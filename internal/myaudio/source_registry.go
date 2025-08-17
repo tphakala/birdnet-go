@@ -277,12 +277,7 @@ func (r *AudioSourceRegistry) ReleaseSourceReference(sourceID string) error {
 
 	source, exists := r.sources[sourceID]
 	if !exists {
-		return errors.Newf("source not found: %s", sourceID).
-			Component("myaudio").
-			Category(errors.CategoryNotFound).
-			Context("operation", "release_source_reference").
-			Context("source_id", sourceID).
-			Build()
+		return fmt.Errorf("%w: %s", ErrSourceNotFound, sourceID)
 	}
 
 	// Decrement reference count (no need for atomic since we hold the mutex)
@@ -314,12 +309,7 @@ func (r *AudioSourceRegistry) RemoveSource(sourceID string) error {
 
 	source, exists := r.sources[sourceID]
 	if !exists {
-		return errors.Newf("source not found: %s", sourceID).
-		Component("myaudio").
-		Category(errors.CategoryNotFound).
-		Context("operation", "remove_source").
-		Context("source_id", sourceID).
-		Build()
+		return fmt.Errorf("%w: %s", ErrSourceNotFound, sourceID)
 	}
 
 	// Remove from all maps
@@ -372,12 +362,7 @@ func (r *AudioSourceRegistry) RemoveSourceIfUnused(sourceID string, checkers ...
 
 	source, exists := r.sources[sourceID]
 	if !exists {
-		return RemoveSourceNotFound, errors.Newf("source not found: %s", sourceID).
-		Component("myaudio").
-		Category(errors.CategoryNotFound).
-		Context("operation", "remove_source_if_unused").
-		Context("source_id", sourceID).
-		Build()
+		return RemoveSourceNotFound, fmt.Errorf("%w: %s", ErrSourceNotFound, sourceID)
 	}
 
 	// Check if source is in use by any buffer type
@@ -396,6 +381,7 @@ func (r *AudioSourceRegistry) RemoveSourceIfUnused(sourceID string, checkers ...
 	// Source is not in use, safe to remove
 	delete(r.sources, sourceID)
 	delete(r.connectionMap, source.connectionString)
+	delete(r.refCounts, sourceID)
 
 	r.logger.With("id", sourceID).
 		With("safe", source.SafeString).
@@ -444,15 +430,17 @@ func (r *AudioSourceRegistry) CleanupInactiveSources(inactiveDuration time.Durat
 	removedCount := 0
 
 	for id, source := range r.sources {
-		if source.LastSeen.Before(cutoffTime) && !source.IsActive {
-			delete(r.sources, id)
-			delete(r.connectionMap, source.connectionString)
-			removedCount++
-			r.logger.With("id", id).
-				With("safe", source.SafeString).
-				With("last_seen", source.LastSeen).
-				Info("Cleaned up inactive source")
+		if !source.LastSeen.Before(cutoffTime) || source.IsActive {
+			continue
 		}
+		delete(r.sources, id)
+		delete(r.connectionMap, source.connectionString)
+		delete(r.refCounts, id)
+		removedCount++
+		r.logger.With("id", id).
+			With("safe", source.SafeString).
+			With("last_seen", source.LastSeen).
+			Info("Cleaned up inactive source")
 	}
 
 	if removedCount > 0 {

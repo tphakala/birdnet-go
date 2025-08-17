@@ -1573,7 +1573,8 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 			// This ensures consistent UUID-based IDs like RTSP sources
 			registry := myaudio.GetRegistry()
 			source, err := registry.RegisterSource(settings.Realtime.Audio.Source, myaudio.SourceConfig{
-				Type: myaudio.SourceTypeAudioCard,
+				Type:        myaudio.SourceTypeAudioCard,
+				DisplayName: settings.Realtime.Audio.Source,
 			})
 			if err != nil {
 				log.Printf("⚠️  Failed to register audio device source: %v", err)

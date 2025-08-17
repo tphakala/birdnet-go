@@ -89,8 +89,11 @@ func TestMemoryLeakFix(t *testing.T) {
 	}
 
 	// Verify sources are registered
-	if len(registry.sources) != 3 {
-		t.Errorf("Expected 3 sources, got %d", len(registry.sources))
+	registry.mu.RLock()
+	sourcesCount := len(registry.sources)
+	registry.mu.RUnlock()
+	if sourcesCount != 3 {
+		t.Errorf("Expected 3 sources, got %d", sourcesCount)
 	}
 
 	// Remove sources
@@ -101,11 +104,15 @@ func TestMemoryLeakFix(t *testing.T) {
 	}
 
 	// Verify sources are removed
-	if len(registry.sources) != 0 {
-		t.Errorf("Expected 0 sources after cleanup, got %d", len(registry.sources))
+	registry.mu.RLock()
+	sourcesCount = len(registry.sources)
+	connectionMapCount := len(registry.connectionMap)
+	registry.mu.RUnlock()
+	if sourcesCount != 0 {
+		t.Errorf("Expected 0 sources after cleanup, got %d", sourcesCount)
 	}
-	if len(registry.connectionMap) != 0 {
-		t.Errorf("Expected 0 entries in connectionMap after cleanup, got %d", len(registry.connectionMap))
+	if connectionMapCount != 0 {
+		t.Errorf("Expected 0 entries in connectionMap after cleanup, got %d", connectionMapCount)
 	}
 }
 

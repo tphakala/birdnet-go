@@ -454,10 +454,7 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 func ReadFromAnalysisBuffer(sourceID string) ([]byte, error) {
 	start := time.Now()
 
-	abMutex.Lock()
-	defer abMutex.Unlock()
-
-	// Get source info for enhanced logging (ID + DisplayName)
+	// Get source info for enhanced logging (ID + DisplayName) - do this outside mutex
 	var displayName string
 	if registry := GetRegistry(); registry != nil {
 		if source, exists := registry.GetSourceByID(sourceID); exists {
@@ -467,6 +464,9 @@ func ReadFromAnalysisBuffer(sourceID string) ([]byte, error) {
 	if displayName == "" {
 		displayName = sourceID // Default fallback
 	}
+
+	abMutex.Lock()
+	defer abMutex.Unlock()
 
 	// Get the ring buffer for the given source ID
 	ab, exists := analysisBuffers[sourceID]
