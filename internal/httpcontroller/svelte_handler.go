@@ -1,6 +1,7 @@
 package httpcontroller
 
 import (
+	"io"
 	"log"
 	"net/http"
 
@@ -34,6 +35,12 @@ func (s *Server) SetupSvelteRoutes() {
 			}
 		}()
 
+		// Get file info for http.ServeContent
+		stat, err := file.Stat()
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info")
+		}
+
 		// Set correct MIME type based on file extension
 		contentType := "application/octet-stream"
 		if len(path) > 5 && path[len(path)-5:] == ".json" {
@@ -53,7 +60,17 @@ func (s *Server) SetupSvelteRoutes() {
 		// Set content type header
 		c.Response().Header().Set("Content-Type", contentType)
 
-		// Serve the file
-		return c.Stream(http.StatusOK, contentType, file)
+		// Check if file implements io.ReadSeeker (required for http.ServeContent)
+		seeker, ok := file.(io.ReadSeeker)
+		if !ok {
+			// Fallback to less efficient streaming if not seekable
+			// This shouldn't happen with embed.FS files
+			return c.Stream(http.StatusOK, contentType, file)
+		}
+
+		// Use http.ServeContent for efficient file serving with proper buffer management
+		// This handles Range requests, caching headers, and prevents buffer accumulation
+		http.ServeContent(c.Response(), c.Request(), path, stat.ModTime(), seeker)
+		return nil
 	})
 }

@@ -369,7 +369,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 		)
 		h.Debug("ServeSpectrogram: Error sanitizing clip name: %v", err)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
-		return c.File("assets/images/spectrogram-placeholder.svg")
+		return serveFileEfficiently(c, "assets/images/spectrogram-placeholder.svg")
 	}
 	logger.Debug("Clip name sanitized successfully",
 		slog.String("raw_clip_name", clipName),
@@ -395,7 +395,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 		)
 		h.Debug("ServeSpectrogram: Error checking audio file: %v", err)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
-		return c.File("assets/images/spectrogram-placeholder.svg")
+		return serveFileEfficiently(c, "assets/images/spectrogram-placeholder.svg")
 	}
 	if !exists {
 		logger.Debug("Audio file not found, serving placeholder",
@@ -404,7 +404,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 		)
 		h.Debug("ServeSpectrogram: Audio file not found: %s", fullPath)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
-		return c.File("assets/images/spectrogram-placeholder.svg")
+		return serveFileEfficiently(c, "assets/images/spectrogram-placeholder.svg")
 	}
 	logger.Debug("Audio file verified successfully",
 		slog.String("full_path", fullPath),
@@ -423,7 +423,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 		)
 		h.Debug("ServeSpectrogram: Error getting spectrogram path: %v", err)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
-		return c.File("assets/images/spectrogram-placeholder.svg")
+		return serveFileEfficiently(c, "assets/images/spectrogram-placeholder.svg")
 	}
 	logger.Debug("Spectrogram path generated successfully",
 		slog.String("audio_path", fullPath),
@@ -442,7 +442,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 		)
 		h.Debug("ServeSpectrogram: Error checking spectrogram file: %v", err)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
-		return c.File("assets/images/spectrogram-placeholder.svg")
+		return serveFileEfficiently(c, "assets/images/spectrogram-placeholder.svg")
 	}
 	if !exists {
 		logger.Debug("Spectrogram not found, initiating generation",
@@ -485,7 +485,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 			)
 			h.Debug("ServeSpectrogram: Failed to create spectrogram: %v", err)
 			c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
-			return c.File("assets/images/spectrogram-placeholder.svg")
+			return serveFileEfficiently(c, "assets/images/spectrogram-placeholder.svg")
 		}
 		generationDuration := time.Since(generationStartTime)
 		logger.Debug("Spectrogram generated successfully",
@@ -511,7 +511,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 		)
 		h.Debug("ServeSpectrogram: Spectrogram still not found after creation attempt: %s", spectrogramPath)
 		c.Response().Header().Set(echo.HeaderContentType, "image/svg+xml")
-		return c.File("assets/images/spectrogram-placeholder.svg")
+		return serveFileEfficiently(c, "assets/images/spectrogram-placeholder.svg")
 	}
 
 	// Get file size for logging
@@ -533,7 +533,8 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	// Set the correct Content-Type header for PNG images
 	c.Response().Header().Set(echo.HeaderContentType, "image/png")
 	c.Response().Header().Set("Cache-Control", "public, max-age=2592000, immutable") // Cache spectrograms for 30 days
-	return c.File(spectrogramPath)
+	// Use efficient file serving to prevent buffer accumulation
+	return serveFileEfficiently(c, spectrogramPath)
 }
 
 // getSpectrogramPath generates the path to the spectrogram image file for a given audio file
@@ -1126,9 +1127,9 @@ func (h *Handlers) ServeAudioClip(c echo.Context) error {
 		c.Response().Header().Get(echo.HeaderContentType),
 		c.Response().Header().Get(echo.HeaderContentDisposition))
 
-	// Serve the file
-	h.Debug("ServeAudioClip: Attempting to serve file: %s", fullPath)
-	return c.File(fullPath)
+	// Serve the file using efficient buffer management
+	h.Debug("ServeAudioClip: Attempting to serve file efficiently: %s", fullPath)
+	return serveFileEfficiently(c, fullPath)
 }
 
 // getAudioMimeType returns the MIME type for an audio file based on its extension
@@ -1152,4 +1153,39 @@ func getAudioMimeType(filename string) string {
 	default:
 		return "application/octet-stream"
 	}
+}
+
+// serveFileEfficiently serves a file using http.ServeContent for efficient buffer management
+// This prevents memory leaks by properly handling buffers and supporting range requests
+func serveFileEfficiently(c echo.Context, filePath string) error {
+	// Open the file
+	file, err := os.Open(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return echo.NewHTTPError(http.StatusNotFound, "File not found")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to open file")
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			// Log error but don't fail the request
+			log.Printf("Error closing file %s: %v", filePath, err)
+		}
+	}()
+
+	// Get file info
+	stat, err := file.Stat()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info")
+	}
+
+	// Only serve regular files
+	if !stat.Mode().IsRegular() {
+		return echo.NewHTTPError(http.StatusForbidden, "Not a regular file")
+	}
+
+	// Use http.ServeContent for efficient serving
+	// This handles Range requests, caching, and proper buffer management
+	http.ServeContent(c.Response(), c.Request(), filepath.Base(filePath), stat.ModTime(), file)
+	return nil
 }
