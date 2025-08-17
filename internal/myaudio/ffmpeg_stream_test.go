@@ -262,31 +262,34 @@ func TestFFmpegStream_ProcessLifecycle(t *testing.T) {
 func TestFFmpegStream_HandleAudioData(t *testing.T) {
 	// Do not use t.Parallel() - this test accesses global analysisBuffers and captureBuffers maps
 	
-	// Use unique source ID to avoid conflicts
-	sourceID := fmt.Sprintf("test-%d", time.Now().UnixNano())
+	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
 	
-	// Skip test if we can't initialize buffers (requires proper setup)
-	if err := AllocateAnalysisBuffer(conf.BufferSize*3, sourceID); err != nil {
+	// Use a proper RTSP URL instead of a sourceID - this is what NewFFmpegStream expects
+	testURL := fmt.Sprintf("rtsp://test-%d.example.com/stream", time.Now().UnixNano())
+	stream := NewFFmpegStream(testURL, "tcp", audioChan)
+	
+	// Get the actual source ID that was created/registered by the stream
+	actualSourceID := stream.source.ID
+	
+	// Now allocate buffers for the actual source ID that was created
+	if err := AllocateAnalysisBuffer(conf.BufferSize*3, actualSourceID); err != nil {
 		t.Skip("Cannot allocate analysis buffer for test")
 	}
 	defer func() {
-		if err := RemoveAnalysisBuffer(sourceID); err != nil {
+		if err := RemoveAnalysisBuffer(actualSourceID); err != nil {
 			t.Logf("Failed to remove analysis buffer: %v", err)
 		}
 	}()
 	
-	if err := AllocateCaptureBufferIfNeeded(60, conf.SampleRate, conf.BitDepth/8, sourceID); err != nil {
+	if err := AllocateCaptureBufferIfNeeded(60, conf.SampleRate, conf.BitDepth/8, actualSourceID); err != nil {
 		t.Skip("Cannot allocate capture buffer for test") 
 	}
 	defer func() {
-		if err := RemoveCaptureBuffer(sourceID); err != nil {
+		if err := RemoveCaptureBuffer(actualSourceID); err != nil {
 			t.Logf("Failed to remove capture buffer: %v", err)
 		}
 	}()
-
-	audioChan := make(chan UnifiedAudioData, 10)
-	defer close(audioChan)
-	stream := NewFFmpegStream(sourceID, "tcp", audioChan)
 	
 	// Test audio data handling
 	testData := make([]byte, 1024)
