@@ -6,9 +6,9 @@ import "time"
 // AudioSource represents a structured audio source with ID, safe string, and display name
 // This allows safe separation of concerns: ID for buffer operations, SafeString for logging, DisplayName for UI
 type AudioSource struct {
-	ID          string `gorm:"column:source_id" json:"id"`               // Source ID for buffer operations (e.g., "rtsp_87b89761")
-	SafeString  string `gorm:"column:source_safe" json:"safeString"`     // Sanitized connection string for logging (credentials removed)
-	DisplayName string `gorm:"column:source_display" json:"displayName"` // User-friendly name for UI display
+	ID          string `json:"id"`          // Source ID for buffer operations (e.g., "rtsp_87b89761")
+	SafeString  string `json:"safeString"`  // Sanitized connection string for logging (credentials removed)
+	DisplayName string `json:"displayName"` // User-friendly name for UI display
 }
 
 // Note represents a single observation data point

@@ -56,8 +56,11 @@ func TestRaceConditionFix(t *testing.T) {
 	}
 
 	// Verify only one source was created
-	if len(registry.sources) != 1 {
-		t.Errorf("Expected 1 source in registry, got %d", len(registry.sources))
+	registry.mu.RLock()
+	sourcesCount := len(registry.sources)
+	registry.mu.RUnlock()
+	if sourcesCount != 1 {
+		t.Errorf("Expected 1 source in registry, got %d", sourcesCount)
 	}
 }
 
@@ -168,13 +171,19 @@ func TestInactiveSourceCleanup(t *testing.T) {
 	}
 
 	// Verify correct sources remain
-	if _, exists := registry.sources["active_001"]; !exists {
+	registry.mu.RLock()
+	_, activeExists := registry.sources["active_001"]
+	_, recentExists := registry.sources["recent_001"]
+	_, oldExists := registry.sources["old_001"]
+	registry.mu.RUnlock()
+	
+	if !activeExists {
 		t.Error("Active source should not be removed")
 	}
-	if _, exists := registry.sources["recent_001"]; !exists {
+	if !recentExists {
 		t.Error("Recent inactive source should not be removed")
 	}
-	if _, exists := registry.sources["old_001"]; exists {
+	if oldExists {
 		t.Error("Old inactive source should be removed")
 	}
 }

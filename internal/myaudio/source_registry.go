@@ -50,7 +50,7 @@ var (
 	// Sentinel errors for better error handling
 	ErrSourceNotFound = errors.Newf("source not found").
 				Component("myaudio").
-				Category(errors.CategoryValidation).
+				Category(errors.CategoryNotFound).
 				Build()
 )
 
@@ -280,12 +280,20 @@ func (r *AudioSourceRegistry) ReleaseSourceReference(sourceID string) error {
 		return fmt.Errorf("%w: %s", ErrSourceNotFound, sourceID)
 	}
 
-	// Decrement reference count (no need for atomic since we hold the mutex)
-	var newCount int32
-	if r.refCounts[sourceID] != nil {
-		*r.refCounts[sourceID]--
-		newCount = *r.refCounts[sourceID]
+	// Check if refCount entry exists - if not, don't proceed with deletion
+	refCountPtr, refCountExists := r.refCounts[sourceID]
+	if !refCountExists {
+		// No refCount entry means this source was not properly reference-counted
+		// Log and return without deletion
+		r.logger.With("id", sourceID).
+			With("safe", source.SafeString).
+			Warn("Attempted to release reference for source without refCount entry")
+		return nil
 	}
+
+	// Decrement reference count (no need for atomic since we hold the mutex)
+	*refCountPtr--
+	newCount := *refCountPtr
 
 	// Remove source if no more references
 	if newCount <= 0 {
@@ -397,14 +405,16 @@ func (r *AudioSourceRegistry) RemoveSourceByConnection(connectionString string) 
 
 	sourceID, exists := r.connectionMap[connectionString]
 	if !exists {
-		// Sanitize connection string before including in error
-		safeString := r.sanitizeConnectionString(connectionString, SourceTypeUnknown)
-		return errors.Newf("source not found for connection: %s", safeString).
+		// Detect source type from connection string and sanitize using that type
+		sourceType := detectSourceTypeFromString(connectionString)
+		safeString := r.sanitizeConnectionString(connectionString, sourceType)
+		baseErr := errors.Newf("source not found for connection: %s", safeString).
 			Component("myaudio").
 			Category(errors.CategoryNotFound).
 			Context("operation", "remove_source_by_connection").
 			Context("safe_connection", safeString).
 			Build()
+		return fmt.Errorf("%w: %w", ErrSourceNotFound, baseErr)
 	}
 
 	source := r.sources[sourceID]
