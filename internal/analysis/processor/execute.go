@@ -73,8 +73,7 @@ func (a ExecuteCommandAction) Execute(data any) error {
 	logger.Debug("Executing command with arguments", "command_path", cmdPath, "args", args)
 
 	// Create command with timeout to prevent hanging processes
-	// Use 5 minute timeout for external scripts
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), ExecuteCommandTimeout)
 	defer cancel()
 	
 	cmd := exec.CommandContext(ctx, cmdPath, args...)

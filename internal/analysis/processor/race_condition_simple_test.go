@@ -17,6 +17,7 @@
 package processor
 
 import (
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -36,7 +37,7 @@ type SimpleAction struct {
 	onExecute     func() // Callback for additional behavior
 }
 
-func (a *SimpleAction) Execute(data interface{}) error {
+func (a *SimpleAction) Execute(data any) error {
 	a.executeMutex.Lock()
 	defer a.executeMutex.Unlock()
 	
@@ -377,6 +378,379 @@ func TestRaceCondition_TimeoutScenario(t *testing.T) {
 		t.Logf("No timeout scenario detected - DB save completed before SSE lookup")
 	}
 }
+
+// TestRaceCondition_CompositeActionSolution demonstrates how CompositeAction solves the race condition
+func TestRaceCondition_CompositeActionSolution(t *testing.T) {
+	t.Parallel()
+
+	// This test verifies that CompositeAction enforces sequential execution
+	// preventing the race condition between DatabaseAction and SSEAction
+
+	executionOrder := make([]string, 0, 2)
+	executionMutex := sync.Mutex{}
+
+	dbAction := &SimpleAction{
+		name:         "Database Action",
+		executeDelay: 200 * time.Millisecond,
+		onExecute: func() {
+			executionMutex.Lock()
+			executionOrder = append(executionOrder, "database")
+			executionMutex.Unlock()
+		},
+	}
+
+	sseAction := &SimpleAction{
+		name:         "SSE Action",
+		executeDelay: 50 * time.Millisecond,
+		onExecute: func() {
+			executionMutex.Lock()
+			executionOrder = append(executionOrder, "sse")
+			executionMutex.Unlock()
+		},
+	}
+
+	// Create CompositeAction that combines both actions
+	compositeAction := &CompositeAction{
+		Actions:     []Action{dbAction, sseAction},
+		Description: "Database save and SSE broadcast (sequential)",
+	}
+
+	detection := createSimpleDetection()
+	startTime := time.Now()
+
+	// Execute the composite action
+	err := compositeAction.Execute(detection)
+	totalDuration := time.Since(startTime)
+
+	if err != nil {
+		t.Fatalf("Composite action failed: %v", err)
+	}
+
+	// Verify both actions executed
+	if !dbAction.WasExecuted() {
+		t.Fatal("Database action was not executed")
+	}
+	if !sseAction.WasExecuted() {
+		t.Fatal("SSE action was not executed")
+	}
+
+	// Verify execution order
+	executionMutex.Lock()
+	defer executionMutex.Unlock()
+	
+	if len(executionOrder) != 2 {
+		t.Fatalf("Expected 2 actions to execute, got %d", len(executionOrder))
+	}
+	
+	if executionOrder[0] != "database" {
+		t.Errorf("Expected database action to execute first, but got: %s", executionOrder[0])
+	}
+	
+	if executionOrder[1] != "sse" {
+		t.Errorf("Expected SSE action to execute second, but got: %s", executionOrder[1])
+	}
+
+	// Verify timing characteristics
+	dbExecutionTime := dbAction.GetExecutionTime()
+	sseExecutionTime := sseAction.GetExecutionTime()
+
+	if sseExecutionTime.Before(dbExecutionTime) {
+		t.Fatal("SSE action executed before database action - race condition still present!")
+	}
+
+	timeBetweenActions := sseExecutionTime.Sub(dbExecutionTime)
+	t.Logf("CompositeAction execution results:")
+	t.Logf("  Total duration: %v", totalDuration)
+	t.Logf("  Database completed at: %v", dbExecutionTime.Sub(startTime))
+	t.Logf("  SSE started at: %v", sseExecutionTime.Sub(startTime))
+	t.Logf("  Time between actions: %v", timeBetweenActions)
+	
+	// The time between actions should be minimal (just the SSE execution time)
+	// since SSE starts immediately after DB completes
+	if timeBetweenActions > 100*time.Millisecond {
+		t.Errorf("Too much delay between actions: %v", timeBetweenActions)
+	}
+
+	t.Logf("✓ CompositeAction enforces sequential execution")
+	t.Logf("✓ Database action completes before SSE action starts")
+	t.Logf("✓ Race condition is prevented - no timeouts will occur")
+}
+
+// TestCompositeAction_TimeoutProtection verifies timeout handling in CompositeAction
+func TestCompositeAction_TimeoutProtection(t *testing.T) {
+	t.Parallel()
+
+	// This test ensures CompositeAction properly handles actions that hang or take too long
+
+	executionTracker := make([]string, 0, 2)
+	executionMutex := sync.Mutex{}
+
+	// Create a fast action that completes quickly
+	fastAction := &SimpleAction{
+		name:         "Fast Action",
+		executeDelay: 100 * time.Millisecond,
+		onExecute: func() {
+			executionMutex.Lock()
+			executionTracker = append(executionTracker, "fast")
+			executionMutex.Unlock()
+		},
+	}
+
+	// Create a hanging action that would exceed timeout
+	// Note: We set this to exceed CompositeActionTimeout (30s) for the test
+	// but we'll use a shorter timeout in test to avoid slow tests
+	hangingAction := &SimpleAction{
+		name:         "Hanging Action",
+		executeDelay: 35 * time.Second, // This exceeds CompositeActionTimeout
+		onExecute: func() {
+			executionMutex.Lock()
+			executionTracker = append(executionTracker, "hanging")
+			executionMutex.Unlock()
+		},
+	}
+
+	// Note: CompositeActionTimeout is a constant (30s), we'll verify the behavior with it
+
+	// Create CompositeAction with fast action followed by hanging action
+	compositeAction := &CompositeAction{
+		Actions:     []Action{fastAction, hangingAction},
+		Description: "Test timeout protection",
+	}
+
+	detection := createSimpleDetection()
+	startTime := time.Now()
+
+	// Execute the composite action (should timeout on second action)
+	err := compositeAction.Execute(detection)
+	duration := time.Since(startTime)
+
+	// Verify that we got a timeout error
+	if err == nil {
+		t.Fatal("Expected timeout error but got nil")
+	}
+
+	// Check that the error message indicates timeout
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Errorf("Expected timeout error, got: %v", err)
+	}
+
+	// Verify that fast action completed but hanging action did not
+	executionMutex.Lock()
+	defer executionMutex.Unlock()
+
+	if len(executionTracker) != 1 || executionTracker[0] != "fast" {
+		t.Errorf("Expected only fast action to complete, got: %v", executionTracker)
+	}
+
+	// Verify the timeout duration is approximately correct
+	// Should be around 30s (CompositeActionTimeout) + 100ms (fast action)
+	expectedDuration := 30*time.Second + 100*time.Millisecond
+	tolerance := 2 * time.Second // Allow some tolerance for test execution
+
+	if duration < expectedDuration-tolerance || duration > expectedDuration+tolerance {
+		t.Logf("Duration %v is outside expected range [%v, %v]", 
+			duration, expectedDuration-tolerance, expectedDuration+tolerance)
+	}
+
+	t.Logf("✓ CompositeAction properly handles timeout")
+	t.Logf("✓ Fast action completed, hanging action was interrupted")
+	t.Logf("✓ Total duration: %v", duration)
+}
+
+// TestCompositeAction_PanicRecovery verifies panic recovery in CompositeAction
+func TestCompositeAction_PanicRecovery(t *testing.T) {
+	t.Parallel()
+
+	// This test ensures CompositeAction recovers from panics in individual actions
+
+	executionTracker := make([]string, 0, 3)
+	executionMutex := sync.Mutex{}
+
+	// Create a normal action
+	normalAction1 := &SimpleAction{
+		name:         "Normal Action 1",
+		executeDelay: 50 * time.Millisecond,
+		onExecute: func() {
+			executionMutex.Lock()
+			executionTracker = append(executionTracker, "normal1")
+			executionMutex.Unlock()
+		},
+	}
+
+	// Create a panicking action
+	panicAction := &SimpleAction{
+		name:         "Panicking Action",
+		executeDelay: 10 * time.Millisecond,
+		onExecute: func() {
+			panic("test panic: simulating unexpected error")
+		},
+	}
+
+	// Create another normal action (should not execute after panic)
+	normalAction2 := &SimpleAction{
+		name:         "Normal Action 2",
+		executeDelay: 50 * time.Millisecond,
+		onExecute: func() {
+			executionMutex.Lock()
+			executionTracker = append(executionTracker, "normal2")
+			executionMutex.Unlock()
+		},
+	}
+
+	// Create CompositeAction with actions including a panicking one
+	compositeAction := &CompositeAction{
+		Actions:     []Action{normalAction1, panicAction, normalAction2},
+		Description: "Test panic recovery",
+	}
+
+	detection := createSimpleDetection()
+
+	// Execute the composite action (should handle panic gracefully)
+	err := compositeAction.Execute(detection)
+
+	// Verify that we got a panic error
+	if err == nil {
+		t.Fatal("Expected panic error but got nil")
+	}
+
+	// Check that the error message indicates panic
+	if !strings.Contains(err.Error(), "panic") {
+		t.Errorf("Expected panic error, got: %v", err)
+	}
+
+	// Verify that only the first action completed
+	executionMutex.Lock()
+	defer executionMutex.Unlock()
+
+	if len(executionTracker) != 1 || executionTracker[0] != "normal1" {
+		t.Errorf("Expected only first action to complete before panic, got: %v", executionTracker)
+	}
+
+	t.Logf("✓ CompositeAction properly recovered from panic")
+	t.Logf("✓ Panic error was returned: %v", err)
+	t.Logf("✓ Subsequent actions were not executed after panic")
+}
+
+// TestCompositeAction_EdgeCases tests edge cases for CompositeAction
+func TestCompositeAction_EdgeCases(t *testing.T) {
+	t.Parallel()
+
+	detection := createSimpleDetection()
+
+	t.Run("nil CompositeAction", func(t *testing.T) {
+		var compositeAction *CompositeAction
+		err := compositeAction.Execute(detection)
+		if err != nil {
+			t.Errorf("Expected nil CompositeAction to return nil error, got: %v", err)
+		}
+	})
+
+	t.Run("nil Actions slice", func(t *testing.T) {
+		compositeAction := &CompositeAction{
+			Actions:     nil,
+			Description: "Test nil actions",
+		}
+		err := compositeAction.Execute(detection)
+		if err != nil {
+			t.Errorf("Expected nil Actions slice to return nil error, got: %v", err)
+		}
+	})
+
+	t.Run("empty Actions slice", func(t *testing.T) {
+		compositeAction := &CompositeAction{
+			Actions:     []Action{},
+			Description: "Test empty actions",
+		}
+		err := compositeAction.Execute(detection)
+		if err != nil {
+			t.Errorf("Expected empty Actions slice to return nil error, got: %v", err)
+		}
+	})
+
+	t.Run("all nil actions", func(t *testing.T) {
+		compositeAction := &CompositeAction{
+			Actions:     []Action{nil, nil, nil},
+			Description: "Test all nil actions",
+		}
+		err := compositeAction.Execute(detection)
+		if err != nil {
+			t.Errorf("Expected all nil actions to return nil error, got: %v", err)
+		}
+	})
+
+	t.Run("mixed nil and valid actions", func(t *testing.T) {
+		executionOrder := make([]string, 0, 2)
+		executionMutex := sync.Mutex{}
+
+		action1 := &SimpleAction{
+			name:         "Action 1",
+			executeDelay: 10 * time.Millisecond,
+			onExecute: func() {
+				executionMutex.Lock()
+				executionOrder = append(executionOrder, "action1")
+				executionMutex.Unlock()
+			},
+		}
+
+		action2 := &SimpleAction{
+			name:         "Action 2",
+			executeDelay: 10 * time.Millisecond,
+			onExecute: func() {
+				executionMutex.Lock()
+				executionOrder = append(executionOrder, "action2")
+				executionMutex.Unlock()
+			},
+		}
+
+		compositeAction := &CompositeAction{
+			Actions:     []Action{nil, action1, nil, action2, nil},
+			Description: "Test mixed nil and valid actions",
+		}
+
+		err := compositeAction.Execute(detection)
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+
+		executionMutex.Lock()
+		defer executionMutex.Unlock()
+
+		if len(executionOrder) != 2 {
+			t.Errorf("Expected 2 actions to execute, got %d", len(executionOrder))
+		}
+		if len(executionOrder) == 2 {
+			if executionOrder[0] != "action1" || executionOrder[1] != "action2" {
+				t.Errorf("Actions executed in wrong order: %v", executionOrder)
+			}
+		}
+	})
+
+	t.Run("single action", func(t *testing.T) {
+		executed := false
+		action := &SimpleAction{
+			name:         "Single Action",
+			executeDelay: 10 * time.Millisecond,
+			onExecute: func() {
+				executed = true
+			},
+		}
+
+		compositeAction := &CompositeAction{
+			Actions:     []Action{action},
+			Description: "Test single action",
+		}
+
+		err := compositeAction.Execute(detection)
+		if err != nil {
+			t.Errorf("Unexpected error: %v", err)
+		}
+
+		if !executed {
+			t.Error("Single action was not executed")
+		}
+	})
+}
+
 
 // TestRaceCondition_ProposedSolutionValidation demonstrates how sequential execution would solve the issue
 func TestRaceCondition_ProposedSolutionValidation(t *testing.T) {

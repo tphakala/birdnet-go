@@ -27,6 +27,40 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observation"
 )
 
+// Timeout and interval constants
+const (
+	// SSEDatabaseIDTimeout is the maximum time to wait for database ID assignment
+	SSEDatabaseIDTimeout = 10 * time.Second
+	
+	// SSEDatabaseCheckInterval is how often to check for database ID
+	SSEDatabaseCheckInterval = 200 * time.Millisecond
+	
+	// SSEAudioFileTimeout is the maximum time to wait for audio file to be written
+	SSEAudioFileTimeout = 5 * time.Second
+	
+	// SSEAudioCheckInterval is how often to check for audio file
+	SSEAudioCheckInterval = 100 * time.Millisecond
+	
+	// MinAudioFileSize is the minimum size in bytes for a valid audio file
+	MinAudioFileSize = 1024
+	
+	// MQTTPublishTimeout is the timeout for MQTT publish operations
+	MQTTPublishTimeout = 10 * time.Second
+	
+	// AudioSegmentDuration is the duration of audio segments to capture
+	AudioSegmentDuration = 15 * time.Second
+	
+	// DatabaseSearchLimit is the maximum number of results when searching for notes
+	DatabaseSearchLimit = 10
+	
+	// CompositeActionTimeout is the timeout for each action in a composite action
+	// This is generous to accommodate slow hardware (e.g., Raspberry Pi with SD cards)
+	CompositeActionTimeout = 30 * time.Second
+	
+	// ExecuteCommandTimeout is the timeout for external command execution
+	ExecuteCommandTimeout = 5 * time.Minute
+)
+
 type Action interface {
 	Execute(data interface{}) error
 	GetDescription() string
@@ -105,6 +139,36 @@ type SSEAction struct {
 	Ds datastore.Interface
 }
 
+// CompositeAction executes multiple actions sequentially, ensuring proper dependency management.
+//
+// This action type was introduced to fix a critical race condition between DatabaseAction 
+// and SSEAction (GitHub issue #1158). The SSEAction depends on DatabaseAction completing 
+// first to ensure database IDs are assigned before SSE broadcasts occur.
+//
+// Key Features:
+//   - Sequential execution: Actions execute in order, each waiting for the previous to complete
+//   - Timeout protection: Each action has a 30-second timeout to prevent hanging
+//   - Panic recovery: Panics in individual actions are caught and converted to errors
+//   - Thread-safe: Mutex protects the Actions slice during access
+//   - Nil-safe: Handles nil actions and empty action lists gracefully
+//
+// Usage:
+//
+//	composite := &CompositeAction{
+//	    Actions: []Action{databaseAction, sseAction},
+//	    Description: "Save to database then broadcast",
+//	}
+//	err := composite.Execute(data)
+//
+// This pattern ensures that dependent actions execute in the correct order, preventing
+// timeout errors like "database ID not assigned after 10s" that occur when actions
+// execute concurrently on resource-constrained hardware.
+type CompositeAction struct {
+	Actions     []Action   // Actions to execute in sequence
+	Description string     // Human-readable description
+	mu          sync.Mutex // Protects concurrent access to Actions
+}
+
 // GetDescription returns a human-readable description of the LogAction
 func (a *LogAction) GetDescription() string {
 	if a.Description != "" {
@@ -159,6 +223,119 @@ func (a *SSEAction) GetDescription() string {
 		return a.Description
 	}
 	return "Broadcast detection via Server-Sent Events"
+}
+
+// GetDescription returns a human-readable description of the CompositeAction
+func (a *CompositeAction) GetDescription() string {
+	if a.Description != "" {
+		return a.Description
+	}
+	return "Composite action (sequential execution)"
+}
+
+// Execute runs all actions sequentially, stopping on first error
+// This method is designed to prevent deadlocks and handle timeouts properly
+func (a *CompositeAction) Execute(data interface{}) error {
+	// Handle nil or empty actions gracefully
+	if a == nil || a.Actions == nil || len(a.Actions) == 0 {
+		return nil // Nothing to execute
+	}
+
+	// Only lock while accessing the Actions slice, not during execution
+	a.mu.Lock()
+	actions := make([]Action, len(a.Actions))
+	copy(actions, a.Actions)
+	a.mu.Unlock()
+
+	// Count non-nil actions for accurate progress reporting
+	nonNilCount := 0
+	for _, action := range actions {
+		if action != nil {
+			nonNilCount++
+		}
+	}
+
+	if nonNilCount == 0 {
+		return nil // All actions are nil
+	}
+
+	// Execute each action in order without holding the mutex
+	currentStep := 0
+	for _, action := range actions {
+		if action == nil {
+			continue
+		}
+		currentStep++
+
+		// Add panic recovery for each action to prevent crashes
+		err := a.executeActionWithRecovery(action, data, currentStep, nonNilCount)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// executeActionWithRecovery executes a single action with panic recovery
+func (a *CompositeAction) executeActionWithRecovery(action Action, data interface{}, step, total int) error {
+	// Use a channel to capture the result
+	type result struct {
+		err error
+	}
+	resultChan := make(chan result, 1)
+
+	go func() {
+		// Recover from panics to prevent goroutine crashes
+		defer func() {
+			if r := recover(); r != nil {
+				panicErr := errors.Newf("action panicked: %v", r).
+					Component("analysis.processor").
+					Category(errors.CategoryProcessing).
+					Context("action_type", fmt.Sprintf("%T", action)).
+					Context("action_description", action.GetDescription()).
+					Context("panic_value", fmt.Sprintf("%v", r)).
+					Context("step", step).
+					Context("total_steps", total).
+					Build()
+				resultChan <- result{err: panicErr}
+			}
+		}()
+
+		// Execute the action
+		err := action.Execute(data)
+		resultChan <- result{err: err}
+	}()
+
+	// Wait for completion with a timeout to prevent hanging
+	// Use a generous timeout since database operations can be slow on constrained hardware
+	timer := time.NewTimer(CompositeActionTimeout)
+	defer timer.Stop()
+
+	select {
+	case res := <-resultChan:
+		if res.err != nil {
+			// Log which action in the sequence failed
+			log.Printf("❌ Composite action failed at step %d/%d (%s): %v", 
+				step, total, action.GetDescription(), res.err)
+			return res.err
+		}
+		return nil
+	case <-timer.C:
+		// Timeout occurred
+		timeoutErr := errors.Newf("action timed out after %v", CompositeActionTimeout).
+			Component("analysis.processor").
+			Category(errors.CategoryTimeout).
+			Context("action_type", fmt.Sprintf("%T", action)).
+			Context("action_description", action.GetDescription()).
+			Context("timeout_seconds", CompositeActionTimeout.Seconds()).
+			Context("step", step).
+			Context("total_steps", total).
+			Build()
+		log.Printf("❌ Composite action timed out at step %d/%d (%s) after %v", 
+			step, total, action.GetDescription(), CompositeActionTimeout)
+		return timeoutErr
+	}
 }
 
 // Execute logs the note to the chag log file
@@ -240,7 +417,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 	// Save audio clip to file if enabled
 	if a.Settings.Realtime.Audio.Export.Enabled {
 		// export audio clip from capture buffer
-		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source.ID, a.Note.BeginTime, 15)
+		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source.ID, a.Note.BeginTime, int(AudioSegmentDuration.Seconds()))
 		if err != nil {
 			// Add structured logging
 			GetLogger().Error("Failed to read audio segment from buffer",
@@ -611,7 +788,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 	}
 
 	// Create a context with timeout for publishing
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), MQTTPublishTimeout)
 	defer cancel()
 
 	// Publish the note to the MQTT broker
@@ -829,16 +1006,14 @@ func (a *SSEAction) waitForAudioFile() error {
 	// Build the full path to the audio file using the configured export path
 	audioPath := filepath.Join(a.Settings.Realtime.Audio.Export.Path, a.Note.ClipName)
 
-	// Wait up to 5 seconds for file to be written
-	timeout := 5 * time.Second
-	deadline := time.Now().Add(timeout)
-	checkInterval := 100 * time.Millisecond
+	// Wait for file to be written
+	deadline := time.Now().Add(SSEAudioFileTimeout)
 
 	for time.Now().Before(deadline) {
 		// Check if file exists and has content
 		if info, err := os.Stat(audioPath); err == nil {
-			// File exists, check if it has reasonable size (audio files should be > 1KB)
-			if info.Size() > 1024 {
+			// File exists, check if it has reasonable size
+			if info.Size() > MinAudioFileSize {
 				if a.Settings.Debug {
 					// Add structured logging
 					GetLogger().Debug("Audio file ready for SSE broadcast",
@@ -854,16 +1029,16 @@ func (a *SSEAction) waitForAudioFile() error {
 			// File exists but might still be writing, wait a bit more
 		}
 
-		time.Sleep(checkInterval)
+		time.Sleep(SSEAudioCheckInterval)
 	}
 
 	// Timeout reached
-	return errors.Newf("audio file %s not ready after %v timeout", a.Note.ClipName, timeout).
+	return errors.Newf("audio file %s not ready after %v timeout", a.Note.ClipName, SSEAudioFileTimeout).
 		Component("analysis.processor").
 		Category(errors.CategoryTimeout).
 		Context("operation", "wait_for_audio_file").
 		Context("clip_name", a.Note.ClipName).
-		Context("timeout_seconds", timeout.Seconds()).
+		Context("timeout_seconds", SSEAudioFileTimeout.Seconds()).
 		Build()
 }
 
@@ -871,9 +1046,7 @@ func (a *SSEAction) waitForAudioFile() error {
 func (a *SSEAction) waitForDatabaseID() error {
 	// We need to query the database to find this note by unique characteristics
 	// Since we don't have the ID yet, we'll search by time, species, and confidence
-	timeout := 10 * time.Second
-	deadline := time.Now().Add(timeout)
-	checkInterval := 200 * time.Millisecond
+	deadline := time.Now().Add(SSEDatabaseIDTimeout)
 
 	for time.Now().Before(deadline) {
 		// Query database for a note matching our characteristics
@@ -894,16 +1067,16 @@ func (a *SSEAction) waitForDatabaseID() error {
 			return nil
 		}
 
-		time.Sleep(checkInterval)
+		time.Sleep(SSEDatabaseCheckInterval)
 	}
 
 	// Timeout reached
-	return errors.Newf("database ID not assigned for %s after %v timeout", a.Note.CommonName, timeout).
+	return errors.Newf("database ID not assigned for %s after %v timeout", a.Note.CommonName, SSEDatabaseIDTimeout).
 		Component("analysis.processor").
 		Category(errors.CategoryTimeout).
 		Context("operation", "wait_for_database_id").
 		Context("species", a.Note.CommonName).
-		Context("timeout_seconds", timeout.Seconds()).
+		Context("timeout_seconds", SSEDatabaseIDTimeout.Seconds()).
 		Build()
 }
 
@@ -924,7 +1097,7 @@ func (a *SSEAction) findNoteInDatabase() (*datastore.Note, error) {
 	query := a.Note.ScientificName
 
 	// Search for notes, sorted by ID descending to get the most recent
-	notes, err := a.Ds.SearchNotes(query, false, 10, 0) // false = sort descending, limit 10, offset 0
+	notes, err := a.Ds.SearchNotes(query, false, DatabaseSearchLimit, 0) // false = sort descending, offset 0
 	if err != nil {
 		return nil, errors.New(err).
 			Component("analysis.processor").
