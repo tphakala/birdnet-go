@@ -497,11 +497,9 @@ func TestCompositeAction_TimeoutProtection(t *testing.T) {
 	}
 
 	// Create a hanging action that would exceed timeout
-	// Note: We set this to exceed CompositeActionTimeout (30s) for the test
-	// but we'll use a shorter timeout in test to avoid slow tests
 	hangingAction := &SimpleAction{
 		name:         "Hanging Action",
-		executeDelay: 35 * time.Second, // This exceeds CompositeActionTimeout
+		executeDelay: 5 * time.Second, // This will exceed our custom timeout
 		onExecute: func() {
 			executionMutex.Lock()
 			executionTracker = append(executionTracker, "hanging")
@@ -509,12 +507,14 @@ func TestCompositeAction_TimeoutProtection(t *testing.T) {
 		},
 	}
 
-	// Note: CompositeActionTimeout is a constant (30s), we'll verify the behavior with it
+	// Use a shorter timeout for faster test execution
+	shortTimeout := 2 * time.Second
 
-	// Create CompositeAction with fast action followed by hanging action
+	// Create CompositeAction with custom timeout
 	compositeAction := &CompositeAction{
 		Actions:     []Action{fastAction, hangingAction},
 		Description: "Test timeout protection",
+		Timeout:     &shortTimeout, // Override default timeout
 	}
 
 	detection := createSimpleDetection()
@@ -543,18 +543,51 @@ func TestCompositeAction_TimeoutProtection(t *testing.T) {
 	}
 
 	// Verify the timeout duration is approximately correct
-	// Should be around 30s (CompositeActionTimeout) + 100ms (fast action)
-	expectedDuration := 30*time.Second + 100*time.Millisecond
-	tolerance := 2 * time.Second // Allow some tolerance for test execution
+	// Should be around 2s (custom timeout) + 100ms (fast action)
+	expectedDuration := 2*time.Second + 100*time.Millisecond
+	tolerance := 500 * time.Millisecond // Allow some tolerance for test execution
 
 	if duration < expectedDuration-tolerance || duration > expectedDuration+tolerance {
-		t.Logf("Duration %v is outside expected range [%v, %v]", 
+		t.Errorf("Duration %v is outside expected range [%v, %v]", 
 			duration, expectedDuration-tolerance, expectedDuration+tolerance)
 	}
 
-	t.Logf("✓ CompositeAction properly handles timeout")
+	t.Logf("✓ CompositeAction properly handles custom timeout")
 	t.Logf("✓ Fast action completed, hanging action was interrupted")
-	t.Logf("✓ Total duration: %v", duration)
+	t.Logf("✓ Total duration: %v (with custom timeout: %v)", duration, shortTimeout)
+}
+
+// TestCompositeAction_DefaultTimeout verifies default timeout behavior
+func TestCompositeAction_DefaultTimeout(t *testing.T) {
+	t.Parallel()
+
+	// Create a simple action
+	simpleAction := &SimpleAction{
+		name:         "Simple Action",
+		executeDelay: 100 * time.Millisecond,
+	}
+
+	// Create CompositeAction without timeout override (should use default)
+	compositeAction := &CompositeAction{
+		Actions:     []Action{simpleAction},
+		Description: "Test default timeout",
+		// Timeout is nil, so should use CompositeActionTimeout (30s)
+	}
+
+	detection := createSimpleDetection()
+
+	// Execute the action
+	err := compositeAction.Execute(detection)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	// Verify the action executed successfully with default timeout
+	if !simpleAction.WasExecuted() {
+		t.Error("Action was not executed")
+	}
+
+	t.Log("✓ CompositeAction uses default timeout when not overridden")
 }
 
 // TestCompositeAction_PanicRecovery verifies panic recovery in CompositeAction

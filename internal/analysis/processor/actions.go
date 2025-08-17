@@ -42,7 +42,8 @@ const (
 	SSEAudioCheckInterval = 100 * time.Millisecond
 	
 	// MinAudioFileSize is the minimum size in bytes for a valid audio file
-	MinAudioFileSize = 1024
+	// Typed as int64 to match os.FileInfo.Size() return type
+	MinAudioFileSize int64 = 1024
 	
 	// MQTTPublishTimeout is the timeout for MQTT publish operations
 	MQTTPublishTimeout = 10 * time.Second
@@ -53,7 +54,7 @@ const (
 	// DatabaseSearchLimit is the maximum number of results when searching for notes
 	DatabaseSearchLimit = 10
 	
-	// CompositeActionTimeout is the timeout for each action in a composite action
+	// CompositeActionTimeout is the default timeout for each action in a composite action
 	// This is generous to accommodate slow hardware (e.g., Raspberry Pi with SD cards)
 	CompositeActionTimeout = 30 * time.Second
 	
@@ -61,9 +62,17 @@ const (
 	ExecuteCommandTimeout = 5 * time.Minute
 )
 
+// Action is the base interface for all actions that can be executed
 type Action interface {
 	Execute(data interface{}) error
 	GetDescription() string
+}
+
+// ContextAction is an enhanced action interface that supports context-aware execution
+// This allows for proper cancellation and timeout propagation
+type ContextAction interface {
+	Action
+	ExecuteContext(ctx context.Context, data interface{}) error
 }
 
 type LogAction struct {
@@ -147,16 +156,19 @@ type SSEAction struct {
 //
 // Key Features:
 //   - Sequential execution: Actions execute in order, each waiting for the previous to complete
-//   - Timeout protection: Each action has a 30-second timeout to prevent hanging
+//   - Configurable timeout: Per-action timeout can be overridden (default: 30 seconds)
+//   - Context support: Actions implementing ContextAction get proper context propagation
 //   - Panic recovery: Panics in individual actions are caught and converted to errors
 //   - Thread-safe: Mutex protects the Actions slice during access
 //   - Nil-safe: Handles nil actions and empty action lists gracefully
 //
 // Usage:
 //
+//	timeout := 45 * time.Second
 //	composite := &CompositeAction{
 //	    Actions: []Action{databaseAction, sseAction},
 //	    Description: "Save to database then broadcast",
+//	    Timeout: &timeout,  // Optional: override default timeout
 //	}
 //	err := composite.Execute(data)
 //
@@ -164,9 +176,10 @@ type SSEAction struct {
 // timeout errors like "database ID not assigned after 10s" that occur when actions
 // execute concurrently on resource-constrained hardware.
 type CompositeAction struct {
-	Actions     []Action   // Actions to execute in sequence
-	Description string     // Human-readable description
-	mu          sync.Mutex // Protects concurrent access to Actions
+	Actions     []Action       // Actions to execute in sequence
+	Description string         // Human-readable description
+	Timeout     *time.Duration // Optional: per-action timeout override (nil = use default)
+	mu          sync.Mutex     // Protects concurrent access to Actions
 }
 
 // GetDescription returns a human-readable description of the LogAction
@@ -277,63 +290,163 @@ func (a *CompositeAction) Execute(data interface{}) error {
 	return nil
 }
 
-// executeActionWithRecovery executes a single action with panic recovery
+// executeActionWithRecovery executes a single action with panic recovery and proper context handling
 func (a *CompositeAction) executeActionWithRecovery(action Action, data interface{}, step, total int) error {
+	// Determine the timeout to use
+	timeout := CompositeActionTimeout
+	if a.Timeout != nil {
+		timeout = *a.Timeout
+	}
+
+	// Create context with timeout for proper cancellation
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel() // Ensure cancel is always called to prevent context leak
+
 	// Use a channel to capture the result
 	type result struct {
 		err error
 	}
 	resultChan := make(chan result, 1)
 
-	go func() {
-		// Recover from panics to prevent goroutine crashes
-		defer func() {
-			if r := recover(); r != nil {
-				panicErr := errors.Newf("action panicked: %v", r).
-					Component("analysis.processor").
-					Category(errors.CategoryProcessing).
-					Context("action_type", fmt.Sprintf("%T", action)).
-					Context("action_description", action.GetDescription()).
-					Context("panic_value", fmt.Sprintf("%v", r)).
-					Context("step", step).
-					Context("total_steps", total).
-					Build()
-				resultChan <- result{err: panicErr}
+	// Check if action supports context-aware execution
+	if contextAction, ok := action.(ContextAction); ok {
+		// Use context-aware execution path
+		go func() {
+			// Recover from panics to prevent goroutine crashes
+			defer func() {
+				if r := recover(); r != nil {
+					panicErr := errors.Newf("action panicked: %v", r).
+						Component("analysis.processor").
+						Category(errors.CategoryProcessing).
+						Context("action_type", fmt.Sprintf("%T", action)).
+						Context("action_description", action.GetDescription()).
+						Context("panic_value", fmt.Sprintf("%v", r)).
+						Context("step", step).
+						Context("total_steps", total).
+						Build()
+					select {
+					case resultChan <- result{err: panicErr}:
+					case <-ctx.Done():
+						// Context cancelled, exit gracefully
+					}
+				}
+			}()
+
+			// Execute the action with context
+			err := contextAction.ExecuteContext(ctx, data)
+			select {
+			case resultChan <- result{err: err}:
+			case <-ctx.Done():
+				// Context cancelled, exit gracefully
 			}
 		}()
+	} else {
+		// Fall back to legacy execution with goroutine management
+		go func() {
+			// Recover from panics to prevent goroutine crashes
+			defer func() {
+				if r := recover(); r != nil {
+					panicErr := errors.Newf("action panicked: %v", r).
+						Component("analysis.processor").
+						Category(errors.CategoryProcessing).
+						Context("action_type", fmt.Sprintf("%T", action)).
+						Context("action_description", action.GetDescription()).
+						Context("panic_value", fmt.Sprintf("%v", r)).
+						Context("step", step).
+						Context("total_steps", total).
+						Build()
+					select {
+					case resultChan <- result{err: panicErr}:
+					case <-ctx.Done():
+						// Context cancelled, exit gracefully
+					}
+				}
+			}()
 
-		// Execute the action
-		err := action.Execute(data)
-		resultChan <- result{err: err}
-	}()
+			// Create a channel to signal completion
+			done := make(chan struct{})
+			var execErr error
 
-	// Wait for completion with a timeout to prevent hanging
-	// Use a generous timeout since database operations can be slow on constrained hardware
-	timer := time.NewTimer(CompositeActionTimeout)
-	defer timer.Stop()
+			// Execute the action in a separate goroutine
+			go func() {
+				defer close(done)
+				// Add panic recovery for the execution goroutine
+				defer func() {
+					if r := recover(); r != nil {
+						// Convert panic to error
+						execErr = errors.Newf("action panicked: %v", r).
+							Component("analysis.processor").
+							Category(errors.CategoryProcessing).
+							Context("action_type", fmt.Sprintf("%T", action)).
+							Context("action_description", action.GetDescription()).
+							Context("panic_value", fmt.Sprintf("%v", r)).
+							Context("step", step).
+							Context("total_steps", total).
+							Build()
+					}
+				}()
+				execErr = action.Execute(data)
+			}()
 
+			// Wait for either completion or context cancellation
+			select {
+			case <-done:
+				// Action completed, send result
+				select {
+				case resultChan <- result{err: execErr}:
+				case <-ctx.Done():
+					// Context cancelled while sending result
+				}
+			case <-ctx.Done():
+				// Context cancelled/timed out
+				// The Execute goroutine will continue but we won't wait for it
+				// This prevents blocking but the goroutine will complete eventually
+				select {
+				case resultChan <- result{err: ctx.Err()}:
+				default:
+				}
+			}
+		}()
+	}
+
+	// Wait for result or timeout
 	select {
 	case res := <-resultChan:
 		if res.err != nil {
-			// Log which action in the sequence failed
+			// Check if it was a context error
+			if errors.Is(res.err, context.DeadlineExceeded) {
+				timeoutErr := errors.Newf("action timed out after %v", timeout).
+					Component("analysis.processor").
+					Category(errors.CategoryTimeout).
+					Context("action_type", fmt.Sprintf("%T", action)).
+					Context("action_description", action.GetDescription()).
+					Context("timeout_seconds", timeout.Seconds()).
+					Context("step", step).
+					Context("total_steps", total).
+					Build()
+				log.Printf("❌ Composite action timed out at step %d/%d (%s) after %v", 
+					step, total, action.GetDescription(), timeout)
+				return timeoutErr
+			}
+			// Log other errors
 			log.Printf("❌ Composite action failed at step %d/%d (%s): %v", 
 				step, total, action.GetDescription(), res.err)
 			return res.err
 		}
 		return nil
-	case <-timer.C:
-		// Timeout occurred
-		timeoutErr := errors.Newf("action timed out after %v", CompositeActionTimeout).
+	case <-ctx.Done():
+		// Context timeout or cancellation
+		timeoutErr := errors.Newf("action timed out after %v", timeout).
 			Component("analysis.processor").
 			Category(errors.CategoryTimeout).
 			Context("action_type", fmt.Sprintf("%T", action)).
 			Context("action_description", action.GetDescription()).
-			Context("timeout_seconds", CompositeActionTimeout.Seconds()).
+			Context("timeout_seconds", timeout.Seconds()).
 			Context("step", step).
 			Context("total_steps", total).
 			Build()
 		log.Printf("❌ Composite action timed out at step %d/%d (%s) after %v", 
-			step, total, action.GetDescription(), CompositeActionTimeout)
+			step, total, action.GetDescription(), timeout)
 		return timeoutErr
 	}
 }
