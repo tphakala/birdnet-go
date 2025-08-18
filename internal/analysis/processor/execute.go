@@ -27,7 +27,16 @@ func (a ExecuteCommandAction) GetDescription() string {
 	return fmt.Sprintf("Execute command: %s", a.Command)
 }
 
+// Execute implements the Action interface for backward compatibility
 func (a ExecuteCommandAction) Execute(data any) error {
+	// Use a default context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), ExecuteCommandTimeout)
+	defer cancel()
+	return a.ExecuteContext(ctx, data)
+}
+
+// ExecuteContext implements the ContextAction interface for proper context propagation
+func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) error {
 	logger := GetLogger()
 	logger.Info("Executing command", "command", a.Command, "params", a.Params)
 
@@ -72,12 +81,12 @@ func (a ExecuteCommandAction) Execute(data any) error {
 
 	logger.Debug("Executing command with arguments", "command_path", cmdPath, "args", args)
 
-	// Create command with timeout to prevent hanging processes
-	// Use 5 minute timeout for external scripts
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	// Create command with timeout, inheriting from parent context
+	// This ensures cancellation propagates from CompositeAction
+	cmdCtx, cancel := context.WithTimeout(ctx, ExecuteCommandTimeout)
 	defer cancel()
 	
-	cmd := exec.CommandContext(ctx, cmdPath, args...)
+	cmd := exec.CommandContext(cmdCtx, cmdPath, args...)
 
 	// Set a clean environment
 	cmd.Env = getCleanEnvironment()

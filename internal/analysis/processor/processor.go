@@ -874,25 +874,82 @@ func parseCommandParams(params []string, detection *Detections) map[string]inter
 // getDefaultActions returns the default actions to be taken for a given detection.
 func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	var actions []Action
+	var databaseAction *DatabaseAction
+	var sseAction *SSEAction
 
 	// Append various default actions based on the application settings
 	if p.Settings.Realtime.Log.Enabled {
 		actions = append(actions, &LogAction{Settings: p.Settings, EventTracker: p.GetEventTracker(), Note: detection.Note})
 	}
 
+	// Create DatabaseAction if database is enabled
 	if p.Settings.Output.SQLite.Enabled || p.Settings.Output.MySQL.Enabled {
 		p.speciesTrackerMu.RLock()
 		tracker := p.NewSpeciesTracker
 		p.speciesTrackerMu.RUnlock()
 
-		actions = append(actions, &DatabaseAction{
+		databaseAction = &DatabaseAction{
 			Settings:          p.Settings,
 			EventTracker:      p.GetEventTracker(),
 			NewSpeciesTracker: tracker,
 			processor:         p, // Add processor reference for source name resolution
 			Note:              detection.Note,
 			Results:           detection.Results,
-			Ds:                p.Ds})
+			Ds:                p.Ds,
+		}
+	}
+
+	// Create SSE action if broadcaster is available (enabled when SSE API is configured)
+	if sseBroadcaster := p.GetSSEBroadcaster(); sseBroadcaster != nil {
+		// Create SSE retry config - use sensible defaults since SSE should be reliable
+		sseRetryConfig := jobqueue.RetryConfig{
+			Enabled:      true, // Enable retries for SSE to improve reliability
+			MaxRetries:   3,    // Conservative retry count for real-time streaming
+			InitialDelay: 1 * time.Second,
+			MaxDelay:     5 * time.Second,
+			Multiplier:   2.0,
+		}
+
+		sseAction = &SSEAction{
+			Settings:       p.Settings,
+			Note:           detection.Note,
+			BirdImageCache: p.BirdImageCache,
+			EventTracker:   p.GetEventTracker(),
+			RetryConfig:    sseRetryConfig,
+			SSEBroadcaster: sseBroadcaster,
+			Ds:             p.Ds,
+		}
+	}
+
+	// CRITICAL FIX for GitHub issue #1158: Race condition between DatabaseAction and SSEAction
+	//
+	// Problem: When both database and SSE are enabled, they execute concurrently via the job queue.
+	// SSEAction polls for database records that haven't been saved yet, causing timeout errors:
+	//   - "database ID not assigned for Eastern Wood-Pewee after 10s timeout"
+	//   - "note not found in database"
+	//   - "audio file ... not ready after 5s timeout"
+	//
+	// Solution: Combine DatabaseAction and SSEAction into a CompositeAction that executes them
+	// sequentially. This ensures the database save completes before SSE attempts to broadcast,
+	// eliminating the race condition while maintaining all other actions' concurrent execution.
+	//
+	// This is particularly important on resource-constrained hardware (e.g., Raspberry Pi with
+	// SD cards) where database writes can take several seconds to complete.
+	if databaseAction != nil && sseAction != nil {
+		// Create composite action for sequential execution
+		compositeAction := &CompositeAction{
+			Actions: []Action{databaseAction, sseAction},
+			Description: "Database save and SSE broadcast (sequential)",
+		}
+		actions = append(actions, compositeAction)
+	} else {
+		// Add them individually if only one is enabled
+		if databaseAction != nil {
+			actions = append(actions, databaseAction)
+		}
+		if sseAction != nil {
+			actions = append(actions, sseAction)
+		}
 	}
 
 	// Add BirdWeatherAction if enabled and client is initialized
@@ -941,28 +998,6 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 				RetryConfig:    mqttRetryConfig,
 			})
 		}
-	}
-
-	// Add SSE action if broadcaster is available (enabled when SSE API is configured)
-	if sseBroadcaster := p.GetSSEBroadcaster(); sseBroadcaster != nil {
-		// Create SSE retry config - use sensible defaults since SSE should be reliable
-		sseRetryConfig := jobqueue.RetryConfig{
-			Enabled:      true, // Enable retries for SSE to improve reliability
-			MaxRetries:   3,    // Conservative retry count for real-time streaming
-			InitialDelay: 1 * time.Second,
-			MaxDelay:     5 * time.Second,
-			Multiplier:   2.0,
-		}
-
-		actions = append(actions, &SSEAction{
-			Settings:       p.Settings,
-			Note:           detection.Note,
-			BirdImageCache: p.BirdImageCache,
-			EventTracker:   p.GetEventTracker(),
-			RetryConfig:    sseRetryConfig,
-			SSEBroadcaster: sseBroadcaster,
-			Ds:             p.Ds,
-		})
 	}
 
 	// Check if UpdateRangeFilterAction needs to be executed for the day
