@@ -53,7 +53,8 @@
   >();
   let lastFilterState = '';
 
-  // Performance optimization: Removed sinh cache (no longer needed with standard Q calculation)
+  // Performance optimization: Cache expensive Math.sinh calculations for BandReject
+  let sinhCache = new Map<number, number>();
 
   // Performance optimization: Cache entire frequency response curves
   let responseCache = new Map<string, { response: Float32Array; xPositions: Float32Array }>();
@@ -135,16 +136,24 @@
     let alpha = 0;
 
     if (filter.type === 'BandReject' && filter.width) {
-      // For BandReject, use standard Q = fc / bandwidth formula
-      // This gives correct attenuation matching the passes setting
-      const centerFreq = filter.frequency;
-      const bandwidth = Math.max(1, Math.min(filter.width, centerFreq * 1.9)); // Ensure reasonable bandwidth
+      // For BandReject, match the exact backend calculation from equalizer.go:252
+      // alpha := math.Sin(w0) * math.Sinh(math.Log(2.0)/2.0*width*w0/math.Sin(w0))
+      const omega = (2 * Math.PI * filter.frequency) / sampleRate;
+      const sin_omega = Math.sin(omega);
 
-      // Standard bandreject Q calculation: Q = center_frequency / bandwidth_in_Hz
-      q = centerFreq / bandwidth;
+      // Ensure bandwidth doesn't exceed center frequency
+      const safeWidth = Math.max(1, Math.min(filter.width, filter.frequency * 1.9));
 
-      // Clamp Q to reasonable range to avoid instability
-      q = Math.max(0.5, Math.min(50, q));
+      // Backend formula: width*w0/sin(w0) argument for sinh
+      const sinhArg = ((Math.log(2) / 2) * safeWidth * omega) / sin_omega;
+      let sinhValue = sinhCache.get(sinhArg);
+      if (sinhValue === undefined) {
+        sinhValue = Math.sinh(sinhArg);
+        sinhCache.set(sinhArg, sinhValue);
+      }
+
+      // Backend calculates alpha directly, not through Q
+      alpha = sin_omega * sinhValue;
     } else if (
       filter.type === 'BandPass' ||
       filter.type === 'BandStop' ||
@@ -162,8 +171,10 @@
     const sin_omega = Math.sin(omega);
     const cos_omega = Math.cos(omega);
 
-    // Calculate alpha from Q for all filter types (BandReject now uses standard Q)
-    alpha = sin_omega / (2 * q);
+    // Use pre-calculated alpha for BandReject, otherwise calculate from Q
+    if (filter.type !== 'BandReject' || !filter.width) {
+      alpha = sin_omega / (2 * q);
+    }
 
     let b0 = 0,
       b1 = 0,
@@ -956,6 +967,7 @@
         filterCoefficientsCache.clear();
         filterResponseCache.clear();
         responseCache.clear(); // Clear response cache
+        sinhCache.clear(); // Clear sinh cache for BandReject filters
         // Keep trig cache as it's frequency-specific, not filter-specific
         lastFilterState = currentFilterState;
       }
