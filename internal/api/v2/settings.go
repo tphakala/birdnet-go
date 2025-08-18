@@ -17,7 +17,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -681,7 +680,7 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (interface
 	case "realtime":
 		return &settings.Realtime, nil
 	case "audio":
-		return &settings.Realtime.Audio, nil
+		return getAudioSectionValue(settings), nil
 	case "dashboard":
 		return &settings.Realtime.Dashboard, nil
 	case "weather":
@@ -882,7 +881,7 @@ func getSettingsSection(settings *conf.Settings, section string) (interface{}, e
 	case "realtime":
 		return settings.Realtime, nil
 	case "audio":
-		return settings.Realtime.Audio, nil
+		return getAudioSection(settings), nil
 	case "dashboard":
 		return settings.Realtime.Dashboard, nil
 	case "weather":
@@ -976,9 +975,7 @@ func getBlockedFieldMap() map[string]interface{} {
 		
 		// Realtime section - block runtime fields
 		"Realtime": map[string]interface{}{
-			"Audio": map[string]interface{}{
-				"SoxAudioTypes": true, // Runtime list of supported audio types
-			},
+			"Audio": getAudioBlockedFields(),
 		},
 		
 		// All other fields are allowed by default
@@ -1038,14 +1035,6 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		_ = c.SendToast("Reconfiguring RTSP sources...", "info", 4000)
 	}
 
-	// Check sound level monitoring settings
-	if soundLevelSettingsChanged(oldSettings, currentSettings) {
-		c.Debug("Sound level monitoring settings changed, triggering reconfiguration")
-		reconfigActions = append(reconfigActions, "reconfigure_sound_level")
-		// Send toast notification
-		_ = c.SendToast("Reconfiguring sound level monitoring...", "info", 3000)
-	}
-
 	// Check telemetry settings
 	if telemetrySettingsChanged(oldSettings, currentSettings) {
 		c.Debug("Telemetry settings changed, triggering reconfiguration")
@@ -1054,25 +1043,12 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		_ = c.SendToast("Reconfiguring telemetry settings...", "info", 3000)
 	}
 
-	// Check audio device settings
-	if audioDeviceSettingChanged(oldSettings, currentSettings) {
-		c.Debug("Audio device changed. A restart will be required.")
-		// Send toast notification about restart requirement
-		_ = c.SendToast("Audio device changed. Restart required to apply changes.", "warning", 8000)
+	// Handle audio settings changes
+	audioActions, err := c.handleAudioSettingsChanges(oldSettings, currentSettings)
+	if err != nil {
+		return err
 	}
-
-	// Check audio equalizer settings
-	if equalizerSettingsChanged(oldSettings.Realtime.Audio.Equalizer, currentSettings.Realtime.Audio.Equalizer) {
-		c.Debug("Audio equalizer settings changed, updating filter chain")
-		// Handle audio equalizer changes synchronously as it returns an error
-		if err := c.handleEqualizerChange(currentSettings); err != nil {
-			// Send error toast
-			_ = c.SendToast("Failed to update audio equalizer settings", "error", 5000)
-			return fmt.Errorf("failed to update audio equalizer: %w", err)
-		}
-		// Send success toast
-		_ = c.SendToast("Audio equalizer settings updated", "success", 3000)
-	}
+	reconfigActions = append(reconfigActions, audioActions...)
 
 	// Trigger reconfigurations asynchronously
 	if len(reconfigActions) > 0 {
@@ -1184,11 +1160,6 @@ func rtspSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return false
 }
 
-// audioDeviceSettingChanged checks if audio device settings have changed
-func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool {
-	return oldSettings.Realtime.Audio.Source != currentSettings.Realtime.Audio.Source
-}
-
 // speciesIntervalSettingsChanged checks if any species-specific interval settings have changed
 func speciesIntervalSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	// Get the old and new species configs
@@ -1251,22 +1222,6 @@ func birdWeatherSettingsChanged(oldSettings, currentSettings *conf.Settings) boo
 	return false
 }
 
-// soundLevelSettingsChanged checks if sound level monitoring settings have changed
-func soundLevelSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
-	// Check for changes in enabled state
-	if oldSettings.Realtime.Audio.SoundLevel.Enabled != currentSettings.Realtime.Audio.SoundLevel.Enabled {
-		return true
-	}
-
-	// Check for changes in interval (only if enabled)
-	if currentSettings.Realtime.Audio.SoundLevel.Enabled &&
-		oldSettings.Realtime.Audio.SoundLevel.Interval != currentSettings.Realtime.Audio.SoundLevel.Interval {
-		return true
-	}
-
-	return false
-}
-
 // telemetrySettingsChanged checks if telemetry/observability settings have changed
 func telemetrySettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	// Check for changes in enabled state
@@ -1281,19 +1236,6 @@ func telemetrySettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	}
 
 	return false
-}
-
-// equalizerSettingsChanged checks if audio equalizer settings have changed
-func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) bool {
-	return !reflect.DeepEqual(oldSettings, newSettings)
-}
-
-// handleEqualizerChange updates the audio filter chain when equalizer settings change
-func (c *Controller) handleEqualizerChange(settings *conf.Settings) error {
-	if err := myaudio.UpdateFilterChain(settings); err != nil {
-		return fmt.Errorf("failed to update audio filter chain: %w", err)
-	}
-	return nil
 }
 
 // LocaleData represents a locale with its code and full name
