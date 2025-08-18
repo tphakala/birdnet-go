@@ -69,10 +69,12 @@
   // Performance optimization: Use requestAnimationFrame
   let animationFrameId: number | null = null;
   let resizeDebounceTimer: number | null = null;
+  let qualityUpgradeTimer: number | null = null;
 
   // PERFORMANCE: Track if we should use reduced quality for real-time updates
   let useReducedQuality = $state(false);
   let lastInteractionTime = 0;
+  let isResizing = $state(false);
 
   // Professional margins for proper label spacing
   const margins = {
@@ -433,7 +435,7 @@
   }
 
   // Update canvas dimensions based on container size with proper DPR handling
-  function updateCanvasDimensions() {
+  function updateCanvasDimensions(immediate = false) {
     if (containerElement && canvas) {
       const containerWidth = containerElement.clientWidth;
       // Use most of the container width while maintaining reasonable limits
@@ -472,9 +474,19 @@
         canvasWidth = newCanvasWidth;
         canvasHeight = newCanvasHeight;
 
-        // Clear coordinate-dependent caches since dimensions changed
-        responseCache.clear();
-        filterCoefficientsCache.clear(); // Clear for safety
+        // PERFORMANCE: Only clear coordinate-dependent caches
+        // Don't clear expensive filter caches during active resize
+        if (!isResizing || immediate) {
+          responseCache.clear(); // Always clear this since coordinates changed
+          if (immediate) {
+            // Only clear filter caches on final resize, not during active resize
+            filterCoefficientsCache.clear();
+            filterResponseCache.clear();
+          }
+        } else {
+          // During resize, only clear response cache
+          responseCache.clear();
+        }
       }
     }
   }
@@ -520,7 +532,7 @@
   // Compute entire frequency response curve with caching
   function computeResponseCurve(): { response: Float32Array; xPositions: Float32Array } {
     // PERFORMANCE: Use efficient cache key generation with quality
-    const quality = useReducedQuality ? 'low' : 'high';
+    const quality = isResizing ? 'resize' : useReducedQuality ? 'low' : 'high';
     const cacheKey = createCacheKey(filters, quality);
 
     // Return cached response if available
@@ -530,29 +542,50 @@
 
     // SMART SAMPLING: Higher resolution with intelligent frequency distribution
     // Ensure sufficient resolution for smooth curves
-    const minSteps = useReducedQuality ? 400 : 800;
-    const maxSteps = useReducedQuality ? 600 : 1200;
+    let minSteps, maxSteps;
+
+    if (isResizing) {
+      // Extra-low quality during active resize for maximum responsiveness
+      minSteps = 150;
+      maxSteps = 300;
+    } else if (useReducedQuality) {
+      // Normal reduced quality for interactions
+      minSteps = 400;
+      maxSteps = 600;
+    } else {
+      // Full quality for final render
+      minSteps = 800;
+      maxSteps = 1200;
+    }
 
     // Collect critical frequencies that need dense sampling
     const criticalFreqs: number[] = [];
-    for (const filter of filters) {
-      // Add filter center frequency
-      criticalFreqs.push(filter.frequency);
 
-      if (filter.type === 'BandReject' && filter.width) {
-        // For band reject, add points around the notch for smooth transition
-        const halfWidth = filter.width / 2;
-        // Sample densely around the notch edges
-        for (let factor of [0.5, 0.7, 0.9, 1.0, 1.1, 1.3, 1.5]) {
-          criticalFreqs.push(Math.max(20, filter.frequency - halfWidth * factor));
-          criticalFreqs.push(Math.min(20000, filter.frequency + halfWidth * factor));
-        }
-      } else if (filter.type === 'HighPass' || filter.type === 'LowPass') {
-        // For HP/LP, sample around cutoff frequency
-        for (let factor of [0.25, 0.5, 0.7, 0.9, 1.1, 1.4, 2.0, 4.0]) {
-          const freq = filter.frequency * factor;
-          if (freq >= 20 && freq <= 20000) {
-            criticalFreqs.push(freq);
+    // Skip critical frequency sampling during resize for performance
+    if (!isResizing) {
+      for (const filter of filters) {
+        // Add filter center frequency
+        criticalFreqs.push(filter.frequency);
+
+        if (filter.type === 'BandReject' && filter.width) {
+          // For band reject, add points around the notch for smooth transition
+          const halfWidth = filter.width / 2;
+          // Sample densely around the notch edges
+          const factors = useReducedQuality ? [0.7, 1.0, 1.3] : [0.5, 0.7, 0.9, 1.0, 1.1, 1.3, 1.5];
+          for (let factor of factors) {
+            criticalFreqs.push(Math.max(20, filter.frequency - halfWidth * factor));
+            criticalFreqs.push(Math.min(20000, filter.frequency + halfWidth * factor));
+          }
+        } else if (filter.type === 'HighPass' || filter.type === 'LowPass') {
+          // For HP/LP, sample around cutoff frequency
+          const factors = useReducedQuality
+            ? [0.5, 1.0, 2.0]
+            : [0.25, 0.5, 0.7, 0.9, 1.1, 1.4, 2.0, 4.0];
+          for (let factor of factors) {
+            const freq = filter.frequency * factor;
+            if (freq >= 20 && freq <= 20000) {
+              criticalFreqs.push(freq);
+            }
           }
         }
       }
@@ -572,8 +605,8 @@
     // Add all critical frequencies
     for (const freq of criticalFreqs) {
       samplingFreqs.add(freq);
-      // Add extra points around each critical frequency
-      if (!useReducedQuality) {
+      // Add extra points around each critical frequency (skip during resize)
+      if (!useReducedQuality && !isResizing) {
         for (let offset = 0.9; offset <= 1.1; offset += 0.01) {
           const nearFreq = freq * offset;
           if (nearFreq >= 20 && nearFreq <= 20000) {
@@ -864,22 +897,49 @@
       attributeFilter: ['data-theme', 'class'],
     });
 
-    // Listen for window resize - with proper browser support check and debouncing
+    // Listen for window resize - optimized for responsiveness
     // eslint-disable-next-line no-undef -- ResizeObserver checked via globalThis
     let resizeObserver: ResizeObserver | undefined;
     if (typeof globalThis.ResizeObserver !== 'undefined' && containerElement) {
       // eslint-disable-next-line no-undef -- ResizeObserver available via globalThis
       const RO = globalThis.ResizeObserver as typeof ResizeObserver;
       resizeObserver = new RO(() => {
-        // PERFORMANCE: Debounce resize events to prevent excessive redraws
+        // IMMEDIATE: First resize happens instantly with reduced quality
+        if (!isResizing) {
+          isResizing = true;
+          useReducedQuality = true;
+          lastInteractionTime = Date.now();
+
+          // Immediate low-quality update for responsive feel
+          updateCanvasDimensions();
+          scheduleDrawGraph(true);
+        }
+
+        // Clear any existing timers
         if (resizeDebounceTimer !== null) {
           window.clearTimeout(resizeDebounceTimer);
         }
+        if (qualityUpgradeTimer !== null) {
+          window.clearTimeout(qualityUpgradeTimer);
+        }
+
+        // Short debounce for continued resizing (60fps)
         resizeDebounceTimer = window.setTimeout(() => {
           updateCanvasDimensions();
-          scheduleDrawGraph();
+          scheduleDrawGraph(true);
           resizeDebounceTimer = null;
-        }, 100); // 100ms debounce for resize events
+        }, 16); // 16ms = ~60fps for smooth resizing
+
+        // Longer delay for final high-quality render
+        qualityUpgradeTimer = window.setTimeout(() => {
+          isResizing = false;
+          useReducedQuality = false;
+
+          // Final high-quality update with full cache clearing
+          updateCanvasDimensions(true);
+          scheduleDrawGraph();
+          qualityUpgradeTimer = null;
+        }, 150); // 150ms after resize stops
       });
       resizeObserver.observe(containerElement);
     }
@@ -891,9 +951,12 @@
       if (animationFrameId !== null) {
         window.cancelAnimationFrame(animationFrameId);
       }
-      // Clean up resize debounce timer
+      // Clean up resize timers
       if (resizeDebounceTimer !== null) {
         window.clearTimeout(resizeDebounceTimer);
+      }
+      if (qualityUpgradeTimer !== null) {
+        window.clearTimeout(qualityUpgradeTimer);
       }
     };
   });
