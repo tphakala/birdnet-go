@@ -559,9 +559,12 @@
 
     // Calculate response at each frequency
     for (let i = 0; i < steps; i++) {
+      // eslint-disable-next-line security/detect-object-injection -- Safe: numeric array index
       const freq = sortedFreqs[i];
       const x = freqToX(freq);
+      // eslint-disable-next-line security/detect-object-injection -- Safe: numeric array index
       xPositions[i] = x;
+      // eslint-disable-next-line security/detect-object-injection -- Safe: numeric array index
       response[i] = calculateCombinedResponse(freq);
     }
 
@@ -695,7 +698,9 @@
 
       // Draw continuous line through all points
       for (let i = 1; i < steps; i++) {
+        // eslint-disable-next-line security/detect-object-injection -- Safe: numeric array index
         const gain = response[i];
+        // eslint-disable-next-line security/detect-object-injection -- Safe: numeric array index
         const x = xPositions[i];
 
         // CRITICAL: Always draw to maintain continuity

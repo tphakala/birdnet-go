@@ -274,6 +274,7 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
           const rawType = coerceString(f.type, 'LowPass');
           // Try exact match first, then lowercase
           const normalizedType =
+            // eslint-disable-next-line security/detect-object-injection -- Safe: controlled string keys from known map
             allowedTypesMap[rawType] || allowedTypesMap[rawType.toLowerCase()] || 'LowPass';
 
           const coercedFilter: EqualizerFilter = {
