@@ -36,7 +36,7 @@ require (
 	golang.org/x/net v0.43.0
 	golang.org/x/term v0.34.0
 	golang.org/x/text v0.28.0
-	google.golang.org/api v0.246.0
+	google.golang.org/api v0.247.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.6.0
@@ -45,9 +45,9 @@ require (
 )
 
 require (
-	cloud.google.com/go/auth v0.16.3 // indirect
+	cloud.google.com/go/auth v0.16.4 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
-	cloud.google.com/go/compute/metadata v0.7.0 // indirect
+	cloud.google.com/go/compute/metadata v0.8.0 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/eaburns/bit v0.0.0-20131029213740-7bd5cd37375d // indirect
@@ -70,7 +70,7 @@ require (
 	go.opentelemetry.io/otel v1.36.0 // indirect
 	go.opentelemetry.io/otel/metric v1.36.0 // indirect
 	go.opentelemetry.io/otel/trace v1.36.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250728155136-f173205681a0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
 	google.golang.org/grpc v1.74.2 // indirect
 )
 
@@ -120,5 +120,5 @@ require (
 	golang.org/x/sync v0.16.0
 	golang.org/x/sys v0.35.0
 	golang.org/x/time v0.12.0
-	google.golang.org/protobuf v1.36.6 // indirect
+	google.golang.org/protobuf v1.36.7 // indirect
 )
