@@ -33,8 +33,8 @@ github.com/fsnotify/fsnotify v1.8.0 h1:dAwr6QBTBZIkG8roQaJjGof0pp0EeF+tNV7YBP3F/
 github.com/fsnotify/fsnotify v1.8.0/go.mod h1:8jBTzvmWwFyi3Pb8djgCCO5IBqzKJ/Jwo8TRcHyHii0=
 github.com/getsentry/sentry-go v0.35.1 h1:iopow6UVLE2aXu46xKVIs8Z9D/YZkJrHkgozrxa+tOQ=
 github.com/getsentry/sentry-go v0.35.1/go.mod h1:C55omcY9ChRQIUcVcGcs+Zdy4ZpQGvNJ7JYHIoSWOtE=
-github.com/getsentry/sentry-go/echo v0.35.0 h1:3ZXdOwy6EbYebgCVrRkNMaTc1wQ5Up1rmIs1WxCfRt4=
-github.com/getsentry/sentry-go/echo v0.35.0/go.mod h1:RCIdhBnJDy6pU8c+GcLM6IJ36i3or3gT4v9nsc4Fjzc=
+github.com/getsentry/sentry-go/echo v0.35.1 h1:MIhSUyo7cpCdcw0/lIeAw5fukrDt3x9G7qbiyjbVllI=
+github.com/getsentry/sentry-go/echo v0.35.1/go.mod h1:IjdEzgvwlP2/7A32tWk75UmSUsBqvKFdpkN6WhB1e6M=
 github.com/go-audio/audio v1.0.0 h1:zS9vebldgbQqktK4H0lUqWrG8P0NxCJVqcj7ZpNnwd4=
 github.com/go-audio/audio v1.0.0/go.mod h1:6uAu0+H2lHkwdGsAY+j2wHPNPpPoeg5AaEFh9FlA+Zs=
 github.com/go-audio/riff v1.0.0 h1:d8iCGbDvox9BfLagY94fBynxSPHO80LmZCaOsmKxokA=
