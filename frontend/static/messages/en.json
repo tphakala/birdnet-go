@@ -1140,19 +1140,11 @@
             "freeService": "Yr is a free weather data service. For more information, visit <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Use of OpenWeather requires an API key, sign up for a free API key at <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Requires a Wunderground API key and a valid PWS station ID. See https://www.wunderground.com/member/devices for details."
+          "wunderground": "Requires a Wunderground API key and a valid PWS station ID. See <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a> for details."
         },
         "apiKey": {
           "label": "API Key",
           "helpText": "Your API key for the selected weather provider. Keep this secret!"
-        },
-        "stationId": {
-          "label": "Station ID",
-          "helpText": "Your Wunderground Personal Weather Station (PWS) ID."
-        },
-        "endpoint": {
-          "label": "API Endpoint",
-          "helpText": "Custom Wunderground API endpoint. Default: https://api.weather.com/v2/pws/observations/current"
         },
         "units": {
           "label": "Units of Measurement",

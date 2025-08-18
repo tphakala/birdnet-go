@@ -1035,6 +1035,30 @@
             "wunderground": "Wunderground"
           }
         },
+        "wunderground": {
+          "apiKey": {
+            "label": "Clé API Wunderground",
+            "helpText": "Entrez votre clé API Wunderground. Requise pour les données météo."
+          },
+          "stationId": {
+            "label": "ID de station",
+            "helpText": "Votre identifiant de station PWS Wunderground (ex : KCAOAKLA12)."
+          },
+          "endpoint": {
+            "label": "Point de terminaison API",
+            "helpText": "Remplacez le point de terminaison API Wunderground par défaut si nécessaire."
+          },
+          "units": {
+            "label": "Unités",
+            "helpText": "Sélectionnez les unités pour la température et la vitesse du vent (m = Métrique, e = Impérial, h = Hybride UK)."
+          },
+          "test": {
+            "button": "Tester la connexion Wunderground",
+            "loading": "Test en cours...",
+            "description": "Tester la connexion au fournisseur Wunderground",
+            "inProgress": "Test en cours..."
+          }
+        },
         "notes": {
           "none": "Aucune donnée météo ne sera récupérée.",
           "yrno": {
@@ -1053,7 +1077,8 @@
           "options": {
             "standard": "Standard",
             "metric": "Métrique",
-            "imperial": "Impérial"
+            "imperial": "Impérial",
+            "ukhybrid": "Hybride UK (°C/°F)"
           }
         },
         "test": {
@@ -1063,29 +1088,6 @@
           "apiKeyRequired": "La clé API OpenWeather doit être spécifiée",
           "inProgress": "Test en cours...",
           "description": "Tester la connexion au fournisseur météo"
-        }
-      },
-      "wunderground": {
-        "title": "Wunderground",
-        "description": "Configurer le fournisseur météo Wunderground.",
-        "apiKey": {
-          "label": "Clé API",
-          "helpText": "Votre clé API Wunderground. Gardez-la secrète !"
-        },
-        "test": {
-          "button": "Tester la connexion Wunderground",
-          "loading": "Test en cours...",
-          "description": "Tester la connexion au fournisseur Wunderground",
-          "inProgress": "Test en cours...",
-          "apiKeyRequired": "La clé API Wunderground doit être spécifiée"
-        }
-      },
-      "notes": {
-        "wunderground": "L'utilisation de Wunderground nécessite une clé API. Inscrivez-vous sur <a href=\"https://www.wunderground.com/weather/api/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a> pour plus de détails."
-      },
-      "units": {
-        "options": {
-          "ukhybrid": "Hybride UK (°C/°F)"
         }
       }
     },

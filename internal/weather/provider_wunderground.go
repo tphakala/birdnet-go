@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -18,26 +19,34 @@ const (
 )
 
 // InferWundergroundIcon infers a standardized icon code from Wunderground measurements.
-func InferWundergroundIcon(tempC, precipMM, windMS, humidity, solarRadiation float64) IconCode {
-	switch {
-	case precipMM > 0:
+func InferWundergroundIcon(tempC, precipMM, windMS, humidity, solarRadiation float64, windGust float64) IconCode {
+	// 1. Thunderstorm: heavy rain + high wind gust
+	if precipMM > 10 && windGust > 15 {
+		return IconThunderstorm
+	}
+	// 2. Precipitation type: snow vs rain (use temp)
+	if precipMM > 0 {
 		if tempC < 0 {
 			return IconSnow
 		}
 		return IconRain
-	case windMS > 15:
-		return IconThunderstorm
-	case humidity > 90 && tempC < 5:
-		return IconFog
-	case solarRadiation > 600:
-		return IconClearSky
-	case solarRadiation >= 200 && solarRadiation <= 600:
-		return IconPartlyCloudy
-	case solarRadiation < 200:
-		return IconCloudy
-	default:
-		return IconFair
 	}
+
+	// 3. Fog
+	if humidity > 90 && tempC < 5 {
+		return IconFog
+	}
+	// 4. Cloud cover: estimate from solarRadiation
+	if solarRadiation > 600 {
+		return IconClearSky
+	}
+	if solarRadiation >= 200 && solarRadiation <= 600 {
+		return IconPartlyCloudy
+	}
+	if solarRadiation < 200 {
+		return IconCloudy
+	}
+	return IconFair
 }
 
 type WundergroundResponse struct {
@@ -55,7 +64,8 @@ type WundergroundResponse struct {
 		Winddir        int     `json:"winddir"`
 		Humidity       int     `json:"humidity"`
 		QcStatus       int     `json:"qcStatus"`
-		Imperial       struct {
+		// Optional/extra fields for improved icon inference:
+		Imperial struct {
 			Temp        float64 `json:"temp"`
 			HeatIndex   float64 `json:"heatIndex"`
 			Dewpt       float64 `json:"dewpt"`
@@ -99,6 +109,17 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	}
 	if apiKey == "" || stationId == "" {
 		return nil, errors.New(fmt.Errorf("Wunderground API key or Station ID not configured")).
+			Component("weather").
+			Category(errors.CategoryConfiguration).
+			Context("provider", wundergroundProviderName).
+			Build()
+	}
+
+	// Validate stationId format: 3-32 chars, letters, digits, hyphen, underscore
+	stationIdPattern := `^[A-Za-z0-9_-]{3,32}$`
+	stationIdRegex := regexp.MustCompile(stationIdPattern)
+	if !stationIdRegex.MatchString(stationId) {
+		return nil, errors.New(fmt.Errorf("invalid Wunderground Station ID format")).
 			Component("weather").
 			Category(errors.CategoryConfiguration).
 			Context("provider", wundergroundProviderName).
@@ -183,25 +204,54 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	obs := wuResp.Observations[0]
 	obsTime, _ := time.Parse(time.RFC3339, obs.ObsTimeUtc)
 	var temp, feelsLike, windSpeed, windGust, pressure float64
+	var heatIndex, windChill float64
+
 	if units == "m" {
 		temp = obs.Metric.Temp
-		feelsLike = obs.Metric.HeatIndex
+		heatIndex = obs.Metric.HeatIndex
+		windChill = obs.Metric.WindChill
 		windSpeed = obs.Metric.WindSpeed
 		windGust = obs.Metric.WindGust
 		pressure = obs.Metric.Pressure
+		// Thresholds in metric: hot >=27°C, cold <=10°C, wind >4.8 km/h
+		if temp >= 27 && !isInvalid(heatIndex) {
+			feelsLike = heatIndex
+		} else if temp <= 10 && windSpeed > 4.8 && !isInvalid(windChill) {
+			feelsLike = windChill
+		} else {
+			feelsLike = temp
+		}
 	} else if units == "h" {
 		// Hybrid (UK): use Metric for temp, Imperial for wind
 		temp = obs.Metric.Temp
-		feelsLike = obs.Metric.HeatIndex
+		heatIndex = obs.Metric.HeatIndex
+		windChill = obs.Metric.WindChill
 		windSpeed = obs.Imperial.WindSpeed
 		windGust = obs.Imperial.WindGust
 		pressure = obs.Metric.Pressure
+		// Use metric temp thresholds, imperial wind threshold (3 mph)
+		if temp >= 27 && !isInvalid(heatIndex) {
+			feelsLike = heatIndex
+		} else if temp <= 10 && windSpeed > 3 && !isInvalid(windChill) {
+			feelsLike = windChill
+		} else {
+			feelsLike = temp
+		}
 	} else {
 		temp = obs.Imperial.Temp
-		feelsLike = obs.Imperial.HeatIndex
+		heatIndex = obs.Imperial.HeatIndex
+		windChill = obs.Imperial.WindChill
 		windSpeed = obs.Imperial.WindSpeed
 		windGust = obs.Imperial.WindGust
 		pressure = obs.Imperial.Pressure
+		// Thresholds in imperial: hot >=80°F, cold <=50°F, wind >3 mph
+		if temp >= 80 && !isInvalid(heatIndex) {
+			feelsLike = heatIndex
+		} else if temp <= 50 && windSpeed > 3 && !isInvalid(windChill) {
+			feelsLike = windChill
+		} else {
+			feelsLike = temp
+		}
 	}
 
 	iconCode := InferWundergroundIcon(
@@ -210,6 +260,7 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 		windSpeed,
 		float64(obs.Humidity),
 		obs.SolarRadiation,
+		windGust,
 	)
 	mappedData := &WeatherData{
 		Time: obsTime,
@@ -240,4 +291,9 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 
 	logger.Debug("Mapped API response to WeatherData structure", "station", obs.StationID, "temp", mappedData.Temperature.Current)
 	return mappedData, nil
+}
+
+// isInvalid checks if a float64 value is zero or NaN (invalid for HeatIndex/WindChill logic)
+func isInvalid(val float64) bool {
+	return val == 0 || val != val
 }

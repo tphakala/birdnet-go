@@ -756,6 +756,8 @@ func getProviderDisplayName(provider string) string {
 		return "Yr.no"
 	case "openweather":
 		return "OpenWeather"
+	case "wunderground":
+		return "Weather Underground"
 	default:
 		// Simple capitalization for unknown providers
 		if provider != "" {

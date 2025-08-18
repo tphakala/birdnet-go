@@ -50,6 +50,12 @@ func (h *Handlers) TestWeather(c echo.Context) error {
 			Units    string `json:"units"`
 			Language string `json:"language"`
 		} `json:"openWeather"`
+		Wunderground struct {
+			APIKey    string `json:"apiKey"`
+			StationID string `json:"stationId"`
+			Endpoint  string `json:"endpoint"`
+			Units     string `json:"units"`
+		} `json:"wunderground"`
 	}
 
 	var testConfig TestConfig
@@ -77,6 +83,12 @@ func (h *Handlers) TestWeather(c echo.Context) error {
 						Endpoint: testConfig.OpenWeather.Endpoint,
 						Units:    testConfig.OpenWeather.Units,
 						Language: testConfig.OpenWeather.Language,
+					},
+					Wunderground: conf.WundergroundSettings{
+						APIKey:    testConfig.Wunderground.APIKey,
+						StationID: testConfig.Wunderground.StationID,
+						Endpoint:  testConfig.Wunderground.Endpoint,
+						Units:     testConfig.Wunderground.Units,
 					},
 				},
 			},
@@ -576,6 +588,9 @@ func generateWeatherTroubleshootingHint(result *WeatherTestResult) string {
 		if result.Provider == "openweather" {
 			return "Please verify that your OpenWeather API key is correct and active. You can check your API key status at https://home.openweathermap.org/api_keys"
 		}
+		if result.Provider == "wunderground" {
+			return "Please verify your Wunderground API key and Station ID. You can manage your credentials at https://www.wunderground.com/member/api-keys."
+		}
 		return "Authentication failed. Check your API credentials."
 
 	case stageWeatherDataFetch:
@@ -599,6 +614,8 @@ func getProviderDisplayName(provider string) string {
 		return "Yr.no"
 	case "openweather":
 		return "OpenWeather"
+	case "wunderground":
+		return "Wunderground"
 	default:
 		return provider
 	}

@@ -1261,17 +1261,31 @@ func GenerateRandomSecret() string {
 	return base64.RawURLEncoding.EncodeToString(bytes)
 }
 
-// GetWeatherSettings returns the appropriate weather settings based on the configuration
-func (s *Settings) GetWeatherSettings() (provider string, openweather OpenWeatherSettings) {
-	// First check new format
-	if s.Realtime.Weather.Provider != "" {
-		return s.Realtime.Weather.Provider, s.Realtime.Weather.OpenWeather
-	}
+// GetWeatherProvider returns the configured provider and its settings as any.
+type WeatherProvider string
 
-	if s.Realtime.OpenWeather.Enabled {
-		return "openweather", s.Realtime.OpenWeather
-	}
+const (
+	WeatherNone         WeatherProvider = "none"
+	WeatherYrNo         WeatherProvider = "yrno"
+	WeatherOpenWeather  WeatherProvider = "openweather"
+	WeatherWunderground WeatherProvider = "wunderground"
+)
 
-	// Default to YrNo if nothing is configured
-	return "yrno", OpenWeatherSettings{}
+// Prefer explicit settings return to avoid confusion at call sites.
+func (s *Settings) GetWeatherProvider() (provider WeatherProvider, settings any) {
+	p := s.Realtime.Weather.Provider
+	switch p {
+	case string(WeatherOpenWeather):
+		return WeatherOpenWeather, s.Realtime.Weather.OpenWeather
+	case string(WeatherWunderground):
+		return WeatherWunderground, s.Realtime.Weather.Wunderground
+	case string(WeatherYrNo), string(WeatherNone):
+		return WeatherProvider(p), nil
+	default:
+		// Sensible default for legacy configs
+		if s.Realtime.OpenWeather.Enabled {
+			return WeatherOpenWeather, s.Realtime.OpenWeather
+		}
+		return WeatherYrNo, nil
+	}
 }

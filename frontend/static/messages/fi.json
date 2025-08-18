@@ -1107,7 +1107,7 @@
             "freeService": "Yr on ilmainen säätietopalvelu. Lisätietoja: <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "OpenWeatherin käyttö vaatii API-avaimen, rekisteröidy ilmaiselle API-avaimelle osoitteessa <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Säätiedot tarjoaa Wunderground. Sinun on annettava oma API-avain ja aseman tunnus. Katso lisätietoja <a href=\"https://www.wunderground.com/weather/api/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a>."
+          "wunderground": "Wundergroundin käyttö vaatii API-avaimen ja aseman tunnuksen. Rekisteröidy osoitteessa <a href=\"https://www.wunderground.com/weather/api/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a>."
         },
         "apiKey": {
           "label": "API-avain",
@@ -1157,14 +1157,7 @@
           "apiKeyRequired": "Wunderground API-avain on annettava"
         }
       },
-      "notes": {
-        "wunderground": "Wundergroundin käyttö vaatii API-avaimen ja aseman tunnuksen. Rekisteröidy osoitteessa <a href=\"https://www.wunderground.com/weather/api/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a>."
-      },
-      "units": {
-        "options": {
-          "ukhybrid": "UK Hybrid"
-        }
-      }
+      "settings.integration.weather.units.options.ukhybrid": "UK Hybrid (°C/°F)"
     },
     "species": {
       "alwaysInclude": {
