@@ -424,13 +424,23 @@ func (a *CompositeAction) executeActionWithRecovery(action Action, data interfac
 					Context("step", step).
 					Context("total_steps", total).
 					Build()
-				log.Printf("❌ Composite action timed out at step %d/%d (%s) after %v", 
-					step, total, action.GetDescription(), timeout)
+				GetLogger().Error("Composite action timed out",
+					"component", "analysis.processor.actions",
+					"step", step,
+					"total_steps", total,
+					"action_description", action.GetDescription(),
+					"timeout_seconds", timeout.Seconds(),
+					"operation", "composite_action_timeout")
 				return timeoutErr
 			}
 			// Log other errors
-			log.Printf("❌ Composite action failed at step %d/%d (%s): %v", 
-				step, total, action.GetDescription(), res.err)
+			GetLogger().Error("Composite action failed",
+				"component", "analysis.processor.actions",
+				"step", step,
+				"total_steps", total,
+				"action_description", action.GetDescription(),
+				"error", res.err,
+				"operation", "composite_action_execute")
 			return res.err
 		}
 		return nil
@@ -445,8 +455,13 @@ func (a *CompositeAction) executeActionWithRecovery(action Action, data interfac
 			Context("step", step).
 			Context("total_steps", total).
 			Build()
-		log.Printf("❌ Composite action timed out at step %d/%d (%s) after %v", 
-			step, total, action.GetDescription(), timeout)
+		GetLogger().Error("Composite action timed out",
+			"component", "analysis.processor.actions",
+			"step", step,
+			"total_steps", total,
+			"action_description", action.GetDescription(),
+			"timeout_seconds", timeout.Seconds(),
+			"operation", "composite_action_context_timeout")
 		return timeoutErr
 	}
 }
