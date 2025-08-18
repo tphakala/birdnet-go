@@ -19,7 +19,7 @@ Source: BSD-3-Clause
 
 ### cloud.google.com/go/auth
 
-License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.16.3/auth/LICENSE
+License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.16.4/auth/LICENSE
 Source: Apache-2.0
 
 ### cloud.google.com/go/auth/oauth2adapt
@@ -29,7 +29,7 @@ Source: Apache-2.0
 
 ### cloud.google.com/go/compute/metadata
 
-License: https://github.com/googleapis/google-cloud-go/blob/compute/metadata/v0.7.0/compute/metadata/LICENSE
+License: https://github.com/googleapis/google-cloud-go/blob/compute/metadata/v0.8.0/compute/metadata/LICENSE
 Source: Apache-2.0
 
 ### filippo.io/edwards25519
@@ -84,12 +84,12 @@ Source: BSD-3-Clause
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.35.0/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.35.1/LICENSE
 Source: MIT
 
 ### github.com/getsentry/sentry-go/echo
 
-License: https://github.com/getsentry/sentry-go/blob/echo/v0.35.0/echo/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/echo/v0.35.1/echo/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -249,7 +249,7 @@ Source: MIT
 
 ### github.com/mattn/go-sqlite3
 
-License: https://github.com/mattn/go-sqlite3/blob/v1.14.30/LICENSE
+License: https://github.com/mattn/go-sqlite3/blob/v1.14.32/LICENSE
 Source: MIT
 
 ### github.com/mrjones/oauth
@@ -484,12 +484,12 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.246.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.247.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/f173205681a0/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/a7a43d27e69b/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
@@ -499,7 +499,7 @@ Source: Apache-2.0
 
 ### google.golang.org/protobuf
 
-License: https://github.com/protocolbuffers/protobuf-go/blob/v1.36.6/LICENSE
+License: https://github.com/protocolbuffers/protobuf-go/blob/v1.36.7/LICENSE
 Source: BSD-3-Clause
 
 ### gopkg.in/natefinch/lumberjack.v2
