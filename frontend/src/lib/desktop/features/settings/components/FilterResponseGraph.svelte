@@ -57,7 +57,7 @@
   let sinhCache = new Map<number, number>();
 
   // Performance optimization: Cache entire frequency response curves
-  let responseCache = new Map<string, Float32Array>();
+  let responseCache = new Map<string, { response: Float32Array; xPositions: Float32Array }>();
   let lastResponseCacheKey = '';
 
   // Performance optimization: Cache individual filter responses per frequency
@@ -479,7 +479,7 @@
   }
 
   // Compute entire frequency response curve with caching
-  function computeResponseCurve(): Float32Array {
+  function computeResponseCurve(): { response: Float32Array; xPositions: Float32Array } {
     // PERFORMANCE: Use efficient cache key generation
     const cacheKey = createCacheKey(filters);
 
@@ -488,21 +488,84 @@
       return responseCache.get(cacheKey)!;
     }
 
-    // PERFORMANCE: Adaptive resolution based on filter complexity
-    const baseSteps = 200;
-    const stepsPerFilter = filters.filter(f => f.type === 'BandReject').length * 20;
-    const steps = Math.min(baseSteps + stepsPerFilter, 400);
-    const response = new Float32Array(steps);
+    // SMART SAMPLING: Higher resolution with intelligent frequency distribution
+    // Ensure sufficient resolution for smooth curves
+    const minSteps = useReducedQuality ? 400 : 800;
+    const maxSteps = useReducedQuality ? 600 : 1200;
 
-    for (let step = 0; step < steps; step++) {
-      const plotX = (step / steps) * plotWidth;
-      const canvasX = margins.left + plotX;
-      const freq = xToFreq(canvasX);
-      response[step] = calculateCombinedResponse(freq);
+    // Collect critical frequencies that need dense sampling
+    const criticalFreqs: number[] = [];
+    for (const filter of filters) {
+      // Add filter center frequency
+      criticalFreqs.push(filter.frequency);
+
+      if (filter.type === 'BandReject' && filter.width) {
+        // For band reject, add points around the notch for smooth transition
+        const halfWidth = filter.width / 2;
+        // Sample densely around the notch edges
+        for (let factor of [0.5, 0.7, 0.9, 1.0, 1.1, 1.3, 1.5]) {
+          criticalFreqs.push(Math.max(20, filter.frequency - halfWidth * factor));
+          criticalFreqs.push(Math.min(20000, filter.frequency + halfWidth * factor));
+        }
+      } else if (filter.type === 'HighPass' || filter.type === 'LowPass') {
+        // For HP/LP, sample around cutoff frequency
+        for (let factor of [0.25, 0.5, 0.7, 0.9, 1.1, 1.4, 2.0, 4.0]) {
+          const freq = filter.frequency * factor;
+          if (freq >= 20 && freq <= 20000) {
+            criticalFreqs.push(freq);
+          }
+        }
+      }
     }
 
-    // Cache the computed response
-    responseCache.set(cacheKey, response);
+    // Build a comprehensive set of sampling frequencies
+    const samplingFreqs = new Set<number>();
+
+    // Add uniform logarithmic sampling as base
+    const logMin = Math.log10(MIN_FREQ);
+    const logMax = Math.log10(MAX_FREQ);
+    for (let i = 0; i <= minSteps; i++) {
+      const logFreq = logMin + (i / minSteps) * (logMax - logMin);
+      samplingFreqs.add(Math.pow(10, logFreq));
+    }
+
+    // Add all critical frequencies
+    for (const freq of criticalFreqs) {
+      samplingFreqs.add(freq);
+      // Add extra points around each critical frequency
+      if (!useReducedQuality) {
+        for (let offset = 0.9; offset <= 1.1; offset += 0.01) {
+          const nearFreq = freq * offset;
+          if (nearFreq >= 20 && nearFreq <= 20000) {
+            samplingFreqs.add(nearFreq);
+          }
+        }
+      }
+    }
+
+    // Convert to sorted array and limit size
+    let sortedFreqs = Array.from(samplingFreqs).sort((a, b) => a - b);
+    if (sortedFreqs.length > maxSteps) {
+      // Downsample if we have too many points
+      const skipFactor = Math.ceil(sortedFreqs.length / maxSteps);
+      sortedFreqs = sortedFreqs.filter((_, i) => i % skipFactor === 0);
+    }
+
+    const steps = sortedFreqs.length;
+    const response = new Float32Array(steps);
+    const xPositions = new Float32Array(steps);
+
+    // Calculate response at each frequency
+    for (let i = 0; i < steps; i++) {
+      const freq = sortedFreqs[i];
+      const x = freqToX(freq);
+      xPositions[i] = x;
+      response[i] = calculateCombinedResponse(freq);
+    }
+
+    // Cache the computed response and positions
+    const result = { response, xPositions };
+    responseCache.set(cacheKey, result);
     lastResponseCacheKey = cacheKey;
 
     // Limit cache size to prevent memory leaks
@@ -513,7 +576,7 @@
       }
     }
 
-    return response;
+    return result;
   }
 
   // Draw the frequency response graph
@@ -614,39 +677,38 @@
     ctx.shadowBlur = 0;
 
     // PERFORMANCE: Use precomputed response curve
-    const response = computeResponseCurve();
+    const { response, xPositions } = computeResponseCurve();
     const steps = response.length;
 
-    // Draw curve in segments to handle alpha transparency changes
-    let lastCanvasX = margins.left;
-    let lastY = dbToY(response[0]);
+    // CONTINUOUS CURVE: Draw as single path for smoothness
+    if (steps > 0) {
+      ctx.beginPath();
 
-    for (let step = 1; step < steps; step++) {
-      const plotX = (step / steps) * plotWidth;
-      const canvasX = margins.left + plotX;
-      const gain = response[step];
+      // Start from first point
+      const firstGain = response[0];
+      // Clamp at visual minimum instead of skipping for continuity
+      const firstY = dbToY(Math.max(MIN_DB + 0.5, firstGain));
+      const firstX = xPositions[0];
+      ctx.moveTo(firstX, Math.max(margins.top, Math.min(margins.top + plotHeight, firstY)));
 
-      // Hard cutoff at minimum dB to eliminate horizontal line at bottom
-      const shouldDraw = gain > MIN_DB;
+      // Draw continuous line through all points
+      for (let i = 1; i < steps; i++) {
+        const gain = response[i];
+        const x = xPositions[i];
 
-      // Only draw if above minimum threshold
-      if (shouldDraw) {
-        const y = Math.max(margins.top, Math.min(margins.top + plotHeight, dbToY(gain)));
+        // CRITICAL: Always draw to maintain continuity
+        // Clamp values at visual minimum instead of breaking the line
+        const clampedGain = Math.max(MIN_DB + 0.5, gain);
+        const y = dbToY(clampedGain);
 
-        // Draw line segment
-        ctx.beginPath();
-        ctx.moveTo(lastCanvasX, lastY);
-        ctx.lineTo(canvasX, y);
-        ctx.stroke();
+        // Ensure y is within plot bounds
+        const boundedY = Math.max(margins.top, Math.min(margins.top + plotHeight, y));
 
-        lastCanvasX = canvasX;
-        lastY = y;
-      } else {
-        // Skip drawing but update position for next segment
-        const y = Math.max(margins.top, Math.min(margins.top + plotHeight, dbToY(gain)));
-        lastCanvasX = canvasX;
-        lastY = y;
+        ctx.lineTo(x, boundedY);
       }
+
+      // Stroke the complete path once for best performance and smoothness
+      ctx.stroke();
     }
 
     // Add subtle text when no filters are present - professional styling
