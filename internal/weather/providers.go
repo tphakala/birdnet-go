@@ -15,3 +15,11 @@ type YrNoProvider struct {
 	lastModified string
 }
 type OpenWeatherProvider struct{}
+
+// NewWundergroundProvider creates a new WeatherUnderground provider
+func NewWundergroundProvider() Provider {
+	return &WundergroundProvider{}
+}
+
+// WundergroundProvider implements the Provider interface for WeatherUnderground
+type WundergroundProvider struct{}

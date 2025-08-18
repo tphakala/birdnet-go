@@ -1123,6 +1123,36 @@
           "label": "Provedor meteorológico",
           "helpText": "Selecione o provedor de dados meteorológicos"
         },
+        "provider": {
+          "options": {
+            "wunderground": "Wunderground (English)"
+          }
+        },
+        "wunderground": {
+          "title": "Wunderground (English)",
+          "description": "Obtenha dados meteorológicos para detecções usando a API do Wunderground (apenas em inglês)",
+          "apiKeyInput": {
+            "label": "Chave API",
+            "placeholder": "Digite sua chave API do Wunderground",
+            "helpText": "Sua chave API do Wunderground"
+          },
+          "stationIdInput": {
+            "label": "ID da estação",
+            "placeholder": "Digite seu ID de estação do Wunderground",
+            "helpText": "Seu ID de estação do Wunderground"
+          },
+          "units": {
+            "label": "Unidades de temperatura",
+            "helpText": "Selecione as unidades de temperatura para exibição",
+            "metric": "Métrica (°C)",
+            "imperial": "Imperial (°F)",
+            "ukhybrid": "UK Hybrid (°C/°F)",
+            "scientific": "Científica (K)"
+          }
+        },
+        "notes": {
+          "wunderground": "Os dados meteorológicos do Wunderground estão disponíveis apenas em inglês. Você deve fornecer sua própria chave API e Station ID."
+        },
         "apiKeyInput": {
           "label": "Chave API",
           "placeholder": "Digite a chave API",
@@ -1133,6 +1163,7 @@
           "helpText": "Selecione unidades de temperatura para exibição",
           "metric": "Métrica (°C)",
           "imperial": "Imperial (°F)",
+          "ukhybrid": "UK Hybrid (°C/°F)",
           "scientific": "Científica (K)"
         }
       }

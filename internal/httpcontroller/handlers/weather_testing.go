@@ -246,6 +246,28 @@ func (h *Handlers) testWeatherProvider(ctx context.Context, settings *conf.Setti
 		}
 	}
 
+	if settings.Realtime.Weather.Provider == "wunderground" {
+		apiKey := settings.Realtime.Weather.Wunderground.APIKey
+		stationId := settings.Realtime.Weather.Wunderground.StationID
+		if apiKey == "" || stationId == "" {
+			sendResult(WeatherTestResult{
+				Success: false,
+				Stage:   stageWeatherAuthentication,
+				Message: "Wunderground API key or Station ID is not configured",
+				Error:   "Missing API key or Station ID",
+				State:   "failed",
+			})
+			return
+		}
+		sendResult(WeatherTestResult{
+			Success:    true,
+			Stage:      stageWeatherAuthentication,
+			Message:    "Wunderground API key and Station ID are configured.",
+			State:      "completed",
+			IsProgress: false,
+		})
+	}
+
 	// Stage 3: Weather Data Fetch
 	sendResult(WeatherTestResult{
 		Success:    true,
@@ -262,6 +284,8 @@ func (h *Handlers) testWeatherProvider(ctx context.Context, settings *conf.Setti
 		provider = weather.NewYrNoProvider()
 	case "openweather":
 		provider = weather.NewOpenWeatherProvider()
+	case "wunderground":
+		provider = weather.NewWundergroundProvider()
 	default:
 		sendResult(WeatherTestResult{
 			Success: false,
@@ -335,6 +359,9 @@ func (h *Handlers) testWeatherAPIConnectivity(ctx context.Context, settings *con
 	case "openweather":
 		// For OpenWeather, we'll test the base domain
 		testURL = "https://api.openweathermap.org"
+	case "wunderground":
+		// For WeatherUnderground, test the base domain
+		testURL = "https://api.weather.com"
 	default:
 		return WeatherTestResult{
 			Success: false,

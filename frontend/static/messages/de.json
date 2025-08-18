@@ -1015,7 +1015,8 @@
           "options": {
             "none": "Keiner",
             "yrno": "Yr.no",
-            "openweather": "OpenWeather"
+            "openweather": "OpenWeather",
+            "wunderground": "Wunderground"
           }
         },
         "notes": {
@@ -1024,7 +1025,8 @@
             "description": "Wettervorhersagedaten werden von Yr.no bereitgestellt, einem gemeinsamen Service des Norwegischen Meteorologischen Instituts (met.no) und der Norwegischen Rundfunkgesellschaft (NRK).",
             "freeService": "Yr ist ein kostenloser Wetterdatendienst. Für weitere Informationen besuchen Sie <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
-          "openweather": "Die Nutzung von OpenWeather erfordert einen API-Schlüssel. Registrieren Sie sich für einen kostenlosen API-Schlüssel bei <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>."
+          "openweather": "Die Nutzung von OpenWeather erfordert einen API-Schlüssel. Registrieren Sie sich für einen kostenlosen API-Schlüssel bei <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
+          "wunderground": "Wetterdaten werden von Wunderground bereitgestellt. Sie müssen Ihren eigenen API-Schlüssel angeben. Siehe <a href=\"https://www.wunderground.com/weather/api/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a> für Details."
         },
         "apiKey": {
           "label": "API-Schlüssel",
@@ -1045,6 +1047,29 @@
           "apiKeyRequired": "OpenWeather API-Schlüssel muss angegeben werden",
           "inProgress": "Test läuft...",
           "description": "Wetteranbieter-Verbindung testen"
+        }
+      },
+      "wunderground": {
+        "title": "Wunderground",
+        "description": "Wunderground Wetteranbieter konfigurieren.",
+        "apiKey": {
+          "label": "API-Schlüssel",
+          "helpText": "Ihr Wunderground API-Schlüssel. Halten Sie ihn geheim!"
+        },
+        "test": {
+          "button": "Wunderground-Verbindung testen",
+          "loading": "Teste...",
+          "description": "Wunderground-Anbieter-Verbindung testen",
+          "inProgress": "Test läuft...",
+          "apiKeyRequired": "Wunderground API-Schlüssel muss angegeben werden"
+        }
+      },
+      "notes": {
+        "wunderground": "Die Nutzung von Wunderground erfordert einen API-Schlüssel. Registrieren Sie sich bei <a href=\"https://www.wunderground.com/weather/api/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a> für weitere Details."
+      },
+      "units": {
+        "options": {
+          "ukhybrid": "UK Hybrid (°C/°F)"
         }
       }
     },

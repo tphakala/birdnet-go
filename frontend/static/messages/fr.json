@@ -117,7 +117,7 @@
         "lockDetection": "Verrouiller cette détection après l'enregistrement",
         "lockDetectionHelp": "Le verrouillage de cette détection empêchera sa suppression lors du nettoyage régulier.",
         "unlockDetection": "Déverrouiller cette détection après l'enregistrement",
-        "unlockDetectionHel": "Le déverrouillage permettra la suppression de cette détection lors du nettoyage régulier.",
+        "unlockDetectionHelp": "Le déverrouillage permettra la suppression de cette détection lors du nettoyage régulier.",
         "ignoreSpecies": "Ignorer cette espèce",
         "ignoreSpeciesHelp": "Ignorer cette espèce empêchera les détections futures de cette espèce. Cela ne supprimera pas les détections existantes.",
         "detectionLocked": "Cette détection est actuellement verrouillée.",
@@ -1031,7 +1031,8 @@
           "options": {
             "none": "Aucun",
             "yrno": "Yr.no",
-            "openweather": "OpenWeather"
+            "openweather": "OpenWeather",
+            "wunderground": "Wunderground"
           }
         },
         "notes": {
@@ -1040,7 +1041,8 @@
             "description": "Les données de prévisions météorologiques sont fournies par Yr.no, un service conjoint de l'Institut météorologique norvégien (met.no) et de la Société de radiodiffusion norvégienne (NRK).",
             "freeService": "Yr est un service de données météorologiques gratuit. Pour plus d'informations, visitez <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
-          "openweather": "L'utilisation d'OpenWeather nécessite une clé API, inscrivez-vous pour obtenir une clé API gratuite sur <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>."
+          "openweather": "L'utilisation d'OpenWeather nécessite une clé API, inscrivez-vous pour obtenir une clé API gratuite sur <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
+          "wunderground": "Les données météo sont fournies par Wunderground. Vous devez fournir votre propre clé API. Voir <a href=\"https://www.wunderground.com/weather/api/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a> pour plus de détails."
         },
         "apiKey": {
           "label": "Clé API",
@@ -1061,6 +1063,29 @@
           "apiKeyRequired": "La clé API OpenWeather doit être spécifiée",
           "inProgress": "Test en cours...",
           "description": "Tester la connexion au fournisseur météo"
+        }
+      },
+      "wunderground": {
+        "title": "Wunderground",
+        "description": "Configurer le fournisseur météo Wunderground.",
+        "apiKey": {
+          "label": "Clé API",
+          "helpText": "Votre clé API Wunderground. Gardez-la secrète !"
+        },
+        "test": {
+          "button": "Tester la connexion Wunderground",
+          "loading": "Test en cours...",
+          "description": "Tester la connexion au fournisseur Wunderground",
+          "inProgress": "Test en cours...",
+          "apiKeyRequired": "La clé API Wunderground doit être spécifiée"
+        }
+      },
+      "notes": {
+        "wunderground": "L'utilisation de Wunderground nécessite une clé API. Inscrivez-vous sur <a href=\"https://www.wunderground.com/weather/api/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a> pour plus de détails."
+      },
+      "units": {
+        "options": {
+          "ukhybrid": "Hybride UK (°C/°F)"
         }
       }
     },

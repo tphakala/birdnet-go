@@ -24,31 +24,32 @@
   @component
 -->
 <script lang="ts">
-  import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
+  import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
   import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
-  import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import MultiStageOperation from '$lib/desktop/components/ui/MultiStageOperation.svelte';
+  import TestSuccessNote from '$lib/desktop/components/ui/TestSuccessNote.svelte';
   import SettingsButton from '$lib/desktop/features/settings/components/SettingsButton.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
-  import TestSuccessNote from '$lib/desktop/components/ui/TestSuccessNote.svelte';
-  import { alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import {
-    settingsStore,
-    settingsActions,
-    integrationSettings,
-    realtimeSettings,
-    type SettingsFormData,
-    type MQTTSettings,
-    type WeatherSettings,
-  } from '$lib/stores/settings';
-  import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+  import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import { alertIconsSvg } from '$lib/utils/icons';
+// Centralized icons - see icons.ts
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
   import { t } from '$lib/i18n';
+  import {
+    integrationSettings,
+    realtimeSettings,
+    settingsActions,
+    settingsStore,
+    type MQTTSettings,
+    type SettingsFormData,
+    type WeatherSettings
+  } from '$lib/stores/settings';
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
+  import { hasSettingsChanged } from '$lib/utils/settingsChanges';
 
   const logger = loggers.settings;
 
@@ -92,7 +93,7 @@
       },
       weather: {
         provider: 'yrno' as 'none' | 'yrno' | 'openweather',
-        pollInterval: 60,
+        pollInterval: 15,
         debug: false,
         openWeather: {
           enabled: false,
@@ -690,6 +691,12 @@
           units: currentWeather.openWeather?.units || 'metric',
           language: currentWeather.openWeather?.language || 'en',
         },
+        wunderground: {
+          apiKey: currentWeather.wunderground?.apiKey || '',
+          stationId: currentWeather.wunderground?.stationId || '',
+          endpoint: currentWeather.wunderground?.endpoint || '',
+          units: currentWeather.wunderground?.units || 'm',
+        },
       };
 
       // Make request to the real API with CSRF token
@@ -1102,6 +1109,10 @@
             value: 'openweather',
             label: t('settings.integration.weather.provider.options.openweather'),
           },
+          {
+            value: 'wunderground',
+            label: t('settings.integration.weather.provider.options.wunderground'),
+          },
         ]}
         disabled={store.isLoading || store.isSaving}
         onchange={updateWeatherProvider}
@@ -1156,6 +1167,73 @@
             onchange={updateWeatherUnits}
           />
         </div>
+      {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'wunderground'}
+        <SettingsNote>
+          <span>{@html t('settings.integration.weather.notes.wunderground')}</span>
+        </SettingsNote>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <PasswordField
+            label={t('settings.integration.weather.wunderground.apiKey.label')}
+            value={settings.weather!.wunderground.apiKey || ''}
+            onUpdate={apiKey => settingsActions.updateSection('realtime', {
+              weather: {
+                ...settings.weather!,
+                wunderground: { ...settings.weather!.wunderground, apiKey }
+              }
+            })}
+            placeholder=""
+            helpText={t('settings.integration.weather.wunderground.apiKey.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            allowReveal={true}
+          />
+
+          <TextInput
+            label={t('settings.integration.weather.wunderground.stationId.label')}
+            value={settings.weather!.wunderground.stationId || ''}
+            onchange={stationId => settingsActions.updateSection('realtime', {
+              weather: {
+                ...settings.weather!,
+                wunderground: { ...settings.weather!.wunderground, stationId }
+              }
+            })}
+            placeholder=""
+            helpText={t('settings.integration.weather.wunderground.stationId.helpText')}
+            disabled={store.isLoading || store.isSaving}
+          />
+
+          <TextInput
+            label={t('settings.integration.weather.wunderground.endpoint.label')}
+            value={settings.weather!.wunderground.endpoint || ''}
+            onchange={endpoint => settingsActions.updateSection('realtime', {
+              weather: {
+                ...settings.weather!,
+                wunderground: { ...settings.weather!.wunderground, endpoint }
+              }
+            })}
+            placeholder="https://api.weather.com/v2/pws/observations/current"
+            helpText={t('settings.integration.weather.wunderground.endpoint.helpText')}
+            disabled={store.isLoading || store.isSaving}
+          />
+
+          <SelectField
+            id="wunderground-units"
+            value={settings.weather!.wunderground.units || 'm'}
+            label={t('settings.integration.weather.wunderground.units.label')}
+            options={[
+              { value: 'e', label: t('settings.integration.weather.units.options.imperial') },
+              { value: 'm', label: t('settings.integration.weather.units.options.metric') },
+              { value: 'h', label: t('settings.integration.weather.units.options.ukhybrid') },
+            ]}
+            disabled={store.isLoading || store.isSaving}
+            onchange={units => settingsActions.updateSection('realtime', {
+              weather: {
+                ...settings.weather!,
+                wunderground: { ...settings.weather!.wunderground, units }
+              }
+            })}
+          />
+        </div>
       {/if}
 
       {#if (settings.weather?.provider as WeatherSettings['provider']) !== 'none'}
@@ -1205,3 +1283,4 @@
     </div>
   </SettingsSection>
 </div>
+

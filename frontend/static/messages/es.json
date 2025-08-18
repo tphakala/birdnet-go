@@ -1096,7 +1096,30 @@
           "options": {
             "none": "Ninguno",
             "yrno": "Yr.no",
-            "openweather": "OpenWeather"
+            "openweather": "OpenWeather",
+            "wunderground": "Wunderground (English)"
+          }
+        },
+        "wunderground": {
+          "title": "Wunderground (English)",
+          "description": "Obtén datos meteorológicos para las detecciones usando la API de Wunderground (solo en inglés)",
+          "apiKeyInput": {
+            "label": "Clave API",
+            "placeholder": "Introduce tu clave API de Wunderground",
+            "helpText": "Tu clave API de Wunderground"
+          },
+          "stationIdInput": {
+            "label": "ID de estación",
+            "placeholder": "Introduce tu ID de estación de Wunderground",
+            "helpText": "Tu ID de estación de Wunderground"
+          },
+          "units": {
+            "label": "Unidades de temperatura",
+            "helpText": "Selecciona las unidades de temperatura para mostrar",
+            "metric": "Métrico (°C)",
+            "imperial": "Imperial (°F)",
+            "ukhybrid": "UK Hybrid (°C/°F)",
+            "scientific": "Científico (K)"
           }
         },
         "notes": {
@@ -1105,7 +1128,8 @@
             "description": "Los datos de pronóstico del tiempo son proporcionados por Yr.no, un servicio conjunto del Instituto Meteorológico de Noruega (met.no) y la Corporación de Radiodifusión de Noruega (NRK).",
             "freeService": "Yr es un servicio gratuito de datos meteorológicos. Para más información, visite <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
-          "openweather": "El uso de OpenWeather requiere una clave API, regístrese para obtener una clave API gratuita en <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>."
+          "openweather": "El uso de OpenWeather requiere una clave API, regístrese para obtener una clave API gratuita en <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
+          "wunderground": "Wunderground weather data is only available in English. You must provide your own API key and Station ID."
         },
         "apiKey": {
           "label": "Clave API",
@@ -1116,7 +1140,8 @@
           "options": {
             "standard": "Estándar",
             "metric": "Métrico",
-            "imperial": "Imperial"
+            "imperial": "Imperial",
+            "ukhybrid": "UK Hybrid (°C/°F)"
           }
         },
         "test": {

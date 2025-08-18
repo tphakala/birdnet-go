@@ -1096,7 +1096,8 @@
           "options": {
             "none": "Ei mitään",
             "yrno": "Yr.no",
-            "openweather": "OpenWeather"
+            "openweather": "OpenWeather",
+            "wunderground": "Wunderground"
           }
         },
         "notes": {
@@ -1105,7 +1106,8 @@
             "description": "Sääennustetiedot tarjoaa Yr.no, Norjan meteorologisen instituutin (met.no) ja Norjan yleisradioyhtiön (NRK) yhteinen palvelu.",
             "freeService": "Yr on ilmainen säätietopalvelu. Lisätietoja: <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
-          "openweather": "OpenWeatherin käyttö vaatii API-avaimen, rekisteröidy ilmaiselle API-avaimelle osoitteessa <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>."
+          "openweather": "OpenWeatherin käyttö vaatii API-avaimen, rekisteröidy ilmaiselle API-avaimelle osoitteessa <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
+          "wunderground": "Säätiedot tarjoaa Wunderground. Sinun on annettava oma API-avain ja aseman tunnus. Katso lisätietoja <a href=\"https://www.wunderground.com/weather/api/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a>."
         },
         "apiKey": {
           "label": "API-avain",
@@ -1126,6 +1128,41 @@
           "apiKeyRequired": "OpenWeather API-avain täytyy määrittää",
           "inProgress": "Testaus käynnissä...",
           "description": "Testaa sääpalveluyhteys"
+        }
+      },
+      "wunderground": {
+        "title": "Wunderground",
+        "description": "Hae säätiedot havainnoille Wunderground-rajapinnan kautta (vain englanniksi)",
+        "apiKey": {
+          "label": "API-avain",
+          "helpText": "Wunderground API-avaimesi. Pidä tämä salassa!"
+        },
+        "stationId": {
+          "label": "Aseman tunnus",
+          "helpText": "Wunderground-asemasi tunnus"
+        },
+        "units": {
+          "label": "Lämpötilayksiköt",
+          "helpText": "Valitse lämpötilan näyttöyksiköt",
+          "metric": "Metrinen (°C)",
+          "imperial": "Brittiläinen (°F)",
+          "ukhybrid": "UK Hybrid (°C/°F)",
+          "scientific": "Tieteellinen (K)"
+        },
+        "test": {
+          "button": "Testaa Wunderground-yhteys",
+          "loading": "Testataan...",
+          "description": "Testaa Wunderground-palvelun yhteys",
+          "inProgress": "Testaus käynnissä...",
+          "apiKeyRequired": "Wunderground API-avain on annettava"
+        }
+      },
+      "notes": {
+        "wunderground": "Wundergroundin käyttö vaatii API-avaimen ja aseman tunnuksen. Rekisteröidy osoitteessa <a href=\"https://www.wunderground.com/weather/api/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a>."
+      },
+      "units": {
+        "options": {
+          "ukhybrid": "UK Hybrid"
         }
       }
     },

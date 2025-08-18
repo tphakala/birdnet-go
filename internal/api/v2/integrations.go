@@ -509,10 +509,11 @@ type BirdWeatherTestRequest struct {
 
 // WeatherTestRequest represents a request to test weather provider connectivity
 type WeatherTestRequest struct {
-	Provider     string                      `json:"provider"`
-	PollInterval int                         `json:"pollInterval"`
-	Debug        bool                        `json:"debug"`
-	OpenWeather  conf.OpenWeatherSettings    `json:"openWeather"`
+	Provider     string                    `json:"provider"`
+	PollInterval int                       `json:"pollInterval"`
+	Debug        bool                      `json:"debug"`
+	OpenWeather  conf.OpenWeatherSettings  `json:"openWeather"`
+	Wunderground conf.WundergroundSettings `json:"wunderground"`
 }
 
 // WeatherTestStage represents the result of a weather test stage
@@ -559,6 +560,7 @@ func (c *Controller) TestWeatherConnection(ctx echo.Context) error {
 				Debug:        request.Debug,
 				PollInterval: request.PollInterval,
 				OpenWeather:  request.OpenWeather,
+				Wunderground: request.Wunderground,
 			},
 		},
 	}
@@ -656,6 +658,8 @@ func (c *Controller) testWeatherAPIConnectivity(ctx context.Context, settings *c
 		testURL = "https://api.met.no/weatherapi/locationforecast/2.0/status"
 	case "openweather":
 		testURL = "https://api.openweathermap.org"
+	case "wunderground":
+		testURL = "https://api.weather.com"
 	default:
 		return "", fmt.Errorf("unsupported weather provider: %s", provider)
 	}
@@ -722,6 +726,8 @@ func (c *Controller) testWeatherDataFetch(ctx context.Context, settings *conf.Se
 		provider = weather.NewYrNoProvider()
 	case "openweather":
 		provider = weather.NewOpenWeatherProvider()
+	case "wunderground":
+		provider = weather.NewWundergroundProvider()
 	default:
 		return "", fmt.Errorf("unsupported weather provider: %s", settings.Realtime.Weather.Provider)
 	}

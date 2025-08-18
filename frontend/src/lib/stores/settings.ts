@@ -39,11 +39,11 @@
  * - Automatic persistence to server
  * - Error handling and user feedback
  */
-import { writable, derived, get } from 'svelte/store';
-import { settingsAPI } from '$lib/utils/settingsApi.js';
-import { toastActions } from './toast.js';
 import { safeGet, safeSpread } from '$lib/utils/security';
+import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { coerceSettings } from '$lib/utils/settingsCoercion';
+import { derived, get, writable } from 'svelte/store';
+import { toastActions } from './toast.js';
 
 // Type definitions for settings - Updated interfaces
 export interface MainSettings {
@@ -254,11 +254,20 @@ export interface OpenWeatherSettings {
   language: string;
 }
 
+export interface WundergroundSettings {
+  enabled: boolean;
+  apiKey: string;
+  stationId: string;
+  endpoint: string;
+  units: string;
+}
+
 export interface WeatherSettings {
-  provider: 'none' | 'yrno' | 'openweather';
+  provider: 'none' | 'yrno' | 'openweather' | 'wunderground';
   pollInterval: number;
   debug: boolean;
   openWeather: OpenWeatherSettings;
+  wunderground: WundergroundSettings;
 }
 
 export interface SecuritySettings {
@@ -559,6 +568,13 @@ function createEmptySettings(): SettingsFormData {
           endpoint: 'https://api.openweathermap.org/data/2.5/weather',
           units: 'metric',
           language: 'en',
+        },
+        wunderground: {
+          enabled: false,
+          apiKey: '',
+          stationId: '',
+          endpoint: 'https://api.weather.com/v2/pws/observations/current',
+          units: 'm',
         },
       },
       dashboard: {

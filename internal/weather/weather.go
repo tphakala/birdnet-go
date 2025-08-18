@@ -102,6 +102,8 @@ func NewService(settings *conf.Settings, db datastore.Interface, weatherMetrics 
 		provider = NewYrNoProvider()
 	case "openweather":
 		provider = NewOpenWeatherProvider()
+	case "wunderground":
+		provider = NewWundergroundProvider()
 	default:
 		return nil, errors.New(fmt.Errorf("invalid weather provider: %s", settings.Realtime.Weather.Provider)).
 			Component("weather").
@@ -260,10 +262,10 @@ func (s *Service) StartPolling(stopChan <-chan struct{}) {
 func (s *Service) fetchAndSave() error {
 	// Track fetch duration
 	fetchStart := time.Now()
-	
+
 	// FetchWeather should now internally log its start/end/errors
 	data, err := s.provider.FetchWeather(s.settings)
-	
+
 	// Record fetch metrics
 	if s.metrics != nil {
 		s.metrics.RecordWeatherFetchDuration(s.settings.Realtime.Weather.Provider, time.Since(fetchStart).Seconds())
@@ -274,14 +276,14 @@ func (s *Service) fetchAndSave() error {
 			s.metrics.RecordWeatherFetch(s.settings.Realtime.Weather.Provider, "success")
 		}
 	}
-	
+
 	if err != nil {
 		// Handle "not modified" as a success case - no new data to save
 		if errors.Is(err, ErrWeatherDataNotModified) {
 			weatherLogger.Debug("Weather data not modified since last fetch", "provider", s.settings.Realtime.Weather.Provider)
 			return nil // Not an error, just no new data
 		}
-		
+
 		// Provider should log the specific error, we log the failure context here
 		weatherLogger.Error("Failed to fetch weather data from provider",
 			"provider", s.settings.Realtime.Weather.Provider,
