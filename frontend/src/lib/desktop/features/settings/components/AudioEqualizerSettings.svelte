@@ -24,6 +24,10 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { onDestroy } from 'svelte';
+  import type {
+    EqualizerFilter,
+    EqualizerSettings as StoreEqualizerSettings,
+  } from '$lib/stores/settings';
 
   const logger = loggers.settings;
 
@@ -100,9 +104,15 @@
     Tooltip?: string;
   }
 
-  interface Filter {
-    id?: string;
-    type: string;
+  // Use store's EqualizerFilter type but make id optional for new filters
+  interface Filter extends Omit<EqualizerFilter, 'id'> {
+    id?: string; // Optional for new filters before they're saved
+    [key: string]: any;
+  }
+
+  // For new filter form that allows empty type
+  interface NewFilterForm {
+    type: string; // Allow empty string for unselected
     frequency: number;
     q?: number;
     width?: number;
@@ -111,10 +121,8 @@
     [key: string]: any;
   }
 
-  interface EqualizerSettings {
-    enabled: boolean;
-    filters: Filter[];
-  }
+  // Use the store's EqualizerSettings type alias
+  type EqualizerSettings = StoreEqualizerSettings;
 
   interface Props {
     equalizerSettings: EqualizerSettings;
@@ -129,7 +137,7 @@
   let loadingConfig = $state(true);
 
   // New filter state for adding filters
-  let newFilter = $state<Filter>({
+  let newFilter = $state<NewFilterForm>({
     type: '',
     frequency: 0,
     q: 0.707,
@@ -145,6 +153,15 @@
   // Local state for immediate UI feedback
   let localFilterValues = $state<Map<string, Filter>>(new Map());
 
+  // Generate stable ID for filters that lack one
+  function ensureFilterId(filter: Filter | NewFilterForm): string {
+    if (!filter.id) {
+      // Generate a stable ID based on filter properties and timestamp
+      filter.id = `${filter.type}-${filter.frequency}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    }
+    return filter.id;
+  }
+
   // Load filter configuration from backend on mount with cleanup
   let abortController: AbortController | null = null;
 
@@ -153,8 +170,9 @@
     // Sync local state with props when filters change externally
     const currentFilters = equalizerSettings.filters || [];
     const newLocalValues = new Map<string, Filter>();
-    currentFilters.forEach((filter, index) => {
-      const key = `filter-${index}`;
+    currentFilters.forEach(filter => {
+      const id = ensureFilterId(filter);
+      const key = `filter-${id}`;
       newLocalValues.set(key, { ...filter });
     });
     localFilterValues = newLocalValues;
@@ -235,16 +253,17 @@
   function addNewFilter() {
     if (!newFilter.type) return;
 
-    const filterToAdd = { ...newFilter };
-    // Remove empty id if it exists
-    if (!filterToAdd.id) delete filterToAdd.id;
+    // Cast to Filter since we know type is not empty
+    const filterToAdd = { ...newFilter } as Filter;
+    // Ensure the filter has a proper ID
+    ensureFilterId(filterToAdd);
 
     // Ensure HP/LP filters use Butterworth Q factor
     if (filterToAdd.type === 'HighPass' || filterToAdd.type === 'LowPass') {
       filterToAdd.q = 0.707;
     }
 
-    const filters = [...(equalizerSettings.filters || []), filterToAdd];
+    const filters = [...(equalizerSettings.filters || []), filterToAdd as EqualizerFilter];
     onUpdate({ ...equalizerSettings, filters });
 
     // Reset new filter form
@@ -258,7 +277,7 @@
   }
 
   // Debounced update to parent component
-  function debouncedUpdate(filters: Filter[]) {
+  function debouncedUpdate(filters: EqualizerFilter[]) {
     onUpdate({ ...equalizerSettings, filters });
   }
 
@@ -333,11 +352,12 @@
     }
 
     // Update local state immediately for responsive UI
-    const filterKey = `filter-${index}`;
+    const filterId = ensureFilterId(updatedFilter);
+    const filterKey = `filter-${filterId}`;
     localFilterValues.set(filterKey, updatedFilter);
     localFilterValues = new Map(localFilterValues); // Trigger reactivity
 
-    filters.splice(index, 1, updatedFilter);
+    filters.splice(index, 1, updatedFilter as EqualizerFilter);
 
     // For select/dropdown changes (passes), update immediately
     // For text inputs (frequency, q, width, gain), debounce
@@ -350,7 +370,7 @@
         updateTimeouts.delete(timeoutKey);
       }
       // Update immediately
-      debouncedUpdate(filters);
+      debouncedUpdate(filters as EqualizerFilter[]);
     } else {
       // Debounce the update
       const timeoutKey = `${index}-${paramName}`;
@@ -363,7 +383,7 @@
 
       // Set new timeout
       const newTimeout = window.setTimeout(() => {
-        debouncedUpdate(filters);
+        debouncedUpdate(filters as EqualizerFilter[]);
         updateTimeouts.delete(timeoutKey);
       }, DEBOUNCE_DELAY);
 
@@ -379,7 +399,7 @@
     }
 
     const parameters = getEqFilterParameters(filterType);
-    const updatedFilter: Filter = {
+    const updatedFilter: NewFilterForm = {
       type: filterType,
       frequency: 0,
       q: 0.707,
@@ -445,7 +465,8 @@
     <div class="space-y-4">
       <!-- Existing filters -->
       {#each equalizerSettings.filters || [] as filter, index}
-        {@const filterKey = `filter-${index}`}
+        {@const filterId = ensureFilterId(filter)}
+        {@const filterKey = `filter-${filterId}`}
         {@const displayFilter = localFilterValues.get(filterKey) || filter}
         {@const filterParams = getEqFilterParameters(displayFilter.type)}
         <div

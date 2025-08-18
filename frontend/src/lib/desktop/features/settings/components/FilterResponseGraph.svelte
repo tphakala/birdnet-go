@@ -119,7 +119,7 @@
 
   // Get cached filter coefficients or calculate them
   function getFilterCoefficients(filter: Filter) {
-    const cacheKey = `${filter.type}-${filter.frequency}-${filter.q || 0}-${filter.width || 0}-${filter.passes || 0}`;
+    const cacheKey = `${filter.type}-${filter.frequency}-${filter.q ?? 0}-${filter.width ?? 0}-${filter.passes ?? 0}`;
 
     // Check cache first
     if (filterCoefficientsCache.has(cacheKey)) {
@@ -253,7 +253,7 @@
     }
 
     // PERFORMANCE: Check filter-specific response cache first
-    const filterCacheKey = `${filter.type}-${filter.frequency}-${filter.q || 0}-${filter.width || 0}-${passes}`;
+    const filterCacheKey = `${filter.type}-${filter.frequency}-${filter.q ?? 0}-${filter.width ?? 0}-${passes}`;
     let freqCache = filterResponseCache.get(filterCacheKey);
     if (!freqCache) {
       freqCache = new Map<number, number>();
@@ -471,17 +471,19 @@
   }
 
   // Create efficient cache key without JSON.stringify
-  function createCacheKey(filters: Filter[]): string {
-    if (filters.length === 0) return 'empty';
-    return filters
-      .map(f => `${f.type}:${f.frequency}:${f.q || 0}:${f.width || 0}:${f.passes || 0}`)
+  function createCacheKey(filters: Filter[], quality?: string): string {
+    if (filters.length === 0) return quality ? `empty:${quality}` : 'empty';
+    const filterKey = filters
+      .map(f => `${f.type}:${f.frequency}:${f.q ?? 0}:${f.width ?? 0}:${f.passes ?? 0}`)
       .join('|');
+    return quality ? `${filterKey}:${quality}` : filterKey;
   }
 
   // Compute entire frequency response curve with caching
   function computeResponseCurve(): { response: Float32Array; xPositions: Float32Array } {
-    // PERFORMANCE: Use efficient cache key generation
-    const cacheKey = createCacheKey(filters);
+    // PERFORMANCE: Use efficient cache key generation with quality
+    const quality = useReducedQuality ? 'low' : 'high';
+    const cacheKey = createCacheKey(filters, quality);
 
     // Return cached response if available
     if (cacheKey === lastResponseCacheKey && responseCache.has(cacheKey)) {
@@ -858,9 +860,11 @@
       // PERFORMANCE: Use efficient cache key
       const currentFilterState = createCacheKey(filters);
       if (currentFilterState !== lastFilterState) {
-        // Clear caches when filters change
+        // Clear ALL caches when filters change
         filterCoefficientsCache.clear();
         filterResponseCache.clear();
+        responseCache.clear(); // Clear response cache
+        sinhCache.clear(); // Clear sinh cache
         // Keep trig cache as it's frequency-specific, not filter-specific
         lastFilterState = currentFilterState;
       }

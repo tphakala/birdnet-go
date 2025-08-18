@@ -34,6 +34,7 @@
     settingsActions,
     audioSettings,
     rtspSettings,
+    type EqualizerSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
@@ -352,7 +353,7 @@
   }
 
   // Handle equalizer updates from the AudioEqualizerSettings component
-  function handleEqualizerUpdate(equalizerSettings: { enabled: boolean; filters: any[] }) {
+  function handleEqualizerUpdate(equalizerSettings: EqualizerSettings) {
     // Get current store state directly instead of using derived $audioSettings
     const currentStore = $settingsStore;
     const currentAudio = currentStore.formData.realtime?.audio || {
