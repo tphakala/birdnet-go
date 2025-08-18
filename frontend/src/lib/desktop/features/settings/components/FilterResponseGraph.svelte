@@ -26,6 +26,7 @@
     type: string;
     frequency: number;
     q?: number;
+    width?: number;
     passes?: number;
     [key: string]: any;
   }
@@ -44,6 +45,16 @@
   // Canvas element reference
   let canvas: HTMLCanvasElement;
   let tooltip = $state({ visible: false, x: 0, y: 0, freq: 0, gain: 0 });
+
+  // Performance optimization: Cache filter coefficients
+  let filterCoefficientsCache = new Map<
+    string,
+    { b0: number; b1: number; b2: number; a1: number; a2: number }
+  >();
+  let lastFilterState = '';
+
+  // Performance optimization: Use requestAnimationFrame
+  let animationFrameId: number | null = null;
 
   // Professional margins for proper label spacing
   const margins = {
@@ -88,26 +99,47 @@
     // This function kept for compatibility with existing effect calls
   }
 
-  // Calculate frequency response for a filter using proper digital biquad formulas
-  function calculateFilterResponse(filter: Filter, frequency: number): number {
+  // Get cached filter coefficients or calculate them
+  function getFilterCoefficients(filter: Filter) {
+    const cacheKey = `${filter.type}-${filter.frequency}-${filter.q || 0}-${filter.width || 0}-${filter.passes || 0}`;
+
+    // Check cache first
+    if (filterCoefficientsCache.has(cacheKey)) {
+      return filterCoefficientsCache.get(cacheKey)!;
+    }
+
     const sampleRate = 48000; // 48kHz sample rate
 
     // For HP/LP filters, always use Butterworth response (Q=0.707)
-    // For band-pass/band-stop, use the specified Q factor
+    // For band-pass/band-stop, use the specified Q factor or width
     let q = 0.707; // Default to Butterworth
+    let alpha = 0;
 
-    if (filter.type === 'BandPass' || filter.type === 'BandStop' || filter.type === 'Notch') {
+    if (filter.type === 'BandReject' && filter.width) {
+      // For BandReject, calculate alpha from bandwidth directly
+      const omega = (2 * Math.PI * filter.frequency) / sampleRate;
+      const sin_omega = Math.sin(omega);
+
+      // Ensure bandwidth doesn't exceed center frequency
+      const safeWidth = Math.min(filter.width, filter.frequency * 1.9);
+
+      // Calculate bandwidth in octaves
+      // Guard against negative or zero values
+      const f_low = Math.max(20, filter.frequency - safeWidth / 2);
+      const f_high = filter.frequency + safeWidth / 2;
+      const bw_oct = Math.log2(f_high / f_low);
+
+      // Calculate alpha using the correct formula
+      alpha = sin_omega * Math.sinh((Math.log(2) / 2) * bw_oct);
+    } else if (
+      filter.type === 'BandPass' ||
+      filter.type === 'BandStop' ||
+      filter.type === 'Notch'
+    ) {
       q = Math.max(0.1, Math.min(10, filter.q || 0.707));
     } else if (filter.type === 'HighPass' || filter.type === 'LowPass') {
       // Force Butterworth response for HP/LP filters
       q = 0.707;
-    }
-
-    const passes = filter.passes || 0;
-
-    // If no passes (0dB attenuation), return flat response
-    if (passes === 0) {
-      return 0;
     }
 
     // Calculate filter coefficients using Robert Bristow-Johnson's cookbook formulas
@@ -115,7 +147,11 @@
     const omega = (2 * Math.PI * fc) / sampleRate;
     const sin_omega = Math.sin(omega);
     const cos_omega = Math.cos(omega);
-    const alpha = sin_omega / (2 * q);
+
+    // Use pre-calculated alpha for BandReject, otherwise calculate from Q
+    if (filter.type !== 'BandReject' || !filter.width) {
+      alpha = sin_omega / (2 * q);
+    }
 
     let b0 = 0,
       b1 = 0,
@@ -148,8 +184,12 @@
       a0 = 1 + alpha;
       a1 = -2 * cos_omega;
       a2 = 1 - alpha;
-    } else if (filter.type === 'BandStop' || filter.type === 'Notch') {
-      // Band-stop/notch filter coefficients
+    } else if (
+      filter.type === 'BandStop' ||
+      filter.type === 'Notch' ||
+      filter.type === 'BandReject'
+    ) {
+      // Band-stop/notch/band-reject filter coefficients
       b0 = 1;
       b1 = -2 * cos_omega;
       b2 = 1;
@@ -157,7 +197,10 @@
       a1 = -2 * cos_omega;
       a2 = 1 - alpha;
     } else {
-      return 0; // Unknown filter type
+      // Unknown filter type - return unity coefficients
+      const coeffs = { b0: 1, b1: 0, b2: 0, a1: 0, a2: 0 };
+      filterCoefficientsCache.set(cacheKey, coeffs);
+      return coeffs;
     }
 
     // Normalize coefficients
@@ -167,15 +210,36 @@
     a1 /= a0;
     a2 /= a0;
 
+    // Cache the coefficients
+    const coeffs = { b0, b1, b2, a1, a2 };
+    filterCoefficientsCache.set(cacheKey, coeffs);
+
+    return coeffs;
+  }
+
+  // Calculate frequency response for a filter using cached coefficients
+  function calculateFilterResponse(filter: Filter, frequency: number): number {
+    const sampleRate = 48000; // 48kHz sample rate
+    const passes = filter.passes || 0;
+
+    // If no passes (0dB attenuation), return flat response
+    if (passes === 0) {
+      return 0;
+    }
+
+    // Get cached coefficients
+    const { b0, b1, b2, a1, a2 } = getFilterCoefficients(filter);
+
     // Calculate frequency response at the given frequency
     // H(e^jω) = (b0 + b1*e^-jω + b2*e^-j2ω) / (1 + a1*e^-jω + a2*e^-j2ω)
     const w = (2 * Math.PI * frequency) / sampleRate;
 
-    // For numerical stability, use pre-computed trig values
+    // PERFORMANCE: Use single trig calculation
     const cos_w = Math.cos(w);
     const sin_w = Math.sin(w);
-    const cos_2w = Math.cos(2 * w);
-    const sin_2w = Math.sin(2 * w);
+    // Use double angle formulas instead of calculating separately
+    const cos_2w = 2 * cos_w * cos_w - 1; // cos(2w) = 2cos²(w) - 1
+    const sin_2w = 2 * sin_w * cos_w; // sin(2w) = 2sin(w)cos(w)
 
     // Complex numerator: b0 + b1*e^-jω + b2*e^-j2ω
     // e^-jω = cos(ω) - j*sin(ω)
@@ -187,8 +251,9 @@
     const den_imag = -a1 * sin_w - a2 * sin_2w;
 
     // Calculate magnitude |H| = |numerator| / |denominator|
-    const num_magnitude = Math.sqrt(num_real * num_real + num_imag * num_imag);
-    const den_magnitude = Math.sqrt(den_real * den_real + den_imag * den_imag);
+    // PERFORMANCE: Use hypot for better numerical stability and potential SIMD optimization
+    const num_magnitude = Math.hypot(num_real, num_imag);
+    const den_magnitude = Math.hypot(den_real, den_imag);
 
     // Avoid division by zero and ensure stability
     let magnitude = num_magnitude / Math.max(1e-10, den_magnitude);
@@ -197,7 +262,7 @@
     // This is a physical constraint - passive filters can't amplify
     if (filter.type === 'HighPass') {
       // At frequencies much higher than cutoff, response should approach 1 (0 dB)
-      const freq_ratio = frequency / fc;
+      const freq_ratio = frequency / filter.frequency;
       if (freq_ratio > 10) {
         // Far above cutoff, response should be very close to 1
         magnitude = Math.min(magnitude, 1.0);
@@ -219,8 +284,21 @@
   function calculateCombinedResponse(frequency: number): number {
     let totalGain = 0;
     for (const filter of filters) {
-      totalGain += calculateFilterResponse(filter, frequency);
+      const filterGain = calculateFilterResponse(filter, frequency);
+
+      // Skip this filter if it returns NaN or Infinity
+      if (!isFinite(filterGain)) {
+        continue;
+      }
+
+      totalGain += filterGain;
     }
+
+    // Return flat response if calculation fails
+    if (!isFinite(totalGain)) {
+      return 0;
+    }
+
     return Math.max(MIN_DB, Math.min(MAX_DB, totalGain));
   }
 
@@ -294,6 +372,20 @@
       // Use most of the container width while maintaining reasonable limits
       canvasWidth = Math.min(Math.max(containerWidth * 0.95, 600), 1200);
     }
+  }
+
+  // Schedule graph drawing with requestAnimationFrame
+  function scheduleDrawGraph() {
+    // Cancel any pending animation frame
+    if (animationFrameId !== null) {
+      window.cancelAnimationFrame(animationFrameId);
+    }
+
+    // Schedule new draw
+    animationFrameId = window.requestAnimationFrame(() => {
+      drawGraph();
+      animationFrameId = null;
+    });
   }
 
   // Draw the frequency response graph
@@ -393,8 +485,9 @@
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
 
-    // Draw with higher resolution for smooth curve, using alpha fade for extreme values
-    const steps = plotWidth * 2; // Higher resolution
+    // PERFORMANCE: Reduced resolution for faster calculation
+    // 200-300 points is enough for smooth curve on most displays
+    const steps = Math.min(300, plotWidth); // Reduced from plotWidth * 2
 
     // Draw curve in segments to handle alpha transparency changes
     let lastCanvasX = margins.left;
@@ -528,7 +621,7 @@
     // Listen for theme changes
     const observer = new MutationObserver(() => {
       updateColors();
-      drawGraph();
+      scheduleDrawGraph();
     });
 
     observer.observe(document.documentElement, {
@@ -544,7 +637,7 @@
       const RO = globalThis.ResizeObserver as typeof ResizeObserver;
       resizeObserver = new RO(() => {
         updateCanvasDimensions();
-        drawGraph();
+        scheduleDrawGraph();
       });
       resizeObserver.observe(containerElement);
     }
@@ -552,14 +645,25 @@
     return () => {
       observer.disconnect();
       resizeObserver?.disconnect();
+      // Clean up any pending animation frame
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
     };
   });
 
   // Redraw graph when filters change or dimensions update
   $effect(() => {
     if (canvas) {
+      // Clear coefficient cache when filters change
+      const currentFilterState = JSON.stringify(filters);
+      if (currentFilterState !== lastFilterState) {
+        filterCoefficientsCache.clear();
+        lastFilterState = currentFilterState;
+      }
+
       updateColors();
-      drawGraph();
+      scheduleDrawGraph();
     }
   });
 
@@ -567,7 +671,7 @@
   $effect(() => {
     // This effect will run when canvasWidth changes
     if (canvas && canvasWidth) {
-      drawGraph();
+      scheduleDrawGraph();
     }
   });
 </script>

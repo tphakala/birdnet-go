@@ -153,9 +153,10 @@ export interface EqualizerSettings {
 
 export interface EqualizerFilter {
   id: string;
-  type: 'highpass' | 'lowpass' | 'bandpass' | 'bandstop';
+  type: 'HighPass' | 'LowPass' | 'BandPass' | 'BandStop' | 'BandReject';
   frequency: number;
   q?: number;
+  width?: number; // Bandwidth in Hz (used by BandReject instead of Q)
   gain?: number;
   passes?: number; // Number of filter passes (1=12dB, 2=24dB, 3=36dB, 4=48dB)
 }

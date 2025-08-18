@@ -23,6 +23,7 @@
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import { onDestroy } from 'svelte';
 
   const logger = loggers.settings;
 
@@ -58,6 +59,29 @@
         { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
       ],
     },
+    BandReject: {
+      Parameters: [
+        {
+          Name: 'Frequency',
+          Label: 'Center Frequency',
+          Type: 'number',
+          Unit: 'Hz',
+          Min: 20,
+          Max: 20000,
+          Default: 1000,
+        },
+        {
+          Name: 'Width',
+          Label: 'Bandwidth',
+          Type: 'number',
+          Unit: 'Hz',
+          Min: 1,
+          Max: 10000,
+          Default: 100,
+        },
+        { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
+      ],
+    },
   };
 
   interface FilterParameter {
@@ -81,6 +105,7 @@
     type: string;
     frequency: number;
     q?: number;
+    width?: number;
     gain?: number;
     passes?: number;
     [key: string]: any;
@@ -108,12 +133,32 @@
     type: '',
     frequency: 0,
     q: 0.707,
+    width: 100,
     gain: 0,
     passes: 1, // Default to 12dB attenuation
   });
 
+  // Debouncing for filter parameter updates
+  const DEBOUNCE_DELAY = 300; // milliseconds
+  let updateTimeouts = new Map<string, number>(); // Map of filter-param to timeout ID
+
+  // Local state for immediate UI feedback
+  let localFilterValues = $state<Map<string, Filter>>(new Map());
+
   // Load filter configuration from backend on mount with cleanup
   let abortController: AbortController | null = null;
+
+  // Initialize local filter values from props
+  $effect(() => {
+    // Sync local state with props when filters change externally
+    const currentFilters = equalizerSettings.filters || [];
+    const newLocalValues = new Map<string, Filter>();
+    currentFilters.forEach((filter, index) => {
+      const key = `filter-${index}`;
+      newLocalValues.set(key, { ...filter });
+    });
+    localFilterValues = newLocalValues;
+  });
 
   $effect(() => {
     loadFilterConfig();
@@ -124,6 +169,13 @@
         abortController.abort();
       }
     };
+  });
+
+  // Clean up debounce timeouts on destroy
+  onDestroy(() => {
+    // Clear all pending timeouts
+    updateTimeouts.forEach(timeout => clearTimeout(timeout));
+    updateTimeouts.clear();
   });
 
   async function loadFilterConfig() {
@@ -196,7 +248,7 @@
     onUpdate({ ...equalizerSettings, filters });
 
     // Reset new filter form
-    newFilter = { type: '', frequency: 0, q: 0.707, gain: 0, passes: 1 };
+    newFilter = { type: '', frequency: 0, q: 0.707, width: 100, gain: 0, passes: 1 };
   }
 
   // Remove a filter by index
@@ -205,8 +257,18 @@
     onUpdate({ ...equalizerSettings, filters });
   }
 
-  // Update a specific parameter of a filter
-  function updateFilterParameter(index: number, paramName: string, value: unknown) {
+  // Debounced update to parent component
+  function debouncedUpdate(filters: Filter[]) {
+    onUpdate({ ...equalizerSettings, filters });
+  }
+
+  // Update a specific parameter of a filter with debouncing
+  function updateFilterParameter(
+    index: number,
+    paramName: string,
+    value: unknown,
+    immediate = false
+  ) {
     const filters = [...equalizerSettings.filters];
     const currentFilter = safeArrayAccess(filters, index);
     if (!currentFilter) return;
@@ -215,7 +277,7 @@
     const normalizedParamName = paramName.toLowerCase();
 
     // Safe property assignment - whitelist allowed parameters
-    const allowedParams = ['frequency', 'q', 'gain', 'passes'];
+    const allowedParams = ['frequency', 'q', 'width', 'gain', 'passes'];
     if (!allowedParams.includes(normalizedParamName)) return;
 
     // Get parameter configuration for validation
@@ -228,6 +290,7 @@
     if (
       normalizedParamName === 'frequency' ||
       normalizedParamName === 'q' ||
+      normalizedParamName === 'width' ||
       normalizedParamName === 'gain' ||
       normalizedParamName === 'passes'
     ) {
@@ -258,6 +321,9 @@
       case 'q':
         updatedFilter.q = validatedValue as number;
         break;
+      case 'width':
+        updatedFilter.width = validatedValue as number;
+        break;
       case 'gain':
         updatedFilter.gain = validatedValue as number;
         break;
@@ -266,14 +332,49 @@
         break;
     }
 
+    // Update local state immediately for responsive UI
+    const filterKey = `filter-${index}`;
+    localFilterValues.set(filterKey, updatedFilter);
+    localFilterValues = new Map(localFilterValues); // Trigger reactivity
+
     filters.splice(index, 1, updatedFilter);
-    onUpdate({ ...equalizerSettings, filters });
+
+    // For select/dropdown changes (passes), update immediately
+    // For text inputs (frequency, q, width, gain), debounce
+    if (immediate || normalizedParamName === 'passes') {
+      // Clear any pending timeout for this parameter
+      const timeoutKey = `${index}-${paramName}`;
+      const existingTimeout = updateTimeouts.get(timeoutKey);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+        updateTimeouts.delete(timeoutKey);
+      }
+      // Update immediately
+      debouncedUpdate(filters);
+    } else {
+      // Debounce the update
+      const timeoutKey = `${index}-${paramName}`;
+
+      // Clear existing timeout for this specific parameter
+      const existingTimeout = updateTimeouts.get(timeoutKey);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+      }
+
+      // Set new timeout
+      const newTimeout = window.setTimeout(() => {
+        debouncedUpdate(filters);
+        updateTimeouts.delete(timeoutKey);
+      }, DEBOUNCE_DELAY);
+
+      updateTimeouts.set(timeoutKey, newTimeout);
+    }
   }
 
   // Set default values when filter type is selected
   function getFilterDefaults(filterType: string) {
     if (!filterType) {
-      newFilter = { type: '', frequency: 0, q: 0.707, gain: 0, passes: 1 };
+      newFilter = { type: '', frequency: 0, q: 0.707, width: 100, gain: 0, passes: 1 };
       return;
     }
 
@@ -282,6 +383,7 @@
       type: filterType,
       frequency: 0,
       q: 0.707,
+      width: 100,
       gain: 0,
       passes: 1, // Default to 12dB attenuation
     };
@@ -295,6 +397,9 @@
           break;
         case 'q':
           updatedFilter.q = param.Default;
+          break;
+        case 'width':
+          updatedFilter.width = param.Default;
           break;
         case 'gain':
           updatedFilter.gain = param.Default;
@@ -340,7 +445,9 @@
     <div class="space-y-4">
       <!-- Existing filters -->
       {#each equalizerSettings.filters || [] as filter, index}
-        {@const filterParams = getEqFilterParameters(filter.type)}
+        {@const filterKey = `filter-${index}`}
+        {@const displayFilter = localFilterValues.get(filterKey) || filter}
+        {@const filterParams = getEqFilterParameters(displayFilter.type)}
         <div
           class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end p-4 bg-base-200 rounded-lg border border-base-300"
         >
@@ -350,14 +457,14 @@
               type="button"
               class="btn btn-sm w-full pointer-events-none bg-base-300 border-base-300"
             >
-              <span class="font-medium">{filter.type} Filter</span>
+              <span class="font-medium">{displayFilter.type} Filter</span>
             </button>
           </div>
 
           <!-- Dynamic parameters based on filter type -->
           {#each filterParams as param}
             <!-- Skip Q factor for HP/LP filters - always use Butterworth (Q=0.707) -->
-            {#if !(param.Name === 'Q' && (filter.type === 'HighPass' || filter.type === 'LowPass'))}
+            {#if !(param.Name === 'Q' && (displayFilter.type === 'HighPass' || displayFilter.type === 'LowPass'))}
               <div class="flex flex-col">
                 <div class="label pt-0">
                   <span class="label-text-alt">
@@ -365,11 +472,16 @@
                   </span>
                 </div>
                 {#if param.Label === 'Attenuation'}
-                  <!-- Select for Passes/Attenuation -->
+                  <!-- Select for Passes/Attenuation - immediate update -->
                   <select
-                    value={String(filter.passes ?? param.Default ?? 1)}
+                    value={String(displayFilter.passes ?? param.Default ?? 1)}
                     onchange={e =>
-                      updateFilterParameter(index, param.Name, parseInt(e.currentTarget.value))}
+                      updateFilterParameter(
+                        index,
+                        param.Name,
+                        parseInt(e.currentTarget.value),
+                        true
+                      )}
                     class="select select-bordered select-sm w-full"
                     {disabled}
                   >
@@ -380,9 +492,9 @@
                     <option value="4">48dB</option>
                   </select>
                 {:else if param.Name.toLowerCase() === 'frequency'}
-                  <!-- Frequency input -->
+                  <!-- Frequency input - debounced -->
                   <input
-                    value={filter.frequency ?? param.Default}
+                    value={displayFilter.frequency ?? param.Default}
                     oninput={e =>
                       updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
                     type="number"
@@ -393,9 +505,9 @@
                     {disabled}
                   />
                 {:else if param.Name.toLowerCase() === 'q'}
-                  <!-- Q factor input -->
+                  <!-- Q factor input - debounced -->
                   <input
-                    value={filter.q ?? param.Default}
+                    value={displayFilter.q ?? param.Default}
                     oninput={e =>
                       updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
                     type="number"
@@ -405,10 +517,23 @@
                     class="input input-bordered input-sm w-full"
                     {disabled}
                   />
-                {:else if param.Name.toLowerCase() === 'gain'}
-                  <!-- Gain input -->
+                {:else if param.Name.toLowerCase() === 'width'}
+                  <!-- Width (Bandwidth) input - debounced -->
                   <input
-                    value={filter.gain ?? param.Default}
+                    value={displayFilter.width ?? param.Default}
+                    oninput={e =>
+                      updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
+                    type="number"
+                    min={param.Min}
+                    max={param.Max}
+                    step="1"
+                    class="input input-bordered input-sm w-full"
+                    {disabled}
+                  />
+                {:else if param.Name.toLowerCase() === 'gain'}
+                  <!-- Gain input - debounced -->
+                  <input
+                    value={displayFilter.gain ?? param.Default}
                     oninput={e =>
                       updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
                     type="number"
@@ -511,6 +636,21 @@
                     }}
                     type="number"
                     step="0.1"
+                    min={param.Min}
+                    max={param.Max}
+                    class="input input-bordered input-sm w-full"
+                    {disabled}
+                  />
+                {:else if param.Name.toLowerCase() === 'width'}
+                  <!-- Width (Bandwidth) input -->
+                  <input
+                    value={newFilter.width ?? 100}
+                    oninput={e => {
+                      const value = parseFloat(e.currentTarget.value) || 100;
+                      newFilter = { ...newFilter, width: value };
+                    }}
+                    type="number"
+                    step="1"
                     min={param.Min}
                     max={param.Max}
                     class="input input-bordered input-sm w-full"

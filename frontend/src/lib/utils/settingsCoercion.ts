@@ -258,15 +258,23 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
           const f = filter as UnknownSettings;
 
           // Normalize and validate filter type - backend expects proper case
-          const allowedTypesMap = {
+          const allowedTypesMap: Record<string, string> = {
             lowpass: 'LowPass',
             highpass: 'HighPass',
             bandpass: 'BandPass',
             bandstop: 'BandStop',
+            bandreject: 'BandReject',
+            // Also handle proper case inputs
+            LowPass: 'LowPass',
+            HighPass: 'HighPass',
+            BandPass: 'BandPass',
+            BandStop: 'BandStop',
+            BandReject: 'BandReject',
           };
-          const rawType = coerceString(f.type, 'LowPass').toLowerCase();
+          const rawType = coerceString(f.type, 'LowPass');
+          // Try exact match first, then lowercase
           const normalizedType =
-            allowedTypesMap[rawType as keyof typeof allowedTypesMap] || 'LowPass';
+            allowedTypesMap[rawType] || allowedTypesMap[rawType.toLowerCase()] || 'LowPass';
 
           const coercedFilter: EqualizerFilter = {
             id: coerceString(
@@ -278,9 +286,10 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
               f.frequency,
               20,
               20000,
-              normalizedType === 'HighPass' ? 100 : 15000
+              normalizedType === 'HighPass' ? 100 : normalizedType === 'BandReject' ? 1000 : 15000
             ),
             q: coerceNumber(f.q, 0.1, 10, 0.707),
+            width: coerceNumber(f.width, 1, 10000, 100), // Add width parameter for BandReject
             gain: coerceNumber(f.gain, -48, 12, 0),
             passes: 1, // Default passes
           };
