@@ -82,9 +82,9 @@
     left: 100, // Much more space for dB labels
   };
 
-  // Responsive width calculation
+  // Responsive canvas dimensions
   let canvasWidth = $state(800); // Default fallback
-  let canvasHeight = height;
+  let canvasHeight = $state(height); // Make reactive since we update it
 
   // Plot area dimensions (excluding margins) - now reactive
   let plotWidth = $derived(canvasWidth - margins.left - margins.right);
@@ -432,12 +432,50 @@
     return margins.top + plotHeight - ((db - MIN_DB) / (MAX_DB - MIN_DB)) * plotHeight;
   }
 
-  // Update canvas dimensions based on container
+  // Update canvas dimensions based on container size with proper DPR handling
   function updateCanvasDimensions() {
-    if (containerElement) {
+    if (containerElement && canvas) {
       const containerWidth = containerElement.clientWidth;
       // Use most of the container width while maintaining reasonable limits
-      canvasWidth = Math.min(Math.max(containerWidth * 0.95, 600), 1200);
+      const newCanvasWidth = Math.min(Math.max(containerWidth * 0.95, 600), 1200);
+      const newCanvasHeight = height;
+
+      // Get device pixel ratio for high-DPI displays
+      const dpr = window.devicePixelRatio || 1;
+
+      // Set the internal canvas size (accounting for device pixel ratio)
+      const internalWidth = Math.round(newCanvasWidth * dpr);
+      const internalHeight = Math.round(newCanvasHeight * dpr);
+
+      // Only update if dimensions actually changed to avoid unnecessary redraws
+      if (
+        canvas.width !== internalWidth ||
+        canvas.height !== internalHeight ||
+        canvasWidth !== newCanvasWidth ||
+        canvasHeight !== newCanvasHeight
+      ) {
+        // Update internal canvas dimensions
+        canvas.width = internalWidth;
+        canvas.height = internalHeight;
+
+        // Scale the context to match device pixel ratio
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.scale(dpr, dpr);
+        }
+
+        // Set CSS dimensions (what the user sees)
+        canvas.style.width = `${newCanvasWidth}px`;
+        canvas.style.height = `${newCanvasHeight}px`;
+
+        // Update reactive state
+        canvasWidth = newCanvasWidth;
+        canvasHeight = newCanvasHeight;
+
+        // Clear coordinate-dependent caches since dimensions changed
+        responseCache.clear();
+        filterCoefficientsCache.clear(); // Clear for safety
+      }
     }
   }
 
@@ -779,6 +817,7 @@
   // Handle mouse move for tooltip
   function handleMouseMove(event: MouseEvent) {
     const rect = canvas.getBoundingClientRect();
+    // Use CSS coordinates for mouse positioning (not affected by DPR)
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
@@ -794,8 +833,8 @@
 
       tooltip = {
         visible: true,
-        x: x, // Use canvas-relative coordinates
-        y: y, // Use canvas-relative coordinates
+        x: x, // CSS coordinates for tooltip positioning
+        y: y, // CSS coordinates for tooltip positioning
         freq,
         gain: Math.round(gain * 10) / 10,
       };
@@ -879,10 +918,12 @@
     }
   });
 
-  // Update dimensions when container size changes
+  // Initialize canvas when it becomes available
   $effect(() => {
-    // This effect will run when canvasWidth changes
-    if (canvas && canvasWidth) {
+    // This effect will run when canvas element becomes available
+    if (canvas) {
+      // Initial setup when canvas ref becomes available
+      updateCanvasDimensions();
       scheduleDrawGraph();
     }
   });
