@@ -53,8 +53,26 @@
   >();
   let lastFilterState = '';
 
+  // Performance optimization: Cache expensive Math.sinh calculations for BandReject
+  let sinhCache = new Map<number, number>();
+
+  // Performance optimization: Cache entire frequency response curves
+  let responseCache = new Map<string, Float32Array>();
+  let lastResponseCacheKey = '';
+
+  // Performance optimization: Cache individual filter responses per frequency
+  let filterResponseCache = new Map<string, Map<number, number>>();
+
+  // Performance optimization: Precompute trig values for common frequencies
+  let trigCache = new Map<number, { cos: number; sin: number; cos2: number; sin2: number }>();
+
   // Performance optimization: Use requestAnimationFrame
   let animationFrameId: number | null = null;
+  let resizeDebounceTimer: number | null = null;
+
+  // PERFORMANCE: Track if we should use reduced quality for real-time updates
+  let useReducedQuality = $state(false);
+  let lastInteractionTime = 0;
 
   // Professional margins for proper label spacing
   const margins = {
@@ -129,8 +147,15 @@
       const f_high = filter.frequency + safeWidth / 2;
       const bw_oct = Math.log2(f_high / f_low);
 
-      // Calculate alpha using the correct formula
-      alpha = sin_omega * Math.sinh((Math.log(2) / 2) * bw_oct);
+      // PERFORMANCE: Cache expensive Math.sinh calculation
+      const sinhArg = (Math.log(2) / 2) * bw_oct;
+      let sinhValue = sinhCache.get(sinhArg);
+      if (sinhValue === undefined) {
+        sinhValue = Math.sinh(sinhArg);
+        sinhCache.set(sinhArg, sinhValue);
+      }
+
+      alpha = sin_omega * sinhValue;
     } else if (
       filter.type === 'BandPass' ||
       filter.type === 'BandStop' ||
@@ -227,6 +252,19 @@
       return 0;
     }
 
+    // PERFORMANCE: Check filter-specific response cache first
+    const filterCacheKey = `${filter.type}-${filter.frequency}-${filter.q || 0}-${filter.width || 0}-${passes}`;
+    let freqCache = filterResponseCache.get(filterCacheKey);
+    if (!freqCache) {
+      freqCache = new Map<number, number>();
+      filterResponseCache.set(filterCacheKey, freqCache);
+    }
+
+    const cachedResponse = freqCache.get(frequency);
+    if (cachedResponse !== undefined) {
+      return cachedResponse;
+    }
+
     // Get cached coefficients
     const { b0, b1, b2, a1, a2 } = getFilterCoefficients(filter);
 
@@ -234,12 +272,28 @@
     // H(e^jω) = (b0 + b1*e^-jω + b2*e^-j2ω) / (1 + a1*e^-jω + a2*e^-j2ω)
     const w = (2 * Math.PI * frequency) / sampleRate;
 
-    // PERFORMANCE: Use single trig calculation
-    const cos_w = Math.cos(w);
-    const sin_w = Math.sin(w);
-    // Use double angle formulas instead of calculating separately
-    const cos_2w = 2 * cos_w * cos_w - 1; // cos(2w) = 2cos²(w) - 1
-    const sin_2w = 2 * sin_w * cos_w; // sin(2w) = 2sin(w)cos(w)
+    // PERFORMANCE: Use cached trig values
+    let trigValues = trigCache.get(w);
+    if (!trigValues) {
+      const cos_w = Math.cos(w);
+      const sin_w = Math.sin(w);
+      trigValues = {
+        cos: cos_w,
+        sin: sin_w,
+        cos2: 2 * cos_w * cos_w - 1, // cos(2w) = 2cos²(w) - 1
+        sin2: 2 * sin_w * cos_w, // sin(2w) = 2sin(w)cos(w)
+      };
+      // Limit trig cache size
+      if (trigCache.size > 500) {
+        const firstKey = trigCache.keys().next();
+        if (!firstKey.done && firstKey.value !== undefined) {
+          trigCache.delete(firstKey.value);
+        }
+      }
+      trigCache.set(w, trigValues);
+    }
+
+    const { cos: cos_w, sin: sin_w, cos2: cos_2w, sin2: sin_2w } = trigValues;
 
     // Complex numerator: b0 + b1*e^-jω + b2*e^-j2ω
     // e^-jω = cos(ω) - j*sin(ω)
@@ -277,7 +331,20 @@
     const db = 20 * Math.log10(Math.max(1e-10, cascaded_magnitude));
 
     // Clamp to reasonable range
-    return Math.max(-96, Math.min(12, db));
+    const result = Math.max(-96, Math.min(12, db));
+
+    // PERFORMANCE: Cache the result for this filter and frequency
+    freqCache.set(frequency, result);
+
+    // Limit per-filter cache size
+    if (freqCache.size > 200) {
+      const firstKey = freqCache.keys().next();
+      if (!firstKey.done && firstKey.value !== undefined) {
+        freqCache.delete(firstKey.value);
+      }
+    }
+
+    return result;
   }
 
   // Calculate combined response of all filters (returns 0dB flat response when no filters)
@@ -375,17 +442,78 @@
   }
 
   // Schedule graph drawing with requestAnimationFrame
-  function scheduleDrawGraph() {
+  function scheduleDrawGraph(immediate = false) {
     // Cancel any pending animation frame
     if (animationFrameId !== null) {
       window.cancelAnimationFrame(animationFrameId);
+    }
+
+    // PERFORMANCE: Track interaction timing for quality adjustment
+    const now = Date.now();
+    if (immediate) {
+      lastInteractionTime = now;
+      useReducedQuality = true;
+    } else if (now - lastInteractionTime > 500) {
+      useReducedQuality = false;
     }
 
     // Schedule new draw
     animationFrameId = window.requestAnimationFrame(() => {
       drawGraph();
       animationFrameId = null;
+
+      // Reset quality after draw if interaction is done
+      if (useReducedQuality && Date.now() - lastInteractionTime > 300) {
+        useReducedQuality = false;
+        scheduleDrawGraph(); // Redraw with full quality
+      }
     });
+  }
+
+  // Create efficient cache key without JSON.stringify
+  function createCacheKey(filters: Filter[]): string {
+    if (filters.length === 0) return 'empty';
+    return filters
+      .map(f => `${f.type}:${f.frequency}:${f.q || 0}:${f.width || 0}:${f.passes || 0}`)
+      .join('|');
+  }
+
+  // Compute entire frequency response curve with caching
+  function computeResponseCurve(): Float32Array {
+    // PERFORMANCE: Use efficient cache key generation
+    const cacheKey = createCacheKey(filters);
+
+    // Return cached response if available
+    if (cacheKey === lastResponseCacheKey && responseCache.has(cacheKey)) {
+      return responseCache.get(cacheKey)!;
+    }
+
+    // PERFORMANCE: Adaptive resolution based on filter complexity
+    const baseSteps = 200;
+    const stepsPerFilter = filters.filter(f => f.type === 'BandReject').length * 20;
+    const steps = Math.min(baseSteps + stepsPerFilter, 400);
+    const response = new Float32Array(steps);
+
+    for (let step = 0; step < steps; step++) {
+      const plotX = (step / steps) * plotWidth;
+      const canvasX = margins.left + plotX;
+      const freq = xToFreq(canvasX);
+      response[step] = calculateCombinedResponse(freq);
+    }
+
+    // Cache the computed response
+    responseCache.set(cacheKey, response);
+    lastResponseCacheKey = cacheKey;
+
+    // Limit cache size to prevent memory leaks
+    if (responseCache.size > 10) {
+      const firstKey = responseCache.keys().next();
+      if (!firstKey.done && firstKey.value !== undefined) {
+        responseCache.delete(firstKey.value);
+      }
+    }
+
+    return response;
   }
 
   // Draw the frequency response graph
@@ -485,19 +613,18 @@
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
 
-    // PERFORMANCE: Reduced resolution for faster calculation
-    // 200-300 points is enough for smooth curve on most displays
-    const steps = Math.min(300, plotWidth); // Reduced from plotWidth * 2
+    // PERFORMANCE: Use precomputed response curve
+    const response = computeResponseCurve();
+    const steps = response.length;
 
     // Draw curve in segments to handle alpha transparency changes
     let lastCanvasX = margins.left;
-    let lastY = dbToY(calculateCombinedResponse(xToFreq(margins.left)));
+    let lastY = dbToY(response[0]);
 
-    for (let step = 1; step <= steps; step++) {
+    for (let step = 1; step < steps; step++) {
       const plotX = (step / steps) * plotWidth;
       const canvasX = margins.left + plotX;
-      const freq = xToFreq(canvasX);
-      const gain = calculateCombinedResponse(freq);
+      const gain = response[step];
 
       // Hard cutoff at minimum dB to eliminate horizontal line at bottom
       const shouldDraw = gain > MIN_DB;
@@ -629,15 +756,22 @@
       attributeFilter: ['data-theme', 'class'],
     });
 
-    // Listen for window resize - with proper browser support check
+    // Listen for window resize - with proper browser support check and debouncing
     // eslint-disable-next-line no-undef -- ResizeObserver checked via globalThis
     let resizeObserver: ResizeObserver | undefined;
     if (typeof globalThis.ResizeObserver !== 'undefined' && containerElement) {
       // eslint-disable-next-line no-undef -- ResizeObserver available via globalThis
       const RO = globalThis.ResizeObserver as typeof ResizeObserver;
       resizeObserver = new RO(() => {
-        updateCanvasDimensions();
-        scheduleDrawGraph();
+        // PERFORMANCE: Debounce resize events to prevent excessive redraws
+        if (resizeDebounceTimer !== null) {
+          window.clearTimeout(resizeDebounceTimer);
+        }
+        resizeDebounceTimer = window.setTimeout(() => {
+          updateCanvasDimensions();
+          scheduleDrawGraph();
+          resizeDebounceTimer = null;
+        }, 100); // 100ms debounce for resize events
       });
       resizeObserver.observe(containerElement);
     }
@@ -649,16 +783,23 @@
       if (animationFrameId !== null) {
         window.cancelAnimationFrame(animationFrameId);
       }
+      // Clean up resize debounce timer
+      if (resizeDebounceTimer !== null) {
+        window.clearTimeout(resizeDebounceTimer);
+      }
     };
   });
 
   // Redraw graph when filters change or dimensions update
   $effect(() => {
     if (canvas) {
-      // Clear coefficient cache when filters change
-      const currentFilterState = JSON.stringify(filters);
+      // PERFORMANCE: Use efficient cache key
+      const currentFilterState = createCacheKey(filters);
       if (currentFilterState !== lastFilterState) {
+        // Clear caches when filters change
         filterCoefficientsCache.clear();
+        filterResponseCache.clear();
+        // Keep trig cache as it's frequency-specific, not filter-specific
         lastFilterState = currentFilterState;
       }
 
