@@ -305,6 +305,31 @@ func (m *FFmpegManager) checkStreamHealth() {
 	
 	for url, h := range health {
 		if !h.IsHealthy {
+			// Get the stream to check if it's already restarting
+			m.streamsMu.RLock()
+			stream, exists := m.streams[url]
+			m.streamsMu.RUnlock()
+			
+			// Skip if stream doesn't exist (shouldn't happen but be defensive)
+			if !exists {
+				managerLogger.Warn("unhealthy stream not found in streams map",
+					"url", privacy.SanitizeRTSPUrl(url),
+					"operation", "health_check")
+				continue
+			}
+			
+			// Check if stream is already in the process of restarting
+			if stream.IsRestarting() {
+				if conf.Setting().Debug {
+					managerLogger.Debug("skipping restart for stream already in restart process",
+						"url", privacy.SanitizeRTSPUrl(url),
+						"last_data_ago_seconds", time.Since(h.LastDataReceived).Seconds(),
+						"restart_count", h.RestartCount,
+						"operation", "health_check_skip_restart")
+				}
+				continue // Don't interfere with ongoing restart/backoff
+			}
+			
 			managerLogger.Warn("unhealthy stream detected",
 				"url", privacy.SanitizeRTSPUrl(url),
 				"last_data_ago_seconds", time.Since(h.LastDataReceived).Seconds(),

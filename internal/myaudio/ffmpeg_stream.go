@@ -1226,6 +1226,41 @@ func (s *FFmpegStream) Restart(manual bool) {
 	}
 }
 
+// IsRestarting checks if the stream is currently in the process of restarting.
+// This includes streams that are:
+// - Actively processing a restart request (restartInProgress flag set)
+// - In backoff period between restart attempts (no process running but not stopped)
+// - Waiting for circuit breaker cooldown
+//
+// This method helps prevent the manager from interfering with streams that are
+// already handling their own restart cycle, avoiding premature restarts that
+// would break the exponential backoff mechanism.
+func (s *FFmpegStream) IsRestarting() bool {
+	// Check if we have a running process
+	s.cmdMu.Lock()
+	hasProcess := s.cmd != nil && s.cmd.Process != nil
+	s.cmdMu.Unlock()
+	
+	// Check if restart is in progress
+	s.restartMu.Lock()
+	inProgress := s.restartInProgress
+	s.restartMu.Unlock()
+	
+	// Check if stream is stopped
+	s.stoppedMu.RLock()
+	stopped := s.stopped
+	s.stoppedMu.RUnlock()
+	
+	// Check if circuit breaker is open (in cooldown)
+	circuitOpen := s.isCircuitOpen()
+	
+	// Stream is restarting if:
+	// 1. Restart is explicitly in progress
+	// 2. No process running and not stopped (in backoff)
+	// 3. Circuit breaker is open (waiting for cooldown)
+	return inProgress || (!hasProcess && !stopped) || circuitOpen
+}
+
 // GetHealth returns the current health status of the stream.
 // It includes information about data reception, restart count, and data rate statistics.
 func (s *FFmpegStream) GetHealth() StreamHealth {
