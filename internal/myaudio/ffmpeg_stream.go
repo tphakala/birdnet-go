@@ -1251,8 +1251,8 @@ func (s *FFmpegStream) IsRestarting() bool {
 	stopped := s.stopped
 	s.stoppedMu.RUnlock()
 	
-	// Check if circuit breaker is open (in cooldown)
-	circuitOpen := s.isCircuitOpen()
+	// Check if circuit breaker is open (in cooldown) - silent check to avoid log spam
+	circuitOpen := s.isCircuitOpenSilent()
 	
 	// Stream is restarting if:
 	// 1. Restart is explicitly in progress
@@ -1433,6 +1433,16 @@ func (s *FFmpegStream) logStreamHealth() {
 }
 
 // isCircuitOpen checks if the circuit breaker is open
+// isCircuitOpenSilent checks if the circuit breaker is open without logging.
+// This is used by IsRestarting() to avoid log spam during health checks.
+func (s *FFmpegStream) isCircuitOpenSilent() bool {
+	s.circuitMu.Lock()
+	defer s.circuitMu.Unlock()
+	
+	// Check if circuit was opened and we're still in cooldown
+	return !s.circuitOpenTime.IsZero() && time.Since(s.circuitOpenTime) < circuitBreakerCooldown
+}
+
 func (s *FFmpegStream) isCircuitOpen() bool {
 	s.circuitMu.Lock()
 	defer s.circuitMu.Unlock()

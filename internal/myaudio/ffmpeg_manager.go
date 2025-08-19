@@ -22,6 +22,25 @@ const (
 	minimumStreamRuntime = 2 * time.Minute
 )
 
+// getTimeSinceDataSeconds returns the time in seconds since data was last received,
+// handling the case where LastDataReceived is zero (never received data).
+// Returns 0 if LastDataReceived is zero to avoid confusing large numbers in logs.
+func getTimeSinceDataSeconds(lastDataReceived time.Time) float64 {
+	if lastDataReceived.IsZero() {
+		return 0 // Never received data
+	}
+	return time.Since(lastDataReceived).Seconds()
+}
+
+// formatTimeSinceData returns a human-readable string for time since data was last received,
+// handling the case where LastDataReceived is zero (never received data).
+func formatTimeSinceData(lastDataReceived time.Time) string {
+	if lastDataReceived.IsZero() {
+		return "never received data"
+	}
+	return time.Since(lastDataReceived).String()
+}
+
 // Use shared logger from integration file
 var managerLogger *slog.Logger
 
@@ -321,7 +340,7 @@ func (m *FFmpegManager) checkStreamHealth() {
 			
 			// Skip if stream doesn't exist (shouldn't happen but be defensive)
 			if !exists {
-				managerLogger.Warn("unhealthy stream not found in streams map",
+				managerLogger.Debug("unhealthy stream not found in streams map",
 					"url", privacy.SanitizeRTSPUrl(url),
 					"operation", "health_check")
 				continue
@@ -332,7 +351,7 @@ func (m *FFmpegManager) checkStreamHealth() {
 				if conf.Setting().Debug {
 					managerLogger.Debug("skipping restart for stream already in restart process",
 						"url", privacy.SanitizeRTSPUrl(url),
-						"last_data_ago_seconds", time.Since(h.LastDataReceived).Seconds(),
+						"last_data_ago_seconds", getTimeSinceDataSeconds(h.LastDataReceived),
 						"restart_count", h.RestartCount,
 						"operation", "health_check_skip_restart")
 				}
@@ -349,7 +368,7 @@ func (m *FFmpegManager) checkStreamHealth() {
 							"url", privacy.SanitizeRTSPUrl(url),
 							"runtime_seconds", timeSinceStart.Seconds(),
 							"minimum_runtime_seconds", minimumStreamRuntime.Seconds(),
-							"last_data_ago_seconds", time.Since(h.LastDataReceived).Seconds(),
+							"last_data_ago_seconds", getTimeSinceDataSeconds(h.LastDataReceived),
 							"operation", "health_check_skip_new_stream")
 					}
 					continue // Give new streams time to stabilize
@@ -358,15 +377,15 @@ func (m *FFmpegManager) checkStreamHealth() {
 			
 			managerLogger.Warn("unhealthy stream detected",
 				"url", privacy.SanitizeRTSPUrl(url),
-				"last_data_ago_seconds", time.Since(h.LastDataReceived).Seconds(),
+				"last_data_ago_seconds", getTimeSinceDataSeconds(h.LastDataReceived),
 				"restart_count", h.RestartCount,
 				"is_receiving_data", h.IsReceivingData,
 				"bytes_per_second", h.BytesPerSecond,
 				"total_bytes", h.TotalBytesReceived,
 				"operation", "health_check")
 			
-			log.Printf("⚠️ Unhealthy stream detected: %s (last data: %v ago)", 
-				privacy.SanitizeRTSPUrl(url), time.Since(h.LastDataReceived))
+			log.Printf("⚠️ Unhealthy stream detected: %s (last data: %s ago)", 
+				privacy.SanitizeRTSPUrl(url), formatTimeSinceData(h.LastDataReceived))
 			
 			// Restart unhealthy streams
 			if conf.Setting().Debug {
