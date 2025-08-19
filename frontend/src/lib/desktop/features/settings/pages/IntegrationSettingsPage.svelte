@@ -93,7 +93,7 @@
       },
       weather: {
         provider: 'yrno' as 'none' | 'yrno' | 'openweather',
-        pollInterval: 15,
+        pollInterval: 60,
         debug: false,
         openWeather: {
           enabled: false,
