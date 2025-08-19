@@ -13,6 +13,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
+// Constants for stream health management
+const (
+	// minimumStreamRuntime is the minimum time a stream must be running before
+	// it becomes eligible for health-based restarts. This prevents the manager
+	// from restarting streams that are still establishing their connection or
+	// experiencing temporary startup issues.
+	minimumStreamRuntime = 2 * time.Minute
+)
+
 // Use shared logger from integration file
 var managerLogger *slog.Logger
 
@@ -328,6 +337,23 @@ func (m *FFmpegManager) checkStreamHealth() {
 						"operation", "health_check_skip_restart")
 				}
 				continue // Don't interfere with ongoing restart/backoff
+			}
+			
+			// Check if stream is too new to restart (give it time to establish)
+			processStartTime := stream.GetProcessStartTime()
+			if !processStartTime.IsZero() {
+				timeSinceStart := time.Since(processStartTime)
+				if timeSinceStart < minimumStreamRuntime {
+					if conf.Setting().Debug {
+						managerLogger.Debug("skipping restart for new stream still establishing",
+							"url", privacy.SanitizeRTSPUrl(url),
+							"runtime_seconds", timeSinceStart.Seconds(),
+							"minimum_runtime_seconds", minimumStreamRuntime.Seconds(),
+							"last_data_ago_seconds", time.Since(h.LastDataReceived).Seconds(),
+							"operation", "health_check_skip_new_stream")
+					}
+					continue // Give new streams time to stabilize
+				}
 			}
 			
 			managerLogger.Warn("unhealthy stream detected",

@@ -1261,6 +1261,21 @@ func (s *FFmpegStream) IsRestarting() bool {
 	return inProgress || (!hasProcess && !stopped) || circuitOpen
 }
 
+// GetProcessStartTime returns the start time of the current FFmpeg process.
+// Returns zero time if no process is currently running.
+// This is used by the manager to determine if a stream has been running
+// long enough to be eligible for health-based restarts.
+func (s *FFmpegStream) GetProcessStartTime() time.Time {
+	s.cmdMu.Lock()
+	defer s.cmdMu.Unlock()
+	
+	// Only return start time if we have an active process
+	if s.cmd != nil && s.cmd.Process != nil {
+		return s.processStartTime
+	}
+	return time.Time{} // Zero time indicates no running process
+}
+
 // GetHealth returns the current health status of the stream.
 // It includes information about data reception, restart count, and data rate statistics.
 func (s *FFmpegStream) GetHealth() StreamHealth {
