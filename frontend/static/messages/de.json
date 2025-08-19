@@ -1051,7 +1051,7 @@
             "freeService": "Yr ist ein kostenloser Wetterdatendienst. Für weitere Informationen besuchen Sie <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Die Nutzung von OpenWeather erfordert einen API-Schlüssel. Registrieren Sie sich für einen kostenlosen API-Schlüssel bei <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Wetterdaten werden von Wunderground bereitgestellt. Sie müssen Ihren eigenen API-Schlüssel angeben. Siehe <a href=\"https://www.wunderground.com/weather/api/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a> für Details."
+          "wunderground": "Wetterdaten werden von Wunderground bereitgestellt. Die Nutzung erfordert einen eigenen API-Schlüssel. Weitere Informationen und Registrierung unter <a href=\"https://www.wunderground.com/weather/api/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a>."
         },
         "apiKey": {
           "label": "API-Schlüssel",
@@ -1074,9 +1074,6 @@
           "inProgress": "Test läuft...",
           "description": "Wetteranbieter-Verbindung testen"
         }
-      },
-      "notes": {
-        "wunderground": "Die Nutzung von Wunderground erfordert einen API-Schlüssel. Registrieren Sie sich bei <a href=\"https://www.wunderground.com/weather/api/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a> für weitere Details."
       },
       "units": {
         "options": {

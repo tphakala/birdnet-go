@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"regexp"
 	"time"
@@ -19,9 +20,10 @@ const (
 )
 
 // InferWundergroundIcon infers a standardized icon code from Wunderground measurements.
-func InferWundergroundIcon(tempC, precipMM, windMS, humidity, solarRadiation float64, windGust float64) IconCode {
-	// 1. Thunderstorm: heavy rain + high wind gust
-	if precipMM > 10 && windGust > 15 {
+// windGustMS must be provided in m/s.
+func InferWundergroundIcon(tempC, precipMM, humidity, solarRadiation, windGustMS float64) IconCode {
+	// 1. Thunderstorm: heavy rain + high wind gust (gust normalized to m/s)
+	if precipMM > 10 && windGustMS > 15 {
 		return IconThunderstorm
 	}
 	// 2. Precipitation type: snow vs rain (use temp)
@@ -36,7 +38,19 @@ func InferWundergroundIcon(tempC, precipMM, windMS, humidity, solarRadiation flo
 	if humidity > 90 && tempC < 5 {
 		return IconFog
 	}
-	// 4. Cloud cover: estimate from solarRadiation
+
+	// 4. Night handling: when solar radiation is near zero, infer clouds by humidity
+	if solarRadiation <= 5 {
+		if humidity >= 85 {
+			return IconCloudy
+		}
+		if humidity >= 60 {
+			return IconPartlyCloudy
+		}
+		return IconClearSky
+	}
+
+	// 5. Daytime cloud cover: estimate from solarRadiation
 	if solarRadiation > 600 {
 		return IconClearSky
 	}
@@ -155,7 +169,17 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 			Context("provider", wundergroundProviderName).
 			Build()
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			logger.Error("Failed to close response body", "error", cerr, "operation", "weather_api_close", "provider", wundergroundProviderName)
+			_ = errors.New(cerr).
+				Component("weather").
+				Category(errors.CategoryNetwork).
+				Context("operation", "weather_api_close").
+				Context("provider", wundergroundProviderName).
+				Build()
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
@@ -202,7 +226,11 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	}
 
 	obs := wuResp.Observations[0]
-	obsTime, _ := time.Parse(time.RFC3339, obs.ObsTimeUtc)
+	obsTime, err := time.Parse(time.RFC3339, obs.ObsTimeUtc)
+	if err != nil {
+		logger.Warn("Failed to parse observation time; using current UTC", "obs_time_utc", obs.ObsTimeUtc, "error", err, "station", obs.StationID, "index", 0)
+		obsTime = time.Now().UTC()
+	}
 	var temp, feelsLike, windSpeed, windGust, pressure float64
 	var heatIndex, windChill float64
 
@@ -243,7 +271,7 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 		windChill = obs.Imperial.WindChill
 		windSpeed = obs.Imperial.WindSpeed
 		windGust = obs.Imperial.WindGust
-		pressure = obs.Imperial.Pressure
+		pressure = obs.Imperial.Pressure * 33.8638866667
 		// Thresholds in imperial: hot >=80°F, cold <=50°F, wind >3 mph
 		if temp >= 80 && !isInvalid(heatIndex) {
 			feelsLike = heatIndex
@@ -254,13 +282,31 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 		}
 	}
 
+	// Normalize wind gust to m/s for icon inference thresholds
+	const (
+		mphToMs = 0.44704
+		kmhToMs = 0.277778
+	)
+	gustMS := 0.0
+	if !math.IsNaN(windGust) && windGust != 0 {
+		switch units {
+		case "m":
+			// WU metric wind is in km/h
+			gustMS = windGust * kmhToMs
+		case "h", "e":
+			// WU imperial wind (and hybrid uses imperial for wind) is in mph
+			gustMS = windGust * mphToMs
+		default:
+			gustMS = windGust * mphToMs
+		}
+	}
+
 	iconCode := InferWundergroundIcon(
 		temp,
 		obs.Metric.PrecipRate,
-		windSpeed,
 		float64(obs.Humidity),
 		obs.SolarRadiation,
-		windGust,
+		gustMS,
 	)
 	mappedData := &WeatherData{
 		Time: obsTime,
@@ -283,7 +329,7 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 		},
 		Clouds:      0, // Not provided
 		Visibility:  0, // Not provided
-		Pressure:    int(pressure),
+		Pressure:    int(math.Round(pressure)),
 		Humidity:    obs.Humidity,
 		Description: IconDescription[iconCode],
 		Icon:        string(iconCode),

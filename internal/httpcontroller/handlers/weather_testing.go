@@ -259,6 +259,15 @@ func (h *Handlers) testWeatherProvider(ctx context.Context, settings *conf.Setti
 	}
 
 	if settings.Realtime.Weather.Provider == "wunderground" {
+		// Emit running/authenticating progress before validating credentials
+		sendResult(WeatherTestResult{
+			Success:    true,
+			Stage:      stageWeatherAuthentication,
+			Message:    "Authenticating with Wunderground...",
+			State:      "running",
+			IsProgress: true,
+		})
+
 		apiKey := settings.Realtime.Weather.Wunderground.APIKey
 		stationId := settings.Realtime.Weather.Wunderground.StationID
 		if apiKey == "" || stationId == "" {

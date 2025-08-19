@@ -1100,6 +1100,33 @@
             "wunderground": "Wunderground"
           }
         },
+        "wunderground": {
+          "title": "Wunderground",
+          "description": "Hae säätiedot havainnoille Wunderground-rajapinnan kautta (vain englanniksi)",
+          "apiKey": {
+            "label": "API-avain",
+            "helpText": "Wunderground API-avaimesi. Pidä tämä salassa!"
+          },
+          "stationId": {
+            "label": "Aseman tunnus",
+            "helpText": "Wunderground-asemasi tunnus"
+          },
+          "units": {
+            "label": "Lämpötilayksiköt",
+            "helpText": "Valitse lämpötilan näyttöyksiköt",
+            "metric": "Metrinen (°C)",
+            "imperial": "Brittiläinen (°F)",
+            "ukhybrid": "UK Hybrid (°C/°F)",
+            "scientific": "Tieteellinen (K)"
+          },
+          "test": {
+            "button": "Testaa Wunderground-yhteys",
+            "loading": "Testataan...",
+            "description": "Testaa Wunderground-palvelun yhteys",
+            "inProgress": "Testaus käynnissä...",
+            "apiKeyRequired": "Wunderground API-avain on annettava"
+          }
+        },
         "notes": {
           "none": "Säätietoja ei haeta.",
           "yrno": {
@@ -1128,33 +1155,6 @@
           "apiKeyRequired": "OpenWeather API-avain täytyy määrittää",
           "inProgress": "Testaus käynnissä...",
           "description": "Testaa sääpalveluyhteys"
-        }
-      },
-      "wunderground": {
-        "title": "Wunderground",
-        "description": "Hae säätiedot havainnoille Wunderground-rajapinnan kautta (vain englanniksi)",
-        "apiKey": {
-          "label": "API-avain",
-          "helpText": "Wunderground API-avaimesi. Pidä tämä salassa!"
-        },
-        "stationId": {
-          "label": "Aseman tunnus",
-          "helpText": "Wunderground-asemasi tunnus"
-        },
-        "units": {
-          "label": "Lämpötilayksiköt",
-          "helpText": "Valitse lämpötilan näyttöyksiköt",
-          "metric": "Metrinen (°C)",
-          "imperial": "Brittiläinen (°F)",
-          "ukhybrid": "UK Hybrid (°C/°F)",
-          "scientific": "Tieteellinen (K)"
-        },
-        "test": {
-          "button": "Testaa Wunderground-yhteys",
-          "loading": "Testataan...",
-          "description": "Testaa Wunderground-palvelun yhteys",
-          "inProgress": "Testaus käynnissä...",
-          "apiKeyRequired": "Wunderground API-avain on annettava"
         }
       },
       "settings.integration.weather.units.options.ukhybrid": "UK Hybrid (°C/°F)"
