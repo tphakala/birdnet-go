@@ -381,8 +381,15 @@ func (h *Handlers) testWeatherAPIConnectivity(ctx context.Context, settings *con
 		// For OpenWeather, we'll test the base domain
 		testURL = "https://api.openweathermap.org"
 	case "wunderground":
-		// For WeatherUnderground, test the base domain
-		testURL = "https://api.weather.com"
+		// Prefer custom endpoint if provided; ensure scheme; fallback to default base domain
+		testURL = settings.Realtime.Weather.Wunderground.Endpoint
+		if testURL != "" {
+			if !strings.HasPrefix(testURL, "http://") && !strings.HasPrefix(testURL, "https://") {
+				testURL = "https://" + testURL
+			}
+		} else {
+			testURL = "https://api.weather.com"
+		}
 	default:
 		return WeatherTestResult{
 			Success: false,

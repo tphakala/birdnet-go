@@ -1074,10 +1074,6 @@
           "inProgress": "Test läuft...",
           "description": "Wetteranbieter-Verbindung testen"
         }
-      },
-      "units": {
-        "options": {
-        }
       }
     },
     "audio": {

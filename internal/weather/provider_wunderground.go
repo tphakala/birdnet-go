@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"regexp"
 	"time"
 
@@ -19,11 +20,28 @@ const (
 	wundergroundProviderName = "wunderground"
 )
 
+// Thresholds for inferring weather icons. Tune as needed.
+const (
+	// Precipitation rate in mm/h considered "heavy" for thunderstorm classification (paired with strong gusts).
+	ThunderstormPrecipMM = 10.0
+	// Wind gust threshold in m/s indicating thunderstorm-level winds (paired with heavy precipitation).
+	ThunderstormGustMS = 15.0
+	// Solar radiation in W/m^2 at or below this is treated as night.
+	NightSolarRadiationThreshold = 5.0
+	// Daytime solar radiation above this indicates clear sky.
+	DayClearSRThreshold = 600.0
+	// Daytime solar radiation range for partly cloudy (inclusive).
+	DayPartlyCloudyLowerSR = 200.0
+	DayPartlyCloudyUpperSR = 600.0
+)
+
+var stationIDRegex = regexp.MustCompile(`^[A-Za-z0-9_-]{3,32}$`)
+
 // InferWundergroundIcon infers a standardized icon code from Wunderground measurements.
 // windGustMS must be provided in m/s.
 func InferWundergroundIcon(tempC, precipMM, humidity, solarRadiation, windGustMS float64) IconCode {
 	// 1. Thunderstorm: heavy rain + high wind gust (gust normalized to m/s)
-	if precipMM > 10 && windGustMS > 15 {
+	if precipMM > ThunderstormPrecipMM && windGustMS > ThunderstormGustMS {
 		return IconThunderstorm
 	}
 	// 2. Precipitation type: snow vs rain (use temp)
@@ -40,7 +58,7 @@ func InferWundergroundIcon(tempC, precipMM, humidity, solarRadiation, windGustMS
 	}
 
 	// 4. Night handling: when solar radiation is near zero, infer clouds by humidity
-	if solarRadiation <= 5 {
+	if solarRadiation <= NightSolarRadiationThreshold {
 		if humidity >= 85 {
 			return IconCloudy
 		}
@@ -51,13 +69,13 @@ func InferWundergroundIcon(tempC, precipMM, humidity, solarRadiation, windGustMS
 	}
 
 	// 5. Daytime cloud cover: estimate from solarRadiation
-	if solarRadiation > 600 {
+	if solarRadiation > DayClearSRThreshold {
 		return IconClearSky
 	}
-	if solarRadiation >= 200 && solarRadiation <= 600 {
+	if solarRadiation >= DayPartlyCloudyLowerSR && solarRadiation <= DayPartlyCloudyUpperSR {
 		return IconPartlyCloudy
 	}
-	if solarRadiation < 200 {
+	if solarRadiation < DayPartlyCloudyLowerSR {
 		return IconCloudy
 	}
 	return IconFair
@@ -130,9 +148,7 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	}
 
 	// Validate stationId format: 3-32 chars, letters, digits, hyphen, underscore
-	stationIdPattern := `^[A-Za-z0-9_-]{3,32}$`
-	stationIdRegex := regexp.MustCompile(stationIdPattern)
-	if !stationIdRegex.MatchString(stationId) {
+	if !stationIDRegex.MatchString(stationId) {
 		return nil, errors.New(fmt.Errorf("invalid Wunderground Station ID format")).
 			Component("weather").
 			Category(errors.CategoryConfiguration).
@@ -140,8 +156,22 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 			Build()
 	}
 
-	apiURL := fmt.Sprintf("%s?stationId=%s&format=json&units=%s&apiKey=%s",
-		endpoint, stationId, units, apiKey)
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, errors.New(fmt.Errorf("invalid Wunderground endpoint: %w", err)).
+			Component("weather").
+			Category(errors.CategoryConfiguration).
+			Context("provider", wundergroundProviderName).
+			Build()
+	}
+	q := u.Query()
+	q.Set("stationId", stationId)
+	q.Set("format", "json")
+	q.Set("units", units)
+	q.Set("apiKey", apiKey)
+	u.RawQuery = q.Encode()
+
+	apiURL := u.String()
 
 	logger := weatherLogger.With("provider", wundergroundProviderName)
 	logger.Info("Fetching weather data", "url", maskAPIKey(apiURL, "apiKey"))
@@ -149,7 +179,7 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	client := &http.Client{Timeout: RequestTimeout}
 	req, err := http.NewRequest("GET", apiURL, http.NoBody)
 	if err != nil {
-		logger.Error("Failed to create HTTP request", "url", apiURL, "error", err)
+		logger.Error("Failed to create HTTP request", "url", maskAPIKey(apiURL, "apiKey"), "error", err)
 		return nil, errors.New(err).
 			Component("weather").
 			Category(errors.CategoryNetwork).
@@ -233,34 +263,42 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	}
 	var temp, feelsLike, windSpeed, windGust, pressure float64
 	var heatIndex, windChill float64
+	// Keep a raw gust (provider units) for icon inference normalization
+	var windGustRaw float64
 
 	if units == "m" {
 		temp = obs.Metric.Temp
 		heatIndex = obs.Metric.HeatIndex
 		windChill = obs.Metric.WindChill
-		windSpeed = obs.Metric.WindSpeed
-		windGust = obs.Metric.WindGust
+		// Convert km/h -> m/s for WeatherData
+		windSpeed = obs.Metric.WindSpeed / 3.6
+		windGust = obs.Metric.WindGust / 3.6
+		// Keep raw gust (km/h) for icon inference conversion later
+		windGustRaw = obs.Metric.WindGust
 		pressure = obs.Metric.Pressure
-		// Thresholds in metric: hot >=27°C, cold <=10°C, wind >4.8 km/h
+		// Thresholds in metric: hot >=27°C, cold <=10°C, wind >1.333 m/s (4.8 km/h)
 		if temp >= 27 && !isInvalid(heatIndex) {
 			feelsLike = heatIndex
-		} else if temp <= 10 && windSpeed > 4.8 && !isInvalid(windChill) {
+		} else if temp <= 10 && windSpeed > 1.3333333333 && !isInvalid(windChill) {
 			feelsLike = windChill
 		} else {
 			feelsLike = temp
 		}
 	} else if units == "h" {
-		// Hybrid (UK): use Metric for temp, Imperial for wind
+		// Hybrid (UK): use Metric for temp, Imperial wind converted to m/s
 		temp = obs.Metric.Temp
 		heatIndex = obs.Metric.HeatIndex
 		windChill = obs.Metric.WindChill
-		windSpeed = obs.Imperial.WindSpeed
-		windGust = obs.Imperial.WindGust
+		// Convert mph -> m/s for WeatherData
+		windSpeed = obs.Imperial.WindSpeed * 0.44704
+		windGust = obs.Imperial.WindGust * 0.44704
+		// Keep raw gust (mph) for icon inference conversion later
+		windGustRaw = obs.Imperial.WindGust
 		pressure = obs.Metric.Pressure
-		// Use metric temp thresholds, imperial wind threshold (3 mph)
+		// Use metric temp thresholds, wind threshold 3 mph => 1.34112 m/s
 		if temp >= 27 && !isInvalid(heatIndex) {
 			feelsLike = heatIndex
-		} else if temp <= 10 && windSpeed > 3 && !isInvalid(windChill) {
+		} else if temp <= 10 && windSpeed > 1.34112 && !isInvalid(windChill) {
 			feelsLike = windChill
 		} else {
 			feelsLike = temp
@@ -271,6 +309,8 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 		windChill = obs.Imperial.WindChill
 		windSpeed = obs.Imperial.WindSpeed
 		windGust = obs.Imperial.WindGust
+		// Keep raw gust (mph) for icon inference conversion later
+		windGustRaw = obs.Imperial.WindGust
 		pressure = obs.Imperial.Pressure * 33.8638866667
 		// Thresholds in imperial: hot >=80°F, cold <=50°F, wind >3 mph
 		if temp >= 80 && !isInvalid(heatIndex) {
@@ -288,16 +328,16 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 		kmhToMs = 0.277778
 	)
 	gustMS := 0.0
-	if !math.IsNaN(windGust) && windGust != 0 {
+	if !math.IsNaN(windGustRaw) && windGustRaw != 0 {
 		switch units {
 		case "m":
 			// WU metric wind is in km/h
-			gustMS = windGust * kmhToMs
+			gustMS = windGustRaw * kmhToMs
 		case "h", "e":
 			// WU imperial wind (and hybrid uses imperial for wind) is in mph
-			gustMS = windGust * mphToMs
+			gustMS = windGustRaw * mphToMs
 		default:
-			gustMS = windGust * mphToMs
+			gustMS = windGustRaw * mphToMs
 		}
 	}
 

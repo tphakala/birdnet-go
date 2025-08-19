@@ -1134,7 +1134,7 @@
             "freeService": "Yr on ilmainen säätietopalvelu. Lisätietoja: <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "OpenWeatherin käyttö vaatii API-avaimen, rekisteröidy ilmaiselle API-avaimelle osoitteessa <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Wundergroundin käyttö vaatii API-avaimen ja aseman tunnuksen. Rekisteröidy osoitteessa <a href=\"https://www.wunderground.com/weather/api/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a>."
+          "wunderground": "Wundergroundin käyttö vaatii API-avaimen ja aseman tunnuksen. Hallitse API-avaimia osoitteessa <a href=\"https://www.wunderground.com/member/api-keys\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground API Keys</a> ja katso asemasi tunnus kohdasta <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Member Devices</a>."
         },
         "apiKey": {
           "label": "API-avain",

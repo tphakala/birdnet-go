@@ -30,13 +30,11 @@
   import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import MultiStageOperation from '$lib/desktop/components/ui/MultiStageOperation.svelte';
+  import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
   import TestSuccessNote from '$lib/desktop/components/ui/TestSuccessNote.svelte';
   import SettingsButton from '$lib/desktop/features/settings/components/SettingsButton.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
-  import { alertIconsSvg } from '$lib/utils/icons';
-// Centralized icons - see icons.ts
-  import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
   import { t } from '$lib/i18n';
   import {
     integrationSettings,
@@ -47,6 +45,7 @@
     type SettingsFormData,
     type WeatherSettings
   } from '$lib/stores/settings';
+  import { alertIconsSvg } from '$lib/utils/icons';
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
@@ -1283,4 +1282,3 @@
     </div>
   </SettingsSection>
 </div>
-
