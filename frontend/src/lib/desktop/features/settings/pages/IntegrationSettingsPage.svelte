@@ -43,7 +43,8 @@
     settingsStore,
     type MQTTSettings,
     type SettingsFormData,
-    type WeatherSettings
+    type WeatherSettings,
+    type WundergroundSettings
   } from '$lib/stores/settings';
   import { alertIconsSvg } from '$lib/utils/icons';
   import { loggers } from '$lib/utils/logger';
@@ -91,7 +92,7 @@
         },
       },
       weather: {
-        provider: 'yrno' as 'none' | 'yrno' | 'openweather',
+        provider: 'yrno' as 'none' | 'yrno' | 'openweather' | 'wunderground',
         pollInterval: 60,
         debug: false,
         openWeather: {
@@ -100,6 +101,13 @@
           endpoint: 'https://api.openweathermap.org/data/2.5/weather',
           units: 'metric',
           language: 'en',
+        },
+        wunderground: {
+          enabled: false,
+          apiKey: '',
+          stationId: '',
+          endpoint: 'https://api.weather.com/v2/pws/observations/current',
+          units: 'm',
         },
       },
     }
@@ -239,9 +247,16 @@
   }
 
   // Weather update handlers
+  const wgDefaults: WundergroundSettings = {
+    enabled: false,
+    apiKey: '',
+    stationId: '',
+    endpoint: 'https://api.weather.com/v2/pws/observations/current',
+    units: 'm'
+  };
   function updateWeatherProvider(provider: string) {
     settingsActions.updateSection('realtime', {
-      weather: { ...settings.weather!, provider: provider as 'none' | 'yrno' | 'openweather' },
+      weather: { ...settings.weather!, provider: provider as 'none' | 'yrno' | 'openweather' | 'wunderground' },
     });
   }
 
@@ -1174,11 +1189,11 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <PasswordField
             label={t('settings.integration.weather.wunderground.apiKey.label')}
-            value={settings.weather!.wunderground.apiKey || ''}
+            value={settings.weather?.wunderground?.apiKey ?? ''}
             onUpdate={apiKey => settingsActions.updateSection('realtime', {
               weather: {
                 ...settings.weather!,
-                wunderground: { ...settings.weather!.wunderground, apiKey }
+                wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), apiKey }
               }
             })}
             placeholder=""
@@ -1189,11 +1204,11 @@
 
           <TextInput
             label={t('settings.integration.weather.wunderground.stationId.label')}
-            value={settings.weather!.wunderground.stationId || ''}
+            value={settings.weather?.wunderground?.stationId ?? ''}
             onchange={stationId => settingsActions.updateSection('realtime', {
               weather: {
                 ...settings.weather!,
-                wunderground: { ...settings.weather!.wunderground, stationId }
+                wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), stationId }
               }
             })}
             placeholder=""
@@ -1203,11 +1218,11 @@
 
           <TextInput
             label={t('settings.integration.weather.wunderground.endpoint.label')}
-            value={settings.weather!.wunderground.endpoint || ''}
+            value={settings.weather?.wunderground?.endpoint ?? ''}
             onchange={endpoint => settingsActions.updateSection('realtime', {
               weather: {
                 ...settings.weather!,
-                wunderground: { ...settings.weather!.wunderground, endpoint }
+                wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), endpoint }
               }
             })}
             placeholder="https://api.weather.com/v2/pws/observations/current"
@@ -1217,7 +1232,7 @@
 
           <SelectField
             id="wunderground-units"
-            value={settings.weather!.wunderground.units || 'm'}
+            value={settings.weather?.wunderground?.units ?? 'm'}
             label={t('settings.integration.weather.wunderground.units.label')}
             options={[
               { value: 'e', label: t('settings.integration.weather.units.options.imperial') },
@@ -1228,7 +1243,7 @@
             onchange={units => settingsActions.updateSection('realtime', {
               weather: {
                 ...settings.weather!,
-                wunderground: { ...settings.weather!.wunderground, units }
+                wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), units }
               }
             })}
           />

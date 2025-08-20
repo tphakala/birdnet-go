@@ -1118,13 +1118,6 @@
             "imperial": "Brittiläinen (°F)",
             "ukhybrid": "UK Hybrid (°C/°F)",
             "scientific": "Tieteellinen (K)"
-          },
-          "test": {
-            "button": "Testaa Wunderground-yhteys",
-            "loading": "Testataan...",
-            "description": "Testaa Wunderground-palvelun yhteys",
-            "inProgress": "Testaus käynnissä...",
-            "apiKeyRequired": "Wunderground API-avain on annettava"
           }
         },
         "notes": {
@@ -1156,8 +1149,7 @@
           "inProgress": "Testaus käynnissä...",
           "description": "Testaa sääpalveluyhteys"
         }
-      },
-      "settings.integration.weather.units.options.ukhybrid": "UK Hybrid (°C/°F)"
+      }
     },
     "species": {
       "alwaysInclude": {

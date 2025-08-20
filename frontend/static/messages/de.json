@@ -1030,18 +1030,11 @@
           },
           "endpoint": {
             "label": "API-Endpunkt",
-            "helpText": "Überschreiben Sie den Standard-Wunderground API-Endpunkt falls nötig."
+            "helpText": "Überschreiben Sie den Standard-Wunderground API-Endpunkt, falls nötig."
           },
           "units": {
             "label": "Maßeinheiten",
-            "helpText": "Wählen Sie Maßeinheiten für Temperatur und Windgeschwindigkeit (m = Metrisch, e = Imperial, h = UK Hybrid)."
-          },
-          "test": {
-            "button": "Wunderground-Verbindung testen",
-            "loading": "Teste...",
-            "apiKeyRequired": "Wunderground API-Schlüssel muss angegeben werden",
-            "inProgress": "Test läuft...",
-            "description": "Wunderground-Anbieter-Verbindung testen"
+            "helpText": "Wählen Sie Maßeinheiten für Temperatur und Windgeschwindigkeit: Metrisch, Imperial oder UK‑Hybrid."
           }
         },
         "notes": {

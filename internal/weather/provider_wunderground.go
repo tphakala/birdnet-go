@@ -94,7 +94,7 @@ type WundergroundResponse struct {
 		Lat            float64 `json:"lat"`
 		Uv             float64 `json:"uv"`
 		Winddir        int     `json:"winddir"`
-		Humidity       int     `json:"humidity"`
+		Humidity       float64 `json:"humidity"`
 		QcStatus       int     `json:"qcStatus"`
 		// Optional/extra fields for improved icon inference:
 		Imperial struct {
@@ -169,6 +169,7 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	q.Set("format", "json")
 	q.Set("units", units)
 	q.Set("apiKey", apiKey)
+	q.Set("numericPrecision", "decimal")
 	u.RawQuery = q.Encode()
 
 	apiURL := u.String()
@@ -370,7 +371,7 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 		Clouds:      0, // Not provided
 		Visibility:  0, // Not provided
 		Pressure:    int(math.Round(pressure)),
-		Humidity:    obs.Humidity,
+		Humidity:    int(math.Round(obs.Humidity)),
 		Description: IconDescription[iconCode],
 		Icon:        string(iconCode),
 	}

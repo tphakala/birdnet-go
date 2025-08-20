@@ -605,7 +605,7 @@ func generateWeatherTroubleshootingHint(result *WeatherTestResult) string {
 			return "Please verify that your OpenWeather API key is correct and active. You can check your API key status at https://home.openweathermap.org/api_keys"
 		}
 		if result.Provider == "wunderground" {
-			return "Please verify your Wunderground API key and Station ID. You can manage your credentials at https://www.wunderground.com/member/api-keys."
+			return "Please verify your Wunderground API key and Station ID. You can manage your credentials at https://www.wunderground.com/member/api-keys and locate your Station ID on the Member Devices page at https://www.wunderground.com/member/devices."
 		}
 		return "Authentication failed. Check your API credentials."
 
