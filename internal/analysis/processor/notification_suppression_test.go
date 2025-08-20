@@ -133,7 +133,6 @@ func TestNotificationSuppressionThreadSafety(t *testing.T) {
 	go func() {
 		for i := 0; i < 10; i++ {
 			tracker.CleanupOldNotificationRecords(now)
-			time.Sleep(1 * time.Millisecond)
 		}
 		done <- true
 	}()

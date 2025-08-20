@@ -1299,8 +1299,6 @@ func (t *NewSpeciesTracker) ShouldSuppressNotification(scientificName string, cu
 // This is used to prevent duplicate notifications within the suppression window.
 func (t *NewSpeciesTracker) RecordNotificationSent(scientificName string, sentTime time.Time) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	// Initialize map if needed
 	if t.notificationLastSent == nil {
 		t.notificationLastSent = make(map[string]time.Time)
@@ -1308,7 +1306,9 @@ func (t *NewSpeciesTracker) RecordNotificationSent(scientificName string, sentTi
 
 	// Record the notification time
 	t.notificationLastSent[scientificName] = sentTime
+	t.mu.Unlock()
 	
+	// Log outside the critical section to reduce lock contention
 	logger.Debug("Recorded notification sent",
 		"species", scientificName,
 		"sent_time", sentTime.Format("2006-01-02 15:04:05"))
