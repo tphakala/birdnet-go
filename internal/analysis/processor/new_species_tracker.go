@@ -27,6 +27,9 @@ const (
 	seasonBufferDays           = 7  // Days buffer for season comparison
 	seasonBufferDuration       = seasonBufferDays * hoursPerDay * time.Hour
 	defaultSeasonDurationDays  = 90 // Typical season duration
+	
+	// Notification suppression
+	defaultNotificationSuppressionHours = 168 // Default suppression window (7 days)
 )
 
 // Package-level logger for species tracking
@@ -145,8 +148,8 @@ type NewSpeciesTracker struct {
 
 	// Notification suppression tracking to prevent duplicate notifications
 	// Simply maps scientific name -> last notification time
-	notificationLastSent map[string]time.Time
-	notificationSuppressionHours int // Hours to suppress duplicate notifications (default: 168)
+	notificationLastSent         map[string]time.Time
+	notificationSuppressionWindow time.Duration // Duration to suppress duplicate notifications (default: 7 days)
 }
 
 // seasonDates represents the start date for a season
@@ -199,7 +202,6 @@ func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTr
 
 		// Notification suppression tracking
 		notificationLastSent: make(map[string]time.Time),
-		notificationSuppressionHours: settings.NotificationSuppressionHours,
 	}
 
 	// Initialize seasons from configuration
@@ -225,9 +227,12 @@ func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTr
 		"current_year", tracker.currentYear,
 		"total_seasons", len(tracker.seasons))
 
-	// Set default suppression hours if not configured
-	if tracker.notificationSuppressionHours <= 0 {
-		tracker.notificationSuppressionHours = 168 // Default to 7 days (168 hours)
+	// Set notification suppression window from configuration
+	// 0 is valid (disabled), negative values get default
+	if settings.NotificationSuppressionHours < 0 {
+		tracker.notificationSuppressionWindow = time.Duration(defaultNotificationSuppressionHours) * time.Hour
+	} else {
+		tracker.notificationSuppressionWindow = time.Duration(settings.NotificationSuppressionHours) * time.Hour
 	}
 
 	return tracker
@@ -1048,7 +1053,12 @@ func (t *NewSpeciesTracker) IsNewSpecies(scientificName string) bool {
 // SyncIfNeeded checks if a database sync is needed and performs it
 // This helps keep the tracker updated with any database changes
 func (t *NewSpeciesTracker) SyncIfNeeded() error {
-	if time.Since(t.lastSyncTime).Minutes() < float64(t.syncIntervalMins) {
+	t.mu.RLock()
+	elapsed := time.Since(t.lastSyncTime)
+	interval := t.syncIntervalMins
+	t.mu.RUnlock()
+	
+	if elapsed.Minutes() < float64(interval) {
 		return nil // No sync needed yet
 	}
 
@@ -1141,7 +1151,7 @@ func (t *NewSpeciesTracker) cleanupOldNotificationRecordsLocked(currentTime time
 	}
 
 	cleaned := 0
-	cutoffTime := currentTime.Add(-time.Duration(t.notificationSuppressionHours*2) * time.Hour)
+	cutoffTime := currentTime.Add(-t.notificationSuppressionWindow * 2)
 
 	for species, sentTime := range t.notificationLastSent {
 		if sentTime.Before(cutoffTime) {
@@ -1262,27 +1272,26 @@ func (t *NewSpeciesTracker) ClearCacheForTesting() {
 // Returns true if notification should be suppressed, false if it should be sent.
 func (t *NewSpeciesTracker) ShouldSuppressNotification(scientificName string, currentTime time.Time) bool {
 	t.mu.RLock()
-	defer t.mu.RUnlock()
-
-	// Check if we have sent a notification for this species
 	lastSent, exists := t.notificationLastSent[scientificName]
+	window := t.notificationSuppressionWindow
+	t.mu.RUnlock()
+
 	if !exists {
 		return false // Never sent, don't suppress
 	}
+	if window <= 0 {
+		return false // Suppression disabled
+	}
 
-	// Calculate hours since last notification
-	hoursSinceLastNotification := currentTime.Sub(lastSent).Hours()
-	
-	// Suppress if within the suppression window
-	shouldSuppress := hoursSinceLastNotification < float64(t.notificationSuppressionHours)
-	
+	suppressUntil := lastSent.Add(window)
+	shouldSuppress := currentTime.Before(suppressUntil)
+
 	if shouldSuppress {
 		logger.Debug("Suppressing duplicate notification",
 			"species", scientificName,
-			"hours_since_last", hoursSinceLastNotification,
-			"suppression_hours", t.notificationSuppressionHours)
+			"suppress_until", suppressUntil,
+			"suppression_window", window)
 	}
-	
 	return shouldSuppress
 }
 
@@ -1308,24 +1317,17 @@ func (t *NewSpeciesTracker) RecordNotificationSent(scientificName string, sentTi
 // CleanupOldNotificationRecords removes notification records older than 2x the suppression window
 // to prevent unbounded memory growth.
 func (t *NewSpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) int {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	if t.notificationLastSent == nil {
+	// Early return if suppression is disabled (0 window)
+	if t.notificationSuppressionWindow == 0 {
 		return 0
 	}
 
-	cleaned := 0
-	cutoffTime := currentTime.Add(-time.Duration(t.notificationSuppressionHours*2) * time.Hour)
-
-	for species, sentTime := range t.notificationLastSent {
-		if sentTime.Before(cutoffTime) {
-			delete(t.notificationLastSent, species)
-			cleaned++
-		}
-	}
+	t.mu.Lock()
+	cleaned := t.cleanupOldNotificationRecordsLocked(currentTime)
+	t.mu.Unlock()
 
 	if cleaned > 0 {
+		cutoffTime := currentTime.Add(-t.notificationSuppressionWindow * 2)
 		logger.Debug("Cleaned up old notification records",
 			"removed_count", cleaned,
 			"cutoff_time", cutoffTime.Format("2006-01-02 15:04:05"))
