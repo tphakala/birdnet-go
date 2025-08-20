@@ -205,6 +205,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.speciestracking.enabled", true)
 	viper.SetDefault("realtime.speciestracking.newspecieswindowdays", 7)
 	viper.SetDefault("realtime.speciestracking.syncintervalminutes", 60)
+	viper.SetDefault("realtime.speciestracking.notificationsuppressionhours", 168) // 7 days
 
 	// Yearly tracking defaults
 	viper.SetDefault("realtime.speciestracking.yearlytracking.enabled", true)

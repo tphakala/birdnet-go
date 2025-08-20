@@ -533,6 +533,15 @@ func validateSpeciesTrackingSettings(settings *SpeciesTrackingSettings) error {
 				Build()
 		}
 
+		// Validate notification suppression hours
+		if settings.NotificationSuppressionHours < 0 || settings.NotificationSuppressionHours > 720 {
+			return errors.New(fmt.Errorf("notification suppression hours must be between 0 and 720 (30 days), got %d", settings.NotificationSuppressionHours)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "notification-suppression-hours").
+				Context("suppression_hours", settings.NotificationSuppressionHours).
+				Build()
+		}
+
 		// Validate yearly tracking settings
 		if err := validateYearlyTrackingSettings(&settings.YearlyTracking); err != nil {
 			return err
