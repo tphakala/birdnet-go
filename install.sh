@@ -1593,7 +1593,7 @@ validate_required_ports() {
         print_message "  • Port 80   - HTTP web interface" "$YELLOW"
         print_message "  • Port 443  - HTTPS web interface (with SSL)" "$YELLOW"
         print_message "  • Port $WEB_PORT - Primary web interface" "$YELLOW"
-        print_message "  • Port 8090 - WebSocket/SSE streaming endpoint" "$YELLOW"
+        print_message "  • Port 8090 - Prometheus metrics endpoint" "$YELLOW"
         
         print_message "\n📋 Ports currently in use:" "$RED"
         for i in "${!failed_ports[@]}"; do
