@@ -393,11 +393,11 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 			return
 		default:
 			// Start FFmpeg process
-			// Check circuit breaker
-			if s.isCircuitOpen() {
-				// Wait before next attempt
+			// Check circuit breaker and wait only for remaining cooldown
+			if remaining, open := s.circuitCooldownRemaining(); open {
+				// Wait only the remaining cooldown before next attempt
 				select {
-				case <-time.After(circuitBreakerCooldown):
+				case <-time.After(remaining):
 					continue
 				case <-s.ctx.Done():
 					return
@@ -1048,11 +1048,13 @@ func (s *FFmpegStream) cleanupProcess() {
 			}
 		}
 
-		// Send result if channel is still open
+		// Non-blocking send of the wait result.
+		// If the buffer slot has already been consumed (or we timed out and moved on),
+		// skip sending to avoid blocking; the goroutine will exit regardless.
 		select {
 		case waitDone <- waitErr:
 		default:
-			// Channel might be closed if we timed out
+			// Channel buffer full or already consumed - we timed out
 			if conf.Setting().Debug {
 				streamLogger.Debug("wait result not sent - cleanup already timed out",
 					"url", privacy.SanitizeRTSPUrl(url),
@@ -1153,14 +1155,26 @@ func (s *FFmpegStream) handleRestartBackoff() {
 		streamLogger.Debug("applying restart backoff",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 			"backoff_ms", backoff.Milliseconds(),
+			"jitter_percent_max", 20,
 			"restart_count", currentRestartCount,
 			"operation", "restart_backoff")
 	}
 
-	log.Printf("⏳ Waiting %v before restart attempt #%d for %s", backoff, currentRestartCount, privacy.SanitizeRTSPUrl(s.source.SafeString))
+	// Add 0-20% jitter to avoid synchronized restarts across many streams (thundering herd)
+	wait := backoff
+	if backoff > 0 {
+		jitterRange := time.Duration(float64(backoff) * 0.20)
+		if jitterRange > 0 {
+			if n, err := rand.Int(rand.Reader, big.NewInt(jitterRange.Nanoseconds())); err == nil {
+				wait = backoff + time.Duration(n.Int64())
+			}
+		}
+	}
+
+	log.Printf("⏳ Waiting %v before restart attempt #%d for %s", wait, currentRestartCount, privacy.SanitizeRTSPUrl(s.source.SafeString))
 
 	select {
-	case <-time.After(backoff):
+	case <-time.After(wait):
 		// Continue with restart
 	case <-s.ctx.Done():
 		// Context cancelled
@@ -1447,6 +1461,24 @@ func (s *FFmpegStream) isCircuitOpenSilent() bool {
 	
 	// Check if circuit was opened and we're still in cooldown
 	return !s.circuitOpenTime.IsZero() && time.Since(s.circuitOpenTime) < circuitBreakerCooldown
+}
+
+// circuitCooldownRemaining returns (remaining, true) if the circuit is open, or (0, false) otherwise.
+// This allows waiting only for the remaining cooldown period instead of the full duration.
+func (s *FFmpegStream) circuitCooldownRemaining() (time.Duration, bool) {
+	s.circuitMu.Lock()
+	defer s.circuitMu.Unlock()
+	
+	if s.circuitOpenTime.IsZero() {
+		return 0, false
+	}
+	
+	elapsed := time.Since(s.circuitOpenTime)
+	if elapsed >= circuitBreakerCooldown {
+		return 0, false
+	}
+	
+	return circuitBreakerCooldown - elapsed, true
 }
 
 func (s *FFmpegStream) isCircuitOpen() bool {
