@@ -1480,16 +1480,30 @@ check_port_availability() {
     local port="$1"
     
     # Try multiple methods to ensure portability
-    # First try netcat with short timeout (most reliable)
+    # First try netcat with short timeout - check both IPv4 and IPv6
     if command_exists nc; then
-        if nc -z -w1 localhost "$port" 2>/dev/null; then
-            return 1 # Port is in use
-        else
-            return 0 # Port is available
+        local ipv4_in_use=false
+        local ipv6_in_use=false
+        
+        # Check IPv4
+        if nc -z -w1 127.0.0.1 "$port" 2>/dev/null; then
+            ipv4_in_use=true
         fi
+        
+        # Check IPv6
+        if nc -z -w1 ::1 "$port" 2>/dev/null; then
+            ipv6_in_use=true
+        fi
+        
+        # Port is in use if either IPv4 or IPv6 succeeds
+        if [ "$ipv4_in_use" = true ] || [ "$ipv6_in_use" = true ]; then
+            return 1 # Port is in use
+        fi
+        # If both fail, don't return available - fall through to ss/lsof checks
     # Then try ss with sport filter
     elif command_exists ss; then
-        if ss -H -ltn "sport = :$port" 2>/dev/null | grep -q "LISTEN"; then
+        # Treat any non-empty output as "in use"
+        if [ -n "$(ss -H -ltn "sport = :$port" 2>/dev/null)" ]; then
             return 1 # Port is in use
         else
             return 0 # Port is available
@@ -1562,17 +1576,18 @@ get_port_process_info() {
     
     # If still no info, try netstat as last resort
     if [ -z "$process_info" ] && command_exists netstat; then
-        # Check if port is in use
-        if netstat -tln 2>/dev/null | grep -q ":$port "; then
-            # Try to get process name with elevated permissions if available
-            proc_name=""
-            if command_exists sudo; then
-                proc_name=$(sudo -n netstat -tlnp 2>/dev/null | awk -v port=":$port " '$0 ~ port {print $7}' | cut -d'/' -f2 | head -1)
-            fi
-            
-            if [ -n "$proc_name" ]; then
-                process_info="$proc_name"
-            else
+        # Try to get process name with elevated permissions if available
+        proc_name=""
+        if command_exists sudo; then
+            # Single awk command that matches local address ending with :<port> and extracts program name
+            proc_name=$(sudo -n netstat -tlnp 2>/dev/null | awk -v port=":$port" '$4 ~ port"$" {split($7, a, "/"); print a[2]}' | head -1)
+        fi
+        
+        if [ -n "$proc_name" ]; then
+            process_info="$proc_name"
+        else
+            # Check if port is in use without process info
+            if netstat -tln 2>/dev/null | awk -v port=":$port" '$4 ~ port"$" {exit 0} END {exit 1}'; then
                 process_info="(permission denied to get process name)"
             fi
         fi
@@ -1596,18 +1611,20 @@ validate_required_ports() {
     local port_processes=()
     local port
     local process_info
-    local seen_port
+    
+    # Use associative array for efficient deduplication
+    local -A seen
     
     # Deduplicate ports array to avoid double-checking
     for port in "${ports_to_check[@]}"; do
-        local is_duplicate=false
-        for seen_port in "${unique_ports[@]}"; do
-            if [ "$port" = "$seen_port" ]; then
-                is_duplicate=true
-                break
-            fi
-        done
-        if [ "$is_duplicate" = false ]; then
+        # Skip empty entries
+        if [ -z "$port" ]; then
+            continue
+        fi
+        
+        # Only add if not seen before
+        if [ -z "${seen[$port]:-}" ]; then
+            seen[$port]=1
             unique_ports+=("$port")
         fi
     done
