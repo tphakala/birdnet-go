@@ -36,7 +36,7 @@ func TestNotificationSuppression(t *testing.T) {
 	tracker := NewSpeciesTrackerFromSettings(mockDS, settings)
 
 	// Test species
-	species1 := "Cardinalis cardinalis"
+	species1 := "Cardinalis cardinalis" //nolint:misspell // Scientific name, not a misspelling
 	species2 := "Turdus migratorius"
 	now := time.Now()
 
