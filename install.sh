@@ -1480,31 +1480,31 @@ check_port_availability() {
     local port="$1"
     
     # Try multiple methods to ensure portability
-    # First try netcat if available
+    # First try netcat with short timeout (most reliable)
     if command_exists nc; then
-        if nc -z localhost "$port" 2>/dev/null; then
+        if nc -z -w1 localhost "$port" 2>/dev/null; then
             return 1 # Port is in use
         else
             return 0 # Port is available
         fi
-    # Then try ss from iproute2, which is common on modern Linux
+    # Then try ss with sport filter
     elif command_exists ss; then
-        if ss -lnt | grep -q ":$port "; then
+        if ss -H -ltn "sport = :$port" 2>/dev/null | grep -q "LISTEN"; then
             return 1 # Port is in use
         else
             return 0 # Port is available
         fi
-    # Then try lsof
+    # Then try lsof with explicit flags
     elif command_exists lsof; then
-        if lsof -i:"$port" >/dev/null 2>&1; then
+        if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
             return 1 # Port is in use
         else
             return 0 # Port is available
         fi
-    # Finally try a direct connection with timeout
+    # Finally try /dev/tcp as last resort with timeout
     else
-        # Try to connect to the port, timeout after 1 second
-        if (echo > /dev/tcp/localhost/"$port") >/dev/null 2>&1; then
+        # Use timeout to avoid hangs
+        if timeout 1 bash -c "echo > /dev/tcp/localhost/$port" 2>/dev/null; then
             return 1 # Port is in use
         else
             return 0 # Port is available
@@ -1515,49 +1515,70 @@ check_port_availability() {
 # Function to get process information using a port
 get_port_process_info() {
     local port="$1"
-    local process_info="unknown process"
+    local process_info
+    local ss_output
+    local proc_name
     
-    # Try using ss first (most reliable)
+    # Try using ss first with headerless output and sport filter
     if command_exists ss; then
-        process_info=$(ss -tlnp 2>/dev/null | grep ":$port " | grep -oP 'users:\(\("?\K[^"]+' | head -1)
-        if [ -z "$process_info" ]; then
-            # Try without -p flag if permission denied
-            process_info=$(ss -tln 2>/dev/null | grep ":$port " | awk '{print "(permission denied to get process name)"}' | head -1)
-        fi
-    fi
-    
-    # If ss didn't work, try lsof
-    if [ -z "$process_info" ] && command_exists lsof; then
-        # Try without sudo first
-        process_info=$(lsof -i:"$port" 2>/dev/null | grep LISTEN | awk '{print $1}' | head -1)
-        if [ -z "$process_info" ]; then
-            # Only try with sudo if available and first attempt failed
-            if command_exists sudo; then
-                process_info=$(sudo -n lsof -i:"$port" 2>/dev/null | grep LISTEN | awk '{print $1}' | head -1)
+        # Use ss with headerless flag and sport filter
+        ss_output=$(ss -H -tlnp "sport = :$port" 2>/dev/null)
+        
+        if [ -n "$ss_output" ]; then
+            # Parse with awk instead of grep -P to avoid PCRE dependency
+            # Extract process name from users field using awk
+            proc_name=$(echo "$ss_output" | awk -F'"' '/users:/{print $2}' | head -1)
+            
+            # If no quotes, try alternative parsing
+            if [ -z "$proc_name" ]; then
+                proc_name=$(echo "$ss_output" | awk '/users:/{gsub(/.*users:\(\(/, ""); gsub(/,.*/, ""); gsub(/"/, ""); print}' | head -1)
+            fi
+            
+            if [ -n "$proc_name" ]; then
+                process_info="$proc_name"
+            else
+                # Check if port is listening but no process info available
+                if echo "$ss_output" | grep -q "LISTEN"; then
+                    process_info="(permission denied to get process name)"
+                fi
             fi
         fi
     fi
     
-    # If still no info, try netstat
+    # If ss didn't work, try lsof with explicit flags for safety
+    if [ -z "$process_info" ] && command_exists lsof; then
+        # Try without sudo first with explicit flags
+        proc_name=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $1}' | head -1)
+        
+        if [ -z "$proc_name" ] && command_exists sudo; then
+            # Only try with sudo if first attempt failed
+            proc_name=$(sudo -n lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $1}' | head -1)
+        fi
+        
+        if [ -n "$proc_name" ]; then
+            process_info="$proc_name"
+        fi
+    fi
+    
+    # If still no info, try netstat as last resort
     if [ -z "$process_info" ] && command_exists netstat; then
-        # Try without sudo first
-        process_info=$(netstat -tln 2>/dev/null | grep ":$port " | head -1)
-        if [ -n "$process_info" ]; then
-            # Try to get process name with sudo if available
+        # Check if port is in use
+        if netstat -tln 2>/dev/null | grep -q ":$port "; then
+            # Try to get process name with elevated permissions if available
+            proc_name=""
             if command_exists sudo; then
-                local proc_name=$(sudo -n netstat -tlnp 2>/dev/null | grep ":$port " | awk '{print $7}' | cut -d'/' -f2 | head -1)
-                if [ -n "$proc_name" ]; then
-                    process_info="$proc_name"
-                else
-                    process_info="(permission denied to get process name)"
-                fi
+                proc_name=$(sudo -n netstat -tlnp 2>/dev/null | awk -v port=":$port " '$0 ~ port {print $7}' | cut -d'/' -f2 | head -1)
+            fi
+            
+            if [ -n "$proc_name" ]; then
+                process_info="$proc_name"
             else
                 process_info="(permission denied to get process name)"
             fi
         fi
     fi
     
-    # Return the process info or "unknown"
+    # Return the process info or "unknown process"
     if [ -n "$process_info" ]; then
         echo "$process_info"
     else
@@ -1570,12 +1591,30 @@ get_port_process_info() {
 # This check ensures ports are free before Docker attempts to bind them
 validate_required_ports() {
     local ports_to_check=("80" "443" "$WEB_PORT" "8090")
+    local unique_ports=()
     local failed_ports=()
     local port_processes=()
+    local port
+    local process_info
+    local seen_port
+    
+    # Deduplicate ports array to avoid double-checking
+    for port in "${ports_to_check[@]}"; do
+        local is_duplicate=false
+        for seen_port in "${unique_ports[@]}"; do
+            if [ "$port" = "$seen_port" ]; then
+                is_duplicate=true
+                break
+            fi
+        done
+        if [ "$is_duplicate" = false ]; then
+            unique_ports+=("$port")
+        fi
+    done
     
     print_message "\n🔌 Checking required port availability..." "$YELLOW"
     
-    for port in "${ports_to_check[@]}"; do
+    for port in "${unique_ports[@]}"; do
         if ! check_port_availability "$port"; then
             failed_ports+=("$port")
             process_info=$(get_port_process_info "$port")
@@ -1607,14 +1646,17 @@ validate_required_ports() {
         for i in "${!failed_ports[@]}"; do
             local port="${failed_ports[$i]}"
             local process="${port_processes[$i]}"
+            # Convert to lowercase for case-insensitive matching
+            local process_lower
+            process_lower=$(echo "$process" | tr '[:upper:]' '[:lower:]')
             
-            if [[ "$process" == *"apache"* ]] || [[ "$process" == *"httpd"* ]]; then
+            if [[ "$process_lower" == *"apache"* ]] || [[ "$process_lower" == *"httpd"* ]]; then
                 print_message "   sudo systemctl stop apache2  # For Apache on port $port" "$NC"
-            elif [[ "$process" == *"nginx"* ]]; then
+            elif [[ "$process_lower" == *"nginx"* ]]; then
                 print_message "   sudo systemctl stop nginx    # For Nginx on port $port" "$NC"
-            elif [[ "$process" == *"lighttpd"* ]]; then
+            elif [[ "$process_lower" == *"lighttpd"* ]]; then
                 print_message "   sudo systemctl stop lighttpd # For Lighttpd on port $port" "$NC"
-            elif [[ "$process" == *"caddy"* ]]; then
+            elif [[ "$process_lower" == *"caddy"* ]]; then
                 print_message "   sudo systemctl stop caddy    # For Caddy on port $port" "$NC"
             elif [[ "$port" == "80" ]] || [[ "$port" == "443" ]]; then
                 print_message "   sudo systemctl stop <service> # Replace <service> with the service using port $port" "$NC"
@@ -1649,7 +1691,8 @@ configure_web_port() {
     print_message "\n🔌 Checking web interface port availability..." "$YELLOW"
     
     if ! check_port_availability $WEB_PORT; then
-        local process_info=$(get_port_process_info "$WEB_PORT")
+        local process_info
+        process_info=$(get_port_process_info "$WEB_PORT")
         print_message "❌ Port $WEB_PORT is already in use by: $process_info" "$RED"
         
         while true; do
@@ -1663,7 +1706,7 @@ configure_web_port() {
                     print_message "✅ Port $WEB_PORT is available" "$GREEN"
                     break
                 else
-                    local process_info=$(get_port_process_info "$custom_port")
+                    process_info=$(get_port_process_info "$custom_port")
                     print_message "❌ Port $custom_port is also in use by: $process_info. Please try another port." "$RED"
                 fi
             else
