@@ -312,6 +312,38 @@ realtime:
             parameters: ["CommonName", "Confidence"] # Parameters to pass to the command
             executedefaults: true # true: run default actions (DB, MQTT, etc.) AND this command. false: run ONLY this command.
 
+  # Species tracking settings (NEW)
+  speciesTracking:
+    enabled: true # Enable tracking of new species discoveries (default: true)
+    newSpeciesWindowDays: 7 # Days to show "New Species" badge after first detection (default: 7)
+    syncIntervalMinutes: 60 # How often to sync tracking data with database in minutes (default: 60)
+
+    # Yearly tracking - tracks first arrivals each calendar year
+    yearlyTracking:
+      enabled: true # Enable yearly "New This Year" tracking (default: true)
+      resetMonth: 1 # Month when yearly tracking resets (1-12, default: 1 for January)
+      resetDay: 1 # Day of month when yearly tracking resets (1-31, default: 1)
+      windowDays: 7 # Days to show "New This Year" badge after first yearly detection (default: 7)
+
+    # Seasonal tracking - tracks first arrivals each season
+    seasonalTracking:
+      enabled: true # Enable seasonal "New This Season" tracking (default: true)
+      windowDays: 7 # Days to show "New This Season" badge after first seasonal detection (default: 7)
+      # Custom season definitions (optional - auto-adjusts for hemisphere if not specified)
+      seasons:
+        spring:
+          startMonth: 3 # March (Northern Hemisphere default)
+          startDay: 20 # Spring equinox
+        summer:
+          startMonth: 6 # June
+          startDay: 21 # Summer solstice
+        fall:
+          startMonth: 9 # September
+          startDay: 22 # Fall equinox
+        winter:
+          startMonth: 12 # December
+          startDay: 21 # Winter solstice
+
 # Web server settings
 webserver:
   debug: false # Enable debug mode for web server
@@ -548,20 +580,23 @@ This will show something like: `--env TZ="Europe/Helsinki"`
 To change the timezone for an existing installation:
 
 1. **Edit the systemd service file:**
+
    ```bash
    sudo nano /etc/systemd/system/birdnet-go.service
    ```
 
 2. **Find the line containing `--env TZ=` and update it:**
+
    ```bash
    # Change from:
    --env TZ="Europe/London" \
-   
+
    # To your desired timezone, for example:
    --env TZ="US/Eastern" \
    ```
 
 3. **Reload systemd and restart the service:**
+
    ```bash
    sudo systemctl daemon-reload
    sudo systemctl restart birdnet-go
@@ -601,7 +636,7 @@ If you're using Docker Compose, the timezone is typically set via an environment
 services:
   birdnet-go:
     environment:
-      - TZ=US/Eastern  # Change this to your timezone
+      - TZ=US/Eastern # Change this to your timezone
 ```
 
 After updating, restart the container:
@@ -1829,23 +1864,23 @@ The system tracks three different types of "new" species appearances:
 
 - **What it means**: A bird species detected for the very first time at your location
 - **Visual indicator**: Animated golden star that gently wiggles to catch your attention
-- **When shown**: For 7 days after the first detection (configurable)
+- **When shown**: For 7 days after the first detection (configurable via `newSpeciesWindowDays`)
 - **Perfect for**: Discovering birds that have never visited your area before, tracking range expansions, or celebrating truly rare visitors
 
 ##### 📅 **New This Year** (Annual First)
 
 - **What it means**: A bird species detected for the first time this calendar year
 - **Visual indicator**: Blue calendar icon
-- **When shown**: For 7 days after the first detection of the year (configurable)
-- **Resets**: January 1st each year (configurable date)
+- **When shown**: For 7 days after the first detection of the year (configurable via `yearlyTracking.windowDays`)
+- **Resets**: January 1st each year (configurable via `yearlyTracking.resetMonth` and `resetDay`)
 - **Perfect for**: Tracking yearly visitors, seasonal patterns, and migration timing
 
 ##### 🌿 **New This Season** (Seasonal First)
 
 - **What it means**: A bird species detected for the first time this season
 - **Visual indicator**: Green leaf icon
-- **When shown**: For 7 days after the first seasonal detection (configurable)
-- **Seasons**: Spring (March 20), Summer (June 21), Fall (September 22), Winter (December 21)
+- **When shown**: For 7 days after the first seasonal detection (configurable via `seasonalTracking.windowDays`)
+- **Seasons**: Spring (March 20), Summer (June 21), Fall (September 22), Winter (December 21) - automatically adjusted for hemisphere
 - **Perfect for**: Monitoring seasonal migrations, breeding arrivals, and wintering species
 
 > **Smart Hemisphere Detection**: The system automatically adjusts seasonal definitions based on your latitude - if you're in the Southern Hemisphere, the seasons are flipped appropriately.
@@ -1868,13 +1903,105 @@ When a species qualifies for multiple badges (for example, a bird that's both ne
 
 #### Configuration Options
 
-The species tracking system is enabled by default with sensible settings, but you can customize it through the web interface settings:
+The species tracking system is enabled by default with sensible settings. You can customize it through the web interface settings or directly in your `config.yaml` file under `realtime.speciesTracking`:
 
-- **Enable/Disable**: Turn the entire tracking system on or off
-- **Badge Display Duration**: How long badges remain visible (default: 7 days)
-- **Year Reset Date**: When yearly tracking resets (default: January 1st)
-- **Seasonal Dates**: Customize when seasons begin (defaults to astronomical seasons)
-- **Sync Frequency**: How often the system updates tracking data (default: every hour)
+##### Main Tracking Settings
+
+- **Enable/Disable** (`enabled`): Turn the entire tracking system on or off (default: `true`)
+- **New Species Window** (`newSpeciesWindowDays`): How many days to display the 🌟 "New Species" badge after a bird is detected for the first time ever at your location (default: `7` days)
+- **Database Sync Interval** (`syncIntervalMinutes`): How often the system checks the database for historical data and updates tracking information (default: `60` minutes)
+
+##### Yearly Tracking Settings
+
+Configure how the system tracks first arrivals each calendar year:
+
+- **Enable Yearly Tracking** (`yearlyTracking.enabled`): Turn yearly tracking on/off (default: `true`)
+- **Reset Date** (`yearlyTracking.resetMonth` and `resetDay`): When to reset the yearly list
+  - Default: January 1st (`resetMonth: 1`, `resetDay: 1`)
+  - Example: For a June-to-May year, set `resetMonth: 6`, `resetDay: 1`
+- **Badge Display Window** (`yearlyTracking.windowDays`): How many days to show the 📅 "New This Year" badge (default: `7` days)
+
+##### Seasonal Tracking Settings
+
+Configure how the system tracks first arrivals each season:
+
+- **Enable Seasonal Tracking** (`seasonalTracking.enabled`): Turn seasonal tracking on/off (default: `true`)
+- **Badge Display Window** (`seasonalTracking.windowDays`): How many days to show the 🌿 "New This Season" badge (default: `7` days)
+- **Season Definitions** (`seasonalTracking.seasons`): Customize when each season begins
+  - **Automatic Hemisphere Detection**: If you don't specify custom seasons, the system automatically adjusts based on your latitude:
+    - Northern Hemisphere (latitude > 10°): Spring starts March 20, Summer June 21, etc.
+    - Southern Hemisphere (latitude < -10°): Seasons are shifted by 6 months
+    - Equatorial regions (latitude -10° to 10°): Uses wet/dry season patterns
+  - **Custom Seasons**: You can define your own seasonal boundaries to match local conditions:
+    ```yaml
+    seasons:
+      spring:
+        startMonth: 3 # March
+        startDay: 20 # Day 20
+      # Add more seasons as needed
+    ```
+
+##### Time Period Examples
+
+Here are some common configuration scenarios:
+
+**Default settings** (balanced for most users):
+
+```yaml
+speciesTracking:
+  newSpeciesWindowDays: 7 # Show new species badges for a week
+  yearlyTracking:
+    windowDays: 7 # Show yearly badges for a week
+  seasonalTracking:
+    windowDays: 7 # Show seasonal badges for a week
+```
+
+**Extended visibility** (for users who check less frequently):
+
+```yaml
+speciesTracking:
+  newSpeciesWindowDays: 14 # Show new species badges for 2 weeks
+  yearlyTracking:
+    windowDays: 14 # Show yearly badges for 2 weeks
+  seasonalTracking:
+    windowDays: 14 # Show seasonal badges for 2 weeks
+  syncIntervalMinutes: 30 # Check database more frequently
+```
+
+**Research/documentation focus** (longer retention for rare events):
+
+```yaml
+speciesTracking:
+  newSpeciesWindowDays: 30 # Show lifetime firsts for a month
+  yearlyTracking:
+    windowDays: 21 # Show yearly firsts for 3 weeks
+  seasonalTracking:
+    windowDays: 14 # Show seasonal firsts for 2 weeks
+```
+
+**Custom birding year** (October to September for fall migration focus):
+
+```yaml
+speciesTracking:
+  yearlyTracking:
+    resetMonth: 10 # Reset on October 1st
+    resetDay: 1
+    windowDays: 14 # Extended visibility during migration
+```
+
+**Tropical/equatorial regions** (custom wet/dry seasons):
+
+```yaml
+speciesTracking:
+  seasonalTracking:
+    seasons:
+      wet:
+        startMonth: 4 # April - start of wet season
+        startDay: 1
+      dry:
+        startMonth: 10 # October - start of dry season
+        startDay: 1
+```
 
 #### Practical Benefits
 
