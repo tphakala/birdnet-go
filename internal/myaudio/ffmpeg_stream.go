@@ -31,7 +31,7 @@ const (
 	silenceCheckInterval = 10 * time.Second
 
 	// Data rate calculation settings
-	dataRateWindowSize = 60 * time.Second // Increased from 30s to align better with silence timeout
+	dataRateWindowSize = 10 * time.Second // Responsive window for real-time rate feedback
 	dataRateMaxSamples = 100
 
 	// Process management timeouts
@@ -72,6 +72,9 @@ const (
 
 	// Maximum safe exponent for bit shift to prevent overflow
 	maxBackoffExponent = 20 // This allows up to 2^20 = ~1 million multiplier
+
+	// Restart jitter to prevent thundering herd effect
+	restartJitterPercentMax = 20 // Maximum jitter percentage (0-20% random addition to backoff)
 
 	// Timeout settings for FFmpeg RTSP streams
 	defaultTimeoutMicroseconds = 10000000 // 10 seconds in microseconds
@@ -141,32 +144,38 @@ func (d *dataRateCalculator) addSample(numBytes int64) {
 	}
 }
 
-// getRate returns the current data rate in bytes per second and an error if insufficient data
-func (d *dataRateCalculator) getRate() (float64, error) {
+// getRate returns the current data rate in bytes per second.
+// It gracefully handles edge cases by returning 0 for cosmetic display.
+func (d *dataRateCalculator) getRate() float64 {
 	d.samplesMu.RLock()
 	defer d.samplesMu.RUnlock()
 
 	if len(d.samples) == 0 {
-		return 0, errors.Newf("no data received from RTSP source: %s", privacy.SanitizeRTSPUrl(d.url)).
-			Component("ffmpeg-stream").
-			Category(errors.CategoryAudioSource).
-			Priority(errors.PriorityMedium).
-			Context("operation", "calculate_data_rate").
-			Context("url", privacy.SanitizeRTSPUrl(d.url)).
-			Build()
+		// No data yet - return 0 for clean display
+		return 0
 	}
 
-	if len(d.samples) < 2 {
-		return 0, errors.Newf("insufficient data received from RTSP source: %s", privacy.SanitizeRTSPUrl(d.url)).
-			Component("ffmpeg-stream").
-			Category(errors.CategoryAudioSource).
-			Priority(errors.PriorityLow).
-			Context("operation", "calculate_data_rate").
-			Context("sample_count", len(d.samples)).
-			Context("url", privacy.SanitizeRTSPUrl(d.url)).
-			Build()
+	if len(d.samples) == 1 {
+		// Single sample case: When only one recent sample exists, return an
+		// instantaneous/burst rate estimate rather than a true averaged rate.
+		// We treat the sample size as if spread over 1 second minimum to give
+		// a bytes-per-second estimate. This is NOT a multi-sample average but
+		// rather an instantaneous rate estimate for display purposes.
+		sample := d.samples[0]
+		timeSinceSample := time.Since(sample.timestamp)
+		
+		// If sample is recent (within 5 seconds), show instantaneous rate
+		// This helps new streams show data rate immediately
+		if timeSinceSample < 5*time.Second {
+			// Return the burst size as bytes/second (instantaneous estimate)
+			return float64(sample.bytes)
+		}
+		
+		// Old single sample - no meaningful rate
+		return 0
 	}
 
+	// Multiple samples - calculate average rate
 	totalBytes := int64(0)
 	for _, s := range d.samples {
 		totalBytes += s.bytes
@@ -174,16 +183,20 @@ func (d *dataRateCalculator) getRate() (float64, error) {
 
 	duration := d.samples[len(d.samples)-1].timestamp.Sub(d.samples[0].timestamp).Seconds()
 	if duration <= 0 {
-		return 0, errors.Newf("invalid duration for rate calculation: %f seconds", duration).
-			Component("ffmpeg-stream").
-			Category(errors.CategoryRTSP).
-			Priority(errors.PriorityLow).
-			Context("operation", "calculate_data_rate").
-			Context("duration_seconds", duration).
-			Build()
+		// All samples at same timestamp (shouldn't happen) - return 0
+		return 0
 	}
 
-	return float64(totalBytes) / duration, nil
+	return float64(totalBytes) / duration
+}
+
+// secondsSinceOrZero returns seconds since t, or 0 if t is zero.
+// This prevents huge durations (time since Unix epoch) in logs when lastData is never set.
+func secondsSinceOrZero(t time.Time) float64 {
+	if t.IsZero() {
+		return 0
+	}
+	return time.Since(t).Seconds()
 }
 
 // StreamHealth represents the health status of an FFmpeg stream.
@@ -219,6 +232,7 @@ type FFmpegStream struct {
 	cancelMu    sync.RWMutex // Protect cancel function access
 	restartChan chan struct{}
 	stopChan    chan struct{}
+	stopOnce    sync.Once // Ensure Stop() is idempotent
 	stopped     bool
 	stoppedMu   sync.RWMutex
 
@@ -382,11 +396,11 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 			return
 		default:
 			// Start FFmpeg process
-			// Check circuit breaker
-			if s.isCircuitOpen() {
-				// Wait before next attempt
+			// Check circuit breaker and wait only for remaining cooldown
+			if remaining, open := s.circuitCooldownRemaining(); open {
+				// Wait only the remaining cooldown before next attempt
 				select {
-				case <-time.After(circuitBreakerCooldown):
+				case <-time.After(remaining):
 					continue
 				case <-s.ctx.Done():
 					return
@@ -784,14 +798,29 @@ func (s *FFmpegStream) processAudio() error {
 			lastData := s.lastDataTime
 			s.lastDataMu.RUnlock()
 
-			if time.Since(lastData) > silenceTimeout {
+			// Determine effective "no-data" age: if never received any data, use process runtime
+			effectiveAge := func() time.Duration {
+				if lastData.IsZero() {
+					s.cmdMu.Lock()
+					ps := s.processStartTime
+					s.cmdMu.Unlock()
+					if ps.IsZero() {
+						return 0 // no running process; skip
+					}
+					return time.Since(ps)
+				}
+				return time.Since(lastData)
+			}()
+
+			if effectiveAge > 0 && effectiveAge > silenceTimeout {
 				streamLogger.Warn("no data received from RTSP source, triggering restart",
 					"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 					"timeout_seconds", silenceTimeout.Seconds(),
-					"last_data_ago_seconds", time.Since(lastData).Seconds(),
+					"last_data_ago_seconds", secondsSinceOrZero(lastData),
+					"effective_age_seconds", effectiveAge.Seconds(),
 					"component", "ffmpeg-stream",
 					"operation", "silence_detected")
-				log.Printf("⚠️ No data from %s for %v, restarting stream", privacy.SanitizeRTSPUrl(s.source.SafeString), time.Since(lastData))
+				log.Printf("⚠️ No data from %s for %v, restarting stream", privacy.SanitizeRTSPUrl(s.source.SafeString), effectiveAge)
 				s.cleanupProcess()
 				return errors.Newf("stream stopped producing data for %v seconds", silenceTimeout.Seconds()).
 					Category(errors.CategoryRTSP).
@@ -800,7 +829,8 @@ func (s *FFmpegStream) processAudio() error {
 					Context("operation", "silence_timeout").
 					Context("url", privacy.SanitizeRTSPUrl(s.source.SafeString)).
 					Context("timeout_seconds", silenceTimeout.Seconds()).
-					Context("last_data_seconds_ago", time.Since(lastData).Seconds()).
+					Context("last_data_seconds_ago", secondsSinceOrZero(lastData)).
+					Context("effective_age_seconds", effectiveAge.Seconds()).
 					Build()
 			}
 		default:
@@ -927,10 +957,22 @@ func (s *FFmpegStream) logDroppedData() {
 
 // cleanupProcess cleans up the FFmpeg process
 func (s *FFmpegStream) cleanupProcess() {
+	// Narrow critical section: grab and clear references under lock, then operate on locals
 	s.cmdMu.Lock()
-	defer s.cmdMu.Unlock()
+	cmd := s.cmd
+	stdout := s.stdout
+	pid := 0
+	if cmd != nil && cmd.Process != nil {
+		pid = cmd.Process.Pid
+	}
+	// Clear references so other observers see "no running process" immediately
+	s.cmd = nil
+	s.stdout = nil
+	s.processStartTime = time.Time{} // Clear start time when tearing down
+	s.cmdMu.Unlock()
 
-	if s.cmd == nil || s.cmd.Process == nil {
+	// Check if there was actually a process to clean
+	if cmd == nil || cmd.Process == nil {
 		if conf.Setting().Debug {
 			streamLogger.Debug("cleanup called but no process to clean",
 				"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
@@ -939,7 +981,6 @@ func (s *FFmpegStream) cleanupProcess() {
 		return
 	}
 
-	pid := s.cmd.Process.Pid
 	if conf.Setting().Debug {
 		streamLogger.Debug("starting process cleanup",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
@@ -948,8 +989,8 @@ func (s *FFmpegStream) cleanupProcess() {
 	}
 
 	// Close stdout
-	if s.stdout != nil {
-		if err := s.stdout.Close(); err != nil {
+	if stdout != nil {
+		if err := stdout.Close(); err != nil {
 			// Log but don't fail - process cleanup is more important
 			if conf.Setting().Debug {
 				streamLogger.Debug("failed to close stdout",
@@ -962,7 +1003,7 @@ func (s *FFmpegStream) cleanupProcess() {
 	}
 
 	// Kill process
-	if err := killProcessGroup(s.cmd); err != nil {
+	if err := killProcessGroup(cmd); err != nil {
 		if conf.Setting().Debug {
 			streamLogger.Debug("killProcessGroup failed, attempting direct kill",
 				"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
@@ -971,7 +1012,7 @@ func (s *FFmpegStream) cleanupProcess() {
 				"operation", "cleanup_process_kill")
 		}
 
-		if killErr := s.cmd.Process.Kill(); killErr != nil {
+		if killErr := cmd.Process.Kill(); killErr != nil {
 			// Only log if kill also fails
 			streamLogger.Warn("failed to kill process directly",
 				"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
@@ -993,8 +1034,7 @@ func (s *FFmpegStream) cleanupProcess() {
 	// Always call Wait() to reap the zombie - this is critical!
 	// We do this in a goroutine that we may abandon if it takes too long,
 	// but the goroutine will continue and eventually reap the process
-	// Capture cmd reference to avoid race condition
-	cmd := s.cmd
+	// cmd is already captured at the beginning of this function
 	url := s.source.SafeString
 	waitStartTime := time.Now()
 
@@ -1027,11 +1067,13 @@ func (s *FFmpegStream) cleanupProcess() {
 			}
 		}
 
-		// Send result if channel is still open
+		// Non-blocking send of the wait result.
+		// If the buffer slot has already been consumed (or we timed out and moved on),
+		// skip sending to avoid blocking; the goroutine will exit regardless.
 		select {
 		case waitDone <- waitErr:
 		default:
-			// Channel might be closed if we timed out
+			// Channel buffer full or already consumed - we timed out
 			if conf.Setting().Debug {
 				streamLogger.Debug("wait result not sent - cleanup already timed out",
 					"url", privacy.SanitizeRTSPUrl(url),
@@ -1084,8 +1126,7 @@ func (s *FFmpegStream) cleanupProcess() {
 		}
 	}
 
-	// Clear the command reference
-	s.cmd = nil
+	// Command reference already cleared at the beginning of cleanup
 
 	if conf.Setting().Debug {
 		streamLogger.Debug("process cleanup completed",
@@ -1133,14 +1174,37 @@ func (s *FFmpegStream) handleRestartBackoff() {
 		streamLogger.Debug("applying restart backoff",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 			"backoff_ms", backoff.Milliseconds(),
+			"jitter_percent_max", restartJitterPercentMax,
 			"restart_count", currentRestartCount,
 			"operation", "restart_backoff")
 	}
 
-	log.Printf("⏳ Waiting %v before restart attempt #%d for %s", backoff, currentRestartCount, privacy.SanitizeRTSPUrl(s.source.SafeString))
+	// Add jitter to avoid synchronized restarts across many streams (thundering herd)
+	wait := backoff
+	if backoff > 0 {
+		// Compute jitter factor from constant
+		factor := float64(restartJitterPercentMax) / 100.0
+		jitterRange := time.Duration(float64(backoff) * factor)
+		if jitterRange > 0 {
+			if n, err := rand.Int(rand.Reader, big.NewInt(jitterRange.Nanoseconds())); err == nil {
+				wait = backoff + time.Duration(n.Int64())
+			}
+		}
+	}
+
+	// Log with both formats for compatibility and support dumps
+	streamLogger.Info("waiting before restart attempt",
+		"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+		"wait_seconds", wait.Seconds(),
+		"backoff_seconds", backoff.Seconds(),
+		"jitter_percent_max", restartJitterPercentMax,
+		"restart_count", currentRestartCount,
+		"component", "ffmpeg-stream",
+		"operation", "restart_wait")
+	log.Printf("⏳ Waiting %v before restart attempt #%d for %s", wait, currentRestartCount, privacy.SanitizeRTSPUrl(s.source.SafeString))
 
 	select {
-	case <-time.After(backoff):
+	case <-time.After(wait):
 		// Continue with restart
 	case <-s.ctx.Done():
 		// Context cancelled
@@ -1151,25 +1215,28 @@ func (s *FFmpegStream) handleRestartBackoff() {
 
 // Stop gracefully stops the FFmpeg stream.
 // It signals the stream to stop, cancels the context, and cleans up the FFmpeg process.
+// This method is idempotent - multiple calls are safe and will not panic.
 func (s *FFmpegStream) Stop() {
-	s.stoppedMu.Lock()
-	s.stopped = true
-	s.stoppedMu.Unlock()
+	s.stopOnce.Do(func() {
+		s.stoppedMu.Lock()
+		s.stopped = true
+		s.stoppedMu.Unlock()
 
-	// Signal stop
-	close(s.stopChan)
+		// Signal stop
+		close(s.stopChan)
 
-	// Cancel context with proper locking
-	s.cancelMu.RLock()
-	cancel := s.cancel
-	s.cancelMu.RUnlock()
+		// Cancel context with proper locking
+		s.cancelMu.RLock()
+		cancel := s.cancel
+		s.cancelMu.RUnlock()
 
-	if cancel != nil {
-		cancel()
-	}
+		if cancel != nil {
+			cancel()
+		}
 
-	// Cleanup process
-	s.cleanupProcess()
+		// Cleanup process
+		s.cleanupProcess()
+	})
 }
 
 // Restart requests a stream restart.
@@ -1226,6 +1293,58 @@ func (s *FFmpegStream) Restart(manual bool) {
 	}
 }
 
+// IsRestarting checks if the stream is currently in the process of restarting.
+// This includes streams that are:
+// - Actively processing a restart request (restartInProgress flag set)
+// - In backoff period between restart attempts (no process running but not stopped)
+// - Waiting for circuit breaker cooldown
+//
+// This method helps prevent the manager from interfering with streams that are
+// already handling their own restart cycle, avoiding premature restarts that
+// would break the exponential backoff mechanism.
+func (s *FFmpegStream) IsRestarting() bool {
+	// Check if we have a running process
+	// A process is only running if cmd exists, has a Process, and hasn't exited (no ProcessState)
+	s.cmdMu.Lock()
+	isRunning := s.cmd != nil && s.cmd.Process != nil && s.cmd.ProcessState == nil
+	s.cmdMu.Unlock()
+	
+	// Check if restart is in progress
+	s.restartMu.Lock()
+	inProgress := s.restartInProgress
+	s.restartMu.Unlock()
+	
+	// Check if stream is stopped
+	s.stoppedMu.RLock()
+	stopped := s.stopped
+	s.stoppedMu.RUnlock()
+	
+	// Check if circuit breaker is open (in cooldown) - silent check to avoid log spam
+	circuitOpen := s.isCircuitOpenSilent()
+	
+	// Stream is restarting if:
+	// 1. Restart is explicitly in progress
+	// 2. No process running and not stopped (in backoff)
+	// 3. Circuit breaker is open (waiting for cooldown)
+	return inProgress || (!isRunning && !stopped) || circuitOpen
+}
+
+// GetProcessStartTime returns the start time of the current FFmpeg process.
+// Returns zero time if no process is currently running.
+// This is used by the manager to determine if a stream has been running
+// long enough to be eligible for health-based restarts.
+func (s *FFmpegStream) GetProcessStartTime() time.Time {
+	s.cmdMu.Lock()
+	defer s.cmdMu.Unlock()
+	
+	// Only return start time if we have a truly running process (not exited)
+	// Check ProcessState to ensure the process hasn't exited
+	if s.cmd != nil && s.cmd.Process != nil && s.cmd.ProcessState == nil {
+		return s.processStartTime
+	}
+	return time.Time{} // Zero time indicates no running process
+}
+
 // GetHealth returns the current health status of the stream.
 // It includes information about data reception, restart count, and data rate statistics.
 func (s *FFmpegStream) GetHealth() StreamHealth {
@@ -1249,17 +1368,7 @@ func (s *FFmpegStream) GetHealth() StreamHealth {
 	s.bytesReceivedMu.RUnlock()
 
 	// Get current data rate
-	dataRate, err := s.dataRateCalc.getRate()
-	if err != nil {
-		// Log error but don't fail health check
-		if conf.Setting().Debug {
-			streamLogger.Debug("failed to calculate data rate",
-				"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
-				"error", err,
-				"component", "ffmpeg-stream")
-		}
-		dataRate = 0
-	}
+	dataRate := s.dataRateCalc.getRate()
 
 	// Get configurable thresholds
 	settings := conf.Setting()
@@ -1310,7 +1419,7 @@ func (s *FFmpegStream) GetHealth() StreamHealth {
 			"pid", currentPID,
 			"is_healthy", isHealthy,
 			"is_receiving_data", isReceivingData,
-			"last_data_seconds_ago", time.Since(lastData).Seconds(),
+			"last_data_seconds_ago", secondsSinceOrZero(lastData),
 			"healthy_threshold_seconds", healthyDataThreshold.Seconds(),
 			"total_bytes", totalBytes,
 			"bytes_per_second", dataRate,
@@ -1345,17 +1454,8 @@ func (s *FFmpegStream) logStreamHealth() {
 	totalBytes := s.totalBytesReceived
 	s.bytesReceivedMu.RUnlock()
 
-	dataRate, err := s.dataRateCalc.getRate()
-	if err != nil {
-		// Log error but continue with zero rate for display
-		if conf.Setting().Debug {
-			streamLogger.Debug("failed to calculate data rate for health log",
-				"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
-				"error", err,
-				"component", "ffmpeg-stream")
-		}
-		dataRate = 0
-	}
+	// Reuse the already calculated data rate from health object
+	dataRate := health.BytesPerSecond
 
 	if health.IsReceivingData {
 		streamLogger.Info("stream health check - receiving data",
@@ -1364,7 +1464,7 @@ func (s *FFmpegStream) logStreamHealth() {
 			"is_receiving_data", health.IsReceivingData,
 			"total_bytes_received", totalBytes,
 			"bytes_per_second", dataRate,
-			"last_data_ago_seconds", time.Since(health.LastDataReceived).Seconds(),
+			"last_data_ago_seconds", secondsSinceOrZero(health.LastDataReceived),
 			"component", "ffmpeg-stream",
 			"operation", "health_check")
 		log.Printf("✅ Stream %s is healthy and receiving data (%.1f KB/s)",
@@ -1375,7 +1475,7 @@ func (s *FFmpegStream) logStreamHealth() {
 			"is_healthy", health.IsHealthy,
 			"is_receiving_data", health.IsReceivingData,
 			"total_bytes_received", totalBytes,
-			"last_data_ago_seconds", time.Since(health.LastDataReceived).Seconds(),
+			"last_data_ago_seconds", secondsSinceOrZero(health.LastDataReceived),
 			"component", "ffmpeg-stream",
 			"operation", "health_check")
 		log.Printf("⚠️ Stream %s is not receiving data", privacy.SanitizeRTSPUrl(s.source.SafeString))
@@ -1383,6 +1483,34 @@ func (s *FFmpegStream) logStreamHealth() {
 }
 
 // isCircuitOpen checks if the circuit breaker is open
+// isCircuitOpenSilent checks if the circuit breaker is open without logging.
+// This is used by IsRestarting() to avoid log spam during health checks.
+func (s *FFmpegStream) isCircuitOpenSilent() bool {
+	s.circuitMu.Lock()
+	defer s.circuitMu.Unlock()
+	
+	// Check if circuit was opened and we're still in cooldown
+	return !s.circuitOpenTime.IsZero() && time.Since(s.circuitOpenTime) < circuitBreakerCooldown
+}
+
+// circuitCooldownRemaining returns (remaining, true) if the circuit is open, or (0, false) otherwise.
+// This allows waiting only for the remaining cooldown period instead of the full duration.
+func (s *FFmpegStream) circuitCooldownRemaining() (time.Duration, bool) {
+	s.circuitMu.Lock()
+	defer s.circuitMu.Unlock()
+	
+	if s.circuitOpenTime.IsZero() {
+		return 0, false
+	}
+	
+	elapsed := time.Since(s.circuitOpenTime)
+	if elapsed >= circuitBreakerCooldown {
+		return 0, false
+	}
+	
+	return circuitBreakerCooldown - elapsed, true
+}
+
 func (s *FFmpegStream) isCircuitOpen() bool {
 	s.circuitMu.Lock()
 	defer s.circuitMu.Unlock()

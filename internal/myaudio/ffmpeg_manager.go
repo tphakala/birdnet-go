@@ -13,6 +13,34 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
+// Constants for stream health management
+const (
+	// minimumStreamRuntime is the minimum time a stream must be running before
+	// it becomes eligible for health-based restarts. This prevents the manager
+	// from restarting streams that are still establishing their connection or
+	// experiencing temporary startup issues.
+	minimumStreamRuntime = 2 * time.Minute
+)
+
+// getTimeSinceDataSeconds returns the time in seconds since data was last received,
+// handling the case where LastDataReceived is zero (never received data).
+// Returns 0 if LastDataReceived is zero to avoid confusing large numbers in logs.
+func getTimeSinceDataSeconds(lastDataReceived time.Time) float64 {
+	if lastDataReceived.IsZero() {
+		return 0 // Never received data
+	}
+	return time.Since(lastDataReceived).Seconds()
+}
+
+// formatTimeSinceData returns a human-readable string for time since data was last received,
+// handling the case where LastDataReceived is zero (never received data).
+func formatTimeSinceData(lastDataReceived time.Time) string {
+	if lastDataReceived.IsZero() {
+		return "never received data"
+	}
+	return time.Since(lastDataReceived).String()
+}
+
 // Use shared logger from integration file
 var managerLogger *slog.Logger
 
@@ -305,17 +333,59 @@ func (m *FFmpegManager) checkStreamHealth() {
 	
 	for url, h := range health {
 		if !h.IsHealthy {
+			// Get the stream to check if it's already restarting
+			m.streamsMu.RLock()
+			stream, exists := m.streams[url]
+			m.streamsMu.RUnlock()
+			
+			// Skip if stream doesn't exist (shouldn't happen but be defensive)
+			if !exists {
+				managerLogger.Debug("unhealthy stream not found in streams map",
+					"url", privacy.SanitizeRTSPUrl(url),
+					"operation", "health_check")
+				continue
+			}
+			
+			// Check if stream is already in the process of restarting
+			if stream.IsRestarting() {
+				if conf.Setting().Debug {
+					managerLogger.Debug("skipping restart for stream already in restart process",
+						"url", privacy.SanitizeRTSPUrl(url),
+						"last_data_ago_seconds", getTimeSinceDataSeconds(h.LastDataReceived),
+						"restart_count", h.RestartCount,
+						"operation", "health_check_skip_restart")
+				}
+				continue // Don't interfere with ongoing restart/backoff
+			}
+			
+			// Check if stream is too new to restart (give it time to establish)
+			processStartTime := stream.GetProcessStartTime()
+			if !processStartTime.IsZero() {
+				timeSinceStart := time.Since(processStartTime)
+				if timeSinceStart < minimumStreamRuntime {
+					if conf.Setting().Debug {
+						managerLogger.Debug("skipping restart for new stream still establishing",
+							"url", privacy.SanitizeRTSPUrl(url),
+							"runtime_seconds", timeSinceStart.Seconds(),
+							"minimum_runtime_seconds", minimumStreamRuntime.Seconds(),
+							"last_data_ago_seconds", getTimeSinceDataSeconds(h.LastDataReceived),
+							"operation", "health_check_skip_new_stream")
+					}
+					continue // Give new streams time to stabilize
+				}
+			}
+			
 			managerLogger.Warn("unhealthy stream detected",
 				"url", privacy.SanitizeRTSPUrl(url),
-				"last_data_ago_seconds", time.Since(h.LastDataReceived).Seconds(),
+				"last_data_ago_seconds", getTimeSinceDataSeconds(h.LastDataReceived),
 				"restart_count", h.RestartCount,
 				"is_receiving_data", h.IsReceivingData,
 				"bytes_per_second", h.BytesPerSecond,
 				"total_bytes", h.TotalBytesReceived,
 				"operation", "health_check")
 			
-			log.Printf("⚠️ Unhealthy stream detected: %s (last data: %v ago)", 
-				privacy.SanitizeRTSPUrl(url), time.Since(h.LastDataReceived))
+			log.Printf("⚠️ Unhealthy stream detected: %s (last data: %s ago)", 
+				privacy.SanitizeRTSPUrl(url), formatTimeSinceData(h.LastDataReceived))
 			
 			// Restart unhealthy streams
 			if conf.Setting().Debug {
