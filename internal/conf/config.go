@@ -295,7 +295,7 @@ type SpeciesTrackingSettings struct {
 	Enabled              bool                   `json:"enabled"`              // true to enable new species tracking
 	NewSpeciesWindowDays int                    `json:"newSpeciesWindowDays"` // Days to consider a species "new" (default: 14)
 	SyncIntervalMinutes  int                    `json:"syncIntervalMinutes"`  // Interval to sync with database (default: 60)
-	NotificationSuppressionHours int           `json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 24)
+	NotificationSuppressionHours int           `json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 168)
 	YearlyTracking       YearlyTrackingSettings `json:"yearlyTracking"`       // Settings for yearly species tracking
 	SeasonalTracking     SeasonalTrackingSettings `json:"seasonalTracking"`   // Settings for seasonal species tracking
 }
