@@ -1,7 +1,6 @@
 package processor
 
 import (
-	"os"
 	"testing"
 
 	"go.uber.org/goleak"
@@ -9,11 +8,8 @@ import (
 
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
+		// Keep ignores narrowly scoped to known benign goroutines
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 		goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
-		goleak.IgnoreTopFunction("time.Sleep"),
 	)
-	os.Exit(m.Run())
 }

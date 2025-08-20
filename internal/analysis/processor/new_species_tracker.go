@@ -15,21 +15,21 @@ import (
 // Constants for better maintainability and avoiding magic numbers
 const (
 	// Cache configuration
-	defaultCacheTTL        = 30 * time.Second  // Status cache TTL
-	defaultSeasonCacheTTL  = time.Hour         // Season cache TTL  
-	defaultCacheExpiredAge = -time.Hour        // Age for marking cache as expired
-	
+	defaultCacheTTL        = 30 * time.Second // Status cache TTL
+	defaultSeasonCacheTTL  = time.Hour        // Season cache TTL
+	defaultCacheExpiredAge = -time.Hour       // Age for marking cache as expired
+
 	// Capacity hints for map allocations
 	initialSpeciesCapacity = 100 // Initial capacity for species maps
-	
+
 	// Time calculations
-	hoursPerDay                = 24
-	seasonBufferDays           = 7  // Days buffer for season comparison
-	seasonBufferDuration       = seasonBufferDays * hoursPerDay * time.Hour
-	defaultSeasonDurationDays  = 90 // Typical season duration
-	
+	hoursPerDay               = 24
+	seasonBufferDays          = 7 // Days buffer for season comparison
+	seasonBufferDuration      = seasonBufferDays * hoursPerDay * time.Hour
+	defaultSeasonDurationDays = 90 // Typical season duration
+
 	// Notification suppression
-	defaultNotificationSuppressionHours = 168 // Default suppression window (7 days)
+	defaultNotificationSuppressionWindow = 168 * time.Hour // Default suppression window (7 days)
 )
 
 // Package-level logger for species tracking
@@ -148,7 +148,7 @@ type NewSpeciesTracker struct {
 
 	// Notification suppression tracking to prevent duplicate notifications
 	// Simply maps scientific name -> last notification time
-	notificationLastSent         map[string]time.Time
+	notificationLastSent          map[string]time.Time
 	notificationSuppressionWindow time.Duration // Duration to suppress duplicate notifications (default: 7 days)
 }
 
@@ -194,7 +194,7 @@ func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTr
 
 		// Status result caching
 		statusCache:      make(map[string]cachedSpeciesStatus, initialSpeciesCapacity), // Pre-allocate for species
-		cacheTTL:         defaultCacheTTL,                                             // TTL for cached results
+		cacheTTL:         defaultCacheTTL,                                              // TTL for cached results
 		lastCacheCleanup: now,
 
 		// Season calculation caching
@@ -230,7 +230,7 @@ func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTr
 	// Set notification suppression window from configuration
 	// 0 is valid (disabled), negative values get default
 	if settings.NotificationSuppressionHours < 0 {
-		tracker.notificationSuppressionWindow = time.Duration(defaultNotificationSuppressionHours) * time.Hour
+		tracker.notificationSuppressionWindow = defaultNotificationSuppressionWindow
 	} else {
 		tracker.notificationSuppressionWindow = time.Duration(settings.NotificationSuppressionHours) * time.Hour
 	}
@@ -247,7 +247,7 @@ func (t *NewSpeciesTracker) initializeDefaultSeasons() {
 }
 
 // SetCurrentYearForTesting sets the current year for testing purposes only.
-// 
+//
 // ⚠️  WARNING: THIS METHOD IS STRICTLY FOR TESTING AND SHOULD NEVER BE USED IN PRODUCTION CODE ⚠️
 //
 // This method bypasses the normal year tracking logic and directly manipulates the internal
@@ -803,14 +803,14 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 // cleanupExpiredCache removes expired entries and enforces size limits with LRU eviction
 func (t *NewSpeciesTracker) cleanupExpiredCache(currentTime time.Time) {
 	const maxStatusCacheSize = 1000 // Maximum number of species to cache
-	
+
 	// First pass: remove expired entries
 	for scientificName := range t.statusCache {
 		if currentTime.Sub(t.statusCache[scientificName].timestamp) >= t.cacheTTL {
 			delete(t.statusCache, scientificName)
 		}
 	}
-	
+
 	// Second pass: if still over limit, remove oldest entries (LRU)
 	if len(t.statusCache) > maxStatusCacheSize {
 		// Create a slice of entries for sorting
@@ -822,7 +822,7 @@ func (t *NewSpeciesTracker) cleanupExpiredCache(currentTime time.Time) {
 		for name := range t.statusCache {
 			entries = append(entries, cacheEntry{name: name, timestamp: t.statusCache[name].timestamp})
 		}
-		
+
 		// Sort by timestamp (oldest first)
 		// Note: We could optimize this with a proper LRU implementation if needed
 		for i := 0; i < len(entries)-1; i++ {
@@ -832,13 +832,13 @@ func (t *NewSpeciesTracker) cleanupExpiredCache(currentTime time.Time) {
 				}
 			}
 		}
-		
+
 		// Remove oldest entries until we're under the limit
 		entriesToRemove := len(t.statusCache) - maxStatusCacheSize
 		for i := 0; i < entriesToRemove && i < len(entries); i++ {
 			delete(t.statusCache, entries[i].name)
 		}
-		
+
 		logger.Debug("Cache cleanup completed",
 			"removed_count", entriesToRemove,
 			"remaining_count", len(t.statusCache))
@@ -1057,8 +1057,9 @@ func (t *NewSpeciesTracker) SyncIfNeeded() error {
 	elapsed := time.Since(t.lastSyncTime)
 	interval := t.syncIntervalMins
 	t.mu.RUnlock()
-	
-	if elapsed.Minutes() < float64(interval) {
+
+	// Compare durations directly; min interval is in minutes
+	if elapsed < time.Duration(interval)*time.Minute {
 		return nil // No sync needed yet
 	}
 
@@ -1305,7 +1306,7 @@ func (t *NewSpeciesTracker) RecordNotificationSent(scientificName string, sentTi
 	if t.notificationSuppressionWindow <= 0 {
 		return
 	}
-	
+
 	t.mu.Lock()
 	// Initialize map if needed
 	if t.notificationLastSent == nil {
@@ -1315,7 +1316,7 @@ func (t *NewSpeciesTracker) RecordNotificationSent(scientificName string, sentTi
 	// Record the notification time
 	t.notificationLastSent[scientificName] = sentTime
 	t.mu.Unlock()
-	
+
 	// Log outside the critical section to reduce lock contention
 	logger.Debug("Recorded notification sent",
 		"species", scientificName,
@@ -1326,7 +1327,7 @@ func (t *NewSpeciesTracker) RecordNotificationSent(scientificName string, sentTi
 // to prevent unbounded memory growth.
 func (t *NewSpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) int {
 	// Early return if suppression is disabled (0 window)
-	if t.notificationSuppressionWindow == 0 {
+	if t.notificationSuppressionWindow <= 0 {
 		return 0
 	}
 
