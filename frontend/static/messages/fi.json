@@ -1111,6 +1111,10 @@
             "label": "Aseman tunnus",
             "helpText": "Wunderground-asemasi tunnus"
           },
+          "endpoint": {
+            "label": "API-päätepiste",
+            "helpText": "Korvaa tarvittaessa Wundergroundin oletus-API-päätepiste."
+          },
           "units": {
             "label": "Lämpötilayksiköt",
             "helpText": "Valitse lämpötilan näyttöyksiköt",
