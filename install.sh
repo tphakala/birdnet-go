@@ -1519,7 +1519,7 @@ get_port_process_info() {
     
     # Try using ss first (most reliable)
     if command_exists ss; then
-        process_info=$(ss -tlnp 2>/dev/null | grep ":$port " | grep -oP 'users:\(\("\K[^"]+' | head -1)
+        process_info=$(ss -tlnp 2>/dev/null | grep ":$port " | grep -oP 'users:\(\("?\K[^"]+' | head -1)
         if [ -z "$process_info" ]; then
             # Try without -p flag if permission denied
             process_info=$(ss -tln 2>/dev/null | grep ":$port " | awk '{print "(permission denied to get process name)"}' | head -1)
@@ -1549,10 +1549,10 @@ get_port_process_info() {
                 if [ -n "$proc_name" ]; then
                     process_info="$proc_name"
                 else
-                    process_info="(process name requires elevated permissions)"
+                    process_info="(permission denied to get process name)"
                 fi
             else
-                process_info="(process name requires elevated permissions)"
+                process_info="(permission denied to get process name)"
             fi
         fi
     fi
