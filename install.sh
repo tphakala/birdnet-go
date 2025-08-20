@@ -1512,6 +1512,135 @@ check_port_availability() {
     fi
 }
 
+# Function to get process information using a port
+get_port_process_info() {
+    local port="$1"
+    local process_info="unknown process"
+    
+    # Try using ss first (most reliable)
+    if command_exists ss; then
+        process_info=$(ss -tlnp 2>/dev/null | grep ":$port " | grep -oP 'users:\(\("\K[^"]+' | head -1)
+        if [ -z "$process_info" ]; then
+            # Try without -p flag if permission denied
+            process_info=$(ss -tln 2>/dev/null | grep ":$port " | awk '{print "(permission denied to get process name)"}' | head -1)
+        fi
+    fi
+    
+    # If ss didn't work, try lsof
+    if [ -z "$process_info" ] && command_exists lsof; then
+        # Try without sudo first
+        process_info=$(lsof -i:"$port" 2>/dev/null | grep LISTEN | awk '{print $1}' | head -1)
+        if [ -z "$process_info" ]; then
+            # Only try with sudo if available and first attempt failed
+            if command_exists sudo; then
+                process_info=$(sudo -n lsof -i:"$port" 2>/dev/null | grep LISTEN | awk '{print $1}' | head -1)
+            fi
+        fi
+    fi
+    
+    # If still no info, try netstat
+    if [ -z "$process_info" ] && command_exists netstat; then
+        # Try without sudo first
+        process_info=$(netstat -tln 2>/dev/null | grep ":$port " | head -1)
+        if [ -n "$process_info" ]; then
+            # Try to get process name with sudo if available
+            if command_exists sudo; then
+                local proc_name=$(sudo -n netstat -tlnp 2>/dev/null | grep ":$port " | awk '{print $7}' | cut -d'/' -f2 | head -1)
+                if [ -n "$proc_name" ]; then
+                    process_info="$proc_name"
+                else
+                    process_info="(process name requires elevated permissions)"
+                fi
+            else
+                process_info="(process name requires elevated permissions)"
+            fi
+        fi
+    fi
+    
+    # Return the process info or "unknown"
+    if [ -n "$process_info" ]; then
+        echo "$process_info"
+    else
+        echo "unknown process"
+    fi
+}
+
+# Function to validate all required ports
+# Note: Docker daemon runs as root and handles privileged port binding (80, 443)
+# This check ensures ports are free before Docker attempts to bind them
+validate_required_ports() {
+    local ports_to_check=("80" "443" "$WEB_PORT" "8090")
+    local failed_ports=()
+    local port_processes=()
+    
+    print_message "\n🔌 Checking required port availability..." "$YELLOW"
+    
+    for port in "${ports_to_check[@]}"; do
+        if ! check_port_availability "$port"; then
+            failed_ports+=("$port")
+            process_info=$(get_port_process_info "$port")
+            port_processes+=("$process_info")
+            print_message "❌ Port $port is already in use by: $process_info" "$RED"
+        else
+            print_message "✅ Port $port is available" "$GREEN"
+        fi
+    done
+    
+    # If any ports are in use, show detailed error and exit
+    if [ ${#failed_ports[@]} -gt 0 ]; then
+        print_message "\n❌ ERROR: Required ports are not available" "$RED"
+        print_message "\nBirdNET-Go requires the following ports to be available:" "$YELLOW"
+        print_message "  • Port 80   - HTTP web interface" "$YELLOW"
+        print_message "  • Port 443  - HTTPS web interface (with SSL)" "$YELLOW"
+        print_message "  • Port $WEB_PORT - Primary web interface" "$YELLOW"
+        print_message "  • Port 8090 - WebSocket/SSE streaming endpoint" "$YELLOW"
+        
+        print_message "\n📋 Ports currently in use:" "$RED"
+        for i in "${!failed_ports[@]}"; do
+            print_message "  • Port ${failed_ports[$i]} - Used by: ${port_processes[$i]}" "$RED"
+        done
+        
+        print_message "\n💡 To resolve this issue, you can:" "$YELLOW"
+        print_message "\n1. Stop the conflicting services:" "$YELLOW"
+        
+        # Provide specific instructions based on common services
+        for i in "${!failed_ports[@]}"; do
+            local port="${failed_ports[$i]}"
+            local process="${port_processes[$i]}"
+            
+            if [[ "$process" == *"apache"* ]] || [[ "$process" == *"httpd"* ]]; then
+                print_message "   sudo systemctl stop apache2  # For Apache on port $port" "$NC"
+            elif [[ "$process" == *"nginx"* ]]; then
+                print_message "   sudo systemctl stop nginx    # For Nginx on port $port" "$NC"
+            elif [[ "$process" == *"lighttpd"* ]]; then
+                print_message "   sudo systemctl stop lighttpd # For Lighttpd on port $port" "$NC"
+            elif [[ "$process" == *"caddy"* ]]; then
+                print_message "   sudo systemctl stop caddy    # For Caddy on port $port" "$NC"
+            elif [[ "$port" == "80" ]] || [[ "$port" == "443" ]]; then
+                print_message "   sudo systemctl stop <service> # Replace <service> with the service using port $port" "$NC"
+            fi
+        done
+        
+        print_message "\n2. Or use Docker with different port mappings (advanced users):" "$YELLOW"
+        print_message "   Modify the systemd service file after installation to use different ports" "$NC"
+        
+        print_message "\n3. Or uninstall conflicting software if not needed:" "$YELLOW"
+        print_message "   sudo apt remove <package-name>" "$NC"
+        
+        print_message "\n⚠️  Note: BirdNET-Go's Caddy web server requires ports 80 and 443 for:" "$YELLOW"
+        print_message "  • Automatic HTTPS certificate generation (Let's Encrypt)" "$YELLOW"
+        print_message "  • HTTP to HTTPS redirection" "$YELLOW"
+        print_message "  • Proper web interface functionality" "$YELLOW"
+        
+        send_telemetry_event "error" "Port availability check failed" "error" "step=validate_required_ports,failed_ports=${failed_ports[*]}"
+        
+        return 1
+    fi
+    
+    print_message "✅ All required ports are available" "$GREEN"
+    return 0
+}
+
 # Function to configure web interface port
 configure_web_port() {
     # Default port
@@ -1520,7 +1649,8 @@ configure_web_port() {
     print_message "\n🔌 Checking web interface port availability..." "$YELLOW"
     
     if ! check_port_availability $WEB_PORT; then
-        print_message "❌ Port $WEB_PORT is already in use" "$RED"
+        local process_info=$(get_port_process_info "$WEB_PORT")
+        print_message "❌ Port $WEB_PORT is already in use by: $process_info" "$RED"
         
         while true; do
             print_message "Please enter a different port number (1024-65535): " "$YELLOW" "nonewline"
@@ -1533,7 +1663,8 @@ configure_web_port() {
                     print_message "✅ Port $WEB_PORT is available" "$GREEN"
                     break
                 else
-                    print_message "❌ Port $custom_port is also in use. Please try another port." "$RED"
+                    local process_info=$(get_port_process_info "$custom_port")
+                    print_message "❌ Port $custom_port is also in use by: $process_info. Please try another port." "$RED"
                 fi
             else
                 print_message "❌ Invalid port number. Please enter a number between 1024 and 65535." "$RED"
@@ -1545,6 +1676,13 @@ configure_web_port() {
     
     # Update config file with port
     sed -i "s/port: 8080/port: $WEB_PORT/" "$CONFIG_FILE"
+    
+    # After configuring the web port, validate ALL required ports including 80 and 443
+    if ! validate_required_ports; then
+        print_message "\n❌ Installation cannot continue due to port conflicts" "$RED"
+        print_message "Please resolve the port conflicts and run the installer again." "$YELLOW"
+        exit 1
+    fi
 }
 
 # Generate systemd service content
