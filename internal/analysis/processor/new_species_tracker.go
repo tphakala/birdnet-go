@@ -1305,14 +1305,6 @@ func (t *NewSpeciesTracker) RecordNotificationSent(scientificName string, sentTi
 		"sent_time", sentTime.Format("2006-01-02 15:04:05"))
 }
 
-// IsNewInAnyPeriod checks if a species is new in any tracking period.
-// This replaces the complex GetNotificationTrackingPeriod logic.
-func (t *NewSpeciesTracker) IsNewInAnyPeriod(status *SpeciesStatus) bool {
-	return status.IsNew || 
-		(t.yearlyEnabled && status.IsNewThisYear) || 
-		(t.seasonalEnabled && status.IsNewThisSeason)
-}
-
 // CleanupOldNotificationRecords removes notification records older than 2x the suppression window
 // to prevent unbounded memory growth.
 func (t *NewSpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) int {

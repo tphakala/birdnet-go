@@ -604,12 +604,15 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 		return
 	}
 
+	// Store current time for consistent use throughout
+	var notificationTime time.Time
+	
 	// Check notification suppression if tracker is available
 	if a.NewSpeciesTracker != nil {
-		currentTime := time.Now()
+		notificationTime = time.Now()
 		
 		// Check if notification should be suppressed for this species
-		if a.NewSpeciesTracker.ShouldSuppressNotification(a.Note.ScientificName, currentTime) {
+		if a.NewSpeciesTracker.ShouldSuppressNotification(a.Note.ScientificName, notificationTime) {
 			if a.Settings.Debug {
 				GetLogger().Debug("Suppressing duplicate new species notification",
 					"component", "analysis.processor.actions",
@@ -619,9 +622,6 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 			}
 			return
 		}
-		
-		// Record that notification will be sent (do this before publishing to avoid race)
-		defer a.NewSpeciesTracker.RecordNotificationSent(a.Note.ScientificName, currentTime)
 	}
 
 	eventBus := events.GetEventBus()
@@ -658,6 +658,11 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 
 	// Publish the detection event
 	if published := eventBus.TryPublishDetection(detectionEvent); published {
+		// Only record notification as sent if publishing succeeded
+		if a.NewSpeciesTracker != nil && notificationTime != (time.Time{}) {
+			a.NewSpeciesTracker.RecordNotificationSent(a.Note.ScientificName, notificationTime)
+		}
+		
 		if a.Settings.Debug {
 			// Add structured logging
 			GetLogger().Debug("Published new species detection event",
