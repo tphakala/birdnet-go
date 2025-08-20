@@ -73,6 +73,9 @@ const (
 	// Maximum safe exponent for bit shift to prevent overflow
 	maxBackoffExponent = 20 // This allows up to 2^20 = ~1 million multiplier
 
+	// Restart jitter to prevent thundering herd effect
+	restartJitterPercentMax = 20 // Maximum jitter percentage (0-20% random addition to backoff)
+
 	// Timeout settings for FFmpeg RTSP streams
 	defaultTimeoutMicroseconds = 10000000 // 10 seconds in microseconds
 	minTimeoutMicroseconds     = 1000000  // 1 second in microseconds
@@ -795,14 +798,29 @@ func (s *FFmpegStream) processAudio() error {
 			lastData := s.lastDataTime
 			s.lastDataMu.RUnlock()
 
-			if time.Since(lastData) > silenceTimeout {
+			// Determine effective "no-data" age: if never received any data, use process runtime
+			effectiveAge := func() time.Duration {
+				if lastData.IsZero() {
+					s.cmdMu.Lock()
+					ps := s.processStartTime
+					s.cmdMu.Unlock()
+					if ps.IsZero() {
+						return 0 // no running process; skip
+					}
+					return time.Since(ps)
+				}
+				return time.Since(lastData)
+			}()
+
+			if effectiveAge > 0 && effectiveAge > silenceTimeout {
 				streamLogger.Warn("no data received from RTSP source, triggering restart",
 					"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 					"timeout_seconds", silenceTimeout.Seconds(),
 					"last_data_ago_seconds", secondsSinceOrZero(lastData),
+					"effective_age_seconds", effectiveAge.Seconds(),
 					"component", "ffmpeg-stream",
 					"operation", "silence_detected")
-				log.Printf("⚠️ No data from %s for %v, restarting stream", privacy.SanitizeRTSPUrl(s.source.SafeString), time.Since(lastData))
+				log.Printf("⚠️ No data from %s for %v, restarting stream", privacy.SanitizeRTSPUrl(s.source.SafeString), effectiveAge)
 				s.cleanupProcess()
 				return errors.Newf("stream stopped producing data for %v seconds", silenceTimeout.Seconds()).
 					Category(errors.CategoryRTSP).
@@ -812,6 +830,7 @@ func (s *FFmpegStream) processAudio() error {
 					Context("url", privacy.SanitizeRTSPUrl(s.source.SafeString)).
 					Context("timeout_seconds", silenceTimeout.Seconds()).
 					Context("last_data_seconds_ago", secondsSinceOrZero(lastData)).
+					Context("effective_age_seconds", effectiveAge.Seconds()).
 					Build()
 			}
 		default:
@@ -1155,15 +1174,17 @@ func (s *FFmpegStream) handleRestartBackoff() {
 		streamLogger.Debug("applying restart backoff",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 			"backoff_ms", backoff.Milliseconds(),
-			"jitter_percent_max", 20,
+			"jitter_percent_max", restartJitterPercentMax,
 			"restart_count", currentRestartCount,
 			"operation", "restart_backoff")
 	}
 
-	// Add 0-20% jitter to avoid synchronized restarts across many streams (thundering herd)
+	// Add jitter to avoid synchronized restarts across many streams (thundering herd)
 	wait := backoff
 	if backoff > 0 {
-		jitterRange := time.Duration(float64(backoff) * 0.20)
+		// Compute jitter factor from constant
+		factor := float64(restartJitterPercentMax) / 100.0
+		jitterRange := time.Duration(float64(backoff) * factor)
 		if jitterRange > 0 {
 			if n, err := rand.Int(rand.Reader, big.NewInt(jitterRange.Nanoseconds())); err == nil {
 				wait = backoff + time.Duration(n.Int64())
@@ -1171,6 +1192,15 @@ func (s *FFmpegStream) handleRestartBackoff() {
 		}
 	}
 
+	// Log with both formats for compatibility and support dumps
+	streamLogger.Info("waiting before restart attempt",
+		"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+		"wait_seconds", wait.Seconds(),
+		"backoff_seconds", backoff.Seconds(),
+		"jitter_percent_max", restartJitterPercentMax,
+		"restart_count", currentRestartCount,
+		"component", "ffmpeg-stream",
+		"operation", "restart_wait")
 	log.Printf("⏳ Waiting %v before restart attempt #%d for %s", wait, currentRestartCount, privacy.SanitizeRTSPUrl(s.source.SafeString))
 
 	select {
