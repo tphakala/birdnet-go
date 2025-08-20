@@ -659,7 +659,7 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 	// Publish the detection event
 	if published := eventBus.TryPublishDetection(detectionEvent); published {
 		// Only record notification as sent if publishing succeeded
-		if a.NewSpeciesTracker != nil && notificationTime != (time.Time{}) {
+		if a.NewSpeciesTracker != nil && !notificationTime.IsZero() {
 			a.NewSpeciesTracker.RecordNotificationSent(a.Note.ScientificName, notificationTime)
 		}
 		

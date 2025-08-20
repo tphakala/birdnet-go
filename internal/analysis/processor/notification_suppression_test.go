@@ -68,9 +68,9 @@ func TestNotificationSuppression(t *testing.T) {
 	}
 
 	// Test 5: Cleanup should remove old records
-	// Add an old record
+	// Add an old record using the public API
 	oldTime := now.Add(-3 * time.Hour)
-	tracker.notificationLastSent["Old Species"] = oldTime
+	tracker.RecordNotificationSent("Old Species", oldTime)
 
 	// Run cleanup
 	cleaned := tracker.CleanupOldNotificationRecords(now)
@@ -91,6 +91,8 @@ func TestNotificationSuppression(t *testing.T) {
 
 // TestNotificationSuppressionThreadSafety tests thread safety of notification suppression
 func TestNotificationSuppressionThreadSafety(t *testing.T) {
+	t.Parallel()
+	
 	// Create a mock datastore
 	mockDS := &mockSpeciesDatastore{}
 
