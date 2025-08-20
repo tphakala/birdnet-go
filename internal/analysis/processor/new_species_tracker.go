@@ -2,7 +2,6 @@
 package processor
 
 import (
-	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -145,9 +144,9 @@ type NewSpeciesTracker struct {
 	seasonCacheTTL     time.Duration // Time-to-live for season cache (1 hour)
 
 	// Notification suppression tracking to prevent duplicate notifications
-	// Maps scientific name -> tracking period -> last notification time
-	notificationLastSent map[string]map[string]time.Time
-	notificationSuppressionHours int // Hours to suppress duplicate notifications (default: 24)
+	// Simply maps scientific name -> last notification time
+	notificationLastSent map[string]time.Time
+	notificationSuppressionHours int // Hours to suppress duplicate notifications (default: 168)
 }
 
 // seasonDates represents the start date for a season
@@ -199,7 +198,7 @@ func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTr
 		seasonCacheTTL: defaultSeasonCacheTTL, // TTL for season cache
 
 		// Notification suppression tracking
-		notificationLastSent: make(map[string]map[string]time.Time),
+		notificationLastSent: make(map[string]time.Time),
 		notificationSuppressionHours: settings.NotificationSuppressionHours,
 	}
 
@@ -1144,16 +1143,10 @@ func (t *NewSpeciesTracker) cleanupOldNotificationRecordsLocked(currentTime time
 	cleaned := 0
 	cutoffTime := currentTime.Add(-time.Duration(t.notificationSuppressionHours*2) * time.Hour)
 
-	for species, periods := range t.notificationLastSent {
-		for period, sentTime := range periods {
-			if sentTime.Before(cutoffTime) {
-				delete(periods, period)
-				cleaned++
-			}
-		}
-		// Remove species entry if no periods remain
-		if len(periods) == 0 {
+	for species, sentTime := range t.notificationLastSent {
+		if sentTime.Before(cutoffTime) {
 			delete(t.notificationLastSent, species)
+			cleaned++
 		}
 	}
 
@@ -1265,21 +1258,16 @@ func (t *NewSpeciesTracker) ClearCacheForTesting() {
 }
 
 // ShouldSuppressNotification checks if a notification for this species should be suppressed
-// based on when the last notification was sent for the same tracking period.
+// based on when the last notification was sent for this species.
 // Returns true if notification should be suppressed, false if it should be sent.
-func (t *NewSpeciesTracker) ShouldSuppressNotification(scientificName, trackingPeriod string, currentTime time.Time) bool {
+func (t *NewSpeciesTracker) ShouldSuppressNotification(scientificName string, currentTime time.Time) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	// Check if we have any notification history for this species
-	if t.notificationLastSent == nil || t.notificationLastSent[scientificName] == nil {
-		return false // No history, don't suppress
-	}
-
-	// Check if we have sent a notification for this tracking period
-	lastSent, exists := t.notificationLastSent[scientificName][trackingPeriod]
+	// Check if we have sent a notification for this species
+	lastSent, exists := t.notificationLastSent[scientificName]
 	if !exists {
-		return false // Never sent for this period, don't suppress
+		return false // Never sent, don't suppress
 	}
 
 	// Calculate hours since last notification
@@ -1291,7 +1279,6 @@ func (t *NewSpeciesTracker) ShouldSuppressNotification(scientificName, trackingP
 	if shouldSuppress {
 		logger.Debug("Suppressing duplicate notification",
 			"species", scientificName,
-			"period", trackingPeriod,
 			"hours_since_last", hoursSinceLastNotification,
 			"suppression_hours", t.notificationSuppressionHours)
 	}
@@ -1299,44 +1286,31 @@ func (t *NewSpeciesTracker) ShouldSuppressNotification(scientificName, trackingP
 	return shouldSuppress
 }
 
-// RecordNotificationSent records that a notification was sent for a species in a specific tracking period.
+// RecordNotificationSent records that a notification was sent for a species.
 // This is used to prevent duplicate notifications within the suppression window.
-func (t *NewSpeciesTracker) RecordNotificationSent(scientificName, trackingPeriod string, sentTime time.Time) {
+func (t *NewSpeciesTracker) RecordNotificationSent(scientificName string, sentTime time.Time) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Initialize maps if needed
+	// Initialize map if needed
 	if t.notificationLastSent == nil {
-		t.notificationLastSent = make(map[string]map[string]time.Time)
-	}
-	if t.notificationLastSent[scientificName] == nil {
-		t.notificationLastSent[scientificName] = make(map[string]time.Time)
+		t.notificationLastSent = make(map[string]time.Time)
 	}
 
 	// Record the notification time
-	t.notificationLastSent[scientificName][trackingPeriod] = sentTime
+	t.notificationLastSent[scientificName] = sentTime
 	
 	logger.Debug("Recorded notification sent",
 		"species", scientificName,
-		"period", trackingPeriod,
 		"sent_time", sentTime.Format("2006-01-02 15:04:05"))
 }
 
-// GetNotificationTrackingPeriod determines the appropriate tracking period identifier
-// based on the species status. This is used to track notifications separately for
-// lifetime, yearly, and seasonal "new species" detections.
-func (t *NewSpeciesTracker) GetNotificationTrackingPeriod(status *SpeciesStatus) string {
-	// Prioritize the most specific period that's "new"
-	if t.seasonalEnabled && status.IsNewThisSeason {
-		return fmt.Sprintf("season_%s_%d", status.CurrentSeason, t.currentYear)
-	}
-	if t.yearlyEnabled && status.IsNewThisYear {
-		return fmt.Sprintf("year_%d", t.currentYear)
-	}
-	if status.IsNew {
-		return "lifetime"
-	}
-	return "" // Not a new species in any period
+// IsNewInAnyPeriod checks if a species is new in any tracking period.
+// This replaces the complex GetNotificationTrackingPeriod logic.
+func (t *NewSpeciesTracker) IsNewInAnyPeriod(status *SpeciesStatus) bool {
+	return status.IsNew || 
+		(t.yearlyEnabled && status.IsNewThisYear) || 
+		(t.seasonalEnabled && status.IsNewThisSeason)
 }
 
 // CleanupOldNotificationRecords removes notification records older than 2x the suppression window
@@ -1352,16 +1326,10 @@ func (t *NewSpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time)
 	cleaned := 0
 	cutoffTime := currentTime.Add(-time.Duration(t.notificationSuppressionHours*2) * time.Hour)
 
-	for species, periods := range t.notificationLastSent {
-		for period, sentTime := range periods {
-			if sentTime.Before(cutoffTime) {
-				delete(periods, period)
-				cleaned++
-			}
-		}
-		// Remove species entry if no periods remain
-		if len(periods) == 0 {
+	for species, sentTime := range t.notificationLastSent {
+		if sentTime.Before(cutoffTime) {
 			delete(t.notificationLastSent, species)
+			cleaned++
 		}
 	}
 

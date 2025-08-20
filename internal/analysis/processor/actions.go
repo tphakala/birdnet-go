@@ -606,27 +606,22 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 
 	// Check notification suppression if tracker is available
 	if a.NewSpeciesTracker != nil {
-		// Get species status to determine tracking period
-		status := a.NewSpeciesTracker.GetSpeciesStatus(a.Note.ScientificName, time.Now())
-		trackingPeriod := a.NewSpeciesTracker.GetNotificationTrackingPeriod(&status)
+		currentTime := time.Now()
 		
-		if trackingPeriod != "" {
-			// Check if notification should be suppressed
-			if a.NewSpeciesTracker.ShouldSuppressNotification(a.Note.ScientificName, trackingPeriod, time.Now()) {
-				if a.Settings.Debug {
-					GetLogger().Debug("Suppressing duplicate new species notification",
-						"component", "analysis.processor.actions",
-						"species", a.Note.CommonName,
-						"scientific_name", a.Note.ScientificName,
-						"tracking_period", trackingPeriod,
-						"operation", "suppress_notification")
-				}
-				return
+		// Check if notification should be suppressed for this species
+		if a.NewSpeciesTracker.ShouldSuppressNotification(a.Note.ScientificName, currentTime) {
+			if a.Settings.Debug {
+				GetLogger().Debug("Suppressing duplicate new species notification",
+					"component", "analysis.processor.actions",
+					"species", a.Note.CommonName,
+					"scientific_name", a.Note.ScientificName,
+					"operation", "suppress_notification")
 			}
-			
-			// Record that notification will be sent (do this before publishing to avoid race)
-			defer a.NewSpeciesTracker.RecordNotificationSent(a.Note.ScientificName, trackingPeriod, time.Now())
+			return
 		}
+		
+		// Record that notification will be sent (do this before publishing to avoid race)
+		defer a.NewSpeciesTracker.RecordNotificationSent(a.Note.ScientificName, currentTime)
 	}
 
 	eventBus := events.GetEventBus()
