@@ -31,7 +31,7 @@ const (
 	silenceCheckInterval = 10 * time.Second
 
 	// Data rate calculation settings
-	dataRateWindowSize = 60 * time.Second // Increased from 30s to align better with silence timeout
+	dataRateWindowSize = 10 * time.Second // Responsive window for real-time rate feedback
 	dataRateMaxSamples = 100
 
 	// Process management timeouts
@@ -141,32 +141,35 @@ func (d *dataRateCalculator) addSample(numBytes int64) {
 	}
 }
 
-// getRate returns the current data rate in bytes per second and an error if insufficient data
+// getRate returns the current data rate in bytes per second.
+// It gracefully handles edge cases by returning 0 instead of errors for cosmetic display.
 func (d *dataRateCalculator) getRate() (float64, error) {
 	d.samplesMu.RLock()
 	defer d.samplesMu.RUnlock()
 
 	if len(d.samples) == 0 {
-		return 0, errors.Newf("no data received from RTSP source: %s", privacy.SanitizeRTSPUrl(d.url)).
-			Component("ffmpeg-stream").
-			Category(errors.CategoryAudioSource).
-			Priority(errors.PriorityMedium).
-			Context("operation", "calculate_data_rate").
-			Context("url", privacy.SanitizeRTSPUrl(d.url)).
-			Build()
+		// No data yet - return 0 without error for clean display
+		return 0, nil
 	}
 
-	if len(d.samples) < 2 {
-		return 0, errors.Newf("insufficient data received from RTSP source: %s", privacy.SanitizeRTSPUrl(d.url)).
-			Component("ffmpeg-stream").
-			Category(errors.CategoryAudioSource).
-			Priority(errors.PriorityLow).
-			Context("operation", "calculate_data_rate").
-			Context("sample_count", len(d.samples)).
-			Context("url", privacy.SanitizeRTSPUrl(d.url)).
-			Build()
+	if len(d.samples) == 1 {
+		// Single sample - estimate instantaneous rate if recent
+		sample := d.samples[0]
+		timeSinceSample := time.Since(sample.timestamp)
+		
+		// If sample is recent (within 5 seconds), show instantaneous rate
+		// This helps new streams show data rate immediately
+		if timeSinceSample < 5*time.Second {
+			// Use 1 second as the minimum duration for rate calculation
+			// This gives us bytes/second for the single burst
+			return float64(sample.bytes), nil
+		}
+		
+		// Old single sample - no meaningful rate
+		return 0, nil
 	}
 
+	// Multiple samples - calculate average rate
 	totalBytes := int64(0)
 	for _, s := range d.samples {
 		totalBytes += s.bytes
@@ -174,13 +177,8 @@ func (d *dataRateCalculator) getRate() (float64, error) {
 
 	duration := d.samples[len(d.samples)-1].timestamp.Sub(d.samples[0].timestamp).Seconds()
 	if duration <= 0 {
-		return 0, errors.Newf("invalid duration for rate calculation: %f seconds", duration).
-			Component("ffmpeg-stream").
-			Category(errors.CategoryRTSP).
-			Priority(errors.PriorityLow).
-			Context("operation", "calculate_data_rate").
-			Context("duration_seconds", duration).
-			Build()
+		// All samples at same timestamp (shouldn't happen) - return 0
+		return 0, nil
 	}
 
 	return float64(totalBytes) / duration, nil
