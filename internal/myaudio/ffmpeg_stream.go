@@ -142,14 +142,14 @@ func (d *dataRateCalculator) addSample(numBytes int64) {
 }
 
 // getRate returns the current data rate in bytes per second.
-// It gracefully handles edge cases by returning 0 instead of errors for cosmetic display.
-func (d *dataRateCalculator) getRate() (float64, error) {
+// It gracefully handles edge cases by returning 0 for cosmetic display.
+func (d *dataRateCalculator) getRate() float64 {
 	d.samplesMu.RLock()
 	defer d.samplesMu.RUnlock()
 
 	if len(d.samples) == 0 {
-		// No data yet - return 0 without error for clean display
-		return 0, nil
+		// No data yet - return 0 for clean display
+		return 0
 	}
 
 	if len(d.samples) == 1 {
@@ -162,11 +162,11 @@ func (d *dataRateCalculator) getRate() (float64, error) {
 		if timeSinceSample < 5*time.Second {
 			// Use 1 second as the minimum duration for rate calculation
 			// This gives us bytes/second for the single burst
-			return float64(sample.bytes), nil
+			return float64(sample.bytes)
 		}
 		
 		// Old single sample - no meaningful rate
-		return 0, nil
+		return 0
 	}
 
 	// Multiple samples - calculate average rate
@@ -178,10 +178,19 @@ func (d *dataRateCalculator) getRate() (float64, error) {
 	duration := d.samples[len(d.samples)-1].timestamp.Sub(d.samples[0].timestamp).Seconds()
 	if duration <= 0 {
 		// All samples at same timestamp (shouldn't happen) - return 0
-		return 0, nil
+		return 0
 	}
 
-	return float64(totalBytes) / duration, nil
+	return float64(totalBytes) / duration
+}
+
+// secondsSinceOrZero returns seconds since t, or 0 if t is zero.
+// This prevents huge durations (time since Unix epoch) in logs when lastData is never set.
+func secondsSinceOrZero(t time.Time) float64 {
+	if t.IsZero() {
+		return 0
+	}
+	return time.Since(t).Seconds()
 }
 
 // StreamHealth represents the health status of an FFmpeg stream.
@@ -217,6 +226,7 @@ type FFmpegStream struct {
 	cancelMu    sync.RWMutex // Protect cancel function access
 	restartChan chan struct{}
 	stopChan    chan struct{}
+	stopOnce    sync.Once // Ensure Stop() is idempotent
 	stopped     bool
 	stoppedMu   sync.RWMutex
 
@@ -786,7 +796,7 @@ func (s *FFmpegStream) processAudio() error {
 				streamLogger.Warn("no data received from RTSP source, triggering restart",
 					"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 					"timeout_seconds", silenceTimeout.Seconds(),
-					"last_data_ago_seconds", time.Since(lastData).Seconds(),
+					"last_data_ago_seconds", secondsSinceOrZero(lastData),
 					"component", "ffmpeg-stream",
 					"operation", "silence_detected")
 				log.Printf("⚠️ No data from %s for %v, restarting stream", privacy.SanitizeRTSPUrl(s.source.SafeString), time.Since(lastData))
@@ -798,7 +808,7 @@ func (s *FFmpegStream) processAudio() error {
 					Context("operation", "silence_timeout").
 					Context("url", privacy.SanitizeRTSPUrl(s.source.SafeString)).
 					Context("timeout_seconds", silenceTimeout.Seconds()).
-					Context("last_data_seconds_ago", time.Since(lastData).Seconds()).
+					Context("last_data_seconds_ago", secondsSinceOrZero(lastData)).
 					Build()
 			}
 		default:
@@ -1149,25 +1159,28 @@ func (s *FFmpegStream) handleRestartBackoff() {
 
 // Stop gracefully stops the FFmpeg stream.
 // It signals the stream to stop, cancels the context, and cleans up the FFmpeg process.
+// This method is idempotent - multiple calls are safe and will not panic.
 func (s *FFmpegStream) Stop() {
-	s.stoppedMu.Lock()
-	s.stopped = true
-	s.stoppedMu.Unlock()
+	s.stopOnce.Do(func() {
+		s.stoppedMu.Lock()
+		s.stopped = true
+		s.stoppedMu.Unlock()
 
-	// Signal stop
-	close(s.stopChan)
+		// Signal stop
+		close(s.stopChan)
 
-	// Cancel context with proper locking
-	s.cancelMu.RLock()
-	cancel := s.cancel
-	s.cancelMu.RUnlock()
+		// Cancel context with proper locking
+		s.cancelMu.RLock()
+		cancel := s.cancel
+		s.cancelMu.RUnlock()
 
-	if cancel != nil {
-		cancel()
-	}
+		if cancel != nil {
+			cancel()
+		}
 
-	// Cleanup process
-	s.cleanupProcess()
+		// Cleanup process
+		s.cleanupProcess()
+	})
 }
 
 // Restart requests a stream restart.
@@ -1235,8 +1248,9 @@ func (s *FFmpegStream) Restart(manual bool) {
 // would break the exponential backoff mechanism.
 func (s *FFmpegStream) IsRestarting() bool {
 	// Check if we have a running process
+	// A process is only running if cmd exists, has a Process, and hasn't exited (no ProcessState)
 	s.cmdMu.Lock()
-	hasProcess := s.cmd != nil && s.cmd.Process != nil
+	isRunning := s.cmd != nil && s.cmd.Process != nil && s.cmd.ProcessState == nil
 	s.cmdMu.Unlock()
 	
 	// Check if restart is in progress
@@ -1256,7 +1270,7 @@ func (s *FFmpegStream) IsRestarting() bool {
 	// 1. Restart is explicitly in progress
 	// 2. No process running and not stopped (in backoff)
 	// 3. Circuit breaker is open (waiting for cooldown)
-	return inProgress || (!hasProcess && !stopped) || circuitOpen
+	return inProgress || (!isRunning && !stopped) || circuitOpen
 }
 
 // GetProcessStartTime returns the start time of the current FFmpeg process.
@@ -1297,17 +1311,7 @@ func (s *FFmpegStream) GetHealth() StreamHealth {
 	s.bytesReceivedMu.RUnlock()
 
 	// Get current data rate
-	dataRate, err := s.dataRateCalc.getRate()
-	if err != nil {
-		// Log error but don't fail health check
-		if conf.Setting().Debug {
-			streamLogger.Debug("failed to calculate data rate",
-				"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
-				"error", err,
-				"component", "ffmpeg-stream")
-		}
-		dataRate = 0
-	}
+	dataRate := s.dataRateCalc.getRate()
 
 	// Get configurable thresholds
 	settings := conf.Setting()
@@ -1358,7 +1362,7 @@ func (s *FFmpegStream) GetHealth() StreamHealth {
 			"pid", currentPID,
 			"is_healthy", isHealthy,
 			"is_receiving_data", isReceivingData,
-			"last_data_seconds_ago", time.Since(lastData).Seconds(),
+			"last_data_seconds_ago", secondsSinceOrZero(lastData),
 			"healthy_threshold_seconds", healthyDataThreshold.Seconds(),
 			"total_bytes", totalBytes,
 			"bytes_per_second", dataRate,
@@ -1393,17 +1397,8 @@ func (s *FFmpegStream) logStreamHealth() {
 	totalBytes := s.totalBytesReceived
 	s.bytesReceivedMu.RUnlock()
 
-	dataRate, err := s.dataRateCalc.getRate()
-	if err != nil {
-		// Log error but continue with zero rate for display
-		if conf.Setting().Debug {
-			streamLogger.Debug("failed to calculate data rate for health log",
-				"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
-				"error", err,
-				"component", "ffmpeg-stream")
-		}
-		dataRate = 0
-	}
+	// Reuse the already calculated data rate from health object
+	dataRate := health.BytesPerSecond
 
 	if health.IsReceivingData {
 		streamLogger.Info("stream health check - receiving data",
@@ -1412,7 +1407,7 @@ func (s *FFmpegStream) logStreamHealth() {
 			"is_receiving_data", health.IsReceivingData,
 			"total_bytes_received", totalBytes,
 			"bytes_per_second", dataRate,
-			"last_data_ago_seconds", time.Since(health.LastDataReceived).Seconds(),
+			"last_data_ago_seconds", secondsSinceOrZero(health.LastDataReceived),
 			"component", "ffmpeg-stream",
 			"operation", "health_check")
 		log.Printf("✅ Stream %s is healthy and receiving data (%.1f KB/s)",
@@ -1423,7 +1418,7 @@ func (s *FFmpegStream) logStreamHealth() {
 			"is_healthy", health.IsHealthy,
 			"is_receiving_data", health.IsReceivingData,
 			"total_bytes_received", totalBytes,
-			"last_data_ago_seconds", time.Since(health.LastDataReceived).Seconds(),
+			"last_data_ago_seconds", secondsSinceOrZero(health.LastDataReceived),
 			"component", "ffmpeg-stream",
 			"operation", "health_check")
 		log.Printf("⚠️ Stream %s is not receiving data", privacy.SanitizeRTSPUrl(s.source.SafeString))
