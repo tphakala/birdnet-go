@@ -153,15 +153,18 @@ func (d *dataRateCalculator) getRate() float64 {
 	}
 
 	if len(d.samples) == 1 {
-		// Single sample - estimate instantaneous rate if recent
+		// Single sample case: When only one recent sample exists, return an
+		// instantaneous/burst rate estimate rather than a true averaged rate.
+		// We treat the sample size as if spread over 1 second minimum to give
+		// a bytes-per-second estimate. This is NOT a multi-sample average but
+		// rather an instantaneous rate estimate for display purposes.
 		sample := d.samples[0]
 		timeSinceSample := time.Since(sample.timestamp)
 		
 		// If sample is recent (within 5 seconds), show instantaneous rate
 		// This helps new streams show data rate immediately
 		if timeSinceSample < 5*time.Second {
-			// Use 1 second as the minimum duration for rate calculation
-			// This gives us bytes/second for the single burst
+			// Return the burst size as bytes/second (instantaneous estimate)
 			return float64(sample.bytes)
 		}
 		
@@ -935,10 +938,22 @@ func (s *FFmpegStream) logDroppedData() {
 
 // cleanupProcess cleans up the FFmpeg process
 func (s *FFmpegStream) cleanupProcess() {
+	// Narrow critical section: grab and clear references under lock, then operate on locals
 	s.cmdMu.Lock()
-	defer s.cmdMu.Unlock()
+	cmd := s.cmd
+	stdout := s.stdout
+	pid := 0
+	if cmd != nil && cmd.Process != nil {
+		pid = cmd.Process.Pid
+	}
+	// Clear references so other observers see "no running process" immediately
+	s.cmd = nil
+	s.stdout = nil
+	s.processStartTime = time.Time{} // Clear start time when tearing down
+	s.cmdMu.Unlock()
 
-	if s.cmd == nil || s.cmd.Process == nil {
+	// Check if there was actually a process to clean
+	if cmd == nil || cmd.Process == nil {
 		if conf.Setting().Debug {
 			streamLogger.Debug("cleanup called but no process to clean",
 				"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
@@ -947,7 +962,6 @@ func (s *FFmpegStream) cleanupProcess() {
 		return
 	}
 
-	pid := s.cmd.Process.Pid
 	if conf.Setting().Debug {
 		streamLogger.Debug("starting process cleanup",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
@@ -956,8 +970,8 @@ func (s *FFmpegStream) cleanupProcess() {
 	}
 
 	// Close stdout
-	if s.stdout != nil {
-		if err := s.stdout.Close(); err != nil {
+	if stdout != nil {
+		if err := stdout.Close(); err != nil {
 			// Log but don't fail - process cleanup is more important
 			if conf.Setting().Debug {
 				streamLogger.Debug("failed to close stdout",
@@ -970,7 +984,7 @@ func (s *FFmpegStream) cleanupProcess() {
 	}
 
 	// Kill process
-	if err := killProcessGroup(s.cmd); err != nil {
+	if err := killProcessGroup(cmd); err != nil {
 		if conf.Setting().Debug {
 			streamLogger.Debug("killProcessGroup failed, attempting direct kill",
 				"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
@@ -979,7 +993,7 @@ func (s *FFmpegStream) cleanupProcess() {
 				"operation", "cleanup_process_kill")
 		}
 
-		if killErr := s.cmd.Process.Kill(); killErr != nil {
+		if killErr := cmd.Process.Kill(); killErr != nil {
 			// Only log if kill also fails
 			streamLogger.Warn("failed to kill process directly",
 				"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
@@ -1001,8 +1015,7 @@ func (s *FFmpegStream) cleanupProcess() {
 	// Always call Wait() to reap the zombie - this is critical!
 	// We do this in a goroutine that we may abandon if it takes too long,
 	// but the goroutine will continue and eventually reap the process
-	// Capture cmd reference to avoid race condition
-	cmd := s.cmd
+	// cmd is already captured at the beginning of this function
 	url := s.source.SafeString
 	waitStartTime := time.Now()
 
@@ -1092,8 +1105,7 @@ func (s *FFmpegStream) cleanupProcess() {
 		}
 	}
 
-	// Clear the command reference
-	s.cmd = nil
+	// Command reference already cleared at the beginning of cleanup
 
 	if conf.Setting().Debug {
 		streamLogger.Debug("process cleanup completed",
@@ -1281,8 +1293,9 @@ func (s *FFmpegStream) GetProcessStartTime() time.Time {
 	s.cmdMu.Lock()
 	defer s.cmdMu.Unlock()
 	
-	// Only return start time if we have an active process
-	if s.cmd != nil && s.cmd.Process != nil {
+	// Only return start time if we have a truly running process (not exited)
+	// Check ProcessState to ensure the process hasn't exited
+	if s.cmd != nil && s.cmd.Process != nil && s.cmd.ProcessState == nil {
 		return s.processStartTime
 	}
 	return time.Time{} // Zero time indicates no running process
