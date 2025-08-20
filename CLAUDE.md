@@ -43,7 +43,7 @@ ast-grep --pattern "async function $NAME($$$) { $$$ }" src/
 # ❌ Complex grep with regex
 grep -r "console\.\(log\|warn\|error\)" src/
 
-# ✅ Structural pattern matching  
+# ✅ Structural pattern matching
 ast-grep --pattern "console.$METHOD($$$)" src/
 ```
 
@@ -63,7 +63,7 @@ ast-grep --pattern "export let $PROP" --rewrite "let { $PROP } = \$props()" --la
 ### Why ast-grep?
 
 - **Syntax-aware**: Won't break code structure
-- **Language-specific**: Supports TypeScript, Svelte, Go, etc.  
+- **Language-specific**: Supports TypeScript, Svelte, Go, etc.
 - **Reliable**: Matches semantic patterns, not just text
 - **Safe refactoring**: Preserves code meaning
 

@@ -8,11 +8,11 @@ This document describes the structured logging infrastructure implemented for th
 
 ### Package Loggers
 
-| Package | Service Name | Logger File | Purpose |
-|---------|--------------|-------------|---------|
-| `analysis` | `analysis` | `logger.go` | Main analysis operations |
-| `analysis.processor` | `species-tracking` | `new_species_tracker.go` | Processor operations (existing) |
-| `analysis.jobqueue` | `analysis-jobqueue` | `logger.go` | Job queue operations |
+| Package              | Service Name        | Logger File              | Purpose                         |
+| -------------------- | ------------------- | ------------------------ | ------------------------------- |
+| `analysis`           | `analysis`          | `logger.go`              | Main analysis operations        |
+| `analysis.processor` | `species-tracking`  | `new_species_tracker.go` | Processor operations (existing) |
+| `analysis.jobqueue`  | `analysis-jobqueue` | `logger.go`              | Job queue operations            |
 
 ### Logger Initialization Pattern
 
@@ -23,7 +23,7 @@ var logger *slog.Logger
 
 func init() {
     logger = logging.ForService("service-name")
-    
+
     // Defensive initialization
     if logger == nil {
         logger = slog.Default().With("service", "service-name")
@@ -86,6 +86,7 @@ logger.Debug("Processing completed",
 ## Log Files
 
 Based on the logging service configuration, logs will be written to:
+
 - `logs/analysis.log` - Main analysis operations
 - `logs/species-tracking.log` - Species tracking (existing)
 - `logs/analysis-jobqueue.log` - Job queue operations
@@ -95,6 +96,7 @@ Based on the logging service configuration, logs will be written to:
 ### Processor Package
 
 The processor package already had a logger initialized in `new_species_tracker.go`. We've maintained compatibility by:
+
 1. Keeping the existing logger setup
 2. Adding helper functions in `logger.go`
 3. Using the existing logger for all processor operations
@@ -102,6 +104,7 @@ The processor package already had a logger initialized in `new_species_tracker.g
 ### Error Integration
 
 All loggers integrate with the enhanced error system:
+
 - Errors logged will trigger telemetry if configured
 - Error context is preserved in structured logs
 - Component identification is automatic via error system
@@ -116,14 +119,14 @@ func TestWithLogger(t *testing.T) {
     testLogger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
         Level: slog.LevelDebug,
     }))
-    
+
     // Replace package logger for testing
     oldLogger := logger
     logger = testLogger
     defer func() { logger = oldLogger }()
-    
+
     // Run test...
-    
+
     // Verify logs
     logs := buf.String()
     assert.Contains(t, logs, "expected message")

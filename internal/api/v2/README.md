@@ -206,17 +206,17 @@ routeInitializers := []struct {
 
 ### System Information (`system.go`)
 
-| Method | Route                     | Handler                   | Auth | Description                |
-| ------ | ------------------------- | ------------------------- | ---- | -------------------------- |
-| GET    | `/system/info`            | `GetSystemInfo`           | ✅   | General system information |
-| GET    | `/system/resources`       | `GetResourceInfo`         | ✅   | Resource usage information |
-| GET    | `/system/disks`           | `GetDiskInfo`             | ✅   | Disk usage information     |
-| GET    | `/system/jobs`            | `GetJobQueueStats`        | ✅   | Job queue statistics       |
-| GET    | `/system/processes`       | `GetProcessInfo`          | ✅   | Process information        |
-| GET    | `/system/temperature/cpu` | `GetSystemCPUTemperature` | ✅   | CPU temperature            |
-| GET    | `/system/audio/devices`   | `GetAudioDevices`         | ✅   | Available audio devices    |
-| GET    | `/system/audio/active`    | `GetActiveAudioDevice`    | ✅   | Active audio device        |
-| GET    | `/system/audio/equalizer/config` | `GetEqualizerConfig` | ✅   | Audio equalizer filter configuration |
+| Method | Route                            | Handler                   | Auth | Description                          |
+| ------ | -------------------------------- | ------------------------- | ---- | ------------------------------------ |
+| GET    | `/system/info`                   | `GetSystemInfo`           | ✅   | General system information           |
+| GET    | `/system/resources`              | `GetResourceInfo`         | ✅   | Resource usage information           |
+| GET    | `/system/disks`                  | `GetDiskInfo`             | ✅   | Disk usage information               |
+| GET    | `/system/jobs`                   | `GetJobQueueStats`        | ✅   | Job queue statistics                 |
+| GET    | `/system/processes`              | `GetProcessInfo`          | ✅   | Process information                  |
+| GET    | `/system/temperature/cpu`        | `GetSystemCPUTemperature` | ✅   | CPU temperature                      |
+| GET    | `/system/audio/devices`          | `GetAudioDevices`         | ✅   | Available audio devices              |
+| GET    | `/system/audio/active`           | `GetActiveAudioDevice`    | ✅   | Active audio device                  |
+| GET    | `/system/audio/equalizer/config` | `GetEqualizerConfig`      | ✅   | Audio equalizer filter configuration |
 
 ### Weather (`weather.go`)
 
