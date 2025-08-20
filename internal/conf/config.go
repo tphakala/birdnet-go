@@ -548,7 +548,8 @@ type BirdNETConfig struct {
 // RangeFilterSettings contains settings for the range filter
 type RangeFilterSettings struct {
 	Debug       bool      `json:"debug"`                          // true to enable debug mode
-	Model       string    `json:"model"`                          // range filter model model
+	Model       string    `json:"model"`                          // range filter model version: "legacy" for v1, or empty/default for v2
+	ModelPath   string    `json:"modelPath"`                      // path to external meta model file (empty for embedded)
 	Threshold   float32   `json:"threshold"`                      // rangefilter species occurrence threshold
 	Species     []string  `yaml:"-" json:"species,omitempty"`     // list of included species, runtime value
 	LastUpdated time.Time `yaml:"-" json:"lastUpdated,omitempty"` // last time the species list was updated, runtime value
