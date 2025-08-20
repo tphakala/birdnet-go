@@ -2,6 +2,7 @@
 package processor
 
 import (
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -142,6 +143,11 @@ type NewSpeciesTracker struct {
 	seasonCacheTime    time.Time     // Timestamp when season was cached
 	seasonCacheForTime time.Time     // The input time for which season was cached
 	seasonCacheTTL     time.Duration // Time-to-live for season cache (1 hour)
+
+	// Notification suppression tracking to prevent duplicate notifications
+	// Maps scientific name -> tracking period -> last notification time
+	notificationLastSent map[string]map[string]time.Time
+	notificationSuppressionHours int // Hours to suppress duplicate notifications (default: 24)
 }
 
 // seasonDates represents the start date for a season
@@ -191,6 +197,10 @@ func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTr
 
 		// Season calculation caching
 		seasonCacheTTL: defaultSeasonCacheTTL, // TTL for season cache
+
+		// Notification suppression tracking
+		notificationLastSent: make(map[string]map[string]time.Time),
+		notificationSuppressionHours: settings.NotificationSuppressionHours,
 	}
 
 	// Initialize seasons from configuration
@@ -215,6 +225,11 @@ func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTr
 		"current_season", tracker.currentSeason,
 		"current_year", tracker.currentYear,
 		"total_seasons", len(tracker.seasons))
+
+	// Set default suppression hours if not configured
+	if tracker.notificationSuppressionHours <= 0 {
+		tracker.notificationSuppressionHours = 168 // Default to 7 days (168 hours)
+	}
 
 	return tracker
 }
@@ -1038,7 +1053,19 @@ func (t *NewSpeciesTracker) SyncIfNeeded() error {
 		return nil // No sync needed yet
 	}
 
-	return t.InitFromDatabase()
+	// Perform database sync
+	if err := t.InitFromDatabase(); err != nil {
+		return err
+	}
+
+	// Also perform periodic cleanup of old records (both species and notification records)
+	pruned := t.PruneOldEntries()
+	if pruned > 0 {
+		logger.Debug("Pruned old entries during sync",
+			"count", pruned)
+	}
+
+	return nil
 }
 
 // GetWindowDays returns the configured window for new species
@@ -1101,7 +1128,36 @@ func (t *NewSpeciesTracker) PruneOldEntries() int {
 		}
 	}
 
+	// Also cleanup old notification records
+	cleaned := t.cleanupOldNotificationRecordsLocked(now)
+	pruned += cleaned
+
 	return pruned
+}
+
+// cleanupOldNotificationRecordsLocked is an internal version that assumes lock is already held
+func (t *NewSpeciesTracker) cleanupOldNotificationRecordsLocked(currentTime time.Time) int {
+	if t.notificationLastSent == nil {
+		return 0
+	}
+
+	cleaned := 0
+	cutoffTime := currentTime.Add(-time.Duration(t.notificationSuppressionHours*2) * time.Hour)
+
+	for species, periods := range t.notificationLastSent {
+		for period, sentTime := range periods {
+			if sentTime.Before(cutoffTime) {
+				delete(periods, period)
+				cleaned++
+			}
+		}
+		// Remove species entry if no periods remain
+		if len(periods) == 0 {
+			delete(t.notificationLastSent, species)
+		}
+	}
+
+	return cleaned
 }
 
 // CheckAndUpdateSpecies atomically checks if a species is new and updates the tracker
@@ -1206,6 +1262,116 @@ func (t *NewSpeciesTracker) ClearCacheForTesting() {
 	defer t.mu.Unlock()
 
 	t.statusCache = make(map[string]cachedSpeciesStatus)
+}
+
+// ShouldSuppressNotification checks if a notification for this species should be suppressed
+// based on when the last notification was sent for the same tracking period.
+// Returns true if notification should be suppressed, false if it should be sent.
+func (t *NewSpeciesTracker) ShouldSuppressNotification(scientificName, trackingPeriod string, currentTime time.Time) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	// Check if we have any notification history for this species
+	if t.notificationLastSent == nil || t.notificationLastSent[scientificName] == nil {
+		return false // No history, don't suppress
+	}
+
+	// Check if we have sent a notification for this tracking period
+	lastSent, exists := t.notificationLastSent[scientificName][trackingPeriod]
+	if !exists {
+		return false // Never sent for this period, don't suppress
+	}
+
+	// Calculate hours since last notification
+	hoursSinceLastNotification := currentTime.Sub(lastSent).Hours()
+	
+	// Suppress if within the suppression window
+	shouldSuppress := hoursSinceLastNotification < float64(t.notificationSuppressionHours)
+	
+	if shouldSuppress {
+		logger.Debug("Suppressing duplicate notification",
+			"species", scientificName,
+			"period", trackingPeriod,
+			"hours_since_last", hoursSinceLastNotification,
+			"suppression_hours", t.notificationSuppressionHours)
+	}
+	
+	return shouldSuppress
+}
+
+// RecordNotificationSent records that a notification was sent for a species in a specific tracking period.
+// This is used to prevent duplicate notifications within the suppression window.
+func (t *NewSpeciesTracker) RecordNotificationSent(scientificName, trackingPeriod string, sentTime time.Time) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// Initialize maps if needed
+	if t.notificationLastSent == nil {
+		t.notificationLastSent = make(map[string]map[string]time.Time)
+	}
+	if t.notificationLastSent[scientificName] == nil {
+		t.notificationLastSent[scientificName] = make(map[string]time.Time)
+	}
+
+	// Record the notification time
+	t.notificationLastSent[scientificName][trackingPeriod] = sentTime
+	
+	logger.Debug("Recorded notification sent",
+		"species", scientificName,
+		"period", trackingPeriod,
+		"sent_time", sentTime.Format("2006-01-02 15:04:05"))
+}
+
+// GetNotificationTrackingPeriod determines the appropriate tracking period identifier
+// based on the species status. This is used to track notifications separately for
+// lifetime, yearly, and seasonal "new species" detections.
+func (t *NewSpeciesTracker) GetNotificationTrackingPeriod(status *SpeciesStatus) string {
+	// Prioritize the most specific period that's "new"
+	if t.seasonalEnabled && status.IsNewThisSeason {
+		return fmt.Sprintf("season_%s_%d", status.CurrentSeason, t.currentYear)
+	}
+	if t.yearlyEnabled && status.IsNewThisYear {
+		return fmt.Sprintf("year_%d", t.currentYear)
+	}
+	if status.IsNew {
+		return "lifetime"
+	}
+	return "" // Not a new species in any period
+}
+
+// CleanupOldNotificationRecords removes notification records older than 2x the suppression window
+// to prevent unbounded memory growth.
+func (t *NewSpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.notificationLastSent == nil {
+		return 0
+	}
+
+	cleaned := 0
+	cutoffTime := currentTime.Add(-time.Duration(t.notificationSuppressionHours*2) * time.Hour)
+
+	for species, periods := range t.notificationLastSent {
+		for period, sentTime := range periods {
+			if sentTime.Before(cutoffTime) {
+				delete(periods, period)
+				cleaned++
+			}
+		}
+		// Remove species entry if no periods remain
+		if len(periods) == 0 {
+			delete(t.notificationLastSent, species)
+		}
+	}
+
+	if cleaned > 0 {
+		logger.Debug("Cleaned up old notification records",
+			"removed_count", cleaned,
+			"cutoff_time", cutoffTime.Format("2006-01-02 15:04:05"))
+	}
+
+	return cleaned
 }
 
 // Close releases resources associated with the species tracker, including the logger.
