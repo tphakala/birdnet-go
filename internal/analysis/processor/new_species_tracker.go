@@ -201,7 +201,7 @@ func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTr
 		seasonCacheTTL: defaultSeasonCacheTTL, // TTL for season cache
 
 		// Notification suppression tracking
-		notificationLastSent: make(map[string]time.Time),
+		notificationLastSent: make(map[string]time.Time, initialSpeciesCapacity),
 	}
 
 	// Initialize seasons from configuration
@@ -1137,21 +1137,24 @@ func (t *NewSpeciesTracker) PruneOldEntries() int {
 		}
 	}
 
-	// Also cleanup old notification records
-	cleaned := t.cleanupOldNotificationRecordsLocked(now)
-	pruned += cleaned
+	// Also cleanup old notification records (only if suppression is enabled)
+	if t.notificationSuppressionWindow > 0 {
+		cleaned := t.cleanupOldNotificationRecordsLocked(now)
+		pruned += cleaned
+	}
 
 	return pruned
 }
 
 // cleanupOldNotificationRecordsLocked is an internal version that assumes lock is already held
 func (t *NewSpeciesTracker) cleanupOldNotificationRecordsLocked(currentTime time.Time) int {
-	if t.notificationLastSent == nil {
+	if t.notificationLastSent == nil || t.notificationSuppressionWindow <= 0 {
 		return 0
 	}
 
 	cleaned := 0
-	cutoffTime := currentTime.Add(-t.notificationSuppressionWindow * 2)
+	// Compute cutoff = currentTime - (2 * suppressionWindow) to remove records older than 2x retention
+	cutoffTime := currentTime.Add(-2 * t.notificationSuppressionWindow)
 
 	for species, sentTime := range t.notificationLastSent {
 		if sentTime.Before(cutoffTime) {
@@ -1298,10 +1301,15 @@ func (t *NewSpeciesTracker) ShouldSuppressNotification(scientificName string, cu
 // RecordNotificationSent records that a notification was sent for a species.
 // This is used to prevent duplicate notifications within the suppression window.
 func (t *NewSpeciesTracker) RecordNotificationSent(scientificName string, sentTime time.Time) {
+	// Early return when suppression is disabled to avoid unnecessary operations
+	if t.notificationSuppressionWindow <= 0 {
+		return
+	}
+	
 	t.mu.Lock()
 	// Initialize map if needed
 	if t.notificationLastSent == nil {
-		t.notificationLastSent = make(map[string]time.Time)
+		t.notificationLastSent = make(map[string]time.Time, initialSpeciesCapacity)
 	}
 
 	// Record the notification time
@@ -1327,7 +1335,7 @@ func (t *NewSpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time)
 	t.mu.Unlock()
 
 	if cleaned > 0 {
-		cutoffTime := currentTime.Add(-t.notificationSuppressionWindow * 2)
+		cutoffTime := currentTime.Add(-2 * t.notificationSuppressionWindow)
 		logger.Debug("Cleaned up old notification records",
 			"removed_count", cleaned,
 			"cutoff_time", cutoffTime.Format("2006-01-02 15:04:05"))
