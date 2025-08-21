@@ -206,7 +206,10 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	logger := weatherLogger.With("provider", wundergroundProviderName)
 	logger.Info("Fetching weather data", "url", maskAPIKey(apiURL, "apiKey"))
 
-	ctx := context.Background()
+	// Create a context with timeout for this specific request
+	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	defer cancel() // Ensure resources are freed
+
 	client := &http.Client{Timeout: RequestTimeout}
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, http.NoBody)
 	if err != nil {
