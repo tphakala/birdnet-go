@@ -89,7 +89,7 @@ Source: MIT
 
 ### github.com/getsentry/sentry-go/echo
 
-License: https://github.com/getsentry/sentry-go/blob/echo/v0.35.0/echo/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/echo/v0.35.1/echo/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -249,7 +249,7 @@ Source: MIT
 
 ### github.com/mattn/go-sqlite3
 
-License: https://github.com/mattn/go-sqlite3/blob/v1.14.30/LICENSE
+License: https://github.com/mattn/go-sqlite3/blob/v1.14.32/LICENSE
 Source: MIT
 
 ### github.com/mrjones/oauth
