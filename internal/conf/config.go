@@ -140,7 +140,6 @@ type WeatherSettings struct {
 
 // WundergroundSettings contains settings for WeatherUnderground integration.
 type WundergroundSettings struct {
-	Enabled   bool   `json:"enabled"`   // true to enable WeatherUnderground integration
 	APIKey    string `json:"apiKey"`    // WeatherUnderground API key
 	StationID string `json:"stationId"` // WeatherUnderground station ID
 	Endpoint  string `json:"endpoint"`  // WeatherUnderground API endpoint

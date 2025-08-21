@@ -256,7 +256,6 @@ export interface OpenWeatherSettings {
 }
 
 export interface WundergroundSettings {
-  enabled: boolean;
   apiKey: string;
   stationId: string;
   endpoint: string;

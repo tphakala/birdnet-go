@@ -25,7 +25,6 @@ export const openWeatherDefaults: OpenWeatherSettings = {
  * Default configuration for Weather Underground provider
  */
 export const wundergroundDefaults: WundergroundSettings = {
-  enabled: false,
   apiKey: '',
   stationId: '',
   endpoint: 'https://api.weather.com/v2/pws/observations/current',

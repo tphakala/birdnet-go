@@ -146,7 +146,6 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.weather.openweather.language", "en")
 
 	// Weather Underground specific configuration
-	viper.SetDefault("realtime.weather.wunderground.enabled", false)
 	viper.SetDefault("realtime.weather.wunderground.apikey", "")
 	viper.SetDefault("realtime.weather.wunderground.stationid", "")
 	viper.SetDefault("realtime.weather.wunderground.endpoint", "https://api.weather.com/v2/pws/observations/current")
