@@ -435,8 +435,8 @@ tasks:
         GOOS={{.GOOS}} GOARCH={{.GOARCH}} {{.CGO_FLAGS}} \
           CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
           go build -tags noembed {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}{{.BINARY_SUFFIX}}
-      - 'echo "Built non-embedded binary: {{.BINARY_DIR}}/{{.BINARY_NAME}}{{.BINARY_SUFFIX}}"'
-      - 'echo "Note: This binary requires external model files to run"'
+        echo "Built non-embedded binary: {{.BINARY_DIR}}/{{.BINARY_NAME}}{{.BINARY_SUFFIX}}"
+        echo "Note: This binary requires external model files to run"
 
   noembed_linux_amd64:
     desc: Build Linux AMD64 without embedded models
