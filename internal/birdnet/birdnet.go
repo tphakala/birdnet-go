@@ -27,19 +27,6 @@ import (
 // Default model version for the embedded model
 const DefaultModelVersion = "BirdNET_GLOBAL_6K_V2.4"
 
-// Embedded TensorFlow Lite model data.
-//
-//go:embed data/BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite
-var modelData []byte
-
-// Embedded TensorFlow Lite range filter model data.
-//
-//go:embed data/BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite
-var metaModelDataV1 []byte
-
-//go:embed data/BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite
-var metaModelDataV2 []byte
-
 // Model version string, default is the embedded model version
 var modelVersion = "BirdNET GLOBAL 6K V2.4 FP32"
 
@@ -207,6 +194,10 @@ func (bn *BirdNET) initializeModel() error {
 	if status := bn.AnalysisInterpreter.AllocateTensors(); status != tflite.OK {
 		return fmt.Errorf("tensor allocation failed")
 	}
+	
+	// Force garbage collection to reclaim memory from model loading
+	// The model data is no longer needed as TFLite has created its own internal copy
+	runtime.GC()
 
 	// Update model version based on custom model path if provided
 	if bn.Settings.BirdNET.ModelPath != "" {
@@ -241,19 +232,68 @@ func (bn *BirdNET) initializeModel() error {
 }
 
 // getMetaModelData returns the appropriate meta model data based on the settings.
-func (bn *BirdNET) getMetaModelData() []byte {
-	if bn.Settings.BirdNET.RangeFilter.Model == "legacy" {
-		fmt.Printf("⚠️ Using legacy range filter model")
-		return metaModelDataV1
+func (bn *BirdNET) getMetaModelData() ([]byte, error) {
+	// Check if external model path is specified
+	if bn.Settings.BirdNET.RangeFilter.ModelPath != "" {
+		modelPath := bn.Settings.BirdNET.RangeFilter.ModelPath
+		
+		// Expand environment variables first
+		modelPath = os.ExpandEnv(modelPath)
+		
+		// Then expand ~ to home directory if needed
+		if strings.HasPrefix(modelPath, "~/") {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return nil, errors.New(err).
+					Category(errors.CategoryFileIO).
+					Context("path", modelPath).
+					Build()
+			}
+			modelPath = filepath.Join(homeDir, modelPath[2:])
+		}
+		
+		// Load model from external file
+		data, err := os.ReadFile(modelPath)
+		if err != nil {
+			return nil, errors.New(err).
+				Category(errors.CategoryFileIO).
+				Context("path", modelPath).
+				Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
+				Build()
+		}
+		
+		fmt.Printf("📁 Loaded range filter model from: %s\n", modelPath)
+		return data, nil
 	}
-	return metaModelDataV2
+	
+	// Fall back to embedded models
+	var data []byte
+	if bn.Settings.BirdNET.RangeFilter.Model == "legacy" {
+		fmt.Printf("⚠️ Using legacy range filter model\n")
+		data = metaModelDataV1
+	} else {
+		data = metaModelDataV2
+	}
+	
+	if !hasEmbeddedModels || data == nil {
+		return nil, errors.Newf("range filter model not available (built with noembed tag, specify ModelPath in RangeFilter config)").
+			Category(errors.CategoryModelLoad).
+			Context("embedded_models", hasEmbeddedModels).
+			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
+			Build()
+	}
+	
+	return data, nil
 }
 
 // initializeMetaModel loads and initializes the meta model used for range filtering.
 func (bn *BirdNET) initializeMetaModel() error {
 	start := time.Now()
 
-	metaModelData := bn.getMetaModelData()
+	metaModelData, err := bn.getMetaModelData()
+	if err != nil {
+		return err
+	}
 
 	model := tflite.NewModel(metaModelData)
 	if model == nil {
@@ -290,6 +330,10 @@ func (bn *BirdNET) initializeMetaModel() error {
 			Timing("meta-model-allocate", time.Since(start)).
 			Build()
 	}
+	
+	// Force garbage collection to reclaim memory from meta model loading
+	// The model data is no longer needed as TFLite has created its own internal copy
+	runtime.GC()
 
 	return nil
 }
@@ -494,10 +538,31 @@ func (bn *BirdNET) loadModel() ([]byte, error) {
 	start := time.Now()
 
 	if bn.Settings.BirdNET.ModelPath == "" {
+		if !hasEmbeddedModels || modelData == nil {
+			return nil, errors.Newf("no model path specified and no embedded model available (built with noembed tag)").
+				Category(errors.CategoryModelLoad).
+				Context("embedded_models", hasEmbeddedModels).
+				Build()
+		}
 		return modelData, nil
 	}
 
 	modelPath := bn.Settings.BirdNET.ModelPath
+	// Expand environment variables first
+	modelPath = os.ExpandEnv(modelPath)
+	
+	// Then expand ~ to home directory if needed
+	if strings.HasPrefix(modelPath, "~/") {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return nil, errors.New(err).
+				Category(errors.CategoryFileIO).
+				Context("path", modelPath).
+				Build()
+		}
+		modelPath = filepath.Join(homeDir, modelPath[2:])
+	}
+	
 	data, err := os.ReadFile(modelPath)
 	if err != nil {
 		return nil, errors.New(err).

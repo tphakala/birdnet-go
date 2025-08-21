@@ -78,6 +78,11 @@ tasks:
 
   native-target:
     cmds:
+      - |
+        if [ "{{.OS}}" = "unsupported" ] || [ "{{.ARCH}}" = "unsupported" ]; then
+          echo "Error: Unsupported platform combination: OS={{.OS}}, ARCH={{.ARCH}}"
+          exit 1
+        fi
       - task: "{{OS}}_{{ARCH}}"
     vars:
       OS:
@@ -91,7 +96,7 @@ tasks:
         sh: |
           case "{{.UNAME_M}}" in
             x86_64) echo "amd64";;
-            aarch64) echo "arm64";;
+            aarch64|arm64) echo "arm64";;
             *) echo "unsupported";;
           esac
 
@@ -257,6 +262,35 @@ tasks:
       - rm -f {{.AVICOMMONS_DATA_DIR}}/{{.AVICOMMONS_JSON_FILE}}
       - rm -rf frontend/dist frontend/node_modules
 
+  # Non-embedded builds (without embedded models - smaller binary size)
+  noembed:
+    desc: Build for native platform without embedded models
+    deps: [noembed-native-target]
+
+  noembed-native-target:
+    cmds:
+      - |
+        if [ "{{.OS}}" = "unsupported" ] || [ "{{.ARCH}}" = "unsupported" ]; then
+          echo "Error: Unsupported platform combination: OS={{.OS}}, ARCH={{.ARCH}}"
+          exit 1
+        fi
+      - task: "noembed_{{OS}}_{{ARCH}}"
+    vars:
+      OS:
+        sh: |
+          case "{{.UNAME_S}}" in
+            Linux) echo "linux";;
+            Darwin) echo "darwin";;
+            *) echo "unsupported";;
+          esac
+      ARCH:
+        sh: |
+          case "{{.UNAME_M}}" in
+            x86_64) echo "amd64";;
+            aarch64|arm64) echo "arm64";;
+            *) echo "unsupported";;
+          esac
+
   linux_amd64:
     deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
     vars:
@@ -270,7 +304,7 @@ tasks:
         mkdir -p {{.TFLITE_LIB_DIR}}
         GOOS=linux GOARCH=amd64 {{.CGO_FLAGS}} \
         CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
-        go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
+        go build -trimpath {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   linux_arm64:
     deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
@@ -288,7 +322,7 @@ tasks:
         fi
         GOOS=linux GOARCH=arm64 {{.CGO_FLAGS}} \
         CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
-        go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
+        go build -trimpath {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   windows_amd64:
     deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
@@ -303,12 +337,12 @@ tasks:
         GOOS=windows GOARCH=amd64 {{.CGO_FLAGS}} \
         CC=x86_64-w64-mingw32-gcc \
         CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
-        go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}.exe
+        go build -trimpath {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}.exe
 
   darwin_amd64:
     deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
     vars:
-      TFLITE_LIB_DIR: /opt/homebrew/lib
+      TFLITE_LIB_DIR: /usr/local/lib
       TFLITE_LIB_ARCH: darwin_amd64.tar.gz
       TARGET: darwin_amd64
     cmds:
@@ -317,7 +351,7 @@ tasks:
       - |
         GOOS=darwin GOARCH=amd64 {{.CGO_FLAGS}} \
         CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
-        go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
+        go build -trimpath {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   darwin_arm64:
     deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
@@ -331,7 +365,7 @@ tasks:
       - |
         GOOS=darwin GOARCH=arm64 {{.CGO_FLAGS}} \
         CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
-        go build {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
+        go build -trimpath {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}
 
   download-tflite:
     internal: true
@@ -378,6 +412,94 @@ tasks:
         fi
       - task: ensure-tflite-symlinks
         vars: {LIB_DIR: '{{.TFLITE_LIB_DIR}}', LIB_FILENAME: '{{.LIB_FILENAME}}'}
+
+  # Internal task for building noembed binaries across platforms
+  noembed_build:
+    internal: true
+    deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
+    cmds:
+      - task: download-tflite
+        vars: 
+          TFLITE_LIB_DIR: '{{.TFLITE_LIB_DIR}}'
+          TFLITE_LIB_ARCH: '{{.TFLITE_LIB_ARCH}}'
+          TARGET: '{{.TARGET}}'
+      - mkdir -p {{.BINARY_DIR}}
+      - |
+        {{if .CROSS_COMPILE_CHECK}}
+        if [ "$(uname -m)" != "{{.CROSS_COMPILE_CHECK}}" ]; then
+          export CC={{.CC}}
+        fi
+        {{else if .CC}}
+        export CC={{.CC}}
+        {{end}}
+        GOOS={{.GOOS}} GOARCH={{.GOARCH}} {{.CGO_FLAGS}} \
+          CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
+          go build -trimpath -tags noembed {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}{{.BINARY_SUFFIX}}
+        echo "Built non-embedded binary: {{.BINARY_DIR}}/{{.BINARY_NAME}}{{.BINARY_SUFFIX}}"
+        echo "Note: This binary requires external model files to run"
+
+  noembed_linux_amd64:
+    desc: Build Linux AMD64 without embedded models
+    cmds:
+      - task: noembed_build
+        vars:
+          TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR_AMD64}}'
+          TFLITE_LIB_ARCH: linux_amd64.tar.gz
+          TARGET: linux_amd64
+          GOOS: linux
+          GOARCH: amd64
+          BINARY_SUFFIX: ''
+
+  noembed_linux_arm64:
+    desc: Build Linux ARM64 without embedded models
+    cmds:
+      - task: noembed_build
+        vars:
+          TFLITE_LIB_DIR: '{{.DOCKER_LIB_DIR | default .SYSTEM_LIB_DIR_ARM64}}'
+          TFLITE_LIB_ARCH: linux_arm64.tar.gz
+          TARGET: linux_arm64
+          GOOS: linux
+          GOARCH: arm64
+          CROSS_COMPILE_CHECK: 'aarch64'
+          CC: 'aarch64-linux-gnu-gcc'
+          BINARY_SUFFIX: ''
+
+  noembed_windows_amd64:
+    desc: Build Windows AMD64 without embedded models
+    cmds:
+      - task: noembed_build
+        vars:
+          TFLITE_LIB_DIR: /usr/x86_64-w64-mingw32/lib
+          TFLITE_LIB_ARCH: windows_amd64.zip
+          TARGET: windows_amd64
+          GOOS: windows
+          GOARCH: amd64
+          CC: x86_64-w64-mingw32-gcc
+          BINARY_SUFFIX: '.exe'
+
+  noembed_darwin_amd64:
+    desc: Build Darwin AMD64 without embedded models
+    cmds:
+      - task: noembed_build
+        vars:
+          TFLITE_LIB_DIR: /usr/local/lib
+          TFLITE_LIB_ARCH: darwin_amd64.tar.gz
+          TARGET: darwin_amd64
+          GOOS: darwin
+          GOARCH: amd64
+          BINARY_SUFFIX: ''
+
+  noembed_darwin_arm64:
+    desc: Build Darwin ARM64 without embedded models
+    cmds:
+      - task: noembed_build
+        vars:
+          TFLITE_LIB_DIR: /opt/homebrew/lib
+          TFLITE_LIB_ARCH: darwin_arm64.tar.gz
+          TARGET: darwin_arm64
+          GOOS: darwin
+          GOARCH: arm64
+          BINARY_SUFFIX: ''
 
   ensure-tflite-symlinks:
     internal: true
