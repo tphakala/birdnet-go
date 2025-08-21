@@ -33,6 +33,33 @@ const (
 	// Daytime solar radiation range for partly cloudy (inclusive).
 	DayPartlyCloudyLowerSR = 200.0
 	DayPartlyCloudyUpperSR = 600.0
+	
+	// Temperature thresholds for weather conditions
+	FreezingPointC     = 0.0  // Celsius freezing point for snow/rain determination
+	FogTempThresholdC  = 5.0  // Maximum temperature for fog formation
+	FogHumidityPercent = 90.0 // Minimum humidity for fog formation
+	
+	// Night humidity thresholds for cloud inference
+	NightCloudyHumidityPercent       = 85.0 // Humidity threshold for cloudy conditions at night
+	NightPartlyCloudyHumidityPercent = 60.0 // Humidity threshold for partly cloudy at night
+	
+	// Unit conversion factors
+	KmhToMs              = 0.277778      // Convert km/h to m/s (divide by 3.6)
+	MphToMs              = 0.44704       // Convert mph to m/s
+	InHgToHPa            = 33.8638866667 // Convert inches of mercury to hectopascals
+	
+	// Feels-like temperature thresholds - Metric
+	MetricHotTempC          = 27.0         // Temperature above which to use heat index
+	MetricColdTempC         = 10.0         // Temperature below which to use wind chill
+	MetricWindThresholdMs   = 1.3333333333 // Wind speed threshold for wind chill (4.8 km/h)
+	
+	// Feels-like temperature thresholds - Hybrid (UK)
+	HybridWindThresholdMs   = 1.34112      // Wind speed threshold for wind chill (3 mph)
+	
+	// Feels-like temperature thresholds - Imperial
+	ImperialHotTempF        = 80.0         // Temperature above which to use heat index
+	ImperialColdTempF       = 50.0         // Temperature below which to use wind chill
+	ImperialWindThresholdMph = 3.0         // Wind speed threshold for wind chill
 )
 
 var stationIDRegex = regexp.MustCompile(`^[A-Za-z0-9_-]{3,32}$`)
@@ -46,23 +73,23 @@ func InferWundergroundIcon(tempC, precipMM, humidity, solarRadiation, windGustMS
 	}
 	// 2. Precipitation type: snow vs rain (use temp)
 	if precipMM > 0 {
-		if tempC < 0 {
+		if tempC < FreezingPointC {
 			return IconSnow
 		}
 		return IconRain
 	}
 
 	// 3. Fog
-	if humidity > 90 && tempC < 5 {
+	if humidity > FogHumidityPercent && tempC < FogTempThresholdC {
 		return IconFog
 	}
 
 	// 4. Night handling: when solar radiation is near zero, infer clouds by humidity
 	if solarRadiation <= NightSolarRadiationThreshold {
-		if humidity >= 85 {
+		if humidity >= NightCloudyHumidityPercent {
 			return IconCloudy
 		}
-		if humidity >= 60 {
+		if humidity >= NightPartlyCloudyHumidityPercent {
 			return IconPartlyCloudy
 		}
 		return IconClearSky
@@ -375,8 +402,8 @@ func extractMeasurements(obs *struct {
 		m.heatIndex = obs.Metric.HeatIndex
 		m.windChill = obs.Metric.WindChill
 		// Convert km/h -> m/s for WeatherData
-		m.windSpeed = obs.Metric.WindSpeed / 3.6
-		m.windGust = obs.Metric.WindGust / 3.6
+		m.windSpeed = obs.Metric.WindSpeed * KmhToMs
+		m.windGust = obs.Metric.WindGust * KmhToMs
 		// Keep raw gust (km/h) for icon inference conversion later
 		m.windGustRaw = obs.Metric.WindGust
 		m.pressure = obs.Metric.Pressure
@@ -386,8 +413,8 @@ func extractMeasurements(obs *struct {
 		m.heatIndex = obs.Metric.HeatIndex
 		m.windChill = obs.Metric.WindChill
 		// Convert mph -> m/s for WeatherData
-		m.windSpeed = obs.Imperial.WindSpeed * 0.44704
-		m.windGust = obs.Imperial.WindGust * 0.44704
+		m.windSpeed = obs.Imperial.WindSpeed * MphToMs
+		m.windGust = obs.Imperial.WindGust * MphToMs
 		// Keep raw gust (mph) for icon inference conversion later
 		m.windGustRaw = obs.Imperial.WindGust
 		m.pressure = obs.Metric.Pressure
@@ -400,7 +427,7 @@ func extractMeasurements(obs *struct {
 		m.windGust = obs.Imperial.WindGust
 		// Keep raw gust (mph) for icon inference conversion later
 		m.windGustRaw = obs.Imperial.WindGust
-		m.pressure = obs.Imperial.Pressure * 33.8638866667
+		m.pressure = obs.Imperial.Pressure * InHgToHPa
 	}
 	
 	return m
@@ -412,9 +439,9 @@ func calculateFeelsLike(m weatherMeasurements, units string) float64 {
 	case "m":
 		// Thresholds in metric: hot >=27°C, cold <=10°C, wind >1.333 m/s (4.8 km/h)
 		switch {
-		case m.temp >= 27 && !isInvalid(m.heatIndex):
+		case m.temp >= MetricHotTempC && !isInvalid(m.heatIndex):
 			return m.heatIndex
-		case m.temp <= 10 && m.windSpeed > 1.3333333333 && !isInvalid(m.windChill):
+		case m.temp <= MetricColdTempC && m.windSpeed > MetricWindThresholdMs && !isInvalid(m.windChill):
 			return m.windChill
 		default:
 			return m.temp
@@ -422,9 +449,9 @@ func calculateFeelsLike(m weatherMeasurements, units string) float64 {
 	case "h":
 		// Use metric temp thresholds, wind threshold 3 mph => 1.34112 m/s
 		switch {
-		case m.temp >= 27 && !isInvalid(m.heatIndex):
+		case m.temp >= MetricHotTempC && !isInvalid(m.heatIndex):
 			return m.heatIndex
-		case m.temp <= 10 && m.windSpeed > 1.34112 && !isInvalid(m.windChill):
+		case m.temp <= MetricColdTempC && m.windSpeed > HybridWindThresholdMs && !isInvalid(m.windChill):
 			return m.windChill
 		default:
 			return m.temp
@@ -432,9 +459,9 @@ func calculateFeelsLike(m weatherMeasurements, units string) float64 {
 	default:
 		// Thresholds in imperial: hot >=80°F, cold <=50°F, wind >3 mph
 		switch {
-		case m.temp >= 80 && !isInvalid(m.heatIndex):
+		case m.temp >= ImperialHotTempF && !isInvalid(m.heatIndex):
 			return m.heatIndex
-		case m.temp <= 50 && m.windSpeed > 3 && !isInvalid(m.windChill):
+		case m.temp <= ImperialColdTempF && m.windSpeed > ImperialWindThresholdMph && !isInvalid(m.windChill):
 			return m.windChill
 		default:
 			return m.temp
@@ -444,11 +471,6 @@ func calculateFeelsLike(m weatherMeasurements, units string) float64 {
 
 // normalizeWindGust converts wind gust to m/s for icon inference
 func normalizeWindGust(windGustRaw float64, units string) float64 {
-	const (
-		mphToMs = 0.44704
-		kmhToMs = 0.277778
-	)
-	
 	if math.IsNaN(windGustRaw) || windGustRaw == 0 {
 		return 0.0
 	}
@@ -456,11 +478,11 @@ func normalizeWindGust(windGustRaw float64, units string) float64 {
 	switch units {
 	case "m":
 		// WU metric wind is in km/h
-		return windGustRaw * kmhToMs
+		return windGustRaw * KmhToMs
 	case "h", "e":
 		// WU imperial wind (and hybrid uses imperial for wind) is in mph
-		return windGustRaw * mphToMs
+		return windGustRaw * MphToMs
 	default:
-		return windGustRaw * mphToMs
+		return windGustRaw * MphToMs
 	}
 }

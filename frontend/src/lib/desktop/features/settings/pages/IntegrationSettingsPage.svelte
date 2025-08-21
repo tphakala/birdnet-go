@@ -44,7 +44,7 @@
     type MQTTSettings,
     type SettingsFormData,
     type WeatherSettings,
-    type WundergroundSettings
+    type WundergroundSettings,
   } from '$lib/stores/settings';
   import { alertIconsSvg } from '$lib/utils/icons';
   import { loggers } from '$lib/utils/logger';
@@ -252,11 +252,14 @@
     apiKey: '',
     stationId: '',
     endpoint: 'https://api.weather.com/v2/pws/observations/current',
-    units: 'm'
+    units: 'm',
   };
   function updateWeatherProvider(provider: string) {
     settingsActions.updateSection('realtime', {
-      weather: { ...settings.weather!, provider: provider as 'none' | 'yrno' | 'openweather' | 'wunderground' },
+      weather: {
+        ...settings.weather!,
+        provider: provider as 'none' | 'yrno' | 'openweather' | 'wunderground',
+      },
     });
   }
 
@@ -1190,12 +1193,13 @@
           <PasswordField
             label={t('settings.integration.weather.wunderground.apiKey.label')}
             value={settings.weather?.wunderground?.apiKey ?? ''}
-            onUpdate={apiKey => settingsActions.updateSection('realtime', {
-              weather: {
-                ...settings.weather!,
-                wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), apiKey }
-              }
-            })}
+            onUpdate={apiKey =>
+              settingsActions.updateSection('realtime', {
+                weather: {
+                  ...settings.weather!,
+                  wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), apiKey },
+                },
+              })}
             placeholder=""
             helpText={t('settings.integration.weather.wunderground.apiKey.helpText')}
             disabled={store.isLoading || store.isSaving}
@@ -1205,12 +1209,13 @@
           <TextInput
             label={t('settings.integration.weather.wunderground.stationId.label')}
             value={settings.weather?.wunderground?.stationId ?? ''}
-            onchange={stationId => settingsActions.updateSection('realtime', {
-              weather: {
-                ...settings.weather!,
-                wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), stationId }
-              }
-            })}
+            onchange={stationId =>
+              settingsActions.updateSection('realtime', {
+                weather: {
+                  ...settings.weather!,
+                  wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), stationId },
+                },
+              })}
             placeholder=""
             helpText={t('settings.integration.weather.wunderground.stationId.helpText')}
             disabled={store.isLoading || store.isSaving}
@@ -1219,12 +1224,13 @@
           <TextInput
             label={t('settings.integration.weather.wunderground.endpoint.label')}
             value={settings.weather?.wunderground?.endpoint ?? ''}
-            onchange={endpoint => settingsActions.updateSection('realtime', {
-              weather: {
-                ...settings.weather!,
-                wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), endpoint }
-              }
-            })}
+            onchange={endpoint =>
+              settingsActions.updateSection('realtime', {
+                weather: {
+                  ...settings.weather!,
+                  wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), endpoint },
+                },
+              })}
             placeholder="https://api.weather.com/v2/pws/observations/current"
             helpText={t('settings.integration.weather.wunderground.endpoint.helpText')}
             disabled={store.isLoading || store.isSaving}
@@ -1240,12 +1246,13 @@
               { value: 'h', label: t('settings.integration.weather.units.options.ukhybrid') },
             ]}
             disabled={store.isLoading || store.isSaving}
-            onchange={units => settingsActions.updateSection('realtime', {
-              weather: {
-                ...settings.weather!,
-                wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), units }
-              }
-            })}
+            onchange={units =>
+              settingsActions.updateSection('realtime', {
+                weather: {
+                  ...settings.weather!,
+                  wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), units },
+                },
+              })}
           />
         </div>
       {/if}
