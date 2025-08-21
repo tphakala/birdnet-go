@@ -89,7 +89,7 @@ Source: MIT
 
 ### github.com/getsentry/sentry-go/echo
 
-License: https://github.com/getsentry/sentry-go/blob/echo/v0.35.0/echo/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/echo/v0.35.1/echo/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -134,7 +134,7 @@ Source: MPL-2.0
 
 ### github.com/go-viper/mapstructure/v2
 
-License: https://github.com/go-viper/mapstructure/blob/v2.3.0/LICENSE
+License: https://github.com/go-viper/mapstructure/blob/v2.4.0/LICENSE
 Source: MIT
 
 ### github.com/google/s2a-go
@@ -249,7 +249,7 @@ Source: MIT
 
 ### github.com/mattn/go-sqlite3
 
-License: https://github.com/mattn/go-sqlite3/blob/v1.14.30/LICENSE
+License: https://github.com/mattn/go-sqlite3/blob/v1.14.32/LICENSE
 Source: MIT
 
 ### github.com/mrjones/oauth
@@ -526,3 +526,4 @@ Source: MIT
 
 License: https://github.com/go-gorm/gorm/blob/v1.30.1/LICENSE
 Source: MIT
+
