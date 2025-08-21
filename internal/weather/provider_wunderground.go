@@ -2,6 +2,7 @@
 package weather
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -204,8 +205,9 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	logger := weatherLogger.With("provider", wundergroundProviderName)
 	logger.Info("Fetching weather data", "url", maskAPIKey(apiURL, "apiKey"))
 
+	ctx := context.Background()
 	client := &http.Client{Timeout: RequestTimeout}
-	req, err := http.NewRequest("GET", apiURL, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, http.NoBody)
 	if err != nil {
 		logger.Error("Failed to create HTTP request", "url", maskAPIKey(apiURL, "apiKey"), "error", err)
 		return nil, errors.New(err).
@@ -229,13 +231,7 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	}
 	defer func() {
 		if cerr := resp.Body.Close(); cerr != nil {
-			logger.Error("Failed to close response body", "error", cerr, "operation", "weather_api_close", "provider", wundergroundProviderName)
-			_ = errors.New(cerr).
-				Component("weather").
-				Category(errors.CategoryNetwork).
-				Context("operation", "weather_api_close").
-				Context("provider", wundergroundProviderName).
-				Build()
+			logger.Warn("Failed to close response body", "error", cerr, "operation", "weather_api_close", "provider", wundergroundProviderName)
 		}
 	}()
 
@@ -299,9 +295,21 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	// Normalize wind gust to m/s for icon inference
 	gustMS := normalizeWindGust(measurements.windGustRaw, units)
 
+	// Calculate precipitation rate in mm/h for icon inference
+	var precipMMH float64
+	switch {
+	case obs.Metric.PrecipRate > 0:
+		precipMMH = obs.Metric.PrecipRate
+	case obs.Imperial.PrecipRate > 0:
+		// Convert inches/hour to mm/hour (1 inch = 25.4 mm)
+		precipMMH = obs.Imperial.PrecipRate * 25.4
+	default:
+		precipMMH = 0.0
+	}
+
 	iconCode := InferWundergroundIcon(
 		measurements.temp,
-		obs.Metric.PrecipRate,
+		precipMMH,
 		float64(obs.Humidity),
 		obs.SolarRadiation,
 		gustMS,
