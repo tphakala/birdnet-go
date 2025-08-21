@@ -709,10 +709,10 @@
           language: currentWeather.openWeather?.language || 'en',
         },
         wunderground: {
-          apiKey: currentWeather.wunderground?.apiKey || '',
-          stationId: currentWeather.wunderground?.stationId || '',
-          endpoint: currentWeather.wunderground?.endpoint || '',
-          units: currentWeather.wunderground?.units || 'm',
+          apiKey: currentWeather.wunderground?.apiKey ?? '',
+          stationId: currentWeather.wunderground?.stationId ?? '',
+          endpoint: currentWeather.wunderground?.endpoint ?? '',
+          units: currentWeather.wunderground?.units ?? 'm',
         },
       };
 
@@ -1250,7 +1250,10 @@
               settingsActions.updateSection('realtime', {
                 weather: {
                   ...settings.weather!,
-                  wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), units },
+                  wunderground: {
+                    ...(settings.weather?.wunderground ?? wgDefaults),
+                    units: units as 'm' | 'e' | 'h',
+                  },
                 },
               })}
           />
@@ -1273,6 +1276,16 @@
                     store.formData?.realtime?.weather?.openWeather?.apiKey ??
                     settings.weather?.openWeather?.apiKey
                   )) ||
+                ((store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) ===
+                  'wunderground' &&
+                  (!(
+                    store.formData?.realtime?.weather?.wunderground?.apiKey ??
+                    settings.weather?.wunderground?.apiKey
+                  ) ||
+                    !(
+                      store.formData?.realtime?.weather?.wunderground?.stationId ??
+                      settings.weather?.wunderground?.stationId
+                    ))) ||
                 testStates.weather.isRunning}
             >
               {t('settings.integration.weather.test.button')}
@@ -1281,6 +1294,8 @@
               {#if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'none'}
                 {t('settings.integration.weather.test.noProvider')}
               {:else if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'openweather' && !(store.formData?.realtime?.weather?.openWeather?.apiKey ?? settings.weather?.openWeather?.apiKey)}
+                {t('settings.integration.weather.test.apiKeyRequired')}
+              {:else if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'wunderground' && (!(store.formData?.realtime?.weather?.wunderground?.apiKey ?? settings.weather?.wunderground?.apiKey) || !(store.formData?.realtime?.weather?.wunderground?.stationId ?? settings.weather?.wunderground?.stationId))}
                 {t('settings.integration.weather.test.apiKeyRequired')}
               {:else if testStates.weather.isRunning}
                 {t('settings.integration.weather.test.inProgress')}

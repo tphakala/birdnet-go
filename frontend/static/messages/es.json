@@ -1097,29 +1097,25 @@
             "none": "Ninguno",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Wunderground (English)"
+            "wunderground": "Weather Underground"
           }
         },
         "wunderground": {
-          "title": "Wunderground (English)",
-          "description": "Obtén datos meteorológicos para las detecciones usando la API de Wunderground (solo en inglés)",
-          "apiKeyInput": {
-            "label": "Clave API",
-            "placeholder": "Introduce tu clave API de Wunderground",
-            "helpText": "Tu clave API de Wunderground"
+          "apiKey": {
+            "label": "Clave API de Weather Underground",
+            "helpText": "Ingresa tu clave API de Weather Underground. Requerida para datos meteorológicos. ¡Manténla en secreto!"
           },
-          "stationIdInput": {
+          "stationId": {
             "label": "ID de estación",
-            "placeholder": "Introduce tu ID de estación de Wunderground",
-            "helpText": "Tu ID de estación de Wunderground"
+            "helpText": "Tu ID de estación PWS de Weather Underground (ej., KCAOAKLA12)."
+          },
+          "endpoint": {
+            "label": "Endpoint de API",
+            "helpText": "Sobrescribe el endpoint de API de Weather Underground si es necesario. Por defecto usa https://api.weather.com/v2/pws/observations/current si se deja vacío."
           },
           "units": {
-            "label": "Unidades de temperatura",
-            "helpText": "Selecciona las unidades de temperatura para mostrar",
-            "metric": "Métrico (°C)",
-            "imperial": "Imperial (°F)",
-            "ukhybrid": "UK Hybrid (°C/°F)",
-            "scientific": "Científico (K)"
+            "label": "Unidades",
+            "helpText": "Selecciona unidades para temperatura y velocidad del viento (m = Métrico, e = Imperial, h = Híbrido del Reino Unido)."
           }
         },
         "notes": {
@@ -1129,11 +1125,11 @@
             "freeService": "Yr es un servicio gratuito de datos meteorológicos. Para más información, visite <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "El uso de OpenWeather requiere una clave API, regístrese para obtener una clave API gratuita en <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Wunderground weather data is only available in English. You must provide your own API key and Station ID."
+          "wunderground": "Requiere una clave API de Weather Underground y un ID de estación PWS válido. Los datos meteorológicos de Weather Underground solo están disponibles en inglés. Consulte <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> para más detalles."
         },
         "apiKey": {
           "label": "Clave API",
-          "helpText": "Tu clave API de OpenWeather. ¡Manténla en secreto!"
+          "helpText": "Tu clave API para el proveedor de clima seleccionado. ¡Manténla en secreto!"
         },
         "units": {
           "label": "Unidades de medida",
@@ -1141,7 +1137,7 @@
             "standard": "Estándar",
             "metric": "Métrico",
             "imperial": "Imperial",
-            "ukhybrid": "UK Hybrid (°C/°F)"
+            "ukhybrid": "Híbrido del Reino Unido"
           }
         },
         "test": {

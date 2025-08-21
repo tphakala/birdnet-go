@@ -1289,3 +1289,22 @@ func (s *Settings) GetWeatherProvider() (provider WeatherProvider, settings any)
 		return WeatherYrNo, nil
 	}
 }
+
+// ValidateWunderground validates Wunderground settings when the provider is selected
+func (w *WundergroundSettings) ValidateWunderground() error {
+	// Check if Wunderground is enabled but missing required fields
+	if w.Enabled {
+		if w.APIKey == "" {
+			return fmt.Errorf("wunderground.apiKey is required when Wunderground is enabled")
+		}
+		if w.StationID == "" {
+			return fmt.Errorf("wunderground.stationId is required when Wunderground is enabled")
+		}
+		// Validate units
+		validUnits := map[string]bool{"m": true, "e": true, "h": true}
+		if !validUnits[w.Units] {
+			return fmt.Errorf("wunderground.units must be one of [m, e, h], got: %s", w.Units)
+		}
+	}
+	return nil
+}

@@ -344,13 +344,14 @@ func isInvalid(val float64) bool {
 
 // weatherMeasurements holds extracted weather data from API response
 type weatherMeasurements struct {
-	temp        float64
-	heatIndex   float64
-	windChill   float64
-	windSpeed   float64
-	windGust    float64
-	windGustRaw float64
-	pressure    float64
+	temp         float64
+	heatIndex    float64
+	windChill    float64
+	windSpeed    float64
+	windGust     float64
+	windGustRaw  float64
+	windSpeedRaw float64 // Raw wind speed in original units for feels-like calculation
+	pressure     float64
 }
 
 // extractMeasurements extracts weather measurements based on units configuration
@@ -423,9 +424,11 @@ func extractMeasurements(obs *struct {
 		m.temp = obs.Imperial.Temp
 		m.heatIndex = obs.Imperial.HeatIndex
 		m.windChill = obs.Imperial.WindChill
-		m.windSpeed = obs.Imperial.WindSpeed
-		m.windGust = obs.Imperial.WindGust
-		// Keep raw gust (mph) for icon inference conversion later
+		// Convert mph -> m/s for WeatherData consistency
+		m.windSpeed = obs.Imperial.WindSpeed * MphToMs
+		m.windGust = obs.Imperial.WindGust * MphToMs
+		// Keep raw values (mph) for feels-like calculation and icon inference
+		m.windSpeedRaw = obs.Imperial.WindSpeed
 		m.windGustRaw = obs.Imperial.WindGust
 		m.pressure = obs.Imperial.Pressure * InHgToHPa
 	}
@@ -458,10 +461,11 @@ func calculateFeelsLike(m weatherMeasurements, units string) float64 {
 		}
 	default:
 		// Thresholds in imperial: hot >=80°F, cold <=50°F, wind >3 mph
+		// Use raw wind speed (mph) for threshold comparison
 		switch {
 		case m.temp >= ImperialHotTempF && !isInvalid(m.heatIndex):
 			return m.heatIndex
-		case m.temp <= ImperialColdTempF && m.windSpeed > ImperialWindThresholdMph && !isInvalid(m.windChill):
+		case m.temp <= ImperialColdTempF && m.windSpeedRaw > ImperialWindThresholdMph && !isInvalid(m.windChill):
 			return m.windChill
 		default:
 			return m.temp

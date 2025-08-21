@@ -1097,23 +1097,23 @@
             "none": "Ei mitään",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Wunderground"
+            "wunderground": "Weather Underground"
           }
         },
         "wunderground": {
-          "title": "Wunderground",
-          "description": "Hae säätiedot havainnoille Wunderground-rajapinnan kautta (vain englanniksi)",
+          "title": "Weather Underground",
+          "description": "Hae säätiedot havainnoille Weather Underground -rajapinnan kautta (vain englanniksi)",
           "apiKey": {
             "label": "API-avain",
-            "helpText": "Wunderground API-avaimesi. Pidä tämä salassa!"
+            "helpText": "Weather Underground API-avaimesi. Pidä tämä salassa!"
           },
           "stationId": {
             "label": "Aseman tunnus",
-            "helpText": "Wunderground-asemasi tunnus"
+            "helpText": "Weather Underground PWS-asemasi tunnus (esim. KCAOAKLA12)."
           },
           "endpoint": {
             "label": "API-päätepiste",
-            "helpText": "Korvaa tarvittaessa Wundergroundin oletus-API-päätepiste."
+            "helpText": "Korvaa tarvittaessa Weather Undergroundin oletus-API-päätepiste. Oletuksena käytetään https://api.weather.com/v2/pws/observations/current jos jätet tyhjäksi."
           },
           "units": {
             "label": "Lämpötilayksiköt",
@@ -1131,11 +1131,11 @@
             "freeService": "Yr on ilmainen säätietopalvelu. Lisätietoja: <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "OpenWeatherin käyttö vaatii API-avaimen, rekisteröidy ilmaiselle API-avaimelle osoitteessa <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Wundergroundin käyttö vaatii API-avaimen ja aseman tunnuksen. Hallitse API-avaimia osoitteessa <a href=\"https://www.wunderground.com/member/api-keys\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground API Keys</a> ja katso asemasi tunnus kohdasta <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Member Devices</a>."
+          "wunderground": "Vaatii Weather Underground API-avaimen ja kelvollisen PWS-asematunnuksen. Katso lisätietoja <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>."
         },
         "apiKey": {
           "label": "API-avain",
-          "helpText": "OpenWeather API-avaimesi. Pidä tämä salassa!"
+          "helpText": "Sääpalveluntarjoajan API-avaimesi. Pidä tämä salassa!"
         },
         "units": {
           "label": "Mittayksiköt",
@@ -1149,7 +1149,7 @@
           "button": "Testaa sääpalvelu",
           "loading": "Testataan...",
           "noProvider": "Sääpalvelua ei valittu",
-          "apiKeyRequired": "OpenWeather API-avain täytyy määrittää",
+          "apiKeyRequired": "API-avain täytyy määrittää",
           "inProgress": "Testaus käynnissä...",
           "description": "Testaa sääpalveluyhteys"
         }

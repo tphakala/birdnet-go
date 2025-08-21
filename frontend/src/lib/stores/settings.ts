@@ -259,7 +259,7 @@ export interface WundergroundSettings {
   apiKey: string;
   stationId: string;
   endpoint: string;
-  units: string;
+  units: 'm' | 'e' | 'h'; // m=metric, e=imperial/english, h=UK hybrid
 }
 
 export interface WeatherSettings {

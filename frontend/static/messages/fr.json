@@ -1032,7 +1032,7 @@
             "none": "Aucun",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Wunderground"
+            "wunderground": "Weather Underground"
           }
         },
         "wunderground": {
@@ -1066,11 +1066,11 @@
             "freeService": "Yr est un service de données météorologiques gratuit. Pour plus d'informations, visitez <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "L'utilisation d'OpenWeather nécessite une clé API, inscrivez-vous pour obtenir une clé API gratuite sur <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Les données météo sont fournies par Wunderground. Vous devez fournir votre propre clé API. Voir <a href=\"https://www.wunderground.com/weather/api/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a> pour plus de détails."
+          "wunderground": "Nécessite une clé API Weather Underground et un ID de station PWS valide. Voir <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> pour plus de détails."
         },
         "apiKey": {
           "label": "Clé API",
-          "helpText": "Votre clé API OpenWeather. Gardez-la secrète !"
+          "helpText": "Votre clé API pour le fournisseur météo sélectionné. Gardez-la secrète !"
         },
         "units": {
           "label": "Unités de mesure",
@@ -1078,14 +1078,14 @@
             "standard": "Standard",
             "metric": "Métrique",
             "imperial": "Impérial",
-            "ukhybrid": "Hybride UK (°C/°F)"
+            "ukhybrid": "Hybride UK"
           }
         },
         "test": {
           "button": "Tester le fournisseur météo",
           "loading": "Test en cours...",
           "noProvider": "Aucun fournisseur météo sélectionné",
-          "apiKeyRequired": "La clé API OpenWeather doit être spécifiée",
+          "apiKeyRequired": "La clé API doit être spécifiée",
           "inProgress": "Test en cours...",
           "description": "Tester la connexion au fournisseur météo"
         }

@@ -1112,21 +1112,21 @@
             "none": "None",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Wunderground"
+            "wunderground": "Weather Underground"
           }
         },
         "wunderground": {
           "apiKey": {
-            "label": "Wunderground API Key",
-            "helpText": "Enter your Wunderground API key. Required for weather data."
+            "label": "Weather Underground API Key",
+            "helpText": "Enter your Weather Underground API key. Required for weather data."
           },
           "stationId": {
             "label": "Station ID",
-            "helpText": "Your Wunderground PWS station ID (e.g., KCAOAKLA12)."
+            "helpText": "Your Weather Underground PWS station ID (e.g., KCAOAKLA12)."
           },
           "endpoint": {
             "label": "API Endpoint",
-            "helpText": "Override the default Wunderground API endpoint if needed."
+            "helpText": "Override the default Weather Underground API endpoint if needed. Defaults to https://api.weather.com/v2/pws/observations/current if left empty."
           },
           "units": {
             "label": "Units",
@@ -1140,7 +1140,7 @@
             "freeService": "Yr is a free weather data service. For more information, visit <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Use of OpenWeather requires an API key, sign up for a free API key at <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Requires a Wunderground API key and a valid PWS station ID. See <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Wunderground</a> for details."
+          "wunderground": "Requires a Weather Underground API key and a valid PWS station ID. See <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> for details."
         },
         "apiKey": {
           "label": "API Key",

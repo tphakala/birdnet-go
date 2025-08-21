@@ -509,6 +509,17 @@ func validateWeatherSettings(settings *WeatherSettings) error {
 			Context("poll_interval", settings.PollInterval).
 			Build()
 	}
+	
+	// Validate Wunderground settings if it's the selected provider
+	if settings.Provider == "wunderground" {
+		if err := settings.Wunderground.ValidateWunderground(); err != nil {
+			return errors.New(err).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "wunderground-settings").
+				Build()
+		}
+	}
+	
 	return nil
 }
 

@@ -1125,45 +1125,41 @@
         },
         "provider": {
           "options": {
-            "wunderground": "Wunderground (English)"
+            "wunderground": "Weather Underground"
           }
         },
         "wunderground": {
-          "title": "Wunderground (English)",
-          "description": "Obtenha dados meteorológicos para detecções usando a API do Wunderground (apenas em inglês)",
-          "apiKeyInput": {
-            "label": "Chave API",
-            "placeholder": "Digite sua chave API do Wunderground",
-            "helpText": "Sua chave API do Wunderground"
+          "apiKey": {
+            "label": "Chave API do Weather Underground",
+            "helpText": "Digite sua chave API do Weather Underground. Necessária para dados meteorológicos. Mantenha em segredo!"
           },
-          "stationIdInput": {
+          "stationId": {
             "label": "ID da estação",
-            "placeholder": "Digite seu ID de estação do Wunderground",
-            "helpText": "Seu ID de estação do Wunderground"
+            "helpText": "Seu ID de estação PWS do Weather Underground (ex: KCAOAKLA12)."
+          },
+          "endpoint": {
+            "label": "Endpoint da API",
+            "helpText": "Substitua o endpoint padrão da API do Weather Underground, se necessário. O padrão é https://api.weather.com/v2/pws/observations/current se deixado vazio."
           },
           "units": {
-            "label": "Unidades de temperatura",
-            "helpText": "Selecione as unidades de temperatura para exibição",
-            "metric": "Métrica (°C)",
-            "imperial": "Imperial (°F)",
-            "ukhybrid": "UK Hybrid (°C/°F)",
-            "scientific": "Científica (K)"
+            "label": "Unidades",
+            "helpText": "Selecione unidades para temperatura e velocidade do vento (m = Métrico, e = Imperial, h = Híbrido do Reino Unido)."
           }
         },
         "notes": {
-          "wunderground": "Os dados meteorológicos do Wunderground estão disponíveis apenas em inglês. Você deve fornecer sua própria chave API e Station ID."
+          "wunderground": "Requer uma chave API do Weather Underground e um ID de estação PWS válido. Os dados meteorológicos do Weather Underground estão disponíveis apenas em inglês. Veja <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> para detalhes."
         },
         "apiKeyInput": {
           "label": "Chave API",
           "placeholder": "Digite a chave API",
-          "helpText": "Sua chave API do OpenWeather"
+          "helpText": "Sua chave API para o provedor meteorológico selecionado. Mantenha em segredo!"
         },
         "units": {
           "label": "Unidades de temperatura",
           "helpText": "Selecione unidades de temperatura para exibição",
           "metric": "Métrica (°C)",
           "imperial": "Imperial (°F)",
-          "ukhybrid": "UK Hybrid (°C/°F)",
+          "ukhybrid": "Híbrido do Reino Unido",
           "scientific": "Científica (K)"
         }
       }
