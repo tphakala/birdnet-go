@@ -1480,49 +1480,38 @@ check_port_availability() {
     local port="$1"
     
     # Try multiple methods to ensure portability
-    # First try netcat with short timeout - check both IPv4 and IPv6
+    # Each method is independent - nc only short-circuits on positive detection
+    
+    # 1) Quick nc probe (IPv4 and IPv6); only short-circuit on positive detection
     if command_exists nc; then
-        local ipv4_in_use=false
-        local ipv6_in_use=false
-        
-        # Check IPv4
-        if nc -z -w1 127.0.0.1 "$port" 2>/dev/null; then
-            ipv4_in_use=true
-        fi
-        
-        # Check IPv6
-        if nc -z -w1 ::1 "$port" 2>/dev/null; then
-            ipv6_in_use=true
-        fi
-        
-        # Port is in use if either IPv4 or IPv6 succeeds
-        if [ "$ipv4_in_use" = true ] || [ "$ipv6_in_use" = true ]; then
+        if nc -z -w1 127.0.0.1 "$port" 2>/dev/null || nc -z -w1 ::1 "$port" 2>/dev/null; then
             return 1 # Port is in use
         fi
-        # If both fail, don't return available - fall through to ss/lsof checks
-    # Then try ss with sport filter
-    elif command_exists ss; then
-        # Treat any non-empty output as "in use"
+    fi
+    
+    # 2) ss with sport filter (covers IPv4/IPv6 listeners)
+    if command_exists ss; then
         if [ -n "$(ss -H -ltn "sport = :$port" 2>/dev/null)" ]; then
             return 1 # Port is in use
         else
             return 0 # Port is available
         fi
-    # Then try lsof with explicit flags
-    elif command_exists lsof; then
+    fi
+    
+    # 3) lsof (explicit LISTEN)
+    if command_exists lsof; then
         if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
             return 1 # Port is in use
         else
             return 0 # Port is available
         fi
-    # Finally try /dev/tcp as last resort with timeout
+    fi
+    
+    # 4) /dev/tcp fallback with timeout
+    if timeout 1 bash -c "echo > /dev/tcp/127.0.0.1/$port" 2>/dev/null; then
+        return 1 # Port is in use
     else
-        # Use timeout to avoid hangs
-        if timeout 1 bash -c "echo > /dev/tcp/localhost/$port" 2>/dev/null; then
-            return 1 # Port is in use
-        else
-            return 0 # Port is available
-        fi
+        return 0 # Port is available
     fi
 }
 
@@ -1555,6 +1544,13 @@ get_port_process_info() {
                 if echo "$ss_output" | grep -q "LISTEN"; then
                     process_info="(permission denied to get process name)"
                 fi
+            fi
+        else
+            # When ss -p produces no output (unprivileged), re-check without -p flag
+            # to detect if port is actually listening
+            ss_output=$(ss -H -tln "sport = :$port" 2>/dev/null)
+            if [ -n "$ss_output" ] && echo "$ss_output" | grep -q "LISTEN"; then
+                process_info="(permission denied to get process name)"
             fi
         fi
     fi
