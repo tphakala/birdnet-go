@@ -1549,7 +1549,7 @@ get_port_process_info() {
             # When ss -p produces no output (unprivileged), re-check without -p flag
             # to detect if port is actually listening
             ss_output=$(ss -H -tln "sport = :$port" 2>/dev/null)
-            if [ -n "$ss_output" ] && echo "$ss_output" | grep -q "LISTEN"; then
+            if [ -n "$ss_output" ]; then
                 process_info="(permission denied to get process name)"
             fi
         fi
@@ -1644,7 +1644,9 @@ validate_required_ports() {
         print_message "\nBirdNET-Go requires the following ports to be available:" "$YELLOW"
         print_message "  • Port 80   - HTTP web interface" "$YELLOW"
         print_message "  • Port 443  - HTTPS web interface (with SSL)" "$YELLOW"
-        print_message "  • Port $WEB_PORT - Primary web interface" "$YELLOW"
+        if [ "$WEB_PORT" != "80" ] && [ "$WEB_PORT" != "443" ]; then
+            print_message "  • Port $WEB_PORT - Primary web interface" "$YELLOW"
+        fi
         print_message "  • Port 8090 - Prometheus metrics endpoint" "$YELLOW"
         
         print_message "\n📋 Ports currently in use:" "$RED"
@@ -1731,7 +1733,7 @@ configure_web_port() {
     fi
     
     # Update config file with port
-    sed -i "s/port: 8080/port: $WEB_PORT/" "$CONFIG_FILE"
+    sed -i -E "s/^(\\s*port:\\s*)[0-9]+/\\1$WEB_PORT/" "$CONFIG_FILE"
     
     # After configuring the web port, validate ALL required ports including 80 and 443
     if ! validate_required_ports; then
