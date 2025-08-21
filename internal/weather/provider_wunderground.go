@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -236,8 +237,20 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		logger.Error("Received non-OK status code", "status_code", resp.StatusCode, "response_body", string(bodyBytes))
+		// Read and truncate response body for safe logging
+		const maxBodyPreview = 512
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyPreview+1))
+		
+		var bodyPreview string
+		if len(bodyBytes) > maxBodyPreview {
+			// Truncate and normalize whitespace
+			bodyPreview = strings.ReplaceAll(string(bodyBytes[:maxBodyPreview]), "\n", " ") + "..."
+		} else {
+			// Normalize whitespace for smaller bodies
+			bodyPreview = strings.ReplaceAll(string(bodyBytes), "\n", " ")
+		}
+		
+		logger.Error("Received non-OK status code", "status_code", resp.StatusCode, "response_preview", bodyPreview)
 		return nil, errors.New(fmt.Errorf("received non-200 response (%d)", resp.StatusCode)).
 			Component("weather").
 			Category(errors.CategoryNetwork).
@@ -345,9 +358,10 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	return mappedData, nil
 }
 
-// isInvalid checks if a float64 value is zero or NaN (invalid for HeatIndex/WindChill logic)
+// isInvalid checks if a float64 value is NaN (invalid for HeatIndex/WindChill logic)
+// Note: WU may use 0 for N/A but we treat only NaN as invalid to avoid dropping legitimate zero values
 func isInvalid(val float64) bool {
-	return val == 0 || math.IsNaN(val)
+	return math.IsNaN(val)
 }
 
 // weatherMeasurements holds extracted weather data from API response

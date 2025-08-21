@@ -44,12 +44,12 @@
     type MQTTSettings,
     type SettingsFormData,
     type WeatherSettings,
-    type WundergroundSettings,
   } from '$lib/stores/settings';
   import { alertIconsSvg } from '$lib/utils/icons';
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+  import { wundergroundDefaults, weatherDefaults } from '$lib/utils/weatherDefaults';
 
   const logger = loggers.settings;
 
@@ -91,25 +91,7 @@
           path: '/metrics',
         },
       },
-      weather: {
-        provider: 'yrno' as 'none' | 'yrno' | 'openweather' | 'wunderground',
-        pollInterval: 60,
-        debug: false,
-        openWeather: {
-          enabled: false,
-          apiKey: '',
-          endpoint: 'https://api.openweathermap.org/data/2.5/weather',
-          units: 'metric',
-          language: 'en',
-        },
-        wunderground: {
-          enabled: false,
-          apiKey: '',
-          stationId: '',
-          endpoint: 'https://api.weather.com/v2/pws/observations/current',
-          units: 'm',
-        },
-      },
+      weather: weatherDefaults,
     }
   );
 
@@ -247,13 +229,6 @@
   }
 
   // Weather update handlers
-  const wgDefaults: WundergroundSettings = {
-    enabled: false,
-    apiKey: '',
-    stationId: '',
-    endpoint: 'https://api.weather.com/v2/pws/observations/current',
-    units: 'm',
-  };
   function updateWeatherProvider(provider: string) {
     settingsActions.updateSection('realtime', {
       weather: {
@@ -1197,7 +1172,10 @@
               settingsActions.updateSection('realtime', {
                 weather: {
                   ...settings.weather!,
-                  wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), apiKey },
+                  wunderground: {
+                    ...(settings.weather?.wunderground ?? wundergroundDefaults),
+                    apiKey,
+                  },
                 },
               })}
             placeholder=""
@@ -1213,7 +1191,10 @@
               settingsActions.updateSection('realtime', {
                 weather: {
                   ...settings.weather!,
-                  wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), stationId },
+                  wunderground: {
+                    ...(settings.weather?.wunderground ?? wundergroundDefaults),
+                    stationId,
+                  },
                 },
               })}
             placeholder=""
@@ -1228,7 +1209,10 @@
               settingsActions.updateSection('realtime', {
                 weather: {
                   ...settings.weather!,
-                  wunderground: { ...(settings.weather?.wunderground ?? wgDefaults), endpoint },
+                  wunderground: {
+                    ...(settings.weather?.wunderground ?? wundergroundDefaults),
+                    endpoint,
+                  },
                 },
               })}
             placeholder="https://api.weather.com/v2/pws/observations/current"
@@ -1251,7 +1235,7 @@
                 weather: {
                   ...settings.weather!,
                   wunderground: {
-                    ...(settings.weather?.wunderground ?? wgDefaults),
+                    ...(settings.weather?.wunderground ?? wundergroundDefaults),
                     units: units as 'm' | 'e' | 'h',
                   },
                 },

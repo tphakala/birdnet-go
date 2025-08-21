@@ -42,6 +42,7 @@
 import { safeGet, safeSpread } from '$lib/utils/security';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { coerceSettings } from '$lib/utils/settingsCoercion';
+import { weatherDefaults } from '$lib/utils/weatherDefaults';
 import { derived, get, writable } from 'svelte/store';
 import { toastActions } from './toast.js';
 
@@ -558,25 +559,7 @@ function createEmptySettings(): SettingsFormData {
         exclude: [],
         config: {},
       },
-      weather: {
-        provider: 'none',
-        pollInterval: 60,
-        debug: false,
-        openWeather: {
-          enabled: false,
-          apiKey: '',
-          endpoint: 'https://api.openweathermap.org/data/2.5/weather',
-          units: 'metric',
-          language: 'en',
-        },
-        wunderground: {
-          enabled: false,
-          apiKey: '',
-          stationId: '',
-          endpoint: 'https://api.weather.com/v2/pws/observations/current',
-          units: 'm',
-        },
-      },
+      weather: weatherDefaults,
       dashboard: {
         thumbnails: {
           summary: true,
