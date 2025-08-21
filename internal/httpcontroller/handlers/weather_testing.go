@@ -306,7 +306,7 @@ func (h *Handlers) testWeatherProvider(ctx context.Context, settings *conf.Setti
 	case "openweather":
 		provider = weather.NewOpenWeatherProvider()
 	case "wunderground":
-		provider = weather.NewWundergroundProvider()
+		provider = weather.NewWundergroundProvider(nil)
 	default:
 		sendResult(WeatherTestResult{
 			Success: false,

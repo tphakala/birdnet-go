@@ -594,10 +594,7 @@ func (c *Controller) TestWeatherConnection(ctx echo.Context) error {
 			return c.testWeatherAPIConnectivity(testCtx, testSettings)
 		}},
 		{"authentication", "Authentication", func() (string, error) {
-			if request.Provider == "openweather" {
-				return c.testWeatherAuthentication(testCtx, testSettings)
-			}
-			return "Authentication not required for this provider", nil
+			return c.testWeatherAuthentication(testCtx, testSettings)
 		}},
 		{"fetch", "Weather Data Fetch", func() (string, error) {
 			return c.testWeatherDataFetch(testCtx, testSettings)
@@ -686,36 +683,49 @@ func (c *Controller) testWeatherAPIConnectivity(ctx context.Context, settings *c
 
 // testWeatherAuthentication tests authentication with the weather API
 func (c *Controller) testWeatherAuthentication(ctx context.Context, settings *conf.Settings) (string, error) {
-	apiKey := settings.Realtime.Weather.OpenWeather.APIKey
-	endpoint := settings.Realtime.Weather.OpenWeather.Endpoint
-	if endpoint == "" {
-		endpoint = "https://api.openweathermap.org/data/2.5/weather"
-	}
-
-	testURL := fmt.Sprintf("%s?lat=0&lon=0&appid=%s", endpoint, apiKey)
-
-	client := &http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
-	if err != nil {
-		return "", fmt.Errorf("failed to create authentication request: %w", err)
-	}
-
-	req.Header.Set("User-Agent", "BirdNET-Go Weather Test")
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to authenticate with OpenWeather API: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			c.logger.Printf("warning: failed to close response body: %v", err)
+	provider := settings.Realtime.Weather.Provider
+	
+	switch provider {
+	case "openweather":
+		apiKey := settings.Realtime.Weather.OpenWeather.APIKey
+		endpoint := settings.Realtime.Weather.OpenWeather.Endpoint
+		if endpoint == "" {
+			endpoint = "https://api.openweathermap.org/data/2.5/weather"
 		}
-	}()
 
-	if resp.StatusCode == 401 {
-		return "", fmt.Errorf("authentication failed: invalid API key")
+		testURL := fmt.Sprintf("%s?lat=0&lon=0&appid=%s", endpoint, apiKey)
+
+		client := &http.Client{Timeout: 5 * time.Second}
+		req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
+		if err != nil {
+			return "", fmt.Errorf("failed to create authentication request: %w", err)
+		}
+
+		req.Header.Set("User-Agent", "BirdNET-Go Weather Test")
+		resp, err := client.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("failed to authenticate with OpenWeather API: %w", err)
+		}
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				c.logger.Printf("warning: failed to close response body: %v", err)
+			}
+		}()
+
+		if resp.StatusCode == 401 {
+			return "", fmt.Errorf("invalid API key - please check your OpenWeather API key")
+		}
+
+		return "Successfully authenticated with OpenWeather API", nil
+		
+	case "wunderground":
+		// For Weather Underground, authentication is tested in the data fetch stage
+		// since there's no separate auth endpoint
+		return "Authentication will be verified during data fetch", nil
+		
+	default:
+		return "Authentication not required for this provider", nil
 	}
-
-	return "Successfully authenticated with OpenWeather API", nil
 }
 
 // testWeatherDataFetch tests fetching actual weather data
@@ -727,14 +737,16 @@ func (c *Controller) testWeatherDataFetch(ctx context.Context, settings *conf.Se
 	case "openweather":
 		provider = weather.NewOpenWeatherProvider()
 	case "wunderground":
-		provider = weather.NewWundergroundProvider()
+		provider = weather.NewWundergroundProvider(nil)
 	default:
 		return "", fmt.Errorf("unsupported weather provider: %s", settings.Realtime.Weather.Provider)
 	}
 
 	weatherData, err := provider.FetchWeather(settings)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch weather data: %w", err)
+		// Extract the actual error message instead of wrapping it
+		// The provider already returns detailed error messages
+		return "", err
 	}
 
 	if weatherData == nil {

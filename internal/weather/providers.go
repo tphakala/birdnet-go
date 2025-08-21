@@ -1,5 +1,10 @@
 package weather
 
+import (
+	"net/http"
+	"time"
+)
+
 // NewYrNoProvider creates a new Yr.no weather provider
 func NewYrNoProvider() Provider {
 	return &YrNoProvider{}
@@ -16,10 +21,19 @@ type YrNoProvider struct {
 }
 type OpenWeatherProvider struct{}
 
-// NewWundergroundProvider creates a new WeatherUnderground provider
-func NewWundergroundProvider() Provider {
-	return &WundergroundProvider{}
+// NewWundergroundProvider creates a new WeatherUnderground provider with shared HTTP client
+func NewWundergroundProvider(client *http.Client) Provider {
+	if client == nil {
+		client = &http.Client{
+			Timeout: 30 * time.Second,
+		}
+	}
+	return &WundergroundProvider{
+		httpClient: client,
+	}
 }
 
 // WundergroundProvider implements the Provider interface for WeatherUnderground
-type WundergroundProvider struct{}
+type WundergroundProvider struct {
+	httpClient *http.Client
+}

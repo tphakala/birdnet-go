@@ -103,7 +103,7 @@ func NewService(settings *conf.Settings, db datastore.Interface, weatherMetrics 
 	case "openweather":
 		provider = NewOpenWeatherProvider()
 	case "wunderground":
-		provider = NewWundergroundProvider()
+		provider = NewWundergroundProvider(nil)
 	default:
 		return nil, errors.New(fmt.Errorf("invalid weather provider: %s", settings.Realtime.Weather.Provider)).
 			Component("weather").

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
@@ -110,7 +111,22 @@ func InferWundergroundIcon(tempC, precipMM, humidity, solarRadiation, windGustMS
 	return IconFair
 }
 
-type WundergroundResponse struct {
+// wundergroundErrorResponse represents an error response from Weather Underground API
+type wundergroundErrorResponse struct {
+	Metadata struct {
+		TransactionID string `json:"transaction_id"`
+	} `json:"metadata"`
+	Success bool `json:"success"`
+	Errors  []struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	} `json:"errors"`
+}
+
+// wundergroundResponse models the JSON observations response from the Weather Underground API.
+type wundergroundResponse struct {
 	Observations []struct {
 		StationID      string  `json:"stationID"`
 		ObsTimeUtc     string  `json:"obsTimeUtc"`
@@ -153,6 +169,70 @@ type WundergroundResponse struct {
 	} `json:"observations"`
 }
 
+// parseWundergroundError extracts and formats error messages from Weather Underground API responses
+func parseWundergroundError(bodyBytes []byte, statusCode int, stationId, units string, logger *slog.Logger) string {
+	// Try to parse Weather Underground error response
+	var errorResp wundergroundErrorResponse
+	
+	if err := json.Unmarshal(bodyBytes, &errorResp); err == nil && len(errorResp.Errors) > 0 {
+		// Extract the first error message
+		errorMessage := errorResp.Errors[0].Error.Message
+		errorCode := errorResp.Errors[0].Error.Code
+		
+		// Log the structured error
+		logger.Error("Weather Underground API error", 
+			"status_code", statusCode,
+			"error_code", errorCode,
+			"error_message", errorMessage,
+			"station", stationId,
+			"units", units)
+		
+		// Provide user-friendly error messages based on error code
+		switch errorCode {
+		case "CDN-0001":
+			return "invalid API key - please check your Weather Underground API key"
+		case "CDN-0002":
+			return "invalid station ID - please verify your Weather Underground station ID"
+		case "CDN-0003":
+			return "station not found - the specified station ID does not exist"
+		case "CDN-0004":
+			return "rate limit exceeded - please try again later"
+		default:
+			if errorMessage == "" {
+				return fmt.Sprintf("Weather Underground API error (code: %s)", errorCode)
+			}
+			return errorMessage
+		}
+	}
+	
+	// Fallback for non-standard error responses
+	const maxBodyPreview = 512
+	var bodyPreview string
+	if len(bodyBytes) > maxBodyPreview {
+		bodyPreview = strings.ReplaceAll(string(bodyBytes[:maxBodyPreview]), "\n", " ") + "..."
+	} else {
+		bodyPreview = strings.ReplaceAll(string(bodyBytes), "\n", " ")
+	}
+	
+	logger.Error("Received non-OK status code", "status_code", statusCode, "response_preview", bodyPreview)
+	
+	// Generic error message based on status code
+	switch statusCode {
+	case 401:
+		return "authentication failed - please check your API key"
+	case 403:
+		return "access forbidden - please check your API permissions"
+	case 404:
+		return "weather station not found - please verify the station ID"
+	case 429:
+		return "rate limit exceeded - please try again later"
+	case 500, 502, 503, 504:
+		return "Weather Underground service is temporarily unavailable - please try again later"
+	default:
+		return fmt.Sprintf("Weather Underground API error (HTTP %d)", statusCode)
+	}
+}
+
 func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
 	apiKey := settings.Realtime.Weather.Wunderground.APIKey
 	stationId := settings.Realtime.Weather.Wunderground.StationID
@@ -166,6 +246,10 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	}
 	// Only allow supported units: "e" (English), "m" (Metric), "h" (Hybrid UK)
 	if units != "e" && units != "m" && units != "h" {
+		weatherLogger.Warn("Invalid units value detected, falling back to imperial",
+			"units", units,
+			"station", stationId,
+			"provider", wundergroundProviderName)
 		units = "e"
 	}
 	if apiKey == "" || stationId == "" {
@@ -210,7 +294,6 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
 	defer cancel() // Ensure resources are freed
 
-	client := &http.Client{Timeout: RequestTimeout}
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, http.NoBody)
 	if err != nil {
 		logger.Error("Failed to create HTTP request", "url", maskAPIKey(apiURL, "apiKey"), "error", err)
@@ -222,15 +305,33 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 			Build()
 	}
 	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Accept", "application/json")
 
-	resp, err := client.Do(req)
+	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		logger.Error("HTTP request failed", "error", err)
+		weatherLogger.Error("HTTP request failed", "error", err)
+		
+		// Distinguish between context cancellation and deadline errors
+		var category errors.ErrorCategory
+		var contextReason string
+		switch ctx.Err() {
+		case context.Canceled:
+			category = errors.CategoryTimeout
+			contextReason = "canceled"
+		case context.DeadlineExceeded:
+			category = errors.CategoryTimeout
+			contextReason = "timeout"
+		default:
+			category = errors.CategoryNetwork
+			contextReason = "network_error"
+		}
+		
 		return nil, errors.New(err).
 			Component("weather").
-			Category(errors.CategoryNetwork).
+			Category(category).
 			Context("operation", "weather_api_request").
 			Context("provider", wundergroundProviderName).
+			Context("reason", contextReason).
 			Build()
 	}
 	defer func() {
@@ -240,26 +341,20 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		// Read and truncate response body for safe logging
-		const maxBodyPreview = 512
-		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyPreview+1))
+		// Read response body to extract error details
+		bodyBytes, _ := io.ReadAll(resp.Body)
 		
-		var bodyPreview string
-		if len(bodyBytes) > maxBodyPreview {
-			// Truncate and normalize whitespace
-			bodyPreview = strings.ReplaceAll(string(bodyBytes[:maxBodyPreview]), "\n", " ") + "..."
-		} else {
-			// Normalize whitespace for smaller bodies
-			bodyPreview = strings.ReplaceAll(string(bodyBytes), "\n", " ")
-		}
+		// Parse and format the error message
+		errorMessage := parseWundergroundError(bodyBytes, resp.StatusCode, stationId, units, logger)
 		
-		logger.Error("Received non-OK status code", "status_code", resp.StatusCode, "response_preview", bodyPreview)
-		return nil, errors.New(fmt.Errorf("received non-200 response (%d)", resp.StatusCode)).
+		return nil, errors.New(fmt.Errorf("%s", errorMessage)).
 			Component("weather").
 			Category(errors.CategoryNetwork).
 			Context("operation", "weather_api_response").
 			Context("provider", wundergroundProviderName).
-			Context("status_code", fmt.Sprintf("%d", resp.StatusCode)).
+			Context("status_code", resp.StatusCode).
+			Context("station", stationId).
+			Context("units", units).
 			Build()
 	}
 
@@ -274,9 +369,15 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 			Build()
 	}
 
-	var wuResp WundergroundResponse
+	var wuResp wundergroundResponse
 	if err := json.Unmarshal(body, &wuResp); err != nil {
-		logger.Error("Failed to unmarshal response JSON", "error", err, "response_body", string(body))
+		// Truncate response body for safe logging
+		const maxPreview = 200
+		responsePreview := string(body)
+		if len(responsePreview) > maxPreview {
+			responsePreview = responsePreview[:maxPreview] + "..."
+		}
+		logger.Error("Failed to unmarshal response JSON", "error", err, "response_preview", responsePreview)
 		return nil, errors.New(err).
 			Component("weather").
 			Category(errors.CategoryValidation).
@@ -292,6 +393,8 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 			Category(errors.CategoryValidation).
 			Context("operation", "validate_weather_response").
 			Context("provider", wundergroundProviderName).
+			Context("station", stationId).
+			Context("units", units).
 			Build()
 	}
 
