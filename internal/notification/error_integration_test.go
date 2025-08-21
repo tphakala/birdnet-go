@@ -28,8 +28,8 @@ func TestGetNotificationPriority(t *testing.T) {
 		// Medium priorities
 		{"Threshold", string(errors.CategoryThreshold), PriorityMedium},
 		{"SpeciesTracking", string(errors.CategorySpeciesTracking), PriorityMedium},
-		{"Timeout", string(errors.CategoryTimeout), PriorityMedium},
-		{"Retry", string(errors.CategoryRetry), PriorityMedium},
+		{"Timeout", string(errors.CategoryTimeout), PriorityLow},
+		{"Retry", string(errors.CategoryRetry), PriorityLow},
 		{"Cancellation", string(errors.CategoryCancellation), PriorityMedium},
 		{"Broadcast", string(errors.CategoryBroadcast), PriorityMedium},
 		{"Integration", string(errors.CategoryIntegration), PriorityMedium},
