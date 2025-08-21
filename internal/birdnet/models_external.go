@@ -16,4 +16,5 @@ var metaModelDataV1 []byte
 var metaModelDataV2 []byte
 
 // hasEmbeddedModels indicates whether models are embedded in the binary
-const hasEmbeddedModels = false
+// This is a var instead of const to allow test overrides
+var hasEmbeddedModels = false

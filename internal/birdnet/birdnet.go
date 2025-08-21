@@ -237,7 +237,10 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 	if bn.Settings.BirdNET.RangeFilter.ModelPath != "" {
 		modelPath := bn.Settings.BirdNET.RangeFilter.ModelPath
 		
-		// Expand ~ to home directory if needed
+		// Expand environment variables first
+		modelPath = os.ExpandEnv(modelPath)
+		
+		// Then expand ~ to home directory if needed
 		if strings.HasPrefix(modelPath, "~/") {
 			homeDir, err := os.UserHomeDir()
 			if err != nil {
@@ -545,6 +548,21 @@ func (bn *BirdNET) loadModel() ([]byte, error) {
 	}
 
 	modelPath := bn.Settings.BirdNET.ModelPath
+	// Expand environment variables first
+	modelPath = os.ExpandEnv(modelPath)
+	
+	// Then expand ~ to home directory if needed
+	if strings.HasPrefix(modelPath, "~/") {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return nil, errors.New(err).
+				Category(errors.CategoryFileIO).
+				Context("path", modelPath).
+				Build()
+		}
+		modelPath = filepath.Join(homeDir, modelPath[2:])
+	}
+	
 	data, err := os.ReadFile(modelPath)
 	if err != nil {
 		return nil, errors.New(err).
