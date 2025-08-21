@@ -78,7 +78,7 @@ func getNotificationPriority(category, explicitPriority string) Priority {
 	case string(errors.CategoryThreshold), string(errors.CategorySpeciesTracking):
 		return PriorityMedium // Important but not critical
 	case string(errors.CategoryTimeout), string(errors.CategoryRetry):
-		return PriorityMedium // Transient issues
+		return PriorityLow // Transient issues - don't bother users with these
 	case string(errors.CategoryCancellation), string(errors.CategoryBroadcast), string(errors.CategoryIntegration):
 		return PriorityMedium // General operational issues
 	case string(errors.CategoryValidation):

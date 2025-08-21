@@ -284,9 +284,17 @@ func handleHTTPResponse(resp *http.Response, expectedStatus int, operation, mask
 				"status_code", resp.StatusCode,
 				"html_error", htmlError,
 				"response_preview", string(responseBody[:min(len(responseBody), 500)]))
+			
+			// Determine category based on status code
+			category := errors.CategoryNetwork
+			if resp.StatusCode == 408 || resp.StatusCode == 504 || resp.StatusCode == 524 {
+				// 408 Request Timeout, 504 Gateway Timeout, 524 Timeout (Cloudflare)
+				category = errors.CategoryTimeout
+			}
+			
 			return nil, errors.New(fmt.Errorf("%s failed: %s (status %d)", operation, htmlError, resp.StatusCode)).
 				Component("birdweather").
-				Category(errors.CategoryNetwork).
+				Category(category).
 				Context("response_type", "html").
 				Context("status_code", resp.StatusCode).
 				Context("operation", operation).
