@@ -12,11 +12,24 @@ services:
       - BIRDNET_UID=${BIRDNET_UID:-1000}
       - BIRDNET_GID=${BIRDNET_GID:-1000}
       # Optional: uncomment to configure via environment variables
+      # BirdNET Configuration
       # - BIRDNET_LOCALE=en-us
       # - BIRDNET_LATITUDE=60.192059
       # - BIRDNET_LONGITUDE=24.945831
       # - BIRDNET_SENSITIVITY=1.0
+      # - BIRDNET_THRESHOLD=0.8
       # - BIRDNET_OVERLAP=1.5
+      # - BIRDNET_THREADS=0
+      # - BIRDNET_DEBUG=false
+      # - BIRDNET_USEXNNPACK=true
+      # Model Paths (for external models)
+      # - BIRDNET_MODELPATH=/path/to/model.tflite
+      # - BIRDNET_LABELPATH=/path/to/labels.txt
+      # Range Filter Configuration
+      # - BIRDNET_RANGEFILTER_MODEL=latest
+      # - BIRDNET_RANGEFILTER_THRESHOLD=0.01
+      # - BIRDNET_RANGEFILTER_MODELPATH=/path/to/rangefilter.tflite
+      # - BIRDNET_RANGEFILTER_DEBUG=false
     volumes:
       - ./config:/config
       - ./data:/data
