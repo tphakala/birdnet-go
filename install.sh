@@ -1480,36 +1480,222 @@ check_port_availability() {
     local port="$1"
     
     # Try multiple methods to ensure portability
-    # First try netcat if available
+    # Each method is independent - nc only short-circuits on positive detection
+    
+    # 1) Quick nc probe (IPv4 and IPv6); only short-circuit on positive detection
     if command_exists nc; then
-        if nc -z localhost "$port" 2>/dev/null; then
+        if nc -z -w1 127.0.0.1 "$port" 2>/dev/null || nc -z -w1 ::1 "$port" 2>/dev/null; then
             return 1 # Port is in use
-        else
-            return 0 # Port is available
         fi
-    # Then try ss from iproute2, which is common on modern Linux
-    elif command_exists ss; then
-        if ss -lnt | grep -q ":$port "; then
-            return 1 # Port is in use
-        else
-            return 0 # Port is available
-        fi
-    # Then try lsof
-    elif command_exists lsof; then
-        if lsof -i:"$port" >/dev/null 2>&1; then
-            return 1 # Port is in use
-        else
-            return 0 # Port is available
-        fi
-    # Finally try a direct connection with timeout
-    else
-        # Try to connect to the port, timeout after 1 second
-        if (echo > /dev/tcp/localhost/"$port") >/dev/null 2>&1; then
+    fi
+    
+    # 2) ss with sport filter (covers IPv4/IPv6 listeners)
+    if command_exists ss; then
+        if [ -n "$(ss -H -ltn "sport = :$port" 2>/dev/null)" ]; then
             return 1 # Port is in use
         else
             return 0 # Port is available
         fi
     fi
+    
+    # 3) lsof (explicit LISTEN)
+    if command_exists lsof; then
+        if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+            return 1 # Port is in use
+        else
+            return 0 # Port is available
+        fi
+    fi
+    
+    # 4) /dev/tcp fallback with timeout
+    if timeout 1 bash -c "echo > /dev/tcp/127.0.0.1/$port" 2>/dev/null; then
+        return 1 # Port is in use
+    else
+        return 0 # Port is available
+    fi
+}
+
+# Function to get process information using a port
+get_port_process_info() {
+    local port="$1"
+    local process_info
+    local ss_output
+    local proc_name
+    
+    # Try using ss first with headerless output and sport filter
+    if command_exists ss; then
+        # Use ss with headerless flag and sport filter
+        ss_output=$(ss -H -tlnp "sport = :$port" 2>/dev/null)
+        
+        if [ -n "$ss_output" ]; then
+            # Parse with awk instead of grep -P to avoid PCRE dependency
+            # Extract process name from users field using awk
+            proc_name=$(echo "$ss_output" | awk -F'"' '/users:/{print $2}' | head -1)
+            
+            # If no quotes, try alternative parsing
+            if [ -z "$proc_name" ]; then
+                proc_name=$(echo "$ss_output" | awk '/users:/{gsub(/.*users:\(\(/, ""); gsub(/,.*/, ""); gsub(/"/, ""); print}' | head -1)
+            fi
+            
+            if [ -n "$proc_name" ]; then
+                process_info="$proc_name"
+            else
+                # Check if port is listening but no process info available
+                if echo "$ss_output" | grep -q "LISTEN"; then
+                    process_info="(permission denied to get process name)"
+                fi
+            fi
+        else
+            # When ss -p produces no output (unprivileged), re-check without -p flag
+            # to detect if port is actually listening
+            ss_output=$(ss -H -tln "sport = :$port" 2>/dev/null)
+            if [ -n "$ss_output" ]; then
+                process_info="(permission denied to get process name)"
+            fi
+        fi
+    fi
+    
+    # If ss didn't work, try lsof with explicit flags for safety
+    if [ -z "$process_info" ] && command_exists lsof; then
+        # Try without sudo first with explicit flags
+        proc_name=$(lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $1}' | head -1)
+        
+        if [ -z "$proc_name" ] && command_exists sudo; then
+            # Only try with sudo if first attempt failed
+            proc_name=$(sudo -n lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $1}' | head -1)
+        fi
+        
+        if [ -n "$proc_name" ]; then
+            process_info="$proc_name"
+        fi
+    fi
+    
+    # If still no info, try netstat as last resort
+    if [ -z "$process_info" ] && command_exists netstat; then
+        # Try to get process name with elevated permissions if available
+        proc_name=""
+        if command_exists sudo; then
+            # Single awk command that matches local address ending with :<port> and extracts program name
+            proc_name=$(sudo -n netstat -tlnp 2>/dev/null | awk -v port=":$port" '$4 ~ port"$" {split($7, a, "/"); print a[2]}' | head -1)
+        fi
+        
+        if [ -n "$proc_name" ]; then
+            process_info="$proc_name"
+        else
+            # Check if port is in use without process info
+            if netstat -tln 2>/dev/null | awk -v port=":$port" '$4 ~ port"$" {exit 0} END {exit 1}'; then
+                process_info="(permission denied to get process name)"
+            fi
+        fi
+    fi
+    
+    # Return the process info or "unknown process"
+    if [ -n "$process_info" ]; then
+        echo "$process_info"
+    else
+        echo "unknown process"
+    fi
+}
+
+# Function to validate all required ports
+# Note: Docker daemon runs as root and handles privileged port binding (80, 443)
+# This check ensures ports are free before Docker attempts to bind them
+validate_required_ports() {
+    local ports_to_check=("80" "443" "$WEB_PORT" "8090")
+    local unique_ports=()
+    local failed_ports=()
+    local port_processes=()
+    local port
+    local process_info
+    
+    # Use associative array for efficient deduplication
+    local -A seen
+    
+    # Deduplicate ports array to avoid double-checking
+    for port in "${ports_to_check[@]}"; do
+        # Skip empty entries
+        if [ -z "$port" ]; then
+            continue
+        fi
+        
+        # Only add if not seen before
+        if [ -z "${seen[$port]:-}" ]; then
+            seen[$port]=1
+            unique_ports+=("$port")
+        fi
+    done
+    
+    print_message "\n🔌 Checking required port availability..." "$YELLOW"
+    
+    for port in "${unique_ports[@]}"; do
+        if ! check_port_availability "$port"; then
+            failed_ports+=("$port")
+            process_info=$(get_port_process_info "$port")
+            port_processes+=("$process_info")
+            print_message "❌ Port $port is already in use by: $process_info" "$RED"
+        else
+            print_message "✅ Port $port is available" "$GREEN"
+        fi
+    done
+    
+    # If any ports are in use, show detailed error and exit
+    if [ ${#failed_ports[@]} -gt 0 ]; then
+        print_message "\n❌ ERROR: Required ports are not available" "$RED"
+        print_message "\nBirdNET-Go requires the following ports to be available:" "$YELLOW"
+        print_message "  • Port 80   - HTTP web interface" "$YELLOW"
+        print_message "  • Port 443  - HTTPS web interface (with SSL)" "$YELLOW"
+        if [ "$WEB_PORT" != "80" ] && [ "$WEB_PORT" != "443" ]; then
+            print_message "  • Port $WEB_PORT - Primary web interface" "$YELLOW"
+        fi
+        print_message "  • Port 8090 - Prometheus metrics endpoint" "$YELLOW"
+        
+        print_message "\n📋 Ports currently in use:" "$RED"
+        for i in "${!failed_ports[@]}"; do
+            print_message "  • Port ${failed_ports[$i]} - Used by: ${port_processes[$i]}" "$RED"
+        done
+        
+        print_message "\n💡 To resolve this issue, you can:" "$YELLOW"
+        print_message "\n1. Stop the conflicting services:" "$YELLOW"
+        
+        # Provide specific instructions based on common services
+        for i in "${!failed_ports[@]}"; do
+            local port="${failed_ports[$i]}"
+            local process="${port_processes[$i]}"
+            # Convert to lowercase for case-insensitive matching
+            local process_lower
+            process_lower=$(echo "$process" | tr '[:upper:]' '[:lower:]')
+            
+            if [[ "$process_lower" == *"apache"* ]] || [[ "$process_lower" == *"httpd"* ]]; then
+                print_message "   sudo systemctl stop apache2  # For Apache on port $port" "$NC"
+            elif [[ "$process_lower" == *"nginx"* ]]; then
+                print_message "   sudo systemctl stop nginx    # For Nginx on port $port" "$NC"
+            elif [[ "$process_lower" == *"lighttpd"* ]]; then
+                print_message "   sudo systemctl stop lighttpd # For Lighttpd on port $port" "$NC"
+            elif [[ "$process_lower" == *"caddy"* ]]; then
+                print_message "   sudo systemctl stop caddy    # For Caddy on port $port" "$NC"
+            elif [[ "$port" == "80" ]] || [[ "$port" == "443" ]]; then
+                print_message "   sudo systemctl stop <service> # Replace <service> with the service using port $port" "$NC"
+            fi
+        done
+        
+        print_message "\n2. Or use Docker with different port mappings (advanced users):" "$YELLOW"
+        print_message "   Modify the systemd service file after installation to use different ports" "$NC"
+        
+        print_message "\n3. Or uninstall conflicting software if not needed:" "$YELLOW"
+        print_message "   sudo apt remove <package-name>" "$NC"
+        
+        print_message "\n⚠️  Note: BirdNET-Go's Caddy web server requires ports 80 and 443 for:" "$YELLOW"
+        print_message "  • Automatic HTTPS certificate generation (Let's Encrypt)" "$YELLOW"
+        print_message "  • HTTP to HTTPS redirection" "$YELLOW"
+        print_message "  • Proper web interface functionality" "$YELLOW"
+        
+        send_telemetry_event "error" "Port availability check failed" "error" "step=validate_required_ports,failed_ports=${failed_ports[*]}"
+        
+        return 1
+    fi
+    
+    print_message "✅ All required ports are available" "$GREEN"
+    return 0
 }
 
 # Function to configure web interface port
@@ -1520,7 +1706,9 @@ configure_web_port() {
     print_message "\n🔌 Checking web interface port availability..." "$YELLOW"
     
     if ! check_port_availability $WEB_PORT; then
-        print_message "❌ Port $WEB_PORT is already in use" "$RED"
+        local process_info
+        process_info=$(get_port_process_info "$WEB_PORT")
+        print_message "❌ Port $WEB_PORT is already in use by: $process_info" "$RED"
         
         while true; do
             print_message "Please enter a different port number (1024-65535): " "$YELLOW" "nonewline"
@@ -1533,7 +1721,8 @@ configure_web_port() {
                     print_message "✅ Port $WEB_PORT is available" "$GREEN"
                     break
                 else
-                    print_message "❌ Port $custom_port is also in use. Please try another port." "$RED"
+                    process_info=$(get_port_process_info "$custom_port")
+                    print_message "❌ Port $custom_port is also in use by: $process_info. Please try another port." "$RED"
                 fi
             else
                 print_message "❌ Invalid port number. Please enter a number between 1024 and 65535." "$RED"
@@ -1544,7 +1733,14 @@ configure_web_port() {
     fi
     
     # Update config file with port
-    sed -i "s/port: 8080/port: $WEB_PORT/" "$CONFIG_FILE"
+    sed -i -E "s/^(\\s*port:\\s*)[0-9]+/\\1$WEB_PORT/" "$CONFIG_FILE"
+    
+    # After configuring the web port, validate ALL required ports including 80 and 443
+    if ! validate_required_ports; then
+        print_message "\n❌ Installation cannot continue due to port conflicts" "$RED"
+        print_message "Please resolve the port conflicts and run the installer again." "$YELLOW"
+        exit 1
+    fi
 }
 
 # Generate systemd service content
