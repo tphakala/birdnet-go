@@ -50,6 +50,12 @@ func (h *Handlers) TestWeather(c echo.Context) error {
 			Units    string `json:"units"`
 			Language string `json:"language"`
 		} `json:"openWeather"`
+		Wunderground struct {
+			APIKey    string `json:"apiKey"`
+			StationID string `json:"stationId"`
+			Endpoint  string `json:"endpoint"`
+			Units     string `json:"units"`
+		} `json:"wunderground"`
 	}
 
 	var testConfig TestConfig
@@ -77,6 +83,12 @@ func (h *Handlers) TestWeather(c echo.Context) error {
 						Endpoint: testConfig.OpenWeather.Endpoint,
 						Units:    testConfig.OpenWeather.Units,
 						Language: testConfig.OpenWeather.Language,
+					},
+					Wunderground: conf.WundergroundSettings{
+						APIKey:    testConfig.Wunderground.APIKey,
+						StationID: testConfig.Wunderground.StationID,
+						Endpoint:  testConfig.Wunderground.Endpoint,
+						Units:     testConfig.Wunderground.Units,
 					},
 				},
 			},
@@ -246,6 +258,37 @@ func (h *Handlers) testWeatherProvider(ctx context.Context, settings *conf.Setti
 		}
 	}
 
+	if settings.Realtime.Weather.Provider == "wunderground" {
+		// Emit running/authenticating progress before validating credentials
+		sendResult(WeatherTestResult{
+			Success:    true,
+			Stage:      stageWeatherAuthentication,
+			Message:    "Authenticating with Wunderground...",
+			State:      "running",
+			IsProgress: true,
+		})
+
+		apiKey := settings.Realtime.Weather.Wunderground.APIKey
+		stationId := settings.Realtime.Weather.Wunderground.StationID
+		if apiKey == "" || stationId == "" {
+			sendResult(WeatherTestResult{
+				Success: false,
+				Stage:   stageWeatherAuthentication,
+				Message: "Wunderground API key or Station ID is not configured",
+				Error:   "Missing API key or Station ID",
+				State:   "failed",
+			})
+			return
+		}
+		sendResult(WeatherTestResult{
+			Success:    true,
+			Stage:      stageWeatherAuthentication,
+			Message:    "Wunderground API key and Station ID are configured.",
+			State:      "completed",
+			IsProgress: false,
+		})
+	}
+
 	// Stage 3: Weather Data Fetch
 	sendResult(WeatherTestResult{
 		Success:    true,
@@ -262,6 +305,8 @@ func (h *Handlers) testWeatherProvider(ctx context.Context, settings *conf.Setti
 		provider = weather.NewYrNoProvider()
 	case "openweather":
 		provider = weather.NewOpenWeatherProvider()
+	case "wunderground":
+		provider = weather.NewWundergroundProvider(nil)
 	default:
 		sendResult(WeatherTestResult{
 			Success: false,
@@ -335,6 +380,16 @@ func (h *Handlers) testWeatherAPIConnectivity(ctx context.Context, settings *con
 	case "openweather":
 		// For OpenWeather, we'll test the base domain
 		testURL = "https://api.openweathermap.org"
+	case "wunderground":
+		// Prefer custom endpoint if provided; ensure scheme; fallback to default base domain
+		testURL = settings.Realtime.Weather.Wunderground.Endpoint
+		if testURL != "" {
+			if !strings.HasPrefix(testURL, "http://") && !strings.HasPrefix(testURL, "https://") {
+				testURL = "https://" + testURL
+			}
+		} else {
+			testURL = "https://api.weather.com"
+		}
 	default:
 		return WeatherTestResult{
 			Success: false,
@@ -549,6 +604,9 @@ func generateWeatherTroubleshootingHint(result *WeatherTestResult) string {
 		if result.Provider == "openweather" {
 			return "Please verify that your OpenWeather API key is correct and active. You can check your API key status at https://home.openweathermap.org/api_keys"
 		}
+		if result.Provider == "wunderground" {
+			return "Please verify your Wunderground API key and Station ID. You can manage your credentials at https://www.wunderground.com/member/api-keys and locate your Station ID on the Member Devices page at https://www.wunderground.com/member/devices."
+		}
 		return "Authentication failed. Check your API credentials."
 
 	case stageWeatherDataFetch:
@@ -572,6 +630,8 @@ func getProviderDisplayName(provider string) string {
 		return "Yr.no"
 	case "openweather":
 		return "OpenWeather"
+	case "wunderground":
+		return "Wunderground"
 	default:
 		return provider
 	}

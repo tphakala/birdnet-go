@@ -39,11 +39,12 @@
  * - Automatic persistence to server
  * - Error handling and user feedback
  */
-import { writable, derived, get } from 'svelte/store';
-import { settingsAPI } from '$lib/utils/settingsApi.js';
-import { toastActions } from './toast.js';
 import { safeGet, safeSpread } from '$lib/utils/security';
+import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { coerceSettings } from '$lib/utils/settingsCoercion';
+import { weatherDefaults } from '$lib/utils/weatherDefaults';
+import { derived, get, writable } from 'svelte/store';
+import { toastActions } from './toast.js';
 
 // Type definitions for settings - Updated interfaces
 export interface MainSettings {
@@ -254,11 +255,19 @@ export interface OpenWeatherSettings {
   language: string;
 }
 
+export interface WundergroundSettings {
+  apiKey: string;
+  stationId: string;
+  endpoint: string;
+  units: 'm' | 'e' | 'h'; // m=metric, e=imperial/english, h=UK hybrid
+}
+
 export interface WeatherSettings {
-  provider: 'none' | 'yrno' | 'openweather';
+  provider: 'none' | 'yrno' | 'openweather' | 'wunderground';
   pollInterval: number;
   debug: boolean;
   openWeather: OpenWeatherSettings;
+  wunderground: WundergroundSettings;
 }
 
 export interface SecuritySettings {
@@ -549,18 +558,7 @@ function createEmptySettings(): SettingsFormData {
         exclude: [],
         config: {},
       },
-      weather: {
-        provider: 'none',
-        pollInterval: 60,
-        debug: false,
-        openWeather: {
-          enabled: false,
-          apiKey: '',
-          endpoint: 'https://api.openweathermap.org/data/2.5/weather',
-          units: 'metric',
-          language: 'en',
-        },
-      },
+      weather: weatherDefaults,
       dashboard: {
         thumbnails: {
           summary: true,

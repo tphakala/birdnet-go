@@ -1096,7 +1096,32 @@
           "options": {
             "none": "Ei mitään",
             "yrno": "Yr.no",
-            "openweather": "OpenWeather"
+            "openweather": "OpenWeather",
+            "wunderground": "Weather Underground"
+          }
+        },
+        "wunderground": {
+          "title": "Weather Underground",
+          "description": "Hae säätiedot havainnoille Weather Underground -rajapinnan kautta (vain englanniksi)",
+          "apiKey": {
+            "label": "API-avain",
+            "helpText": "Weather Underground API-avaimesi. Pidä tämä salassa!"
+          },
+          "stationId": {
+            "label": "Aseman tunnus",
+            "helpText": "Weather Underground PWS-asemasi tunnus (esim. KCAOAKLA12)."
+          },
+          "endpoint": {
+            "label": "API-päätepiste",
+            "helpText": "Korvaa tarvittaessa Weather Undergroundin oletus-API-päätepiste. Oletuksena käytetään https://api.weather.com/v2/pws/observations/current jos jätet tyhjäksi."
+          },
+          "units": {
+            "label": "Lämpötilayksiköt",
+            "helpText": "Valitse lämpötilan näyttöyksiköt",
+            "metric": "Metrinen (°C)",
+            "imperial": "Brittiläinen (°F)",
+            "ukhybrid": "UK Hybrid (°C/°F)",
+            "scientific": "Tieteellinen (K)"
           }
         },
         "notes": {
@@ -1105,11 +1130,12 @@
             "description": "Sääennustetiedot tarjoaa Yr.no, Norjan meteorologisen instituutin (met.no) ja Norjan yleisradioyhtiön (NRK) yhteinen palvelu.",
             "freeService": "Yr on ilmainen säätietopalvelu. Lisätietoja: <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
-          "openweather": "OpenWeatherin käyttö vaatii API-avaimen, rekisteröidy ilmaiselle API-avaimelle osoitteessa <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>."
+          "openweather": "OpenWeatherin käyttö vaatii API-avaimen, rekisteröidy ilmaiselle API-avaimelle osoitteessa <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
+          "wunderground": "Vaatii Weather Underground API-avaimen ja kelvollisen PWS-asematunnuksen. Katso lisätietoja <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>."
         },
         "apiKey": {
           "label": "API-avain",
-          "helpText": "OpenWeather API-avaimesi. Pidä tämä salassa!"
+          "helpText": "Sääpalveluntarjoajan API-avaimesi. Pidä tämä salassa!"
         },
         "units": {
           "label": "Mittayksiköt",
@@ -1123,7 +1149,7 @@
           "button": "Testaa sääpalvelu",
           "loading": "Testataan...",
           "noProvider": "Sääpalvelua ei valittu",
-          "apiKeyRequired": "OpenWeather API-avain täytyy määrittää",
+          "apiKeyRequired": "API-avain täytyy määrittää",
           "inProgress": "Testaus käynnissä...",
           "description": "Testaa sääpalveluyhteys"
         }

@@ -1015,7 +1015,26 @@
           "options": {
             "none": "Keiner",
             "yrno": "Yr.no",
-            "openweather": "OpenWeather"
+            "openweather": "OpenWeather",
+            "wunderground": "Weather Underground"
+          }
+        },
+        "wunderground": {
+          "apiKey": {
+            "label": "Wunderground API-Schlüssel",
+            "helpText": "Geben Sie Ihren Weather Underground API-Schlüssel ein. Erforderlich für Wetterdaten."
+          },
+          "stationId": {
+            "label": "Stations-ID",
+            "helpText": "Ihre Weather Underground PWS Stations-ID (z.B. KCAOAKLA12)."
+          },
+          "endpoint": {
+            "label": "API-Endpunkt",
+            "helpText": "Überschreiben Sie den Standard-Weather Underground API-Endpunkt, falls nötig. Standardmäßig wird https://api.weather.com/v2/pws/observations/current verwendet, wenn leer gelassen."
+          },
+          "units": {
+            "label": "Maßeinheiten",
+            "helpText": "Wählen Sie Maßeinheiten für Temperatur und Windgeschwindigkeit: Metrisch, Imperial oder UK‑Hybrid."
           }
         },
         "notes": {
@@ -1024,25 +1043,27 @@
             "description": "Wettervorhersagedaten werden von Yr.no bereitgestellt, einem gemeinsamen Service des Norwegischen Meteorologischen Instituts (met.no) und der Norwegischen Rundfunkgesellschaft (NRK).",
             "freeService": "Yr ist ein kostenloser Wetterdatendienst. Für weitere Informationen besuchen Sie <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
-          "openweather": "Die Nutzung von OpenWeather erfordert einen API-Schlüssel. Registrieren Sie sich für einen kostenlosen API-Schlüssel bei <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>."
+          "openweather": "Die Nutzung von OpenWeather erfordert einen API-Schlüssel. Registrieren Sie sich für einen kostenlosen API-Schlüssel bei <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
+          "wunderground": "Erfordert einen Weather Underground API-Schlüssel und eine gültige PWS-Stations-ID. Weitere Informationen unter <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>."
         },
         "apiKey": {
           "label": "API-Schlüssel",
-          "helpText": "Ihr OpenWeather API-Schlüssel. Halten Sie ihn geheim!"
+          "helpText": "Ihr API-Schlüssel für den ausgewählten Wetteranbieter. Halten Sie ihn geheim!"
         },
         "units": {
           "label": "Maßeinheiten",
           "options": {
             "standard": "Standard",
             "metric": "Metrisch",
-            "imperial": "Imperial"
+            "imperial": "Imperial",
+            "ukhybrid": "UK Hybrid"
           }
         },
         "test": {
           "button": "Wetteranbieter testen",
           "loading": "Teste...",
           "noProvider": "Kein Wetteranbieter ausgewählt",
-          "apiKeyRequired": "OpenWeather API-Schlüssel muss angegeben werden",
+          "apiKeyRequired": "API-Schlüssel muss angegeben werden",
           "inProgress": "Test läuft...",
           "description": "Wetteranbieter-Verbindung testen"
         }

@@ -145,6 +145,12 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.weather.openweather.units", "metric")
 	viper.SetDefault("realtime.weather.openweather.language", "en")
 
+	// Weather Underground specific configuration
+	viper.SetDefault("realtime.weather.wunderground.apikey", "")
+	viper.SetDefault("realtime.weather.wunderground.stationid", "")
+	viper.SetDefault("realtime.weather.wunderground.endpoint", "https://api.weather.com/v2/pws/observations/current")
+	viper.SetDefault("realtime.weather.wunderground.units", "m") // m=metric, e=imperial, h=UK hybrid
+
 	// RTSP configuration
 	viper.SetDefault("realtime.rtsp.urls", []string{})
 	viper.SetDefault("realtime.rtsp.transport", "tcp")

@@ -24,12 +24,12 @@ var configFiles embed.FS
 
 // EqualizerFilter is a struct for equalizer filter settings
 type EqualizerFilter struct {
-	Type      string  `json:"type"`      // e.g., "LowPass", "HighPass", "BandPass", etc.
+	Type      string  `json:"type"` // e.g., "LowPass", "HighPass", "BandPass", etc.
 	Frequency float64 `json:"frequency"`
 	Q         float64 `json:"q"`
-	Gain      float64 `json:"gain"`      // Only used for certain filter types like Peaking
-	Width     float64 `json:"width"`     // Only used for certain filter types like BandPass and BandReject
-	Passes    int     `json:"passes"`    // Filter passes for added attenuation or gain
+	Gain      float64 `json:"gain"`   // Only used for certain filter types like Peaking
+	Width     float64 `json:"width"`  // Only used for certain filter types like BandPass and BandReject
+	Passes    int     `json:"passes"` // Filter passes for added attenuation or gain
 }
 
 // EqualizerSettings is a struct for audio EQ settings
@@ -59,21 +59,21 @@ type RetentionSettings struct {
 // AudioSettings contains settings for audio processing and export.
 // SoundLevelSettings contains settings for sound level monitoring
 type SoundLevelSettings struct {
-	Enabled              bool `yaml:"enabled" mapstructure:"enabled" json:"enabled"`                               // true to enable sound level monitoring
-	Interval             int  `yaml:"interval" mapstructure:"interval" json:"interval"`                             // measurement interval in seconds (default: 10)
-	Debug                bool `yaml:"debug" mapstructure:"debug" json:"debug"`                                   // true to enable debug logging for sound level monitoring
+	Enabled              bool `yaml:"enabled" mapstructure:"enabled" json:"enabled"`                                            // true to enable sound level monitoring
+	Interval             int  `yaml:"interval" mapstructure:"interval" json:"interval"`                                         // measurement interval in seconds (default: 10)
+	Debug                bool `yaml:"debug" mapstructure:"debug" json:"debug"`                                                  // true to enable debug logging for sound level monitoring
 	DebugRealtimeLogging bool `yaml:"debug_realtime_logging" mapstructure:"debug_realtime_logging" json:"debugRealtimeLogging"` // true to log debug messages for every realtime update, false to log only at configured interval
 }
 
 type AudioSettings struct {
-	Source          string             `yaml:"source" mapstructure:"source" json:"source"`          // audio source to use for analysis
-	FfmpegPath      string             `yaml:"ffmpegpath" mapstructure:"ffmpegpath" json:"ffmpegPath"`      // path to ffmpeg, runtime value
-	SoxPath         string             `yaml:"soxpath" mapstructure:"soxpath" json:"soxPath"`         // path to sox, runtime value
-	SoxAudioTypes   []string           `yaml:"-" json:"-"`     // supported audio types of sox, runtime value
-	StreamTransport string             `json:"streamTransport"` // preferred transport for audio streaming: "auto", "sse", or "ws"
-	Export          ExportSettings     `json:"export"`          // export settings
-	SoundLevel      SoundLevelSettings `json:"soundLevel"`      // sound level monitoring settings
-	UseAudioCore    bool               `yaml:"useaudiocore" mapstructure:"useaudiocore" json:"useAudioCore"`    // true to use new audiocore package instead of myaudio
+	Source          string             `yaml:"source" mapstructure:"source" json:"source"`                   // audio source to use for analysis
+	FfmpegPath      string             `yaml:"ffmpegpath" mapstructure:"ffmpegpath" json:"ffmpegPath"`       // path to ffmpeg, runtime value
+	SoxPath         string             `yaml:"soxpath" mapstructure:"soxpath" json:"soxPath"`                // path to sox, runtime value
+	SoxAudioTypes   []string           `yaml:"-" json:"-"`                                                   // supported audio types of sox, runtime value
+	StreamTransport string             `json:"streamTransport"`                                              // preferred transport for audio streaming: "auto", "sse", or "ws"
+	Export          ExportSettings     `json:"export"`                                                       // export settings
+	SoundLevel      SoundLevelSettings `json:"soundLevel"`                                                   // sound level monitoring settings
+	UseAudioCore    bool               `yaml:"useaudiocore" mapstructure:"useaudiocore" json:"useAudioCore"` // true to use new audiocore package instead of myaudio
 
 	Equalizer EqualizerSettings `json:"equalizer"` // equalizer settings
 }
@@ -131,10 +131,19 @@ type EBirdSettings struct {
 
 // WeatherSettings contains all weather-related settings
 type WeatherSettings struct {
-	Provider     string              `json:"provider"`     // "none", "yrno" or "openweather"
-	PollInterval int                 `json:"pollInterval"` // weather data polling interval in minutes
-	Debug        bool                `json:"debug"`        // true to enable debug mode
-	OpenWeather  OpenWeatherSettings `json:"openWeather"`  // OpenWeather integration settings
+	Provider     string               `json:"provider"`     // "none", "yrno", "openweather", or "wunderground"
+	PollInterval int                  `json:"pollInterval"` // weather data polling interval in minutes
+	Debug        bool                 `json:"debug"`        // true to enable debug mode
+	OpenWeather  OpenWeatherSettings  `json:"openWeather"`  // OpenWeather integration settings
+	Wunderground WundergroundSettings `json:"wunderground"` // WeatherUnderground integration settings
+}
+
+// WundergroundSettings contains settings for WeatherUnderground integration.
+type WundergroundSettings struct {
+	APIKey    string `json:"apiKey"`    // WeatherUnderground API key
+	StationID string `json:"stationId"` // WeatherUnderground station ID
+	Endpoint  string `json:"endpoint"`  // WeatherUnderground API endpoint
+	Units     string `json:"units"`     // units of measurement: "e" (imperial), "m" (metric), "h" (UK hybrid)
 }
 
 // OpenWeatherSettings contains settings for OpenWeather integration.
@@ -170,10 +179,10 @@ type RTSPHealthSettings struct {
 
 // RTSPSettings contains settings for RTSP streaming.
 type RTSPSettings struct {
-	Transport        string              `json:"transport"`        // RTSP Transport Protocol
-	URLs             []string            `json:"urls"`             // RTSP stream URL
-	Health           RTSPHealthSettings  `json:"health"`           // health monitoring settings
-	FFmpegParameters []string            `json:"ffmpegParameters"` // optional custom FFmpeg parameters
+	Transport        string             `json:"transport"`        // RTSP Transport Protocol
+	URLs             []string           `json:"urls"`             // RTSP stream URL
+	Health           RTSPHealthSettings `json:"health"`           // health monitoring settings
+	FFmpegParameters []string           `json:"ffmpegParameters"` // optional custom FFmpeg parameters
 }
 
 // MQTTSettings contains settings for MQTT integration.
@@ -191,8 +200,8 @@ type MQTTSettings struct {
 
 // MQTTTLSSettings contains TLS/SSL configuration for secure MQTT connections
 type MQTTTLSSettings struct {
-	Enabled            bool   `json:"enabled"`            // true to enable TLS (auto-detected from broker URL)
-	InsecureSkipVerify bool   `json:"insecureSkipVerify"` // true to skip certificate verification (for self-signed certs)
+	Enabled            bool   `json:"enabled"`                                          // true to enable TLS (auto-detected from broker URL)
+	InsecureSkipVerify bool   `json:"insecureSkipVerify"`                               // true to skip certificate verification (for self-signed certs)
 	CACert             string `yaml:"cacert,omitempty" json:"caCert,omitempty"`         // path to CA certificate file (managed internally)
 	ClientCert         string `yaml:"clientcert,omitempty" json:"clientCert,omitempty"` // path to client certificate file (managed internally)
 	ClientKey          string `yaml:"clientkey,omitempty" json:"clientKey,omitempty"`   // path to client key file (managed internally)
@@ -248,33 +257,33 @@ type RealtimeSettings struct {
 		Path    string `json:"path"`    // path to OBS chat log
 	} `json:"log"`
 	LogDeduplication LogDeduplicationSettings `json:"logDeduplication"` // Log deduplication settings
-	Birdweather   BirdweatherSettings   `json:"birdweather"`   // Birdweather integration settings
-	EBird         EBirdSettings         `json:"ebird"`         // eBird integration settings
-	OpenWeather   OpenWeatherSettings   `yaml:"-" json:"-"`    // OpenWeather integration settings
-	PrivacyFilter PrivacyFilterSettings `json:"privacyFilter"` // Privacy filter settings
-	DogBarkFilter DogBarkFilterSettings `json:"dogBarkFilter"` // Dog bark filter settings
-	RTSP          RTSPSettings          `json:"rtsp"`          // RTSP settings
-	MQTT            MQTTSettings            `json:"mqtt"`            // MQTT settings
-	Telemetry       TelemetrySettings       `json:"telemetry"`       // Telemetry settings
-	Monitoring      MonitoringSettings      `json:"monitoring"`      // System resource monitoring settings
-	Species         SpeciesSettings         `json:"species"`         // Custom thresholds and actions for species
-	Weather         WeatherSettings         `json:"weather"`         // Weather provider related settings
-	SpeciesTracking SpeciesTrackingSettings `json:"speciesTracking"` // New species tracking settings
+	Birdweather      BirdweatherSettings      `json:"birdweather"`      // Birdweather integration settings
+	EBird            EBirdSettings            `json:"ebird"`            // eBird integration settings
+	OpenWeather      OpenWeatherSettings      `yaml:"-" json:"-"`       // OpenWeather integration settings
+	PrivacyFilter    PrivacyFilterSettings    `json:"privacyFilter"`    // Privacy filter settings
+	DogBarkFilter    DogBarkFilterSettings    `json:"dogBarkFilter"`    // Dog bark filter settings
+	RTSP             RTSPSettings             `json:"rtsp"`             // RTSP settings
+	MQTT             MQTTSettings             `json:"mqtt"`             // MQTT settings
+	Telemetry        TelemetrySettings        `json:"telemetry"`        // Telemetry settings
+	Monitoring       MonitoringSettings       `json:"monitoring"`       // System resource monitoring settings
+	Species          SpeciesSettings          `json:"species"`          // Custom thresholds and actions for species
+	Weather          WeatherSettings          `json:"weather"`          // Weather provider related settings
+	SpeciesTracking  SpeciesTrackingSettings  `json:"speciesTracking"`  // New species tracking settings
 }
 
 // SpeciesAction represents a single action configuration
 type SpeciesAction struct {
-	Type            string   `yaml:"type" json:"type"`                        // Type of action (ExecuteCommand, etc)
-	Command         string   `yaml:"command" json:"command"`                  // Path to the command to execute
-	Parameters      []string `yaml:"parameters" json:"parameters"`            // Action parameters
+	Type            string   `yaml:"type" json:"type"`                       // Type of action (ExecuteCommand, etc)
+	Command         string   `yaml:"command" json:"command"`                 // Path to the command to execute
+	Parameters      []string `yaml:"parameters" json:"parameters"`           // Action parameters
 	ExecuteDefaults bool     `yaml:"executeDefaults" json:"executeDefaults"` // Whether to also execute default actions
 }
 
 // SpeciesConfig represents configuration for a specific species
 type SpeciesConfig struct {
-	Threshold float64         `yaml:"threshold" json:"threshold"`                    // Confidence threshold
+	Threshold float64         `yaml:"threshold" json:"threshold"`                   // Confidence threshold
 	Interval  int             `yaml:"interval,omitempty" json:"interval,omitempty"` // New field: Custom interval in seconds
-	Actions   []SpeciesAction `yaml:"actions" json:"actions"`                      // List of actions to execute
+	Actions   []SpeciesAction `yaml:"actions" json:"actions"`                       // List of actions to execute
 }
 
 // RealtimeSpeciesSettings contains all species-specific settings
@@ -286,18 +295,18 @@ type SpeciesSettings struct {
 
 // LogDeduplicationSettings contains settings for log deduplication
 type LogDeduplicationSettings struct {
-	Enabled              bool `json:"enabled"`              // true to enable log deduplication
+	Enabled                    bool `json:"enabled"`                    // true to enable log deduplication
 	HealthCheckIntervalSeconds int  `json:"healthCheckIntervalSeconds"` // Health check interval in seconds (default: 60)
 }
 
 // SpeciesTrackingSettings contains settings for tracking new species
 type SpeciesTrackingSettings struct {
-	Enabled              bool                   `json:"enabled"`              // true to enable new species tracking
-	NewSpeciesWindowDays int                    `json:"newSpeciesWindowDays"` // Days to consider a species "new" (default: 14)
-	SyncIntervalMinutes  int                    `json:"syncIntervalMinutes"`  // Interval to sync with database (default: 60)
-	NotificationSuppressionHours int           `json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 168)
-	YearlyTracking       YearlyTrackingSettings `json:"yearlyTracking"`       // Settings for yearly species tracking
-	SeasonalTracking     SeasonalTrackingSettings `json:"seasonalTracking"`   // Settings for seasonal species tracking
+	Enabled              bool                     `json:"enabled"`              // true to enable new species tracking
+	NewSpeciesWindowDays int                      `json:"newSpeciesWindowDays"` // Days to consider a species "new" (default: 14)
+	SyncIntervalMinutes  int                      `json:"syncIntervalMinutes"`  // Interval to sync with database (default: 60)
+	NotificationSuppressionHours int             `json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 168)
+	YearlyTracking       YearlyTrackingSettings   `json:"yearlyTracking"`       // Settings for yearly species tracking
+	SeasonalTracking     SeasonalTrackingSettings `json:"seasonalTracking"`     // Settings for seasonal species tracking
 }
 
 // YearlyTrackingSettings contains settings for tracking first arrivals each year
@@ -346,7 +355,7 @@ func GetSeasonalTrackingWithHemisphere(settings SeasonalTrackingSettings, latitu
 // GetDefaultSeasons returns default seasons based on hemisphere
 func GetDefaultSeasons(latitude float64) map[string]Season {
 	hemisphere := DetectHemisphere(latitude)
-	
+
 	switch hemisphere {
 	case "northern":
 		// Northern hemisphere seasons
@@ -368,10 +377,10 @@ func GetDefaultSeasons(latitude float64) map[string]Season {
 		// Equatorial regions typically have wet and dry seasons
 		// Using approximate dates common to many equatorial regions
 		return map[string]Season{
-			"wet1": {StartMonth: 3, StartDay: 1},   // March-May wet season
-			"dry1": {StartMonth: 6, StartDay: 1},   // June-August dry season
-			"wet2": {StartMonth: 9, StartDay: 1},   // September-November wet season
-			"dry2": {StartMonth: 12, StartDay: 1},  // December-February dry season
+			"wet1": {StartMonth: 3, StartDay: 1},  // March-May wet season
+			"dry1": {StartMonth: 6, StartDay: 1},  // June-August dry season
+			"wet2": {StartMonth: 9, StartDay: 1},  // September-November wet season
+			"dry2": {StartMonth: 12, StartDay: 1}, // December-February dry season
 		}
 	}
 }
@@ -437,7 +446,7 @@ func (y *YearlyTrackingSettings) Validate() error {
 	case 4, 6, 9, 11: // April, June, September, November
 		maxDays = 30
 	}
-	
+
 	if y.ResetDay < 1 || y.ResetDay > maxDays {
 		return errors.Newf("reset day must be between 1 and %d for month %d, got %d", maxDays, y.ResetMonth, y.ResetDay).
 			Component("config").
@@ -465,7 +474,7 @@ func (s *SeasonalTrackingSettings) Validate() error {
 				return err
 			}
 		}
-		
+
 		// Check that we have at least 2 seasons
 		if len(s.Seasons) < 2 {
 			return errors.Newf("at least 2 seasons must be defined, got %d", len(s.Seasons)).
@@ -496,7 +505,7 @@ func (s *Season) Validate(name string) error {
 	case 4, 6, 9, 11: // April, June, September, November
 		maxDays = 30
 	}
-	
+
 	if s.StartDay < 1 || s.StartDay > maxDays {
 		return errors.Newf("season '%s' start day must be between 1 and %d for month %d, got %d", name, maxDays, s.StartMonth, s.StartDay).
 			Component("config").
@@ -532,16 +541,16 @@ type BirdNETConfig struct {
 	RangeFilter RangeFilterSettings `json:"rangeFilter"` // range filter settings
 	ModelPath   string              `json:"modelPath"`   // path to external model file (empty for embedded)
 	LabelPath   string              `json:"labelPath"`   // path to external label file (empty for embedded)
-	Labels      []string            `yaml:"-" json:"-"` // list of available species labels, runtime value
+	Labels      []string            `yaml:"-" json:"-"`  // list of available species labels, runtime value
 	UseXNNPACK  bool                `json:"useXnnpack"`  // true to use XNNPACK delegate for inference acceleration
 }
 
 // RangeFilterSettings contains settings for the range filter
 type RangeFilterSettings struct {
-	Debug       bool      `json:"debug"`                    // true to enable debug mode
-	Model       string    `json:"model"`                    // range filter model model
-	Threshold   float32   `json:"threshold"`                // rangefilter species occurrence threshold
-	Species     []string  `yaml:"-" json:"species,omitempty"` // list of included species, runtime value
+	Debug       bool      `json:"debug"`                          // true to enable debug mode
+	Model       string    `json:"model"`                          // range filter model model
+	Threshold   float32   `json:"threshold"`                      // rangefilter species occurrence threshold
+	Species     []string  `yaml:"-" json:"species,omitempty"`     // list of included species, runtime value
 	LastUpdated time.Time `yaml:"-" json:"lastUpdated,omitempty"` // last time the species list was updated, runtime value
 }
 
@@ -754,14 +763,14 @@ type BackupScheduleConfig struct {
 
 // BackupConfig contains backup-related configuration
 type BackupConfig struct {
-	Enabled        bool                   `yaml:"enabled" json:"enabled"`                 // Global flag to enable or disable the entire backup system. If false, no backups (manual or scheduled) will occur.
-	Debug          bool                   `yaml:"debug" json:"debug"`                     // If true, enables detailed debug logging for backup operations.
-	Encryption     bool                   `yaml:"encryption" json:"encryption"`           // If true, enables encryption for backup archives. Requires EncryptionKey to be set.
-	EncryptionKey  string                 `yaml:"encryption_key" json:"encryptionKey"`    // Base64-encoded encryption key used for AES-256-GCM encryption of backup archives. Must be kept secret and safe.
+	Enabled        bool                   `yaml:"enabled" json:"enabled"`                // Global flag to enable or disable the entire backup system. If false, no backups (manual or scheduled) will occur.
+	Debug          bool                   `yaml:"debug" json:"debug"`                    // If true, enables detailed debug logging for backup operations.
+	Encryption     bool                   `yaml:"encryption" json:"encryption"`          // If true, enables encryption for backup archives. Requires EncryptionKey to be set.
+	EncryptionKey  string                 `yaml:"encryption_key" json:"encryptionKey"`   // Base64-encoded encryption key used for AES-256-GCM encryption of backup archives. Must be kept secret and safe.
 	SanitizeConfig bool                   `yaml:"sanitize_config" json:"sanitizeConfig"` // If true, sensitive information (like passwords, API keys) will be removed from the configuration file copy that is included in the backup archive.
-	Retention      BackupRetention        `yaml:"retention" json:"retention"`             // Defines policies for how long and how many backups are kept.
-	Targets        []BackupTarget         `yaml:"targets" json:"targets"`                 // A list of configured backup targets (destinations) where backup archives will be stored.
-	Schedules      []BackupScheduleConfig `yaml:"schedules" json:"schedules"`             // A list of schedules (e.g., daily, weekly) that define when automatic backups should run.
+	Retention      BackupRetention        `yaml:"retention" json:"retention"`            // Defines policies for how long and how many backups are kept.
+	Targets        []BackupTarget         `yaml:"targets" json:"targets"`                // A list of configured backup targets (destinations) where backup archives will be stored.
+	Schedules      []BackupScheduleConfig `yaml:"schedules" json:"schedules"`            // A list of schedules (e.g., daily, weekly) that define when automatic backups should run.
 
 	// OperationTimeouts defines timeouts for various backup operations
 	OperationTimeouts struct {
@@ -777,9 +786,9 @@ type Settings struct {
 	Debug bool `json:"debug"` // true to enable debug mode
 
 	// Runtime values, not stored in config file
-	Version            string   `yaml:"-" json:"version,omitempty"` // Version from build
-	BuildDate          string   `yaml:"-" json:"buildDate,omitempty"` // Build date from build
-	SystemID           string   `yaml:"-" json:"systemId,omitempty"` // Unique system identifier for telemetry
+	Version            string   `yaml:"-" json:"version,omitempty"`            // Version from build
+	BuildDate          string   `yaml:"-" json:"buildDate,omitempty"`          // Build date from build
+	SystemID           string   `yaml:"-" json:"systemId,omitempty"`           // Unique system identifier for telemetry
 	ValidationWarnings []string `yaml:"-" json:"validationWarnings,omitempty"` // Configuration validation warnings for telemetry
 
 	Main struct {
@@ -882,15 +891,15 @@ func Load() (*Settings, error) {
 				Context("operation", "generate_session_secret").
 				Build()
 		}
-		
+
 		settings.Security.SessionSecret = sessionSecret
-		
+
 		// Also set it in viper so it gets saved to config file
 		viper.Set("security.sessionsecret", sessionSecret)
-		
+
 		// Log that we generated a new session secret
 		log.Printf("Generated new SessionSecret for existing configuration")
-		
+
 		// Save the updated config back to file to persist the generated secret
 		// This ensures the secret remains the same across restarts
 		configFile := viper.ConfigFileUsed()
@@ -914,8 +923,8 @@ func Load() (*Settings, error) {
 		if errors.As(err, &validationErr) {
 			// Report configuration issues to telemetry for debugging
 			for _, errMsg := range validationErr.Errors {
-				if strings.Contains(errMsg, "fallback") || strings.Contains(errMsg, "not supported") || 
-				   strings.Contains(errMsg, "OAuth authentication warning") {
+				if strings.Contains(errMsg, "fallback") || strings.Contains(errMsg, "not supported") ||
+					strings.Contains(errMsg, "OAuth authentication warning") {
 					// This is a warning - report to telemetry but don't fail
 					log.Printf("Configuration warning: %s", errMsg)
 					// Store the warning for later telemetry reporting
@@ -1132,37 +1141,37 @@ func SetTestSettings(settings *Settings) {
 // This creates isolated settings that won't affect the global configuration.
 func GetTestSettings() *Settings {
 	settings := &Settings{}
-	
+
 	// Initialize with defaults
 	settings.Debug = false
 	settings.Main.Name = "BirdNET-Go-Test"
 	settings.Main.TimeAs24h = true
-	
+
 	// Set up minimal test configuration
 	settings.BirdNET.Sensitivity = 1.0
 	settings.BirdNET.Threshold = 0.8
 	settings.BirdNET.Overlap = 0.0
 	settings.BirdNET.Locale = "en"
-	
+
 	// Dashboard settings with thumbnails
 	settings.Realtime.Dashboard.Thumbnails.Debug = false
 	settings.Realtime.Dashboard.Thumbnails.Summary = false
 	settings.Realtime.Dashboard.Thumbnails.Recent = true
 	settings.Realtime.Dashboard.Thumbnails.ImageProvider = "avicommons"
 	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = "none"
-	
+
 	// Other realtime settings
 	settings.Realtime.Interval = 15
 	settings.Realtime.ProcessingTime = false
-	
+
 	// Web server settings
 	settings.WebServer.Enabled = false
 	settings.WebServer.Port = "8080"
-	
+
 	// Output settings
 	settings.Output.SQLite.Enabled = false
 	settings.Output.SQLite.Path = ":memory:"
-	
+
 	return settings
 }
 
@@ -1251,17 +1260,48 @@ func GenerateRandomSecret() string {
 	return base64.RawURLEncoding.EncodeToString(bytes)
 }
 
-// GetWeatherSettings returns the appropriate weather settings based on the configuration
-func (s *Settings) GetWeatherSettings() (provider string, openweather OpenWeatherSettings) {
-	// First check new format
-	if s.Realtime.Weather.Provider != "" {
-		return s.Realtime.Weather.Provider, s.Realtime.Weather.OpenWeather
-	}
+// GetWeatherProvider returns the configured provider and its settings as any.
+type WeatherProvider string
 
-	if s.Realtime.OpenWeather.Enabled {
-		return "openweather", s.Realtime.OpenWeather
-	}
+const (
+	WeatherNone         WeatherProvider = "none"
+	WeatherYrNo         WeatherProvider = "yrno"
+	WeatherOpenWeather  WeatherProvider = "openweather"
+	WeatherWunderground WeatherProvider = "wunderground"
+)
 
-	// Default to YrNo if nothing is configured
-	return "yrno", OpenWeatherSettings{}
+// Prefer explicit settings return to avoid confusion at call sites.
+func (s *Settings) GetWeatherProvider() (provider WeatherProvider, settings any) {
+	p := s.Realtime.Weather.Provider
+	switch p {
+	case string(WeatherOpenWeather):
+		return WeatherOpenWeather, s.Realtime.Weather.OpenWeather
+	case string(WeatherWunderground):
+		return WeatherWunderground, s.Realtime.Weather.Wunderground
+	case string(WeatherYrNo), string(WeatherNone):
+		return WeatherProvider(p), nil
+	default:
+		// Sensible default for legacy configs
+		if s.Realtime.OpenWeather.Enabled {
+			return WeatherOpenWeather, s.Realtime.OpenWeather
+		}
+		return WeatherYrNo, nil
+	}
+}
+
+// ValidateWunderground validates Wunderground settings when the provider is "wunderground"
+func (w *WundergroundSettings) ValidateWunderground() error {
+	// Validate required fields when provider is "wunderground"
+	if w.APIKey == "" {
+		return fmt.Errorf("wunderground.apiKey is required when provider is wunderground")
+	}
+	if w.StationID == "" {
+		return fmt.Errorf("wunderground.stationId is required when provider is wunderground")
+	}
+	// Validate units
+	validUnits := map[string]bool{"m": true, "e": true, "h": true}
+	if !validUnits[w.Units] {
+		return fmt.Errorf("wunderground.units must be one of [m, e, h], got: %s", w.Units)
+	}
+	return nil
 }

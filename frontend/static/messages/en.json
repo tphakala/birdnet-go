@@ -1111,7 +1111,26 @@
           "options": {
             "none": "None",
             "yrno": "Yr.no",
-            "openweather": "OpenWeather"
+            "openweather": "OpenWeather",
+            "wunderground": "Weather Underground"
+          }
+        },
+        "wunderground": {
+          "apiKey": {
+            "label": "Weather Underground API Key",
+            "helpText": "Enter your Weather Underground API key. Required for weather data."
+          },
+          "stationId": {
+            "label": "Station ID",
+            "helpText": "Your Weather Underground PWS station ID (e.g., KCAOAKLA12)."
+          },
+          "endpoint": {
+            "label": "API Endpoint",
+            "helpText": "Override the default Weather Underground API endpoint if needed. Defaults to https://api.weather.com/v2/pws/observations/current if left empty."
+          },
+          "units": {
+            "label": "Units",
+            "helpText": "Select units for temperature and wind speed (m = Metric, e = Imperial, h = UK Hybrid)."
           }
         },
         "notes": {
@@ -1120,25 +1139,27 @@
             "description": "Weather forecast data is provided by Yr.no, a joint service by the Norwegian Meteorological Institute (met.no) and the Norwegian Broadcasting Corporation (NRK).",
             "freeService": "Yr is a free weather data service. For more information, visit <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
-          "openweather": "Use of OpenWeather requires an API key, sign up for a free API key at <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>."
+          "openweather": "Use of OpenWeather requires an API key, sign up for a free API key at <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
+          "wunderground": "Requires a Weather Underground API key and a valid PWS station ID. See <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> for details."
         },
         "apiKey": {
           "label": "API Key",
-          "helpText": "Your OpenWeather API key. Keep this secret!"
+          "helpText": "Your API key for the selected weather provider. Keep this secret!"
         },
         "units": {
           "label": "Units of Measurement",
           "options": {
             "standard": "Standard",
             "metric": "Metric",
-            "imperial": "Imperial"
+            "imperial": "Imperial",
+            "ukhybrid": "UK Hybrid"
           }
         },
         "test": {
           "button": "Test Weather Provider",
           "loading": "Testing...",
           "noProvider": "No weather provider selected",
-          "apiKeyRequired": "OpenWeather API key must be specified",
+          "apiKeyRequired": "API key must be specified",
           "inProgress": "Test in progress...",
           "description": "Test weather provider connection"
         }
