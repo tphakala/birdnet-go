@@ -28,10 +28,54 @@ fi
 USER_NAME=$(getent passwd "$APP_UID" | cut -d: -f1)
 
 # Ensure /config and /data are accessible to the user
-mkdir -p /config /data/clips
+mkdir -p /config /data/clips /data/model
 chown -R "$APP_UID":"$APP_GID" /config
 chown "$APP_UID":"$APP_GID" /data
 chown "$APP_UID":"$APP_GID" /data/*
+
+# Check for model files in priority order
+# 1. User custom models in /data/model (highest priority)
+if [ -d "/data/model" ] && [ "$(ls -A /data/model)" ]; then
+    echo "📁 User custom models found in /data/model"
+    # Set read permissions for model files
+    chmod -R a+r /data/model/*.tflite 2>/dev/null || true
+    # Ensure directory is executable (browsable)
+    chmod a+x /data/model
+    MODELS_AVAILABLE=true
+else
+    echo "📁 No user custom models in /data/model"
+    MODELS_AVAILABLE=false
+fi
+
+# 2. Built-in models in /models (fallback)
+if [ -d "/models" ] && [ "$(ls -A /models)" ]; then
+    echo "📦 Built-in models available in /models"
+    # Ensure built-in models are readable
+    chmod -R a+r /models/*.tflite 2>/dev/null || true
+    chmod a+x /models
+    MODELS_AVAILABLE=true
+else
+    echo "⚠️  Warning: No built-in models found in /models"
+fi
+
+# Summary message
+if [ "$MODELS_AVAILABLE" = "true" ]; then
+    echo "✅ Model files available - BirdNET-Go should start normally"
+else
+    echo "❌ No model files found - BirdNET-Go will look for models in standard paths"
+fi
+
+# Check if user has custom model path configured via environment variable
+if [ ! -z "$BIRDNET_MODELPATH" ]; then
+    echo "Custom model path configured: $BIRDNET_MODELPATH"
+    # Expand environment variables in the path using shell expansion
+    EXPANDED_PATH=$(eval echo "$BIRDNET_MODELPATH")
+    if [ -f "$EXPANDED_PATH" ]; then
+        echo "Custom model file found at: $EXPANDED_PATH"
+    else
+        echo "Warning: Custom model file not found at: $EXPANDED_PATH"
+    fi
+fi
 
 # Only chown clips directory if any subdirectories have wrong ownership
 NEEDS_CHOWN=false

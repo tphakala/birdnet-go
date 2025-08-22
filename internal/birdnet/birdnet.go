@@ -577,8 +577,10 @@ const DefaultModelDirectory = "model"
 func getOSSpecificSystemPaths(modelName string) []string {
 	var paths []string
 	
-	// Docker container path (works on all OS in containers)
-	paths = append(paths, filepath.Join(string(filepath.Separator), "data", DefaultModelDirectory, modelName))
+	// Docker container paths (works on all OS in containers)
+	paths = append(paths, 
+		filepath.Join(string(filepath.Separator), "data", DefaultModelDirectory, modelName),        // User custom models in /data/model
+		filepath.Join(string(filepath.Separator), "models", modelName))                            // Built-in models in /models
 	
 	// OS-specific system paths
 	switch runtime.GOOS {

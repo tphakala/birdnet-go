@@ -52,18 +52,23 @@ ARG TARGETPLATFORM
 # Skip puppeteer download during build (not needed for production)
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
-# Build assets and compile BirdNET-Go
+# Build assets and compile BirdNET-Go (non-embedded build)
 RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
     task check-tensorflow && \
     task download-assets && \
     task generate-tailwindcss && \
     TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
-    echo "Building with BUILD_VERSION=${BUILD_VERSION}" && \
-    BUILD_VERSION="${BUILD_VERSION}" DOCKER_LIB_DIR=/home/dev-user/lib task ${TARGET}
+    echo "Building non-embedded version with BUILD_VERSION=${BUILD_VERSION}" && \
+    BUILD_VERSION="${BUILD_VERSION}" DOCKER_LIB_DIR=/home/dev-user/lib task noembed_${TARGET}
 
 # Create final image using a multi-platform base image
 FROM --platform=$TARGETPLATFORM debian:bookworm-slim
+
+# Copy model files to /models directory as separate cacheable layer
+# This layer will be reused if model files haven't changed between builds
+RUN mkdir -p /models
+COPY --from=build /home/dev-user/src/BirdNET-Go/internal/birdnet/data/*.tflite /models/
 
 # Install ALSA library and SOX for audio processing, and other system utilities for debugging
 RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
