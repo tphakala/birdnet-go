@@ -28,10 +28,35 @@ fi
 USER_NAME=$(getent passwd "$APP_UID" | cut -d: -f1)
 
 # Ensure /config and /data are accessible to the user
-mkdir -p /config /data/clips
+mkdir -p /config /data/clips /data/model
 chown -R "$APP_UID":"$APP_GID" /config
 chown "$APP_UID":"$APP_GID" /data
 chown "$APP_UID":"$APP_GID" /data/*
+
+# Ensure model files are accessible
+# Only set ownership if models exist (preserves user-mounted models)
+if [ -d "/data/model" ] && [ "$(ls -A /data/model)" ]; then
+    echo "Model files found in /data/model"
+    # Set read permissions for model files
+    chmod -R a+r /data/model/*.tflite 2>/dev/null || true
+    # Ensure directory is executable (browsable)
+    chmod a+x /data/model
+else
+    echo "Warning: No model files found in /data/model"
+    echo "BirdNET-Go will look for models in standard paths"
+fi
+
+# Check if user has custom model path configured via environment variable
+if [ ! -z "$BIRDNET_MODELPATH" ]; then
+    echo "Custom model path configured: $BIRDNET_MODELPATH"
+    # Expand environment variables in the path using shell expansion
+    EXPANDED_PATH=$(eval echo "$BIRDNET_MODELPATH")
+    if [ -f "$EXPANDED_PATH" ]; then
+        echo "Custom model file found at: $EXPANDED_PATH"
+    else
+        echo "Warning: Custom model file not found at: $EXPANDED_PATH"
+    fi
+fi
 
 # Only chown clips directory if any subdirectories have wrong ownership
 NEEDS_CHOWN=false

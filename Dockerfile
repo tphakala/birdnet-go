@@ -52,15 +52,15 @@ ARG TARGETPLATFORM
 # Skip puppeteer download during build (not needed for production)
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
-# Build assets and compile BirdNET-Go
+# Build assets and compile BirdNET-Go (non-embedded build)
 RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
     task check-tensorflow && \
     task download-assets && \
     task generate-tailwindcss && \
     TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
-    echo "Building with BUILD_VERSION=${BUILD_VERSION}" && \
-    BUILD_VERSION="${BUILD_VERSION}" DOCKER_LIB_DIR=/home/dev-user/lib task ${TARGET}
+    echo "Building non-embedded version with BUILD_VERSION=${BUILD_VERSION}" && \
+    BUILD_VERSION="${BUILD_VERSION}" DOCKER_LIB_DIR=/home/dev-user/lib task noembed_${TARGET}
 
 # Create final image using a multi-platform base image
 FROM --platform=$TARGETPLATFORM debian:bookworm-slim
@@ -121,6 +121,11 @@ WORKDIR /data
 EXPOSE 80 443 8080 8090
 
 COPY --from=build /home/dev-user/src/BirdNET-Go/bin /usr/bin/
+
+# Copy model files to /data/model directory from the build stage
+# This ensures seamless transition for users upgrading from embedded builds
+RUN mkdir -p /data/model
+COPY --from=build /home/dev-user/src/BirdNET-Go/internal/birdnet/data/*.tflite /data/model/
 
 ENTRYPOINT ["/usr/bin/entrypoint.sh"]
 CMD ["birdnet-go", "realtime"]
