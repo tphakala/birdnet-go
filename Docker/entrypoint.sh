@@ -33,17 +33,36 @@ chown -R "$APP_UID":"$APP_GID" /config
 chown "$APP_UID":"$APP_GID" /data
 chown "$APP_UID":"$APP_GID" /data/*
 
-# Ensure model files are accessible
-# Only set ownership if models exist (preserves user-mounted models)
+# Check for model files in priority order
+# 1. User custom models in /data/model (highest priority)
 if [ -d "/data/model" ] && [ "$(ls -A /data/model)" ]; then
-    echo "Model files found in /data/model"
+    echo "📁 User custom models found in /data/model"
     # Set read permissions for model files
     chmod -R a+r /data/model/*.tflite 2>/dev/null || true
     # Ensure directory is executable (browsable)
     chmod a+x /data/model
+    MODELS_AVAILABLE=true
 else
-    echo "Warning: No model files found in /data/model"
-    echo "BirdNET-Go will look for models in standard paths"
+    echo "📁 No user custom models in /data/model"
+    MODELS_AVAILABLE=false
+fi
+
+# 2. Built-in models in /models (fallback)
+if [ -d "/models" ] && [ "$(ls -A /models)" ]; then
+    echo "📦 Built-in models available in /models"
+    # Ensure built-in models are readable
+    chmod -R a+r /models/*.tflite 2>/dev/null || true
+    chmod a+x /models
+    MODELS_AVAILABLE=true
+else
+    echo "⚠️  Warning: No built-in models found in /models"
+fi
+
+# Summary message
+if [ "$MODELS_AVAILABLE" = "true" ]; then
+    echo "✅ Model files available - BirdNET-Go should start normally"
+else
+    echo "❌ No model files found - BirdNET-Go will look for models in standard paths"
 fi
 
 # Check if user has custom model path configured via environment variable

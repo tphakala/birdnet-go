@@ -65,6 +65,11 @@ RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
 # Create final image using a multi-platform base image
 FROM --platform=$TARGETPLATFORM debian:bookworm-slim
 
+# Copy model files to /models directory as separate cacheable layer
+# This layer will be reused if model files haven't changed between builds
+RUN mkdir -p /models
+COPY --from=build /home/dev-user/src/BirdNET-Go/internal/birdnet/data/*.tflite /models/
+
 # Install ALSA library and SOX for audio processing, and other system utilities for debugging
 RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     ca-certificates \
@@ -121,11 +126,6 @@ WORKDIR /data
 EXPOSE 80 443 8080 8090
 
 COPY --from=build /home/dev-user/src/BirdNET-Go/bin /usr/bin/
-
-# Copy model files to /data/model directory from the build stage
-# This ensures seamless transition for users upgrading from embedded builds
-RUN mkdir -p /data/model
-COPY --from=build /home/dev-user/src/BirdNET-Go/internal/birdnet/data/*.tflite /data/model/
 
 ENTRYPOINT ["/usr/bin/entrypoint.sh"]
 CMD ["birdnet-go", "realtime"]
