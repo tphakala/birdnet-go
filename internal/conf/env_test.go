@@ -78,6 +78,8 @@ func TestValidateEnvLocale(t *testing.T) {
 }
 
 func TestValidateEnvPath(t *testing.T) {
+	t.Parallel()
+	
 	// Create a temp file for testing
 	tmpFile := t.TempDir() + "/test.tflite"
 	err := os.WriteFile(tmpFile, []byte("test"), 0o600)
@@ -90,7 +92,7 @@ func TestValidateEnvPath(t *testing.T) {
 		errMsg  string
 	}{
 		{"absolute path exists", tmpFile, false, ""},
-		{"absolute path not exists", "/nonexistent/path/file.txt", false, "warning"}, // Warning, not error
+		{"absolute path not exists", "/nonexistent/path/file.txt", false, ""}, // No error for non-existent files
 		{"relative path", "relative/path", true, "must be absolute"},
 		{"path traversal attempt", "/valid/../../../etc/passwd", false, ""}, // Clean normalizes this to /etc/passwd 
 		{"relative with dots", "../../../etc/passwd", true, "must be absolute"},
@@ -106,15 +108,7 @@ func TestValidateEnvPath(t *testing.T) {
 					assert.Contains(t, err.Error(), tt.errMsg)
 				}
 			} else {
-				// Check for warning (file not exists is a warning, not a hard error)
-				if err != nil && tt.errMsg == "warning" {
-					assert.Contains(t, err.Error(), "warning")
-				} else if tt.errMsg == "" {
-					// No error expected at all (or just a warning which we accept)
-					if err != nil && !strings.Contains(err.Error(), "warning") {
-						t.Errorf("unexpected error: %v", err)
-					}
-				}
+				assert.NoError(t, err)
 			}
 		})
 	}
@@ -126,8 +120,7 @@ func TestConfigureEnvironmentVariables(t *testing.T) {
 	
 	// Test with invalid boolean env var
 	t.Run("invalid boolean", func(t *testing.T) {
-		require.NoError(t, os.Setenv("BIRDNET_DEBUG", "maybe"))
-		defer func() { _ = os.Unsetenv("BIRDNET_DEBUG") }()
+		t.Setenv("BIRDNET_DEBUG", "maybe")
 		
 		err := configureEnvironmentVariables()
 		require.Error(t, err)
@@ -136,8 +129,7 @@ func TestConfigureEnvironmentVariables(t *testing.T) {
 	
 	// Test with invalid locale
 	t.Run("invalid locale", func(t *testing.T) {
-		require.NoError(t, os.Setenv("BIRDNET_LOCALE", "invalid_locale"))
-		defer func() { _ = os.Unsetenv("BIRDNET_LOCALE") }()
+		t.Setenv("BIRDNET_LOCALE", "invalid_locale")
 		
 		err := configureEnvironmentVariables()
 		require.Error(t, err)
@@ -147,10 +139,8 @@ func TestConfigureEnvironmentVariables(t *testing.T) {
 	
 	// Test with multiple errors
 	t.Run("multiple errors", func(t *testing.T) {
-		require.NoError(t, os.Setenv("BIRDNET_DEBUG", "invalid"))
-		require.NoError(t, os.Setenv("BIRDNET_LOCALE", "x"))
-		defer func() { _ = os.Unsetenv("BIRDNET_DEBUG") }()
-		defer func() { _ = os.Unsetenv("BIRDNET_LOCALE") }()
+		t.Setenv("BIRDNET_DEBUG", "invalid")
+		t.Setenv("BIRDNET_LOCALE", "x")
 		
 		err := configureEnvironmentVariables()
 		require.Error(t, err)
@@ -162,12 +152,9 @@ func TestConfigureEnvironmentVariables(t *testing.T) {
 	// Test with valid values
 	t.Run("valid values", func(t *testing.T) {
 		viper.Reset()
-		require.NoError(t, os.Setenv("BIRDNET_DEBUG", "true"))
-		require.NoError(t, os.Setenv("BIRDNET_LOCALE", "en-us"))
-		require.NoError(t, os.Setenv("BIRDNET_THREADS", "4"))
-		defer func() { _ = os.Unsetenv("BIRDNET_DEBUG") }()
-		defer func() { _ = os.Unsetenv("BIRDNET_LOCALE") }()
-		defer func() { _ = os.Unsetenv("BIRDNET_THREADS") }()
+		t.Setenv("BIRDNET_DEBUG", "true")
+		t.Setenv("BIRDNET_LOCALE", "en-us")
+		t.Setenv("BIRDNET_THREADS", "4")
 		
 		err := configureEnvironmentVariables()
 		assert.NoError(t, err)

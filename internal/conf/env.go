@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -59,7 +60,7 @@ func bindEnvVars() error {
 
 		// Validate the value if it's set and validation function is provided
 		if binding.Validate != nil {
-			if envValue := os.Getenv(binding.EnvVar); envValue != "" {
+			if envValue, present := os.LookupEnv(binding.EnvVar); present {
 				if err := binding.Validate(envValue); err != nil {
 					warnings = append(warnings, fmt.Sprintf("Invalid %s value '%s': %v", binding.EnvVar, envValue, err))
 				}
@@ -78,6 +79,7 @@ func bindEnvVars() error {
 
 // validateEnvBool validates boolean environment variables
 func validateEnvBool(value string) error {
+	value = strings.TrimSpace(value)
 	_, err := strconv.ParseBool(value)
 	if err != nil {
 		return fmt.Errorf("invalid boolean value '%s': must be true/false, 1/0, t/f, TRUE/FALSE, T/F", value)
@@ -100,6 +102,7 @@ func validateEnvLocale(value string) error {
 }
 
 func validateEnvLatitude(value string) error {
+	value = strings.TrimSpace(value)
 	lat, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return fmt.Errorf("invalid latitude: %w", err)
@@ -111,6 +114,7 @@ func validateEnvLatitude(value string) error {
 }
 
 func validateEnvLongitude(value string) error {
+	value = strings.TrimSpace(value)
 	lng, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return fmt.Errorf("invalid longitude: %w", err)
@@ -122,6 +126,7 @@ func validateEnvLongitude(value string) error {
 }
 
 func validateEnvSensitivity(value string) error {
+	value = strings.TrimSpace(value)
 	sensitivity, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return fmt.Errorf("invalid sensitivity: %w", err)
@@ -133,6 +138,7 @@ func validateEnvSensitivity(value string) error {
 }
 
 func validateEnvThreshold(value string) error {
+	value = strings.TrimSpace(value)
 	threshold, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return fmt.Errorf("invalid threshold: %w", err)
@@ -144,6 +150,7 @@ func validateEnvThreshold(value string) error {
 }
 
 func validateEnvOverlap(value string) error {
+	value = strings.TrimSpace(value)
 	overlap, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return fmt.Errorf("invalid overlap: %w", err)
@@ -155,6 +162,7 @@ func validateEnvOverlap(value string) error {
 }
 
 func validateEnvThreads(value string) error {
+	value = strings.TrimSpace(value)
 	threads, err := strconv.Atoi(value)
 	if err != nil {
 		return fmt.Errorf("invalid threads: %w", err)
@@ -167,15 +175,14 @@ func validateEnvThreads(value string) error {
 
 func validateEnvRangeFilterModel(value string) error {
 	validModels := []string{"latest", "legacy"}
-	for _, valid := range validModels {
-		if value == valid {
-			return nil
-		}
+	if !slices.Contains(validModels, value) {
+		return fmt.Errorf("must be one of: %s", strings.Join(validModels, ", "))
 	}
-	return fmt.Errorf("must be one of: %s", strings.Join(validModels, ", "))
+	return nil
 }
 
 func validateEnvRangeFilterThreshold(value string) error {
+	value = strings.TrimSpace(value)
 	threshold, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return fmt.Errorf("invalid range filter threshold: %w", err)
@@ -195,22 +202,8 @@ func validateEnvPath(value string) error {
 		return fmt.Errorf("path must be absolute, got relative path: %s", cleanedPath)
 	}
 	
-	// Check for path traversal attempts after cleaning
-	// Split path and check each component
-	pathParts := strings.Split(cleanedPath, string(os.PathSeparator))
-	for _, part := range pathParts {
-		if part == ".." {
-			return fmt.Errorf("path traversal detected in cleaned path: %s", cleanedPath)
-		}
-	}
-	
-	// Optionally check if file exists (warn but don't fail)
-	if _, err := os.Stat(cleanedPath); os.IsNotExist(err) {
-		// Return a warning as part of the error that can be logged
-		// but doesn't prevent the app from starting
-		return fmt.Errorf("warning: file does not exist: %s", cleanedPath)
-	}
-	
+	// filepath.Clean already handles path traversal, so no need for additional checks
+	// Only return fatal errors - let caller handle existence warnings
 	return nil
 }
 
