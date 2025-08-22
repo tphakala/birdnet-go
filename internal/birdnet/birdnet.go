@@ -275,18 +275,19 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 			fmt.Printf("⚠️ Looking for legacy range filter model\n")
 		}
 		
-		data, path, err := tryLoadModelFromStandardPaths(modelFileName)
-		if err == nil {
-			fmt.Printf("📁 Loaded range filter model from standard path: %s\n", path)
-			bn.Debug("Loaded range filter model from standard path: %s", path)
-			return data, nil
+		result := tryLoadModelFromStandardPaths(modelFileName)
+		if result.Found {
+			fmt.Printf("📁 Loaded range filter model from standard path: %s\n", result.Path)
+			bn.Debug("Loaded range filter model from standard path: %s", result.Path)
+			return result.Data, nil
 		}
-		// If standard paths failed, report the error
-		return nil, errors.Newf("range filter model not found in standard paths (built with noembed tag)").
+		// If standard paths failed, report the error with attempted paths
+		return nil, errors.Newf("range filter model '%s' not found in standard paths (built with noembed tag)", modelFileName).
 			Category(errors.CategoryModelLoad).
 			Context("embedded_models", hasEmbeddedModels).
 			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
 			Context("attempted_file", modelFileName).
+			Context("attempted_paths", result.AttemptedPaths).
 			Build()
 	}
 	
@@ -557,47 +558,133 @@ func (bn *BirdNET) Delete() {
 	}
 }
 
-// Default model file names
-const (
-	DefaultBirdNETModelName = "BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite"
-	DefaultRangeFilterV1ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite"
-	DefaultRangeFilterV2ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite"
-	DefaultModelDirectory = "model"  // Changed from "data/model" to just "model"
-)
+// DefaultBirdNETModelName is the expected filesystem basename for the main BirdNET analysis model file.
+// This filename is used when searching standard paths for external model files in noembed builds.
+const DefaultBirdNETModelName = "BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite"
 
-// tryLoadModelFromStandardPaths attempts to load a model from standard locations
-func tryLoadModelFromStandardPaths(modelName string) (data []byte, path string, err error) {
-	// List of standard paths to check
-	standardPaths := []string{
-		filepath.Join(DefaultModelDirectory, modelName),          // Relative: model/ (resolves to /data/model/ in Docker)
-		// Docker-specific paths
-		"/data/" + DefaultModelDirectory + "/" + modelName,       // Docker volume path: /data/model/
-		// System installation paths
-		"/usr/share/birdnet-go/" + DefaultModelDirectory + "/" + modelName,  // System path with model subdir
-		"/opt/birdnet-go/" + DefaultModelDirectory + "/" + modelName,        // Alternative system path with model subdir
+// DefaultRangeFilterV1ModelName is the expected filesystem basename for the legacy (v1) range filter model file.
+// This filename is used when RangeFilter.Model is set to "legacy" in noembed builds.
+const DefaultRangeFilterV1ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite"
+
+// DefaultRangeFilterV2ModelName is the expected filesystem basename for the default (v2) range filter model file.
+// This filename is used when RangeFilter.Model is set to "latest" or unspecified in noembed builds.
+const DefaultRangeFilterV2ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite"
+
+// DefaultModelDirectory is the default directory name where model files are expected to be found.
+// This is a relative path that will be resolved against various base paths during model discovery.
+// In Docker containers with WORKDIR /data, this resolves to /data/model/.
+// Callers can override model locations by setting explicit ModelPath or RangeFilter.ModelPath in configuration.
+const DefaultModelDirectory = "model"
+
+// ModelSearchResult contains the results of searching for a model file in standard locations.
+type ModelSearchResult struct {
+	Data           []byte   // Model file contents (nil if not found)
+	Path           string   // Successful path (empty if not found)  
+	Found          bool     // Whether a model file was successfully loaded
+	AttemptedPaths []string // All paths that were searched (for error reporting)
+}
+
+// getOSSpecificSystemPaths returns OS-appropriate system installation paths.
+func getOSSpecificSystemPaths(modelName string) []string {
+	var paths []string
+	
+	// Docker container path (works on all OS in containers)
+	paths = append(paths, filepath.Join(string(filepath.Separator), "data", DefaultModelDirectory, modelName))
+	
+	// OS-specific system paths
+	switch runtime.GOOS {
+	case "windows":
+		// Windows system paths
+		paths = append(paths,
+			filepath.Join("C:", string(filepath.Separator), "Program Files", "BirdNET-Go", DefaultModelDirectory, modelName),
+			filepath.Join("C:", string(filepath.Separator), "ProgramData", "BirdNET-Go", DefaultModelDirectory, modelName),
+		)
+		
+		// Windows user-specific path
+		if userProfile := os.Getenv("USERPROFILE"); userProfile != "" {
+			paths = append(paths, filepath.Join(userProfile, "AppData", "Local", "BirdNET-Go", DefaultModelDirectory, modelName))
+		}
+		
+	case "darwin": // macOS
+		// macOS system paths
+		paths = append(paths,
+			filepath.Join(string(filepath.Separator), "usr", "local", "share", "birdnet-go", DefaultModelDirectory, modelName),
+			filepath.Join(string(filepath.Separator), "opt", "birdnet-go", DefaultModelDirectory, modelName),
+			filepath.Join(string(filepath.Separator), "Applications", "BirdNET-Go.app", "Contents", "Resources", DefaultModelDirectory, modelName),
+		)
+		
+		// macOS user-specific path
+		if home := os.Getenv("HOME"); home != "" {
+			paths = append(paths,
+				filepath.Join(home, "Library", "Application Support", "BirdNET-Go", DefaultModelDirectory, modelName),
+			)
+		}
+		
+	default: // Linux and other Unix-like systems
+		// Linux/Unix system paths
+		paths = append(paths,
+			filepath.Join(string(filepath.Separator), "usr", "share", "birdnet-go", DefaultModelDirectory, modelName),
+			filepath.Join(string(filepath.Separator), "opt", "birdnet-go", DefaultModelDirectory, modelName),
+		)
+		
+		// XDG Base Directory specification for user data
+		if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
+			paths = append(paths, filepath.Join(xdgDataHome, "birdnet-go", DefaultModelDirectory, modelName))
+		} else if home := os.Getenv("HOME"); home != "" {
+			paths = append(paths, filepath.Join(home, ".local", "share", "birdnet-go", DefaultModelDirectory, modelName))
+		}
 	}
+	
+	return paths
+}
 
-	// Also check relative to executable
-	if exePath, err := os.Executable(); err == nil {
+// tryLoadModelFromStandardPaths attempts to load a model from standard locations.
+// It returns a ModelSearchResult with the outcome and attempted paths for error reporting.
+func tryLoadModelFromStandardPaths(modelName string) ModelSearchResult {
+	// Build candidate paths using filepath.Join for all constructions
+	var candidatePaths []string
+	
+	// Relative paths (resolved against current working directory)
+	candidatePaths = append(candidatePaths,
+		filepath.Join(DefaultModelDirectory, modelName),           // model/<name>
+		filepath.Join("data", DefaultModelDirectory, modelName),   // Legacy: data/model/<name>
+	)
+	
+	// OS-specific system paths
+	candidatePaths = append(candidatePaths, getOSSpecificSystemPaths(modelName)...)
+
+	// Executable-relative paths
+	if exePath, execErr := os.Executable(); execErr == nil {
 		exeDir := filepath.Dir(exePath)
-		standardPaths = append(standardPaths,
-			filepath.Join(exeDir, DefaultModelDirectory, modelName),
-			filepath.Join(exeDir, "..", DefaultModelDirectory, modelName),
+		candidatePaths = append(candidatePaths,
+			filepath.Join(exeDir, DefaultModelDirectory, modelName),                    // <exe-dir>/model/<name>
+			filepath.Join(exeDir, "..", DefaultModelDirectory, modelName),              // <exe-dir>/../model/<name>
+			filepath.Join(exeDir, "share", "birdnet-go", DefaultModelDirectory, modelName), // <exe-dir>/share/birdnet-go/model/<name>
 		)
 	}
 
-	for _, path := range standardPaths {
-		// Check if file exists
-		if _, err := os.Stat(path); err == nil {
-			// File exists, try to load it
-			data, err := os.ReadFile(path)
-			if err == nil {
-				return data, path, nil
+	// Attempt to read from each candidate path directly (no os.Stat to avoid TOCTOU)
+	for _, candidatePath := range candidatePaths {
+		data, err := os.ReadFile(candidatePath)
+		if err == nil {
+			// Successfully loaded model
+			return ModelSearchResult{
+				Data:           data,
+				Path:           candidatePath, 
+				Found:          true,
+				AttemptedPaths: candidatePaths,
 			}
 		}
+		// Continue trying other paths (collect I/O errors but don't return them individually)
 	}
 
-	return nil, "", fmt.Errorf("model file %s not found in standard paths", modelName)
+	// No model found in any standard location
+	return ModelSearchResult{
+		Data:           nil,
+		Path:           "",
+		Found:          false,
+		AttemptedPaths: candidatePaths,
+	}
 }
 
 // loadModel loads either the embedded model or an external model file
@@ -638,17 +725,18 @@ func (bn *BirdNET) loadModel() ([]byte, error) {
 
 	// No model path specified, try standard paths first (for noembed builds)
 	if !hasEmbeddedModels {
-		data, path, err := tryLoadModelFromStandardPaths(DefaultBirdNETModelName)
-		if err == nil {
-			fmt.Printf("📁 Loaded BirdNET model from standard path: %s\n", path)
-			bn.Debug("Loaded model from standard path: %s (size: %d MB)", path, len(data)/1024/1024)
-			return data, nil
+		result := tryLoadModelFromStandardPaths(DefaultBirdNETModelName)
+		if result.Found {
+			fmt.Printf("📁 Loaded BirdNET model from standard path: %s\n", result.Path)
+			bn.Debug("Loaded model from standard path: %s (size: %d MB)", result.Path, len(result.Data)/1024/1024)
+			return result.Data, nil
 		}
-		// If standard paths failed, report the error
-		return nil, errors.Newf("no model path specified and model not found in standard paths (built with noembed tag)").
+		// If standard paths failed, report the error with attempted paths
+		return nil, errors.Newf("no model path specified and model '%s' not found in standard paths (built with noembed tag)", DefaultBirdNETModelName).
 			Category(errors.CategoryModelLoad).
 			Context("embedded_models", hasEmbeddedModels).
 			Context("attempted_file", DefaultBirdNETModelName).
+			Context("attempted_paths", result.AttemptedPaths).
 			Build()
 	}
 
