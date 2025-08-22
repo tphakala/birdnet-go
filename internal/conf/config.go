@@ -962,10 +962,18 @@ func Load() (*Settings, error) {
 	return settingsInstance, nil
 }
 
+
 // initViper initializes viper with default values and reads the configuration file.
 func initViper() error {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
+
+	// Configure environment variable support
+	if err := configureEnvironmentVariables(); err != nil {
+		// Log any validation warnings but don't fail startup
+		// This allows the application to continue with config file/default values
+		log.Printf("Environment variable configuration warning: %v", err)
+	}
 
 	// Get OS specific config paths
 	configPaths, err := GetDefaultConfigPaths()
