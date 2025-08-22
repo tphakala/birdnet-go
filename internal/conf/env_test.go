@@ -127,6 +127,7 @@ func TestConfigureEnvironmentVariables(t *testing.T) {
 	
 	// Test with invalid boolean env var
 	t.Run("invalid boolean", func(t *testing.T) {
+		viper.Reset()
 		t.Setenv("BIRDNET_DEBUG", "maybe")
 		
 		err := configureEnvironmentVariables()
@@ -136,6 +137,7 @@ func TestConfigureEnvironmentVariables(t *testing.T) {
 	
 	// Test with invalid locale
 	t.Run("invalid locale", func(t *testing.T) {
+		viper.Reset()
 		t.Setenv("BIRDNET_LOCALE", "invalid_locale")
 		
 		err := configureEnvironmentVariables()
@@ -146,6 +148,7 @@ func TestConfigureEnvironmentVariables(t *testing.T) {
 	
 	// Test with multiple errors
 	t.Run("multiple errors", func(t *testing.T) {
+		viper.Reset()
 		t.Setenv("BIRDNET_DEBUG", "invalid")
 		t.Setenv("BIRDNET_LOCALE", "x")
 		
@@ -174,6 +177,7 @@ func TestConfigureEnvironmentVariables_EmptyValuesValidated(t *testing.T) {
 	
 	// Test that empty-but-present env vars are validated
 	t.Run("empty threads value", func(t *testing.T) {
+		viper.Reset()
 		t.Setenv("BIRDNET_THREADS", "")
 		
 		err := configureEnvironmentVariables()
@@ -228,4 +232,31 @@ func TestValidateAndNormalizeRangeFilterModel(t *testing.T) {
 			assert.Equal(t, tt.expected, actual)
 		})
 	}
+}
+
+func TestLocaleCanonicalizations(t *testing.T) {
+	// Test that locale gets canonicalized to lowercase on successful validation
+	t.Run("uppercase locale gets canonicalized", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv("BIRDNET_LOCALE", "EN-US")
+		
+		err := configureEnvironmentVariables()
+		require.NoError(t, err)
+		
+		// Check that the locale was canonicalized to lowercase
+		actual := viper.GetString("birdnet.locale")
+		assert.Equal(t, "en-us", actual)
+	})
+	
+	t.Run("mixed case locale gets canonicalized", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv("BIRDNET_LOCALE", "De-DE")
+		
+		err := configureEnvironmentVariables()
+		require.NoError(t, err)
+		
+		// Check that the locale was canonicalized to lowercase
+		actual := viper.GetString("birdnet.locale")
+		assert.Equal(t, "de-de", actual)
+	})
 }

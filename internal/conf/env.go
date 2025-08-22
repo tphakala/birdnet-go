@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Configuration key constants
@@ -61,6 +62,30 @@ const (
 	EnvVarRangeFilterDebug     = "BIRDNET_RANGEFILTER_DEBUG"
 )
 
+// Validation constraint constants
+const (
+	// Latitude/Longitude ranges
+	LatitudeMin  = -90.0
+	LatitudeMax  = 90.0
+	LongitudeMin = -180.0
+	LongitudeMax = 180.0
+
+	// BirdNET sensitivity range
+	SensitivityMin = 0.1
+	SensitivityMax = 1.5
+
+	// Detection threshold range (both regular and range filter)
+	ThresholdMin = 0.0
+	ThresholdMax = 1.0
+
+	// Audio overlap range  
+	OverlapMin = 0.0
+	OverlapMax = 2.9
+
+	// Thread count minimum (no maximum enforced)
+	ThreadsMin = 0
+)
+
 // envBinding holds metadata for environment variable bindings (internal use)
 type envBinding struct {
 	ConfigKey string             // Viper config key
@@ -97,27 +122,30 @@ func getEnvBindings() []envBinding {
 // bindEnvVars sets up environment variable bindings with validation (internal)
 func bindEnvVars() error {
 	bindings := getEnvBindings()
-	var warnings []string
+	var errs []error
 
 	for _, binding := range bindings {
 		// Bind the environment variable to the config key
 		if err := viper.BindEnv(binding.ConfigKey, binding.EnvVar); err != nil {
-			warnings = append(warnings, fmt.Sprintf("Failed to bind %s: %v", binding.EnvVar, err))
+			errs = append(errs, fmt.Errorf("failed to bind %s: %w", binding.EnvVar, err))
 			continue
 		}
 
 		// Validate the value if it's set and validation function is provided
-		if binding.Validate != nil {
-			if envValue, present := os.LookupEnv(binding.EnvVar); present {
+		if envValue, present := os.LookupEnv(binding.EnvVar); present {
+			if binding.Validate != nil {
 				if err := binding.Validate(envValue); err != nil {
-					warnings = append(warnings, fmt.Sprintf("Invalid %s value '%s': %v", binding.EnvVar, envValue, err))
+					errs = append(errs, fmt.Errorf("%s=%q: %w", binding.EnvVar, envValue, err))
+				} else if binding.ConfigKey == ConfigKeyLocale {
+					// Canonicalize locale to lower-case on successful validation
+					viper.Set(binding.ConfigKey, strings.ToLower(strings.TrimSpace(envValue)))
 				}
 			}
 		}
 	}
 
-	if len(warnings) > 0 {
-		return fmt.Errorf("environment variable issues:\n  - %s", strings.Join(warnings, "\n  - "))
+	if len(errs) > 0 {
+		return fmt.Errorf("environment variable issues: %w", errors.Join(errs...))
 	}
 
 	return nil
@@ -155,8 +183,8 @@ func validateEnvLatitude(value string) error {
 	if err != nil {
 		return fmt.Errorf("invalid latitude: %w", err)
 	}
-	if lat < -90 || lat > 90 {
-		return fmt.Errorf("latitude must be between -90 and 90, got %g", lat)
+	if lat < LatitudeMin || lat > LatitudeMax {
+		return fmt.Errorf("latitude must be between %g and %g, got %g", LatitudeMin, LatitudeMax, lat)
 	}
 	return nil
 }
@@ -167,8 +195,8 @@ func validateEnvLongitude(value string) error {
 	if err != nil {
 		return fmt.Errorf("invalid longitude: %w", err)
 	}
-	if lng < -180 || lng > 180 {
-		return fmt.Errorf("longitude must be between -180 and 180, got %g", lng)
+	if lng < LongitudeMin || lng > LongitudeMax {
+		return fmt.Errorf("longitude must be between %g and %g, got %g", LongitudeMin, LongitudeMax, lng)
 	}
 	return nil
 }
@@ -179,8 +207,8 @@ func validateEnvSensitivity(value string) error {
 	if err != nil {
 		return fmt.Errorf("invalid sensitivity: %w", err)
 	}
-	if sensitivity < 0.1 || sensitivity > 1.5 {
-		return fmt.Errorf("sensitivity must be between 0.1 and 1.5, got %g", sensitivity)
+	if sensitivity < SensitivityMin || sensitivity > SensitivityMax {
+		return fmt.Errorf("sensitivity must be between %g and %g, got %g", SensitivityMin, SensitivityMax, sensitivity)
 	}
 	return nil
 }
@@ -191,8 +219,8 @@ func validateEnvThreshold(value string) error {
 	if err != nil {
 		return fmt.Errorf("invalid threshold: %w", err)
 	}
-	if threshold < 0.0 || threshold > 1.0 {
-		return fmt.Errorf("threshold must be between 0.0 and 1.0, got %g", threshold)
+	if threshold < ThresholdMin || threshold > ThresholdMax {
+		return fmt.Errorf("threshold must be between %g and %g, got %g", ThresholdMin, ThresholdMax, threshold)
 	}
 	return nil
 }
@@ -203,8 +231,8 @@ func validateEnvOverlap(value string) error {
 	if err != nil {
 		return fmt.Errorf("invalid overlap: %w", err)
 	}
-	if overlap < 0.0 || overlap > 2.9 {
-		return fmt.Errorf("overlap must be between 0.0 and 2.9, got %g", overlap)
+	if overlap < OverlapMin || overlap > OverlapMax {
+		return fmt.Errorf("overlap must be between %g and %g, got %g", OverlapMin, OverlapMax, overlap)
 	}
 	return nil
 }
@@ -215,8 +243,8 @@ func validateEnvThreads(value string) error {
 	if err != nil {
 		return fmt.Errorf("invalid threads: %w", err)
 	}
-	if threads < 0 {
-		return fmt.Errorf("threads must be non-negative, got %d", threads)
+	if threads < ThreadsMin {
+		return fmt.Errorf("threads must be >= %d, got %d", ThreadsMin, threads)
 	}
 	return nil
 }
@@ -235,8 +263,8 @@ func validateEnvRangeFilterThreshold(value string) error {
 	if err != nil {
 		return fmt.Errorf("invalid range filter threshold: %w", err)
 	}
-	if threshold < 0.0 || threshold > 1.0 {
-		return fmt.Errorf("range filter threshold must be between 0.0 and 1.0, got %g", threshold)
+	if threshold < ThresholdMin || threshold > ThresholdMax {
+		return fmt.Errorf("range filter threshold must be between %g and %g, got %g", ThresholdMin, ThresholdMax, threshold)
 	}
 	return nil
 }
