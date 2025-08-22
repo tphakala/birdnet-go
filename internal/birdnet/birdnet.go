@@ -594,14 +594,28 @@ func getOSSpecificSystemPaths(modelName string) []string {
 	// OS-specific system paths
 	switch runtime.GOOS {
 	case "windows":
-		// Windows system paths
-		paths = append(paths,
-			filepath.Join("C:", string(filepath.Separator), "Program Files", "BirdNET-Go", DefaultModelDirectory, modelName),
-			filepath.Join("C:", string(filepath.Separator), "ProgramData", "BirdNET-Go", DefaultModelDirectory, modelName),
-		)
+		// Windows system paths using environment variables
+		// Use PROGRAMFILES env var, fall back to C:\Program Files if not set
+		if programFiles := os.Getenv("PROGRAMFILES"); programFiles != "" {
+			paths = append(paths, filepath.Join(programFiles, "BirdNET-Go", DefaultModelDirectory, modelName))
+		} else {
+			// Fallback to default location if env var not set
+			paths = append(paths, filepath.Join("C:", string(filepath.Separator), "Program Files", "BirdNET-Go", DefaultModelDirectory, modelName))
+		}
 		
-		// Windows user-specific path
-		if userProfile := os.Getenv("USERPROFILE"); userProfile != "" {
+		// Use PROGRAMDATA env var, fall back to C:\ProgramData if not set
+		if programData := os.Getenv("PROGRAMDATA"); programData != "" {
+			paths = append(paths, filepath.Join(programData, "BirdNET-Go", DefaultModelDirectory, modelName))
+		} else {
+			// Fallback to default location if env var not set
+			paths = append(paths, filepath.Join("C:", string(filepath.Separator), "ProgramData", "BirdNET-Go", DefaultModelDirectory, modelName))
+		}
+		
+		// Windows user-specific path using LOCALAPPDATA
+		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+			paths = append(paths, filepath.Join(localAppData, "BirdNET-Go", DefaultModelDirectory, modelName))
+		} else if userProfile := os.Getenv("USERPROFILE"); userProfile != "" {
+			// Fallback to constructing from USERPROFILE if LOCALAPPDATA not set
 			paths = append(paths, filepath.Join(userProfile, "AppData", "Local", "BirdNET-Go", DefaultModelDirectory, modelName))
 		}
 		
