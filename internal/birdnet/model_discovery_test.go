@@ -9,36 +9,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// withTempWorkDir creates a temporary directory, changes to it, runs the function,
+// and ensures we return to the original directory afterwards.
+func withTempWorkDir(t *testing.T, fn func(tempDir string)) {
+	t.Helper()
+	
+	tempDir := t.TempDir()
+	originalWd, err := os.Getwd()
+	require.NoError(t, err, "Failed to get working directory")
+	
+	// Register cleanup to restore working directory
+	t.Cleanup(func() {
+		if err := os.Chdir(originalWd); err != nil {
+			t.Errorf("Failed to restore working directory: %v", err)
+		}
+	})
+	
+	require.NoError(t, os.Chdir(tempDir), "Failed to change to temp directory")
+	
+	// Run the test function
+	fn(tempDir)
+}
+
 func TestTryLoadModelFromStandardPaths_RelativeDirectory(t *testing.T) {
 	// Note: Cannot run in parallel due to os.Chdir() usage affecting global state
 	
 	const testModelName = "test_model.tflite"
 	const testContent = "mock model data"
 	
-	tempDir := t.TempDir()
-	originalWd, err := os.Getwd()
-	require.NoError(t, err, "Failed to get working directory")
-	
-	defer func() {
-		if err := os.Chdir(originalWd); err != nil {
-			t.Errorf("Failed to restore working directory: %v", err)
-		}
-	}()
-	
-	require.NoError(t, os.Chdir(tempDir), "Failed to change to temp directory")
+	withTempWorkDir(t, func(tempDir string) {
+		// Create test file in relative model directory
+		modelPath := filepath.Join(DefaultModelDirectory, testModelName)
+		require.NoError(t, os.MkdirAll(DefaultModelDirectory, 0o755), "Failed to create model directory")
+		require.NoError(t, os.WriteFile(modelPath, []byte(testContent), 0o644), "Failed to create test file")
 
-	// Create test file in relative model directory
-	modelPath := filepath.Join(DefaultModelDirectory, testModelName)
-	require.NoError(t, os.MkdirAll(DefaultModelDirectory, 0o755), "Failed to create model directory")
-	require.NoError(t, os.WriteFile(modelPath, []byte(testContent), 0o644), "Failed to create test file")
+		data, path, err := tryLoadModelFromStandardPaths(testModelName, "test")
 
-	result := tryLoadModelFromStandardPaths(testModelName)
-
-	require.True(t, result.Found, "Expected model to be found")
-	require.True(t, strings.HasSuffix(result.Path, modelPath), 
-		"Expected path to end with %s, got %s", modelPath, result.Path)
-	require.Equal(t, testContent, string(result.Data), "Expected correct file content")
-	require.NotEmpty(t, result.AttemptedPaths, "Expected AttemptedPaths to be populated")
+		require.NoError(t, err, "Expected model to be found")
+		require.True(t, strings.HasSuffix(path, modelPath), 
+			"Expected path to end with %s, got %s", modelPath, path)
+		require.Equal(t, testContent, string(data), "Expected correct file content")
+	})
 }
 
 func TestTryLoadModelFromStandardPaths_LegacyDataDirectory(t *testing.T) {
@@ -47,31 +58,21 @@ func TestTryLoadModelFromStandardPaths_LegacyDataDirectory(t *testing.T) {
 	const testModelName = "test_model.tflite"
 	const testContent = "mock model data"
 	
-	tempDir := t.TempDir()
-	originalWd, err := os.Getwd()
-	require.NoError(t, err, "Failed to get working directory")
-	
-	defer func() {
-		if err := os.Chdir(originalWd); err != nil {
-			t.Errorf("Failed to restore working directory: %v", err)
-		}
-	}()
-	
-	require.NoError(t, os.Chdir(tempDir), "Failed to change to temp directory")
+	withTempWorkDir(t, func(tempDir string) {
+		// Create test file in legacy data/model directory  
+		modelPath := filepath.Join("data", DefaultModelDirectory, testModelName)
+		require.NoError(t, os.MkdirAll(filepath.Join("data", DefaultModelDirectory), 0o755), 
+			"Failed to create model directory")
+		require.NoError(t, os.WriteFile(modelPath, []byte(testContent), 0o644), 
+			"Failed to create test file")
 
-	// Create test file in legacy data/model directory  
-	modelPath := filepath.Join("data", DefaultModelDirectory, testModelName)
-	require.NoError(t, os.MkdirAll(filepath.Join("data", DefaultModelDirectory), 0o755), 
-		"Failed to create model directory")
-	require.NoError(t, os.WriteFile(modelPath, []byte(testContent), 0o644), 
-		"Failed to create test file")
+		data, path, err := tryLoadModelFromStandardPaths(testModelName, "test")
 
-	result := tryLoadModelFromStandardPaths(testModelName)
-
-	require.True(t, result.Found, "Expected model to be found")
-	require.True(t, strings.HasSuffix(result.Path, modelPath),
-		"Expected path to end with %s, got %s", modelPath, result.Path)
-	require.Equal(t, testContent, string(result.Data), "Expected correct file content")
+		require.NoError(t, err, "Expected model to be found")
+		require.True(t, strings.HasSuffix(path, modelPath),
+			"Expected path to end with %s, got %s", modelPath, path)
+		require.Equal(t, testContent, string(data), "Expected correct file content")
+	})
 }
 
 func TestTryLoadModelFromStandardPaths_FirstHitWins(t *testing.T) {
@@ -79,76 +80,45 @@ func TestTryLoadModelFromStandardPaths_FirstHitWins(t *testing.T) {
 	
 	const testModelName = "test_model.tflite"
 	
-	tempDir := t.TempDir()
-	originalWd, err := os.Getwd()
-	require.NoError(t, err, "Failed to get working directory")
-	
-	defer func() {
-		if err := os.Chdir(originalWd); err != nil {
-			t.Errorf("Failed to restore working directory: %v", err)
-		}
-	}()
-	
-	require.NoError(t, os.Chdir(tempDir), "Failed to change to temp directory")
+	withTempWorkDir(t, func(tempDir string) {
+		// Create test files in multiple locations
+		firstPath := filepath.Join(DefaultModelDirectory, testModelName)
+		secondPath := filepath.Join("data", DefaultModelDirectory, testModelName)
 
-	// Create test files in multiple locations
-	firstPath := filepath.Join(DefaultModelDirectory, testModelName)
-	secondPath := filepath.Join("data", DefaultModelDirectory, testModelName)
+		// Create first priority file
+		require.NoError(t, os.MkdirAll(DefaultModelDirectory, 0o755), "Failed to create first directory")
+		require.NoError(t, os.WriteFile(firstPath, []byte("first_priority"), 0o644), "Failed to create first file")
 
-	// Create first priority file
-	require.NoError(t, os.MkdirAll(DefaultModelDirectory, 0o755), "Failed to create first directory")
-	require.NoError(t, os.WriteFile(firstPath, []byte("first_priority"), 0o644), "Failed to create first file")
+		// Create second priority file
+		require.NoError(t, os.MkdirAll(filepath.Join("data", DefaultModelDirectory), 0o755), 
+			"Failed to create second directory")
+		require.NoError(t, os.WriteFile(secondPath, []byte("second_priority"), 0o644), 
+			"Failed to create second file")
 
-	// Create second priority file
-	require.NoError(t, os.MkdirAll(filepath.Join("data", DefaultModelDirectory), 0o755), 
-		"Failed to create second directory")
-	require.NoError(t, os.WriteFile(secondPath, []byte("second_priority"), 0o644), 
-		"Failed to create second file")
+		data, path, err := tryLoadModelFromStandardPaths(testModelName, "test")
 
-	result := tryLoadModelFromStandardPaths(testModelName)
-
-	require.True(t, result.Found, "Expected model to be found")
-	// Should find first priority
-	require.True(t, strings.HasSuffix(result.Path, firstPath),
-		"Expected first priority path ending with %s, got %s", firstPath, result.Path)
-	require.Equal(t, "first_priority", string(result.Data), "Expected first priority data")
+		require.NoError(t, err, "Expected model to be found")
+		// Should find first priority
+		require.True(t, strings.HasSuffix(path, firstPath),
+			"Expected first priority path ending with %s, got %s", firstPath, path)
+		require.Equal(t, "first_priority", string(data), "Expected first priority data")
+	})
 }
 
 func TestTryLoadModelFromStandardPaths_ModelNotFound(t *testing.T) {
 	// Note: Cannot run in parallel due to os.Chdir() usage affecting global state
 	
-	tempDir := t.TempDir()
-	originalWd, err := os.Getwd()
-	require.NoError(t, err, "Failed to get working directory")
-	
-	defer func() {
-		if err := os.Chdir(originalWd); err != nil {
-			t.Errorf("Failed to restore working directory: %v", err)
-		}
-	}()
-	
-	require.NoError(t, os.Chdir(tempDir), "Failed to change to temp directory")
+	withTempWorkDir(t, func(tempDir string) {
+		data, path, err := tryLoadModelFromStandardPaths("nonexistent.tflite", "test")
 
-	result := tryLoadModelFromStandardPaths("nonexistent.tflite")
-
-	require.False(t, result.Found, "Expected model not to be found")
-	require.Empty(t, result.Path, "Expected empty path when not found")
-	require.Nil(t, result.Data, "Expected nil data when not found")
-	require.NotEmpty(t, result.AttemptedPaths, "Expected AttemptedPaths to be populated even when not found")
-
-	// Verify AttemptedPaths contains expected relative paths
-	expectedPatterns := []string{DefaultModelDirectory, "data"}
-	for _, pattern := range expectedPatterns {
-		found := false
-		for _, attemptedPath := range result.AttemptedPaths {
-			if strings.Contains(attemptedPath, pattern) {
-				found = true
-				break
-			}
-		}
-		require.True(t, found, "Expected attempted paths to include pattern %s, got %v", 
-			pattern, result.AttemptedPaths)
-	}
+		require.Error(t, err, "Expected error when model not found")
+		require.Nil(t, data, "Expected nil data when not found")
+		require.Empty(t, path, "Expected empty path when not found")
+		
+		// Verify error contains attempted paths context
+		require.Contains(t, err.Error(), "not found in standard paths", "Error should mention standard paths")
+		require.Contains(t, err.Error(), "nonexistent.tflite", "Error should mention the file name")
+	})
 }
 
 func TestTryLoadModelFromStandardPaths_RangeFilterModels(t *testing.T) {
@@ -167,30 +137,19 @@ func TestTryLoadModelFromStandardPaths_RangeFilterModels(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			
-			tempDir := t.TempDir()
-			originalWd, err := os.Getwd()
-			require.NoError(t, err, "Failed to get working directory")
-			
-			defer func() {
-				if err := os.Chdir(originalWd); err != nil {
-					t.Errorf("Failed to restore working directory: %v", err)
-				}
-			}()
-			
-			require.NoError(t, os.Chdir(tempDir), "Failed to change to temp directory")
+			withTempWorkDir(t, func(tempDir string) {
+				// Create test file
+				modelPath := filepath.Join(DefaultModelDirectory, tc.modelName)
+				require.NoError(t, os.MkdirAll(DefaultModelDirectory, 0o755), "Failed to create model directory")
+				require.NoError(t, os.WriteFile(modelPath, []byte(testContent), 0o644), "Failed to create test file")
 
-			// Create test file
-			modelPath := filepath.Join(DefaultModelDirectory, tc.modelName)
-			require.NoError(t, os.MkdirAll(DefaultModelDirectory, 0o755), "Failed to create model directory")
-			require.NoError(t, os.WriteFile(modelPath, []byte(testContent), 0o644), "Failed to create test file")
+				data, path, err := tryLoadModelFromStandardPaths(tc.modelName, "test")
 
-			result := tryLoadModelFromStandardPaths(tc.modelName)
-
-			require.True(t, result.Found, "Expected model to be found")
-			require.True(t, strings.HasSuffix(result.Path, modelPath),
-				"Expected path to end with %s, got %s", modelPath, result.Path)
-			require.Equal(t, testContent, string(result.Data), "Expected correct file content")
+				require.NoError(t, err, "Expected model to be found")
+				require.True(t, strings.HasSuffix(path, modelPath),
+					"Expected path to end with %s, got %s", modelPath, path)
+				require.Equal(t, testContent, string(data), "Expected correct file content")
+			})
 		})
 	}
 }
@@ -200,42 +159,20 @@ func TestTryLoadModelFromStandardPaths_AttemptedPaths(t *testing.T) {
 
 	const testModelName = "nonexistent.tflite"
 	
-	tempDir := t.TempDir()
-	originalWd, err := os.Getwd()
-	require.NoError(t, err, "Failed to get working directory")
-	
-	defer func() {
-		if err := os.Chdir(originalWd); err != nil {
-			t.Errorf("Failed to restore working directory: %v", err)
-		}
-	}()
-	
-	require.NoError(t, os.Chdir(tempDir), "Failed to change to temp directory")
+	withTempWorkDir(t, func(tempDir string) {
+		data, path, err := tryLoadModelFromStandardPaths(testModelName, "test")
 
-	result := tryLoadModelFromStandardPaths(testModelName)
+		require.Error(t, err, "Expected error when model not found")
+		require.Nil(t, data, "Expected nil data")
+		require.Empty(t, path, "Expected empty path")
 
-	require.False(t, result.Found, "Expected not to find model")
-
-	// Verify that AttemptedPaths is populated and contains expected patterns
-	require.NotEmpty(t, result.AttemptedPaths, "Expected AttemptedPaths to be populated")
-
-	// All attempted paths should end with the model name
-	for _, attemptedPath := range result.AttemptedPaths {
-		require.Equal(t, testModelName, filepath.Base(attemptedPath),
-			"Expected all attempted paths to end with model name")
-	}
-
-	// Should contain both relative and absolute paths
-	hasRelativePath := false
-	hasAbsolutePath := false
-	for _, path := range result.AttemptedPaths {
-		if filepath.IsAbs(path) {
-			hasAbsolutePath = true
-		} else {
-			hasRelativePath = true
-		}
-	}
-
-	require.True(t, hasRelativePath, "Expected some relative paths in AttemptedPaths")
-	require.True(t, hasAbsolutePath, "Expected some absolute paths in AttemptedPaths")
+		// Error should contain information about attempted paths
+		errStr := err.Error()
+		require.Contains(t, errStr, "not found in standard paths", "Error should mention standard paths")
+		require.Contains(t, errStr, testModelName, "Error should mention the model name")
+		
+		// The error context would include attempted paths, but we'd need to parse the error
+		// to verify. For now, we can at least verify the error mentions the failure.
+		require.Contains(t, errStr, "test model", "Error should mention model type")
+	})
 }

@@ -275,20 +275,16 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 			fmt.Printf("⚠️ Looking for legacy range filter model\n")
 		}
 		
-		result := tryLoadModelFromStandardPaths(modelFileName)
-		if result.Found {
-			fmt.Printf("📁 Loaded range filter model from standard path: %s\n", result.Path)
-			bn.Debug("Loaded range filter model from standard path: %s", result.Path)
-			return result.Data, nil
+		data, path, err := tryLoadModelFromStandardPaths(modelFileName, "range filter")
+		if err != nil {
+			// Add extra context to the error
+			return nil, errors.Wrap(err).
+				Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
+				Build()
 		}
-		// If standard paths failed, report the error with attempted paths
-		return nil, errors.Newf("range filter model '%s' not found in standard paths (built with noembed tag)", modelFileName).
-			Category(errors.CategoryModelLoad).
-			Context("embedded_models", hasEmbeddedModels).
-			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
-			Context("attempted_file", modelFileName).
-			Context("attempted_paths", result.AttemptedPaths).
-			Build()
+		fmt.Printf("📁 Loaded range filter model from standard path: %s\n", path)
+		bn.Debug("Loaded range filter model from standard path: %s", path)
+		return data, nil
 	}
 	
 	// Fall back to embedded models
@@ -576,13 +572,6 @@ const DefaultRangeFilterV2ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP1
 // Callers can override model locations by setting explicit ModelPath or RangeFilter.ModelPath in configuration.
 const DefaultModelDirectory = "model"
 
-// ModelSearchResult contains the results of searching for a model file in standard locations.
-type ModelSearchResult struct {
-	Data           []byte   // Model file contents (nil if not found)
-	Path           string   // Successful path (empty if not found)  
-	Found          bool     // Whether a model file was successfully loaded
-	AttemptedPaths []string // All paths that were searched (for error reporting)
-}
 
 // getOSSpecificSystemPaths returns OS-appropriate system installation paths.
 func getOSSpecificSystemPaths(modelName string) []string {
@@ -653,8 +642,9 @@ func getOSSpecificSystemPaths(modelName string) []string {
 }
 
 // tryLoadModelFromStandardPaths attempts to load a model from standard locations.
-// It returns a ModelSearchResult with the outcome and attempted paths for error reporting.
-func tryLoadModelFromStandardPaths(modelName string) ModelSearchResult {
+// It returns the model data, path, and an error if not found.
+// The error includes all attempted paths for debugging.
+func tryLoadModelFromStandardPaths(modelName, modelType string) (data []byte, path string, err error) {
 	// Build candidate paths using filepath.Join for all constructions
 	var candidatePaths []string
 	
@@ -671,34 +661,30 @@ func tryLoadModelFromStandardPaths(modelName string) ModelSearchResult {
 	if exePath, execErr := os.Executable(); execErr == nil {
 		exeDir := filepath.Dir(exePath)
 		candidatePaths = append(candidatePaths,
-			filepath.Join(exeDir, DefaultModelDirectory, modelName),                    // <exe-dir>/model/<name>
-			filepath.Join(exeDir, "..", DefaultModelDirectory, modelName),              // <exe-dir>/../model/<name>
-			filepath.Join(exeDir, "share", "birdnet-go", DefaultModelDirectory, modelName), // <exe-dir>/share/birdnet-go/model/<name>
+			filepath.Join(exeDir, DefaultModelDirectory, modelName),                        // <exe-dir>/model/<name>
+			filepath.Join(exeDir, "..", DefaultModelDirectory, modelName),                  // <exe-dir>/../model/<name>
+			filepath.Join(exeDir, "..", "share", "birdnet-go", DefaultModelDirectory, modelName), // <exe-dir>/../share/birdnet-go/model/<name>
 		)
 	}
 
 	// Attempt to read from each candidate path directly (no os.Stat to avoid TOCTOU)
 	for _, candidatePath := range candidatePaths {
-		data, err := os.ReadFile(candidatePath)
-		if err == nil {
+		fileData, readErr := os.ReadFile(candidatePath)
+		if readErr == nil {
 			// Successfully loaded model
-			return ModelSearchResult{
-				Data:           data,
-				Path:           candidatePath, 
-				Found:          true,
-				AttemptedPaths: candidatePaths,
-			}
+			return fileData, candidatePath, nil
 		}
 		// Continue trying other paths (collect I/O errors but don't return them individually)
 	}
 
-	// No model found in any standard location
-	return ModelSearchResult{
-		Data:           nil,
-		Path:           "",
-		Found:          false,
-		AttemptedPaths: candidatePaths,
-	}
+	// No model found in any standard location - build error with context
+	return nil, "", errors.Newf("%s model '%s' not found in standard paths (built with noembed tag)", modelType, modelName).
+		Category(errors.CategoryModelLoad).
+		Context("embedded_models", hasEmbeddedModels).
+		Context("model_type", modelType).
+		Context("attempted_file", modelName).
+		Context("attempted_paths", candidatePaths).
+		Build()
 }
 
 // loadModel loads either the embedded model or an external model file
@@ -739,19 +725,13 @@ func (bn *BirdNET) loadModel() ([]byte, error) {
 
 	// No model path specified, try standard paths first (for noembed builds)
 	if !hasEmbeddedModels {
-		result := tryLoadModelFromStandardPaths(DefaultBirdNETModelName)
-		if result.Found {
-			fmt.Printf("📁 Loaded BirdNET model from standard path: %s\n", result.Path)
-			bn.Debug("Loaded model from standard path: %s (size: %d MB)", result.Path, len(result.Data)/1024/1024)
-			return result.Data, nil
+		data, path, err := tryLoadModelFromStandardPaths(DefaultBirdNETModelName, "BirdNET")
+		if err != nil {
+			return nil, err
 		}
-		// If standard paths failed, report the error with attempted paths
-		return nil, errors.Newf("no model path specified and model '%s' not found in standard paths (built with noembed tag)", DefaultBirdNETModelName).
-			Category(errors.CategoryModelLoad).
-			Context("embedded_models", hasEmbeddedModels).
-			Context("attempted_file", DefaultBirdNETModelName).
-			Context("attempted_paths", result.AttemptedPaths).
-			Build()
+		fmt.Printf("📁 Loaded BirdNET model from standard path: %s\n", path)
+		bn.Debug("Loaded model from standard path: %s (size: %d MB)", path, len(data)/1024/1024)
+		return data, nil
 	}
 
 	// Use embedded model if available
