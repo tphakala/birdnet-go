@@ -13,6 +13,54 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Configuration key constants
+const (
+	// BirdNET Core Configuration
+	ConfigKeyLocale      = "birdnet.locale"
+	ConfigKeyLatitude    = "birdnet.latitude"
+	ConfigKeyLongitude   = "birdnet.longitude"
+	ConfigKeySensitivity = "birdnet.sensitivity"
+	ConfigKeyThreshold   = "birdnet.threshold"
+	ConfigKeyOverlap     = "birdnet.overlap"
+	ConfigKeyThreads     = "birdnet.threads"
+	ConfigKeyDebug       = "birdnet.debug"
+	ConfigKeyUseXNNPack  = "birdnet.usexnnpack"
+
+	// Model Paths
+	ConfigKeyModelPath = "birdnet.modelpath"
+	ConfigKeyLabelPath = "birdnet.labelpath"
+
+	// Range Filter Configuration
+	ConfigKeyRangeFilterModel     = "birdnet.rangefilter.model"
+	ConfigKeyRangeFilterThreshold = "birdnet.rangefilter.threshold"
+	ConfigKeyRangeFilterModelPath = "birdnet.rangefilter.modelpath"
+	ConfigKeyRangeFilterDebug     = "birdnet.rangefilter.debug"
+)
+
+// Environment variable name constants
+const (
+	// BirdNET Core Configuration
+	EnvVarLocale      = "BIRDNET_LOCALE"
+	EnvVarLatitude    = "BIRDNET_LATITUDE"
+	EnvVarLongitude   = "BIRDNET_LONGITUDE"
+	EnvVarSensitivity = "BIRDNET_SENSITIVITY"
+	EnvVarThreshold   = "BIRDNET_THRESHOLD"
+	EnvVarOverlap     = "BIRDNET_OVERLAP"
+	EnvVarThreads     = "BIRDNET_THREADS"
+	EnvVarDebug       = "BIRDNET_DEBUG"
+	EnvVarUseXNNPack  = "BIRDNET_USEXNNPACK"
+
+	// Model Paths
+	EnvVarModelPath = "BIRDNET_MODELPATH"
+	EnvVarLabelPath = "BIRDNET_LABELPATH"
+
+	// Range Filter Configuration
+	EnvVarRangeFilterModel     = "BIRDNET_RANGEFILTER_MODEL"
+	EnvVarRangeFilterThreshold = "BIRDNET_RANGEFILTER_THRESHOLD"
+	EnvVarRangeFilterModelPath = "BIRDNET_RANGEFILTER_MODELPATH"
+	EnvVarRangeFilterDebug     = "BIRDNET_RANGEFILTER_DEBUG"
+)
+
 // envBinding holds metadata for environment variable bindings (internal use)
 type envBinding struct {
 	ConfigKey string             // Viper config key
@@ -24,25 +72,25 @@ type envBinding struct {
 func getEnvBindings() []envBinding {
 	return []envBinding{
 		// BirdNET Core Configuration
-		{"birdnet.locale", "BIRDNET_LOCALE", validateEnvLocale},
-		{"birdnet.latitude", "BIRDNET_LATITUDE", validateEnvLatitude},
-		{"birdnet.longitude", "BIRDNET_LONGITUDE", validateEnvLongitude},
-		{"birdnet.sensitivity", "BIRDNET_SENSITIVITY", validateEnvSensitivity},
-		{"birdnet.threshold", "BIRDNET_THRESHOLD", validateEnvThreshold},
-		{"birdnet.overlap", "BIRDNET_OVERLAP", validateEnvOverlap},
-		{"birdnet.threads", "BIRDNET_THREADS", validateEnvThreads},
-		{"birdnet.debug", "BIRDNET_DEBUG", validateEnvBool},
-		{"birdnet.usexnnpack", "BIRDNET_USEXNNPACK", validateEnvBool},
+		{ConfigKeyLocale, EnvVarLocale, validateEnvLocale},
+		{ConfigKeyLatitude, EnvVarLatitude, validateEnvLatitude},
+		{ConfigKeyLongitude, EnvVarLongitude, validateEnvLongitude},
+		{ConfigKeySensitivity, EnvVarSensitivity, validateEnvSensitivity},
+		{ConfigKeyThreshold, EnvVarThreshold, validateEnvThreshold},
+		{ConfigKeyOverlap, EnvVarOverlap, validateEnvOverlap},
+		{ConfigKeyThreads, EnvVarThreads, validateEnvThreads},
+		{ConfigKeyDebug, EnvVarDebug, validateEnvBool},
+		{ConfigKeyUseXNNPack, EnvVarUseXNNPack, validateEnvBool},
 		
 		// Model Paths
-		{"birdnet.modelpath", "BIRDNET_MODELPATH", validateEnvPath},
-		{"birdnet.labelpath", "BIRDNET_LABELPATH", validateEnvPath},
+		{ConfigKeyModelPath, EnvVarModelPath, validateEnvPath},
+		{ConfigKeyLabelPath, EnvVarLabelPath, validateEnvPath},
 		
 		// Range Filter Configuration
-		{"birdnet.rangefilter.model", "BIRDNET_RANGEFILTER_MODEL", validateEnvRangeFilterModel},
-		{"birdnet.rangefilter.threshold", "BIRDNET_RANGEFILTER_THRESHOLD", validateEnvRangeFilterThreshold},
-		{"birdnet.rangefilter.modelpath", "BIRDNET_RANGEFILTER_MODELPATH", validateEnvPath},
-		{"birdnet.rangefilter.debug", "BIRDNET_RANGEFILTER_DEBUG", validateEnvBool},
+		{ConfigKeyRangeFilterModel, EnvVarRangeFilterModel, validateEnvRangeFilterModel},
+		{ConfigKeyRangeFilterThreshold, EnvVarRangeFilterThreshold, validateEnvRangeFilterThreshold},
+		{ConfigKeyRangeFilterModelPath, EnvVarRangeFilterModelPath, validateEnvPath},
+		{ConfigKeyRangeFilterDebug, EnvVarRangeFilterDebug, validateEnvBool},
 	}
 }
 
@@ -194,7 +242,15 @@ func validateEnvRangeFilterThreshold(value string) error {
 }
 
 func validateEnvPath(value string) error {
-	// Clean the path first to normalize it
+	// Trim leading/trailing whitespace first
+	value = strings.TrimSpace(value)
+	
+	// Explicitly reject empty input
+	if value == "" {
+		return fmt.Errorf("path must not be empty")
+	}
+	
+	// Clean the path to normalize it
 	cleanedPath := filepath.Clean(value)
 	
 	// Require absolute paths for security

@@ -2,6 +2,7 @@ package conf
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -81,9 +82,14 @@ func TestValidateEnvPath(t *testing.T) {
 	t.Parallel()
 	
 	// Create a temp file for testing
-	tmpFile := t.TempDir() + "/test.tflite"
+	tmpFile := filepath.Join(t.TempDir(), "test.tflite")
 	err := os.WriteFile(tmpFile, []byte("test"), 0o600)
 	require.NoError(t, err)
+	
+	// Create portable absolute paths for testing
+	tempDir := t.TempDir()
+	nonExistentPath := filepath.Join(tempDir, "nonexistent", "path", "file.txt")
+	pathTraversalAttempt := filepath.Join(tempDir, "valid", "..", "..", "..", "etc", "passwd")
 	
 	tests := []struct {
 		name    string
@@ -92,11 +98,12 @@ func TestValidateEnvPath(t *testing.T) {
 		errMsg  string
 	}{
 		{"absolute path exists", tmpFile, false, ""},
-		{"absolute path not exists", "/nonexistent/path/file.txt", false, ""}, // No error for non-existent files
-		{"relative path", "relative/path", true, "must be absolute"},
-		{"path traversal attempt", "/valid/../../../etc/passwd", false, ""}, // Clean normalizes this to /etc/passwd 
-		{"relative with dots", "../../../etc/passwd", true, "must be absolute"},
-		{"empty path", "", true, "must be absolute"},
+		{"absolute path not exists", nonExistentPath, false, ""}, // No error for non-existent files
+		{"relative path", filepath.Join("relative", "path"), true, "must be absolute"},
+		{"path traversal attempt", pathTraversalAttempt, false, ""}, // Clean normalizes this 
+		{"relative with dots", filepath.Join("..", "..", "..", "etc", "passwd"), true, "must be absolute"},
+		{"empty path", "", true, "must not be empty"},
+		{"whitespace only", "   ", true, "must not be empty"},
 	}
 	
 	for _, tt := range tests {
@@ -159,4 +166,66 @@ func TestConfigureEnvironmentVariables(t *testing.T) {
 		err := configureEnvironmentVariables()
 		assert.NoError(t, err)
 	})
+}
+
+func TestConfigureEnvironmentVariables_EmptyValuesValidated(t *testing.T) {
+	// Reset viper for clean test
+	viper.Reset()
+	
+	// Test that empty-but-present env vars are validated
+	t.Run("empty threads value", func(t *testing.T) {
+		t.Setenv("BIRDNET_THREADS", "")
+		
+		err := configureEnvironmentVariables()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid threads")
+	})
+}
+
+func TestValidateAndNormalizeRangeFilterModel(t *testing.T) {
+	// Test direct validation function
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"empty string", "", true},
+		{"latest", "latest", false},
+		{"legacy", "legacy", false},
+		{"invalid", "invalid", true},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateEnvRangeFilterModel(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+	
+	// Test integration with configureEnvironmentVariables
+	integrationTests := []struct {
+		name     string
+		envValue string
+		expected string
+	}{
+		{"latest model", "latest", "latest"},
+		{"legacy model", "legacy", "legacy"},
+	}
+	
+	for _, tt := range integrationTests {
+		t.Run(tt.name, func(t *testing.T) {
+			viper.Reset()
+			t.Setenv("BIRDNET_RANGEFILTER_MODEL", tt.envValue)
+			
+			err := configureEnvironmentVariables()
+			require.NoError(t, err)
+			
+			actual := viper.GetString("birdnet.rangefilter.model")
+			assert.Equal(t, tt.expected, actual)
+		})
+	}
 }
