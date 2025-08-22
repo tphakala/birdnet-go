@@ -8,7 +8,9 @@ vi.mock('$lib/i18n', () => ({
 }));
 
 vi.mock('$lib/utils/security', () => ({
+  // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled inputs
   safeGet: vi.fn((obj, key) => obj?.[key]),
+  // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled inputs
   safeArrayAccess: vi.fn((arr, index) => arr?.[index]),
 }));
 
@@ -192,7 +194,8 @@ describe('AudioEqualizerSettings', () => {
 
   it('should display existing HighPass filter with correct attenuation value', async () => {
     const existingFilter = {
-      type: 'HighPass',
+      id: 'test-filter-1',
+      type: 'HighPass' as const,
       frequency: 100,
       passes: 2, // 24dB attenuation
       q: 0.707,
@@ -222,7 +225,8 @@ describe('AudioEqualizerSettings', () => {
 
   it('should handle missing passes property gracefully', async () => {
     const filterWithoutPasses = {
-      type: 'HighPass',
+      id: 'test-filter-2',
+      type: 'HighPass' as const,
       frequency: 100,
       // passes property missing - should default to 1 (12dB)
       q: 0.707,

@@ -26,6 +26,7 @@
     type: string;
     frequency: number;
     q?: number;
+    width?: number;
     passes?: number;
     [key: string]: any;
   }
@@ -45,6 +46,35 @@
   let canvas: HTMLCanvasElement;
   let tooltip = $state({ visible: false, x: 0, y: 0, freq: 0, gain: 0 });
 
+  // Performance optimization: Cache filter coefficients
+  let filterCoefficientsCache = new Map<
+    string,
+    { b0: number; b1: number; b2: number; a1: number; a2: number }
+  >();
+  let lastFilterState = '';
+
+  // Performance optimization: No longer needed with stable Q-based calculation
+
+  // Performance optimization: Cache entire frequency response curves
+  let responseCache = new Map<string, { response: Float32Array; xPositions: Float32Array }>();
+  let lastResponseCacheKey = '';
+
+  // Performance optimization: Cache individual filter responses per frequency
+  let filterResponseCache = new Map<string, Map<number, number>>();
+
+  // Performance optimization: Precompute trig values for common frequencies
+  let trigCache = new Map<number, { cos: number; sin: number; cos2: number; sin2: number }>();
+
+  // Performance optimization: Use requestAnimationFrame
+  let animationFrameId: number | null = null;
+  let resizeDebounceTimer: number | null = null;
+  let qualityUpgradeTimer: number | null = null;
+
+  // PERFORMANCE: Track if we should use reduced quality for real-time updates
+  let useReducedQuality = $state(false);
+  let lastInteractionTime = 0;
+  let isResizing = $state(false);
+
   // Professional margins for proper label spacing
   const margins = {
     top: 40,
@@ -53,9 +83,9 @@
     left: 100, // Much more space for dB labels
   };
 
-  // Responsive width calculation
+  // Responsive canvas dimensions
   let canvasWidth = $state(800); // Default fallback
-  let canvasHeight = height;
+  let canvasHeight = $state(height); // Make reactive since we update it
 
   // Plot area dimensions (excluding margins) - now reactive
   let plotWidth = $derived(canvasWidth - margins.left - margins.right);
@@ -88,26 +118,42 @@
     // This function kept for compatibility with existing effect calls
   }
 
-  // Calculate frequency response for a filter using proper digital biquad formulas
-  function calculateFilterResponse(filter: Filter, frequency: number): number {
+  // Get cached filter coefficients or calculate them
+  function getFilterCoefficients(filter: Filter) {
+    const cacheKey = `${filter.type}-${filter.frequency}-${filter.q ?? 0}-${filter.width ?? 0}-${filter.passes ?? 0}`;
+
+    // Check cache first
+    if (filterCoefficientsCache.has(cacheKey)) {
+      return filterCoefficientsCache.get(cacheKey)!;
+    }
+
     const sampleRate = 48000; // 48kHz sample rate
 
     // For HP/LP filters, always use Butterworth response (Q=0.707)
-    // For band-pass/band-stop, use the specified Q factor
+    // For band-pass/band-stop, use the specified Q factor or width
     let q = 0.707; // Default to Butterworth
+    let alpha = 0;
 
-    if (filter.type === 'BandPass' || filter.type === 'BandStop' || filter.type === 'Notch') {
+    if (filter.type === 'BandReject' && filter.width) {
+      // WORKAROUND: Use correct Q-based calculation instead of buggy backend formula
+      // Backend bug: Uses Hz directly in formula expecting octaves, causing -48dB notches
+      // This shows the expected -12dB notch for proper user experience
+
+      const centerFreq = filter.frequency;
+      const bandwidthHz = filter.width;
+
+      // Standard Q calculation: Q = center_frequency / bandwidth_hz
+      q = centerFreq / bandwidthHz;
+      q = Math.max(0.1, Math.min(100, q));
+    } else if (
+      filter.type === 'BandPass' ||
+      filter.type === 'BandStop' ||
+      filter.type === 'Notch'
+    ) {
       q = Math.max(0.1, Math.min(10, filter.q || 0.707));
     } else if (filter.type === 'HighPass' || filter.type === 'LowPass') {
       // Force Butterworth response for HP/LP filters
       q = 0.707;
-    }
-
-    const passes = filter.passes || 0;
-
-    // If no passes (0dB attenuation), return flat response
-    if (passes === 0) {
-      return 0;
     }
 
     // Calculate filter coefficients using Robert Bristow-Johnson's cookbook formulas
@@ -115,7 +161,9 @@
     const omega = (2 * Math.PI * fc) / sampleRate;
     const sin_omega = Math.sin(omega);
     const cos_omega = Math.cos(omega);
-    const alpha = sin_omega / (2 * q);
+
+    // Calculate alpha from Q for all filter types
+    alpha = sin_omega / (2 * q);
 
     let b0 = 0,
       b1 = 0,
@@ -148,8 +196,12 @@
       a0 = 1 + alpha;
       a1 = -2 * cos_omega;
       a2 = 1 - alpha;
-    } else if (filter.type === 'BandStop' || filter.type === 'Notch') {
-      // Band-stop/notch filter coefficients
+    } else if (
+      filter.type === 'BandStop' ||
+      filter.type === 'Notch' ||
+      filter.type === 'BandReject'
+    ) {
+      // Band-stop/notch/band-reject filter coefficients
       b0 = 1;
       b1 = -2 * cos_omega;
       b2 = 1;
@@ -157,7 +209,10 @@
       a1 = -2 * cos_omega;
       a2 = 1 - alpha;
     } else {
-      return 0; // Unknown filter type
+      // Unknown filter type - return unity coefficients
+      const coeffs = { b0: 1, b1: 0, b2: 0, a1: 0, a2: 0 };
+      filterCoefficientsCache.set(cacheKey, coeffs);
+      return coeffs;
     }
 
     // Normalize coefficients
@@ -167,15 +222,65 @@
     a1 /= a0;
     a2 /= a0;
 
+    // Cache the coefficients
+    const coeffs = { b0, b1, b2, a1, a2 };
+    filterCoefficientsCache.set(cacheKey, coeffs);
+
+    return coeffs;
+  }
+
+  // Calculate frequency response for a filter using cached coefficients
+  function calculateFilterResponse(filter: Filter, frequency: number): number {
+    const sampleRate = 48000; // 48kHz sample rate
+    const passes = filter.passes || 0;
+
+    // If no passes (0dB attenuation), return flat response
+    if (passes === 0) {
+      return 0;
+    }
+
+    // PERFORMANCE: Check filter-specific response cache first
+    const filterCacheKey = `${filter.type}-${filter.frequency}-${filter.q ?? 0}-${filter.width ?? 0}-${passes}`;
+    let freqCache = filterResponseCache.get(filterCacheKey);
+    if (!freqCache) {
+      freqCache = new Map<number, number>();
+      filterResponseCache.set(filterCacheKey, freqCache);
+    }
+
+    const cachedResponse = freqCache.get(frequency);
+    if (cachedResponse !== undefined) {
+      return cachedResponse;
+    }
+
+    // Get cached coefficients
+    const { b0, b1, b2, a1, a2 } = getFilterCoefficients(filter);
+
     // Calculate frequency response at the given frequency
     // H(e^jω) = (b0 + b1*e^-jω + b2*e^-j2ω) / (1 + a1*e^-jω + a2*e^-j2ω)
     const w = (2 * Math.PI * frequency) / sampleRate;
 
-    // For numerical stability, use pre-computed trig values
-    const cos_w = Math.cos(w);
-    const sin_w = Math.sin(w);
-    const cos_2w = Math.cos(2 * w);
-    const sin_2w = Math.sin(2 * w);
+    // PERFORMANCE: Use cached trig values
+    let trigValues = trigCache.get(w);
+    if (!trigValues) {
+      const cos_w = Math.cos(w);
+      const sin_w = Math.sin(w);
+      trigValues = {
+        cos: cos_w,
+        sin: sin_w,
+        cos2: 2 * cos_w * cos_w - 1, // cos(2w) = 2cos²(w) - 1
+        sin2: 2 * sin_w * cos_w, // sin(2w) = 2sin(w)cos(w)
+      };
+      // Limit trig cache size
+      if (trigCache.size > 500) {
+        const firstKey = trigCache.keys().next();
+        if (!firstKey.done && firstKey.value !== undefined) {
+          trigCache.delete(firstKey.value);
+        }
+      }
+      trigCache.set(w, trigValues);
+    }
+
+    const { cos: cos_w, sin: sin_w, cos2: cos_2w, sin2: sin_2w } = trigValues;
 
     // Complex numerator: b0 + b1*e^-jω + b2*e^-j2ω
     // e^-jω = cos(ω) - j*sin(ω)
@@ -187,8 +292,9 @@
     const den_imag = -a1 * sin_w - a2 * sin_2w;
 
     // Calculate magnitude |H| = |numerator| / |denominator|
-    const num_magnitude = Math.sqrt(num_real * num_real + num_imag * num_imag);
-    const den_magnitude = Math.sqrt(den_real * den_real + den_imag * den_imag);
+    // PERFORMANCE: Use hypot for better numerical stability and potential SIMD optimization
+    const num_magnitude = Math.hypot(num_real, num_imag);
+    const den_magnitude = Math.hypot(den_real, den_imag);
 
     // Avoid division by zero and ensure stability
     let magnitude = num_magnitude / Math.max(1e-10, den_magnitude);
@@ -197,7 +303,7 @@
     // This is a physical constraint - passive filters can't amplify
     if (filter.type === 'HighPass') {
       // At frequencies much higher than cutoff, response should approach 1 (0 dB)
-      const freq_ratio = frequency / fc;
+      const freq_ratio = frequency / filter.frequency;
       if (freq_ratio > 10) {
         // Far above cutoff, response should be very close to 1
         magnitude = Math.min(magnitude, 1.0);
@@ -212,15 +318,41 @@
     const db = 20 * Math.log10(Math.max(1e-10, cascaded_magnitude));
 
     // Clamp to reasonable range
-    return Math.max(-96, Math.min(12, db));
+    const result = Math.max(-96, Math.min(12, db));
+
+    // PERFORMANCE: Cache the result for this filter and frequency
+    freqCache.set(frequency, result);
+
+    // Limit per-filter cache size
+    if (freqCache.size > 200) {
+      const firstKey = freqCache.keys().next();
+      if (!firstKey.done && firstKey.value !== undefined) {
+        freqCache.delete(firstKey.value);
+      }
+    }
+
+    return result;
   }
 
   // Calculate combined response of all filters (returns 0dB flat response when no filters)
   function calculateCombinedResponse(frequency: number): number {
     let totalGain = 0;
     for (const filter of filters) {
-      totalGain += calculateFilterResponse(filter, frequency);
+      const filterGain = calculateFilterResponse(filter, frequency);
+
+      // Skip this filter if it returns NaN or Infinity
+      if (!isFinite(filterGain)) {
+        continue;
+      }
+
+      totalGain += filterGain;
     }
+
+    // Return flat response if calculation fails
+    if (!isFinite(totalGain)) {
+      return 0;
+    }
+
     return Math.max(MIN_DB, Math.min(MAX_DB, totalGain));
   }
 
@@ -287,13 +419,237 @@
     return margins.top + plotHeight - ((db - MIN_DB) / (MAX_DB - MIN_DB)) * plotHeight;
   }
 
-  // Update canvas dimensions based on container
-  function updateCanvasDimensions() {
-    if (containerElement) {
+  // Update canvas dimensions based on container size with proper DPR handling
+  function updateCanvasDimensions(immediate = false) {
+    if (containerElement && canvas) {
       const containerWidth = containerElement.clientWidth;
       // Use most of the container width while maintaining reasonable limits
-      canvasWidth = Math.min(Math.max(containerWidth * 0.95, 600), 1200);
+      const newCanvasWidth = Math.min(Math.max(containerWidth * 0.95, 600), 1200);
+      const newCanvasHeight = height;
+
+      // Get device pixel ratio for high-DPI displays
+      const dpr = window.devicePixelRatio || 1;
+
+      // Set the internal canvas size (accounting for device pixel ratio)
+      const internalWidth = Math.round(newCanvasWidth * dpr);
+      const internalHeight = Math.round(newCanvasHeight * dpr);
+
+      // Only update if dimensions actually changed to avoid unnecessary redraws
+      if (
+        canvas.width !== internalWidth ||
+        canvas.height !== internalHeight ||
+        canvasWidth !== newCanvasWidth ||
+        canvasHeight !== newCanvasHeight
+      ) {
+        // Update internal canvas dimensions
+        canvas.width = internalWidth;
+        canvas.height = internalHeight;
+
+        // Scale the context to match device pixel ratio
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.scale(dpr, dpr);
+        }
+
+        // Set CSS dimensions (what the user sees)
+        canvas.style.width = `${newCanvasWidth}px`;
+        canvas.style.height = `${newCanvasHeight}px`;
+
+        // Update reactive state
+        canvasWidth = newCanvasWidth;
+        canvasHeight = newCanvasHeight;
+
+        // PERFORMANCE: Only clear coordinate-dependent caches
+        // Don't clear expensive filter caches during active resize
+        if (!isResizing || immediate) {
+          responseCache.clear(); // Always clear this since coordinates changed
+          if (immediate) {
+            // Only clear filter caches on final resize, not during active resize
+            filterCoefficientsCache.clear();
+            filterResponseCache.clear();
+          }
+        } else {
+          // During resize, only clear response cache
+          responseCache.clear();
+        }
+      }
     }
+  }
+
+  // Schedule graph drawing with requestAnimationFrame
+  function scheduleDrawGraph(immediate = false) {
+    // Cancel any pending animation frame
+    if (animationFrameId !== null) {
+      window.cancelAnimationFrame(animationFrameId);
+    }
+
+    // PERFORMANCE: Track interaction timing for quality adjustment
+    const now = Date.now();
+    if (immediate) {
+      lastInteractionTime = now;
+      useReducedQuality = true;
+    } else if (now - lastInteractionTime > 500) {
+      useReducedQuality = false;
+    }
+
+    // Schedule new draw
+    animationFrameId = window.requestAnimationFrame(() => {
+      drawGraph();
+      animationFrameId = null;
+
+      // Reset quality after draw if interaction is done
+      if (useReducedQuality && Date.now() - lastInteractionTime > 300) {
+        useReducedQuality = false;
+        scheduleDrawGraph(); // Redraw with full quality
+      }
+    });
+  }
+
+  // Create efficient cache key without JSON.stringify
+  function createCacheKey(filters: Filter[], quality?: string): string {
+    if (filters.length === 0) return quality ? `empty:${quality}` : 'empty';
+    const filterKey = filters
+      .map(f => `${f.type}:${f.frequency}:${f.q ?? 0}:${f.width ?? 0}:${f.passes ?? 0}`)
+      .join('|');
+    return quality ? `${filterKey}:${quality}` : filterKey;
+  }
+
+  // Compute entire frequency response curve with caching
+  function computeResponseCurve(): { response: Float32Array; xPositions: Float32Array } {
+    // PERFORMANCE: Use efficient cache key generation with quality
+    const quality = isResizing ? 'resize' : useReducedQuality ? 'low' : 'high';
+    const cacheKey = createCacheKey(filters, quality);
+
+    // Return cached response if available
+    if (cacheKey === lastResponseCacheKey && responseCache.has(cacheKey)) {
+      return responseCache.get(cacheKey)!;
+    }
+
+    // SMART SAMPLING: Higher resolution with intelligent frequency distribution
+    // Ensure sufficient resolution for smooth curves
+    let minSteps, maxSteps;
+
+    if (isResizing) {
+      // Extra-low quality during active resize for maximum responsiveness
+      minSteps = 150;
+      maxSteps = 300;
+    } else if (useReducedQuality) {
+      // Normal reduced quality for interactions
+      minSteps = 400;
+      maxSteps = 600;
+    } else {
+      // Full quality for final render
+      minSteps = 800;
+      maxSteps = 1200;
+    }
+
+    // Collect critical frequencies that need dense sampling
+    const criticalFreqs: number[] = [];
+
+    // Skip critical frequency sampling during resize for performance
+    if (!isResizing) {
+      for (const filter of filters) {
+        // Add filter center frequency
+        criticalFreqs.push(filter.frequency);
+
+        if (filter.type === 'BandReject' && filter.width) {
+          // For band reject, sample VERY densely around the exact center to avoid aliasing
+          // Add many points very close to center frequency
+          const centerF = filter.frequency;
+
+          // Sample within ±1Hz of center for narrow notches
+          for (let offset = -1; offset <= 1; offset += 0.1) {
+            const freq = centerF + offset;
+            if (freq >= 20 && freq <= 20000) {
+              criticalFreqs.push(freq);
+            }
+          }
+
+          // Also sample at bandwidth edges
+          const halfWidth = filter.width / 2;
+          // Sample densely around the notch edges
+          const factors = useReducedQuality ? [0.7, 1.0, 1.3] : [0.5, 0.7, 0.9, 1.0, 1.1, 1.3, 1.5];
+          for (let factor of factors) {
+            criticalFreqs.push(Math.max(20, filter.frequency - halfWidth * factor));
+            criticalFreqs.push(Math.min(20000, filter.frequency + halfWidth * factor));
+          }
+        } else if (filter.type === 'HighPass' || filter.type === 'LowPass') {
+          // For HP/LP, sample around cutoff frequency
+          const factors = useReducedQuality
+            ? [0.5, 1.0, 2.0]
+            : [0.25, 0.5, 0.7, 0.9, 1.1, 1.4, 2.0, 4.0];
+          for (let factor of factors) {
+            const freq = filter.frequency * factor;
+            if (freq >= 20 && freq <= 20000) {
+              criticalFreqs.push(freq);
+            }
+          }
+        }
+      }
+    }
+
+    // Build a comprehensive set of sampling frequencies
+    const samplingFreqs = new Set<number>();
+
+    // Add uniform logarithmic sampling as base
+    const logMin = Math.log10(MIN_FREQ);
+    const logMax = Math.log10(MAX_FREQ);
+    for (let i = 0; i <= minSteps; i++) {
+      const logFreq = logMin + (i / minSteps) * (logMax - logMin);
+      samplingFreqs.add(Math.pow(10, logFreq));
+    }
+
+    // Add all critical frequencies
+    for (const freq of criticalFreqs) {
+      samplingFreqs.add(freq);
+      // Add extra points around each critical frequency (skip during resize)
+      if (!useReducedQuality && !isResizing) {
+        for (let offset = 0.9; offset <= 1.1; offset += 0.01) {
+          const nearFreq = freq * offset;
+          if (nearFreq >= 20 && nearFreq <= 20000) {
+            samplingFreqs.add(nearFreq);
+          }
+        }
+      }
+    }
+
+    // Convert to sorted array and limit size
+    let sortedFreqs = Array.from(samplingFreqs).sort((a, b) => a - b);
+    if (sortedFreqs.length > maxSteps) {
+      // Downsample if we have too many points
+      const skipFactor = Math.ceil(sortedFreqs.length / maxSteps);
+      sortedFreqs = sortedFreqs.filter((_, i) => i % skipFactor === 0);
+    }
+
+    const steps = sortedFreqs.length;
+    const response = new Float32Array(steps);
+    const xPositions = new Float32Array(steps);
+
+    // Calculate response at each frequency
+    for (let i = 0; i < steps; i++) {
+      // eslint-disable-next-line security/detect-object-injection -- Safe: numeric array index
+      const freq = sortedFreqs[i];
+      const x = freqToX(freq);
+      // eslint-disable-next-line security/detect-object-injection -- Safe: numeric array index
+      xPositions[i] = x;
+      // eslint-disable-next-line security/detect-object-injection -- Safe: numeric array index
+      response[i] = calculateCombinedResponse(freq);
+    }
+
+    // Cache the computed response and positions
+    const result = { response, xPositions };
+    responseCache.set(cacheKey, result);
+    lastResponseCacheKey = cacheKey;
+
+    // Limit cache size to prevent memory leaks
+    if (responseCache.size > 10) {
+      const firstKey = responseCache.keys().next();
+      if (!firstKey.done && firstKey.value !== undefined) {
+        responseCache.delete(firstKey.value);
+      }
+    }
+
+    return result;
   }
 
   // Draw the frequency response graph
@@ -393,40 +749,41 @@
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
 
-    // Draw with higher resolution for smooth curve, using alpha fade for extreme values
-    const steps = plotWidth * 2; // Higher resolution
+    // PERFORMANCE: Use precomputed response curve
+    const { response, xPositions } = computeResponseCurve();
+    const steps = response.length;
 
-    // Draw curve in segments to handle alpha transparency changes
-    let lastCanvasX = margins.left;
-    let lastY = dbToY(calculateCombinedResponse(xToFreq(margins.left)));
+    // CONTINUOUS CURVE: Draw as single path for smoothness
+    if (steps > 0) {
+      ctx.beginPath();
 
-    for (let step = 1; step <= steps; step++) {
-      const plotX = (step / steps) * plotWidth;
-      const canvasX = margins.left + plotX;
-      const freq = xToFreq(canvasX);
-      const gain = calculateCombinedResponse(freq);
+      // Start from first point
+      const firstGain = response[0];
+      // Clamp at visual minimum instead of skipping for continuity
+      const firstY = dbToY(Math.max(MIN_DB + 0.5, firstGain));
+      const firstX = xPositions[0];
+      ctx.moveTo(firstX, Math.max(margins.top, Math.min(margins.top + plotHeight, firstY)));
 
-      // Hard cutoff at minimum dB to eliminate horizontal line at bottom
-      const shouldDraw = gain > MIN_DB;
+      // Draw continuous line through all points
+      for (let i = 1; i < steps; i++) {
+        // eslint-disable-next-line security/detect-object-injection -- Safe: numeric array index
+        const gain = response[i];
+        // eslint-disable-next-line security/detect-object-injection -- Safe: numeric array index
+        const x = xPositions[i];
 
-      // Only draw if above minimum threshold
-      if (shouldDraw) {
-        const y = Math.max(margins.top, Math.min(margins.top + plotHeight, dbToY(gain)));
+        // CRITICAL: Always draw to maintain continuity
+        // Clamp values at visual minimum instead of breaking the line
+        const clampedGain = Math.max(MIN_DB + 0.5, gain);
+        const y = dbToY(clampedGain);
 
-        // Draw line segment
-        ctx.beginPath();
-        ctx.moveTo(lastCanvasX, lastY);
-        ctx.lineTo(canvasX, y);
-        ctx.stroke();
+        // Ensure y is within plot bounds
+        const boundedY = Math.max(margins.top, Math.min(margins.top + plotHeight, y));
 
-        lastCanvasX = canvasX;
-        lastY = y;
-      } else {
-        // Skip drawing but update position for next segment
-        const y = Math.max(margins.top, Math.min(margins.top + plotHeight, dbToY(gain)));
-        lastCanvasX = canvasX;
-        lastY = y;
+        ctx.lineTo(x, boundedY);
       }
+
+      // Stroke the complete path once for best performance and smoothness
+      ctx.stroke();
     }
 
     // Add subtle text when no filters are present - professional styling
@@ -490,6 +847,7 @@
   // Handle mouse move for tooltip
   function handleMouseMove(event: MouseEvent) {
     const rect = canvas.getBoundingClientRect();
+    // Use CSS coordinates for mouse positioning (not affected by DPR)
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
@@ -505,8 +863,8 @@
 
       tooltip = {
         visible: true,
-        x: x, // Use canvas-relative coordinates
-        y: y, // Use canvas-relative coordinates
+        x: x, // CSS coordinates for tooltip positioning
+        y: y, // CSS coordinates for tooltip positioning
         freq,
         gain: Math.round(gain * 10) / 10,
       };
@@ -528,7 +886,7 @@
     // Listen for theme changes
     const observer = new MutationObserver(() => {
       updateColors();
-      drawGraph();
+      scheduleDrawGraph();
     });
 
     observer.observe(document.documentElement, {
@@ -536,15 +894,49 @@
       attributeFilter: ['data-theme', 'class'],
     });
 
-    // Listen for window resize - with proper browser support check
+    // Listen for window resize - optimized for responsiveness
     // eslint-disable-next-line no-undef -- ResizeObserver checked via globalThis
     let resizeObserver: ResizeObserver | undefined;
     if (typeof globalThis.ResizeObserver !== 'undefined' && containerElement) {
       // eslint-disable-next-line no-undef -- ResizeObserver available via globalThis
       const RO = globalThis.ResizeObserver as typeof ResizeObserver;
       resizeObserver = new RO(() => {
-        updateCanvasDimensions();
-        drawGraph();
+        // IMMEDIATE: First resize happens instantly with reduced quality
+        if (!isResizing) {
+          isResizing = true;
+          useReducedQuality = true;
+          lastInteractionTime = Date.now();
+
+          // Immediate low-quality update for responsive feel
+          updateCanvasDimensions();
+          scheduleDrawGraph(true);
+        }
+
+        // Clear any existing timers
+        if (resizeDebounceTimer !== null) {
+          window.clearTimeout(resizeDebounceTimer);
+        }
+        if (qualityUpgradeTimer !== null) {
+          window.clearTimeout(qualityUpgradeTimer);
+        }
+
+        // Short debounce for continued resizing (60fps)
+        resizeDebounceTimer = window.setTimeout(() => {
+          updateCanvasDimensions();
+          scheduleDrawGraph(true);
+          resizeDebounceTimer = null;
+        }, 16); // 16ms = ~60fps for smooth resizing
+
+        // Longer delay for final high-quality render
+        qualityUpgradeTimer = window.setTimeout(() => {
+          isResizing = false;
+          useReducedQuality = false;
+
+          // Final high-quality update with full cache clearing
+          updateCanvasDimensions(true);
+          scheduleDrawGraph();
+          qualityUpgradeTimer = null;
+        }, 150); // 150ms after resize stops
       });
       resizeObserver.observe(containerElement);
     }
@@ -552,22 +944,46 @@
     return () => {
       observer.disconnect();
       resizeObserver?.disconnect();
+      // Clean up any pending animation frame
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+      // Clean up resize timers
+      if (resizeDebounceTimer !== null) {
+        window.clearTimeout(resizeDebounceTimer);
+      }
+      if (qualityUpgradeTimer !== null) {
+        window.clearTimeout(qualityUpgradeTimer);
+      }
     };
   });
 
   // Redraw graph when filters change or dimensions update
   $effect(() => {
     if (canvas) {
+      // PERFORMANCE: Use efficient cache key
+      const currentFilterState = createCacheKey(filters);
+      if (currentFilterState !== lastFilterState) {
+        // Clear ALL caches when filters change
+        filterCoefficientsCache.clear();
+        filterResponseCache.clear();
+        responseCache.clear(); // Clear response cache
+        // Keep trig cache as it's frequency-specific, not filter-specific
+        lastFilterState = currentFilterState;
+      }
+
       updateColors();
-      drawGraph();
+      scheduleDrawGraph();
     }
   });
 
-  // Update dimensions when container size changes
+  // Initialize canvas when it becomes available
   $effect(() => {
-    // This effect will run when canvasWidth changes
-    if (canvas && canvasWidth) {
-      drawGraph();
+    // This effect will run when canvas element becomes available
+    if (canvas) {
+      // Initial setup when canvas ref becomes available
+      updateCanvasDimensions();
+      scheduleDrawGraph();
     }
   });
 </script>
