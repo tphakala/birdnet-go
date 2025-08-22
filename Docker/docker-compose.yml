@@ -13,23 +13,27 @@ services:
       - BIRDNET_GID=${BIRDNET_GID:-1000}
       # Optional: uncomment to configure via environment variables
       # BirdNET Configuration
-      # - BIRDNET_LOCALE=en-us
-      # - BIRDNET_LATITUDE=60.192059
-      # - BIRDNET_LONGITUDE=24.945831
-      # - BIRDNET_SENSITIVITY=1.0
-      # - BIRDNET_THRESHOLD=0.8
-      # - BIRDNET_OVERLAP=1.5
-      # - BIRDNET_THREADS=0
-      # - BIRDNET_DEBUG=false
-      # - BIRDNET_USEXNNPACK=true
-      # Model Paths (for external models)
-      # - BIRDNET_MODELPATH=/path/to/model.tflite
-      # - BIRDNET_LABELPATH=/path/to/labels.txt
+      # - BIRDNET_LOCALE=en-us                      # Locale code (2-10 chars, e.g., "en" or "en-us")
+      # - BIRDNET_LATITUDE=60.192059                # Valid range: -90.0 to 90.0
+      # - BIRDNET_LONGITUDE=24.945831               # Valid range: -180.0 to 180.0
+      # - BIRDNET_SENSITIVITY=1.0                   # Valid range: 0.1 to 1.5 (higher = more sensitive)
+      # - BIRDNET_THRESHOLD=0.8                     # Valid range: 0.0 to 1.0 (confidence threshold)
+      # - BIRDNET_OVERLAP=1.5                       # Valid range: 0.0 to 2.9 seconds (audio chunk overlap)
+      # - BIRDNET_THREADS=0                         # 0 = auto (use all CPUs), or specify number of threads
+      # - BIRDNET_DEBUG=false                       # Enable debug logging (true/false)
+      # - BIRDNET_USEXNNPACK=true                   # Use XNNPACK acceleration (true/false)
+      # Model Paths (for external models - must be mounted from host)
+      # Note: External model files must be mounted into the container, e.g.:
+      #   volumes:
+      #     - ./models/custom.tflite:/models/custom.tflite
+      # Then reference the container path:
+      # - BIRDNET_MODELPATH=/models/custom.tflite   # Path to custom model file inside container
+      # - BIRDNET_LABELPATH=/models/labels.txt      # Path to custom labels file inside container
       # Range Filter Configuration
-      # - BIRDNET_RANGEFILTER_MODEL=latest
-      # - BIRDNET_RANGEFILTER_THRESHOLD=0.01
-      # - BIRDNET_RANGEFILTER_MODELPATH=/path/to/rangefilter.tflite
-      # - BIRDNET_RANGEFILTER_DEBUG=false
+      # - BIRDNET_RANGEFILTER_MODEL=latest          # Model version: "latest" or "legacy"
+      # - BIRDNET_RANGEFILTER_THRESHOLD=0.01        # Valid range: 0.0 to 1.0 (range filter threshold)
+      # - BIRDNET_RANGEFILTER_MODELPATH=/models/rangefilter.tflite # Path to custom range filter model
+      # - BIRDNET_RANGEFILTER_DEBUG=false           # Enable range filter debug logging (true/false)
     volumes:
       - ./config:/config
       - ./data:/data

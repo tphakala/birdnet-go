@@ -3,8 +3,9 @@ package conf
 
 import (
 	"fmt"
-	"log"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -29,8 +30,8 @@ func getEnvBindings() []envBinding {
 		{"birdnet.threshold", "BIRDNET_THRESHOLD", validateEnvThreshold},
 		{"birdnet.overlap", "BIRDNET_OVERLAP", validateEnvOverlap},
 		{"birdnet.threads", "BIRDNET_THREADS", validateEnvThreads},
-		{"birdnet.debug", "BIRDNET_DEBUG", nil}, // Bool validation handled by viper
-		{"birdnet.usexnnpack", "BIRDNET_USEXNNPACK", nil}, // Bool validation handled by viper
+		{"birdnet.debug", "BIRDNET_DEBUG", validateEnvBool},
+		{"birdnet.usexnnpack", "BIRDNET_USEXNNPACK", validateEnvBool},
 		
 		// Model Paths
 		{"birdnet.modelpath", "BIRDNET_MODELPATH", validateEnvPath},
@@ -40,7 +41,7 @@ func getEnvBindings() []envBinding {
 		{"birdnet.rangefilter.model", "BIRDNET_RANGEFILTER_MODEL", validateEnvRangeFilterModel},
 		{"birdnet.rangefilter.threshold", "BIRDNET_RANGEFILTER_THRESHOLD", validateEnvRangeFilterThreshold},
 		{"birdnet.rangefilter.modelpath", "BIRDNET_RANGEFILTER_MODELPATH", validateEnvPath},
-		{"birdnet.rangefilter.debug", "BIRDNET_RANGEFILTER_DEBUG", nil}, // Bool validation handled by viper
+		{"birdnet.rangefilter.debug", "BIRDNET_RANGEFILTER_DEBUG", validateEnvBool},
 	}
 }
 
@@ -75,9 +76,25 @@ func bindEnvVars() error {
 
 // Environment variable validation functions
 
+// validateEnvBool validates boolean environment variables
+func validateEnvBool(value string) error {
+	_, err := strconv.ParseBool(value)
+	if err != nil {
+		return fmt.Errorf("invalid boolean value '%s': must be true/false, 1/0, t/f, TRUE/FALSE, T/F", value)
+	}
+	return nil
+}
+
+// localePattern matches locale patterns like "en" or "en-us"
+var localePattern = regexp.MustCompile(`(?i)^[a-z]{2}(-[a-z]{2})?$`)
+
 func validateEnvLocale(value string) error {
 	if len(value) < 2 || len(value) > 10 {
-		return fmt.Errorf("locale must be 2-10 characters, got %d", len(value))
+		return fmt.Errorf("locale must be 2-10 characters (got %d), expected pattern: 'en' or 'en-us', actual: '%s'", len(value), value)
+	}
+	// Check pattern for valid locale format
+	if !localePattern.MatchString(value) {
+		return fmt.Errorf("locale must match pattern 'xx' or 'xx-xx' (e.g., 'en' or 'en-us'), got: '%s'", value)
 	}
 	return nil
 }
@@ -170,27 +187,39 @@ func validateEnvRangeFilterThreshold(value string) error {
 }
 
 func validateEnvPath(value string) error {
-	// Basic path traversal protection
-	if strings.Contains(value, "..") {
-		return fmt.Errorf("path traversal not allowed")
+	// Clean the path first to normalize it
+	cleanedPath := filepath.Clean(value)
+	
+	// Require absolute paths for security
+	if !filepath.IsAbs(cleanedPath) {
+		return fmt.Errorf("path must be absolute, got relative path: %s", cleanedPath)
 	}
-	// Could add more path validation here (check if file exists, etc.)
+	
+	// Check for path traversal attempts after cleaning
+	// Split path and check each component
+	pathParts := strings.Split(cleanedPath, string(os.PathSeparator))
+	for _, part := range pathParts {
+		if part == ".." {
+			return fmt.Errorf("path traversal detected in cleaned path: %s", cleanedPath)
+		}
+	}
+	
+	// Optionally check if file exists (warn but don't fail)
+	if _, err := os.Stat(cleanedPath); os.IsNotExist(err) {
+		// Return a warning as part of the error that can be logged
+		// but doesn't prevent the app from starting
+		return fmt.Errorf("warning: file does not exist: %s", cleanedPath)
+	}
+	
 	return nil
 }
 
 // configureEnvironmentVariables sets up environment variable support for Viper
 func configureEnvironmentVariables() error {
-	// Enable automatic environment variable reading
-	viper.AutomaticEnv()
-	viper.SetEnvPrefix("BIRDNET")
+	// Set up key replacer for nested config keys
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	
 	// Bind specific environment variables with validation
-	if err := bindEnvVars(); err != nil {
-		// Log warnings but don't fail startup
-		// This allows the application to continue with config file/default values
-		log.Printf("Environment variable validation warnings: %v", err)
-	}
-	
-	return nil
+	// Return any errors to the caller for centralized handling
+	return bindEnvVars()
 }

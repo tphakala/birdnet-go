@@ -970,7 +970,8 @@ func initViper() error {
 
 	// Configure environment variable support
 	if err := configureEnvironmentVariables(); err != nil {
-		// Log any issues but don't fail startup
+		// Log any validation warnings but don't fail startup
+		// This allows the application to continue with config file/default values
 		log.Printf("Environment variable configuration warning: %v", err)
 	}
 
