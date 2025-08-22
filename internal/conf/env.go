@@ -303,18 +303,12 @@ func canonicalizeValue(configKey, envValue string) {
 	case ConfigKeyDebug, ConfigKeyUseXNNPACK, ConfigKeyRangeFilterDebug:
 		if parsed, err := strconv.ParseBool(strings.ToLower(trimmed)); err == nil {
 			viper.Set(configKey, parsed)
-		} else {
-			// Safe fallback: set trimmed string if parsing fails unexpectedly
-			viper.Set(configKey, trimmed)
 		}
 		
 	// Integer values
 	case ConfigKeyThreads:
 		if parsed, err := strconv.Atoi(trimmed); err == nil {
 			viper.Set(configKey, parsed)
-		} else {
-			// Safe fallback: set trimmed string if parsing fails unexpectedly
-			viper.Set(configKey, trimmed)
 		}
 		
 	// Float64 values
@@ -322,9 +316,6 @@ func canonicalizeValue(configKey, envValue string) {
 		 ConfigKeyThreshold, ConfigKeyOverlap, ConfigKeyRangeFilterThreshold:
 		if parsed, err := strconv.ParseFloat(trimmed, 64); err == nil {
 			viper.Set(configKey, parsed)
-		} else {
-			// Safe fallback: set trimmed string if parsing fails unexpectedly
-			viper.Set(configKey, trimmed)
 		}
 		
 	// String values (including locale with special handling)
@@ -334,10 +325,6 @@ func canonicalizeValue(configKey, envValue string) {
 		
 	case ConfigKeyModelPath, ConfigKeyLabelPath, ConfigKeyRangeFilterModel, ConfigKeyRangeFilterModelPath:
 		// Regular string values - just trim whitespace
-		viper.Set(configKey, trimmed)
-		
-	default:
-		// Safe fallback for any unhandled config keys - set trimmed string
 		viper.Set(configKey, trimmed)
 	}
 }

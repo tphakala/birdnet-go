@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -276,39 +277,49 @@ func TestLocaleCanonicalizations(t *testing.T) {
 	})
 }
 
-func TestValidateEnvLatitude(t *testing.T) {
+// testCoordinateValidator is a helper function to test coordinate validation functions
+// It generates comprehensive test cases for any coordinate validator to eliminate duplication
+func testCoordinateValidator(t *testing.T, validator func(string) error, minVal, maxVal float64) {
+	t.Helper()
 	t.Parallel()
+	
+	// Generate valid test values within range
+	validMid := (maxVal - minVal) / 4 // A reasonable value within range
+	if minVal < 0 {
+		validMid = -validMid // Use negative value for coordinates that support negatives
+	}
 	
 	tests := []struct {
 		name    string
 		value   string
 		wantErr bool
 	}{
+		// Valid values
 		{"valid zero", "0", false},
-		{"valid positive", "45.5", false},
-		{"valid negative", "-45.5", false},
-		{"valid max", "90", false},
-		{"valid min", "-90", false},
-		{"valid decimal", "12.34567", false},
+		{"valid positive", fmt.Sprintf("%.1f", validMid), false},
+		{"valid negative", fmt.Sprintf("%.1f", -validMid), false},
+		{"valid max", fmt.Sprintf("%.0f", maxVal), false},
+		{"valid min", fmt.Sprintf("%.0f", minVal), false},
+		{"valid decimal", fmt.Sprintf("%.6f", validMid/2), false},
 		// Whitespace handling
-		{"valid with spaces", " 45.5 ", false},
-		{"valid with tab", "\t-30.5\t", false},
-		{"valid with newline", "60.0\n", false},
-		{"valid with mixed whitespace", " \t 45.5 \n ", false},
+		{"valid with spaces", fmt.Sprintf(" %.1f ", validMid), false},
+		{"valid with tab", fmt.Sprintf("\t%.1f\t", -validMid*0.7), false},
+		{"valid with newline", fmt.Sprintf("%.1f\n", validMid*0.6), false},
+		{"valid with mixed whitespace", fmt.Sprintf(" \t %.1f \n ", validMid), false},
 		// Edge cases and errors
-		{"too high", "90.1", true},
-		{"too low", "-90.1", true},
-		{"way too high", "180", true},
-		{"way too low", "-180", true},
+		{"too high", fmt.Sprintf("%.1f", maxVal+0.1), true},
+		{"too low", fmt.Sprintf("%.1f", minVal-0.1), true},
+		{"way too high", fmt.Sprintf("%.0f", maxVal*2), true},
+		{"way too low", fmt.Sprintf("%.0f", minVal*2), true},
 		{"not a number", "abc", true},
 		{"empty", "", true},
 		{"whitespace only", "   ", true},
-		{"decimal with spaces out of range", " 91.0 ", true},
+		{"decimal with spaces out of range", fmt.Sprintf(" %.1f ", maxVal+1.0), true},
 	}
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateEnvLatitude(tt.value)
+			err := validator(tt.value)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -318,46 +329,12 @@ func TestValidateEnvLatitude(t *testing.T) {
 	}
 }
 
+func TestValidateEnvLatitude(t *testing.T) {
+	testCoordinateValidator(t, validateEnvLatitude, LatitudeMin, LatitudeMax)
+}
+
 func TestValidateEnvLongitude(t *testing.T) {
-	t.Parallel()
-	
-	tests := []struct {
-		name    string
-		value   string
-		wantErr bool
-	}{
-		{"valid zero", "0", false},
-		{"valid positive", "120.5", false},
-		{"valid negative", "-120.5", false},
-		{"valid max", "180", false},
-		{"valid min", "-180", false},
-		{"valid decimal", "123.456789", false},
-		// Whitespace handling
-		{"valid with spaces", " 120.5 ", false},
-		{"valid with tab", "\t-150.5\t", false},
-		{"valid with newline", "90.0\n", false},
-		{"valid with mixed whitespace", " \t -120.5 \n ", false},
-		// Edge cases and errors
-		{"too high", "180.1", true},
-		{"too low", "-180.1", true},
-		{"way too high", "360", true},
-		{"way too low", "-360", true},
-		{"not a number", "xyz", true},
-		{"empty", "", true},
-		{"whitespace only", "\t\n  ", true},
-		{"decimal with spaces out of range", " -181.0 ", true},
-	}
-	
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateEnvLongitude(tt.value)
-			if tt.wantErr {
-				require.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
+	testCoordinateValidator(t, validateEnvLongitude, LongitudeMin, LongitudeMax)
 }
 
 func TestValidateEnvSensitivity(t *testing.T) {
