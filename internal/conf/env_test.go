@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -600,6 +601,121 @@ func TestValueCanonicalization(t *testing.T) {
 				assert.Equal(t, tt.expectedValue, actual)
 			default:
 				t.Fatalf("Unknown expected type: %s", tt.expectedType)
+			}
+		})
+	}
+}
+
+func TestEnvironmentVariableValidationPreservesDefaults(t *testing.T) {
+
+	tests := []struct {
+		name           string
+		defaultValue   interface{}
+		configKey      string  
+		envVar         string
+		invalidEnvVal  string
+		validEnvVal    string
+		expectedType   string
+	}{
+		{
+			name:          "invalid boolean preserves default",
+			defaultValue:  true,
+			configKey:     "birdnet.debug", 
+			envVar:        "BIRDNET_DEBUG",
+			invalidEnvVal: "not_a_boolean",
+			validEnvVal:   "false",
+			expectedType:  "bool",
+		},
+		{
+			name:          "invalid threads preserves default", 
+			defaultValue:  4,
+			configKey:     "birdnet.threads",
+			envVar:        "BIRDNET_THREADS", 
+			invalidEnvVal: "not_a_number",
+			validEnvVal:   "8",
+			expectedType:  "int",
+		},
+		{
+			name:          "invalid threshold preserves default",
+			defaultValue:  0.8,
+			configKey:     "birdnet.threshold",
+			envVar:        "BIRDNET_THRESHOLD",
+			invalidEnvVal: "not_a_float", 
+			validEnvVal:   "0.5",
+			expectedType:  "float64",
+		},
+		{
+			name:          "invalid locale preserves default",
+			defaultValue:  "en-us", 
+			configKey:     "birdnet.locale",
+			envVar:        "BIRDNET_LOCALE",
+			invalidEnvVal: "toolong_invalid_locale",
+			validEnvVal:   "fr",
+			expectedType:  "string",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			viper.Reset()
+			defer viper.Reset()
+
+			// Set default value in viper
+			viper.Set(tt.configKey, tt.defaultValue)
+			originalValue := viper.Get(tt.configKey)
+
+			// Test with invalid environment variable
+			t.Setenv(tt.envVar, tt.invalidEnvVal)
+
+			// Configure environment variables - should preserve default on validation failure
+			err := configureEnvironmentVariables()
+			require.Error(t, err, "Expected error for invalid env var")
+			assert.Contains(t, err.Error(), tt.envVar, "Error should mention the problematic env var")
+
+			// Verify the original default is preserved
+			actualValue := viper.Get(tt.configKey)
+			assert.Equal(t, originalValue, actualValue, 
+				"Invalid env var %s=%q should not override default %v", 
+				tt.envVar, tt.invalidEnvVal, tt.defaultValue)
+
+			// Verify type is preserved
+			switch tt.expectedType {
+			case "bool":
+				assert.IsType(t, true, actualValue, "Type should remain bool")
+			case "int":
+				assert.IsType(t, 0, actualValue, "Type should remain int")
+			case "float64":
+				assert.IsType(t, 0.0, actualValue, "Type should remain float64")
+			case "string":
+				assert.IsType(t, "", actualValue, "Type should remain string")
+			}
+
+			// Test with valid environment variable to ensure it still works
+			t.Setenv(tt.envVar, tt.validEnvVal)
+			viper.Reset()
+			viper.Set(tt.configKey, tt.defaultValue)
+
+			err = configureEnvironmentVariables()
+			require.NoError(t, err, "Valid env var should not cause error")
+
+			// Verify the valid env var overrides the default
+			actualValue = viper.Get(tt.configKey)
+			assert.NotEqual(t, tt.defaultValue, actualValue, 
+				"Valid env var should override default")
+
+			// Verify type conversion happened correctly for typed values
+			switch tt.expectedType {
+			case "bool":
+				expected, _ := strconv.ParseBool(tt.validEnvVal)
+				assert.Equal(t, expected, actualValue)
+			case "int":
+				expected, _ := strconv.Atoi(tt.validEnvVal)
+				assert.Equal(t, expected, actualValue)
+			case "float64":
+				expected, _ := strconv.ParseFloat(tt.validEnvVal, 64)
+				assert.InEpsilon(t, expected, actualValue, 1e-9)
+			case "string":
+				assert.Equal(t, strings.ToLower(tt.validEnvVal), actualValue)
 			}
 		})
 	}

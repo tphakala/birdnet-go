@@ -125,23 +125,30 @@ func bindEnvVars() error {
 	var errs []error
 
 	for _, binding := range bindings {
-		// Bind the environment variable to the config key
+		// Check if environment variable is present first
+		envValue, present := os.LookupEnv(binding.EnvVar)
+		if !present {
+			// Skip binding for absent environment variables to preserve defaults/config
+			continue
+		}
+
+		// Validate the value if validation function is provided
+		if binding.Validate != nil {
+			if err := binding.Validate(envValue); err != nil {
+				// Skip binding for invalid values to preserve defaults/config
+				errs = append(errs, fmt.Errorf("%s=%q: %w", binding.EnvVar, envValue, err))
+				continue
+			}
+		}
+
+		// Only bind environment variable after successful validation (or if no validation required)
 		if err := viper.BindEnv(binding.ConfigKey, binding.EnvVar); err != nil {
 			errs = append(errs, fmt.Errorf("failed to bind %s: %w", binding.EnvVar, err))
 			continue
 		}
 
-		// Validate the value if it's set and validation function is provided
-		if envValue, present := os.LookupEnv(binding.EnvVar); present {
-			if binding.Validate != nil {
-				if err := binding.Validate(envValue); err != nil {
-					errs = append(errs, fmt.Errorf("%s=%q: %w", binding.EnvVar, envValue, err))
-				} else {
-					// Canonicalize values after successful validation
-					canonicalizeValue(binding.ConfigKey, envValue)
-				}
-			}
-		}
+		// Canonicalize values after successful binding
+		canonicalizeValue(binding.ConfigKey, envValue)
 	}
 
 	if len(errs) > 0 {
