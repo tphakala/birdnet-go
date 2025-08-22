@@ -266,6 +266,30 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 		return data, nil
 	}
 	
+	// No model path specified, try standard paths first (for noembed builds)
+	if !hasEmbeddedModels {
+		// Determine which model file to look for based on the model version
+		modelFileName := DefaultRangeFilterV2ModelName
+		if bn.Settings.BirdNET.RangeFilter.Model == "legacy" {
+			modelFileName = DefaultRangeFilterV1ModelName
+			fmt.Printf("⚠️ Looking for legacy range filter model\n")
+		}
+		
+		data, path, err := tryLoadModelFromStandardPaths(modelFileName)
+		if err == nil {
+			fmt.Printf("📁 Loaded range filter model from standard path: %s\n", path)
+			bn.Debug("Loaded range filter model from standard path: %s", path)
+			return data, nil
+		}
+		// If standard paths failed, report the error
+		return nil, errors.Newf("range filter model not found in standard paths (built with noembed tag)").
+			Category(errors.CategoryModelLoad).
+			Context("embedded_models", hasEmbeddedModels).
+			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
+			Context("attempted_file", modelFileName).
+			Build()
+	}
+	
 	// Fall back to embedded models
 	var data []byte
 	if bn.Settings.BirdNET.RangeFilter.Model == "legacy" {
@@ -275,8 +299,8 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 		data = metaModelDataV2
 	}
 	
-	if !hasEmbeddedModels || data == nil {
-		return nil, errors.Newf("range filter model not available (built with noembed tag, specify ModelPath in RangeFilter config)").
+	if data == nil {
+		return nil, errors.Newf("range filter model not available: embedded model is nil").
 			Category(errors.CategoryModelLoad).
 			Context("embedded_models", hasEmbeddedModels).
 			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
@@ -533,48 +557,110 @@ func (bn *BirdNET) Delete() {
 	}
 }
 
+// Default model file names
+const (
+	DefaultBirdNETModelName = "BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite"
+	DefaultRangeFilterV1ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite"
+	DefaultRangeFilterV2ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite"
+	DefaultModelDirectory = "model"  // Changed from "data/model" to just "model"
+)
+
+// tryLoadModelFromStandardPaths attempts to load a model from standard locations
+func tryLoadModelFromStandardPaths(modelName string) (data []byte, path string, err error) {
+	// List of standard paths to check
+	standardPaths := []string{
+		filepath.Join(DefaultModelDirectory, modelName),          // Relative: model/ (resolves to /data/model/ in Docker)
+		// Docker-specific paths
+		"/data/" + DefaultModelDirectory + "/" + modelName,       // Docker volume path: /data/model/
+		// System installation paths
+		"/usr/share/birdnet-go/" + DefaultModelDirectory + "/" + modelName,  // System path with model subdir
+		"/opt/birdnet-go/" + DefaultModelDirectory + "/" + modelName,        // Alternative system path with model subdir
+	}
+
+	// Also check relative to executable
+	if exePath, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exePath)
+		standardPaths = append(standardPaths,
+			filepath.Join(exeDir, DefaultModelDirectory, modelName),
+			filepath.Join(exeDir, "..", DefaultModelDirectory, modelName),
+		)
+	}
+
+	for _, path := range standardPaths {
+		// Check if file exists
+		if _, err := os.Stat(path); err == nil {
+			// File exists, try to load it
+			data, err := os.ReadFile(path)
+			if err == nil {
+				return data, path, nil
+			}
+		}
+	}
+
+	return nil, "", fmt.Errorf("model file %s not found in standard paths", modelName)
+}
+
 // loadModel loads either the embedded model or an external model file
 func (bn *BirdNET) loadModel() ([]byte, error) {
 	start := time.Now()
 
-	if bn.Settings.BirdNET.ModelPath == "" {
-		if !hasEmbeddedModels || modelData == nil {
-			return nil, errors.Newf("no model path specified and no embedded model available (built with noembed tag)").
-				Category(errors.CategoryModelLoad).
-				Context("embedded_models", hasEmbeddedModels).
-				Build()
+	// If a specific model path is configured, use it
+	if bn.Settings.BirdNET.ModelPath != "" {
+		modelPath := bn.Settings.BirdNET.ModelPath
+		// Expand environment variables first
+		modelPath = os.ExpandEnv(modelPath)
+		
+		// Then expand ~ to home directory if needed
+		if strings.HasPrefix(modelPath, "~/") {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return nil, errors.New(err).
+					Category(errors.CategoryFileIO).
+					Context("path", modelPath).
+					Build()
+			}
+			modelPath = filepath.Join(homeDir, modelPath[2:])
 		}
-		return modelData, nil
-	}
-
-	modelPath := bn.Settings.BirdNET.ModelPath
-	// Expand environment variables first
-	modelPath = os.ExpandEnv(modelPath)
-	
-	// Then expand ~ to home directory if needed
-	if strings.HasPrefix(modelPath, "~/") {
-		homeDir, err := os.UserHomeDir()
+		
+		data, err := os.ReadFile(modelPath)
 		if err != nil {
 			return nil, errors.New(err).
 				Category(errors.CategoryFileIO).
-				Context("path", modelPath).
+				ModelContext(modelPath, "external").
+				Context("operation", "read").
+				Timing("model-file-read", time.Since(start)).
 				Build()
 		}
-		modelPath = filepath.Join(homeDir, modelPath[2:])
+
+		bn.Debug("Loaded external model file: %s (size: %d MB)", modelPath, len(data)/1024/1024)
+		return data, nil
 	}
-	
-	data, err := os.ReadFile(modelPath)
-	if err != nil {
-		return nil, errors.New(err).
-			Category(errors.CategoryFileIO).
-			ModelContext(modelPath, "external").
-			Context("operation", "read").
-			Timing("model-file-read", time.Since(start)).
+
+	// No model path specified, try standard paths first (for noembed builds)
+	if !hasEmbeddedModels {
+		data, path, err := tryLoadModelFromStandardPaths(DefaultBirdNETModelName)
+		if err == nil {
+			fmt.Printf("📁 Loaded BirdNET model from standard path: %s\n", path)
+			bn.Debug("Loaded model from standard path: %s (size: %d MB)", path, len(data)/1024/1024)
+			return data, nil
+		}
+		// If standard paths failed, report the error
+		return nil, errors.Newf("no model path specified and model not found in standard paths (built with noembed tag)").
+			Category(errors.CategoryModelLoad).
+			Context("embedded_models", hasEmbeddedModels).
+			Context("attempted_file", DefaultBirdNETModelName).
 			Build()
 	}
 
-	bn.Debug("Loaded external model file: %s (size: %d MB)", modelPath, len(data)/1024/1024)
-	return data, nil
+	// Use embedded model if available
+	if modelData != nil {
+		return modelData, nil
+	}
+
+	return nil, errors.Newf("no model available: embedded model is nil").
+		Category(errors.CategoryModelLoad).
+		Context("embedded_models", hasEmbeddedModels).
+		Build()
 }
 
 // validateModelAndLabels checks if the number of labels matches the model's output size
