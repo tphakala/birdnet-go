@@ -31,6 +31,21 @@ func TestValidateEnvBool(t *testing.T) {
 		{"yes", "yes", true}, // strconv.ParseBool doesn't accept yes/no
 		{"no", "no", true},   // strconv.ParseBool doesn't accept yes/no
 		{"empty", "", true},
+		// Whitespace handling tests
+		{"true with spaces", " true ", false},
+		{"false with spaces", "  false  ", false},
+		{"true with tab", "\ttrue", false},
+		{"false with newline", "false\n", false},
+		{"true with mixed whitespace", " \t true \n ", false},
+		{"1 with spaces", " 1 ", false},
+		{"0 with tab", "\t0\t", false},
+		// Numeric-like edge cases (should fail for boolean)
+		{"decimal 0.5", "0.5", true},
+		{"decimal with spaces", " 0.5 ", true},
+		{"decimal 1.0", "1.0", true},
+		{"decimal 0.0", "0.0", true},
+		{"negative number", "-1", true},
+		{"large number", "123", true},
 	}
 	
 	for _, tt := range tests {
@@ -259,4 +274,356 @@ func TestLocaleCanonicalizations(t *testing.T) {
 		actual := viper.GetString("birdnet.locale")
 		assert.Equal(t, "de-de", actual)
 	})
+}
+
+func TestValidateEnvLatitude(t *testing.T) {
+	t.Parallel()
+	
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid zero", "0", false},
+		{"valid positive", "45.5", false},
+		{"valid negative", "-45.5", false},
+		{"valid max", "90", false},
+		{"valid min", "-90", false},
+		{"valid decimal", "12.34567", false},
+		// Whitespace handling
+		{"valid with spaces", " 45.5 ", false},
+		{"valid with tab", "\t-30.5\t", false},
+		{"valid with newline", "60.0\n", false},
+		{"valid with mixed whitespace", " \t 45.5 \n ", false},
+		// Edge cases and errors
+		{"too high", "90.1", true},
+		{"too low", "-90.1", true},
+		{"way too high", "180", true},
+		{"way too low", "-180", true},
+		{"not a number", "abc", true},
+		{"empty", "", true},
+		{"whitespace only", "   ", true},
+		{"decimal with spaces out of range", " 91.0 ", true},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateEnvLatitude(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateEnvLongitude(t *testing.T) {
+	t.Parallel()
+	
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid zero", "0", false},
+		{"valid positive", "120.5", false},
+		{"valid negative", "-120.5", false},
+		{"valid max", "180", false},
+		{"valid min", "-180", false},
+		{"valid decimal", "123.456789", false},
+		// Whitespace handling
+		{"valid with spaces", " 120.5 ", false},
+		{"valid with tab", "\t-150.5\t", false},
+		{"valid with newline", "90.0\n", false},
+		{"valid with mixed whitespace", " \t -120.5 \n ", false},
+		// Edge cases and errors
+		{"too high", "180.1", true},
+		{"too low", "-180.1", true},
+		{"way too high", "360", true},
+		{"way too low", "-360", true},
+		{"not a number", "xyz", true},
+		{"empty", "", true},
+		{"whitespace only", "\t\n  ", true},
+		{"decimal with spaces out of range", " -181.0 ", true},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateEnvLongitude(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateEnvSensitivity(t *testing.T) {
+	t.Parallel()
+	
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid min", "0.1", false},
+		{"valid max", "1.5", false},
+		{"valid middle", "1.0", false},
+		{"valid decimal", "0.75", false},
+		// Whitespace handling
+		{"valid with spaces", " 1.0 ", false},
+		{"valid with tab", "\t0.5\t", false},
+		{"valid with newline", "1.2\n", false},
+		{"valid with mixed whitespace", " \t 0.8 \n ", false},
+		// Edge cases and errors
+		{"too low", "0.09", true},
+		{"too high", "1.51", true},
+		{"zero", "0", true},
+		{"negative", "-0.5", true},
+		{"not a number", "high", true},
+		{"empty", "", true},
+		{"whitespace only", "  \t  ", true},
+		{"decimal with spaces out of range", " 2.0 ", true},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateEnvSensitivity(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateEnvThreshold(t *testing.T) {
+	t.Parallel()
+	
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid min", "0.0", false},
+		{"valid max", "1.0", false},
+		{"valid middle", "0.5", false},
+		{"valid decimal", "0.75", false},
+		// Whitespace handling
+		{"valid with spaces", " 0.5 ", false},
+		{"valid with tab", "\t0.8\t", false},
+		{"valid with newline", "0.3\n", false},
+		{"valid with mixed whitespace", " \t 0.9 \n ", false},
+		// Edge cases and errors
+		{"too low", "-0.1", true},
+		{"too high", "1.1", true},
+		{"negative", "-0.5", true},
+		{"greater than one", "2.0", true},
+		{"not a number", "medium", true},
+		{"empty", "", true},
+		{"whitespace only", "\n\t  ", true},
+		{"decimal with spaces out of range", " 1.5 ", true},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateEnvThreshold(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateEnvOverlap(t *testing.T) {
+	t.Parallel()
+	
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid min", "0.0", false},
+		{"valid max", "2.9", false},
+		{"valid middle", "1.5", false},
+		{"valid decimal", "2.5", false},
+		// Whitespace handling
+		{"valid with spaces", " 1.5 ", false},
+		{"valid with tab", "\t2.0\t", false},
+		{"valid with newline", "1.8\n", false},
+		{"valid with mixed whitespace", " \t 2.2 \n ", false},
+		// Edge cases and errors
+		{"too low", "-0.1", true},
+		{"too high", "3.0", true},
+		{"negative", "-1.0", true},
+		{"way too high", "5.0", true},
+		{"not a number", "large", true},
+		{"empty", "", true},
+		{"whitespace only", " \t \n ", true},
+		{"decimal with spaces out of range", " 3.5 ", true},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateEnvOverlap(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateEnvThreads(t *testing.T) {
+	t.Parallel()
+	
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid zero", "0", false},
+		{"valid positive", "4", false},
+		{"valid large", "16", false},
+		{"valid very large", "128", false},
+		// Whitespace handling
+		{"valid with spaces", " 8 ", false},
+		{"valid with tab", "\t4\t", false},
+		{"valid with newline", "12\n", false},
+		{"valid with mixed whitespace", " \t 6 \n ", false},
+		// Edge cases and errors
+		{"negative", "-1", true},
+		{"negative large", "-10", true},
+		{"decimal", "4.5", true},
+		{"decimal with spaces", " 8.2 ", true},
+		{"not a number", "many", true},
+		{"empty", "", true},
+		{"whitespace only", "  \t\n  ", true},
+		{"float notation", "1e2", true},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateEnvThreads(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateEnvRangeFilterThreshold(t *testing.T) {
+	t.Parallel()
+	
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid min", "0.0", false},
+		{"valid max", "1.0", false},
+		{"valid middle", "0.5", false},
+		{"valid decimal", "0.85", false},
+		// Whitespace handling
+		{"valid with spaces", " 0.7 ", false},
+		{"valid with tab", "\t0.3\t", false},
+		{"valid with newline", "0.9\n", false},
+		{"valid with mixed whitespace", " \t 0.4 \n ", false},
+		// Edge cases and errors  
+		{"too low", "-0.1", true},
+		{"too high", "1.1", true},
+		{"negative", "-0.5", true},
+		{"greater than one", "2.0", true},
+		{"not a number", "auto", true},
+		{"empty", "", true},
+		{"whitespace only", "\t \n   ", true},
+		{"decimal with spaces out of range", " 1.8 ", true},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateEnvRangeFilterThreshold(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValueCanonicalization(t *testing.T) {
+	// Test that values are canonicalized to correct types after validation
+	tests := []struct {
+		name     string
+		envVar   string
+		envValue string
+		configKey string
+		expectedType string
+		expectedValue interface{}
+	}{
+		// Boolean canonicalization
+		{"boolean true", "BIRDNET_DEBUG", "true", "birdnet.debug", "bool", true},
+		{"boolean false", "BIRDNET_DEBUG", "false", "birdnet.debug", "bool", false},
+		{"boolean with spaces", "BIRDNET_DEBUG", " TRUE ", "birdnet.debug", "bool", true},
+		{"boolean uppercase", "BIRDNET_USEXNNPACK", "FALSE", "birdnet.usexnnpack", "bool", false},
+		
+		// Integer canonicalization  
+		{"threads zero", "BIRDNET_THREADS", "0", "birdnet.threads", "int", 0},
+		{"threads positive", "BIRDNET_THREADS", "8", "birdnet.threads", "int", 8},
+		{"threads with spaces", "BIRDNET_THREADS", " 4 ", "birdnet.threads", "int", 4},
+		
+		// Float canonicalization
+		{"latitude", "BIRDNET_LATITUDE", "45.5", "birdnet.latitude", "float64", 45.5},
+		{"longitude with spaces", "BIRDNET_LONGITUDE", " -120.5 ", "birdnet.longitude", "float64", -120.5},
+		{"sensitivity", "BIRDNET_SENSITIVITY", "1.2", "birdnet.sensitivity", "float64", 1.2},
+		{"threshold", "BIRDNET_THRESHOLD", "0.8", "birdnet.threshold", "float64", 0.8},
+		{"overlap", "BIRDNET_OVERLAP", "2.5", "birdnet.overlap", "float64", 2.5},
+		
+		// String canonicalization
+		{"locale lowercase", "BIRDNET_LOCALE", "EN-US", "birdnet.locale", "string", "en-us"},
+		{"locale with spaces", "BIRDNET_LOCALE", " de-DE ", "birdnet.locale", "string", "de-de"},
+		{"model path trimmed", "BIRDNET_MODELPATH", " /path/to/model ", "birdnet.modelpath", "string", "/path/to/model"},
+		{"range filter model", "BIRDNET_RANGEFILTER_MODEL", " latest ", "birdnet.rangefilter.model", "string", "latest"},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			viper.Reset()
+			t.Setenv(tt.envVar, tt.envValue)
+			
+			err := configureEnvironmentVariables()
+			require.NoError(t, err)
+			
+			// Check that the value was stored with the correct type
+			actual := viper.Get(tt.configKey)
+			require.NotNil(t, actual)
+			
+			// Verify type
+			switch tt.expectedType {
+			case "bool":
+				assert.IsType(t, bool(false), actual, "Expected bool type")
+				assert.Equal(t, tt.expectedValue, actual)
+			case "int":
+				assert.IsType(t, int(0), actual, "Expected int type")
+				assert.Equal(t, tt.expectedValue, actual)
+			case "float64":
+				assert.IsType(t, float64(0), actual, "Expected float64 type")
+				assert.Equal(t, tt.expectedValue, actual)
+			case "string":
+				assert.IsType(t, "", actual, "Expected string type")
+				assert.Equal(t, tt.expectedValue, actual)
+			default:
+				t.Fatalf("Unknown expected type: %s", tt.expectedType)
+			}
+		})
+	}
 }

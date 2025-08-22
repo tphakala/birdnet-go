@@ -14,7 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
-// Configuration key constants
+// BirdNET core configuration keys for viper config paths.
 const (
 	// BirdNET Core Configuration
 	ConfigKeyLocale      = "birdnet.locale"
@@ -25,7 +25,7 @@ const (
 	ConfigKeyOverlap     = "birdnet.overlap"
 	ConfigKeyThreads     = "birdnet.threads"
 	ConfigKeyDebug       = "birdnet.debug"
-	ConfigKeyUseXNNPack  = "birdnet.usexnnpack"
+	ConfigKeyUseXNNPACK  = "birdnet.usexnnpack"
 
 	// Model Paths
 	ConfigKeyModelPath = "birdnet.modelpath"
@@ -38,7 +38,7 @@ const (
 	ConfigKeyRangeFilterDebug     = "birdnet.rangefilter.debug"
 )
 
-// Environment variable name constants
+// Environment variable names that map to configuration keys.
 const (
 	// BirdNET Core Configuration
 	EnvVarLocale      = "BIRDNET_LOCALE"
@@ -49,7 +49,7 @@ const (
 	EnvVarOverlap     = "BIRDNET_OVERLAP"
 	EnvVarThreads     = "BIRDNET_THREADS"
 	EnvVarDebug       = "BIRDNET_DEBUG"
-	EnvVarUseXNNPack  = "BIRDNET_USEXNNPACK"
+	EnvVarUseXNNPACK  = "BIRDNET_USEXNNPACK"
 
 	// Model Paths
 	EnvVarModelPath = "BIRDNET_MODELPATH"
@@ -62,7 +62,7 @@ const (
 	EnvVarRangeFilterDebug     = "BIRDNET_RANGEFILTER_DEBUG"
 )
 
-// Validation constraint constants
+// Validation constraint constants for environment variable ranges.
 const (
 	// Latitude/Longitude ranges
 	LatitudeMin  = -90.0
@@ -78,7 +78,7 @@ const (
 	ThresholdMin = 0.0
 	ThresholdMax = 1.0
 
-	// Audio overlap range  
+	// Audio overlap range
 	OverlapMin = 0.0
 	OverlapMax = 2.9
 
@@ -105,7 +105,7 @@ func getEnvBindings() []envBinding {
 		{ConfigKeyOverlap, EnvVarOverlap, validateEnvOverlap},
 		{ConfigKeyThreads, EnvVarThreads, validateEnvThreads},
 		{ConfigKeyDebug, EnvVarDebug, validateEnvBool},
-		{ConfigKeyUseXNNPack, EnvVarUseXNNPack, validateEnvBool},
+		{ConfigKeyUseXNNPACK, EnvVarUseXNNPACK, validateEnvBool},
 		
 		// Model Paths
 		{ConfigKeyModelPath, EnvVarModelPath, validateEnvPath},
@@ -136,9 +136,9 @@ func bindEnvVars() error {
 			if binding.Validate != nil {
 				if err := binding.Validate(envValue); err != nil {
 					errs = append(errs, fmt.Errorf("%s=%q: %w", binding.EnvVar, envValue, err))
-				} else if binding.ConfigKey == ConfigKeyLocale {
-					// Canonicalize locale to lower-case on successful validation
-					viper.Set(binding.ConfigKey, strings.ToLower(strings.TrimSpace(envValue)))
+				} else {
+					// Canonicalize values after successful validation
+					canonicalizeValue(binding.ConfigKey, envValue)
 				}
 			}
 		}
@@ -167,6 +167,7 @@ func validateEnvBool(value string) error {
 var localePattern = regexp.MustCompile(`(?i)^[a-z]{2}(-[a-z]{2})?$`)
 
 func validateEnvLocale(value string) error {
+	value = strings.TrimSpace(value)
 	if len(value) < 2 || len(value) > 10 {
 		return fmt.Errorf("locale must be 2-10 characters (got %d), expected pattern: 'en' or 'en-us', actual: '%s'", len(value), value)
 	}
@@ -250,6 +251,7 @@ func validateEnvThreads(value string) error {
 }
 
 func validateEnvRangeFilterModel(value string) error {
+	value = strings.TrimSpace(value)
 	validModels := []string{"latest", "legacy"}
 	if !slices.Contains(validModels, value) {
 		return fmt.Errorf("must be one of: %s", strings.Join(validModels, ", "))
@@ -289,6 +291,55 @@ func validateEnvPath(value string) error {
 	// filepath.Clean already handles path traversal, so no need for additional checks
 	// Only return fatal errors - let caller handle existence warnings
 	return nil
+}
+
+// canonicalizeValue normalizes environment variable values to appropriate types after validation
+func canonicalizeValue(configKey, envValue string) {
+	trimmed := strings.TrimSpace(envValue)
+	
+	// Determine value type based on config key and canonicalize accordingly
+	switch configKey {
+	// Boolean values
+	case ConfigKeyDebug, ConfigKeyUseXNNPACK, ConfigKeyRangeFilterDebug:
+		if parsed, err := strconv.ParseBool(strings.ToLower(trimmed)); err == nil {
+			viper.Set(configKey, parsed)
+		} else {
+			// Safe fallback: set trimmed string if parsing fails unexpectedly
+			viper.Set(configKey, trimmed)
+		}
+		
+	// Integer values
+	case ConfigKeyThreads:
+		if parsed, err := strconv.Atoi(trimmed); err == nil {
+			viper.Set(configKey, parsed)
+		} else {
+			// Safe fallback: set trimmed string if parsing fails unexpectedly
+			viper.Set(configKey, trimmed)
+		}
+		
+	// Float64 values
+	case ConfigKeyLatitude, ConfigKeyLongitude, ConfigKeySensitivity, 
+		 ConfigKeyThreshold, ConfigKeyOverlap, ConfigKeyRangeFilterThreshold:
+		if parsed, err := strconv.ParseFloat(trimmed, 64); err == nil {
+			viper.Set(configKey, parsed)
+		} else {
+			// Safe fallback: set trimmed string if parsing fails unexpectedly
+			viper.Set(configKey, trimmed)
+		}
+		
+	// String values (including locale with special handling)
+	case ConfigKeyLocale:
+		// Canonicalize locale to lowercase
+		viper.Set(configKey, strings.ToLower(trimmed))
+		
+	case ConfigKeyModelPath, ConfigKeyLabelPath, ConfigKeyRangeFilterModel, ConfigKeyRangeFilterModelPath:
+		// Regular string values - just trim whitespace
+		viper.Set(configKey, trimmed)
+		
+	default:
+		// Safe fallback for any unhandled config keys - set trimmed string
+		viper.Set(configKey, trimmed)
+	}
 }
 
 // configureEnvironmentVariables sets up environment variable support for Viper
