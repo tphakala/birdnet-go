@@ -108,7 +108,9 @@ func (c *Controller) initAnalyticsRoutes() {
 	// Time analytics routes (can be implemented later)
 	timeGroup := analyticsGroup.Group("/time")
 	timeGroup.GET("/hourly", c.GetHourlyAnalytics)
+	timeGroup.GET("/hourly/batch", c.GetBatchHourlySpeciesData) // Batch hourly data for multiple species
 	timeGroup.GET("/daily", c.GetDailyAnalytics)
+	timeGroup.GET("/daily/batch", c.GetBatchDailySpeciesData)   // Batch daily trends for multiple species
 	timeGroup.GET("/distribution/hourly", c.GetTimeOfDayDistribution) // Renamed endpoint for time-of-day distribution
 }
 
@@ -1446,4 +1448,322 @@ func (c *Controller) GetSpeciesThumbnails(ctx echo.Context) error {
 	}
 
 	return ctx.JSON(http.StatusOK, result)
+}
+
+// GetBatchHourlySpeciesData handles GET /api/v2/analytics/time/hourly/batch
+// Returns hourly detection patterns for multiple species in a single request
+func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
+	ip := ctx.RealIP()
+	path := ctx.Request().URL.Path
+
+	// Parse parameters
+	speciesParams := ctx.QueryParams()["species"]
+	date := ctx.QueryParam("date")
+	
+	// Validate required parameters
+	if len(speciesParams) == 0 {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Missing required parameter in batch hourly species data",
+				"parameter", "species",
+				"ip", ip,
+				"path", path,
+			)
+		}
+		return echo.NewHTTPError(http.StatusBadRequest, "Missing required parameter: species (array)")
+	}
+
+	if date == "" {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Missing required parameter in batch hourly species data",
+				"parameter", "date",
+				"ip", ip,
+				"path", path,
+			)
+		}
+		return echo.NewHTTPError(http.StatusBadRequest, "Missing required parameter: date")
+	}
+
+	// Validate date format
+	if _, err := time.Parse("2006-01-02", date); err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Invalid date format in batch hourly species data",
+				"date", date,
+				"error", err.Error(),
+				"ip", ip,
+				"path", path,
+			)
+		}
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid date format. Use YYYY-MM-DD")
+	}
+
+	// Rate limiting - maximum 10 species per request
+	const maxBatchSize = 10
+	if len(speciesParams) > maxBatchSize {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Batch size exceeded limit in hourly species data",
+				"requested", len(speciesParams), "max", maxBatchSize, "ip", ip, "path", path)
+		}
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Too many species requested. Maximum: %d", maxBatchSize))
+	}
+
+	// Parse optional min_confidence parameter
+	minConfidence := 0.0
+	if minConfidenceStr := ctx.QueryParam("min_confidence"); minConfidenceStr != "" {
+		if parsedConfidence, parseErr := strconv.ParseFloat(minConfidenceStr, 64); parseErr == nil {
+			minConfidence = parsedConfidence / 100.0 // Convert from percentage to decimal
+		} else if c.apiLogger != nil {
+			c.apiLogger.Warn("Invalid min_confidence parameter in batch hourly species data, using default 0",
+				"value", minConfidenceStr, "error", parseErr.Error(), "ip", ip, "path", path)
+		}
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieving batch hourly species data",
+			"date", date,
+			"species_count", len(speciesParams),
+			"min_confidence", minConfidence,
+			"ip", ip,
+			"path", path,
+		)
+	}
+
+	// Process each species
+	results := make(map[string][]HourlyDistribution)
+	processingErrors := make([]string, 0)
+
+	for _, species := range speciesParams {
+		// Trim whitespace from species name
+		species = strings.TrimSpace(species)
+		if species == "" {
+			continue
+		}
+
+		// Get hourly data for this species
+		hourlyData, err := c.DS.GetHourlyAnalyticsData(date, species)
+		if err != nil {
+			errorMsg := fmt.Sprintf("Failed to get hourly data for species %s: %v", species, err)
+			processingErrors = append(processingErrors, errorMsg)
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Error getting hourly data for species in batch request",
+					"species", species, "date", date, "error", err.Error(), "ip", ip, "path", path)
+			}
+			continue
+		}
+
+		// Convert to HourlyDistribution format
+		hourlyDistribution := make([]HourlyDistribution, 24)
+		for hour := 0; hour < 24; hour++ {
+			hourlyDistribution[hour] = HourlyDistribution{Hour: hour, Count: 0}
+		}
+
+		// Fill in actual data
+		for _, data := range hourlyData {
+			if data.Hour >= 0 && data.Hour < 24 {
+				hourlyDistribution[data.Hour].Count = data.Count
+			}
+		}
+
+		results[species] = hourlyDistribution
+	}
+
+	// Log partial failures if any
+	if len(processingErrors) > 0 && len(results) > 0 {
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Batch hourly species data completed with partial failures",
+				"successful", len(results), "failed", len(processingErrors),
+				"errors", processingErrors, "ip", ip, "path", path)
+		}
+	}
+
+	// Return error if all species failed
+	if len(results) == 0 {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("All species in batch hourly request failed",
+				"requested_species", len(speciesParams), "errors", processingErrors, "ip", ip, "path", path)
+		}
+		return c.HandleError(ctx, fmt.Errorf("failed to process any requested species"),
+			"Failed to process batch hourly request", http.StatusInternalServerError)
+	}
+
+	// Log successful completion
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Batch hourly species data retrieved",
+			"requested_species", len(speciesParams), "successful_species", len(results),
+			"failed_species", len(processingErrors), "ip", ip, "path", path)
+	}
+
+	return ctx.JSON(http.StatusOK, results)
+}
+
+// GetBatchDailySpeciesData handles GET /api/v2/analytics/time/daily/batch
+// Returns daily trend data for multiple species in a single request
+func (c *Controller) GetBatchDailySpeciesData(ctx echo.Context) error {
+	ip := ctx.RealIP()
+	path := ctx.Request().URL.Path
+
+	// Parse parameters
+	speciesParams := ctx.QueryParams()["species"]
+	startDate := ctx.QueryParam("start_date")
+	endDate := ctx.QueryParam("end_date")
+
+	// Validate required parameters
+	if len(speciesParams) == 0 {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Missing required parameter in batch daily species data",
+				"parameter", "species",
+				"ip", ip,
+				"path", path,
+			)
+		}
+		return echo.NewHTTPError(http.StatusBadRequest, "Missing required parameter: species (array)")
+	}
+
+	if startDate == "" {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Missing required parameter in batch daily species data",
+				"parameter", "start_date",
+				"ip", ip,
+				"path", path,
+			)
+		}
+		return echo.NewHTTPError(http.StatusBadRequest, "Missing required parameter: start_date")
+	}
+
+	// Validate date formats and chronological order
+	if err := parseAndValidateDateRange(startDate, endDate); err != nil {
+		if errors.Is(err, ErrInvalidStartDate) || errors.Is(err, ErrInvalidEndDate) || errors.Is(err, ErrDateOrder) {
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Invalid date range in batch daily species data",
+					"start_date", startDate,
+					"end_date", endDate,
+					"error", err.Error(),
+					"ip", ip,
+					"path", path,
+				)
+			}
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+		// Handle unexpected errors
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Unexpected error validating date range in batch daily species data",
+				"start_date", startDate,
+				"end_date", endDate,
+				"error", err.Error(),
+				"ip", ip,
+				"path", path,
+			)
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "Error validating date range")
+	}
+
+	// Default end date if not provided (30 days from start)
+	if endDate == "" {
+		startTime, _ := time.Parse("2006-01-02", startDate) // parseAndValidateDateRange ensures this succeeds
+		endDate = startTime.AddDate(0, 0, 30).Format("2006-01-02")
+	}
+
+	// Rate limiting - maximum 10 species per request
+	const maxBatchSize = 10
+	if len(speciesParams) > maxBatchSize {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Batch size exceeded limit in daily species data",
+				"requested", len(speciesParams), "max", maxBatchSize, "ip", ip, "path", path)
+		}
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Too many species requested. Maximum: %d", maxBatchSize))
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Retrieving batch daily species data",
+			"start_date", startDate,
+			"end_date", endDate,
+			"species_count", len(speciesParams),
+			"ip", ip,
+			"path", path,
+		)
+	}
+
+	// Process each species
+	type DailyResponse struct {
+		Date  string `json:"date"`
+		Count int    `json:"count"`
+	}
+
+	type SpeciesDailyData struct {
+		StartDate string          `json:"start_date"`
+		EndDate   string          `json:"end_date"`
+		Species   string          `json:"species"`
+		Data      []DailyResponse `json:"data"`
+		Total     int             `json:"total"`
+	}
+
+	results := make(map[string]SpeciesDailyData)
+	processingErrors := make([]string, 0)
+
+	for _, species := range speciesParams {
+		// Trim whitespace from species name
+		species = strings.TrimSpace(species)
+		if species == "" {
+			continue
+		}
+
+		// Get daily data for this species
+		dailyData, err := c.DS.GetDailyAnalyticsData(startDate, endDate, species)
+		if err != nil {
+			errorMsg := fmt.Sprintf("Failed to get daily data for species %s: %v", species, err)
+			processingErrors = append(processingErrors, errorMsg)
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Error getting daily data for species in batch request",
+					"species", species, "start_date", startDate, "end_date", endDate, 
+					"error", err.Error(), "ip", ip, "path", path)
+			}
+			continue
+		}
+
+		// Convert to response format and calculate total
+		responseData := make([]DailyResponse, 0, len(dailyData))
+		totalCount := 0
+		for _, data := range dailyData {
+			responseData = append(responseData, DailyResponse{
+				Date:  data.Date,
+				Count: data.Count,
+			})
+			totalCount += data.Count
+		}
+
+		results[species] = SpeciesDailyData{
+			StartDate: startDate,
+			EndDate:   endDate,
+			Species:   species,
+			Data:      responseData,
+			Total:     totalCount,
+		}
+	}
+
+	// Log partial failures if any
+	if len(processingErrors) > 0 && len(results) > 0 {
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Batch daily species data completed with partial failures",
+				"successful", len(results), "failed", len(processingErrors),
+				"errors", processingErrors, "ip", ip, "path", path)
+		}
+	}
+
+	// Return error if all species failed
+	if len(results) == 0 {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("All species in batch daily request failed",
+				"requested_species", len(speciesParams), "errors", processingErrors, "ip", ip, "path", path)
+		}
+		return c.HandleError(ctx, fmt.Errorf("failed to process any requested species"),
+			"Failed to process batch daily request", http.StatusInternalServerError)
+	}
+
+	// Log successful completion
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Batch daily species data retrieved",
+			"requested_species", len(speciesParams), "successful_species", len(results),
+			"failed_species", len(processingErrors), "ip", ip, "path", path)
+	}
+
+	return ctx.JSON(http.StatusOK, results)
 }
