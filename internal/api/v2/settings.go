@@ -790,10 +790,58 @@ func validateSecuritySection(data json.RawMessage) error {
 	return fmt.Errorf("direct updates to security section are not supported for security reasons")
 }
 
+// mainSectionAllowedFields defines which fields in the main section can be updated via API
+var mainSectionAllowedFields = map[string]bool{
+	"name":      true, // Node name is safe to update
+	"timeAs24h": true, // Time format is safe to update
+}
+
 // validateMainSection validates main settings
 func validateMainSection(data json.RawMessage) error {
-	// Main settings updates are not allowed via API
-	return fmt.Errorf("main settings cannot be updated via API")
+	var updateMap map[string]interface{}
+	if err := json.Unmarshal(data, &updateMap); err != nil {
+		return err
+	}
+
+	// Check if any disallowed fields are being updated
+	for field := range updateMap {
+		if !mainSectionAllowedFields[field] {
+			return fmt.Errorf("field '%s' in main settings cannot be updated via API", field)
+		}
+	}
+
+	// Validate field values
+	if err := validateMainSectionValues(updateMap); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateMainSectionValues validates the values of main section fields
+func validateMainSectionValues(updateMap map[string]interface{}) error {
+	// Validate node name
+	if name, exists := updateMap["name"]; exists {
+		if str, ok := name.(string); ok {
+			if str == "" {
+				return fmt.Errorf("node name cannot be empty")
+			}
+			if len(str) > 100 {
+				return fmt.Errorf("node name must not exceed 100 characters")
+			}
+		} else {
+			return fmt.Errorf("node name must be a string")
+		}
+	}
+
+	// Validate timeAs24h
+	if timeAs24h, exists := updateMap["timeAs24h"]; exists {
+		if _, ok := timeAs24h.(bool); !ok {
+			return fmt.Errorf("timeAs24h must be a boolean value")
+		}
+	}
+
+	return nil
 }
 
 // validateBirdNETSection validates BirdNET settings
