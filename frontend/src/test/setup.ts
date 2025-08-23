@@ -407,10 +407,30 @@ Object.defineProperty(window, 'location', {
 
 // Mock security utilities - consolidated mock for consistent test behavior
 vi.mock('$lib/utils/security', () => ({
-  // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data
-  safeGet: vi.fn((obj, key) => obj?.[key]),
-  // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data
-  safeArrayAccess: vi.fn((arr, index) => arr?.[index]),
+  safeGet: vi.fn((obj, key, defaultValue) => {
+    if (obj === null || obj === undefined || typeof obj !== 'object') {
+      return defaultValue;
+    }
+    // Use hasOwnProperty check for proper property access validation
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) {
+      return defaultValue;
+    }
+    // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data, property validated above
+    const value = obj[key];
+    return value ?? defaultValue;
+  }),
+  safeArrayAccess: vi.fn((arr, index, defaultValue) => {
+    if (!Array.isArray(arr)) {
+      return defaultValue;
+    }
+    // Enforce index bounds checking
+    if (index < 0 || index >= arr.length) {
+      return defaultValue;
+    }
+    // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data, bounds validated above
+    const value = arr[index];
+    return value ?? defaultValue;
+  }),
 }));
 
 // Note: Other utility modules are not mocked globally to allow their own tests to run properly

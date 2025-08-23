@@ -1050,7 +1050,7 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, response)
 }
 
-// GetTimeOfDayDistribution handles GET /api/v2/analytics/time/distribution
+// GetTimeOfDayDistribution handles GET /api/v2/analytics/time/distribution/hourly
 // Returns an aggregated count of detections by hour of day across the given date range
 func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 	// Get query parameters

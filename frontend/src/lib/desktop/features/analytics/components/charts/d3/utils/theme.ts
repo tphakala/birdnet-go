@@ -1,5 +1,7 @@
 // D3 theme utilities for analytics charts
-import * as d3 from 'd3';
+import { easeQuadInOut } from 'd3-ease';
+import type { Selection, BaseType } from 'd3-selection';
+import type { Transition } from 'd3-transition';
 
 export interface AxisTheme {
   color: string;
@@ -148,11 +150,19 @@ export class ThemeStore {
   }
 
   private updateTheme(): void {
-    // Small delay to ensure CSS variables are updated
-    setTimeout(() => {
-      this.currentTheme = getCurrentTheme();
-      this.callbacks.forEach(callback => callback(this.currentTheme));
-    }, 50);
+    // Schedule theme update for next paint to align with rendering
+    if (typeof globalThis.requestAnimationFrame !== 'undefined') {
+      globalThis.requestAnimationFrame(() => {
+        this.currentTheme = getCurrentTheme();
+        this.callbacks.forEach(callback => callback(this.currentTheme));
+      });
+    } else {
+      // Fallback for environments without requestAnimationFrame
+      setTimeout(() => {
+        this.currentTheme = getCurrentTheme();
+        this.callbacks.forEach(callback => callback(this.currentTheme));
+      }, 0);
+    }
   }
 
   get theme(): ChartTheme {
@@ -185,12 +195,52 @@ export class ThemeStore {
 }
 
 /**
+ * Calculate relative luminance of a color to determine if it's dark or light
+ */
+function getColorLuminance(color: string): number {
+  try {
+    let r = 0,
+      g = 0,
+      b = 0;
+
+    if (color.startsWith('#')) {
+      // Handle hex colors
+      const hex = color.slice(1);
+      if (hex.length === 3) {
+        r = parseInt(hex[0] + hex[0], 16);
+        g = parseInt(hex[1] + hex[1], 16);
+        b = parseInt(hex[2] + hex[2], 16);
+      } else if (hex.length === 6) {
+        r = parseInt(hex.substr(0, 2), 16);
+        g = parseInt(hex.substr(2, 2), 16);
+        b = parseInt(hex.substr(4, 2), 16);
+      }
+    } else if (color.startsWith('rgb(') || color.startsWith('rgba(')) {
+      // eslint-disable-next-line security/detect-unsafe-regex -- Safe: well-constructed regex for RGB/RGBA parsing with controlled input
+      const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+      if (match) {
+        r = parseInt(match[1], 10);
+        g = parseInt(match[2], 10);
+        b = parseInt(match[3], 10);
+      }
+    }
+
+    // Calculate relative luminance using sRGB coefficients
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  } catch {
+    // Fallback: assume light mode if color parsing fails
+    return 0.6;
+  }
+}
+
+/**
  * Generate species color palette based on theme
  * Using a curated palette for better visual distinction
  */
 export function generateSpeciesColors(count: number, theme: ChartTheme): string[] {
-  // Check if we're in dark mode
-  const isDark = theme.background === '#1f2937';
+  // Check if we're in dark mode using luminance calculation
+  const backgroundLuminance = getColorLuminance(theme.background);
+  const isDark = backgroundLuminance < 0.5;
 
   // Adjust base opacity based on theme
   const baseOpacity = isDark ? 0.8 : 0.7;
@@ -309,8 +359,8 @@ export function getContrastColor(backgroundColor: string): string {
  * Apply theme transitions to chart elements
  */
 export function applyThemeTransition(
-  selection: d3.Selection<d3.BaseType, unknown, d3.BaseType, unknown>,
+  selection: Selection<BaseType, unknown, BaseType, unknown>,
   duration = 300
-): d3.Transition<d3.BaseType, unknown, d3.BaseType, unknown> {
-  return selection.transition().duration(duration).ease(d3.easeQuadInOut);
+): Transition<BaseType, unknown, BaseType, unknown> {
+  return selection.transition().duration(duration).ease(easeQuadInOut);
 }

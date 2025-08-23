@@ -104,7 +104,9 @@ export function formatTick(value: number | Date, type: 'number' | 'time' | 'hour
     case 'time':
       return timeFormat('%b %d')(value as Date);
     case 'hour': {
-      const hour = value as number;
+      const rawHour = value as number;
+      // Clamp hour to 0-23 range to ensure consistent labels
+      const hour = Math.max(0, Math.min(23, Math.floor(rawHour)));
       return `${String(hour).padStart(2, '0')}:00`;
     }
     default:
