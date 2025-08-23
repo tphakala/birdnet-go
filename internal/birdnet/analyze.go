@@ -206,8 +206,7 @@ func (bn *BirdNET) ProcessChunkWithContext(ctx context.Context, chunk []float32,
 	// Get species occurrence scores once for all results (optimization)
 	var speciesOccurrences map[string]float64
 	if bn.Settings.BirdNET.Latitude != 0 && bn.Settings.BirdNET.Longitude != 0 {
-		now := time.Now()
-		cachedScores, err := bn.getCachedSpeciesScores(now)
+		cachedScores, err := bn.getCachedSpeciesScores(predStart)
 		if err == nil && len(cachedScores) > 0 {
 			speciesOccurrences = cachedScores
 		}

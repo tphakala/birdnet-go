@@ -30,11 +30,11 @@ const DefaultModelVersion = "BirdNET_GLOBAL_6K_V2.4"
 // Model version string, default is the embedded model version
 var modelVersion = "BirdNET GLOBAL 6K V2.4 FP32"
 
-// speciesCacheEntry holds cached species scores for a specific date
+// speciesCacheEntry holds cached species scores for a composite cache key.
+// Scores are immutable once stored - callers must not mutate the returned map.
 type speciesCacheEntry struct {
-	date         string                   // Date string in YYYY-MM-DD format
+	key          string                   // Composite cache key: date + rounded lat/lon + model id
 	scores       map[string]float64       // Species occurrence scores keyed by label
-	createdAt    time.Time               // When this cache entry was created
 }
 
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
@@ -556,52 +556,69 @@ func (bn *BirdNET) loadLabelsFromText(file *os.File) error {
 	return scanner.Err()
 }
 
+// clearSpeciesCache clears the species occurrence cache.
+// This should be called when model/labels change, node is deleted, or location is updated.
+func (bn *BirdNET) clearSpeciesCache() {
+	bn.speciesCacheMu.Lock()
+	clear(bn.speciesCache)
+	bn.speciesCacheMu.Unlock()
+}
+
 // getCachedSpeciesScores returns species occurrence scores with caching to avoid repeated calls within same day
 func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]float64, error) {
-	// Create date key in YYYY-MM-DD format using the target date's location
-	dateKey := targetDate.Format("2006-01-02")
-	
-	// First, try to read from cache with read lock
+	// Build composite cache key: date + rounded lat/lon + model
+	day := targetDate.Format("2006-01-02")
+	cacheKey := fmt.Sprintf("%s|%.4f,%.4f|%s",
+		day,
+		bn.Settings.BirdNET.Latitude,
+		bn.Settings.BirdNET.Longitude,
+		bn.Settings.BirdNET.RangeFilter.Model,
+	)
+
+	// FAST PATH: read under RLock and return a defensive copy
 	bn.speciesCacheMu.RLock()
-	if entry, exists := bn.speciesCache[dateKey]; exists {
-		// Verify the cached entry is still valid (same date)
-		if entry.date == dateKey {
-			scores := entry.scores
-			bn.speciesCacheMu.RUnlock()
-			return scores, nil
+	if entry, ok := bn.speciesCache[cacheKey]; ok && entry.key == cacheKey {
+		out := make(map[string]float64, len(entry.scores))
+		for k, v := range entry.scores {
+			out[k] = v
 		}
+		bn.speciesCacheMu.RUnlock()
+		return out, nil
 	}
 	bn.speciesCacheMu.RUnlock()
-	
-	// Cache miss or invalid, acquire write lock and fetch fresh data
-	bn.speciesCacheMu.Lock()
-	defer bn.speciesCacheMu.Unlock()
-	
-	// Double-check after acquiring write lock (another goroutine might have populated it)
-	if entry, exists := bn.speciesCache[dateKey]; exists && entry.date == dateKey {
-		return entry.scores, nil
-	}
-	
-	// Call the actual GetProbableSpecies method
+
+	// MISS PATH: fetch outside of any lock to avoid blocking readers
 	speciesScores, err := bn.GetProbableSpecies(targetDate, 0.0)
 	if err != nil {
 		return nil, err
 	}
-	
-	// Convert SpeciesScore slice to map
 	scores := make(map[string]float64, len(speciesScores))
-	for _, score := range speciesScores {
-		scores[score.Label] = score.Score
+	for _, s := range speciesScores {
+		scores[s.Label] = s.Score
 	}
-	
-	// Store in cache
-	bn.speciesCache[dateKey] = &speciesCacheEntry{
-		date:      dateKey,
-		scores:    scores,
-		createdAt: time.Now(),
+
+	// WRITE PATH: double-check, evict old entries, and publish new results
+	bn.speciesCacheMu.Lock()
+	if entry, ok := bn.speciesCache[cacheKey]; ok && entry.key == cacheKey {
+		out := make(map[string]float64, len(entry.scores))
+		for k, v := range entry.scores {
+			out[k] = v
+		}
+		bn.speciesCacheMu.Unlock()
+		return out, nil
 	}
-	
-	return scores, nil
+	// Keep cache bounded by clearing before setting new key
+	clear(bn.speciesCache)
+	bn.speciesCache[cacheKey] = &speciesCacheEntry{
+		key:    cacheKey,
+		scores: scores,
+	}
+	out := make(map[string]float64, len(scores))
+	for k, v := range scores {
+		out[k] = v
+	}
+	bn.speciesCacheMu.Unlock()
+	return out, nil
 }
 
 // Delete releases resources used by the TensorFlow Lite interpreters.
@@ -612,6 +629,7 @@ func (bn *BirdNET) Delete() {
 	if bn.RangeInterpreter != nil {
 		bn.RangeInterpreter.Delete()
 	}
+	bn.clearSpeciesCache()
 }
 
 // DefaultBirdNETModelName is the expected filesystem basename for the main BirdNET analysis model file.
@@ -940,6 +958,9 @@ func (bn *BirdNET) ReloadModel() error {
 	if oldRangeInterpreter != nil {
 		oldRangeInterpreter.Delete()
 	}
+	
+	// Clear species cache as model/labels have changed
+	bn.clearSpeciesCache()
 
 	bn.Debug("\033[32m✅ Model reload completed successfully\033[0m")
 	return nil

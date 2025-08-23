@@ -49,6 +49,25 @@ func ParseSpeciesString(species string) (scientificName, commonName, speciesCode
 	return species, species, ""
 }
 
+// NoteParams holds the parameters for creating a new Note.
+type NoteParams struct {
+	Begin       time.Time
+	End         time.Time
+	Species     string
+	Confidence  float64
+	Source      string
+	ClipName    string
+	Elapsed     time.Duration
+	Occurrence  float64
+}
+
+// NewWith creates and returns a new Note with the provided NoteParams and current date and time.
+// It uses the configuration and parsing functions to set the appropriate fields.
+// For custom models, species may have placeholder taxonomy codes if not in the eBird taxonomy.
+func NewWith(settings *conf.Settings, p *NoteParams) datastore.Note {
+	return New(settings, p.Begin, p.End, p.Species, p.Confidence, p.Source, p.ClipName, p.Elapsed, p.Occurrence)
+}
+
 // New creates and returns a new Note with the provided parameters and current date and time.
 // It uses the configuration and parsing functions to set the appropriate fields.
 // For custom models, species may have placeholder taxonomy codes if not in the eBird taxonomy.
