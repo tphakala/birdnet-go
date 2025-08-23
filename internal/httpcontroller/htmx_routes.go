@@ -83,6 +83,7 @@ func (s *Server) initRoutes() {
 		"/ui/notifications":             {Path: "/ui/notifications", TemplateName: "svelte-standalone", Title: "Notifications"},
 		"/ui/analytics":                 {Path: "/ui/analytics", TemplateName: "svelte-standalone", Title: "Analytics"},
 		"/ui/analytics/species":         {Path: "/ui/analytics/species", TemplateName: "svelte-standalone", Title: "Species"},
+		"/ui/analytics/advanced":        {Path: "/ui/analytics/advanced", TemplateName: "svelte-standalone", Title: "Advanced Analytics"},
 		"/ui/search":                    {Path: "/ui/search", TemplateName: "svelte-standalone", Title: "Search Detections"},
 		"/ui/about":                     {Path: "/ui/about", TemplateName: "svelte-standalone", Title: "About BirdNET-Go"},
 		"/ui/system":                    {Path: "/ui/system", TemplateName: "svelte-standalone", Title: "System Dashboard", Authorized: true},

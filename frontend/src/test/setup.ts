@@ -405,8 +405,195 @@ Object.defineProperty(window, 'location', {
   },
 });
 
-// Note: Utility modules are not mocked globally to allow their own tests to run properly
-// Component tests that need utility mocks should mock them individually
+// Mock security utilities - consolidated mock for consistent test behavior
+vi.mock('$lib/utils/security', () => ({
+  safeGet: vi.fn(
+    (
+      obj: Record<string, unknown> | null | undefined,
+      key: string,
+      defaultValue?: unknown
+    ): unknown => {
+      if (obj === null || obj === undefined || typeof obj !== 'object') {
+        return defaultValue;
+      }
+      // Use hasOwnProperty check for proper property access validation
+      if (!Object.prototype.hasOwnProperty.call(obj, key)) {
+        return defaultValue;
+      }
+      // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data, property validated above
+      const value = obj[key];
+      return value ?? defaultValue;
+    }
+  ),
+  safeArrayAccess: vi.fn((arr: unknown, index: number, defaultValue?: unknown): unknown => {
+    if (!Array.isArray(arr)) {
+      return defaultValue;
+    }
+    // Enforce index bounds checking
+    if (index < 0 || index >= arr.length) {
+      return defaultValue;
+    }
+    // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data, bounds validated above
+    const value = arr[index];
+    return value ?? defaultValue;
+  }),
+  // Mock safeSpread to just spread objects without security validation for tests
+  safeSpread: vi.fn(
+    (...objects: Array<Record<string, unknown> | null | undefined>): Record<string, unknown> => {
+      return objects.reduce(
+        (result: Record<string, unknown>, obj) => {
+          if (obj != null && typeof obj === 'object') {
+            return { ...result, ...obj };
+          }
+          return result;
+        },
+        {} as Record<string, unknown>
+      );
+    }
+  ),
+  // Mock URL validation for RTSP and other protocols
+  validateProtocolURL: vi.fn(
+    (
+      url: unknown,
+      allowedProtocols: string[] = ['rtsp', 'http', 'https'],
+      maxLength: number = 2048
+    ): boolean => {
+      if (!url || typeof url !== 'string' || url.length > maxLength) {
+        return false;
+      }
+      try {
+        const parsed = new URL(url);
+        return allowedProtocols.includes(parsed.protocol.slice(0, -1));
+      } catch {
+        return false;
+      }
+    }
+  ),
+  // Mock CIDR validation
+  validateCIDR: vi.fn(cidr => {
+    if (!cidr || typeof cidr !== 'string' || cidr.length > 18) return false;
+    const parts = cidr.split('/');
+    if (parts.length !== 2) return false;
+    const [ip, mask] = parts;
+    const octets = ip.split('.');
+    if (octets.length !== 4) return false;
+    for (const octet of octets) {
+      if (!/^\d{1,3}$/.test(octet)) return false;
+      const num = parseInt(octet, 10);
+      if (num > 255) return false;
+    }
+    if (!/^\d{1,2}$/.test(mask)) return false;
+    const maskNum = parseInt(mask, 10);
+    return maskNum >= 0 && maskNum <= 32;
+  }),
+  // Mock other security utilities with basic implementations for tests
+  safeLookup: vi.fn((lookupTable, key, allowedKeys, defaultValue) => {
+    if (Array.isArray(allowedKeys) && !allowedKeys.includes(key)) {
+      return defaultValue;
+    }
+    // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data
+    return lookupTable[key] ?? defaultValue;
+  }),
+  createSafeMap: vi.fn(obj => {
+    if (obj) {
+      return new Map(Object.entries(obj));
+    }
+    return new Map();
+  }),
+  validateInput: vi.fn((input, maxLength, pattern) => {
+    if (!input || input.length > maxLength) {
+      return false;
+    }
+    return pattern ? pattern.test(input) : true;
+  }),
+  safeRegexTest: vi.fn((pattern, input, maxLength = 1000) => {
+    const str = String(input ?? '');
+    if (str.length > maxLength) {
+      return false;
+    }
+    try {
+      return pattern.test(str);
+    } catch {
+      return false;
+    }
+  }),
+  sanitizeFilename: vi.fn(filename => {
+    const basename = filename.split(/[\\/]/).pop() ?? '';
+    if (basename === '') {
+      return 'screenshot.png';
+    }
+    return basename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  }),
+  createEnumLookup: vi.fn(enumObj => {
+    const validKeys = Object.keys(enumObj);
+    return (key: string) => {
+      if (validKeys.includes(key)) {
+        // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with validated key
+        return enumObj[key];
+      }
+      return undefined;
+    };
+  }),
+  safeSwitch: vi.fn((key, cases, defaultValue) => {
+    // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data
+    return cases[key] ?? defaultValue;
+  }),
+  safeArraySpread: vi.fn((...arrays) => {
+    const result = [];
+    for (const arr of arrays) {
+      if (Array.isArray(arr)) {
+        result.push(...arr);
+      }
+    }
+    return result;
+  }),
+  SafeAccessMap: vi.fn().mockImplementation(function () {
+    const map = new Map();
+    return Object.assign(map, {
+      safeGet: vi.fn((key, defaultValue) => map.get(key) ?? defaultValue),
+      hasError: vi.fn(key => map.has(key)),
+      getError: vi.fn(key => map.get(key)),
+    });
+  }),
+  nodeListToArray: vi.fn(nodeList => Array.from(nodeList)),
+  safeElementAccess: vi.fn((elements, index, elementType) => {
+    const arr = Array.isArray(elements) ? elements : Array.from(elements);
+    // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled array access
+    const element = arr[index];
+    if (!element) return undefined;
+    if (elementType && !(element instanceof elementType)) return undefined;
+    return element;
+  }),
+  numberToStringKey: vi.fn(key => key.toString()),
+  createIndexMap: vi.fn(() => new Map()),
+  IndexMap: vi.fn().mockImplementation(function () {
+    const map = new Map();
+    return Object.assign(map, {
+      setByIndex: vi.fn((index, value) => map.set(index.toString(), value)),
+      getByIndex: vi.fn(index => map.get(index.toString())),
+      deleteByIndex: vi.fn(index => map.delete(index.toString())),
+      hasByIndex: vi.fn(index => map.has(index.toString())),
+    });
+  }),
+  safePropertyAccess: vi.fn((obj, key) => {
+    if (obj == null) return undefined;
+    // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data
+    return obj[key];
+  }),
+  safePropertyAccessWithFallback: vi.fn((obj, key, fallback) => {
+    if (obj == null) return fallback;
+    // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data
+    return obj[key] ?? fallback;
+  }),
+  createTypedDefault: vi.fn(defaults => ({ ...defaults })),
+  ensureRequiredProperties: vi.fn((obj, defaults) => {
+    if (obj == null) return { ...defaults };
+    return { ...defaults, ...obj };
+  }),
+}));
+
+// Note: Other utility modules are not mocked globally to allow their own tests to run properly
+// Component tests that need other utility mocks should mock them individually
 
 // Global test utilities
 export const testUtils = {

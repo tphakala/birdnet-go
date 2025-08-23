@@ -39,6 +39,7 @@
       dashboard: currentRoute === '/ui/dashboard' || currentRoute === '/ui/',
       analytics: currentRoute.startsWith('/ui/analytics'),
       analyticsExact: currentRoute === '/ui/analytics',
+      analyticsAdvanced: currentRoute === '/ui/analytics/advanced',
       analyticsSpecies: currentRoute === '/ui/analytics/species',
       search: currentRoute.startsWith('/ui/search'),
       about: currentRoute.startsWith('/ui/about'),
@@ -68,6 +69,7 @@
   let navigationUrls = $derived({
     dashboard: onNavigate ? '/' : '/ui/dashboard',
     analytics: onNavigate ? '/analytics' : '/ui/analytics',
+    analyticsAdvanced: '/ui/analytics/advanced', // Always use new UI - no legacy equivalent
     analyticsSpecies: onNavigate ? '/analytics/species' : '/ui/analytics/species',
     search: onNavigate ? '/search' : '/ui/search',
     about: onNavigate ? '/about' : '/ui/about',
