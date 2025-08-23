@@ -1,7 +1,8 @@
 <!-- Base D3 Chart Component -->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import * as d3 from 'd3';
+  import { select } from 'd3-selection';
+  import type { Selection } from 'd3-selection';
   import type { Snippet } from 'svelte';
 
   import { ThemeStore, type ChartTheme } from './utils/theme';
@@ -13,11 +14,12 @@
     margin?: { top: number; right: number; bottom: number; left: number };
     className?: string;
     id?: string;
+    ariaLabel?: string;
     children?: Snippet<
       [
         {
-          svg: d3.Selection<globalThis.SVGSVGElement, unknown, null, undefined>;
-          chartGroup: d3.Selection<globalThis.SVGGElement, unknown, null, undefined>;
+          svg: Selection<globalThis.SVGSVGElement, unknown, null, undefined>;
+          chartGroup: Selection<globalThis.SVGGElement, unknown, null, undefined>;
           innerWidth: number;
           innerHeight: number;
           theme: ChartTheme;
@@ -34,6 +36,7 @@
     margin = { top: 20, right: 20, bottom: 40, left: 60 },
     className = '',
     id,
+    ariaLabel,
     children,
     onResize,
     responsive = true,
@@ -47,8 +50,8 @@
   let svgElement: SVGSVGElement;
 
   // D3 selections
-  let svg: d3.Selection<globalThis.SVGSVGElement, unknown, null, undefined>;
-  let chartGroup: d3.Selection<globalThis.SVGGElement, unknown, null, undefined>;
+  let svg: Selection<globalThis.SVGSVGElement, unknown, null, undefined>;
+  let chartGroup: Selection<globalThis.SVGGElement, unknown, null, undefined>;
 
   // Reactive dimensions
   let containerWidth = $state(width);
@@ -71,7 +74,7 @@
   // Initialize chart on mount
   onMount(() => {
     // Generate unique ID on client side to prevent SSR/hydration mismatch
-    chartId = id || `chart-${Math.random().toString(36).substr(2, 9)}`;
+    chartId = id || `chart-${Math.random().toString(36).slice(2, 11)}`;
 
     // Initialize theme store
     themeStore = new ThemeStore();
@@ -83,7 +86,7 @@
     });
 
     // Initialize D3 selections
-    svg = d3.select(svgElement);
+    svg = select(svgElement);
 
     // Create main chart group with margins
     chartGroup = svg
@@ -181,13 +184,15 @@
   style:height={responsive ? '100%' : `${height}px`}
   style:min-height="200px"
   role="img"
-  aria-label="Data visualization chart"
+  aria-label={ariaLabel || 'Data visualization chart'}
 >
   <svg
     bind:this={svgElement}
     id={chartId}
     width={containerWidth}
     height={containerHeight}
+    viewBox="0 0 {containerWidth} {containerHeight}"
+    preserveAspectRatio="xMidYMid meet"
     class="chart-svg"
   >
     <!-- Render children with chart context -->

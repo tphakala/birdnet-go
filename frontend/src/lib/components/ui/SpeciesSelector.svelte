@@ -53,6 +53,8 @@
   let dropdownRef = $state<HTMLDivElement>();
   let inputRef = $state<HTMLInputElement>();
   let shouldShowDropdown = $state(false);
+  // Generate unique ID for dropdown
+  const dropdownId = `species-dropdown-${Math.random().toString(36).slice(2, 9)}`;
 
   // Size configurations
   const sizeConfig = {
@@ -130,9 +132,12 @@
     return [{ category: '', items: filtered }];
   });
 
+  // Type predicate to safely filter out undefined values
+  const isSpecies = (s: Species | undefined): s is Species => s != null;
+
   // Selected species objects
-  const selectedSpecies = $derived(
-    () => selected.map(id => species.find(s => s.id === id)).filter(Boolean) as Species[]
+  const selectedSpecies = $derived(() =>
+    selected.map(id => species.find(s => s.id === id)).filter(isSpecies)
   );
 
   // Handlers
@@ -244,6 +249,10 @@
               )}
               class:input-disabled={disabled}
               readonly={disabled}
+              role="combobox"
+              aria-expanded={isExpanded || shouldShowDropdown ? 'true' : 'false'}
+              aria-controls={dropdownId}
+              aria-haspopup="listbox"
               onfocus={handleInputFocus}
               onblur={handleInputBlur}
             />
@@ -303,7 +312,7 @@
 
       <!-- Max Selections Warning -->
       {#if maxSelections && selected.length >= maxSelections}
-        <div class="badge badge-warning gap-2">
+        <div class="badge badge-warning gap-2" role="status" aria-live="polite" aria-atomic="true">
           {@html actionIcons.warning}
           Max {maxSelections} species selected
         </div>
@@ -330,7 +339,10 @@
     {#if (isExpanded || shouldShowDropdown) && (searchQuery || !searchable)}
       <div
         bind:this={dropdownRef}
+        id={dropdownId}
         class="absolute z-50 w-full min-w-[320px] mt-2 bg-base-100 border border-base-300 rounded-lg shadow-xl max-h-80 overflow-y-auto"
+        role="listbox"
+        aria-multiselectable="true"
       >
         {#if loading}
           <div class="p-6 text-center">
@@ -346,7 +358,7 @@
           {#each filteredSpecies() as group}
             {#if group.category && categorized}
               <div class="px-4 py-2 bg-base-200 text-sm font-medium capitalize">
-                {group.category.replace('-', ' ')}
+                {group.category.replaceAll('-', ' ')}
               </div>
             {/if}
 
@@ -364,6 +376,9 @@
                   !canSelect && 'opacity-50 cursor-not-allowed'
                 )}
                 disabled={!canSelect}
+                role="option"
+                aria-selected={isSelected}
+                aria-disabled={!canSelect}
                 onclick={() => canSelect && toggleSpecies(species)}
               >
                 <div class="flex items-center gap-4 flex-1 min-w-0">
@@ -437,6 +452,7 @@
               type="button"
               class="absolute right-2 top-1/2 -translate-y-1/2 btn btn-ghost btn-xs btn-circle"
               onclick={clearSearch}
+              aria-label="Clear search"
             >
               {@html navigationIcons.close}
             </button>

@@ -1,7 +1,8 @@
 <!-- Daily Species Trend Chart -->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import * as d3 from 'd3';
+  import { extent, select, line, area, curveMonotoneX, scaleTime, scaleLinear } from 'd3';
+  import type { Selection, ZoomTransform, AxisDomain } from 'd3';
 
   import BaseChart from './BaseChart.svelte';
   import { getLocalDateString } from '$lib/utils/date';
@@ -26,6 +27,7 @@
     data: DailyData[];
     visible: boolean;
     color?: string;
+    id?: string; // Add stable ID for legend toggling
   }
 
   interface Props {
@@ -56,7 +58,8 @@
 
   // Component state
   let tooltip: ChartTooltip | null = null;
-  let zoomTransform: d3.ZoomTransform | null = null;
+  let zoomTransform: ZoomTransform | null = null;
+  let chartContainer: HTMLDivElement | null = null;
   // let brushSelection: [Date, Date] | null = null;
 
   // Prepare data with colors
@@ -77,6 +80,7 @@
       // eslint-disable-next-line security/detect-object-injection -- Safe: internal array access with controlled index
       color: species.color || colors[index],
       visible: selectedSpecies.length === 0 || selectedSpecies.includes(species.species),
+      id: species.id || species.species, // Use species name as fallback ID
     }));
   });
 
@@ -122,8 +126,8 @@
       species.data.map(point => point.count)
     );
 
-    const dateExtent = d3.extent<Date>(allDates);
-    const countExtent = d3.extent<number>(allCounts);
+    const dateExtent = extent<Date>(allDates);
+    const countExtent = extent<number>(allCounts);
 
     // Handle cases where extent returns undefined
     const safeDateExtent: [Date, Date] =
@@ -134,12 +138,10 @@
         : [0, 100];
 
     return {
-      x: d3
-        .scaleTime()
+      x: scaleTime()
         .domain(dateRange || safeDateExtent)
         .range([0, 100]),
-      y: d3
-        .scaleLinear()
+      y: scaleLinear()
         .domain([0, (safeCountExtent[1] || 0) * 1.1])
         .range([100, 0]),
     };
@@ -147,16 +149,16 @@
 
   // Store chart context
   let chartContext = $state<{
-    svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
-    chartGroup: d3.Selection<globalThis.SVGGElement, unknown, null, undefined>;
+    svg: Selection<SVGSVGElement, unknown, null, undefined>;
+    chartGroup: Selection<globalThis.SVGGElement, unknown, null, undefined>;
     innerWidth: number;
     innerHeight: number;
     theme: ChartTheme;
   } | null>(null);
 
   function drawChart(context: {
-    svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
-    chartGroup: d3.Selection<globalThis.SVGGElement, unknown, null, undefined>;
+    svg: Selection<SVGSVGElement, unknown, null, undefined>;
+    chartGroup: Selection<globalThis.SVGGElement, unknown, null, undefined>;
     innerWidth: number;
     innerHeight: number;
     theme: ChartTheme;
@@ -211,10 +213,11 @@
       daysDiff <= 7 ? 'day' : daysDiff <= 30 ? 'week' : daysDiff <= 365 ? 'month' : 'year';
 
     // Create axes
+    const dateTick = createDateAxisFormatter(dateFormat);
     const xAxis = createAxis({
       scale: xScale,
       orientation: 'bottom',
-      tickFormat: (d: d3.AxisDomain) => createDateAxisFormatter(dateFormat)(d as Date),
+      tickFormat: (d: AxisDomain) => dateTick(d as Date),
       tickCount: Math.min(8, Math.floor(innerWidth / 80)),
     });
 
@@ -222,9 +225,7 @@
       scale: yScale,
       orientation: 'left',
       tickCount: 6,
-      tickFormat: showRelative
-        ? (((_d: d3.AxisDomain) => `${Number(_d).toFixed(0)}%`) as (_d: d3.AxisDomain) => string)
-        : undefined,
+      tickFormat: showRelative ? (_d: AxisDomain) => `${Number(_d).toFixed(0)}%` : undefined,
     });
 
     // Draw axes
@@ -266,19 +267,17 @@
     );
 
     // Line generator
-    const line = d3
-      .line<DailyData>()
+    const lineGenerator = line<DailyData>()
       .x(d => xScale(d.date))
       .y(d => yScale(d.count))
-      .curve(d3.curveMonotoneX);
+      .curve(curveMonotoneX);
 
     // Area generator for filled areas (optional enhancement)
-    const area = d3
-      .area<DailyData>()
+    const areaGenerator = area<DailyData>()
       .x(d => xScale(d.date))
       .y0(innerHeight)
       .y1(d => yScale(d.count))
-      .curve(d3.curveMonotoneX);
+      .curve(curveMonotoneX);
 
     // Create clip path for zoom (unique per instance)
     const clipPathId = `chart-area-${Math.random().toString(36).slice(2, 8)}`;
@@ -295,13 +294,13 @@
     // Draw lines for each species
     const linesGroup = chartArea.append('g').attr('class', 'lines');
 
-    (processed as any).forEach((species: any) => {
+    processed.forEach((species: SpeciesTrendData) => {
       // Add area (subtle background fill)
       linesGroup
         .append('path')
         .datum(species.data)
         .attr('class', `area-${species.species.replace(/\s+/g, '-')}`)
-        .attr('d', area)
+        .attr('d', areaGenerator)
         .style('fill', species.color ?? '#999999')
         .style('opacity', 0.1)
         .style('pointer-events', 'none');
@@ -311,7 +310,7 @@
         .append('path')
         .datum(species.data)
         .attr('class', `line-${species.species.replace(/\s+/g, '-')}`)
-        .attr('d', line)
+        .attr('d', lineGenerator)
         .style('fill', 'none')
         .style('stroke', species.color ?? '#999999')
         .style('stroke-width', 2)
@@ -327,24 +326,23 @@
         .data(species.data)
         .enter()
         .append('circle')
-        .attr('cx', (d: any) => xScale((d as DailyData).date))
-        .attr('cy', (d: any) => yScale((d as DailyData).count))
+        .attr('cx', (d: DailyData) => xScale(d.date))
+        .attr('cy', (d: DailyData) => yScale(d.count))
         .attr('r', 3)
         .style('fill', species.color ?? '#999999')
         .style('opacity', 0.7)
-        .on('mouseenter', function (event, d: any) {
-          const dailyData = d as DailyData;
+        .on('mouseenter', function (event: MouseEvent, d: DailyData) {
           // Highlight this point
-          d3.select(this).transition().duration(150).attr('r', 6).style('opacity', 1);
+          select(this).transition().duration(150).attr('r', 6).style('opacity', 1);
 
           // Show tooltip
           const tooltipData = {
             title: species.commonName,
             items: [
-              { label: 'Date', value: dailyData.date.toLocaleDateString() },
+              { label: 'Date', value: d.date.toLocaleDateString() },
               {
                 label: showRelative ? 'Percentage' : 'Detections',
-                value: showRelative ? `${dailyData.count.toFixed(1)}%` : dailyData.count.toString(),
+                value: showRelative ? `${d.count.toFixed(1)}%` : d.count.toString(),
               },
             ],
             x: event.clientX,
@@ -354,7 +352,7 @@
           tooltip?.show(tooltipData);
         })
         .on('mouseleave', function () {
-          d3.select(this).transition().duration(150).attr('r', 3).style('opacity', 0.7);
+          select(this).transition().duration(150).attr('r', 3).style('opacity', 0.7);
 
           tooltip?.hide();
         });
@@ -374,19 +372,29 @@
           const newXScale = transform.rescaleX(xScale);
 
           // Update axes
-          xAxisGroup.call(xAxis.scale(newXScale as any));
+          xAxisGroup.call(
+            createAxis({
+              scale: newXScale,
+              orientation: 'bottom',
+              tickFormat: (d: AxisDomain) => dateTick(d as Date),
+              tickCount: Math.min(8, Math.floor(innerWidth / 80)),
+            })
+          );
 
           // Update lines and points
           linesGroup.selectAll('path').attr('d', function () {
             const className = (this as globalThis.SVGPathElement).className.baseVal;
             const isArea = className.includes('area-');
             const generator = isArea
-              ? area.x(d => newXScale(d.date))
-              : line.x(d => newXScale(d.date));
-            return generator(d3.select(this).datum() as DailyData[]);
+              ? areaGenerator.x(d => newXScale(d.date))
+              : lineGenerator.x(d => newXScale(d.date));
+            return generator(select(this).datum() as DailyData[]);
           });
 
-          linesGroup.selectAll('circle').attr('cx', (d: any) => newXScale((d as DailyData).date));
+          linesGroup.selectAll('circle').attr('cx', (d: unknown) => {
+            const dailyData = d as DailyData;
+            return newXScale(dailyData.date);
+          });
         },
       });
     }
@@ -415,7 +423,8 @@
 
     // Create legend
     const processedForLegend = processedData();
-    const legendItems = (processedForLegend as any).map((species: any) => ({
+    const legendItems = processedForLegend.map((species: SpeciesTrendData) => ({
+      id: species.id || species.species,
       label: species.commonName,
       color: species.color ?? '#999999',
       visible: species.visible,
@@ -426,8 +435,10 @@
         items: legendItems,
         position: { x: innerWidth - 150, y: 20 },
         itemHeight: 20,
-        onToggle: (label, visible) => {
-          const species = (processedForLegend as any).find((s: any) => s.commonName === label);
+        onToggle: (id, visible) => {
+          const species = processedForLegend.find(
+            (s: SpeciesTrendData) => (s.id || s.species) === id
+          );
           if (species) {
             onSpeciesToggle?.(species.species, visible);
           }
@@ -467,10 +478,9 @@
   });
 
   onMount(() => {
-    // Initialize tooltip
-    const container = document.querySelector('.chart-container');
-    if (container) {
-      tooltip = new ChartTooltip(container as HTMLElement);
+    // Initialize tooltip - use component's own container
+    if (chartContainer) {
+      tooltip = new ChartTooltip(chartContainer);
     }
   });
 
@@ -479,7 +489,7 @@
   });
 </script>
 
-<div class="daily-species-trend-chart">
+<div class="daily-species-trend-chart" bind:this={chartContainer}>
   <BaseChart {width} {height} responsive={true}>
     {#snippet children(context)}
       <!-- CRITICAL: Capture D3 context from BaseChart for use in $effect
