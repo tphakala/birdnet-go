@@ -86,13 +86,13 @@
   });
 
   // Store chart context
-  let chartContext: {
+  let chartContext = $state<{
     svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
     chartGroup: d3.Selection<globalThis.SVGGElement, unknown, null, undefined>;
     innerWidth: number;
     innerHeight: number;
     theme: ChartTheme;
-  } | null = null;
+  } | null>(null);
 
   function drawChart(context: {
     svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
@@ -386,10 +386,7 @@
       <!-- CRITICAL: Capture D3 context from BaseChart for use in $effect
            Snippets only render once, so we can't call drawChart directly here.
            Instead we store context and let the $effect handle reactive updates. -->
-      {(() => {
-        chartContext = context;
-        return '';
-      })()}
+      {(chartContext = context)}
     {/snippet}
   </BaseChart>
 </div>

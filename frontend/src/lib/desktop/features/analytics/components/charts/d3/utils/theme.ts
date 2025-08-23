@@ -109,6 +109,8 @@ export class ThemeStore {
   private currentTheme: ChartTheme;
   private readonly callbacks: Set<(theme: ChartTheme) => void> = new Set();
   private observer: MutationObserver | null = null;
+  private mediaQuery: MediaQueryList | null = null;
+  private mediaQueryListener: (() => void) | null = null;
 
   constructor() {
     this.currentTheme = getCurrentTheme();
@@ -131,10 +133,11 @@ export class ThemeStore {
     });
 
     // Also listen for CSS variable changes
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    mediaQuery.addEventListener('change', () => {
+    this.mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    this.mediaQueryListener = () => {
       this.updateTheme();
-    });
+    };
+    this.mediaQuery.addEventListener('change', this.mediaQueryListener);
   }
 
   private updateTheme(): void {
@@ -163,6 +166,13 @@ export class ThemeStore {
       this.observer.disconnect();
       this.observer = null;
     }
+
+    if (this.mediaQuery && this.mediaQueryListener) {
+      this.mediaQuery.removeEventListener('change', this.mediaQueryListener);
+      this.mediaQuery = null;
+      this.mediaQueryListener = null;
+    }
+
     this.callbacks.clear();
   }
 }
@@ -171,22 +181,28 @@ export class ThemeStore {
  * Generate species color palette based on theme
  * Using a curated palette for better visual distinction
  */
-export function generateSpeciesColors(count: number, _theme: ChartTheme): string[] {
+export function generateSpeciesColors(count: number, theme: ChartTheme): string[] {
+  // Check if we're in dark mode
+  const isDark = theme.background === '#1f2937';
+
+  // Adjust base opacity based on theme
+  const baseOpacity = isDark ? 0.8 : 0.7;
+
   // Use a more diverse color palette for better distinction between species
   // These colors are carefully chosen to be distinguishable in both light and dark themes
   const baseColors = [
-    'rgba(59, 130, 246, 0.8)', // Blue
-    'rgba(16, 185, 129, 0.8)', // Green
-    'rgba(245, 158, 11, 0.8)', // Orange
-    'rgba(236, 72, 153, 0.8)', // Pink
-    'rgba(139, 92, 246, 0.8)', // Purple
-    'rgba(239, 68, 68, 0.8)', // Red
-    'rgba(20, 184, 166, 0.8)', // Teal
-    'rgba(234, 179, 8, 0.8)', // Yellow
-    'rgba(99, 102, 241, 0.8)', // Indigo
-    'rgba(249, 115, 22, 0.8)', // Orange-red
-    'rgba(168, 85, 247, 0.8)', // Purple-pink
-    'rgba(34, 197, 94, 0.8)', // Emerald
+    `rgba(59, 130, 246, ${baseOpacity})`, // Blue
+    `rgba(16, 185, 129, ${baseOpacity})`, // Green
+    `rgba(245, 158, 11, ${baseOpacity})`, // Orange
+    `rgba(236, 72, 153, ${baseOpacity})`, // Pink
+    `rgba(139, 92, 246, ${baseOpacity})`, // Purple
+    `rgba(239, 68, 68, ${baseOpacity})`, // Red
+    `rgba(20, 184, 166, ${baseOpacity})`, // Teal
+    `rgba(234, 179, 8, ${baseOpacity})`, // Yellow
+    `rgba(99, 102, 241, ${baseOpacity})`, // Indigo
+    `rgba(249, 115, 22, ${baseOpacity})`, // Orange-red
+    `rgba(168, 85, 247, ${baseOpacity})`, // Purple-pink
+    `rgba(34, 197, 94, ${baseOpacity})`, // Emerald
   ];
 
   if (count <= baseColors.length) {
@@ -195,7 +211,7 @@ export function generateSpeciesColors(count: number, _theme: ChartTheme): string
 
   // Generate additional colors by modifying opacity
   const colors = [...baseColors];
-  const opacityVariations = [0.6, 0.4, 0.9];
+  const opacityVariations = isDark ? [0.6, 0.4, 0.9] : [0.5, 0.3, 0.8];
 
   while (colors.length < count) {
     for (let i = 0; i < baseColors.length && colors.length < count; i++) {

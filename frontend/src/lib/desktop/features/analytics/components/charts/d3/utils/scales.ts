@@ -1,8 +1,14 @@
 // D3 scale utilities for analytics charts
 import * as d3 from 'd3';
+import { generateSpeciesColors, getCurrentTheme } from './theme';
 
-export interface ScaleConfig {
-  domain: [number, number] | string[];
+export interface LinearScaleConfig {
+  domain: [number, number];
+  range: [number, number];
+}
+
+export interface BandScaleConfig {
+  domain: string[] | unknown[];
   range: [number, number];
   padding?: number;
 }
@@ -15,12 +21,17 @@ export interface TimeScaleConfig {
 /**
  * Create a linear scale with nice ticks
  */
-export function createLinearScale(config: ScaleConfig): d3.ScaleLinear<number, number> {
-  const scale = d3
-    .scaleLinear()
-    .domain(config.domain as [number, number])
-    .range(config.range)
-    .nice();
+export function createLinearScale(config: LinearScaleConfig): d3.ScaleLinear<number, number> {
+  // Validate domain for linear scale
+  if (
+    !Array.isArray(config.domain) ||
+    typeof config.domain[0] !== 'number' ||
+    typeof config.domain[1] !== 'number'
+  ) {
+    throw new TypeError('createLinearScale: domain must be [number, number]');
+  }
+
+  const scale = d3.scaleLinear().domain(config.domain).range(config.range).nice();
 
   return scale;
 }
@@ -35,10 +46,18 @@ export function createTimeScale(config: TimeScaleConfig): d3.ScaleTime<number, n
 /**
  * Create a band scale for categorical data
  */
-export function createBandScale(config: ScaleConfig): d3.ScaleBand<string> {
+export function createBandScale(config: BandScaleConfig): d3.ScaleBand<string> {
+  // Validate and coerce domain to string array
+  if (!Array.isArray(config.domain)) {
+    throw new TypeError('createBandScale: domain must be an array');
+  }
+
+  // Coerce all items to strings
+  const validatedDomain = config.domain.map(item => String(item));
+
   const scale = d3
     .scaleBand()
-    .domain(config.domain as string[])
+    .domain(validatedDomain)
     .range(config.range)
     .padding(config.padding ?? 0.1);
 
@@ -49,29 +68,9 @@ export function createBandScale(config: ScaleConfig): d3.ScaleBand<string> {
  * Create a color scale for species differentiation
  */
 export function createSpeciesColorScale(species: string[]): d3.ScaleOrdinal<string, string> {
-  // Use D3's category10 colors, extended with more colors if needed
-  const colors = [
-    '#1f77b4',
-    '#ff7f0e',
-    '#2ca02c',
-    '#d62728',
-    '#9467bd',
-    '#8c564b',
-    '#e377c2',
-    '#7f7f7f',
-    '#bcbd22',
-    '#17becf',
-    '#aec7e8',
-    '#ffbb78',
-    '#98df8a',
-    '#ff9896',
-    '#c5b0d5',
-    '#c49c94',
-    '#f7b6d3',
-    '#c7c7c7',
-    '#dbdb8d',
-    '#9edae5',
-  ];
+  // Use the theme's generateSpeciesColors function for consistent theming
+  const theme = getCurrentTheme();
+  const colors = generateSpeciesColors(species.length, theme);
 
   return d3.scaleOrdinal<string, string>().domain(species).range(colors);
 }
@@ -96,7 +95,7 @@ export function formatTick(value: number | Date, type: 'number' | 'time' | 'hour
       return d3.timeFormat('%b %d')(value as Date);
     case 'hour': {
       const hour = value as number;
-      return `${hour}:00`;
+      return `${String(hour).padStart(2, '0')}:00`;
     }
     default:
       return String(value);
@@ -113,8 +112,12 @@ export interface ResponsiveScaleConfig {
 }
 
 export function createResponsiveScales(config: ResponsiveScaleConfig) {
-  const innerWidth = config.containerWidth - config.margin.left - config.margin.right;
-  const innerHeight = config.containerHeight - config.margin.top - config.margin.bottom;
+  // Clamp inner dimensions to non-negative values to prevent negative ranges
+  const innerWidth = Math.max(0, config.containerWidth - config.margin.left - config.margin.right);
+  const innerHeight = Math.max(
+    0,
+    config.containerHeight - config.margin.top - config.margin.bottom
+  );
 
   return {
     innerWidth,
