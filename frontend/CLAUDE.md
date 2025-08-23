@@ -13,6 +13,7 @@
 - **NEVER use `any` type**
 - **NEVER create inline SVGs** - use `$lib/utils/icons`
 - **NEVER use `toISOString()` for dates** - use `getLocalDateString()`
+- **Use D3.js for ALL charting/plotting** - unless specific requirement for custom approach
 - **Run `npm run check:all` before EVERY commit**
 
 ## Structure
