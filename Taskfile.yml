@@ -229,23 +229,19 @@ tasks:
       - npm run test:coverage
 
   frontend-quality:
-    desc: Run comprehensive frontend quality checks
+    desc: Run comprehensive frontend quality checks and auto-fix issues
     dir: frontend
     deps: [frontend-install]
     cmds:
+      - npm run format
+      - npm run lint -- --fix
+      - npm run ast:fix
       - npm run check:all
       - npm run test:ci
       - npm run audit:security
       - npm run analyze:circular
       - npm run build
       - npm run analyze:bundle:size
-
-  frontend-quality-fix:
-    desc: Auto-fix frontend quality issues (CSS/style formatting)
-    dir: frontend
-    deps: [frontend-install]
-    cmds:
-      - npm run lint:css:fix
 
   # Format all markdown files with prettier
   format-md:
