@@ -1669,20 +1669,42 @@ func (c *Controller) GetBatchDailySpeciesData(ctx echo.Context) error {
 		endDate = startTime.AddDate(0, 0, 30).Format("2006-01-02")
 	}
 
-	// Rate limiting - maximum species per request
-	if len(speciesParams) > maxSpeciesBatch {
+	// Deduplicate species list to avoid redundant DB calls and result overwrites
+	uniqueSpecies := make([]string, 0, len(speciesParams))
+	seen := make(map[string]bool)
+	
+	for _, species := range speciesParams {
+		// Trim whitespace from species name
+		trimmedSpecies := strings.TrimSpace(species)
+		if trimmedSpecies == "" {
+			continue // Skip empty entries
+		}
+		
+		// Skip if already seen (case-sensitive deduplication)
+		if seen[trimmedSpecies] {
+			continue
+		}
+		
+		// Add to unique list and mark as seen
+		seen[trimmedSpecies] = true
+		uniqueSpecies = append(uniqueSpecies, trimmedSpecies)
+	}
+
+	// Rate limiting - maximum unique species per request
+	if len(uniqueSpecies) > maxSpeciesBatch {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Batch size exceeded limit in daily species data",
-				"requested", len(speciesParams), "max", maxSpeciesBatch, "ip", ip, "path", path)
+				"requested", len(speciesParams), "unique", len(uniqueSpecies), "max", maxSpeciesBatch, "ip", ip, "path", path)
 		}
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Too many species requested. Maximum: %d", maxSpeciesBatch))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Too many unique species requested. Maximum: %d", maxSpeciesBatch))
 	}
 
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Retrieving batch daily species data",
 			"start_date", startDate,
 			"end_date", endDate,
-			"species_count", len(speciesParams),
+			"species_requested", len(speciesParams),
+			"species_unique", len(uniqueSpecies),
 			"ip", ip,
 			"path", path,
 		)
@@ -1705,13 +1727,9 @@ func (c *Controller) GetBatchDailySpeciesData(ctx echo.Context) error {
 	results := make(map[string]SpeciesDailyData)
 	processingErrors := make([]string, 0)
 
-	for _, species := range speciesParams {
-		// Trim whitespace from species name
-		species = strings.TrimSpace(species)
-		if species == "" {
-			continue
-		}
-
+	for _, species := range uniqueSpecies {
+		// Species is already trimmed and validated in deduplication step
+		
 		// Get daily data for this species
 		dailyData, err := c.DS.GetDailyAnalyticsData(startDate, endDate, species)
 		if err != nil {
@@ -1758,7 +1776,7 @@ func (c *Controller) GetBatchDailySpeciesData(ctx echo.Context) error {
 	if len(results) == 0 {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("All species in batch daily request failed",
-				"requested_species", len(speciesParams), "errors", processingErrors, "ip", ip, "path", path)
+				"requested_species", len(speciesParams), "unique_species", len(uniqueSpecies), "errors", processingErrors, "ip", ip, "path", path)
 		}
 		return c.HandleError(ctx, fmt.Errorf("failed to process any requested species"),
 			"Failed to process batch daily request", http.StatusInternalServerError)
@@ -1767,7 +1785,7 @@ func (c *Controller) GetBatchDailySpeciesData(ctx echo.Context) error {
 	// Log successful completion
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Batch daily species data retrieved",
-			"requested_species", len(speciesParams), "successful_species", len(results),
+			"requested_species", len(speciesParams), "unique_species", len(uniqueSpecies), "successful_species", len(results),
 			"failed_species", len(processingErrors), "ip", ip, "path", path)
 	}
 
