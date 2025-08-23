@@ -121,6 +121,8 @@
         : 'https://your-domain.com'
   );
   
+  // Use clean OAuth callback URLs (without /api/v1 prefix) for better UX
+  // Backend supports both /auth/:provider/callback and /api/v1/auth/:provider/callback
   let googleRedirectURI = $derived(`${currentHost}/auth/google/callback`);
   let githubRedirectURI = $derived(`${currentHost}/auth/github/callback`);
 

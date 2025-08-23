@@ -222,17 +222,18 @@
 
   // SECURITY: Validate OAuth endpoints before redirect
   function handleOAuthLogin(provider: 'google' | 'github') {
-    // Use configurable endpoints or fallback to defaults
+    // Use clean OAuth routes (without /api/v1 prefix) for consistency
+    // Backend supports both /auth/:provider and /api/v1/auth/:provider
     const defaultEndpoints = {
-      google: '/api/v1/auth/google',
-      github: '/api/v1/auth/github',
+      google: '/auth/google',
+      github: '/auth/github',
     };
 
     const configuredEndpoints = authConfig.endpoints || {};
     const endpoint = safeGet(configuredEndpoints, provider) || safeGet(defaultEndpoints, provider);
 
-    // SECURITY: Basic endpoint validation
-    if (!endpoint || !endpoint.startsWith('/api/v1/auth/')) {
+    // SECURITY: Basic endpoint validation - accept both formats
+    if (!endpoint || (!endpoint.startsWith('/auth/') && !endpoint.startsWith('/api/v1/auth/'))) {
       error = 'Configuration error. Please contact your administrator.';
       return;
     }
