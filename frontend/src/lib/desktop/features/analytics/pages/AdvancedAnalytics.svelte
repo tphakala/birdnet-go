@@ -34,40 +34,42 @@
   let dailyTrendData = $state<any[]>([]);
 
   // Computed date range
-  const computedDateRange = $derived(() => {
-    const today = new Date();
-    let start: Date, end: Date;
+  const computedDateRange = $derived(
+    (() => {
+      const today = new Date();
+      let start: Date, end: Date;
 
-    switch (dateRange) {
-      case 'week':
-        end = today;
-        start = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case 'month':
-        end = today;
-        start = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-        break;
-      case 'quarter':
-        end = today;
-        start = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
-        break;
-      case 'year':
-        end = today;
-        start = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
-        break;
-      case 'custom':
-        start = startDate
-          ? new Date(startDate)
-          : new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-        end = endDate ? new Date(endDate) : today;
-        break;
-      default:
-        end = today;
-        start = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-    }
+      switch (dateRange) {
+        case 'week':
+          end = today;
+          start = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case 'month':
+          end = today;
+          start = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        case 'quarter':
+          end = today;
+          start = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
+          break;
+        case 'year':
+          end = today;
+          start = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
+          break;
+        case 'custom':
+          start = startDate
+            ? new Date(startDate)
+            : new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+          end = endDate ? new Date(endDate) : today;
+          break;
+        default:
+          end = today;
+          start = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
 
-    return [start, end] as [Date, Date];
-  });
+      return [start, end] as [Date, Date];
+    })()
+  );
 
   // Format date for API calls (avoid timezone issues)
   function formatDateForAPI(date: Date): string {
@@ -80,7 +82,7 @@
   // Fetch available species
   async function fetchAvailableSpecies() {
     try {
-      const [start, end] = computedDateRange();
+      const [start, end] = computedDateRange;
       const params = new URLSearchParams({
         start_date: formatDateForAPI(start),
         end_date: formatDateForAPI(end),
@@ -135,7 +137,7 @@
     }
 
     try {
-      const [start] = computedDateRange();
+      const [start] = computedDateRange;
       const params = new URLSearchParams({
         date: formatDateForAPI(start),
         min_confidence: '0',
@@ -190,7 +192,7 @@
     }
 
     try {
-      const [start, end] = computedDateRange();
+      const [start, end] = computedDateRange;
       const params = new URLSearchParams({
         start_date: formatDateForAPI(start),
         end_date: formatDateForAPI(end),
@@ -500,7 +502,7 @@
           <DailySpeciesTrendChart
             data={dailyTrendData}
             {selectedSpecies}
-            dateRange={computedDateRange()}
+            dateRange={computedDateRange}
             showRelative={showRelativeTrends}
             {enableZoom}
             {enableBrush}
