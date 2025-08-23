@@ -1,5 +1,16 @@
 // D3 scale utilities for analytics charts
-import * as d3 from 'd3';
+import {
+  scaleLinear,
+  scaleTime,
+  scaleBand,
+  scaleOrdinal,
+  type ScaleLinear,
+  type ScaleTime,
+  type ScaleBand,
+  type ScaleOrdinal,
+} from 'd3-scale';
+import { timeFormat } from 'd3-time-format';
+import { format as numberFormat } from 'd3-format';
 import { generateSpeciesColors, getCurrentTheme } from './theme';
 
 export interface LinearScaleConfig {
@@ -21,7 +32,7 @@ export interface TimeScaleConfig {
 /**
  * Create a linear scale with nice ticks
  */
-export function createLinearScale(config: LinearScaleConfig): d3.ScaleLinear<number, number> {
+export function createLinearScale(config: LinearScaleConfig): ScaleLinear<number, number> {
   // Validate domain for linear scale
   if (
     !Array.isArray(config.domain) ||
@@ -31,7 +42,7 @@ export function createLinearScale(config: LinearScaleConfig): d3.ScaleLinear<num
     throw new TypeError('createLinearScale: domain must be [number, number]');
   }
 
-  const scale = d3.scaleLinear().domain(config.domain).range(config.range).nice();
+  const scale = scaleLinear().domain(config.domain).range(config.range).nice();
 
   return scale;
 }
@@ -39,14 +50,14 @@ export function createLinearScale(config: LinearScaleConfig): d3.ScaleLinear<num
 /**
  * Create a time scale for date-based charts
  */
-export function createTimeScale(config: TimeScaleConfig): d3.ScaleTime<number, number> {
-  return d3.scaleTime().domain(config.domain).range(config.range);
+export function createTimeScale(config: TimeScaleConfig): ScaleTime<number, number> {
+  return scaleTime().domain(config.domain).range(config.range);
 }
 
 /**
  * Create a band scale for categorical data
  */
-export function createBandScale(config: BandScaleConfig): d3.ScaleBand<string> {
+export function createBandScale(config: BandScaleConfig): ScaleBand<string> {
   // Validate and coerce domain to string array
   if (!Array.isArray(config.domain)) {
     throw new TypeError('createBandScale: domain must be an array');
@@ -55,8 +66,7 @@ export function createBandScale(config: BandScaleConfig): d3.ScaleBand<string> {
   // Coerce all items to strings
   const validatedDomain = config.domain.map(item => String(item));
 
-  const scale = d3
-    .scaleBand()
+  const scale = scaleBand()
     .domain(validatedDomain)
     .range(config.range)
     .padding(config.padding ?? 0.1);
@@ -67,19 +77,19 @@ export function createBandScale(config: BandScaleConfig): d3.ScaleBand<string> {
 /**
  * Create a color scale for species differentiation
  */
-export function createSpeciesColorScale(species: string[]): d3.ScaleOrdinal<string, string> {
+export function createSpeciesColorScale(species: string[]): ScaleOrdinal<string, string> {
   // Use the theme's generateSpeciesColors function for consistent theming
   const theme = getCurrentTheme();
   const colors = generateSpeciesColors(species.length, theme);
 
-  return d3.scaleOrdinal<string, string>().domain(species).range(colors);
+  return scaleOrdinal<string, string>().domain(species).range(colors);
 }
 
 /**
  * Get nice tick values for a numeric domain
  */
 export function getNiceTicks(domain: [number, number], targetTicks = 5): number[] {
-  const scale = d3.scaleLinear().domain(domain).nice();
+  const scale = scaleLinear().domain(domain).nice();
 
   return scale.ticks(targetTicks);
 }
@@ -90,9 +100,9 @@ export function getNiceTicks(domain: [number, number], targetTicks = 5): number[
 export function formatTick(value: number | Date, type: 'number' | 'time' | 'hour'): string {
   switch (type) {
     case 'number':
-      return d3.format('.0f')(value as number);
+      return numberFormat('.0f')(value as number);
     case 'time':
-      return d3.timeFormat('%b %d')(value as Date);
+      return timeFormat('%b %d')(value as Date);
     case 'hour': {
       const hour = value as number;
       return `${String(hour).padStart(2, '0')}:00`;

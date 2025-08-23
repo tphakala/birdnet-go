@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
 import { select } from 'd3-selection';
 import { scaleLinear } from 'd3-scale';
+import { timeFormatDefaultLocale } from 'd3-time-format';
 import {
   createHourAxisFormatter,
   createDateAxisFormatter,
@@ -14,8 +15,13 @@ let container: SVGGElement;
 let svg: SVGSVGElement;
 
 beforeEach(() => {
-  // Clean up any existing DOM
-  document.body.innerHTML = '';
+  // Clear any mocks
+  vi.clearAllMocks();
+
+  // Clean up any existing DOM nodes safely
+  while (document.body.firstChild) {
+    document.body.removeChild(document.body.firstChild);
+  }
 
   // Create a minimal SVG container
   svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -52,6 +58,46 @@ describe('createHourAxisFormatter', () => {
 });
 
 describe('createDateAxisFormatter', () => {
+  // Set fixed English locale for deterministic date formatting
+  beforeAll(() => {
+    timeFormatDefaultLocale({
+      dateTime: '%x, %X',
+      date: '%-m/%-d/%Y',
+      time: '%-I:%M:%S %p',
+      periods: ['AM', 'PM'],
+      days: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+      shortDays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+      months: [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ],
+      shortMonths: [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ],
+    });
+  });
+
   // Fixed dates for deterministic testing
   const testDate = new Date('2024-01-15T14:30:00');
   const anotherDate = new Date('2024-12-25T09:15:00');

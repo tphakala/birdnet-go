@@ -1,6 +1,6 @@
 <!-- Multi-Species Time of Day Chart -->
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
   import * as d3 from 'd3';
 
   import BaseChart from './BaseChart.svelte';
@@ -317,6 +317,7 @@
 
     // Create legend
     const legendItems = visibleData().map(species => ({
+      id: species.species,
       label: species.commonName,
       color: species.color ?? '#999999',
       visible: species.visible,
@@ -327,8 +328,8 @@
         items: legendItems,
         position: { x: innerWidth - 150, y: 20 },
         itemHeight: 20,
-        onToggle: (label, visible) => {
-          const species = visibleData().find(s => s.commonName === label);
+        onToggle: (id, visible) => {
+          const species = visibleData().find(s => s.species === id);
           if (species) {
             onSpeciesToggle?.(species.species, visible);
           }
@@ -367,11 +368,15 @@
     }
   });
 
-  onMount(() => {
-    // Initialize tooltip
-    const container = document.querySelector('.chart-container');
-    if (container) {
-      tooltip = new ChartTooltip(container as HTMLElement);
+  // Initialize tooltip when chart context becomes available
+  $effect(() => {
+    const ctx = chartContext;
+    if (!tooltip && ctx) {
+      const node = ctx.svg?.node?.();
+      const container = (node?.closest?.('.chart-container') ?? null) as HTMLElement | null;
+      if (container) {
+        tooltip = new ChartTooltip(container);
+      }
     }
   });
 

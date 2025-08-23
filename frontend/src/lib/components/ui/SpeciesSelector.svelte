@@ -215,7 +215,14 @@
 </script>
 
 <!-- eslint-disable-next-line security/detect-object-injection -- Safe: size prop is constrained to specific string literals -->
-<div class={cn('species-selector relative', sizeConfig[size].container, className)}>
+<div
+  class={cn(
+    'species-selector relative',
+    /* eslint-disable-next-line security/detect-object-injection -- Safe: size prop is constrained to specific string literals */
+    sizeConfig[size].container,
+    className
+  )}
+>
   <!-- Chip Variant -->
   {#if variant === 'chip'}
     <div
