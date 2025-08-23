@@ -1325,6 +1325,129 @@ The application includes several security options:
 - Automatic TLS certificate management via Let's Encrypt
 - IP subnet-based authentication bypass for local networks
 
+#### Setting Up OAuth Authentication
+
+BirdNET-Go supports OAuth2 authentication with Google and GitHub for secure access to your web interface. This is the recommended authentication method when exposing your instance to the internet.
+
+##### Google OAuth Setup
+
+1. **Create a Google Cloud Project**:
+   - Go to the [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select an existing one
+   - Enable the Google+ API or People API for your project
+
+2. **Configure OAuth Consent Screen**:
+   - Navigate to "APIs & Services" → "OAuth consent screen"
+   - Choose "External" user type (unless you have a Google Workspace)
+   - Fill in the required application information:
+     - Application name: `BirdNET-Go`
+     - User support email: Your email address
+     - Developer contact information: Your email address
+   - Add your domain to authorized domains if applicable
+   - Save and continue through the scopes and test users sections
+
+3. **Create OAuth Credentials**:
+   - Navigate to "APIs & Services" → "Credentials"
+   - Click "Create Credentials" → "OAuth client ID"
+   - Select "Web application" as the application type
+   - Set the name: `BirdNET-Go Web Client`
+   - **Authorized redirect URIs**: Add your callback URL:
+     - Format: `http://YOUR_HOST:PORT/auth/google/callback`
+     - Example: `http://192.168.1.100:8080/auth/google/callback`
+     - For internet access: `https://yourdomain.com/auth/google/callback`
+
+4. **Configure BirdNET-Go**:
+   - Copy the Client ID and Client Secret from Google
+   - In your BirdNET-Go web interface, go to Settings → Security
+   - Enable Google OAuth and enter:
+     - **Client ID**: Your Google OAuth Client ID
+     - **Client Secret**: Your Google OAuth Client Secret  
+     - **User ID** (optional): Restrict access to specific Google account by entering the user's email address
+
+##### GitHub OAuth Setup
+
+1. **Create a GitHub OAuth App**:
+   - Go to GitHub Settings → Developer settings → OAuth Apps
+   - Click "New OAuth App"
+   - Fill in the application details:
+     - **Application name**: `BirdNET-Go`
+     - **Homepage URL**: `http://YOUR_HOST:PORT` (your BirdNET-Go URL)
+     - **Authorization callback URL**: `http://YOUR_HOST:PORT/auth/github/callback`
+       - Example: `http://192.168.1.100:8080/auth/github/callback`
+       - For internet access: `https://yourdomain.com/auth/github/callback`
+   - Click "Register application"
+
+2. **Generate Client Secret**:
+   - After creating the app, click "Generate a new client secret"
+   - Copy both the Client ID and Client Secret immediately
+
+3. **Configure BirdNET-Go**:
+   - In your BirdNET-Go web interface, go to Settings → Security
+   - Enable GitHub OAuth and enter:
+     - **Client ID**: Your GitHub OAuth Client ID
+     - **Client Secret**: Your GitHub OAuth Client Secret
+     - **User ID** (optional): Restrict access to specific GitHub account by entering the username
+
+##### OAuth Configuration Examples
+
+**Configuration file example** (`config.yaml`):
+
+```yaml
+security:
+  host: "yourdomain.com"  # Your domain for HTTPS
+  autotls: true          # Enable automatic HTTPS certificates
+  
+  googleauth:
+    enabled: true
+    clientid: "123456789-abcdefghijklmnop.apps.googleusercontent.com"
+    clientsecret: "GOCSPX-your-secret-key-here"
+    userid: "user@gmail.com"  # Optional: restrict to specific user
+  
+  githubauth:
+    enabled: true
+    clientid: "Ov23liABCDEFGHIJ1234"
+    clientsecret: "your-github-secret-key-here"
+    userid: "yourusername"    # Optional: restrict to specific user
+```
+
+**Environment variables** (Docker):
+
+```bash
+BIRDNET_SECURITY_GOOGLEAUTH_ENABLED=true
+BIRDNET_SECURITY_GOOGLEAUTH_CLIENTID=123456789-abcdefghijklmnop.apps.googleusercontent.com
+BIRDNET_SECURITY_GOOGLEAUTH_CLIENTSECRET=GOCSPX-your-secret-key-here
+BIRDNET_SECURITY_GOOGLEAUTH_USERID=user@gmail.com
+
+BIRDNET_SECURITY_GITHUBAUTH_ENABLED=true
+BIRDNET_SECURITY_GITHUBAUTH_CLIENTID=Ov23liABCDEFGHIJ1234
+BIRDNET_SECURITY_GITHUBAUTH_CLIENTSECRET=your-github-secret-key-here
+BIRDNET_SECURITY_GITHUBAUTH_USERID=yourusername
+```
+
+##### Important OAuth Notes
+
+- **Callback URLs**: Always use the format `/auth/provider/callback` (e.g., `/auth/google/callback`, `/auth/github/callback`) as shown in the BirdNET-Go settings page
+- **HTTPS Requirement**: OAuth providers typically require HTTPS for production use. Enable `autotls: true` or use a reverse proxy with SSL certificates
+- **User ID Restrictions**: The optional `userid` field allows you to restrict access to a specific account for enhanced security
+- **Local Network**: OAuth authentication works on local networks, but you can also enable subnet bypass for local access without OAuth
+- **Multiple Providers**: You can enable both Google and GitHub OAuth simultaneously - users will see both options on the login page
+
+##### Troubleshooting OAuth
+
+**"Invalid redirect URI" errors**:
+- Ensure your callback URL in the OAuth app configuration exactly matches the format shown in BirdNET-Go settings
+- Check that the protocol (http/https) and port number are correct
+- The callback URL should end with `/auth/google/callback` or `/auth/github/callback`
+
+**"Access blocked" errors**:
+- For Google OAuth: Ensure your app is verified or add your email to test users
+- For GitHub OAuth: Verify the OAuth app is active and the callback URL is correct
+
+**Login button not appearing**:
+- Check that OAuth is enabled in BirdNET-Go settings
+- Verify your client ID and client secret are correctly configured
+- Check the browser console for JavaScript errors
+
 ### Filtering Capabilities
 
 BirdNET-Go includes intelligent filtering mechanisms:
