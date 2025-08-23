@@ -1,7 +1,7 @@
 <!-- Species Selector - Modern UX Component -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
   import { navigationIcons, actionIcons } from '$lib/utils/icons';
   import type { Species } from '$lib/types/species';
@@ -53,8 +53,9 @@
   let dropdownRef = $state<HTMLDivElement>();
   let inputRef = $state<HTMLInputElement>();
   let shouldShowDropdown = $state(false);
-  // Generate unique ID for dropdown
-  const dropdownId = `species-dropdown-${Math.random().toString(36).slice(2, 9)}`;
+  let blurTimeoutId: number | undefined;
+  // Generate unique ID for dropdown (client-only to avoid SSR hydration mismatch)
+  let dropdownId = $state('');
 
   // Size configurations
   const sizeConfig = {
@@ -105,17 +106,19 @@
 
   // Filtered and categorized species
   const filteredSpecies = $derived(() => {
+    // Cache trimmed and lowercased query once to avoid repeated string transforms
+    const trimmedLowerQuery = searchQuery.trim().toLowerCase();
     let filtered = species.filter(
       s =>
-        s.commonName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (s.scientificName?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
+        s.commonName.toLowerCase().includes(trimmedLowerQuery) ||
+        (s.scientificName?.toLowerCase().includes(trimmedLowerQuery) ?? false)
     );
 
     if (categorized) {
       // Group by category or frequency
       const groups = new Map<string, Species[]>();
       filtered.forEach(s => {
-        const key = s.category || s.frequency || 'other';
+        const key = s.category ?? s.frequency ?? 'other';
         let group = groups.get(key);
         if (group === undefined) {
           group = [];
@@ -194,13 +197,34 @@
 
   // Handle input blur with delay to allow click events
   function handleInputBlur() {
+    // Clear any existing timeout
+    if (blurTimeoutId !== undefined) {
+      window.clearTimeout(blurTimeoutId);
+    }
     // Small delay to allow dropdown clicks to register
-    setTimeout(() => {
+    blurTimeoutId = window.setTimeout(() => {
       // Only close if not refocusing on input or clicking in dropdown
       if (document.activeElement !== inputRef && !dropdownRef?.contains(document.activeElement)) {
         shouldShowDropdown = false;
       }
+      blurTimeoutId = undefined;
     }, 200);
+  }
+
+  // Handle keyboard navigation for combobox pattern
+  function handleInputKeydown(e: KeyboardEvent) {
+    if (disabled) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      // Open and focus first option
+      isExpanded = true;
+      shouldShowDropdown = true;
+      const first = dropdownRef?.querySelector<HTMLElement>('[role="option"]');
+      first?.focus();
+    } else if (e.key === 'Escape') {
+      isExpanded = false;
+      shouldShowDropdown = false;
+    }
   }
 
   $effect(() => {
@@ -211,10 +235,40 @@
   });
 
   // Update dropdown visibility based on search query
+  // Initialize dropdownId on client mount to avoid SSR hydration mismatch
+  $effect(() => {
+    if (typeof window !== 'undefined' && dropdownId === '') {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        dropdownId = `species-dropdown-${crypto.randomUUID().slice(0, 8)}`;
+      } else {
+        dropdownId = `species-dropdown-${Math.random().toString(36).slice(2, 9)}`;
+      }
+    }
+  });
+
   $effect(() => {
     if (searchQuery && inputRef === document.activeElement) {
       shouldShowDropdown = true;
       isExpanded = true;
+    }
+  });
+
+  // Helper function for frequency badge rendering
+  function getFrequencyBadge(frequency: Species['frequency']) {
+    if (!showFrequency || !frequency) {
+      return null;
+    }
+    const freqConfig =
+      frequency in frequencyConfig
+        ? frequencyConfig[frequency as keyof typeof frequencyConfig]
+        : null;
+    return freqConfig;
+  }
+
+  // Cleanup timeout on component destroy
+  onDestroy(() => {
+    if (blurTimeoutId !== undefined) {
+      window.clearTimeout(blurTimeoutId);
     }
   });
 </script>
@@ -250,11 +304,14 @@
               class:input-disabled={disabled}
               readonly={disabled}
               role="combobox"
+              aria-label="Search species"
+              aria-autocomplete="list"
               aria-expanded={isExpanded || shouldShowDropdown ? 'true' : 'false'}
               aria-controls={dropdownId}
               aria-haspopup="listbox"
               onfocus={handleInputFocus}
               onblur={handleInputBlur}
+              onkeydown={handleInputKeydown}
             />
             {#if searchQuery}
               <button
@@ -336,7 +393,7 @@
     </div>
 
     <!-- Species Dropdown -->
-    {#if (isExpanded || shouldShowDropdown) && (searchQuery || !searchable)}
+    {#if isExpanded || shouldShowDropdown}
       <div
         bind:this={dropdownRef}
         id={dropdownId}
@@ -377,19 +434,21 @@
                 )}
                 disabled={!canSelect}
                 role="option"
-                aria-selected={isSelected}
-                aria-disabled={!canSelect}
+                aria-selected={isSelected ? 'true' : 'false'}
+                aria-checked={isSelected ? 'true' : 'false'}
+                aria-disabled={!canSelect ? 'true' : 'false'}
                 onclick={() => canSelect && toggleSpecies(species)}
               >
                 <div class="flex items-center gap-4 flex-1 min-w-0">
-                  <!-- Checkbox -->
-                  <input
-                    type="checkbox"
-                    class="checkbox checkbox-primary checkbox-sm flex-shrink-0"
-                    checked={isSelected}
-                    disabled={!canSelect}
-                    readonly
-                  />
+                  <!-- Visual checkbox indicator -->
+                  <span
+                    class={cn(
+                      'checkbox checkbox-primary checkbox-sm flex-shrink-0',
+                      isSelected && 'checkbox-checked',
+                      !canSelect && 'checkbox-disabled'
+                    )}
+                    aria-hidden="true"
+                  ></span>
 
                   <!-- Species Info -->
                   <div class="text-left flex-1 min-w-0">
@@ -412,10 +471,7 @@
 
                 <!-- Frequency Badge -->
                 {#if showFrequency && species.frequency}
-                  {@const freqConfig =
-                    species.frequency in frequencyConfig
-                      ? frequencyConfig[species.frequency as keyof typeof frequencyConfig]
-                      : null}
+                  {@const freqConfig = getFrequencyBadge(species.frequency)}
                   {#if freqConfig}
                     <div class={cn('badge badge-sm ml-2 flex-shrink-0', freqConfig.color)}>
                       {freqConfig.label}
@@ -439,6 +495,7 @@
             type="text"
             bind:value={searchQuery}
             {placeholder}
+            aria-label="Search species"
             class={cn(
               'input input-bordered w-full',
               /* eslint-disable-next-line security/detect-object-injection -- Safe: size prop is constrained to specific string literals */
@@ -497,10 +554,7 @@
                   {/if}
                 </div>
                 {#if showFrequency && species.frequency}
-                  {@const freqConfig =
-                    species.frequency in frequencyConfig
-                      ? frequencyConfig[species.frequency as keyof typeof frequencyConfig]
-                      : null}
+                  {@const freqConfig = getFrequencyBadge(species.frequency)}
                   {#if freqConfig}
                     <div class={cn('badge badge-sm', freqConfig.color)}>
                       {freqConfig.label}

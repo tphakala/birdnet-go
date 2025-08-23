@@ -1,8 +1,12 @@
 <!-- Daily Species Trend Chart -->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { extent, select, line, area, curveMonotoneX, scaleTime, scaleLinear } from 'd3';
-  import type { Selection, ZoomTransform, AxisDomain } from 'd3';
+  import { extent } from 'd3-array';
+  import { select, type Selection } from 'd3-selection';
+  import { line, area, curveMonotoneX } from 'd3-shape';
+  import { scaleTime, scaleLinear } from 'd3-scale';
+  import type { AxisDomain } from 'd3-axis';
+  import type { ZoomTransform } from 'd3-zoom';
 
   import BaseChart from './BaseChart.svelte';
   import { getLocalDateString } from '$lib/utils/date';
@@ -14,7 +18,7 @@
     addBrushBehavior,
     createLegend,
   } from './utils/interactions';
-  import { generateSpeciesColors, type ChartTheme } from './utils/theme';
+  import { generateSpeciesColors, getCurrentTheme, type ChartTheme } from './utils/theme';
 
   interface DailyData {
     date: Date;
@@ -66,14 +70,8 @@
   const chartData = $derived(() => {
     if (!data.length) return [];
 
-    const colors = generateSpeciesColors(data.length, {
-      primary: '#3b82f6',
-      secondary: '#6366f1',
-      accent: '#f59e0b',
-      success: '#10b981',
-      warning: '#f59e0b',
-      error: '#ef4444',
-    } as ChartTheme);
+    const currentTheme = getCurrentTheme();
+    const colors = generateSpeciesColors(data.length, currentTheme);
 
     return data.map((species, index) => ({
       ...species,
@@ -339,7 +337,7 @@
           const tooltipData = {
             title: species.commonName,
             items: [
-              { label: 'Date', value: d.date.toLocaleDateString() },
+              { label: 'Date', value: getLocalDateString(d.date) },
               {
                 label: showRelative ? 'Percentage' : 'Detections',
                 value: showRelative ? `${d.count.toFixed(1)}%` : d.count.toString(),

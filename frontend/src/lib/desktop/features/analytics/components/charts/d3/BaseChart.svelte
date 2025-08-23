@@ -191,7 +191,7 @@
     id={chartId}
     width={containerWidth}
     height={containerHeight}
-    viewBox="0 0 {containerWidth} {containerHeight}"
+    viewBox={`0 0 ${containerWidth} ${containerHeight}`}
     preserveAspectRatio="xMidYMid meet"
     class="chart-svg"
   >

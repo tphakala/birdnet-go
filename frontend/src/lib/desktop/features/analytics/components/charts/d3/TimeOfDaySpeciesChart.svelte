@@ -10,7 +10,7 @@
   import { createLinearScale } from './utils/scales';
   import { createAxis, styleAxis, addAxisLabel, createHourAxisFormatter } from './utils/axes';
   import { ChartTooltip, addCrosshair, createLegend } from './utils/interactions';
-  import { generateSpeciesColors, type ChartTheme } from './utils/theme';
+  import { generateSpeciesColors, getCurrentTheme, type ChartTheme } from './utils/theme';
 
   interface HourlyData {
     hour: number;
@@ -48,14 +48,8 @@
   const chartData = $derived(() => {
     if (!data.length) return [];
 
-    const colors = generateSpeciesColors(data.length, {
-      primary: '#3b82f6',
-      secondary: '#6366f1',
-      accent: '#f59e0b',
-      success: '#10b981',
-      warning: '#f59e0b',
-      error: '#ef4444',
-    } as ChartTheme);
+    const currentTheme = getCurrentTheme();
+    const colors = generateSpeciesColors(data.length, currentTheme);
 
     return data.map((species, index) => ({
       ...species,
@@ -258,7 +252,8 @@
 
           tooltip?.show(tooltipData);
         })
-        .on('mouseleave', function (_this: globalThis.SVGCircleElement) {
+        // eslint-disable-next-line no-unused-vars -- `this` context is used by D3 for DOM element reference
+        .on('mouseleave', function (this: globalThis.SVGCircleElement) {
           select(this).transition().duration(150).attr('r', 3).style('opacity', 0.6);
 
           tooltip?.hide();

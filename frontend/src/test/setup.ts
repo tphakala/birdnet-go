@@ -407,19 +407,25 @@ Object.defineProperty(window, 'location', {
 
 // Mock security utilities - consolidated mock for consistent test behavior
 vi.mock('$lib/utils/security', () => ({
-  safeGet: vi.fn((obj, key, defaultValue) => {
-    if (obj === null || obj === undefined || typeof obj !== 'object') {
-      return defaultValue;
+  safeGet: vi.fn(
+    (
+      obj: Record<string, unknown> | null | undefined,
+      key: string,
+      defaultValue?: unknown
+    ): unknown => {
+      if (obj === null || obj === undefined || typeof obj !== 'object') {
+        return defaultValue;
+      }
+      // Use hasOwnProperty check for proper property access validation
+      if (!Object.prototype.hasOwnProperty.call(obj, key)) {
+        return defaultValue;
+      }
+      // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data, property validated above
+      const value = obj[key];
+      return value ?? defaultValue;
     }
-    // Use hasOwnProperty check for proper property access validation
-    if (!Object.prototype.hasOwnProperty.call(obj, key)) {
-      return defaultValue;
-    }
-    // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data, property validated above
-    const value = obj[key];
-    return value ?? defaultValue;
-  }),
-  safeArrayAccess: vi.fn((arr, index, defaultValue) => {
+  ),
+  safeArrayAccess: vi.fn((arr: unknown, index: number, defaultValue?: unknown): unknown => {
     if (!Array.isArray(arr)) {
       return defaultValue;
     }
@@ -432,17 +438,26 @@ vi.mock('$lib/utils/security', () => ({
     return value ?? defaultValue;
   }),
   // Mock safeSpread to just spread objects without security validation for tests
-  safeSpread: vi.fn((...objects) => {
-    return objects.reduce((result, obj) => {
-      if (obj != null && typeof obj === 'object') {
-        return { ...result, ...obj };
-      }
-      return result;
-    }, {});
-  }),
+  safeSpread: vi.fn(
+    (...objects: Array<Record<string, unknown> | null | undefined>): Record<string, unknown> => {
+      return objects.reduce(
+        (result: Record<string, unknown>, obj) => {
+          if (obj != null && typeof obj === 'object') {
+            return { ...result, ...obj };
+          }
+          return result;
+        },
+        {} as Record<string, unknown>
+      );
+    }
+  ),
   // Mock URL validation for RTSP and other protocols
   validateProtocolURL: vi.fn(
-    (url, allowedProtocols = ['rtsp', 'http', 'https'], maxLength = 2048) => {
+    (
+      url: unknown,
+      allowedProtocols: string[] = ['rtsp', 'http', 'https'],
+      maxLength: number = 2048
+    ): boolean => {
       if (!url || typeof url !== 'string' || url.length > maxLength) {
         return false;
       }
