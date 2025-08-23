@@ -52,7 +52,7 @@ func ParseSpeciesString(species string) (scientificName, commonName, speciesCode
 // New creates and returns a new Note with the provided parameters and current date and time.
 // It uses the configuration and parsing functions to set the appropriate fields.
 // For custom models, species may have placeholder taxonomy codes if not in the eBird taxonomy.
-func New(settings *conf.Settings, beginTime, endTime time.Time, species string, confidence float64, source, clipName string, elapsedTime time.Duration) datastore.Note {
+func New(settings *conf.Settings, beginTime, endTime time.Time, species string, confidence float64, source, clipName string, elapsedTime time.Duration, occurrence float64) datastore.Note {
 	// Parse the species string to get the scientific name, common name, and species code.
 	scientificName, commonName, speciesCode := ParseSpeciesString(species)
 
@@ -100,6 +100,7 @@ func New(settings *conf.Settings, beginTime, endTime time.Time, species string, 
 		Sensitivity:    settings.BirdNET.Sensitivity, // Sensitivity setting from configuration.
 		ClipName:       clipName,                     // Name of the audio clip.
 		ProcessingTime: elapsedTime,                  // Time taken to process the observation.
+		Occurrence:     occurrence,                   // Occurrence probability based on location/time.
 	}
 }
 

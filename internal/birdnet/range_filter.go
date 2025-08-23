@@ -87,6 +87,13 @@ func BuildRangeFilter(bn *BirdNET) error {
 // It also updates the scores for species that have custom actions defined in the speciesConfigCSV.
 func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
 	bn.Debug("Applying range filter")
+	
+	// Skip filtering if range interpreter is not initialized
+	if bn.RangeInterpreter == nil {
+		bn.Debug("Range filter model not loaded, returning empty scores")
+		return []SpeciesScore{}, nil
+	}
+	
 	// Skip filtering if location is not set
 	if bn.Settings.BirdNET.Latitude == 0 && bn.Settings.BirdNET.Longitude == 0 {
 		bn.Debug("Latitude and longitude not set, not using location based prediction filter")

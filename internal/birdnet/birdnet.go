@@ -906,6 +906,34 @@ func (bn *BirdNET) Debug(format string, v ...interface{}) {
 	}
 }
 
+// GetSpeciesOccurrence returns the occurrence probability for a given species based on current location and time
+// Returns 0.0 if the species is not found or range filter is not enabled
+func (bn *BirdNET) GetSpeciesOccurrence(species string) float64 {
+	// If location not set, range filter is not active, return 0
+	if bn.Settings.BirdNET.Latitude == 0 && bn.Settings.BirdNET.Longitude == 0 {
+		return 0.0
+	}
+
+	// Get current probable species with their scores
+	today := time.Now().Truncate(24 * time.Hour)
+	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
+	if err != nil {
+		bn.Debug("Error getting probable species for occurrence: %v", err)
+		return 0.0
+	}
+
+	// Look for the species in the scores
+	for _, score := range speciesScores {
+		if score.Label == species {
+			// Return the score (already in 0-1 range)
+			return score.Score
+		}
+	}
+
+	// Species not found in range filter results
+	return 0.0
+}
+
 // EnrichResultWithTaxonomy adds taxonomy information to a detection result
 // Returns scientific name, common name, and eBird code if available
 func (bn *BirdNET) EnrichResultWithTaxonomy(speciesLabel string) (scientific, common, code string) {
