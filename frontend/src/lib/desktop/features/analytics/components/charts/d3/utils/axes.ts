@@ -3,6 +3,7 @@ import { axisBottom, axisLeft, axisRight, axisTop } from 'd3-axis';
 import { timeFormat } from 'd3-time-format';
 import type { Axis, AxisDomain, AxisScale } from 'd3-axis';
 import type { ScaleLinear, ScaleTime } from 'd3-scale';
+import { select } from 'd3-selection';
 import type { Selection } from 'd3-selection';
 
 export interface AxisConfig {
@@ -189,46 +190,82 @@ export function createDateAxisFormatter(
 export function createGridLines(
   container: Selection<SVGGElement, unknown, null, undefined>,
   config: {
-    xScale?: AxisScale<AxisDomain>;
-    yScale?: AxisScale<AxisDomain>;
+    xScale?: ScaleLinear<number, number> | ScaleTime<number, number> | AxisScale<AxisDomain>;
+    yScale?: ScaleLinear<number, number> | ScaleTime<number, number> | AxisScale<AxisDomain>;
     width: number;
     height: number;
   },
   theme: AxisTheme
 ): void {
+  // Remove existing grids to prevent duplicates (idempotent)
+  container.selectAll('.grid').remove();
+
   // Vertical grid lines
   if (config.xScale) {
-    const xAxis = axisBottom(config.xScale)
+    const xAxis = axisBottom(config.xScale as AxisScale<AxisDomain>)
       .tickSize(-config.height)
       .tickFormat(() => '');
 
-    container
+    const xGridGroup = container
       .append('g')
       .attr('class', 'grid grid-x')
       .attr('transform', `translate(0,${config.height})`)
-      .call(xAxis)
+      .style('pointer-events', 'none'); // Non-interactive
+
+    xGridGroup.call(xAxis);
+
+    // Style grid lines
+    xGridGroup
       .selectAll('line')
       .style('stroke', theme.gridColor)
       .style('stroke-dasharray', '2,2')
       .style('opacity', 0.3);
+
+    // Hide domain line
+    xGridGroup.select('.domain').style('display', 'none');
+
+    // Remove outer tick lines (first and last) using D3 selection methods
+    const xTicks = xGridGroup.selectAll('.tick');
+    if (!xTicks.empty()) {
+      xTicks.nodes().forEach((tick, index, array) => {
+        if (index === 0 || index === array.length - 1) {
+          select(tick).selectAll('line').remove();
+        }
+      });
+    }
   }
 
   // Horizontal grid lines
   if (config.yScale) {
-    const yAxis = axisLeft(config.yScale)
+    const yAxis = axisLeft(config.yScale as AxisScale<AxisDomain>)
       .tickSize(-config.width)
       .tickFormat(() => '');
 
-    container
+    const yGridGroup = container
       .append('g')
       .attr('class', 'grid grid-y')
-      .call(yAxis)
+      .style('pointer-events', 'none'); // Non-interactive
+
+    yGridGroup.call(yAxis);
+
+    // Style grid lines
+    yGridGroup
       .selectAll('line')
       .style('stroke', theme.gridColor)
       .style('stroke-dasharray', '2,2')
       .style('opacity', 0.3);
-  }
 
-  // Hide the domain line for grid
-  container.selectAll('.grid .domain').style('display', 'none');
+    // Hide domain line
+    yGridGroup.select('.domain').style('display', 'none');
+
+    // Remove outer tick lines (first and last) using D3 selection methods
+    const yTicks = yGridGroup.selectAll('.tick');
+    if (!yTicks.empty()) {
+      yTicks.nodes().forEach((tick, index, array) => {
+        if (index === 0 || index === array.length - 1) {
+          select(tick).selectAll('line').remove();
+        }
+      });
+    }
+  }
 }
