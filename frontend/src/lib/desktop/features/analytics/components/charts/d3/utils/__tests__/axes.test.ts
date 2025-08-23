@@ -6,8 +6,8 @@ import {
   createDateAxisFormatter,
   addAxisLabel,
   createGridLines,
-  type AxisTheme,
 } from '../axes';
+import type { AxisTheme } from '../theme';
 
 // Mock DOM setup for jsdom
 let container: SVGGElement;

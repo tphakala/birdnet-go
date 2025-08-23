@@ -3,8 +3,8 @@ import { axisBottom, axisLeft, axisRight, axisTop } from 'd3-axis';
 import { timeFormat } from 'd3-time-format';
 import type { Axis, AxisDomain, AxisScale } from 'd3-axis';
 import type { ScaleLinear, ScaleTime } from 'd3-scale';
-import { select } from 'd3-selection';
 import type { Selection } from 'd3-selection';
+import type { AxisTheme } from './theme';
 
 export interface AxisConfig {
   scale: ScaleLinear<number, number> | ScaleTime<number, number> | AxisScale<AxisDomain>;
@@ -16,34 +16,18 @@ export interface AxisConfig {
   label?: string;
 }
 
-export interface AxisTheme {
-  color: string;
-  fontSize: string;
-  fontFamily: string;
-  strokeWidth: number;
-  gridColor: string;
-}
-
 /**
  * Create and configure a D3 axis
  */
 export function createAxis(config: AxisConfig): Axis<AxisDomain> {
-  let axis: Axis<AxisDomain>;
+  const factories = {
+    top: axisTop,
+    right: axisRight,
+    bottom: axisBottom,
+    left: axisLeft,
+  } as const;
 
-  switch (config.orientation) {
-    case 'top':
-      axis = axisTop(config.scale as AxisScale<AxisDomain>);
-      break;
-    case 'right':
-      axis = axisRight(config.scale as AxisScale<AxisDomain>);
-      break;
-    case 'bottom':
-      axis = axisBottom(config.scale as AxisScale<AxisDomain>);
-      break;
-    case 'left':
-      axis = axisLeft(config.scale as AxisScale<AxisDomain>);
-      break;
-  }
+  const axis = factories[config.orientation](config.scale as AxisScale<AxisDomain>);
 
   if (config.tickCount !== undefined) {
     axis.ticks(config.tickCount);
@@ -140,27 +124,25 @@ export function addAxisLabel(
     .text(text);
 }
 
-// Configurable constant for time format
-const USE_24_HOUR_FORMAT: boolean = true; // Set to false for 12-hour format
-
 /**
  * Create hour-specific axis formatter (0-23 hours)
- * Uses 24-hour format by default, configurable via USE_24_HOUR_FORMAT
+ * Uses 24-hour format by default, configurable via parameter
  */
-export function createHourAxisFormatter(): (d: number) => string {
+export function createHourAxisFormatter(use24Hour = true): (d: number) => string {
   return (d: number) => {
-    const hour = d as number;
+    const hour = Math.max(0, Math.min(23, Math.round(d)));
 
-    if (USE_24_HOUR_FORMAT) {
-      // 24-hour format: "00:00", "13:00", "23:00"
+    if (use24Hour) {
       return `${hour.toString().padStart(2, '0')}:00`;
-    } else {
-      // 12-hour format with AM/PM
-      if (hour === 0) return '12 AM';
-      if (hour === 12) return '12 PM';
-      if (hour < 12) return `${hour} AM`;
-      return `${hour - 12} PM`;
     }
+
+    // Localized 12-hour label; UTC prevents tz offset
+    const dt = new Date(Date.UTC(1970, 0, 1, hour, 0, 0));
+    return new Intl.DateTimeFormat(undefined, {
+      hour: 'numeric',
+      hour12: true,
+      timeZone: 'UTC',
+    }).format(dt);
   };
 }
 
@@ -168,11 +150,14 @@ export function createHourAxisFormatter(): (d: number) => string {
  * Create date axis formatter for different time ranges
  */
 export function createDateAxisFormatter(
-  range: 'day' | 'week' | 'month' | 'year'
+  range: 'day' | 'week' | 'month' | 'year',
+  opts: { use24Hour?: boolean } = {}
 ): (d: Date) => string {
+  const use24Hour = opts.use24Hour ?? true;
+
   switch (range) {
     case 'day':
-      return (d: Date) => timeFormat('%H:%M')(d);
+      return (d: Date) => timeFormat(use24Hour ? '%H:%M' : '%I:%M %p')(d);
     case 'week':
       return (d: Date) => timeFormat('%a %d')(d);
     case 'month':
@@ -204,6 +189,7 @@ export function createGridLines(
   if (config.xScale) {
     const xAxis = axisBottom(config.xScale as AxisScale<AxisDomain>)
       .tickSize(-config.height)
+      .tickSizeOuter(0)
       .tickFormat(() => '');
 
     const xGridGroup = container
@@ -224,21 +210,14 @@ export function createGridLines(
     // Hide domain line
     xGridGroup.select('.domain').style('display', 'none');
 
-    // Remove outer tick lines (first and last) using D3 selection methods
-    const xTicks = xGridGroup.selectAll('.tick');
-    if (!xTicks.empty()) {
-      xTicks.nodes().forEach((tick, index, array) => {
-        if (index === 0 || index === array.length - 1) {
-          select(tick).selectAll('line').remove();
-        }
-      });
-    }
+    // Outer ticks suppressed via tickSizeOuter(0)
   }
 
   // Horizontal grid lines
   if (config.yScale) {
     const yAxis = axisLeft(config.yScale as AxisScale<AxisDomain>)
       .tickSize(-config.width)
+      .tickSizeOuter(0)
       .tickFormat(() => '');
 
     const yGridGroup = container
@@ -258,14 +237,6 @@ export function createGridLines(
     // Hide domain line
     yGridGroup.select('.domain').style('display', 'none');
 
-    // Remove outer tick lines (first and last) using D3 selection methods
-    const yTicks = yGridGroup.selectAll('.tick');
-    if (!yTicks.empty()) {
-      yTicks.nodes().forEach((tick, index, array) => {
-        if (index === 0 || index === array.length - 1) {
-          select(tick).selectAll('line').remove();
-        }
-      });
-    }
+    // Outer ticks suppressed via tickSizeOuter(0)
   }
 }

@@ -1,6 +1,13 @@
 // D3 theme utilities for analytics charts
 import * as d3 from 'd3';
-import type { AxisTheme } from './axes';
+
+export interface AxisTheme {
+  color: string;
+  fontSize: string;
+  fontFamily: string;
+  strokeWidth: number;
+  gridColor: string;
+}
 
 export interface ChartTheme {
   background: string;
