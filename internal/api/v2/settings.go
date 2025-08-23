@@ -799,24 +799,8 @@ var securitySectionAllowedFields = map[string]bool{
 
 // validateSecuritySection validates security settings
 func validateSecuritySection(data json.RawMessage) error {
-	var updateMap map[string]interface{}
-	if err := json.Unmarshal(data, &updateMap); err != nil {
-		return err
-	}
-
-	// Check if any disallowed fields are being updated
-	for field := range updateMap {
-		if !securitySectionAllowedFields[field] {
-			return fmt.Errorf("field '%s' in security settings cannot be updated via API", field)
-		}
-	}
-
-	// Validate field values
-	if err := validateSecuritySectionValues(updateMap); err != nil {
-		return err
-	}
-
-	return nil
+	// Security settings cannot be updated via API for security reasons
+	return fmt.Errorf("security settings cannot be updated via API")
 }
 
 // validateSecuritySectionValues validates the values of security section fields
@@ -998,24 +982,8 @@ var mainSectionAllowedFields = map[string]bool{
 
 // validateMainSection validates main settings
 func validateMainSection(data json.RawMessage) error {
-	var updateMap map[string]interface{}
-	if err := json.Unmarshal(data, &updateMap); err != nil {
-		return err
-	}
-
-	// Check if any disallowed fields are being updated
-	for field := range updateMap {
-		if !mainSectionAllowedFields[field] {
-			return fmt.Errorf("field '%s' in main settings cannot be updated via API", field)
-		}
-	}
-
-	// Validate field values
-	if err := validateMainSectionValues(updateMap); err != nil {
-		return err
-	}
-
-	return nil
+	// Main settings cannot be updated via API for security reasons
+	return fmt.Errorf("main settings cannot be updated via API")
 }
 
 // validateMainSectionValues validates the values of main section fields

@@ -1337,7 +1337,8 @@ func TestTrueConcurrentReviewAccess(t *testing.T) {
 			barrier.Wait()
 
 			// Create a fresh request for each goroutine
-			client := &http.Client{}
+			client := createTestHTTPClient(5 * time.Second)
+			defer client.CloseIdleConnections() // Ensure cleanup
 			req, _ := http.NewRequest(
 				http.MethodPost,
 				server.URL+"/api/v2/detections/1/review",
@@ -1450,9 +1451,8 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 				barrier.Wait()
 
 				// Create request with timeout appropriate for platform
-				client := &http.Client{
-					Timeout: 5 * time.Second,
-				}
+				client := createTestHTTPClient(5 * time.Second)
+				defer client.CloseIdleConnections() // Ensure cleanup
 
 				// Add small stagger time to simulate more realistic conditions
 				// (especially important on Windows)

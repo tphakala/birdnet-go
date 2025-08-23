@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/observability"
-	"go.uber.org/goleak"
 )
 
 // SSETestConfig holds configuration for SSE connection tests
@@ -50,19 +49,8 @@ var sseTestConfigs = []SSETestConfig{
 // TestSSEConnectionCleanup is the main test that verifies SSE connections
 // are properly cleaned up without goroutine leaks
 func TestSSEConnectionCleanup(t *testing.T) {
-	// Defer goleak check to verify no goroutines leak after test
-	defer goleak.VerifyNone(t,
-		// Ignore goroutines from testing framework and other standard libraries
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
-		// Ignore the go-cache janitor which we can't control
-		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
-		// Ignore lumberjack logger goroutines
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		// Ignore audio streaming HLS initialization goroutine (unrelated to SSE)
-		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/httpcontroller/handlers.init.0.func1"),
-	)
+	// Goroutine leak checking is now handled centrally in TestMain
+	// This prevents this test from detecting goroutines from other tests
 
 	for _, config := range sseTestConfigs {
 		// Loop variable capture no longer needed in Go 1.22+
@@ -100,14 +88,13 @@ func testSSEEndpointCleanup(t *testing.T, config SSETestConfig) {
 	})
 }
 
+
 // testSingleConnectionManualDisconnect verifies that manually closing an SSE connection
 // properly cleans up goroutines
 func testSingleConnectionManualDisconnect(t *testing.T, server *httptest.Server, config SSETestConfig) {
 	t.Helper()
-	// Create HTTP client
-	client := &http.Client{
-		Timeout: config.testTimeout,
-	}
+	// Create HTTP client optimized for tests
+	client := createTestHTTPClient(config.testTimeout)
 
 	// Make SSE request
 	req, err := http.NewRequest("GET", server.URL+"/api/v2"+config.endpoint, http.NoBody)
@@ -145,14 +132,11 @@ func testSingleConnectionManualDisconnect(t *testing.T, server *httptest.Server,
 	// Close connection manually
 	_ = resp.Body.Close() // Ignore close error in test
 
-	// Close idle connections to prevent goroutine leaks
+	// Close idle connections - should be immediate with DisableKeepAlives
 	client.CloseIdleConnections()
 
-	// Wait briefly for cleanup
-	time.Sleep(500 * time.Millisecond)
-
-	// Connection should be cleaned up - no way to verify directly in this context
-	// but goleak will catch any leaked goroutines
+	// Connection cleanup is immediate with DisableKeepAlives=true
+	// goleak will catch any leaked goroutines
 }
 
 // testSingleConnectionContextCancellation verifies that canceling the context
@@ -162,10 +146,8 @@ func testSingleConnectionContextCancellation(t *testing.T, server *httptest.Serv
 	// Create context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Create HTTP client with context
-	client := &http.Client{
-		Timeout: config.testTimeout,
-	}
+	// Create HTTP client optimized for tests
+	client := createTestHTTPClient(config.testTimeout)
 
 	// Make SSE request with context
 	req, err := http.NewRequestWithContext(ctx, "GET", server.URL+"/api/v2"+config.endpoint, http.NoBody)
@@ -207,11 +189,10 @@ func testSingleConnectionContextCancellation(t *testing.T, server *httptest.Serv
 
 	// Response body will be closed by defer
 
-	// Close idle connections to prevent goroutine leaks
+	// Close idle connections - should be immediate with DisableKeepAlives
 	client.CloseIdleConnections()
 
-	// Wait for cleanup
-	time.Sleep(500 * time.Millisecond)
+	// Cleanup is immediate with DisableKeepAlives=true
 }
 
 // testMultipleConcurrentConnections verifies that multiple concurrent SSE connections
@@ -227,9 +208,7 @@ func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, co
 		go func(connID int) {
 			defer wg.Done()
 
-			client := &http.Client{
-				Timeout: config.testTimeout,
-			}
+			client := createTestHTTPClient(config.testTimeout)
 			defer client.CloseIdleConnections() // Always cleanup
 
 			req, err := http.NewRequest("GET", server.URL+"/api/v2"+config.endpoint, http.NoBody)
@@ -262,9 +241,7 @@ func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, co
 	// Wait for all connections to complete
 	wg.Wait()
 
-	// Wait for cleanup
-	time.Sleep(500 * time.Millisecond)
-
+	// Cleanup is immediate with DisableKeepAlives=true
 	// At least one connection should have been established
 	require.Positive(t, int(atomic.LoadInt32(&connectionsEstablished)), 
 		"At least one connection should have been established")
@@ -277,9 +254,7 @@ func testConnectionTimeout(t *testing.T, server *httptest.Server, config SSETest
 	// This test would require modifying the timeout constants for testing
 	// For now, we'll test the behavior with a short-lived connection
 	
-	client := &http.Client{
-		Timeout: config.connectionTimeout,
-	}
+	client := createTestHTTPClient(config.connectionTimeout)
 
 	req, err := http.NewRequest("GET", server.URL+"/api/v2"+config.endpoint, http.NoBody)
 	require.NoError(t, err)
@@ -298,37 +273,23 @@ func testConnectionTimeout(t *testing.T, server *httptest.Server, config SSETest
 		// Read until client timeout occurs
 	}
 
-	// Close idle connections to prevent goroutine leaks
+	// Close idle connections - should be immediate with DisableKeepAlives
 	client.CloseIdleConnections()
 
-	// Connection should be closed by timeout
-	time.Sleep(500 * time.Millisecond)
+	// Connection cleanup is immediate with DisableKeepAlives=true
 }
 
 // TestSSEUnbufferedChannelFix specifically tests that the critical unbuffered channel
 // deadlock issue has been fixed
 func TestSSEUnbufferedChannelFix(t *testing.T) {
-	defer goleak.VerifyNone(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
-		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		// Ignore audio streaming HLS initialization goroutine (unrelated to SSE)
-		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/httpcontroller/handlers.init.0.func1"),
-		// Ignore HTTP client persistent connection goroutines (cleaned up after test)
-		goleak.IgnoreTopFunction("net/http.(*persistConn).writeLoop"),
-		goleak.IgnoreTopFunction("net/http.(*persistConn).readLoop"),
-	)
+	// Goroutine leak checking is now handled centrally in TestMain
 
 	// Test the detections endpoint to verify the critical unbuffered channel fix
 	server, controller := setupSSETestServer(t)
 	defer server.Close()
 	defer controller.Shutdown()
 
-	client := &http.Client{
-		Timeout: 3 * time.Second,
-	}
+	client := createTestHTTPClient(3 * time.Second)
 
 	// Create multiple rapid connections and disconnections to stress test
 	// the Done channel handling
@@ -345,42 +306,26 @@ func TestSSEUnbufferedChannelFix(t *testing.T) {
 		// Immediately close to trigger the disconnect handler
 		_ = resp.Body.Close() // Ignore close error in test
 
-		// Small delay between connections
-		time.Sleep(50 * time.Millisecond)
+		// No artificial delay - test rapid connections/disconnections
 	}
 
-	// Close idle connections to prevent goroutine leaks
+	// Close idle connections - should be immediate with DisableKeepAlives
 	client.CloseIdleConnections()
 
-	// Wait for all cleanup to complete
-	time.Sleep(500 * time.Millisecond)
-
 	// If the test reaches here without hanging, the unbuffered channel issue is fixed
+	// Cleanup is immediate with DisableKeepAlives=true
 }
 
 // TestSSERateLimiting verifies that SSE rate limiting works correctly
 // and doesn't cause goroutine leaks
 func TestSSERateLimiting(t *testing.T) {
-	defer goleak.VerifyNone(t,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("sync.runtime_notifyListWait"),
-		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-		// Ignore audio streaming HLS initialization goroutine (unrelated to SSE)
-		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/httpcontroller/handlers.init.0.func1"),
-		// Ignore HTTP client persistent connection goroutines (cleaned up after test)
-		goleak.IgnoreTopFunction("net/http.(*persistConn).writeLoop"),
-		goleak.IgnoreTopFunction("net/http.(*persistConn).readLoop"),
-	)
+	// Goroutine leak checking is now handled centrally in TestMain
 
 	server, controller := setupSSETestServer(t)
 	defer server.Close()
 	defer controller.Shutdown()
 
-	client := &http.Client{
-		Timeout: 2 * time.Second,
-	}
+	client := createTestHTTPClient(2 * time.Second)
 
 	var successCount, rateLimitedCount int
 
@@ -409,11 +354,10 @@ func TestSSERateLimiting(t *testing.T) {
 	require.Positive(t, successCount, "Should have some successful connections")
 	require.Positive(t, rateLimitedCount, "Should have some rate limited connections")
 
-	// Close idle connections to prevent goroutine leaks
+	// Close idle connections - should be immediate with DisableKeepAlives
 	client.CloseIdleConnections()
 
-	// Wait for cleanup
-	time.Sleep(500 * time.Millisecond)
+	// Cleanup is immediate with DisableKeepAlives=true
 }
 
 // setupSSETestServer creates a test server with SSE endpoints configured
@@ -472,9 +416,7 @@ func BenchmarkSSEConnectionSetup(b *testing.B) {
 	defer server.Close()
 	defer controller.Shutdown()
 
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
+	client := createTestHTTPClient(5 * time.Second)
 	defer client.CloseIdleConnections()
 
 	b.ReportAllocs()

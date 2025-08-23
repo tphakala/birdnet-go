@@ -3,9 +3,11 @@ package api
 import (
 	"encoding/json"
 	"log"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 	
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -14,6 +16,7 @@ import (
 )
 
 // getTestController creates a test controller with disabled saving
+// Note: DisableHTTPKeepAlivesForTesting() is called in TestMain before any tests run
 func getTestController(t *testing.T, e *echo.Echo) *Controller {
 	t.Helper()
 	return &Controller{
@@ -106,5 +109,39 @@ func assertControllerError(t *testing.T, err error, rec *httptest.ResponseRecord
 		if expectedMessage != "" {
 			assert.Contains(t, httpErr.Message, expectedMessage, "Error message should contain expected text")
 		}
+	}
+}
+
+// createTestHTTPClient creates an HTTP client optimized for tests to prevent goroutine leaks
+func createTestHTTPClient(timeout time.Duration) *http.Client {
+	// Create custom transport that disables keep-alive to prevent persistent connection goroutines
+	transport := &http.Transport{
+		DisableKeepAlives:     true, // This prevents persistent connections and their goroutines
+		IdleConnTimeout:       1 * time.Second,
+		MaxIdleConns:          0, // Disable connection pooling
+		MaxIdleConnsPerHost:   0,
+		DisableCompression:    false, // Keep compression for realistic testing
+		ForceAttemptHTTP2:     false, // Disable HTTP/2 for simplicity in tests
+		ResponseHeaderTimeout: timeout,
+	}
+	
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+	}
+}
+
+// DisableHTTPKeepAlivesForTesting configures the default HTTP client transport
+// to prevent goroutine leaks from persistent connections during testing
+func DisableHTTPKeepAlivesForTesting() {
+	// Override the default transport to prevent goroutine leaks in ALL HTTP clients
+	http.DefaultTransport = &http.Transport{
+		DisableKeepAlives:     true,
+		IdleConnTimeout:       1 * time.Second,
+		MaxIdleConns:          0,
+		MaxIdleConnsPerHost:   0,
+		DisableCompression:    false,
+		ForceAttemptHTTP2:     false,
+		ResponseHeaderTimeout: 30 * time.Second,
 	}
 }
