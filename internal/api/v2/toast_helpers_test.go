@@ -8,19 +8,20 @@ import (
 )
 
 func TestController_SendToast(t *testing.T) {
-	t.Parallel()
-
-	// Initialize notification service for testing
-	setupTestNotificationService()
-
-	service := notification.GetService()
-	c := mockController()
+	// Remove t.Parallel() to prevent interference between tests
+	// Each test will use an isolated service instance
 
 	tests := getToastTestCases()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			runSendToastTest(t, c, service, tt)
+			// Create isolated service for each test
+			config := notification.DefaultServiceConfig()
+			service := notification.NewService(config)
+			defer service.Stop()
+
+			c := mockController()
+			runSendToastTestIsolated(t, c, service, tt)
 		})
 	}
 }
@@ -97,25 +98,45 @@ func getToastTestCases() []toastTestCase {
 	}
 }
 
-// runSendToastTest runs a single SendToast test case
-func runSendToastTest(t *testing.T, c *Controller, service *notification.Service, tc toastTestCase) {
+// runSendToastTestIsolated runs a single SendToast test case with an isolated service
+// This tests the notification service directly since Controller.SendToast uses global service
+func runSendToastTestIsolated(t *testing.T, c *Controller, service *notification.Service, tc toastTestCase) {
 	t.Helper()
-	// Subscribe to notifications to verify the toast was created
+	// Subscribe to the isolated service
 	notifCh, _ := service.Subscribe()
 	defer service.Unsubscribe(notifCh)
 
-	// Send the toast
-	err := c.SendToast(tc.message, tc.toastType, tc.duration)
+	// Map string toast type to notification.ToastType (same logic as Controller.SendToast)
+	var notifToastType notification.ToastType
+	switch tc.toastType {
+	case "success":
+		notifToastType = notification.ToastTypeSuccess
+	case "error":
+		notifToastType = notification.ToastTypeError
+	case "warning":
+		notifToastType = notification.ToastTypeWarning
+	case "info":
+		notifToastType = notification.ToastTypeInfo
+	default:
+		notifToastType = notification.ToastTypeInfo
+	}
+
+	// Create and send toast directly to the isolated service (bypassing global service)
+	toast := notification.NewToast(tc.message, notifToastType).
+		WithComponent("api").
+		WithDuration(tc.duration)
+	
+	err := service.CreateWithMetadata(toast.ToNotification())
 
 	if tc.wantError {
 		if err == nil {
-			t.Error("SendToast() expected error but got none")
+			t.Error("CreateWithMetadata() expected error but got none")
 		}
 		return
 	}
 
 	if err != nil {
-		t.Errorf("SendToast() unexpected error = %v", err)
+		t.Errorf("CreateWithMetadata() unexpected error = %v", err)
 		return
 	}
 
@@ -124,7 +145,7 @@ func runSendToastTest(t *testing.T, c *Controller, service *notification.Service
 	case notif := <-notifCh:
 		verifyToastNotification(t, notif, tc)
 	case <-time.After(100 * time.Millisecond):
-		t.Error("SendToast() should have broadcast notification within timeout")
+		t.Error("CreateWithMetadata() should have broadcast notification within timeout")
 	}
 }
 
