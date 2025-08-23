@@ -177,8 +177,58 @@ func TestNoteJSONIncludesOccurrence(t *testing.T) {
 	jsonData, err := json.Marshal(note)
 	require.NoError(t, err, "JSON marshaling should not error")
 
-	// Assert the marshaled string contains the occurrence field
-	jsonString := string(jsonData)
-	assert.Contains(t, jsonString, `"occurrence":0.23`, "JSON should contain occurrence field with value 0.23")
+	// Unmarshal into map to properly test the occurrence field
+	var jsonMap map[string]interface{}
+	err = json.Unmarshal(jsonData, &jsonMap)
+	require.NoError(t, err, "JSON unmarshaling should not error")
+
+	// Assert that the occurrence key exists and has the correct numeric value
+	occurrenceValue, exists := jsonMap["occurrence"]
+	require.True(t, exists, "JSON should contain occurrence key")
+	
+	// Cast to float64 and assert the value with epsilon for floating-point comparison
+	occurrenceFloat, ok := occurrenceValue.(float64)
+	require.True(t, ok, "occurrence value should be a float64")
+	assert.InEpsilon(t, 0.23, occurrenceFloat, 0.001, "occurrence value should equal 0.23")
+}
+
+func TestNoteJSONOmitsOccurrenceWhenZero(t *testing.T) {
+	t.Parallel()
+
+	// Build Settings with Main.Name and BirdNET config
+	settings := &conf.Settings{}
+	settings.Main.Name = "TestNode"
+	settings.BirdNET = conf.BirdNETConfig{
+		Latitude:    52.5200,
+		Longitude:   13.4050,
+		Threshold:   0.5,
+		Sensitivity: 1.0,
+	}
+
+	// Create test observation with occurrence 0.0 (should be omitted due to omitzero tag)
+	beginTime := time.Now()
+	endTime := beginTime.Add(3 * time.Second)
+	species := "Turdus merula_blackbird"
+	confidence := 0.85
+	source := "test_audio"
+	clipName := "test_clip.wav"
+	elapsedTime := 100 * time.Millisecond
+	occurrence := 0.0
+
+	// Construct the note via observation.New
+	note := observation.New(settings, beginTime, endTime, species, confidence, source, clipName, elapsedTime, occurrence)
+
+	// Marshal the note to JSON
+	jsonData, err := json.Marshal(note)
+	require.NoError(t, err, "JSON marshaling should not error")
+
+	// Unmarshal into map to verify occurrence key is omitted
+	var jsonMap map[string]interface{}
+	err = json.Unmarshal(jsonData, &jsonMap)
+	require.NoError(t, err, "JSON unmarshaling should not error")
+
+	// Assert that the occurrence key does NOT exist when value is zero (omitzero behavior)
+	_, exists := jsonMap["occurrence"]
+	assert.False(t, exists, "JSON should omit occurrence key when value is 0.0 due to omitzero tag")
 }
 

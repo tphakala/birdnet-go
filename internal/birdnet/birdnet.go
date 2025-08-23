@@ -30,6 +30,13 @@ const DefaultModelVersion = "BirdNET_GLOBAL_6K_V2.4"
 // Model version string, default is the embedded model version
 var modelVersion = "BirdNET GLOBAL 6K V2.4 FP32"
 
+// speciesCacheEntry holds cached species scores for a specific date
+type speciesCacheEntry struct {
+	date         string                   // Date string in YYYY-MM-DD format
+	scores       map[string]float64       // Species occurrence scores keyed by label
+	createdAt    time.Time               // When this cache entry was created
+}
+
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
 type BirdNET struct {
 	AnalysisInterpreter *tflite.Interpreter
@@ -42,6 +49,10 @@ type BirdNET struct {
 	mu                  sync.Mutex
 	resultsBuffer       []datastore.Results // Pre-allocated buffer for results to reduce allocations
 	confidenceBuffer    []float32           // Pre-allocated buffer for confidence values to reduce allocations
+	
+	// Species occurrence cache to avoid repeated GetProbableSpecies calls within same day
+	speciesCacheMu      sync.RWMutex
+	speciesCache        map[string]*speciesCacheEntry
 }
 
 // NewBirdNET initializes a new BirdNET instance with given settings.
@@ -49,6 +60,7 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	bn := &BirdNET{
 		Settings:     settings,
 		TaxonomyPath: "", // Default to embedded taxonomy
+		speciesCache: make(map[string]*speciesCacheEntry),
 	}
 
 	// Determine model info based on settings
@@ -542,6 +554,54 @@ func (bn *BirdNET) loadLabelsFromText(file *os.File) error {
 		bn.Settings.BirdNET.Labels = append(bn.Settings.BirdNET.Labels, strings.TrimSpace(scanner.Text()))
 	}
 	return scanner.Err()
+}
+
+// getCachedSpeciesScores returns species occurrence scores with caching to avoid repeated calls within same day
+func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]float64, error) {
+	// Create date key in YYYY-MM-DD format using the target date's location
+	dateKey := targetDate.Format("2006-01-02")
+	
+	// First, try to read from cache with read lock
+	bn.speciesCacheMu.RLock()
+	if entry, exists := bn.speciesCache[dateKey]; exists {
+		// Verify the cached entry is still valid (same date)
+		if entry.date == dateKey {
+			scores := entry.scores
+			bn.speciesCacheMu.RUnlock()
+			return scores, nil
+		}
+	}
+	bn.speciesCacheMu.RUnlock()
+	
+	// Cache miss or invalid, acquire write lock and fetch fresh data
+	bn.speciesCacheMu.Lock()
+	defer bn.speciesCacheMu.Unlock()
+	
+	// Double-check after acquiring write lock (another goroutine might have populated it)
+	if entry, exists := bn.speciesCache[dateKey]; exists && entry.date == dateKey {
+		return entry.scores, nil
+	}
+	
+	// Call the actual GetProbableSpecies method
+	speciesScores, err := bn.GetProbableSpecies(targetDate, 0.0)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Convert SpeciesScore slice to map
+	scores := make(map[string]float64, len(speciesScores))
+	for _, score := range speciesScores {
+		scores[score.Label] = score.Score
+	}
+	
+	// Store in cache
+	bn.speciesCache[dateKey] = &speciesCacheEntry{
+		date:      dateKey,
+		scores:    scores,
+		createdAt: time.Now(),
+	}
+	
+	return scores, nil
 }
 
 // Delete releases resources used by the TensorFlow Lite interpreters.

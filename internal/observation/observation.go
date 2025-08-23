@@ -100,7 +100,7 @@ func New(settings *conf.Settings, beginTime, endTime time.Time, species string, 
 		Sensitivity:    settings.BirdNET.Sensitivity, // Sensitivity setting from configuration.
 		ClipName:       clipName,                     // Name of the audio clip.
 		ProcessingTime: elapsedTime,                  // Time taken to process the observation.
-		Occurrence:     clamp(occurrence, 0.0, 1.0), // Occurrence probability based on location/time, clamped to [0,1].
+		Occurrence:     math.Max(0.0, math.Min(1.0, occurrence)), // Occurrence probability based on location/time, clamped to [0,1].
 	}
 }
 
@@ -237,13 +237,3 @@ func WriteNotesCsv(settings *conf.Settings, notes []datastore.Note, filename str
 	return nil
 }
 
-// clamp restricts a value to be within the inclusive range [minVal, maxVal]
-func clamp(value, minVal, maxVal float64) float64 {
-	if value < minVal {
-		return minVal
-	}
-	if value > maxVal {
-		return maxVal
-	}
-	return value
-}
