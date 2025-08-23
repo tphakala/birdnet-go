@@ -90,8 +90,12 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 	
 	// Skip filtering if range interpreter is not initialized
 	if bn.RangeInterpreter == nil {
-		bn.Debug("Range filter model not loaded, returning empty scores")
-		return []SpeciesScore{}, nil
+		bn.Debug("Range filter model not loaded, returning zero scores for all labels")
+		var speciesScores []SpeciesScore
+		for _, label := range bn.Settings.BirdNET.Labels {
+			speciesScores = append(speciesScores, SpeciesScore{Score: 0.0, Label: label})
+		}
+		return speciesScores, nil
 	}
 	
 	// Skip filtering if location is not set

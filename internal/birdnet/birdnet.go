@@ -909,6 +909,11 @@ func (bn *BirdNET) Debug(format string, v ...interface{}) {
 // GetSpeciesOccurrence returns the occurrence probability for a given species based on current location and time
 // Returns 0.0 if the species is not found or range filter is not enabled
 func (bn *BirdNET) GetSpeciesOccurrence(species string) float64 {
+	// Fast-path: if range interpreter is not initialized, return 0
+	if bn.RangeInterpreter == nil {
+		return 0.0
+	}
+
 	// If location not set, range filter is not active, return 0
 	if bn.Settings.BirdNET.Latitude == 0 && bn.Settings.BirdNET.Longitude == 0 {
 		return 0.0
@@ -925,7 +930,13 @@ func (bn *BirdNET) GetSpeciesOccurrence(species string) float64 {
 	// Look for the species in the scores
 	for _, score := range speciesScores {
 		if score.Label == species {
-			// Return the score (already in 0-1 range)
+			// Clamp the score to [0.0, 1.0] range
+			if score.Score < 0.0 {
+				return 0.0
+			}
+			if score.Score > 1.0 {
+				return 1.0
+			}
 			return score.Score
 		}
 	}
