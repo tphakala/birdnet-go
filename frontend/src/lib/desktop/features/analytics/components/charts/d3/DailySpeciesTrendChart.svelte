@@ -4,6 +4,7 @@
   import * as d3 from 'd3';
 
   import BaseChart from './BaseChart.svelte';
+  import { getLocalDateString } from '$lib/utils/date';
   import { createTimeScale, createLinearScale } from './utils/scales';
   import { createAxis, styleAxis, addAxisLabel, createDateAxisFormatter } from './utils/axes';
   import {
@@ -91,7 +92,7 @@
 
     visibleData().forEach(species => {
       species.data.forEach(point => {
-        const dateStr = point.date.toISOString().split('T')[0];
+        const dateStr = getLocalDateString(point.date);
         const currentTotal = dailyTotals.get(dateStr) ?? 0;
         dailyTotals.set(dateStr, currentTotal + point.count);
       });
@@ -101,7 +102,7 @@
     return visibleData().map(species => ({
       ...species,
       data: species.data.map(point => {
-        const dateStr = point.date.toISOString().split('T')[0];
+        const dateStr = getLocalDateString(point.date);
         const total = dailyTotals.get(dateStr) ?? 1;
         return {
           ...point,
@@ -113,14 +114,16 @@
 
   // Calculate scales
   const scales = $derived(() => {
-    const processed = processedData();
+    const processed: SpeciesTrendData[] = processedData();
     if (!processed.length) return null;
 
-    const allDates = (processed as any).flatMap((s: any) => s.data.map((d: any) => d.date));
-    const allCounts = (processed as any).flatMap((s: any) => s.data.map((d: any) => d.count));
+    const allDates: Date[] = processed.flatMap(species => species.data.map(point => point.date));
+    const allCounts: number[] = processed.flatMap(species =>
+      species.data.map(point => point.count)
+    );
 
-    const dateExtent = d3.extent(allDates) as [Date, Date] | [undefined, undefined];
-    const countExtent = d3.extent(allCounts) as [number, number] | [undefined, undefined];
+    const dateExtent = d3.extent<Date>(allDates);
+    const countExtent = d3.extent<number>(allCounts);
 
     // Handle cases where extent returns undefined
     const safeDateExtent: [Date, Date] =
@@ -211,7 +214,7 @@
     const xAxis = createAxis({
       scale: xScale,
       orientation: 'bottom',
-      tickFormat: createDateAxisFormatter(dateFormat) as any,
+      tickFormat: (d: d3.AxisDomain) => createDateAxisFormatter(dateFormat)(d as Date),
       tickCount: Math.min(8, Math.floor(innerWidth / 80)),
     });
 
@@ -219,7 +222,9 @@
       scale: yScale,
       orientation: 'left',
       tickCount: 6,
-      tickFormat: showRelative ? (d: d3.AxisDomain) => `${(d as number).toFixed(0)}%` : undefined,
+      tickFormat: showRelative
+        ? (((_d: d3.AxisDomain) => `${Number(_d).toFixed(0)}%`) as (_d: d3.AxisDomain) => string)
+        : undefined,
     });
 
     // Draw axes
@@ -275,16 +280,17 @@
       .y1(d => yScale(d.count))
       .curve(d3.curveMonotoneX);
 
-    // Create clip path for zoom
+    // Create clip path for zoom (unique per instance)
+    const clipPathId = `chart-area-${Math.random().toString(36).slice(2, 8)}`;
     chartGroup
       .append('defs')
       .append('clipPath')
-      .attr('id', 'chart-area')
+      .attr('id', clipPathId)
       .append('rect')
       .attr('width', innerWidth)
       .attr('height', innerHeight);
 
-    const chartArea = chartGroup.append('g').attr('clip-path', 'url(#chart-area)');
+    const chartArea = chartGroup.append('g').attr('clip-path', `url(#${clipPathId})`);
 
     // Draw lines for each species
     const linesGroup = chartArea.append('g').attr('class', 'lines');

@@ -274,6 +274,7 @@ export function getContrastColor(backgroundColor: string): string {
       }
     } else if (color.startsWith('rgb(') || color.startsWith('rgba(')) {
       // Handle rgb() and rgba() formats
+      // eslint-disable-next-line security/detect-unsafe-regex -- Safe: well-constructed regex for RGB/RGBA parsing
       const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
 
       if (match) {

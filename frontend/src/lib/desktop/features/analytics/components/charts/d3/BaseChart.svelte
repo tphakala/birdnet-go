@@ -33,11 +33,14 @@
     height = 400,
     margin = { top: 20, right: 20, bottom: 40, left: 60 },
     className = '',
-    id = `chart-${Math.random().toString(36).substr(2, 9)}`,
+    id,
     children,
     onResize,
     responsive = true,
   }: Props = $props();
+
+  // Generate unique ID on client side to prevent SSR/hydration mismatch
+  let chartId = $state<string>('');
 
   // DOM references
   let containerElement: HTMLDivElement;
@@ -67,6 +70,9 @@
 
   // Initialize chart on mount
   onMount(() => {
+    // Generate unique ID on client side to prevent SSR/hydration mismatch
+    chartId = id || `chart-${Math.random().toString(36).substr(2, 9)}`;
+
     // Initialize theme store
     themeStore = new ThemeStore();
     currentTheme = themeStore.theme;
@@ -179,7 +185,7 @@
 >
   <svg
     bind:this={svgElement}
-    {id}
+    id={chartId}
     width={containerWidth}
     height={containerHeight}
     class="chart-svg"

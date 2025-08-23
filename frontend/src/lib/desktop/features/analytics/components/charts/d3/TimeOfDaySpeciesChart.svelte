@@ -135,7 +135,7 @@
     const xAxis = createAxis({
       scale: xScale,
       orientation: 'bottom',
-      tickFormat: createHourAxisFormatter() as any,
+      tickFormat: (d: d3.AxisDomain) => createHourAxisFormatter()(d as number),
       tickCount: 12,
     });
 

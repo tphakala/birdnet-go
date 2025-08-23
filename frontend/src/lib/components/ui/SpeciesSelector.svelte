@@ -214,6 +214,7 @@
   });
 </script>
 
+<!-- eslint-disable-next-line security/detect-object-injection -- Safe: size prop is constrained to specific string literals -->
 <div class={cn('species-selector relative', sizeConfig[size].container, className)}>
   <!-- Chip Variant -->
   {#if variant === 'chip'}
@@ -229,7 +230,11 @@
               bind:this={inputRef}
               bind:value={searchQuery}
               placeholder={selectedSpecies().length ? 'Add more species...' : placeholder}
-              class={cn('input input-ghost w-full pr-8', sizeConfig[size].input)}
+              class={cn(
+                'input input-ghost w-full pr-8',
+                /* eslint-disable-next-line security/detect-object-injection -- Safe: size prop is constrained to specific string literals */
+                sizeConfig[size].input
+              )}
               class:input-disabled={disabled}
               readonly={disabled}
               onfocus={handleInputFocus}
@@ -240,6 +245,7 @@
                 type="button"
                 class="absolute right-2 top-1/2 -translate-y-1/2 btn btn-ghost btn-xs btn-circle"
                 onclick={clearSearch}
+                aria-label="Clear search"
               >
                 {@html navigationIcons.close}
               </button>
@@ -255,6 +261,7 @@
             <div
               class={cn(
                 'badge badge-primary gap-2 cursor-pointer hover:badge-primary-focus transition-colors',
+                // eslint-disable-next-line security/detect-object-injection -- Safe: size prop is constrained to specific string literals
                 sizeConfig[size].chip
               )}
             >
@@ -299,8 +306,13 @@
       {#if !searchable && !disabled}
         <button
           type="button"
-          class={cn('btn btn-outline btn-primary', sizeConfig[size].button)}
+          class={cn(
+            'btn btn-outline btn-primary',
+            /* eslint-disable-next-line security/detect-object-injection -- Safe: size prop is constrained to specific string literals */
+            sizeConfig[size].button
+          )}
           onclick={() => (isExpanded = !isExpanded)}
+          aria-label="Add species"
         >
           {@html actionIcons.plus}
         </button>
@@ -339,6 +351,7 @@
                 type="button"
                 class={cn(
                   'w-full px-4 py-3 flex items-center justify-between hover:bg-base-200 transition-colors border-b border-base-200 last:border-b-0',
+                  // eslint-disable-next-line security/detect-object-injection -- Safe: size prop is constrained to specific string literals
                   sizeConfig[size].list,
                   isSelected && 'bg-primary/10',
                   !canSelect && 'opacity-50 cursor-not-allowed'
@@ -404,7 +417,11 @@
             type="text"
             bind:value={searchQuery}
             {placeholder}
-            class={cn('input input-bordered w-full', sizeConfig[size].input)}
+            class={cn(
+              'input input-bordered w-full',
+              /* eslint-disable-next-line security/detect-object-injection -- Safe: size prop is constrained to specific string literals */
+              sizeConfig[size].input
+            )}
             class:input-disabled={disabled}
             readonly={disabled}
           />
