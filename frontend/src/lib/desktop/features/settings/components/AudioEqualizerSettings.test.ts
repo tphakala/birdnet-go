@@ -8,7 +8,9 @@ vi.mock('$lib/i18n', () => ({
 }));
 
 vi.mock('$lib/utils/security', () => ({
+  // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data
   safeGet: vi.fn((obj, key) => obj?.[key]),
+  // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data
   safeArrayAccess: vi.fn((arr, index) => arr?.[index]),
 }));
 

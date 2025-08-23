@@ -99,8 +99,12 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@types/d3": "^7.4.3",
     "chart.js": "^4.5.0",
     "chartjs-adapter-date-fns": "^3.0.0",
+    "d3": "^7.9.0",
+    "d3-scale-chromatic": "^3.1.0",
+    "d3-time-format": "^4.1.0",
     "daisyui": "~4.12.24",
     "eventsource": "^4.0.0",
     "hls.js": "^1.6.7",

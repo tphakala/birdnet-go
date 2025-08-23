@@ -12,6 +12,7 @@
 
   // Dynamic imports for heavy pages - properly typed component references
   let Analytics = $state<Component | null>(null);
+  let AdvancedAnalytics = $state<Component | null>(null);
   let Species = $state<Component | null>(null);
   let Search = $state<Component | null>(null);
   let About = $state<Component | null>(null);
@@ -60,6 +61,12 @@
       component: 'species',
     },
     { route: 'analytics', page: 'analytics', title: 'Analytics', component: 'analytics' },
+    {
+      route: 'advanced-analytics',
+      page: 'analytics/advanced',
+      title: 'Advanced Analytics',
+      component: 'advanced-analytics',
+    },
     { route: 'search', page: 'search', title: 'Search', component: 'search' },
     { route: 'detections', page: 'detections', title: 'Detections', component: 'detections' },
     {
@@ -95,6 +102,14 @@
           if (!Analytics) {
             const module = await import('./lib/desktop/features/analytics/pages/Analytics.svelte');
             Analytics = module.default;
+          }
+          break;
+        case 'advanced-analytics':
+          if (!AdvancedAnalytics) {
+            const module = await import(
+              './lib/desktop/features/analytics/pages/AdvancedAnalytics.svelte'
+            );
+            AdvancedAnalytics = module.default;
           }
           break;
         case 'species':
@@ -204,6 +219,7 @@
     '/ui/dashboard': findRouteConfig('dashboard'),
     '/ui/notifications': findRouteConfig('notifications'),
     '/ui/analytics/species': findRouteConfig('species'),
+    '/ui/analytics/advanced': findRouteConfig('advanced-analytics'),
     '/ui/analytics': findRouteConfig('analytics'),
     '/ui/search': findRouteConfig('search'),
     '/ui/detections': findRouteConfig('detections'),
@@ -332,6 +348,8 @@
     {@render renderRoute(Notifications)}
   {:else if currentRoute === 'analytics'}
     {@render renderRoute(Analytics)}
+  {:else if currentRoute === 'advanced-analytics'}
+    {@render renderRoute(AdvancedAnalytics)}
   {:else if currentRoute === 'species'}
     {@render renderRoute(Species)}
   {:else if currentRoute === 'search'}
