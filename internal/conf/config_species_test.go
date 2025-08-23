@@ -81,7 +81,7 @@ func TestSpeciesConfigYAMLPersistence(t *testing.T) {
 			require.NoError(t, err, "Failed to unmarshal YAML back to struct")
 
 			// Verify values are preserved
-			assert.Equal(t, tt.config.Threshold, unmarshaledConfig.Threshold, "Threshold should be preserved")
+			assert.InDelta(t, tt.config.Threshold, unmarshaledConfig.Threshold, 0.0001, "Threshold should be preserved")
 			assert.Equal(t, tt.config.Interval, unmarshaledConfig.Interval, "Interval should be preserved")
 			assert.Equal(t, tt.config.Actions, unmarshaledConfig.Actions, "Actions should be preserved")
 		})
@@ -135,7 +135,7 @@ func TestSpeciesConfigJSONPersistence(t *testing.T) {
 
 	// Check Rare Bird config
 	rareBirdConfig := unmarshaledSettings.Config["Rare Bird"]
-	assert.Equal(t, 0.0, rareBirdConfig.Threshold, "Zero threshold should be preserved")
+	assert.InDelta(t, 0.0, rareBirdConfig.Threshold, 0.0001, "Zero threshold should be preserved")
 	assert.Equal(t, 0, rareBirdConfig.Interval, "Zero interval should be preserved")
 }
 
@@ -215,12 +215,12 @@ func TestSettingsSaveAndLoad(t *testing.T) {
 
 	// Verify Zero Values Bird config is preserved
 	zeroConfig := loadedSettings.Realtime.Species.Config["Zero Values Bird"]
-	assert.Equal(t, 0.0, zeroConfig.Threshold, "Zero threshold should be loaded correctly")
+	assert.InDelta(t, 0.0, zeroConfig.Threshold, 0.0001, "Zero threshold should be loaded correctly")
 	assert.Equal(t, 0, zeroConfig.Interval, "Zero interval should be loaded correctly")
 
 	// Verify Normal Bird config
 	normalConfig := loadedSettings.Realtime.Species.Config["Normal Bird"]
-	assert.Equal(t, 0.8, normalConfig.Threshold, "Normal threshold should be loaded correctly")
+	assert.InDelta(t, 0.8, normalConfig.Threshold, 0.0001, "Normal threshold should be loaded correctly")
 	assert.Equal(t, 45, normalConfig.Interval, "Normal interval should be loaded correctly")
 }
 
@@ -258,6 +258,6 @@ func TestSpeciesConfigUpdate(t *testing.T) {
 
 	// Verify zero values are preserved
 	config := reloaded.Realtime.Species.Config["Existing Bird"]
-	assert.Equal(t, 0.0, config.Threshold, "Zero threshold should be preserved after update")
+	assert.InDelta(t, 0.0, config.Threshold, 0.0001, "Zero threshold should be preserved after update")
 	assert.Equal(t, 0, config.Interval, "Zero interval should be preserved after update")
 }

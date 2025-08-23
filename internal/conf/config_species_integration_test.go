@@ -55,14 +55,14 @@ realtime:
 	require.NoError(t, err, "Failed to unmarshal config")
 
 	// Verify initial values loaded correctly
-	assert.Equal(t, 2, len(settings.Realtime.Species.Config), "Should have 2 species configs")
+	assert.Len(t, settings.Realtime.Species.Config, 2, "Should have 2 species configs")
 	
 	rareBird := settings.Realtime.Species.Config["Rare Bird"]
-	assert.Equal(t, 0.0, rareBird.Threshold, "Rare Bird threshold should be 0.0")
+	assert.InDelta(t, 0.0, rareBird.Threshold, 0.0001, "Rare Bird threshold should be 0.0")
 	assert.Equal(t, 0, rareBird.Interval, "Rare Bird interval should be 0")
 	
 	commonBird := settings.Realtime.Species.Config["Common Bird"]
-	assert.Equal(t, 0.95, commonBird.Threshold, "Common Bird threshold should be 0.95")
+	assert.InDelta(t, 0.95, commonBird.Threshold, 0.0001, "Common Bird threshold should be 0.95")
 	assert.Equal(t, 60, commonBird.Interval, "Common Bird interval should be 60")
 
 	// Modify the settings - update Common Bird to zero values
@@ -121,20 +121,20 @@ realtime:
 	require.NoError(t, err, "Failed to reload settings")
 
 	// Verify all birds have correct values after reload
-	assert.Equal(t, 3, len(reloadedSettings.Realtime.Species.Config), "Should have 3 species configs after reload")
+	assert.Len(t, reloadedSettings.Realtime.Species.Config, 3, "Should have 3 species configs after reload")
 	
 	// Check Rare Bird (unchanged)
 	rareBird = reloadedSettings.Realtime.Species.Config["Rare Bird"]
-	assert.Equal(t, 0.0, rareBird.Threshold, "Rare Bird threshold should still be 0.0")
+	assert.InDelta(t, 0.0, rareBird.Threshold, 0.0001, "Rare Bird threshold should still be 0.0")
 	assert.Equal(t, 0, rareBird.Interval, "Rare Bird interval should still be 0")
 	
 	// Check Common Bird (updated to zeros)
 	commonBird = reloadedSettings.Realtime.Species.Config["Common Bird"]
-	assert.Equal(t, 0.0, commonBird.Threshold, "Common Bird threshold should now be 0.0")
+	assert.InDelta(t, 0.0, commonBird.Threshold, 0.0001, "Common Bird threshold should now be 0.0")
 	assert.Equal(t, 0, commonBird.Interval, "Common Bird interval should now be 0")
 	
 	// Check Zero Bird (new)
 	zeroBird := reloadedSettings.Realtime.Species.Config["Zero Bird"]
-	assert.Equal(t, 0.0, zeroBird.Threshold, "Zero Bird threshold should be 0.0")
+	assert.InDelta(t, 0.0, zeroBird.Threshold, 0.0001, "Zero Bird threshold should be 0.0")
 	assert.Equal(t, 0, zeroBird.Interval, "Zero Bird interval should be 0")
 }
