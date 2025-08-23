@@ -68,8 +68,7 @@ export function createAxis(config: AxisConfig): Axis<AxisDomain> {
  */
 export function styleAxis(
   axisGroup: Selection<SVGGElement, unknown, null, undefined>,
-  theme: AxisTheme,
-  showGrid = false
+  theme: AxisTheme
 ): void {
   // Style the axis line and ticks
   axisGroup
@@ -83,15 +82,6 @@ export function styleAxis(
     .style('fill', theme.color)
     .style('font-size', theme.fontSize)
     .style('font-family', theme.fontFamily);
-
-  // Add grid lines if requested
-  if (showGrid) {
-    axisGroup
-      .selectAll('.tick line')
-      .style('stroke', theme.gridColor)
-      .style('stroke-dasharray', '2,2')
-      .style('opacity', 0.3);
-  }
 }
 
 /**
@@ -140,10 +130,12 @@ export function addAxisLabel(
     .attr('class', 'axis-label')
     .attr('text-anchor', 'middle')
     .attr('transform', `translate(${x},${y}) rotate(${rotation})`)
+    .attr('aria-hidden', 'true')
     .style('fill', theme.color)
     .style('font-size', theme.fontSize)
     .style('font-family', theme.fontFamily)
     .style('font-weight', 'bold')
+    .style('pointer-events', 'none')
     .text(text);
 }
 
