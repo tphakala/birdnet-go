@@ -114,8 +114,12 @@
       const groups = new Map<string, Species[]>();
       filtered.forEach(s => {
         const key = s.category || s.frequency || 'other';
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key)!.push(s);
+        let group = groups.get(key);
+        if (group === undefined) {
+          group = [];
+          groups.set(key, group);
+        }
+        group.push(s);
       });
       return Array.from(groups.entries()).map(([category, items]) => ({
         category,
@@ -373,14 +377,15 @@
 
                 <!-- Frequency Badge -->
                 {#if showFrequency && species.frequency}
-                  <div
-                    class={cn(
-                      'badge badge-sm ml-2 flex-shrink-0',
-                      frequencyConfig[species.frequency].color
-                    )}
-                  >
-                    {frequencyConfig[species.frequency].label}
-                  </div>
+                  {@const freqConfig =
+                    species.frequency in frequencyConfig
+                      ? frequencyConfig[species.frequency as keyof typeof frequencyConfig]
+                      : null}
+                  {#if freqConfig}
+                    <div class={cn('badge badge-sm ml-2 flex-shrink-0', freqConfig.color)}>
+                      {freqConfig.label}
+                    </div>
+                  {/if}
                 {/if}
               </button>
             {/each}
@@ -452,9 +457,15 @@
                   {/if}
                 </div>
                 {#if showFrequency && species.frequency}
-                  <div class={cn('badge badge-sm', frequencyConfig[species.frequency].color)}>
-                    {frequencyConfig[species.frequency].label}
-                  </div>
+                  {@const freqConfig =
+                    species.frequency in frequencyConfig
+                      ? frequencyConfig[species.frequency as keyof typeof frequencyConfig]
+                      : null}
+                  {#if freqConfig}
+                    <div class={cn('badge badge-sm', freqConfig.color)}>
+                      {freqConfig.label}
+                    </div>
+                  {/if}
                 {/if}
               </label>
             {/each}

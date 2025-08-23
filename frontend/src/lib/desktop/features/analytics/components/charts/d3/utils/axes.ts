@@ -1,14 +1,15 @@
 // D3 axis utilities for analytics charts
-import * as d3 from 'd3';
+import { axisBottom, axisLeft, axisRight, axisTop } from 'd3-axis';
+import { timeFormat } from 'd3-time-format';
+import type { Axis, AxisDomain, AxisScale } from 'd3-axis';
+import type { ScaleLinear, ScaleTime } from 'd3-scale';
+import type { Selection } from 'd3-selection';
 
 export interface AxisConfig {
-  scale:
-    | d3.ScaleLinear<number, number>
-    | d3.ScaleTime<number, number>
-    | d3.AxisScale<d3.AxisDomain>;
+  scale: ScaleLinear<number, number> | ScaleTime<number, number> | AxisScale<AxisDomain>;
   orientation: 'top' | 'right' | 'bottom' | 'left';
   tickCount?: number;
-  tickFormat?: (d: d3.AxisDomain, i: number) => string;
+  tickFormat?: (d: AxisDomain, i: number) => string;
   tickSize?: number;
   tickPadding?: number;
   label?: string;
@@ -25,21 +26,21 @@ export interface AxisTheme {
 /**
  * Create and configure a D3 axis
  */
-export function createAxis(config: AxisConfig): d3.Axis<d3.AxisDomain> {
-  let axis: d3.Axis<d3.AxisDomain>;
+export function createAxis(config: AxisConfig): Axis<AxisDomain> {
+  let axis: Axis<AxisDomain>;
 
   switch (config.orientation) {
     case 'top':
-      axis = d3.axisTop(config.scale as d3.AxisScale<d3.AxisDomain>);
+      axis = axisTop(config.scale as AxisScale<AxisDomain>);
       break;
     case 'right':
-      axis = d3.axisRight(config.scale as d3.AxisScale<d3.AxisDomain>);
+      axis = axisRight(config.scale as AxisScale<AxisDomain>);
       break;
     case 'bottom':
-      axis = d3.axisBottom(config.scale as d3.AxisScale<d3.AxisDomain>);
+      axis = axisBottom(config.scale as AxisScale<AxisDomain>);
       break;
     case 'left':
-      axis = d3.axisLeft(config.scale as d3.AxisScale<d3.AxisDomain>);
+      axis = axisLeft(config.scale as AxisScale<AxisDomain>);
       break;
   }
 
@@ -66,7 +67,7 @@ export function createAxis(config: AxisConfig): d3.Axis<d3.AxisDomain> {
  * Apply theme styling to an axis group
  */
 export function styleAxis(
-  axisGroup: d3.Selection<SVGGElement, unknown, null, undefined>,
+  axisGroup: Selection<SVGGElement, unknown, null, undefined>,
   theme: AxisTheme,
   showGrid = false
 ): void {
@@ -97,7 +98,7 @@ export function styleAxis(
  * Add axis label
  */
 export function addAxisLabel(
-  container: d3.Selection<SVGGElement, unknown, null, undefined>,
+  container: Selection<SVGGElement, unknown, null, undefined>,
   config: {
     text: string;
     orientation: 'top' | 'right' | 'bottom' | 'left';
@@ -178,15 +179,15 @@ export function createDateAxisFormatter(
 ): (d: Date) => string {
   switch (range) {
     case 'day':
-      return (d: Date) => d3.timeFormat('%H:%M')(d);
+      return (d: Date) => timeFormat('%H:%M')(d);
     case 'week':
-      return (d: Date) => d3.timeFormat('%a %d')(d);
+      return (d: Date) => timeFormat('%a %d')(d);
     case 'month':
-      return (d: Date) => d3.timeFormat('%b %d')(d);
+      return (d: Date) => timeFormat('%b %d')(d);
     case 'year':
-      return (d: Date) => d3.timeFormat('%b %Y')(d);
+      return (d: Date) => timeFormat('%b %Y')(d);
     default:
-      return (d: Date) => d3.timeFormat('%b %d')(d);
+      return (d: Date) => timeFormat('%b %d')(d);
   }
 }
 
@@ -194,10 +195,10 @@ export function createDateAxisFormatter(
  * Create grid lines for a chart
  */
 export function createGridLines(
-  container: d3.Selection<SVGGElement, unknown, null, undefined>,
+  container: Selection<SVGGElement, unknown, null, undefined>,
   config: {
-    xScale?: d3.AxisScale<d3.AxisDomain>;
-    yScale?: d3.AxisScale<d3.AxisDomain>;
+    xScale?: AxisScale<AxisDomain>;
+    yScale?: AxisScale<AxisDomain>;
     width: number;
     height: number;
   },
@@ -205,8 +206,7 @@ export function createGridLines(
 ): void {
   // Vertical grid lines
   if (config.xScale) {
-    const xAxis = d3
-      .axisBottom(config.xScale)
+    const xAxis = axisBottom(config.xScale)
       .tickSize(-config.height)
       .tickFormat(() => '');
 
@@ -223,8 +223,7 @@ export function createGridLines(
 
   // Horizontal grid lines
   if (config.yScale) {
-    const yAxis = d3
-      .axisLeft(config.yScale)
+    const yAxis = axisLeft(config.yScale)
       .tickSize(-config.width)
       .tickFormat(() => '');
 

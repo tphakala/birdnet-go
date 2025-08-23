@@ -19,6 +19,7 @@ import (
 )
 
 const placeholderImageURL = "/assets/images/bird-placeholder.svg"
+const maxSpeciesBatch = 10
 
 // SpeciesDailySummary represents a bird in the daily species summary API response
 type SpeciesDailySummary struct {
@@ -1496,14 +1497,13 @@ func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid date format. Use YYYY-MM-DD")
 	}
 
-	// Rate limiting - maximum 10 species per request
-	const maxBatchSize = 10
-	if len(speciesParams) > maxBatchSize {
+	// Rate limiting - maximum species per request
+	if len(speciesParams) > maxSpeciesBatch {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Batch size exceeded limit in hourly species data",
-				"requested", len(speciesParams), "max", maxBatchSize, "ip", ip, "path", path)
+				"requested", len(speciesParams), "max", maxSpeciesBatch, "ip", ip, "path", path)
 		}
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Too many species requested. Maximum: %d", maxBatchSize))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Too many species requested. Maximum: %d", maxSpeciesBatch))
 	}
 
 	// Parse optional min_confidence parameter
@@ -1530,6 +1530,7 @@ func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
 	// Process each species
 	results := make(map[string][]HourlyDistribution)
 	processingErrors := make([]string, 0)
+	seen := make(map[string]bool)
 
 	for _, species := range speciesParams {
 		// Trim whitespace from species name
@@ -1537,6 +1538,12 @@ func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
 		if species == "" {
 			continue
 		}
+
+		// Skip if already processed
+		if seen[species] {
+			continue
+		}
+		seen[species] = true
 
 		// Get hourly data for this species
 		hourlyData, err := c.DS.GetHourlyAnalyticsData(date, species)
@@ -1662,14 +1669,13 @@ func (c *Controller) GetBatchDailySpeciesData(ctx echo.Context) error {
 		endDate = startTime.AddDate(0, 0, 30).Format("2006-01-02")
 	}
 
-	// Rate limiting - maximum 10 species per request
-	const maxBatchSize = 10
-	if len(speciesParams) > maxBatchSize {
+	// Rate limiting - maximum species per request
+	if len(speciesParams) > maxSpeciesBatch {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Batch size exceeded limit in daily species data",
-				"requested", len(speciesParams), "max", maxBatchSize, "ip", ip, "path", path)
+				"requested", len(speciesParams), "max", maxSpeciesBatch, "ip", ip, "path", path)
 		}
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Too many species requested. Maximum: %d", maxBatchSize))
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Too many species requested. Maximum: %d", maxSpeciesBatch))
 	}
 
 	if c.apiLogger != nil {

@@ -173,14 +173,20 @@
 
     const { svg, chartGroup, innerWidth, innerHeight, theme } = context;
 
+    // Get scales safely
+    const s = scales();
+    if (!s) {
+      throw new Error('Scales not available for chart rendering');
+    }
+
     // Update scale ranges for current dimensions
     const xScale = createTimeScale({
-      domain: scales()!.x.domain() as [Date, Date],
+      domain: s.x.domain() as [Date, Date],
       range: [0, innerWidth],
     });
 
     const yScale = createLinearScale({
-      domain: scales()!.y.domain() as [number, number],
+      domain: s.y.domain() as [number, number],
       range: [innerHeight, 0],
     });
 
@@ -485,13 +491,13 @@
     min-height: 400px;
   }
 
-  :global(.line-) {
+  :global([class^='line-']) {
     transition:
       stroke-width 0.2s ease,
       opacity 0.2s ease;
   }
 
-  :global(.line-:hover) {
+  :global([class^='line-']:hover) {
     stroke-width: 3px !important;
     opacity: 1 !important;
   }
