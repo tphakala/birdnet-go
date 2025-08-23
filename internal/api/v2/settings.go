@@ -784,10 +784,210 @@ func validateRTSPSection(data json.RawMessage) error {
 	return validateRTSPURLs(rtspSettings.URLs)
 }
 
+// securitySectionAllowedFields defines which fields in the security section can be updated via API
+var securitySectionAllowedFields = map[string]bool{
+	"host":              true, // Server hostname for TLS
+	"autoTls":           true, // AutoTLS setting
+	"basicAuth":         true, // Basic authentication settings
+	"googleAuth":        true, // Google OAuth settings
+	"githubAuth":        true, // GitHub OAuth settings
+	"allowSubnetBypass": true, // Subnet bypass settings
+	"redirectToHttps":   true, // HTTPS redirect setting
+	// sessionSecret is NOT allowed - it's generated internally
+	// sessionDuration is NOT allowed - it's a runtime setting
+}
+
 // validateSecuritySection validates security settings
 func validateSecuritySection(data json.RawMessage) error {
-	// Security settings updates are not allowed via API
-	return fmt.Errorf("direct updates to security section are not supported for security reasons")
+	var updateMap map[string]interface{}
+	if err := json.Unmarshal(data, &updateMap); err != nil {
+		return err
+	}
+
+	// Check if any disallowed fields are being updated
+	for field := range updateMap {
+		if !securitySectionAllowedFields[field] {
+			return fmt.Errorf("field '%s' in security settings cannot be updated via API", field)
+		}
+	}
+
+	// Validate field values
+	if err := validateSecuritySectionValues(updateMap); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateSecuritySectionValues validates the values of security section fields
+func validateSecuritySectionValues(updateMap map[string]interface{}) error {
+	// Validate host
+	if err := validateHostField(updateMap); err != nil {
+		return err
+	}
+
+	// Validate autoTls
+	if err := validateAutoTLSField(updateMap); err != nil {
+		return err
+	}
+
+	// Validate basicAuth
+	if err := validateBasicAuthField(updateMap); err != nil {
+		return err
+	}
+
+	// Validate OAuth settings
+	if err := validateOAuthSettings("googleAuth", updateMap); err != nil {
+		return err
+	}
+	if err := validateOAuthSettings("githubAuth", updateMap); err != nil {
+		return err
+	}
+
+	// Validate allowSubnetBypass
+	if err := validateSubnetBypassField(updateMap); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateHostField validates the host field
+func validateHostField(updateMap map[string]interface{}) error {
+	host, exists := updateMap["host"]
+	if !exists {
+		return nil
+	}
+
+	str, ok := host.(string)
+	if !ok {
+		return fmt.Errorf("host must be a string")
+	}
+
+	if str != "" && len(str) > 255 {
+		return fmt.Errorf("host must not exceed 255 characters")
+	}
+
+	return nil
+}
+
+// validateAutoTLSField validates the autoTls field
+func validateAutoTLSField(updateMap map[string]interface{}) error {
+	autoTls, exists := updateMap["autoTls"]
+	if !exists {
+		return nil
+	}
+
+	if _, ok := autoTls.(bool); !ok {
+		return fmt.Errorf("autoTls must be a boolean value")
+	}
+
+	return nil
+}
+
+// validateBasicAuthField validates the basicAuth field
+func validateBasicAuthField(updateMap map[string]interface{}) error {
+	basicAuth, exists := updateMap["basicAuth"]
+	if !exists {
+		return nil
+	}
+
+	basicAuthMap, ok := basicAuth.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	// Validate enabled field
+	if enabled, exists := basicAuthMap["enabled"]; exists {
+		if _, ok := enabled.(bool); !ok {
+			return fmt.Errorf("basicAuth.enabled must be a boolean")
+		}
+	}
+	// Password complexity is validated elsewhere
+
+	return nil
+}
+
+// validateSubnetBypassField validates the allowSubnetBypass field
+func validateSubnetBypassField(updateMap map[string]interface{}) error {
+	subnetBypass, exists := updateMap["allowSubnetBypass"]
+	if !exists {
+		return nil
+	}
+
+	bypassMap, ok := subnetBypass.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	// Validate enabled field
+	if enabled, exists := bypassMap["enabled"]; exists {
+		if _, ok := enabled.(bool); !ok {
+			return fmt.Errorf("allowSubnetBypass.enabled must be a boolean")
+		}
+	}
+
+	// Validate subnet field
+	if subnet, exists := bypassMap["subnet"]; exists {
+		str, ok := subnet.(string)
+		if !ok {
+			return fmt.Errorf("subnet must be a string")
+		}
+
+		if str != "" && !strings.Contains(str, "/") {
+			return fmt.Errorf("subnet must be in CIDR format (e.g., 192.168.1.0/24)")
+		}
+	}
+
+	return nil
+}
+
+// validateOAuthSettings validates OAuth provider settings
+func validateOAuthSettings(providerName string, updateMap map[string]interface{}) error {
+	provider, exists := updateMap[providerName]
+	if !exists {
+		return nil
+	}
+
+	providerMap, ok := provider.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("%s must be an object", providerName)
+	}
+
+	// Check enabled field
+	enabled := false
+	if enabledVal, exists := providerMap["enabled"]; exists {
+		if enabledBool, ok := enabledVal.(bool); ok {
+			enabled = enabledBool
+		} else {
+			return fmt.Errorf("%s.enabled must be a boolean", providerName)
+		}
+	}
+
+	// If enabled, validate required fields
+	if enabled {
+		// Check clientId
+		if clientId, exists := providerMap["clientId"]; exists {
+			if str, ok := clientId.(string); !ok || str == "" {
+				return fmt.Errorf("%s.clientId is required when enabled", providerName)
+			}
+		} else if enabled {
+			// clientId field missing when provider is enabled
+			return fmt.Errorf("%s.clientId is required when enabled", providerName)
+		}
+
+		// Check clientSecret
+		if clientSecret, exists := providerMap["clientSecret"]; exists {
+			if str, ok := clientSecret.(string); !ok || str == "" {
+				return fmt.Errorf("%s.clientSecret is required when enabled", providerName)
+			}
+		} else if enabled {
+			// clientSecret field missing when provider is enabled
+			return fmt.Errorf("%s.clientSecret is required when enabled", providerName)
+		}
+	}
+
+	return nil
 }
 
 // mainSectionAllowedFields defines which fields in the main section can be updated via API
@@ -1018,6 +1218,19 @@ func getBlockedFieldMap() map[string]interface{} {
 				"Model":       true, // Model type is configured in config.yaml, frontend should not overwrite
 				"Species":     true, // Runtime species list populated by range filter
 				"LastUpdated": true, // Runtime timestamp of last filter update
+			},
+		},
+		
+		// Security section - block runtime/internal fields only
+		"Security": map[string]interface{}{
+			"SessionSecret":   true, // Generated internally, never updated via API
+			"SessionDuration": true, // Runtime setting
+			// Note: The following OAuth2 server internal fields are in BasicAuth struct
+			"BasicAuth": map[string]interface{}{
+				"ClientID":       true, // OAuth2 server internal field
+				"ClientSecret":   true, // OAuth2 server internal field (different from user's password)
+				"AuthCodeExp":    true, // OAuth2 server internal field
+				"AccessTokenExp": true, // OAuth2 server internal field
 			},
 		},
 		
