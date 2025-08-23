@@ -10,6 +10,56 @@
 
   const logger = getLogger('advanced-analytics');
 
+  // Chart data interfaces
+  interface TimeOfDayDatum {
+    hour: number;
+    count: number;
+  }
+
+  interface TimeOfDaySpeciesData {
+    species: string;
+    commonName: string;
+    data: TimeOfDayDatum[];
+    visible: boolean;
+  }
+
+  interface DailyTrendDatum {
+    date: Date;
+    count: number;
+  }
+
+  interface DailyTrendSpeciesData {
+    species: string;
+    commonName: string;
+    data: DailyTrendDatum[];
+    visible: boolean;
+  }
+
+  // API response interfaces
+  interface SpeciesSummaryResponse {
+    scientific_name?: string;
+    common_name?: string;
+    count?: number;
+  }
+
+  interface HourlyDataItem {
+    hour: number;
+    count: number;
+  }
+
+  interface DailyDataItem {
+    date: string;
+    count: number;
+  }
+
+  interface SpeciesDailyData {
+    start_date: string;
+    end_date: string;
+    species: string;
+    data: DailyDataItem[];
+    total: number;
+  }
+
   // Component state
   let isLoading = $state(false);
   let error = $state<string | null>(null);
@@ -24,14 +74,19 @@
   let selectedSpecies = $state<string[]>([]);
   let maxSpecies = 10;
 
+  // Abort controllers for preventing race conditions
+  let speciesController: AbortController | null = null;
+  let timeOfDayController: AbortController | null = null;
+  let dailyTrendController: AbortController | null = null;
+
   // Chart options
   let showRelativeTrends = $state(false);
   let enableZoom = $state(true);
   let enableBrush = $state(false);
 
   // Chart data
-  let timeOfDayData = $state<any[]>([]);
-  let dailyTrendData = $state<any[]>([]);
+  let timeOfDayData = $state<TimeOfDaySpeciesData[]>([]);
+  let dailyTrendData = $state<DailyTrendSpeciesData[]>([]);
 
   // Computed date range
   const computedDateRange = $derived(
@@ -82,6 +137,12 @@
   // Fetch available species
   async function fetchAvailableSpecies() {
     try {
+      // Abort any previous species fetch
+      if (speciesController) {
+        speciesController.abort();
+      }
+      speciesController = new AbortController();
+
       const [start, end] = computedDateRange;
       const params = new URLSearchParams({
         start_date: formatDateForAPI(start),
@@ -89,16 +150,18 @@
         limit: '50', // Get top 50 species
       });
 
-      const response = await fetch(`/api/v2/analytics/species/summary?${params}`);
+      const response = await fetch(`/api/v2/analytics/species/summary?${params}`, {
+        signal: speciesController.signal,
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data: unknown = await response.json();
 
       availableSpecies = Array.isArray(data)
-        ? data.map((item, index) => {
-            const count = item.count || 0;
+        ? (data as SpeciesSummaryResponse[]).map((item, index) => {
+            const count = item.count ?? 0;
             const frequency =
               count > 100
                 ? 'very-common'
@@ -108,9 +171,9 @@
                     ? 'uncommon'
                     : 'rare';
             return {
-              id: item.scientific_name || `species-${index}`,
-              commonName: item.common_name || 'Unknown',
-              scientificName: item.scientific_name || 'Unknown',
+              id: item.scientific_name ?? `species-${index}`,
+              commonName: item.common_name ?? 'Unknown',
+              scientificName: item.scientific_name ?? 'Unknown',
               frequency: frequency as 'very-common' | 'common' | 'uncommon' | 'rare',
               category: 'Birds', // TODO: Add category data from API
               description: `${count} detections`,
@@ -119,11 +182,16 @@
           })
         : [];
 
-      // Auto-select top 5 species if none selected
+      // Auto-select top species if none selected (limited by backend cap)
       if (selectedSpecies.length === 0 && availableSpecies.length > 0) {
-        selectedSpecies = availableSpecies.slice(0, 5).map(s => s.id);
+        const maxToSelect = Math.min(availableSpecies.length, 5, 10); // Client wants 5, backend allows 10
+        selectedSpecies = availableSpecies.slice(0, maxToSelect).map(s => s.id);
       }
     } catch (err) {
+      // Don't log abort errors as they're expected
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
       logger.error('Error fetching available species:', err);
       availableSpecies = [];
     }
@@ -137,6 +205,12 @@
     }
 
     try {
+      // Abort any previous time of day fetch
+      if (timeOfDayController) {
+        timeOfDayController.abort();
+      }
+      timeOfDayController = new AbortController();
+
       const [start] = computedDateRange;
       const params = new URLSearchParams({
         date: formatDateForAPI(start),
@@ -151,23 +225,31 @@
         }
       });
 
-      const response = await fetch(`/api/v2/analytics/time/hourly/batch?${params}`);
+      const response = await fetch(`/api/v2/analytics/time/hourly/batch?${params}`, {
+        signal: timeOfDayController.signal,
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data: unknown = await response.json();
+
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw new Error('Invalid hourly batch response: expected an object');
+      }
 
       // Convert API response to chart format
-      const newTimeOfDayData = Object.entries(data).map(([species, hourlyData]) => {
+      const newTimeOfDayData: TimeOfDaySpeciesData[] = Object.entries(
+        data as Record<string, unknown>
+      ).map(([species, hourlyData]) => {
         const speciesInfo = availableSpecies.find(s => s.scientificName === species);
         return {
           species,
-          commonName: speciesInfo?.commonName || species,
+          commonName: speciesInfo?.commonName ?? species,
           data: Array.isArray(hourlyData)
-            ? hourlyData.map((item: any) => ({
-                hour: item.hour,
-                count: item.count,
+            ? (hourlyData as HourlyDataItem[]).map(item => ({
+                hour: typeof item.hour === 'number' ? item.hour : 0,
+                count: typeof item.count === 'number' ? item.count : 0,
               }))
             : [],
           visible: true,
@@ -179,6 +261,10 @@
         timeOfDayData = newTimeOfDayData;
       }
     } catch (err) {
+      // Don't log abort errors as they're expected
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
       logger.error('Error fetching time of day data:', err);
       // Don't clear existing data on error, just log it
     }
@@ -192,6 +278,12 @@
     }
 
     try {
+      // Abort any previous daily trend fetch
+      if (dailyTrendController) {
+        dailyTrendController.abort();
+      }
+      dailyTrendController = new AbortController();
+
       const [start, end] = computedDateRange;
       const params = new URLSearchParams({
         start_date: formatDateForAPI(start),
@@ -206,32 +298,54 @@
         }
       });
 
-      const response = await fetch(`/api/v2/analytics/time/daily/batch?${params}`);
+      const response = await fetch(`/api/v2/analytics/time/daily/batch?${params}`, {
+        signal: dailyTrendController.signal,
+      });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data: unknown = await response.json();
+
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw new Error('Invalid daily batch response: expected an object');
+      }
 
       // Convert API response to chart format
-      const newDailyTrendData = Object.entries(data).map(([species, trendData]) => {
+      const newDailyTrendData: DailyTrendSpeciesData[] = Object.entries(
+        data as Record<string, unknown>
+      ).map(([species, trendData]) => {
         const speciesInfo = availableSpecies.find(s => s.scientificName === species);
-        // The API returns SpeciesDailyData with nested data array
-        const apiData = trendData as {
-          start_date: string;
-          end_date: string;
-          species: string;
-          data: { date: string; count: number }[];
-          total: number;
-        };
+
+        // Validate that trendData has the expected structure
+        if (!trendData || typeof trendData !== 'object') {
+          return {
+            species,
+            commonName: speciesInfo?.commonName ?? species,
+            data: [],
+            visible: true,
+          };
+        }
+
+        const apiData = trendData as SpeciesDailyData;
+        const dataArray = Array.isArray(apiData.data) ? apiData.data : [];
 
         return {
           species,
-          commonName: speciesInfo?.commonName || species,
-          data: (apiData.data || []).map(item => ({
-            date: new Date(item.date),
-            count: item.count,
-          })),
+          commonName: speciesInfo?.commonName ?? species,
+          data: dataArray
+            .map(item => {
+              if (!item || typeof item !== 'object') return null;
+
+              const date = new Date(item.date);
+              const count = typeof item.count === 'number' ? item.count : 0;
+
+              // Skip invalid dates
+              if (isNaN(date.getTime())) return null;
+
+              return { date, count };
+            })
+            .filter((item): item is DailyTrendDatum => item !== null),
           visible: true,
         };
       });
@@ -241,6 +355,10 @@
         dailyTrendData = newDailyTrendData;
       }
     } catch (err) {
+      // Don't log abort errors as they're expected
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
       logger.error('Error fetching daily trend data:', err);
       // Don't clear existing data on error, just log it
     }
@@ -263,6 +381,10 @@
         dailyTrendData = [];
       }
     } catch (err) {
+      // Don't log abort errors as they're expected
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
       logger.error('Error fetching analytics data:', err);
       error = 'Failed to load analytics data. Please try again.';
     } finally {

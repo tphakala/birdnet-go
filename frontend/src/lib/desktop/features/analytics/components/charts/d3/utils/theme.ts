@@ -240,15 +240,61 @@ export function generateSpeciesColors(count: number, theme: ChartTheme): string[
  * Get contrast color for text on colored backgrounds
  */
 export function getContrastColor(backgroundColor: string): string {
-  // Simple luminance calculation to determine if we need light or dark text
-  const hex = backgroundColor.replace('#', '');
-  const r = parseInt(hex.substr(0, 2), 16);
-  const g = parseInt(hex.substr(2, 2), 16);
-  const b = parseInt(hex.substr(4, 2), 16);
+  let r = 0,
+    g = 0,
+    b = 0;
 
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  try {
+    // Detect and parse different color formats
+    const color = backgroundColor.trim();
 
-  return luminance > 0.5 ? '#000000' : '#ffffff';
+    if (color.startsWith('#')) {
+      // Handle hex colors (#RGB, #RRGGBB)
+      const hex = color.slice(1);
+
+      if (hex.length === 3) {
+        // Shorthand hex (#RGB -> #RRGGBB)
+        r = parseInt(hex[0] + hex[0], 16);
+        g = parseInt(hex[1] + hex[1], 16);
+        b = parseInt(hex[2] + hex[2], 16);
+      } else if (hex.length === 6) {
+        // Full hex (#RRGGBB)
+        r = parseInt(hex.substr(0, 2), 16);
+        g = parseInt(hex.substr(2, 2), 16);
+        b = parseInt(hex.substr(4, 2), 16);
+      } else {
+        throw new Error('Invalid hex format');
+      }
+    } else if (color.startsWith('rgb(') || color.startsWith('rgba(')) {
+      // Handle rgb() and rgba() formats
+      const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+
+      if (match) {
+        r = parseInt(match[1], 10);
+        g = parseInt(match[2], 10);
+        b = parseInt(match[3], 10);
+        // Note: We ignore alpha channel for luminance calculation
+        // If needed, could composite with white: r = r * alpha + 255 * (1 - alpha)
+      } else {
+        throw new Error('Invalid rgb/rgba format');
+      }
+    } else {
+      throw new Error('Unrecognized color format');
+    }
+
+    // Validate RGB values are in range
+    if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
+      throw new Error('RGB values out of range');
+    }
+
+    // Calculate relative luminance using sRGB coefficients
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+    return luminance > 0.5 ? '#000000' : '#ffffff';
+  } catch {
+    // Safe fallback for unrecognized or invalid formats
+    return '#000000';
+  }
 }
 
 /**
