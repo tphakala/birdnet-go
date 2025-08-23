@@ -444,19 +444,24 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
       return coerceBirdNetSettings(data as PartialBirdNetSettings);
     case 'audio':
       return coerceAudioSettings(data as PartialAudioSettings);
-    case 'realtime':
-      // Handle realtime.audio nested structure
+    case 'realtime': {
+      // Handle realtime nested structures
+      const coercedRealtime: UnknownSettings = { ...data };
+
       if (data.audio) {
-        return {
-          ...data,
-          audio: coerceAudioSettings(data.audio as PartialAudioSettings),
-          mqtt: data.mqtt ? coerceMQTTSettings(data.mqtt as PartialMQTTSettings) : data.mqtt,
-          species: data.species
-            ? coerceSpeciesSettings(data.species as PartialSpeciesSettings)
-            : data.species,
-        };
+        coercedRealtime.audio = coerceAudioSettings(data.audio as PartialAudioSettings);
       }
-      return data;
+
+      if (data.mqtt) {
+        coercedRealtime.mqtt = coerceMQTTSettings(data.mqtt as PartialMQTTSettings);
+      }
+
+      if (data.species) {
+        coercedRealtime.species = coerceSpeciesSettings(data.species as PartialSpeciesSettings);
+      }
+
+      return coercedRealtime;
+    }
     case 'security':
       return coerceSecuritySettings(data as PartialSecuritySettings);
     case 'species':
