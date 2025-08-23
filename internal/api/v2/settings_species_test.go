@@ -126,9 +126,16 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 			require.NoError(t, err, "Update should succeed")
 			assert.Equal(t, http.StatusOK, rec.Code, "Should return 200 OK")
 
-			// Extract the bird name from the payload
-			speciesMap := tt.payload["species"].(map[string]interface{})
-			configMap := speciesMap["config"].(map[string]interface{})
+			// Extract the bird name from the payload with safe type assertions
+			speciesInterface, hasSpecies := tt.payload["species"]
+			require.True(t, hasSpecies, "Payload should contain species field")
+			speciesMap, ok := speciesInterface.(map[string]interface{})
+			require.True(t, ok, "Species field should be a map")
+
+			configInterface, hasConfig := speciesMap["config"]
+			require.True(t, hasConfig, "Species should contain config field")
+			configMap, ok := configInterface.(map[string]interface{})
+			require.True(t, ok, "Config field should be a map")
 			var birdName string
 			for name := range configMap {
 				birdName = name
@@ -141,6 +148,10 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 				"%s: Threshold should match", tt.description)
 			assert.Equal(t, tt.expectedConfig.Interval, actualConfig.Interval, 
 				"%s: Interval should match", tt.description)
+			
+			// Verify Actions slice is empty but not nil (should match expected)
+			assert.Empty(t, actualConfig.Actions, "%s: Actions should be empty", tt.description)
+			assert.NotNil(t, actualConfig.Actions, "%s: Actions should be empty slice, not nil", tt.description)
 
 			// Verify the response includes the updated values
 			var response map[string]interface{}
@@ -212,14 +223,18 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify zero values are preserved in the controller's settings
-	// This is the core fix - zero values should be preserved
+	// Zero threshold and interval values should persist after update operations
 	initialBird := controller.Settings.Realtime.Species.Config["Initial Bird"]
 	assert.InDelta(t, 0.0, initialBird.Threshold, 0.0001, "Initial Bird threshold should be zero")
 	assert.Equal(t, 0, initialBird.Interval, "Initial Bird interval should be zero")
+	assert.Empty(t, initialBird.Actions, "Initial Bird actions should be empty")
+	assert.NotNil(t, initialBird.Actions, "Initial Bird actions should be empty slice, not nil")
 
 	newBird := controller.Settings.Realtime.Species.Config["New Bird"] 
 	assert.InDelta(t, 0.0, newBird.Threshold, 0.0001, "New Bird threshold should be zero")
 	assert.Equal(t, 0, newBird.Interval, "New Bird interval should be zero")
+	assert.Empty(t, newBird.Actions, "New Bird actions should be empty")
+	assert.NotNil(t, newBird.Actions, "New Bird actions should be empty slice, not nil")
 
 	// Verify the API response indicates success
 	var response map[string]interface{}
@@ -298,6 +313,7 @@ func TestPartialSpeciesConfigUpdate(t *testing.T) {
 	assert.InDelta(t, 0.0, birdA.Threshold, 0.0001, "Bird A threshold should be zero")
 	assert.Equal(t, 0, birdA.Interval, "Bird A interval should be zero")
 	assert.Empty(t, birdA.Actions, "Bird A actions should be cleared")
+	assert.NotNil(t, birdA.Actions, "Bird A actions should be empty slice, not nil")
 
 	// Verify Bird B remains unchanged
 	birdB := controller.Settings.Realtime.Species.Config["Bird B"]
@@ -375,21 +391,38 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 	require.NoError(t, err, "GET should succeed")
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var response map[string]interface{}
+	var response map[string]any
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err, "Response should be valid JSON")
 
-	// Critical test: verify GET returns the updated zero values
-	species, ok := response["species"].(map[string]interface{})
-	require.True(t, ok, "Response should contain species field")
+	// Verify GET endpoint returns the updated zero values after PATCH operation
+	speciesInterface, hasSpecies := response["species"]
+	require.True(t, hasSpecies, "Response should contain species field")
+	species, ok := speciesInterface.(map[string]any)
+	require.True(t, ok, "Species field should be a map")
 
-	config, ok := species["config"].(map[string]interface{})
-	require.True(t, ok, "Species should contain config field")
-	require.NotNil(t, config, "Config should not be nil")
+	configInterface, hasConfig := species["config"]
+	require.True(t, hasConfig, "Species should contain config field")
+	require.NotNil(t, configInterface, "Config should not be nil")
+	config, ok := configInterface.(map[string]any)
+	require.True(t, ok, "Config field should be a map")
 
-	testBirdResponse, ok := config["Test Bird"].(map[string]interface{})
-	require.True(t, ok, "Test Bird should exist in GET response")
+	testBirdInterface, hasTestBird := config["Test Bird"]
+	require.True(t, hasTestBird, "Test Bird should exist in GET response")
+	testBirdResponse, ok := testBirdInterface.(map[string]any)
+	require.True(t, ok, "Test Bird should be a map")
 
-	assert.InDelta(t, 0.0, testBirdResponse["threshold"], 0.0001, "GET should return updated zero threshold")
-	assert.InDelta(t, float64(0), testBirdResponse["interval"], 0.0001, "GET should return updated zero interval")
+	// Extract and validate threshold (JSON numbers decode as float64)
+	thresholdInterface, hasThreshold := testBirdResponse["threshold"]
+	require.True(t, hasThreshold, "Test Bird should have threshold")
+	threshold, ok := thresholdInterface.(float64)
+	require.True(t, ok, "Threshold should be a number")
+	assert.InDelta(t, 0.0, threshold, 0.0001, "GET should return updated zero threshold")
+
+	// Extract and validate interval (JSON numbers decode as float64)
+	intervalInterface, hasInterval := testBirdResponse["interval"]
+	require.True(t, hasInterval, "Test Bird should have interval")
+	intervalFloat, ok := intervalInterface.(float64)
+	require.True(t, ok, "Interval should be a number")
+	assert.InDelta(t, float64(0), intervalFloat, 0.0001, "GET should return updated zero interval")
 }

@@ -7,6 +7,8 @@ import {
   type SpeciesConfig,
 } from './settings';
 import { settingsAPI } from '$lib/utils/settingsApi';
+import { toastActions } from './toast';
+import { createEmptySettings } from '../../types/test-helpers';
 
 // Mock the settingsAPI
 vi.mock('$lib/utils/settingsApi', () => ({
@@ -100,6 +102,10 @@ describe('Species Settings Store', () => {
       const state = get(settingsStore);
       const species = state.formData.realtime?.species;
 
+      // Verify include/exclude arrays were preserved
+      expect(species?.include).toStrictEqual(['Robin']);
+      expect(species?.exclude).toStrictEqual(['Crow']);
+
       // Check Zero Bird
       const zeroBird = species?.config['Zero Bird'];
       expect(zeroBird?.threshold).toBe(0.0);
@@ -133,11 +139,27 @@ describe('Species Settings Store', () => {
         },
       });
 
-      // Save settings
-      await settingsActions.saveSettings();
+      // Check isSaving state before save
+      const stateBefore = get(settingsStore);
+      expect(stateBefore.isSaving).toBe(false);
+
+      // Save settings and check isSaving during operation
+      const savePromise = settingsActions.saveSettings();
+      const stateDuring = get(settingsStore);
+      expect(stateDuring.isSaving).toBe(true);
+
+      // Wait for save to complete
+      await savePromise;
+
+      // Check isSaving state after save
+      const stateAfter = get(settingsStore);
+      expect(stateAfter.isSaving).toBe(false);
 
       // Verify save was called
       expect(mockSave).toHaveBeenCalledTimes(1);
+
+      // Verify success toast was shown
+      expect(toastActions.success).toHaveBeenCalledTimes(1);
 
       // Get the data that was sent to save
       const savedData = mockSave.mock.calls[0][0] as SettingsFormData;
@@ -153,11 +175,12 @@ describe('Species Settings Store', () => {
       const mockSave = vi.mocked(settingsAPI.save);
       mockSave.mockResolvedValueOnce({ success: true });
 
-      // Set initial configs
+      // Set initial configs with additional realtime fields
       settingsActions.updateSection('realtime', {
+        interval: 15, // Add other realtime fields
         species: {
-          include: [],
-          exclude: [],
+          include: ['Existing Bird'],
+          exclude: ['Excluded Bird'],
           config: {
             'Bird A': {
               threshold: 0.5,
@@ -173,14 +196,16 @@ describe('Species Settings Store', () => {
         },
       });
 
-      // Update only Bird A to zero values
+      // Update only Bird A to zero values using deep merge
       const currentState = get(settingsStore);
-      const currentConfig = currentState.formData.realtime?.species?.config ?? {};
+      const currentRealtime = currentState.formData.realtime ?? {};
+      const currentSpecies = currentRealtime.species ?? { include: [], exclude: [], config: {} };
+      const currentConfig = currentSpecies.config;
 
       settingsActions.updateSection('realtime', {
+        ...currentRealtime,
         species: {
-          include: [],
-          exclude: [],
+          ...currentSpecies,
           config: {
             ...currentConfig,
             'Bird A': {
@@ -195,16 +220,26 @@ describe('Species Settings Store', () => {
       // Save settings
       await settingsActions.saveSettings();
 
-      // Verify both birds are in saved data
+      // Verify both birds are in saved data and other fields are preserved
       const savedData = mockSave.mock.calls[0][0] as SettingsFormData;
-      const species = savedData.realtime?.species;
+      const realtime = savedData.realtime;
+      const species = realtime?.species;
 
+      // Verify realtime fields were preserved
+      expect(realtime?.interval).toBe(15);
+
+      // Verify species include/exclude arrays were preserved
+      expect(species?.include).toEqual(['Existing Bird']);
+      expect(species?.exclude).toEqual(['Excluded Bird']);
+
+      // Verify Bird A was updated with zero values
       expect(species?.config['Bird A']).toEqual({
         threshold: 0.0,
         interval: 0,
         actions: [],
       });
 
+      // Verify Bird B remained unchanged
       expect(species?.config['Bird B']).toEqual({
         threshold: 0.8,
         interval: 40,
@@ -297,6 +332,31 @@ describe('Species Settings Store', () => {
       expect(edgeCase?.interval).toBe(0);
     });
 
+    it('should clamp values above allowed upper bound', () => {
+      // Test that values above maximum are clamped to the upper bound
+      settingsActions.updateSection('realtime', {
+        species: {
+          include: [],
+          exclude: [],
+          config: {
+            'Upper Bound Test': {
+              threshold: 1.5, // Invalid, should be clamped to 1
+              interval: 30, // Valid, should remain unchanged
+              actions: [],
+            },
+          },
+        },
+      });
+
+      const state = get(settingsStore);
+      const upperBoundTest = state.formData.realtime?.species?.config['Upper Bound Test'];
+
+      // Threshold above 1 should be clamped to 1 (the maximum valid value)
+      expect(upperBoundTest?.threshold).toBe(1);
+      // Valid interval should remain unchanged
+      expect(upperBoundTest?.interval).toBe(30);
+    });
+
     it('should preserve valid zero values without changing them', () => {
       // Test that valid zero values are not incorrectly changed to defaults
       settingsActions.updateSection('realtime', {
@@ -322,35 +382,3 @@ describe('Species Settings Store', () => {
     });
   });
 });
-
-// Helper function to create empty settings
-function createEmptySettings(): SettingsFormData {
-  return {
-    main: {
-      name: '',
-    },
-    birdnet: {
-      modelPath: '',
-      labelPath: '',
-      sensitivity: 1.0,
-      threshold: 0.3,
-      overlap: 0.0,
-      locale: 'en',
-      threads: 4,
-      latitude: 0,
-      longitude: 0,
-      rangeFilter: {
-        threshold: 0.03,
-        speciesCount: null,
-        species: [],
-      },
-    },
-    realtime: {
-      species: {
-        include: [],
-        exclude: [],
-        config: {},
-      },
-    },
-  };
-}

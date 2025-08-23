@@ -69,15 +69,19 @@ func (c *Controller) GetAllSettings(ctx echo.Context) error {
 	c.settingsMutex.RLock()
 	defer c.settingsMutex.RUnlock()
 
-	settings := conf.Setting()
+	settings := c.Settings
 	if settings == nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Settings not initialized when trying to get all settings",
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-			)
+		// Fallback to global settings if controller settings not set
+		settings = conf.Setting()
+		if settings == nil {
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Settings not initialized when trying to get all settings",
+					"path", ctx.Request().URL.Path,
+					"ip", ctx.RealIP(),
+				)
+			}
+			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 		}
-		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 	}
 
 	if c.apiLogger != nil {
@@ -1560,10 +1564,14 @@ func (c *Controller) GetSystemID(ctx echo.Context) error {
 	c.settingsMutex.RLock()
 	defer c.settingsMutex.RUnlock()
 
-	settings := conf.Setting()
+	settings := c.Settings
 	if settings == nil {
-		c.logAPIRequest(ctx, slog.LevelError, "Settings not initialized when trying to get system ID")
-		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
+		// Fallback to global settings if controller settings not set
+		settings = conf.Setting()
+		if settings == nil {
+			c.logAPIRequest(ctx, slog.LevelError, "Settings not initialized when trying to get system ID", "endpoint", "GetSystemID")
+			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
+		}
 	}
 
 	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved system ID successfully", "system_id", settings.SystemID)

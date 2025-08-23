@@ -10,6 +10,25 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Test helper functions for YAML/JSON unmarshaling
+
+// unmarshalYAML is a generic helper for YAML unmarshaling with error handling
+func unmarshalYAML[T any](t *testing.T, data []byte, target *T, failureMessage string) {
+	t.Helper()
+	err := yaml.Unmarshal(data, target)
+	require.NoError(t, err, failureMessage)
+}
+
+// safeMapAccess is a helper for safe map key access with type assertion
+func safeMapAccess[T any](t *testing.T, m map[string]interface{}, key, description string) T {
+	t.Helper()
+	valueInterface, hasKey := m[key]
+	require.True(t, hasKey, "%s should contain %s field", description, key)
+	value, ok := valueInterface.(T)
+	require.True(t, ok, "%s field should be of correct type", key)
+	return value
+}
+
 // TestSpeciesConfigIntegration tests the full integration of species config with zero values
 func TestSpeciesConfigIntegration(t *testing.T) {
 	// Create a temporary directory for the test
@@ -43,7 +62,7 @@ realtime:
 `
 
 	// Write initial config
-	err := os.WriteFile(configPath, []byte(initialConfig), 0o644)
+	err := os.WriteFile(configPath, []byte(initialConfig), 0o600)
 	require.NoError(t, err, "Failed to write initial config")
 
 	// Read and parse the config
@@ -51,17 +70,18 @@ realtime:
 	require.NoError(t, err, "Failed to read config")
 
 	var settings Settings
-	err = yaml.Unmarshal(configData, &settings)
-	require.NoError(t, err, "Failed to unmarshal config")
+	unmarshalYAML(t, configData, &settings, "Failed to unmarshal config")
 
 	// Verify initial values loaded correctly
 	assert.Len(t, settings.Realtime.Species.Config, 2, "Should have 2 species configs")
 	
-	rareBird := settings.Realtime.Species.Config["Rare Bird"]
+	rareBird, hasRareBird := settings.Realtime.Species.Config["Rare Bird"]
+	require.True(t, hasRareBird, "Rare Bird should exist in config")
 	assert.InDelta(t, 0.0, rareBird.Threshold, 0.0001, "Rare Bird threshold should be 0.0")
 	assert.Equal(t, 0, rareBird.Interval, "Rare Bird interval should be 0")
 	
-	commonBird := settings.Realtime.Species.Config["Common Bird"]
+	commonBird, hasCommonBird := settings.Realtime.Species.Config["Common Bird"]
+	require.True(t, hasCommonBird, "Common Bird should exist in config")
 	assert.InDelta(t, 0.95, commonBird.Threshold, 0.0001, "Common Bird threshold should be 0.95")
 	assert.Equal(t, 60, commonBird.Interval, "Common Bird interval should be 60")
 
@@ -89,13 +109,12 @@ realtime:
 
 	// Parse the saved YAML to verify structure
 	var yamlMap map[string]interface{}
-	err = yaml.Unmarshal(savedData, &yamlMap)
-	require.NoError(t, err, "Failed to parse saved YAML")
+	unmarshalYAML(t, savedData, &yamlMap, "Failed to parse saved YAML")
 
-	// Navigate to species configs
-	realtime := yamlMap["realtime"].(map[string]interface{})
-	species := realtime["species"].(map[string]interface{})
-	configs := species["config"].(map[string]interface{})
+	// Navigate to species configs with safe type assertions
+	realtime := safeMapAccess[map[string]interface{}](t, yamlMap, "realtime", "YAML")
+	species := safeMapAccess[map[string]interface{}](t, realtime, "species", "realtime")
+	configs := safeMapAccess[map[string]interface{}](t, species, "config", "species")
 
 	// Check that all three birds exist
 	assert.Contains(t, configs, "Rare Bird", "Rare Bird should exist")
@@ -104,7 +123,8 @@ realtime:
 
 	// Verify zero values are present in the YAML
 	for birdName, configInterface := range configs {
-		config := configInterface.(map[string]interface{})
+		config, ok := configInterface.(map[string]interface{})
+		require.True(t, ok, "Bird config %s should be a map", birdName)
 		
 		// Check that threshold exists
 		_, hasThreshold := config["threshold"]
@@ -117,24 +137,26 @@ realtime:
 
 	// Load the config again to verify round-trip
 	var reloadedSettings Settings
-	err = yaml.Unmarshal(savedData, &reloadedSettings)
-	require.NoError(t, err, "Failed to reload settings")
+	unmarshalYAML(t, savedData, &reloadedSettings, "Failed to reload settings")
 
 	// Verify all birds have correct values after reload
 	assert.Len(t, reloadedSettings.Realtime.Species.Config, 3, "Should have 3 species configs after reload")
 	
 	// Check Rare Bird (unchanged)
-	rareBird = reloadedSettings.Realtime.Species.Config["Rare Bird"]
+	rareBird, hasRareBirdReloaded := reloadedSettings.Realtime.Species.Config["Rare Bird"]
+	require.True(t, hasRareBirdReloaded, "Rare Bird should exist in reloaded config")
 	assert.InDelta(t, 0.0, rareBird.Threshold, 0.0001, "Rare Bird threshold should still be 0.0")
 	assert.Equal(t, 0, rareBird.Interval, "Rare Bird interval should still be 0")
 	
 	// Check Common Bird (updated to zeros)
-	commonBird = reloadedSettings.Realtime.Species.Config["Common Bird"]
+	commonBird, hasCommonBirdReloaded := reloadedSettings.Realtime.Species.Config["Common Bird"]
+	require.True(t, hasCommonBirdReloaded, "Common Bird should exist in reloaded config")
 	assert.InDelta(t, 0.0, commonBird.Threshold, 0.0001, "Common Bird threshold should now be 0.0")
 	assert.Equal(t, 0, commonBird.Interval, "Common Bird interval should now be 0")
 	
 	// Check Zero Bird (new)
-	zeroBird := reloadedSettings.Realtime.Species.Config["Zero Bird"]
+	zeroBird, hasZeroBird := reloadedSettings.Realtime.Species.Config["Zero Bird"]
+	require.True(t, hasZeroBird, "Zero Bird should exist in reloaded config")
 	assert.InDelta(t, 0.0, zeroBird.Threshold, 0.0001, "Zero Bird threshold should be 0.0")
 	assert.Equal(t, 0, zeroBird.Interval, "Zero Bird interval should be 0")
 }

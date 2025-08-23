@@ -362,11 +362,16 @@ export function coerceSecuritySettings(settings: PartialSecuritySettings): Parti
 /**
  * Validate and coerce species settings
  */
-export function coerceSpeciesSettings(settings: PartialSpeciesSettings): PartialSpeciesSettings {
+export function coerceSpeciesSettings(
+  settings: PartialSpeciesSettings | null | undefined
+): PartialSpeciesSettings {
+  // Handle case where settings is null, undefined, or not an object
+  const safeSettings = settings && typeof settings === 'object' ? settings : {};
+
   const coerced: PartialSpeciesSettings = {
-    include: coerceArray<string>(settings.include, []),
-    exclude: coerceArray<string>(settings.exclude, []),
-    config: coerceObject(settings.config as UnknownSettings, {}),
+    include: coerceArray<string>(safeSettings.include, []),
+    exclude: coerceArray<string>(safeSettings.exclude, []),
+    config: coerceObject(safeSettings.config as UnknownSettings, {}),
   };
 
   // Validate and clean species config
@@ -448,15 +453,15 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
       // Handle realtime nested structures
       const coercedRealtime: UnknownSettings = { ...data };
 
-      if (data.audio) {
+      if (Object.prototype.hasOwnProperty.call(data, 'audio')) {
         coercedRealtime.audio = coerceAudioSettings(data.audio as PartialAudioSettings);
       }
 
-      if (data.mqtt) {
+      if (Object.prototype.hasOwnProperty.call(data, 'mqtt')) {
         coercedRealtime.mqtt = coerceMQTTSettings(data.mqtt as PartialMQTTSettings);
       }
 
-      if (data.species) {
+      if (Object.prototype.hasOwnProperty.call(data, 'species')) {
         coercedRealtime.species = coerceSpeciesSettings(data.species as PartialSpeciesSettings);
       }
 
