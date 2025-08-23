@@ -18,12 +18,17 @@ func (s *Server) initAuthRoutes() {
 	g := s.Echo.Group("")
 	g.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(10)))
 
-	// OAuth2 routes
+	// OAuth2 routes (basic auth flow)
 	g.GET("/api/v1/oauth2/authorize", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthorize))
 	g.POST("/api/v1/oauth2/token", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthToken))
 	g.GET("/api/v1/oauth2/callback", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthCallback))
 
-	// Social authentication routes
+	// Clean OAuth routes (preferred going forward - not versioned)
+	g.GET("/auth/:provider", s.Handlers.WithErrorHandling(handleGothProvider))
+	g.GET("/auth/:provider/callback", s.Handlers.WithErrorHandling(handleGothCallback))
+
+	// Legacy v1 API routes (kept for backward compatibility)
+	// TODO: Remove when v1 API is deprecated
 	g.GET("/api/v1/auth/:provider", s.Handlers.WithErrorHandling(handleGothProvider))
 	g.GET("/api/v1/auth/:provider/callback", s.Handlers.WithErrorHandling(handleGothCallback))
 
