@@ -792,8 +792,25 @@ func validateSecuritySection(data json.RawMessage) error {
 
 // validateMainSection validates main settings
 func validateMainSection(data json.RawMessage) error {
-	// Main settings updates are not allowed via API
-	return fmt.Errorf("main settings cannot be updated via API")
+	var updateMap map[string]interface{}
+	if err := json.Unmarshal(data, &updateMap); err != nil {
+		return err
+	}
+
+	// Allow updates to safe fields only
+	allowedFields := map[string]bool{
+		"name":      true, // Node name is safe to update
+		"timeAs24h": true, // Time format is safe to update
+	}
+
+	// Check if any disallowed fields are being updated
+	for field := range updateMap {
+		if !allowedFields[field] {
+			return fmt.Errorf("field '%s' in main settings cannot be updated via API", field)
+		}
+	}
+
+	return nil
 }
 
 // validateBirdNETSection validates BirdNET settings
