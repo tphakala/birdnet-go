@@ -87,14 +87,17 @@ func BuildRangeFilter(bn *BirdNET) error {
 // It also updates the scores for species that have custom actions defined in the speciesConfigCSV.
 func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
 	bn.Debug("Applying range filter")
+	
+	// Skip filtering if range interpreter is not initialized
+	if bn.RangeInterpreter == nil {
+		bn.Debug("Range filter model not loaded, returning zero scores for all labels")
+		return zeroScoresForAllLabels(bn.Settings.BirdNET.Labels), nil
+	}
+	
 	// Skip filtering if location is not set
 	if bn.Settings.BirdNET.Latitude == 0 && bn.Settings.BirdNET.Longitude == 0 {
 		bn.Debug("Latitude and longitude not set, not using location based prediction filter")
-		var speciesScores []SpeciesScore
-		for _, label := range bn.Settings.BirdNET.Labels {
-			speciesScores = append(speciesScores, SpeciesScore{Score: 0.0, Label: label})
-		}
-		return speciesScores, nil
+		return zeroScoresForAllLabels(bn.Settings.BirdNET.Labels), nil
 	}
 
 	// Apply prediction filter based on the context
@@ -147,6 +150,15 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 	sort.Sort(ByScore(speciesScores))
 
 	return speciesScores, nil
+}
+
+// zeroScoresForAllLabels creates a slice of SpeciesScore with zero scores for all provided labels
+func zeroScoresForAllLabels(labels []string) []SpeciesScore {
+	speciesScores := make([]SpeciesScore, len(labels))
+	for i, label := range labels {
+		speciesScores[i] = SpeciesScore{Score: 0.0, Label: label}
+	}
+	return speciesScores
 }
 
 // addSpeciesWithMaxScore adds all matching species to the scores list with maximum score

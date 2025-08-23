@@ -203,10 +203,25 @@ func (bn *BirdNET) ProcessChunkWithContext(ctx context.Context, chunk []float32,
 	var source = ""
 	var clipName = ""
 
+	// Get species occurrence scores once for all results (optimization)
+	var speciesOccurrences map[string]float64
+	if bn.Settings.BirdNET.Latitude != 0 && bn.Settings.BirdNET.Longitude != 0 {
+		cachedScores, err := bn.getCachedSpeciesScores(predStart)
+		if err == nil && len(cachedScores) > 0 {
+			speciesOccurrences = cachedScores
+		}
+	}
+
 	// Pre-allocate slice with capacity for all results
 	notes := make([]datastore.Note, 0, len(results))
 	for _, result := range results {
-		note := observation.New(bn.Settings, predStart, predEnd, result.Species, float64(result.Confidence), source, clipName, 0)
+		// Look up occurrence score for this species (nil map reads are safe)
+		occurrence := speciesOccurrences[result.Species]
+		
+		// Compute actual processing time
+		processingTime := time.Since(start)
+		
+		note := observation.New(bn.Settings, predStart, predEnd, result.Species, float64(result.Confidence), source, clipName, processingTime, occurrence)
 		notes = append(notes, note)
 	}
 	return notes, nil

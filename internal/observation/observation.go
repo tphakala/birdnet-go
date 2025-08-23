@@ -49,10 +49,29 @@ func ParseSpeciesString(species string) (scientificName, commonName, speciesCode
 	return species, species, ""
 }
 
+// NoteParams holds the parameters for creating a new Note.
+type NoteParams struct {
+	Begin       time.Time
+	End         time.Time
+	Species     string
+	Confidence  float64
+	Source      string
+	ClipName    string
+	Elapsed     time.Duration
+	Occurrence  float64
+}
+
+// NewWith creates and returns a new Note with the provided NoteParams and current date and time.
+// It uses the configuration and parsing functions to set the appropriate fields.
+// For custom models, species may have placeholder taxonomy codes if not in the eBird taxonomy.
+func NewWith(settings *conf.Settings, p *NoteParams) datastore.Note {
+	return New(settings, p.Begin, p.End, p.Species, p.Confidence, p.Source, p.ClipName, p.Elapsed, p.Occurrence)
+}
+
 // New creates and returns a new Note with the provided parameters and current date and time.
 // It uses the configuration and parsing functions to set the appropriate fields.
 // For custom models, species may have placeholder taxonomy codes if not in the eBird taxonomy.
-func New(settings *conf.Settings, beginTime, endTime time.Time, species string, confidence float64, source, clipName string, elapsedTime time.Duration) datastore.Note {
+func New(settings *conf.Settings, beginTime, endTime time.Time, species string, confidence float64, source, clipName string, elapsedTime time.Duration, occurrence float64) datastore.Note {
 	// Parse the species string to get the scientific name, common name, and species code.
 	scientificName, commonName, speciesCode := ParseSpeciesString(species)
 
@@ -100,6 +119,7 @@ func New(settings *conf.Settings, beginTime, endTime time.Time, species string, 
 		Sensitivity:    settings.BirdNET.Sensitivity, // Sensitivity setting from configuration.
 		ClipName:       clipName,                     // Name of the audio clip.
 		ProcessingTime: elapsedTime,                  // Time taken to process the observation.
+		Occurrence:     math.Max(0.0, math.Min(1.0, occurrence)), // Occurrence probability based on location/time, clamped to [0,1].
 	}
 }
 
@@ -235,3 +255,4 @@ func WriteNotesCsv(settings *conf.Settings, notes []datastore.Note, filename str
 	// Return nil if the writing operation completes successfully.
 	return nil
 }
+

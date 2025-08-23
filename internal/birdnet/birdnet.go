@@ -30,6 +30,13 @@ const DefaultModelVersion = "BirdNET_GLOBAL_6K_V2.4"
 // Model version string, default is the embedded model version
 var modelVersion = "BirdNET GLOBAL 6K V2.4 FP32"
 
+// speciesCacheEntry holds cached species scores for a composite cache key.
+// Scores are immutable once stored - callers must not mutate the returned map.
+type speciesCacheEntry struct {
+	key          string                   // Composite cache key: date + rounded lat/lon + model id
+	scores       map[string]float64       // Species occurrence scores keyed by label
+}
+
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
 type BirdNET struct {
 	AnalysisInterpreter *tflite.Interpreter
@@ -42,6 +49,10 @@ type BirdNET struct {
 	mu                  sync.Mutex
 	resultsBuffer       []datastore.Results // Pre-allocated buffer for results to reduce allocations
 	confidenceBuffer    []float32           // Pre-allocated buffer for confidence values to reduce allocations
+	
+	// Species occurrence cache to avoid repeated GetProbableSpecies calls within same day
+	speciesCacheMu      sync.RWMutex
+	speciesCache        map[string]*speciesCacheEntry
 }
 
 // NewBirdNET initializes a new BirdNET instance with given settings.
@@ -49,6 +60,7 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	bn := &BirdNET{
 		Settings:     settings,
 		TaxonomyPath: "", // Default to embedded taxonomy
+		speciesCache: make(map[string]*speciesCacheEntry),
 	}
 
 	// Determine model info based on settings
@@ -544,6 +556,71 @@ func (bn *BirdNET) loadLabelsFromText(file *os.File) error {
 	return scanner.Err()
 }
 
+// clearSpeciesCache clears the species occurrence cache.
+// This should be called when model/labels change, node is deleted, or location is updated.
+func (bn *BirdNET) clearSpeciesCache() {
+	bn.speciesCacheMu.Lock()
+	clear(bn.speciesCache)
+	bn.speciesCacheMu.Unlock()
+}
+
+// getCachedSpeciesScores returns species occurrence scores with caching to avoid repeated calls within same day
+func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]float64, error) {
+	// Build composite cache key: date + rounded lat/lon + model
+	day := targetDate.Format("2006-01-02")
+	cacheKey := fmt.Sprintf("%s|%.4f,%.4f|%s",
+		day,
+		bn.Settings.BirdNET.Latitude,
+		bn.Settings.BirdNET.Longitude,
+		bn.Settings.BirdNET.RangeFilter.Model,
+	)
+
+	// FAST PATH: read under RLock and return a defensive copy
+	bn.speciesCacheMu.RLock()
+	if entry, ok := bn.speciesCache[cacheKey]; ok && entry.key == cacheKey {
+		out := make(map[string]float64, len(entry.scores))
+		for k, v := range entry.scores {
+			out[k] = v
+		}
+		bn.speciesCacheMu.RUnlock()
+		return out, nil
+	}
+	bn.speciesCacheMu.RUnlock()
+
+	// MISS PATH: fetch outside of any lock to avoid blocking readers
+	speciesScores, err := bn.GetProbableSpecies(targetDate, 0.0)
+	if err != nil {
+		return nil, err
+	}
+	scores := make(map[string]float64, len(speciesScores))
+	for _, s := range speciesScores {
+		scores[s.Label] = s.Score
+	}
+
+	// WRITE PATH: double-check, evict old entries, and publish new results
+	bn.speciesCacheMu.Lock()
+	if entry, ok := bn.speciesCache[cacheKey]; ok && entry.key == cacheKey {
+		out := make(map[string]float64, len(entry.scores))
+		for k, v := range entry.scores {
+			out[k] = v
+		}
+		bn.speciesCacheMu.Unlock()
+		return out, nil
+	}
+	// Keep cache bounded by clearing before setting new key
+	clear(bn.speciesCache)
+	bn.speciesCache[cacheKey] = &speciesCacheEntry{
+		key:    cacheKey,
+		scores: scores,
+	}
+	out := make(map[string]float64, len(scores))
+	for k, v := range scores {
+		out[k] = v
+	}
+	bn.speciesCacheMu.Unlock()
+	return out, nil
+}
+
 // Delete releases resources used by the TensorFlow Lite interpreters.
 func (bn *BirdNET) Delete() {
 	if bn.AnalysisInterpreter != nil {
@@ -552,6 +629,7 @@ func (bn *BirdNET) Delete() {
 	if bn.RangeInterpreter != nil {
 		bn.RangeInterpreter.Delete()
 	}
+	bn.clearSpeciesCache()
 }
 
 // DefaultBirdNETModelName is the expected filesystem basename for the main BirdNET analysis model file.
@@ -880,6 +958,9 @@ func (bn *BirdNET) ReloadModel() error {
 	if oldRangeInterpreter != nil {
 		oldRangeInterpreter.Delete()
 	}
+	
+	// Clear species cache as model/labels have changed
+	bn.clearSpeciesCache()
 
 	bn.Debug("\033[32m✅ Model reload completed successfully\033[0m")
 	return nil
@@ -904,6 +985,45 @@ func (bn *BirdNET) Debug(format string, v ...interface{}) {
 			log.Printf("[birdnet] "+format, v...)
 		}
 	}
+}
+
+// GetSpeciesOccurrence returns the occurrence probability for a given species based on current location and time
+// Returns 0.0 if the species is not found or range filter is not enabled
+func (bn *BirdNET) GetSpeciesOccurrence(species string) float64 {
+	// Fast-path: if range interpreter is not initialized, return 0
+	if bn.RangeInterpreter == nil {
+		return 0.0
+	}
+
+	// If location not set, range filter is not active, return 0
+	if bn.Settings.BirdNET.Latitude == 0 && bn.Settings.BirdNET.Longitude == 0 {
+		return 0.0
+	}
+
+	// Get current probable species with their scores
+	today := time.Now().Truncate(24 * time.Hour)
+	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
+	if err != nil {
+		bn.Debug("Error getting probable species for occurrence: %v", err)
+		return 0.0
+	}
+
+	// Look for the species in the scores
+	for _, score := range speciesScores {
+		if score.Label == species {
+			// Clamp the score to [0.0, 1.0] range
+			if score.Score < 0.0 {
+				return 0.0
+			}
+			if score.Score > 1.0 {
+				return 1.0
+			}
+			return score.Score
+		}
+	}
+
+	// Species not found in range filter results
+	return 0.0
 }
 
 // EnrichResultWithTaxonomy adds taxonomy information to a detection result
