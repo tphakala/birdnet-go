@@ -304,3 +304,92 @@ func TestPartialSpeciesConfigUpdate(t *testing.T) {
 	assert.InDelta(t, 0.8, birdB.Threshold, 0.0001, "Bird B threshold should be unchanged")
 	assert.Equal(t, 60, birdB.Interval, "Bird B interval should be unchanged")
 }
+
+// TestSpeciesSettingsPatchGetSync tests that PATCH -> GET works correctly
+// This ensures that updates to controller.Settings are reflected in GET responses
+func TestSpeciesSettingsPatchGetSync(t *testing.T) {
+	// Setup controller with its own settings (simulating real usage)
+	e := echo.New()
+	controller := &Controller{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				Interval: 15,
+				Species: conf.SpeciesSettings{
+					Include: []string{},
+					Exclude: []string{},
+					Config: map[string]conf.SpeciesConfig{
+						"Test Bird": {
+							Threshold: 0.5,
+							Interval:  30,
+							Actions:   []conf.SpeciesAction{},
+						},
+					},
+				},
+			},
+		},
+		DisableSaveSettings: true,
+	}
+
+	// Step 1: PATCH update with zero values
+	updatePayload := map[string]interface{}{
+		"species": map[string]interface{}{
+			"config": map[string]interface{}{
+				"Test Bird": map[string]interface{}{
+					"threshold": 0.0, // Zero value that should persist
+					"interval":  0,   // Zero value that should persist
+					"actions":   []interface{}{},
+				},
+			},
+		},
+	}
+
+	jsonData, err := json.Marshal(updatePayload)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/realtime", bytes.NewReader(jsonData))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetPath("/api/v2/settings/realtime")
+	ctx.SetParamNames("section")
+	ctx.SetParamValues("realtime")
+
+	err = controller.UpdateSectionSettings(ctx)
+	require.NoError(t, err, "PATCH should succeed")
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Verify controller settings were updated
+	testBird := controller.Settings.Realtime.Species.Config["Test Bird"]
+	assert.InDelta(t, 0.0, testBird.Threshold, 0.0001, "Controller should have zero threshold")
+	assert.Equal(t, 0, testBird.Interval, "Controller should have zero interval")
+
+	// Step 2: GET to verify the updated values are returned
+	req = httptest.NewRequest(http.MethodGet, "/api/v2/settings/realtime", http.NoBody)
+	rec = httptest.NewRecorder()
+	ctx = e.NewContext(req, rec)
+	ctx.SetPath("/api/v2/settings/realtime")
+	ctx.SetParamNames("section")
+	ctx.SetParamValues("realtime")
+
+	err = controller.GetSectionSettings(ctx)
+	require.NoError(t, err, "GET should succeed")
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err, "Response should be valid JSON")
+
+	// Critical test: verify GET returns the updated zero values
+	species, ok := response["species"].(map[string]interface{})
+	require.True(t, ok, "Response should contain species field")
+
+	config, ok := species["config"].(map[string]interface{})
+	require.True(t, ok, "Species should contain config field")
+	require.NotNil(t, config, "Config should not be nil")
+
+	testBirdResponse, ok := config["Test Bird"].(map[string]interface{})
+	require.True(t, ok, "Test Bird should exist in GET response")
+
+	assert.InDelta(t, 0.0, testBirdResponse["threshold"], 0.0001, "GET should return updated zero threshold")
+	assert.InDelta(t, float64(0), testBirdResponse["interval"], 0.0001, "GET should return updated zero interval")
+}
