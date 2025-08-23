@@ -473,7 +473,7 @@ vi.mock('$lib/utils/security', () => ({
   }),
   // Mock other security utilities with basic implementations for tests
   safeLookup: vi.fn((lookupTable, key, allowedKeys, defaultValue) => {
-    if (allowedKeys && !allowedKeys.includes(key)) {
+    if (Array.isArray(allowedKeys) && !allowedKeys.includes(key)) {
       return defaultValue;
     }
     // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data
@@ -492,17 +492,21 @@ vi.mock('$lib/utils/security', () => ({
     return pattern ? pattern.test(input) : true;
   }),
   safeRegexTest: vi.fn((pattern, input, maxLength = 1000) => {
-    if (input.length > maxLength) {
+    const str = String(input ?? '');
+    if (str.length > maxLength) {
       return false;
     }
     try {
-      return pattern.test(input);
+      return pattern.test(str);
     } catch {
       return false;
     }
   }),
   sanitizeFilename: vi.fn(filename => {
     const basename = filename.split(/[\\/]/).pop() ?? '';
+    if (basename === '') {
+      return 'screenshot.png';
+    }
     return basename.replace(/[^a-zA-Z0-9._-]/g, '_');
   }),
   createEnumLookup: vi.fn(enumObj => {

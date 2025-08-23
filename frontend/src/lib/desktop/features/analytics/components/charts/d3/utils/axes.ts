@@ -20,12 +20,15 @@ export interface AxisConfig {
  * Create and configure a D3 axis
  */
 export function createAxis(config: AxisConfig): Axis<AxisDomain> {
-  const factories = {
+  const factories: Record<
+    'top' | 'right' | 'bottom' | 'left',
+    (s: AxisScale<AxisDomain>) => Axis<AxisDomain>
+  > = {
     top: axisTop,
     right: axisRight,
     bottom: axisBottom,
     left: axisLeft,
-  } as const;
+  };
 
   const axis = factories[config.orientation](config.scale as AxisScale<AxisDomain>);
 

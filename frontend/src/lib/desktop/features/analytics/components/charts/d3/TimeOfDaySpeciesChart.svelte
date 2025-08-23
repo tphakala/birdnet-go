@@ -1,7 +1,10 @@
 <!-- Multi-Species Time of Day Chart -->
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import * as d3 from 'd3';
+  import { select } from 'd3-selection';
+  import { line as d3Line, curveMonotoneX } from 'd3-shape';
+  import { max, scaleLinear } from 'd3';
+  import type { Selection, AxisDomain } from 'd3';
 
   import BaseChart from './BaseChart.svelte';
   import { createLinearScale } from './utils/scales';
@@ -71,15 +74,14 @@
     if (!visible.length) return null;
 
     const maxCount =
-      d3.max(
+      max(
         visible.flatMap(s => s.data),
         d => d.count
       ) ?? 0;
 
     return {
-      x: d3.scaleLinear().domain([0, 23]).range([0, 100]), // Percentage-based for responsiveness
-      y: d3
-        .scaleLinear()
+      x: scaleLinear().domain([0, 23]).range([0, 100]), // Percentage-based for responsiveness
+      y: scaleLinear()
         .domain([0, maxCount * 1.1])
         .range([100, 0]), // Inverted for SVG
     };
@@ -87,16 +89,16 @@
 
   // Store chart context
   let chartContext = $state<{
-    svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
-    chartGroup: d3.Selection<globalThis.SVGGElement, unknown, null, undefined>;
+    svg: Selection<SVGSVGElement, unknown, null, undefined>;
+    chartGroup: Selection<globalThis.SVGGElement, unknown, null, undefined>;
     innerWidth: number;
     innerHeight: number;
     theme: ChartTheme;
   } | null>(null);
 
   function drawChart(context: {
-    svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
-    chartGroup: d3.Selection<globalThis.SVGGElement, unknown, null, undefined>;
+    svg: Selection<SVGSVGElement, unknown, null, undefined>;
+    chartGroup: Selection<globalThis.SVGGElement, unknown, null, undefined>;
     innerWidth: number;
     innerHeight: number;
     theme: ChartTheme;
@@ -132,10 +134,11 @@
     }
 
     // Create axes
+    const hourFormatter = createHourAxisFormatter();
     const xAxis = createAxis({
       scale: xScale,
       orientation: 'bottom',
-      tickFormat: (d: d3.AxisDomain) => createHourAxisFormatter()(d as number),
+      tickFormat: (d: AxisDomain) => hourFormatter(d as number),
       tickCount: 12,
     });
 
@@ -184,18 +187,17 @@
     );
 
     // Line generator
-    const line = d3
-      .line<HourlyData>()
+    const line = d3Line<HourlyData>()
       .x(d => xScale(d.hour))
       .y(d => yScale(d.count))
-      .curve(d3.curveMonotoneX);
+      .curve(curveMonotoneX);
 
     // Draw lines for each species
     const linesGroup = chartGroup.append('g').attr('class', 'lines');
 
     const speciesLines = linesGroup
-      .selectAll('.species-line')
-      .data(visibleData(), (d: any) => (d as SpeciesTimeData).species);
+      .selectAll<globalThis.SVGPathElement, SpeciesTimeData>('.species-line')
+      .data<SpeciesTimeData>(visibleData(), d => d.species);
 
     // Enter new lines
     speciesLines
@@ -238,9 +240,9 @@
         .attr('r', 0)
         .style('fill', species.color ?? '#999999')
         .style('opacity', 0)
-        .on('mouseenter', function (event, d) {
+        .on('mouseenter', function (event: MouseEvent, d: HourlyData) {
           // Highlight this point
-          d3.select(this).transition().duration(150).attr('r', 6).style('opacity', 1);
+          select(this).transition().duration(150).attr('r', 6).style('opacity', 1);
 
           // Show tooltip
           const tooltipData = {
@@ -256,8 +258,8 @@
 
           tooltip?.show(tooltipData);
         })
-        .on('mouseleave', function () {
-          d3.select(this).transition().duration(150).attr('r', 3).style('opacity', 0.6);
+        .on('mouseleave', function (_this: globalThis.SVGCircleElement) {
+          select(this).transition().duration(150).attr('r', 3).style('opacity', 0.6);
 
           tooltip?.hide();
         })

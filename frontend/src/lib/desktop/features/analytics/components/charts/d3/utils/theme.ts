@@ -36,6 +36,39 @@ export interface ChartTheme {
  * Following the pattern from chartHelpers.ts for consistency
  */
 export function getCurrentTheme(): ChartTheme {
+  // SSR guard - return safe default theme when running server-side
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    // Return light theme as default for SSR
+    const textColor = 'rgba(55, 65, 81, 1)';
+    const gridColor = 'rgba(0, 0, 0, 0.1)';
+
+    return {
+      background: '#ffffff',
+      foreground: textColor,
+      muted: 'rgba(0, 0, 0, 0.6)',
+      accent: '#0284c7',
+      primary: '#2563eb',
+      secondary: '#4b5563',
+      success: '#22c55e',
+      warning: '#f59e0b',
+      error: '#ef4444',
+      text: textColor,
+      grid: gridColor,
+      axis: {
+        color: textColor,
+        fontSize: '12px',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        strokeWidth: 1,
+        gridColor,
+      },
+      tooltip: {
+        background: 'rgba(255, 255, 255, 0.95)',
+        text: textColor,
+        border: 'rgba(0, 0, 0, 0.2)',
+      },
+    };
+  }
+
   const root = document.documentElement;
   // Check if we're in dark mode
   const isDark = root.getAttribute('data-theme') === 'dark';
