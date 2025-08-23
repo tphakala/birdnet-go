@@ -218,9 +218,14 @@ describe('Species Settings Store', () => {
       const mockLoad = vi.mocked(settingsAPI.load);
 
       // Mock API response with zero values
+      const completeSettings = createEmptySettings();
       mockLoad.mockResolvedValueOnce({
         main: { name: 'TestNode' },
-        birdnet: { threshold: 0.3, locale: 'en' },
+        birdnet: {
+          ...completeSettings.birdnet,
+          threshold: 0.3,
+          locale: 'en',
+        },
         realtime: {
           species: {
             include: ['Robin'],
