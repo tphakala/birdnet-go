@@ -69,6 +69,10 @@ FROM --platform=$TARGETPLATFORM debian:bookworm-slim
 # This layer will be reused if model files haven't changed between builds
 RUN mkdir -p /models
 COPY --from=build /home/dev-user/src/BirdNET-Go/internal/birdnet/data/*.tflite /models/
+# Set read permissions for model files
+RUN chmod -R a+r /models/*.tflite 2>/dev/null || true
+# Ensure directory is executable (browsable)
+RUN chmod a+x /models
 
 # Install ALSA library and SOX for audio processing, and other system utilities for debugging
 RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
@@ -121,8 +125,8 @@ WORKDIR /data
 
 # Make ports available to the world outside this container
 # 80, 443 for AutoTLS (automatic HTTPS certificates)
-# 8080 for standard HTTP web interface
-# 8090 for Prometheus metrics endpoint
+# 8080 application standard HTTP web interface port
+# 8090 Prometheus metrics endpoint
 EXPOSE 80 443 8080 8090
 
 COPY --from=build /home/dev-user/src/BirdNET-Go/bin /usr/bin/
