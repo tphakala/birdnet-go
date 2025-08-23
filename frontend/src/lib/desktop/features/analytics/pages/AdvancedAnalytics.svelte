@@ -5,7 +5,8 @@
   import TimeOfDaySpeciesChart from '../components/charts/d3/TimeOfDaySpeciesChart.svelte';
   import DailySpeciesTrendChart from '../components/charts/d3/DailySpeciesTrendChart.svelte';
   import SpeciesSelector from '$lib/components/ui/SpeciesSelector.svelte';
-  import type { Species } from '$lib/types/species';
+  import type { Species, SpeciesId } from '$lib/types/species';
+  import { createSpeciesId } from '$lib/types/species';
   import { getLogger } from '$lib/utils/logger';
 
   const logger = getLogger('advanced-analytics');
@@ -71,7 +72,7 @@
 
   // Species selection
   let availableSpecies = $state<Species[]>([]);
-  let selectedSpecies = $state<string[]>([]);
+  let selectedSpecies = $state<SpeciesId[]>([]);
   let maxSpecies = 10;
 
   // Abort controllers for preventing race conditions
@@ -171,7 +172,7 @@
                     ? 'uncommon'
                     : 'rare';
             return {
-              id: item.scientific_name ?? `species-${index}`,
+              id: createSpeciesId(item.scientific_name ?? `species-${index}`),
               commonName: item.common_name ?? 'Unknown',
               scientificName: item.scientific_name ?? 'Unknown',
               frequency: frequency as 'very-common' | 'common' | 'uncommon' | 'rare',
@@ -473,17 +474,23 @@
 
           {#if dateRange === 'custom'}
             <div class="grid grid-cols-2 gap-2 mt-2">
+              <label for="startDateInput" class="sr-only">Start date</label>
               <input
+                id="startDateInput"
                 type="date"
                 bind:value={startDate}
                 class="input input-bordered input-sm"
                 max={endDate}
+                aria-label="Start date"
               />
+              <label for="endDateInput" class="sr-only">End date</label>
               <input
+                id="endDateInput"
                 type="date"
                 bind:value={endDate}
                 class="input input-bordered input-sm"
                 min={startDate}
+                aria-label="End date"
               />
             </div>
           {/if}
@@ -545,7 +552,7 @@
               emptyText="No species found for the selected date range"
               className="w-full"
               on:change={e => {
-                selectedSpecies = e.detail.selected;
+                selectedSpecies = e.detail.selected.map(createSpeciesId);
                 // Refresh chart data when species selection changes
                 if (selectedSpecies.length > 0) {
                   fetchTimeOfDayData();
@@ -595,12 +602,18 @@
           {#if isLoading}
             <div
               class="absolute inset-0 bg-base-100/80 backdrop-blur-sm flex items-center justify-center rounded-lg"
+              role="status"
+              aria-busy="true"
+              aria-label="Loading analytics data"
             >
               <span class="loading loading-spinner loading-lg text-primary"></span>
+              <span class="sr-only">Loading analytics data</span>
             </div>
           {:else if timeOfDayData.length === 0}
             <div
               class="absolute inset-0 flex items-center justify-center text-base-content/60 rounded-lg"
+              role="status"
+              aria-label="No time-of-day data available"
             >
               <div class="text-center">
                 <p class="text-lg mb-2">No time-of-day data available</p>
@@ -636,12 +649,18 @@
           {#if isLoading}
             <div
               class="absolute inset-0 bg-base-100/80 backdrop-blur-sm flex items-center justify-center rounded-lg"
+              role="status"
+              aria-busy="true"
+              aria-label="Loading trend data"
             >
               <span class="loading loading-spinner loading-lg text-primary"></span>
+              <span class="sr-only">Loading trend data</span>
             </div>
           {:else if dailyTrendData.length === 0}
             <div
               class="absolute inset-0 flex items-center justify-center text-base-content/60 rounded-lg"
+              role="status"
+              aria-label="No trend data available"
             >
               <div class="text-center">
                 <p class="text-lg mb-2">No trend data available</p>

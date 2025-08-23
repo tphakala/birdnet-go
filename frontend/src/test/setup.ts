@@ -405,8 +405,16 @@ Object.defineProperty(window, 'location', {
   },
 });
 
-// Note: Utility modules are not mocked globally to allow their own tests to run properly
-// Component tests that need utility mocks should mock them individually
+// Mock security utilities - consolidated mock for consistent test behavior
+vi.mock('$lib/utils/security', () => ({
+  // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data
+  safeGet: vi.fn((obj, key) => obj?.[key]),
+  // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data
+  safeArrayAccess: vi.fn((arr, index) => arr?.[index]),
+}));
+
+// Note: Other utility modules are not mocked globally to allow their own tests to run properly
+// Component tests that need other utility mocks should mock them individually
 
 // Global test utilities
 export const testUtils = {

@@ -3,24 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import AudioEqualizerSettings from './AudioEqualizerSettings.svelte';
 
 // Mock dependencies
-vi.mock('$lib/i18n', () => ({
-  t: vi.fn(key => key),
-}));
-
-vi.mock('$lib/utils/security', () => ({
-  // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data
-  safeGet: vi.fn((obj, key) => obj?.[key]),
-  // eslint-disable-next-line security/detect-object-injection -- Safe: test mock with controlled data
-  safeArrayAccess: vi.fn((arr, index) => arr?.[index]),
-}));
-
-vi.mock('$lib/utils/logger', () => ({
-  loggers: {
-    settings: {
-      error: vi.fn(),
-    },
-  },
-}));
+// Common mocks are now handled globally in src/test/setup.ts
+// ($lib/i18n, $lib/utils/security, $lib/utils/logger)
 
 // Mock FilterResponseGraph to avoid canvas issues
 vi.mock('./FilterResponseGraph.svelte', () => {
