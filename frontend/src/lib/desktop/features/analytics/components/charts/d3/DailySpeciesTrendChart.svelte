@@ -143,13 +143,13 @@
   });
 
   // Store chart context
-  let chartContext: {
+  let chartContext = $state<{
     svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
     chartGroup: d3.Selection<globalThis.SVGGElement, unknown, null, undefined>;
     innerWidth: number;
     innerHeight: number;
     theme: ChartTheme;
-  } | null = null;
+  } | null>(null);
 
   function drawChart(context: {
     svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
@@ -290,7 +290,7 @@
         .datum(species.data)
         .attr('class', `area-${species.species.replace(/\s+/g, '-')}`)
         .attr('d', area)
-        .style('fill', species.color!)
+        .style('fill', species.color ?? '#999999')
         .style('opacity', 0.1)
         .style('pointer-events', 'none');
 
@@ -301,7 +301,7 @@
         .attr('class', `line-${species.species.replace(/\s+/g, '-')}`)
         .attr('d', line)
         .style('fill', 'none')
-        .style('stroke', species.color!)
+        .style('stroke', species.color ?? '#999999')
         .style('stroke-width', 2)
         .style('opacity', 0.8);
 
@@ -318,7 +318,7 @@
         .attr('cx', (d: any) => xScale((d as DailyData).date))
         .attr('cy', (d: any) => yScale((d as DailyData).count))
         .attr('r', 3)
-        .style('fill', species.color!)
+        .style('fill', species.color ?? '#999999')
         .style('opacity', 0.7)
         .on('mouseenter', function (event, d: any) {
           const dailyData = d as DailyData;
@@ -405,7 +405,7 @@
     const processedForLegend = processedData();
     const legendItems = (processedForLegend as any).map((species: any) => ({
       label: species.commonName,
-      color: species.color!,
+      color: species.color ?? '#999999',
       visible: species.visible,
     }));
 
@@ -473,10 +473,7 @@
       <!-- CRITICAL: Capture D3 context from BaseChart for use in $effect
            Snippets only render once, so we can't call drawChart directly here.
            Instead we store context and let the $effect handle reactive updates. -->
-      {(() => {
-        chartContext = context;
-        return '';
-      })()}
+      {((chartContext = context), '')}
     {/snippet}
   </BaseChart>
 </div>

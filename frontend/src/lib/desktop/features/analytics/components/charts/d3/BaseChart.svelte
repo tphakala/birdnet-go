@@ -54,6 +54,7 @@
   // Theme management
   let themeStore: ThemeStore;
   let currentTheme = $state<ChartTheme | null>(null);
+  let themeUnsubscribe: (() => void) | null = null;
 
   // Computed properties
   const dimensions = $derived(() => {
@@ -71,7 +72,7 @@
     currentTheme = themeStore.theme;
 
     // Subscribe to theme changes
-    const unsubscribe = themeStore.subscribe(theme => {
+    themeUnsubscribe = themeStore.subscribe(theme => {
       currentTheme = theme;
     });
 
@@ -89,14 +90,12 @@
       setupResizeObserver();
     }
 
-    // Cleanup function
-    return () => {
-      unsubscribe();
-    };
+    // No cleanup needed - handled in onDestroy
   });
 
   // Cleanup on destroy
   onDestroy(() => {
+    themeUnsubscribe?.();
     themeStore?.destroy();
     if (resizeObserver) {
       resizeObserver.disconnect();

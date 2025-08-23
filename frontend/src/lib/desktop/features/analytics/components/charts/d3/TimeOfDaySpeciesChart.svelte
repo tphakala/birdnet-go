@@ -104,7 +104,8 @@
     // Store context for later use
     chartContext = context;
 
-    if (!scales() || !visibleData().length) {
+    const currentScales = scales();
+    if (!currentScales || !visibleData().length) {
       // Clear existing content
       if (context.chartGroup) {
         context.chartGroup.selectAll('*').remove();
@@ -121,7 +122,7 @@
     });
 
     const yScale = createLinearScale({
-      domain: [0, scales()!.y.domain()[1]],
+      domain: [0, currentScales.y.domain()[1]],
       range: [innerHeight, 0],
     });
 
@@ -203,7 +204,7 @@
       .attr('class', 'species-line')
       .attr('d', d => line(d.data))
       .style('fill', 'none')
-      .style('stroke', d => d.color!)
+      .style('stroke', d => d.color ?? '#999999')
       .style('stroke-width', 2)
       .style('opacity', 0)
       .transition()
@@ -215,7 +216,7 @@
       .transition()
       .duration(300)
       .attr('d', d => line(d.data))
-      .style('stroke', d => d.color!);
+      .style('stroke', d => d.color ?? '#999999');
 
     // Exit old lines
     speciesLines.exit().transition().duration(300).style('opacity', 0).remove();
@@ -235,7 +236,7 @@
         .attr('cx', d => xScale(d.hour))
         .attr('cy', d => yScale(d.count))
         .attr('r', 0)
-        .style('fill', species.color!)
+        .style('fill', species.color ?? '#999999')
         .style('opacity', 0)
         .on('mouseenter', function (event, d) {
           // Highlight this point
@@ -287,7 +288,7 @@
                 ? {
                     species: species.commonName,
                     count: hourPoint.count,
-                    color: species.color!,
+                    color: species.color ?? '#999999',
                   }
                 : null;
             })
@@ -317,7 +318,7 @@
     // Create legend
     const legendItems = visibleData().map(species => ({
       label: species.commonName,
-      color: species.color!,
+      color: species.color ?? '#999999',
       visible: species.visible,
     }));
 
