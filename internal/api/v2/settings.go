@@ -22,8 +22,8 @@ import (
 
 // UpdateRequest represents a request to update settings
 type UpdateRequest struct {
-	Path  string      `json:"path"`
-	Value any `json:"value"`
+	Path  string `json:"path"`
+	Value any    `json:"value"`
 }
 
 // initSettingsRoutes registers all settings-related API endpoints
@@ -286,7 +286,7 @@ func updateAllowedFieldsRecursivelyWithTracking(
 				fieldPath += "."
 			}
 			fieldPath += fieldName
-			*skippedFields = append(*skippedFields, fieldPath + " (runtime-only)")
+			*skippedFields = append(*skippedFields, fieldPath+" (runtime-only)")
 			continue
 		}
 
@@ -535,7 +535,6 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	})
 }
 
-
 // updateSettingsSectionWithTracking updates a specific section of the settings and tracks skipped fields
 func updateSettingsSectionWithTracking(settings *conf.Settings, section string, data json.RawMessage, skippedFields *[]string) error {
 	section = strings.ToLower(section)
@@ -562,7 +561,6 @@ func updateSettingsSectionWithTracking(settings *conf.Settings, section string, 
 	// Use the generic handler with merging for ALL sections
 	return handleGenericSection(sectionValue, data, section, skippedFields)
 }
-
 
 // validateRTSPURLs validates a slice of RTSP URLs
 func validateRTSPURLs(urls []string) error {
@@ -607,7 +605,6 @@ func validateRTSPURLs(urls []string) error {
 	return nil
 }
 
-
 // mergeJSONIntoStruct merges JSON data into an existing struct without zeroing out missing fields
 // This is crucial for preserving nested object values when partial updates are sent
 func mergeJSONIntoStruct(data json.RawMessage, target any) error {
@@ -616,13 +613,13 @@ func mergeJSONIntoStruct(data json.RawMessage, target any) error {
 	if err := json.Unmarshal(data, &updateMap); err != nil {
 		return err
 	}
-	
+
 	// Get current values as a map
 	currentJSON, err := json.Marshal(target)
 	if err != nil {
 		return err
 	}
-	
+
 	var currentMap map[string]any
 	if err := json.Unmarshal(currentJSON, &currentMap); err != nil {
 		return err
@@ -636,19 +633,19 @@ func mergeJSONIntoStruct(data json.RawMessage, target any) error {
 	if err != nil {
 		return err
 	}
-	
+
 	return json.Unmarshal(mergedJSON, target)
 }
 
 // deepMergeMaps recursively merges two maps, with values from src overwriting dst
 func deepMergeMaps(dst, src map[string]any) map[string]any {
 	result := make(map[string]any)
-	
+
 	// Copy all values from dst
 	for k, v := range dst {
 		result[k] = v
 	}
-	
+
 	// Merge values from src
 	for k, v := range src {
 		if v == nil {
@@ -656,7 +653,7 @@ func deepMergeMaps(dst, src map[string]any) map[string]any {
 			result[k] = nil
 			continue
 		}
-		
+
 		// Check if both dst and src have maps at this key
 		if dstMap, dstOk := dst[k].(map[string]any); dstOk {
 			if srcMap, srcOk := v.(map[string]any); srcOk {
@@ -665,11 +662,11 @@ func deepMergeMaps(dst, src map[string]any) map[string]any {
 				continue
 			}
 		}
-		
+
 		// Otherwise, just use the src value
 		result[k] = v
 	}
-	
+
 	return result
 }
 
@@ -742,7 +739,7 @@ func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName stri
 			capitalizedSectionName = strings.ToUpper(sectionName[:1]) + sectionName[1:]
 		}
 	}
-	
+
 	blockedFieldsMap := getBlockedFieldMap()
 	if blockedFields, exists := blockedFieldsMap[capitalizedSectionName]; exists {
 		if _, ok := blockedFields.(map[string]any); ok {
@@ -1125,7 +1122,6 @@ func getSettingsSection(settings *conf.Settings, section string) (any, error) {
 	}
 }
 
-
 // validateField performs validation on specific fields that require extra checks
 // Returns nil if validation passes, error otherwise
 func validateField(fieldName string, value any) error {
@@ -1161,7 +1157,7 @@ func validateField(fieldName string, value any) error {
 				return fmt.Errorf("longitude must be between -180 and 180")
 			}
 		}
-	case "Password":
+	case "password":
 		// For sensitive fields like passwords, perform additional validation
 		// For example, you could check minimum length, complexity, etc.
 		if pass, ok := value.(string); ok {
@@ -1189,7 +1185,7 @@ func getBlockedFieldMap() map[string]any {
 		"SystemID":           true, // Unique system identifier
 		"ValidationWarnings": true, // Runtime validation state
 		"Input":              true, // File/directory analysis mode config
-		
+
 		// BirdNET section - block runtime fields
 		"BirdNET": map[string]any{
 			"Labels": true, // Runtime list populated from label file
@@ -1200,7 +1196,7 @@ func getBlockedFieldMap() map[string]any {
 				"LastUpdated": true, // Runtime timestamp of last filter update
 			},
 		},
-		
+
 		// Security section - block runtime/internal fields only
 		"Security": map[string]any{
 			"SessionSecret":   true, // Generated internally, never updated via API
@@ -1213,12 +1209,12 @@ func getBlockedFieldMap() map[string]any {
 				"AccessTokenExp": true, // OAuth2 server internal field
 			},
 		},
-		
+
 		// Realtime section - block runtime fields
 		"Realtime": map[string]any{
 			"Audio": getAudioBlockedFields(),
 		},
-		
+
 		// All other fields are allowed by default
 	}
 }
