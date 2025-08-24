@@ -3,6 +3,8 @@ bin/birdnet-go.exe
 assets/tailwind.css
 log/
 clips/
+models/
+plans/
 spectrograms/
 .task/*
 .vscode/*
