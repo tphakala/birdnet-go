@@ -16,7 +16,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/runtime"
+	"github.com/tphakala/birdnet-go/internal/buildinfo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -784,7 +784,7 @@ type BackupConfig struct {
 }
 
 // Settings contains all configuration options for the BirdNET-Go application.
-// Runtime values like Version, BuildDate, SystemID are now in runtime.Context
+// Runtime values like Version, BuildDate, SystemID are now in buildinfo.RuntimeContext
 type Settings struct {
 	Debug bool `json:"debug"` // true to enable debug mode
 
@@ -855,7 +855,7 @@ var (
 
 // Load reads the configuration file and environment variables into GlobalConfig.
 // Returns settings, validation result, and any error
-func Load() (*Settings, *runtime.ValidationResult, error) {
+func Load() (*Settings, *buildinfo.ValidationResult, error) {
 	settingsMutex.Lock()
 	defer settingsMutex.Unlock()
 
@@ -863,7 +863,7 @@ func Load() (*Settings, *runtime.ValidationResult, error) {
 	settings := &Settings{}
 
 	// Initialize validation result
-	validationResult := runtime.NewValidationResult()
+	validationResult := buildinfo.NewValidationResult()
 
 	// Initialize viper and read config
 	if err := initViper(); err != nil {

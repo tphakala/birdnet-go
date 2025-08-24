@@ -9,7 +9,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
+	runtimectx "github.com/tphakala/birdnet-go/internal/buildinfo"
 )
 
 func TestTelemetryIntegration(t *testing.T) {

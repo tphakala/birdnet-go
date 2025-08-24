@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/observability"
-	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
+	runtimectx "github.com/tphakala/birdnet-go/internal/buildinfo"
 	"go.uber.org/goleak"
 )
 

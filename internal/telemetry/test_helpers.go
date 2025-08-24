@@ -9,7 +9,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
-	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
+	runtimectx "github.com/tphakala/birdnet-go/internal/buildinfo"
 )
 
 // TestConfig holds configuration for telemetry testing

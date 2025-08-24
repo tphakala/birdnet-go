@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
+	runtimectx "github.com/tphakala/birdnet-go/internal/buildinfo"
 	"github.com/tphakala/birdnet-go/internal/support"
 )
 

@@ -18,7 +18,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
+	runtimectx "github.com/tphakala/birdnet-go/internal/buildinfo"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 

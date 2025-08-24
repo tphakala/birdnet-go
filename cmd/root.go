@@ -16,7 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/cmd/realtime"
 	"github.com/tphakala/birdnet-go/cmd/support"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
+	runtimectx "github.com/tphakala/birdnet-go/internal/buildinfo"
 )
 
 // RootCommand creates and returns the root command

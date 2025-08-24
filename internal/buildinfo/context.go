@@ -1,7 +1,7 @@
-// Package runtime contains runtime metadata separate from user configuration
-package runtime
+// Package buildinfo contains build-time metadata and validation state separate from user configuration
+package buildinfo
 
-// Context contains runtime metadata that is not user-configurable
+// Context contains build-time metadata that is not user-configurable
 // This data is injected at application startup and should not be part
 // of the configuration system.
 type Context struct {
