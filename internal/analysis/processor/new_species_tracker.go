@@ -28,6 +28,9 @@ const (
 	seasonBufferDuration      = seasonBufferDays * hoursPerDay * time.Hour
 	defaultSeasonDurationDays = 90 // Typical season duration
 
+	// Season calculations
+	winterAdjustmentCutoffMonth = 6 // June - first month where winter shouldn't adjust to previous year
+
 	// Notification suppression
 	defaultNotificationSuppressionWindow = 168 * time.Hour // Default suppression window (7 days)
 )
@@ -623,8 +626,10 @@ func (t *NewSpeciesTracker) getSeasonDateRange(seasonName string, now time.Time)
 	seasonStart := time.Date(currentYear, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
 
 	// Handle winter season that might start in previous year
+	// Winter spans across years: Dec 21 (year X) -> Mar 19 (year X+1)
 	// Only adjust winter to previous year in early months (Jan-May) to match computeCurrentSeason logic
-	if season.month >= 12 && int(now.Month()) < 6 {
+	// This ensures consistency between season detection and date range calculations
+	if season.month >= 12 && int(now.Month()) < winterAdjustmentCutoffMonth {
 		seasonStart = time.Date(currentYear-1, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
 	}
 
