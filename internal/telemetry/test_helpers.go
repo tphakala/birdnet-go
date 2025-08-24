@@ -9,12 +9,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
+	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
 )
 
 // TestConfig holds configuration for telemetry testing
 type TestConfig struct {
 	MockTransport *MockTransport
 	Settings      *conf.Settings
+	Runtime       *runtimectx.Context
 }
 
 // TestingTB is a common interface for *testing.T and *testing.B
@@ -32,14 +34,17 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 	// Create mock transport
 	mockTransport := NewMockTransport()
 
-	// Create test settings
+	// Create test settings and runtime
 	testSettings := &conf.Settings{
-		Debug:    true,
-		Version:  "test-version",
-		SystemID: "test-system-id",
+		Debug: true,
 		Sentry: conf.SentrySettings{
 			Enabled: true,
 		},
+	}
+	
+	testRuntime := &runtimectx.Context{
+		Version:  "test-version",
+		SystemID: "test-system-id",
 	}
 
 	// Initialize Sentry with mock transport
@@ -70,12 +75,12 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 
 	// Configure scope with test data
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
-		scope.SetTag("system_id", testSettings.SystemID)
+		scope.SetTag("system_id", testRuntime.SystemID)
 		scope.SetTag("test_mode", "true")
 		scope.SetContext("application", map[string]any{
 			"name":      "BirdNET-Go",
-			"version":   testSettings.Version,
-			"system_id": testSettings.SystemID,
+			"version":   testRuntime.Version,
+			"system_id": testRuntime.SystemID,
 			"test_mode": true,
 		})
 	})
@@ -134,6 +139,7 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 	return &TestConfig{
 		MockTransport: mockTransport,
 		Settings:      testSettings,
+		Runtime:       testRuntime,
 	}, cleanup
 }
 

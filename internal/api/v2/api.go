@@ -31,6 +31,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -41,6 +42,7 @@ type Controller struct {
 	Group               *echo.Group
 	DS                  datastore.Interface
 	Settings            *conf.Settings
+	Runtime             *runtimectx.Context
 	BirdImageCache      *imageprovider.BirdImageCache
 	SunCalc             *suncalc.SunCalc
 	Processor           *processor.Processor
@@ -159,16 +161,16 @@ func (c *Controller) TunnelDetectionMiddleware() echo.MiddlewareFunc {
 }
 
 // New creates a new API controller, returning an error if initialization fails.
-func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
+func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings, runtime *runtimectx.Context,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string, logger *log.Logger, oauth2Server *security.OAuth2Server,
 	metrics *observability.Metrics) (*Controller, error) {
-	return NewWithOptions(e, ds, settings, birdImageCache, sunCalc, controlChan, logger, oauth2Server, metrics, true)
+	return NewWithOptions(e, ds, settings, runtime, birdImageCache, sunCalc, controlChan, logger, oauth2Server, metrics, true)
 }
 
 // NewWithOptions creates a new API controller with optional route initialization.
 // Set initializeRoutes to false for testing to avoid starting background goroutines.
-func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
+func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Settings, runtime *runtimectx.Context,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string, logger *log.Logger, oauth2Server *security.OAuth2Server,
 	metrics *observability.Metrics, initializeRoutes bool) (*Controller, error) {
@@ -242,6 +244,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		Echo:           e,
 		DS:             ds,
 		Settings:       settings,
+		Runtime:        runtime,
 		BirdImageCache: birdImageCache,
 		SunCalc:        sunCalc,
 		controlChan:    controlChan,
@@ -458,8 +461,8 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 	// Create response structure
 	response := map[string]interface{}{
 		"status":     "healthy",
-		"version":    c.Settings.Version,
-		"build_date": c.Settings.BuildDate,
+		"version":    c.Runtime.Version,
+		"build_date": c.Runtime.BuildDate,
 		"timestamp":  time.Now().Format(time.RFC3339),
 	}
 
@@ -968,13 +971,13 @@ func (c *Controller) getEffectiveAuthMiddleware() echo.MiddlewareFunc {
 
 // InitializeAPI creates a new API controller and registers all routes
 // It now accepts the OAuth2Server instance directly.
-func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
+func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings, runtime *runtimectx.Context,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string, logger *log.Logger, proc *processor.Processor,
 	oauth2Server *security.OAuth2Server, metrics *observability.Metrics) *Controller { // Added oauth2Server and metrics parameters
 
 	// Create API controller, passing oauth2Server and metrics directly to New
-	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, logger, oauth2Server, metrics)
+	apiController, err := New(e, ds, settings, runtime, birdImageCache, sunCalc, controlChan, logger, oauth2Server, metrics)
 	if err != nil {
 		logger.Fatalf("Failed to initialize API: %v", err)
 	}
@@ -985,8 +988,8 @@ func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings
 	// Log initialization
 	if apiController.apiLogger != nil {
 		apiController.apiLogger.Info("API v2 initialized",
-			"version", settings.Version,
-			"build_date", settings.BuildDate,
+			"version", runtime.Version,
+			"build_date", runtime.BuildDate,
 		)
 	}
 

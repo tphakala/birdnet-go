@@ -13,6 +13,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
 )
 
 // DeferredMessage represents a message that was captured before Sentry initialization
@@ -65,7 +66,7 @@ func collectPlatformInfo() PlatformInfo {
 
 // InitSentry initializes Sentry SDK with privacy-compliant settings
 // This function will only initialize Sentry if explicitly enabled by the user
-func InitSentry(settings *conf.Settings) error {
+func InitSentry(settings *conf.Settings, runtimeCtx *runtimectx.Context) error {
 	// Check if Sentry is explicitly enabled (opt-in)
 	if !settings.Sentry.Enabled {
 		log.Println("Sentry telemetry is disabled (opt-in required)")
@@ -78,12 +79,12 @@ func InitSentry(settings *conf.Settings) error {
 	}
 
 	// Initialize Sentry SDK
-	if err := initializeSentrySDK(settings); err != nil {
+	if err := initializeSentrySDK(settings, runtimeCtx); err != nil {
 		return err
 	}
 
 	// Configure global scope
-	configureSentryScope(settings)
+	configureSentryScope(settings, runtimeCtx)
 
 	// Initialize attachment uploader
 	attachmentUploader = NewAttachmentUploader(true)
@@ -92,7 +93,7 @@ func InitSentry(settings *conf.Settings) error {
 	deferredCount := processDeferredMessages()
 
 	// Log initialization success
-	logInitializationSuccess(settings, deferredCount)
+	logInitializationSuccess(settings, runtimeCtx, deferredCount)
 
 	// Event bus integration is deferred until after core services are initialized
 	// to avoid circular dependencies and ensure proper logging
@@ -107,7 +108,7 @@ func enableDebugLogging() {
 }
 
 // initializeSentrySDK initializes the Sentry SDK with privacy-compliant options
-func initializeSentrySDK(settings *conf.Settings) error {
+func initializeSentrySDK(settings *conf.Settings, runtimeCtx *runtimectx.Context) error {
 	// Use hardcoded DSN for BirdNET-Go project
 	const sentryDSN = "https://b9269b6c0f8fae154df65be5a97e0435@o4509553065525248.ingest.de.sentry.io/4509553112186960"
 
@@ -123,7 +124,12 @@ func initializeSentrySDK(settings *conf.Settings) error {
 		ServerName:       "", // Explicitly clear server name to prevent hostname leakage
 
 		// Set release version if available
-		Release: fmt.Sprintf("birdnet-go@%s", settings.Version),
+		Release: func() string {
+			if runtimeCtx != nil {
+				return fmt.Sprintf("birdnet-go@%s", runtimeCtx.Version)
+			}
+			return "birdnet-go@unknown"
+		}(),
 
 		// BeforeSend allows us to filter sensitive data
 		BeforeSend: createBeforeSendHook(settings),
@@ -292,12 +298,14 @@ func removePrivacyTags(tags map[string]string) []string {
 }
 
 // configureSentryScope configures the global Sentry scope with system information
-func configureSentryScope(settings *conf.Settings) {
+func configureSentryScope(settings *conf.Settings, runtimeCtx *runtimectx.Context) {
 	platformInfo := collectPlatformInfo()
 
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		// Set system ID as a tag for all events
-		scope.SetTag("system_id", settings.SystemID)
+		if runtimeCtx != nil {
+			scope.SetTag("system_id", runtimeCtx.SystemID)
+		}
 
 		// Set platform tags for easy filtering in Sentry
 		scope.SetTag("os", platformInfo.OS)
@@ -309,9 +317,19 @@ func configureSentryScope(settings *conf.Settings) {
 
 		// Set application context
 		scope.SetContext("application", map[string]any{
-			"name":      "BirdNET-Go",
-			"version":   settings.Version,
-			"system_id": settings.SystemID,
+			"name": "BirdNET-Go",
+			"version": func() string {
+				if runtimeCtx != nil {
+					return runtimeCtx.Version
+				}
+				return "unknown"
+			}(),
+			"system_id": func() string {
+				if runtimeCtx != nil {
+					return runtimeCtx.SystemID
+				}
+				return "unknown"
+			}(),
 		})
 
 		// Set platform context for detailed telemetry
@@ -344,23 +362,34 @@ func processDeferredMessages() int {
 }
 
 // logInitializationSuccess logs the successful initialization of Sentry
-func logInitializationSuccess(settings *conf.Settings, deferredCount int) {
+func logInitializationSuccess(settings *conf.Settings, runtimeCtx *runtimectx.Context, deferredCount int) {
 	platformInfo := collectPlatformInfo()
 
 	logTelemetryInfo(nil, "Sentry telemetry initialized",
-		"system_id", settings.SystemID,
-		"version", settings.Version,
+		"system_id", func() string {
+			if runtimeCtx != nil { return runtimeCtx.SystemID }
+			return "unknown"
+		}(),
+		"version", func() string {
+			if runtimeCtx != nil { return runtimeCtx.Version }
+			return "unknown"
+		}(),
 		"debug", settings.Sentry.Debug,
 		"platform", platformInfo.OS,
 		"arch", platformInfo.Architecture,
 		"deferred_messages", deferredCount,
 	)
 
+	systemID := "unknown"
+	if runtimeCtx != nil {
+		systemID = runtimeCtx.SystemID
+	}
+
 	if deferredCount > 0 {
 		log.Printf("Sentry telemetry initialized successfully, processed %d deferred messages (System ID: %s)",
-			deferredCount, settings.SystemID)
+			deferredCount, systemID)
 	} else {
-		log.Printf("Sentry telemetry initialized successfully (opt-in enabled, System ID: %s)", settings.SystemID)
+		log.Printf("Sentry telemetry initialized successfully (opt-in enabled, System ID: %s)", systemID)
 	}
 }
 

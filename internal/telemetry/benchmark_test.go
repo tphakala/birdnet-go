@@ -8,6 +8,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
 )
 
 // BenchmarkTelemetryDisabled measures performance when telemetry is disabled
@@ -20,7 +21,12 @@ func BenchmarkTelemetryDisabled(b *testing.B) {
 	}
 	
 	// Initialize with disabled telemetry
-	if err := InitSentry(settings); err != nil {
+	runtimeCtx := &runtimectx.Context{
+		Version:   "benchmark-version",
+		BuildDate: "benchmark-build",
+		SystemID:  "benchmark-system-id",
+	}
+	if err := InitSentry(settings, runtimeCtx); err != nil {
 		b.Fatalf("Failed to initialize Sentry: %v", err)
 	}
 	InitializeErrorIntegration()

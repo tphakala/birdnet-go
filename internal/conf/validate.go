@@ -145,14 +145,8 @@ func validateBirdNETSettings(birdnetSettings *BirdNETConfig, settings *Settings)
 			message := fmt.Sprintf("BirdNET locale '%s' is not supported, will use fallback '%s'", birdnetSettings.Locale, normalizedLocale)
 			errs = append(errs, message)
 
-			// Store the validation warning for telemetry reporting
-			// We can't call telemetry directly here due to import cycles
-			// This will be handled by the calling code in main.go
-			if settings.ValidationWarnings == nil {
-				settings.ValidationWarnings = make([]string, 0)
-			}
-			settings.ValidationWarnings = append(settings.ValidationWarnings,
-				fmt.Sprintf("config-locale-validation: %s", message))
+			// Note: Validation warnings are now handled by the caller through ValidationResult
+			// This validation function should remain pure and only return errors
 		}
 		// Update the settings with the normalized locale
 		birdnetSettings.Locale = normalizedLocale

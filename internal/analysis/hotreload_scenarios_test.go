@@ -207,7 +207,7 @@ func TestHandleReconfigureSoundLevelMessages(t *testing.T) {
 	settings := conf.GetSettings()
 	if settings == nil {
 		// Try to load default settings
-		if _, err := conf.Load(); err != nil {
+		if _, _, err := conf.Load(); err != nil {
 			t.Skip("Cannot load settings for test")
 		}
 		settings = conf.GetSettings()

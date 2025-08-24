@@ -23,9 +23,9 @@ func TestHealthCheck(t *testing.T) {
 	// Setup mock expectations for database check
 	mockDS.On("GetLastDetections", 1).Return([]datastore.Note{}, nil)
 
-	// Add system metrics to the controller settings
-	controller.Settings.Version = "1.2.3"
-	controller.Settings.BuildDate = "2023-05-15"
+	// Set system metrics in the controller runtime context
+	controller.Runtime.Version = "1.2.3"
+	controller.Runtime.BuildDate = "2023-05-15"
 
 	// Create a request to the health check endpoint
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/health", http.NoBody)

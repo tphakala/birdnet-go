@@ -16,31 +16,32 @@ import (
 	"github.com/tphakala/birdnet-go/cmd/realtime"
 	"github.com/tphakala/birdnet-go/cmd/support"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
 )
 
 // RootCommand creates and returns the root command
-func RootCommand(settings *conf.Settings) *cobra.Command {
+func RootCommand(config *conf.Settings, runtime *runtimectx.Context) *cobra.Command {
 	// Create the root command
 	rootCmd := &cobra.Command{
 		Use:   "birdnet",
-		Short: "BirdNET-Go CLI",
+		Short: fmt.Sprintf("BirdNET-Go %s CLI", runtime.Version),
 	}
 
 	// Set up the global flags for the root command.
-	err := setupFlags(rootCmd, settings)
+	err := setupFlags(rootCmd, config)
 	if err != nil {
 		log.Printf("error setting up flags: %v\n", err)
 	}
 
 	// Add sub-commands to the root command.
-	fileCmd := file.Command(settings)
-	directoryCmd := directory.Command(settings)
-	realtimeCmd := realtime.Command(settings)
+	fileCmd := file.Command(config)
+	directoryCmd := directory.Command(config)
+	realtimeCmd := realtime.Command(config)
 	authorsCmd := authors.Command()
 	licenseCmd := license.Command()
-	rangeCmd := rangefilter.Command(settings)
-	supportCmd := support.Command(settings)
-	benchmarkCmd := benchmark.Command(settings)
+	rangeCmd := rangefilter.Command(config)
+	supportCmd := support.Command(config, runtime)  // Support needs both
+	benchmarkCmd := benchmark.Command(config)
 
 	subcommands := []*cobra.Command{
 		fileCmd,

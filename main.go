@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -89,15 +90,18 @@ func mainWithExitCode() int {
 	httpcontroller.ImageProviderRegistry = imageProviderRegistry
 
 	// Load the configuration
-	settings := conf.Setting()
-	if settings == nil {
-		fmt.Fprintf(os.Stderr, "Error loading configuration\n")
+	config, validationResult, err := conf.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
 		return 1
 	}
 
-	// Set runtime values
-	settings.Version = version
-	settings.BuildDate = buildDate
+	// Handle validation warnings
+	if validationResult != nil && validationResult.HasIssues() {
+		for _, warning := range validationResult.Warnings {
+			fmt.Printf("⚠️  Config warning: %s\n", warning)
+		}
+	}
 
 	// Load or create system ID for telemetry
 	systemID, err := telemetry.LoadOrCreateSystemID(filepath.Dir(viper.ConfigFileUsed()))
@@ -106,13 +110,20 @@ func mainWithExitCode() int {
 		// Generate a temporary one for this session
 		systemID, _ = telemetry.GenerateSystemID()
 	}
-	settings.SystemID = systemID
+
+	// Create runtime context with separated concerns
+	runtimeContext := &runtimectx.Context{
+		Version:   version,
+		BuildDate: buildDate,
+		SystemID:  systemID,
+	}
 
 	fmt.Printf("🐦 \033[37mBirdNET-Go %s (built: %s), using config file: %s\033[0m\n",
-		settings.Version, settings.BuildDate, viper.ConfigFileUsed())
+		runtimeContext.Version, runtimeContext.BuildDate, viper.ConfigFileUsed())
 
 	// Initialize core systems (telemetry and notification)
-	if err := telemetry.InitializeSystem(settings); err != nil {
+	// TODO: telemetry.InitializeSystem should accept runtime context in future refactoring
+	if err := telemetry.InitializeSystem(config); err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing core systems: %v\n", err)
 		// Continue - these are not critical for basic operation
 	}
@@ -124,7 +135,7 @@ func mainWithExitCode() int {
 	}
 
 	// Enable runtime profiling if debug mode is enabled
-	if settings.Debug {
+	if config.Debug {
 		// Enable mutex profiling for detecting lock contention
 		runtime.SetMutexProfileFraction(1)
 
@@ -135,8 +146,8 @@ func mainWithExitCode() int {
 	}
 
 	// Process configuration validation warnings that occurred before Sentry initialization
-	if len(settings.ValidationWarnings) > 0 {
-		for _, warning := range settings.ValidationWarnings {
+	if validationResult != nil && len(validationResult.Warnings) > 0 {
+		for _, warning := range validationResult.Warnings {
 			parts := strings.SplitN(warning, ": ", 2)
 			if len(parts) == 2 {
 				component := parts[0]
@@ -144,12 +155,10 @@ func mainWithExitCode() int {
 				telemetry.CaptureMessage(message, sentry.LevelWarning, component)
 			}
 		}
-		// Clear the warnings as they've been processed
-		settings.ValidationWarnings = nil
 	}
 
 	// Execute the root command
-	rootCmd := cmd.RootCommand(settings)
+	rootCmd := cmd.RootCommand(config, runtimeContext)
 	if err := rootCmd.Execute(); err != nil {
 		if errors.Is(err, analysis.ErrAnalysisCanceled) {
 			// Clean exit for user-initiated cancellation

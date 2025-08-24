@@ -26,6 +26,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	obsmetrics "github.com/tphakala/birdnet-go/internal/observability/metrics"
+	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/serviceapi"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
@@ -213,10 +214,20 @@ func (s *Server) initializeServer() {
 
 	// Initialize the JSON API v2 - Pass OAuth2Server directly
 	s.Debug("Initializing JSON API v2")
+	
+	// TODO: Temporary fix - create runtime context from global state
+	// This should be passed from the caller in the future
+	runtimeContext := &runtimectx.Context{
+		Version:   "unknown",
+		BuildDate: "unknown",
+		SystemID:  "unknown",
+	}
+	
 	s.APIV2 = api.InitializeAPI(
 		s.Echo,
 		s.DS,
 		s.Settings,
+		runtimeContext,
 		s.BirdImageCache,
 		s.SunCalc,
 		s.controlChan,

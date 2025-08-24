@@ -16,6 +16,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/runtime"
 	"gopkg.in/yaml.v3"
 )
 
@@ -783,14 +784,9 @@ type BackupConfig struct {
 }
 
 // Settings contains all configuration options for the BirdNET-Go application.
+// Runtime values like Version, BuildDate, SystemID are now in runtime.Context
 type Settings struct {
 	Debug bool `json:"debug"` // true to enable debug mode
-
-	// Runtime values, not stored in config file
-	Version            string   `yaml:"-" json:"version,omitempty"`            // Version from build
-	BuildDate          string   `yaml:"-" json:"buildDate,omitempty"`          // Build date from build
-	SystemID           string   `yaml:"-" json:"systemId,omitempty"`           // Unique system identifier for telemetry
-	ValidationWarnings []string `yaml:"-" json:"validationWarnings,omitempty"` // Configuration validation warnings for telemetry
 
 	Main struct {
 		Name      string    `json:"name"`      // name of BirdNET-Go node, can be used to identify source of notes
@@ -858,16 +854,20 @@ var (
 )
 
 // Load reads the configuration file and environment variables into GlobalConfig.
-func Load() (*Settings, error) {
+// Returns settings, validation result, and any error
+func Load() (*Settings, *runtime.ValidationResult, error) {
 	settingsMutex.Lock()
 	defer settingsMutex.Unlock()
 
 	// Create a new settings struct
 	settings := &Settings{}
 
+	// Initialize validation result
+	validationResult := runtime.NewValidationResult()
+
 	// Initialize viper and read config
 	if err := initViper(); err != nil {
-		return nil, errors.New(err).
+		return nil, nil, errors.New(err).
 			Category(errors.CategoryConfiguration).
 			Context("operation", "init-viper").
 			Build()
@@ -875,7 +875,7 @@ func Load() (*Settings, error) {
 
 	// Unmarshal the config into settings
 	if err := viper.Unmarshal(settings); err != nil {
-		return nil, errors.New(err).
+		return nil, nil, errors.New(err).
 			Category(errors.CategoryConfiguration).
 			Context("operation", "unmarshal-config").
 			Build()
@@ -886,7 +886,7 @@ func Load() (*Settings, error) {
 		// Generate a new session secret
 		sessionSecret := GenerateRandomSecret()
 		if sessionSecret == "" {
-			return nil, errors.Newf("failed to generate session secret").
+			return nil, nil, errors.Newf("failed to generate session secret").
 				Component("conf").
 				Category(errors.CategoryConfiguration).
 				Context("operation", "generate_session_secret").
@@ -928,12 +928,12 @@ func Load() (*Settings, error) {
 					strings.Contains(errMsg, "OAuth authentication warning") {
 					// This is a warning - report to telemetry but don't fail
 					log.Printf("Configuration warning: %s", errMsg)
-					// Store the warning for later telemetry reporting
-					settings.ValidationWarnings = append(settings.ValidationWarnings, errMsg)
+					// Store the warning in validation result
+					validationResult.AddWarning(errMsg)
 					// Note: Telemetry reporting will happen later in birdnet package when Sentry is initialized
 				} else {
 					// This is a real validation error - fail the config load
-					return nil, errors.New(err).
+					return nil, nil, errors.New(err).
 						Category(errors.CategoryValidation).
 						Context("component", "settings").
 						Context("error_msg", errMsg).
@@ -942,7 +942,7 @@ func Load() (*Settings, error) {
 			}
 		} else {
 			// Other validation errors should fail the config load
-			return nil, errors.New(err).
+			return nil, nil, errors.New(err).
 				Category(errors.CategoryValidation).
 				Context("component", "settings").
 				Build()
@@ -959,7 +959,7 @@ func Load() (*Settings, error) {
 
 	// Save settings instance
 	settingsInstance = settings
-	return settingsInstance, nil
+	return settingsInstance, validationResult, nil
 }
 
 
@@ -1118,10 +1118,11 @@ func SaveSettings() error {
 }
 
 // Setting returns the current settings instance, initializing it if necessary
+// Deprecated: Use explicit configuration loading instead of global singleton
 func Setting() *Settings {
 	once.Do(func() {
 		if settingsInstance == nil {
-			_, err := Load()
+			_, validationResult, err := Load()
 			if err != nil {
 				// Fatal error loading settings - application cannot continue
 				enhancedErr := errors.New(err).
@@ -1129,6 +1130,13 @@ func Setting() *Settings {
 					Context("operation", "load-settings-init").
 					Build()
 				log.Fatalf("Error loading settings: %v", enhancedErr)
+			}
+			
+			// Log warnings from validation
+			if validationResult != nil && len(validationResult.Warnings) > 0 {
+				for _, warning := range validationResult.Warnings {
+					log.Printf("Configuration warning: %s", warning)
+				}
 			}
 		}
 	})

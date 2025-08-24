@@ -81,8 +81,8 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	collector := support.NewCollector(
 		configPath[0], // Use first config path
 		".",           // Data directory (current directory)
-		settings.SystemID,
-		settings.Version,
+		c.Runtime.SystemID,
+		c.Runtime.Version,
 	)
 
 	// Set collection options
@@ -96,12 +96,12 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	}
 
 	// Collect data
-	c.apiLogger.Debug("Starting support data collection", "system_id", settings.SystemID)
+	c.apiLogger.Debug("Starting support data collection", "system_id", c.Runtime.SystemID)
 	dump, err := collector.Collect(ctx.Request().Context(), opts)
 	if err != nil {
 		c.apiLogger.Error("Failed to collect support data",
 			"error", err,
-			"system_id", settings.SystemID,
+			"system_id", c.Runtime.SystemID,
 			"opts", opts,
 		)
 		return ctx.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -139,7 +139,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	if req.UploadToSentry {
 		// Initialize minimal Sentry if needed
 		if !settings.Sentry.Enabled {
-			if err := telemetry.InitMinimalSentryForSupport(settings.SystemID, settings.Version); err != nil {
+			if err := telemetry.InitMinimalSentryForSupport(c.Runtime.SystemID, c.Runtime.Version); err != nil {
 				c.apiLogger.Error("Failed to initialize minimal Sentry for support upload",
 					"error", err,
 					"dump_id", dump.ID,
@@ -152,7 +152,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		// Proceed with upload if still requested
 		if req.UploadToSentry {
 			uploader := telemetry.GetAttachmentUploader()
-			if err := uploader.UploadSupportDump(ctx.Request().Context(), archiveData, settings.SystemID, req.UserMessage); err != nil {
+			if err := uploader.UploadSupportDump(ctx.Request().Context(), archiveData, c.Runtime.SystemID, req.UserMessage); err != nil {
 				// Log error but don't fail the request
 				c.apiLogger.Error("Failed to upload support dump to Sentry",
 					"error", err,
@@ -164,7 +164,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 				response.Message = "Support dump generated and uploaded successfully"
 				c.apiLogger.Info("Support dump uploaded to Sentry",
 					"dump_id", dump.ID,
-					"system_id", settings.SystemID,
+					"system_id", c.Runtime.SystemID,
 					"telemetry_enabled", settings.Sentry.Enabled,
 				)
 			}
@@ -248,8 +248,8 @@ func (c *Controller) GetSupportStatus(ctx echo.Context) error {
 
 	status := map[string]any{
 		"telemetry_enabled": settings.Sentry.Enabled,
-		"system_id":         settings.SystemID,
-		"version":           settings.Version,
+		"system_id":         c.Runtime.SystemID,
+		"version":           c.Runtime.Version,
 	}
 
 	return ctx.JSON(http.StatusOK, status)

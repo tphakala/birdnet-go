@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
 	"go.uber.org/goleak"
 )
 
@@ -54,7 +55,12 @@ func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
 	mockMetrics, _ := observability.NewMetrics()
 
 	// Create controller WITH route initialization to start background goroutines
-	controller, err := NewWithOptions(e, mockDS, settings, nil, nil, controlChan, nil, nil, mockMetrics, true)
+	mockRuntime := &runtimectx.Context{
+		Version:   "test-version",
+		BuildDate: "test-build-date",
+		SystemID:  "test-system-id",
+	}
+	controller, err := NewWithOptions(e, mockDS, settings, mockRuntime, nil, nil, controlChan, nil, nil, mockMetrics, true)
 	require.NoError(t, err)
 
 	// Wait for goroutines to start using the synchronization channel

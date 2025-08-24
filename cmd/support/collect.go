@@ -8,11 +8,12 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
 	"github.com/tphakala/birdnet-go/internal/support"
 )
 
 // CollectCommand creates the support data collection subcommand
-func CollectCommand() *cobra.Command {
+func CollectCommand(runtime *runtimectx.Context) *cobra.Command {
 	return &cobra.Command{
 		Use:   "collect",
 		Short: "Collect system diagnostics for troubleshooting",
@@ -25,13 +26,12 @@ func CollectCommand() *cobra.Command {
 				configPaths = []string{"."}
 			}
 			
-			// Get current settings for system ID
-			settings := conf.GetSettings()
+			// Use runtime context for system ID and version
 			systemID := "unknown"
 			version := "unknown"
-			if settings != nil {
-				systemID = settings.SystemID
-				version = settings.Version
+			if runtime != nil {
+				systemID = runtime.SystemID
+				version = runtime.Version
 			}
 			
 			// Create collector

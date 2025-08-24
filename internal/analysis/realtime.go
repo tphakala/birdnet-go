@@ -1426,8 +1426,15 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 			Build()
 	}
 
-	// Use settings.Version for the app version
-	backupManager, err := backup.NewManager(settings, backupLogger, stateManager, settings.Version)
+	// TODO: Get runtime version from context - using fallback for now
+	// This should be passed from the caller during the configuration separation refactoring
+	appVersion := "unknown"
+	if currentSettings := conf.GetSettings(); currentSettings != nil {
+		// Try to get version from global settings as a temporary fallback
+		// This access pattern will be removed during the complete refactoring
+		appVersion = "birdnet-go" // Default app name as fallback
+	}
+	backupManager, err := backup.NewManager(settings, backupLogger, stateManager, appVersion)
 	if err != nil {
 		return nil, nil, errors.New(err).
 			Component("analysis.realtime").

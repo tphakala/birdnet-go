@@ -9,6 +9,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
 )
 
 func TestTelemetryIntegration(t *testing.T) {
@@ -195,7 +196,12 @@ func TestTelemetryDisabled(t *testing.T) {
 	}
 
 	// Initialize with disabled telemetry
-	err := InitSentry(settings)
+	runtimeCtx := &runtimectx.Context{
+		Version:   "test-version",
+		BuildDate: "test-build",
+		SystemID:  "test-system-id",
+	}
+	err := InitSentry(settings, runtimeCtx)
 	if err != nil {
 		t.Errorf("InitSentry should not error when disabled: %v", err)
 	}

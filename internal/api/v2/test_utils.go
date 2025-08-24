@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	runtimectx "github.com/tphakala/birdnet-go/internal/runtime"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"gorm.io/gorm"
 )
@@ -696,8 +697,15 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 	// Create mock metrics for testing
 	mockMetrics, _ := observability.NewMetrics()
 
+	// Create mock runtime context for testing
+	mockRuntime := &runtimectx.Context{
+		Version:   "test-version",
+		BuildDate: "test-build-date",
+		SystemID:  "test-system-id",
+	}
+
 	// Create API controller without initializing routes to avoid starting background goroutines
-	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, nil, mockMetrics, false)
+	controller, err := NewWithOptions(e, mockDS, settings, mockRuntime, birdImageCache, sunCalc, controlChan, logger, nil, mockMetrics, false)
 	if err != nil {
 		t.Fatalf("Failed to create test API controller: %v", err)
 	}

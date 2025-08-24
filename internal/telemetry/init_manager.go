@@ -105,7 +105,8 @@ func (m *InitManager) InitializeSentrySafe(settings any) error {
 		go func() {
 			// Type assertion for settings
 			if s, ok := settings.(*conf.Settings); ok {
-				done <- InitSentry(s)
+				// TODO: Need to pass runtime context here - using nil for now as temporary fix
+				done <- InitSentry(s, nil)
 			} else {
 				done <- fmt.Errorf("invalid settings type: expected *conf.Settings")
 			}

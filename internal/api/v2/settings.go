@@ -1623,11 +1623,11 @@ func (c *Controller) GetSystemID(ctx echo.Context) error {
 		}
 	}
 
-	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved system ID successfully", "system_id", settings.SystemID)
+	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved system ID successfully", "system_id", c.Runtime.SystemID)
 
 	// Return system ID in the format expected by the frontend
 	response := map[string]string{
-		"systemID": settings.SystemID,
+		"systemID": c.Runtime.SystemID,
 	}
 
 	return ctx.JSON(http.StatusOK, response)
