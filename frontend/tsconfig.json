@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vitest/globals", "@testing-library/jest-dom", "node"],
+    "types": ["vitest/globals", "@testing-library/jest-dom", "node", "@playwright/test"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
@@ -32,6 +32,8 @@
     "src/**/*.svelte",
     "src/vite-env.d.ts",
     "src/vitest-env.d.ts",
+    "tests/**/*.ts",
+    "playwright.config.ts",
     "vite.config.js",
     "tailwind.config.js",
     "postcss.config.js"
