@@ -2,8 +2,8 @@
 package buildinfo
 
 const (
-	// unknownValue is the fallback value used when build information is not available
-	unknownValue = "unknown"
+	// UnknownValue is the fallback value used when build information is not available
+	UnknownValue = "unknown"
 )
 
 // Compile-time assertion to ensure Context implements the BuildInfo interface
@@ -73,10 +73,10 @@ func NewValidationResult() *ValidationResult {
 // Version implements BuildInfo.Version
 func (c *Context) Version() string {
 	if c == nil {
-		return unknownValue
+		return UnknownValue
 	}
 	if c.version == "" {
-		return unknownValue
+		return UnknownValue
 	}
 	return c.version
 }
@@ -84,10 +84,10 @@ func (c *Context) Version() string {
 // BuildDate implements BuildInfo.BuildDate
 func (c *Context) BuildDate() string {
 	if c == nil {
-		return unknownValue
+		return UnknownValue
 	}
 	if c.buildDate == "" {
-		return unknownValue
+		return UnknownValue
 	}
 	return c.buildDate
 }
@@ -95,10 +95,10 @@ func (c *Context) BuildDate() string {
 // SystemID implements BuildInfo.SystemID
 func (c *Context) SystemID() string {
 	if c == nil {
-		return unknownValue
+		return UnknownValue
 	}
 	if c.systemID == "" {
-		return unknownValue
+		return UnknownValue
 	}
 	return c.systemID
 }

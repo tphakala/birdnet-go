@@ -21,7 +21,7 @@ import (
 // RootCommand creates and returns the root command
 func RootCommand(config *conf.Settings, runtime *runtimectx.Context) *cobra.Command {
 	// Compute safe version string
-	version := "unknown"
+	version := runtimectx.UnknownValue
 	if runtime != nil && runtime.Version() != "" {
 		version = runtime.Version()
 	}

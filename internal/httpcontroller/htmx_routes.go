@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/buildinfo"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/security"
@@ -64,7 +65,7 @@ func (s *Server) getVersionString() string {
 	if s.RuntimeContext != nil && s.RuntimeContext.Version() != "" {
 		return s.RuntimeContext.Version()
 	}
-	return "unknown"
+	return buildinfo.UnknownValue
 }
 
 // initRoutes initializes the routes for the server.

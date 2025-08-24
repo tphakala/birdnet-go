@@ -27,8 +27,8 @@ func CollectCommand(runtime *runtimectx.Context) *cobra.Command {
 			}
 			
 			// Use runtime context for system ID and version
-			systemID := "unknown"
-			version := "unknown"
+			systemID := runtimectx.UnknownValue
+			version := runtimectx.UnknownValue
 			if runtime != nil {
 				if runtime.SystemID() != "" {
 					systemID = runtime.SystemID()

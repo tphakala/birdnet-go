@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/buildinfo"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -1624,12 +1625,12 @@ func (c *Controller) GetSystemID(ctx echo.Context) error {
 	}
 
 	// Use BuildInfo interface methods for safe access, rely solely on c.Runtime.SystemID
-	systemID := "unknown"
+	systemID := buildinfo.UnknownValue
 	if c.Runtime != nil && c.Runtime.SystemID() != "" {
 		systemID = c.Runtime.SystemID()
 		c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved system ID successfully", "system_id", systemID)
 	} else {
-		c.logAPIRequest(ctx, slog.LevelWarn, "System ID not available, using fallback value", "fallback", "unknown")
+		c.logAPIRequest(ctx, slog.LevelWarn, "System ID not available, using fallback value", "fallback", buildinfo.UnknownValue)
 	}
 
 	// Return system ID in the format expected by the frontend (always 200 OK)

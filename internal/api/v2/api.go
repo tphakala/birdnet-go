@@ -461,8 +461,8 @@ func (c *Controller) initRoutes() {
 // HealthCheck handles the API health check endpoint
 func (c *Controller) HealthCheck(ctx echo.Context) error {
 	// Use BuildInfo interface methods for safe access
-	version := "unknown"
-	buildDate := "unknown"
+	version := runtimectx.UnknownValue
+	buildDate := runtimectx.UnknownValue
 	if c.Runtime != nil {
 		version = c.Runtime.Version()
 		buildDate = c.Runtime.BuildDate()
@@ -997,8 +997,8 @@ func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings
 
 	// Log initialization using BuildInfo interface methods
 	if apiController.apiLogger != nil {
-		version := "unknown"
-		buildDate := "unknown"
+		version := runtimectx.UnknownValue
+		buildDate := runtimectx.UnknownValue
 		if runtimeCtx != nil {
 			version = runtimeCtx.Version()
 			buildDate = runtimeCtx.BuildDate()

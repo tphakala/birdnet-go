@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/buildinfo"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/support"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -78,8 +79,8 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	}
 
 	// Create collector with proper paths using BuildInfo interface methods
-	systemID := "unknown"
-	version := "unknown" 
+	systemID := buildinfo.UnknownValue
+	version := buildinfo.UnknownValue 
 	if c.Runtime != nil {
 		systemID = c.Runtime.SystemID()
 		version = c.Runtime.Version()
@@ -254,8 +255,8 @@ func (c *Controller) GetSupportStatus(ctx echo.Context) error {
 	}
 
 	// Use BuildInfo interface methods for safe access
-	systemID := "unknown"
-	version := "unknown"
+	systemID := buildinfo.UnknownValue
+	version := buildinfo.UnknownValue
 	if c.Runtime != nil {
 		systemID = c.Runtime.SystemID()
 		version = c.Runtime.Version()

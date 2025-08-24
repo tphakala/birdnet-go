@@ -330,13 +330,13 @@ func configureSentryScope(settings *conf.Settings, runtimeCtx *runtimectx.Contex
 				if runtimeCtx != nil && runtimeCtx.Version() != "" {
 					return runtimeCtx.Version()
 				}
-				return "unknown"
+				return runtimectx.UnknownValue
 			}(),
 			"system_id": func() string {
 				if runtimeCtx != nil && runtimeCtx.SystemID() != "" {
 					return runtimeCtx.SystemID()
 				}
-				return "unknown"
+				return runtimectx.UnknownValue
 			}(),
 		})
 
@@ -376,11 +376,11 @@ func logInitializationSuccess(settings *conf.Settings, runtimeCtx *runtimectx.Co
 	logTelemetryInfo(nil, "Sentry telemetry initialized",
 		"system_id", func() string {
 			if runtimeCtx != nil { return runtimeCtx.SystemID() }
-			return "unknown"
+			return runtimectx.UnknownValue
 		}(),
 		"version", func() string {
 			if runtimeCtx != nil { return runtimeCtx.Version() }
-			return "unknown"
+			return runtimectx.UnknownValue
 		}(),
 		"debug", settings.Sentry.Debug,
 		"platform", platformInfo.OS,
@@ -388,7 +388,7 @@ func logInitializationSuccess(settings *conf.Settings, runtimeCtx *runtimectx.Co
 		"deferred_messages", deferredCount,
 	)
 
-	systemID := "unknown"
+	systemID := runtimectx.UnknownValue
 	if runtimeCtx != nil {
 		systemID = runtimeCtx.SystemID()
 	}

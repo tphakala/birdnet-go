@@ -1428,7 +1428,7 @@ func initializeBackupSystem(settings *conf.Settings, runtime *runtimectx.Context
 	}
 
 	// Use runtime context for app version
-	appVersion := "unknown"
+	appVersion := runtimectx.UnknownValue
 	if runtime != nil && runtime.Version() != "" {
 		appVersion = runtime.Version()
 	}
