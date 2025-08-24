@@ -31,6 +31,8 @@ func safeMapAccessMap(t *testing.T, m map[string]any, key, description string) m
 
 // TestSpeciesConfigIntegration tests the full integration of species config with zero values
 func TestSpeciesConfigIntegration(t *testing.T) {
+	t.Parallel()
+	
 	// Create a temporary directory for the test
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "test_integration_config.yaml")
@@ -130,7 +132,7 @@ realtime:
 		_, hasThreshold := config["threshold"]
 		assert.True(t, hasThreshold, "%s should have threshold field", birdName)
 		
-		// Check that interval exists (THIS IS THE KEY TEST)
+		// Check that interval exists — regression guard to ensure zero values are serialized
 		_, hasInterval := config["interval"]
 		assert.True(t, hasInterval, "%s should have interval field even when zero", birdName)
 	}

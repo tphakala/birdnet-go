@@ -13,6 +13,7 @@ import (
 
 // TestSpeciesConfigYAMLPersistence tests that species config with zero values persists correctly
 func TestSpeciesConfigYAMLPersistence(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		config    SpeciesConfig
@@ -56,6 +57,7 @@ func TestSpeciesConfigYAMLPersistence(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Marshal to YAML
 			yamlData, err := yaml.Marshal(tt.config)
 			require.NoError(t, err, "Failed to marshal config to YAML")
@@ -69,7 +71,7 @@ func TestSpeciesConfigYAMLPersistence(t *testing.T) {
 			_, hasThreshold := yamlMap["threshold"]
 			assert.True(t, hasThreshold, "threshold field should always be present in YAML")
 
-			// Check if interval is present - THIS WILL FAIL with omitempty tag
+			// Check if interval is present - regression guard: ensure interval persists even when zero
 			_, hasInterval := yamlMap["interval"]
 			if !tt.expectNil {
 				assert.True(t, hasInterval, "interval field should be present in YAML even when zero")
@@ -90,6 +92,7 @@ func TestSpeciesConfigYAMLPersistence(t *testing.T) {
 
 // TestSpeciesConfigJSONPersistence tests JSON marshaling for API communication
 func TestSpeciesConfigJSONPersistence(t *testing.T) {
+	t.Parallel()
 	speciesSettings := SpeciesSettings{
 		Include: []string{"Robin", "Blue Jay"},
 		Exclude: []string{"Crow"},
@@ -127,7 +130,7 @@ func TestSpeciesConfigJSONPersistence(t *testing.T) {
 	rareBird, ok := rareBirdInterface.(map[string]any)
 	require.True(t, ok, "Rare Bird entry should be a map")
 
-	// THIS WILL FAIL if interval has omitempty tag
+	// Regression guard: ensure interval field persists in JSON even when zero
 	_, hasInterval := rareBird["interval"]
 	assert.True(t, hasInterval, "interval field should be present in JSON even when zero")
 
@@ -148,6 +151,8 @@ func TestSpeciesConfigJSONPersistence(t *testing.T) {
 
 // TestSettingsSaveAndLoad tests the full save/load cycle with species configs
 func TestSettingsSaveAndLoad(t *testing.T) {
+	t.Parallel()
+	
 	// Create temp directory for test
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "test_config.yaml")
@@ -197,15 +202,29 @@ func TestSettingsSaveAndLoad(t *testing.T) {
 	err = yaml.Unmarshal(yamlContent, &yamlData)
 	require.NoError(t, err, "Failed to parse YAML")
 
-	// Navigate to species config
-	realtime := yamlData["realtime"].(map[string]any)
-	species := realtime["species"].(map[string]any)
-	configMap := species["config"].(map[string]any)
+	// Navigate to species config with safe type assertions
+	realtimeRaw, ok := yamlData["realtime"]
+	require.True(t, ok, "realtime section should exist in YAML data")
+	realtime, ok := realtimeRaw.(map[string]any)
+	require.True(t, ok, "realtime should be a map")
+
+	speciesRaw, ok := realtime["species"]
+	require.True(t, ok, "species section should exist in realtime")
+	species, ok := speciesRaw.(map[string]any)
+	require.True(t, ok, "species should be a map")
+
+	configMapRaw, ok := species["config"]
+	require.True(t, ok, "config section should exist in species")
+	configMap, ok := configMapRaw.(map[string]any)
+	require.True(t, ok, "config should be a map")
 	
-	// Check Zero Values Bird
-	zeroValuesBird := configMap["Zero Values Bird"].(map[string]any)
+	// Check Zero Values Bird with safe type assertion
+	zeroValuesBirdRaw, ok := configMap["Zero Values Bird"]
+	require.True(t, ok, "Zero Values Bird should exist in config")
+	zeroValuesBird, ok := zeroValuesBirdRaw.(map[string]any)
+	require.True(t, ok, "Zero Values Bird should be a map")
 	
-	// THIS WILL FAIL with omitempty on interval
+	// Regression guard: ensure interval field persists even when zero
 	_, hasInterval := zeroValuesBird["interval"]
 	assert.True(t, hasInterval, "interval field should be saved even when zero")
 	
@@ -233,6 +252,8 @@ func TestSettingsSaveAndLoad(t *testing.T) {
 
 // TestSpeciesConfigUpdate tests updating existing species config
 func TestSpeciesConfigUpdate(t *testing.T) {
+	t.Parallel()
+	
 	// Initial settings with one species config
 	settings := &Settings{
 		Realtime: RealtimeSettings{

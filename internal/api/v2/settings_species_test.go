@@ -15,6 +15,8 @@ import (
 
 // TestUpdateSpeciesSettingsWithZeroValues tests that zero values in species config are preserved
 func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
+	t.Parallel()
+	
 	// Setup
 	e := echo.New()
 	_, _, controller := newAPIContext(t, e, "", "", nil)
@@ -91,6 +93,7 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Execute update
 			rec := patchRealtime(t, e, controller, tt.payload)
 			require.Equal(t, http.StatusOK, rec.Code, "Should return 200 OK")
@@ -139,6 +142,8 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 
 // TestSpeciesSettingsUpdate tests that species config updates preserve zero values correctly  
 func TestSpeciesSettingsUpdate(t *testing.T) {
+	t.Parallel()
+	
 	// Setup
 	e := echo.New()
 	controller := &Controller{
@@ -214,6 +219,8 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 
 // TestPartialSpeciesConfigUpdate tests that partial updates don't lose existing data
 func TestPartialSpeciesConfigUpdate(t *testing.T) {
+	t.Parallel()
+	
 	// Setup with existing configs
 	e := echo.New()
 	controller := &Controller{
@@ -281,6 +288,8 @@ func TestPartialSpeciesConfigUpdate(t *testing.T) {
 // TestSpeciesSettingsPatchGetSync tests that PATCH -> GET works correctly
 // This ensures that updates to controller.Settings are reflected in GET responses
 func TestSpeciesSettingsPatchGetSync(t *testing.T) {
+	t.Parallel()
+	
 	// Setup controller with its own settings (simulating real usage)
 	e := echo.New()
 	controller := &Controller{
@@ -418,13 +427,17 @@ func newAPIContext(t *testing.T, e *echo.Echo, method, path string, body any) (e
 func patchRealtime(t *testing.T, e *echo.Echo, c *Controller, payload any) *httptest.ResponseRecorder {
 	t.Helper()
 
-	ctx, rec, _ := newAPIContext(t, e, http.MethodPatch, "/api/v2/settings/realtime", payload)
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/realtime", bytes.NewReader(data))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
 	ctx.SetPath("/api/v2/settings/:section")
 	ctx.SetParamNames("section")
 	ctx.SetParamValues("realtime")
 
-	err := c.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
+	require.NoError(t, c.UpdateSectionSettings(ctx))
 	return rec
 }
 
@@ -432,12 +445,13 @@ func patchRealtime(t *testing.T, e *echo.Echo, c *Controller, payload any) *http
 func getRealtime(t *testing.T, e *echo.Echo, c *Controller) *httptest.ResponseRecorder {
 	t.Helper()
 
-	ctx, rec, _ := newAPIContext(t, e, http.MethodGet, "/api/v2/settings/realtime", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/realtime", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
 	ctx.SetPath("/api/v2/settings/:section")
 	ctx.SetParamNames("section")
 	ctx.SetParamValues("realtime")
 
-	err := c.GetSectionSettings(ctx)
-	require.NoError(t, err)
+	require.NoError(t, c.GetSectionSettings(ctx))
 	return rec
 }
