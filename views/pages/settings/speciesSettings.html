@@ -4,8 +4,8 @@
 <input type="hidden" name="templateName" value="{{.TemplateName}}">
 
 <!-- Add script imports for species components -->
-<script src="/assets/js/components/speciesUtils.js?v={{.Settings.Version}}"></script>
-<script src="/assets/js/components/speciesComponentMixin.js?v={{.Settings.Version}}"></script>
+<script src="/assets/js/components/speciesUtils.js?v={{.Version}}"></script>
+<script src="/assets/js/components/speciesComponentMixin.js?v={{.Version}}"></script>
 
 <!-- First div - Include Species -->
 <div class="collapse collapse-open bg-base-100 shadow-xs col-span-3" 
@@ -37,7 +37,7 @@
             this.allSpecies = [];
             this.filteredSpecies = [];
             // Use app version for cache busting
-            const appVersion = '{{.Settings.Version}}';
+            const appVersion = '{{.Version}}';
             const cached = localStorage.getItem('allSpecies');
             const cachedFiltered = localStorage.getItem('filteredSpecies');
             const cachedVersion = localStorage.getItem('allSpeciesVersion');
@@ -184,7 +184,7 @@
         
         async init() {
             // Use app version for cache busting
-            const appVersion = '{{.Settings.Version}}';
+            const appVersion = '{{.Version}}';
             const cachedFiltered = localStorage.getItem('filteredSpecies');
             const cachedVersion = localStorage.getItem('allSpeciesVersion');
             
@@ -194,7 +194,7 @@
                 this.filteredSpecies = {{getIncludedSpecies | toJSON}};
                 // Cache filtered species
                 localStorage.setItem('filteredSpecies', JSON.stringify(this.filteredSpecies));
-                localStorage.setItem('allSpeciesVersion', '{{.Settings.Version}}');
+                localStorage.setItem('allSpeciesVersion', '{{.Version}}');
             }
         },
         
@@ -313,7 +313,7 @@
             this.allSpecies = [];
             this.filteredSpecies = [];
             // Use app version for cache busting
-            const appVersion = '{{.Settings.Version}}';
+            const appVersion = '{{.Version}}';
             const cached = localStorage.getItem('allSpecies');
             const cachedFiltered = localStorage.getItem('filteredSpecies');
             const cachedVersion = localStorage.getItem('allSpeciesVersion');
