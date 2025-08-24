@@ -580,7 +580,8 @@
                 placeholder="Type to search..."
                 predictions={configPredictions}
                 onInput={updateConfigPredictions}
-                onAdd={() => {}}
+                onPredictionSelect={species => (configInputValue = species)}
+                onAdd={species => setTimeout(() => (configInputValue = species), 0)}
                 buttonText=""
                 buttonIcon={false}
                 size="xs"
