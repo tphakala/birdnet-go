@@ -43,6 +43,7 @@ const browserGlobals = {
   setInterval: 'readonly',
   clearTimeout: 'readonly',
   clearInterval: 'readonly',
+  queueMicrotask: 'readonly',
   localStorage: 'readonly',
   sessionStorage: 'readonly',
   URL: 'readonly',

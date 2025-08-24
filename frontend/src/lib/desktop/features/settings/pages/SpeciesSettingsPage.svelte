@@ -136,6 +136,13 @@
     actionParameters = '';
   }
 
+  // Helper function to handle species selection with proper timing
+  function handleSpeciesPicked(species: string) {
+    queueMicrotask(() => {
+      configInputValue = species;
+    });
+  }
+
   // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
   let includeHasChanges = $derived(
     hasSettingsChanged(
@@ -580,8 +587,8 @@
                 placeholder="Type to search..."
                 predictions={configPredictions}
                 onInput={updateConfigPredictions}
-                onPredictionSelect={species => (configInputValue = species)}
-                onAdd={species => setTimeout(() => (configInputValue = species), 0)}
+                onPredictionSelect={handleSpeciesPicked}
+                onAdd={handleSpeciesPicked}
                 buttonText=""
                 buttonIcon={false}
                 size="xs"
