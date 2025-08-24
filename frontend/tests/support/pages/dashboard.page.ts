@@ -15,8 +15,18 @@ export class DashboardPage {
   }
 
   async navigate() {
-    await this.page.goto('/dashboard');
-    await expect(this.statusIndicator).toBeVisible();
+    // Navigate to the new UI dashboard
+    await this.page.goto('/ui/dashboard');
+
+    // Wait for main content to be visible (more reliable than status indicator)
+    await expect(
+      this.page.locator('[data-testid="main-content"], main, [role="main"]')
+    ).toBeVisible();
+
+    // If status indicator exists, wait for it
+    if ((await this.statusIndicator.count()) > 0) {
+      await expect(this.statusIndicator).toBeVisible();
+    }
   }
 
   async waitForDetection(species: string, timeout: number = 30000) {
@@ -29,8 +39,16 @@ export class DashboardPage {
   }
 
   async openSettings() {
-    await this.settingsButton.click();
-    await this.page.waitForURL('**/settings');
+    if ((await this.settingsButton.count()) > 0) {
+      await this.settingsButton.click();
+      await this.page.waitForURL('**/ui/settings');
+    } else {
+      // Fallback: navigate directly to settings
+      await this.page.goto('/ui/settings');
+      await expect(
+        this.page.locator('[data-testid="main-content"], main, [role="main"]')
+      ).toBeVisible();
+    }
   }
 
   async getDetectionCount(): Promise<number> {

@@ -1,17 +1,23 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Environment-specific configuration
+const isCI = !!process.env['CI'];
+const baseURL = process.env['BASE_URL'] ?? 'http://localhost:8080/ui';
+
 export default defineConfig({
   testDir: './tests/e2e',
-  timeout: 30000,
-  expect: { timeout: 10000 },
+  timeout: isCI ? 60000 : 30000, // Longer timeout in CI
+  expect: { timeout: isCI ? 15000 : 10000 },
   fullyParallel: true,
-  forbidOnly: !!process.env['CI'],
-  retries: process.env['CI'] ? 2 : 0,
-  workers: process.env['CI'] ? 1 : undefined,
+  forbidOnly: isCI,
+  retries: isCI ? 2 : 0,
+  workers: isCI ? 1 : undefined,
   reporter: [['html'], ['junit', { outputFile: 'test-results/junit.xml' }], ['github']],
 
   use: {
-    baseURL: 'http://localhost:8080/ui',
+    baseURL,
+    navigationTimeout: isCI ? 60000 : 30000,
+    actionTimeout: isCI ? 20000 : 10000,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

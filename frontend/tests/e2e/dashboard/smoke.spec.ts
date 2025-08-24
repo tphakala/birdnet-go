@@ -1,22 +1,43 @@
 import { test, expect } from '@playwright/test';
-import { DashboardPage } from '../../support/pages/dashboard.page';
 
-test.describe('Dashboard Smoke Tests', () => {
-  test('Dashboard loads successfully', async ({ page }) => {
-    const dashboard = new DashboardPage(page);
+test.describe('Dashboard Smoke Tests - New UI Only', () => {
+  test('Dashboard loads successfully with expected UI elements', async ({ page }) => {
+    // Navigate to dashboard (new UI only)
+    await page.goto('/ui/dashboard');
 
-    // Navigate to dashboard
-    await dashboard.navigate();
+    // Wait for main content area to load
+    await expect(page.locator('[data-testid="main-content"], main, [role="main"]')).toBeVisible();
 
-    // Verify basic page elements are visible
-    await expect(page.locator('h1, h2')).toBeVisible();
-    await expect(page.locator('body')).toContainText(/dashboard|bird|detection/i);
+    // Verify specific dashboard elements are present
+    await expect(
+      page.locator('[data-testid="dashboard-header"], h1:has-text("Dashboard")')
+    ).toBeVisible();
 
-    // Verify the page doesn't have any critical errors
-    await expect(page.locator('[role="alert"]')).not.toBeVisible();
+    // Check for key dashboard sections
+    const detectionSection = page
+      .locator('[data-testid="recent-detections"], [data-testid="detections-card"]')
+      .first();
+    const statusSection = page
+      .locator('[data-testid="status-indicator"], [data-testid="system-status"]')
+      .first();
 
-    // Basic accessibility check - page should have a main heading
-    await expect(page.locator('h1, h2, [aria-label]')).toBeVisible();
+    // At least one of these should be visible on the dashboard
+    const hasDashboardContent =
+      (await detectionSection.isVisible()) || (await statusSection.isVisible());
+    expect(hasDashboardContent).toBe(true);
+
+    // Verify the page doesn't have critical errors
+    await expect(
+      page.locator('[role="alert"]:has-text("Error"), .error-boundary')
+    ).not.toBeVisible();
+
+    // Ensure we're on the new UI (not HTMX)
+    await expect(page).toHaveURL(/.*\/ui\/dashboard/);
+
+    // Check that essential navigation is present
+    await expect(
+      page.locator('nav, [data-testid="sidebar"], [data-testid="navigation"]')
+    ).toBeVisible();
   });
 
   test('API health check responds', async ({ request }) => {
@@ -25,15 +46,25 @@ test.describe('Dashboard Smoke Tests', () => {
     expect(response.ok()).toBeTruthy();
   });
 
-  test('Navigation elements are present', async ({ page }) => {
-    await page.goto('/');
+  test('New UI navigation elements are present and functional', async ({ page }) => {
+    // Start at new UI root
+    await page.goto('/ui/');
 
-    // Look for navigation elements that should be present
-    const navigation = page.locator('nav, [role="navigation"], [data-testid*="nav"]');
+    // Look for navigation elements that should be present in the new UI
+    const navigation = page.locator(
+      'nav, [role="navigation"], [data-testid*="nav"], [data-testid="sidebar"]'
+    );
     await expect(navigation.first()).toBeVisible();
 
-    // Verify we can navigate to dashboard
-    await page.goto('/dashboard');
-    await expect(page).toHaveURL(/.*\/dashboard$/);
+    // Verify we can navigate to dashboard within the new UI
+    await page.goto('/ui/dashboard');
+    await expect(page).toHaveURL(/.*\/ui\/dashboard$/);
+
+    // Check that we can navigate to other sections (if they exist)
+    const settingsLink = page.locator('a[href*="/ui/settings"], [data-testid*="settings"]').first();
+    if (await settingsLink.isVisible()) {
+      await settingsLink.click();
+      await expect(page).toHaveURL(/.*\/ui\/settings/);
+    }
   });
 });
