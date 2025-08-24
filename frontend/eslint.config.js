@@ -134,6 +134,41 @@ export default [
     },
   },
   
+  // Test files (use separate Playwright tsconfig)
+  {
+    files: ['tests/**/*.ts', 'playwright.config.ts'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        project: './tsconfig.playwright.json',
+      },
+      globals: browserGlobals,
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+      security,
+    },
+    rules: {
+      ...tsPlugin.configs.recommended.rules,
+      ...tsPlugin.configs.strict.rules,
+      // Security rules
+      ...security.configs.recommended.rules,
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': 'off', // Use TypeScript version instead
+      'no-console': 'warn',
+      'prefer-const': 'error',
+      'no-var': 'error',
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/prefer-nullish-coalescing': 'error',
+      '@typescript-eslint/prefer-optional-chain': 'error',
+      '@typescript-eslint/no-unnecessary-condition': 'error',
+      '@typescript-eslint/prefer-readonly': 'error',
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+    },
+  },
+  
   // JavaScript files
   {
     files: ['**/*.js', '**/*.mjs'],
