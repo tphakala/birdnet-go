@@ -9,12 +9,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
+	runtimectx "github.com/tphakala/birdnet-go/internal/buildinfo"
 )
 
 // TestConfig holds configuration for telemetry testing
 type TestConfig struct {
 	MockTransport *MockTransport
 	Settings      *conf.Settings
+	Runtime       *runtimectx.Context
 }
 
 // TestingTB is a common interface for *testing.T and *testing.B
@@ -32,15 +34,15 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 	// Create mock transport
 	mockTransport := NewMockTransport()
 
-	// Create test settings
+	// Create test settings and runtime
 	testSettings := &conf.Settings{
-		Debug:    true,
-		Version:  "test-version",
-		SystemID: "test-system-id",
+		Debug: true,
 		Sentry: conf.SentrySettings{
 			Enabled: true,
 		},
 	}
+	
+	testRuntime := runtimectx.NewContext("test-version", "test-build-date", "test-system-id")
 
 	// Initialize Sentry with mock transport
 	err := sentry.Init(sentry.ClientOptions{
@@ -66,16 +68,16 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 	atomic.StoreInt32(&testMode, 1)
 	
 	// Update telemetry enabled state for test mode
-	UpdateTelemetryEnabled()
+	UpdateTelemetryEnabled(testSettings.Sentry.Enabled)
 
 	// Configure scope with test data
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
-		scope.SetTag("system_id", testSettings.SystemID)
+		scope.SetTag("system_id", testRuntime.SystemID())
 		scope.SetTag("test_mode", "true")
 		scope.SetContext("application", map[string]any{
 			"name":      "BirdNET-Go",
-			"version":   testSettings.Version,
-			"system_id": testSettings.SystemID,
+			"version":   testRuntime.Version(),
+			"system_id": testRuntime.SystemID(),
 			"test_mode": true,
 		})
 	})
@@ -96,10 +98,10 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 	}
 
 	// Initialize error integration
-	InitializeErrorIntegration()
+	InitializeErrorIntegration(testSettings)
 
 	// Initialize telemetry event bus integration
-	if err := InitializeEventBusIntegration(); err != nil {
+	if err := InitializeEventBusIntegration(testSettings); err != nil {
 		t.Fatalf("Failed to initialize telemetry event bus integration: %v", err)
 	}
 
@@ -134,6 +136,7 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 	return &TestConfig{
 		MockTransport: mockTransport,
 		Settings:      testSettings,
+		Runtime:       testRuntime,
 	}, cleanup
 }
 

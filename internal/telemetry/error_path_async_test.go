@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -20,7 +21,10 @@ func TestErrorHandlerNeverBlocks(t *testing.T) {
 		config.MockTransport.SetDelay(100 * time.Millisecond)
 
 		// Initialize error integration
-		InitializeErrorIntegration()
+		testSettings := &conf.Settings{
+			Sentry: conf.SentrySettings{Enabled: true},
+		}
+		InitializeErrorIntegration(testSettings)
 
 		// Measure how long Build() takes
 		start := time.Now()
@@ -96,7 +100,10 @@ func TestCurrentTelemetryIntegration(t *testing.T) {
 		defer cleanup()
 
 		// Initialize error integration
-		InitializeErrorIntegration()
+		testSettings := &conf.Settings{
+			Sentry: conf.SentrySettings{Enabled: true},
+		}
+		InitializeErrorIntegration(testSettings)
 
 		// Add significant delay to telemetry
 		config.MockTransport.SetDelay(100 * time.Millisecond)

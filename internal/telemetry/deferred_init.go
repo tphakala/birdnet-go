@@ -4,6 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 	
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 )
@@ -18,7 +19,7 @@ var (
 
 // InitializeTelemetryEventBus initializes the telemetry event bus integration
 // This should be called after all core services are initialized to avoid deadlocks
-func InitializeTelemetryEventBus() error {
+func InitializeTelemetryEventBus(settings *conf.Settings) error {
 	deferredInitMutex.Lock()
 	defer deferredInitMutex.Unlock()
 	
@@ -49,7 +50,12 @@ func InitializeTelemetryEventBus() error {
 	logger.Info("enabled error package event bus integration")
 	
 	// Step 3: Initialize telemetry worker and register it
-	if err := InitializeEventBusIntegration(); err != nil {
+	if settings == nil {
+		logger.Warn("settings not available, skipping telemetry event bus integration")
+		return nil
+	}
+	
+	if err := InitializeEventBusIntegration(settings); err != nil {
 		logger.Error("failed to initialize telemetry event bus integration", "error", err)
 		return err
 	}

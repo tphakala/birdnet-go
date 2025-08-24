@@ -49,10 +49,13 @@ type ControlMonitor struct {
 	telemetryQuitChan      chan struct{}
 	telemetryWg            sync.WaitGroup
 	metrics                *observability.Metrics
+
+	// Injected dependencies for testability
+	settings    *conf.Settings
 }
 
 // NewControlMonitor creates a new ControlMonitor instance
-func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData, metrics *observability.Metrics) *ControlMonitor {
+func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData, metrics *observability.Metrics, settings *conf.Settings) *ControlMonitor {
 	cm := &ControlMonitor{
 		wg:                     wg,
 		controlChan:            controlChan,
@@ -65,6 +68,7 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 		proc:                   proc,
 		bn:                     proc.Bn,
 		metrics:                metrics,
+		settings:               settings,
 	}
 	
 	// Initialize the sound level manager but don't start it yet
@@ -103,8 +107,7 @@ func (cm *ControlMonitor) Stop() {
 
 // initializeSoundLevelIfEnabled starts sound level monitoring if it's enabled in settings
 func (cm *ControlMonitor) initializeSoundLevelIfEnabled() {
-	settings := conf.Setting()
-	if settings.Realtime.Audio.SoundLevel.Enabled {
+	if cm.settings.Realtime.Audio.SoundLevel.Enabled {
 		// Initialize the sound level manager
 		if cm.soundLevelManager == nil {
 			cm.soundLevelManager = NewSoundLevelManager(cm.soundLevelChan, cm.proc, cm.httpServer, cm.metrics)
@@ -128,13 +131,12 @@ func (cm *ControlMonitor) initializeTelemetryIfEnabled() {
 		return
 	}
 	
-	settings := conf.Setting()
-	if settings.Realtime.Telemetry.Enabled {
+	if cm.settings.Realtime.Telemetry.Enabled {
 		cm.telemetryEndpointMutex.Lock()
 		defer cm.telemetryEndpointMutex.Unlock()
 		
 		// Validate listen address format
-		if err := cm.validateListenAddress(settings.Realtime.Telemetry.Listen); err != nil {
+		if err := cm.validateListenAddress(cm.settings.Realtime.Telemetry.Listen); err != nil {
 			log.Printf("⚠️ Warning: Invalid telemetry listen address: %v", err)
 			return
 		}
@@ -143,7 +145,7 @@ func (cm *ControlMonitor) initializeTelemetryIfEnabled() {
 		cm.telemetryQuitChan = make(chan struct{})
 		
 		// Initialize endpoint
-		endpoint, err := observability.NewEndpoint(settings, cm.metrics)
+		endpoint, err := observability.NewEndpoint(cm.settings, cm.metrics)
 		if err != nil {
 			log.Printf("Error initializing telemetry endpoint: %v", err)
 			return
@@ -153,7 +155,7 @@ func (cm *ControlMonitor) initializeTelemetryIfEnabled() {
 		endpoint.Start(&cm.telemetryWg, cm.telemetryQuitChan)
 		cm.telemetryEndpoint = endpoint
 		
-		log.Printf("📊 Telemetry endpoint started at %s", settings.Realtime.Telemetry.Listen)
+		log.Printf("📊 Telemetry endpoint started at %s", cm.settings.Realtime.Telemetry.Listen)
 	}
 }
 
@@ -238,7 +240,6 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 // handleReconfigureMQTT reconfigures the MQTT connection
 func (cm *ControlMonitor) handleReconfigureMQTT() {
 	log.Printf("\033[32m🔄 Reconfiguring MQTT connection...\033[0m")
-	settings := conf.Setting()
 
 	if cm.proc == nil {
 		log.Printf("\033[31m❌ Error: Processor not available\033[0m")
@@ -250,9 +251,9 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 	cm.proc.DisconnectMQTTClient()
 
 	// If MQTT is enabled, initialize and connect
-	if settings.Realtime.MQTT.Enabled {
+	if cm.settings.Realtime.MQTT.Enabled {
 		var err error
-		newClient, err := mqtt.NewClient(settings, cm.proc.Metrics)
+		newClient, err := mqtt.NewClient(cm.settings, cm.proc.Metrics)
 		if err != nil {
 			log.Printf("\033[31m❌ Error creating MQTT client: %v\033[0m", err)
 			cm.notifyError("Failed to create MQTT client", err)
@@ -282,14 +283,13 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 // handleReconfigureRTSP reconfigures RTSP sources
 func (cm *ControlMonitor) handleReconfigureRTSP() {
 	log.Printf("\033[32m🔄 Reconfiguring RTSP sources...\033[0m")
-	settings := conf.Setting()
 
 	// Prepare the list of active sources (using source IDs, not raw URLs)
 	var sources []string
-	if len(settings.Realtime.RTSP.URLs) > 0 {
+	if len(cm.settings.Realtime.RTSP.URLs) > 0 {
 		registry := myaudio.GetRegistry()
 		if registry != nil {
-			for _, url := range settings.Realtime.RTSP.URLs {
+			for _, url := range cm.settings.Realtime.RTSP.URLs {
 				if rtspSource := registry.GetOrCreateSource(url, myaudio.SourceTypeRTSP); rtspSource != nil {
 					sources = append(sources, rtspSource.ID)
 				} else {
@@ -300,10 +300,10 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 			log.Printf("⚠️ Registry not available during RTSP reconfiguration, skipping RTSP sources")
 		}
 	}
-	if settings.Realtime.Audio.Source != "" {
+	if cm.settings.Realtime.Audio.Source != "" {
 		// Get the audio source from registry instead of hardcoded "malgo"
 		if registry := myaudio.GetRegistry(); registry != nil {
-			if audioSource := registry.GetOrCreateSource(settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard); audioSource != nil {
+			if audioSource := registry.GetOrCreateSource(cm.settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard); audioSource != nil {
 				sources = append(sources, audioSource.ID)
 			} else {
 				log.Printf("⚠️ Failed to get audio source from registry during RTSP reconfiguration")
@@ -398,7 +398,7 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 		}
 	}()
 
-	myaudio.ReconfigureRTSPStreams(settings, cm.wg, cm.quitChan, cm.restartChan, cm.unifiedAudioChan)
+	myaudio.ReconfigureRTSPStreams(cm.settings, cm.wg, cm.quitChan, cm.restartChan, cm.unifiedAudioChan)
 
 	log.Printf("\033[32m✅ RTSP sources reconfigured successfully\033[0m")
 	cm.notifySuccess("Audio capture reconfigured successfully")
@@ -407,7 +407,6 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 // handleReconfigureBirdWeather reconfigures the BirdWeather integration
 func (cm *ControlMonitor) handleReconfigureBirdWeather() {
 	log.Printf("\033[32m🔄 Reconfiguring BirdWeather integration...\033[0m")
-	settings := conf.Setting()
 
 	if cm.proc == nil {
 		log.Printf("\033[31m❌ Error: Processor not available\033[0m")
@@ -419,8 +418,8 @@ func (cm *ControlMonitor) handleReconfigureBirdWeather() {
 	cm.proc.DisconnectBwClient()
 
 	// Create new BirdWeather client with updated settings
-	if settings.Realtime.Birdweather.Enabled {
-		bwClient, err := birdweather.New(settings)
+	if cm.settings.Realtime.Birdweather.Enabled {
+		bwClient, err := birdweather.New(cm.settings)
 		if err != nil {
 			log.Printf("\033[31m❌ Error creating BirdWeather client: %v\033[0m", err)
 			cm.notifyError("Failed to create BirdWeather client", err)
@@ -441,7 +440,6 @@ func (cm *ControlMonitor) handleReconfigureBirdWeather() {
 // handleUpdateDetectionIntervals updates event tracking intervals for species
 func (cm *ControlMonitor) handleUpdateDetectionIntervals() {
 	log.Printf("\033[32m🔄 Updating detection rate limits...\033[0m")
-	settings := conf.Setting()
 
 	if cm.proc == nil {
 		log.Printf("\033[31m❌ Error: Processor not available\033[0m")
@@ -450,7 +448,7 @@ func (cm *ControlMonitor) handleUpdateDetectionIntervals() {
 	}
 
 	// Validate global interval setting
-	globalInterval := time.Duration(settings.Realtime.Interval) * time.Second
+	globalInterval := time.Duration(cm.settings.Realtime.Interval) * time.Second
 	if globalInterval <= 0 {
 		log.Printf("\033[33m⚠️ Warning: Invalid global interval value (%v), using default\033[0m", globalInterval)
 		globalInterval = 5 * time.Second // Fallback to a reasonable default
@@ -462,7 +460,7 @@ func (cm *ControlMonitor) handleUpdateDetectionIntervals() {
 	// Create a new EventTracker with updated settings
 	newTracker := processor.NewEventTrackerWithConfig(
 		globalInterval,
-		settings.Realtime.Species.Config,
+		cm.settings.Realtime.Species.Config,
 	)
 
 	// Clean up the old EventTracker if possible
@@ -508,10 +506,9 @@ func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 		return
 	}
 	
-	settings := conf.Setting()
-	if settings.Realtime.Audio.SoundLevel.Enabled {
-		log.Printf("✅ Sound level monitoring reconfigured (interval: %ds)", settings.Realtime.Audio.SoundLevel.Interval)
-		cm.notifySuccess(fmt.Sprintf("Sound level monitoring reconfigured (interval: %ds)", settings.Realtime.Audio.SoundLevel.Interval))
+	if cm.settings.Realtime.Audio.SoundLevel.Enabled {
+		log.Printf("✅ Sound level monitoring reconfigured (interval: %ds)", cm.settings.Realtime.Audio.SoundLevel.Interval)
+		cm.notifySuccess(fmt.Sprintf("Sound level monitoring reconfigured (interval: %ds)", cm.settings.Realtime.Audio.SoundLevel.Interval))
 	} else {
 		log.Printf("✅ Sound level monitoring disabled")
 		cm.notifySuccess("Sound level monitoring disabled")
@@ -529,8 +526,6 @@ func (cm *ControlMonitor) handleReconfigureTelemetry() {
 		return
 	}
 	
-	settings := conf.Setting()
-
 	// Lock the mutex to ensure thread-safe access
 	cm.telemetryEndpointMutex.Lock()
 	defer cm.telemetryEndpointMutex.Unlock()
@@ -547,9 +542,9 @@ func (cm *ControlMonitor) handleReconfigureTelemetry() {
 	}
 
 	// If telemetry is enabled, start new endpoint
-	if settings.Realtime.Telemetry.Enabled {
+	if cm.settings.Realtime.Telemetry.Enabled {
 		// Validate listen address format
-		if err := cm.validateListenAddress(settings.Realtime.Telemetry.Listen); err != nil {
+		if err := cm.validateListenAddress(cm.settings.Realtime.Telemetry.Listen); err != nil {
 			log.Printf("❌ Invalid telemetry listen address: %v", err)
 			cm.notifyError("Invalid telemetry listen address", err)
 			return
@@ -559,7 +554,7 @@ func (cm *ControlMonitor) handleReconfigureTelemetry() {
 		cm.telemetryQuitChan = make(chan struct{})
 		
 		// Initialize new endpoint
-		endpoint, err := observability.NewEndpoint(settings, cm.metrics)
+		endpoint, err := observability.NewEndpoint(cm.settings, cm.metrics)
 		if err != nil {
 			log.Printf("❌ Error initializing telemetry endpoint: %v", err)
 			cm.notifyError("Failed to initialize telemetry endpoint", err)
@@ -571,8 +566,8 @@ func (cm *ControlMonitor) handleReconfigureTelemetry() {
 		endpoint.Start(&cm.telemetryWg, cm.telemetryQuitChan)
 		cm.telemetryEndpoint = endpoint
 
-		log.Printf("✅ Telemetry endpoint reconfigured at %s", settings.Realtime.Telemetry.Listen)
-		cm.notifySuccess(fmt.Sprintf("Telemetry endpoint reconfigured at %s", settings.Realtime.Telemetry.Listen))
+		log.Printf("✅ Telemetry endpoint reconfigured at %s", cm.settings.Realtime.Telemetry.Listen)
+		cm.notifySuccess(fmt.Sprintf("Telemetry endpoint reconfigured at %s", cm.settings.Realtime.Telemetry.Listen))
 	} else {
 		log.Printf("✅ Telemetry endpoint disabled")
 		cm.notifySuccess("Telemetry endpoint disabled")

@@ -9,6 +9,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	runtimectx "github.com/tphakala/birdnet-go/internal/buildinfo"
 )
 
 func TestTelemetryIntegration(t *testing.T) {
@@ -18,7 +19,10 @@ func TestTelemetryIntegration(t *testing.T) {
 		defer cleanup()
 
 		// Initialize error integration
-		InitializeErrorIntegration()
+		testSettings := &conf.Settings{
+			Sentry: conf.SentrySettings{Enabled: true},
+		}
+		InitializeErrorIntegration(testSettings)
 
 		// Create an error with context
 		originalErr := fmt.Errorf("connection failed")
@@ -195,13 +199,14 @@ func TestTelemetryDisabled(t *testing.T) {
 	}
 
 	// Initialize with disabled telemetry
-	err := InitSentry(settings)
+	runtimeCtx := runtimectx.NewContext("test-version", "test-build", "test-system-id")
+	err := InitSentry(settings, runtimeCtx)
 	if err != nil {
 		t.Errorf("InitSentry should not error when disabled: %v", err)
 	}
 
 	// Update the cached telemetry state
-	UpdateTelemetryEnabled()
+	UpdateTelemetryEnabled(settings.Sentry.Enabled)
 
 	// Try to report error
 	testErr := fmt.Errorf("should not be captured")
