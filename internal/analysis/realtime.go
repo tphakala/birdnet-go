@@ -284,8 +284,8 @@ func RealtimeAnalysis(settings *conf.Settings, runtime *runtimectx.Context, noti
 	}
 
 	// start cleanup of clips
-	if conf.Setting().Realtime.Audio.Export.Retention.Policy != "none" {
-		startClipCleanupMonitor(&wg, quitChan, dataStore)
+	if settings.Realtime.Audio.Export.Retention.Policy != "none" {
+		startClipCleanupMonitor(&wg, quitChan, dataStore, settings)
 	}
 
 	// start weather polling
@@ -300,7 +300,7 @@ func RealtimeAnalysis(settings *conf.Settings, runtime *runtimectx.Context, noti
 	// startTelemetryEndpoint(&wg, settings, metrics, quitChan) // Moved to control monitor
 
 	// start control monitor for hot reloads
-	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, httpServer, metrics)
+	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, httpServer, metrics, settings, runtime)
 
 	// start shutdown signal monitor
 	monitorShutdownSignals(quitChan)
@@ -611,11 +611,11 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 }
 
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
-func startClipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}, dataStore datastore.Interface) {
+func startClipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}, dataStore datastore.Interface, settings *conf.Settings) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		clipCleanupMonitor(quitChan, dataStore)
+		clipCleanupMonitor(quitChan, dataStore, settings)
 	}()
 }
 
@@ -724,7 +724,7 @@ func closeDataStore(store datastore.Interface) {
 
 // ClipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
 // It also performs periodic cleanup of log deduplicator states to prevent memory growth.
-func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
+func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface, settings *conf.Settings) {
 	// Create a ticker that triggers every five minutes to perform cleanup
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop() // Ensure the ticker is stopped to prevent leaks
@@ -732,7 +732,7 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 	// Get the shared disk manager logger
 	diskManagerLogger := diskmanager.GetLogger()
 
-	policy := conf.Setting().Realtime.Audio.Export.Retention.Policy
+	policy := settings.Realtime.Audio.Export.Retention.Policy
 	// Add structured logging
 	GetLogger().Info("Clip cleanup monitor initialized",
 		"policy", policy,
@@ -760,15 +760,15 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 			// Add structured logging
 			GetLogger().Info("Starting clip cleanup task",
 				"timestamp", t.Format(time.RFC3339),
-				"policy", conf.Setting().Realtime.Audio.Export.Retention.Policy,
+				"policy", settings.Realtime.Audio.Export.Retention.Policy,
 				"operation", "clip_cleanup_task")
 			log.Println("🧹 Running clip cleanup task")
 			diskManagerLogger.Info("Cleanup timer triggered",
 				"timestamp", t.Format(time.RFC3339),
-				"policy", conf.Setting().Realtime.Audio.Export.Retention.Policy)
+				"policy", settings.Realtime.Audio.Export.Retention.Policy)
 
 			// age based cleanup method
-			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "age" {
+			if settings.Realtime.Audio.Export.Retention.Policy == "age" {
 				diskManagerLogger.Debug("Starting age-based cleanup via timer")
 				result := diskmanager.AgeBasedCleanup(quitChan, dataStore)
 				if result.Err != nil {
@@ -795,7 +795,7 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 			}
 
 			// priority based cleanup method
-			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "usage" {
+			if settings.Realtime.Audio.Export.Retention.Policy == "usage" {
 				diskManagerLogger.Debug("Starting usage-based cleanup via timer")
 				result := diskmanager.UsageBasedCleanup(quitChan, dataStore)
 				if result.Err != nil {
@@ -830,7 +830,7 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 // or ensuring this is called only once during a deterministic startup phase (e.g., in main).
 // setupImageProviderRegistry initializes or retrieves the global image provider registry
 // and registers the default providers (Wikimedia, AviCommons).
-func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.Metrics) (*imageprovider.ImageProviderRegistry, error) {
+func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.Metrics, settings *conf.Settings) (*imageprovider.ImageProviderRegistry, error) {
 	// Use the global registry if available, otherwise create a new one
 	var registry *imageprovider.ImageProviderRegistry
 	if httpcontroller.ImageProviderRegistry != nil {
@@ -906,7 +906,7 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 		log.Println("Attempting to register AviCommons provider...")
 
 		// Debug logging for embedded filesystem if enabled
-		if conf.Setting().Realtime.Dashboard.Thumbnails.Debug {
+		if settings.Realtime.Dashboard.Thumbnails.Debug {
 			// Add structured logging
 			GetLogger().Debug("Listing embedded filesystem contents",
 				"operation", "debug_filesystem")
@@ -996,8 +996,8 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 }
 
 // selectDefaultImageProvider determines the default image provider based on configuration
-func selectDefaultImageProvider(registry *imageprovider.ImageProviderRegistry) *imageprovider.BirdImageCache {
-	preferredProvider := conf.Setting().Realtime.Dashboard.Thumbnails.ImageProvider
+func selectDefaultImageProvider(registry *imageprovider.ImageProviderRegistry, settings *conf.Settings) *imageprovider.BirdImageCache {
+	preferredProvider := settings.Realtime.Dashboard.Thumbnails.ImageProvider
 	var defaultCache *imageprovider.BirdImageCache
 
 	if preferredProvider == "auto" {
@@ -1181,9 +1181,9 @@ func warmUpImageCacheInBackground(ds datastore.Interface, registry *imageprovide
 
 // initBirdImageCache initializes the bird image cache by setting up providers,
 // selecting a default, and starting a background warm-up process.
-func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) *imageprovider.BirdImageCache {
+func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics, settings *conf.Settings) *imageprovider.BirdImageCache {
 	// 1. Set up the registry and register known providers
-	registry, regErr := setupImageProviderRegistry(ds, metrics)
+	registry, regErr := setupImageProviderRegistry(ds, metrics, settings)
 	if regErr != nil {
 		// Log errors encountered during provider registration
 		// Add structured logging
@@ -1205,7 +1205,7 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) 
 	}
 
 	// 2. Select the default cache based on settings and availability
-	defaultCache := selectDefaultImageProvider(registry)
+	defaultCache := selectDefaultImageProvider(registry, settings)
 
 	// If no provider could be initialized or selected, return nil
 	if defaultCache == nil {
@@ -1258,8 +1258,8 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) 
 }
 
 // startControlMonitor handles various control signals for realtime analysis mode
-func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, httpServer *httpcontroller.Server, metrics *observability.Metrics) *ControlMonitor {
-	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, audioLevelChan, soundLevelChan, metrics)
+func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, httpServer *httpcontroller.Server, metrics *observability.Metrics, settings *conf.Settings, runtime *runtimectx.Context) *ControlMonitor {
+	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, audioLevelChan, soundLevelChan, metrics, settings, runtime)
 	ctrlMonitor.httpServer = httpServer
 	ctrlMonitor.Start()
 	return ctrlMonitor
@@ -1525,12 +1525,12 @@ func initializeMetrics() (*observability.Metrics, error) {
 // or if we need it for the settings UI to show available providers
 func initializeBirdImageCacheIfNeeded(settings *conf.Settings, dataStore datastore.Interface, metrics *observability.Metrics) *imageprovider.BirdImageCache {
 	if settings.Realtime.Dashboard.Thumbnails.Summary || settings.Realtime.Dashboard.Thumbnails.Recent {
-		return initBirdImageCache(dataStore, metrics)
+		return initBirdImageCache(dataStore, metrics, settings)
 	}
 	// Always initialize the cache so the settings UI can show available providers
 	// even when thumbnails are disabled - the cache will just not be used for actual image fetching
 	log.Println("Initializing bird image cache for settings UI (thumbnails disabled)")
-	return initBirdImageCache(dataStore, metrics)
+	return initBirdImageCache(dataStore, metrics, settings)
 }
 
 // initializeAudioSources prepares and validates audio sources
