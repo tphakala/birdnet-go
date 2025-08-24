@@ -42,7 +42,7 @@
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
-  import { alertIconsSvg, navigationIcons } from '$lib/utils/icons';
+  import { alertIconsSvg, navigationIcons, mediaIcons } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import {
@@ -1056,6 +1056,54 @@
       mysql: { ...settings.output.mysql, enabled: type === 'mysql' },
     });
   }
+
+  // Download range filter species list as CSV
+  async function downloadSpeciesCSV() {
+    try {
+      // Construct URL with current parameters
+      const params = new URLSearchParams({
+        latitude: settings.birdnet.latitude.toString(),
+        longitude: settings.birdnet.longitude.toString(),
+        threshold: settings.birdnet.rangeFilter.threshold.toString(),
+      });
+
+      const response = await fetch(`/api/v2/range/species/csv?${params}`, {
+        headers: { 'X-CSRF-Token': csrfToken },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download CSV');
+      }
+
+      // Get the filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'birdnet_species.csv';
+      if (contentDisposition) {
+        const matches = /filename="([^"]*)"/.exec(contentDisposition);
+        if (matches && matches[1]) {
+          filename = matches[1];
+        }
+      }
+
+      // Get the CSV content
+      const blob = await response.blob();
+
+      // Create a download link and trigger it
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toastActions.success('Species list downloaded successfully');
+    } catch (error) {
+      logger.error('Failed to download species CSV:', error);
+      toastActions.error('Failed to download species list. Please try again.');
+    }
+  }
 </script>
 
 <main class="space-y-4 settings-page-content" aria-label="Main settings configuration">
@@ -1395,6 +1443,16 @@
                   {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
                 {/if}
               </button>
+              <button
+                type="button"
+                class="btn btn-sm btn-primary"
+                disabled={!rangeFilterState.speciesCount || rangeFilterState.loading}
+                onclick={downloadSpeciesCSV}
+                title="Download species list as CSV"
+              >
+                {@html mediaIcons.download}
+                <span class="ml-1">Download</span>
+              </button>
             </div>
             <div class="label">
               <span class="label-text-alt"
@@ -1726,7 +1784,16 @@
         {/if}
       </div>
 
-      <div class="flex justify-end items-center mt-4 pt-4 border-t">
+      <div class="flex justify-between items-center mt-4 pt-4 border-t">
+        <button
+          type="button"
+          class="btn btn-sm btn-primary"
+          onclick={downloadSpeciesCSV}
+          disabled={rangeFilterState.loading}
+        >
+          {@html mediaIcons.download}
+          <span class="ml-1">Download CSV</span>
+        </button>
         <button
           type="button"
           class="btn btn-outline"

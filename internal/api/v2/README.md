@@ -142,12 +142,13 @@ routeInitializers := []struct {
 
 ### Range Filter (`range.go`)
 
-| Method | Route                  | Handler                      | Auth | Description                     |
-| ------ | ---------------------- | ---------------------------- | ---- | ------------------------------- |
-| GET    | `/range/species/count` | `GetRangeFilterSpeciesCount` | ❌   | Species count with range filter |
-| GET    | `/range/species/list`  | `GetRangeFilterSpeciesList`  | ❌   | Species list with range filter  |
-| POST   | `/range/species/test`  | `TestRangeFilter`            | ❌   | Test range filter configuration |
-| POST   | `/range/rebuild`       | `RebuildRangeFilter`         | ❌   | Rebuild range filter data       |
+| Method | Route                  | Handler                      | Auth | Description                          |
+| ------ | ---------------------- | ---------------------------- | ---- | ------------------------------------ |
+| GET    | `/range/species/count` | `GetRangeFilterSpeciesCount` | ❌   | Species count with range filter     |
+| GET    | `/range/species/list`  | `GetRangeFilterSpeciesList`  | ❌   | Species list with range filter      |
+| GET    | `/range/species/csv`   | `GetRangeFilterSpeciesCSV`   | ❌   | Export species list as CSV download |
+| POST   | `/range/species/test`  | `TestRangeFilter`            | ❌   | Test range filter configuration     |
+| POST   | `/range/rebuild`       | `RebuildRangeFilter`         | ❌   | Rebuild range filter data           |
 
 ### Search (`search.go`)
 
