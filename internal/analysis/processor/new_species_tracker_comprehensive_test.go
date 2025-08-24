@@ -511,7 +511,7 @@ func TestInitFromDatabaseError(t *testing.T) {
 
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
-	assert.Error(t, err, "Should return error from database")
+	require.Error(t, err, "Should return error from database")
 	assert.Contains(t, err.Error(), "database error")
 }
 
@@ -528,7 +528,7 @@ func TestInitFromDatabaseNilDatastore(t *testing.T) {
 	// Create tracker with nil datastore
 	tracker := NewSpeciesTrackerFromSettings(nil, settings)
 	err := tracker.InitFromDatabase()
-	assert.Error(t, err, "Should error with nil datastore")
+	require.Error(t, err, "Should error with nil datastore")
 	assert.Contains(t, err.Error(), "datastore is nil")
 }
 
@@ -717,7 +717,7 @@ func TestLoadYearlyDataError(t *testing.T) {
 
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
-	assert.Error(t, err, "Should return error from yearly data loading")
+	require.Error(t, err, "Should return error from yearly data loading")
 	assert.Contains(t, err.Error(), "yearly data error")
 }
 
@@ -753,7 +753,7 @@ func TestLoadSeasonalDataError(t *testing.T) {
 
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
-	assert.Error(t, err, "Should return error from seasonal data loading")
+	require.Error(t, err, "Should return error from seasonal data loading")
 	assert.Contains(t, err.Error(), "seasonal data error")
 }
 
@@ -805,11 +805,12 @@ func TestConcurrentNotificationOperations(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < 100; j++ {
 				speciesName := species[j%len(species)]
-				if id%3 == 0 {
+				switch id % 3 {
+				case 0:
 					tracker.RecordNotificationSent(speciesName, currentTime)
-				} else if id%3 == 1 {
+				case 1:
 					_ = tracker.ShouldSuppressNotification(speciesName, currentTime)
-				} else {
+				default:
 					_ = tracker.CleanupOldNotificationRecords(currentTime)
 				}
 			}
