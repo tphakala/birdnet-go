@@ -55,7 +55,6 @@
   // Initialize CSRF token once on mount - prevents stale values across hot-reloads
   onMount(() => {
     const metaElement = document.querySelector('meta[name="csrf-token"]');
-    // eslint-disable-next-line no-undef -- HTMLMetaElement is a standard DOM type
     csrfToken = (metaElement as HTMLMetaElement | null)?.getAttribute('content') || '';
 
     // Load species data after CSRF token is available

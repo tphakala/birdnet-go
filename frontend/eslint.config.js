@@ -52,6 +52,7 @@ const browserGlobals = {
   TouchEvent: 'readonly',
   crypto: 'readonly',
   // TypeScript DOM interface types
+  HTMLMetaElement: 'readonly',
   Document: 'readonly',
   Window: 'readonly',
   AddEventListenerOptions: 'readonly',
