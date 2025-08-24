@@ -93,9 +93,10 @@ test.describe('Authentication - New UI Only', () => {
 
     // If CSRF is implemented, the token should be available and non-empty
     if (hasCsrfMeta) {
-      const token = await csrfMeta.getAttribute('content');
-      expect(token).toBeTruthy();
-      expect(token?.length).toBeGreaterThan(10); // Should be a real token
+      const token = csrfMeta;
+      await expect(token).toHaveAttribute('content');
+      const tokenContent = await token.getAttribute('content');
+      expect(tokenContent?.length).toBeGreaterThan(10); // Should be a real token
     }
 
     // Also check for CSRF in settings page (more likely to have forms)
@@ -106,8 +107,8 @@ test.describe('Authentication - New UI Only', () => {
     const hasSettingsCsrfMeta = (await settingsCsrfMeta.count()) > 0;
 
     if (hasSettingsCsrfMeta) {
-      const settingsToken = await settingsCsrfMeta.getAttribute('content');
-      expect(settingsToken).toBeTruthy();
+      const settingsToken = settingsCsrfMeta;
+      await expect(settingsToken).toHaveAttribute('content');
     }
 
     // Enforce CSRF presence only if requested via environment

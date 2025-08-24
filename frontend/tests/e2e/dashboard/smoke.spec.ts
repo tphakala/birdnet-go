@@ -34,9 +34,7 @@ test.describe('Dashboard Smoke Tests - New UI Only', () => {
     expect(hasDashboardContent).toBe(true);
 
     // Verify the page doesn't have critical errors
-    await expect(
-      page.locator('[role="alert"]:has-text("Error"), .error-boundary')
-    ).not.toBeVisible();
+    await expect(page.locator('[role="alert"]:has-text("Error"), .error-boundary')).toHaveCount(0);
 
     // Ensure we're on the new UI (not HTMX)
     await expect(page).toHaveURL(/.*\/ui\/dashboard/);
@@ -54,15 +52,34 @@ test.describe('Dashboard Smoke Tests - New UI Only', () => {
   });
 
   test('API health check responds with valid contract', async ({ request }) => {
-    // Build absolute URL to avoid baseURL path issues
+    // Build health endpoint from BASE_URL origin
     const baseUrl = process.env['BASE_URL'] ?? 'http://localhost:8080';
-    const healthUrl = `${baseUrl.replace(/\/ui$/, '')}/api/v2/health`;
+    const origin = new URL(baseUrl).origin;
+    const healthUrl = `${origin}/api/v2/health`;
 
     const response = await request.get(healthUrl);
     expect(response.ok()).toBeTruthy();
 
-    // Parse and validate health response contract
-    const healthData = await response.json();
+    // Check content type before parsing JSON
+    const contentType = response.headers()['content-type'];
+    // eslint-disable-next-line @typescript-eslint/prefer-optional-chain -- explicit null check needed for error message
+    if (!contentType || !contentType.includes('application/json')) {
+      const responseText = await response.text();
+      throw new Error(
+        `Expected JSON response, got ${contentType}. Status: ${response.status()}, Body: ${responseText}`
+      );
+    }
+
+    // Parse and validate health response contract with error handling
+    let healthData;
+    try {
+      healthData = await response.json();
+    } catch (error) {
+      const responseText = await response.text();
+      throw new Error(
+        `Failed to parse JSON response. Status: ${response.status()}, Body: ${responseText}, Error: ${error}`
+      );
+    }
 
     // Validate expected health contract fields
     expect(healthData).toHaveProperty('status');

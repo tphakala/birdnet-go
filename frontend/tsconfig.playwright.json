@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "types": ["@playwright/test"],
+    "types": ["@playwright/test", "node"],
     "allowJs": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,

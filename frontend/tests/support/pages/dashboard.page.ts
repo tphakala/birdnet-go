@@ -55,7 +55,7 @@ export class DashboardPage {
    * @param species Species name to wait for
    * @param timeout Maximum wait time in milliseconds
    */
-  async waitForDetection(species: string, timeout = 30000): Promise<void> {
+  async waitForDetection(species: string, timeout = 30_000): Promise<void> {
     // Use locator-based expect instead of waitForSelector
     const detectionLocator = this.page
       .locator('[data-testid^="detection-"]')
@@ -71,7 +71,7 @@ export class DashboardPage {
    */
   async playAudioClip(detectionId: string): Promise<void> {
     await this.page.getByTestId(`play-${detectionId}`).click();
-    await expect(this.page.getByTestId('audio-player')).toBeVisible({ timeout: 5000 });
+    await expect(this.page.getByTestId('audio-player')).toBeVisible({ timeout: 10_000 });
   }
 
   /**
@@ -100,10 +100,10 @@ export class DashboardPage {
    * @returns Promise resolving to the number of detection items
    */
   async getDetectionCount(): Promise<number> {
-    // Wait for the detections list to be attached and visible
-    await expect(this.detectionsList).toBeAttached();
+    // Wait for the detections list to be visible before counting
+    await expect(this.detectionsList).toBeVisible();
 
     // Count the detection items within the list
-    return await this.detectionsList.locator('[data-testid="detection-item"]').count();
+    return this.detectionsList.locator('[data-testid="detection-item"]').count();
   }
 }

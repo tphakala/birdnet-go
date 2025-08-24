@@ -4,17 +4,18 @@ test.describe('Error Handling and Network Failures', () => {
   test('Application handles JavaScript errors gracefully', async ({ page }) => {
     const errors: string[] = [];
 
-    // Capture JavaScript errors
-    page.on('pageerror', error => {
+    // Capture JavaScript errors with cleanup
+    const pageErrorHandler = (error: Error) => {
       errors.push(error.message);
-    });
-
-    // Capture console errors
-    page.on('console', msg => {
+    };
+    const consoleHandler = (msg: import('@playwright/test').ConsoleMessage) => {
       if (msg.type() === 'error') {
         errors.push(msg.text());
       }
-    });
+    };
+
+    page.on('pageerror', pageErrorHandler);
+    page.on('console', consoleHandler);
 
     await page.goto('/ui/dashboard');
 
@@ -46,11 +47,18 @@ test.describe('Error Handling and Network Failures', () => {
       const navigation = page.locator('nav, [data-testid="navigation"], [data-testid="sidebar"]');
       await expect(navigation.first()).toBeVisible();
     }
+
+    // Assert no unexpected errors occurred
+    expect(errors, 'no unexpected console/page errors').toEqual([]);
+
+    // Cleanup event listeners
+    page.off('pageerror', pageErrorHandler);
+    page.off('console', consoleHandler);
   });
 
   test('Application handles API network failures', async ({ page }) => {
     // Start intercepting network requests
-    await page.route('/api/v2/**', route => {
+    await page.route('**/api/v2/**', route => {
       // Simulate network failure for API calls
       route.abort('failed');
     });
@@ -71,13 +79,13 @@ test.describe('Error Handling and Network Failures', () => {
     await expect(navigation.first()).toBeVisible();
 
     // The app should remain navigable even with API failures
-    const isNavigationWorking = await navigation.first().isVisible();
-    expect(isNavigationWorking).toBe(true);
+    const isNavigationWorking = navigation.first();
+    await expect(isNavigationWorking).toBeVisible();
   });
 
   test('Application handles slow network conditions', async ({ page }) => {
     // Simulate slow network
-    await page.route('/api/v2/**', route => {
+    await page.route('**/api/v2/**', route => {
       setTimeout(() => {
         route.fulfill({
           status: 200,
@@ -102,7 +110,7 @@ test.describe('Error Handling and Network Failures', () => {
 
   test('Application handles malformed API responses', async ({ page }) => {
     // Intercept API calls and return malformed JSON
-    await page.route('/api/v2/**', route => {
+    await page.route('**/api/v2/**', route => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -129,7 +137,7 @@ test.describe('Error Handling and Network Failures', () => {
     let requestCount = 0;
 
     // Fail first request, succeed on retry
-    await page.route('/api/v2/health', route => {
+    await page.route('**/api/v2/health', route => {
       requestCount++;
       if (requestCount === 1) {
         route.abort('failed');

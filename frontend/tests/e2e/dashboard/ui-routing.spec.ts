@@ -14,17 +14,21 @@ test.describe('New UI Routing - /ui/ paths only', () => {
       // Should always be on a /ui/ route
       await expect(page).toHaveURL(/.*\/ui\/.*/);
 
-      // Should have some content (main area, navigation, or basic page structure)
-      const hasContent = await page
-        .locator('body')
-        .evaluate(el => el.textContent && el.textContent.trim().length > 0);
-      expect(hasContent).toBe(true);
+      // Should have structural elements (main area, navigation)
+      const mainRegion = page.locator('main, [role="main"], [data-testid="main-content"]').first();
+      const hasMain = (await mainRegion.count()) > 0;
+      const hasNavigation = (await page.locator('nav').count()) > 0;
+
+      expect(hasMain || hasNavigation, 'Should have main content area or navigation').toBe(true);
+
+      if (hasMain) {
+        await expect(mainRegion).toBeVisible();
+      }
 
       // Should not show critical errors
-      const errorElements = page.locator('[role="alert"]:has-text("Error"), .error-boundary');
-      if ((await errorElements.count()) > 0) {
-        await expect(errorElements).not.toBeVisible();
-      }
+      await expect(page.locator('[role="alert"]:has-text("Error"), .error-boundary')).toHaveCount(
+        0
+      );
     }
   });
 
@@ -78,7 +82,7 @@ test.describe('New UI Routing - /ui/ paths only', () => {
       '[data-testid="main-content"]',
       'main', // HTML5 semantic main
       '[data-svelte-h]', // Svelte hydration markers (if present)
-      '.svelte-*', // Svelte generated classes
+      '[class*="svelte-"]', // Svelte generated classes
     ];
 
     let hasModernUI = false;

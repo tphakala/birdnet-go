@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 // Environment-specific configuration
 const isCI = !!process.env['CI'];
-const baseURL = process.env['BASE_URL'] ?? 'http://localhost:8080/ui';
+const baseURL = process.env['BASE_URL'] ?? 'http://localhost:8080';
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -72,6 +72,6 @@ export default defineConfig({
     command: 'task dev_server',
     port: 8080,
     reuseExistingServer: !process.env['CI'],
-    timeout: 180000, // 3 minutes for cold machine startup
+    timeout: 240000, // 4 minutes for cold machine startup
   },
 });

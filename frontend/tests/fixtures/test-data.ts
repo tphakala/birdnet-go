@@ -1,5 +1,14 @@
 import type { Page, Route } from '@playwright/test';
 
+// Detection type for strongly typed test data
+export interface Detection {
+  id: string;
+  species: string;
+  confidence: number;
+  timestamp: string;
+  duration: number;
+}
+
 // Helper to build absolute URLs for API calls
 function getApiUrl(path: string): string {
   const baseUrl =
@@ -23,6 +32,18 @@ async function apiCall<T>(path: string, options: RequestInit = {}): Promise<T> {
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`API call failed: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    // Handle 204 No Content responses
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    // Check content-type before parsing JSON
+    const contentType = response.headers.get('content-type');
+    if (!contentType?.includes('application/json')) {
+      const responseText = await response.text();
+      return (responseText === '' ? undefined : responseText) as T;
     }
 
     return (await response.json()) as T;
@@ -69,13 +90,16 @@ export const TestDataManager = {
       username?: string;
       role?: 'admin' | 'user';
     } = {}
-  ): Promise<{ id: string; username: string; role: string }> {
+  ): Promise<{ id: string; username: string; role: 'admin' | 'user' }> {
     try {
-      return await postJSON<{ id: string; username: string; role: string }>('/api/v2/test/users', {
-        username: options.username ?? 'testuser',
-        password: 'testpassword',
-        role: options.role ?? 'user',
-      });
+      return await postJSON<{ id: string; username: string; role: 'admin' | 'user' }>(
+        '/api/v2/test/users',
+        {
+          username: options.username ?? 'testuser',
+          password: 'testpassword',
+          role: options.role ?? 'user',
+        }
+      );
     } catch (error) {
       // Fallback for when test endpoints don't exist
       // eslint-disable-next-line no-console -- Test debugging information
@@ -83,7 +107,7 @@ export const TestDataManager = {
       return {
         id: 'test-user-1',
         username: options.username ?? 'testuser',
-        role: options.role ?? 'user',
+        role: options.role ?? ('user' as 'admin' | 'user'),
       };
     }
   },
@@ -99,7 +123,7 @@ export const TestDataManager = {
     count = 10,
     seed = 12345,
     baseTime = new Date('2024-01-01T10:00:00Z').getTime()
-  ): unknown[] {
+  ): Detection[] {
     const random = seededRandom(seed);
     const species = ['Robin', 'Sparrow', 'Blue Jay', 'Cardinal', 'Woodpecker', 'Crow', 'Finch'];
 
@@ -117,7 +141,7 @@ export const TestDataManager = {
    * @param detections Array of detection objects
    * @returns Promise resolving to the detections array
    */
-  async createTestDetections(detections: unknown[]): Promise<unknown[]> {
+  async createTestDetections(detections: Detection[]): Promise<Detection[]> {
     try {
       await postJSON<{ message: string }>('/api/v2/test/detections', { detections });
     } catch (error) {
@@ -159,7 +183,7 @@ export const TestDataManager = {
    */
   setupMockEndpoints(page: Page): void {
     // Mock test endpoints that don't exist yet
-    page.route('/api/v2/test/**', (route: Route) => {
+    page.route('**/api/v2/test/**', (route: Route) => {
       const url = route.request().url();
 
       if (url.includes('/test/users')) {
@@ -196,7 +220,7 @@ export const TestDataManager = {
     });
 
     // Mock health endpoint if needed
-    page.route('/api/v2/health', (route: Route) => {
+    page.route('**/api/v2/health', (route: Route) => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
