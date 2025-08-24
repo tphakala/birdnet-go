@@ -112,16 +112,18 @@ func mainWithExitCode() int {
 	}
 
 	// Create runtime context with separated concerns
-	runtimeContext := &runtimectx.Context{
-		Version:   version,
-		BuildDate: buildDate,
-		SystemID:  systemID,
-	}
+	runtimeContext := runtimectx.NewContext(version, buildDate, systemID)
 
 	fmt.Printf("🐦 \033[37mBirdNET-Go %s (built: %s), using config file: %s\033[0m\n",
-		runtimeContext.Version, runtimeContext.BuildDate, viper.ConfigFileUsed())
+		runtimeContext.Version(), runtimeContext.BuildDate(), viper.ConfigFileUsed())
 
 	// Initialize core systems (telemetry and notification)
+	// Initialize Sentry with runtime context first
+	if err := telemetry.InitSentry(config, runtimeContext); err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing Sentry: %v\n", err)
+		os.Exit(1)
+	}
+	
 	// TODO: telemetry.InitializeSystem should accept runtime context in future refactoring
 	if err := telemetry.InitializeSystem(config); err != nil {
 		fmt.Fprintf(os.Stderr, "Error initializing core systems: %v\n", err)

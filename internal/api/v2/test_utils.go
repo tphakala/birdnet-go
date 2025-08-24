@@ -698,11 +698,7 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 	mockMetrics := NewTestMetrics(t)
 
 	// Create mock runtime context for testing
-	mockRuntime := &runtimectx.Context{
-		Version:   "test-version",
-		BuildDate: "test-build-date",
-		SystemID:  "test-system-id",
-	}
+	mockRuntime := runtimectx.NewContext("test-version", "test-build-date", "test-system-id")
 
 	// Create API controller without initializing routes to avoid starting background goroutines
 	controller, err := NewWithOptions(e, mockDS, settings, mockRuntime, birdImageCache, sunCalc, controlChan, logger, nil, mockMetrics, false)

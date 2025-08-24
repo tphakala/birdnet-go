@@ -392,11 +392,7 @@ func setupSSETestServer(t *testing.T) (*httptest.Server, *Controller) {
 	require.NoError(t, err, "Failed to initialize metrics")
 
 	// Create controller WITH route initialization
-	mockRuntime := &runtimectx.Context{
-		Version:   "test-version",
-		BuildDate: "test-build-date",
-		SystemID:  "test-system-id",
-	}
+	mockRuntime := runtimectx.NewContext("test-version", "test-build-date", "test-system-id")
 	controller, err := NewWithOptions(e, mockDS, settings, mockRuntime, nil, nil, controlChan, nil, nil, mockMetrics, true)
 	require.NoError(t, err)
 
@@ -469,11 +465,7 @@ func setupSSETestServerForBench(b *testing.B) (*httptest.Server, *Controller) {
 	controlChan := make(chan string, 10)
 	mockMetrics, _ := observability.NewMetrics()
 
-	mockRuntime := &runtimectx.Context{
-		Version:   "test-version",
-		BuildDate: "test-build-date", 
-		SystemID:  "test-system-id",
-	}
+	mockRuntime := runtimectx.NewContext("test-version", "test-build-date", "test-system-id")
 	controller, err := NewWithOptions(e, mockDS, settings, mockRuntime, nil, nil, controlChan, nil, nil, mockMetrics, true)
 	if err != nil {
 		b.Fatal(err)

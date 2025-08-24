@@ -12,7 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 )
 
-// RealtimeCommand creates a new command for real-time audio analysis.
+// Command creates a new command for real-time audio analysis.
 func Command(settings *conf.Settings, runtime *runtimectx.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "realtime",

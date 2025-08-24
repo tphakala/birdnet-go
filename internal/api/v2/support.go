@@ -81,8 +81,8 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	systemID := "unknown"
 	version := "unknown" 
 	if c.Runtime != nil {
-		systemID = c.Runtime.GetSystemID()
-		version = c.Runtime.GetVersion()
+		systemID = c.Runtime.SystemID()
+		version = c.Runtime.Version()
 	}
 	
 	collector := support.NewCollector(
@@ -257,8 +257,8 @@ func (c *Controller) GetSupportStatus(ctx echo.Context) error {
 	systemID := "unknown"
 	version := "unknown"
 	if c.Runtime != nil {
-		systemID = c.Runtime.GetSystemID()
-		version = c.Runtime.GetVersion()
+		systemID = c.Runtime.SystemID()
+		version = c.Runtime.Version()
 	}
 	
 	status := map[string]any{

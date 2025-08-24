@@ -30,11 +30,11 @@ func CollectCommand(runtime *runtimectx.Context) *cobra.Command {
 			systemID := "unknown"
 			version := "unknown"
 			if runtime != nil {
-				if runtime.SystemID != "" {
-					systemID = runtime.SystemID
+				if runtime.SystemID() != "" {
+					systemID = runtime.SystemID()
 				}
-				if runtime.Version != "" {
-					version = runtime.Version
+				if runtime.Version() != "" {
+					version = runtime.Version()
 				}
 			}
 			

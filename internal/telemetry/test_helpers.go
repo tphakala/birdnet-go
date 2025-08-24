@@ -42,10 +42,7 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 		},
 	}
 	
-	testRuntime := &runtimectx.Context{
-		Version:  "test-version",
-		SystemID: "test-system-id",
-	}
+	testRuntime := runtimectx.NewContext("test-version", "test-build-date", "test-system-id")
 
 	// Initialize Sentry with mock transport
 	err := sentry.Init(sentry.ClientOptions{
@@ -75,12 +72,12 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 
 	// Configure scope with test data
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
-		scope.SetTag("system_id", testRuntime.SystemID)
+		scope.SetTag("system_id", testRuntime.SystemID())
 		scope.SetTag("test_mode", "true")
 		scope.SetContext("application", map[string]any{
 			"name":      "BirdNET-Go",
-			"version":   testRuntime.Version,
-			"system_id": testRuntime.SystemID,
+			"version":   testRuntime.Version(),
+			"system_id": testRuntime.SystemID(),
 			"test_mode": true,
 		})
 	})

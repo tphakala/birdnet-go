@@ -12,7 +12,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
-	runtimectx "github.com/tphakala/birdnet-go/internal/buildinfo"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
@@ -53,11 +52,10 @@ type ControlMonitor struct {
 
 	// Injected dependencies for testability
 	settings    *conf.Settings
-	buildInfo   runtimectx.BuildInfo
 }
 
 // NewControlMonitor creates a new ControlMonitor instance
-func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData, metrics *observability.Metrics, settings *conf.Settings, buildInfo runtimectx.BuildInfo) *ControlMonitor {
+func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData, metrics *observability.Metrics, settings *conf.Settings) *ControlMonitor {
 	cm := &ControlMonitor{
 		wg:                     wg,
 		controlChan:            controlChan,
@@ -71,7 +69,6 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 		bn:                     proc.Bn,
 		metrics:                metrics,
 		settings:               settings,
-		buildInfo:              buildInfo,
 	}
 	
 	// Initialize the sound level manager but don't start it yet

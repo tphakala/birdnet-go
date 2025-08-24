@@ -42,6 +42,8 @@ type Controller struct {
 	Group               *echo.Group
 	DS                  datastore.Interface
 	Settings            *conf.Settings
+	// Runtime provides build-time metadata. A nil Runtime is permitted for tests/early-boot scenarios; 
+	// handlers will fallback to "unknown" values for version, build date, and system ID when nil.
 	Runtime             *runtimectx.Context
 	BirdImageCache      *imageprovider.BirdImageCache
 	SunCalc             *suncalc.SunCalc
@@ -161,16 +163,16 @@ func (c *Controller) TunnelDetectionMiddleware() echo.MiddlewareFunc {
 }
 
 // New creates a new API controller, returning an error if initialization fails.
-func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings, runtime *runtimectx.Context,
+func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings, runtimeCtx *runtimectx.Context,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string, logger *log.Logger, oauth2Server *security.OAuth2Server,
 	metrics *observability.Metrics) (*Controller, error) {
-	return NewWithOptions(e, ds, settings, runtime, birdImageCache, sunCalc, controlChan, logger, oauth2Server, metrics, true)
+	return NewWithOptions(e, ds, settings, runtimeCtx, birdImageCache, sunCalc, controlChan, logger, oauth2Server, metrics, true)
 }
 
 // NewWithOptions creates a new API controller with optional route initialization.
 // Set initializeRoutes to false for testing to avoid starting background goroutines.
-func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Settings, runtime *runtimectx.Context,
+func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Settings, runtimeCtx *runtimectx.Context,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string, logger *log.Logger, oauth2Server *security.OAuth2Server,
 	metrics *observability.Metrics, initializeRoutes bool) (*Controller, error) {
@@ -244,7 +246,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		Echo:           e,
 		DS:             ds,
 		Settings:       settings,
-		Runtime:        runtime,
+		Runtime:        runtimeCtx,
 		BirdImageCache: birdImageCache,
 		SunCalc:        sunCalc,
 		controlChan:    controlChan,
@@ -462,8 +464,8 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 	version := "unknown"
 	buildDate := "unknown"
 	if c.Runtime != nil {
-		version = c.Runtime.GetVersion()
-		buildDate = c.Runtime.GetBuildDate()
+		version = c.Runtime.Version()
+		buildDate = c.Runtime.BuildDate()
 	}
 	
 	// Create response structure
@@ -979,13 +981,13 @@ func (c *Controller) getEffectiveAuthMiddleware() echo.MiddlewareFunc {
 
 // InitializeAPI creates a new API controller and registers all routes
 // It now accepts the OAuth2Server instance directly.
-func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings, runtime *runtimectx.Context,
+func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings, runtimeCtx *runtimectx.Context,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string, logger *log.Logger, proc *processor.Processor,
 	oauth2Server *security.OAuth2Server, metrics *observability.Metrics) (*Controller, error) { // Return error instead of Fatalf
 
 	// Create API controller, passing oauth2Server and metrics directly to New
-	apiController, err := New(e, ds, settings, runtime, birdImageCache, sunCalc, controlChan, logger, oauth2Server, metrics)
+	apiController, err := New(e, ds, settings, runtimeCtx, birdImageCache, sunCalc, controlChan, logger, oauth2Server, metrics)
 	if err != nil {
 		return nil, err
 	}
@@ -997,9 +999,9 @@ func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings
 	if apiController.apiLogger != nil {
 		version := "unknown"
 		buildDate := "unknown"
-		if runtime != nil {
-			version = runtime.GetVersion()
-			buildDate = runtime.GetBuildDate()
+		if runtimeCtx != nil {
+			version = runtimeCtx.Version()
+			buildDate = runtimeCtx.BuildDate()
 		}
 		apiController.apiLogger.Info("API v2 initialized",
 			"version", version,

@@ -1259,7 +1259,7 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics, 
 
 // startControlMonitor handles various control signals for realtime analysis mode
 func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, httpServer *httpcontroller.Server, metrics *observability.Metrics, settings *conf.Settings, runtime *runtimectx.Context) *ControlMonitor {
-	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, audioLevelChan, soundLevelChan, metrics, settings, runtime)
+	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, audioLevelChan, soundLevelChan, metrics, settings)
 	ctrlMonitor.httpServer = httpServer
 	ctrlMonitor.Start()
 	return ctrlMonitor
@@ -1429,8 +1429,8 @@ func initializeBackupSystem(settings *conf.Settings, runtime *runtimectx.Context
 
 	// Use runtime context for app version
 	appVersion := "unknown"
-	if runtime != nil && runtime.Version != "" {
-		appVersion = runtime.Version
+	if runtime != nil && runtime.Version() != "" {
+		appVersion = runtime.Version()
 	}
 	backupManager, err := backup.NewManager(settings, backupLogger, stateManager, appVersion)
 	if err != nil {

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	runtimectx "github.com/tphakala/birdnet-go/internal/buildinfo"
 )
 
 // TestHealthCheck tests the health check endpoint
@@ -24,8 +25,7 @@ func TestHealthCheck(t *testing.T) {
 	mockDS.On("GetLastDetections", 1).Return([]datastore.Note{}, nil)
 
 	// Set system metrics in the controller runtime context
-	controller.Runtime.Version = "1.2.3"
-	controller.Runtime.BuildDate = "2023-05-15"
+	controller.Runtime = runtimectx.NewContext("1.2.3", "2023-05-15", "test-system-id")
 
 	// Create a request to the health check endpoint
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/health", http.NoBody)

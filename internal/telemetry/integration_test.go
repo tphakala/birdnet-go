@@ -199,11 +199,7 @@ func TestTelemetryDisabled(t *testing.T) {
 	}
 
 	// Initialize with disabled telemetry
-	runtimeCtx := &runtimectx.Context{
-		Version:   "test-version",
-		BuildDate: "test-build",
-		SystemID:  "test-system-id",
-	}
+	runtimeCtx := runtimectx.NewContext("test-version", "test-build", "test-system-id")
 	err := InitSentry(settings, runtimeCtx)
 	if err != nil {
 		t.Errorf("InitSentry should not error when disabled: %v", err)

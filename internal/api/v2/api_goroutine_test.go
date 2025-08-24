@@ -52,27 +52,26 @@ func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
 	controlChan := make(chan string, 10)
 
 	// Create mock metrics
-	mockMetrics, _ := observability.NewMetrics()
+	mockMetrics, err := observability.NewMetrics()
+	require.NoError(t, err)
 
 	// Create controller WITH route initialization to start background goroutines
-	mockRuntime := &runtimectx.Context{
-		Version:   "test-version",
-		BuildDate: "test-build-date",
-		SystemID:  "test-system-id",
-	}
+	mockRuntime := runtimectx.NewContext("test-version", "test-build-date", "test-system-id")
 	controller, err := NewWithOptions(e, mockDS, settings, mockRuntime, nil, nil, controlChan, nil, nil, mockMetrics, true)
 	require.NoError(t, err)
+
+	// Register cleanup functions to ensure shutdown runs even on early test failures
+	t.Cleanup(func() {
+		controller.Shutdown()
+	})
+	t.Cleanup(func() {
+		close(controlChan)
+	})
 
 	// Wait for goroutines to start using the synchronization channel
 	if controller.goroutinesStarted != nil {
 		<-controller.goroutinesStarted
 	}
-
-	// Shutdown the controller
-	controller.Shutdown()
-	
-	// Close control channel to prevent any lingering goroutines
-	close(controlChan)
 }
 
 // TestGoroutineCleanupWithoutRoutes verifies that creating a controller without

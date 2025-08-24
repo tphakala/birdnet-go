@@ -21,11 +21,7 @@ func BenchmarkTelemetryDisabled(b *testing.B) {
 	}
 	
 	// Initialize with disabled telemetry
-	runtimeCtx := &runtimectx.Context{
-		Version:   "benchmark-version",
-		BuildDate: "benchmark-build",
-		SystemID:  "benchmark-system-id",
-	}
+	runtimeCtx := runtimectx.NewContext("benchmark-version", "benchmark-build", "benchmark-system-id")
 	if err := InitSentry(settings, runtimeCtx); err != nil {
 		b.Fatalf("Failed to initialize Sentry: %v", err)
 	}

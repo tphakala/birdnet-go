@@ -134,7 +134,7 @@ func initializeSentrySDK(settings *conf.Settings, runtimeCtx *runtimectx.Context
 		// Set release version if available
 		Release: func() string {
 			if runtimeCtx != nil {
-				return fmt.Sprintf("birdnet-go@%s", runtimeCtx.Version)
+				return fmt.Sprintf("birdnet-go@%s", runtimeCtx.Version())
 			}
 			return "birdnet-go@unknown"
 		}(),
@@ -312,7 +312,7 @@ func configureSentryScope(settings *conf.Settings, runtimeCtx *runtimectx.Contex
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		// Set system ID as a tag for all events
 		if runtimeCtx != nil {
-			scope.SetTag("system_id", runtimeCtx.SystemID)
+			scope.SetTag("system_id", runtimeCtx.SystemID())
 		}
 
 		// Set platform tags for easy filtering in Sentry
@@ -327,14 +327,14 @@ func configureSentryScope(settings *conf.Settings, runtimeCtx *runtimectx.Contex
 		scope.SetContext("application", map[string]any{
 			"name": "BirdNET-Go",
 			"version": func() string {
-				if runtimeCtx != nil {
-					return runtimeCtx.Version
+				if runtimeCtx != nil && runtimeCtx.Version() != "" {
+					return runtimeCtx.Version()
 				}
 				return "unknown"
 			}(),
 			"system_id": func() string {
-				if runtimeCtx != nil {
-					return runtimeCtx.SystemID
+				if runtimeCtx != nil && runtimeCtx.SystemID() != "" {
+					return runtimeCtx.SystemID()
 				}
 				return "unknown"
 			}(),
@@ -375,11 +375,11 @@ func logInitializationSuccess(settings *conf.Settings, runtimeCtx *runtimectx.Co
 
 	logTelemetryInfo(nil, "Sentry telemetry initialized",
 		"system_id", func() string {
-			if runtimeCtx != nil { return runtimeCtx.SystemID }
+			if runtimeCtx != nil { return runtimeCtx.SystemID() }
 			return "unknown"
 		}(),
 		"version", func() string {
-			if runtimeCtx != nil { return runtimeCtx.Version }
+			if runtimeCtx != nil { return runtimeCtx.Version() }
 			return "unknown"
 		}(),
 		"debug", settings.Sentry.Debug,
@@ -390,7 +390,7 @@ func logInitializationSuccess(settings *conf.Settings, runtimeCtx *runtimectx.Co
 
 	systemID := "unknown"
 	if runtimeCtx != nil {
-		systemID = runtimeCtx.SystemID
+		systemID = runtimeCtx.SystemID()
 	}
 
 	if deferredCount > 0 {

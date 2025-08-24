@@ -1,29 +1,37 @@
 // Package buildinfo contains build-time metadata and validation state separate from user configuration
 package buildinfo
 
+const (
+	// unknownValue is the fallback value used when build information is not available
+	unknownValue = "unknown"
+)
+
+// Compile-time assertion to ensure Context implements the BuildInfo interface
+var _ BuildInfo = (*Context)(nil)
+
 // BuildInfo provides an interface for accessing build-time metadata.
 // This interface makes testing easier and allows for different implementations.
 type BuildInfo interface {
-	// GetVersion returns the build version string
-	GetVersion() string
-	// GetBuildDate returns the build date string  
-	GetBuildDate() string
-	// GetSystemID returns the unique system identifier
-	GetSystemID() string
+	// Version returns the build version string
+	Version() string
+	// BuildDate returns the build date string  
+	BuildDate() string
+	// SystemID returns the unique system identifier
+	SystemID() string
 }
 
 // Context contains build-time metadata that is not user-configurable
 // This data is injected at application startup and should not be part
 // of the configuration system.
 type Context struct {
-	// Version holds the Git version tag from build
-	Version string
+	// version holds the Git version tag from build
+	version string
 
-	// BuildDate is the time when the binary was built
-	BuildDate string
+	// buildDate is the time when the binary was built
+	buildDate string
 
-	// SystemID is a unique system identifier for telemetry
-	SystemID string
+	// systemID is a unique system identifier for telemetry
+	systemID string
 }
 
 // ValidationResult holds validation outcomes separately from configuration
@@ -62,35 +70,59 @@ func NewValidationResult() *ValidationResult {
 	}
 }
 
-// GetVersion implements BuildInfo.GetVersion
+// Version implements BuildInfo.Version
+func (c *Context) Version() string {
+	if c == nil {
+		return unknownValue
+	}
+	if c.version == "" {
+		return unknownValue
+	}
+	return c.version
+}
+
+// BuildDate implements BuildInfo.BuildDate
+func (c *Context) BuildDate() string {
+	if c == nil {
+		return unknownValue
+	}
+	if c.buildDate == "" {
+		return unknownValue
+	}
+	return c.buildDate
+}
+
+// SystemID implements BuildInfo.SystemID
+func (c *Context) SystemID() string {
+	if c == nil {
+		return unknownValue
+	}
+	if c.systemID == "" {
+		return unknownValue
+	}
+	return c.systemID
+}
+
+// GetVersion provides backward compatibility - deprecated, use Version() instead
 func (c *Context) GetVersion() string {
-	if c == nil {
-		return "unknown"
-	}
-	if c.Version == "" {
-		return "unknown"
-	}
-	return c.Version
+	return c.Version()
 }
 
-// GetBuildDate implements BuildInfo.GetBuildDate
+// GetBuildDate provides backward compatibility - deprecated, use BuildDate() instead  
 func (c *Context) GetBuildDate() string {
-	if c == nil {
-		return "unknown"
-	}
-	if c.BuildDate == "" {
-		return "unknown"
-	}
-	return c.BuildDate
+	return c.BuildDate()
 }
 
-// GetSystemID implements BuildInfo.GetSystemID
+// GetSystemID provides backward compatibility - deprecated, use SystemID() instead
 func (c *Context) GetSystemID() string {
-	if c == nil {
-		return "unknown"
+	return c.SystemID()
+}
+
+// NewContext creates a new Context with the given version, build date, and system ID
+func NewContext(version, buildDate, systemID string) *Context {
+	return &Context{
+		version:   version,
+		buildDate: buildDate,
+		systemID:  systemID,
 	}
-	if c.SystemID == "" {
-		return "unknown"
-	}
-	return c.SystemID
 }

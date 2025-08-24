@@ -1623,20 +1623,16 @@ func (c *Controller) GetSystemID(ctx echo.Context) error {
 		}
 	}
 
-	// Use BuildInfo interface methods for safe access
-	systemID := ""
-	if c.Runtime != nil {
-		systemID = c.Runtime.GetSystemID()
-	}
-	
-	if systemID == "unknown" || systemID == "" {
-		c.logAPIRequest(ctx, slog.LevelError, "System ID not available", "endpoint", "GetSystemID")
-		return c.HandleError(ctx, fmt.Errorf("system ID not available"), "System ID not available", http.StatusInternalServerError)
+	// Use BuildInfo interface methods for safe access, rely solely on c.Runtime.SystemID
+	systemID := "unknown"
+	if c.Runtime != nil && c.Runtime.SystemID() != "" {
+		systemID = c.Runtime.SystemID()
+		c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved system ID successfully", "system_id", systemID)
+	} else {
+		c.logAPIRequest(ctx, slog.LevelWarn, "System ID not available, using fallback value", "fallback", "unknown")
 	}
 
-	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved system ID successfully", "system_id", systemID)
-
-	// Return system ID in the format expected by the frontend
+	// Return system ID in the format expected by the frontend (always 200 OK)
 	response := map[string]string{
 		"systemID": systemID,
 	}
