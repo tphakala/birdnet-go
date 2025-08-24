@@ -5,6 +5,7 @@ import tsParser from '@typescript-eslint/parser';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 import vitest from '@vitest/eslint-plugin';
 import security from 'eslint-plugin-security';
+import playwright from 'eslint-plugin-playwright';
 
 // Shared browser globals to avoid duplication
 const browserGlobals = {
@@ -134,6 +135,103 @@ export default [
     },
   },
   
+  // Playwright E2E test files
+  {
+    files: ['tests/**/*.ts', 'playwright.config.ts'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        project: './tsconfig.playwright.json',
+      },
+      globals: {
+        // Node.js globals for Playwright test environment
+        global: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+      playwright,
+      security,
+    },
+    rules: {
+      ...tsPlugin.configs.recommended.rules,
+      ...tsPlugin.configs.strict.rules,
+      ...playwright.configs['flat/recommended'].rules,
+      // Security rules
+      ...security.configs.recommended.rules,
+      
+      // E2E-specific Playwright rule overrides
+      'playwright/no-conditional-in-test': 'off', // E2E tests need conditionals for optional UI elements
+      'playwright/no-conditional-expect': 'off', // E2E tests need conditional expects for dynamic states
+      'playwright/no-wait-for-timeout': 'off', // Sometimes necessary for timing-sensitive E2E scenarios
+      
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': 'off',
+      'no-console': 'warn',
+      'prefer-const': 'error',
+      'no-var': 'error',
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/prefer-nullish-coalescing': 'error',
+      '@typescript-eslint/prefer-optional-chain': 'error',
+      '@typescript-eslint/no-unnecessary-condition': 'error',
+      '@typescript-eslint/prefer-readonly': 'error',
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+    },
+  },
+
+  // Playwright setup files - allow standalone expects
+  {
+    files: ['tests/**/*.setup.ts'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        project: './tsconfig.playwright.json',
+      },
+      globals: {
+        global: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+      playwright,
+      security,
+    },
+    rules: {
+      ...tsPlugin.configs.recommended.rules,
+      ...playwright.configs['flat/recommended'].rules,
+      
+      // Setup-specific Playwright rule overrides
+      'playwright/no-standalone-expect': 'off', // Allow standalone expect in setup
+      'playwright/no-conditional-in-test': 'off', // E2E setup needs conditionals
+      'playwright/no-conditional-expect': 'off', // E2E setup needs conditional expects
+      'playwright/no-wait-for-timeout': 'off', // Sometimes necessary in setup
+      
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': 'off',
+      'no-console': 'warn',
+      'prefer-const': 'error',
+      'no-var': 'error',
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/prefer-nullish-coalescing': 'error',
+      '@typescript-eslint/prefer-optional-chain': 'error',
+      '@typescript-eslint/no-unnecessary-condition': 'error',
+      '@typescript-eslint/prefer-readonly': 'error',
+      '@typescript-eslint/switch-exhaustiveness-check': 'error',
+    },
+  },
+  
   // JavaScript files
   {
     files: ['**/*.js', '**/*.mjs'],
@@ -182,11 +280,10 @@ export default [
   
   // Node.js scripts and config files
   {
-    files: ['src/test/**/*.js', '*.config.js', 'test-*.js', 'debug-*.js', 'src/lib/i18n/generateTypes.ts'],
+    files: ['src/test/**/*.js', '*.config.js', '*.config.ts', 'test-*.js', 'debug-*.js', 'src/lib/i18n/generateTypes.ts'],
     languageOptions: {
       globals: {
-        // Include browser globals and add Node.js specific globals
-        ...browserGlobals,
+        // Node.js specific globals only (no browser globals for Node scripts)
         global: 'readonly',
         process: 'readonly',
         performance: 'readonly',
@@ -211,6 +308,9 @@ export default [
       'eslint.config.js',
       'vitest.config.js',
       'vite.config.js',
+      'playwright-report/',
+      'test-results/',
+      'blob-report/',
     ],
   },
 ];
