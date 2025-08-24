@@ -26,6 +26,7 @@ func createTestTracker(t *testing.T) *NewSpeciesTracker {
 
 // TestWinterAdjustmentBugFix verifies the core winter adjustment bug is fixed
 func TestWinterAdjustmentBugFix(t *testing.T) {
+	t.Parallel()
 	tracker := createTestTracker(t)
 
 	// Test August 24, 2025 - the original bug report date
@@ -34,10 +35,6 @@ func TestWinterAdjustmentBugFix(t *testing.T) {
 	startDate, endDate := tracker.getSeasonDateRange("winter", aug24)
 	
 	// After fix: winter should return empty range in August (hasn't started yet)
-	assert.Equal(t, startDate, endDate, 
-		"Winter in August should return empty range [%s, %s], got [%s, %s]", 
-		aug24.Format("2006-01-02"), aug24.Format("2006-01-02"), startDate, endDate)
-	
 	assert.Equal(t, "2025-08-24", startDate, 
 		"Winter should return current date as empty range start")
 	assert.Equal(t, "2025-08-24", endDate, 
@@ -49,49 +46,49 @@ func TestWinterAdjustmentBugFix(t *testing.T) {
 		"August 24, 2025 should be summer, not %s", currentSeason)
 }
 
-// TestWinterAdjustmentLogic tests winter adjustment for all months
+// TestWinterAdjustmentLogic tests winter adjustment for all months using actual API calls
 func TestWinterAdjustmentLogic(t *testing.T) {
 	tests := []struct {
-		month        int
-		shouldAdjust bool
-		description  string
+		month            int
+		expectedStartYear int
+		description      string
 	}{
-		{1, true, "January should adjust winter to previous year"},
-		{2, true, "February should adjust winter to previous year"},
-		{3, true, "March should adjust winter to previous year"},
-		{4, true, "April should adjust winter to previous year"},
-		{5, true, "May should adjust winter to previous year"},
-		{6, false, "June should NOT adjust winter to previous year"},
-		{7, false, "July should NOT adjust winter to previous year"},
-		{8, false, "August should NOT adjust winter to previous year"},
-		{9, false, "September should NOT adjust winter to previous year"},
-		{10, false, "October should NOT adjust winter to previous year"},
-		{11, false, "November should NOT adjust winter to previous year"},
-		{12, false, "December should NOT adjust winter to previous year"},
+		{1, 2024, "January should adjust winter to previous year"},
+		{2, 2024, "February should adjust winter to previous year"},
+		{3, 2024, "March should adjust winter to previous year"},
+		{4, 2024, "April should adjust winter to previous year"},
+		{5, 2024, "May should adjust winter to previous year"},
+		{6, 2025, "June should use current year winter (empty range)"},
+		{7, 2025, "July should use current year winter (empty range)"},
+		{8, 2025, "August should use current year winter (empty range)"},
+		{9, 2025, "September should use current year winter (empty range)"},
+		{10, 2025, "October should use current year winter (empty range)"},
+		{11, 2025, "November should use current year winter (empty range)"},
+		{12, 2025, "December (day 15) should use current year winter (empty range)"},
 	}
 
 	tracker := createTestTracker(t)
 
 	for _, tt := range tests {
 		t.Run(time.Month(tt.month).String(), func(t *testing.T) {
+			t.Parallel()
 			testTime := time.Date(2025, time.Month(tt.month), 15, 12, 0, 0, 0, time.UTC)
 			startDate, endDate := tracker.getSeasonDateRange("winter", testTime)
 			
-			if tt.shouldAdjust {
+			switch tt.expectedStartYear {
+			case 2024:
 				// Should get range starting from previous year's winter
 				assert.Equal(t, "2024-12-21", startDate, 
 					"Winter in %s should start from previous year", time.Month(tt.month))
-			} else {
-				// Should get empty range (winter hasn't started this year yet) OR current year winter
-				if tt.month == 12 && testTime.Day() >= 21 {
-					// Special case: after Dec 21, winter has started
-					assert.Equal(t, "2025-12-21", startDate,
-						"Winter in late December should start from current year")
-				} else {
-					// Empty range for months 6-11 (and early December)
-					assert.Equal(t, startDate, endDate,
-						"Winter in %s should return empty range", time.Month(tt.month))
-				}
+				assert.Equal(t, testTime.Format("2006-01-02"), endDate,
+					"Winter range should end at current date")
+			default:
+				// Empty range for months 6-12 (when winter hasn't started yet)
+				expectedDate := testTime.Format("2006-01-02")
+				assert.Equal(t, expectedDate, startDate,
+					"Winter in %s should return empty range start", time.Month(tt.month))
+				assert.Equal(t, expectedDate, endDate,
+					"Winter in %s should return empty range end", time.Month(tt.month))
 			}
 		})
 	}
@@ -99,6 +96,7 @@ func TestWinterAdjustmentLogic(t *testing.T) {
 
 // TestSeasonDateRanges tests date range calculation for various scenarios
 func TestSeasonDateRanges(t *testing.T) {
+	t.Parallel()
 	tracker := createTestTracker(t)
 
 	tests := []struct {
@@ -109,7 +107,7 @@ func TestSeasonDateRanges(t *testing.T) {
 		expectedEnd   string
 		description   string
 	}{
-		// August 24 test cases - the problematic date from original bug
+		// August 24 test cases - regression test for winter adjustment bug
 		{
 			"August24_Spring",
 			"2025-08-24",
@@ -140,7 +138,7 @@ func TestSeasonDateRanges(t *testing.T) {
 			"winter", 
 			"2025-08-24",
 			"2025-08-24",
-			"Winter range for August 24 (empty - not started)",
+			"Winter range for August 24 (empty - regression test)",
 		},
 
 		// Winter spanning years
@@ -182,6 +180,7 @@ func TestSeasonDateRanges(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			testTime, err := time.Parse("2006-01-02", tt.currentDate)
 			require.NoError(t, err)
 			testTime = testTime.Add(17*time.Hour + 42*time.Minute + 39*time.Second)
@@ -189,9 +188,8 @@ func TestSeasonDateRanges(t *testing.T) {
 			startDate, endDate := tracker.getSeasonDateRange(tt.season, testTime)
 			
 			// Check for invalid range (start > end)
-			if startDate > endDate {
-				t.Errorf("INVALID RANGE: start (%s) > end (%s) for %s", startDate, endDate, tt.description)
-			}
+			assert.LessOrEqual(t, startDate, endDate,
+				"INVALID RANGE for %s: start=%s > end=%s", tt.description, startDate, endDate)
 			
 			assert.Equal(t, tt.expectedStart, startDate, 
 				"Start date mismatch for %s", tt.description)
@@ -203,15 +201,15 @@ func TestSeasonDateRanges(t *testing.T) {
 
 // TestCurrentSeasonDetection tests season detection for key dates
 func TestCurrentSeasonDetection(t *testing.T) {
-	tracker := createTestTracker(t)
+	t.Parallel()
 
 	tests := []struct {
 		date           string
 		expectedSeason string
 		description    string
 	}{
-		// Test current bug scenario
-		{"2025-08-24", "summer", "August 24 - original bug report date"},
+		// Test regression scenario
+		{"2025-08-24", "summer", "August 24 - regression test for winter adjustment bug"},
 		
 		// Test each season's middle
 		{"2025-01-15", "winter", "Middle of winter"},
@@ -228,16 +226,18 @@ func TestCurrentSeasonDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.date+"_"+tt.expectedSeason, func(t *testing.T) {
+			t.Parallel()
+			tracker := createTestTracker(t)
 			testTime, err := time.Parse("2006-01-02", tt.date)
 			require.NoError(t, err)
 			testTime = testTime.Add(12 * time.Hour) // Noon
 
 			actualSeason := tracker.getCurrentSeason(testTime)
 			
-			// For the August 24 test (our main bug), we want this to pass
+			// For the August 24 test (our main regression test), we want this to pass
 			if tt.date == "2025-08-24" {
 				assert.Equal(t, tt.expectedSeason, actualSeason,
-					"CRITICAL: %s should be %s (original bug scenario)", tt.description, tt.expectedSeason)
+					"CRITICAL: %s should be %s (regression test)", tt.description, tt.expectedSeason)
 			} else {
 				// For boundary dates, we document but don't fail (separate issue)
 				if actualSeason != tt.expectedSeason {
@@ -253,6 +253,7 @@ func TestCurrentSeasonDetection(t *testing.T) {
 
 // TestSeasonConfiguration verifies the season configuration is correct
 func TestSeasonConfiguration(t *testing.T) {
+	t.Parallel()
 	tracker := createTestTracker(t)
 	
 	expectedSeasons := map[string]seasonDates{
@@ -276,6 +277,7 @@ func TestSeasonConfiguration(t *testing.T) {
 
 // TestDateValidation ensures no invalid date ranges are generated
 func TestDateValidation(t *testing.T) {
+	t.Parallel()
 	tracker := createTestTracker(t)
 	
 	testDates := []string{
@@ -306,20 +308,21 @@ func TestDateValidation(t *testing.T) {
 
 // TestWinterAdjustmentConstant verifies the constant is used correctly
 func TestWinterAdjustmentConstant(t *testing.T) {
+	t.Parallel()
 	// Verify the constant value makes sense
-	assert.Equal(t, 6, winterAdjustmentCutoffMonth, 
-		"Winter adjustment cutoff should be June (month 6)")
+	assert.Equal(t, winterAdjustmentCutoffMonth, int(time.June), 
+		"Winter adjustment cutoff should be June")
 	
 	// Test the logic with the constant
 	testCases := []struct {
 		month    int
 		expected bool
 	}{
-		{1, true},  // January < 6
-		{5, true},  // May < 6  
-		{6, false}, // June == 6
-		{8, false}, // August > 6
-		{12, false}, // December > 6
+		{1, true},  // January < June
+		{5, true},  // May < June  
+		{6, false}, // June == June
+		{8, false}, // August > June
+		{12, false}, // December > June
 	}
 	
 	for _, tc := range testCases {
