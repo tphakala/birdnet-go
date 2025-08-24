@@ -19,7 +19,10 @@ func TestTelemetryIntegration(t *testing.T) {
 		defer cleanup()
 
 		// Initialize error integration
-		InitializeErrorIntegration()
+		testSettings := &conf.Settings{
+			Sentry: conf.SentrySettings{Enabled: true},
+		}
+		InitializeErrorIntegration(testSettings)
 
 		// Create an error with context
 		originalErr := fmt.Errorf("connection failed")
@@ -207,7 +210,7 @@ func TestTelemetryDisabled(t *testing.T) {
 	}
 
 	// Update the cached telemetry state
-	UpdateTelemetryEnabled()
+	UpdateTelemetryEnabled(settings.Sentry.Enabled)
 
 	// Try to report error
 	testErr := fmt.Errorf("should not be captured")

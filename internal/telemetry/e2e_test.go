@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -17,7 +18,10 @@ func TestE2ECompleteFlow(t *testing.T) {
 	defer cleanup()
 
 	// Initialize error integration
-	InitializeErrorIntegration()
+	testSettings := &conf.Settings{
+		Sentry: conf.SentrySettings{Enabled: true},
+	}
+	InitializeErrorIntegration(testSettings)
 
 	t.Run("error to telemetry flow", func(t *testing.T) {
 		// Create enhanced error

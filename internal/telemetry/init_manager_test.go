@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 func TestInitManager_ConcurrentInitialization(t *testing.T) {
@@ -22,7 +24,10 @@ func TestInitManager_ConcurrentInitialization(t *testing.T) {
 	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			err := manager.InitializeErrorIntegrationSafe()
+			testSettings := &conf.Settings{
+				Sentry: conf.SentrySettings{Enabled: true},
+			}
+			err := manager.InitializeErrorIntegrationSafe(testSettings)
 			if err != nil {
 				t.Errorf("Error integration initialization failed: %v", err)
 			}

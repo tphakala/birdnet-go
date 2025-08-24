@@ -36,8 +36,9 @@ type SystemInitManager struct {
 	eventBusErr     error
 	workerErr       error
 	
-	mu     sync.RWMutex
-	logger *slog.Logger
+	mu       sync.RWMutex
+	logger   *slog.Logger
+	settings *conf.Settings // Store settings for use across initialization phases
 }
 
 var (
@@ -65,6 +66,11 @@ func GetSystemInitManager() *SystemInitManager {
 // InitializeCore initializes core services (telemetry and notification)
 func (m *SystemInitManager) InitializeCore(settings *conf.Settings) error {
 	m.logger.Info("starting core services initialization")
+
+	// Store settings for use in async initialization
+	m.mu.Lock()
+	m.settings = settings
+	m.mu.Unlock()
 
 	// Phase 1: Initialize telemetry (synchronous error reporting)
 	if err := m.initializeTelemetry(settings); err != nil {
@@ -124,7 +130,9 @@ func (m *SystemInitManager) initializeNotification() error {
 		m.logger.Debug("initializing notification service")
 		
 		// Get settings for debug flag
-		settings := conf.GetSettings()
+		m.mu.RLock()
+		settings := m.settings
+		m.mu.RUnlock()
 		debug := false
 		if settings != nil {
 			debug = settings.Debug
@@ -160,7 +168,9 @@ func (m *SystemInitManager) initializeEventBus() error {
 		m.logger.Debug("initializing event bus")
 		
 		// Get settings for debug flag
-		settings := conf.GetSettings()
+		m.mu.RLock()
+		settings := m.settings
+		m.mu.RUnlock()
 		debug := false
 		if settings != nil {
 			debug = settings.Debug
@@ -242,7 +252,13 @@ func (m *SystemInitManager) initializeTelemetryEventBus() error {
 	if m.telemetryCoordinator == nil {
 		return InitializeEventBus()
 	}
-	return m.telemetryCoordinator.InitializeEventBusIntegration()
+	
+	// Get stored settings
+	m.mu.RLock()
+	settings := m.settings
+	m.mu.RUnlock()
+	
+	return m.telemetryCoordinator.InitializeEventBusIntegration(settings)
 }
 
 // HealthCheck returns comprehensive health status

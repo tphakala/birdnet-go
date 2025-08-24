@@ -29,7 +29,7 @@ func BenchmarkTelemetryDisabled(b *testing.B) {
 	if err := InitSentry(settings, runtimeCtx); err != nil {
 		b.Fatalf("Failed to initialize Sentry: %v", err)
 	}
-	InitializeErrorIntegration()
+	InitializeErrorIntegration(settings)
 
 	b.Run("CaptureError", func(b *testing.B) {
 		err := fmt.Errorf("benchmark error")
@@ -72,7 +72,11 @@ func BenchmarkTelemetryEnabled(b *testing.B) {
 	config, cleanup := InitForTesting(b)
 	defer cleanup()
 	
-	InitializeErrorIntegration()
+	// Create test settings
+	testSettings := &conf.Settings{
+		Sentry: conf.SentrySettings{Enabled: true},
+	}
+	InitializeErrorIntegration(testSettings)
 
 	b.Run("CaptureError", func(b *testing.B) {
 		err := fmt.Errorf("benchmark error")

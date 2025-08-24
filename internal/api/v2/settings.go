@@ -194,7 +194,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	}
 
 	// Update the cached telemetry state after settings change
-	telemetry.UpdateTelemetryEnabled()
+	telemetry.UpdateTelemetryEnabled(settings.Sentry.Enabled)
 
 	c.logAPIRequest(ctx, slog.LevelInfo, "Settings updated and saved successfully", "skipped_fields_count", len(skippedFields))
 	return ctx.JSON(http.StatusOK, map[string]any{
@@ -527,7 +527,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	}
 
 	// Update the cached telemetry state after settings change
-	telemetry.UpdateTelemetryEnabled()
+	telemetry.UpdateTelemetryEnabled(settings.Sentry.Enabled)
 
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":       fmt.Sprintf("%s settings updated successfully", section),

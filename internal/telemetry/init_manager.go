@@ -62,14 +62,14 @@ func GetInitManager() *InitManager {
 }
 
 // InitializeErrorIntegrationSafe safely initializes error integration
-func (m *InitManager) InitializeErrorIntegrationSafe() error {
+func (m *InitManager) InitializeErrorIntegrationSafe(settings *conf.Settings) error {
 	var err error
 	m.errorIntegrationOnce.Do(func() {
 		m.errorIntegration.Store(int32(InitStateInProgress))
 		m.logger.Debug("initializing error integration")
 
 		// Call the actual initialization
-		InitializeErrorIntegration()
+		InitializeErrorIntegration(settings)
 
 		m.errorIntegration.Store(int32(InitStateCompleted))
 		m.logger.Info("error integration initialized successfully")
@@ -84,14 +84,14 @@ func (m *InitManager) InitializeErrorIntegrationSafe() error {
 }
 
 // InitializeSentrySafe safely initializes Sentry with retry logic
-func (m *InitManager) InitializeSentrySafe(settings any) error {
+func (m *InitManager) InitializeSentrySafe(settings *conf.Settings) error {
 	var err error
 	m.sentryOnce.Do(func() {
 		m.sentryClient.Store(int32(InitStateInProgress))
 		m.logger.Debug("initializing Sentry client")
 
 		// Ensure error integration is ready
-		if err := m.InitializeErrorIntegrationSafe(); err != nil {
+		if err := m.InitializeErrorIntegrationSafe(settings); err != nil {
 			m.sentryErr.Store(err)
 			m.sentryClient.Store(int32(InitStateFailed))
 			return
@@ -103,13 +103,8 @@ func (m *InitManager) InitializeSentrySafe(settings any) error {
 
 		done := make(chan error, 1)
 		go func() {
-			// Type assertion for settings
-			if s, ok := settings.(*conf.Settings); ok {
-				// TODO: Need to pass runtime context here - using nil for now as temporary fix
-				done <- InitSentry(s, nil)
-			} else {
-				done <- fmt.Errorf("invalid settings type: expected *conf.Settings")
-			}
+			// TODO: Need to pass runtime context here - using nil for now as temporary fix
+			done <- InitSentry(settings, nil)
 		}()
 
 		select {
@@ -139,7 +134,7 @@ func (m *InitManager) InitializeSentrySafe(settings any) error {
 }
 
 // InitializeEventBusSafe safely initializes event bus integration
-func (m *InitManager) InitializeEventBusSafe() error {
+func (m *InitManager) InitializeEventBusSafe(settings *conf.Settings) error {
 	var err error
 	m.eventBusOnce.Do(func() {
 		m.eventBus.Store(int32(InitStateInProgress))
@@ -154,7 +149,7 @@ func (m *InitManager) InitializeEventBusSafe() error {
 		}
 
 		// Call the actual initialization
-		if err = InitializeTelemetryEventBus(); err != nil {
+		if err = InitializeTelemetryEventBus(settings); err != nil {
 			m.eventBusErr.Store(err)
 			m.eventBus.Store(int32(InitStateFailed))
 			m.logger.Error("event bus integration failed", "error", err)

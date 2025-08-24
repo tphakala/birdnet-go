@@ -71,7 +71,7 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 	atomic.StoreInt32(&testMode, 1)
 	
 	// Update telemetry enabled state for test mode
-	UpdateTelemetryEnabled()
+	UpdateTelemetryEnabled(testSettings.Sentry.Enabled)
 
 	// Configure scope with test data
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
@@ -101,10 +101,10 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 	}
 
 	// Initialize error integration
-	InitializeErrorIntegration()
+	InitializeErrorIntegration(testSettings)
 
 	// Initialize telemetry event bus integration
-	if err := InitializeEventBusIntegration(); err != nil {
+	if err := InitializeEventBusIntegration(testSettings); err != nil {
 		t.Fatalf("Failed to initialize telemetry event bus integration: %v", err)
 	}
 

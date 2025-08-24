@@ -178,7 +178,7 @@ func (h *Handlers) SaveSettings(c echo.Context) error {
 	}
 
 	// Update the cached telemetry state after settings change
-	telemetry.UpdateTelemetryEnabled()
+	telemetry.UpdateTelemetryEnabled(settings.Sentry.Enabled)
 
 	// Send success notification for applying and saving settings
 	h.SSE.SendNotification(Notification{

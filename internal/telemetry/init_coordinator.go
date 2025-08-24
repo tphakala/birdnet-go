@@ -28,7 +28,7 @@ func (c *InitCoordinator) InitializeAll(settings *conf.Settings) error {
 	logger.Info("starting telemetry initialization sequence")
 
 	// Phase 1: Initialize error integration (synchronous reporting)
-	if err := c.manager.InitializeErrorIntegrationSafe(); err != nil {
+	if err := c.manager.InitializeErrorIntegrationSafe(settings); err != nil {
 		return fmt.Errorf("error integration initialization failed: %w", err)
 	}
 
@@ -46,7 +46,7 @@ func (c *InitCoordinator) InitializeAll(settings *conf.Settings) error {
 }
 
 // InitializeEventBusIntegration should be called after all core services are initialized
-func (c *InitCoordinator) InitializeEventBusIntegration() error {
+func (c *InitCoordinator) InitializeEventBusIntegration(settings *conf.Settings) error {
 	logger := getLoggerSafe("init-coordinator")
 	
 	// Check prerequisites
@@ -60,7 +60,10 @@ func (c *InitCoordinator) InitializeEventBusIntegration() error {
 
 	// Initialize event bus integration
 	logger.Info("initializing telemetry event bus integration")
-	if err := c.manager.InitializeEventBusSafe(); err != nil {
+	if settings == nil {
+		return fmt.Errorf("settings not available for event bus integration")
+	}
+	if err := c.manager.InitializeEventBusSafe(settings); err != nil {
 		return fmt.Errorf("event bus integration failed: %w", err)
 	}
 
@@ -142,11 +145,14 @@ func Initialize(settings *conf.Settings) error {
 }
 
 // InitializeEventBus initializes event bus integration (call after core services are ready)
+// Deprecated: This function will be updated to require explicit settings parameter
 func InitializeEventBus() error {
 	if globalInitCoordinator == nil {
 		return fmt.Errorf("telemetry not initialized")
 	}
-	return globalInitCoordinator.InitializeEventBusIntegration()
+	// TODO: This function needs to be updated to accept settings parameter
+	// For now, we'll return an error indicating that explicit initialization is required
+	return fmt.Errorf("InitializeEventBus() is deprecated - use InitializeEventBusIntegration(settings) directly through SystemInitManager")
 }
 
 // WaitForReady waits for telemetry to be ready
