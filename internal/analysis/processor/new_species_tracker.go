@@ -29,7 +29,7 @@ const (
 	defaultSeasonDurationDays = 90 // Typical season duration
 
 	// Season calculations
-	winterAdjustmentCutoffMonth = int(time.June) // June - first month where winter shouldn't adjust to previous year
+	winterAdjustmentCutoffMonth time.Month = time.June // June - first month where winter shouldn't adjust to previous year
 
 	// Notification suppression
 	defaultNotificationSuppressionWindow = 168 * time.Hour // Default suppression window (7 days)
@@ -249,11 +249,11 @@ func (t *NewSpeciesTracker) initializeDefaultSeasons() {
 	t.seasons["winter"] = seasonDates{month: 12, day: 21} // December 21
 }
 
-// shouldAdjustWinter determines if winter season should be adjusted to previous year
-// Winter spans across years: Dec 21 (year X) -> Mar 19 (year X+1)
+// shouldAdjustWinter determines whether to shift the start year for a winter season
+// (i.e., decide if the season's start year should be decremented for seasons that begin in December)
 // Only adjust in early months (Jan-May) to maintain consistency between season detection and date ranges
-func (t *NewSpeciesTracker) shouldAdjustWinter(now time.Time, seasonMonth int) bool {
-	return seasonMonth >= 12 && int(now.Month()) < winterAdjustmentCutoffMonth
+func (t *NewSpeciesTracker) shouldAdjustWinter(now time.Time, seasonMonth time.Month) bool {
+	return seasonMonth >= 12 && now.Month() < winterAdjustmentCutoffMonth
 }
 
 // SetCurrentYearForTesting sets the current year for testing purposes only.
@@ -340,7 +340,7 @@ func (t *NewSpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 		seasonDate := time.Date(currentTime.Year(), time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
 
 		// Handle winter season that might start in previous year
-		if t.shouldAdjustWinter(currentTime, seasonStart.month) {
+		if t.shouldAdjustWinter(currentTime, time.Month(seasonStart.month)) {
 			seasonDate = time.Date(currentTime.Year()-1, time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
 			logger.Debug("Adjusting winter season to previous year",
 				"season", seasonName,
@@ -635,7 +635,7 @@ func (t *NewSpeciesTracker) getSeasonDateRange(seasonName string, now time.Time)
 	// Handle winter season that might start in previous year
 	// Winter spans across years: Dec 21 (year X) -> Mar 19 (year X+1)
 	// This ensures consistency between season detection and date range calculations
-	if t.shouldAdjustWinter(now, season.month) {
+	if t.shouldAdjustWinter(now, time.Month(season.month)) {
 		seasonStart = time.Date(currentYear-1, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
 	}
 

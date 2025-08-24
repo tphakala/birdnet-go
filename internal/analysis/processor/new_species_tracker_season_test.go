@@ -97,7 +97,6 @@ func TestWinterAdjustmentLogic(t *testing.T) {
 // TestSeasonDateRanges tests date range calculation for various scenarios
 func TestSeasonDateRanges(t *testing.T) {
 	t.Parallel()
-	tracker := createTestTracker(t)
 
 	tests := []struct {
 		name          string
@@ -181,6 +180,7 @@ func TestSeasonDateRanges(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			tracker := createTestTracker(t)
 			testTime, err := time.Parse("2006-01-02", tt.currentDate)
 			require.NoError(t, err)
 			testTime = testTime.Add(17*time.Hour + 42*time.Minute + 39*time.Second)
@@ -310,7 +310,7 @@ func TestDateValidation(t *testing.T) {
 func TestWinterAdjustmentConstant(t *testing.T) {
 	t.Parallel()
 	// Verify the constant value makes sense
-	assert.Equal(t, winterAdjustmentCutoffMonth, int(time.June), 
+	assert.Equal(t, time.June, winterAdjustmentCutoffMonth, 
 		"Winter adjustment cutoff should be June")
 	
 	// Test the logic with the constant
@@ -326,7 +326,7 @@ func TestWinterAdjustmentConstant(t *testing.T) {
 	}
 	
 	for _, tc := range testCases {
-		actual := tc.month < winterAdjustmentCutoffMonth
+		actual := time.Month(tc.month) < winterAdjustmentCutoffMonth
 		assert.Equal(t, tc.expected, actual,
 			"Month %d comparison with cutoff should be %v", tc.month, tc.expected)
 	}
