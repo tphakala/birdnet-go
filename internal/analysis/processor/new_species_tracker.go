@@ -323,18 +323,29 @@ func (t *NewSpeciesTracker) isSameSeasonPeriod(time1, time2 time.Time) bool {
 // computeCurrentSeason performs the actual season calculation (moved from getCurrentSeason)
 func (t *NewSpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 	currentMonth := int(currentTime.Month())
+	currentDay := currentTime.Day()
 
 	// Log season calculation
 	logger.Debug("Computing current season",
 		"input_time", currentTime.Format("2006-01-02 15:04:05"),
 		"current_month", currentMonth,
+		"current_day", currentDay,
 		"current_year", currentTime.Year())
 
+	// Check seasons in a deterministic order to handle boundaries correctly
+	// Order: winter, spring, summer, fall (in chronological order within a year)
+	seasonOrder := []string{"winter", "spring", "summer", "fall"}
+	
 	// Find the most recent season start date
 	var currentSeason string
 	var latestDate time.Time
 
-	for seasonName, seasonStart := range t.seasons {
+	for _, seasonName := range seasonOrder {
+		seasonStart, exists := t.seasons[seasonName]
+		if !exists {
+			continue
+		}
+
 		// Create a date for this year's season start
 		seasonDate := time.Date(currentTime.Year(), time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
 
@@ -346,15 +357,17 @@ func (t *NewSpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 				"adjusted_date", seasonDate.Format("2006-01-02"))
 		}
 
-		// If this season has started and is more recent than our current candidate
-		if (currentTime.After(seasonDate) || currentTime.Equal(seasonDate)) &&
-			(currentSeason == "" || seasonDate.After(latestDate)) {
-			logger.Debug("Season candidate found",
-				"season", seasonName,
-				"start_date", seasonDate.Format("2006-01-02"),
-				"is_after_current", currentTime.After(seasonDate) || currentTime.Equal(seasonDate))
-			currentSeason = seasonName
-			latestDate = seasonDate
+		// Check if current date is on or after this season's start
+		if currentTime.Equal(seasonDate) || currentTime.After(seasonDate) {
+			// Update if this is a more recent season start than what we have
+			if currentSeason == "" || seasonDate.After(latestDate) {
+				logger.Debug("Season match found",
+					"season", seasonName,
+					"start_date", seasonDate.Format("2006-01-02"),
+					"is_current", currentTime.Equal(seasonDate) || currentTime.After(seasonDate))
+				currentSeason = seasonName
+				latestDate = seasonDate
+			}
 		}
 	}
 
@@ -497,15 +510,23 @@ func (t *NewSpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 			Build()
 	}
 
-	// Clear and populate lifetime tracking map
-	t.speciesFirstSeen = make(map[string]time.Time, len(newSpeciesData))
-	for _, species := range newSpeciesData {
-		if species.FirstSeenDate != "" {
-			firstSeen, err := time.Parse("2006-01-02", species.FirstSeenDate)
-			if err == nil {
-				t.speciesFirstSeen[species.ScientificName] = firstSeen
+	// Only clear existing data if we have new data to replace it with
+	// This prevents data loss if database returns empty results due to errors
+	if len(newSpeciesData) > 0 || len(t.speciesFirstSeen) == 0 {
+		// Clear and populate lifetime tracking map
+		t.speciesFirstSeen = make(map[string]time.Time, len(newSpeciesData))
+		for _, species := range newSpeciesData {
+			if species.FirstSeenDate != "" {
+				firstSeen, err := time.Parse("2006-01-02", species.FirstSeenDate)
+				if err == nil {
+					t.speciesFirstSeen[species.ScientificName] = firstSeen
+				}
 			}
 		}
+	} else {
+		// Database returned empty data but we have existing data - keep it
+		logger.Debug("Database returned empty species data, preserving existing tracking data",
+			"existing_species_count", len(t.speciesFirstSeen))
 	}
 
 	return nil
@@ -528,15 +549,24 @@ func (t *NewSpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 			Build()
 	}
 
-	// Clear and populate yearly tracking map
-	t.speciesThisYear = make(map[string]time.Time, len(yearlyData))
-	for _, species := range yearlyData {
-		if species.FirstSeenDate != "" {
-			firstSeen, err := time.Parse("2006-01-02", species.FirstSeenDate)
-			if err == nil {
-				t.speciesThisYear[species.ScientificName] = firstSeen
+	// Only clear existing data if we have new data to replace it with
+	// This prevents data loss if database returns empty results due to errors
+	if len(yearlyData) > 0 || len(t.speciesThisYear) == 0 {
+		// Clear and populate yearly tracking map
+		t.speciesThisYear = make(map[string]time.Time, len(yearlyData))
+		for _, species := range yearlyData {
+			if species.FirstSeenDate != "" {
+				firstSeen, err := time.Parse("2006-01-02", species.FirstSeenDate)
+				if err == nil {
+					t.speciesThisYear[species.ScientificName] = firstSeen
+				}
 			}
 		}
+	} else {
+		// Database returned empty data but we have existing data - keep it
+		logger.Debug("Database returned empty yearly data, preserving existing tracking data",
+			"existing_yearly_species_count", len(t.speciesThisYear),
+			"year", t.currentYear)
 	}
 
 	return nil
@@ -544,11 +574,16 @@ func (t *NewSpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 
 // loadSeasonalDataFromDatabase loads first detection data for each season in the current year
 func (t *NewSpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
+	// Preserve existing seasonal maps if we have them
+	existingSeasonData := t.speciesBySeason
+	hasExistingData := len(existingSeasonData) > 0
+	
 	// Initialize seasonal maps
 	t.speciesBySeason = make(map[string]map[string]time.Time)
 
 	logger.Debug("Loading seasonal data from database",
-		"total_seasons", len(t.seasons))
+		"total_seasons", len(t.seasons),
+		"has_existing_data", hasExistingData)
 
 	for seasonName := range t.seasons {
 		startDate, endDate := t.getSeasonDateRange(seasonName, now)
@@ -595,6 +630,21 @@ func (t *NewSpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 			"season", seasonName,
 			"total_retrieved", len(seasonalData),
 			"species_loaded", len(seasonMap))
+	}
+
+	// Check if all seasons returned empty data
+	allEmpty := true
+	for _, seasonMap := range t.speciesBySeason {
+		if len(seasonMap) > 0 {
+			allEmpty = false
+			break
+		}
+	}
+
+	// If all seasons returned empty and we had existing data, restore it
+	if allEmpty && hasExistingData {
+		logger.Debug("All seasons returned empty data, restoring existing seasonal tracking data")
+		t.speciesBySeason = existingSeasonData
 	}
 
 	return nil
@@ -1074,9 +1124,43 @@ func (t *NewSpeciesTracker) SyncIfNeeded() error {
 		return nil // No sync needed yet
 	}
 
+	// Store count of existing data before sync
+	t.mu.RLock()
+	existingLifetimeCount := len(t.speciesFirstSeen)
+	existingYearlyCount := len(t.speciesThisYear)
+	existingSeasonalCount := 0
+	for _, seasonMap := range t.speciesBySeason {
+		existingSeasonalCount += len(seasonMap)
+	}
+	t.mu.RUnlock()
+
+	// Log sync attempt
+	logger.Debug("Starting database sync",
+		"existing_lifetime_species", existingLifetimeCount,
+		"existing_yearly_species", existingYearlyCount,
+		"existing_seasonal_species", existingSeasonalCount)
+
 	// Perform database sync
 	if err := t.InitFromDatabase(); err != nil {
+		logger.Error("Database sync failed, preserving existing data",
+			"error", err,
+			"existing_species", existingLifetimeCount)
+		// Don't propagate error if we have existing data - continue with cached data
+		if existingLifetimeCount > 0 {
+			return nil
+		}
 		return err
+	}
+
+	// Check if sync suspiciously cleared all data
+	t.mu.RLock()
+	newLifetimeCount := len(t.speciesFirstSeen)
+	t.mu.RUnlock()
+
+	if existingLifetimeCount > 0 && newLifetimeCount == 0 {
+		logger.Warn("Database sync returned no data but had existing data - possible database issue",
+			"previous_count", existingLifetimeCount,
+			"new_count", newLifetimeCount)
 	}
 
 	// Also perform periodic cleanup of old records (both species and notification records)
