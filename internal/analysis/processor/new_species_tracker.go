@@ -249,11 +249,10 @@ func (t *NewSpeciesTracker) initializeDefaultSeasons() {
 	t.seasons["winter"] = seasonDates{month: 12, day: 21} // December 21
 }
 
-// shouldAdjustWinter determines whether to shift the start year for a winter season
-// (i.e., decide if the season's start year should be decremented for seasons that begin in December)
-// Only adjust in early months (Jan-May) to maintain consistency between season detection and date ranges
+// shouldAdjustWinter adjusts the season start year only when the season month is December
+// and the current month is before winterAdjustmentCutoffMonth (Jan-May)
 func (t *NewSpeciesTracker) shouldAdjustWinter(now time.Time, seasonMonth time.Month) bool {
-	return seasonMonth >= 12 && now.Month() < winterAdjustmentCutoffMonth
+	return seasonMonth == time.December && now.Month() < winterAdjustmentCutoffMonth
 }
 
 // SetCurrentYearForTesting sets the current year for testing purposes only.
