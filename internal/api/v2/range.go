@@ -2,10 +2,11 @@
 package api
 
 import (
+	"bytes"
+	"encoding/csv"
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -382,12 +383,20 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 	}
 	
 	// Generate CSV content
-	csvContent := c.generateSpeciesCSV(speciesList, location, threshold)
+	csvContent, csvErr := c.generateSpeciesCSV(speciesList, location, threshold)
+	if csvErr != nil {
+		return c.HandleError(ctx, csvErr, "Failed to generate CSV", http.StatusInternalServerError)
+	}
 	
 	// Set headers for file download
 	filename := "birdnet_range_filter_species_" + time.Now().Format("20060102_150405") + ".csv"
 	ctx.Response().Header().Set("Content-Type", "text/csv; charset=utf-8")
 	ctx.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	
+	// Add cache control headers to prevent browser caching
+	ctx.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	ctx.Response().Header().Set("Pragma", "no-cache")
+	ctx.Response().Header().Set("Expires", "0")
 	
 	c.logAPIRequest(ctx, 1, "Range filter species CSV exported", "species_count", len(speciesList))
 	return ctx.String(http.StatusOK, csvContent)
@@ -465,46 +474,49 @@ func (c *Controller) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilt
 	return speciesList, location, req.Threshold, nil
 }
 
-// generateSpeciesCSV generates CSV content from species list
-func (c *Controller) generateSpeciesCSV(species []RangeFilterSpecies, location Location, threshold float32) string {
-	var csvBuilder strings.Builder
+// generateSpeciesCSV generates CSV content from species list using the standard CSV library
+func (c *Controller) generateSpeciesCSV(species []RangeFilterSpecies, location Location, threshold float32) (string, error) {
+	var buf bytes.Buffer
 	
-	// Write metadata header
-	csvBuilder.WriteString("# BirdNET-Go Range Filter Species Export\n")
-	csvBuilder.WriteString(fmt.Sprintf("# Generated: %s\n", time.Now().Format(time.RFC3339)))
-	csvBuilder.WriteString(fmt.Sprintf("# Location: %.6f, %.6f\n", location.Latitude, location.Longitude))
-	csvBuilder.WriteString(fmt.Sprintf("# Threshold: %.2f\n", threshold))
-	csvBuilder.WriteString(fmt.Sprintf("# Total Species: %d\n", len(species)))
-	csvBuilder.WriteString("#\n")
+	// Write metadata headers as comments (not part of CSV data)
+	buf.WriteString("# BirdNET-Go Range Filter Species Export\n")
+	buf.WriteString(fmt.Sprintf("# Generated: %s\n", time.Now().Format(time.RFC3339)))
+	buf.WriteString(fmt.Sprintf("# Location: %.6f, %.6f\n", location.Latitude, location.Longitude))
+	buf.WriteString(fmt.Sprintf("# Threshold: %.2f\n", threshold))
+	buf.WriteString(fmt.Sprintf("# Total Species: %d\n", len(species)))
+	buf.WriteString("#\n")
+	
+	// Create CSV writer
+	writer := csv.NewWriter(&buf)
 	
 	// Write CSV header
-	csvBuilder.WriteString("Scientific Name,Common Name,Probability Score\n")
+	if err := writer.Write([]string{"Scientific Name", "Common Name", "Probability Score"}); err != nil {
+		return "", fmt.Errorf("failed to write CSV header: %w", err)
+	}
 	
 	// Write species data
 	for _, s := range species {
-		// Escape commas in names if present
-		scientificName := s.ScientificName
-		commonName := s.CommonName
-		
-		// Quote fields if they contain commas
-		// Using manual CSV escaping instead of %q to follow CSV RFC 4180 standard
-		if strings.Contains(scientificName, ",") {
-			scientificName = fmt.Sprintf("\"%s\"", strings.ReplaceAll(scientificName, "\"", "\"\"")) //nolint:gocritic // CSV escaping, not Go quoting
-		}
-		if strings.Contains(commonName, ",") {
-			commonName = fmt.Sprintf("\"%s\"", strings.ReplaceAll(commonName, "\"", "\"\"")) //nolint:gocritic // CSV escaping, not Go quoting
-		}
-		
 		// Format score (if available)
 		scoreStr := "N/A"
 		if s.Score != nil {
 			scoreStr = fmt.Sprintf("%.4f", *s.Score)
 		}
 		
-		csvBuilder.WriteString(fmt.Sprintf("%s,%s,%s\n", scientificName, commonName, scoreStr))
+		// Write row - CSV library handles escaping automatically
+		if err := writer.Write([]string{s.ScientificName, s.CommonName, scoreStr}); err != nil {
+			return "", fmt.Errorf("failed to write CSV row: %w", err)
+		}
 	}
 	
-	return csvBuilder.String()
+	// Flush any buffered data
+	writer.Flush()
+	
+	// Check for any errors during writing
+	if err := writer.Error(); err != nil {
+		return "", fmt.Errorf("CSV writer error: %w", err)
+	}
+	
+	return buf.String(), nil
 }
 
 // parseFloat64 is a helper function to parse string to float64
