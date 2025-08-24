@@ -623,7 +623,8 @@ func (t *NewSpeciesTracker) getSeasonDateRange(seasonName string, now time.Time)
 	seasonStart := time.Date(currentYear, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
 
 	// Handle winter season that might start in previous year
-	if season.month >= 12 && now.Month() < time.Month(season.month) {
+	// Only adjust winter to previous year in early months (Jan-May) to match computeCurrentSeason logic
+	if season.month >= 12 && int(now.Month()) < 6 {
 		seasonStart = time.Date(currentYear-1, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
 	}
 
