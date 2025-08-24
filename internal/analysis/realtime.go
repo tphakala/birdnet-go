@@ -94,7 +94,7 @@ var audioDemuxManager = NewAudioDemuxManager()
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 //
 //nolint:gocognit,gocyclo // This is the main orchestration function that coordinates multiple subsystems during startup and shutdown
-func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
+func RealtimeAnalysis(settings *conf.Settings, runtime *runtimectx.Context, notificationChan chan handlers.Notification) error {
 	// Initialize BirdNET interpreter
 	if err := initializeBirdNET(settings); err != nil {
 		// Model initialization failures are not retryable because they indicate:
@@ -197,7 +197,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 		log.Println("Error: Backup logger is nil. Logging may not be initialized.")
 		backupLogger = slog.Default() // Use default as fallback
 	}
-	backupManager, backupScheduler, err := initializeBackupSystem(settings, backupLogger)
+	backupManager, backupScheduler, err := initializeBackupSystem(settings, runtime, backupLogger)
 	if err != nil {
 		// Log the specific error from initialization
 		backupLogger.Error("Failed to initialize backup system", "error", err)
@@ -231,13 +231,7 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	systemMonitor := initializeSystemMonitor(settings)
 
 	// Initialize and start the HTTP server
-	// TODO: Pass real runtime context once RealtimeAnalysis signature is updated
-	tempRuntimeContext := &runtimectx.Context{
-		Version:   "unknown",
-		BuildDate: "unknown", 
-		SystemID:  "unknown",
-	}
-	httpServer := httpcontroller.New(settings, tempRuntimeContext, dataStore, birdImageCache, audioLevelChan, controlChan, proc, metrics)
+	httpServer := httpcontroller.New(settings, runtime, dataStore, birdImageCache, audioLevelChan, controlChan, proc, metrics)
 	httpServer.Start()
 
 	// Initialize the wait group to wait for all goroutines to finish
@@ -1421,7 +1415,7 @@ func logHLSCleanup(err error) {
 }
 
 // initializeBackupSystem sets up the backup manager and scheduler.
-func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) (*backup.Manager, *backup.Scheduler, error) {
+func initializeBackupSystem(settings *conf.Settings, runtime *runtimectx.Context, backupLogger *slog.Logger) (*backup.Manager, *backup.Scheduler, error) {
 	backupLogger.Info("Initializing backup system...")
 
 	stateManager, err := backup.NewStateManager(backupLogger)
@@ -1433,9 +1427,11 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 			Build()
 	}
 
-	// TODO: Get runtime version from context - using fallback for now
-	// This should be passed from the caller during the configuration separation refactoring
+	// Use runtime context for app version
 	appVersion := "unknown"
+	if runtime != nil && runtime.Version != "" {
+		appVersion = runtime.Version
+	}
 	backupManager, err := backup.NewManager(settings, backupLogger, stateManager, appVersion)
 	if err != nil {
 		return nil, nil, errors.New(err).

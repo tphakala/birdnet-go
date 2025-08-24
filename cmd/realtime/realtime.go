@@ -7,19 +7,20 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/analysis"
+	runtimectx "github.com/tphakala/birdnet-go/internal/buildinfo"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 )
 
 // RealtimeCommand creates a new command for real-time audio analysis.
-func Command(settings *conf.Settings) *cobra.Command {
+func Command(settings *conf.Settings, runtime *runtimectx.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "realtime",
 		Short: "Analyze audio in realtime mode",
 		Long:  "Start analyzing incoming audio data in real-time looking for bird calls.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			notificationChan := make(chan handlers.Notification, 10)
-			return analysis.RealtimeAnalysis(settings, notificationChan)
+			return analysis.RealtimeAnalysis(settings, runtime, notificationChan)
 		},
 	}
 

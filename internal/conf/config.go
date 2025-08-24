@@ -1074,6 +1074,14 @@ func getDefaultConfig() string {
 }
 
 // GetSettings returns the current settings instance
+//
+// Deprecated: This function will be removed in a future release.
+// Use explicit configuration loading instead of global singleton access:
+//
+//   // Instead of: settings := conf.GetSettings()
+//   // Use: config, validationResult, err := conf.Load()
+//
+// For dependency injection, pass configuration explicitly through function parameters.
 func GetSettings() *Settings {
 	settingsMutex.RLock()
 	defer settingsMutex.RUnlock()
@@ -1118,7 +1126,15 @@ func SaveSettings() error {
 }
 
 // Setting returns the current settings instance, initializing it if necessary
-// Deprecated: Use explicit configuration loading instead of global singleton
+//
+// Deprecated: This function will be removed in a future release.
+// Use explicit configuration loading instead of global singleton access:
+//
+//   // Instead of: settings := conf.Setting()
+//   // Use: config, validationResult, err := conf.Load()
+//
+// For dependency injection, pass configuration explicitly through function parameters.
+// See internal/buildinfo package for build-time metadata separation.
 func Setting() *Settings {
 	once.Do(func() {
 		if settingsInstance == nil {

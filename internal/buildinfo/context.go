@@ -1,6 +1,17 @@
 // Package buildinfo contains build-time metadata and validation state separate from user configuration
 package buildinfo
 
+// BuildInfo provides an interface for accessing build-time metadata.
+// This interface makes testing easier and allows for different implementations.
+type BuildInfo interface {
+	// GetVersion returns the build version string
+	GetVersion() string
+	// GetBuildDate returns the build date string  
+	GetBuildDate() string
+	// GetSystemID returns the unique system identifier
+	GetSystemID() string
+}
+
 // Context contains build-time metadata that is not user-configurable
 // This data is injected at application startup and should not be part
 // of the configuration system.
@@ -49,4 +60,37 @@ func NewValidationResult() *ValidationResult {
 	return &ValidationResult{
 		Valid: true,
 	}
+}
+
+// GetVersion implements BuildInfo.GetVersion
+func (c *Context) GetVersion() string {
+	if c == nil {
+		return "unknown"
+	}
+	if c.Version == "" {
+		return "unknown"
+	}
+	return c.Version
+}
+
+// GetBuildDate implements BuildInfo.GetBuildDate
+func (c *Context) GetBuildDate() string {
+	if c == nil {
+		return "unknown"
+	}
+	if c.BuildDate == "" {
+		return "unknown"
+	}
+	return c.BuildDate
+}
+
+// GetSystemID implements BuildInfo.GetSystemID
+func (c *Context) GetSystemID() string {
+	if c == nil {
+		return "unknown"
+	}
+	if c.SystemID == "" {
+		return "unknown"
+	}
+	return c.SystemID
 }

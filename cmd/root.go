@@ -42,7 +42,7 @@ func RootCommand(config *conf.Settings, runtime *runtimectx.Context) *cobra.Comm
 	// Add sub-commands to the root command.
 	fileCmd := file.Command(config)
 	directoryCmd := directory.Command(config)
-	realtimeCmd := realtime.Command(config)
+	realtimeCmd := realtime.Command(config, runtime)
 	authorsCmd := authors.Command()
 	licenseCmd := license.Command()
 	rangeCmd := rangefilter.Command(config)
