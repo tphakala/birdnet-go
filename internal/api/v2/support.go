@@ -77,12 +77,19 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		configPath = []string{"."}
 	}
 
-	// Create collector with proper paths
+	// Create collector with proper paths using BuildInfo interface methods
+	systemID := "unknown"
+	version := "unknown" 
+	if c.Runtime != nil {
+		systemID = c.Runtime.GetSystemID()
+		version = c.Runtime.GetVersion()
+	}
+	
 	collector := support.NewCollector(
 		configPath[0], // Use first config path
 		".",           // Data directory (current directory)
-		c.Runtime.SystemID,
-		c.Runtime.Version,
+		systemID,
+		version,
 	)
 
 	// Set collection options
@@ -96,12 +103,12 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	}
 
 	// Collect data
-	c.apiLogger.Debug("Starting support data collection", "system_id", c.Runtime.SystemID)
+	c.apiLogger.Debug("Starting support data collection", "system_id", systemID)
 	dump, err := collector.Collect(ctx.Request().Context(), opts)
 	if err != nil {
 		c.apiLogger.Error("Failed to collect support data",
 			"error", err,
-			"system_id", c.Runtime.SystemID,
+			"system_id", systemID,
 			"opts", opts,
 		)
 		return ctx.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -139,7 +146,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	if req.UploadToSentry {
 		// Initialize minimal Sentry if needed
 		if !settings.Sentry.Enabled {
-			if err := telemetry.InitMinimalSentryForSupport(c.Runtime.SystemID, c.Runtime.Version); err != nil {
+			if err := telemetry.InitMinimalSentryForSupport(systemID, version); err != nil {
 				c.apiLogger.Error("Failed to initialize minimal Sentry for support upload",
 					"error", err,
 					"dump_id", dump.ID,
@@ -152,7 +159,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		// Proceed with upload if still requested
 		if req.UploadToSentry {
 			uploader := telemetry.GetAttachmentUploader()
-			if err := uploader.UploadSupportDump(ctx.Request().Context(), archiveData, c.Runtime.SystemID, req.UserMessage); err != nil {
+			if err := uploader.UploadSupportDump(ctx.Request().Context(), archiveData, systemID, req.UserMessage); err != nil {
 				// Log error but don't fail the request
 				c.apiLogger.Error("Failed to upload support dump to Sentry",
 					"error", err,
@@ -164,7 +171,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 				response.Message = "Support dump generated and uploaded successfully"
 				c.apiLogger.Info("Support dump uploaded to Sentry",
 					"dump_id", dump.ID,
-					"system_id", c.Runtime.SystemID,
+					"system_id", systemID,
 					"telemetry_enabled", settings.Sentry.Enabled,
 				)
 			}
@@ -246,10 +253,18 @@ func (c *Controller) GetSupportStatus(ctx echo.Context) error {
 		})
 	}
 
+	// Use BuildInfo interface methods for safe access
+	systemID := "unknown"
+	version := "unknown"
+	if c.Runtime != nil {
+		systemID = c.Runtime.GetSystemID()
+		version = c.Runtime.GetVersion()
+	}
+	
 	status := map[string]any{
 		"telemetry_enabled": settings.Sentry.Enabled,
-		"system_id":         c.Runtime.SystemID,
-		"version":           c.Runtime.Version,
+		"system_id":         systemID,
+		"version":           version,
 	}
 
 	return ctx.JSON(http.StatusOK, status)
