@@ -28,6 +28,9 @@ const (
 	seasonBufferDuration      = seasonBufferDays * hoursPerDay * time.Hour
 	defaultSeasonDurationDays = 90 // Typical season duration
 
+	// Season calculations
+	winterAdjustmentCutoffMonth time.Month = time.June // June - first month where winter shouldn't adjust to previous year
+
 	// Notification suppression
 	defaultNotificationSuppressionWindow = 168 * time.Hour // Default suppression window (7 days)
 )
@@ -246,6 +249,12 @@ func (t *NewSpeciesTracker) initializeDefaultSeasons() {
 	t.seasons["winter"] = seasonDates{month: 12, day: 21} // December 21
 }
 
+// shouldAdjustWinter adjusts the season start year only when the season month is December
+// and the current month is before winterAdjustmentCutoffMonth (Jan-May)
+func (t *NewSpeciesTracker) shouldAdjustWinter(now time.Time, seasonMonth time.Month) bool {
+	return seasonMonth == time.December && now.Month() < winterAdjustmentCutoffMonth
+}
+
 // SetCurrentYearForTesting sets the current year for testing purposes only.
 //
 // ⚠️  WARNING: THIS METHOD IS STRICTLY FOR TESTING AND SHOULD NEVER BE USED IN PRODUCTION CODE ⚠️
@@ -330,7 +339,7 @@ func (t *NewSpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 		seasonDate := time.Date(currentTime.Year(), time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
 
 		// Handle winter season that might start in previous year
-		if seasonStart.month >= 12 && currentMonth < 6 {
+		if t.shouldAdjustWinter(currentTime, time.Month(seasonStart.month)) {
 			seasonDate = time.Date(currentTime.Year()-1, time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
 			logger.Debug("Adjusting winter season to previous year",
 				"season", seasonName,
@@ -623,7 +632,9 @@ func (t *NewSpeciesTracker) getSeasonDateRange(seasonName string, now time.Time)
 	seasonStart := time.Date(currentYear, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
 
 	// Handle winter season that might start in previous year
-	if season.month >= 12 && now.Month() < time.Month(season.month) {
+	// Winter spans across years: Dec 21 (year X) -> Mar 19 (year X+1)
+	// This ensures consistency between season detection and date range calculations
+	if t.shouldAdjustWinter(now, time.Month(season.month)) {
 		seasonStart = time.Date(currentYear-1, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
 	}
 
