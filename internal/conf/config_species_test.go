@@ -61,7 +61,7 @@ func TestSpeciesConfigYAMLPersistence(t *testing.T) {
 			require.NoError(t, err, "Failed to marshal config to YAML")
 
 			// Unmarshal back to map to check presence of fields
-			var yamlMap map[string]interface{}
+			var yamlMap map[string]any
 			err = yaml.Unmarshal(yamlData, &yamlMap)
 			require.NoError(t, err, "Failed to unmarshal YAML to map")
 
@@ -112,13 +112,20 @@ func TestSpeciesConfigJSONPersistence(t *testing.T) {
 	require.NoError(t, err, "Failed to marshal to JSON")
 
 	// Check that zero values are present in JSON
-	var jsonMap map[string]interface{}
+	var jsonMap map[string]any
 	err = json.Unmarshal(jsonData, &jsonMap)
 	require.NoError(t, err, "Failed to unmarshal JSON to map")
 
 	// Navigate to the Rare Bird config
-	configMap := jsonMap["config"].(map[string]interface{})
-	rareBird := configMap["Rare Bird"].(map[string]interface{})
+	configInterface, ok := jsonMap["config"]
+	require.True(t, ok, "JSON should contain config field")
+	configMap, ok := configInterface.(map[string]any)
+	require.True(t, ok, "config field should be a map")
+	
+	rareBirdInterface, ok := configMap["Rare Bird"]
+	require.True(t, ok, "config should contain Rare Bird entry")
+	rareBird, ok := rareBirdInterface.(map[string]any)
+	require.True(t, ok, "Rare Bird entry should be a map")
 
 	// THIS WILL FAIL if interval has omitempty tag
 	_, hasInterval := rareBird["interval"]
@@ -186,17 +193,17 @@ func TestSettingsSaveAndLoad(t *testing.T) {
 	require.NoError(t, err, "Failed to read config file")
 
 	// Parse YAML to check structure
-	var yamlData map[string]interface{}
+	var yamlData map[string]any
 	err = yaml.Unmarshal(yamlContent, &yamlData)
 	require.NoError(t, err, "Failed to parse YAML")
 
 	// Navigate to species config
-	realtime := yamlData["realtime"].(map[string]interface{})
-	species := realtime["species"].(map[string]interface{})
-	configMap := species["config"].(map[string]interface{})
+	realtime := yamlData["realtime"].(map[string]any)
+	species := realtime["species"].(map[string]any)
+	configMap := species["config"].(map[string]any)
 	
 	// Check Zero Values Bird
-	zeroValuesBird := configMap["Zero Values Bird"].(map[string]interface{})
+	zeroValuesBird := configMap["Zero Values Bird"].(map[string]any)
 	
 	// THIS WILL FAIL with omitempty on interval
 	_, hasInterval := zeroValuesBird["interval"]

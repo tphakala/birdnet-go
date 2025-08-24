@@ -23,7 +23,7 @@ import (
 // UpdateRequest represents a request to update settings
 type UpdateRequest struct {
 	Path  string      `json:"path"`
-	Value interface{} `json:"value"`
+	Value any `json:"value"`
 }
 
 // initSettingsRoutes registers all settings-related API endpoints
@@ -138,10 +138,14 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
 
-	settings := conf.Setting()
+	settings := c.Settings
 	if settings == nil {
-		c.logAPIRequest(ctx, slog.LevelError, "Settings not initialized during update attempt")
-		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
+		// Fallback to global settings if controller settings not set
+		settings = conf.Setting()
+		if settings == nil {
+			c.logAPIRequest(ctx, slog.LevelError, "Settings not initialized during update attempt")
+			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
+		}
 	}
 
 	// Create a backup of current settings for rollback if needed
@@ -193,7 +197,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	telemetry.UpdateTelemetryEnabled()
 
 	c.logAPIRequest(ctx, slog.LevelInfo, "Settings updated and saved successfully", "skipped_fields_count", len(skippedFields))
-	return ctx.JSON(http.StatusOK, map[string]interface{}{
+	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":       "Settings updated successfully",
 		"skippedFields": skippedFields,
 	})
@@ -223,7 +227,7 @@ func validateSettingsData(settings *conf.Settings) error {
 	)
 
 	// If the port is a string (as indicated by the linter error), convert it to int
-	switch v := interface{}(settings.WebServer.Port).(type) {
+	switch v := any(settings.WebServer.Port).(type) {
 	case int:
 		portInt = v
 	case string:
@@ -261,7 +265,7 @@ func updateAllowedSettingsWithTracking(current, updated *conf.Settings) ([]strin
 // Using BLACKLIST approach - fields are allowed by default unless blocked or marked with yaml:"-"
 func updateAllowedFieldsRecursivelyWithTracking(
 	currentValue, updatedValue reflect.Value,
-	blockedFields map[string]interface{},
+	blockedFields map[string]any,
 	skippedFields *[]string,
 	prefix string,
 ) error {
@@ -331,11 +335,11 @@ func getFieldInfo(valueType reflect.Value, fieldIndex int, fieldName, prefix str
 func processField(
 	currentField, updatedField reflect.Value,
 	fieldName, fieldPath, jsonTag string,
-	blockedFields map[string]interface{},
+	blockedFields map[string]any,
 	skippedFields *[]string,
 ) error {
 	// Check field permissions using blacklist approach
-	blockedSubfields, isBlockedAsMap := blockedFields[fieldName].(map[string]interface{})
+	blockedSubfields, isBlockedAsMap := blockedFields[fieldName].(map[string]any)
 
 	if !isBlockedAsMap {
 		// Handle field based on permission (if it's a simple boolean permission or not in blocklist)
@@ -352,7 +356,7 @@ func processField(
 func handleFieldPermission(
 	currentField, updatedField reflect.Value,
 	fieldName, fieldPath, jsonTag string,
-	blockedFields map[string]interface{},
+	blockedFields map[string]any,
 	skippedFields *[]string,
 ) error {
 	// INVERTED LOGIC: Default is to ALLOW unless explicitly blocked
@@ -382,7 +386,7 @@ func handleFieldPermission(
 func handleFieldByType(
 	currentField, updatedField reflect.Value,
 	fieldName, fieldPath, jsonTag string,
-	blockedSubfields map[string]interface{},
+	blockedSubfields map[string]any,
 	skippedFields *[]string,
 ) error {
 	// For struct fields
@@ -403,7 +407,7 @@ func handleFieldByType(
 func handleStructField(
 	currentField, updatedField reflect.Value,
 	fieldPath string,
-	blockedSubfields map[string]interface{},
+	blockedSubfields map[string]any,
 	skippedFields *[]string,
 ) error {
 	return updateAllowedFieldsRecursivelyWithTracking(
@@ -419,7 +423,7 @@ func handleStructField(
 func handlePointerField(
 	currentField, updatedField reflect.Value,
 	fieldPath string,
-	blockedSubfields map[string]interface{},
+	blockedSubfields map[string]any,
 	skippedFields *[]string,
 ) error {
 	// Create a new struct if current is nil but updated is not
@@ -491,7 +495,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	}
 
 	// Validate that the request body contains valid JSON
-	var tempValue interface{}
+	var tempValue any
 	if err := json.Unmarshal(requestBody, &tempValue); err != nil {
 		return c.HandleError(ctx, err, "Invalid JSON in request body", http.StatusBadRequest)
 	}
@@ -525,7 +529,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	// Update the cached telemetry state after settings change
 	telemetry.UpdateTelemetryEnabled()
 
-	return ctx.JSON(http.StatusOK, map[string]interface{}{
+	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":       fmt.Sprintf("%s settings updated successfully", section),
 		"skippedFields": skippedFields,
 	})
@@ -536,7 +540,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 func updateSettingsSectionWithTracking(settings *conf.Settings, section string, data json.RawMessage, skippedFields *[]string) error {
 	section = strings.ToLower(section)
 
-	var tempValue interface{}
+	var tempValue any
 	if err := json.Unmarshal(data, &tempValue); err != nil {
 		return fmt.Errorf("invalid JSON for section %s: %w", section, err)
 	}
@@ -606,9 +610,9 @@ func validateRTSPURLs(urls []string) error {
 
 // mergeJSONIntoStruct merges JSON data into an existing struct without zeroing out missing fields
 // This is crucial for preserving nested object values when partial updates are sent
-func mergeJSONIntoStruct(data json.RawMessage, target interface{}) error {
+func mergeJSONIntoStruct(data json.RawMessage, target any) error {
 	// First unmarshal into a map
-	var updateMap map[string]interface{}
+	var updateMap map[string]any
 	if err := json.Unmarshal(data, &updateMap); err != nil {
 		return err
 	}
@@ -619,7 +623,7 @@ func mergeJSONIntoStruct(data json.RawMessage, target interface{}) error {
 		return err
 	}
 	
-	var currentMap map[string]interface{}
+	var currentMap map[string]any
 	if err := json.Unmarshal(currentJSON, &currentMap); err != nil {
 		return err
 	}
@@ -637,8 +641,8 @@ func mergeJSONIntoStruct(data json.RawMessage, target interface{}) error {
 }
 
 // deepMergeMaps recursively merges two maps, with values from src overwriting dst
-func deepMergeMaps(dst, src map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{})
+func deepMergeMaps(dst, src map[string]any) map[string]any {
+	result := make(map[string]any)
 	
 	// Copy all values from dst
 	for k, v := range dst {
@@ -654,8 +658,8 @@ func deepMergeMaps(dst, src map[string]interface{}) map[string]interface{} {
 		}
 		
 		// Check if both dst and src have maps at this key
-		if dstMap, dstOk := dst[k].(map[string]interface{}); dstOk {
-			if srcMap, srcOk := v.(map[string]interface{}); srcOk {
+		if dstMap, dstOk := dst[k].(map[string]any); dstOk {
+			if srcMap, srcOk := v.(map[string]any); srcOk {
 				// Both are maps, merge recursively
 				result[k] = deepMergeMaps(dstMap, srcMap)
 				continue
@@ -672,7 +676,7 @@ func deepMergeMaps(dst, src map[string]interface{}) map[string]interface{} {
 // Helper functions
 
 // getSettingsSectionValue returns a pointer to the requested section of settings for in-place updates
-func getSettingsSectionValue(settings *conf.Settings, section string) (interface{}, error) {
+func getSettingsSectionValue(settings *conf.Settings, section string) (any, error) {
 	section = strings.ToLower(section)
 
 	// Map section names to their corresponding pointers
@@ -715,7 +719,7 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (interface
 }
 
 // handleGenericSection handles updates to any settings section using merging
-func handleGenericSection(sectionPtr interface{}, data json.RawMessage, sectionName string, skippedFields *[]string) error {
+func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName string, skippedFields *[]string) error {
 	// Use mergeJSONIntoStruct to preserve fields not included in the update
 	if err := mergeJSONIntoStruct(data, sectionPtr); err != nil {
 		return fmt.Errorf("failed to merge settings for section %s: %w", sectionName, err)
@@ -741,7 +745,7 @@ func handleGenericSection(sectionPtr interface{}, data json.RawMessage, sectionN
 	
 	blockedFieldsMap := getBlockedFieldMap()
 	if blockedFields, exists := blockedFieldsMap[capitalizedSectionName]; exists {
-		if _, ok := blockedFields.(map[string]interface{}); ok {
+		if _, ok := blockedFields.(map[string]any); ok {
 			// For now, just note that we have blocked fields
 			// The actual blocking happens in updateAllowedFieldsRecursivelyWithTracking
 			*skippedFields = append(*skippedFields, fmt.Sprintf("Section %s has field-level restrictions", sectionName))
@@ -812,7 +816,7 @@ func validateSecuritySection(data json.RawMessage) error {
 }
 
 // validateSecuritySectionValues validates the values of security section fields
-func validateSecuritySectionValues(updateMap map[string]interface{}) error {
+func validateSecuritySectionValues(updateMap map[string]any) error {
 	// Validate host
 	if err := validateHostField(updateMap); err != nil {
 		return err
@@ -845,7 +849,7 @@ func validateSecuritySectionValues(updateMap map[string]interface{}) error {
 }
 
 // validateHostField validates the host field
-func validateHostField(updateMap map[string]interface{}) error {
+func validateHostField(updateMap map[string]any) error {
 	host, exists := updateMap["host"]
 	if !exists {
 		return nil
@@ -864,7 +868,7 @@ func validateHostField(updateMap map[string]interface{}) error {
 }
 
 // validateAutoTLSField validates the autoTls field
-func validateAutoTLSField(updateMap map[string]interface{}) error {
+func validateAutoTLSField(updateMap map[string]any) error {
 	autoTls, exists := updateMap["autoTls"]
 	if !exists {
 		return nil
@@ -878,13 +882,13 @@ func validateAutoTLSField(updateMap map[string]interface{}) error {
 }
 
 // validateBasicAuthField validates the basicAuth field
-func validateBasicAuthField(updateMap map[string]interface{}) error {
+func validateBasicAuthField(updateMap map[string]any) error {
 	basicAuth, exists := updateMap["basicAuth"]
 	if !exists {
 		return nil
 	}
 
-	basicAuthMap, ok := basicAuth.(map[string]interface{})
+	basicAuthMap, ok := basicAuth.(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -901,13 +905,13 @@ func validateBasicAuthField(updateMap map[string]interface{}) error {
 }
 
 // validateSubnetBypassField validates the allowSubnetBypass field
-func validateSubnetBypassField(updateMap map[string]interface{}) error {
+func validateSubnetBypassField(updateMap map[string]any) error {
 	subnetBypass, exists := updateMap["allowSubnetBypass"]
 	if !exists {
 		return nil
 	}
 
-	bypassMap, ok := subnetBypass.(map[string]interface{})
+	bypassMap, ok := subnetBypass.(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -935,13 +939,13 @@ func validateSubnetBypassField(updateMap map[string]interface{}) error {
 }
 
 // validateOAuthSettings validates OAuth provider settings
-func validateOAuthSettings(providerName string, updateMap map[string]interface{}) error {
+func validateOAuthSettings(providerName string, updateMap map[string]any) error {
 	provider, exists := updateMap[providerName]
 	if !exists {
 		return nil
 	}
 
-	providerMap, ok := provider.(map[string]interface{})
+	providerMap, ok := provider.(map[string]any)
 	if !ok {
 		return fmt.Errorf("%s must be an object", providerName)
 	}
@@ -995,7 +999,7 @@ func validateMainSection(data json.RawMessage) error {
 }
 
 // validateMainSectionValues validates the values of main section fields
-func validateMainSectionValues(updateMap map[string]interface{}) error {
+func validateMainSectionValues(updateMap map[string]any) error {
 	// Validate node name
 	if name, exists := updateMap["name"]; exists {
 		if str, ok := name.(string); ok {
@@ -1022,7 +1026,7 @@ func validateMainSectionValues(updateMap map[string]interface{}) error {
 
 // validateBirdNETSection validates BirdNET settings
 func validateBirdNETSection(data json.RawMessage) error {
-	var updateMap map[string]interface{}
+	var updateMap map[string]any
 	if err := json.Unmarshal(data, &updateMap); err != nil {
 		return err
 	}
@@ -1050,7 +1054,7 @@ func validateBirdNETSection(data json.RawMessage) error {
 
 // validateWebServerSection validates WebServer settings
 func validateWebServerSection(data json.RawMessage) error {
-	var updateMap map[string]interface{}
+	var updateMap map[string]any
 	if err := json.Unmarshal(data, &updateMap); err != nil {
 		return err
 	}
@@ -1077,7 +1081,7 @@ func validateWebServerSection(data json.RawMessage) error {
 }
 
 // getSettingsSection returns the requested section of settings
-func getSettingsSection(settings *conf.Settings, section string) (interface{}, error) {
+func getSettingsSection(settings *conf.Settings, section string) (any, error) {
 	section = strings.ToLower(section)
 
 	// Use reflection to get the field
@@ -1124,7 +1128,7 @@ func getSettingsSection(settings *conf.Settings, section string) (interface{}, e
 
 // validateField performs validation on specific fields that require extra checks
 // Returns nil if validation passes, error otherwise
-func validateField(fieldName string, value interface{}) error {
+func validateField(fieldName string, value any) error {
 	switch fieldName {
 	case "port":
 		// Validate port is in valid range
@@ -1177,8 +1181,8 @@ func validateField(fieldName string, value interface{}) error {
 //
 // IMPORTANT: Only add fields here if they pose a security risk
 // Most runtime-only fields should use yaml:"-" tag instead
-func getBlockedFieldMap() map[string]interface{} {
-	return map[string]interface{}{
+func getBlockedFieldMap() map[string]any {
+	return map[string]any{
 		// Block these top-level runtime fields
 		"Version":            true, // Runtime version info
 		"BuildDate":          true, // Build time info
@@ -1187,10 +1191,10 @@ func getBlockedFieldMap() map[string]interface{} {
 		"Input":              true, // File/directory analysis mode config
 		
 		// BirdNET section - block runtime fields
-		"BirdNET": map[string]interface{}{
+		"BirdNET": map[string]any{
 			"Labels": true, // Runtime list populated from label file
 			// Block RangeFilter runtime fields
-			"RangeFilter": map[string]interface{}{
+			"RangeFilter": map[string]any{
 				"Model":       true, // Model type is configured in config.yaml, frontend should not overwrite
 				"Species":     true, // Runtime species list populated by range filter
 				"LastUpdated": true, // Runtime timestamp of last filter update
@@ -1198,11 +1202,11 @@ func getBlockedFieldMap() map[string]interface{} {
 		},
 		
 		// Security section - block runtime/internal fields only
-		"Security": map[string]interface{}{
+		"Security": map[string]any{
 			"SessionSecret":   true, // Generated internally, never updated via API
 			"SessionDuration": true, // Runtime setting
 			// Note: The following OAuth2 server internal fields are in BasicAuth struct
-			"BasicAuth": map[string]interface{}{
+			"BasicAuth": map[string]any{
 				"ClientID":       true, // OAuth2 server internal field
 				"ClientSecret":   true, // OAuth2 server internal field (different from user's password)
 				"AuthCodeExp":    true, // OAuth2 server internal field
@@ -1211,7 +1215,7 @@ func getBlockedFieldMap() map[string]interface{} {
 		},
 		
 		// Realtime section - block runtime fields
-		"Realtime": map[string]interface{}{
+		"Realtime": map[string]any{
 			"Audio": getAudioBlockedFields(),
 		},
 		

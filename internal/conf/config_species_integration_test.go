@@ -19,14 +19,6 @@ func unmarshalYAML[T any](t *testing.T, data []byte, target *T, failureMessage s
 	require.NoError(t, err, failureMessage)
 }
 
-// safeMapAccess is a helper for safe map key access returning any type
-func safeMapAccess(t *testing.T, m map[string]any, key, description string) any {
-	t.Helper()
-	valueInterface, hasKey := m[key]
-	require.True(t, hasKey, "%s should contain %s field", description, key)
-	return valueInterface
-}
-
 // safeMapAccessMap is a helper for safe map access when expecting a nested map
 func safeMapAccessMap(t *testing.T, m map[string]any, key, description string) map[string]any {
 	t.Helper()

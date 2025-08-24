@@ -31,6 +31,21 @@ describe('Species Settings Store', () => {
     vi.clearAllMocks();
   });
 
+  // Helper function to reduce duplication in species settings tests
+  const setSpeciesConfig = (options: {
+    include?: string[];
+    exclude?: string[];
+    config?: Record<string, SpeciesConfig>;
+  }) => {
+    settingsActions.updateSection('realtime', {
+      species: {
+        include: options.include ?? [],
+        exclude: options.exclude ?? [],
+        config: options.config ?? {},
+      },
+    });
+  };
+
   afterEach(() => {
     // Reset store to initial state
     settingsStore.set({
@@ -53,12 +68,8 @@ describe('Species Settings Store', () => {
         },
       };
 
-      settingsActions.updateSection('realtime', {
-        species: {
-          include: [],
-          exclude: [],
-          config: testConfig,
-        },
+      setSpeciesConfig({
+        config: testConfig,
       });
 
       const state = get(settingsStore);
@@ -91,12 +102,10 @@ describe('Species Settings Store', () => {
         },
       };
 
-      settingsActions.updateSection('realtime', {
-        species: {
-          include: ['Robin'],
-          exclude: ['Crow'],
-          config: testConfig,
-        },
+      setSpeciesConfig({
+        include: ['Robin'],
+        exclude: ['Crow'],
+        config: testConfig,
       });
 
       const state = get(settingsStore);
@@ -125,16 +134,12 @@ describe('Species Settings Store', () => {
       mockSave.mockResolvedValueOnce({ success: true });
 
       // Set up species config with zero values
-      settingsActions.updateSection('realtime', {
-        species: {
-          include: [],
-          exclude: [],
-          config: {
-            'Zero Test': {
-              threshold: 0.0,
-              interval: 0,
-              actions: [],
-            },
+      setSpeciesConfig({
+        config: {
+          'Zero Test': {
+            threshold: 0.0,
+            interval: 0,
+            actions: [],
           },
         },
       });
@@ -160,6 +165,8 @@ describe('Species Settings Store', () => {
 
       // Verify success toast was shown
       expect(toastActions.success).toHaveBeenCalledTimes(1);
+      // Verify no error toast was shown
+      expect(toastActions.error).not.toHaveBeenCalled();
 
       // Get the data that was sent to save
       const savedData = mockSave.mock.calls[0][0] as SettingsFormData;
@@ -305,21 +312,49 @@ describe('Species Settings Store', () => {
         state.formData.realtime?.species?.config
       );
     });
+
+    it('should preserve empty species.config object when loading from API', async () => {
+      const mockLoad = vi.mocked(settingsAPI.load);
+
+      // Mock API response with empty config object
+      const completeSettings = createEmptySettings();
+      mockLoad.mockResolvedValueOnce({
+        main: { name: 'TestNode' },
+        birdnet: {
+          ...completeSettings.birdnet,
+          threshold: 0.3,
+          locale: 'en',
+        },
+        realtime: {
+          species: {
+            include: [],
+            exclude: [],
+            config: {}, // Empty config should be preserved
+          },
+        },
+      });
+
+      await settingsActions.loadSettings();
+
+      const state = get(settingsStore);
+
+      // Verify empty config object is preserved in formData (not undefined)
+      expect(state.formData.realtime?.species?.config).toStrictEqual({});
+
+      // Verify originalData also preserves empty config for change detection
+      expect(state.originalData.realtime?.species?.config).toStrictEqual({});
+    });
   });
 
   describe('Coercion Edge Cases', () => {
     it('should coerce negative values to valid minimums', () => {
       // Test that coercion properly handles invalid negative values
-      settingsActions.updateSection('realtime', {
-        species: {
-          include: [],
-          exclude: [],
-          config: {
-            'Edge Case': {
-              threshold: -0.1, // Invalid, should be coerced to 0
-              interval: -5, // Invalid, should be coerced to 0
-              actions: [],
-            },
+      setSpeciesConfig({
+        config: {
+          'Edge Case': {
+            threshold: -0.1, // Invalid, should be coerced to 0
+            interval: -5, // Invalid, should be coerced to 0
+            actions: [],
           },
         },
       });
@@ -334,16 +369,12 @@ describe('Species Settings Store', () => {
 
     it('should clamp values above allowed upper bound', () => {
       // Test that values above maximum are clamped to the upper bound
-      settingsActions.updateSection('realtime', {
-        species: {
-          include: [],
-          exclude: [],
-          config: {
-            'Upper Bound Test': {
-              threshold: 1.5, // Invalid, should be clamped to 1
-              interval: 30, // Valid, should remain unchanged
-              actions: [],
-            },
+      setSpeciesConfig({
+        config: {
+          'Upper Bound Test': {
+            threshold: 1.5, // Invalid, should be clamped to 1
+            interval: 30, // Valid, should remain unchanged
+            actions: [],
           },
         },
       });
@@ -359,16 +390,12 @@ describe('Species Settings Store', () => {
 
     it('should preserve valid zero values without changing them', () => {
       // Test that valid zero values are not incorrectly changed to defaults
-      settingsActions.updateSection('realtime', {
-        species: {
-          include: [],
-          exclude: [],
-          config: {
-            'Zero Test': {
-              threshold: 0.0, // Valid zero, should remain 0
-              interval: 0, // Valid zero, should remain 0
-              actions: [],
-            },
+      setSpeciesConfig({
+        config: {
+          'Zero Test': {
+            threshold: 0.0, // Valid zero, should remain 0
+            interval: 0, // Valid zero, should remain 0
+            actions: [],
           },
         },
       });

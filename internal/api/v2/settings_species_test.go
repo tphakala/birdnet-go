@@ -21,21 +21,21 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		payload        map[string]interface{}
+		payload        map[string]any
 		expectedConfig conf.SpeciesConfig
 		description    string
 	}{
 		{
 			name: "zero_threshold_and_interval",
-			payload: map[string]interface{}{
-				"species": map[string]interface{}{
+			payload: map[string]any{
+				"species": map[string]any{
 					"include": []string{},
 					"exclude": []string{},
-					"config": map[string]interface{}{
-						"Test Bird": map[string]interface{}{
+					"config": map[string]any{
+						"Test Bird": map[string]any{
 							"threshold": 0.0,
 							"interval":  0,
-							"actions":   []interface{}{},
+							"actions":   []any{},
 						},
 					},
 				},
@@ -49,13 +49,13 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 		},
 		{
 			name: "only_threshold_zero",
-			payload: map[string]interface{}{
-				"species": map[string]interface{}{
-					"config": map[string]interface{}{
-						"Rare Bird": map[string]interface{}{
+			payload: map[string]any{
+				"species": map[string]any{
+					"config": map[string]any{
+						"Rare Bird": map[string]any{
 							"threshold": 0.0,
 							"interval":  60,
-							"actions":   []interface{}{},
+							"actions":   []any{},
 						},
 					},
 				},
@@ -69,13 +69,13 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 		},
 		{
 			name: "only_interval_zero",
-			payload: map[string]interface{}{
-				"species": map[string]interface{}{
-					"config": map[string]interface{}{
-						"Common Bird": map[string]interface{}{
+			payload: map[string]any{
+				"species": map[string]any{
+					"config": map[string]any{
+						"Common Bird": map[string]any{
 							"threshold": 0.85,
 							"interval":  0,
-							"actions":   []interface{}{},
+							"actions":   []any{},
 						},
 					},
 				},
@@ -93,17 +93,17 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Execute update
 			rec := patchRealtime(t, e, controller, tt.payload)
-			assert.Equal(t, http.StatusOK, rec.Code, "Should return 200 OK")
+			require.Equal(t, http.StatusOK, rec.Code, "Should return 200 OK")
 
 			// Extract the bird name from the payload with safe type assertions
 			speciesInterface, hasSpecies := tt.payload["species"]
 			require.True(t, hasSpecies, "Payload should contain species field")
-			speciesMap, ok := speciesInterface.(map[string]interface{})
+			speciesMap, ok := speciesInterface.(map[string]any)
 			require.True(t, ok, "Species field should be a map")
 
 			configInterface, hasConfig := speciesMap["config"]
 			require.True(t, hasConfig, "Species should contain config field")
-			configMap, ok := configInterface.(map[string]interface{})
+			configMap, ok := configInterface.(map[string]any)
 			require.True(t, ok, "Config field should be a map")
 			var birdName string
 			for name := range configMap {
@@ -123,10 +123,16 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 			assert.NotNil(t, actualConfig.Actions, "%s: Actions should be empty slice, not nil", tt.description)
 
 			// Verify the response includes the updated values
-			var response map[string]interface{}
+			var response map[string]any
 			err := json.Unmarshal(rec.Body.Bytes(), &response)
 			require.NoError(t, err, "Response should be valid JSON")
-			assert.Equal(t, "realtime settings updated successfully", response["message"])
+			
+			// Type-assert the message field to ensure it's a string
+			messageField, exists := response["message"]
+			require.True(t, exists, "Response should contain message field")
+			message, ok := messageField.(string)
+			require.True(t, ok, "Message field should be a string")
+			assert.Equal(t, "realtime settings updated successfully", message)
 		})
 	}
 }
@@ -156,28 +162,28 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 	}
 
 	// Update with zero values
-	updatePayload := map[string]interface{}{
+	updatePayload := map[string]any{
 		"interval": 15,
-		"species": map[string]interface{}{
+		"species": map[string]any{
 			"include": []string{"Robin"},
 			"exclude": []string{"Crow"},
-			"config": map[string]interface{}{
-				"Initial Bird": map[string]interface{}{
+			"config": map[string]any{
+				"Initial Bird": map[string]any{
 					"threshold": 0.0, // Update to zero
 					"interval":  0,   // Update to zero
-					"actions":   []interface{}{},
+					"actions":   []any{},
 				},
-				"New Bird": map[string]interface{}{
+				"New Bird": map[string]any{
 					"threshold": 0.0, // Add new bird with zero values
 					"interval":  0,   
-					"actions":   []interface{}{},
+					"actions":   []any{},
 				},
 			},
 		},
 	}
 
 	rec := patchRealtime(t, e, controller, updatePayload)
-	assert.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify zero values are preserved in the controller's settings
 	// Zero threshold and interval values should persist after update operations
@@ -194,10 +200,16 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 	assert.NotNil(t, newBird.Actions, "New Bird actions should be empty slice, not nil")
 
 	// Verify the API response indicates success
-	var response map[string]interface{}
+	var response map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err, "Response should be valid JSON")
-	assert.Equal(t, "realtime settings updated successfully", response["message"])
+	
+	// Type-assert the message field to ensure it's a string
+	messageField, exists := response["message"]
+	require.True(t, exists, "Response should contain message field")
+	message, ok := messageField.(string)
+	require.True(t, ok, "Message field should be a string")
+	assert.Equal(t, "realtime settings updated successfully", message)
 }
 
 // TestPartialSpeciesConfigUpdate tests that partial updates don't lose existing data
@@ -233,25 +245,25 @@ func TestPartialSpeciesConfigUpdate(t *testing.T) {
 	}
 
 	// Update only Bird A with zero values, Bird B should remain unchanged
-	updatePayload := map[string]interface{}{
-		"species": map[string]interface{}{
-			"config": map[string]interface{}{
-				"Bird A": map[string]interface{}{
+	updatePayload := map[string]any{
+		"species": map[string]any{
+			"config": map[string]any{
+				"Bird A": map[string]any{
 					"threshold": 0.0,
 					"interval":  0,
-					"actions":   []interface{}{}, // Clear actions
+					"actions":   []any{}, // Clear actions
 				},
-				"Bird B": map[string]interface{}{
+				"Bird B": map[string]any{
 					"threshold": 0.8,
 					"interval":  60,
-					"actions":   []interface{}{},
+					"actions":   []any{},
 				},
 			},
 		},
 	}
 
 	rec := patchRealtime(t, e, controller, updatePayload)
-	assert.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify Bird A was updated with zero values
 	birdA := controller.Settings.Realtime.Species.Config["Bird A"]
@@ -292,20 +304,20 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 	}
 
 	// Step 1: PATCH update with zero values
-	updatePayload := map[string]interface{}{
-		"species": map[string]interface{}{
-			"config": map[string]interface{}{
-				"Test Bird": map[string]interface{}{
+	updatePayload := map[string]any{
+		"species": map[string]any{
+			"config": map[string]any{
+				"Test Bird": map[string]any{
 					"threshold": 0.0, // Zero value that should persist
 					"interval":  0,   // Zero value that should persist
-					"actions":   []interface{}{},
+					"actions":   []any{},
 				},
 			},
 		},
 	}
 
 	rec := patchRealtime(t, e, controller, updatePayload)
-	assert.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify controller settings were updated
 	testBird := controller.Settings.Realtime.Species.Config["Test Bird"]
@@ -314,7 +326,7 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 
 	// Step 2: GET to verify the updated values are returned
 	rec = getRealtime(t, e, controller)
-	assert.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, http.StatusOK, rec.Code)
 
 	var response map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &response)
@@ -355,7 +367,7 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 // Test helper functions
 
 // newAPIContext creates an Echo instance, controller, and context for testing
-func newAPIContext(t *testing.T, e *echo.Echo, method, path string, body interface{}) (echo.Context, *httptest.ResponseRecorder, *Controller) {
+func newAPIContext(t *testing.T, e *echo.Echo, method, path string, body any) (echo.Context, *httptest.ResponseRecorder, *Controller) {
 	t.Helper()
 
 	controller := &Controller{
@@ -378,6 +390,14 @@ func newAPIContext(t *testing.T, e *echo.Echo, method, path string, body interfa
 		DisableSaveSettings: true, // Disable file save for testing
 	}
 
+	// Use default values if method or path are empty
+	if method == "" {
+		method = http.MethodGet
+	}
+	if path == "" {
+		path = "/api/v2/test"
+	}
+
 	var req *http.Request
 	if body != nil {
 		jsonData, err := json.Marshal(body)
@@ -395,7 +415,7 @@ func newAPIContext(t *testing.T, e *echo.Echo, method, path string, body interfa
 }
 
 // patchRealtime creates a PATCH request context for the realtime section
-func patchRealtime(t *testing.T, e *echo.Echo, c *Controller, payload interface{}) *httptest.ResponseRecorder {
+func patchRealtime(t *testing.T, e *echo.Echo, c *Controller, payload any) *httptest.ResponseRecorder {
 	t.Helper()
 
 	ctx, rec, _ := newAPIContext(t, e, http.MethodPatch, "/api/v2/settings/realtime", payload)
