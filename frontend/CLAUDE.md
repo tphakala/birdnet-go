@@ -31,15 +31,20 @@ frontend/
 
 ## Commands
 
-| Command                | Purpose                              | When          |
-| ---------------------- | ------------------------------------ | ------------- |
-| `npm run check:all`    | Format + lint + typecheck + ast-grep | Before commit |
-| `npm run lint:fix`     | Auto-fix JS/TS                       | After changes |
-| `npm run typecheck`    | Validate types                       | Before PR     |
-| `npm run test:a11y`    | Accessibility tests                  | Before PR     |
-| `npm run analyze:all`  | Circular deps + duplication          | Weekly        |
-| `npm run ast:all`      | Run all ast-grep rules               | Before commit |
-| `npm run ast:security` | Security vulnerability scan          | Before PR     |
+### Task Commands (from root directory)
+
+| Command                       | Purpose                                      | When          |
+| ----------------------------- | -------------------------------------------- | ------------- |
+| `task frontend-install`       | Install frontend dependencies                | Setup         |
+| `task frontend-typecheck`     | Run TypeScript type checking                 | Before PR     |
+| `task frontend-build`         | Build frontend for production with typecheck | Before commit |
+| `task frontend-dev`           | Start frontend development server            | Development   |
+| `task frontend-lint`          | Run comprehensive checks (npm run check:all) | Before commit |
+| `task frontend-lint-fix`      | Auto-fix formatting, linting, and ast-grep   | After changes |
+| `task frontend-ast-fix`       | Auto-fix ast-grep detected issues            | After changes |
+| `task frontend-test`          | Run frontend tests                           | Before PR     |
+| `task frontend-test-coverage` | Run frontend tests with coverage             | Weekly        |
+| `task frontend-quality`       | Run comprehensive quality checks + build     | Before PR     |
 
 ## Svelte 5 Patterns
 

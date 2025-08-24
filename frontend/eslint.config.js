@@ -43,6 +43,7 @@ const browserGlobals = {
   setInterval: 'readonly',
   clearTimeout: 'readonly',
   clearInterval: 'readonly',
+  queueMicrotask: 'readonly',
   localStorage: 'readonly',
   sessionStorage: 'readonly',
   URL: 'readonly',
@@ -51,6 +52,7 @@ const browserGlobals = {
   TouchEvent: 'readonly',
   crypto: 'readonly',
   // TypeScript DOM interface types
+  HTMLMetaElement: 'readonly',
   Document: 'readonly',
   Window: 'readonly',
   AddEventListenerOptions: 'readonly',

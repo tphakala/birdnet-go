@@ -282,6 +282,11 @@ func validateRealtimeSettings(settings *RealtimeSettings) error {
 		return err
 	}
 
+	// Validate species settings
+	if err := validateSpeciesConfigSettings(&settings.Species); err != nil {
+		return err
+	}
+
 	// Add more realtime settings validation as needed
 	return nil
 }
@@ -651,4 +656,31 @@ func getMaxDaysInMonth(month int) int {
 	default: // January, March, May, July, August, October, December
 		return 31
 	}
+}
+
+// validateSpeciesConfigSettings validates the species-specific configuration settings
+func validateSpeciesConfigSettings(settings *SpeciesSettings) error {
+	// Validate each species configuration
+	for speciesName, config := range settings.Config {
+		// Check if interval is non-negative
+		if config.Interval < 0 {
+			return errors.New(fmt.Errorf("species config for '%s': interval must be non-negative, got %d", speciesName, config.Interval)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "species-config-interval").
+				Context("species_name", speciesName).
+				Context("interval", config.Interval).
+				Build()
+		}
+		
+		// Check if threshold is within valid range
+		if config.Threshold < 0 || config.Threshold > 1 {
+			return errors.New(fmt.Errorf("species config for '%s': threshold must be between 0 and 1, got %f", speciesName, config.Threshold)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "species-config-threshold").
+				Context("species_name", speciesName).
+				Context("threshold", config.Threshold).
+				Build()
+		}
+	}
+	return nil
 }

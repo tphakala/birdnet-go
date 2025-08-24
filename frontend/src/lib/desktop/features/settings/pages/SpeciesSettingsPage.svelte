@@ -55,7 +55,6 @@
   // Initialize CSRF token once on mount - prevents stale values across hot-reloads
   onMount(() => {
     const metaElement = document.querySelector('meta[name="csrf-token"]');
-    // eslint-disable-next-line no-undef -- HTMLMetaElement is a standard DOM type
     csrfToken = (metaElement as HTMLMetaElement | null)?.getAttribute('content') || '';
 
     // Load species data after CSRF token is available
@@ -134,6 +133,13 @@
   // Helper function to clear parameters
   function clearParameters() {
     actionParameters = '';
+  }
+
+  // Helper function to handle species selection with proper timing
+  function handleSpeciesPicked(species: string) {
+    queueMicrotask(() => {
+      configInputValue = species;
+    });
   }
 
   // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
@@ -363,7 +369,7 @@
     showActions = false; // Start with actions collapsed
   }
 
-  function saveConfig() {
+  async function saveConfig() {
     const species = configInputValue.trim();
     if (!species) return;
 
@@ -410,16 +416,33 @@
       actions,
     };
 
-    settingsActions.updateSection('realtime', {
-      ...$realtimeSettings,
-      species: {
-        ...settings,
-        config: updatedConfig,
-      },
-    });
+    try {
+      // Update the section in form data
+      settingsActions.updateSection('realtime', {
+        ...$realtimeSettings,
+        species: {
+          ...settings,
+          config: updatedConfig,
+        },
+      });
 
-    // Reset form
-    cancelEdit();
+      // Actually save the settings to the server
+      await settingsActions.saveSettings();
+
+      // Show success feedback
+      toastActions.success(
+        editingSpecies
+          ? `Updated configuration for "${species}"`
+          : `Added configuration for "${species}"`
+      );
+
+      // Reset form only after successful save
+      cancelEdit();
+    } catch (error) {
+      logger.error('Failed to save species configuration:', error);
+      toastActions.error(`Failed to save configuration for "${species}". Please try again.`);
+      // Don't reset the form on error so user can retry
+    }
   }
 
   function cancelEdit() {
@@ -580,7 +603,8 @@
                 placeholder="Type to search..."
                 predictions={configPredictions}
                 onInput={updateConfigPredictions}
-                onAdd={() => {}}
+                onPredictionSelect={handleSpeciesPicked}
+                onAdd={handleSpeciesPicked}
                 buttonText=""
                 buttonIcon={false}
                 size="xs"
@@ -627,13 +651,28 @@
             <div class="col-span-2 flex gap-1">
               <button
                 class="btn btn-xs btn-primary flex-1"
+                class:loading={store.isSaving}
                 data-testid="save-config-button"
                 onclick={saveConfig}
-                disabled={!configInputValue.trim() || newThreshold < 0 || newThreshold > 1}
+                disabled={!configInputValue.trim() ||
+                  newThreshold < 0 ||
+                  newThreshold > 1 ||
+                  store.isLoading ||
+                  store.isSaving}
               >
-                {editingSpecies ? 'Save' : 'Add'}
+                {#if store.isSaving}
+                  Saving...
+                {:else}
+                  {editingSpecies ? 'Save' : 'Add'}
+                {/if}
               </button>
-              <button class="btn btn-xs btn-ghost flex-1" onclick={cancelEdit}> Cancel </button>
+              <button
+                class="btn btn-xs btn-ghost flex-1"
+                onclick={cancelEdit}
+                disabled={store.isSaving}
+              >
+                Cancel
+              </button>
             </div>
           </div>
 
@@ -806,6 +845,7 @@
                 onclick={() => startEdit(species)}
                 title="Edit configuration"
                 aria-label="Edit {species} configuration"
+                disabled={store.isLoading || store.isSaving}
               >
                 {@html actionIcons.edit}
               </button>
@@ -815,6 +855,7 @@
                 onclick={() => removeConfig(species)}
                 title="Remove configuration"
                 aria-label="Remove {species} configuration"
+                disabled={store.isLoading || store.isSaving}
               >
                 {@html actionIcons.delete}
               </button>

@@ -362,11 +362,19 @@ export function coerceSecuritySettings(settings: PartialSecuritySettings): Parti
 /**
  * Validate and coerce species settings
  */
-export function coerceSpeciesSettings(settings: PartialSpeciesSettings): PartialSpeciesSettings {
+export function coerceSpeciesSettings(
+  settings: PartialSpeciesSettings | null | undefined
+): PartialSpeciesSettings {
+  // Handle case where settings is null, undefined, or not an object
+  const safeSettings = settings && typeof settings === 'object' ? settings : {};
+
   const coerced: PartialSpeciesSettings = {
-    include: coerceArray<string>(settings.include, []),
-    exclude: coerceArray<string>(settings.exclude, []),
-    config: coerceObject(settings.config as UnknownSettings, {}),
+    include: coerceArray<string>(safeSettings.include, []),
+    exclude: coerceArray<string>(safeSettings.exclude, []),
+    config: coerceObject<Record<string, SpeciesConfig>>(
+      safeSettings.config as UnknownSettings,
+      {} as Record<string, SpeciesConfig>
+    ),
   };
 
   // Validate and clean species config
@@ -444,19 +452,24 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
       return coerceBirdNetSettings(data as PartialBirdNetSettings);
     case 'audio':
       return coerceAudioSettings(data as PartialAudioSettings);
-    case 'realtime':
-      // Handle realtime.audio nested structure
-      if (data.audio) {
-        return {
-          ...data,
-          audio: coerceAudioSettings(data.audio as PartialAudioSettings),
-          mqtt: data.mqtt ? coerceMQTTSettings(data.mqtt as PartialMQTTSettings) : data.mqtt,
-          species: data.species
-            ? coerceSpeciesSettings(data.species as PartialSpeciesSettings)
-            : data.species,
-        };
+    case 'realtime': {
+      // Handle realtime nested structures
+      const coercedRealtime: UnknownSettings = { ...data };
+
+      if (Object.prototype.hasOwnProperty.call(data, 'audio')) {
+        coercedRealtime.audio = coerceAudioSettings(data.audio as PartialAudioSettings);
       }
-      return data;
+
+      if (Object.prototype.hasOwnProperty.call(data, 'mqtt')) {
+        coercedRealtime.mqtt = coerceMQTTSettings(data.mqtt as PartialMQTTSettings);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(data, 'species')) {
+        coercedRealtime.species = coerceSpeciesSettings(data.species as PartialSpeciesSettings);
+      }
+
+      return coercedRealtime;
+    }
     case 'security':
       return coerceSecuritySettings(data as PartialSecuritySettings);
     case 'species':
