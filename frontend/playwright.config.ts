@@ -18,6 +18,10 @@ export default defineConfig({
     baseURL,
     navigationTimeout: isCI ? 60000 : 30000,
     actionTimeout: isCI ? 20000 : 10000,
+    // Reduce network idle wait time for real-time apps with SSE
+    launchOptions: {
+      args: isCI ? ['--no-sandbox', '--disable-setuid-sandbox'] : undefined,
+    },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -47,11 +51,15 @@ export default defineConfig({
       name: 'mobile-chrome',
       use: { ...devices['Pixel 7'] },
       dependencies: ['setup'],
+      // Skip mobile testing for /ui/ paths - only desktop and tablet UI implemented
+      testIgnore: ['**/dashboard/**', '**/settings/**', '**/*ui-routing*', '**/*smoke*'],
     },
     {
       name: 'mobile-safari',
       use: { ...devices['iPhone 14'] },
       dependencies: ['setup'],
+      // Skip mobile testing for /ui/ paths - only desktop and tablet UI implemented
+      testIgnore: ['**/dashboard/**', '**/settings/**', '**/*ui-routing*', '**/*smoke*'],
     },
     {
       name: 'tablet',

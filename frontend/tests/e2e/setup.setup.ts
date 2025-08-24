@@ -47,7 +47,7 @@ setup('Setup test environment and wait for server readiness', async ({ request, 
   let uiReady = false;
   try {
     await page.goto('/ui/', { timeout: 10000 });
-    await page.waitForLoadState('networkidle', { timeout: 10000 });
+    await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
 
     // Check if we can access the new UI
     const hasMainContent =

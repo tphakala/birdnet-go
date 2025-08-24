@@ -9,7 +9,7 @@ test.describe('New UI Routing - /ui/ paths only', () => {
       await page.goto(route);
 
       // Wait for page to load
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Should always be on a /ui/ route
       await expect(page).toHaveURL(/.*\/ui\/.*/);
@@ -67,7 +67,7 @@ test.describe('New UI Routing - /ui/ paths only', () => {
 
   test('New UI components and features are present', async ({ page }) => {
     await page.goto('/ui/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Look for modern UI components that would be in the new Svelte UI
     const modernUIElements = [
@@ -104,7 +104,7 @@ test.describe('New UI Routing - /ui/ paths only', () => {
 
   test('New UI handles client-side routing', async ({ page }) => {
     await page.goto('/ui/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Try to navigate within the UI (if navigation exists)
     const settingsLink = page
@@ -116,7 +116,7 @@ test.describe('New UI Routing - /ui/ paths only', () => {
 
       // Should navigate to settings within the new UI
       await expect(page).toHaveURL(/.*\/ui\/settings/);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Should have settings content
       const hasContent = await page
@@ -133,23 +133,23 @@ test.describe('New UI Routing - /ui/ paths only', () => {
   test('Browser back/forward works with new UI routing', async ({ page }) => {
     // Start at dashboard
     await page.goto('/ui/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Navigate to settings
     await page.goto('/ui/settings');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await expect(page).toHaveURL(/.*\/ui\/settings/);
 
     // Use browser back button
     await page.goBack();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Should be back at dashboard
     await expect(page).toHaveURL(/.*\/ui\/dashboard/);
 
     // Use browser forward button
     await page.goForward();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Should be back at settings
     await expect(page).toHaveURL(/.*\/ui\/settings/);

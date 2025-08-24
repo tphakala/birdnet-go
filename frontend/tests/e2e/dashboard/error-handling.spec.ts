@@ -19,7 +19,7 @@ test.describe('Error Handling and Network Failures', () => {
     await page.goto('/ui/dashboard');
 
     // Wait for the page to load completely
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Inject a controlled error to test error boundary
     await page.evaluate(() => {

@@ -6,7 +6,7 @@ test.describe('Authentication - New UI Only', () => {
     await page.goto('/ui/settings');
 
     // Wait for navigation to complete (handles redirects)
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Wait a bit more for potential client-side redirects
     await page.waitForTimeout(1000);
@@ -85,7 +85,7 @@ test.describe('Authentication - New UI Only', () => {
     await page.goto('/ui/');
 
     // Wait for page to fully load
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Check for CSRF protection meta tag
     const csrfMeta = page.locator('meta[name="csrf-token"]');
@@ -100,7 +100,7 @@ test.describe('Authentication - New UI Only', () => {
 
     // Also check for CSRF in settings page (more likely to have forms)
     await page.goto('/ui/settings');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const settingsCsrfMeta = page.locator('meta[name="csrf-token"]');
     const hasSettingsCsrfMeta = (await settingsCsrfMeta.count()) > 0;

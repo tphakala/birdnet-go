@@ -140,7 +140,7 @@ test.describe('Dashboard Smoke Tests - New UI Only', () => {
       .first();
     if (await settingsLink.isVisible()) {
       await settingsLink.click();
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       await expect(page).toHaveURL(/.*\/ui\/settings/);
 
       // Verify we actually navigated to settings content
