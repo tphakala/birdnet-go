@@ -19,13 +19,13 @@ type Context struct {
 // This prevents mixing validation state with configuration data.
 type ValidationResult struct {
 	// Warnings are configuration issues that don't prevent startup
-	Warnings []string
+	Warnings []string `json:"warnings,omitempty"`
 
 	// Errors are critical issues that should prevent startup
-	Errors []string
+	Errors []string `json:"errors,omitempty"`
 
 	// Valid indicates if the configuration passed validation
-	Valid bool
+	Valid bool `json:"valid"`
 }
 
 // AddWarning adds a warning to the validation result

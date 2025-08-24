@@ -7,7 +7,7 @@ import (
 )
 
 // Command creates the support parent command
-func Command(settings *conf.Settings, runtime *runtimectx.Context) *cobra.Command {
+func Command(_ *conf.Settings, runtime *runtimectx.Context) *cobra.Command {
 	supportCmd := &cobra.Command{
 		Use:   "support",
 		Short: "Commands related to support operations in BirdNET-Go",

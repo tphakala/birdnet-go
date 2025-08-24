@@ -1623,6 +1623,12 @@ func (c *Controller) GetSystemID(ctx echo.Context) error {
 		}
 	}
 
+	// Guard against nil runtime context or empty SystemID
+	if c.Runtime == nil || c.Runtime.SystemID == "" {
+		c.logAPIRequest(ctx, slog.LevelError, "Runtime context or SystemID not available", "endpoint", "GetSystemID")
+		return c.HandleError(ctx, fmt.Errorf("runtime context not available"), "System ID not available", http.StatusInternalServerError)
+	}
+
 	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved system ID successfully", "system_id", c.Runtime.SystemID)
 
 	// Return system ID in the format expected by the frontend

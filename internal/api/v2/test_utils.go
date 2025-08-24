@@ -694,8 +694,8 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 	// Size 10 is sufficient for concurrent test scenarios (e.g., TestConcurrentControlRequests uses 5)
 	controlChan := make(chan string, 10)
 
-	// Create mock metrics for testing
-	mockMetrics, _ := observability.NewMetrics()
+	// Create mock metrics for testing using helper
+	mockMetrics := NewTestMetrics(t)
 
 	// Create mock runtime context for testing
 	mockRuntime := &runtimectx.Context{

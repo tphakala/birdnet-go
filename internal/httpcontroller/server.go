@@ -48,6 +48,7 @@ type Server struct {
 	notificationChan  chan handlers.Notification
 	Processor         *processor.Processor
 	APIV2             *api.Controller // Our new JSON API
+	RuntimeContext    *runtimectx.Context // Build-time metadata
 	metrics           *observability.Metrics
 
 	// Page and partial routes
@@ -60,13 +61,14 @@ type Server struct {
 }
 
 // New initializes a new HTTP server with given context and datastore.
-func New(settings *conf.Settings, dataStore datastore.Interface, birdImageCache *imageprovider.BirdImageCache, audioLevelChan chan myaudio.AudioLevelData, controlChan chan string, proc *processor.Processor, observabilityMetrics *observability.Metrics) *Server {
+func New(settings *conf.Settings, runtimeContext *runtimectx.Context, dataStore datastore.Interface, birdImageCache *imageprovider.BirdImageCache, audioLevelChan chan myaudio.AudioLevelData, controlChan chan string, proc *processor.Processor, observabilityMetrics *observability.Metrics) *Server {
 	configureDefaultSettings(settings)
 
 	s := &Server{
 		Echo:              echo.New(),
 		DS:                dataStore,
 		Settings:          settings,
+		RuntimeContext:    runtimeContext,
 		BirdImageCache:    birdImageCache,
 		AudioLevelChan:    audioLevelChan,
 		DashboardSettings: &settings.Realtime.Dashboard,
@@ -215,19 +217,12 @@ func (s *Server) initializeServer() {
 	// Initialize the JSON API v2 - Pass OAuth2Server directly
 	s.Debug("Initializing JSON API v2")
 	
-	// TODO: Temporary fix - create runtime context from global state
-	// This should be passed from the caller in the future
-	runtimeContext := &runtimectx.Context{
-		Version:   "unknown",
-		BuildDate: "unknown",
-		SystemID:  "unknown",
-	}
-	
-	s.APIV2 = api.InitializeAPI(
+	var err error
+	s.APIV2, err = api.InitializeAPI(
 		s.Echo,
 		s.DS,
 		s.Settings,
-		runtimeContext,
+		s.RuntimeContext,
 		s.BirdImageCache,
 		s.SunCalc,
 		s.controlChan,
@@ -236,6 +231,10 @@ func (s *Server) initializeServer() {
 		s.OAuth2Server, // Pass OAuth2Server instance
 		s.metrics,      // Pass observability metrics
 	)
+	if err != nil {
+		s.LogError(nil, err, "Failed to initialize API v2")
+		log.Fatalf("Failed to initialize API v2: %v", err)
+	}
 
 	// Connect the processor's SSE broadcaster to the API controller's SSE manager
 	s.Debug("Setting up SSE broadcaster connection")

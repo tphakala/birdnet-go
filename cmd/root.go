@@ -21,10 +21,16 @@ import (
 
 // RootCommand creates and returns the root command
 func RootCommand(config *conf.Settings, runtime *runtimectx.Context) *cobra.Command {
+	// Compute safe version string
+	version := "unknown"
+	if runtime != nil && runtime.Version != "" {
+		version = runtime.Version
+	}
+	
 	// Create the root command
 	rootCmd := &cobra.Command{
 		Use:   "birdnet",
-		Short: fmt.Sprintf("BirdNET-Go %s CLI", runtime.Version),
+		Short: fmt.Sprintf("BirdNET-Go %s CLI", version),
 	}
 
 	// Set up the global flags for the root command.

@@ -458,11 +458,23 @@ func (c *Controller) initRoutes() {
 
 // HealthCheck handles the API health check endpoint
 func (c *Controller) HealthCheck(ctx echo.Context) error {
+	// Prepare safe version and build date
+	version := "unknown"
+	buildDate := "unknown"
+	if c.Runtime != nil {
+		if c.Runtime.Version != "" {
+			version = c.Runtime.Version
+		}
+		if c.Runtime.BuildDate != "" {
+			buildDate = c.Runtime.BuildDate
+		}
+	}
+	
 	// Create response structure
 	response := map[string]interface{}{
 		"status":     "healthy",
-		"version":    c.Runtime.Version,
-		"build_date": c.Runtime.BuildDate,
+		"version":    version,
+		"build_date": buildDate,
 		"timestamp":  time.Now().Format(time.RFC3339),
 	}
 
@@ -974,12 +986,12 @@ func (c *Controller) getEffectiveAuthMiddleware() echo.MiddlewareFunc {
 func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings, runtime *runtimectx.Context,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string, logger *log.Logger, proc *processor.Processor,
-	oauth2Server *security.OAuth2Server, metrics *observability.Metrics) *Controller { // Added oauth2Server and metrics parameters
+	oauth2Server *security.OAuth2Server, metrics *observability.Metrics) (*Controller, error) { // Return error instead of Fatalf
 
 	// Create API controller, passing oauth2Server and metrics directly to New
 	apiController, err := New(e, ds, settings, runtime, birdImageCache, sunCalc, controlChan, logger, oauth2Server, metrics)
 	if err != nil {
-		logger.Fatalf("Failed to initialize API: %v", err)
+		return nil, err
 	}
 
 	// Assign processor after initialization
@@ -993,5 +1005,5 @@ func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings
 		)
 	}
 
-	return apiController
+	return apiController, nil
 }

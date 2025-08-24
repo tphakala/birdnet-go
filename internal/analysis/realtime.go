@@ -19,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/adapter"
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
+	runtimectx "github.com/tphakala/birdnet-go/internal/buildinfo"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
@@ -230,7 +231,13 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	systemMonitor := initializeSystemMonitor(settings)
 
 	// Initialize and start the HTTP server
-	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan, proc, metrics)
+	// TODO: Pass real runtime context once RealtimeAnalysis signature is updated
+	tempRuntimeContext := &runtimectx.Context{
+		Version:   "unknown",
+		BuildDate: "unknown", 
+		SystemID:  "unknown",
+	}
+	httpServer := httpcontroller.New(settings, tempRuntimeContext, dataStore, birdImageCache, audioLevelChan, controlChan, proc, metrics)
 	httpServer.Start()
 
 	// Initialize the wait group to wait for all goroutines to finish
@@ -1429,11 +1436,6 @@ func initializeBackupSystem(settings *conf.Settings, backupLogger *slog.Logger) 
 	// TODO: Get runtime version from context - using fallback for now
 	// This should be passed from the caller during the configuration separation refactoring
 	appVersion := "unknown"
-	if currentSettings := conf.GetSettings(); currentSettings != nil {
-		// Try to get version from global settings as a temporary fallback
-		// This access pattern will be removed during the complete refactoring
-		appVersion = "birdnet-go" // Default app name as fallback
-	}
 	backupManager, err := backup.NewManager(settings, backupLogger, stateManager, appVersion)
 	if err != nil {
 		return nil, nil, errors.New(err).

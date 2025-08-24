@@ -30,8 +30,12 @@ func CollectCommand(runtime *runtimectx.Context) *cobra.Command {
 			systemID := "unknown"
 			version := "unknown"
 			if runtime != nil {
-				systemID = runtime.SystemID
-				version = runtime.Version
+				if runtime.SystemID != "" {
+					systemID = runtime.SystemID
+				}
+				if runtime.Version != "" {
+					version = runtime.Version
+				}
 			}
 			
 			// Create collector

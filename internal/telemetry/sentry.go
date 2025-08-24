@@ -27,6 +27,7 @@ type DeferredMessage struct {
 // sentryInitialized tracks whether Sentry has been initialized
 var (
 	sentryInitialized  bool
+	sentryOptInEnabled int32 // atomic boolean for Sentry opt-in state (0=false, 1=true)
 	deferredMessages   []DeferredMessage
 	deferredMutex      sync.Mutex
 	attachmentUploader *AttachmentUploader
@@ -67,6 +68,13 @@ func collectPlatformInfo() PlatformInfo {
 // InitSentry initializes Sentry SDK with privacy-compliant settings
 // This function will only initialize Sentry if explicitly enabled by the user
 func InitSentry(settings *conf.Settings, runtimeCtx *runtimectx.Context) error {
+	// Set the opt-in state based on settings for other functions to use
+	if settings.Sentry.Enabled {
+		atomic.StoreInt32(&sentryOptInEnabled, 1)
+	} else {
+		atomic.StoreInt32(&sentryOptInEnabled, 0)
+	}
+	
 	// Check if Sentry is explicitly enabled (opt-in)
 	if !settings.Sentry.Enabled {
 		log.Println("Sentry telemetry is disabled (opt-in required)")
@@ -395,10 +403,9 @@ func logInitializationSuccess(settings *conf.Settings, runtimeCtx *runtimectx.Co
 
 // CaptureError captures an error with privacy-compliant context
 func CaptureError(err error, component string) {
-	// Skip settings check in test mode
+	// Skip opt-in check in test mode, otherwise check if Sentry is enabled
 	if atomic.LoadInt32(&testMode) == 0 {
-		settings := conf.GetSettings()
-		if settings == nil || !settings.Sentry.Enabled {
+		if atomic.LoadInt32(&sentryOptInEnabled) == 0 {
 			return
 		}
 	}
@@ -434,10 +441,9 @@ func CaptureError(err error, component string) {
 
 // CaptureMessage captures a message with privacy-compliant context
 func CaptureMessage(message string, level sentry.Level, component string) {
-	// Skip settings check in test mode
+	// Skip opt-in check in test mode, otherwise check if Sentry is enabled
 	if atomic.LoadInt32(&testMode) == 0 {
-		settings := conf.GetSettings()
-		if settings == nil || !settings.Sentry.Enabled {
+		if atomic.LoadInt32(&sentryOptInEnabled) == 0 {
 			return
 		}
 	}
@@ -469,10 +475,9 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 // CaptureMessageDeferred captures a message for later processing if Sentry is not yet initialized
 // If Sentry is already initialized, it immediately sends the message
 func CaptureMessageDeferred(message string, level sentry.Level, component string) {
-	// Skip settings check in test mode
+	// Skip opt-in check in test mode, otherwise check if Sentry is enabled
 	if atomic.LoadInt32(&testMode) == 0 {
-		settings := conf.GetSettings()
-		if settings == nil || !settings.Sentry.Enabled {
+		if atomic.LoadInt32(&sentryOptInEnabled) == 0 {
 			return
 		}
 	}
@@ -509,10 +514,9 @@ func CaptureMessageDeferred(message string, level sentry.Level, component string
 
 // Flush ensures all buffered events are sent to Sentry
 func Flush(timeout time.Duration) {
-	// Skip settings check in test mode
+	// Skip opt-in check in test mode, otherwise check if Sentry is enabled
 	if atomic.LoadInt32(&testMode) == 0 {
-		settings := conf.GetSettings()
-		if settings == nil || !settings.Sentry.Enabled {
+		if atomic.LoadInt32(&sentryOptInEnabled) == 0 {
 			return
 		}
 	}
