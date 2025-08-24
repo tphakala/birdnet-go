@@ -211,6 +211,8 @@ export default [
       'eslint.config.js',
       'vitest.config.js',
       'vite.config.js',
+      'playwright-report/',
+      'test-results/',
     ],
   },
 ];
