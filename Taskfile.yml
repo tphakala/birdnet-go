@@ -251,6 +251,51 @@ tasks:
     cmds:
       - npx prettier --write "../**/*.md"
 
+  # E2E Testing Tasks
+  e2e-install:
+    desc: Install E2E testing dependencies
+    dir: frontend
+    cmds:
+      - npm install -D @playwright/test playwright @axe-core/playwright
+      - npx playwright install
+
+  e2e-test:
+    desc: Run end-to-end tests
+    dir: frontend
+    deps: [frontend-build, e2e-install]
+    cmds:
+      - npx playwright test
+
+  e2e-test-headed:
+    desc: Run E2E tests in headed mode for debugging
+    dir: frontend
+    cmds:
+      - npx playwright test --headed
+
+  e2e-test-ui:
+    desc: Run E2E tests with Playwright UI mode
+    dir: frontend
+    cmds:
+      - npx playwright test --ui
+
+  e2e-test-mobile:
+    desc: Run E2E tests on mobile devices only
+    dir: frontend
+    cmds:
+      - npx playwright test --grep="mobile|responsive"
+
+  e2e-test-performance:
+    desc: Run performance-focused E2E tests
+    dir: frontend
+    cmds:
+      - npx playwright test --grep="performance"
+
+  e2e-report:
+    desc: Open E2E test report
+    dir: frontend
+    cmds:
+      - npx playwright show-report
+
   clean:
     cmds:
       - go clean

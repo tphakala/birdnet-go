@@ -28,3 +28,5 @@ Unraid/SUBMISSION.md
 frontend/node_modules
 frontend/dist/
 frontend/.svelte-kit
+frontend/test-results/
+frontend/playwright-report/
