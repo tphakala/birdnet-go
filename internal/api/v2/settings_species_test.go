@@ -17,25 +17,7 @@ import (
 func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 	// Setup
 	e := echo.New()
-	controller := &Controller{
-		Settings: &conf.Settings{
-			Main: struct {
-				Name      string         `json:"name"`
-				TimeAs24h bool           `json:"timeAs24h"`
-				Log       conf.LogConfig `json:"log"`
-			}{
-				Name: "TestNode",
-			},
-			Realtime: conf.RealtimeSettings{
-				Species: conf.SpeciesSettings{
-					Include: []string{},
-					Exclude: []string{},
-					Config:  map[string]conf.SpeciesConfig{},
-				},
-			},
-		},
-		DisableSaveSettings: true, // Disable file save for testing
-	}
+	_, _, controller := newAPIContext(t, e, "", "", nil)
 
 	tests := []struct {
 		name           string
@@ -109,21 +91,8 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create request
-			jsonData, err := json.Marshal(tt.payload)
-			require.NoError(t, err)
-
-			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/realtime", bytes.NewReader(jsonData))
-			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-			rec := httptest.NewRecorder()
-			ctx := e.NewContext(req, rec)
-			ctx.SetPath("/api/v2/settings/realtime")
-			ctx.SetParamNames("section")
-			ctx.SetParamValues("realtime")
-
 			// Execute update
-			err = controller.UpdateSectionSettings(ctx)
-			require.NoError(t, err, "Update should succeed")
+			rec := patchRealtime(t, e, controller, tt.payload)
 			assert.Equal(t, http.StatusOK, rec.Code, "Should return 200 OK")
 
 			// Extract the bird name from the payload with safe type assertions
@@ -155,7 +124,7 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 
 			// Verify the response includes the updated values
 			var response map[string]interface{}
-			err = json.Unmarshal(rec.Body.Bytes(), &response)
+			err := json.Unmarshal(rec.Body.Bytes(), &response)
 			require.NoError(t, err, "Response should be valid JSON")
 			assert.Equal(t, "realtime settings updated successfully", response["message"])
 		})
@@ -207,19 +176,7 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 		},
 	}
 
-	jsonData, err := json.Marshal(updatePayload)
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/realtime", bytes.NewReader(jsonData))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetPath("/api/v2/settings/realtime")
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("realtime")
-
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err, "Update should succeed")
+	rec := patchRealtime(t, e, controller, updatePayload)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify zero values are preserved in the controller's settings
@@ -238,7 +195,7 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 
 	// Verify the API response indicates success
 	var response map[string]interface{}
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	err := json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err, "Response should be valid JSON")
 	assert.Equal(t, "realtime settings updated successfully", response["message"])
 }
@@ -293,19 +250,7 @@ func TestPartialSpeciesConfigUpdate(t *testing.T) {
 		},
 	}
 
-	jsonData, err := json.Marshal(updatePayload)
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/realtime", bytes.NewReader(jsonData))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetPath("/api/v2/settings/realtime")
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("realtime")
-
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
+	rec := patchRealtime(t, e, controller, updatePayload)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify Bird A was updated with zero values
@@ -359,19 +304,7 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 		},
 	}
 
-	jsonData, err := json.Marshal(updatePayload)
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/realtime", bytes.NewReader(jsonData))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetPath("/api/v2/settings/realtime")
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("realtime")
-
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err, "PATCH should succeed")
+	rec := patchRealtime(t, e, controller, updatePayload)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify controller settings were updated
@@ -380,19 +313,11 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 	assert.Equal(t, 0, testBird.Interval, "Controller should have zero interval")
 
 	// Step 2: GET to verify the updated values are returned
-	req = httptest.NewRequest(http.MethodGet, "/api/v2/settings/realtime", http.NoBody)
-	rec = httptest.NewRecorder()
-	ctx = e.NewContext(req, rec)
-	ctx.SetPath("/api/v2/settings/realtime")
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("realtime")
-
-	err = controller.GetSectionSettings(ctx)
-	require.NoError(t, err, "GET should succeed")
+	rec = getRealtime(t, e, controller)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var response map[string]any
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	err := json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err, "Response should be valid JSON")
 
 	// Verify GET endpoint returns the updated zero values after PATCH operation
@@ -425,4 +350,74 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 	intervalFloat, ok := intervalInterface.(float64)
 	require.True(t, ok, "Interval should be a number")
 	assert.InDelta(t, float64(0), intervalFloat, 0.0001, "GET should return updated zero interval")
+}
+
+// Test helper functions
+
+// newAPIContext creates an Echo instance, controller, and context for testing
+func newAPIContext(t *testing.T, e *echo.Echo, method, path string, body interface{}) (echo.Context, *httptest.ResponseRecorder, *Controller) {
+	t.Helper()
+
+	controller := &Controller{
+		Settings: &conf.Settings{
+			Main: struct {
+				Name      string         `json:"name"`
+				TimeAs24h bool           `json:"timeAs24h"`
+				Log       conf.LogConfig `json:"log"`
+			}{
+				Name: "TestNode",
+			},
+			Realtime: conf.RealtimeSettings{
+				Species: conf.SpeciesSettings{
+					Include: []string{},
+					Exclude: []string{},
+					Config:  map[string]conf.SpeciesConfig{},
+				},
+			},
+		},
+		DisableSaveSettings: true, // Disable file save for testing
+	}
+
+	var req *http.Request
+	if body != nil {
+		jsonData, err := json.Marshal(body)
+		require.NoError(t, err)
+		req = httptest.NewRequest(method, path, bytes.NewReader(jsonData))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	} else {
+		req = httptest.NewRequest(method, path, http.NoBody)
+	}
+
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	return ctx, rec, controller
+}
+
+// patchRealtime creates a PATCH request context for the realtime section
+func patchRealtime(t *testing.T, e *echo.Echo, c *Controller, payload interface{}) *httptest.ResponseRecorder {
+	t.Helper()
+
+	ctx, rec, _ := newAPIContext(t, e, http.MethodPatch, "/api/v2/settings/realtime", payload)
+	ctx.SetPath("/api/v2/settings/:section")
+	ctx.SetParamNames("section")
+	ctx.SetParamValues("realtime")
+
+	err := c.UpdateSectionSettings(ctx)
+	require.NoError(t, err)
+	return rec
+}
+
+// getRealtime creates a GET request context for the realtime section
+func getRealtime(t *testing.T, e *echo.Echo, c *Controller) *httptest.ResponseRecorder {
+	t.Helper()
+
+	ctx, rec, _ := newAPIContext(t, e, http.MethodGet, "/api/v2/settings/realtime", nil)
+	ctx.SetPath("/api/v2/settings/:section")
+	ctx.SetParamNames("section")
+	ctx.SetParamValues("realtime")
+
+	err := c.GetSectionSettings(ctx)
+	require.NoError(t, err)
+	return rec
 }

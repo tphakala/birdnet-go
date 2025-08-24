@@ -19,13 +19,21 @@ func unmarshalYAML[T any](t *testing.T, data []byte, target *T, failureMessage s
 	require.NoError(t, err, failureMessage)
 }
 
-// safeMapAccess is a helper for safe map key access with type assertion
-func safeMapAccess[T any](t *testing.T, m map[string]interface{}, key, description string) T {
+// safeMapAccess is a helper for safe map key access returning any type
+func safeMapAccess(t *testing.T, m map[string]any, key, description string) any {
 	t.Helper()
 	valueInterface, hasKey := m[key]
 	require.True(t, hasKey, "%s should contain %s field", description, key)
-	value, ok := valueInterface.(T)
-	require.True(t, ok, "%s field should be of correct type", key)
+	return valueInterface
+}
+
+// safeMapAccessMap is a helper for safe map access when expecting a nested map
+func safeMapAccessMap(t *testing.T, m map[string]any, key, description string) map[string]any {
+	t.Helper()
+	valueInterface, hasKey := m[key]
+	require.True(t, hasKey, "%s should contain %s field", description, key)
+	value, ok := valueInterface.(map[string]any)
+	require.True(t, ok, "%s field should be a map", key)
 	return value
 }
 
@@ -108,13 +116,13 @@ realtime:
 	require.NoError(t, err, "Failed to read saved config")
 
 	// Parse the saved YAML to verify structure
-	var yamlMap map[string]interface{}
+	var yamlMap map[string]any
 	unmarshalYAML(t, savedData, &yamlMap, "Failed to parse saved YAML")
 
 	// Navigate to species configs with safe type assertions
-	realtime := safeMapAccess[map[string]interface{}](t, yamlMap, "realtime", "YAML")
-	species := safeMapAccess[map[string]interface{}](t, realtime, "species", "realtime")
-	configs := safeMapAccess[map[string]interface{}](t, species, "config", "species")
+	realtime := safeMapAccessMap(t, yamlMap, "realtime", "YAML")
+	species := safeMapAccessMap(t, realtime, "species", "realtime")
+	configs := safeMapAccessMap(t, species, "config", "species")
 
 	// Check that all three birds exist
 	assert.Contains(t, configs, "Rare Bird", "Rare Bird should exist")
@@ -123,7 +131,7 @@ realtime:
 
 	// Verify zero values are present in the YAML
 	for birdName, configInterface := range configs {
-		config, ok := configInterface.(map[string]interface{})
+		config, ok := configInterface.(map[string]any)
 		require.True(t, ok, "Bird config %s should be a map", birdName)
 		
 		// Check that threshold exists

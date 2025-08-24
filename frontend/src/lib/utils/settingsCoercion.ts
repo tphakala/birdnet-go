@@ -371,7 +371,10 @@ export function coerceSpeciesSettings(
   const coerced: PartialSpeciesSettings = {
     include: coerceArray<string>(safeSettings.include, []),
     exclude: coerceArray<string>(safeSettings.exclude, []),
-    config: coerceObject(safeSettings.config as UnknownSettings, {}),
+    config: coerceObject<Record<string, SpeciesConfig>>(
+      safeSettings.config as UnknownSettings,
+      {} as Record<string, SpeciesConfig>
+    ),
   };
 
   // Validate and clean species config
