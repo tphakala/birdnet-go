@@ -8,7 +8,7 @@ export default defineConfig({
   testDir: './tests/e2e',
   timeout: isCI ? 60000 : 30000, // Longer timeout in CI
   expect: { timeout: isCI ? 15000 : 10000 },
-  fullyParallel: true,
+  fullyParallel: false, // Disabled to avoid flakiness with shared test data
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
   workers: isCI ? 1 : undefined,
@@ -64,6 +64,6 @@ export default defineConfig({
     command: 'task dev_server',
     port: 8080,
     reuseExistingServer: !process.env['CI'],
-    timeout: 120000,
+    timeout: 180000, // 3 minutes for cold machine startup
   },
 });

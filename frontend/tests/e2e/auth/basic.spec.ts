@@ -5,25 +5,35 @@ test.describe('Authentication - New UI Only', () => {
     // Try to access a protected route in the new UI without authentication
     await page.goto('/ui/settings');
 
-    // Wait for the page to load
+    // Wait for navigation to complete (handles redirects)
     await page.waitForLoadState('networkidle');
 
-    // Should either redirect to login or show login form, or be publicly accessible
-    const isLoginPage =
-      page.url().includes('/login') ||
-      page.url().includes('/auth') ||
-      (await page
-        .locator(
-          '[data-testid*="login"], [data-testid*="auth"], input[type="password"], [data-testid="login-form"]'
-        )
-        .isVisible());
+    // Wait a bit more for potential client-side redirects
+    await page.waitForTimeout(1000);
 
-    const isMainContent = await page
+    const currentUrl = page.url();
+
+    // Check if we were redirected to login/auth
+    const isRedirectedToLogin = currentUrl.includes('/login') || currentUrl.includes('/auth');
+
+    // Check if login form elements are present
+    const hasLoginForm = await page
+      .locator(
+        '[data-testid*="login"], [data-testid*="auth"], input[type="password"], [data-testid="login-form"]'
+      )
+      .isVisible();
+
+    // Check if we stayed on settings page (publicly accessible)
+    const isOnSettingsPage = currentUrl.includes('/ui/settings');
+    const hasSettingsContent = await page
       .locator('[data-testid="main-content"], main, [role="main"]')
       .isVisible();
 
-    if (isLoginPage) {
-      // Verify login UI elements are present and functional
+    if (isRedirectedToLogin || hasLoginForm) {
+      // Assert we were redirected or show login form
+      expect(isRedirectedToLogin || hasLoginForm).toBe(true);
+
+      // Verify login UI elements are present
       const loginForm = page
         .locator('form, [data-testid*="login"], [data-testid="login-form"]')
         .first();
@@ -41,34 +51,43 @@ test.describe('Authentication - New UI Only', () => {
       if ((await passwordField.count()) > 0) {
         await expect(passwordField.first()).toBeVisible();
       }
-    } else if (isMainContent) {
-      // If not redirected to login, the route is publicly accessible
+    } else if (isOnSettingsPage && hasSettingsContent) {
+      // Assert we stayed on settings (publicly accessible)
+      await expect(page).toHaveURL(/.*\/ui\/settings/);
       await expect(page.locator('[data-testid="main-content"], main, [role="main"]')).toBeVisible();
-
-      // Ensure we're still in the new UI
-      await expect(page).toHaveURL(/.*\/ui\/.*/);
     } else {
-      // Fallback: at minimum, the page should load something
-      await expect(page.locator('body')).toBeVisible();
+      // Unexpected state - fail the test
+      throw new Error(
+        `Unexpected auth state: URL=${currentUrl}, hasLoginForm=${hasLoginForm}, hasSettingsContent=${hasSettingsContent}`
+      );
     }
   });
 
   test('Application handles unauthenticated API requests', async ({ request }) => {
-    // Test that protected API endpoints handle unauthorized access gracefully
-    const response = await request.get('/api/v2/settings/audio');
+    // Build absolute URL to avoid baseURL path prefixing
+    const baseUrl = process.env['BASE_URL'] ?? 'http://localhost:8080';
+    const apiUrl = `${baseUrl.replace(/\/ui$/, '')}/api/v2/settings/audio`;
 
-    // Should either return 401/403 or allow access (depending on auth setup)
-    expect([200, 401, 403]).toContain(response.status());
+    const response = await request.get(apiUrl);
+
+    // Use environment flag to control auth expectations
+    if (process.env['EXPECT_AUTH_REQUIRED'] === 'true') {
+      // Expect authentication to be required
+      expect([401, 403]).toContain(response.status());
+    } else {
+      // Expect public access or successful response
+      expect(response.status()).toBe(200);
+    }
   });
 
-  test('CSRF protection is properly configured in new UI', async ({ page }) => {
+  test('CSRF token meta tag (optional)', async ({ page }) => {
     // Check CSRF on the new UI
     await page.goto('/ui/');
 
     // Wait for page to fully load
     await page.waitForLoadState('networkidle');
 
-    // Check for CSRF protection meta tag or cookie
+    // Check for CSRF protection meta tag
     const csrfMeta = page.locator('meta[name="csrf-token"]');
     const hasCsrfMeta = (await csrfMeta.count()) > 0;
 
@@ -91,7 +110,9 @@ test.describe('Authentication - New UI Only', () => {
       expect(settingsToken).toBeTruthy();
     }
 
-    // This test passes even if CSRF is not implemented (optional security feature)
-    expect(true).toBe(true);
+    // Enforce CSRF presence only if requested via environment
+    if (process.env['E2E_EXPECT_CSRF'] === 'true') {
+      expect(hasCsrfMeta || hasSettingsCsrfMeta).toBe(true);
+    }
   });
 });

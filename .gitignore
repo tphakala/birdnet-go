@@ -30,3 +30,7 @@ frontend/dist/
 frontend/.svelte-kit
 frontend/test-results/
 frontend/playwright-report/
+frontend/blob-report/
+frontend/tests/.auth/
+frontend/coverage/
+frontend/playwright-report*.zip

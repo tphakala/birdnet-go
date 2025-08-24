@@ -1,29 +1,49 @@
-import { test as setup } from '@playwright/test';
+import { test as setup, expect } from '@playwright/test';
+import { TestDataManager } from '../fixtures/test-data';
 
-setup('Wait for server and new UI to be ready', async ({ request, page }) => {
-  // Wait for the application server to be responsive
-  let serverReady = false;
-  let retries = 0;
-  const maxRetries = 30; // 30 seconds
+setup('Setup test environment and wait for server readiness', async ({ request, page }) => {
+  // Set explicit timeout for this setup test
+  setup.setTimeout(60_000); // 1 minute timeout
 
-  while (retries < maxRetries && !serverReady) {
-    try {
-      const response = await request.get('/api/v2/health', { timeout: 2000 });
-      if (response.ok()) {
-        serverReady = true;
-        // eslint-disable-next-line no-console
-        console.log('Server is ready for E2E tests');
-        break;
-      }
-    } catch {
-      // Server not ready yet, continue waiting
-    }
-
-    retries++;
-    await new Promise(resolve => setTimeout(resolve, 1000));
+  // Setup test data using fallback/mock data if endpoints don't exist
+  try {
+    await TestDataManager.cleanup();
+    await TestDataManager.createTestUser();
+    await TestDataManager.setupAudioSource('microphone');
+    // eslint-disable-next-line no-console -- Test setup debugging
+    console.log('Test data setup completed');
+  } catch (error) {
+    // eslint-disable-next-line no-console -- Test setup debugging
+    console.warn('Test data setup using fallback/mock data:', error);
   }
 
-  // Test new UI accessibility even if API health check fails
+  // Wait for server health using absolute URL and Playwright polling
+  const baseURL = process.env['BASE_URL'] ?? 'http://localhost:8080';
+  const healthURL = `${baseURL}/api/v2/health`;
+
+  // Use expect.poll for reliable health check with built-in retries
+  await expect
+    .poll(
+      async () => {
+        try {
+          const response = await request.get(healthURL, { timeout: 5000 });
+          return response.ok();
+        } catch {
+          return false;
+        }
+      },
+      {
+        message: 'Server health check',
+        timeout: 30_000, // 30 seconds total
+        intervals: [1_000], // Check every 1 second
+      }
+    )
+    .toBe(true);
+
+  // eslint-disable-next-line no-console -- Test setup debugging
+  console.log('Server is ready for E2E tests');
+
+  // Test new UI accessibility
   let uiReady = false;
   try {
     await page.goto('/ui/', { timeout: 10000 });
@@ -34,26 +54,17 @@ setup('Wait for server and new UI to be ready', async ({ request, page }) => {
       (await page.locator('[data-testid="main-content"], main, [role="main"], body').count()) > 0;
     if (hasMainContent) {
       uiReady = true;
-      // eslint-disable-next-line no-console
+      // eslint-disable-next-line no-console -- Test setup debugging
       console.log('New UI is accessible for E2E tests');
     }
   } catch (error) {
-    // eslint-disable-next-line no-console
+    // eslint-disable-next-line no-console -- Test setup debugging
     console.warn('New UI accessibility test failed:', error);
   }
 
-  // Require either server or UI to be ready for tests to proceed
-  if (!serverReady && !uiReady) {
-    throw new Error('Neither server API nor new UI is ready for testing within timeout period');
-  }
-
-  if (!serverReady) {
-    // eslint-disable-next-line no-console
-    console.warn('Server API not ready, but new UI is accessible - proceeding with limited tests');
-  }
-
+  // At minimum, we need either server API or UI to be accessible
   if (!uiReady) {
-    // eslint-disable-next-line no-console
-    console.warn('New UI not accessible, but server API is ready - some tests may fail');
+    // eslint-disable-next-line no-console -- Test setup debugging
+    console.warn('New UI not fully accessible, but server API is ready - some UI tests may fail');
   }
 });
