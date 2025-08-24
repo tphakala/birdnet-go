@@ -764,6 +764,8 @@ func getSectionValidators() map[string]sectionValidator {
 		"main":      validateMainSection,
 		"birdnet":   validateBirdNETSection,
 		"webserver": validateWebServerSection,
+		"species":   validateSpeciesSection,
+		"realtime":  validateRealtimeSection,
 	}
 }
 
@@ -1074,6 +1076,53 @@ func validateWebServerSection(data json.RawMessage) error {
 		}
 	}
 
+	return nil
+}
+
+// validateSpeciesSection validates species settings
+func validateSpeciesSection(data json.RawMessage) error {
+	var speciesSettings conf.SpeciesSettings
+	if err := json.Unmarshal(data, &speciesSettings); err != nil {
+		return err
+	}
+
+	// Call the existing species config validation from the conf package
+	// This will validate threshold range (0-1) and interval (>= 0)
+	for speciesName, config := range speciesSettings.Config {
+		// Check if interval is non-negative
+		if config.Interval < 0 {
+			return fmt.Errorf("species config for '%s': interval must be non-negative, got %d", speciesName, config.Interval)
+		}
+		
+		// Check if threshold is within valid range
+		if config.Threshold < 0 || config.Threshold > 1 {
+			return fmt.Errorf("species config for '%s': threshold must be between 0 and 1, got %f", speciesName, config.Threshold)
+		}
+	}
+	
+	return nil
+}
+
+// validateRealtimeSection validates realtime settings that contain species
+func validateRealtimeSection(data json.RawMessage) error {
+	var realtimeSettings conf.RealtimeSettings
+	if err := json.Unmarshal(data, &realtimeSettings); err != nil {
+		return err
+	}
+
+	// Validate species config if present
+	for speciesName, config := range realtimeSettings.Species.Config {
+		// Check if interval is non-negative
+		if config.Interval < 0 {
+			return fmt.Errorf("species config for '%s': interval must be non-negative, got %d", speciesName, config.Interval)
+		}
+		
+		// Check if threshold is within valid range
+		if config.Threshold < 0 || config.Threshold > 1 {
+			return fmt.Errorf("species config for '%s': threshold must be between 0 and 1, got %f", speciesName, config.Threshold)
+		}
+	}
+	
 	return nil
 }
 

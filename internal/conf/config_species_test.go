@@ -15,9 +15,8 @@ import (
 func TestSpeciesConfigYAMLPersistence(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name      string
-		config    SpeciesConfig
-		expectNil bool // whether we expect fields to be missing in YAML
+		name   string
+		config SpeciesConfig
 	}{
 		{
 			name: "zero_threshold_and_interval",
@@ -26,7 +25,6 @@ func TestSpeciesConfigYAMLPersistence(t *testing.T) {
 				Interval:  0,
 				Actions:   []SpeciesAction{},
 			},
-			expectNil: false, // We want these to persist even when zero
 		},
 		{
 			name: "non_zero_values",
@@ -42,7 +40,6 @@ func TestSpeciesConfigYAMLPersistence(t *testing.T) {
 					},
 				},
 			},
-			expectNil: false,
 		},
 		{
 			name: "only_threshold_set",
@@ -51,7 +48,6 @@ func TestSpeciesConfigYAMLPersistence(t *testing.T) {
 				Interval:  0, // This should still persist
 				Actions:   []SpeciesAction{},
 			},
-			expectNil: false,
 		},
 	}
 
@@ -73,9 +69,7 @@ func TestSpeciesConfigYAMLPersistence(t *testing.T) {
 
 			// Check if interval is present - regression guard: ensure interval persists even when zero
 			_, hasInterval := yamlMap["interval"]
-			if !tt.expectNil {
-				assert.True(t, hasInterval, "interval field should be present in YAML even when zero")
-			}
+			assert.True(t, hasInterval, "interval field should be present in YAML even when zero")
 
 			// Unmarshal back to struct
 			var unmarshaledConfig SpeciesConfig
@@ -137,6 +131,13 @@ func TestSpeciesConfigJSONPersistence(t *testing.T) {
 	// Verify threshold is present
 	_, hasThreshold := rareBird["threshold"]
 	assert.True(t, hasThreshold, "threshold field should be present in JSON")
+
+	// Check that actions key exists and has correct type/shape
+	actionsValue, hasActions := rareBird["actions"]
+	assert.True(t, hasActions, "actions field should be present in JSON")
+	actions, ok := actionsValue.([]any)
+	require.True(t, ok, "actions field should be an array")
+	assert.Empty(t, actions, "actions should be empty")
 
 	// Unmarshal back and verify values
 	var unmarshaledSettings SpeciesSettings
@@ -240,12 +241,14 @@ func TestSettingsSaveAndLoad(t *testing.T) {
 	require.NoError(t, err, "Failed to unmarshal loaded settings")
 
 	// Verify Zero Values Bird config is preserved
-	zeroConfig := loadedSettings.Realtime.Species.Config["Zero Values Bird"]
+	zeroConfig, ok := loadedSettings.Realtime.Species.Config["Zero Values Bird"]
+	assert.True(t, ok, "Zero Values Bird config must be present")
 	assert.InDelta(t, 0.0, zeroConfig.Threshold, 0.0001, "Zero threshold should be loaded correctly")
 	assert.Equal(t, 0, zeroConfig.Interval, "Zero interval should be loaded correctly")
 
 	// Verify Normal Bird config
-	normalConfig := loadedSettings.Realtime.Species.Config["Normal Bird"]
+	normalConfig, ok := loadedSettings.Realtime.Species.Config["Normal Bird"]
+	assert.True(t, ok, "Normal Bird config must be present")
 	assert.InDelta(t, 0.8, normalConfig.Threshold, 0.0001, "Normal threshold should be loaded correctly")
 	assert.Equal(t, 45, normalConfig.Interval, "Normal interval should be loaded correctly")
 }
@@ -285,7 +288,10 @@ func TestSpeciesConfigUpdate(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify zero values are preserved
-	config := reloaded.Realtime.Species.Config["Existing Bird"]
+	config, ok := reloaded.Realtime.Species.Config["Existing Bird"]
+	assert.True(t, ok, "Existing Bird config must be present")
 	assert.InDelta(t, 0.0, config.Threshold, 0.0001, "Zero threshold should be preserved after update")
 	assert.Equal(t, 0, config.Interval, "Zero interval should be preserved after update")
+	assert.NotNil(t, config.Actions, "Actions should be empty slice, not nil")
+	assert.Empty(t, config.Actions, "Actions should be empty after update")
 }

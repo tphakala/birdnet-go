@@ -23,9 +23,9 @@ func unmarshalYAML[T any](t *testing.T, data []byte, target *T, failureMessage s
 func safeMapAccessMap(t *testing.T, m map[string]any, key, description string) map[string]any {
 	t.Helper()
 	valueInterface, hasKey := m[key]
-	require.True(t, hasKey, "%s should contain %s field", description, key)
+	require.True(t, hasKey, "%s should contain '%s' field", description, key)
 	value, ok := valueInterface.(map[string]any)
-	require.True(t, ok, "%s field should be a map", key)
+	require.True(t, ok, "'%s' field should be a map[string]any (object)", key)
 	return value
 }
 
@@ -128,13 +128,55 @@ realtime:
 		config, ok := configInterface.(map[string]any)
 		require.True(t, ok, "Bird config %s should be a map", birdName)
 		
-		// Check that threshold exists
-		_, hasThreshold := config["threshold"]
+		// Check that threshold exists and validate expected values
+		thresholdValue, hasThreshold := config["threshold"]
 		assert.True(t, hasThreshold, "%s should have threshold field", birdName)
+		// YAML unmarshaling can give us float64 for zero values
+		var threshold float64
+		switch v := thresholdValue.(type) {
+		case float64:
+			threshold = v
+		case int:
+			threshold = float64(v)
+		default:
+			t.Errorf("%s threshold should be numeric, got %T: %v", birdName, thresholdValue, thresholdValue)
+			continue
+		}
 		
-		// Check that interval exists — regression guard to ensure zero values are serialized
-		_, hasInterval := config["interval"]
+		// Check that interval exists and validate expected values
+		intervalValue, hasInterval := config["interval"]
 		assert.True(t, hasInterval, "%s should have interval field even when zero", birdName)
+		// YAML unmarshaling can give us int for zero values
+		var interval int
+		switch v := intervalValue.(type) {
+		case int:
+			interval = v
+		case float64:
+			interval = int(v)
+		default:
+			t.Errorf("%s interval should be numeric, got %T: %v", birdName, intervalValue, intervalValue)
+			continue
+		}
+		
+		// Validate concrete expected values based on bird name
+		switch birdName {
+		case "Rare Bird":
+			assert.InDelta(t, 0.0, threshold, 0.0001, "Rare Bird should have 0.0 threshold")
+			assert.Equal(t, 0, interval, "Rare Bird should have 0 interval")
+		case "Common Bird":
+			assert.InDelta(t, 0.0, threshold, 0.0001, "Common Bird should have updated 0.0 threshold")
+			assert.Equal(t, 0, interval, "Common Bird should have updated 0 interval")
+		case "Zero Bird":
+			assert.InDelta(t, 0.0, threshold, 0.0001, "Zero Bird should have 0.0 threshold")
+			assert.Equal(t, 0, interval, "Zero Bird should have 0 interval")
+		}
+		
+		// Check that actions field exists and has correct type/shape
+		actionsValue, hasActions := config["actions"]
+		assert.True(t, hasActions, "%s should have actions field", birdName)
+		actions, ok := actionsValue.([]interface{})
+		require.True(t, ok, "%s actions should be a slice/list", birdName)
+		assert.Empty(t, actions, "%s actions should be empty", birdName)
 	}
 
 	// Load the config again to verify round-trip
@@ -149,16 +191,22 @@ realtime:
 	require.True(t, hasRareBirdReloaded, "Rare Bird should exist in reloaded config")
 	assert.InDelta(t, 0.0, rareBird.Threshold, 0.0001, "Rare Bird threshold should still be 0.0")
 	assert.Equal(t, 0, rareBird.Interval, "Rare Bird interval should still be 0")
+	require.NotNil(t, rareBird.Actions, "Rare Bird actions should not be nil")
+	assert.Empty(t, rareBird.Actions, "Rare Bird actions should be empty")
 	
 	// Check Common Bird (updated to zeros)
 	commonBird, hasCommonBirdReloaded := reloadedSettings.Realtime.Species.Config["Common Bird"]
 	require.True(t, hasCommonBirdReloaded, "Common Bird should exist in reloaded config")
 	assert.InDelta(t, 0.0, commonBird.Threshold, 0.0001, "Common Bird threshold should now be 0.0")
 	assert.Equal(t, 0, commonBird.Interval, "Common Bird interval should now be 0")
+	require.NotNil(t, commonBird.Actions, "Common Bird actions should not be nil")
+	assert.Empty(t, commonBird.Actions, "Common Bird actions should be empty")
 	
 	// Check Zero Bird (new)
 	zeroBird, hasZeroBird := reloadedSettings.Realtime.Species.Config["Zero Bird"]
 	require.True(t, hasZeroBird, "Zero Bird should exist in reloaded config")
 	assert.InDelta(t, 0.0, zeroBird.Threshold, 0.0001, "Zero Bird threshold should be 0.0")
 	assert.Equal(t, 0, zeroBird.Interval, "Zero Bird interval should be 0")
+	require.NotNil(t, zeroBird.Actions, "Zero Bird actions should not be nil")
+	assert.Empty(t, zeroBird.Actions, "Zero Bird actions should be empty")
 }

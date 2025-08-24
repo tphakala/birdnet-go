@@ -3,6 +3,8 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,7 +21,7 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 	
 	// Setup
 	e := echo.New()
-	_, _, controller := newAPIContext(t, e, "", "", nil)
+	controller := createTestController(t)
 
 	tests := []struct {
 		name           string
@@ -283,6 +285,7 @@ func TestPartialSpeciesConfigUpdate(t *testing.T) {
 	birdB := controller.Settings.Realtime.Species.Config["Bird B"]
 	assert.InDelta(t, 0.8, birdB.Threshold, 0.0001, "Bird B threshold should be unchanged")
 	assert.Equal(t, 60, birdB.Interval, "Bird B interval should be unchanged")
+	assert.NotNil(t, birdB.Actions, "Bird B actions should be empty slice, not nil")
 }
 
 // TestSpeciesSettingsPatchGetSync tests that PATCH -> GET works correctly
@@ -373,6 +376,48 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 	assert.InDelta(t, float64(0), intervalFloat, 0.0001, "GET should return updated zero interval")
 }
 
+// TestSpeciesSettingsRejectInvalid tests that invalid species config is rejected by the API
+func TestSpeciesSettingsRejectInvalid(t *testing.T) {
+	t.Parallel()
+	
+	// Setup
+	e := echo.New()
+	controller := createTestController(t)
+
+	// Test with invalid threshold (1.5 > 1.0 max allowed) and invalid interval (-1 < 0 min allowed)
+	invalidPayload := map[string]any{
+		"species": map[string]any{
+			"config": map[string]any{
+				"Invalid Bird": map[string]any{
+					"threshold": 1.5, // Invalid: threshold > 1.0
+					"interval":  -1,  // Invalid: interval < 0
+					"actions":   []any{},
+				},
+			},
+		},
+	}
+
+	rec := patchRealtime(t, e, controller, invalidPayload)
+	
+	// Should return client error status (400 Bad Request)
+	assert.Equal(t, http.StatusBadRequest, rec.Code, "Should reject invalid species config")
+
+	// Unmarshal response body to check validation error
+	var response map[string]any
+	err := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err, "Response should be valid JSON")
+	
+	// Assert the presence/shape of the validation error 
+	assert.Contains(t, response, "error", "Response should contain error field for validation failure")
+	
+	// Verify error message mentions validation failure
+	if errorField, exists := response["error"]; exists {
+		errorString, ok := errorField.(string)
+		require.True(t, ok, "Error field should be a string")
+		assert.Contains(t, errorString, "validation", "Error should mention validation failure")
+	}
+}
+
 // Test helper functions
 
 // newAPIContext creates an Echo instance, controller, and context for testing
@@ -454,4 +499,23 @@ func getRealtime(t *testing.T, e *echo.Echo, c *Controller) *httptest.ResponseRe
 
 	require.NoError(t, c.GetSectionSettings(ctx))
 	return rec
+}
+
+// createTestController creates a test controller with initialized settings for species tests
+func createTestController(t *testing.T) *Controller {
+	t.Helper()
+	
+	return &Controller{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				Species: conf.SpeciesSettings{
+					Include: []string{},
+					Exclude: []string{},
+					Config:  map[string]conf.SpeciesConfig{},
+				},
+			},
+		},
+		DisableSaveSettings: true,
+		logger: log.New(io.Discard, "", 0), // Add a discard logger for tests
+	}
 }
