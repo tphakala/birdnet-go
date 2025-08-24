@@ -17,6 +17,7 @@
 package processor
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"testing"
@@ -38,12 +39,20 @@ type SimpleAction struct {
 }
 
 func (a *SimpleAction) Execute(data any) error {
+	// Use ExecuteContext with background context for backward compatibility
+	return a.ExecuteContext(context.Background(), data)
+}
+
+// ExecuteContext implements the ContextAction interface for proper context propagation
+func (a *SimpleAction) ExecuteContext(ctx context.Context, data any) error {
 	a.executeMutex.Lock()
 	defer a.executeMutex.Unlock()
 	
-	// Simulate processing time
+	// Simulate processing time with context-aware sleep
 	if a.executeDelay > 0 {
-		time.Sleep(a.executeDelay)
+		if err := a.interruptibleSleep(ctx, a.executeDelay); err != nil {
+			return err
+		}
 	}
 	
 	a.executedAt = time.Now()
@@ -55,6 +64,21 @@ func (a *SimpleAction) Execute(data any) error {
 	}
 	
 	return nil
+}
+
+// interruptibleSleep performs a sleep that can be interrupted by context cancellation
+func (a *SimpleAction) interruptibleSleep(ctx context.Context, duration time.Duration) error {
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	
+	select {
+	case <-timer.C:
+		// Sleep completed normally
+		return nil
+	case <-ctx.Done():
+		// Context was cancelled/timed out
+		return ctx.Err()
+	}
 }
 
 func (a *SimpleAction) GetDescription() string {
