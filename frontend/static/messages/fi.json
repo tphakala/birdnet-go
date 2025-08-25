@@ -98,7 +98,8 @@
       "cancelEdit": "Peruuta muokkaus",
       "editSpecies": "Muokkaa lajia",
       "removeSpecies": "Poista laji",
-      "dismissError": "Hylkää virhe"
+      "dismissError": "Hylkää virhe",
+      "downloadCsv": "Lataa lajilista CSV-tiedostona"
     },
     "modal": {
       "confirmAction": "Vahvista toiminto",
@@ -680,6 +681,9 @@
             "loading": "Ladataan...",
             "viewSpecies": "Näytä lajit"
           },
+          "downloadTitle": "Lataa lajilista CSV-muodossa",
+          "csvDownloaded": "Lajilista ladattu onnistuneesti",
+          "csvDownloadFailed": "Lajilistan lataus epäonnistui. Yritä uudelleen.",
           "modal": {
             "title": "Aluesuodattimen lajit",
             "speciesCount": "Lajimäärä:",

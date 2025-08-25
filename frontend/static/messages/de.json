@@ -98,7 +98,8 @@
       "cancelEdit": "Bearbeitung abbrechen",
       "editSpecies": "Art bearbeiten",
       "removeSpecies": "Art entfernen",
-      "dismissError": "Fehler verwerfen"
+      "dismissError": "Fehler verwerfen",
+      "downloadCsv": "Artenliste als CSV herunterladen"
     },
     "modal": {
       "confirmAction": "Aktion bestätigen",
@@ -680,6 +681,9 @@
             "loading": "Wird geladen...",
             "viewSpecies": "Arten anzeigen"
           },
+          "downloadTitle": "Artenliste als CSV herunterladen",
+          "csvDownloaded": "Artenliste erfolgreich heruntergeladen",
+          "csvDownloadFailed": "Fehler beim Herunterladen der Artenliste. Bitte versuchen Sie es erneut.",
           "modal": {
             "title": "Reichweitenfilter-Arten",
             "speciesCount": "Artenanzahl:",

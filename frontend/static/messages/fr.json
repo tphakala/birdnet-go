@@ -97,7 +97,8 @@
       "cancelEdit": "Annuler les modifications",
       "editSpecies": "Modifier l'espèce",
       "removeSpecies": "Supprimer l'espèce",
-      "dismissError": "Ignorer l'erreur"
+      "dismissError": "Ignorer l'erreur",
+      "downloadCsv": "Télécharger la liste des espèces au format CSV"
     },
     "modal": {
       "confirmAction": "Confirmer l'action",
@@ -718,6 +719,9 @@
             "loading": "Chargement...",
             "viewSpecies": "Voir les espèces"
           },
+          "downloadTitle": "Télécharger la liste des espèces au format CSV",
+          "csvDownloaded": "Liste des espèces téléchargée avec succès",
+          "csvDownloadFailed": "Échec du téléchargement de la liste des espèces. Veuillez réessayer.",
           "modal": {
             "title": "Espèces du filtre de portée",
             "speciesCount": "Nombre d'espèces :",

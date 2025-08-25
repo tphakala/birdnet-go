@@ -40,9 +40,9 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
-  import { api, ApiError } from '$lib/utils/api';
+  import { api, ApiError, getCsrfToken } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
-  import { alertIconsSvg, navigationIcons } from '$lib/utils/icons';
+  import { alertIconsSvg, navigationIcons, mediaIcons } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import {
@@ -148,6 +148,7 @@
     speciesCount: number | null;
     loading: boolean;
     testing: boolean;
+    downloading: boolean;
     error: string | null;
     showModal: boolean;
     species: any[];
@@ -155,6 +156,7 @@
     speciesCount: null,
     loading: false,
     testing: false,
+    downloading: false,
     error: null,
     showModal: false,
     species: [],
@@ -255,11 +257,7 @@
   let mapInitialized = $state(false);
   let mapLibraryLoading = $state(false);
 
-  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
-  let csrfToken = $derived(
-    (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
-      ''
-  );
+  // Note: getCsrfToken is called dynamically to ensure fresh token retrieval
 
   // PERFORMANCE OPTIMIZATION: Load API data concurrently
   // Use $effect instead of onMount for Svelte 5 pattern
@@ -918,9 +916,7 @@
 
   async function loadRangeFilterCount() {
     try {
-      const response = await fetch('/api/v2/range/species/count', {
-        headers: { 'X-CSRF-Token': csrfToken },
-      });
+      const response = await fetch('/api/v2/range/species/count');
       if (!response.ok) throw new Error('Failed to load range filter count');
       const data = await response.json();
       rangeFilterState.speciesCount = data.count;
@@ -1055,6 +1051,81 @@
       sqlite: { ...settings.output.sqlite, enabled: type === 'sqlite' },
       mysql: { ...settings.output.mysql, enabled: type === 'mysql' },
     });
+  }
+
+  // Download range filter species list as CSV
+  async function downloadSpeciesCSV() {
+    // Prevent duplicate requests
+    if (rangeFilterState.downloading) return;
+
+    try {
+      rangeFilterState.downloading = true;
+
+      // Construct URL with current parameters
+      const params = new URLSearchParams({
+        latitude: settings.birdnet.latitude.toString(),
+        longitude: settings.birdnet.longitude.toString(),
+        threshold: settings.birdnet.rangeFilter.threshold.toString(),
+      });
+
+      const response = await fetch(`/api/v2/range/species/csv?${params}`, {
+        headers: {
+          'X-CSRF-Token': getCsrfToken() || '',
+          Accept: 'text/csv',
+        },
+      });
+
+      if (!response.ok) {
+        // Try to surface API error message if available
+        let msg = 'Failed to download CSV';
+        try {
+          const data = await response.clone().json();
+          if (data?.message) msg = data.message;
+        } catch {
+          // ignore parse errors; fall back to generic
+        }
+        throw new Error(msg);
+      }
+
+      // Get the filename from Content-Disposition header or use default
+      const cd =
+        response.headers.get('Content-Disposition') ||
+        response.headers.get('content-disposition') ||
+        '';
+      let filename = 'birdnet_species.csv';
+      // RFC 5987: filename*=utf-8''<urlencoded>
+      const fnStar = cd.match(/filename\*\s*=\s*([^']*)''([^;]+)/i);
+      if (fnStar && fnStar[2]) {
+        try {
+          filename = decodeURIComponent(fnStar[2]);
+        } catch {
+          /* keep default */
+        }
+      } else {
+        const fn = cd.match(/filename\s*=\s*"([^"]+)"/i) || cd.match(/filename\s*=\s*([^;]+)/i);
+        if (fn && fn[1]) filename = fn[1].trim();
+      }
+
+      // Get the CSV content
+      const blob = await response.blob();
+
+      // Create a download link and trigger it
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      toastActions.success(t('settings.main.sections.rangeFilter.csvDownloaded'));
+    } catch (error) {
+      logger.error('Failed to download species CSV:', error);
+      toastActions.error(t('settings.main.sections.rangeFilter.csvDownloadFailed'));
+    } finally {
+      rangeFilterState.downloading = false;
+    }
   }
 </script>
 
@@ -1395,6 +1466,19 @@
                   {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
                 {/if}
               </button>
+              <button
+                type="button"
+                class="btn btn-sm btn-primary"
+                disabled={!rangeFilterState.speciesCount ||
+                  rangeFilterState.loading ||
+                  rangeFilterState.downloading}
+                onclick={downloadSpeciesCSV}
+                title={t('settings.main.sections.rangeFilter.downloadTitle')}
+                aria-label={t('common.aria.downloadCsv')}
+              >
+                {@html mediaIcons.download}
+                <span class="ml-1">{t('analytics.filters.exportCsv')}</span>
+              </button>
             </div>
             <div class="label">
               <span class="label-text-alt"
@@ -1726,7 +1810,19 @@
         {/if}
       </div>
 
-      <div class="flex justify-end items-center mt-4 pt-4 border-t">
+      <div class="flex justify-between items-center mt-4 pt-4 border-t">
+        <button
+          type="button"
+          class="btn btn-sm btn-primary"
+          onclick={downloadSpeciesCSV}
+          disabled={rangeFilterState.loading ||
+            rangeFilterState.downloading ||
+            !rangeFilterState.speciesCount}
+          aria-label={t('common.aria.downloadCsv')}
+        >
+          {@html mediaIcons.download}
+          <span class="ml-1">{t('analytics.filters.exportCsv')}</span>
+        </button>
         <button
           type="button"
           class="btn btn-outline"

@@ -98,7 +98,8 @@
       "cancelEdit": "Cancelar edición",
       "editSpecies": "Editar especie",
       "removeSpecies": "Eliminar especie",
-      "dismissError": "Descartar error"
+      "dismissError": "Descartar error",
+      "downloadCsv": "Descargar lista de especies en CSV"
     },
     "modal": {
       "confirmAction": "Confirmar acción",
@@ -680,6 +681,9 @@
             "loading": "Cargando...",
             "viewSpecies": "Ver especies"
           },
+          "downloadTitle": "Descargar lista de especies como CSV",
+          "csvDownloaded": "Lista de especies descargada exitosamente",
+          "csvDownloadFailed": "Error al descargar la lista de especies. Por favor, inténtalo de nuevo.",
           "modal": {
             "title": "Especies del filtro de rango",
             "speciesCount": "Número de especies:",
