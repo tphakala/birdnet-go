@@ -370,23 +370,30 @@ func TestFullWorkflow_MemoryManagement(t *testing.T) {
 
 	// Add many species to test memory management
 	baseTime := time.Now()
-	for i := 0; i < 100; i++ {
-		species := fmt.Sprintf("Memory_Test_Species_%d", i)
-		detectionTime := baseTime.Add(time.Duration(-i*24) * time.Hour) // Spread over 100 days
+	// Add some very old species (that will be pruned)
+	for i := 0; i < 20; i++ {
+		species := fmt.Sprintf("Very_Old_Species_%d", i)
+		detectionTime := baseTime.AddDate(-11, 0, -i) // 11+ years ago
+		tracker.CheckAndUpdateSpecies(species, detectionTime)
+	}
+	// Add recent species (that won't be pruned)
+	for i := 0; i < 80; i++ {
+		species := fmt.Sprintf("Recent_Species_%d", i)
+		detectionTime := baseTime.Add(time.Duration(-i*24) * time.Hour) // Spread over 80 days
 		tracker.CheckAndUpdateSpecies(species, detectionTime)
 	}
 
 	// Check initial count
 	initialCount := tracker.GetSpeciesCount()
-	assert.Equal(t, 100, initialCount, "Should have 100 species")
+	assert.Equal(t, 100, initialCount, "Should have 100 species total")
 
-	// Test pruning old entries
+	// Test pruning old entries (only 11+ year old entries should be pruned)
 	prunedCount := tracker.PruneOldEntries()
-	assert.Positive(t, prunedCount, "Should prune some old entries")
+	assert.Equal(t, 20, prunedCount, "Should prune exactly 20 very old entries")
 
 	// Check count after pruning
 	finalCount := tracker.GetSpeciesCount()
-	assert.Less(t, finalCount, initialCount, "Count should decrease after pruning")
+	assert.Equal(t, 80, finalCount, "Should have 80 species remaining after pruning")
 
 	// Test cache management
 	for i := 0; i < 1000; i++ {

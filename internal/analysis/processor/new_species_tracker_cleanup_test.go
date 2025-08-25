@@ -38,45 +38,51 @@ func TestPruneOldEntries_CriticalReliability(t *testing.T) {
 		{
 			"prune_lifetime_old_entries",
 			func(tracker *NewSpeciesTracker, now time.Time) {
-				// Window is 14 days, prune at 2x = 28 days
-				tracker.speciesFirstSeen["Old_Species_1"] = now.AddDate(0, 0, -30)
-				tracker.speciesFirstSeen["Old_Species_2"] = now.AddDate(0, 0, -40)
-				tracker.speciesFirstSeen["Recent_Species"] = now.AddDate(0, 0, -20)
+				// Lifetime entries are pruned after 10 years, NOT 2x window
+				tracker.speciesFirstSeen["Very_Old_Species"] = now.AddDate(-11, 0, 0) // 11 years ago - should be pruned
+				tracker.speciesFirstSeen["Old_Species_1"] = now.AddDate(0, 0, -30)   // 30 days ago - should NOT be pruned
+				tracker.speciesFirstSeen["Old_Species_2"] = now.AddDate(0, 0, -40)   // 40 days ago - should NOT be pruned
+				tracker.speciesFirstSeen["Recent_Species"] = now.AddDate(0, 0, -20)  // 20 days ago - should NOT be pruned
 			},
 			time.Now(),
-			2,
-			"Entries older than 2x window (28 days) should be pruned",
+			1,
+			"Only entries older than 10 years should be pruned from lifetime tracking",
 		},
 		{
 			"prune_yearly_tracking",
 			func(tracker *NewSpeciesTracker, now time.Time) {
-				// Yearly window is 7 days, prune at 2x = 14 days
+				// Yearly tracking prunes entries from before the current tracking year
 				tracker.yearlyEnabled = true
 				tracker.yearlyWindowDays = 7
-				tracker.speciesThisYear["Old_Year_Species"] = now.AddDate(0, 0, -15)
-				tracker.speciesThisYear["Recent_Year_Species"] = now.AddDate(0, 0, -10)
+				tracker.resetMonth = 1 // January reset
+				tracker.resetDay = 1
+				// Add entry from last year (before Jan 1)
+				tracker.speciesThisYear["Last_Year_Species"] = now.AddDate(-1, 0, 0) // 1 year ago - should be pruned
+				tracker.speciesThisYear["This_Year_Species"] = now.AddDate(0, 0, -10) // 10 days ago - should NOT be pruned
 			},
 			time.Now(),
 			1,
-			"Yearly entries older than 2x window should be pruned",
+			"Only entries from before the current tracking year should be pruned",
 		},
 		{
 			"prune_seasonal_tracking",
 			func(tracker *NewSpeciesTracker, now time.Time) {
-				// Seasonal window is 7 days, prune at 2x = 14 days
+				// Seasonal tracking prunes entire seasons older than 1 year
 				tracker.seasonalEnabled = true
 				tracker.seasonalWindowDays = 7
-				tracker.speciesBySeason["spring"] = map[string]time.Time{
-					"Old_Spring_Species":    now.AddDate(0, 0, -20),
-					"Recent_Spring_Species": now.AddDate(0, 0, -5),
+				// Old season - all entries older than 1 year
+				tracker.speciesBySeason["old_spring"] = map[string]time.Time{
+					"Very_Old_Spring_1": now.AddDate(-2, 0, 0), // 2 years ago
+					"Very_Old_Spring_2": now.AddDate(-2, 0, 0), // 2 years ago
 				}
-				tracker.speciesBySeason["summer"] = map[string]time.Time{
-					"Old_Summer_Species": now.AddDate(0, 0, -30),
+				// Recent season - has recent entries
+				tracker.speciesBySeason["current_spring"] = map[string]time.Time{
+					"Recent_Spring_Species": now.AddDate(0, 0, -5), // 5 days ago
 				}
 			},
 			time.Now(),
 			2,
-			"Seasonal entries older than 2x window should be pruned",
+			"Entire seasons older than 1 year should be pruned",
 		},
 		{
 			"prune_notification_records",
@@ -95,48 +101,48 @@ func TestPruneOldEntries_CriticalReliability(t *testing.T) {
 			func(tracker *NewSpeciesTracker, now time.Time) {
 				tracker.seasonalEnabled = true
 				tracker.seasonalWindowDays = 7
-				// Create season with all old entries that will be pruned
-				tracker.speciesBySeason["winter"] = map[string]time.Time{
-					"Old_Winter_1": now.AddDate(0, 0, -30),
-					"Old_Winter_2": now.AddDate(0, 0, -40),
+				// Create season with all old entries (older than 1 year) that will be pruned
+				tracker.speciesBySeason["old_winter"] = map[string]time.Time{
+					"Very_Old_Winter_1": now.AddDate(-2, 0, 0), // 2 years ago
+					"Very_Old_Winter_2": now.AddDate(-2, 0, 0), // 2 years ago
 				}
-				tracker.speciesBySeason["spring"] = map[string]time.Time{
-					"Recent_Spring": now.AddDate(0, 0, -5),
+				tracker.speciesBySeason["recent_spring"] = map[string]time.Time{
+					"Recent_Spring": now.AddDate(0, 0, -5), // 5 days ago
 				}
 			},
 			time.Now(),
 			2,
-			"Empty season maps should be removed after pruning",
+			"Old season maps should be removed entirely after pruning",
 		},
 		{
 			"boundary_conditions",
 			func(tracker *NewSpeciesTracker, now time.Time) {
-				// Test exact boundary (2x window)
-				// PruneOldEntries uses Before() which means entries at exactly -28 days ARE pruned
-				tracker.speciesFirstSeen["Exactly_At_Boundary"] = now.AddDate(0, 0, -28) // Exactly 2x14 - will be pruned
-				tracker.speciesFirstSeen["Just_Before_Boundary"] = now.AddDate(0, 0, -27) // Not pruned
-				tracker.speciesFirstSeen["Just_After_Boundary"] = now.AddDate(0, 0, -29) // Will be pruned
+				// Test exact boundary (10 years for lifetime tracking)
+				// PruneOldEntries uses Before() which means entries at exactly 10 years ARE pruned
+				tracker.speciesFirstSeen["Exactly_At_Boundary"] = now.AddDate(-10, 0, 0) // Exactly 10 years - will be pruned
+				tracker.speciesFirstSeen["Just_Before_Boundary"] = now.AddDate(-10, 0, 1) // Just under 10 years - not pruned
+				tracker.speciesFirstSeen["Just_After_Boundary"] = now.AddDate(-10, 0, -1) // Just over 10 years - will be pruned
 			},
 			time.Now(),
-			2, // Both -28 and -29 should be pruned (Before() excludes the boundary)
-			"Boundary conditions should be handled correctly (Before() excludes boundary)",
+			2, // Both exactly 10 years and over should be pruned (Before() includes the boundary)
+			"Boundary conditions should be handled correctly (10 year cutoff)",
 		},
 		{
 			"massive_dataset_pruning",
 			func(tracker *NewSpeciesTracker, now time.Time) {
-				// Add 1000 old entries and 100 recent ones
+				// Add 1000 very old entries (> 10 years) and 100 recent ones
 				for i := 0; i < 1000; i++ {
-					speciesName := "Old_Species_" + string(rune(i))
-					tracker.speciesFirstSeen[speciesName] = now.AddDate(0, 0, -50-i)
+					speciesName := "Very_Old_Species_" + string(rune(i))
+					tracker.speciesFirstSeen[speciesName] = now.AddDate(-11, 0, -i) // 11+ years ago
 				}
 				for i := 0; i < 100; i++ {
 					speciesName := "Recent_Species_" + string(rune(i))
-					tracker.speciesFirstSeen[speciesName] = now.AddDate(0, 0, -10)
+					tracker.speciesFirstSeen[speciesName] = now.AddDate(0, 0, -10) // 10 days ago
 				}
 			},
 			time.Now(),
 			1000,
-			"Large datasets should be pruned efficiently",
+			"Large datasets should be pruned efficiently (10+ year old entries)",
 		},
 	}
 
@@ -194,10 +200,10 @@ func TestPruneOldEntries_CriticalReliability(t *testing.T) {
 
 			// Verify empty season maps are removed
 			if tt.name == "empty_season_map_removal" {
-				_, exists := tracker.speciesBySeason["winter"]
-				assert.False(t, exists, "Empty winter season map should be removed")
-				_, exists = tracker.speciesBySeason["spring"]
-				assert.True(t, exists, "Spring season map with entries should remain")
+				_, exists := tracker.speciesBySeason["old_winter"]
+				assert.False(t, exists, "Old winter season map should be removed")
+				_, exists = tracker.speciesBySeason["recent_spring"]
+				assert.True(t, exists, "Recent spring season map with entries should remain")
 			}
 
 			t.Logf("✓ Successfully pruned %d entries", pruned)

@@ -858,18 +858,22 @@ func TestPruneOldEntriesComprehensive(t *testing.T) {
 
 	// Add old and recent entries for all tracking types
 	tracker.mu.Lock()
-	// Lifetime
-	tracker.speciesFirstSeen["OldLifetime"] = now.Add(-30 * 24 * time.Hour)
-	tracker.speciesFirstSeen["RecentLifetime"] = now.Add(-10 * 24 * time.Hour)
+	// Lifetime - only entries older than 10 years are pruned
+	tracker.speciesFirstSeen["VeryOldLifetime"] = now.AddDate(-11, 0, 0) // 11 years ago - WILL be pruned
+	tracker.speciesFirstSeen["OldLifetime"] = now.Add(-30 * 24 * time.Hour) // 30 days ago - will NOT be pruned
+	tracker.speciesFirstSeen["RecentLifetime"] = now.Add(-10 * 24 * time.Hour) // 10 days ago - will NOT be pruned
 	
-	// Yearly
-	tracker.speciesThisYear["OldYearly"] = now.Add(-70 * 24 * time.Hour)
-	tracker.speciesThisYear["RecentYearly"] = now.Add(-20 * 24 * time.Hour)
+	// Yearly - only entries from before the current tracking year are pruned
+	tracker.speciesThisYear["LastYearEntry"] = now.AddDate(-1, 0, 0) // 1 year ago - WILL be pruned
+	tracker.speciesThisYear["OldYearly"] = now.Add(-70 * 24 * time.Hour) // 70 days ago - will NOT be pruned (still this year)
+	tracker.speciesThisYear["RecentYearly"] = now.Add(-20 * 24 * time.Hour) // 20 days ago - will NOT be pruned
 	
-	// Seasonal
-	tracker.speciesBySeason["spring"] = make(map[string]time.Time)
-	tracker.speciesBySeason["spring"]["OldSeasonal"] = now.Add(-50 * 24 * time.Hour)
-	tracker.speciesBySeason["spring"]["RecentSeasonal"] = now.Add(-15 * 24 * time.Hour)
+	// Seasonal - entire seasons older than 1 year are pruned
+	tracker.speciesBySeason["old_spring"] = make(map[string]time.Time)
+	tracker.speciesBySeason["old_spring"]["VeryOldSeasonal"] = now.AddDate(-2, 0, 0) // 2 years ago - WILL be pruned (entire season)
+	tracker.speciesBySeason["current_spring"] = make(map[string]time.Time)
+	tracker.speciesBySeason["current_spring"]["OldSeasonal"] = now.Add(-50 * 24 * time.Hour) // 50 days ago - will NOT be pruned
+	tracker.speciesBySeason["current_spring"]["RecentSeasonal"] = now.Add(-15 * 24 * time.Hour) // 15 days ago - will NOT be pruned
 	
 	// Notifications
 	tracker.notificationLastSent = make(map[string]time.Time)
@@ -883,25 +887,33 @@ func TestPruneOldEntriesComprehensive(t *testing.T) {
 
 	// Check what remains
 	tracker.mu.RLock()
+	_, hasVeryOldLifetime := tracker.speciesFirstSeen["VeryOldLifetime"]
 	_, hasOldLifetime := tracker.speciesFirstSeen["OldLifetime"]
 	_, hasRecentLifetime := tracker.speciesFirstSeen["RecentLifetime"]
+	_, hasLastYearEntry := tracker.speciesThisYear["LastYearEntry"]
 	_, hasOldYearly := tracker.speciesThisYear["OldYearly"]
 	_, hasRecentYearly := tracker.speciesThisYear["RecentYearly"]
-	_, hasOldSeasonal := tracker.speciesBySeason["spring"]["OldSeasonal"]
-	_, hasRecentSeasonal := tracker.speciesBySeason["spring"]["RecentSeasonal"]
+	_, hasOldSpring := tracker.speciesBySeason["old_spring"]
+	_, hasCurrentSpring := tracker.speciesBySeason["current_spring"]
+	_, hasOldSeasonal := tracker.speciesBySeason["current_spring"]["OldSeasonal"]
+	_, hasRecentSeasonal := tracker.speciesBySeason["current_spring"]["RecentSeasonal"]
 	_, hasOldNotification := tracker.notificationLastSent["OldNotification"]
 	_, hasRecentNotification := tracker.notificationLastSent["RecentNotification"]
 	tracker.mu.RUnlock()
 
-	// Old entries should be pruned
-	assert.False(t, hasOldLifetime, "Old lifetime should be pruned")
-	assert.False(t, hasOldYearly, "Old yearly should be pruned")
-	assert.False(t, hasOldSeasonal, "Old seasonal should be pruned")
+	// Very old entries should be pruned
+	assert.False(t, hasVeryOldLifetime, "11-year-old lifetime entry should be pruned")
+	assert.False(t, hasLastYearEntry, "Last year's yearly entry should be pruned")
+	assert.False(t, hasOldSpring, "Old spring season (2 years ago) should be pruned entirely")
 	assert.False(t, hasOldNotification, "Old notification should be pruned")
 	
-	// Recent entries should remain
+	// These should remain (not old enough to prune)
+	assert.True(t, hasOldLifetime, "30-day-old lifetime entry should remain")
 	assert.True(t, hasRecentLifetime, "Recent lifetime should remain")
+	assert.True(t, hasOldYearly, "70-day-old yearly entry (still this year) should remain")
 	assert.True(t, hasRecentYearly, "Recent yearly should remain")
+	assert.True(t, hasCurrentSpring, "Current spring season should remain")
+	assert.True(t, hasOldSeasonal, "50-day-old seasonal entry should remain")
 	assert.True(t, hasRecentSeasonal, "Recent seasonal should remain")
 	assert.True(t, hasRecentNotification, "Recent notification should remain")
 }

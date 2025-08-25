@@ -1373,10 +1373,16 @@ func (t *NewSpeciesTracker) PruneOldEntries() int {
 	now := time.Now()
 	pruned := 0
 
-	// Calculate separate cutoff times for each tracking period
-	lifetimeCutoff := now.AddDate(0, 0, -t.windowDays*2)
+	// CRITICAL: Lifetime tracking should NEVER be pruned based on the new species window!
+	// The "new species window" (e.g., 14 days) determines notification behavior,
+	// NOT data retention. Lifetime data should be kept indefinitely.
+	//
+	// We only prune lifetime entries older than 10 years to handle edge cases
+	// like test data or corrupted entries, but normal species data is kept forever.
+	const lifetimeRetentionYears = 10
+	lifetimeCutoff := now.AddDate(-lifetimeRetentionYears, 0, 0)
 
-	// Prune lifetime tracking map
+	// Prune lifetime tracking map (only very old entries)
 	for scientificName, firstSeen := range t.speciesFirstSeen {
 		if firstSeen.Before(lifetimeCutoff) {
 			delete(t.speciesFirstSeen, scientificName)
@@ -1385,29 +1391,51 @@ func (t *NewSpeciesTracker) PruneOldEntries() int {
 	}
 
 	// Prune yearly tracking map if enabled
+	// Only prune entries from previous years that are outside the tracking window
 	if t.yearlyEnabled {
-		yearlyCutoff := now.AddDate(0, 0, -t.yearlyWindowDays*2)
+		currentYearStart := time.Date(now.Year(), time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
+		if now.Before(currentYearStart) {
+			// If we haven't reached reset date this year, adjust to last year's reset
+			currentYearStart = currentYearStart.AddDate(-1, 0, 0)
+		}
+		
+		// Only prune entries from before the current tracking year
 		for scientificName, firstSeen := range t.speciesThisYear {
-			if firstSeen.Before(yearlyCutoff) {
+			if firstSeen.Before(currentYearStart) {
 				delete(t.speciesThisYear, scientificName)
 				pruned++
+				logger.Debug("Pruned old yearly entry",
+					"species", scientificName,
+					"first_seen", firstSeen.Format("2006-01-02"),
+					"year_start", currentYearStart.Format("2006-01-02"))
 			}
 		}
 	}
 
 	// Prune seasonal tracking maps if enabled
+	// Keep current season and previous 3 seasons (full year of data)
 	if t.seasonalEnabled {
-		seasonalCutoff := now.AddDate(0, 0, -t.seasonalWindowDays*2)
+		// Calculate cutoff: 1 year ago
+		seasonCutoff := now.AddDate(-1, 0, 0)
+		
 		for season, speciesMap := range t.speciesBySeason {
-			for scientificName, firstSeen := range speciesMap {
-				if firstSeen.Before(seasonalCutoff) {
-					delete(speciesMap, scientificName)
-					pruned++
+			// Check if this is an old season by looking at the oldest entry
+			isOldSeason := true
+			for _, firstSeen := range speciesMap {
+				if firstSeen.After(seasonCutoff) {
+					isOldSeason = false
+					break
 				}
 			}
-			// Remove empty seasonal maps to prevent memory leaks
-			if len(speciesMap) == 0 {
+			
+			// If all entries in this season are old, remove the entire season
+			if isOldSeason && len(speciesMap) > 0 {
+				prunedFromSeason := len(speciesMap)
 				delete(t.speciesBySeason, season)
+				pruned += prunedFromSeason
+				logger.Debug("Pruned old season data",
+					"season", season,
+					"entries_removed", prunedFromSeason)
 			}
 		}
 	}
