@@ -1207,14 +1207,15 @@ get_ip_location() {
                     local lon
                     lat=$(echo "$coordinates" | cut -d' ' -f1)
                     lon=$(echo "$coordinates" | cut -d' ' -f2)
-                    echo "$lat|$lon|$city|$country"
+                    # NordVPN doesn't provide timezone, so return empty timezone field
+                    echo "$lat|$lon|$city|$country|"
                     return 0
                 fi
             fi
         fi
     fi
 
-    # If NordVPN fails, try ipapi.co as a fallback
+    # If NordVPN fails, try ipapi.co as a fallback (includes timezone info)
     local ipapi_info
     if ipapi_info=$(curl -s "https://ipapi.co/json/" 2>/dev/null) && [ -n "$ipapi_info" ]; then
         # Check if the response is valid JSON and contains the required fields
@@ -1223,16 +1224,23 @@ get_ip_location() {
             local country
             local lat
             local lon
+            local timezone
             city=$(echo "$ipapi_info" | jq -r '.city')
             country=$(echo "$ipapi_info" | jq -r '.country_name')
             lat=$(echo "$ipapi_info" | jq -r '.latitude')
             lon=$(echo "$ipapi_info" | jq -r '.longitude')
+            timezone=$(echo "$ipapi_info" | jq -r '.timezone // empty')
             
             if [ "$city" != "null" ] && [ "$country" != "null" ] && \
                [ "$lat" != "null" ] && [ "$lon" != "null" ] && \
                [ -n "$city" ] && [ -n "$country" ] && \
                [ -n "$lat" ] && [ -n "$lon" ]; then
-                echo "$lat|$lon|$city|$country"
+                # Include timezone if available, otherwise empty
+                if [ -n "$timezone" ] && [ "$timezone" != "null" ]; then
+                    echo "$lat|$lon|$city|$country|$timezone"
+                else
+                    echo "$lat|$lon|$city|$country|"
+                fi
                 return 0
             fi
         fi
@@ -1274,21 +1282,43 @@ configure_timezone() {
         print_message "📍 System timezone detected: $system_tz" "$GREEN"
     fi
     
-    # Validate the detected timezone exists
-    if [ -f "/usr/share/zoneinfo/$system_tz" ]; then
-        detected_tz="$system_tz"
-        print_message "✅ Timezone '$system_tz' is valid" "$GREEN"
+    # Prefer location-based timezone detection over system timezone
+    if [ -n "$DETECTED_TZ" ] && [ "$DETECTED_TZ" != "null" ]; then
+        if [ -f "/usr/share/zoneinfo/$DETECTED_TZ" ]; then
+            detected_tz="$DETECTED_TZ"
+            print_message "🌍 Using timezone from location detection: $DETECTED_TZ" "$GREEN"
+        else
+            print_message "⚠️ Location-based timezone '$DETECTED_TZ' could not be validated, falling back to system timezone" "$YELLOW"
+            # Fall back to system timezone validation
+            if [ -f "/usr/share/zoneinfo/$system_tz" ]; then
+                detected_tz="$system_tz"
+                print_message "✅ System timezone '$system_tz' is valid" "$GREEN"
+            else
+                print_message "⚠️ System timezone '$system_tz' could not be validated" "$YELLOW"
+                detected_tz="UTC"
+            fi
+        fi
     else
-        print_message "⚠️ System timezone '$system_tz' could not be validated" "$YELLOW"
-        detected_tz="UTC"
+        # No location-based timezone, validate system timezone
+        if [ -f "/usr/share/zoneinfo/$system_tz" ]; then
+            detected_tz="$system_tz"
+            print_message "✅ System timezone '$system_tz' is valid" "$GREEN"
+        else
+            print_message "⚠️ System timezone '$system_tz' could not be validated" "$YELLOW"
+            detected_tz="UTC"
+        fi
     fi
     
     # Check for common timezone misconfigurations
     local system_time=$(date +"%Y-%m-%d %H:%M:%S %Z")
     print_message "🕐 Current system time: $system_time" "$YELLOW"
     
-    # Ask user to confirm timezone
-    print_message "\n❓ Do you want to use the detected timezone '$detected_tz'? (y/n): " "$YELLOW" "nonewline"
+    # Ask user to confirm timezone - provide context about where it came from
+    if [ -n "$DETECTED_TZ" ] && [ "$DETECTED_TZ" = "$detected_tz" ]; then
+        print_message "\n❓ Do you want to use the timezone detected from your location '$detected_tz'? (y/n): " "$YELLOW" "nonewline"
+    else
+        print_message "\n❓ Do you want to use the detected timezone '$detected_tz'? (y/n): " "$YELLOW" "nonewline"
+    fi
     read -r use_detected
     
     if [[ $use_detected != "y" ]]; then
@@ -1303,7 +1333,17 @@ configure_timezone() {
             print_message "\n❓ Enter your timezone (e.g., US/Eastern, Europe/London): " "$YELLOW" "nonewline"
             read -r user_tz
             
-            # Validate the timezone
+            # Convert lowercase input to proper case format
+            local normalized_tz="$user_tz"
+            if [[ "$user_tz" =~ ^[a-z]+/[a-z_]+ ]]; then
+                # Convert region/city format from lowercase to proper case
+                local region=$(echo "$user_tz" | cut -d'/' -f1 | sed 's/./\U&/')
+                local city=$(echo "$user_tz" | cut -d'/' -f2 | sed 's/_/ /g; s/\b\w/\U&/g; s/ /_/g')
+                normalized_tz="${region}/${city}"
+                print_message "📝 Converting '$user_tz' to proper format: '$normalized_tz'" "$YELLOW"
+            fi
+            
+            # Validate the timezone (try both original and normalized)
             if [ -f "/usr/share/zoneinfo/$user_tz" ]; then
                 detected_tz="$user_tz"
                 print_message "✅ Timezone '$user_tz' is valid" "$GREEN"
@@ -1320,8 +1360,27 @@ configure_timezone() {
                 else
                     print_message "Let's try again with a different timezone" "$YELLOW"
                 fi
+            elif [ -f "/usr/share/zoneinfo/$normalized_tz" ]; then
+                detected_tz="$normalized_tz"
+                print_message "✅ Timezone '$normalized_tz' is valid" "$GREEN"
+                
+                # Show what time it would be in that timezone
+                local tz_time=$(TZ="$normalized_tz" date +"%Y-%m-%d %H:%M:%S %Z")
+                print_message "🕐 Time in $normalized_tz: $tz_time" "$YELLOW"
+                
+                print_message "❓ Is this the correct time for your location? (y/n): " "$YELLOW" "nonewline"
+                read -r confirm_time
+                
+                if [[ $confirm_time == "y" ]]; then
+                    break
+                else
+                    print_message "Let's try again with a different timezone" "$YELLOW"
+                fi
             else
                 print_message "❌ Invalid timezone '$user_tz'" "$RED"
+                if [ "$user_tz" != "$normalized_tz" ]; then
+                    print_message "   Also tried: '$normalized_tz'" "$RED"
+                fi
                 print_message "💡 Tip: You can list all available timezones with: timedatectl list-timezones" "$YELLOW"
                 print_message "   Or check /usr/share/zoneinfo/ directory" "$YELLOW"
             fi
@@ -1354,20 +1413,34 @@ configure_location() {
         local ip_lon
         local ip_city
         local ip_country
+        local ip_timezone
         ip_lat=$(echo "$ip_location" | cut -d'|' -f1)
         ip_lon=$(echo "$ip_location" | cut -d'|' -f2)
         ip_city=$(echo "$ip_location" | cut -d'|' -f3)
         ip_country=$(echo "$ip_location" | cut -d'|' -f4)
+        ip_timezone=$(echo "$ip_location" | cut -d'|' -f5)
+        
+        # Display timezone info if available
+        local location_msg="$ip_city, $ip_country ($ip_lat, $ip_lon)"
+        if [ -n "$ip_timezone" ] && [ "$ip_timezone" != "null" ]; then
+            location_msg="$location_msg [Timezone: $ip_timezone]"
+        fi
         
         print_message "📍 Based on your IP address, your location appears to be: " "$YELLOW" "nonewline"
-        print_message "$ip_city, $ip_country ($ip_lat, $ip_lon)" "$NC"
+        print_message "$location_msg" "$NC"
         print_message "❓ Would you like to use this location? (y/n): " "$YELLOW" "nonewline"
         read -r use_ip_location
         
         if [[ $use_ip_location == "y" ]]; then
             lat=$ip_lat
             lon=$ip_lon
-            print_message "✅ Using IP-based location" "$GREEN"
+            # Store detected timezone globally for timezone configuration
+            if [ -n "$ip_timezone" ] && [ "$ip_timezone" != "null" ]; then
+                DETECTED_TZ="$ip_timezone"
+                print_message "✅ Using IP-based location and detected timezone: $ip_timezone" "$GREEN"
+            else
+                print_message "✅ Using IP-based location" "$GREEN"
+            fi
             # Update config file and return
             sed -i "s/latitude: 00.000/latitude: $lat/" "$CONFIG_FILE"
             sed -i "s/longitude: 00.000/longitude: $lon/" "$CONFIG_FILE"
@@ -1700,42 +1773,13 @@ validate_required_ports() {
 
 # Function to configure web interface port
 configure_web_port() {
-    # Default port
+    # Set default port
     WEB_PORT=8080
-    
-    print_message "\n🔌 Checking web interface port availability..." "$YELLOW"
-    
-    if ! check_port_availability $WEB_PORT; then
-        local process_info
-        process_info=$(get_port_process_info "$WEB_PORT")
-        print_message "❌ Port $WEB_PORT is already in use by: $process_info" "$RED"
-        
-        while true; do
-            print_message "Please enter a different port number (1024-65535): " "$YELLOW" "nonewline"
-            read -r custom_port
-            
-            # Validate port number
-            if [[ "$custom_port" =~ ^[0-9]+$ ]] && [ "$custom_port" -ge 1024 ] && [ "$custom_port" -le 65535 ]; then
-                if check_port_availability "$custom_port"; then
-                    WEB_PORT="$custom_port"
-                    print_message "✅ Port $WEB_PORT is available" "$GREEN"
-                    break
-                else
-                    process_info=$(get_port_process_info "$custom_port")
-                    print_message "❌ Port $custom_port is also in use by: $process_info. Please try another port." "$RED"
-                fi
-            else
-                print_message "❌ Invalid port number. Please enter a number between 1024 and 65535." "$RED"
-            fi
-        done
-    else
-        print_message "✅ Default port $WEB_PORT is available" "$GREEN"
-    fi
     
     # Update config file with port
     sed -i -E "s/^(\\s*port:\\s*)[0-9]+/\\1$WEB_PORT/" "$CONFIG_FILE"
     
-    # After configuring the web port, validate ALL required ports including 80 and 443
+    # Validate ALL required ports including 80, 443, 8080, and 8090
     if ! validate_required_ports; then
         print_message "\n❌ Installation cannot continue due to port conflicts" "$RED"
         print_message "Please resolve the port conflicts and run the installer again." "$YELLOW"
@@ -2791,14 +2835,14 @@ configure_audio_input
 # Configure audio format
 configure_audio_format
 
-# Configure timezone
+# Configure location (this will also detect timezone)
+configure_location
+
+# Configure timezone (now with smart detection from location)
 configure_timezone
 
 # Configure locale
 configure_locale
-
-# Configure location
-configure_location
 
 # Configure security
 configure_auth
