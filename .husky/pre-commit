@@ -18,7 +18,7 @@ if [ -n "$GO_FILES" ]; then
   
   # Run golangci-lint
   echo "   Linting Go files..."
-  if ! golangci-lint run --out-format=colored-line-number --print-issued-lines=false; then
+  if ! golangci-lint run -v; then
     echo "❌ golangci-lint found issues in Go files"
     echo "💡 Fix the issues above or run: git commit --no-verify to bypass"
     exit 1

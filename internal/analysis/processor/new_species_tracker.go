@@ -1683,4 +1683,3 @@ func (t *NewSpeciesTracker) Close() error {
 	}
 	return nil
 }
-// Test hook functionality
