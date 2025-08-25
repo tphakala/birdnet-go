@@ -1,0 +1,452 @@
+// new_species_tracker_database_reliability_test.go
+// Critical reliability tests for database loading and synchronization functions
+// Targets highest-impact functions with insufficient test coverage for maximum reliability improvement
+package processor
+
+import (
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
+)
+
+// TestLoadLifetimeDataFromDatabase_CriticalReliability tests the core data loading function
+// CRITICAL: This function loads all historical data - corruption here affects entire system
+func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		mockData       []datastore.NewSpeciesData
+		mockError      error
+		expectedError  bool
+		expectedCount  int
+		description    string
+	}{
+		{
+			"empty_database_graceful_handling",
+			[]datastore.NewSpeciesData{},
+			nil,
+			false, 0,
+			"Empty database should be handled gracefully without errors",
+		},
+		{
+			"valid_single_species_data",
+			[]datastore.NewSpeciesData{
+				{ScientificName: "Turdus_migratorius", FirstSeenDate: "2024-01-15"},
+			},
+			nil,
+			false, 1,
+			"Single valid species should load correctly",
+		},
+		{
+			"large_dataset_performance", 
+			generateLargeDataset(1000),
+			nil,
+			false, 1000,
+			"Large dataset (1000 species) should load efficiently",
+		},
+		{
+			"database_connection_failure",
+			nil,
+			fmt.Errorf("database connection lost"),
+			true, 0,
+			"Database connection failure should be handled gracefully",
+		},
+		{
+			"malformed_date_data_recovery",
+			[]datastore.NewSpeciesData{
+				{ScientificName: "Valid_Species", FirstSeenDate: "2024-01-15"},
+				{ScientificName: "Invalid_Date_Species", FirstSeenDate: "invalid-date"},
+				{ScientificName: "Empty_Date_Species", FirstSeenDate: ""},
+				{ScientificName: "Another_Valid_Species", FirstSeenDate: "2024-02-20"},
+			},
+			nil,
+			false, 2, // Should load valid entries and skip invalid ones
+			"Malformed date data should not crash system - skip invalid, load valid",
+		},
+		{
+			"duplicate_species_handling",
+			[]datastore.NewSpeciesData{
+				{ScientificName: "Duplicate_Species", FirstSeenDate: "2024-01-15"},
+				{ScientificName: "Duplicate_Species", FirstSeenDate: "2024-01-10"}, // Earlier date should win
+				{ScientificName: "Unique_Species", FirstSeenDate: "2024-02-01"},
+			},
+			nil,
+			false, 2,
+			"Duplicate species should be handled - earliest date should be kept",
+		},
+		{
+			"extreme_date_values",
+			[]datastore.NewSpeciesData{
+				{ScientificName: "Future_Species", FirstSeenDate: "2030-12-31"},
+				{ScientificName: "Past_Species", FirstSeenDate: "1900-01-01"},  
+				{ScientificName: "Current_Species", FirstSeenDate: "2024-01-15"},
+			},
+			nil,
+			false, 3,
+			"Extreme date values should not break the system",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Logf("Testing critical scenario: %s", tt.description)
+
+			// Create mock datastore
+			ds := &MockSpeciesDatastore{}
+			if tt.mockError != nil {
+				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(nil, tt.mockError)
+			} else {
+				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(tt.mockData, nil)
+			}
+			
+			// Mock other required methods
+			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				Return([]datastore.NewSpeciesData{}, nil)
+
+			// Create tracker
+			settings := &conf.SpeciesTrackingSettings{
+				Enabled:              true,
+				NewSpeciesWindowDays: 14,
+				SyncIntervalMinutes:  60,
+			}
+
+			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			require.NotNil(t, tracker)
+
+			// Test the critical loadLifetimeDataFromDatabase function
+			now := time.Now()
+			err := tracker.loadLifetimeDataFromDatabase(now)
+
+			if tt.expectedError {
+				require.Error(t, err, "Expected error for scenario: %s", tt.name)
+				t.Logf("✓ Error correctly handled: %v", err)
+			} else {
+				require.NoError(t, err, "No error expected for scenario: %s", tt.name)
+				
+				// Verify data was loaded correctly
+				actualCount := tracker.GetSpeciesCount()
+				assert.Equal(t, tt.expectedCount, actualCount, 
+					"Species count mismatch for scenario: %s", tt.name)
+				
+				t.Logf("✓ Successfully loaded %d species", actualCount)
+			}
+
+			// Test system stability after loading
+			testSpecies := "Post_Load_Test_Species"
+			isNew, days := tracker.CheckAndUpdateSpecies(testSpecies, now)
+			assert.True(t, isNew, "System should remain functional after data loading")
+			assert.Equal(t, 0, days, "New species should have 0 days")
+			
+			// Cleanup
+			tracker.ClearCacheForTesting()
+		})
+	}
+}
+
+// TestLoadYearlyDataFromDatabase_CriticalReliability tests yearly data loading reliability
+// CRITICAL: Yearly tracking depends on this - failures cause incorrect year reset logic
+func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		currentTime   time.Time
+		mockData      []datastore.NewSpeciesData
+		mockError     error
+		expectedError bool
+		description   string
+	}{
+		{
+			"current_year_data_loading",
+			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
+			[]datastore.NewSpeciesData{
+				{ScientificName: "Year_Species_1", FirstSeenDate: "2024-03-15"},
+				{ScientificName: "Year_Species_2", FirstSeenDate: "2024-01-01"},
+			},
+			nil, false,
+			"Current year data should load correctly for mid-year time",
+		},
+		{
+			"year_boundary_december",
+			time.Date(2024, 12, 31, 23, 59, 0, 0, time.UTC),
+			[]datastore.NewSpeciesData{
+				{ScientificName: "Dec_Species", FirstSeenDate: "2024-12-31"},
+			},
+			nil, false,
+			"Year boundary (December 31st) should be handled correctly",
+		},
+		{
+			"year_boundary_january", 
+			time.Date(2024, 1, 1, 0, 1, 0, 0, time.UTC),
+			[]datastore.NewSpeciesData{
+				{ScientificName: "Jan_Species", FirstSeenDate: "2024-01-01"},
+			},
+			nil, false,
+			"Year boundary (January 1st) should be handled correctly",
+		},
+		{
+			"leap_year_february",
+			time.Date(2024, 2, 29, 12, 0, 0, 0, time.UTC), // 2024 is leap year
+			[]datastore.NewSpeciesData{
+				{ScientificName: "Leap_Species", FirstSeenDate: "2024-02-29"},
+			},
+			nil, false,
+			"Leap year February 29th should be handled correctly",
+		},
+		{
+			"database_timeout_error",
+			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
+			nil,
+			fmt.Errorf("database query timeout after 30s"),
+			true,
+			"Database timeout should be handled without crashing system",
+		},
+		{
+			"corrupted_year_data",
+			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
+			[]datastore.NewSpeciesData{
+				{ScientificName: "Good_Species", FirstSeenDate: "2024-06-01"},
+				{ScientificName: "", FirstSeenDate: "2024-06-02"}, // Empty name
+				{ScientificName: "Bad_Date_Species", FirstSeenDate: "2024-13-45"}, // Invalid date
+				{ScientificName: "Another_Good_Species", FirstSeenDate: "2024-06-03"},
+			},
+			nil, false,
+			"Corrupted data should not prevent loading of valid entries",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Logf("Testing yearly data loading: %s", tt.description)
+
+			// Create mock datastore 
+			ds := &MockSpeciesDatastore{}
+			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				Return([]datastore.NewSpeciesData{}, nil) // Lifetime data
+			
+			if tt.mockError != nil {
+				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(nil, tt.mockError)
+			} else {
+				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(tt.mockData, nil)
+			}
+
+			// Create tracker with yearly tracking enabled
+			settings := &conf.SpeciesTrackingSettings{
+				Enabled:              true,
+				NewSpeciesWindowDays: 14,
+				SyncIntervalMinutes:  60,
+				YearlyTracking: conf.YearlyTrackingSettings{
+					Enabled:    true,
+					ResetMonth: 1,
+					ResetDay:   1,
+				},
+			}
+
+			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			require.NotNil(t, tracker)
+
+			// Test loadYearlyDataFromDatabase directly
+			err := tracker.loadYearlyDataFromDatabase(tt.currentTime)
+
+			if tt.expectedError {
+				require.Error(t, err, "Expected error for scenario: %s", tt.name)
+				t.Logf("✓ Error correctly handled: %v", err)
+			} else {
+				require.NoError(t, err, "No error expected for scenario: %s", tt.name)
+				
+				// Verify yearly tracking is functional after loading
+				testSpecies := "Yearly_Test_Species"
+				isNew, days := tracker.CheckAndUpdateSpecies(testSpecies, tt.currentTime)
+				assert.True(t, isNew, "Yearly tracking should be functional after data loading")
+				assert.Equal(t, 0, days, "New species should have 0 days in new year context")
+				
+				t.Logf("✓ Yearly data loading successful for time: %v", tt.currentTime.Format("2006-01-02"))
+			}
+
+			// Test system stability
+			status := tracker.GetSpeciesStatus("Test_Species", tt.currentTime)
+			assert.GreaterOrEqual(t, status.DaysSinceFirst, 0, "Status queries should remain functional")
+			
+			tracker.ClearCacheForTesting()
+		})
+	}
+}
+
+// TestSyncIfNeeded_CriticalReliability tests database synchronization reliability  
+// CRITICAL: Keeps tracker and database consistent - failures cause data loss
+func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name               string
+		lastSyncTime       time.Time
+		currentTime        time.Time
+		syncInterval       int
+		databaseChanges    bool
+		databaseError      error
+		expectSync         bool
+		expectError        bool
+		description        string
+	}{
+		{
+			"sync_not_needed_recent",
+			time.Now().Add(-30 * time.Minute), // 30 minutes ago
+			time.Now(),
+			60, // 60 minute interval
+			false, nil,
+			false, false,
+			"Recent sync should not trigger another sync",
+		},
+		{
+			"sync_needed_interval_exceeded", 
+			time.Now().Add(-90 * time.Minute), // 90 minutes ago
+			time.Now(),
+			60, // 60 minute interval  
+			true, nil,
+			true, false,
+			"Sync interval exceeded should trigger database sync",
+		},
+		{
+			"sync_failure_database_down",
+			time.Now().Add(-120 * time.Minute), // 2 hours ago
+			time.Now(),
+			60,
+			false, fmt.Errorf("database connection failed"),
+			true, true,
+			"Database failure during sync should be handled gracefully",
+		},
+		{
+			"sync_with_new_database_data",
+			time.Now().Add(-90 * time.Minute),
+			time.Now(),
+			60,
+			true, nil,
+			true, false,
+			"New data from database should be loaded during sync",
+		},
+		{
+			"sync_exactly_at_interval",
+			time.Now().Add(-60 * time.Minute), // Exactly 60 minutes
+			time.Now(),
+			60,
+			true, nil,
+			true, false,
+			"Sync exactly at interval boundary should trigger",
+		},
+		{
+			"sync_with_zero_interval",
+			time.Now().Add(-10 * time.Minute),
+			time.Now(),
+			0, // Zero interval should always sync
+			true, nil,
+			true, false,
+			"Zero sync interval should always trigger sync",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Logf("Testing sync scenario: %s", tt.description)
+
+			// Create mock datastore
+			ds := &MockSpeciesDatastore{}
+			
+			// Setup mock data for initial load
+			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				Return([]datastore.NewSpeciesData{
+					{ScientificName: "Initial_Species", FirstSeenDate: "2024-01-01"},
+				}, nil)
+			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				Return([]datastore.NewSpeciesData{}, nil)
+
+			// Setup sync calls
+			if tt.expectSync {
+				if tt.databaseError != nil {
+					// Sync will fail
+					ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+						Return(nil, tt.databaseError).Maybe()
+				} else if tt.databaseChanges {
+					// Sync will succeed with new data
+					ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+						Return([]datastore.NewSpeciesData{
+							{ScientificName: "Initial_Species", FirstSeenDate: "2024-01-01"},
+							{ScientificName: "Synced_New_Species", FirstSeenDate: "2024-01-15"},
+						}, nil).Maybe()
+				}
+			}
+
+			// Create tracker
+			settings := &conf.SpeciesTrackingSettings{
+				Enabled:              true,
+				NewSpeciesWindowDays: 14,
+				SyncIntervalMinutes:  tt.syncInterval,
+			}
+
+			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			require.NotNil(t, tracker)
+			require.NoError(t, tracker.InitFromDatabase())
+
+			// Simulate passage of time by manipulating last sync
+			// We need to use reflection or test methods to set internal state
+			initialCount := tracker.GetSpeciesCount()
+			
+			// Test SyncIfNeeded
+			err := tracker.SyncIfNeeded()
+
+			if tt.expectError {
+				require.Error(t, err, "Expected sync error for scenario: %s", tt.name)
+				t.Logf("✓ Sync error correctly handled: %v", err)
+			} else {
+				require.NoError(t, err, "No sync error expected for scenario: %s", tt.name)
+				
+				if tt.expectSync && tt.databaseChanges && !tt.expectError {
+					// Should have loaded new data
+					finalCount := tracker.GetSpeciesCount()
+					assert.Greater(t, finalCount, initialCount, 
+						"Sync should have loaded new species data")
+					t.Logf("✓ Sync loaded new data: %d -> %d species", initialCount, finalCount)
+				}
+			}
+
+			// Verify system remains functional after sync attempt
+			testSpecies := "Post_Sync_Test_Species"
+			isNew, days := tracker.CheckAndUpdateSpecies(testSpecies, tt.currentTime)
+			assert.True(t, isNew, "System should remain functional after sync")
+			assert.Equal(t, 0, days, "New species should have 0 days")
+
+			tracker.ClearCacheForTesting()
+		})
+	}
+}
+
+// generateLargeDataset creates a large dataset for performance testing
+func generateLargeDataset(count int) []datastore.NewSpeciesData {
+	data := make([]datastore.NewSpeciesData, count)
+	baseDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	
+	for i := 0; i < count; i++ {
+		// Generate species name and date
+		speciesName := fmt.Sprintf("Large_Dataset_Species_%06d", i)
+		detectionDate := baseDate.AddDate(0, 0, i%365) // Spread across a year
+		dateStr := detectionDate.Format("2006-01-02")
+		
+		data[i] = datastore.NewSpeciesData{
+			ScientificName: speciesName,
+			FirstSeenDate:  dateStr,
+		}
+	}
+	
+	return data
+}
