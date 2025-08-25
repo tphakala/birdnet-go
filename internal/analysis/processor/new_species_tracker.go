@@ -426,8 +426,14 @@ func (t *NewSpeciesTracker) shouldResetYear(currentTime time.Time) bool {
 		return true
 	}
 
-	// If we're in the same year as our tracked year, no reset needed
+	// If we're in the same year as our tracked year, check for custom reset date
 	if currentTime.Year() == t.currentYear {
+		// Simple check: only reset if current date is exactly the reset date and we have existing data
+		// This ensures we reset once when the date is reached, but don't keep resetting
+		if int(currentTime.Month()) == t.resetMonth && currentTime.Day() == t.resetDay {
+			// Only reset if we have existing yearly data (indicates we need a new cycle)
+			return len(t.speciesThisYear) > 0
+		}
 		return false
 	}
 
