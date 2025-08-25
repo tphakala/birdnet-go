@@ -36,7 +36,7 @@ func TestBuildSpeciesStatusLocked_CriticalReliability(t *testing.T) {
 			"new_species_all_periods",
 			"Brand_New_Species",
 			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
-			"Summer",
+			"summer",
 			[]datastore.NewSpeciesData{}, // Not in lifetime
 			[]datastore.NewSpeciesData{}, // Not in yearly
 			[]datastore.NewSpeciesData{}, // Not in seasonal
@@ -47,20 +47,20 @@ func TestBuildSpeciesStatusLocked_CriticalReliability(t *testing.T) {
 			"existing_lifetime_new_year_season",
 			"Existing_Lifetime_Species",
 			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
-			"Summer",
+			"summer",
 			[]datastore.NewSpeciesData{
 				{ScientificName: "Existing_Lifetime_Species", FirstSeenDate: "2023-03-10"},
 			},
 			[]datastore.NewSpeciesData{}, // New this year
 			[]datastore.NewSpeciesData{}, // New this season
-			true, 462, // Days since 2023-03-10 to 2024-06-15
+			false, 463, // Days since 2023-03-10 to 2024-06-15 (>14 days, so not new)
 			"Species with lifetime history but new to current year/season",
 		},
 		{
 			"existing_all_periods_old",
 			"Old_Known_Species", 
 			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
-			"Summer",
+			"summer",
 			[]datastore.NewSpeciesData{
 				{ScientificName: "Old_Known_Species", FirstSeenDate: "2023-03-10"},
 			},
@@ -70,14 +70,14 @@ func TestBuildSpeciesStatusLocked_CriticalReliability(t *testing.T) {
 			[]datastore.NewSpeciesData{
 				{ScientificName: "Old_Known_Species", FirstSeenDate: "2024-06-01"},
 			},
-			false, 462, // Days since first lifetime detection
+			false, 463, // Days since first lifetime detection
 			"Species known in all periods should not be marked as new",
 		},
 		{
 			"seasonal_transition_edge_case",
 			"Seasonal_Transition_Species",
 			time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC), // First day of summer
-			"Summer",
+			"summer",
 			[]datastore.NewSpeciesData{
 				{ScientificName: "Seasonal_Transition_Species", FirstSeenDate: "2024-03-15"},
 			},
@@ -85,14 +85,14 @@ func TestBuildSpeciesStatusLocked_CriticalReliability(t *testing.T) {
 				{ScientificName: "Seasonal_Transition_Species", FirstSeenDate: "2024-03-15"},
 			},
 			[]datastore.NewSpeciesData{}, // New to summer season
-			true, 78, // Days since spring detection
+			false, 78, // Days since spring detection (>14 days, so not new)
 			"Species transitioning between seasons should handle correctly",
 		},
 		{
 			"within_new_species_window",
 			"Recent_Species",
 			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
-			"Summer", 
+			"summer", 
 			[]datastore.NewSpeciesData{
 				{ScientificName: "Recent_Species", FirstSeenDate: "2024-06-10"}, // 5 days ago
 			},
@@ -109,7 +109,7 @@ func TestBuildSpeciesStatusLocked_CriticalReliability(t *testing.T) {
 			"outside_new_species_window",
 			"Older_Species",
 			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
-			"Summer",
+			"summer",
 			[]datastore.NewSpeciesData{
 				{ScientificName: "Older_Species", FirstSeenDate: "2024-05-01"}, // 45 days ago
 			},
@@ -126,7 +126,7 @@ func TestBuildSpeciesStatusLocked_CriticalReliability(t *testing.T) {
 			"year_boundary_calculation",
 			"Year_Boundary_Species",
 			time.Date(2024, 1, 5, 12, 0, 0, 0, time.UTC), // Early January
-			"Winter",
+			"winter",
 			[]datastore.NewSpeciesData{
 				{ScientificName: "Year_Boundary_Species", FirstSeenDate: "2023-12-28"}, // Previous year
 			},
@@ -139,7 +139,7 @@ func TestBuildSpeciesStatusLocked_CriticalReliability(t *testing.T) {
 			"leap_year_calculation",
 			"Leap_Year_Species",
 			time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC), // Day after leap day
-			"Spring",
+			"spring",
 			[]datastore.NewSpeciesData{
 				{ScientificName: "Leap_Year_Species", FirstSeenDate: "2024-02-29"}, // Leap day
 			},
@@ -233,79 +233,79 @@ func TestComputeCurrentSeason_CriticalReliability(t *testing.T) {
 		{
 			"spring_start_march_21",
 			time.Date(2024, 3, 21, 12, 0, 0, 0, time.UTC),
-			"Spring",
+			"spring",
 			"Spring equinox should be calculated as Spring",
 		},
 		{
 			"spring_end_june_20",
 			time.Date(2024, 6, 20, 12, 0, 0, 0, time.UTC),
-			"Spring", 
+			"spring", 
 			"Last day of spring should be Spring",
 		},
 		{
 			"summer_start_june_21", 
 			time.Date(2024, 6, 21, 12, 0, 0, 0, time.UTC),
-			"Summer",
+			"summer",
 			"Summer solstice should be calculated as Summer",
 		},
 		{
 			"summer_end_september_20",
 			time.Date(2024, 9, 20, 12, 0, 0, 0, time.UTC),
-			"Summer",
+			"summer",
 			"Last day of summer should be Summer", 
 		},
 		{
 			"autumn_start_september_21",
 			time.Date(2024, 9, 21, 12, 0, 0, 0, time.UTC),
-			"Autumn",
+			"fall",
 			"Autumn equinox should be calculated as Autumn",
 		},
 		{
 			"autumn_end_december_20",
 			time.Date(2024, 12, 20, 12, 0, 0, 0, time.UTC),
-			"Autumn",
+			"fall",
 			"Last day of autumn should be Autumn",
 		},
 		{
 			"winter_start_december_21",
 			time.Date(2024, 12, 21, 12, 0, 0, 0, time.UTC),
-			"Winter",
+			"winter",
 			"Winter solstice should be calculated as Winter",
 		},
 		{
 			"winter_january",
 			time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC),
-			"Winter",
+			"winter",
 			"Mid-January should be Winter",
 		},
 		{
 			"winter_february",
 			time.Date(2024, 2, 15, 12, 0, 0, 0, time.UTC),
-			"Winter",
+			"winter",
 			"Mid-February should be Winter",
 		},
 		{
 			"winter_end_march_20",
 			time.Date(2024, 3, 20, 12, 0, 0, 0, time.UTC),
-			"Winter",
+			"winter",
 			"Last day of winter should be Winter",
 		},
 		{
 			"leap_year_february_29",
 			time.Date(2024, 2, 29, 12, 0, 0, 0, time.UTC),
-			"Winter",
+			"winter",
 			"Leap year February 29 should be Winter",
 		},
 		{
 			"year_boundary_december_31",
 			time.Date(2024, 12, 31, 23, 59, 0, 0, time.UTC),
-			"Winter", 
+			"winter", 
 			"New Year's Eve should be Winter",
 		},
 		{
 			"year_boundary_january_1",
 			time.Date(2024, 1, 1, 0, 1, 0, 0, time.UTC),
-			"Winter",
+			"winter",
 			"New Year's Day should be Winter",
 		},
 	}
@@ -366,25 +366,25 @@ func TestDateRangeFunctions_CriticalReliability(t *testing.T) {
 		{
 			"mid_year_ranges",
 			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
-			"Summer",
+			"summer",
 			"Mid-year date ranges should be calculated correctly",
 		},
 		{
 			"year_start_ranges",
 			time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-			"Winter",
+			"winter",
 			"Year start should calculate ranges correctly",
 		},
 		{
 			"year_end_ranges",
 			time.Date(2024, 12, 31, 23, 59, 59, 0, time.UTC),
-			"Winter",
+			"winter",
 			"Year end should calculate ranges correctly",
 		},
 		{
 			"leap_year_ranges", 
 			time.Date(2024, 2, 29, 12, 0, 0, 0, time.UTC),
-			"Winter",
+			"winter",
 			"Leap year should handle date ranges correctly",
 		},
 	}

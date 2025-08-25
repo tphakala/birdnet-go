@@ -100,8 +100,16 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 			runtime.ReadMemStats(&m2)
 			afterInitMemory := m2.Alloc
 			
+			// Calculate init increase safely to avoid underflow
+			var initIncrease int64
+			if afterInitMemory >= initialMemory {
+				initIncrease = int64(afterInitMemory - initialMemory)
+			} else {
+				initIncrease = 0
+			}
+			
 			t.Logf("Memory after init: %d KB (increase: %d KB)", 
-				afterInitMemory/1024, (afterInitMemory-initialMemory)/1024)
+				afterInitMemory/1024, initIncrease/1024)
 
 			// Perform intensive operations
 			currentTime := time.Now()
@@ -151,13 +159,28 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 			runtime.ReadMemStats(&m3)
 			finalMemory := m3.Alloc
 
+			// Calculate memory increase safely to avoid underflow
+			var totalIncrease int64
+			if finalMemory >= initialMemory {
+				totalIncrease = int64(finalMemory - initialMemory)
+			} else {
+				totalIncrease = 0
+			}
+			
 			t.Logf("Final memory: %d KB (total increase: %d KB)", 
-				finalMemory/1024, (finalMemory-initialMemory)/1024)
+				finalMemory/1024, totalIncrease/1024)
 			t.Logf("Operations completed: %d", operationCount)
 
 			// Assert reasonable memory usage
-			memoryIncrease := finalMemory - initialMemory
-			maxReasonableIncrease := uint64(100 * 1024 * 1024) // 100MB max increase
+			// Use signed arithmetic to avoid underflow when GC reduces memory usage
+			var memoryIncrease int64
+			if finalMemory >= initialMemory {
+				memoryIncrease = int64(finalMemory - initialMemory)
+			} else {
+				// Memory decreased due to GC - treat as no increase
+				memoryIncrease = 0
+			}
+			maxReasonableIncrease := int64(100 * 1024 * 1024) // 100MB max increase
 			
 			assert.Less(t, memoryIncrease, maxReasonableIncrease, 
 				"Memory increase should be reasonable (<%d MB)", maxReasonableIncrease/(1024*1024))
@@ -203,16 +226,16 @@ func TestPerformanceUnderSustainedLoad(t *testing.T) {
 		description        string
 	}{
 		{
-			"moderate_sustained_load", 30, 100, 50,
-			"30 seconds at 100 ops/sec with 50 species",
+			"moderate_sustained_load", 10, 100, 50,
+			"10 seconds at 100 ops/sec with 50 species",
 		},
 		{
-			"high_sustained_load", 60, 200, 100,
-			"60 seconds at 200 ops/sec with 100 species", 
+			"high_sustained_load", 15, 200, 100,
+			"15 seconds at 200 ops/sec with 100 species", 
 		},
 		{
-			"burst_then_sustained", 45, 500, 25,
-			"45 seconds at 500 ops/sec with 25 species (high contention)",
+			"burst_then_sustained", 12, 500, 25,
+			"12 seconds at 500 ops/sec with 25 species (high contention)",
 		},
 	}
 

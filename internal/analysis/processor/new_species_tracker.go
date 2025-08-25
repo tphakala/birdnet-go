@@ -877,10 +877,16 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 	// Calculate lifetime status
 	if exists {
 		daysSince := int(currentTime.Sub(firstSeen).Hours() / hoursPerDay)
+		// Defensive check: prevent negative days due to concurrent operations or timing edge cases
+		if daysSince < 0 {
+			// Treat negative days as 0 (safest approach for concurrent scenarios)
+			daysSince = 0
+		}
 		status.DaysSinceFirst = daysSince
 		status.IsNew = daysSince <= t.windowDays
 	} else {
-		// Species not seen before
+		// Species not seen before - set FirstSeenTime to current time
+		status.FirstSeenTime = currentTime
 		status.IsNew = true
 		status.DaysSinceFirst = 0
 	}
@@ -889,6 +895,11 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 	if t.yearlyEnabled {
 		if firstThisYear != nil {
 			daysThisYear := int(currentTime.Sub(*firstThisYear).Hours() / hoursPerDay)
+			// Defensive check: prevent negative days due to concurrent operations or timing edge cases
+			if daysThisYear < 0 {
+				// Treat negative days as 0 (safest approach for concurrent scenarios)
+				daysThisYear = 0
+			}
 			status.DaysThisYear = daysThisYear
 			status.IsNewThisYear = daysThisYear <= t.yearlyWindowDays
 		} else {
@@ -902,6 +913,11 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 	if t.seasonalEnabled {
 		if firstThisSeason != nil {
 			daysThisSeason := int(currentTime.Sub(*firstThisSeason).Hours() / hoursPerDay)
+			// Defensive check: prevent negative days due to concurrent operations or timing edge cases
+			if daysThisSeason < 0 {
+				// Treat negative days as 0 (safest approach for concurrent scenarios)
+				daysThisSeason = 0
+			}
 			status.DaysThisSeason = daysThisSeason
 			status.IsNewThisSeason = daysThisSeason <= t.seasonalWindowDays
 		} else {
@@ -1065,6 +1081,11 @@ func (t *NewSpeciesTracker) buildSpeciesStatusLocked(scientificName string, curr
 	if t.yearlyEnabled {
 		if firstThisYear != nil {
 			daysThisYear := int(currentTime.Sub(*firstThisYear).Hours() / hoursPerDay)
+			// Defensive check: prevent negative days due to concurrent operations or timing edge cases
+			if daysThisYear < 0 {
+				// Treat negative days as 0 (safest approach for concurrent scenarios)
+				daysThisYear = 0
+			}
 			status.DaysThisYear = daysThisYear
 			status.IsNewThisYear = daysThisYear <= t.yearlyWindowDays
 		} else {
@@ -1078,6 +1099,11 @@ func (t *NewSpeciesTracker) buildSpeciesStatusLocked(scientificName string, curr
 	if t.seasonalEnabled {
 		if firstThisSeason != nil {
 			daysThisSeason := int(currentTime.Sub(*firstThisSeason).Hours() / hoursPerDay)
+			// Defensive check: prevent negative days due to concurrent operations or timing edge cases
+			if daysThisSeason < 0 {
+				// Treat negative days as 0 (safest approach for concurrent scenarios)
+				daysThisSeason = 0
+			}
 			status.DaysThisSeason = daysThisSeason
 			status.IsNewThisSeason = daysThisSeason <= t.seasonalWindowDays
 		} else {
