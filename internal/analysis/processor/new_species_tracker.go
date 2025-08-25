@@ -1685,4 +1685,3 @@ func (t *NewSpeciesTracker) Close() error {
 	}
 	return nil
 }
-// Test shell safety
