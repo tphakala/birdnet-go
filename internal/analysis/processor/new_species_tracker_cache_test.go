@@ -24,7 +24,9 @@ func TestCleanupExpiredCacheComprehensive(t *testing.T) {
 		// Call cleanup with no cache entries
 		// IMPORTANT: Use force=true to bypass recent cleanup check in tests
 		now := time.Now()
+		tracker.mu.Lock()
 		tracker.cleanupExpiredCacheWithForce(now, true)
+		tracker.mu.Unlock()
 		
 		// Should not panic and cache should remain empty
 		assert.NotNil(t, tracker.statusCache)
@@ -118,7 +120,9 @@ func TestCleanupExpiredCacheComprehensive(t *testing.T) {
 		
 		// Run cleanup with force=true to update lastCacheCleanup
 		now := time.Now()
+		tracker.mu.Lock()
 		tracker.cleanupExpiredCacheWithForce(now, true)
+		tracker.mu.Unlock()
 		
 		// lastCacheCleanup should be updated
 		assert.True(t, tracker.lastCacheCleanup.After(oldCleanupTime))

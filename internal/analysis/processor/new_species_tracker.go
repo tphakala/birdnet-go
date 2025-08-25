@@ -930,11 +930,17 @@ func (t *NewSpeciesTracker) cleanupExpiredCacheWithForce(currentTime time.Time, 
 		return // Skip cleanup entirely if done recently
 	}
 
-	// First pass: remove expired entries
+	// First pass: collect expired entries to avoid concurrent map iteration/write
+	expiredKeys := make([]string, 0)
 	for scientificName := range t.statusCache {
+		// Access by key to avoid copying the entire struct
 		if currentTime.Sub(t.statusCache[scientificName].timestamp) >= t.cacheTTL {
-			delete(t.statusCache, scientificName)
+			expiredKeys = append(expiredKeys, scientificName)
 		}
+	}
+	// Now delete the expired entries
+	for _, key := range expiredKeys {
+		delete(t.statusCache, key)
 	}
 
 	// Second pass: if still over limit, remove oldest entries (LRU)
