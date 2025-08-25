@@ -19,7 +19,7 @@ Source: BSD-3-Clause
 
 ### cloud.google.com/go/auth
 
-License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.16.4/auth/LICENSE
+License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.16.5/auth/LICENSE
 Source: Apache-2.0
 
 ### cloud.google.com/go/auth/oauth2adapt
@@ -229,7 +229,7 @@ Source: MIT
 
 ### github.com/markbates/goth
 
-License: https://github.com/markbates/goth/blob/v1.81.0/LICENSE.txt
+License: https://github.com/markbates/goth/blob/v1.82.0/LICENSE.txt
 Source: MIT
 
 ### github.com/mattn/go-colorable
@@ -359,7 +359,7 @@ Source: MIT
 
 ### github.com/stretchr/testify
 
-License: https://github.com/stretchr/testify/blob/v1.10.0/LICENSE
+License: https://github.com/stretchr/testify/blob/v1.11.0/LICENSE
 Source: MIT
 
 ### github.com/subosito/gotenv
@@ -437,9 +437,14 @@ Source: Apache-2.0
 License: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.36.0/trace/LICENSE
 Source: Apache-2.0
 
+### go.uber.org/goleak
+
+License: https://github.com/uber-go/goleak/blob/v1.3.0/LICENSE
+Source: MIT
+
 ### go.uber.org/mock/gomock
 
-License: https://github.com/uber/mock/blob/v0.5.2/LICENSE
+License: https://github.com/uber/mock/blob/v0.6.0/LICENSE
 Source: Apache-2.0
 
 ### golang.org/x/crypto
@@ -484,12 +489,12 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.247.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.248.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/a7a43d27e69b/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/3122310a409c/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
