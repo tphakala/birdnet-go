@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"go.uber.org/goleak"
 	"gorm.io/gorm"
 )
 
@@ -817,10 +818,10 @@ func TestInitializationFailure(t *testing.T) {
 // TestUserRequestsNotRateLimited tests that user requests are not subject to rate limiting
 func TestUserRequestsNotRateLimited(t *testing.T) {
 	t.Parallel()
-	// Create the actual Wikipedia provider to test rate limiting behavior
-	provider, err := imageprovider.NewWikiMediaProvider()
-	if err != nil {
-		t.Fatalf("Failed to create WikiMedia provider: %v", err)
+	
+	// Create a mock provider with minimal delay to test rate limiting behavior
+	mockProvider := &mockImageProvider{
+		fetchDelay: 1 * time.Millisecond, // Very fast mock responses
 	}
 
 	// Create a mock store
@@ -830,7 +831,12 @@ func TestUserRequestsNotRateLimited(t *testing.T) {
 		t.Fatalf("Failed to create metrics: %v", err)
 	}
 
-	cache := imageprovider.InitCache("wikimedia", provider, metrics, mockStore)
+	cache := imageprovider.InitCache("wikimedia", mockProvider, metrics, mockStore)
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	// Test species that should exist in Wikipedia
 	testSpecies := []string{
@@ -963,4 +969,15 @@ func (m *mockProviderWithContext) FetchWithContext(ctx context.Context, scientif
 		}
 	}
 	return m.Fetch(scientificName)
+}
+
+// TestMain provides goleak verification to detect goroutine leaks
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m,
+		goleak.IgnoreTopFunction("testing.(*T).Run"),
+		goleak.IgnoreTopFunction("runtime.gopark"),
+		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
+		// Ignore the cache refresh goroutine pattern - it should be properly cleaned up by Close()
+		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/imageprovider.(*BirdImageCache).startCacheRefresh.func1"),
+	)
 }
