@@ -95,8 +95,8 @@ func TestInternalStateMutationWithLocking(t *testing.T) {
 		// Verify species were added correctly
 		for _, species := range testSpecies {
 			status := tracker.GetSpeciesStatus(species, baseTime)
-			assert.False(t, status.IsNew, "Pre-existing species should not be new")
-			assert.Positive(t, status.DaysSinceFirst, "Pre-existing species should have positive days since first")
+			assert.True(t, status.IsNew, "Species added 1 day ago (within 14-day window) should still be new")
+			assert.Equal(t, 1, status.DaysSinceFirst, "Species added 1 day ago should have 1 day since first")
 		}
 
 		ds.AssertExpectations(t)
@@ -181,7 +181,7 @@ func TestCacheTTLValidation(t *testing.T) {
 		
 		// Get the same species again - should use cache if within TTL
 		status2 := tracker.GetSpeciesStatus(speciesName, baseTime)
-		assert.False(t, status2.IsNew, "Species should not be new on second access")
+		assert.True(t, status2.IsNew, "Species should still be new as it's within the 7-day window")
 		
 		// The exact TTL validation would require access to internal cache implementation
 		// For now, we test the behavior that would be affected by cache expiration

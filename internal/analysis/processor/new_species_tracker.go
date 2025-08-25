@@ -773,7 +773,12 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 	// Calculate lifetime status
 	if exists {
 		daysSince := int(currentTime.Sub(firstSeen).Hours() / hoursPerDay)
+		// Defensive clamp: ensure days are never negative
+		if daysSince < 0 {
+			daysSince = 0
+		}
 		status.DaysSinceFirst = daysSince
+		// Species is "new" if it was first seen within the window period
 		status.IsNew = daysSince <= t.windowDays
 	} else {
 		// Species not seen before
@@ -785,6 +790,10 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 	if t.yearlyEnabled {
 		if firstThisYear != nil {
 			daysThisYear := int(currentTime.Sub(*firstThisYear).Hours() / hoursPerDay)
+			// Defensive clamp: ensure days are never negative
+			if daysThisYear < 0 {
+				daysThisYear = 0
+			}
 			status.DaysThisYear = daysThisYear
 			status.IsNewThisYear = daysThisYear <= t.yearlyWindowDays
 		} else {
@@ -798,6 +807,10 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 	if t.seasonalEnabled {
 		if firstThisSeason != nil {
 			daysThisSeason := int(currentTime.Sub(*firstThisSeason).Hours() / hoursPerDay)
+			// Defensive clamp: ensure days are never negative
+			if daysThisSeason < 0 {
+				daysThisSeason = 0
+			}
 			status.DaysThisSeason = daysThisSeason
 			status.IsNewThisSeason = daysThisSeason <= t.seasonalWindowDays
 		} else {
@@ -929,7 +942,12 @@ func (t *NewSpeciesTracker) buildSpeciesStatusLocked(scientificName string, curr
 	// Calculate lifetime status
 	if exists {
 		daysSince := int(currentTime.Sub(firstSeen).Hours() / hoursPerDay)
+		// Defensive clamp: ensure days are never negative
+		if daysSince < 0 {
+			daysSince = 0
+		}
 		status.DaysSinceFirst = daysSince
+		// Species is "new" if it was first seen within the window period
 		status.IsNew = daysSince <= t.windowDays
 	} else {
 		// Species not seen before
@@ -941,6 +959,10 @@ func (t *NewSpeciesTracker) buildSpeciesStatusLocked(scientificName string, curr
 	if t.yearlyEnabled {
 		if firstThisYear != nil {
 			daysThisYear := int(currentTime.Sub(*firstThisYear).Hours() / hoursPerDay)
+			// Defensive clamp: ensure days are never negative
+			if daysThisYear < 0 {
+				daysThisYear = 0
+			}
 			status.DaysThisYear = daysThisYear
 			status.IsNewThisYear = daysThisYear <= t.yearlyWindowDays
 		} else {
@@ -954,6 +976,10 @@ func (t *NewSpeciesTracker) buildSpeciesStatusLocked(scientificName string, curr
 	if t.seasonalEnabled {
 		if firstThisSeason != nil {
 			daysThisSeason := int(currentTime.Sub(*firstThisSeason).Hours() / hoursPerDay)
+			// Defensive clamp: ensure days are never negative
+			if daysThisSeason < 0 {
+				daysThisSeason = 0
+			}
 			status.DaysThisSeason = daysThisSeason
 			status.IsNewThisSeason = daysThisSeason <= t.seasonalWindowDays
 		} else {
@@ -1058,6 +1084,11 @@ func (t *NewSpeciesTracker) IsNewSpecies(scientificName string) bool {
 	}
 
 	daysSince := int(time.Since(firstSeen).Hours() / hoursPerDay)
+	// Defensive clamp: ensure days are never negative
+	if daysSince < 0 {
+		daysSince = 0
+	}
+	// Species is "new" if it was first seen within the window period
 	return daysSince <= t.windowDays
 }
 
@@ -1101,8 +1132,12 @@ func (t *NewSpeciesTracker) GetSpeciesCount() int {
 	return len(t.speciesFirstSeen)
 }
 
-// PruneOldEntries removes species entries older than 2x their respective window periods
-// This prevents unbounded memory growth over time using period-specific cutoff times
+// PruneOldEntries removes obsolete tracking entries to prevent unbounded memory growth.
+// This function implements intelligent retention policies for different tracking periods:
+// - Lifetime tracking: Never pruned (permanent record)
+// - Yearly tracking: Pruned after year ends + window period
+// - Seasonal tracking: Pruned for seasons older than 1 year
+// - Notification records: Pruned after 2x suppression window
 func (t *NewSpeciesTracker) PruneOldEntries() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -1110,49 +1145,89 @@ func (t *NewSpeciesTracker) PruneOldEntries() int {
 	now := time.Now()
 	pruned := 0
 
-	// Calculate separate cutoff times for each tracking period
-	lifetimeCutoff := now.AddDate(0, 0, -t.windowDays*2)
+	// CRITICAL: Lifetime tracking should NEVER be pruned based on the new species window!
+	// The "new species window" (e.g., 14 days) determines notification behavior,
+	// NOT data retention. Lifetime data should be kept indefinitely.
+	//
+	// We only prune lifetime entries older than 10 years to handle edge cases
+	// like test data or corrupted entries, but normal species data is kept forever.
+	const lifetimeRetentionYears = 10
+	lifetimeCutoff := now.AddDate(-lifetimeRetentionYears, 0, 0)
 
-	// Prune lifetime tracking map
+	// Prune lifetime tracking map (only very old entries)
 	for scientificName, firstSeen := range t.speciesFirstSeen {
 		if firstSeen.Before(lifetimeCutoff) {
 			delete(t.speciesFirstSeen, scientificName)
 			pruned++
+			logger.Debug("Pruned very old lifetime entry",
+				"species", scientificName,
+				"first_seen", firstSeen.Format("2006-01-02"),
+				"cutoff", lifetimeCutoff.Format("2006-01-02"))
 		}
 	}
 
 	// Prune yearly tracking map if enabled
+	// Only prune entries from previous years that are outside the tracking window
 	if t.yearlyEnabled {
-		yearlyCutoff := now.AddDate(0, 0, -t.yearlyWindowDays*2)
+		currentYearStart := time.Date(now.Year(), time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
+		if now.Before(currentYearStart) {
+			// If we haven't reached reset date this year, adjust to last year's reset
+			currentYearStart = currentYearStart.AddDate(-1, 0, 0)
+		}
+		
+		// Only prune entries from before the current tracking year
 		for scientificName, firstSeen := range t.speciesThisYear {
-			if firstSeen.Before(yearlyCutoff) {
+			if firstSeen.Before(currentYearStart) {
 				delete(t.speciesThisYear, scientificName)
 				pruned++
+				logger.Debug("Pruned old yearly entry",
+					"species", scientificName,
+					"first_seen", firstSeen.Format("2006-01-02"),
+					"year_start", currentYearStart.Format("2006-01-02"))
 			}
 		}
 	}
 
 	// Prune seasonal tracking maps if enabled
+	// Keep current season and previous 3 seasons (full year of data)
 	if t.seasonalEnabled {
-		seasonalCutoff := now.AddDate(0, 0, -t.seasonalWindowDays*2)
+		// Calculate cutoff: 1 year ago
+		seasonCutoff := now.AddDate(-1, 0, 0)
+		
 		for season, speciesMap := range t.speciesBySeason {
-			for scientificName, firstSeen := range speciesMap {
-				if firstSeen.Before(seasonalCutoff) {
-					delete(speciesMap, scientificName)
-					pruned++
+			// Check if this is an old season by looking at the oldest entry
+			isOldSeason := true
+			for _, firstSeen := range speciesMap {
+				if firstSeen.After(seasonCutoff) {
+					isOldSeason = false
+					break
 				}
 			}
-			// Remove empty seasonal maps to prevent memory leaks
-			if len(speciesMap) == 0 {
+			
+			// If all entries in this season are old, remove the entire season
+			if isOldSeason && len(speciesMap) > 0 {
+				prunedFromSeason := len(speciesMap)
 				delete(t.speciesBySeason, season)
+				pruned += prunedFromSeason
+				logger.Debug("Pruned old season data",
+					"season", season,
+					"entries_removed", prunedFromSeason)
 			}
 		}
 	}
 
-	// Also cleanup old notification records (only if suppression is enabled)
+	// Cleanup old notification records (only if suppression is enabled)
+	// This uses the appropriate retention period for notifications
 	if t.notificationSuppressionWindow > 0 {
 		cleaned := t.cleanupOldNotificationRecordsLocked(now)
 		pruned += cleaned
+	}
+
+	if pruned > 0 {
+		logger.Info("Pruned tracking entries",
+			"total_pruned", pruned,
+			"lifetime_remaining", len(t.speciesFirstSeen),
+			"yearly_remaining", len(t.speciesThisYear))
 	}
 
 	return pruned
@@ -1201,7 +1276,12 @@ func (t *NewSpeciesTracker) CheckAndUpdateSpecies(scientificName string, detecti
 	} else {
 		// Calculate days since first seen
 		daysSince := int(detectionTime.Sub(firstSeen).Hours() / hoursPerDay)
+		// Defensive clamp: ensure days are never negative
+		if daysSince < 0 {
+			daysSince = 0
+		}
 		daysSinceFirstSeen = daysSince
+		// Species is "new" if it was first seen within the window period
 		isNew = daysSince <= t.windowDays
 
 		// Update if this detection is earlier than recorded

@@ -25,8 +25,7 @@ func TestSpeciesTrackerIntegration(t *testing.T) {
 				{ScientificName: "Turdus migratorius", CommonName: "Robin", FirstSeenDate: "2024-01-15"},
 				{ScientificName: "Cardinalis cardinalis", CommonName: "Cardinal", FirstSeenDate: "2024-02-10"}, //nolint:misspell // Cardinalis is correct scientific genus name
 			}, nil)
-		ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-			Return([]datastore.NewSpeciesData{}, nil)
+		// Note: GetSpeciesFirstDetectionInPeriod should not be called since yearly/seasonal tracking is disabled
 
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled:              true,
@@ -248,7 +247,7 @@ func TestSpeciesTrackerIntegration(t *testing.T) {
 		ds := &MockSpeciesDatastore{}
 		ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 			Return([]datastore.NewSpeciesData{
-				{ScientificName: "Cached_Species", CommonName: "Cached Bird", FirstSeenDate: "2024-01-01"},
+				{ScientificName: "Cached_Species", CommonName: "Cached Bird", FirstSeenDate: time.Now().AddDate(0, 0, -5).Format("2006-01-02")}, // 5 days ago, within 14-day window
 			}, nil)
 		ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 			Return([]datastore.NewSpeciesData{}, nil).Maybe()
@@ -279,7 +278,7 @@ func TestSpeciesTrackerIntegration(t *testing.T) {
 		
 		// Next call should rebuild cache
 		status := tracker.GetSpeciesStatus("Cached_Species", currentTime)
-		assert.False(t, status.IsNew, "Cached species loaded from DB should not be new")
+		assert.True(t, status.IsNew, "Cached species seen 5 days ago (within 14-day window) should still be new")
 
 		// Test pruning behavior
 		pruned := tracker.PruneOldEntries()
@@ -299,8 +298,9 @@ func TestSpeciesTrackerIntegration(t *testing.T) {
 			Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 		settings := &conf.SpeciesTrackingSettings{
-			Enabled:              true,
-			NewSpeciesWindowDays: 14,
+			Enabled:                     true,
+			NewSpeciesWindowDays:        14,
+			NotificationSuppressionHours: 168, // 7 days suppression window
 		}
 
 		tracker := NewSpeciesTrackerFromSettings(ds, settings)

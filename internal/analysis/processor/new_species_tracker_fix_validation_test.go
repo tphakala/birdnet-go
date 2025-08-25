@@ -26,8 +26,7 @@ func TestSpeciesTrackerValidation(t *testing.T) {
 		ds := &MockSpeciesDatastore{}
 		ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 			Return([]datastore.NewSpeciesData{}, nil)
-		ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-			Return([]datastore.NewSpeciesData{}, nil)
+		// Note: GetSpeciesFirstDetectionInPeriod should not be called since yearly/seasonal tracking is disabled
 
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled:              true,
@@ -98,8 +97,7 @@ func TestSpeciesTrackerValidation(t *testing.T) {
 		ds := &MockSpeciesDatastore{}
 		ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 			Return([]datastore.NewSpeciesData{}, nil)
-		ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-			Return([]datastore.NewSpeciesData{}, nil)
+		// Note: GetSpeciesFirstDetectionInPeriod should not be called since yearly/seasonal tracking is disabled
 
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled:              true,
@@ -215,6 +213,7 @@ func TestPrecisionEdgeCases(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
+	// This test enables yearly and seasonal tracking, so GetSpeciesFirstDetectionInPeriod will be called
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
 
@@ -284,7 +283,7 @@ func TestPrecisionEdgeCases(t *testing.T) {
 			if tc.offset < 24*time.Hour {
 				assert.LessOrEqual(t, days2, 1, 
 					"Small time offset should produce 0 or 1 days")
-				// For sub-day offsets when species was just added, expect isNew2 to be true and 0 days
+				// For sub-day offsets when species was just added, it should still be considered new
 				if tc.offset < time.Hour && !secondTime.Before(firstTime) {
 					assert.True(t, isNew2, "Sub-hour offset should still be considered new")
 					assert.Equal(t, 0, days2, "Sub-hour offset should have 0 days")
@@ -305,8 +304,7 @@ func TestBoundaryConditions(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
-	ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-		Return([]datastore.NewSpeciesData{}, nil)
+	// Note: GetSpeciesFirstDetectionInPeriod should not be called since yearly/seasonal tracking is disabled
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -335,20 +333,20 @@ func TestBoundaryConditions(t *testing.T) {
 		{
 			name:        "within_window",
 			timeOffset:  3 * 24 * time.Hour, // 3 days later
-			expectNew:   false,
-			description: "Detection within window should not be new",
+			expectNew:   true,
+			description: "Detection within window should still be new",
 		},
 		{
 			name:        "at_boundary",
 			timeOffset:  7 * 24 * time.Hour, // Exactly 7 days later
-			expectNew:   false,
-			description: "Detection at window boundary should not be new",
+			expectNew:   true,
+			description: "Detection at window boundary should still be new",
 		},
 		{
 			name:        "outside_window",
 			timeOffset:  8 * 24 * time.Hour, // 8 days later (outside 7-day window)
-			expectNew:   true,
-			description: "Detection outside window should be new",
+			expectNew:   false,
+			description: "Detection outside window should not be new",
 		},
 	}
 
