@@ -40,7 +40,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
-  import { api, ApiError } from '$lib/utils/api';
+  import { api, ApiError, getCsrfToken } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
   import { alertIconsSvg, navigationIcons, mediaIcons } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
@@ -255,11 +255,7 @@
   let mapInitialized = $state(false);
   let mapLibraryLoading = $state(false);
 
-  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
-  let csrfToken = $derived(
-    (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
-      ''
-  );
+  // Note: getCsrfToken is called dynamically to ensure fresh token retrieval
 
   // PERFORMANCE OPTIMIZATION: Load API data concurrently
   // Use $effect instead of onMount for Svelte 5 pattern
@@ -919,7 +915,7 @@
   async function loadRangeFilterCount() {
     try {
       const response = await fetch('/api/v2/range/species/count', {
-        headers: { 'X-CSRF-Token': csrfToken },
+        headers: { 'X-CSRF-Token': getCsrfToken() || '' },
       });
       if (!response.ok) throw new Error('Failed to load range filter count');
       const data = await response.json();
@@ -1068,21 +1064,41 @@
       });
 
       const response = await fetch(`/api/v2/range/species/csv?${params}`, {
-        headers: { 'X-CSRF-Token': csrfToken },
+        headers: {
+          'X-CSRF-Token': getCsrfToken() || '',
+          Accept: 'text/csv',
+        },
       });
 
       if (!response.ok) {
-        throw new Error('Failed to download CSV');
+        // Try to surface API error message if available
+        let msg = 'Failed to download CSV';
+        try {
+          const data = await response.clone().json();
+          if (data?.message) msg = data.message;
+        } catch {
+          // ignore parse errors; fall back to generic
+        }
+        throw new Error(msg);
       }
 
       // Get the filename from Content-Disposition header or use default
-      const contentDisposition = response.headers.get('Content-Disposition');
+      const cd =
+        response.headers.get('Content-Disposition') ||
+        response.headers.get('content-disposition') ||
+        '';
       let filename = 'birdnet_species.csv';
-      if (contentDisposition) {
-        const matches = /filename="([^"]*)"/.exec(contentDisposition);
-        if (matches && matches[1]) {
-          filename = matches[1];
+      // RFC 5987: filename*=utf-8''<urlencoded>
+      const fnStar = cd.match(/filename\*\s*=\s*([^']*)''([^;]+)/i);
+      if (fnStar && fnStar[2]) {
+        try {
+          filename = decodeURIComponent(fnStar[2]);
+        } catch {
+          /* keep default */
         }
+      } else {
+        const fn = cd.match(/filename\s*=\s*"([^"]+)"/i) || cd.match(/filename\s*=\s*([^;]+)/i);
+        if (fn && fn[1]) filename = fn[1].trim();
       }
 
       // Get the CSV content
@@ -1098,10 +1114,10 @@
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
 
-      toastActions.success('Species list downloaded successfully');
+      toastActions.success(t('settings.main.sections.rangeFilter.csvDownloaded'));
     } catch (error) {
       logger.error('Failed to download species CSV:', error);
-      toastActions.error('Failed to download species list. Please try again.');
+      toastActions.error(t('settings.main.sections.rangeFilter.csvDownloadFailed'));
     }
   }
 </script>
@@ -1448,10 +1464,11 @@
                 class="btn btn-sm btn-primary"
                 disabled={!rangeFilterState.speciesCount || rangeFilterState.loading}
                 onclick={downloadSpeciesCSV}
-                title="Download species list as CSV"
+                title={t('settings.main.sections.rangeFilter.downloadTitle')}
+                aria-label={t('settings.main.sections.rangeFilter.downloadTitle')}
               >
                 {@html mediaIcons.download}
-                <span class="ml-1">Download</span>
+                <span class="ml-1">{t('settings.main.sections.rangeFilter.download')}</span>
               </button>
             </div>
             <div class="label">
@@ -1789,10 +1806,10 @@
           type="button"
           class="btn btn-sm btn-primary"
           onclick={downloadSpeciesCSV}
-          disabled={rangeFilterState.loading}
+          disabled={rangeFilterState.loading || !rangeFilterState.speciesCount}
         >
           {@html mediaIcons.download}
-          <span class="ml-1">Download CSV</span>
+          <span class="ml-1">{t('settings.main.sections.rangeFilter.downloadCSV')}</span>
         </button>
         <button
           type="button"

@@ -680,6 +680,11 @@
             "loading": "Wird geladen...",
             "viewSpecies": "Arten anzeigen"
           },
+          "download": "Herunterladen",
+          "downloadTitle": "Artenliste als CSV herunterladen",
+          "downloadCSV": "CSV herunterladen",
+          "csvDownloaded": "Artenliste erfolgreich heruntergeladen",
+          "csvDownloadFailed": "Fehler beim Herunterladen der Artenliste. Bitte versuchen Sie es erneut.",
           "modal": {
             "title": "Reichweitenfilter-Arten",
             "speciesCount": "Artenanzahl:",

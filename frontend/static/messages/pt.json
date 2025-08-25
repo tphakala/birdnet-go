@@ -680,6 +680,11 @@
             "loading": "Carregando...",
             "viewSpecies": "Ver espécies"
           },
+          "download": "Download",
+          "downloadTitle": "Baixar lista de espécies como CSV",
+          "downloadCSV": "Baixar CSV",
+          "csvDownloaded": "Lista de espécies baixada com sucesso",
+          "csvDownloadFailed": "Falha ao baixar a lista de espécies. Tente novamente.",
           "modal": {
             "title": "Espécies do filtro de alcance",
             "speciesCount": "Contagem de espécies:",

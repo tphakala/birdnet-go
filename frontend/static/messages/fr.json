@@ -718,6 +718,11 @@
             "loading": "Chargement...",
             "viewSpecies": "Voir les espèces"
           },
+          "download": "Télécharger",
+          "downloadTitle": "Télécharger la liste des espèces au format CSV",
+          "downloadCSV": "Télécharger CSV",
+          "csvDownloaded": "Liste des espèces téléchargée avec succès",
+          "csvDownloadFailed": "Échec du téléchargement de la liste des espèces. Veuillez réessayer.",
           "modal": {
             "title": "Espèces du filtre de portée",
             "speciesCount": "Nombre d'espèces :",

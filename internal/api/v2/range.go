@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -383,14 +384,13 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 	}
 	
 	// Generate CSV content
-	csvContent, csvErr := c.generateSpeciesCSV(speciesList, location, threshold)
+	csvBytes, csvErr := c.generateSpeciesCSV(speciesList, location, threshold)
 	if csvErr != nil {
 		return c.HandleError(ctx, csvErr, "Failed to generate CSV", http.StatusInternalServerError)
 	}
 	
 	// Set headers for file download
 	filename := "birdnet_range_filter_species_" + time.Now().Format("20060102_150405") + ".csv"
-	ctx.Response().Header().Set("Content-Type", "text/csv; charset=utf-8")
 	ctx.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
 	
 	// Add cache control headers to prevent browser caching
@@ -399,7 +399,7 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 	ctx.Response().Header().Set("Expires", "0")
 	
 	c.logAPIRequest(ctx, 1, "Range filter species CSV exported", "species_count", len(speciesList))
-	return ctx.String(http.StatusOK, csvContent)
+	return ctx.Blob(http.StatusOK, "text/csv; charset=utf-8", csvBytes)
 }
 
 // getTestSpeciesList gets species list with test parameters (helper for CSV export)
@@ -474,9 +474,26 @@ func (c *Controller) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilt
 	return speciesList, location, req.Threshold, nil
 }
 
+// sanitizeCSVField sanitizes CSV fields to prevent spreadsheet formula injection
+func sanitizeCSVField(field string) string {
+	if field == "" {
+		return field
+	}
+	// Check if field starts with dangerous characters
+	if strings.HasPrefix(field, "=") || strings.HasPrefix(field, "+") ||
+		strings.HasPrefix(field, "-") || strings.HasPrefix(field, "@") {
+		// Prefix with single quote to neutralize formula
+		return "'" + field
+	}
+	return field
+}
+
 // generateSpeciesCSV generates CSV content from species list using the standard CSV library
-func (c *Controller) generateSpeciesCSV(species []RangeFilterSpecies, location Location, threshold float32) (string, error) {
+func (c *Controller) generateSpeciesCSV(species []RangeFilterSpecies, location Location, threshold float32) ([]byte, error) {
 	var buf bytes.Buffer
+	
+	// Write UTF-8 BOM for Excel compatibility
+	buf.WriteString("\uFEFF")
 	
 	// Write metadata headers as comments (not part of CSV data)
 	buf.WriteString("# BirdNET-Go Range Filter Species Export\n")
@@ -489,9 +506,14 @@ func (c *Controller) generateSpeciesCSV(species []RangeFilterSpecies, location L
 	// Create CSV writer
 	writer := csv.NewWriter(&buf)
 	
-	// Write CSV header
-	if err := writer.Write([]string{"Scientific Name", "Common Name", "Probability Score"}); err != nil {
-		return "", fmt.Errorf("failed to write CSV header: %w", err)
+	// Write CSV header (sanitized)
+	headerRow := []string{
+		sanitizeCSVField("Scientific Name"),
+		sanitizeCSVField("Common Name"),
+		sanitizeCSVField("Probability Score"),
+	}
+	if err := writer.Write(headerRow); err != nil {
+		return nil, fmt.Errorf("failed to write CSV header: %w", err)
 	}
 	
 	// Write species data
@@ -502,9 +524,15 @@ func (c *Controller) generateSpeciesCSV(species []RangeFilterSpecies, location L
 			scoreStr = fmt.Sprintf("%.4f", *s.Score)
 		}
 		
-		// Write row - CSV library handles escaping automatically
-		if err := writer.Write([]string{s.ScientificName, s.CommonName, scoreStr}); err != nil {
-			return "", fmt.Errorf("failed to write CSV row: %w", err)
+		// Sanitize all fields before writing
+		row := []string{
+			sanitizeCSVField(s.ScientificName),
+			sanitizeCSVField(s.CommonName),
+			sanitizeCSVField(scoreStr),
+		}
+		
+		if err := writer.Write(row); err != nil {
+			return nil, fmt.Errorf("failed to write CSV row: %w", err)
 		}
 	}
 	
@@ -513,10 +541,10 @@ func (c *Controller) generateSpeciesCSV(species []RangeFilterSpecies, location L
 	
 	// Check for any errors during writing
 	if err := writer.Error(); err != nil {
-		return "", fmt.Errorf("CSV writer error: %w", err)
+		return nil, fmt.Errorf("CSV writer error: %w", err)
 	}
 	
-	return buf.String(), nil
+	return buf.Bytes(), nil
 }
 
 // parseFloat64 is a helper function to parse string to float64

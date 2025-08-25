@@ -776,6 +776,11 @@
             "loading": "Loading...",
             "viewSpecies": "View Species"
           },
+          "download": "Download",
+          "downloadTitle": "Download species list as CSV",
+          "downloadCSV": "Download CSV",
+          "csvDownloaded": "Species list downloaded successfully",
+          "csvDownloadFailed": "Failed to download species list. Please try again.",
           "modal": {
             "title": "Range Filter Species",
             "speciesCount": "Species Count:",

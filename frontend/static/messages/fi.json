@@ -680,6 +680,11 @@
             "loading": "Ladataan...",
             "viewSpecies": "Näytä lajit"
           },
+          "download": "Lataa",
+          "downloadTitle": "Lataa lajilista CSV-muodossa",
+          "downloadCSV": "Lataa CSV",
+          "csvDownloaded": "Lajilista ladattu onnistuneesti",
+          "csvDownloadFailed": "Lajilistan lataus epäonnistui. Yritä uudelleen.",
           "modal": {
             "title": "Aluesuodattimen lajit",
             "speciesCount": "Lajimäärä:",
