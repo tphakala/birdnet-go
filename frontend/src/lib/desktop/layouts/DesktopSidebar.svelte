@@ -327,9 +327,15 @@
 
         <!-- Version number -->
         <div class="text-center text-xs text-base-content/60 text-gray-500" role="contentinfo">
-          <span class="inline-flex items-center gap-1">
+          <a
+            href="https://github.com/tphakala/birdnet-go"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-1 hover:text-base-content/80 transition-colors duration-200"
+            aria-label="View BirdNET-Go repository on GitHub (opens in new window)"
+          >
             {version}
-          </span>
+          </a>
         </div>
       </div>
     </div>
