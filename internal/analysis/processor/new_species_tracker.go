@@ -317,7 +317,7 @@ func (t *NewSpeciesTracker) isSameSeasonPeriod(time1, time2 time.Time) bool {
 	if timeDiff < 0 {
 		timeDiff = -timeDiff
 	}
-	return timeDiff < seasonBufferDuration
+	return timeDiff <= seasonBufferDuration
 }
 
 // computeCurrentSeason performs the actual season calculation (moved from getCurrentSeason)
@@ -364,7 +364,9 @@ func (t *NewSpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 				logger.Debug("Season match found",
 					"season", seasonName,
 					"start_date", seasonDate.Format("2006-01-02"),
-					"is_current", currentTime.Equal(seasonDate) || currentTime.After(seasonDate))
+					"is_current", currentTime.Equal(seasonDate) || currentTime.After(seasonDate),
+					"replaces", currentSeason,
+					"previous_date", latestDate.Format("2006-01-02"))
 				currentSeason = seasonName
 				latestDate = seasonDate
 			}
@@ -512,8 +514,9 @@ func (t *NewSpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 
 	// Only clear existing data if we have new data to replace it with
 	// This prevents data loss if database returns empty results due to errors
-	if len(newSpeciesData) > 0 || len(t.speciesFirstSeen) == 0 {
-		// Clear and populate lifetime tracking map
+	switch {
+	case len(newSpeciesData) > 0:
+		// Clear and populate lifetime tracking map with new data
 		t.speciesFirstSeen = make(map[string]time.Time, len(newSpeciesData))
 		for _, species := range newSpeciesData {
 			if species.FirstSeenDate != "" {
@@ -523,7 +526,13 @@ func (t *NewSpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 				}
 			}
 		}
-	} else {
+		logger.Debug("Loaded species data from database",
+			"species_count", len(newSpeciesData))
+	case len(t.speciesFirstSeen) == 0:
+		// No data from database and no existing data - initialize empty map
+		t.speciesFirstSeen = make(map[string]time.Time, initialSpeciesCapacity)
+		logger.Debug("No species data from database, initialized empty tracking")
+	default:
 		// Database returned empty data but we have existing data - keep it
 		logger.Debug("Database returned empty species data, preserving existing tracking data",
 			"existing_species_count", len(t.speciesFirstSeen))
@@ -551,8 +560,9 @@ func (t *NewSpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 
 	// Only clear existing data if we have new data to replace it with
 	// This prevents data loss if database returns empty results due to errors
-	if len(yearlyData) > 0 || len(t.speciesThisYear) == 0 {
-		// Clear and populate yearly tracking map
+	switch {
+	case len(yearlyData) > 0:
+		// Clear and populate yearly tracking map with new data
 		t.speciesThisYear = make(map[string]time.Time, len(yearlyData))
 		for _, species := range yearlyData {
 			if species.FirstSeenDate != "" {
@@ -562,7 +572,15 @@ func (t *NewSpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 				}
 			}
 		}
-	} else {
+		logger.Debug("Loaded yearly species data from database",
+			"species_count", len(yearlyData),
+			"year", t.currentYear)
+	case len(t.speciesThisYear) == 0:
+		// No data from database and no existing data - initialize empty map
+		t.speciesThisYear = make(map[string]time.Time, initialSpeciesCapacity)
+		logger.Debug("No yearly species data from database, initialized empty tracking",
+			"year", t.currentYear)
+	default:
 		// Database returned empty data but we have existing data - keep it
 		logger.Debug("Database returned empty yearly data, preserving existing tracking data",
 			"existing_yearly_species_count", len(t.speciesThisYear),
@@ -652,7 +670,11 @@ func (t *NewSpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 
 // getYearDateRange calculates the start and end dates for yearly tracking
 func (t *NewSpeciesTracker) getYearDateRange(now time.Time) (startDate, endDate string) {
-	currentYear := now.Year()
+	// Use t.currentYear if set (for testing), otherwise use now.Year()
+	currentYear := t.currentYear
+	if currentYear == 0 {
+		currentYear = now.Year()
+	}
 
 	// Calculate year start based on reset settings
 	yearStart := time.Date(currentYear, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
@@ -720,20 +742,22 @@ func (t *NewSpeciesTracker) GetSpeciesStatus(scientificName string, currentTime 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Check cache first - if valid entry exists within TTL, return it
+	// Check cache first - if valid entry exists within TTL and same year, return it
 	if cached, exists := t.statusCache[scientificName]; exists {
-		if currentTime.Sub(cached.timestamp) < t.cacheTTL {
+		// Check if cache is still valid (within TTL and same year)
+		cacheValid := currentTime.Sub(cached.timestamp) < t.cacheTTL
+		sameYear := currentTime.Year() == cached.timestamp.Year()
+		
+		if cacheValid && sameYear {
 			// Cache hit - return cached result directly
 			return cached.status
 		}
-		// Cache expired - will recompute and update cache below
+		// Cache expired or year changed - will recompute and update cache below
 	}
 
 	// Perform periodic cache cleanup to prevent unbounded growth
-	if currentTime.Sub(t.lastCacheCleanup) > t.cacheTTL*10 { // Cleanup every 10 TTL periods (5 minutes)
-		t.cleanupExpiredCache(currentTime)
-		t.lastCacheCleanup = currentTime
-	}
+	// The cleanup function will check if enough time has passed
+	t.cleanupExpiredCache(currentTime)
 
 	// Cache miss or expired - compute fresh status
 	t.checkAndResetPeriods(currentTime)
@@ -863,7 +887,18 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 // cleanupExpiredCache removes expired entries from the status cache to prevent memory leaks
 // cleanupExpiredCache removes expired entries and enforces size limits with LRU eviction
 func (t *NewSpeciesTracker) cleanupExpiredCache(currentTime time.Time) {
+	t.cleanupExpiredCacheWithForce(currentTime, false)
+}
+
+// cleanupExpiredCacheWithForce allows forcing cleanup even if recently performed (for testing)
+func (t *NewSpeciesTracker) cleanupExpiredCacheWithForce(currentTime time.Time, force bool) {
 	const maxStatusCacheSize = 1000 // Maximum number of species to cache
+	const targetCacheSize = 800     // Target size after cleanup (80% of max)
+
+	// Skip if recently performed (unless forced)
+	if !force && currentTime.Sub(t.lastCacheCleanup) <= t.cacheTTL*10 {
+		return // Skip cleanup entirely if done recently
+	}
 
 	// First pass: remove expired entries
 	for scientificName := range t.statusCache {
@@ -873,7 +908,7 @@ func (t *NewSpeciesTracker) cleanupExpiredCache(currentTime time.Time) {
 	}
 
 	// Second pass: if still over limit, remove oldest entries (LRU)
-	if len(t.statusCache) > maxStatusCacheSize {
+	if len(t.statusCache) > targetCacheSize {
 		// Create a slice of entries for sorting
 		type cacheEntry struct {
 			name      string
@@ -894,8 +929,8 @@ func (t *NewSpeciesTracker) cleanupExpiredCache(currentTime time.Time) {
 			}
 		}
 
-		// Remove oldest entries until we're under the limit
-		entriesToRemove := len(t.statusCache) - maxStatusCacheSize
+		// Remove oldest entries until we're at target size
+		entriesToRemove := len(t.statusCache) - targetCacheSize
 		for i := 0; i < entriesToRemove && i < len(entries); i++ {
 			delete(t.statusCache, entries[i].name)
 		}
@@ -904,6 +939,9 @@ func (t *NewSpeciesTracker) cleanupExpiredCache(currentTime time.Time) {
 			"removed_count", entriesToRemove,
 			"remaining_count", len(t.statusCache))
 	}
+
+	// Update cleanup timestamp
+	t.lastCacheCleanup = currentTime
 }
 
 // GetBatchSpeciesStatus returns the tracking status for multiple species in a single operation
@@ -1249,8 +1287,9 @@ func (t *NewSpeciesTracker) cleanupOldNotificationRecordsLocked(currentTime time
 	}
 
 	cleaned := 0
-	// Compute cutoff = currentTime - (2 * suppressionWindow) to remove records older than 2x retention
-	cutoffTime := currentTime.Add(-2 * t.notificationSuppressionWindow)
+	// Compute cutoff = currentTime - suppressionWindow to remove records no longer needed
+	// Once the suppression window has passed, we can notify again, so no need to keep the record
+	cutoffTime := currentTime.Add(-t.notificationSuppressionWindow)
 
 	for species, sentTime := range t.notificationLastSent {
 		if sentTime.Before(cutoffTime) {
@@ -1283,14 +1322,17 @@ func (t *NewSpeciesTracker) CheckAndUpdateSpecies(scientificName string, detecti
 		// Record this as the first detection
 		t.speciesFirstSeen[scientificName] = detectionTime
 	} else {
-		// Calculate days since first seen
-		daysSince := int(detectionTime.Sub(firstSeen).Hours() / hoursPerDay)
-		daysSinceFirstSeen = daysSince
-		isNew = daysSince <= t.windowDays
-
 		// Update if this detection is earlier than recorded
 		if detectionTime.Before(firstSeen) {
 			t.speciesFirstSeen[scientificName] = detectionTime
+			// This is now the earliest detection
+			daysSinceFirstSeen = 0
+			isNew = true // New detection is always "new" when it's the earliest
+		} else {
+			// Calculate days since first seen
+			daysSince := int(detectionTime.Sub(firstSeen).Hours() / hoursPerDay)
+			daysSinceFirstSeen = daysSince
+			isNew = daysSince <= t.windowDays
 		}
 	}
 

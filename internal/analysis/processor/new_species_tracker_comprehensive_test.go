@@ -126,6 +126,8 @@ func TestWinterSeasonAdjustmentBug(t *testing.T) {
 		for _, tc := range testDates {
 			t.Run(tc.description, func(t *testing.T) {
 				tracker.mu.Lock()
+				// Clear the season cache to ensure fresh calculation
+				tracker.cachedSeason = ""
 				season := tracker.getCurrentSeason(tc.date)
 				tracker.mu.Unlock()
 				assert.Equal(t, tc.expectedSeason, season, "%s: expected %s", tc.description, tc.expectedSeason)
@@ -183,9 +185,9 @@ func TestDatabaseSyncBug(t *testing.T) {
 	err = tracker.SyncIfNeeded()
 	require.NoError(t, err)
 
-	// Check if sync caused species to become "new" (this would be the bug)
+	// Check that sync did NOT cause species to become "new" (bug is fixed)
 	status = tracker.GetSpeciesStatus("Parus major", currentTime)
-	assert.True(t, status.IsNew, "BUG: Sync cleared data making old species appear new!")
+	assert.False(t, status.IsNew, "Old species should still not be new after sync - data preserved!")
 }
 
 // TestYearResetLogic tests the year reset behavior comprehensively

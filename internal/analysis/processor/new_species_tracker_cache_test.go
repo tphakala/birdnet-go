@@ -54,8 +54,8 @@ func TestCleanupExpiredCacheComprehensive(t *testing.T) {
 			timestamp: now.Add(-1 * time.Hour), // Very expired
 		}
 		
-		// Run cleanup
-		tracker.cleanupExpiredCache(now)
+		// Run cleanup with force=true to bypass recent check
+		tracker.cleanupExpiredCacheWithForce(now, true)
 		
 		// Only species2 should remain
 		assert.Len(t, tracker.statusCache, 1)
@@ -83,8 +83,8 @@ func TestCleanupExpiredCacheComprehensive(t *testing.T) {
 			}
 		}
 		
-		// Run cleanup
-		tracker.cleanupExpiredCache(now)
+		// Run cleanup with force=true to bypass recent check
+		tracker.cleanupExpiredCacheWithForce(now, true)
 		
 		// Should keep only 800 entries (80% of maxCacheSize)
 		assert.LessOrEqual(t, len(tracker.statusCache), 800)
@@ -115,9 +115,9 @@ func TestCleanupExpiredCacheComprehensive(t *testing.T) {
 		oldCleanupTime := time.Now().Add(-1 * time.Hour)
 		tracker.lastCacheCleanup = oldCleanupTime
 		
-		// Run cleanup
+		// Run cleanup with force=true to update lastCacheCleanup
 		now := time.Now()
-		tracker.cleanupExpiredCache(now)
+		tracker.cleanupExpiredCacheWithForce(now, true)
 		
 		// lastCacheCleanup should be updated
 		assert.True(t, tracker.lastCacheCleanup.After(oldCleanupTime))
