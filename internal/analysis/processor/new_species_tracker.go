@@ -1359,10 +1359,28 @@ func (t *NewSpeciesTracker) CheckAndUpdateSpecies(scientificName string, detecti
 			daysSinceFirstSeen = 0
 			isNew = true // New detection is always "new" when it's the earliest
 		} else {
-			// Calculate days since first seen
-			daysSince := int(detectionTime.Sub(firstSeen).Hours() / hoursPerDay)
-			daysSinceFirstSeen = daysSince
-			isNew = daysSince <= t.windowDays
+			// Calculate days since first seen using duration-based calculation for precision
+			timeDiff := detectionTime.Sub(firstSeen)
+			daysSince := int(timeDiff / (24 * time.Hour))
+			
+			// Defensive check: prevent negative days due to floating point precision or other edge cases
+			if daysSince < 0 {
+				// Log the anomaly for investigation but handle gracefully
+				logger.Debug("Negative days calculation detected - treating as earliest detection",
+					"species", scientificName,
+					"detection_time", detectionTime.Format("2006-01-02 15:04:05.000"),
+					"first_seen", firstSeen.Format("2006-01-02 15:04:05.000"),
+					"calculated_days", daysSince,
+					"time_diff_hours", detectionTime.Sub(firstSeen).Hours())
+				
+				// Treat as earliest detection (safest approach)
+				t.speciesFirstSeen[scientificName] = detectionTime
+				daysSinceFirstSeen = 0
+				isNew = true
+			} else {
+				daysSinceFirstSeen = daysSince
+				isNew = daysSince <= t.windowDays
+			}
 		}
 	}
 

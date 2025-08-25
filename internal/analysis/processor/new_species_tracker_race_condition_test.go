@@ -6,6 +6,7 @@ package processor
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -83,12 +84,12 @@ func TestRaceConditionInTimeCalculation(t *testing.T) {
 				
 				isNew, days := tracker.CheckAndUpdateSpecies(speciesName, detectionTime)
 				
-				totalOps++
+				atomic.AddInt64(&totalOps, 1)
 				
 				// Check for negative days (the race condition symptom)
 				if days < 0 {
+					atomic.AddInt64(&negativeResults, 1)
 					mutex.Lock()
-					negativeResults++
 					if len(negativeExamples) < 5 { // Collect examples
 						negativeExamples = append(negativeExamples, 
 							fmt.Sprintf("Species: %s, Days: %d, IsNew: %v, GR: %d, Op: %d", 
@@ -103,10 +104,10 @@ func TestRaceConditionInTimeCalculation(t *testing.T) {
 	wg.Wait()
 
 	t.Logf("Race condition test completed:")
-	t.Logf("  Total operations: %d", totalOps)
-	t.Logf("  Operations with negative days: %d", negativeResults)
-	if negativeResults > 0 {
-		t.Logf("  Error rate: %.4f%%", float64(negativeResults)/float64(totalOps)*100)
+	t.Logf("  Total operations: %d", atomic.LoadInt64(&totalOps))
+	t.Logf("  Operations with negative days: %d", atomic.LoadInt64(&negativeResults))
+	if atomic.LoadInt64(&negativeResults) > 0 {
+		t.Logf("  Error rate: %.4f%%", float64(atomic.LoadInt64(&negativeResults))/float64(atomic.LoadInt64(&totalOps))*100)
 		t.Logf("  Example negative results:")
 		for _, example := range negativeExamples {
 			t.Logf("    %s", example)
@@ -242,9 +243,9 @@ func TestHighContentionScenario(t *testing.T) {
 				
 				isNew, days := tracker.CheckAndUpdateSpecies(species, detectionTime)
 				
-				totalCount++
+				atomic.AddInt64(&totalCount, 1)
 				if days < 0 {
-					negativeCount++
+					atomic.AddInt64(&negativeCount, 1)
 				}
 				
 				_ = isNew // Use the result to prevent optimization
@@ -256,11 +257,11 @@ func TestHighContentionScenario(t *testing.T) {
 
 	t.Logf("High contention test results:")
 	t.Logf("  Single species: %s", species)  
-	t.Logf("  Total operations: %d", totalCount)
-	t.Logf("  Negative day results: %d", negativeCount)
+	t.Logf("  Total operations: %d", atomic.LoadInt64(&totalCount))
+	t.Logf("  Negative day results: %d", atomic.LoadInt64(&negativeCount))
 	
-	if negativeCount > 0 {
-		errorRate := float64(negativeCount) / float64(totalCount) * 100
+	if atomic.LoadInt64(&negativeCount) > 0 {
+		errorRate := float64(atomic.LoadInt64(&negativeCount)) / float64(atomic.LoadInt64(&totalCount)) * 100
 		t.Logf("  🔥 Race condition rate: %.2f%%", errorRate)
 		t.Logf("  📊 This demonstrates the race condition under maximum contention")
 	} else {
