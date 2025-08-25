@@ -738,9 +738,15 @@ func (t *NewSpeciesTracker) getSeasonDateRange(seasonName string, now time.Time)
 
 // isWithinCurrentYear checks if a detection time falls within the current tracking year
 func (t *NewSpeciesTracker) isWithinCurrentYear(detectionTime time.Time) bool {
-	// Use the tracker's current year (respects SetCurrentYearForTesting)
-	// UTC is used here only for creating a reference point - actual comparisons use local time
-	referenceTime := time.Date(t.currentYear, time.December, 31, 23, 59, 59, 0, time.UTC)
+	// For mid-year resets, we need to calculate year range based on the detection time itself
+	// to determine which tracking year the detection belongs to
+	referenceTime := detectionTime
+	if t.currentYear != 0 {
+		// For testing: use the detection time but in the test year to maintain timezone
+		referenceTime = time.Date(t.currentYear, detectionTime.Month(), detectionTime.Day(), 
+			detectionTime.Hour(), detectionTime.Minute(), detectionTime.Second(), 
+			detectionTime.Nanosecond(), detectionTime.Location())
+	}
 	startDate, endDate := t.getYearDateRange(referenceTime)
 	
 	yearStart, err := time.Parse("2006-01-02", startDate)

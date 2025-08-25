@@ -558,17 +558,19 @@ func TestNewSpeciesTracker_yearlyResetBoundaries(t *testing.T) {
 		
 		tracker := NewSpeciesTrackerFromSettings(ds, settings)
 		
-		// Test detection before reset date
+		// Test detection before reset date (June 30, 2024)
 		beforeReset := time.Date(2024, 6, 30, 0, 0, 0, 0, time.UTC)
 		tracker.SetCurrentYearForTesting(2024)
 		isWithin := tracker.isWithinCurrentYear(beforeReset)
 		
-		// Should be in previous year period (July 2023 - June 2024)
+		// June 30, 2024 is within current tracking year (July 1, 2023 - June 30, 2024)
+		// since we haven't reached the July 1, 2024 reset date yet
 		assert.True(t, isWithin)
 		
-		// Test detection after reset date
+		// Test detection after reset date (July 2, 2024) 
 		afterReset := time.Date(2024, 7, 2, 0, 0, 0, 0, time.UTC)
 		isWithin = tracker.isWithinCurrentYear(afterReset)
+		// July 2, 2024 is within new tracking year (July 1, 2024 - June 30, 2025)
 		assert.True(t, isWithin)
 	})
 }

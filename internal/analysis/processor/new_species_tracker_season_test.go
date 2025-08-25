@@ -217,11 +217,11 @@ func TestCurrentSeasonDetection(t *testing.T) {
 		{"2025-07-15", "summer", "Middle of summer", false},
 		{"2025-10-15", "fall", "Middle of fall", false},
 		
-		// Test boundary dates with known issues
+		// Test boundary dates - all working correctly now
 		{"2025-03-20", "spring", "First day of spring", false},
-		{"2025-06-21", "summer", "First day of summer", true},  // Known boundary issue
-		{"2025-09-22", "fall", "First day of fall", true},      // Known boundary issue
-		{"2025-12-21", "winter", "First day of winter", true},  // Known boundary issue
+		{"2025-06-21", "summer", "First day of summer", false},  // Fixed boundary
+		{"2025-09-22", "fall", "First day of fall", false},      // Fixed boundary
+		{"2025-12-21", "winter", "First day of winter", false},  // Fixed boundary
 	}
 
 	for _, tt := range tests {
@@ -351,32 +351,33 @@ func TestWinterAdjustmentConstant(t *testing.T) {
 	}
 }
 
-// TestDocumentKnownBoundaryIssues documents boundary issues for future fixes
-// TODO: Address season boundary off-by-one issues in separate PR
-func TestDocumentKnownBoundaryIssues(t *testing.T) {
-	t.Skip("Documenting known boundary issues - to be fixed in separate PR")
+// TestSeasonBoundariesFixed verifies that season boundary detection works correctly
+// Previously these were "known boundary issues" but have been resolved
+func TestSeasonBoundariesFixed(t *testing.T) {
+	t.Parallel()
 	
 	tracker := createTestTracker(t)
 	
-	boundaryIssues := []struct {
+	seasonBoundaries := []struct {
 		date           string
 		expectedSeason string
 		description    string
 	}{
-		{"2025-06-21", "summer", "First day of summer shows as spring"},
-		{"2025-09-22", "fall", "First day of fall shows as summer"},
-		{"2025-12-21", "winter", "First day of winter shows as fall"},
+		{"2025-06-21", "summer", "First day of summer"},
+		{"2025-09-22", "fall", "First day of fall"},
+		{"2025-12-21", "winter", "First day of winter"},
+		{"2025-03-20", "spring", "First day of spring"},
 	}
-
-	t.Log("Known season boundary issues (separate from winter adjustment bug):")
-	for _, issue := range boundaryIssues {
-		testTime, err := time.Parse("2006-01-02", issue.date)
-		require.NoError(t, err)
-		testTime = testTime.Add(12 * time.Hour)
-
-		actualSeason := tracker.getCurrentSeason(testTime)
-		t.Logf("  %s: expected %s, got %s (%s)", 
-			issue.date, issue.expectedSeason, actualSeason, issue.description)
+	
+	for _, boundary := range seasonBoundaries {
+		t.Run(boundary.description, func(t *testing.T) {
+			testTime, err := time.Parse("2006-01-02", boundary.date)
+			require.NoError(t, err)
+			testTime = testTime.Add(12 * time.Hour)
+			
+			actualSeason := tracker.getCurrentSeason(testTime)
+			assert.Equal(t, boundary.expectedSeason, actualSeason, 
+				"Season boundary detection for %s", boundary.description)
+		})
 	}
-	t.Log("These boundary issues should be addressed in a follow-up PR")
 }
