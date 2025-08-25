@@ -304,6 +304,28 @@ func (t *NewSpeciesTracker) SetCurrentYearForTesting(year int) {
 	t.currentYear = year
 }
 
+// SetCurrentSeasonForTesting sets the current season for testing purposes only.
+//
+// ⚠️  WARNING: THIS METHOD IS STRICTLY FOR TESTING AND SHOULD NEVER BE USED IN PRODUCTION CODE ⚠️
+//
+// This method bypasses the normal season detection logic and directly manipulates the internal
+// cached season state, which can lead to:
+// - Incorrect seasonal tracking calculations that don't match the actual time of year
+// - Inconsistent seasonal data that doesn't align with other tracking periods
+// - Cache corruption if the season doesn't match the actual system time
+// - Broken seasonal reset logic that relies on time-based transitions
+//
+// Use this method only in controlled test environments where you need to simulate
+// specific seasonal tracking scenarios.
+//
+// This method provides controlled access to the season cache for test scenarios only.
+func (t *NewSpeciesTracker) SetCurrentSeasonForTesting(season string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.cachedSeason = season
+	t.seasonCacheForTime = time.Now() // Set cache time to current time for validity
+}
+
 // getCurrentSeason determines which season we're currently in with intelligent caching
 func (t *NewSpeciesTracker) getCurrentSeason(currentTime time.Time) string {
 	// Check cache first - if valid entry exists and the input time is reasonably close to cached time

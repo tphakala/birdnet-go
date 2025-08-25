@@ -17,32 +17,6 @@ import (
 )
 
 // TestFullWorkflow_BasicTracking tests basic species tracking workflow
-// SetCurrentSeasonForTesting safely sets the current season for testing purposes only.
-// WARNING: This method is strictly for testing and should never be used in production code.
-//
-// This method properly acquires the tracker mutex, sets currentSeason, initializes
-// the species map for the season if needed, and releases the lock.
-func (t *NewSpeciesTracker) SetCurrentSeasonForTesting(season string) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	
-	t.currentSeason = season
-	
-	// Initialize seasonal tracking if enabled and season map doesn't exist
-	if t.seasonalEnabled {
-		if t.speciesBySeason == nil {
-			t.speciesBySeason = make(map[string]map[string]time.Time)
-		}
-		if t.speciesBySeason[season] == nil {
-			t.speciesBySeason[season] = make(map[string]time.Time)
-		}
-	}
-	
-	// Invalidate caches since season changed
-	t.cachedSeason = ""
-	t.seasonCacheTime = time.Time{}
-}
-
 // CRITICAL: Tests the entire lifecycle from initialization through detection
 func TestFullWorkflow_BasicTracking(t *testing.T) {
 	t.Parallel()
@@ -52,7 +26,8 @@ func TestFullWorkflow_BasicTracking(t *testing.T) {
 	
 	// Setup mock to return empty results for any date range
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil)
-	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil)
+	// Basic tracking doesn't use yearly/seasonal, so this may not be called
+	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	
 	// Verify all mock expectations are met
 	t.Cleanup(func() { ds.AssertExpectations(t) })
@@ -370,7 +345,8 @@ func TestFullWorkflow_ErrorRecovery(t *testing.T) {
 	// Test with datastore that returns errors
 	errorDS := &MockSpeciesDatastore{}
 	errorDS.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData(nil), fmt.Errorf("database error"))
-	errorDS.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData(nil), fmt.Errorf("database error"))
+	// Basic tracking doesn't use yearly/seasonal, so this may not be called
+	errorDS.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData(nil), fmt.Errorf("database error")).Maybe()
 	
 	// Verify error mock expectations are met
 	t.Cleanup(func() { errorDS.AssertExpectations(t) })
