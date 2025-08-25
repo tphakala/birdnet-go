@@ -17,6 +17,32 @@ import (
 )
 
 // TestFullWorkflow_BasicTracking tests basic species tracking workflow
+// SetCurrentSeasonForTesting safely sets the current season for testing purposes only.
+// WARNING: This method is strictly for testing and should never be used in production code.
+//
+// This method properly acquires the tracker mutex, sets currentSeason, initializes
+// the species map for the season if needed, and releases the lock.
+func (t *NewSpeciesTracker) SetCurrentSeasonForTesting(season string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	
+	t.currentSeason = season
+	
+	// Initialize seasonal tracking if enabled and season map doesn't exist
+	if t.seasonalEnabled {
+		if t.speciesBySeason == nil {
+			t.speciesBySeason = make(map[string]map[string]time.Time)
+		}
+		if t.speciesBySeason[season] == nil {
+			t.speciesBySeason[season] = make(map[string]time.Time)
+		}
+	}
+	
+	// Invalidate caches since season changed
+	t.cachedSeason = ""
+	t.seasonCacheTime = time.Time{}
+}
+
 // CRITICAL: Tests the entire lifecycle from initialization through detection
 func TestFullWorkflow_BasicTracking(t *testing.T) {
 	t.Parallel()
@@ -27,6 +53,9 @@ func TestFullWorkflow_BasicTracking(t *testing.T) {
 	// Setup mock to return empty results for any date range
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil)
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil)
+	
+	// Verify all mock expectations are met
+	t.Cleanup(func() { ds.AssertExpectations(t) })
 
 	// Configure basic tracking
 	settings := &conf.SpeciesTrackingSettings{
@@ -104,6 +133,9 @@ func TestFullWorkflow_YearlyTracking(t *testing.T) {
 	
 	// Default handler for other period queries  
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
+	
+	// Verify all mock expectations are met
+	t.Cleanup(func() { ds.AssertExpectations(t) })
 
 	// Configure for yearly tracking
 	settings := &conf.SpeciesTrackingSettings{
@@ -171,6 +203,9 @@ func TestFullWorkflow_SeasonalTracking(t *testing.T) {
 	// Mock will return seasonal data
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(springData, nil).Maybe()
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
+	
+	// Verify all mock expectations are met
+	t.Cleanup(func() { ds.AssertExpectations(t) })
 
 	// Configure for seasonal tracking
 	settings := &conf.SpeciesTrackingSettings{
@@ -185,8 +220,8 @@ func TestFullWorkflow_SeasonalTracking(t *testing.T) {
 	tracker := NewSpeciesTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 
-	// Initialize with spring season
-	tracker.currentSeason = "spring"
+	// Initialize with spring season using safe test helper
+	tracker.SetCurrentSeasonForTesting("spring")
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -227,6 +262,9 @@ func TestFullWorkflow_CombinedTracking(t *testing.T) {
 	// Setup default mock responses
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
+	
+	// Verify all mock expectations are met
+	t.Cleanup(func() { ds.AssertExpectations(t) })
 
 	// Enable all tracking modes
 	settings := &conf.SpeciesTrackingSettings{
@@ -333,6 +371,9 @@ func TestFullWorkflow_ErrorRecovery(t *testing.T) {
 	errorDS := &MockSpeciesDatastore{}
 	errorDS.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData(nil), fmt.Errorf("database error"))
 	errorDS.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData(nil), fmt.Errorf("database error"))
+	
+	// Verify error mock expectations are met
+	t.Cleanup(func() { errorDS.AssertExpectations(t) })
 
 	tracker2 := NewSpeciesTrackerFromSettings(errorDS, settings)
 	require.NotNil(t, tracker2)
@@ -359,6 +400,9 @@ func TestFullWorkflow_MemoryManagement(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
+	
+	// Verify all mock expectations are met
+	t.Cleanup(func() { ds.AssertExpectations(t) })
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -419,6 +463,9 @@ func TestFullWorkflow_NotificationSystem(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
+	
+	// Verify all mock expectations are met
+	t.Cleanup(func() { ds.AssertExpectations(t) })
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -480,7 +527,9 @@ func TestFullWorkflow_PerformanceUnderLoad(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
-	// Already handled above
+	
+	// Verify all mock expectations are met
+	t.Cleanup(func() { ds.AssertExpectations(t) })
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,

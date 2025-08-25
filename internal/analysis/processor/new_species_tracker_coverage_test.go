@@ -268,7 +268,7 @@ func TestCleanupExpiredCacheLRU(t *testing.T) {
 	cacheSize := len(tracker.statusCache)
 	tracker.mu.RUnlock()
 
-	assert.LessOrEqual(t, cacheSize, 1000, "Cache should be reduced to max size")
+	assert.LessOrEqual(t, cacheSize, maxStatusCacheSize, "Cache should be reduced to max size")
 	
 	// Verify newer entries remain (lower indices)
 	tracker.mu.RLock()

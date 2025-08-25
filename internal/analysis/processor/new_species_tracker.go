@@ -33,6 +33,10 @@ const (
 
 	// Notification suppression
 	defaultNotificationSuppressionWindow = 168 * time.Hour // Default suppression window (7 days)
+
+	// Cache management
+	maxStatusCacheSize = 1000 // Maximum number of species to cache
+	targetCacheSize    = 800  // Target size after cleanup (80% of max)
 )
 
 // Package-level logger for species tracking
@@ -1017,8 +1021,6 @@ func (t *NewSpeciesTracker) cleanupExpiredCache(currentTime time.Time) {
 
 // cleanupExpiredCacheWithForce allows forcing cleanup even if recently performed (for testing)
 func (t *NewSpeciesTracker) cleanupExpiredCacheWithForce(currentTime time.Time, force bool) {
-	const maxStatusCacheSize = 1000 // Maximum number of species to cache
-	const targetCacheSize = 800     // Target size after cleanup (80% of max)
 
 	// Skip if recently performed (unless forced)
 	if !force && currentTime.Sub(t.lastCacheCleanup) <= t.cacheTTL*10 {
@@ -1683,3 +1685,4 @@ func (t *NewSpeciesTracker) Close() error {
 	}
 	return nil
 }
+// Test shell safety
