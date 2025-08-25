@@ -416,19 +416,22 @@ func (t *NewSpeciesTracker) checkAndResetPeriods(currentTime time.Time) {
 
 // shouldResetYear determines if we should reset yearly tracking
 func (t *NewSpeciesTracker) shouldResetYear(currentTime time.Time) bool {
-	// Check if we've crossed the yearly reset date
-	resetDate := time.Date(currentTime.Year(), time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, currentTime.Location())
-
-	// If current time is after reset date and we haven't reset for this year
-	if currentTime.After(resetDate) && currentTime.Year() > t.currentYear {
+	// If we've never reset before (currentYear is 0), we need to reset
+	if t.currentYear == 0 {
 		return true
 	}
 
-	// Handle case where reset date hasn't occurred yet this year
+	// If we're in a later year than our tracked year, we need to reset
 	if currentTime.Year() > t.currentYear {
 		return true
 	}
 
+	// If we're in the same year as our tracked year, no reset needed
+	if currentTime.Year() == t.currentYear {
+		return false
+	}
+
+	// If we're somehow in an earlier year than our tracked year (shouldn't happen), no reset
 	return false
 }
 
@@ -670,22 +673,33 @@ func (t *NewSpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 
 // getYearDateRange calculates the start and end dates for yearly tracking
 func (t *NewSpeciesTracker) getYearDateRange(now time.Time) (startDate, endDate string) {
-	// Use t.currentYear if set (for testing), otherwise use now.Year()
-	currentYear := t.currentYear
-	if currentYear == 0 {
-		currentYear = now.Year()
+	// Use t.currentYear if explicitly set for testing, otherwise use the provided time's year
+	currentYear := now.Year()
+	if t.currentYear != 0 && t.currentYear != time.Now().Year() {
+		// Only use t.currentYear if it was explicitly set for testing (not the default from constructor)
+		currentYear = t.currentYear
 	}
 
-	// Calculate year start based on reset settings
-	yearStart := time.Date(currentYear, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
-
-	// If we haven't reached the reset date this year, use last year's reset date
-	if now.Before(yearStart) {
-		yearStart = time.Date(currentYear-1, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
+	// Determine the tracking year based on reset date
+	// If current time is before this year's reset date, we're still in the previous tracking year
+	currentYearResetDate := time.Date(currentYear, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
+	
+	var trackingYear int
+	if now.Before(currentYearResetDate) {
+		// We haven't reached this year's reset date yet, so we're still in the previous tracking year
+		trackingYear = currentYear - 1
+	} else {
+		// We've passed this year's reset date, so we're in the current tracking year
+		trackingYear = currentYear
 	}
+
+	// Calculate the tracking period: from reset date of trackingYear to day before reset date of next year
+	yearStart := time.Date(trackingYear, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
+	nextYearReset := time.Date(trackingYear+1, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
+	yearEnd := nextYearReset.AddDate(0, 0, -1)
 
 	startDate = yearStart.Format("2006-01-02")
-	endDate = now.Format("2006-01-02")
+	endDate = yearEnd.Format("2006-01-02")
 
 	return startDate, endDate
 }
@@ -693,30 +707,31 @@ func (t *NewSpeciesTracker) getYearDateRange(now time.Time) (startDate, endDate 
 // getSeasonDateRange calculates the start and end dates for a specific season
 func (t *NewSpeciesTracker) getSeasonDateRange(seasonName string, now time.Time) (startDate, endDate string) {
 	season, exists := t.seasons[seasonName]
-	if !exists {
-		// Return empty range for unknown season
-		return now.Format("2006-01-02"), now.Format("2006-01-02")
+	if !exists || season.month <= 0 || season.day <= 0 {
+		// Return empty strings for unknown or invalid season
+		return "", ""
 	}
 
+	// Use test year override if set, otherwise use now's year
 	currentYear := now.Year()
+	if t.currentYear != 0 && t.currentYear != time.Now().Year() {
+		currentYear = t.currentYear
+	}
 
-	// Calculate season start date for this year
+	// Calculate season start date
 	seasonStart := time.Date(currentYear, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
 
 	// Handle winter season that might start in previous year
-	// Winter spans across years: Dec 21 (year X) -> Mar 19 (year X+1)
-	// This ensures consistency between season detection and date range calculations
 	if t.shouldAdjustWinter(now, time.Month(season.month)) {
 		seasonStart = time.Date(currentYear-1, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
 	}
 
-	// If the season hasn't started yet this year, don't return any data
-	if now.Before(seasonStart) {
-		return now.Format("2006-01-02"), now.Format("2006-01-02") // Empty range
-	}
+	// Calculate season end date - seasons last 3 months
+	// Add 3 months, then subtract 1 day to get the last day of the 3rd month
+	seasonEnd := seasonStart.AddDate(0, 3, 0).AddDate(0, 0, -1)
 
 	startDate = seasonStart.Format("2006-01-02")
-	endDate = now.Format("2006-01-02")
+	endDate = seasonEnd.Format("2006-01-02")
 
 	return startDate, endDate
 }
@@ -726,14 +741,23 @@ func (t *NewSpeciesTracker) isWithinCurrentYear(detectionTime time.Time) bool {
 	// Use the tracker's current year (respects SetCurrentYearForTesting)
 	// UTC is used here only for creating a reference point - actual comparisons use local time
 	referenceTime := time.Date(t.currentYear, time.December, 31, 23, 59, 59, 0, time.UTC)
-	startDate, _ := t.getYearDateRange(referenceTime)
+	startDate, endDate := t.getYearDateRange(referenceTime)
+	
 	yearStart, err := time.Parse("2006-01-02", startDate)
 	if err != nil {
 		return false
 	}
+	
+	yearEnd, err := time.Parse("2006-01-02", endDate)
+	if err != nil {
+		return false
+	}
+	// Add 23:59:59 to end date to include the entire last day
+	yearEnd = yearEnd.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
 
-	// Check if the detection falls within this year's tracking period
-	return detectionTime.After(yearStart) || detectionTime.Equal(yearStart)
+	// Check if the detection falls within this year's tracking period (inclusive of both bounds)
+	return (detectionTime.After(yearStart) || detectionTime.Equal(yearStart)) && 
+		   (detectionTime.Before(yearEnd) || detectionTime.Equal(yearEnd))
 }
 
 // GetSpeciesStatus returns the tracking status for a species with caching for performance

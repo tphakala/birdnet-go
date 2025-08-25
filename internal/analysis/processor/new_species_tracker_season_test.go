@@ -34,11 +34,11 @@ func TestWinterAdjustmentBugFix(t *testing.T) {
 	
 	startDate, endDate := tracker.getSeasonDateRange("winter", aug24)
 	
-	// After fix: winter should return empty range in August (hasn't started yet)
-	assert.Equal(t, "2025-08-24", startDate, 
-		"Winter should return current date as empty range start")
-	assert.Equal(t, "2025-08-24", endDate, 
-		"Winter should return current date as empty range end")
+	// After fix: winter should return proper 3-month range regardless of when asked
+	assert.Equal(t, "2025-12-21", startDate, 
+		"Winter should return proper winter start date")
+	assert.Equal(t, "2026-03-20", endDate, 
+		"Winter should return proper winter end date")
 	
 	// Verify the current season is correctly detected as summer
 	currentSeason := tracker.getCurrentSeason(aug24)
@@ -77,18 +77,17 @@ func TestWinterAdjustmentLogic(t *testing.T) {
 			
 			switch tt.expectedStartYear {
 			case 2024:
-				// Should get range starting from previous year's winter
+				// Should get range starting from previous year's winter (proper 3-month range)
 				assert.Equal(t, "2024-12-21", startDate, 
 					"Winter in %s should start from previous year", time.Month(tt.month))
-				assert.Equal(t, testTime.Format("2006-01-02"), endDate,
-					"Winter range should end at current date")
+				assert.Equal(t, "2025-03-20", endDate,
+					"Winter range should end at spring start (Mar 20)")
 			default:
-				// Empty range for months 6-12 (when winter hasn't started yet)
-				expectedDate := testTime.Format("2006-01-02")
-				assert.Equal(t, expectedDate, startDate,
-					"Winter in %s should return empty range start", time.Month(tt.month))
-				assert.Equal(t, expectedDate, endDate,
-					"Winter in %s should return empty range end", time.Month(tt.month))
+				// For months 6-12: winter season ranges from current year Dec to next year Mar
+				assert.Equal(t, "2025-12-21", startDate,
+					"Winter in %s should start from current year Dec 21", time.Month(tt.month))
+				assert.Equal(t, "2026-03-20", endDate,
+					"Winter in %s should end at next year Mar 20", time.Month(tt.month))
 			}
 		})
 	}

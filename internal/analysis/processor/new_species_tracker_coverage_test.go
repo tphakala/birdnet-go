@@ -211,8 +211,9 @@ func TestCleanupExpiredCache(t *testing.T) {
 	tracker.mu.Unlock()
 
 	// Clean up cache
+	// IMPORTANT: Use force=true to bypass recent cleanup check in tests
 	tracker.mu.Lock()
-	tracker.cleanupExpiredCache(currentTime)
+	tracker.cleanupExpiredCacheWithForce(currentTime, true)
 	tracker.mu.Unlock()
 
 	// Check results
@@ -256,9 +257,10 @@ func TestCleanupExpiredCacheLRU(t *testing.T) {
 	}
 	tracker.mu.Unlock()
 
-	// Clean up cache
+	// Clean up cache - test LRU eviction
+	// IMPORTANT: Use force=true to bypass recent cleanup check in tests
 	tracker.mu.Lock()
-	tracker.cleanupExpiredCache(currentTime)
+	tracker.cleanupExpiredCacheWithForce(currentTime, true)
 	tracker.mu.Unlock()
 
 	// Check that cache was reduced to max size

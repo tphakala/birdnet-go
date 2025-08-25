@@ -22,8 +22,9 @@ func TestCleanupExpiredCacheComprehensive(t *testing.T) {
 		tracker := NewSpeciesTrackerFromSettings(ds, settings)
 		
 		// Call cleanup with no cache entries
+		// IMPORTANT: Use force=true to bypass recent cleanup check in tests
 		now := time.Now()
-		tracker.cleanupExpiredCache(now)
+		tracker.cleanupExpiredCacheWithForce(now, true)
 		
 		// Should not panic and cache should remain empty
 		assert.NotNil(t, tracker.statusCache)
@@ -142,6 +143,7 @@ func TestCleanupExpiredCacheComprehensive(t *testing.T) {
 		}
 		
 		// Run cleanup - should skip due to recent cleanup
+		// IMPORTANT: Do NOT use force=true here - we're testing the skip behavior
 		now := time.Now()
 		tracker.cleanupExpiredCache(now)
 		

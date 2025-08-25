@@ -80,32 +80,32 @@ func TestNewSpeciesTracker_shouldResetYear(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		lastResetYear  int
 		currentYear    int
+		testTime       time.Time
 		expectedReset  bool
 	}{
 		{
 			name:          "same year no reset",
-			lastResetYear: 2024,
 			currentYear:   2024,
+			testTime:      time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC), // Same year as currentYear
 			expectedReset: false,
 		},
 		{
 			name:          "new year should reset",
-			lastResetYear: 2023,
-			currentYear:   2024,
+			currentYear:   2023,
+			testTime:      time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC), // Later year than currentYear
 			expectedReset: true,
 		},
 		{
 			name:          "never reset before",
-			lastResetYear: 0,
-			currentYear:   2024,
+			currentYear:   0,
+			testTime:      time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC), // Any year when currentYear is 0
 			expectedReset: true,
 		},
 		{
 			name:          "multiple years passed",
-			lastResetYear: 2020,
-			currentYear:   2024,
+			currentYear:   2020,
+			testTime:      time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC), // Much later year
 			expectedReset: true,
 		},
 	}
@@ -121,11 +121,10 @@ func TestNewSpeciesTracker_shouldResetYear(t *testing.T) {
 			}
 
 			tracker := NewSpeciesTrackerFromSettings(ds, settings)
-			// We can't directly set lastYearReset, but we can test based on current year
+			// Set the current tracking year for testing
 			tracker.SetCurrentYearForTesting(tt.currentYear)
 			
-			now := time.Now()
-			shouldReset := tracker.shouldResetYear(now)
+			shouldReset := tracker.shouldResetYear(tt.testTime)
 			assert.Equal(t, tt.expectedReset, shouldReset)
 		})
 	}

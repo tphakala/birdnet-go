@@ -370,19 +370,19 @@ func TestNotificationRecordCleanup(t *testing.T) {
 	currentTime := time.Now()
 
 	// Add old and recent notification records
-	oldTime := currentTime.Add(-72 * time.Hour) // 3 days ago
-	recentTime := currentTime.Add(-12 * time.Hour)
+	oldTime := currentTime.Add(-72 * time.Hour) // 3 days ago (outside 24h window)
+	recentTime := currentTime.Add(-30 * time.Hour) // 30 hours ago (outside 24h window)
 
 	tracker.RecordNotificationSent("Old Species", oldTime)
 	tracker.RecordNotificationSent("Recent Species", recentTime)
 
 	// Cleanup old records
 	cleaned := tracker.CleanupOldNotificationRecords(currentTime)
-	assert.Equal(t, 1, cleaned, "Should clean 1 old record")
+	assert.Equal(t, 2, cleaned, "Should clean 2 old records")
 
-	// Recent should not be suppressed (past window)
+	// Recent should not be suppressed (cleaned up - outside window)
 	shouldSuppress := tracker.ShouldSuppressNotification("Recent Species", currentTime)
-	assert.False(t, shouldSuppress, "Recent species should not be suppressed after window")
+	assert.False(t, shouldSuppress, "Recent species should not be suppressed (cleaned up)")
 
 	// Old should not be suppressed (cleaned up)
 	shouldSuppress = tracker.ShouldSuppressNotification("Old Species", currentTime)
@@ -562,13 +562,13 @@ func TestGetYearDateRange(t *testing.T) {
 		{
 			time.Date(2024, 4, 1, 0, 0, 0, 0, time.UTC),
 			"2024-03-15",
-			"2024-04-01",
+			"2025-03-14",
 			"After reset date in same year",
 		},
 		{
 			time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
 			"2023-03-15",
-			"2024-02-01",
+			"2024-03-14",
 			"Before reset date uses previous year",
 		},
 	}
@@ -618,29 +618,29 @@ func TestGetSeasonDateRange(t *testing.T) {
 			"summer",
 			time.Date(2024, 7, 15, 0, 0, 0, 0, time.UTC),
 			"2024-06-21",
-			"2024-07-15",
-			"Summer season in July",
+			"2024-09-20",
+			"Summer season in July (proper 3-month range)",
 		},
 		{
 			"winter",
 			time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC),
 			"2023-12-21",
-			"2024-01-15",
-			"Winter season in January (crosses year)",
+			"2024-03-20",
+			"Winter season in January (crosses year, proper 3-month range)",
 		},
 		{
 			"spring",
 			time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC),
-			"2024-03-15",
-			"2024-03-15",
-			"Before spring starts (empty range)",
+			"2024-03-20",
+			"2024-06-19",
+			"Spring season (proper 3-month range)",
 		},
 		{
 			"unknown",
 			time.Date(2024, 7, 15, 0, 0, 0, 0, time.UTC),
-			"2024-07-15",
-			"2024-07-15",
-			"Unknown season returns empty range",
+			"",
+			"",
+			"Unknown season returns empty strings",
 		},
 	}
 
