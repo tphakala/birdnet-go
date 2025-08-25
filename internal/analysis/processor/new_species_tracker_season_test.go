@@ -34,11 +34,11 @@ func TestWinterAdjustmentBugFix(t *testing.T) {
 	
 	startDate, endDate := tracker.getSeasonDateRange("winter", aug24)
 	
-	// After fix: winter should return empty range in August (hasn't started yet)
-	assert.Equal(t, "2025-08-24", startDate, 
-		"Winter should return current date as empty range start")
-	assert.Equal(t, "2025-08-24", endDate, 
-		"Winter should return current date as empty range end")
+	// After fix: winter should return proper 3-month range regardless of when asked
+	assert.Equal(t, "2025-12-21", startDate, 
+		"Winter should return proper winter start date")
+	assert.Equal(t, "2026-03-20", endDate, 
+		"Winter should return proper winter end date")
 	
 	// Verify the current season is correctly detected as summer
 	currentSeason := tracker.getCurrentSeason(aug24)
@@ -77,18 +77,17 @@ func TestWinterAdjustmentLogic(t *testing.T) {
 			
 			switch tt.expectedStartYear {
 			case 2024:
-				// Should get range starting from previous year's winter
+				// Should get range starting from previous year's winter (proper 3-month range)
 				assert.Equal(t, "2024-12-21", startDate, 
 					"Winter in %s should start from previous year", time.Month(tt.month))
-				assert.Equal(t, testTime.Format("2006-01-02"), endDate,
-					"Winter range should end at current date")
+				assert.Equal(t, "2025-03-20", endDate,
+					"Winter range should end at spring start (Mar 20)")
 			default:
-				// Empty range for months 6-12 (when winter hasn't started yet)
-				expectedDate := testTime.Format("2006-01-02")
-				assert.Equal(t, expectedDate, startDate,
-					"Winter in %s should return empty range start", time.Month(tt.month))
-				assert.Equal(t, expectedDate, endDate,
-					"Winter in %s should return empty range end", time.Month(tt.month))
+				// For months 6-12: winter season ranges from current year Dec to next year Mar
+				assert.Equal(t, "2025-12-21", startDate,
+					"Winter in %s should start from current year Dec 21", time.Month(tt.month))
+				assert.Equal(t, "2026-03-20", endDate,
+					"Winter in %s should end at next year Mar 20", time.Month(tt.month))
 			}
 		})
 	}
@@ -112,32 +111,32 @@ func TestSeasonDateRanges(t *testing.T) {
 			"2025-08-24",
 			"spring",
 			"2025-03-20",
-			"2025-08-24",
-			"Spring range for August 24",
+			"2025-06-19",
+			"Spring range for August 24 (consistent 3-month range)",
 		},
 		{
 			"August24_Summer", 
 			"2025-08-24",
 			"summer",
 			"2025-06-21",
-			"2025-08-24",
-			"Summer range for August 24 (current season)",
+			"2025-09-20",
+			"Summer range for August 24 (consistent 3-month range)",
 		},
 		{
 			"August24_Fall",
 			"2025-08-24", 
 			"fall",
-			"2025-08-24",
-			"2025-08-24",
-			"Fall range for August 24 (empty - not started)",
+			"2025-09-22",
+			"2025-12-21",
+			"Fall range for August 24 (consistent 3-month range)",
 		},
 		{
 			"August24_Winter",
 			"2025-08-24",
 			"winter", 
-			"2025-08-24",
-			"2025-08-24",
-			"Winter range for August 24 (empty - regression test)",
+			"2025-12-21",
+			"2026-03-20",
+			"Winter range for August 24 (consistent 3-month range - regression test)",
 		},
 
 		// Winter spanning years
@@ -146,16 +145,16 @@ func TestSeasonDateRanges(t *testing.T) {
 			"2025-01-15",
 			"winter",
 			"2024-12-21",
-			"2025-01-15",
-			"Winter range spans from previous year",
+			"2025-03-20",
+			"Winter range spans from previous year (consistent 3-month range)",
 		},
 		{
 			"January_Spring",
 			"2025-01-15",
 			"spring",
-			"2025-01-15",
-			"2025-01-15",
-			"Spring range in January (empty - not started)",
+			"2025-03-20",
+			"2025-06-19",
+			"Spring range in January (consistent 3-month range)",
 		},
 		
 		// Winter just starting
@@ -164,16 +163,16 @@ func TestSeasonDateRanges(t *testing.T) {
 			"2025-12-22",
 			"winter",
 			"2025-12-21",
-			"2025-12-22",
-			"Winter just started on Dec 22",
+			"2026-03-20",
+			"Winter just started on Dec 22 (consistent 3-month range)",
 		},
 		{
 			"December20_Winter",
 			"2025-12-20",
 			"winter",
-			"2025-12-20",
-			"2025-12-20",
-			"Winter not yet started on Dec 20",
+			"2025-12-21",
+			"2026-03-20",
+			"Winter not yet started on Dec 20 (consistent 3-month range)",
 		},
 	}
 
@@ -218,11 +217,11 @@ func TestCurrentSeasonDetection(t *testing.T) {
 		{"2025-07-15", "summer", "Middle of summer", false},
 		{"2025-10-15", "fall", "Middle of fall", false},
 		
-		// Test boundary dates with known issues
+		// Test boundary dates - all working correctly now
 		{"2025-03-20", "spring", "First day of spring", false},
-		{"2025-06-21", "summer", "First day of summer", true},  // Known boundary issue
-		{"2025-09-22", "fall", "First day of fall", true},      // Known boundary issue
-		{"2025-12-21", "winter", "First day of winter", true},  // Known boundary issue
+		{"2025-06-21", "summer", "First day of summer", false},  // Fixed boundary
+		{"2025-09-22", "fall", "First day of fall", false},      // Fixed boundary
+		{"2025-12-21", "winter", "First day of winter", false},  // Fixed boundary
 	}
 
 	for _, tt := range tests {
@@ -352,32 +351,33 @@ func TestWinterAdjustmentConstant(t *testing.T) {
 	}
 }
 
-// TestDocumentKnownBoundaryIssues documents boundary issues for future fixes
-// TODO: Address season boundary off-by-one issues in separate PR
-func TestDocumentKnownBoundaryIssues(t *testing.T) {
-	t.Skip("Documenting known boundary issues - to be fixed in separate PR")
+// TestSeasonBoundariesFixed verifies that season boundary detection works correctly
+// Previously these were "known boundary issues" but have been resolved
+func TestSeasonBoundariesFixed(t *testing.T) {
+	t.Parallel()
 	
 	tracker := createTestTracker(t)
 	
-	boundaryIssues := []struct {
+	seasonBoundaries := []struct {
 		date           string
 		expectedSeason string
 		description    string
 	}{
-		{"2025-06-21", "summer", "First day of summer shows as spring"},
-		{"2025-09-22", "fall", "First day of fall shows as summer"},
-		{"2025-12-21", "winter", "First day of winter shows as fall"},
+		{"2025-06-21", "summer", "First day of summer"},
+		{"2025-09-22", "fall", "First day of fall"},
+		{"2025-12-21", "winter", "First day of winter"},
+		{"2025-03-20", "spring", "First day of spring"},
 	}
-
-	t.Log("Known season boundary issues (separate from winter adjustment bug):")
-	for _, issue := range boundaryIssues {
-		testTime, err := time.Parse("2006-01-02", issue.date)
-		require.NoError(t, err)
-		testTime = testTime.Add(12 * time.Hour)
-
-		actualSeason := tracker.getCurrentSeason(testTime)
-		t.Logf("  %s: expected %s, got %s (%s)", 
-			issue.date, issue.expectedSeason, actualSeason, issue.description)
+	
+	for _, boundary := range seasonBoundaries {
+		t.Run(boundary.description, func(t *testing.T) {
+			testTime, err := time.Parse("2006-01-02", boundary.date)
+			require.NoError(t, err)
+			testTime = testTime.Add(12 * time.Hour)
+			
+			actualSeason := tracker.getCurrentSeason(testTime)
+			assert.Equal(t, boundary.expectedSeason, actualSeason, 
+				"Season boundary detection for %s", boundary.description)
+		})
 	}
-	t.Log("These boundary issues should be addressed in a follow-up PR")
 }

@@ -244,12 +244,16 @@ func TestNewSpeciesTracker_PruneOldEntries(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	historicalData := []datastore.NewSpeciesData{
 		{
+			ScientificName: "Very Old Species",
+			FirstSeenDate:  time.Now().Add(-11 * 365 * 24 * time.Hour).Format("2006-01-02"), // 11 years ago (should be pruned)
+		},
+		{
 			ScientificName: "Old Species",
-			FirstSeenDate:  time.Now().Add(-30 * 24 * time.Hour).Format("2006-01-02"), // 30 days ago
+			FirstSeenDate:  time.Now().Add(-30 * 24 * time.Hour).Format("2006-01-02"), // 30 days ago (should NOT be pruned)
 		},
 		{
 			ScientificName: "Recent Species",
-			FirstSeenDate:  time.Now().Add(-5 * 24 * time.Hour).Format("2006-01-02"), // 5 days ago
+			FirstSeenDate:  time.Now().Add(-5 * 24 * time.Hour).Format("2006-01-02"), // 5 days ago (should NOT be pruned)
 		},
 	}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
@@ -271,18 +275,21 @@ func TestNewSpeciesTracker_PruneOldEntries(t *testing.T) {
 	require.NoError(t, err)
 
 	// Initial species count
-	assert.Equal(t, 2, tracker.GetSpeciesCount(), "Expected 2 species initially")
+	assert.Equal(t, 3, tracker.GetSpeciesCount(), "Expected 3 species initially")
 
-	// Prune old entries (older than 28 days)
+	// Prune old entries (only entries older than 10 years should be pruned for lifetime tracking)
 	pruned := tracker.PruneOldEntries()
-	assert.Equal(t, 1, pruned, "Expected 1 species to be pruned")
+	assert.Equal(t, 1, pruned, "Expected 1 species to be pruned (11 years old)")
 
-	// Should only have recent species left
-	assert.Equal(t, 1, tracker.GetSpeciesCount(), "Expected 1 species after pruning")
+	// Should have both recent and 30-day-old species left
+	assert.Equal(t, 2, tracker.GetSpeciesCount(), "Expected 2 species after pruning")
 
-	// Recent species should still be there
+	// Both remaining species should still be tracked
 	status := tracker.GetSpeciesStatus("Recent Species", time.Now())
 	assert.True(t, status.IsNew, "Recent species should still be marked as new after pruning")
+	
+	status30Days := tracker.GetSpeciesStatus("Old Species", time.Now())
+	assert.False(t, status30Days.IsNew, "30-day-old species should not be new but should still be tracked")
 }
 
 // Benchmark tests
