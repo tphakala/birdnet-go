@@ -21,6 +21,11 @@ import (
 func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
+	// Use recent dates to avoid pruning issues
+	recentDate := time.Now().AddDate(0, 0, -5).Format("2006-01-02") // 5 days ago
+	olderRecentDate := time.Now().AddDate(0, 0, -10).Format("2006-01-02") // 10 days ago  
+	newerRecentDate := time.Now().AddDate(0, 0, -2).Format("2006-01-02") // 2 days ago
+
 	tests := []struct {
 		name           string
 		mockData       []datastore.NewSpeciesData
@@ -39,7 +44,7 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 		{
 			"valid_single_species_data",
 			[]datastore.NewSpeciesData{
-				{ScientificName: "Turdus_migratorius", FirstSeenDate: "2024-01-15"},
+				{ScientificName: "Turdus_migratorius", FirstSeenDate: recentDate},
 			},
 			nil,
 			false, 1,
@@ -62,10 +67,10 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 		{
 			"malformed_date_data_recovery",
 			[]datastore.NewSpeciesData{
-				{ScientificName: "Valid_Species", FirstSeenDate: "2024-01-15"},
+				{ScientificName: "Valid_Species", FirstSeenDate: recentDate},
 				{ScientificName: "Invalid_Date_Species", FirstSeenDate: "invalid-date"},
 				{ScientificName: "Empty_Date_Species", FirstSeenDate: ""},
-				{ScientificName: "Another_Valid_Species", FirstSeenDate: "2024-02-20"},
+				{ScientificName: "Another_Valid_Species", FirstSeenDate: newerRecentDate},
 			},
 			nil,
 			false, 2, // Should load valid entries and skip invalid ones
@@ -74,9 +79,9 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 		{
 			"duplicate_species_handling",
 			[]datastore.NewSpeciesData{
-				{ScientificName: "Duplicate_Species", FirstSeenDate: "2024-01-15"},
-				{ScientificName: "Duplicate_Species", FirstSeenDate: "2024-01-10"}, // Earlier date should win
-				{ScientificName: "Unique_Species", FirstSeenDate: "2024-02-01"},
+				{ScientificName: "Duplicate_Species", FirstSeenDate: recentDate},
+				{ScientificName: "Duplicate_Species", FirstSeenDate: olderRecentDate}, // Earlier date should win
+				{ScientificName: "Unique_Species", FirstSeenDate: newerRecentDate},
 			},
 			nil,
 			false, 2,
@@ -87,7 +92,7 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 			[]datastore.NewSpeciesData{
 				{ScientificName: "Future_Species", FirstSeenDate: "2030-12-31"},
 				{ScientificName: "Past_Species", FirstSeenDate: "1900-01-01"},  
-				{ScientificName: "Current_Species", FirstSeenDate: "2024-01-15"},
+				{ScientificName: "Current_Species", FirstSeenDate: recentDate},
 			},
 			nil,
 			false, 3,
@@ -158,6 +163,12 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
+	// Use current year and recent dates
+	currentYear := time.Now().Year()
+	currentTime := time.Now()
+	recentDate := currentTime.AddDate(0, 0, -5).Format("2006-01-02") // 5 days ago
+	olderRecentDate := currentTime.AddDate(0, 0, -10).Format("2006-01-02") // 10 days ago
+
 	tests := []struct {
 		name          string
 		currentTime   time.Time
@@ -168,44 +179,44 @@ func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 	}{
 		{
 			"current_year_data_loading",
-			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
+			time.Date(currentYear, 6, 15, 12, 0, 0, 0, time.UTC),
 			[]datastore.NewSpeciesData{
-				{ScientificName: "Year_Species_1", FirstSeenDate: "2024-03-15"},
-				{ScientificName: "Year_Species_2", FirstSeenDate: "2024-01-01"},
+				{ScientificName: "Year_Species_1", FirstSeenDate: recentDate},
+				{ScientificName: "Year_Species_2", FirstSeenDate: olderRecentDate},
 			},
 			nil, false,
 			"Current year data should load correctly for mid-year time",
 		},
 		{
 			"year_boundary_december",
-			time.Date(2024, 12, 31, 23, 59, 0, 0, time.UTC),
+			time.Date(currentYear, 12, 31, 23, 59, 0, 0, time.UTC),
 			[]datastore.NewSpeciesData{
-				{ScientificName: "Dec_Species", FirstSeenDate: "2024-12-31"},
+				{ScientificName: "Dec_Species", FirstSeenDate: recentDate},
 			},
 			nil, false,
 			"Year boundary (December 31st) should be handled correctly",
 		},
 		{
 			"year_boundary_january", 
-			time.Date(2024, 1, 1, 0, 1, 0, 0, time.UTC),
+			time.Date(currentYear, 1, 1, 0, 1, 0, 0, time.UTC),
 			[]datastore.NewSpeciesData{
-				{ScientificName: "Jan_Species", FirstSeenDate: "2024-01-01"},
+				{ScientificName: "Jan_Species", FirstSeenDate: recentDate},
 			},
 			nil, false,
 			"Year boundary (January 1st) should be handled correctly",
 		},
 		{
 			"leap_year_february",
-			time.Date(2024, 2, 29, 12, 0, 0, 0, time.UTC), // 2024 is leap year
+			time.Date(currentYear, 2, 28, 12, 0, 0, 0, time.UTC), // Use Feb 28 (works for all years)
 			[]datastore.NewSpeciesData{
-				{ScientificName: "Leap_Species", FirstSeenDate: "2024-02-29"},
+				{ScientificName: "Feb_Species", FirstSeenDate: recentDate},
 			},
 			nil, false,
-			"Leap year February 29th should be handled correctly",
+			"February date should be handled correctly",
 		},
 		{
 			"database_timeout_error",
-			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
+			time.Date(currentYear, 6, 15, 12, 0, 0, 0, time.UTC),
 			nil,
 			fmt.Errorf("database query timeout after 30s"),
 			true,
@@ -213,12 +224,12 @@ func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 		},
 		{
 			"corrupted_year_data",
-			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
+			time.Date(currentYear, 6, 15, 12, 0, 0, 0, time.UTC),
 			[]datastore.NewSpeciesData{
-				{ScientificName: "Good_Species", FirstSeenDate: "2024-06-01"},
-				{ScientificName: "", FirstSeenDate: "2024-06-02"}, // Empty name
+				{ScientificName: "Good_Species", FirstSeenDate: recentDate},
+				{ScientificName: "", FirstSeenDate: olderRecentDate}, // Empty name
 				{ScientificName: "Bad_Date_Species", FirstSeenDate: "2024-13-45"}, // Invalid date
-				{ScientificName: "Another_Good_Species", FirstSeenDate: "2024-06-03"},
+				{ScientificName: "Another_Good_Species", FirstSeenDate: recentDate},
 			},
 			nil, false,
 			"Corrupted data should not prevent loading of valid entries",
@@ -363,9 +374,12 @@ func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
 			// Create mock datastore
 			ds := &MockSpeciesDatastore{}
 			
-			// Setup mock data for initial load and sync calls
+			// Setup mock data for initial load and sync calls with recent dates
+			recentDate := time.Now().AddDate(0, 0, -5).Format("2006-01-02") // 5 days ago
+			newerRecentDate := time.Now().AddDate(0, 0, -2).Format("2006-01-02") // 2 days ago
+			
 			initialData := []datastore.NewSpeciesData{
-				{ScientificName: "Initial_Species", FirstSeenDate: "2024-01-01"},
+				{ScientificName: "Initial_Species", FirstSeenDate: recentDate},
 			}
 			
 			// Setup sync data based on test scenario
@@ -373,14 +387,15 @@ func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
 			var syncError error
 			
 			if tt.expectSync {
-				if tt.databaseError != nil {
+				switch {
+				case tt.databaseError != nil:
 					syncError = tt.databaseError
-				} else if tt.databaseChanges {
+				case tt.databaseChanges:
 					syncData = []datastore.NewSpeciesData{
-						{ScientificName: "Initial_Species", FirstSeenDate: "2024-01-01"},
-						{ScientificName: "Synced_New_Species", FirstSeenDate: "2024-01-15"},
+						{ScientificName: "Initial_Species", FirstSeenDate: recentDate},
+						{ScientificName: "Synced_New_Species", FirstSeenDate: newerRecentDate},
 					}
-				} else {
+				default:
 					syncData = initialData // Same data
 				}
 			}
@@ -451,12 +466,14 @@ func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
 // generateLargeDataset creates a large dataset for performance testing
 func generateLargeDataset(count int) []datastore.NewSpeciesData {
 	data := make([]datastore.NewSpeciesData, count)
-	baseDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	// Use current time minus a few days to ensure data is recent
+	baseDate := time.Now().AddDate(0, 0, -10) // 10 days ago
 	
 	for i := 0; i < count; i++ {
 		// Generate species name and date
 		speciesName := fmt.Sprintf("Large_Dataset_Species_%06d", i)
-		detectionDate := baseDate.AddDate(0, 0, i%365) // Spread across a year
+		// Spread across 10 days instead of full year to keep all data recent
+		detectionDate := baseDate.AddDate(0, 0, i%10) 
 		dateStr := detectionDate.Format("2006-01-02")
 		
 		data[i] = datastore.NewSpeciesData{

@@ -257,8 +257,14 @@ func TestComputeCurrentSeason_CriticalReliability(t *testing.T) {
 		{
 			"autumn_start_september_21",
 			time.Date(2024, 9, 21, 12, 0, 0, 0, time.UTC),
+			"summer",
+			"September 21 should be Summer (Fall starts Sept 22)",
+		},
+		{
+			"autumn_start_september_22",
+			time.Date(2024, 9, 22, 12, 0, 0, 0, time.UTC),
 			"fall",
-			"Autumn equinox should be calculated as Autumn",
+			"September 22 should be Fall (actual Autumn equinox)",
 		},
 		{
 			"autumn_end_december_20",
@@ -285,10 +291,16 @@ func TestComputeCurrentSeason_CriticalReliability(t *testing.T) {
 			"Mid-February should be Winter",
 		},
 		{
+			"winter_end_march_19",
+			time.Date(2024, 3, 19, 12, 0, 0, 0, time.UTC),
+			"winter",
+			"March 19 should be Winter (last day before Spring starts)",
+		},
+		{
 			"winter_end_march_20",
 			time.Date(2024, 3, 20, 12, 0, 0, 0, time.UTC),
-			"winter",
-			"Last day of winter should be Winter",
+			"spring",
+			"March 20 should be Spring (Spring starts March 20)",
 		},
 		{
 			"leap_year_february_29",

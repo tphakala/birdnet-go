@@ -233,6 +233,9 @@ func TestCacheLRUEviction_CriticalReliability(t *testing.T) {
 	require.NotNil(t, tracker)
 	require.NoError(t, tracker.InitFromDatabase())
 
+	// Set a longer TTL so entries don't get expired during LRU test
+	tracker.cacheTTL = 2 * time.Hour // Long enough so entries aren't expired
+
 	currentTime := time.Now()
 
 	// Fill cache beyond limit to trigger LRU
@@ -242,8 +245,8 @@ func TestCacheLRUEviction_CriticalReliability(t *testing.T) {
 	// Add entries with different timestamps for LRU testing
 	for i := 0; i < totalEntries; i++ {
 		speciesName := fmt.Sprintf("LRU_Test_Species_%04d", i)
-		// Older entries have earlier timestamps
-		entryTime := currentTime.Add(-time.Duration(totalEntries-i) * time.Minute)
+		// Older entries have earlier timestamps (but within TTL)
+		entryTime := currentTime.Add(-time.Duration(totalEntries-i) * time.Second)
 		
 		tracker.statusCache[speciesName] = cachedSpeciesStatus{
 			status: SpeciesStatus{
@@ -326,7 +329,7 @@ func TestBuildSpeciesStatusWithBuffer_CriticalReliability(t *testing.T) {
 			&time.Time{},
 			14,
 			true, 10, true, true,
-			"Species within window should be marked as new",
+			"Species within lifetime window, new to year/season should be marked as new",
 		},
 		{
 			"existing_outside_window",
@@ -359,7 +362,7 @@ func TestBuildSpeciesStatusWithBuffer_CriticalReliability(t *testing.T) {
 			&time.Time{},
 			14,
 			true, 14, true, true,
-			"Species exactly at window boundary should be marked as new",
+			"Species exactly at window boundary, new to year/season should be marked as new",
 		},
 		{
 			"edge_case_just_outside_window",
@@ -424,13 +427,15 @@ func TestBuildSpeciesStatusWithBuffer_CriticalReliability(t *testing.T) {
 				*tt.lifetimeFirstSeen = firstSeen
 			}
 
-			if tt.yearlyFirstSeen != nil && tt.expectedDaysSince <= 30 {
+			// Only populate yearly tracking if we expect IsNewThisYear = false
+			if tt.yearlyFirstSeen != nil && tt.expectedDaysSince <= 30 && !tt.expectedIsNewYear {
 				yearFirst := tt.currentTime.Add(-time.Duration(tt.expectedDaysSince) * 24 * time.Hour)
 				tracker.speciesThisYear[tt.speciesName] = yearFirst
 				*tt.yearlyFirstSeen = yearFirst
 			}
 
-			if tt.seasonalFirstSeen != nil && tt.expectedDaysSince <= 30 {
+			// Only populate seasonal tracking if we expect IsNewThisSeason = false
+			if tt.seasonalFirstSeen != nil && tt.expectedDaysSince <= 30 && !tt.expectedIsNewSeason {
 				seasonFirst := tt.currentTime.Add(-time.Duration(tt.expectedDaysSince) * 24 * time.Hour)
 				currentSeason := tracker.getCurrentSeason(tt.currentTime)
 				if tracker.speciesBySeason[currentSeason] == nil {

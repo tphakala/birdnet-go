@@ -321,7 +321,7 @@ func TestFullWorkflow_ErrorRecovery(t *testing.T) {
 
 	// InitFromDatabase correctly returns error when datastore is nil
 	err := tracker.InitFromDatabase()
-	assert.Error(t, err, "Should return error when datastore is nil")
+	require.Error(t, err, "Should return error when datastore is nil")
 	assert.Contains(t, err.Error(), "datastore is nil", "Error should indicate nil datastore")
 
 	// Tracker should still be functional
@@ -339,7 +339,7 @@ func TestFullWorkflow_ErrorRecovery(t *testing.T) {
 
 	// InitFromDatabase properly returns error when datastore fails (expected behavior)
 	err = tracker2.InitFromDatabase()
-	assert.Error(t, err, "Should return error when datastore fails")
+	require.Error(t, err, "Should return error when datastore fails")
 	assert.Contains(t, err.Error(), "database error", "Error should contain database error message")
 
 	// Even though initialization failed, tracker should still be functional for new detections
@@ -382,7 +382,7 @@ func TestFullWorkflow_MemoryManagement(t *testing.T) {
 
 	// Test pruning old entries
 	prunedCount := tracker.PruneOldEntries()
-	assert.Greater(t, prunedCount, 0, "Should prune some old entries")
+	assert.Positive(t, prunedCount, "Should prune some old entries")
 
 	// Check count after pruning
 	finalCount := tracker.GetSpeciesCount()

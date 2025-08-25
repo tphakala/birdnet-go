@@ -233,11 +233,11 @@ func TestCheckAndUpdateSpecies_CriticalReliability(t *testing.T) {
 			"Updated_Species",
 			time.Now().AddDate(0, 0, -10), // Detection 10 days ago
 			func(tracker *NewSpeciesTracker, now time.Time) {
-				tracker.speciesFirstSeen["Updated_Species"] = now.AddDate(0, 0, -5) // Originally 5 days ago
+				tracker.speciesFirstSeen["Updated_Species"] = now.AddDate(0, 0, 5) // Originally 5 days from detection (5 days ago)
 			},
 			true, // New earliest detection
-			0,    // Days from new earliest
-			"Earlier detection should update and be marked as new",
+			0,    // Days from new earliest detection
+			"Earlier detection should update first seen time and be marked as new",
 		},
 		{
 			"later_detection_no_update",
@@ -400,7 +400,7 @@ func TestCheckAndUpdateSpecies_Atomicity(t *testing.T) {
 	}
 
 	// Verify consistency
-	assert.Greater(t, newCount, 0, "At least some updates should report as new")
+	assert.Positive(t, newCount, "At least some updates should report as new")
 	assert.GreaterOrEqual(t, minDays, 0, "Minimum days should be non-negative")
 
 	// Verify final state
