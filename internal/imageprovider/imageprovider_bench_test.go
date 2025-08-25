@@ -33,6 +33,11 @@ func BenchmarkCacheHit(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create cache: %v", err)
 	}
+	defer func() {
+		if err := cache.Close(); err != nil {
+			b.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 	cache.SetImageProvider(mockProvider)
 
 	// Pre-populate cache
@@ -78,6 +83,11 @@ func BenchmarkCacheMissWithDBHit(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create cache: %v", err)
 	}
+	defer func() {
+		if err := cache.Close(); err != nil {
+			b.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 	cache.SetImageProvider(mockProvider)
 
 	b.ReportAllocs()
@@ -108,6 +118,11 @@ func BenchmarkCacheMissWithProviderFetch(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create cache: %v", err)
 	}
+	defer func() {
+		if err := cache.Close(); err != nil {
+			b.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 	cache.SetImageProvider(mockProvider)
 
 	b.ReportAllocs()
@@ -136,6 +151,11 @@ func BenchmarkConcurrentCacheAccess(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create cache: %v", err)
 	}
+	defer func() {
+		if err := cache.Close(); err != nil {
+			b.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 	cache.SetImageProvider(mockProvider)
 
 	// Pre-populate some cache entries
@@ -177,7 +197,11 @@ func BenchmarkRateLimitedFetch(b *testing.B) {
 	}
 
 	cache := imageprovider.InitCache("wikimedia", provider, metrics, mockStore)
-	_ = cache // Mark as used
+	defer func() {
+		if err := cache.Close(); err != nil {
+			b.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	// Test species that are likely to exist in Wikipedia
 	testSpecies := []string{
@@ -215,6 +239,11 @@ func BenchmarkGetBatch(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create cache: %v", err)
 	}
+	defer func() {
+		if err := cache.Close(); err != nil {
+			b.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 	cache.SetImageProvider(mockProvider)
 
 	// Create batch of species names
@@ -260,6 +289,11 @@ func BenchmarkMemoryUsage(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create cache: %v", err)
 	}
+	defer func() {
+		if err := cache.Close(); err != nil {
+			b.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 	cache.SetImageProvider(mockProvider)
 
 	b.ReportAllocs()
@@ -311,6 +345,11 @@ func BenchmarkCacheRefreshCycle(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create cache: %v", err)
 	}
+	defer func() {
+		if err := cache.Close(); err != nil {
+			b.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 	cache.SetImageProvider(mockProvider)
 
 	// Let refresh cycle run
@@ -343,6 +382,11 @@ func BenchmarkProviderAccess(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create cache: %v", err)
 	}
+	defer func() {
+		if err := cache.Close(); err != nil {
+			b.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 	cache.SetImageProvider(mockProvider)
 
 	// Pre-populate cache to focus on provider access
@@ -423,6 +467,11 @@ func BenchmarkConcurrentInitialization(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create cache: %v", err)
 	}
+	defer func() {
+		if err := cache.Close(); err != nil {
+			b.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 	cache.SetImageProvider(mockProvider)
 
 	b.ReportAllocs()

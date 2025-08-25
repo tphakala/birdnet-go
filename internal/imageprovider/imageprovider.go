@@ -1085,6 +1085,7 @@ func (c *BirdImageCache) updateMetrics() {
 	// c.metrics.SetMemoryCacheSizeBytes(float64(c.MemoryUsage())) // Method doesn't exist
 }
 
+
 // CreateDefaultCache creates the default BirdImageCache (currently Wikimedia Commons via Wikipedia API).
 func CreateDefaultCache(metricsCollector *observability.Metrics, store datastore.Interface) (*BirdImageCache, error) {
 	// Use the correct constructor name from wikipedia.go

@@ -51,6 +51,11 @@ func TestErrorHandlingEnhancement(t *testing.T) {
 				}
 				metrics, _ := observability.NewMetrics()
 				cache, _ := imageprovider.CreateDefaultCache(metrics, failingStore)
+				defer func() {
+					if closeErr := cache.Close(); closeErr != nil {
+						t.Logf("Failed to close cache: %v", closeErr)
+					}
+				}()
 				cache.SetImageProvider(&mockImageProvider{})
 				_, err := cache.Get("Test species")
 				return err
@@ -104,6 +109,11 @@ func TestErrorContextData(t *testing.T) {
 	mockStore := newMockStore()
 	metrics, _ := observability.NewMetrics()
 	cache, _ := imageprovider.CreateDefaultCache(metrics, mockStore)
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 	cache.SetImageProvider(mockProvider)
 
 	_, err := cache.Get("Turdus merula")
