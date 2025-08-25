@@ -1,5 +1,33 @@
 #!/bin/sh
 
+# Go backend checks
+echo "🔍 Running backend pre-commit checks..."
+
+# Check if any Go files are being committed
+GO_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
+
+if [ -n "$GO_FILES" ]; then
+  echo "📝 Go files detected in commit, running golangci-lint..."
+  
+  # Check if golangci-lint is available
+  if ! command -v golangci-lint >/dev/null 2>&1; then
+    echo "❌ golangci-lint is not installed or not in PATH"
+    echo "💡 Install it with: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$(go env GOPATH)/bin v1.61.0"
+    exit 1
+  fi
+  
+  # Run golangci-lint
+  echo "   Linting Go files..."
+  if ! golangci-lint run --out-format=colored-line-number --print-issued-lines=false; then
+    echo "❌ golangci-lint found issues in Go files"
+    echo "💡 Fix the issues above or run: git commit --no-verify to bypass"
+    exit 1
+  fi
+  echo "✅ golangci-lint passed for all Go files"
+else
+  echo "📄 No Go files in this commit, skipping golangci-lint"
+fi
+
 # Frontend checks
 echo "🔍 Running frontend pre-commit checks..."
 cd frontend || exit 1
