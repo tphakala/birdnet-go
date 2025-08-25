@@ -1282,6 +1282,26 @@ func (t *NewSpeciesTracker) ClearCacheForTesting() {
 	t.statusCache = make(map[string]cachedSpeciesStatus)
 }
 
+// ForceCleanupForTesting forces cache cleanup with the given time for testing purposes.
+// This method should only be used in tests to simulate cache cleanup without
+// manipulating internal fields directly.
+func (t *NewSpeciesTracker) ForceCleanupForTesting(currentTime time.Time) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.cleanupExpiredCache(currentTime)
+}
+
+// CacheSizeForTesting returns the current number of entries in the status cache.
+// This method should only be used in tests to verify cache behavior without
+// accessing internal fields directly.
+func (t *NewSpeciesTracker) CacheSizeForTesting() int {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	return len(t.statusCache)
+}
+
 // ShouldSuppressNotification checks if a notification for this species should be suppressed
 // based on when the last notification was sent for this species.
 // Returns true if notification should be suppressed, false if it should be sent.
