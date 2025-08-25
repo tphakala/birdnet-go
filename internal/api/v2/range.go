@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -391,7 +392,9 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 	
 	// Set headers for file download
 	filename := "birdnet_range_filter_species_" + time.Now().Format("20060102_150405") + ".csv"
-	ctx.Response().Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	// RFC 5987: Include both filename and filename* for UTF-8 support
+	encodedFilename := url.QueryEscape(filename)
+	ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q; filename*=UTF-8''%s", filename, encodedFilename))
 	
 	// Add cache control headers to prevent browser caching
 	ctx.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")

@@ -98,7 +98,8 @@
       "cancelEdit": "Cancelar edición",
       "editSpecies": "Editar especie",
       "removeSpecies": "Eliminar especie",
-      "dismissError": "Descartar error"
+      "dismissError": "Descartar error",
+      "downloadCsv": "Descargar lista de especies en CSV"
     },
     "modal": {
       "confirmAction": "Confirmar acción",
@@ -680,9 +681,7 @@
             "loading": "Cargando...",
             "viewSpecies": "Ver especies"
           },
-          "download": "Descargar",
           "downloadTitle": "Descargar lista de especies como CSV",
-          "downloadCSV": "Descargar CSV",
           "csvDownloaded": "Lista de especies descargada exitosamente",
           "csvDownloadFailed": "Error al descargar la lista de especies. Por favor, inténtalo de nuevo.",
           "modal": {

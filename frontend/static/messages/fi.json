@@ -98,7 +98,8 @@
       "cancelEdit": "Peruuta muokkaus",
       "editSpecies": "Muokkaa lajia",
       "removeSpecies": "Poista laji",
-      "dismissError": "Hylkää virhe"
+      "dismissError": "Hylkää virhe",
+      "downloadCsv": "Lataa lajilista CSV-tiedostona"
     },
     "modal": {
       "confirmAction": "Vahvista toiminto",
@@ -680,9 +681,7 @@
             "loading": "Ladataan...",
             "viewSpecies": "Näytä lajit"
           },
-          "download": "Lataa",
           "downloadTitle": "Lataa lajilista CSV-muodossa",
-          "downloadCSV": "Lataa CSV",
           "csvDownloaded": "Lajilista ladattu onnistuneesti",
           "csvDownloadFailed": "Lajilistan lataus epäonnistui. Yritä uudelleen.",
           "modal": {

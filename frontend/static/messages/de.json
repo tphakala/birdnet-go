@@ -98,7 +98,8 @@
       "cancelEdit": "Bearbeitung abbrechen",
       "editSpecies": "Art bearbeiten",
       "removeSpecies": "Art entfernen",
-      "dismissError": "Fehler verwerfen"
+      "dismissError": "Fehler verwerfen",
+      "downloadCsv": "Artenliste als CSV herunterladen"
     },
     "modal": {
       "confirmAction": "Aktion bestätigen",
@@ -680,9 +681,7 @@
             "loading": "Wird geladen...",
             "viewSpecies": "Arten anzeigen"
           },
-          "download": "Herunterladen",
           "downloadTitle": "Artenliste als CSV herunterladen",
-          "downloadCSV": "CSV herunterladen",
           "csvDownloaded": "Artenliste erfolgreich heruntergeladen",
           "csvDownloadFailed": "Fehler beim Herunterladen der Artenliste. Bitte versuchen Sie es erneut.",
           "modal": {

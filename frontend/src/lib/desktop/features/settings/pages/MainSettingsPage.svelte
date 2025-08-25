@@ -148,6 +148,7 @@
     speciesCount: number | null;
     loading: boolean;
     testing: boolean;
+    downloading: boolean;
     error: string | null;
     showModal: boolean;
     species: any[];
@@ -155,6 +156,7 @@
     speciesCount: null,
     loading: false,
     testing: false,
+    downloading: false,
     error: null,
     showModal: false,
     species: [],
@@ -914,9 +916,7 @@
 
   async function loadRangeFilterCount() {
     try {
-      const response = await fetch('/api/v2/range/species/count', {
-        headers: { 'X-CSRF-Token': getCsrfToken() || '' },
-      });
+      const response = await fetch('/api/v2/range/species/count');
       if (!response.ok) throw new Error('Failed to load range filter count');
       const data = await response.json();
       rangeFilterState.speciesCount = data.count;
@@ -1055,7 +1055,12 @@
 
   // Download range filter species list as CSV
   async function downloadSpeciesCSV() {
+    // Prevent duplicate requests
+    if (rangeFilterState.downloading) return;
+
     try {
+      rangeFilterState.downloading = true;
+
       // Construct URL with current parameters
       const params = new URLSearchParams({
         latitude: settings.birdnet.latitude.toString(),
@@ -1118,6 +1123,8 @@
     } catch (error) {
       logger.error('Failed to download species CSV:', error);
       toastActions.error(t('settings.main.sections.rangeFilter.csvDownloadFailed'));
+    } finally {
+      rangeFilterState.downloading = false;
     }
   }
 </script>
@@ -1462,13 +1469,15 @@
               <button
                 type="button"
                 class="btn btn-sm btn-primary"
-                disabled={!rangeFilterState.speciesCount || rangeFilterState.loading}
+                disabled={!rangeFilterState.speciesCount ||
+                  rangeFilterState.loading ||
+                  rangeFilterState.downloading}
                 onclick={downloadSpeciesCSV}
                 title={t('settings.main.sections.rangeFilter.downloadTitle')}
-                aria-label={t('settings.main.sections.rangeFilter.downloadTitle')}
+                aria-label={t('common.aria.downloadCsv')}
               >
                 {@html mediaIcons.download}
-                <span class="ml-1">{t('settings.main.sections.rangeFilter.download')}</span>
+                <span class="ml-1">{t('analytics.filters.exportCsv')}</span>
               </button>
             </div>
             <div class="label">
@@ -1806,10 +1815,13 @@
           type="button"
           class="btn btn-sm btn-primary"
           onclick={downloadSpeciesCSV}
-          disabled={rangeFilterState.loading || !rangeFilterState.speciesCount}
+          disabled={rangeFilterState.loading ||
+            rangeFilterState.downloading ||
+            !rangeFilterState.speciesCount}
+          aria-label={t('common.aria.downloadCsv')}
         >
           {@html mediaIcons.download}
-          <span class="ml-1">{t('settings.main.sections.rangeFilter.downloadCSV')}</span>
+          <span class="ml-1">{t('analytics.filters.exportCsv')}</span>
         </button>
         <button
           type="button"
