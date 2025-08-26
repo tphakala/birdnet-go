@@ -5,7 +5,7 @@
   import SpeciesCard from '../components/ui/SpeciesCard.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
-  import { parseLocalDateString } from '$lib/utils/date';
+  import { parseLocalDateString, getLocalDateString } from '$lib/utils/date';
 
   const logger = loggers.analytics;
 
@@ -66,7 +66,7 @@
   });
 
   function formatDateForInput(date: Date): string {
-    return date.toISOString().split('T')[0];
+    return getLocalDateString(date);
   }
 
   function formatNumber(number: number): string {
@@ -341,7 +341,7 @@
     const url = URL.createObjectURL(blob);
 
     link.setAttribute('href', url);
-    link.setAttribute('download', `birdnet-species-${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `birdnet-species-${getLocalDateString()}.csv`);
     link.style.visibility = 'hidden';
 
     document.body.appendChild(link);

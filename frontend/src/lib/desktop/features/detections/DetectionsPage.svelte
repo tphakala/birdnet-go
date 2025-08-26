@@ -4,6 +4,7 @@
   import type { DetectionsListData, DetectionQueryParams } from '$lib/types/detection.types';
   import DetectionsCard from './components/DetectionsCard.svelte';
   import { getLogger } from '$lib/utils/logger';
+  import { getLocalDateString } from '$lib/utils/date';
 
   const logger = getLogger('app');
 
@@ -54,7 +55,7 @@
 
     return {
       queryType,
-      date: params.get('date') || new Date().toISOString().split('T')[0],
+      date: params.get('date') || getLocalDateString(),
       hour: params.get('hour') || undefined,
       duration: params.get('duration') ? parseInt(params.get('duration')!) : undefined,
       species: params.get('species') || undefined,

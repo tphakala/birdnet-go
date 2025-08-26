@@ -9,7 +9,7 @@
   import { t } from '$lib/i18n';
   import { getLogger } from '$lib/utils/logger';
   import { safeArrayAccess, safeGet } from '$lib/utils/security';
-  import { parseLocalDateString } from '$lib/utils/date';
+  import { parseLocalDateString, getLocalDateString } from '$lib/utils/date';
 
   const logger = getLogger('app');
 
@@ -187,7 +187,7 @@
 
   // Format date for input (YYYY-MM-DD)
   function formatDateForInput(date: Date): string {
-    return date.toISOString().split('T')[0];
+    return getLocalDateString(date);
   }
 
   // Get period label based on current filter
@@ -1132,7 +1132,7 @@
               label: context => {
                 const dataPoint = context.dataset.data[context.dataIndex] as [number, number];
                 // dataPoint[0] is already a timestamp, format it directly
-                const startDate = new Date(dataPoint[0]).toISOString().split('T')[0];
+                const startDate = getLocalDateString(new Date(dataPoint[0]));
                 return `${t('analytics.charts.firstHeard')}: ${startDate}`;
               },
             },
