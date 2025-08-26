@@ -993,6 +993,12 @@ func (c *Collector) getLogSearchPaths() []string {
 func (lfc *logFileCollector) processLogPath(w *zip.Writer, logPath string) error {
 	info, err := os.Stat(logPath)
 	if err != nil {
+		// If the path doesn't exist, return a simple error (not enhanced)
+		// This is expected during log path search and shouldn't create user notifications
+		if os.IsNotExist(err) {
+			return err // Return simple error for non-existent paths
+		}
+		// For other errors (permission, etc.), create enhanced error
 		return errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
