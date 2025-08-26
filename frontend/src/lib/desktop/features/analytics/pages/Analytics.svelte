@@ -1126,10 +1126,8 @@
               title: tooltipItems => tooltipItems[0].label,
               label: context => {
                 const dataPoint = context.dataset.data[context.dataIndex] as [number, number];
-                const startDate =
-                  parseLocalDateString(new Date(dataPoint[0]).toISOString())
-                    ?.toISOString()
-                    .split('T')[0] ?? '';
+                // dataPoint[0] is already a timestamp, format it directly
+                const startDate = new Date(dataPoint[0]).toISOString().split('T')[0];
                 return `${t('analytics.charts.firstHeard')}: ${startDate}`;
               },
             },

@@ -7,22 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
-
-// Fixed implementation using the new utility
-function fixedPreviousDay(selectedDate: string): string {
-  const date = parseLocalDateString(selectedDate);
-  if (!date) throw new Error('Invalid date');
-  date.setDate(date.getDate() - 1);
-  return getLocalDateString(date);
-}
-
-function fixedNextDay(selectedDate: string): string {
-  const date = parseLocalDateString(selectedDate);
-  if (!date) throw new Error('Invalid date');
-  date.setDate(date.getDate() + 1);
-  return getLocalDateString(date);
-}
+import { getLocalDateString, getPreviousDay, getNextDay, addDays } from '$lib/utils/date';
 
 describe('DashboardPage Date Navigation Bug', () => {
   describe('Bug Demonstration', () => {
@@ -69,64 +54,80 @@ describe('DashboardPage Date Navigation Bug', () => {
     it('navigates dates correctly with fixed implementation', () => {
       const startDate = '2025-08-25';
 
-      // Test going backwards
-      const prev1 = fixedPreviousDay(startDate);
+      // Test going backwards using the shared utility
+      const prev1 = getPreviousDay(startDate);
       expect(prev1).toBe('2025-08-24');
 
-      const prev2 = fixedPreviousDay(prev1);
+      const prev2 = getPreviousDay(prev1);
       expect(prev2).toBe('2025-08-23');
 
       // Test going forwards
-      const next1 = fixedNextDay(startDate);
+      const next1 = getNextDay(startDate);
       expect(next1).toBe('2025-08-26');
 
-      const next2 = fixedNextDay(next1);
+      const next2 = getNextDay(next1);
       expect(next2).toBe('2025-08-27');
     });
 
     it('handles month boundaries correctly', () => {
       // End of month
       const endOfAugust = '2025-08-31';
-      const startOfSeptember = fixedNextDay(endOfAugust);
+      const startOfSeptember = getNextDay(endOfAugust);
       expect(startOfSeptember).toBe('2025-09-01');
 
       // Beginning of month
       const startOfSep = '2025-09-01';
-      const endOfAug = fixedPreviousDay(startOfSep);
+      const endOfAug = getPreviousDay(startOfSep);
       expect(endOfAug).toBe('2025-08-31');
 
       // February (non-leap year)
       const endOfFeb = '2025-02-28';
-      const startOfMarch = fixedNextDay(endOfFeb);
+      const startOfMarch = getNextDay(endOfFeb);
       expect(startOfMarch).toBe('2025-03-01');
     });
 
     it('handles year boundaries correctly', () => {
       // End of year
       const endOfYear = '2025-12-31';
-      const newYear = fixedNextDay(endOfYear);
+      const newYear = getNextDay(endOfYear);
       expect(newYear).toBe('2026-01-01');
 
       // Beginning of year
       const firstDay = '2026-01-01';
-      const lastDay = fixedPreviousDay(firstDay);
+      const lastDay = getPreviousDay(firstDay);
       expect(lastDay).toBe('2025-12-31');
+    });
+
+    it('tests the addDays utility for multiple day navigation', () => {
+      const startDate = '2025-08-25';
+
+      // Add multiple days
+      expect(addDays(startDate, 7)).toBe('2025-09-01');
+      expect(addDays(startDate, 30)).toBe('2025-09-24');
+
+      // Subtract multiple days
+      expect(addDays(startDate, -7)).toBe('2025-08-18');
+      expect(addDays(startDate, -30)).toBe('2025-07-26');
+
+      // Year boundary
+      expect(addDays('2024-12-25', 10)).toBe('2025-01-04');
+      expect(addDays('2025-01-05', -10)).toBe('2024-12-26');
     });
 
     it('handles leap year correctly', () => {
       // 2024 is a leap year
       const feb28 = '2024-02-28';
-      const feb29 = fixedNextDay(feb28);
+      const feb29 = getNextDay(feb28);
       expect(feb29).toBe('2024-02-29');
 
-      const mar1 = fixedNextDay(feb29);
+      const mar1 = getNextDay(feb29);
       expect(mar1).toBe('2024-03-01');
 
       // Going backwards
-      const backToFeb29 = fixedPreviousDay(mar1);
+      const backToFeb29 = getPreviousDay(mar1);
       expect(backToFeb29).toBe('2024-02-29');
 
-      const backToFeb28 = fixedPreviousDay(backToFeb29);
+      const backToFeb28 = getPreviousDay(backToFeb29);
       expect(backToFeb28).toBe('2024-02-28');
     });
 
@@ -145,7 +146,7 @@ describe('DashboardPage Date Navigation Bug', () => {
       ];
 
       expectedBackwardDates.forEach(expected => {
-        currentDate = fixedPreviousDay(currentDate);
+        currentDate = getPreviousDay(currentDate);
         expect(currentDate).toBe(expected);
       });
 
@@ -161,7 +162,7 @@ describe('DashboardPage Date Navigation Bug', () => {
       ];
 
       expectedForwardDates.forEach(expected => {
-        currentDate = fixedNextDay(currentDate);
+        currentDate = getNextDay(currentDate);
         expect(currentDate).toBe(expected);
       });
 
@@ -180,14 +181,14 @@ describe('DashboardPage Date Navigation Bug', () => {
 
       dates.forEach(date => {
         // Each date should navigate correctly
-        const prev = fixedPreviousDay(date);
-        const next = fixedNextDay(date);
+        const prev = getPreviousDay(date);
+        const next = getNextDay(date);
 
         // Going back then forward should return to original
-        expect(fixedNextDay(prev)).toBe(date);
+        expect(getNextDay(prev)).toBe(date);
 
         // Going forward then back should return to original
-        expect(fixedPreviousDay(next)).toBe(date);
+        expect(getPreviousDay(next)).toBe(date);
       });
     });
   });
@@ -199,20 +200,20 @@ describe('DashboardPage Date Navigation Bug', () => {
       const duringDST = '2025-03-09'; // Sunday (DST starts at 2 AM)
       const afterDST = '2025-03-10'; // Monday after DST
 
-      expect(fixedNextDay(beforeDST)).toBe(duringDST);
-      expect(fixedNextDay(duringDST)).toBe(afterDST);
-      expect(fixedPreviousDay(afterDST)).toBe(duringDST);
-      expect(fixedPreviousDay(duringDST)).toBe(beforeDST);
+      expect(getNextDay(beforeDST)).toBe(duringDST);
+      expect(getNextDay(duringDST)).toBe(afterDST);
+      expect(getPreviousDay(afterDST)).toBe(duringDST);
+      expect(getPreviousDay(duringDST)).toBe(beforeDST);
 
       // Fall back (DST ends) - typically first Sunday in November
       const beforeEnd = '2025-11-01'; // Saturday before DST ends
       const duringEnd = '2025-11-02'; // Sunday (DST ends at 2 AM)
       const afterEnd = '2025-11-03'; // Monday after DST ends
 
-      expect(fixedNextDay(beforeEnd)).toBe(duringEnd);
-      expect(fixedNextDay(duringEnd)).toBe(afterEnd);
-      expect(fixedPreviousDay(afterEnd)).toBe(duringEnd);
-      expect(fixedPreviousDay(duringEnd)).toBe(beforeEnd);
+      expect(getNextDay(beforeEnd)).toBe(duringEnd);
+      expect(getNextDay(duringEnd)).toBe(afterEnd);
+      expect(getPreviousDay(afterEnd)).toBe(duringEnd);
+      expect(getPreviousDay(duringEnd)).toBe(beforeEnd);
     });
 
     it('handles invalid dates gracefully', () => {
@@ -276,8 +277,8 @@ describe('DashboardPage Date Navigation Bug', () => {
       // Note: We can't fully test the buggy behavior without timezone mocking
       // but we can verify the fixed implementation works correctly
 
-      const fixedPrev = fixedPreviousDay(testDate);
-      const fixedNext = fixedNextDay(testDate);
+      const fixedPrev = getPreviousDay(testDate);
+      const fixedNext = getNextDay(testDate);
 
       expect(fixedPrev).toBe('2025-08-24');
       expect(fixedNext).toBe('2025-08-26');
