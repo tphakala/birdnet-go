@@ -335,6 +335,9 @@ func (s *Service) CreateErrorNotification(err error) (*Notification, error) {
 		case string(errors.CategoryNetwork), string(errors.CategoryHTTP):
 			priority = PriorityHigh
 			title = fmt.Sprintf("%s Error", category)
+		case string(errors.CategoryImageProvider), string(errors.CategoryImageFetch):
+			priority = PriorityLow
+			title = "Image Provider Notice"
 		default:
 			priority = PriorityMedium
 			title = "Application Error"

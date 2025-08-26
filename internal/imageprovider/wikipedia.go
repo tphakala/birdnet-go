@@ -20,6 +20,41 @@ import (
 
 const wikiProviderName = "wikimedia"
 
+// Error categorization for enhanced diagnostics
+type apiErrorCategory struct {
+	Type        string
+	Description string
+	Severity    string
+	Actionable  bool
+}
+
+var (
+	errorCategoryJSONParsing = apiErrorCategory{
+		Type:        "json_parsing_failure",
+		Description: "Wikipedia returned HTML error page instead of JSON",
+		Severity:    "low",
+		Actionable:  false,
+	}
+	errorCategoryNetworkFailure = apiErrorCategory{
+		Type:        "network_failure", 
+		Description: "Network connectivity or Wikipedia API unavailable",
+		Severity:    "high",
+		Actionable:  true,
+	}
+	errorCategoryAPIStructuredError = apiErrorCategory{
+		Type:        "api_structured_error",
+		Description: "Wikipedia API returned structured error response",
+		Severity:    "low",
+		Actionable:  true,
+	}
+	errorCategoryMalformedResponse = apiErrorCategory{
+		Type:        "malformed_response",
+		Description: "Wikipedia API response format unexpected",
+		Severity:    "low", 
+		Actionable:  true,
+	}
+)
+
 // wikiMediaProvider implements the ImageProvider interface for Wikipedia.
 type wikiMediaProvider struct {
 	client            *mwclient.Client
@@ -34,6 +69,48 @@ type wikiMediaAuthor struct {
 	URL         string
 	licenseName string
 	licenseURL  string
+}
+
+// logAPIError logs API errors with enhanced diagnostics and categorization
+func logAPIError(logger *slog.Logger, category apiErrorCategory, reqID, species string, params map[string]string, err error) {
+	logger.Error("Wikipedia API error - categorized for diagnostics",
+		"error_category", category.Type,
+		"error_description", category.Description,
+		"error_severity", category.Severity,
+		"actionable", category.Actionable,
+		"request_id", reqID,
+		"species_query", species,
+		"api_params", params,
+		"original_error", err.Error(),
+		"troubleshooting_hint", getTroubleshootingHint(category))
+}
+
+// getTroubleshootingHint provides actionable troubleshooting advice based on error category
+func getTroubleshootingHint(category apiErrorCategory) string {
+	switch category.Type {
+	case "json_parsing_failure":
+		return "This usually means the species has no Wikipedia page. Check if scientific name is correct or if alternative names exist."
+	case "network_failure":
+		return "Check network connectivity and Wikipedia API status. Consider implementing backoff or fallback providers."
+	case "api_structured_error":
+		return "Wikipedia API rejected the request. Check API parameters, rate limits, or API changes."
+	case "malformed_response":
+		return "Wikipedia API response format unexpected. May indicate API changes or temporary service issues."
+	default:
+		return "Review error details and consider checking Wikipedia API documentation for changes."
+	}
+}
+
+// logAPISuccess logs successful API operations for baseline metrics
+func logAPISuccess(logger *slog.Logger, reqID, species, operation string, params map[string]string, responseMetadata map[string]interface{}) {
+	logger.Info("Wikipedia API success - operation completed normally",
+		"success", true,
+		"request_id", reqID,
+		"species_query", species,
+		"operation", operation,
+		"api_params", params,
+		"response_metadata", responseMetadata,
+		"diagnostic_info", "normal_successful_operation_for_baseline_metrics")
 }
 
 // NewWikiMediaProvider creates a new Wikipedia media provider.
@@ -106,6 +183,21 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 			return resp, nil // Success
 		}
 
+		// Check if this is a JSON parsing error (Wikipedia returned HTML instead of JSON)
+		if strings.Contains(err.Error(), "invalid character") && strings.Contains(err.Error(), "looking for beginning of value") {
+			// JSON parsing errors are expected behavior (species without Wikipedia pages)
+			// Log at DEBUG level only to avoid notification spam
+			attemptLogger.Debug("Wikipedia returned HTML error page instead of JSON - normal for species without pages",
+				"species_query", params["titles"],
+				"error_type", "json_parsing_expected",
+				"original_error", err.Error(),
+				"reason", "species_likely_has_no_wikipedia_page",
+				"action", "returning_image_not_found_no_retry")
+			
+			// Don't retry JSON parsing errors - Wikipedia page likely doesn't exist
+			return nil, ErrImageNotFound
+		}
+
 		lastErr = err
 		attemptLogger.Warn("API request failed", "error", err)
 		// if l.debug {
@@ -118,7 +210,9 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 		time.Sleep(waitDuration)
 	}
 
-	logger.Error("API request failed after all retries", "last_error", lastErr)
+	// Use categorized error logging for final failure
+	logAPIError(logger, errorCategoryNetworkFailure, reqID, params["titles"], params, lastErr)
+	
 	enhancedErr := errors.New(lastErr).
 		Component("imageprovider").
 		Category(errors.CategoryNetwork).
@@ -126,6 +220,12 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 		Context("request_id", reqID).
 		Context("max_retries", l.maxRetries).
 		Context("operation", "query_with_retry").
+		Context("api_action", params["action"]).
+		Context("species_query", params["titles"]).
+		Context("error_category", errorCategoryNetworkFailure.Type).
+		Context("error_severity", errorCategoryNetworkFailure.Severity).
+		Context("actionable", errorCategoryNetworkFailure.Actionable).
+		Context("final_error", lastErr.Error()).
 		Build()
 	return nil, enhancedErr
 }
@@ -167,16 +267,31 @@ func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(reqID string, params
 	// First check if the response has a query field at all
 	query, err := resp.GetObject("query")
 	if err != nil {
-		// No query field usually means the API returned an error or unexpected structure
-		logger.Debug("No 'query' field in Wikipedia response", "error", err)
+		// Enhanced logging for missing query field
+		logger.Info("Wikipedia response missing 'query' field - analyzing response structure", 
+			"error", err.Error(),
+			"request_params", params,
+			"response_analysis", "checking_for_api_errors")
 
 		// Check if there's an error field in the response
 		if errorObj, errCheck := resp.GetObject("error"); errCheck == nil {
 			if errorCode, errCode := errorObj.GetString("code"); errCode == nil {
 				if errorInfo, errInfo := errorObj.GetString("info"); errInfo == nil {
-					logger.Warn("Wikipedia API returned error", "error_code", errorCode, "error_info", errorInfo)
+					logger.Debug("Wikipedia API returned structured error response - normal for missing pages",
+						"error_code", errorCode, 
+						"error_info", errorInfo,
+						"error_type", "api_structured_error_expected",
+						"species_query", params["titles"],
+						"diagnostic_hint", "wikipedia_api_rejected_request_for_nonexistent_page")
 				}
 			}
+		} else {
+			// No structured error, likely malformed response - this might be more serious
+			logger.Debug("Wikipedia response has no 'query' field and no structured 'error' field",
+				"response_structure_error", err.Error(),
+				"error_type", "malformed_api_response_expected",
+				"species_query", params["titles"],
+				"diagnostic_hint", "wikipedia_api_returned_unexpected_format_for_missing_page")
 		}
 
 		// This is likely a "not found" scenario, not an error worth reporting to telemetry
@@ -186,41 +301,60 @@ func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(reqID string, params
 	// Try to get pages array from the query object
 	pages, err := query.GetObjectArray("pages")
 	if err != nil {
-		logger.Debug("No 'pages' field in query response", "error", err)
+		// Enhanced logging for missing pages array
+		logger.Info("No 'pages' field in Wikipedia query response - analyzing alternative response structures", 
+			"pages_error", err.Error(),
+			"species_query", params["titles"],
+			"response_analysis", "checking_redirects_and_normalized_titles")
 
 		// Check for alternative structures that might indicate page issues
 		// Check for redirects
 		if redirects, redirectErr := query.GetObjectArray("redirects"); redirectErr == nil && len(redirects) > 0 {
-			logger.Debug("Wikipedia response contains redirects but no pages")
+			logger.Info("Wikipedia response contains redirects but no pages",
+				"redirect_count", len(redirects),
+				"error_type", "redirect_without_pages",
+				"diagnostic_hint", "wikipedia_redirected_query_but_target_page_missing")
 		}
 
 		// Check for normalized titles
 		if normalized, normalErr := query.GetObjectArray("normalized"); normalErr == nil && len(normalized) > 0 {
-			logger.Debug("Wikipedia response contains normalized titles but no pages")
+			logger.Info("Wikipedia response contains normalized titles but no pages",
+				"normalized_count", len(normalized),
+				"error_type", "normalized_title_without_pages", 
+				"diagnostic_hint", "wikipedia_normalized_species_name_but_no_page_found")
 		}
 
 		// This is a common scenario for species without Wikipedia pages
-		// Don't create telemetry noise - treat as "not found"
-		logger.Debug("Wikipedia page structure indicates no available page for species")
+		// Enhanced diagnostic logging
+		logger.Info("Wikipedia page structure analysis complete - no pages found",
+			"error_type", "no_pages_in_response",
+			"species_query", params["titles"],
+			"diagnostic_hint", "species_likely_has_no_wikipedia_page")
 		return nil, ErrImageNotFound
 	}
 
 	if len(pages) == 0 {
-		logger.Warn("No pages found in Wikipedia response")
-		// Log full response if debug enabled
+		// Enhanced logging for empty pages array - this is normal for missing species
+		logger.Debug("Wikipedia returned empty pages array - normal for species without pages",
+			"error_type", "empty_pages_array_expected",
+			"species_query", params["titles"],
+			"response_has_query_field", true,
+			"pages_array_length", 0,
+			"diagnostic_hint", "wikipedia_query_succeeded_but_species_has_no_page")
+		
+		// Log full response structure for debugging if debug level enabled
 		if logger.Enabled(context.Background(), slog.LevelDebug) {
 			if respObj, errJson := resp.Object(); errJson == nil {
-				logger.Debug("Full response structure (no pages found)", "response", respObj.String())
+				logger.Debug("Full Wikipedia response structure analysis (empty pages)",
+					"response_json", respObj.String(),
+					"analysis", "complete_api_response_for_debugging")
+			} else {
+				logger.Debug("Could not serialize response for debugging", "serialization_error", errJson)
 			}
 		}
-		// if l.debug {
-		// 	log.Printf("Debug: No pages found in Wikipedia response for params: %v", params)
-		// 	if obj, err := resp.Object(); err == nil {
-		// 		log.Printf("Debug: Full response structure: %v", obj)
-		// 	}
-		// }
+		
 		// Return specific error indicating page not found
-		return nil, ErrImageNotFound // Use the package-level error
+		return nil, ErrImageNotFound
 	}
 
 	// Optionally log first page content at Debug level
@@ -236,7 +370,14 @@ func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(reqID string, params
 	// 	}
 	// }
 
-	logger.Debug("Successfully retrieved page data from Wikipedia")
+	// Use success logging function
+	responseMetadata := map[string]interface{}{
+		"pages_found": len(pages),
+		"response_has_query_field": true,
+		"pages_array_length": len(pages),
+	}
+	logAPISuccess(logger, reqID, params["titles"], "get_first_page", params, responseMetadata)
+	
 	return pages[0], nil
 }
 
@@ -273,10 +414,19 @@ func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
 func (l *wikiMediaProvider) fetchWithLimiter(scientificName string, limiter *rate.Limiter) (BirdImage, error) {
 	reqID := uuid.New().String()[:8] // Using first 8 chars for brevity
 	logger := imageProviderLogger.With("provider", wikiProviderName, "scientific_name", scientificName, "request_id", reqID)
-	logger.Info("Fetching image from Wikipedia")
-	// if l.debug {
-	// 	log.Printf("[%s] Debug: Starting Wikipedia fetch for species: %s", reqID, scientificName)
-	// }
+	
+	// Enhanced start logging with operation context
+	rateLimitType := "none"
+	if limiter != nil {
+		rateLimitType = "background"
+	}
+	logger.Info("Starting Wikipedia image fetch - operation details",
+		"operation", "fetch_image",
+		"species_query", scientificName,
+		"rate_limit_type", rateLimitType,
+		"request_id", reqID,
+		"provider", wikiProviderName,
+		"diagnostic_info", "beginning_wikipedia_image_fetch_operation")
 
 	thumbnailURL, thumbnailSourceFile, err := l.queryThumbnail(reqID, scientificName, limiter)
 	if err != nil {
@@ -335,7 +485,19 @@ func (l *wikiMediaProvider) fetchWithLimiter(scientificName string, limiter *rat
 		LicenseName:    authorInfo.licenseName,
 		LicenseURL:     authorInfo.licenseURL,
 	}
-	logger.Info("Successfully fetched image and metadata from Wikipedia")
+	
+	// Enhanced success logging with complete operation summary
+	successMetadata := map[string]interface{}{
+		"thumbnail_url": thumbnailURL,
+		"source_file": thumbnailSourceFile,
+		"author_name": authorInfo.name,
+		"license_name": authorInfo.licenseName,
+		"rate_limit_type": rateLimitType,
+		"has_author_url": authorInfo.URL != "",
+		"has_license_url": authorInfo.licenseURL != "",
+	}
+	logAPISuccess(logger, reqID, scientificName, "complete_fetch_operation", map[string]string{"operation": "full_image_fetch"}, successMetadata)
+	
 	return result, nil
 }
 
