@@ -385,31 +385,48 @@ capture_current_image_hash() {
     
     log_message "INFO" "=== Capturing Current Image State ($context) ==="
     
-    # Try to get running container image first
+    # Try BIRDNET_GO_IMAGE environment variable first as primary target
     local current_image=""
     local image_hash=""
     local image_tag=""
     
-    # Check for running BirdNET-Go container
-    local running_container=$(safe_docker ps --filter "name=birdnet-go" --format "{{.Image}}" 2>/dev/null | head -1)
-    
-    if [ -n "$running_container" ]; then
-        current_image="$running_container"
-        log_message "INFO" "Found running container using image: $current_image"
-    else
-        # Check for any BirdNET-Go containers (stopped)
-        local any_container=$(safe_docker ps -a --filter "name=birdnet-go" --format "{{.Image}}" 2>/dev/null | head -1)
-        if [ -n "$any_container" ]; then
-            current_image="$any_container"
-            log_message "INFO" "Found stopped container using image: $current_image"
+    # Check if BIRDNET_GO_IMAGE is set and verify it exists locally
+    if [ -n "$BIRDNET_GO_IMAGE" ]; then
+        # Verify the image exists via docker inspect or images
+        if safe_docker inspect "$BIRDNET_GO_IMAGE" >/dev/null 2>&1; then
+            current_image="$BIRDNET_GO_IMAGE"
+            log_message "INFO" "Using BIRDNET_GO_IMAGE environment variable: $current_image"
+        elif safe_docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${BIRDNET_GO_IMAGE}$" 2>/dev/null; then
+            current_image="$BIRDNET_GO_IMAGE"
+            log_message "INFO" "Found BIRDNET_GO_IMAGE in local images: $current_image"
         else
-            # Fall back to checking for local BirdNET-Go images
-            current_image=$(safe_docker images --filter "reference=*birdnet-go*" --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | head -1)
-            if [ -n "$current_image" ]; then
-                log_message "INFO" "Found local image: $current_image"
+            log_message "WARN" "BIRDNET_GO_IMAGE ($BIRDNET_GO_IMAGE) not found locally, falling back to container detection"
+        fi
+    fi
+    
+    # Fall back to existing container/image detection if BIRDNET_GO_IMAGE validation failed
+    if [ -z "$current_image" ]; then
+        # Check for running BirdNET-Go container
+        local running_container=$(safe_docker ps --filter "name=birdnet-go" --format "{{.Image}}" 2>/dev/null | head -1)
+        
+        if [ -n "$running_container" ]; then
+            current_image="$running_container"
+            log_message "INFO" "Found running container using image: $current_image"
+        else
+            # Check for any BirdNET-Go containers (stopped)
+            local any_container=$(safe_docker ps -a --filter "name=birdnet-go" --format "{{.Image}}" 2>/dev/null | head -1)
+            if [ -n "$any_container" ]; then
+                current_image="$any_container"
+                log_message "INFO" "Found stopped container using image: $current_image"
             else
-                log_message "WARN" "No BirdNET-Go images found"
-                return 1
+                # Fall back to checking for local BirdNET-Go images
+                current_image=$(safe_docker images --filter "reference=*birdnet-go*" --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | head -1)
+                if [ -n "$current_image" ]; then
+                    log_message "INFO" "Found local image: $current_image"
+                else
+                    log_message "WARN" "No BirdNET-Go images found"
+                    return 1
+                fi
             fi
         fi
     fi
@@ -467,11 +484,13 @@ backup_config_with_version() {
         
         # Update version tracking with backup info
         if [ -n "$image_hash" ]; then
-            # Update the latest entry in version tracking to include backup filename
+            # Update the entry matching this image_hash to include backup filename
             local temp_file="/tmp/version_tracking_temp.log"
             if [ -f "$VERSION_TRACKING_FILE" ]; then
-                # Replace the last line's "none" backup with actual backup filename
-                sed "\$s/|none|/|${backup_filename}|/" "$VERSION_TRACKING_FILE" > "$temp_file"
+                # Match by image_hash to update the intended row atomically
+                awk -F'|' -v OFS='|' -v ih="$image_hash" -v bf="$backup_filename" '
+                  $2==ih && $3=="none" { $3=bf } { print }
+                ' "$VERSION_TRACKING_FILE" > "$temp_file"
                 mv "$temp_file" "$VERSION_TRACKING_FILE"
             fi
             log_message "INFO" "Version tracking updated with config backup association"
@@ -509,8 +528,11 @@ cleanup_old_backups() {
     
     # Remove oldest backups beyond the limit
     local to_remove=$((backup_count - MAX_CONFIG_BACKUPS))
-    find "$CONFIG_DIR" -name "${CONFIG_BACKUP_PREFIX}*.yaml" -type f -print0 2>/dev/null | \
-        xargs -0 ls -t | tail -n "$to_remove" | while read -r old_backup; do
+    find "$CONFIG_DIR" -type f -name "${CONFIG_BACKUP_PREFIX}*.yaml" -printf '%T@ %p\0' 2>/dev/null \
+      | sort -z -n \
+      | head -z -n "$to_remove" \
+      | awk -v RS='\0' -v ORS='\0' '{ $1=""; sub(/^ /,""); print }' \
+      | while IFS= read -r -d '' old_backup; do
             if rm -f "$old_backup" 2>/dev/null; then
                 log_message "INFO" "Removed old backup: $(basename "$old_backup")"
                 
@@ -564,8 +586,9 @@ list_available_versions() {
             config_status="➖ none"
         fi
         
-        # Truncate image hash for display
-        local short_hash="${image_hash:0:12}..."
+        # Truncate image hash for display (strip sha256: prefix if present)
+        local hash_without_prefix="${image_hash#sha256:}"
+        local short_hash="${hash_without_prefix:0:12}..."
         
         echo "[$version_count] $display_time | Image: $short_hash | Config: $config_status | Context: $context"
         echo "    Tag: $image_tag"
@@ -2349,8 +2372,10 @@ configure_auth() {
     if [[ $enable_auth == "y" ]]; then
         log_message "INFO" "User enabled password protection"
         while true; do
-            read -r -p "Enter password: " password
-            read -r -p "Confirm password: " password2
+            read -s -r -p "Enter password: " password
+            printf '\n'
+            read -s -r -p "Confirm password: " password2
+            printf '\n'
             
             if [ "$password" = "$password2" ]; then
                 log_message "INFO" "Password confirmed, generating hash and updating config"
@@ -3481,7 +3506,7 @@ handle_full_install_menu() {
                 exit 1
             fi
             ;;
-        3)
+        4)
             print_message "\n⚠️  WARNING: Uninstalling BirdNET-Go will:" "$RED"
             print_message "  • Remove all BirdNET-Go containers and images" "$RED"
             print_message "  • Delete all configuration and data in $CONFIG_DIR" "$RED"
@@ -3900,7 +3925,7 @@ if [ -f "$CONFIG_FILE" ]; then
 fi
 
 # Verify service is responding
-local final_service_responsive="false" 
+final_service_responsive="false" 
 if systemctl is-active --quiet birdnet-go.service; then
     # Check if web interface is responding
     if curl -s -f --connect-timeout 5 "http://localhost:${WEB_PORT}" >/dev/null 2>&1; then
