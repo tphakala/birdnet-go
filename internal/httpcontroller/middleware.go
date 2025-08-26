@@ -123,6 +123,29 @@ func (s *Server) CacheControlMiddleware() echo.MiddlewareFunc {
 			s.Debug("CacheControlMiddleware: Processing request for path: %s", path)
 
 			switch {
+			case strings.HasPrefix(path, "/ui/assets/"):
+				// Svelte assets - use version-based caching
+				// Files don't change without a new version, so we can cache them
+				// but revalidate when version changes
+				if s.Settings.Debug {
+					// Development: no caching
+					c.Response().Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+					c.Response().Header().Set("Pragma", "no-cache")
+					c.Response().Header().Set("Expires", "0")
+				} else {
+					// Production: cache with revalidation
+					// Browser caches but checks ETag on each request
+					c.Response().Header().Set("Cache-Control", "public, max-age=3600, must-revalidate")
+					
+					// Generate ETag based on version and build date for cache busting
+					if s.Settings.Version != "" {
+						etag := fmt.Sprintf(`"%s-%s"`, s.Settings.Version, s.Settings.BuildDate)
+						c.Response().Header().Set("ETag", etag)
+					} else {
+						// Fallback to path-based ETag if no version
+						c.Response().Header().Set("ETag", generateETag(path))
+					}
+				}
 			case strings.HasSuffix(path, ".css"), strings.HasSuffix(path, ".js"), strings.HasSuffix(path, ".html"):
 				c.Response().Header().Set("Cache-Control", "public, max-age=3600, must-revalidate")
 				c.Response().Header().Set("ETag", generateETag(path))
