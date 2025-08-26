@@ -72,10 +72,12 @@ describe('Date Utilities', () => {
       expect(result?.toISOString()).toBe('2025-08-25T10:30:00.000Z');
     });
 
-    it('returns same Date object when passed a Date', () => {
+    it('returns cloned Date object when passed a Date', () => {
       const date = new Date('2025-08-25T12:00:00');
       const result = parseLocalDateString(date);
-      expect(result).toBe(date);
+      expect(result).not.toBe(date); // Should be a different reference (cloned)
+      expect(result?.getTime()).toBe(date.getTime()); // But same time value
+      expect(result).toStrictEqual(date); // Same date value
     });
 
     it('returns null for invalid date strings', () => {
