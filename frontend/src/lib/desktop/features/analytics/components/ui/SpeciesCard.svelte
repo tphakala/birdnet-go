@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
+  import { parseLocalDateString } from '$lib/utils/date';
 
   interface SpeciesData {
     common_name: string;
@@ -26,7 +27,8 @@
 
   function formatDate(dateString: string): string {
     if (!dateString) return '';
-    const date = new Date(dateString);
+    const date = parseLocalDateString(dateString);
+    if (!date) return '';
     return date.toLocaleDateString();
   }
 

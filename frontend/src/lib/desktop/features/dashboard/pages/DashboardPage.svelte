@@ -5,7 +5,12 @@
   import RecentDetectionsCard from '$lib/desktop/features/dashboard/components/RecentDetectionsCard.svelte';
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary, Detection } from '$lib/types/detection.types';
-  import { getLocalDateString, isFutureDate, parseHour } from '$lib/utils/date';
+  import {
+    getLocalDateString,
+    isFutureDate,
+    parseHour,
+    parseLocalDateString,
+  } from '$lib/utils/date';
   import { getLogger } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
 
@@ -512,7 +517,8 @@
   }
 
   function previousDay() {
-    const date = new Date(selectedDate);
+    const date = parseLocalDateString(selectedDate);
+    if (!date) return;
     date.setDate(date.getDate() - 1);
     selectedDate = getLocalDateString(date);
     handleDateChangeWithCleanup();
@@ -520,7 +526,8 @@
   }
 
   function nextDay() {
-    const date = new Date(selectedDate);
+    const date = parseLocalDateString(selectedDate);
+    if (!date) return;
     date.setDate(date.getDate() + 1);
     const newDateString = getLocalDateString(date);
     if (!isFutureDate(newDateString)) {
@@ -777,7 +784,8 @@
   // Generate adjacent dates for preloading
   function getAdjacentDates(baseDate: string): string[] {
     const dates: string[] = [];
-    const base = new Date(baseDate);
+    const base = parseLocalDateString(baseDate);
+    if (!base) return dates;
 
     // Previous date
     const prevDate = new Date(base);

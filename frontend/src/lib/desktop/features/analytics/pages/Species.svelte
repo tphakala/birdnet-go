@@ -5,6 +5,7 @@
   import SpeciesCard from '../components/ui/SpeciesCard.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import { parseLocalDateString, getLocalDateString } from '$lib/utils/date';
 
   const logger = loggers.analytics;
 
@@ -65,7 +66,7 @@
   });
 
   function formatDateForInput(date: Date): string {
-    return date.toISOString().split('T')[0];
+    return getLocalDateString(date);
   }
 
   function formatNumber(number: number): string {
@@ -79,7 +80,8 @@
 
   function formatDateTime(dateString: string): string {
     if (!dateString) return '';
-    const date = new Date(dateString);
+    const date = parseLocalDateString(dateString);
+    if (!date) return '';
     return date.toLocaleString();
   }
 
@@ -177,19 +179,28 @@
         filtered.sort((a, b) => b.common_name.localeCompare(a.common_name));
         break;
       case 'first_seen_desc':
-        filtered.sort(
-          (a, b) => new Date(b.first_heard).getTime() - new Date(a.first_heard).getTime()
-        );
+        filtered.sort((a, b) => {
+          const dateA = parseLocalDateString(a.first_heard);
+          const dateB = parseLocalDateString(b.first_heard);
+          if (!dateA || !dateB) return 0;
+          return dateB.getTime() - dateA.getTime();
+        });
         break;
       case 'first_seen_asc':
-        filtered.sort(
-          (a, b) => new Date(a.first_heard).getTime() - new Date(b.first_heard).getTime()
-        );
+        filtered.sort((a, b) => {
+          const dateA = parseLocalDateString(a.first_heard);
+          const dateB = parseLocalDateString(b.first_heard);
+          if (!dateA || !dateB) return 0;
+          return dateA.getTime() - dateB.getTime();
+        });
         break;
       case 'last_seen_desc':
-        filtered.sort(
-          (a, b) => new Date(b.last_heard).getTime() - new Date(a.last_heard).getTime()
-        );
+        filtered.sort((a, b) => {
+          const dateA = parseLocalDateString(a.last_heard);
+          const dateB = parseLocalDateString(b.last_heard);
+          if (!dateA || !dateB) return 0;
+          return dateB.getTime() - dateA.getTime();
+        });
         break;
       case 'confidence_desc':
         filtered.sort((a, b) => b.avg_confidence - a.avg_confidence);
@@ -312,8 +323,10 @@
       species.count,
       (species.avg_confidence * 100).toFixed(1) + '%',
       (species.max_confidence * 100).toFixed(1) + '%',
-      species.first_heard ? new Date(species.first_heard).toLocaleString() : '',
-      species.last_heard ? new Date(species.last_heard).toLocaleString() : '',
+      species.first_heard
+        ? (parseLocalDateString(species.first_heard)?.toLocaleString() ?? '')
+        : '',
+      species.last_heard ? (parseLocalDateString(species.last_heard)?.toLocaleString() ?? '') : '',
     ]);
 
     // Create CSV string
@@ -328,7 +341,7 @@
     const url = URL.createObjectURL(blob);
 
     link.setAttribute('href', url);
-    link.setAttribute('download', `birdnet-species-${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `birdnet-species-${getLocalDateString()}.csv`);
     link.style.visibility = 'hidden';
 
     document.body.appendChild(link);

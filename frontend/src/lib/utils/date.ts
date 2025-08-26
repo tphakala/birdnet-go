@@ -17,6 +17,49 @@ export function getLocalDateString(date: Date = new Date()): string {
 }
 
 /**
+ * Parse a date string (YYYY-MM-DD format) into a Date object safely
+ *
+ * IMPORTANT: This function specifically handles the JavaScript date parsing quirk where
+ * new Date("YYYY-MM-DD") creates a date at midnight UTC, which can appear as the
+ * previous day for users in timezones west of UTC.
+ *
+ * To avoid this timezone shift, YYYY-MM-DD strings are parsed at NOON local time,
+ * ensuring the date remains consistent regardless of the user's timezone.
+ *
+ * @param dateString - Date string in YYYY-MM-DD format, ISO 8601, or Date object
+ * @returns Date object representing the date in local timezone, or null if invalid
+ *
+ * @example
+ * // YYYY-MM-DD format - parsed at noon to avoid timezone issues
+ * parseLocalDateString('2025-08-25') // Returns Date at noon on Aug 25, 2025
+ *
+ * // ISO 8601 with time - parsed normally for precise timestamps
+ * parseLocalDateString('2025-08-25T10:30:00Z') // Returns the exact date/time
+ *
+ * // Date object - returned as cloned copy
+ * parseLocalDateString(new Date()) // Returns a cloned Date object
+ */
+export function parseLocalDateString(dateString: string | Date | null | undefined): Date | null {
+  if (!dateString) return null;
+
+  // If already a Date object, return a cloned copy to prevent mutation
+  if (dateString instanceof Date) {
+    return isNaN(dateString.getTime()) ? null : new Date(dateString.getTime());
+  }
+
+  // Handle YYYY-MM-DD format specifically to avoid timezone issues
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    // Parse at noon local time to avoid timezone boundary issues
+    const date = new Date(dateString + 'T12:00:00');
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  // For other formats (ISO 8601 with time), parse normally
+  const date = new Date(dateString);
+  return isNaN(date.getTime()) ? null : date;
+}
+
+/**
  * Check if a date string represents today in the local timezone
  *
  * @param dateString - Date string in YYYY-MM-DD format
@@ -129,4 +172,64 @@ export function formatLocalDateTime(date: Date, includeSeconds: boolean = true):
   const dateString = getLocalDateString(date);
   const timeString = getLocalTimeString(date, includeSeconds);
   return `${dateString} ${timeString}`;
+}
+
+/**
+ * Get the previous day as a YYYY-MM-DD string
+ *
+ * @param dateString - Date string in YYYY-MM-DD format
+ * @returns Previous day in YYYY-MM-DD format
+ * @throws Error if the date string is invalid
+ *
+ * @example
+ * getPreviousDay('2025-08-25') // Returns '2025-08-24'
+ * getPreviousDay('2025-01-01') // Returns '2024-12-31'
+ */
+export function getPreviousDay(dateString: string): string {
+  const date = parseLocalDateString(dateString);
+  if (!date) throw new Error(`Invalid date string: ${dateString}`);
+  date.setDate(date.getDate() - 1);
+  return getLocalDateString(date);
+}
+
+/**
+ * Get the next day as a YYYY-MM-DD string
+ *
+ * @param dateString - Date string in YYYY-MM-DD format
+ * @returns Next day in YYYY-MM-DD format
+ * @throws Error if the date string is invalid
+ *
+ * @example
+ * getNextDay('2025-08-25') // Returns '2025-08-26'
+ * getNextDay('2024-12-31') // Returns '2025-01-01'
+ */
+export function getNextDay(dateString: string): string {
+  const date = parseLocalDateString(dateString);
+  if (!date) throw new Error(`Invalid date string: ${dateString}`);
+  date.setDate(date.getDate() + 1);
+  return getLocalDateString(date);
+}
+
+/**
+ * Add or subtract days from a date string
+ *
+ * @param dateString - Date string in YYYY-MM-DD format
+ * @param days - Number of days to add (positive) or subtract (negative)
+ * @returns New date in YYYY-MM-DD format
+ * @throws Error if the date string is invalid
+ *
+ * @example
+ * addDays('2025-08-25', 7) // Returns '2025-09-01'
+ * addDays('2025-08-25', -7) // Returns '2025-08-18'
+ */
+export function addDays(dateString: string, days: number): string {
+  // Validate that days is an integer
+  if (typeof days !== 'number' || !Number.isFinite(days) || !Number.isInteger(days)) {
+    throw new TypeError('days must be an integer');
+  }
+
+  const date = parseLocalDateString(dateString);
+  if (!date) throw new Error(`Invalid date string: ${dateString}`);
+  date.setDate(date.getDate() + days);
+  return getLocalDateString(date);
 }

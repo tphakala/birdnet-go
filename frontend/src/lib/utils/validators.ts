@@ -3,6 +3,7 @@
  */
 
 import { safeArrayAccess } from './security';
+import { parseLocalDateString } from './date';
 
 export type ValidationResult = string | null;
 export type Validator<T = unknown> = (value: T) => ValidationResult;
@@ -229,8 +230,8 @@ export function date(message: string = 'Invalid date'): Validator<string | Date>
   return (value: string | Date): ValidationResult => {
     if (!value) return null; // Use required() for required fields
 
-    const date = value instanceof Date ? value : new Date(value);
-    if (isNaN(date.getTime())) {
+    const date = value instanceof Date ? value : parseLocalDateString(value);
+    if (!date || isNaN(date.getTime())) {
       return message;
     }
     return null;
@@ -246,8 +247,8 @@ export function futureDate(
   return (value: string | Date): ValidationResult => {
     if (!value) return null; // Use required() for required fields
 
-    const date = value instanceof Date ? value : new Date(value);
-    if (isNaN(date.getTime())) {
+    const date = value instanceof Date ? value : parseLocalDateString(value);
+    if (!date || isNaN(date.getTime())) {
       return 'Invalid date';
     }
 
@@ -265,8 +266,8 @@ export function pastDate(message: string = 'Date must be in the past'): Validato
   return (value: string | Date): ValidationResult => {
     if (!value) return null; // Use required() for required fields
 
-    const date = value instanceof Date ? value : new Date(value);
-    if (isNaN(date.getTime())) {
+    const date = value instanceof Date ? value : parseLocalDateString(value);
+    if (!date || isNaN(date.getTime())) {
       return 'Invalid date';
     }
 

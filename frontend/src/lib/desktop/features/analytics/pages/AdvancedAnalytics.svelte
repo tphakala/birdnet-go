@@ -8,6 +8,7 @@
   import type { Species, SpeciesId } from '$lib/types/species';
   import { createSpeciesId } from '$lib/types/species';
   import { getLogger } from '$lib/utils/logger';
+  import { parseLocalDateString } from '$lib/utils/date';
 
   const logger = getLogger('advanced-analytics');
 
@@ -114,9 +115,10 @@
           break;
         case 'custom':
           start = startDate
-            ? new Date(startDate)
+            ? (parseLocalDateString(startDate) ??
+              new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000))
             : new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-          end = endDate ? new Date(endDate) : today;
+          end = endDate ? (parseLocalDateString(endDate) ?? today) : today;
           break;
         default:
           end = today;
@@ -338,11 +340,11 @@
             .map(item => {
               if (!item || typeof item !== 'object') return null;
 
-              const date = new Date(item.date);
+              const date = parseLocalDateString(item.date);
               const count = typeof item.count === 'number' ? item.count : 0;
 
               // Skip invalid dates
-              if (isNaN(date.getTime())) return null;
+              if (!date || isNaN(date.getTime())) return null;
 
               return { date, count };
             })

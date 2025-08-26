@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import { safeGet } from '$lib/utils/security';
   import { systemIcons } from '$lib/utils/icons';
+  import { parseLocalDateString } from '$lib/utils/date';
 
   type TimeOfDay = 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk';
   type IconSize = 'sm' | 'md' | 'lg' | 'xl';
@@ -45,10 +46,11 @@
   function calculateTimeOfDay(dt: Date | string | number | undefined): TimeOfDay {
     if (!dt) return 'day';
 
-    const date = dt instanceof Date ? dt : new Date(dt);
+    const date =
+      dt instanceof Date ? dt : typeof dt === 'string' ? parseLocalDateString(dt) : new Date(dt);
 
     // Check if date is invalid and fallback to 'day'
-    if (isNaN(date.getTime())) {
+    if (!date || isNaN(date.getTime())) {
       return 'day';
     }
 

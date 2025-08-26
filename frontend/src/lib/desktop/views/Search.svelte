@@ -4,7 +4,7 @@
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import { t, getLocale } from '$lib/i18n';
-  import { getLocalDateString } from '$lib/utils/date';
+  import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { toastActions } from '$lib/stores/toast';
   import {
     actionIcons,
@@ -161,8 +161,9 @@
   // Format date for display
   function formatDate(dateString: string) {
     if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleString(getLocale());
+    const date = parseLocalDateString(dateString);
+    if (!date) return '';
+    return date.toLocaleString(getLocale(), { dateStyle: 'medium', timeStyle: 'short' });
   }
 
   // Handle pagination

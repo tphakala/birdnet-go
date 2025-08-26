@@ -6,6 +6,7 @@ import {
   waitFor,
 } from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
+import { parseLocalDateString } from '$lib/utils/date';
 import DateRangePicker from './DateRangePicker.svelte';
 
 // Mock i18n translations
@@ -88,8 +89,8 @@ describe('DateRangePicker', () => {
 
   it('displays initial dates', () => {
     dateRangeTest.render({
-      startDate: new Date('2024-01-01Z'),
-      endDate: new Date('2024-01-31Z'),
+      startDate: parseLocalDateString('2024-01-01'),
+      endDate: parseLocalDateString('2024-01-31'),
     });
 
     const startInput = screen.getByLabelText('Start Date') as HTMLInputElement;
@@ -111,15 +112,15 @@ describe('DateRangePicker', () => {
     await user.type(startInput, '2024-01-10');
 
     expect(onChange).toHaveBeenCalledWith({
-      startDate: new Date('2024-01-10Z'),
+      startDate: parseLocalDateString('2024-01-10'),
       endDate: null,
     });
 
     await user.type(endInput, '2024-01-20');
 
     expect(onChange).toHaveBeenCalledWith({
-      startDate: new Date('2024-01-10Z'),
-      endDate: new Date('2024-01-20Z'),
+      startDate: parseLocalDateString('2024-01-10'),
+      endDate: parseLocalDateString('2024-01-20'),
     });
   });
 
@@ -127,7 +128,7 @@ describe('DateRangePicker', () => {
     const user = userEvent.setup({ delay: null });
 
     dateRangeTest.render({
-      startDate: new Date('2024-01-10Z'),
+      startDate: parseLocalDateString('2024-01-10'),
     });
 
     const endInput = screen.getByLabelText('End Date');
@@ -143,8 +144,8 @@ describe('DateRangePicker', () => {
 
   it('enforces min and max dates', () => {
     dateRangeTest.render({
-      minDate: new Date('2024-01-01Z'),
-      maxDate: new Date('2024-12-31Z'),
+      minDate: parseLocalDateString('2024-01-01'),
+      maxDate: parseLocalDateString('2024-12-31'),
     });
 
     const startInput = screen.getByLabelText('Start Date') as HTMLInputElement;
@@ -213,8 +214,8 @@ describe('DateRangePicker', () => {
         {
           key: 'Last Week',
           getValue: () => ({
-            startDate: new Date('2024-01-08Z'),
-            endDate: new Date('2024-01-14Z'),
+            startDate: parseLocalDateString('2024-01-08'),
+            endDate: parseLocalDateString('2024-01-14'),
           }),
         },
       ];
@@ -239,8 +240,8 @@ describe('DateRangePicker', () => {
 
   it('shows clear button when dates are selected', async () => {
     dateRangeTest.render({
-      startDate: new Date('2024-01-01Z'),
-      endDate: new Date('2024-01-31Z'),
+      startDate: parseLocalDateString('2024-01-01'),
+      endDate: parseLocalDateString('2024-01-31'),
     });
 
     expect(screen.getByText('Clear')).toBeInTheDocument();
@@ -250,8 +251,8 @@ describe('DateRangePicker', () => {
     const onChange = vi.fn();
 
     dateRangeTest.render({
-      startDate: new Date('2024-01-01Z'),
-      endDate: new Date('2024-01-31Z'),
+      startDate: parseLocalDateString('2024-01-01'),
+      endDate: parseLocalDateString('2024-01-31'),
       onChange,
     });
 
@@ -265,8 +266,8 @@ describe('DateRangePicker', () => {
 
   it('displays selected date range summary', () => {
     dateRangeTest.render({
-      startDate: new Date('2024-01-01Z'),
-      endDate: new Date('2024-01-31Z'),
+      startDate: parseLocalDateString('2024-01-01'),
+      endDate: parseLocalDateString('2024-01-31'),
     });
 
     expect(screen.getByText('Selected')).toBeInTheDocument();
@@ -301,10 +302,10 @@ describe('DateRangePicker', () => {
     const endInput = screen.getByLabelText('End Date');
 
     await user.type(startInput, '2024-01-10');
-    expect(onStartChange).toHaveBeenCalledWith(new Date('2024-01-10Z'));
+    expect(onStartChange).toHaveBeenCalledWith(parseLocalDateString('2024-01-10'));
 
     await user.type(endInput, '2024-01-20');
-    expect(onEndChange).toHaveBeenCalledWith(new Date('2024-01-20Z'));
+    expect(onEndChange).toHaveBeenCalledWith(parseLocalDateString('2024-01-20'));
   });
 
   it('applies custom className', () => {

@@ -9,6 +9,7 @@
   import { t } from '$lib/i18n';
   import { getLogger } from '$lib/utils/logger';
   import { safeArrayAccess, safeGet } from '$lib/utils/security';
+  import { parseLocalDateString, getLocalDateString } from '$lib/utils/date';
 
   const logger = getLogger('app');
 
@@ -179,13 +180,14 @@
   // Format datetime for display
   function formatDateTime(dateString: string): string {
     if (!dateString) return '';
-    const date = new Date(dateString);
+    const date = parseLocalDateString(dateString);
+    if (!date) return '';
     return date.toLocaleString();
   }
 
   // Format date for input (YYYY-MM-DD)
   function formatDateForInput(date: Date): string {
-    return date.toISOString().split('T')[0];
+    return getLocalDateString(date);
   }
 
   // Get period label based on current filter
@@ -1035,10 +1037,15 @@
     // Helper to add one day
     const addOneDay = (dateStr: string) => {
       if (!dateStr || typeof dateStr !== 'string') return null;
-      const date = new Date(dateStr);
-      if (isNaN(date.getTime())) return null;
+      const date = parseLocalDateString(dateStr);
+      if (!date) return null;
       date.setDate(date.getDate() + 1);
-      return date.toISOString().split('T')[0];
+
+      // Format as local YYYY-MM-DD string to avoid timezone shifts
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     };
 
     // Filter and process data
@@ -1050,19 +1057,26 @@
     if (validData.length === 0) return;
 
     // Sort and limit data
-    validData.sort(
-      (a, b) => new Date(b.first_heard_date).getTime() - new Date(a.first_heard_date).getTime()
-    );
+    validData.sort((a, b) => {
+      const dateA = parseLocalDateString(a.first_heard_date);
+      const dateB = parseLocalDateString(b.first_heard_date);
+      if (!dateA || !dateB) return 0;
+      return dateB.getTime() - dateA.getTime();
+    });
     const displayLimit = 20;
     const limitedData = validData.slice(0, displayLimit);
-    limitedData.sort(
-      (a, b) => new Date(a.first_heard_date).getTime() - new Date(b.first_heard_date).getTime()
-    );
+    limitedData.sort((a, b) => {
+      const dateA = parseLocalDateString(a.first_heard_date);
+      const dateB = parseLocalDateString(b.first_heard_date);
+      if (!dateA || !dateB) return 0;
+      return dateA.getTime() - dateB.getTime();
+    });
 
     const labels = limitedData.map(item => item.common_name || item.scientific_name);
     const chartValues = limitedData.map(item => {
-      const startDate = new Date(item.first_heard_date).getTime();
-      const endDate = new Date(addOneDay(item.first_heard_date) || item.first_heard_date).getTime();
+      const startDate = parseLocalDateString(item.first_heard_date)?.getTime() ?? 0;
+      const endDateStr = addOneDay(item.first_heard_date) || item.first_heard_date;
+      const endDate = parseLocalDateString(endDateStr)?.getTime() ?? 0;
       return [startDate, endDate] as [number, number];
     });
 
@@ -1073,16 +1087,17 @@
     let maxDate: number | undefined = undefined;
 
     if (filters.timePeriod !== 'all') {
-      if (filters.startDate) minDate = new Date(filters.startDate).getTime();
-      if (filters.endDate) maxDate = new Date(filters.endDate).getTime();
+      if (filters.startDate) minDate = parseLocalDateString(filters.startDate)?.getTime();
+      if (filters.endDate) maxDate = parseLocalDateString(filters.endDate)?.getTime();
     }
 
     if (!minDate && validData.length > 0) {
-      minDate = new Date(validData[0].first_heard_date).getTime();
+      minDate = parseLocalDateString(validData[0].first_heard_date)?.getTime();
     }
     if (!maxDate && validData.length > 0) {
       const lastDate = addOneDay(validData[validData.length - 1].first_heard_date);
-      maxDate = new Date(lastDate || validData[validData.length - 1].first_heard_date).getTime();
+      const fallbackDate = validData[validData.length - 1].first_heard_date;
+      maxDate = parseLocalDateString(lastDate || fallbackDate)?.getTime();
     }
 
     if (maxDate) {
@@ -1116,7 +1131,8 @@
               title: tooltipItems => tooltipItems[0].label,
               label: context => {
                 const dataPoint = context.dataset.data[context.dataIndex] as [number, number];
-                const startDate = new Date(dataPoint[0]).toISOString().split('T')[0];
+                // dataPoint[0] is already a timestamp, format it directly
+                const startDate = getLocalDateString(new Date(dataPoint[0]));
                 return `${t('analytics.charts.firstHeard')}: ${startDate}`;
               },
             },
