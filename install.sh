@@ -693,11 +693,14 @@ has_previous_versions() {
         return 1
     fi
     
-    # Check if there are any valid entries in the version history
+    # Check if there are any valid non-REVERT entries in the version history
     local version_count=0
     while IFS='|' read -r timestamp image_hash config_backup image_tag context; do
         # Skip empty lines and comments
         [ -z "$timestamp" ] || [[ "$timestamp" == \#* ]] && continue
+        
+        # Skip REVERT entries - they shouldn't be rollback targets
+        [ "$context" = "REVERT" ] && continue
         
         # Validate entry format
         if validate_version_history_entry "${timestamp}|${image_hash}|${config_backup}|${image_tag}|${context}"; then
@@ -717,16 +720,28 @@ list_available_versions() {
     
     log_message "INFO" "Listing available versions for rollback"
     
-    # Read version history file and display options
+    # Read version history file and display options (exclude REVERT entries)
     local version_count=0
+    local -A seen_hashes  # Track unique image hashes to show most recent
+    
     while IFS='|' read -r timestamp image_hash config_backup image_tag context; do
         # Skip empty lines and comments
         [ -z "$timestamp" ] || [[ "$timestamp" == \#* ]] && continue
+        
+        # Skip REVERT entries - they are not rollback targets
+        [ "$context" = "REVERT" ] && continue
         
         # Validate entry format
         if ! validate_version_history_entry "${timestamp}|${image_hash}|${config_backup}|${image_tag}|${context}"; then
             continue
         fi
+        
+        # Skip duplicate image hashes (keep only the most recent)
+        if [ -n "${seen_hashes[$image_hash]:-}" ]; then
+            log_message "INFO" "Skipping duplicate image hash: ${image_hash:0:12}..."
+            continue
+        fi
+        seen_hashes[$image_hash]=1
         
         version_count=$((version_count + 1))
         
@@ -750,17 +765,30 @@ list_available_versions() {
         local hash_without_prefix="${image_hash#sha256:}"
         local short_hash="${hash_without_prefix:0:12}..."
         
-        echo "[$version_count] $display_time | Image: $short_hash | Config: $config_status | Context: $context"
+        # Format context for better readability
+        local display_context="$context"
+        case "$context" in
+            "pre-update") display_context="📦 Pre-update backup" ;;
+            "backup") display_context="💾 Manual backup" ;;
+            "initial") display_context="🎬 Initial capture" ;;
+            *) display_context="📍 $context" ;;
+        esac
+        
+        echo "[$version_count] $display_time | Image: $short_hash | Config: $config_status"
         echo "    Tag: $image_tag"
+        echo "    Context: $display_context"
+        echo ""
         
     done < "$VERSION_HISTORY_FILE"
     
     if [ "$version_count" -eq 0 ]; then
-        log_message "INFO" "No versions found in tracking file"
+        log_message "INFO" "No revertable versions found in tracking file"
+        print_message "❌ No previous versions available for rollback" "$RED"
+        print_message "💡 Rollback versions are created during updates" "$YELLOW"
         return 1
     fi
     
-    log_message "INFO" "Found $version_count available versions"
+    log_message "INFO" "Found $version_count unique revertable versions"
     return 0
 }
 
@@ -773,14 +801,25 @@ get_version_info() {
     fi
     
     local current_index=0
+    local -A seen_hashes  # Track unique image hashes to match list display
+    
     while IFS='|' read -r timestamp image_hash config_backup image_tag context; do
         # Skip empty lines and comments
         [ -z "$timestamp" ] || [[ "$timestamp" == \#* ]] && continue
+        
+        # Skip REVERT entries - matching the list_available_versions logic
+        [ "$context" = "REVERT" ] && continue
         
         # Validate entry format
         if ! validate_version_history_entry "${timestamp}|${image_hash}|${config_backup}|${image_tag}|${context}"; then
             continue
         fi
+        
+        # Skip duplicate image hashes (keep only the most recent) - matching list display
+        if [ -n "${seen_hashes[$image_hash]:-}" ]; then
+            continue
+        fi
+        seen_hashes[$image_hash]=1
         
         current_index=$((current_index + 1))
         
@@ -791,6 +830,80 @@ get_version_info() {
     done < "$VERSION_HISTORY_FILE"
     
     return 1
+}
+
+# Function to show complete version history including all operations (for audit purposes)
+show_version_history() {
+    if [ ! -f "$VERSION_HISTORY_FILE" ]; then
+        print_message "No version history file found" "$YELLOW"
+        return 1
+    fi
+    
+    print_message "\n📜 Complete Version History (including all operations):" "$GREEN"
+    print_message "=" "$GRAY"
+    
+    local entry_count=0
+    while IFS='|' read -r timestamp image_hash config_backup image_tag context; do
+        # Skip empty lines and comments
+        [ -z "$timestamp" ] || [[ "$timestamp" == \#* ]] && continue
+        
+        # Validate entry format
+        if ! validate_version_history_entry "${timestamp}|${image_hash}|${config_backup}|${image_tag}|${context}"; then
+            continue
+        fi
+        
+        entry_count=$((entry_count + 1))
+        
+        # Format timestamp for display
+        local display_time=""
+        if [[ "$timestamp" =~ ^([0-9]{4})([0-9]{2})([0-9]{2})-([0-9]{2})([0-9]{2})([0-9]{2})$ ]]; then
+            display_time="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]} ${BASH_REMATCH[4]}:${BASH_REMATCH[5]}:${BASH_REMATCH[6]}"
+        else
+            display_time="$timestamp"
+        fi
+        
+        # Truncate image hash for display
+        local hash_without_prefix="${image_hash#sha256:}"
+        local short_hash="${hash_without_prefix:0:12}..."
+        
+        # Format context with color coding
+        local context_color="$NC"
+        local context_icon="📍"
+        case "$context" in
+            "REVERT")
+                context_color="$YELLOW"
+                context_icon="🔄"
+                ;;
+            "pre-update")
+                context_color="$GREEN"
+                context_icon="📦"
+                ;;
+            "backup")
+                context_color="$GREEN"
+                context_icon="💾"
+                ;;
+            "initial")
+                context_color="$GREEN"
+                context_icon="🎬"
+                ;;
+        esac
+        
+        print_message "$context_icon [$entry_count] $display_time - $context" "$context_color"
+        print_message "    Image: $short_hash | Tag: $image_tag" "$GRAY"
+        
+        if [ "$config_backup" != "none" ]; then
+            if [ -f "$CONFIG_DIR/$config_backup" ]; then
+                print_message "    Config: ✅ $config_backup" "$GRAY"
+            else
+                print_message "    Config: ❌ $config_backup (missing)" "$GRAY"
+            fi
+        fi
+        print_message "" "$NC"
+        
+    done < "$VERSION_HISTORY_FILE"
+    
+    print_message "Total entries: $entry_count" "$GREEN"
+    return 0
 }
 
 # Function to revert to a previous version
@@ -3635,7 +3748,7 @@ handle_full_install_menu() {
             fi
             ;;
         2)
-            # Revert to previous version
+            # Revert to previous version / Version management
             if ! has_previous_versions; then
                 print_message "\n❌ No previous versions available for rollback" "$RED"
                 print_message "💡 Previous versions will be available after your first update" "$YELLOW"
@@ -3644,26 +3757,49 @@ handle_full_install_menu() {
                 return 1
             fi
             
-            print_message "\n🔄 Reverting to previous version..." "$YELLOW"
-            list_available_versions
-            
-            print_message "\n❓ Enter version number to revert to (or 'c' to cancel): " "$YELLOW" "nonewline"
-            read -r version_choice
-            
-            if [ "$version_choice" = "c" ]; then
-                print_message "❌ Revert cancelled" "$RED"
-                return 1
-            fi
-            
-            if revert_to_version "$version_choice" "ask"; then
-                print_message "✅ Successfully reverted to previous version" "$GREEN"
-                exit 0
-            else
-                print_message "❌ Revert failed" "$RED"
-                print_message "Press any key to return to menu..."
-                read -n 1
-                return 1
-            fi
+            while true; do
+                print_message "\n🔄 Version Management" "$GREEN"
+                print_message "1) Revert to previous version" "$YELLOW"
+                print_message "2) Show complete version history" "$YELLOW"
+                print_message "3) Back to main menu" "$YELLOW"
+                print_message "❓ Select an option (1-3): " "$YELLOW" "nonewline"
+                read -r version_menu_choice
+                
+                case "$version_menu_choice" in
+                    1)
+                        print_message "\n🔄 Available versions for rollback:" "$YELLOW"
+                        if list_available_versions; then
+                            print_message "\n❓ Enter version number to revert to (or 'c' to cancel): " "$YELLOW" "nonewline"
+                            read -r version_choice
+                            
+                            if [ "$version_choice" = "c" ]; then
+                                print_message "❌ Revert cancelled" "$RED"
+                                continue
+                            fi
+                            
+                            if revert_to_version "$version_choice" "ask"; then
+                                print_message "✅ Successfully reverted to previous version" "$GREEN"
+                                exit 0
+                            else
+                                print_message "❌ Revert failed" "$RED"
+                                print_message "Press any key to return to menu..."
+                                read -n 1
+                            fi
+                        else
+                            print_message "Press any key to return to menu..."
+                            read -n 1
+                        fi
+                        ;;
+                    2)
+                        show_version_history
+                        print_message "\nPress any key to return to menu..."
+                        read -n 1
+                        ;;
+                    3|*)
+                        return 1
+                        ;;
+                esac
+            done
             ;;
         3)
             print_message "\n⚠️  WARNING: Fresh installation will:" "$RED"
@@ -3737,14 +3873,59 @@ handle_docker_install_menu() {
     local selection="$1"
     case $selection in
         1)
+            log_message "INFO" "=== Starting Docker Image Update Process ==="
+            
+            # Log pre-update state
+            log_message "INFO" "=== Pre-Update System State ==="
+            log_system_resources "docker-update-pre"
+            log_docker_state "docker-update-pre"
+            log_network_state "docker-update-pre"
+            
+            # Capture current image hash before update
+            local pre_update_image_hash
+            pre_update_image_hash=$(capture_current_image_hash "docker-pre-update")
+            
             check_network
+            
+            log_message "INFO" "Starting Docker image pull: $BIRDNET_GO_IMAGE"
             print_message "\n🔄 Updating BirdNET-Go Docker image..." "$YELLOW"
+            
             if docker pull "${BIRDNET_GO_IMAGE}"; then
-                print_message "✅ Successfully updated to latest image" "$GREEN"
+                log_message "INFO" "Docker image pull completed successfully"
+                
+                # Capture new image hash after update
+                local post_update_image_hash
+                post_update_image_hash=$(capture_current_image_hash "docker-post-update")
+                
+                # Log post-update state
+                log_message "INFO" "=== Post-Update System State ==="
+                log_docker_state "docker-update-post"
+                log_system_resources "docker-update-post"
+                
+                # Check if the image actually changed
+                if [ "$pre_update_image_hash" = "$post_update_image_hash" ]; then
+                    log_message "INFO" "Image hash unchanged - already on latest version"
+                    print_message "✅ Already on latest version" "$GREEN"
+                else
+                    log_message "INFO" "Image updated from ${pre_update_image_hash:0:12} to ${post_update_image_hash:0:12}"
+                    print_message "✅ Successfully updated to latest image" "$GREEN"
+                fi
+                
                 print_message "⚠️ Note: You will need to restart your container to use the updated image" "$YELLOW"
+                log_message "INFO" "Docker image update process completed successfully"
+                
+                # Send telemetry
+                send_telemetry_event "info" "Docker image update completed" "info" "step=docker_update,updated=$([[ "$pre_update_image_hash" != "$post_update_image_hash" ]] && echo "true" || echo "false")"
+                
                 exit 0
             else
+                log_message "ERROR" "Failed to pull Docker image: $BIRDNET_GO_IMAGE"
+                log_command_result "docker pull ${BIRDNET_GO_IMAGE}" 1 "docker image pull"
                 print_message "❌ Failed to update Docker image" "$RED"
+                
+                # Send telemetry for failure
+                send_telemetry_event "error" "Docker image update failed" "error" "step=docker_update"
+                
                 exit 1
             fi
             ;;
