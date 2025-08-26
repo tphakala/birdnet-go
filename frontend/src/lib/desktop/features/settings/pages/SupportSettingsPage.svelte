@@ -362,15 +362,15 @@
               {@html t('settings.support.supportReport.description.intro')}
             </p>
 
-            <div class="alert alert-warning shadow-sm">
-              <div class="h-6 w-6">{@html alertIconsSvg.warning}</div>
-              <div>
-                <h4 class="font-bold">
+            <div class="alert alert-warning shadow-sm text-sm">
+              <div class="h-5 w-5 flex-shrink-0">{@html alertIconsSvg.warning}</div>
+              <div class="min-w-0">
+                <span class="font-semibold">
                   {t('settings.support.supportReport.githubRequired.title')}
-                </h4>
-                <p class="text-sm">
+                </span>
+                <div class="mt-1">
                   {@html t('settings.support.supportReport.githubRequired.description')}
-                </p>
+                </div>
               </div>
             </div>
 
@@ -515,29 +515,31 @@
 
           <!-- Status Message -->
           {#if statusMessage}
-            <div class="mt-4">
+            <div class="mt-3 max-w-2xl">
               <div
-                class="alert"
+                class="alert py-2 px-3 text-sm"
                 class:alert-info={statusType === 'info'}
                 class:alert-success={statusType === 'success'}
                 class:alert-error={statusType === 'error'}
               >
-                {#if statusType === 'info'}
-                  {@html alertIconsSvg.info}
-                {:else if statusType === 'success'}
-                  {@html alertIconsSvg.success}
-                {:else if statusType === 'error'}
-                  {@html alertIconsSvg.error}
-                {/if}
-                <span>{statusMessage}</span>
+                <div class="h-4 w-4 flex-shrink-0">
+                  {#if statusType === 'info'}
+                    {@html alertIconsSvg.info}
+                  {:else if statusType === 'success'}
+                    {@html alertIconsSvg.success}
+                  {:else if statusType === 'error'}
+                    {@html alertIconsSvg.error}
+                  {/if}
+                </div>
+                <span class="min-w-0 text-sm">{statusMessage}</span>
               </div>
 
               <!-- Progress Bar -->
               {#if generating && progressPercent > 0}
-                <div class="mt-2">
-                  <div class="w-full bg-base-300 rounded-full h-2">
+                <div class="mt-1">
+                  <div class="w-full bg-base-300 rounded-full h-1.5">
                     <div
-                      class="bg-primary h-2 rounded-full transition-all duration-500"
+                      class="bg-primary h-1.5 rounded-full transition-all duration-500"
                       style:width="{progressPercent}%"
                     ></div>
                   </div>
