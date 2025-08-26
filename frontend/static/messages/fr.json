@@ -885,8 +885,16 @@
       "supportReport": {
         "title": "Générer un rapport de support",
         "description": {
-          "intro": "Les rapports de support sont **essentiels pour le dépannage** et améliorent considérablement notre capacité à résoudre les problèmes que vous rencontrez. Ils fournissent aux développeurs un contexte crucial sur la configuration de votre système, les journaux d'application récents et les modèles d'erreur qui seraient impossibles à diagnostiquer autrement.",
-          "githubIssue": "Veuillez [créer un problème GitHub](https://github.com/tphakala/birdnet-go/issues/new) décrivant votre problème **avant ou après** la génération de ce rapport de support. Cela permet un suivi et une communication appropriés concernant votre problème."
+          "intro": "Les rapports de support sont **essentiels pour le dépannage** et améliorent considérablement notre capacité à résoudre les problèmes que vous rencontrez. Ils fournissent aux développeurs un contexte crucial sur la configuration de votre système, les journaux d'application récents et les modèles d'erreur qui seraient impossibles à diagnostiquer autrement."
+        },
+        "githubRequired": {
+          "title": "Requis : Problème GitHub pour les envois de support",
+          "description": "<strong>Les envois de support nécessitent un numéro de problème GitHub.</strong> Veuillez <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">créer un problème GitHub</a> décrivant votre problème <strong>avant</strong> de générer un rapport de support. Sans problème lié, les développeurs ne peuvent pas traiter vos données de support."
+        },
+        "githubIssue": {
+          "label": "Numéro du problème GitHub",
+          "placeholder": "#123",
+          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Voir les problèmes existants</a> ou <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">créer un nouveau problème</a> d'abord"
         },
         "whatsIncluded": {
           "title": "Ce qui est inclus dans le rapport :",
@@ -897,11 +905,15 @@
         },
         "userMessage": {
           "label": "Décrivez le problème",
+          "labelOptional": "Décrivez le problème (facultatif)",
           "placeholder": "Veuillez décrire le problème et inclure le lien du problème GitHub si applicable (par ex., #123)",
-          "githubTip": "💡 Conseil : Si vous avez un problème GitHub, veuillez inclure le numéro du problème (par ex., #123) et mentionner votre ID système {systemId} dans le problème GitHub pour aider les développeurs à lier vos données de support."
+          "placeholderOptional": "Ajoutez des détails supplémentaires sur le problème...",
+          "githubTip": "💡 Conseil : Si vous avez un problème GitHub, veuillez inclure le numéro du problème (par ex., #123) et mentionner votre ID système {systemId} dans le problème GitHub pour aider les développeurs à lier vos données de support.",
+          "systemIdNote": "Mentionnez votre ID système {systemId} dans le problème GitHub."
         },
         "uploadOption": {
           "label": "Télécharger vers les développeurs (recommandé)",
+          "labelWithRequirement": "Télécharger vers les développeurs (problème GitHub requis)",
           "details": {
             "sentryUpload": "Les données sont téléchargées vers le service cloud [Sentry](https://sentry.io)",
             "euDataCenter": "Stockées dans le centre de données UE (Francfort, Allemagne)",
@@ -920,7 +932,8 @@
           "downloadSuccess": "Rapport de support généré avec succès ! Téléchargement...",
           "generateSuccess": "Rapport de support généré avec succès !",
           "generateFailed": "Échec de la génération du rapport de support : {message}",
-          "error": "Erreur : {message}"
+          "error": "Erreur : {message}",
+          "githubIssueRequired": "Le numéro du problème GitHub est requis."
         }
       }
     },
