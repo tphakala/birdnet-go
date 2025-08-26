@@ -481,13 +481,16 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 	// Set begin and end time for note
 	beginTime, endTime := item.StartTime, item.StartTime.Add(15*time.Second)
 
+	// Get occurrence probability for this species at detection time
+	occurrence := p.Bn.GetSpeciesOccurrenceAtTime(result.Species, item.StartTime)
+
 	// Create the note
 	note := p.NewWithSpeciesInfo(
 		beginTime, endTime,
 		scientificName, commonName, speciesCode,
 		float64(result.Confidence),
 		item.Source.ID, clipName,
-		item.ElapsedTime)
+		item.ElapsedTime, occurrence)
 
 	// Update species tracker if enabled
 	p.speciesTrackerMu.RLock()
@@ -1210,7 +1213,8 @@ func (p *Processor) NewWithSpeciesInfo(
 	scientificName, commonName, speciesCode string,
 	confidence float64,
 	source, clipName string,
-	elapsedTime time.Duration) datastore.Note {
+	elapsedTime time.Duration,
+	occurrence float64) datastore.Note {
 
 	// detectionTime is time now minus 3 seconds to account for the delay in the detection
 	now := time.Now()
@@ -1285,6 +1289,7 @@ func (p *Processor) NewWithSpeciesInfo(
 		Sensitivity:    p.Settings.BirdNET.Sensitivity, // Sensitivity setting from configuration
 		ClipName:       clipName,                       // Name of the audio clip
 		ProcessingTime: elapsedTime,                    // Time taken to process the observation
+		Occurrence:     occurrence,                     // Runtime occurrence probability (not persisted to DB)
 	}
 }
 

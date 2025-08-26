@@ -990,6 +990,11 @@ func (bn *BirdNET) Debug(format string, v ...interface{}) {
 // GetSpeciesOccurrence returns the occurrence probability for a given species based on current location and time
 // Returns 0.0 if the species is not found or range filter is not enabled
 func (bn *BirdNET) GetSpeciesOccurrence(species string) float64 {
+	return bn.GetSpeciesOccurrenceAtTime(species, time.Now())
+}
+
+// GetSpeciesOccurrenceAtTime returns the occurrence probability for a species at a specific time
+func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time.Time) float64 {
 	// Fast-path: if range interpreter is not initialized, return 0
 	if bn.RangeInterpreter == nil {
 		return 0.0
@@ -1000,9 +1005,24 @@ func (bn *BirdNET) GetSpeciesOccurrence(species string) float64 {
 		return 0.0
 	}
 
-	// Get current probable species with their scores
-	today := time.Now().Truncate(24 * time.Hour)
-	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
+	// Try to get cached scores first
+	cachedScores, err := bn.getCachedSpeciesScores(detectionTime)
+	if err == nil && len(cachedScores) > 0 {
+		if occurrence, found := cachedScores[species]; found {
+			// Clamp the score to [0.0, 1.0] range
+			if occurrence < 0.0 {
+				return 0.0
+			}
+			if occurrence > 1.0 {
+				return 1.0
+			}
+			return occurrence
+		}
+	}
+
+	// Fallback to calculating probable species if cache miss
+	day := detectionTime.Truncate(24 * time.Hour)
+	speciesScores, err := bn.GetProbableSpecies(day, 0.0)
 	if err != nil {
 		bn.Debug("Error getting probable species for occurrence: %v", err)
 		return 0.0
