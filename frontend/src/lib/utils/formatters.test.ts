@@ -18,6 +18,7 @@ import {
   truncateText,
   parseISODate,
 } from './formatters';
+import { getLocalDateString } from './date';
 
 describe('formatters', () => {
   describe('formatDate', () => {
@@ -223,7 +224,7 @@ describe('formatters', () => {
     });
 
     it('handles YYYY-MM-DD strings without timezone shift', () => {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
       const result = formatRelativeTime(today);
       expect(result).toBeTruthy();
       // Should not be "yesterday" due to timezone shift

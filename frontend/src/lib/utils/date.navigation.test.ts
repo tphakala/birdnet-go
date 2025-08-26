@@ -24,8 +24,8 @@ describe('Date Navigation Utilities', () => {
     });
 
     it('throws on invalid date', () => {
-      expect(() => getPreviousDay('invalid')).toThrow('Invalid date string');
-      expect(() => getPreviousDay('')).toThrow('Invalid date string');
+      expect(() => getPreviousDay('invalid')).toThrow(/^Invalid date string/);
+      expect(() => getPreviousDay('')).toThrow(/^Invalid date string/);
     });
   });
 
@@ -48,8 +48,8 @@ describe('Date Navigation Utilities', () => {
     });
 
     it('throws on invalid date', () => {
-      expect(() => getNextDay('invalid')).toThrow('Invalid date string');
-      expect(() => getNextDay('')).toThrow('Invalid date string');
+      expect(() => getNextDay('invalid')).toThrow(/^Invalid date string/);
+      expect(() => getNextDay('')).toThrow(/^Invalid date string/);
     });
   });
 
@@ -92,8 +92,8 @@ describe('Date Navigation Utilities', () => {
     });
 
     it('throws on invalid date', () => {
-      expect(() => addDays('invalid', 1)).toThrow('Invalid date string');
-      expect(() => addDays('', 1)).toThrow('Invalid date string');
+      expect(() => addDays('invalid', 1)).toThrow(/^Invalid date string/);
+      expect(() => addDays('', 1)).toThrow(/^Invalid date string/);
     });
   });
 

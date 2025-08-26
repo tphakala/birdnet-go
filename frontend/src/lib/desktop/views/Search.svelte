@@ -163,7 +163,7 @@
     if (!dateString) return '';
     const date = parseLocalDateString(dateString);
     if (!date) return '';
-    return date.toLocaleString(getLocale());
+    return date.toLocaleString(getLocale(), { dateStyle: 'medium', timeStyle: 'short' });
   }
 
   // Handle pagination

@@ -21,6 +21,7 @@ describe('DashboardPage Date Navigation Bug', () => {
       const noonParse = new Date(dateString + 'T12:00:00');
 
       // The UTC parse time will be midnight UTC
+      // toISOString() is used intentionally to demonstrate a UTC-midnight bug - explicit exception to house rules
       expect(utcParse.toISOString()).toContain('T00:00:00.000Z');
 
       // The noon parse will be at noon local time
@@ -40,6 +41,7 @@ describe('DashboardPage Date Navigation Bug', () => {
       // For users west of UTC, this could appear as previous day
       // We can't easily simulate timezone in tests, but we can show
       // that the time is midnight UTC
+      // toISOString() is used intentionally to demonstrate a UTC-midnight bug - explicit exception to house rules
       expect(utcDate.toISOString()).toBe('2025-03-15T00:00:00.000Z');
 
       // Create date at noon - this is the fixed way
@@ -217,6 +219,9 @@ describe('DashboardPage Date Navigation Bug', () => {
     });
 
     it('handles invalid dates gracefully', () => {
+      // NOTE: This test documents JavaScript's date rollover behavior.
+      // It is not part of app logic but verifies engine-specific behavior.
+
       // These should not crash but may produce unexpected results
       // The important thing is they don't skip days unexpectedly
 
@@ -258,6 +263,7 @@ describe('DashboardPage Date Navigation Bug', () => {
       const fixedDate = new Date(dateString + 'T12:00:00');
 
       // The buggy version creates midnight UTC
+      // toISOString() is used intentionally to demonstrate a UTC-midnight bug - explicit exception to house rules
       expect(buggyDate.toISOString()).toContain('T00:00:00.000Z');
 
       // The fixed version creates noon local time

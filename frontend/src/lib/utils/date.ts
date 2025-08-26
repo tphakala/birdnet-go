@@ -36,15 +36,15 @@ export function getLocalDateString(date: Date = new Date()): string {
  * // ISO 8601 with time - parsed normally for precise timestamps
  * parseLocalDateString('2025-08-25T10:30:00Z') // Returns the exact date/time
  *
- * // Date object - returned as-is
- * parseLocalDateString(new Date()) // Returns the same Date object
+ * // Date object - returned as cloned copy
+ * parseLocalDateString(new Date()) // Returns a cloned Date object
  */
 export function parseLocalDateString(dateString: string | Date | null | undefined): Date | null {
   if (!dateString) return null;
 
-  // If already a Date object, return it
+  // If already a Date object, return a cloned copy to prevent mutation
   if (dateString instanceof Date) {
-    return isNaN(dateString.getTime()) ? null : dateString;
+    return isNaN(dateString.getTime()) ? null : new Date(dateString.getTime());
   }
 
   // Handle YYYY-MM-DD format specifically to avoid timezone issues
@@ -223,6 +223,11 @@ export function getNextDay(dateString: string): string {
  * addDays('2025-08-25', -7) // Returns '2025-08-18'
  */
 export function addDays(dateString: string, days: number): string {
+  // Validate that days is an integer
+  if (typeof days !== 'number' || !Number.isFinite(days) || !Number.isInteger(days)) {
+    throw new TypeError('days must be an integer');
+  }
+
   const date = parseLocalDateString(dateString);
   if (!date) throw new Error(`Invalid date string: ${dateString}`);
   date.setDate(date.getDate() + days);

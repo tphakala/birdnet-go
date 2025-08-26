@@ -6,13 +6,25 @@ import { safeArrayAccess } from './security';
 import { parseLocalDateString } from './date';
 
 /**
+ * Convert various input types into a valid Date object
+ * @param value - Date, string, number, null, or undefined
+ * @returns Valid Date object or null if invalid/null/undefined
+ */
+function toValidDate(value: Date | string | number | null | undefined): Date | null {
+  if (value === null || value === undefined) return null;
+
+  const d = typeof value === 'string' ? parseLocalDateString(value) : new Date(value);
+  if (!d || isNaN(d.getTime())) return null;
+
+  return d;
+}
+
+/**
  * Format date to locale string
  */
 export function formatDate(date: Date | string | number | null | undefined): string {
-  if (date === null || date === undefined) return '';
-
-  const d = typeof date === 'string' ? parseLocalDateString(date) : new Date(date);
-  if (!d || isNaN(d.getTime())) return '';
+  const d = toValidDate(date);
+  if (!d) return '';
 
   return d.toLocaleDateString();
 }
@@ -21,10 +33,8 @@ export function formatDate(date: Date | string | number | null | undefined): str
  * Format date and time to locale string
  */
 export function formatDateTime(date: Date | string | number | null | undefined): string {
-  if (date === null || date === undefined) return '';
-
-  const d = typeof date === 'string' ? parseLocalDateString(date) : new Date(date);
-  if (!d || isNaN(d.getTime())) return '';
+  const d = toValidDate(date);
+  if (!d) return '';
 
   return d.toLocaleString();
 }
@@ -33,10 +43,8 @@ export function formatDateTime(date: Date | string | number | null | undefined):
  * Format date for HTML input (YYYY-MM-DD)
  */
 export function formatDateForInput(date: Date | string | number | null): string {
-  if (!date) return '';
-
-  const d = typeof date === 'string' ? parseLocalDateString(date) : new Date(date);
-  if (!d || isNaN(d.getTime())) return '';
+  const d = toValidDate(date);
+  if (!d) return '';
 
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -125,10 +133,8 @@ export function formatBytes(bytes: number, decimals: number = 2): string {
  * Format relative time (e.g., "2 hours ago", "in 3 days")
  */
 export function formatRelativeTime(date: Date | string | number | null | undefined): string {
-  if (date === null || date === undefined) return '';
-
-  const d = typeof date === 'string' ? parseLocalDateString(date) : new Date(date);
-  if (!d || isNaN(d.getTime())) return '';
+  const d = toValidDate(date);
+  if (!d) return '';
 
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - d.getTime()) / 1000);
@@ -154,10 +160,10 @@ export function formatRelativeTime(date: Date | string | number | null | undefin
  * Format duration between two dates
  */
 export function formatDuration(start: Date | string | number, end: Date | string | number): string {
-  const startDate = typeof start === 'string' ? parseLocalDateString(start) : new Date(start);
-  const endDate = typeof end === 'string' ? parseLocalDateString(end) : new Date(end);
+  const startDate = toValidDate(start);
+  const endDate = toValidDate(end);
 
-  if (!startDate || !endDate || isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return '';
+  if (!startDate || !endDate) return '';
 
   const diffInSeconds = Math.abs(endDate.getTime() - startDate.getTime()) / 1000;
 
