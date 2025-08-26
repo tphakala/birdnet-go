@@ -4,6 +4,7 @@
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+GRAY='\033[0;90m'
 NC='\033[0m' # No Color
 
 
@@ -16,20 +17,17 @@ cat << "EOF"
 |____/|_|_|  \__,_|_| \_|_____| |_|    \____|\___/ 
 EOF
 
-print_message "\n🐦 BirdNET-Go Installation Script" "$GREEN"
-print_message "This script will install BirdNET-Go and its dependencies." "$YELLOW"
 
 BIRDNET_GO_VERSION="nightly"
 BIRDNET_GO_IMAGE="ghcr.io/tphakala/birdnet-go:${BIRDNET_GO_VERSION}"
 
 # Logging configuration
-LOG_DIR="$HOME/birdnet-go-app/logs"
+LOG_DIR="$HOME/birdnet-go-app/data/logs"
 # Generate timestamped log file name: install-YYYYMMDD-HHMMSS.log
 LOG_TIMESTAMP=$(date '+%Y%m%d-%H%M%S')
 LOG_FILE="$LOG_DIR/install-${LOG_TIMESTAMP}.log"
 
-# Initialize logging system early
-setup_logging
+# Logging system will be initialized after function definitions
 
 # Version management configuration
 MAX_CONFIG_BACKUPS=10
@@ -689,6 +687,27 @@ cleanup_old_backups() {
     log_message "INFO" "Backup cleanup completed: $final_count backups remaining"
 }
 
+# Function to check if any versions are available for rollback
+has_previous_versions() {
+    if [ ! -f "$VERSION_HISTORY_FILE" ]; then
+        return 1
+    fi
+    
+    # Check if there are any valid entries in the version history
+    local version_count=0
+    while IFS='|' read -r timestamp image_hash config_backup image_tag context; do
+        # Skip empty lines and comments
+        [ -z "$timestamp" ] || [[ "$timestamp" == \#* ]] && continue
+        
+        # Validate entry format
+        if validate_version_history_entry "${timestamp}|${image_hash}|${config_backup}|${image_tag}|${context}"; then
+            version_count=$((version_count + 1))
+        fi
+    done < "$VERSION_HISTORY_FILE"
+    
+    [ "$version_count" -gt 0 ]
+}
+
 # Function to list available versions for rollback
 list_available_versions() {
     if [ ! -f "$VERSION_HISTORY_FILE" ]; then
@@ -1247,6 +1266,101 @@ check_prerequisites() {
             print_message "✅ Docker is accessible by user $USER" "$GREEN"
         fi
     fi
+
+    # Check port availability early in prerequisites
+    print_message "🔌 Checking required port availability..." "$YELLOW"
+    local ports_to_check=("80" "443" "${WEB_PORT:-8080}" "8090")
+    local unique_ports=()
+    local failed_ports=()
+    local port_processes=()
+    local port
+    local process_info
+    
+    # Use associative array for efficient deduplication
+    local -A seen
+    
+    # Deduplicate ports array to avoid double-checking
+    for port in "${ports_to_check[@]}"; do
+        # Skip empty entries
+        if [ -z "$port" ]; then
+            continue
+        fi
+        
+        # Only add if not seen before
+        if [ -z "${seen[$port]:-}" ]; then
+            seen[$port]=1
+            unique_ports+=("$port")
+        fi
+    done
+    
+    for port in "${unique_ports[@]}"; do
+        if ! check_port_availability "$port"; then
+            failed_ports+=("$port")
+            process_info=$(get_port_process_info "$port")
+            port_processes+=("$process_info")
+            print_message "❌ Port $port is already in use by: $process_info" "$RED"
+        else
+            print_message "✅ Port $port is available" "$GREEN"
+        fi
+    done
+    
+    # If any ports are in use, show detailed error and exit
+    if [ ${#failed_ports[@]} -gt 0 ]; then
+        print_message "\n❌ ERROR: Required ports are not available" "$RED"
+        print_message "\nBirdNET-Go requires the following ports to be available:" "$YELLOW"
+        print_message "  • Port 80   - HTTP web interface" "$YELLOW"
+        print_message "  • Port 443  - HTTPS web interface (with SSL)" "$YELLOW"
+        local web_port_display="${WEB_PORT:-8080}"
+        if [ "$web_port_display" != "80" ] && [ "$web_port_display" != "443" ]; then
+            print_message "  • Port $web_port_display - Primary web interface" "$YELLOW"
+        fi
+        print_message "  • Port 8090 - Prometheus metrics endpoint" "$YELLOW"
+        
+        print_message "\n📋 Ports currently in use:" "$RED"
+        for i in "${!failed_ports[@]}"; do
+            print_message "  • Port ${failed_ports[$i]} - Used by: ${port_processes[$i]}" "$RED"
+        done
+        
+        print_message "\n💡 To resolve this issue, you can:" "$YELLOW"
+        print_message "\n1. Stop the conflicting services:" "$YELLOW"
+        
+        # Provide specific instructions based on common services
+        for i in "${!failed_ports[@]}"; do
+            local failed_port="${failed_ports[$i]}"
+            local process="${port_processes[$i]}"
+            # Convert to lowercase for case-insensitive matching
+            local process_lower
+            process_lower=$(echo "$process" | tr '[:upper:]' '[:lower:]')
+            
+            if [[ "$process_lower" == *"apache"* ]] || [[ "$process_lower" == *"httpd"* ]]; then
+                print_message "   sudo systemctl stop apache2  # For Apache on port $failed_port" "$NC"
+            elif [[ "$process_lower" == *"nginx"* ]]; then
+                print_message "   sudo systemctl stop nginx    # For Nginx on port $failed_port" "$NC"
+            elif [[ "$process_lower" == *"lighttpd"* ]]; then
+                print_message "   sudo systemctl stop lighttpd # For Lighttpd on port $failed_port" "$NC"
+            elif [[ "$process_lower" == *"caddy"* ]]; then
+                print_message "   sudo systemctl stop caddy    # For Caddy on port $failed_port" "$NC"
+            elif [[ "$failed_port" == "80" ]] || [[ "$failed_port" == "443" ]]; then
+                print_message "   sudo systemctl stop <service> # Replace <service> with the service using port $failed_port" "$NC"
+            fi
+        done
+        
+        print_message "\n2. Or use Docker with different port mappings (advanced users):" "$YELLOW"
+        print_message "   Modify the systemd service file after installation to use different ports" "$NC"
+        
+        print_message "\n3. Or uninstall conflicting software if not needed:" "$YELLOW"
+        print_message "   sudo apt remove <package-name>" "$NC"
+        
+        print_message "\n⚠️  Note: BirdNET-Go requires ports 80 and 443 for:" "$YELLOW"
+        print_message "  • HTTP web interface access" "$YELLOW"
+        print_message "  • HTTPS web interface (if SSL is configured)" "$YELLOW"
+        print_message "  • Proper web interface functionality" "$YELLOW"
+        
+        send_telemetry_event "error" "Port availability check failed" "error" "step=check_prerequisites,failed_ports=${failed_ports[*]}"
+        exit 1
+    fi
+    
+    print_message "✅ All required ports are available" "$GREEN"
 
     log_message "INFO" "System prerequisites check completed successfully"
     print_message "🥳 System prerequisites checks passed" "$GREEN"
@@ -2679,106 +2793,6 @@ get_port_process_info() {
     fi
 }
 
-# Function to validate all required ports
-# Note: Docker daemon runs as root and handles privileged port binding (80, 443)
-# This check ensures ports are free before Docker attempts to bind them
-validate_required_ports() {
-    local ports_to_check=("80" "443" "$WEB_PORT" "8090")
-    local unique_ports=()
-    local failed_ports=()
-    local port_processes=()
-    local port
-    local process_info
-    
-    # Use associative array for efficient deduplication
-    local -A seen
-    
-    # Deduplicate ports array to avoid double-checking
-    for port in "${ports_to_check[@]}"; do
-        # Skip empty entries
-        if [ -z "$port" ]; then
-            continue
-        fi
-        
-        # Only add if not seen before
-        if [ -z "${seen[$port]:-}" ]; then
-            seen[$port]=1
-            unique_ports+=("$port")
-        fi
-    done
-    
-    print_message "\n🔌 Checking required port availability..." "$YELLOW"
-    
-    for port in "${unique_ports[@]}"; do
-        if ! check_port_availability "$port"; then
-            failed_ports+=("$port")
-            process_info=$(get_port_process_info "$port")
-            port_processes+=("$process_info")
-            print_message "❌ Port $port is already in use by: $process_info" "$RED"
-        else
-            print_message "✅ Port $port is available" "$GREEN"
-        fi
-    done
-    
-    # If any ports are in use, show detailed error and exit
-    if [ ${#failed_ports[@]} -gt 0 ]; then
-        print_message "\n❌ ERROR: Required ports are not available" "$RED"
-        print_message "\nBirdNET-Go requires the following ports to be available:" "$YELLOW"
-        print_message "  • Port 80   - HTTP web interface" "$YELLOW"
-        print_message "  • Port 443  - HTTPS web interface (with SSL)" "$YELLOW"
-        if [ "$WEB_PORT" != "80" ] && [ "$WEB_PORT" != "443" ]; then
-            print_message "  • Port $WEB_PORT - Primary web interface" "$YELLOW"
-        fi
-        print_message "  • Port 8090 - Prometheus metrics endpoint" "$YELLOW"
-        
-        print_message "\n📋 Ports currently in use:" "$RED"
-        for i in "${!failed_ports[@]}"; do
-            print_message "  • Port ${failed_ports[$i]} - Used by: ${port_processes[$i]}" "$RED"
-        done
-        
-        print_message "\n💡 To resolve this issue, you can:" "$YELLOW"
-        print_message "\n1. Stop the conflicting services:" "$YELLOW"
-        
-        # Provide specific instructions based on common services
-        for i in "${!failed_ports[@]}"; do
-            local port="${failed_ports[$i]}"
-            local process="${port_processes[$i]}"
-            # Convert to lowercase for case-insensitive matching
-            local process_lower
-            process_lower=$(echo "$process" | tr '[:upper:]' '[:lower:]')
-            
-            if [[ "$process_lower" == *"apache"* ]] || [[ "$process_lower" == *"httpd"* ]]; then
-                print_message "   sudo systemctl stop apache2  # For Apache on port $port" "$NC"
-            elif [[ "$process_lower" == *"nginx"* ]]; then
-                print_message "   sudo systemctl stop nginx    # For Nginx on port $port" "$NC"
-            elif [[ "$process_lower" == *"lighttpd"* ]]; then
-                print_message "   sudo systemctl stop lighttpd # For Lighttpd on port $port" "$NC"
-            elif [[ "$process_lower" == *"caddy"* ]]; then
-                print_message "   sudo systemctl stop caddy    # For Caddy on port $port" "$NC"
-            elif [[ "$port" == "80" ]] || [[ "$port" == "443" ]]; then
-                print_message "   sudo systemctl stop <service> # Replace <service> with the service using port $port" "$NC"
-            fi
-        done
-        
-        print_message "\n2. Or use Docker with different port mappings (advanced users):" "$YELLOW"
-        print_message "   Modify the systemd service file after installation to use different ports" "$NC"
-        
-        print_message "\n3. Or uninstall conflicting software if not needed:" "$YELLOW"
-        print_message "   sudo apt remove <package-name>" "$NC"
-        
-        print_message "\n⚠️  Note: BirdNET-Go's Caddy web server requires ports 80 and 443 for:" "$YELLOW"
-        print_message "  • Automatic HTTPS certificate generation (Let's Encrypt)" "$YELLOW"
-        print_message "  • HTTP to HTTPS redirection" "$YELLOW"
-        print_message "  • Proper web interface functionality" "$YELLOW"
-        
-        send_telemetry_event "error" "Port availability check failed" "error" "step=validate_required_ports,failed_ports=${failed_ports[*]}"
-        
-        return 1
-    fi
-    
-    print_message "✅ All required ports are available" "$GREEN"
-    return 0
-}
 
 # Function to configure web interface port
 configure_web_port() {
@@ -2788,12 +2802,7 @@ configure_web_port() {
     # Update config file with port
     sed -i -E "s/^(\\s*port:\\s*)[0-9]+/\\1$WEB_PORT/" "$CONFIG_FILE"
     
-    # Validate ALL required ports including 80, 443, 8080, and 8090
-    if ! validate_required_ports; then
-        print_message "\n❌ Installation cannot continue due to port conflicts" "$RED"
-        print_message "Please resolve the port conflicts and run the installer again." "$YELLOW"
-        exit 1
-    fi
+    # Port validation already done in prerequisites section
 }
 
 # Generate systemd service content
@@ -3565,7 +3574,11 @@ display_menu() {
     if [ "$installation_type" = "full" ]; then
         print_message "🔍 Found existing BirdNET-Go installation (systemd service)" "$YELLOW"
         print_message "1) Check for updates" "$YELLOW"
-        print_message "2) Revert to previous version" "$YELLOW"
+        if has_previous_versions; then
+            print_message "2) Revert to previous version" "$YELLOW"
+        else
+            print_message "2) Revert to previous version (no versions available)" "$GRAY"
+        fi
         print_message "3) Fresh installation" "$YELLOW"
         print_message "4) Uninstall BirdNET-Go, remove data" "$YELLOW"
         print_message "5) Uninstall BirdNET-Go, preserve data" "$YELLOW"
@@ -3575,7 +3588,11 @@ display_menu() {
     elif [ "$installation_type" = "docker" ]; then
         print_message "🔍 Found existing BirdNET-Go Docker container/image" "$YELLOW"
         print_message "1) Check for updates" "$YELLOW"
-        print_message "2) Revert to previous version" "$YELLOW"
+        if has_previous_versions; then
+            print_message "2) Revert to previous version" "$YELLOW"
+        else
+            print_message "2) Revert to previous version (no versions available)" "$GRAY"
+        fi
         print_message "3) Install as systemd service" "$YELLOW"
         print_message "4) Fresh installation" "$YELLOW"
         print_message "5) Remove Docker container/image" "$YELLOW"
@@ -3585,7 +3602,11 @@ display_menu() {
     else
         print_message "🔍 Found BirdNET-Go data from previous installation" "$YELLOW"
         print_message "1) Install using existing data and configuration" "$YELLOW"
-        print_message "2) Revert to previous version" "$YELLOW"
+        if has_previous_versions; then
+            print_message "2) Revert to previous version" "$YELLOW"
+        else
+            print_message "2) Revert to previous version (no versions available)" "$GRAY"
+        fi
         print_message "3) Fresh installation (remove existing data and configuration)" "$YELLOW"
         print_message "4) Remove existing data without installing" "$YELLOW"
         print_message "5) Exit" "$YELLOW"
@@ -3615,14 +3636,16 @@ handle_full_install_menu() {
             ;;
         2)
             # Revert to previous version
-            print_message "\n🔄 Reverting to previous version..." "$YELLOW"
-            list_available_versions
-            if [ $? -eq 1 ]; then
-                print_message "❌ No previous versions available for rollback" "$RED"
+            if ! has_previous_versions; then
+                print_message "\n❌ No previous versions available for rollback" "$RED"
+                print_message "💡 Previous versions will be available after your first update" "$YELLOW"
                 print_message "Press any key to return to menu..."
                 read -n 1
                 return 1
             fi
+            
+            print_message "\n🔄 Reverting to previous version..." "$YELLOW"
+            list_available_versions
             
             print_message "\n❓ Enter version number to revert to (or 'c' to cancel): " "$YELLOW" "nonewline"
             read -r version_choice
@@ -3700,8 +3723,8 @@ handle_full_install_menu() {
             fi
             ;;
         6)
-            print_message "❌ Operation cancelled" "$RED"
-            exit 1
+            print_message "👋 Goodbye!" "$GREEN"
+            exit 0
             ;;
         *)
             print_message "❌ Invalid option" "$RED"
@@ -3727,14 +3750,16 @@ handle_docker_install_menu() {
             ;;
         2)
             # Revert to previous version
-            print_message "\n🔄 Reverting to previous version..." "$YELLOW"
-            list_available_versions
-            if [ $? -eq 1 ]; then
-                print_message "❌ No previous versions available for rollback" "$RED"
+            if ! has_previous_versions; then
+                print_message "\n❌ No previous versions available for rollback" "$RED"
+                print_message "💡 Previous versions will be available after your first update" "$YELLOW"
                 print_message "Press any key to return to menu..."
                 read -n 1
                 return 1
             fi
+            
+            print_message "\n🔄 Reverting to previous version..." "$YELLOW"
+            list_available_versions
             
             print_message "\n❓ Enter version number to revert to (or 'c' to cancel): " "$YELLOW" "nonewline"
             read -r version_choice
@@ -3819,8 +3844,8 @@ handle_docker_install_menu() {
             fi
             ;;
         6)
-            print_message "❌ Operation cancelled" "$RED"
-            exit 1
+            print_message "👋 Goodbye!" "$GREEN"
+            exit 0
             ;;
         *)
             print_message "❌ Invalid option" "$RED"
@@ -3837,14 +3862,16 @@ handle_preserved_data_menu() {
             ;;
         2)
             # Revert to previous version
-            print_message "\n🔄 Reverting to previous version..." "$YELLOW"
-            list_available_versions
-            if [ $? -eq 1 ]; then
-                print_message "❌ No previous versions available for rollback" "$RED"
+            if ! has_previous_versions; then
+                print_message "\n❌ No previous versions available for rollback" "$RED"
+                print_message "💡 Previous versions will be available after your first update" "$YELLOW"
                 print_message "Press any key to return to menu..."
                 read -n 1
                 return 1
             fi
+            
+            print_message "\n🔄 Reverting to previous version..." "$YELLOW"
+            list_available_versions
             
             print_message "\n❓ Enter version number to revert to (or 'c' to cancel): " "$YELLOW" "nonewline"
             read -r version_choice
@@ -3903,8 +3930,8 @@ handle_preserved_data_menu() {
             fi
             ;;
         5)
-            print_message "❌ Operation cancelled" "$RED"
-            exit 1
+            print_message "👋 Goodbye!" "$GREEN"
+            exit 0
             ;;
         *)
             print_message "❌ Invalid option" "$RED"
@@ -3926,23 +3953,33 @@ handle_menu_selection() {
     fi
 }
 
-# Determine what's installed and what to show
+# Menu loop for existing installations
 if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
-    # Display menu based on installation type
-    display_menu "$INSTALLATION_TYPE"
-    max_options=$?
-    
-    # Read user selection
-    read -r response
-    
-    # Validate user selection
-    if [[ "$response" =~ ^[0-9]+$ ]] && [ "$response" -ge 1 ] && [ "$response" -le "$max_options" ]; then
-        # Handle menu selection
-        handle_menu_selection "$INSTALLATION_TYPE" "$response"
-    else
-        print_message "❌ Invalid option" "$RED"
-        exit 1
-    fi
+    while true; do
+        # Display menu based on installation type
+        print_message ""  # Add spacing
+        display_menu "$INSTALLATION_TYPE"
+        max_options=$?
+        
+        # Read user selection
+        read -r response
+        
+        # Validate user selection
+        if [[ "$response" =~ ^[0-9]+$ ]] && [ "$response" -ge 1 ] && [ "$response" -le "$max_options" ]; then
+            # Handle menu selection
+            handle_menu_selection "$INSTALLATION_TYPE" "$response"
+            menu_result=$?
+            
+            # If menu action succeeded (returned 0), break from loop and continue
+            if [ $menu_result -eq 0 ]; then
+                break
+            fi
+            # If menu action failed/cancelled (returned 1), continue loop to show menu again
+        else
+            print_message "❌ Invalid option. Please select a number between 1 and $max_options." "$RED"
+            # Continue loop to show menu again
+        fi
+    done
 fi
 
 print_message "Note: Root privileges will be required for:" "$YELLOW"
@@ -3950,6 +3987,13 @@ print_message "  - Installing system packages (alsa-utils, curl, bc, jq, apache2
 print_message "  - Installing Docker" "$YELLOW"
 print_message "  - Creating systemd service" "$YELLOW"
 print_message ""
+
+# Initialize logging system 
+setup_logging
+
+# Display welcome message
+print_message "\n🐦 BirdNET-Go Installation Script" "$GREEN"
+print_message "This script will install BirdNET-Go and its dependencies." "$YELLOW"
 
 # First check basic network connectivity and ensure curl is available
 check_network
