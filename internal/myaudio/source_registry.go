@@ -4,7 +4,6 @@ package myaudio
 import (
 	"fmt"
 	"log/slog"
-	"net/url"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -514,43 +513,49 @@ func (r *AudioSourceRegistry) validateConnectionString(connectionString string, 
 
 // validateRTSPURL validates RTSP URLs for security
 func (r *AudioSourceRegistry) validateRTSPURL(rtspURL string) error {
-	// Parse URL
-	u, err := url.Parse(rtspURL)
-	if err != nil {
-		return errors.New(err).
+	// Basic validation - check for RTSP scheme without using url.Parse()
+	// This avoids breaking existing configurations with complex passwords
+	// that may contain special characters like colons, which are valid in FFmpeg
+	// but cause url.Parse() to fail due to Go's strict userinfo parsing
+	
+	// Check for empty URL
+	if rtspURL == "" {
+		return errors.Newf("RTSP URL cannot be empty").
 			Component("myaudio").
 			Category(errors.CategoryRTSP).
 			Context("operation", "validate_rtsp_url").
-			Context("reason", "url_parse_failed").
+			Context("reason", "empty_url").
 			Build()
 	}
 
-	// Check scheme (allow test scheme for testing)
-	if u.Scheme != "rtsp" && u.Scheme != "rtsps" && u.Scheme != "test" {
-		return errors.Newf("invalid scheme '%s', expected rtsp, rtsps, or test", u.Scheme).
+	// Check scheme prefix (case-insensitive)
+	lowerURL := strings.ToLower(rtspURL)
+	if !strings.HasPrefix(lowerURL, "rtsp://") && 
+	   !strings.HasPrefix(lowerURL, "rtsps://") && 
+	   !strings.HasPrefix(lowerURL, "test://") {
+		return errors.Newf("invalid scheme, expected rtsp://, rtsps://, or test://").
 			Component("myaudio").
 			Category(errors.CategoryRTSP).
 			Context("operation", "validate_rtsp_url").
-			Context("scheme", u.Scheme).
-			Context("expected_schemes", "rtsp,rtsps,test").
+			Context("reason", "invalid_scheme").
 			Build()
 	}
 
-	// Check for localhost/private network access (optional, depending on security policy)
-	// This is commented out as it might be valid for home users
-	// if u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" {
-	//     return fmt.Errorf("localhost URLs not allowed")
-	// }
-
-	// Validate host exists
-	if u.Host == "" {
-		return errors.Newf("RTSP URL must have a host").
+	// Basic structure validation - ensure there's something after the scheme
+	schemeEnd := strings.Index(lowerURL, "://") + 3
+	if len(rtspURL) <= schemeEnd {
+		return errors.Newf("RTSP URL must have content after scheme").
 			Component("myaudio").
 			Category(errors.CategoryRTSP).
 			Context("operation", "validate_rtsp_url").
-			Context("reason", "missing_host").
+			Context("reason", "missing_content_after_scheme").
 			Build()
 	}
+
+	// Note: We intentionally avoid url.Parse() here as it's too strict for
+	// existing RTSP URLs with complex passwords. FFmpeg can handle URLs that
+	// Go's url.Parse() rejects. The actual connection validation happens
+	// when FFmpeg attempts to connect.
 
 	return nil
 }
