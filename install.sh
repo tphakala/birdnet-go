@@ -4,19 +4,9 @@
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+GRAY='\033[0;90m'
 NC='\033[0m' # No Color
 
-# Function to print colored messages
-print_message() {
-    # Check if $3 exists, otherwise set to empty string
-    local nonewline=${3:-""}
-    
-    if [ "$nonewline" = "nonewline" ]; then
-        echo -en "${2}${1}${NC}"
-    else
-        echo -e "${2}${1}${NC}"
-    fi
-}
 
 # ASCII Art Banner
 cat << "EOF"
@@ -27,11 +17,956 @@ cat << "EOF"
 |____/|_|_|  \__,_|_| \_|_____| |_|    \____|\___/ 
 EOF
 
-print_message "\n🐦 BirdNET-Go Installation Script" "$GREEN"
-print_message "This script will install BirdNET-Go and its dependencies." "$YELLOW"
 
 BIRDNET_GO_VERSION="nightly"
 BIRDNET_GO_IMAGE="ghcr.io/tphakala/birdnet-go:${BIRDNET_GO_VERSION}"
+
+# Logging configuration
+LOG_DIR="$HOME/birdnet-go-app/data/logs"
+# Generate timestamped log file name: install-YYYYMMDD-HHMMSS.log
+LOG_TIMESTAMP=$(date '+%Y%m%d-%H%M%S')
+LOG_FILE="$LOG_DIR/install-${LOG_TIMESTAMP}.log"
+
+# Logging system will be initialized after function definitions
+
+# Version management configuration
+MAX_CONFIG_BACKUPS=10
+VERSION_HISTORY_FILE="$LOG_DIR/version_history.log"
+CONFIG_BACKUP_PREFIX="config-backup-"
+
+# Set secure umask for file creation
+umask 077
+
+# Cleanup trap for temporary files
+cleanup_temp_files() {
+    rm -f /tmp/version_history_*.tmp 2>/dev/null
+    rm -f "$LOG_DIR/.last_backup_time" 2>/dev/null
+    rm -f "$VERSION_HISTORY_FILE.lock" 2>/dev/null
+}
+trap cleanup_temp_files EXIT INT TERM
+
+# Function to validate version history entry format
+validate_version_history_entry() {
+    local line="$1"
+    # Format: timestamp|image_hash|config_backup|image_tag|context
+    # Example: 20240826-134817|sha256:abc123...|config-backup-20240826-134817.yaml|ghcr.io/tphakala/birdnet-go:nightly|pre-update
+    if [[ "$line" =~ ^[0-9]{8}-[0-9]{6}\|[^|]+\|[^|]*\|[^|]+\|[^|]+$ ]]; then
+        return 0
+    else
+        log_message "WARN" "Invalid version history entry format: $line"
+        return 1
+    fi
+}
+
+# Atomic append to version history file with locking
+append_version_history() {
+    local entry="$1"
+    
+    if [ -z "$entry" ]; then
+        log_message "ERROR" "Cannot append empty entry to version history"
+        return 1
+    fi
+    
+    # Validate entry format before writing
+    if ! validate_version_history_entry "$entry"; then
+        log_message "ERROR" "Invalid version history entry format, refusing to append: $entry"
+        return 2
+    fi
+    
+    # Ensure version history file exists with secure permissions
+    if [ ! -f "$VERSION_HISTORY_FILE" ]; then
+        touch "$VERSION_HISTORY_FILE"
+        chmod 600 "$VERSION_HISTORY_FILE" 2>/dev/null
+        log_message "INFO" "Created version history file with secure permissions"
+    fi
+    
+    # Use flock for atomic append operation
+    (
+        flock -x 200
+        echo "$entry" >> "$VERSION_HISTORY_FILE"
+    ) 200>"$VERSION_HISTORY_FILE.lock"
+    
+    local result=$?
+    if [ $result -eq 0 ]; then
+        log_message "INFO" "Version history entry appended atomically"
+    else
+        log_message "ERROR" "Failed to append to version history (exit code: $result)"
+    fi
+    return $result
+}
+
+# Function to setup logging directory
+setup_logging() {
+    # Create logs directory if it doesn't exist
+    if [ ! -d "$LOG_DIR" ]; then
+        mkdir -p "$LOG_DIR" 2>/dev/null || {
+            # If user directory creation fails, try to create it with proper permissions
+            mkdir -p "$(dirname "$LOG_DIR")" 2>/dev/null
+            mkdir -p "$LOG_DIR" 2>/dev/null
+        }
+    fi
+    
+    # Test if we can write to the timestamped log file
+    if [ -d "$LOG_DIR" ] && touch "$LOG_FILE" 2>/dev/null; then
+        # Log file is accessible, initialize with session start
+        log_message "INFO" "=== BirdNET-Go Installation/Update Session Started ==="
+        log_message "INFO" "Log file: $(basename "$LOG_FILE")"
+        log_message "INFO" "Script version: $(grep -o 'script_version.*[0-9]\+\.[0-9]\+\.[0-9]\+' "$0" | head -1 || echo 'unknown')"
+        log_message "INFO" "User: $USER (UID: $(id -u)), Working directory: $(pwd)"
+        log_message "INFO" "System: $(uname -a)"
+        
+        # Log initial system state
+        log_system_resources "initial"
+        log_network_state "initial"
+        
+        return 0
+    else
+        # Cannot write to log file, disable logging
+        LOG_FILE=""
+        return 1
+    fi
+}
+
+# Redact credentials and obvious secrets from log lines
+sanitize_for_logs() {
+    # Redact URL basic-auth creds: scheme://user:pass@host -> scheme://***:***@host
+    # Also redact common secret patterns like password: value
+    sed -E 's#(://)[^/@:]+(:[^/@]*)?@#\1***:***@#g' \
+    | sed -E 's#(password|passwd|pwd|token|secret|api[_-]?key)["'"'"']?\s*[:=]\s*[^"'"'"'[:space:]]+#\1: ***#Ig'
+}
+
+# Function to log messages with timestamps
+log_message() {
+    local level="$1"
+    local message="$2"
+    
+    # Only log if LOG_FILE is set and accessible
+    if [ -n "$LOG_FILE" ] && [ -w "$LOG_FILE" ]; then
+        # Create timestamp in UTC ISO 8601 format with RFC3339 compliance
+        local timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+        # Sanitize the message before logging
+        local sanitized_message
+        sanitized_message=$(echo "$message" | sanitize_for_logs)
+        # Append to log file
+        echo "[$timestamp] [$level] $sanitized_message" >> "$LOG_FILE"
+    fi
+}
+
+# Function to log command execution results
+log_command_result() {
+    local command="$1"
+    local exit_code="$2"
+    local context="$3"
+    
+    if [ "$exit_code" -eq 0 ]; then
+        log_message "INFO" "Command succeeded: $command${context:+ ($context)}"
+    else
+        log_message "ERROR" "Command failed (exit $exit_code): $command${context:+ ($context)}"
+    fi
+}
+
+# Enhanced print_message function that also logs
+print_message() {
+    # Check if $3 exists, otherwise set to empty string
+    local nonewline=${3:-""}
+    local message="$1"
+    local color="$2"
+    
+    if [ "$nonewline" = "nonewline" ]; then
+        echo -en "${color}${message}${NC}"
+    else
+        echo -e "${color}${message}${NC}"
+    fi
+    
+    # Strip ANSI and sanitize before logging
+    local log_line
+    log_line="$(echo "$message" | sed 's/\x1b\[[0-9;]*m//g' | sanitize_for_logs)"
+    
+    # Log the message with appropriate level
+    if [[ "$message" == *"❌"* ]] || [[ "$message" == *"ERROR"* ]] || [[ "$message" == *"Failed"* ]] || [[ "$message" == *"failed"* ]]; then
+        log_message "ERROR" "$log_line"
+    elif [[ "$message" == *"⚠️"* ]] || [[ "$message" == *"WARNING"* ]] || [[ "$message" == *"Warning"* ]]; then
+        log_message "WARN" "$log_line"
+    elif [[ "$message" == *"✅"* ]] || [[ "$message" == *"Success"* ]]; then
+        log_message "INFO" "$log_line"
+    else
+        log_message "INFO" "$log_line"
+    fi
+}
+
+# Function to log system resources (disk, memory)
+log_system_resources() {
+    local context="${1:-general}"
+    
+    log_message "INFO" "=== System Resources Check ($context) ==="
+    
+    # Disk space for key directories
+    local config_dir_space=""
+    local data_dir_space=""
+    local docker_space=""
+    local tmp_space=""
+    
+    if [ -d "$CONFIG_DIR" ] || [ -d "$(dirname "$CONFIG_DIR")" ]; then
+        config_dir_space=$(df -h "$(dirname "$CONFIG_DIR")" 2>/dev/null | awk 'NR==2 {print "Available: " $4 ", Used: " $5}')
+        log_message "INFO" "Config directory disk space: $config_dir_space"
+    fi
+    
+    if [ -d "$DATA_DIR" ] || [ -d "$(dirname "$DATA_DIR")" ]; then
+        data_dir_space=$(df -h "$(dirname "$DATA_DIR")" 2>/dev/null | awk 'NR==2 {print "Available: " $4 ", Used: " $5}')
+        log_message "INFO" "Data directory disk space: $data_dir_space"
+    fi
+    
+    if [ -d "/var/lib/docker" ]; then
+        docker_space=$(df -h /var/lib/docker 2>/dev/null | awk 'NR==2 {print "Available: " $4 ", Used: " $5}')
+        log_message "INFO" "Docker directory disk space: $docker_space"
+    fi
+    
+    tmp_space=$(df -h /tmp 2>/dev/null | awk 'NR==2 {print "Available: " $4 ", Used: " $5}')
+    log_message "INFO" "Temp directory disk space: $tmp_space"
+    
+    # Memory information
+    if [ -f /proc/meminfo ]; then
+        local mem_total=$(grep MemTotal /proc/meminfo | awk '{printf "%.1f GB", $2/1024/1024}')
+        local mem_available=$(grep MemAvailable /proc/meminfo | awk '{printf "%.1f GB", $2/1024/1024}' 2>/dev/null || echo "unknown")
+        log_message "INFO" "Memory: Total $mem_total, Available $mem_available"
+    fi
+    
+    # Load average
+    if [ -f /proc/loadavg ]; then
+        local load_avg=$(cat /proc/loadavg | cut -d' ' -f1-3)
+        log_message "INFO" "Load average: $load_avg"
+    fi
+}
+
+# Function to calculate and log config file hash
+log_config_hash() {
+    local context="${1:-unknown}"
+    
+    if [ -f "$CONFIG_FILE" ]; then
+        local config_hash=$(sha256sum "$CONFIG_FILE" 2>/dev/null | cut -d' ' -f1)
+        local config_size=$(stat -f%z "$CONFIG_FILE" 2>/dev/null || stat -c%s "$CONFIG_FILE" 2>/dev/null)
+        log_message "INFO" "Config file hash ($context): $config_hash (size: ${config_size} bytes)"
+        echo "$config_hash"
+    else
+        log_message "WARN" "Config file not found for hash calculation ($context)"
+        echo ""
+    fi
+}
+
+# Function to detect and log process type
+detect_process_type() {
+    local installation_type="$1"
+    local preserved_data="$2"
+    local fresh_install="$3"
+    
+    if [ "$fresh_install" = "true" ]; then
+        if [ "$preserved_data" = "true" ]; then
+            echo "FRESH_INSTALL_WITH_DATA"
+            log_message "INFO" "Process type: Fresh installation (preserving existing data)"
+        else
+            echo "FRESH_INSTALL"
+            log_message "INFO" "Process type: Fresh installation (clean install)"
+        fi
+    elif [ "$installation_type" = "full" ]; then
+        echo "UPDATE"
+        log_message "INFO" "Process type: Update (existing systemd service installation)"
+    elif [ "$installation_type" = "docker" ]; then
+        echo "MIGRATION"
+        log_message "INFO" "Process type: Migration (Docker-only to systemd service)"
+    elif [ "$preserved_data" = "true" ]; then
+        echo "REINSTALL"
+        log_message "INFO" "Process type: Reinstall (using preserved data)"
+    else
+        echo "INSTALL"
+        log_message "INFO" "Process type: New installation"
+    fi
+}
+
+# Function to log Docker container and image state
+log_docker_state() {
+    local context="${1:-general}"
+    
+    if ! command_exists docker; then
+        log_message "INFO" "Docker state ($context): Docker not installed"
+        return
+    fi
+    
+    log_message "INFO" "=== Docker State ($context) ==="
+    
+    # Docker service status
+    if command_exists systemctl; then
+        local docker_status="unknown"
+        if systemctl is-active --quiet docker; then
+            docker_status="active"
+        elif systemctl is-failed --quiet docker; then
+            docker_status="failed"  
+        else
+            docker_status="inactive"
+        fi
+        log_message "INFO" "Docker service status: $docker_status"
+    fi
+    
+    # BirdNET-Go containers
+    local running_containers
+    local stopped_containers
+    local all_containers
+    
+    running_containers=$(safe_docker ps --filter "name=birdnet-go" --format "{{.ID}} {{.Image}} {{.Status}}" 2>/dev/null | wc -l)
+    all_containers=$(safe_docker ps -a --filter "name=birdnet-go" --format "{{.ID}} {{.Image}} {{.Status}}" 2>/dev/null | wc -l)
+    stopped_containers=$((all_containers - running_containers))
+    
+    log_message "INFO" "BirdNET-Go containers: $running_containers running, $stopped_containers stopped, $all_containers total"
+    
+    # List specific containers with details
+    if [ "$all_containers" -gt 0 ]; then
+        safe_docker ps -a --filter "name=birdnet-go" --format "{{.ID}} {{.Image}} {{.Status}}" 2>/dev/null | while read -r line; do
+            [ -n "$line" ] && log_message "INFO" "Container: $line"
+        done
+    fi
+    
+    # BirdNET-Go images
+    local birdnet_images
+    birdnet_images=$(safe_docker images --filter "reference=*birdnet-go*" --format "{{.Repository}}:{{.Tag}} {{.Size}} {{.CreatedAt}}" 2>/dev/null)
+    
+    if [ -n "$birdnet_images" ]; then
+        log_message "INFO" "BirdNET-Go images found:"
+        echo "$birdnet_images" | while read -r line; do
+            [ -n "$line" ] && log_message "INFO" "Image: $line"
+        done
+    else
+        log_message "INFO" "No BirdNET-Go images found"
+    fi
+}
+
+# Function to log systemd service state  
+log_service_state() {
+    local context="${1:-general}"
+    
+    if ! command_exists systemctl; then
+        log_message "INFO" "Service state ($context): systemd not available"
+        return
+    fi
+    
+    log_message "INFO" "=== Systemd Service State ($context) ==="
+    
+    # Check if service unit file exists
+    local service_file_exists="false"
+    if [ -f "/etc/systemd/system/birdnet-go.service" ]; then
+        service_file_exists="true"
+        local service_file_size=$(stat -c%s "/etc/systemd/system/birdnet-go.service" 2>/dev/null)
+        local service_file_hash=$(sha256sum "/etc/systemd/system/birdnet-go.service" 2>/dev/null | cut -d' ' -f1)
+        log_message "INFO" "Service file exists: size ${service_file_size} bytes, hash: $service_file_hash"
+    else
+        log_message "INFO" "Service file does not exist"
+    fi
+    
+    if [ "$service_file_exists" = "true" ]; then
+        # Service status
+        local service_status="unknown"
+        if systemctl is-active --quiet birdnet-go.service; then
+            service_status="active"
+        elif systemctl is-failed --quiet birdnet-go.service; then
+            service_status="failed"
+        else
+            service_status="inactive"
+        fi
+        
+        local enabled_status="unknown"
+        if systemctl is-enabled --quiet birdnet-go.service; then
+            enabled_status="enabled"
+        else
+            enabled_status="disabled"
+        fi
+        
+        log_message "INFO" "Service status: $service_status, enabled: $enabled_status"
+        
+        # Get last few journal entries for the service
+        local journal_entries=$(journalctl -u birdnet-go.service -n 3 --no-pager --output=cat 2>/dev/null | tail -n 3)
+        if [ -n "$journal_entries" ]; then
+            log_message "INFO" "Recent service log entries:"
+            echo "$journal_entries" | while IFS= read -r line; do
+                [ -n "$line" ] && log_message "INFO" "  $line"
+            done
+        fi
+    fi
+}
+
+# Function to log network connectivity state
+log_network_state() {
+    local context="${1:-general}"
+    
+    log_message "INFO" "=== Network Connectivity ($context) ==="
+    
+    # Test basic connectivity (without logging errors to console)
+    if ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+        log_message "INFO" "Basic connectivity: OK (ping to 8.8.8.8 successful)"
+    else
+        log_message "WARN" "Basic connectivity: FAILED (ping to 8.8.8.8 failed)"
+    fi
+    
+    # Test HTTPS connectivity to key endpoints
+    if command_exists curl; then
+        local github_status=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://github.com" 2>/dev/null)
+        local ghcr_status=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://ghcr.io/v2/" 2>/dev/null)
+        
+        log_message "INFO" "GitHub connectivity: HTTP $github_status"
+        log_message "INFO" "GitHub Container Registry: HTTP $ghcr_status"
+    else
+        log_message "INFO" "curl not available for HTTPS connectivity test"
+    fi
+}
+
+# Function to log comprehensive session information after installation type detection
+log_enhanced_session_info() {
+    local installation_type="$1"
+    local preserved_data="$2"
+    local fresh_install="$3"
+    
+    log_message "INFO" "=== Enhanced Session Information ==="
+    
+    # Detect and log process type
+    local process_type
+    process_type=$(detect_process_type "$installation_type" "$preserved_data" "$fresh_install")
+    log_message "INFO" "Process type detected: $process_type"
+    
+    # Log Docker and service state
+    log_docker_state "pre-process"
+    log_service_state "pre-process"
+    
+    # Log config file hash if it exists (for updates/reinstalls)
+    if [ -f "$CONFIG_FILE" ]; then
+        log_config_hash "pre-process"
+    fi
+    
+    # Log key directory states
+    log_message "INFO" "=== Directory State ==="
+    log_message "INFO" "CONFIG_DIR exists: $([ -d "$CONFIG_DIR" ] && echo "yes" || echo "no")"
+    log_message "INFO" "DATA_DIR exists: $([ -d "$DATA_DIR" ] && echo "yes" || echo "no")"
+    log_message "INFO" "CONFIG_FILE exists: $([ -f "$CONFIG_FILE" ] && echo "yes" || echo "no")"
+    
+    # Count existing audio clips if data directory exists
+    if [ -d "$DATA_DIR/clips" ]; then
+        local clip_count=$(find "$DATA_DIR/clips" -type f -name "*.wav" -o -name "*.mp3" -o -name "*.flac" -o -name "*.aac" -o -name "*.opus" 2>/dev/null | wc -l)
+        local clips_size=$(du -sh "$DATA_DIR/clips" 2>/dev/null | cut -f1)
+        log_message "INFO" "Existing audio clips: $clip_count files, total size: ${clips_size:-unknown}"
+    fi
+}
+
+# Function to capture current Docker image hash and details
+capture_current_image_hash() {
+    local context="${1:-unknown}"
+    
+    if ! command_exists docker; then
+        log_message "WARN" "Cannot capture image hash: Docker not available"
+        return 1
+    fi
+    
+    log_message "INFO" "=== Capturing Current Image State ($context) ==="
+    
+    # Try BIRDNET_GO_IMAGE environment variable first as primary target
+    local current_image=""
+    local image_hash=""
+    local image_tag=""
+    
+    # Check if BIRDNET_GO_IMAGE is set and verify it exists locally
+    if [ -n "$BIRDNET_GO_IMAGE" ]; then
+        # Try to get canonical image ID via docker inspect
+        local canonical_id
+        canonical_id=$(safe_docker inspect --format '{{.Id}}' "$BIRDNET_GO_IMAGE" 2>/dev/null)
+        
+        if [ -n "$canonical_id" ]; then
+            current_image="$BIRDNET_GO_IMAGE"
+            image_hash="$canonical_id"
+            # Strip sha256: prefix and use first 12 chars for display
+            local normalized_id="${canonical_id#sha256:}"
+            log_message "INFO" "Using BIRDNET_GO_IMAGE environment variable: $current_image (ID: ${normalized_id:0:12}...)"
+        elif safe_docker images --format "{{.Repository}}:{{.Tag}}" | grep -Fxq "${BIRDNET_GO_IMAGE}" 2>/dev/null; then
+            # Fall back to checking if image exists in local images (exact match)
+            current_image="$BIRDNET_GO_IMAGE"
+            log_message "INFO" "Found BIRDNET_GO_IMAGE in local images: $current_image"
+        else
+            log_message "WARN" "BIRDNET_GO_IMAGE ($BIRDNET_GO_IMAGE) not found locally, falling back to container detection"
+        fi
+    fi
+    
+    # Fall back to existing container/image detection if BIRDNET_GO_IMAGE validation failed
+    if [ -z "$current_image" ]; then
+        # Check for running BirdNET-Go container
+        local running_container=$(safe_docker ps --filter "name=birdnet-go" --format "{{.Image}}" 2>/dev/null | head -1)
+        
+        if [ -n "$running_container" ]; then
+            current_image="$running_container"
+            log_message "INFO" "Found running container using image: $current_image"
+        else
+            # Check for any BirdNET-Go containers (stopped)
+            local any_container=$(safe_docker ps -a --filter "name=birdnet-go" --format "{{.Image}}" 2>/dev/null | head -1)
+            if [ -n "$any_container" ]; then
+                current_image="$any_container"
+                log_message "INFO" "Found stopped container using image: $current_image"
+            else
+                # Fall back to checking for local BirdNET-Go images
+                current_image=$(safe_docker images --filter "reference=*birdnet-go*" --format "{{.Repository}}:{{.Tag}}" 2>/dev/null | head -1)
+                if [ -n "$current_image" ]; then
+                    log_message "INFO" "Found local image: $current_image"
+                else
+                    log_message "WARN" "No BirdNET-Go images found"
+                    return 1
+                fi
+            fi
+        fi
+    fi
+    
+    # Get image hash and details
+    if [ -n "$current_image" ]; then
+        # Try to get canonical ID first, fall back to image hash
+        if [ -z "$image_hash" ]; then
+            # Try docker inspect first for canonical ID
+            image_hash=$(safe_docker inspect --format '{{.Id}}' "$current_image" 2>/dev/null)
+            
+            # Fall back to docker images if inspect fails
+            if [ -z "$image_hash" ]; then
+                image_hash=$(safe_docker images --no-trunc --format "{{.ID}}" "$current_image" 2>/dev/null | head -1)
+            fi
+        fi
+        
+        image_tag="${current_image}"
+        
+        if [ -n "$image_hash" ]; then
+            log_message "INFO" "Current image: $image_tag"
+            # Strip sha256: prefix and use first 12 chars for display
+            local normalized_hash="${image_hash#sha256:}"
+            log_message "INFO" "Image hash: ${normalized_hash:0:12}..."
+            
+            # Generate fresh timestamp for this capture
+            local capture_timestamp
+            capture_timestamp=$(date '+%Y%m%d-%H%M%S')
+            
+            # Store in version history file format: timestamp|image_hash|config_backup|image_tag|context
+            local version_entry="${capture_timestamp}|${image_hash}|none|${image_tag}|${context}"
+            append_version_history "$version_entry"
+            
+            # Return the hash for use by calling functions
+            echo "$image_hash"
+            return 0
+        else
+            log_message "ERROR" "Failed to get image hash for: $current_image"
+            return 1
+        fi
+    else
+        log_message "WARN" "No current image to capture"
+        return 1
+    fi
+}
+
+# Function to create config backup with version association
+backup_config_with_version() {
+    local context="${1:-backup}"
+    local image_hash="${2:-}"
+    local image_tag="${3:-unknown}"
+    
+    if [ ! -f "$CONFIG_FILE" ]; then
+        log_message "WARN" "No config file to backup: $CONFIG_FILE"
+        return 1
+    fi
+    
+    # Rate limiting check to prevent rapid backup operations (except for critical contexts)
+    if [ "$context" != "pre-update" ] && [ "$context" != "REVERT" ]; then
+        if [ -f "$LOG_DIR/.last_backup_time" ]; then
+            local last_backup_time=$(cat "$LOG_DIR/.last_backup_time" 2>/dev/null || echo 0)
+            local current_time=$(date +%s)
+            if [ $((current_time - last_backup_time)) -lt 60 ]; then
+                log_message "WARN" "Backup throttled: too frequent (wait $((60 - (current_time - last_backup_time)))s)"
+                return 1
+            fi
+        fi
+        date +%s > "$LOG_DIR/.last_backup_time"
+    fi
+    
+    log_message "INFO" "=== Creating Config Backup ($context) ==="
+    
+    # Create backup filename with a per-action timestamp
+    local backup_timestamp
+    backup_timestamp=$(date '+%Y%m%d-%H%M%S')
+    local backup_filename="${CONFIG_BACKUP_PREFIX}${backup_timestamp}.yaml"
+    local backup_path="$CONFIG_DIR/$backup_filename"
+    
+    # Create backup
+    if cp "$CONFIG_FILE" "$backup_path" 2>/dev/null; then
+        log_message "INFO" "Config backup created: $backup_filename"
+        
+        # Calculate backup hash for verification
+        local backup_hash=$(sha256sum "$backup_path" 2>/dev/null | cut -d' ' -f1)
+        log_message "INFO" "Config backup hash: ${backup_hash:0:16}..."
+        
+        # Update version history with backup info
+        if [ -n "$image_hash" ]; then
+            # Update only the most recent entry matching this image_hash with empty backup
+            local temp_file
+            temp_file=$(mktemp /tmp/version_history_XXXXXX.tmp)
+            if [ -f "$VERSION_HISTORY_FILE" ]; then
+                # Store lines and find last matching row index, then update only that row
+                awk -F'|' -v OFS='|' -v ih="$image_hash" -v bf="$backup_filename" '
+                  { lines[NR]=$0 }
+                  $2==ih && $3=="none" { idx=NR }
+                  END {
+                    for (i=1; i<=NR; i++) {
+                      if (i==idx) {
+                        split(lines[i], a, "|"); 
+                        a[3]=bf;
+                        print a[1] OFS a[2] OFS a[3] OFS a[4] OFS a[5]
+                      } else {
+                        print lines[i]
+                      }
+                    }
+                  }
+                ' "$VERSION_HISTORY_FILE" > "$temp_file"
+                mv "$temp_file" "$VERSION_HISTORY_FILE"
+                rm -f "$temp_file" 2>/dev/null  # Clean up in case mv failed
+            fi
+            log_message "INFO" "Version history updated with config backup association"
+        fi
+        
+        # Clean up old backups
+        cleanup_old_backups
+        
+        echo "$backup_filename"
+        return 0
+    else
+        log_message "ERROR" "Failed to create config backup"
+        return 1
+    fi
+}
+
+# Function to cleanup old config backups
+cleanup_old_backups() {
+    if [ ! -d "$CONFIG_DIR" ]; then
+        return 0
+    fi
+    
+    log_message "INFO" "Checking config backup cleanup (max: $MAX_CONFIG_BACKUPS)"
+    
+    # Count existing backup files
+    local backup_count
+    backup_count=$(find "$CONFIG_DIR" -name "${CONFIG_BACKUP_PREFIX}*.yaml" 2>/dev/null | wc -l)
+    
+    if [ "$backup_count" -le "$MAX_CONFIG_BACKUPS" ]; then
+        log_message "INFO" "Backup count ($backup_count) within limit ($MAX_CONFIG_BACKUPS)"
+        return 0
+    fi
+    
+    log_message "INFO" "Cleaning up old backups: $backup_count > $MAX_CONFIG_BACKUPS"
+    
+    # Remove oldest backups beyond the limit
+    local to_remove=$((backup_count - MAX_CONFIG_BACKUPS))
+    find "$CONFIG_DIR" -type f -name "${CONFIG_BACKUP_PREFIX}*.yaml" -printf '%T@ %p\0' 2>/dev/null \
+      | sort -z -n \
+      | head -z -n "$to_remove" \
+      | awk -v RS='\0' -v ORS='\0' '{ $1=""; sub(/^ /,""); print }' \
+      | while IFS= read -r -d '' old_backup; do
+            if rm -f "$old_backup" 2>/dev/null; then
+                log_message "INFO" "Removed old backup: $(basename "$old_backup")"
+                
+                # Remove from version history too
+                local backup_name=$(basename "$old_backup")
+                if [ -f "$VERSION_HISTORY_FILE" ]; then
+                    local cleanup_temp
+                    cleanup_temp=$(mktemp /tmp/version_history_cleanup_XXXXXX.tmp)
+                    # Use grep -F for fixed-string matching to avoid regex interpretation
+                    grep -F -v "|${backup_name}|" "$VERSION_HISTORY_FILE" > "$cleanup_temp" 2>/dev/null
+                    mv "$cleanup_temp" "$VERSION_HISTORY_FILE" 2>/dev/null
+                    rm -f "$cleanup_temp" 2>/dev/null  # Clean up in case mv failed
+                fi
+            else
+                log_message "WARN" "Failed to remove old backup: $old_backup"
+            fi
+        done
+    
+    # Final count
+    local final_count
+    final_count=$(find "$CONFIG_DIR" -name "${CONFIG_BACKUP_PREFIX}*.yaml" 2>/dev/null | wc -l)
+    log_message "INFO" "Backup cleanup completed: $final_count backups remaining"
+}
+
+# Function to check if any versions are available for rollback
+has_previous_versions() {
+    if [ ! -f "$VERSION_HISTORY_FILE" ]; then
+        return 1
+    fi
+    
+    # Check if there are any valid entries in the version history
+    local version_count=0
+    while IFS='|' read -r timestamp image_hash config_backup image_tag context; do
+        # Skip empty lines and comments
+        [ -z "$timestamp" ] || [[ "$timestamp" == \#* ]] && continue
+        
+        # Validate entry format
+        if validate_version_history_entry "${timestamp}|${image_hash}|${config_backup}|${image_tag}|${context}"; then
+            version_count=$((version_count + 1))
+        fi
+    done < "$VERSION_HISTORY_FILE"
+    
+    [ "$version_count" -gt 0 ]
+}
+
+# Function to list available versions for rollback
+list_available_versions() {
+    if [ ! -f "$VERSION_HISTORY_FILE" ]; then
+        log_message "INFO" "No version history file found"
+        return 1
+    fi
+    
+    log_message "INFO" "Listing available versions for rollback"
+    
+    # Read version history file and display options
+    local version_count=0
+    while IFS='|' read -r timestamp image_hash config_backup image_tag context; do
+        # Skip empty lines and comments
+        [ -z "$timestamp" ] || [[ "$timestamp" == \#* ]] && continue
+        
+        # Validate entry format
+        if ! validate_version_history_entry "${timestamp}|${image_hash}|${config_backup}|${image_tag}|${context}"; then
+            continue
+        fi
+        
+        version_count=$((version_count + 1))
+        
+        # Format timestamp for display
+        local display_time=""
+        if [[ "$timestamp" =~ ^([0-9]{4})([0-9]{2})([0-9]{2})-([0-9]{2})([0-9]{2})([0-9]{2})$ ]]; then
+            display_time="${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]} ${BASH_REMATCH[4]}:${BASH_REMATCH[5]}:${BASH_REMATCH[6]}"
+        else
+            display_time="$timestamp"
+        fi
+        
+        # Check if config backup still exists
+        local config_status="❌ missing"
+        if [ "$config_backup" != "none" ] && [ -f "$CONFIG_DIR/$config_backup" ]; then
+            config_status="✅ available"
+        elif [ "$config_backup" = "none" ]; then
+            config_status="➖ none"
+        fi
+        
+        # Truncate image hash for display (strip sha256: prefix if present)
+        local hash_without_prefix="${image_hash#sha256:}"
+        local short_hash="${hash_without_prefix:0:12}..."
+        
+        echo "[$version_count] $display_time | Image: $short_hash | Config: $config_status | Context: $context"
+        echo "    Tag: $image_tag"
+        
+    done < "$VERSION_HISTORY_FILE"
+    
+    if [ "$version_count" -eq 0 ]; then
+        log_message "INFO" "No versions found in tracking file"
+        return 1
+    fi
+    
+    log_message "INFO" "Found $version_count available versions"
+    return 0
+}
+
+# Function to get version info by index
+get_version_info() {
+    local version_index="$1"
+    
+    if [ ! -f "$VERSION_HISTORY_FILE" ]; then
+        return 1
+    fi
+    
+    local current_index=0
+    while IFS='|' read -r timestamp image_hash config_backup image_tag context; do
+        # Skip empty lines and comments
+        [ -z "$timestamp" ] || [[ "$timestamp" == \#* ]] && continue
+        
+        # Validate entry format
+        if ! validate_version_history_entry "${timestamp}|${image_hash}|${config_backup}|${image_tag}|${context}"; then
+            continue
+        fi
+        
+        current_index=$((current_index + 1))
+        
+        if [ "$current_index" -eq "$version_index" ]; then
+            echo "$timestamp|$image_hash|$config_backup|$image_tag|$context"
+            return 0
+        fi
+    done < "$VERSION_HISTORY_FILE"
+    
+    return 1
+}
+
+# Function to revert to a previous version
+revert_to_version() {
+    local version_index="$1"
+    local revert_config="${2:-ask}"
+    
+    log_message "INFO" "=== Starting Version Revert Process ==="
+    
+    # Get version info
+    local version_info
+    version_info=$(get_version_info "$version_index")
+    
+    if [ -z "$version_info" ]; then
+        log_message "ERROR" "Invalid version index: $version_index"
+        return 1
+    fi
+    
+    # Parse version info
+    local timestamp image_hash config_backup image_tag context
+    IFS='|' read -r timestamp image_hash config_backup image_tag context <<< "$version_info"
+    
+    log_message "INFO" "Reverting to version from: $timestamp"
+    log_message "INFO" "Target image: $image_tag"
+    log_message "INFO" "Target hash: $image_hash"
+    log_message "INFO" "Config backup: $config_backup"
+    
+    # Capture current state before revert
+    log_message "INFO" "=== Pre-Revert State Capture ==="
+    log_system_resources "pre-revert"
+    log_docker_state "pre-revert"
+    log_service_state "pre-revert"
+    
+    # Stop current service
+    log_message "INFO" "Stopping current service for revert"
+    if systemctl is-active --quiet birdnet-go.service; then
+        sudo systemctl stop birdnet-go.service
+        log_command_result "systemctl stop birdnet-go.service" $? "stopping service for revert"
+    fi
+    
+    # Try to pull the specific image by hash first, then by tag
+    log_message "INFO" "Attempting to restore Docker image"
+    
+    # First check if image is already available locally
+    local local_image_check
+    local_image_check=$(safe_docker images --no-trunc --format "{{.ID}}" | grep -F "$image_hash" 2>/dev/null)
+    
+    if [ -n "$local_image_check" ]; then
+        log_message "INFO" "Target image already available locally: $image_hash"
+    else
+        log_message "INFO" "Target image not found locally, attempting to pull: $image_tag"
+        
+        # Try pulling by tag (hash-based pulls are not typically supported in registries)
+        if ! safe_docker pull "$image_tag" 2>/dev/null; then
+            log_message "ERROR" "Failed to pull target image: $image_tag"
+            log_message "WARN" "The target image may no longer be available in the registry"
+            
+            # Ask user if they want to continue with local image or abort
+            print_message "❌ Could not pull target image from registry" "$RED"
+            print_message "The image may no longer be available remotely." "$YELLOW"
+            print_message "❓ Continue with local image if available? (y/n): " "$YELLOW" "nonewline"
+            read -r continue_local
+            
+            if [[ ! "$continue_local" =~ ^[Yy]$ ]]; then
+                log_message "INFO" "User cancelled revert due to image unavailability"
+                return 1
+            fi
+            
+            # Check again for local image
+            local_image_check=$(safe_docker images --no-trunc --format "{{.ID}}" | grep -F "$image_hash" 2>/dev/null)
+            if [ -z "$local_image_check" ]; then
+                log_message "ERROR" "Target image not available locally either"
+                print_message "❌ Target image not available locally or remotely" "$RED"
+                return 1
+            fi
+            
+            log_message "INFO" "Continuing with local image: $image_hash"
+        else
+            log_command_result "docker pull $image_tag" $? "pulling target image"
+        fi
+    fi
+    
+    # Handle config revert
+    local config_reverted="false"
+    if [ "$config_backup" != "none" ] && [ -f "$CONFIG_DIR/$config_backup" ]; then
+        if [ "$revert_config" = "ask" ]; then
+            print_message "📄 Config backup is available from the target version" "$GREEN"
+            print_message "❓ Do you want to revert the configuration as well? (y/n): " "$YELLOW" "nonewline"
+            read -r revert_config_choice
+        else
+            revert_config_choice="$revert_config"
+        fi
+        
+        if [[ "$revert_config_choice" =~ ^[Yy]$ ]]; then
+            log_message "INFO" "Reverting configuration file"
+            
+            # Create backup of current config first
+            if [ -f "$CONFIG_FILE" ]; then
+                local pre_revert_timestamp=$(date '+%Y%m%d-%H%M%S')
+                local current_backup="${CONFIG_BACKUP_PREFIX}pre-revert-${pre_revert_timestamp}.yaml"
+                cp "$CONFIG_FILE" "$CONFIG_DIR/$current_backup" 2>/dev/null
+                log_message "INFO" "Current config backed up as: $current_backup"
+            fi
+            
+            # Restore target config
+            if cp "$CONFIG_DIR/$config_backup" "$CONFIG_FILE" 2>/dev/null; then
+                log_message "INFO" "Configuration reverted to: $config_backup"
+                config_reverted="true"
+            else
+                log_message "ERROR" "Failed to revert configuration"
+            fi
+        else
+            log_message "INFO" "Keeping current configuration"
+        fi
+    elif [ "$config_backup" != "none" ]; then
+        log_message "WARN" "Config backup file not found: $CONFIG_DIR/$config_backup"
+    fi
+    
+    # Update systemd service to use the target image
+    log_message "INFO" "Updating systemd service for reverted image"
+    
+    # We need to temporarily update BIRDNET_GO_IMAGE variable for service generation
+    local original_image="$BIRDNET_GO_IMAGE"
+    BIRDNET_GO_IMAGE="$image_tag"
+    
+    # Regenerate systemd service
+    if add_systemd_config; then
+        log_message "INFO" "Systemd service updated for reverted image"
+    else
+        log_message "ERROR" "Failed to update systemd service"
+        BIRDNET_GO_IMAGE="$original_image"
+        return 1
+    fi
+    
+    # Start the service
+    log_message "INFO" "Starting service with reverted image"
+    sudo systemctl daemon-reload
+    log_command_result "systemctl daemon-reload" $? "reloading systemd after revert"
+    
+    if sudo systemctl start birdnet-go.service; then
+        log_command_result "systemctl start birdnet-go.service" $? "starting reverted service"
+        log_message "INFO" "Service started successfully with reverted image"
+    else
+        log_message "ERROR" "Failed to start service with reverted image"
+        # Restore original image setting
+        BIRDNET_GO_IMAGE="$original_image"
+        return 1
+    fi
+    
+    # Restore original image setting
+    BIRDNET_GO_IMAGE="$original_image"
+    
+    # Post-revert validation
+    log_message "INFO" "=== Post-Revert Validation ==="
+    log_docker_state "post-revert"
+    log_service_state "post-revert"
+    
+    # Test service responsiveness
+    sleep 5
+    if curl -s -f --connect-timeout 5 "http://localhost:${WEB_PORT:-8080}" >/dev/null 2>&1; then
+        log_message "INFO" "Reverted service is responding on port ${WEB_PORT:-8080}"
+        print_message "✅ Version revert completed successfully!" "$GREEN"
+        print_message "📄 Configuration reverted: $config_reverted" "$GREEN"
+    else
+        log_message "WARN" "Reverted service may not be fully ready yet"
+        print_message "⚠️ Version reverted, but service may still be starting..." "$YELLOW"
+    fi
+    
+    # Record the revert operation with fresh timestamp
+    local revert_timestamp
+    revert_timestamp=$(date '+%Y%m%d-%H%M%S')
+    local revert_entry="${revert_timestamp}|${image_hash}|$([ "$config_reverted" = "true" ] && echo "$config_backup" || echo "none")|${image_tag}|REVERT"
+    append_version_history "$revert_entry"
+    
+    return 0
+}
 
 # Function to get IP address
 get_ip_address() {
@@ -156,28 +1091,35 @@ check_network() {
 # Function to check system prerequisites
 check_prerequisites() {
     print_message "🔧 Checking system prerequisites..." "$YELLOW"
+    log_message "INFO" "Starting system prerequisites check"
 
     # Check CPU architecture and generation
     case "$(uname -m)" in
         "x86_64")
+            log_message "INFO" "Detected x86_64 architecture, checking for AVX2 support"
             # Check CPU flags for AVX2 (Haswell and newer)
             if ! grep -q "avx2" /proc/cpuinfo; then
+                log_message "ERROR" "CPU requirements not met: AVX2 support required for x86_64"
                 send_telemetry_event "error" "CPU requirements not met" "error" "step=check_prerequisites,error=no_avx2"
                 print_message "❌ Your Intel CPU is too old. BirdNET-Go requires Intel Haswell (2013) or newer CPU with AVX2 support" "$RED"
                 exit 1
             else
+                log_message "INFO" "CPU architecture check passed: x86_64 with AVX2 support"
                 print_message "✅ Intel CPU architecture and generation check passed" "$GREEN"
             fi
             ;;
         "aarch64"|"arm64")
+            log_message "INFO" "Detected ARM 64-bit architecture"
             print_message "✅ ARM 64-bit architecture detected, continuing with installation" "$GREEN"
             ;;
         "armv7l"|"armv6l"|"arm")
+            log_message "ERROR" "Unsupported architecture: 32-bit ARM detected"
             send_telemetry_event "error" "Architecture requirements not met" "error" "step=check_prerequisites,error=32bit_arm"
             print_message "❌ 32-bit ARM architecture detected. BirdNET-Go requires 64-bit ARM processor and OS" "$RED"
             exit 1
             ;;
         *)
+            log_message "ERROR" "Unsupported CPU architecture: $(uname -m)"
             send_telemetry_event "error" "Unsupported CPU architecture" "error" "step=check_prerequisites,error=unsupported_arch,arch=$(uname -m)"
             print_message "❌ Unsupported CPU architecture: $(uname -m)" "$RED"
             exit 1
@@ -187,7 +1129,9 @@ check_prerequisites() {
     # shellcheck source=/etc/os-release
     if [ -f /etc/os-release ]; then
         . /etc/os-release
+        log_message "INFO" "Detected OS: $ID $VERSION_ID ($NAME)"
     else
+        log_message "ERROR" "Cannot determine OS version - /etc/os-release not found"
         print_message "❌ Cannot determine OS version" "$RED"
         exit 1
     fi
@@ -197,13 +1141,16 @@ check_prerequisites() {
         debian)
             # Debian 11 (Bullseye) has VERSION_ID="11"
             if [ -n "$VERSION_ID" ] && [ "$VERSION_ID" -lt 11 ]; then
+                log_message "ERROR" "Debian version $VERSION_ID too old, minimum version 11 required"
                 print_message "❌ Debian $VERSION_ID too old. Version 11 (Bullseye) or newer required" "$RED"
                 exit 1
             else
+                log_message "INFO" "OS compatibility check passed: Debian $VERSION_ID"
                 print_message "✅ Debian $VERSION_ID found" "$GREEN"
             fi
             ;;
         raspbian)
+            log_message "ERROR" "32-bit Raspberry Pi OS detected, 64-bit version required"
             print_message "❌ You are running 32-bit version of Raspberry Pi OS. BirdNET-Go requires 64-bit version" "$RED"
             exit 1
             ;;
@@ -211,13 +1158,16 @@ check_prerequisites() {
             # Ubuntu 20.04 has VERSION_ID="20.04"
             ubuntu_version=$(echo "$VERSION_ID" | awk -F. '{print $1$2}')
             if [ "$ubuntu_version" -lt 2004 ]; then
+                log_message "ERROR" "Ubuntu version $VERSION_ID too old, minimum version 20.04 required"
                 print_message "❌ Ubuntu $VERSION_ID too old. Version 20.04 or newer required" "$RED"
                 exit 1
             else
+                log_message "INFO" "OS compatibility check passed: Ubuntu $VERSION_ID"
                 print_message "✅ Ubuntu $VERSION_ID found" "$GREEN"
             fi
             ;;
         *)
+            log_message "ERROR" "Unsupported Linux distribution: $ID"
             print_message "❌ Unsupported Linux distribution for install.sh. Please use Debian 11+, Ubuntu 20.04+, or Raspberry Pi OS (Bullseye+)" "$RED"
             exit 1
             ;;
@@ -267,31 +1217,40 @@ check_prerequisites() {
 
     # Check and install Docker
     if ! command_exists docker; then
+        log_message "INFO" "Docker not found, installing Docker from apt repository"
         print_message "🐳 Docker not found. Installing Docker..." "$YELLOW"
         # Install Docker from apt repository
         sudo apt -qq update
+        log_command_result "apt update" $? "Docker installation preparation"
         sudo apt -qq install -y docker.io
+        log_command_result "apt install docker.io" $? "Docker package installation"
         # Add current user to required groups
         add_user_to_groups
         # Start Docker service
         if sudo systemctl start docker; then
+            log_message "INFO" "Docker service started successfully"
             print_message "✅ Docker service started successfully" "$GREEN"
         else
+            log_message "ERROR" "Failed to start Docker service"
             print_message "❌ Failed to start Docker service" "$RED"
             exit 1
         fi
         
         # Enable Docker service on boot
         if  sudo systemctl enable docker; then
+            log_message "INFO" "Docker service enabled for boot startup"
             print_message "✅ Docker service start on boot enabled successfully" "$GREEN"
         else
+            log_message "ERROR" "Failed to enable Docker service on boot"
             print_message "❌ Failed to enable Docker service on boot" "$RED"
             exit 1
         fi
+        log_message "INFO" "Docker installation completed, user needs to log out and back in for group changes"
         print_message "⚠️ Docker installed successfully. To make group member changes take effect, please log out and log back in and rerun install.sh to continue with install" "$YELLOW"
         # exit install script
         exit 0
     else
+        log_message "INFO" "Docker already installed and available"
         print_message "✅ Docker found" "$GREEN"
         
         # Check if user is in required groups
@@ -299,13 +1258,111 @@ check_prerequisites() {
 
         # Check if Docker can be used by the user
         if ! docker info &>/dev/null; then
+            log_message "ERROR" "Docker installed but not accessible by user $USER"
             print_message "❌ Docker cannot be accessed by user $USER. Please ensure you have the necessary permissions." "$RED"
             exit 1
         else
+            log_message "INFO" "Docker accessibility check passed for user $USER"
             print_message "✅ Docker is accessible by user $USER" "$GREEN"
         fi
     fi
 
+    # Check port availability early in prerequisites
+    print_message "🔌 Checking required port availability..." "$YELLOW"
+    local ports_to_check=("80" "443" "${WEB_PORT:-8080}" "8090")
+    local unique_ports=()
+    local failed_ports=()
+    local port_processes=()
+    local port
+    local process_info
+    
+    # Use associative array for efficient deduplication
+    local -A seen
+    
+    # Deduplicate ports array to avoid double-checking
+    for port in "${ports_to_check[@]}"; do
+        # Skip empty entries
+        if [ -z "$port" ]; then
+            continue
+        fi
+        
+        # Only add if not seen before
+        if [ -z "${seen[$port]:-}" ]; then
+            seen[$port]=1
+            unique_ports+=("$port")
+        fi
+    done
+    
+    for port in "${unique_ports[@]}"; do
+        if ! check_port_availability "$port"; then
+            failed_ports+=("$port")
+            process_info=$(get_port_process_info "$port")
+            port_processes+=("$process_info")
+            print_message "❌ Port $port is already in use by: $process_info" "$RED"
+        else
+            print_message "✅ Port $port is available" "$GREEN"
+        fi
+    done
+    
+    # If any ports are in use, show detailed error and exit
+    if [ ${#failed_ports[@]} -gt 0 ]; then
+        print_message "\n❌ ERROR: Required ports are not available" "$RED"
+        print_message "\nBirdNET-Go requires the following ports to be available:" "$YELLOW"
+        print_message "  • Port 80   - HTTP web interface" "$YELLOW"
+        print_message "  • Port 443  - HTTPS web interface (with SSL)" "$YELLOW"
+        local web_port_display="${WEB_PORT:-8080}"
+        if [ "$web_port_display" != "80" ] && [ "$web_port_display" != "443" ]; then
+            print_message "  • Port $web_port_display - Primary web interface" "$YELLOW"
+        fi
+        print_message "  • Port 8090 - Prometheus metrics endpoint" "$YELLOW"
+        
+        print_message "\n📋 Ports currently in use:" "$RED"
+        for i in "${!failed_ports[@]}"; do
+            print_message "  • Port ${failed_ports[$i]} - Used by: ${port_processes[$i]}" "$RED"
+        done
+        
+        print_message "\n💡 To resolve this issue, you can:" "$YELLOW"
+        print_message "\n1. Stop the conflicting services:" "$YELLOW"
+        
+        # Provide specific instructions based on common services
+        for i in "${!failed_ports[@]}"; do
+            local failed_port="${failed_ports[$i]}"
+            local process="${port_processes[$i]}"
+            # Convert to lowercase for case-insensitive matching
+            local process_lower
+            process_lower=$(echo "$process" | tr '[:upper:]' '[:lower:]')
+            
+            if [[ "$process_lower" == *"apache"* ]] || [[ "$process_lower" == *"httpd"* ]]; then
+                print_message "   sudo systemctl stop apache2  # For Apache on port $failed_port" "$NC"
+            elif [[ "$process_lower" == *"nginx"* ]]; then
+                print_message "   sudo systemctl stop nginx    # For Nginx on port $failed_port" "$NC"
+            elif [[ "$process_lower" == *"lighttpd"* ]]; then
+                print_message "   sudo systemctl stop lighttpd # For Lighttpd on port $failed_port" "$NC"
+            elif [[ "$process_lower" == *"caddy"* ]]; then
+                print_message "   sudo systemctl stop caddy    # For Caddy on port $failed_port" "$NC"
+            elif [[ "$failed_port" == "80" ]] || [[ "$failed_port" == "443" ]]; then
+                print_message "   sudo systemctl stop <service> # Replace <service> with the service using port $failed_port" "$NC"
+            fi
+        done
+        
+        print_message "\n2. Or use Docker with different port mappings (advanced users):" "$YELLOW"
+        print_message "   Modify the systemd service file after installation to use different ports" "$NC"
+        
+        print_message "\n3. Or uninstall conflicting software if not needed:" "$YELLOW"
+        print_message "   sudo apt remove <package-name>" "$NC"
+        
+        print_message "\n⚠️  Note: BirdNET-Go requires ports 80 and 443 for:" "$YELLOW"
+        print_message "  • HTTP web interface access" "$YELLOW"
+        print_message "  • HTTPS web interface (if SSL is configured)" "$YELLOW"
+        print_message "  • Proper web interface functionality" "$YELLOW"
+        
+        send_telemetry_event "error" "Port availability check failed" "error" "step=check_prerequisites,failed_ports=${failed_ports[*]}"
+        exit 1
+    fi
+    
+    print_message "✅ All required ports are available" "$GREEN"
+
+    log_message "INFO" "System prerequisites check completed successfully"
     print_message "🥳 System prerequisites checks passed" "$GREEN"
     print_message ""
 }
@@ -541,10 +1598,12 @@ check_docker_space() {
 
 # Function to pull Docker image
 pull_docker_image() {
+    log_message "INFO" "Starting Docker image pull: $BIRDNET_GO_IMAGE"
     print_message "\n🐳 Pulling BirdNET-Go Docker image from GitHub Container Registry..." "$YELLOW"
     
     # Check if Docker can be used by the user
     if ! docker info &>/dev/null; then
+        log_message "ERROR" "Docker not accessible by user $USER"
         print_message "❌ Docker cannot be accessed by user $USER. Please ensure you have the necessary permissions." "$RED"
         print_message "This could be due to:" "$YELLOW"
         print_message "- User $USER is not in the docker group" "$YELLOW"
@@ -554,8 +1613,10 @@ pull_docker_image() {
     fi
 
     if docker pull "${BIRDNET_GO_IMAGE}"; then
+        log_message "INFO" "Docker image pulled successfully: $BIRDNET_GO_IMAGE"
         print_message "✅ Docker image pulled successfully" "$GREEN"
     else
+        log_message "ERROR" "Docker image pull failed: $BIRDNET_GO_IMAGE"
         send_telemetry_event "error" "Docker image pull failed" "error" "step=pull_docker_image,image=${BIRDNET_GO_IMAGE}"
         print_message "❌ Failed to pull Docker image" "$RED"
         print_message "This could be due to:" "$YELLOW"
@@ -901,6 +1962,7 @@ test_rtsp_url() {
 
 # Function to configure audio input
 configure_audio_input() {
+    log_message "INFO" "Starting audio capture configuration"
     while true; do
         print_message "\n🎤 Audio Capture Configuration" "$GREEN"
         print_message "1) Use sound card" 
@@ -911,16 +1973,19 @@ configure_audio_input() {
 
         case $audio_choice in
             1)
+                log_message "INFO" "User selected sound card audio input"
                 if configure_sound_card; then
                     break
                 fi
                 ;;
             2)
+                log_message "INFO" "User selected RTSP stream audio input"
                 if configure_rtsp_stream; then
                     break
                 fi
                 ;;
             3)
+                log_message "INFO" "User skipped audio configuration, will configure later via web interface"
                 print_message "⚠️ Skipping audio input configuration" "$YELLOW"
                 print_message "⚠️ You can configure audio input later in BirdNET-Go web interface at Audio Capture Settings" "$YELLOW"
                 # MODIFIED: Always include device mapping even when skipping configuration
@@ -928,10 +1993,12 @@ configure_audio_input() {
                 break
                 ;;
             *)
+                log_message "WARN" "Invalid audio input selection: $audio_choice"
                 print_message "❌ Invalid selection. Please try again." "$RED"
                 ;;
         esac
     done
+    log_message "INFO" "Audio capture configuration completed"
 }
 
 # Function to validate audio device
@@ -969,6 +2036,7 @@ validate_audio_device() {
 
 # Function to configure sound card
 configure_sound_card() {
+    log_message "INFO" "Starting sound card configuration"
     while true; do
         print_message "\n🎤 Detected audio devices:" "$GREEN"
         
@@ -981,9 +2049,12 @@ configure_sound_card() {
         arecord_output=$(LC_ALL=C arecord -l 2>/dev/null)
         
         if [ -z "$arecord_output" ]; then
+            log_message "ERROR" "No audio capture devices found on system"
             print_message "❌ No audio capture devices found!" "$RED"
             return 1
         fi
+        
+        log_message "INFO" "Found audio devices, parsing arecord output"
         
         # Parse arecord output and create a numbered list
         while IFS= read -r line; do
@@ -1011,9 +2082,12 @@ configure_sound_card() {
         done <<< "$arecord_output"
 
         if [ ${#devices[@]} -eq 0 ]; then
+            log_message "ERROR" "No valid audio capture devices parsed from arecord output"
             print_message "❌ No audio capture devices found!" "$RED"
             return 1
         fi
+
+        log_message "INFO" "Found ${#devices[@]} audio capture devices"
 
         # If no USB device was found, use first device as default
         if [ "$default_selection" -eq 0 ]; then
@@ -1024,6 +2098,7 @@ configure_sound_card() {
         read -r selection
 
         if [ "$selection" = "b" ]; then
+            log_message "INFO" "User chose to go back from sound card configuration"
             return 1
         fi
 
@@ -1051,17 +2126,21 @@ configure_sound_card() {
             done <<< "$(LC_ALL=C arecord -l)"
             
             ALSA_CARD="$friendly_name"
+            log_message "INFO" "User selected audio device: card $card_num, device $device_num (${friendly_name})"
             print_message "✅ Selected capture device: " "$GREEN" "nonewline"
             print_message "$ALSA_CARD"
 
             # Update config file with the friendly name
             sed -i "s/source: \"sysdefault\"/source: \"${ALSA_CARD}\"/" "$CONFIG_FILE"
+            log_command_result "sed audio device configuration" $? "updating config file"
             # Comment out RTSP section
             sed -i '/rtsp:/,/      # - rtsp/s/^/#/' "$CONFIG_FILE"
+            log_command_result "sed comment RTSP section" $? "disabling RTSP configuration"
                 
             AUDIO_ENV="--device /dev/snd"
             return 0
         else
+            log_message "WARN" "Invalid audio device selection: $selection"
             print_message "❌ Invalid selection. Please try again." "$RED"
         fi
     done
@@ -1069,6 +2148,7 @@ configure_sound_card() {
 
 # Function to configure RTSP stream
 configure_rtsp_stream() {
+    log_message "INFO" "Starting RTSP stream configuration"
     while true; do
         print_message "\n🎥 RTSP Stream Configuration" "$GREEN"
         print_message "Configure primary RTSP stream. Additional streams can be added later via web interface at Audio Capture Settings." "$YELLOW"
@@ -1076,34 +2156,49 @@ configure_rtsp_stream() {
         read -r RTSP_URL
 
         if [ "$RTSP_URL" = "b" ]; then
+            log_message "INFO" "User chose to go back from RTSP configuration"
             return 1
         fi
         
         if [[ ! $RTSP_URL =~ ^rtsp:// ]]; then
+            log_message "WARN" "Invalid RTSP URL format provided (not starting with rtsp://)"
             print_message "❌ Invalid RTSP URL format. Please try again." "$RED"
             continue
         fi
         
+        # Extract host from URL for logging (without credentials)
+        local rtsp_host=""
+        if [[ $RTSP_URL =~ rtsp://([^@]+@)?([^:/]+) ]]; then
+            rtsp_host="${BASH_REMATCH[2]}"
+        fi
+        log_message "INFO" "Testing RTSP connection to host: ${rtsp_host:-unknown}"
+        
         if test_rtsp_url "$RTSP_URL"; then
+            log_message "INFO" "RTSP connection test successful, configuring RTSP audio input"
             print_message "✅ RTSP connection successful!" "$GREEN"
             
             # Update config file
             sed -i "s|# - rtsp://user:password@example.com/stream1|      - ${RTSP_URL}|" "$CONFIG_FILE"
+            log_command_result "sed RTSP URL configuration" $? "adding RTSP URL to config"
             # Comment out audio source section
             sed -i '/source: "sysdefault"/s/^/#/' "$CONFIG_FILE"
+            log_command_result "sed comment audio source" $? "disabling audio source"
             
             # MODIFIED: Always include device mapping even with RTSP
             AUDIO_ENV="--device /dev/snd"
             return 0
         else
+            log_message "WARN" "RTSP connection test failed for host: ${rtsp_host:-unknown}"
             print_message "❌ Could not connect to RTSP stream. Do you want to:" "$RED"
             print_message "1) Try again"
             print_message "2) Go back to audio input selection"
             print_message "❓ Select option (1/2): " "$YELLOW" "nonewline"
             read -r retry
             if [ "$retry" = "2" ]; then
+                log_message "INFO" "User chose to go back after RTSP connection failure"
                 return 1
             fi
+            log_message "INFO" "User chose to retry RTSP configuration"
         fi
     done
 }
@@ -1404,6 +2499,7 @@ configure_timezone() {
 
 # Function to configure location
 configure_location() {
+    log_message "INFO" "Starting location configuration"
     print_message "\n🌍 Location Configuration, this is used to limit bird species present in your region" "$GREEN"
     
     # Try to get location from NordVPN/OpenStreetMap
@@ -1420,6 +2516,8 @@ configure_location() {
         ip_country=$(echo "$ip_location" | cut -d'|' -f4)
         ip_timezone=$(echo "$ip_location" | cut -d'|' -f5)
         
+        log_message "INFO" "IP-based location detection successful: $ip_city, $ip_country (timezone: ${ip_timezone:-none})"
+        
         # Display timezone info if available
         local location_msg="$ip_city, $ip_country ($ip_lat, $ip_lon)"
         if [ -n "$ip_timezone" ] && [ "$ip_timezone" != "null" ]; then
@@ -1434,19 +2532,27 @@ configure_location() {
         if [[ $use_ip_location == "y" ]]; then
             lat=$ip_lat
             lon=$ip_lon
+            log_message "INFO" "User accepted IP-based location ($ip_city, $ip_country)"
             # Store detected timezone globally for timezone configuration
             if [ -n "$ip_timezone" ] && [ "$ip_timezone" != "null" ]; then
                 DETECTED_TZ="$ip_timezone"
+                log_message "INFO" "Using detected timezone: $ip_timezone"
                 print_message "✅ Using IP-based location and detected timezone: $ip_timezone" "$GREEN"
             else
                 print_message "✅ Using IP-based location" "$GREEN"
             fi
             # Update config file and return
             sed -i "s/latitude: 00.000/latitude: $lat/" "$CONFIG_FILE"
+            local sed_result=$?
             sed -i "s/longitude: 00.000/longitude: $lon/" "$CONFIG_FILE"
+            sed_result=$((sed_result + $?))
+            log_command_result "sed latitude/longitude update" "$sed_result" "updating location coordinates in config file"
             return
+        else
+            log_message "INFO" "User rejected IP-based location, will configure manually"
         fi
     else
+        log_message "WARN" "IP-based location detection failed"
         print_message "⚠️ Could not automatically determine location" "$YELLOW"
     fi
     
@@ -1495,10 +2601,12 @@ configure_location() {
                     if [ -n "$coordinates" ] && [ "$coordinates" != "null null" ]; then
                         lat=$(echo "$coordinates" | cut -d' ' -f1)
                         lon=$(echo "$coordinates" | cut -d' ' -f2)
+                        log_message "INFO" "OpenStreetMap lookup successful for $city, $country"
                         print_message "✅ Found coordinates for $city, $country: " "$GREEN" "nonewline"
                         print_message "$lat, $lon"
                         break
                     else
+                        log_message "WARN" "OpenStreetMap lookup failed for: $city, $country"
                         print_message "❌ Could not find coordinates. Please try again with format: 'City, Country'" "$RED"
                     fi
                 done
@@ -1511,12 +2619,17 @@ configure_location() {
     done
 
     # Update config file
+    log_message "INFO" "Location configured manually, updating config file"
     sed -i "s/latitude: 00.000/latitude: $lat/" "$CONFIG_FILE"
+    local sed_result=$?
     sed -i "s/longitude: 00.000/longitude: $lon/" "$CONFIG_FILE"
+    sed_result=$((sed_result + $?))
+    log_command_result "sed latitude/longitude update" "$sed_result" "updating location coordinates in config file"
 }
 
 # Function to configure basic authentication
 configure_auth() {
+    log_message "INFO" "Starting authentication configuration"
     print_message "\n🔒 Security Configuration" "$GREEN"
     print_message "Do you want to enable password protection for the settings interface?" "$YELLOW"
     print_message "This is highly recommended if BirdNET-Go will be accessible from the internet." "$YELLOW"
@@ -1524,27 +2637,37 @@ configure_auth() {
     read -r enable_auth
 
     if [[ $enable_auth == "y" ]]; then
+        log_message "INFO" "User enabled password protection"
         while true; do
-            read -r -p "Enter password: " password
-            read -r -p "Confirm password: " password2
+            read -s -r -p "Enter password: " password
+            printf '\n'
+            read -s -r -p "Confirm password: " password2
+            printf '\n'
             
             if [ "$password" = "$password2" ]; then
+                log_message "INFO" "Password confirmed, generating hash and updating config"
                 # Generate password hash (using bcrypt)
                 password_hash=$(echo -n "$password" | htpasswd -niB "" | cut -d: -f2)
                 
                 # Update config file - using different delimiter for sed
                 sed -i "s|enabled: false    # true to enable basic auth|enabled: true    # true to enable basic auth|" "$CONFIG_FILE"
+                log_command_result "sed enable auth" $? "enabling authentication"
                 sed -i "s|password: \"\"|password: \"$password_hash\"|" "$CONFIG_FILE"
+                log_command_result "sed password hash" $? "setting password hash"
                 
+                log_message "INFO" "Password protection configured successfully"
                 print_message "✅ Password protection enabled successfully!" "$GREEN"
                 print_message "If you forget your password, you can reset it by editing:" "$YELLOW"
                 print_message "$CONFIG_FILE" "$YELLOW"
                 sleep 3
                 break
             else
+                log_message "WARN" "Password confirmation mismatch, retrying"
                 print_message "❌ Passwords don't match. Please try again." "$RED"
             fi
         done
+    else
+        log_message "INFO" "User disabled password protection"
     fi
 }
 
@@ -1670,106 +2793,6 @@ get_port_process_info() {
     fi
 }
 
-# Function to validate all required ports
-# Note: Docker daemon runs as root and handles privileged port binding (80, 443)
-# This check ensures ports are free before Docker attempts to bind them
-validate_required_ports() {
-    local ports_to_check=("80" "443" "$WEB_PORT" "8090")
-    local unique_ports=()
-    local failed_ports=()
-    local port_processes=()
-    local port
-    local process_info
-    
-    # Use associative array for efficient deduplication
-    local -A seen
-    
-    # Deduplicate ports array to avoid double-checking
-    for port in "${ports_to_check[@]}"; do
-        # Skip empty entries
-        if [ -z "$port" ]; then
-            continue
-        fi
-        
-        # Only add if not seen before
-        if [ -z "${seen[$port]:-}" ]; then
-            seen[$port]=1
-            unique_ports+=("$port")
-        fi
-    done
-    
-    print_message "\n🔌 Checking required port availability..." "$YELLOW"
-    
-    for port in "${unique_ports[@]}"; do
-        if ! check_port_availability "$port"; then
-            failed_ports+=("$port")
-            process_info=$(get_port_process_info "$port")
-            port_processes+=("$process_info")
-            print_message "❌ Port $port is already in use by: $process_info" "$RED"
-        else
-            print_message "✅ Port $port is available" "$GREEN"
-        fi
-    done
-    
-    # If any ports are in use, show detailed error and exit
-    if [ ${#failed_ports[@]} -gt 0 ]; then
-        print_message "\n❌ ERROR: Required ports are not available" "$RED"
-        print_message "\nBirdNET-Go requires the following ports to be available:" "$YELLOW"
-        print_message "  • Port 80   - HTTP web interface" "$YELLOW"
-        print_message "  • Port 443  - HTTPS web interface (with SSL)" "$YELLOW"
-        if [ "$WEB_PORT" != "80" ] && [ "$WEB_PORT" != "443" ]; then
-            print_message "  • Port $WEB_PORT - Primary web interface" "$YELLOW"
-        fi
-        print_message "  • Port 8090 - Prometheus metrics endpoint" "$YELLOW"
-        
-        print_message "\n📋 Ports currently in use:" "$RED"
-        for i in "${!failed_ports[@]}"; do
-            print_message "  • Port ${failed_ports[$i]} - Used by: ${port_processes[$i]}" "$RED"
-        done
-        
-        print_message "\n💡 To resolve this issue, you can:" "$YELLOW"
-        print_message "\n1. Stop the conflicting services:" "$YELLOW"
-        
-        # Provide specific instructions based on common services
-        for i in "${!failed_ports[@]}"; do
-            local port="${failed_ports[$i]}"
-            local process="${port_processes[$i]}"
-            # Convert to lowercase for case-insensitive matching
-            local process_lower
-            process_lower=$(echo "$process" | tr '[:upper:]' '[:lower:]')
-            
-            if [[ "$process_lower" == *"apache"* ]] || [[ "$process_lower" == *"httpd"* ]]; then
-                print_message "   sudo systemctl stop apache2  # For Apache on port $port" "$NC"
-            elif [[ "$process_lower" == *"nginx"* ]]; then
-                print_message "   sudo systemctl stop nginx    # For Nginx on port $port" "$NC"
-            elif [[ "$process_lower" == *"lighttpd"* ]]; then
-                print_message "   sudo systemctl stop lighttpd # For Lighttpd on port $port" "$NC"
-            elif [[ "$process_lower" == *"caddy"* ]]; then
-                print_message "   sudo systemctl stop caddy    # For Caddy on port $port" "$NC"
-            elif [[ "$port" == "80" ]] || [[ "$port" == "443" ]]; then
-                print_message "   sudo systemctl stop <service> # Replace <service> with the service using port $port" "$NC"
-            fi
-        done
-        
-        print_message "\n2. Or use Docker with different port mappings (advanced users):" "$YELLOW"
-        print_message "   Modify the systemd service file after installation to use different ports" "$NC"
-        
-        print_message "\n3. Or uninstall conflicting software if not needed:" "$YELLOW"
-        print_message "   sudo apt remove <package-name>" "$NC"
-        
-        print_message "\n⚠️  Note: BirdNET-Go's Caddy web server requires ports 80 and 443 for:" "$YELLOW"
-        print_message "  • Automatic HTTPS certificate generation (Let's Encrypt)" "$YELLOW"
-        print_message "  • HTTP to HTTPS redirection" "$YELLOW"
-        print_message "  • Proper web interface functionality" "$YELLOW"
-        
-        send_telemetry_event "error" "Port availability check failed" "error" "step=validate_required_ports,failed_ports=${failed_ports[*]}"
-        
-        return 1
-    fi
-    
-    print_message "✅ All required ports are available" "$GREEN"
-    return 0
-}
 
 # Function to configure web interface port
 configure_web_port() {
@@ -1779,12 +2802,7 @@ configure_web_port() {
     # Update config file with port
     sed -i -E "s/^(\\s*port:\\s*)[0-9]+/\\1$WEB_PORT/" "$CONFIG_FILE"
     
-    # Validate ALL required ports including 80, 443, 8080, and 8090
-    if ! validate_required_ports; then
-        print_message "\n❌ Installation cannot continue due to port conflicts" "$RED"
-        print_message "Please resolve the port conflicts and run the installer again." "$YELLOW"
-        exit 1
-    fi
+    # Port validation already done in prerequisites section
 }
 
 # Generate systemd service content
@@ -1940,9 +2958,26 @@ stop_birdnet_service() {
 
 # Function to handle container update process
 handle_container_update() {
+    log_message "INFO" "=== Starting Container Update Process ==="
+    
+    # Log comprehensive pre-update state
+    log_message "INFO" "=== Pre-Update System State ==="
+    log_system_resources "pre-update"
+    log_docker_state "pre-update"
+    log_service_state "pre-update"
+    log_network_state "pre-update"
+    
+    # Store pre-update config hash
+    local pre_update_config_hash=""
+    if [ -f "$CONFIG_FILE" ]; then
+        pre_update_config_hash=$(log_config_hash "pre-update")
+        log_message "INFO" "Pre-update config file backup hash recorded"
+    fi
+    
     local service_needs_update
     service_needs_update=$(check_systemd_service)
     
+    log_message "INFO" "Systemd service update needed: $service_needs_update"
     print_message "🔄 Checking for updates..." "$YELLOW"
     
     # Extract existing timezone from systemd service file if updating
@@ -1950,25 +2985,44 @@ handle_container_update() {
         local existing_tz=$(grep -oP '(?<=--env TZ=")[^"]+' /etc/systemd/system/birdnet-go.service 2>/dev/null)
         if [ -n "$existing_tz" ]; then
             CONFIGURED_TZ="$existing_tz"
+            log_message "INFO" "Extracted existing timezone from service: $CONFIGURED_TZ"
             print_message "📍 Using existing timezone configuration: $CONFIGURED_TZ" "$GREEN"
         fi
     fi
     
     # Stop the service and container
+    log_message "INFO" "Stopping BirdNET-Go service for update"
     stop_birdnet_service
     
     # Clean up existing tmpfs mounts
+    log_message "INFO" "Cleaning up tmpfs mounts"
     cleanup_hls_mount
     
     # Update configuration paths
+    log_message "INFO" "Updating configuration paths"
     update_paths_in_config
     
+    # Capture current version before update
+    log_message "INFO" "Capturing current image hash before update"
+    print_message "📸 Capturing current version for rollback..." "$YELLOW"
+    local current_image_hash
+    current_image_hash=$(capture_current_image_hash "pre-update")
+    
+    # Create config backup with current version
+    if [ -f "$CONFIG_FILE" ] && [ -n "$current_image_hash" ]; then
+        log_message "INFO" "Creating config backup before update"
+        backup_config_with_version "pre-update" "$current_image_hash"
+    fi
+    
     # Pull new image
+    log_message "INFO" "Pulling latest Docker image: $BIRDNET_GO_IMAGE"
     print_message "📥 Pulling latest nightly image..." "$YELLOW"
     if ! docker pull "${BIRDNET_GO_IMAGE}"; then
+        log_message "ERROR" "Failed to pull new Docker image during update"
         print_message "❌ Failed to pull new image" "$RED"
         return 1
     fi
+    log_message "INFO" "Docker image pull completed successfully"
     
     # MODIFIED: Always ensure AUDIO_ENV is set during updates
     if [ -z "$AUDIO_ENV" ]; then
@@ -1977,18 +3031,67 @@ handle_container_update() {
     
     # Update systemd service if needed
     if [ "$service_needs_update" = "true" ]; then
+        log_message "INFO" "Updating systemd service configuration"
         print_message "📝 Updating systemd service..." "$YELLOW"
         add_systemd_config
+    else
+        log_message "INFO" "Systemd service configuration up to date, no changes needed"
     fi
     
     # Start the service
+    log_message "INFO" "Starting BirdNET-Go service after update"
     print_message "🚀 Starting BirdNET-Go service..." "$YELLOW"
     sudo systemctl daemon-reload
+    log_command_result "systemctl daemon-reload" $? "reloading systemd configuration"
     if ! sudo systemctl start birdnet-go.service; then
+        log_message "ERROR" "Failed to start BirdNET-Go service after update"
         print_message "❌ Failed to start service" "$RED"
         return 1
     fi
+    log_message "INFO" "BirdNET-Go service started successfully after update"
     
+    # Post-update validation and logging
+    log_message "INFO" "=== Post-Update Validation ==="
+    
+    # Verify config file integrity
+    if [ -f "$CONFIG_FILE" ]; then
+        local post_update_config_hash
+        post_update_config_hash=$(log_config_hash "post-update")
+        
+        if [ -n "$pre_update_config_hash" ] && [ "$pre_update_config_hash" = "$post_update_config_hash" ]; then
+            log_message "INFO" "Config file integrity verified: hash unchanged"
+        elif [ -n "$pre_update_config_hash" ] && [ "$pre_update_config_hash" != "$post_update_config_hash" ]; then
+            log_message "WARN" "Config file hash changed during update (expected for some updates)"
+            log_message "INFO" "Pre-update hash: $pre_update_config_hash"
+            log_message "INFO" "Post-update hash: $post_update_config_hash"
+        else
+            log_message "INFO" "Config file hash recorded post-update"
+        fi
+    fi
+    
+    # Log post-update system state
+    log_system_resources "post-update"
+    log_docker_state "post-update"
+    log_service_state "post-update"
+    
+    # Verify service is responding
+    local service_responsive="false"
+    if systemctl is-active --quiet birdnet-go.service; then
+        # Give service a moment to fully initialize
+        sleep 2
+        # Check if web interface is responding
+        if curl -s -f --connect-timeout 5 "http://localhost:${WEB_PORT:-8080}" >/dev/null 2>&1; then
+            service_responsive="true"
+            log_message "INFO" "Web interface responding on port ${WEB_PORT:-8080}"
+        else
+            log_message "WARN" "Web interface not responding on port ${WEB_PORT:-8080} (may still be starting)"
+        fi
+    else
+        log_message "ERROR" "Service not active after update"
+    fi
+    
+    log_message "INFO" "Update validation completed - service responsive: $service_responsive"
+    log_message "INFO" "Container update process completed successfully"
     print_message "✅ Update completed successfully" "$GREEN"
     
     # Send upgrade completion telemetry with context
@@ -2106,23 +3209,29 @@ clean_installation() {
 
 # Function to start BirdNET-Go
 start_birdnet_go() {   
+    log_message "INFO" "Starting BirdNET-Go service"
     print_message "\n🚀 Starting BirdNET-Go..." "$GREEN"
     
     # Check if container is already running
     if check_container_running; then
+        log_message "INFO" "BirdNET-Go container already running, skipping startup"
         print_message "✅ BirdNET-Go container is already running" "$GREEN"
         return 0
     fi
     
     # Start the service
+    log_message "INFO" "Executing systemctl start birdnet-go.service"
     sudo systemctl start birdnet-go.service
+    log_command_result "systemctl start birdnet-go.service" $? "starting BirdNET-Go service"
     
     # Check if service started
     if ! sudo systemctl is-active --quiet birdnet-go.service; then
+        log_message "ERROR" "BirdNET-Go service failed to start"
         send_telemetry_event "error" "Service startup failed" "error" "step=start_birdnet_go"
         print_message "❌ Failed to start BirdNET-Go service" "$RED"
         
         # Get and display journald logs for troubleshooting
+        log_message "INFO" "Retrieving service logs for troubleshooting"
         print_message "\n📋 Service logs (last 20 entries):" "$YELLOW"
         journalctl -u birdnet-go.service -n 20 --no-pager
         
@@ -2135,6 +3244,7 @@ start_birdnet_go() {
         
         exit 1
     fi
+    log_message "INFO" "BirdNET-Go service started successfully"
     print_message "✅ BirdNET-Go service started successfully!" "$GREEN"
     # Determine if this is a fresh install or an upgrade
     local install_type="installation"
@@ -2433,6 +3543,7 @@ FRESH_INSTALL="false"
 # Configured timezone (will be set during configuration)
 CONFIGURED_TZ=""
 
+
 # Load telemetry configuration if it exists
 load_telemetry_config
 
@@ -2453,6 +3564,9 @@ if check_preserved_data; then
     PRESERVED_DATA=true
 fi
 
+# Log comprehensive session information now that we know the installation state
+log_enhanced_session_info "$INSTALLATION_TYPE" "$PRESERVED_DATA" "$FRESH_INSTALL"
+
 # Function to display menu options based on installation type
 display_menu() {
     local installation_type="$1"
@@ -2460,29 +3574,44 @@ display_menu() {
     if [ "$installation_type" = "full" ]; then
         print_message "🔍 Found existing BirdNET-Go installation (systemd service)" "$YELLOW"
         print_message "1) Check for updates" "$YELLOW"
-        print_message "2) Fresh installation" "$YELLOW"
-        print_message "3) Uninstall BirdNET-Go, remove data" "$YELLOW"
-        print_message "4) Uninstall BirdNET-Go, preserve data" "$YELLOW"
-        print_message "5) Exit" "$YELLOW"
-        print_message "❓ Select an option (1-5): " "$YELLOW" "nonewline"
-        return 5  # Return number of options
+        if has_previous_versions; then
+            print_message "2) Revert to previous version" "$YELLOW"
+        else
+            print_message "2) Revert to previous version (no versions available)" "$GRAY"
+        fi
+        print_message "3) Fresh installation" "$YELLOW"
+        print_message "4) Uninstall BirdNET-Go, remove data" "$YELLOW"
+        print_message "5) Uninstall BirdNET-Go, preserve data" "$YELLOW"
+        print_message "6) Exit" "$YELLOW"
+        print_message "❓ Select an option (1-6): " "$YELLOW" "nonewline"
+        return 6  # Return number of options
     elif [ "$installation_type" = "docker" ]; then
         print_message "🔍 Found existing BirdNET-Go Docker container/image" "$YELLOW"
         print_message "1) Check for updates" "$YELLOW"
-        print_message "2) Install as systemd service" "$YELLOW"
-        print_message "3) Fresh installation" "$YELLOW"
-        print_message "4) Remove Docker container/image" "$YELLOW"
-        print_message "5) Exit" "$YELLOW"
-        print_message "❓ Select an option (1-5): " "$YELLOW" "nonewline"
-        return 5  # Return number of options
+        if has_previous_versions; then
+            print_message "2) Revert to previous version" "$YELLOW"
+        else
+            print_message "2) Revert to previous version (no versions available)" "$GRAY"
+        fi
+        print_message "3) Install as systemd service" "$YELLOW"
+        print_message "4) Fresh installation" "$YELLOW"
+        print_message "5) Remove Docker container/image" "$YELLOW"
+        print_message "6) Exit" "$YELLOW"
+        print_message "❓ Select an option (1-6): " "$YELLOW" "nonewline"
+        return 6  # Return number of options
     else
         print_message "🔍 Found BirdNET-Go data from previous installation" "$YELLOW"
         print_message "1) Install using existing data and configuration" "$YELLOW"
-        print_message "2) Fresh installation (remove existing data and configuration)" "$YELLOW"
-        print_message "3) Remove existing data without installing" "$YELLOW"
-        print_message "4) Exit" "$YELLOW"
-        print_message "❓ Select an option (1-4): " "$YELLOW" "nonewline"
-        return 4  # Return number of options
+        if has_previous_versions; then
+            print_message "2) Revert to previous version" "$YELLOW"
+        else
+            print_message "2) Revert to previous version (no versions available)" "$GRAY"
+        fi
+        print_message "3) Fresh installation (remove existing data and configuration)" "$YELLOW"
+        print_message "4) Remove existing data without installing" "$YELLOW"
+        print_message "5) Exit" "$YELLOW"
+        print_message "❓ Select an option (1-5): " "$YELLOW" "nonewline"
+        return 5  # Return number of options
     fi
 }
 
@@ -2506,6 +3635,37 @@ handle_full_install_menu() {
             fi
             ;;
         2)
+            # Revert to previous version
+            if ! has_previous_versions; then
+                print_message "\n❌ No previous versions available for rollback" "$RED"
+                print_message "💡 Previous versions will be available after your first update" "$YELLOW"
+                print_message "Press any key to return to menu..."
+                read -n 1
+                return 1
+            fi
+            
+            print_message "\n🔄 Reverting to previous version..." "$YELLOW"
+            list_available_versions
+            
+            print_message "\n❓ Enter version number to revert to (or 'c' to cancel): " "$YELLOW" "nonewline"
+            read -r version_choice
+            
+            if [ "$version_choice" = "c" ]; then
+                print_message "❌ Revert cancelled" "$RED"
+                return 1
+            fi
+            
+            if revert_to_version "$version_choice" "ask"; then
+                print_message "✅ Successfully reverted to previous version" "$GREEN"
+                exit 0
+            else
+                print_message "❌ Revert failed" "$RED"
+                print_message "Press any key to return to menu..."
+                read -n 1
+                return 1
+            fi
+            ;;
+        3)
             print_message "\n⚠️  WARNING: Fresh installation will:" "$RED"
             print_message "  • Remove all BirdNET-Go containers and images" "$RED"
             print_message "  • Delete all configuration and data in $CONFIG_DIR" "$RED"
@@ -2521,7 +3681,7 @@ handle_full_install_menu() {
                 exit 1
             fi
             ;;
-        3)
+        4)
             print_message "\n⚠️  WARNING: Uninstalling BirdNET-Go will:" "$RED"
             print_message "  • Remove all BirdNET-Go containers and images" "$RED"
             print_message "  • Delete all configuration and data in $CONFIG_DIR" "$RED"
@@ -2542,7 +3702,7 @@ handle_full_install_menu() {
                 exit 1
             fi
             ;;
-        4)
+        5)
             print_message "\nℹ️ NOTE: This option will uninstall BirdNET-Go but preserve your data:" "$YELLOW"
             print_message "  • BirdNET-Go containers and images will be removed" "$YELLOW"
             print_message "  • Systemd service will be disabled and removed" "$YELLOW"
@@ -2562,9 +3722,9 @@ handle_full_install_menu() {
                 exit 1
             fi
             ;;
-        5)
-            print_message "❌ Operation cancelled" "$RED"
-            exit 1
+        6)
+            print_message "👋 Goodbye!" "$GREEN"
+            exit 0
             ;;
         *)
             print_message "❌ Invalid option" "$RED"
@@ -2589,9 +3749,41 @@ handle_docker_install_menu() {
             fi
             ;;
         2)
-            print_message "\n🔧 Installing BirdNET-Go as systemd service..." "$GREEN"
+            # Revert to previous version
+            if ! has_previous_versions; then
+                print_message "\n❌ No previous versions available for rollback" "$RED"
+                print_message "💡 Previous versions will be available after your first update" "$YELLOW"
+                print_message "Press any key to return to menu..."
+                read -n 1
+                return 1
+            fi
+            
+            print_message "\n🔄 Reverting to previous version..." "$YELLOW"
+            list_available_versions
+            
+            print_message "\n❓ Enter version number to revert to (or 'c' to cancel): " "$YELLOW" "nonewline"
+            read -r version_choice
+            
+            if [ "$version_choice" = "c" ]; then
+                print_message "❌ Revert cancelled" "$RED"
+                return 1
+            fi
+            
+            if revert_to_version "$version_choice" "ask"; then
+                print_message "✅ Successfully reverted to previous version" "$GREEN"
+                print_message "⚠️ Note: You will need to restart your container to use the reverted image" "$YELLOW"
+                exit 0
+            else
+                print_message "❌ Revert failed" "$RED"
+                print_message "Press any key to return to menu..."
+                read -n 1
+                return 1
+            fi
             ;;
         3)
+            print_message "\n🔧 Installing BirdNET-Go as systemd service..." "$GREEN"
+            ;;
+        4)
             print_message "\n⚠️  WARNING: Fresh installation will:" "$RED"
             print_message "  • Remove all BirdNET-Go containers and images" "$RED"
             print_message "  • Delete all configuration and data in $CONFIG_DIR" "$RED"
@@ -2623,7 +3815,7 @@ handle_docker_install_menu() {
                 exit 1
             fi
             ;;
-        4)
+        5)
             print_message "\n⚠️  WARNING: This will remove BirdNET-Go Docker components:" "$RED"
             print_message "  • Stop and remove all BirdNET-Go containers" "$RED"
             print_message "  • Remove all BirdNET-Go Docker images" "$RED"
@@ -2651,9 +3843,9 @@ handle_docker_install_menu() {
                 exit 1
             fi
             ;;
-        5)
-            print_message "❌ Operation cancelled" "$RED"
-            exit 1
+        6)
+            print_message "👋 Goodbye!" "$GREEN"
+            exit 0
             ;;
         *)
             print_message "❌ Invalid option" "$RED"
@@ -2669,6 +3861,37 @@ handle_preserved_data_menu() {
             print_message "\n📝 Installing BirdNET-Go using existing data..." "$GREEN"
             ;;
         2)
+            # Revert to previous version
+            if ! has_previous_versions; then
+                print_message "\n❌ No previous versions available for rollback" "$RED"
+                print_message "💡 Previous versions will be available after your first update" "$YELLOW"
+                print_message "Press any key to return to menu..."
+                read -n 1
+                return 1
+            fi
+            
+            print_message "\n🔄 Reverting to previous version..." "$YELLOW"
+            list_available_versions
+            
+            print_message "\n❓ Enter version number to revert to (or 'c' to cancel): " "$YELLOW" "nonewline"
+            read -r version_choice
+            
+            if [ "$version_choice" = "c" ]; then
+                print_message "❌ Revert cancelled" "$RED"
+                return 1
+            fi
+            
+            if revert_to_version "$version_choice" "ask"; then
+                print_message "✅ Successfully reverted to previous version" "$GREEN"
+                exit 0
+            else
+                print_message "❌ Revert failed" "$RED"
+                print_message "Press any key to return to menu..."
+                read -n 1
+                return 1
+            fi
+            ;;
+        3)
             print_message "\n⚠️  WARNING: Fresh installation will remove existing data:" "$RED"
             print_message "  • Delete all configuration and data in $CONFIG_DIR" "$RED"
             print_message "  • Delete all recordings and database in $DATA_DIR" "$RED"
@@ -2686,7 +3909,7 @@ handle_preserved_data_menu() {
                 exit 1
             fi
             ;;
-        3)
+        4)
             print_message "\n⚠️  WARNING: This will permanently delete:" "$RED"
             print_message "  • All configuration and data in $CONFIG_DIR" "$RED"
             print_message "  • All recordings and database in $DATA_DIR" "$RED"
@@ -2706,9 +3929,9 @@ handle_preserved_data_menu() {
                 exit 1
             fi
             ;;
-        4)
-            print_message "❌ Operation cancelled" "$RED"
-            exit 1
+        5)
+            print_message "👋 Goodbye!" "$GREEN"
+            exit 0
             ;;
         *)
             print_message "❌ Invalid option" "$RED"
@@ -2730,23 +3953,33 @@ handle_menu_selection() {
     fi
 }
 
-# Determine what's installed and what to show
+# Menu loop for existing installations
 if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
-    # Display menu based on installation type
-    display_menu "$INSTALLATION_TYPE"
-    max_options=$?
-    
-    # Read user selection
-    read -r response
-    
-    # Validate user selection
-    if [[ "$response" =~ ^[0-9]+$ ]] && [ "$response" -ge 1 ] && [ "$response" -le "$max_options" ]; then
-        # Handle menu selection
-        handle_menu_selection "$INSTALLATION_TYPE" "$response"
-    else
-        print_message "❌ Invalid option" "$RED"
-        exit 1
-    fi
+    while true; do
+        # Display menu based on installation type
+        print_message ""  # Add spacing
+        display_menu "$INSTALLATION_TYPE"
+        max_options=$?
+        
+        # Read user selection
+        read -r response
+        
+        # Validate user selection
+        if [[ "$response" =~ ^[0-9]+$ ]] && [ "$response" -ge 1 ] && [ "$response" -le "$max_options" ]; then
+            # Handle menu selection
+            handle_menu_selection "$INSTALLATION_TYPE" "$response"
+            menu_result=$?
+            
+            # If menu action succeeded (returned 0), break from loop and continue
+            if [ $menu_result -eq 0 ]; then
+                break
+            fi
+            # If menu action failed/cancelled (returned 1), continue loop to show menu again
+        else
+            print_message "❌ Invalid option. Please select a number between 1 and $max_options." "$RED"
+            # Continue loop to show menu again
+        fi
+    done
 fi
 
 print_message "Note: Root privileges will be required for:" "$YELLOW"
@@ -2754,6 +3987,13 @@ print_message "  - Installing system packages (alsa-utils, curl, bc, jq, apache2
 print_message "  - Installing Docker" "$YELLOW"
 print_message "  - Creating systemd service" "$YELLOW"
 print_message ""
+
+# Initialize logging system 
+setup_logging
+
+# Display welcome message
+print_message "\n🐦 BirdNET-Go Installation Script" "$GREEN"
+print_message "This script will install BirdNET-Go and its dependencies." "$YELLOW"
 
 # First check basic network connectivity and ensure curl is available
 check_network
@@ -2868,6 +4108,39 @@ start_birdnet_go
 # Validate installation
 validate_installation
 
+log_message "INFO" "=== Installation Completed - Final Validation ==="
+
+# Log final system state  
+log_system_resources "post-install"
+log_docker_state "post-install"  
+log_service_state "post-install"
+
+# Log final config file hash
+if [ -f "$CONFIG_FILE" ]; then
+    log_config_hash "final"
+fi
+
+# Verify service is responding
+final_service_responsive="false" 
+if systemctl is-active --quiet birdnet-go.service; then
+    # Check if web interface is responding
+    if curl -s -f --connect-timeout 5 "http://localhost:${WEB_PORT:-8080}" >/dev/null 2>&1; then
+        final_service_responsive="true"
+        log_message "INFO" "Final validation: Web interface responding on port ${WEB_PORT:-8080}"
+    else
+        log_message "WARN" "Final validation: Web interface not responding on port ${WEB_PORT:-8080}"
+    fi
+else
+    log_message "ERROR" "Final validation: Service not active"
+fi
+
+log_message "INFO" "=== Installation Summary ==="
+log_message "INFO" "Process type: $(detect_process_type "$INSTALLATION_TYPE" "$PRESERVED_DATA" "$FRESH_INSTALL")"
+log_message "INFO" "Configuration directory: $CONFIG_DIR"
+log_message "INFO" "Data directory: $DATA_DIR"  
+log_message "INFO" "Web interface port: ${WEB_PORT:-8080}"
+log_message "INFO" "Service responsive: $final_service_responsive"
+
 print_message ""
 print_message "✅ Installation completed!" "$GREEN"
 print_message "📁 Configuration directory: " "$GREEN" "nonewline"
@@ -2878,8 +4151,10 @@ print_message "$DATA_DIR"
 # Get IP address
 IP_ADDR=$(get_ip_address)
 if [ -n "$IP_ADDR" ]; then
+    log_message "INFO" "Web interface accessible at: http://${IP_ADDR}:${WEB_PORT}"
     print_message "🌐 BirdNET-Go web interface is available at http://${IP_ADDR}:${WEB_PORT}" "$GREEN"
 else
+    log_message "WARN" "Could not determine IP address for web interface access"
     print_message "⚠️ Could not determine IP address - you may access BirdNET-Go at http://localhost:${WEB_PORT}" "$YELLOW"
     print_message "To find your IP address manually, run: ip addr show or nmcli device show" "$YELLOW"
 fi
@@ -2887,6 +4162,12 @@ fi
 # Check if mDNS is available
 if check_mdns; then
     HOSTNAME=$(hostname)
+    log_message "INFO" "mDNS available, accessible at: http://${HOSTNAME}.local:${WEB_PORT}"
     print_message "🌐 Also available at http://${HOSTNAME}.local:${WEB_PORT}" "$GREEN"
+else
+    log_message "INFO" "mDNS not available"
 fi
+
+log_message "INFO" "Install.sh script execution completed successfully"
+log_message "INFO" "=== End of BirdNET-Go Installation/Update Session ==="
 
