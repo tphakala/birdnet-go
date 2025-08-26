@@ -30,8 +30,31 @@ LOG_FILE="$LOG_DIR/install-${LOG_TIMESTAMP}.log"
 
 # Version management configuration
 MAX_CONFIG_BACKUPS=10
-VERSION_TRACKING_FILE="$LOG_DIR/version_tracking.log"
+VERSION_HISTORY_FILE="$LOG_DIR/version_history.log"
 CONFIG_BACKUP_PREFIX="config-backup-"
+
+# Set secure umask for file creation
+umask 077
+
+# Cleanup trap for temporary files
+cleanup_temp_files() {
+    rm -f /tmp/version_history_*.tmp 2>/dev/null
+    rm -f "$LOG_DIR/.last_backup_time" 2>/dev/null
+}
+trap cleanup_temp_files EXIT INT TERM
+
+# Function to validate version history entry format
+validate_version_history_entry() {
+    local line="$1"
+    # Format: timestamp|image_hash|config_backup|image_tag|context
+    # Example: 20240826-134817|sha256:abc123...|config-backup-20240826-134817.yaml|ghcr.io/tphakala/birdnet-go:nightly|pre-update
+    if [[ "$line" =~ ^[0-9]{8}-[0-9]{6}\|[^|]+\|[^|]*\|[^|]+\|[^|]+$ ]]; then
+        return 0
+    else
+        log_message "WARN" "Invalid version history entry format: $line"
+        return 1
+    fi
+}
 
 # Function to setup logging directory
 setup_logging() {
@@ -440,9 +463,9 @@ capture_current_image_hash() {
             log_message "INFO" "Current image: $image_tag"
             log_message "INFO" "Image hash: $image_hash"
             
-            # Store in version tracking file format: timestamp|image_hash|config_backup|image_tag|context
-            echo "${LOG_TIMESTAMP}|${image_hash}|none|${image_tag}|${context}" >> "$VERSION_TRACKING_FILE"
-            log_message "INFO" "Image version captured and tracked"
+            # Store in version history file format: timestamp|image_hash|config_backup|image_tag|context
+            echo "${LOG_TIMESTAMP}|${image_hash}|none|${image_tag}|${context}" >> "$VERSION_HISTORY_FILE"
+            log_message "INFO" "Image version captured and recorded in history"
             
             # Return the hash for use by calling functions
             echo "$image_hash"
@@ -468,6 +491,19 @@ backup_config_with_version() {
         return 1
     fi
     
+    # Rate limiting check to prevent rapid backup operations (except for critical contexts)
+    if [ "$context" != "pre-update" ] && [ "$context" != "REVERT" ]; then
+        if [ -f "$LOG_DIR/.last_backup_time" ]; then
+            local last_backup_time=$(cat "$LOG_DIR/.last_backup_time" 2>/dev/null || echo 0)
+            local current_time=$(date +%s)
+            if [ $((current_time - last_backup_time)) -lt 60 ]; then
+                log_message "WARN" "Backup throttled: too frequent (wait $((60 - (current_time - last_backup_time)))s)"
+                return 1
+            fi
+        fi
+        date +%s > "$LOG_DIR/.last_backup_time"
+    fi
+    
     log_message "INFO" "=== Creating Config Backup ($context) ==="
     
     # Create backup filename with timestamp
@@ -482,18 +518,20 @@ backup_config_with_version() {
         local backup_hash=$(sha256sum "$backup_path" 2>/dev/null | cut -d' ' -f1)
         log_message "INFO" "Config backup hash: ${backup_hash:0:16}..."
         
-        # Update version tracking with backup info
+        # Update version history with backup info
         if [ -n "$image_hash" ]; then
             # Update the entry matching this image_hash to include backup filename
-            local temp_file="/tmp/version_tracking_temp.log"
-            if [ -f "$VERSION_TRACKING_FILE" ]; then
+            local temp_file
+            temp_file=$(mktemp /tmp/version_history_XXXXXX.tmp)
+            if [ -f "$VERSION_HISTORY_FILE" ]; then
                 # Match by image_hash to update the intended row atomically
                 awk -F'|' -v OFS='|' -v ih="$image_hash" -v bf="$backup_filename" '
                   $2==ih && $3=="none" { $3=bf } { print }
-                ' "$VERSION_TRACKING_FILE" > "$temp_file"
-                mv "$temp_file" "$VERSION_TRACKING_FILE"
+                ' "$VERSION_HISTORY_FILE" > "$temp_file"
+                mv "$temp_file" "$VERSION_HISTORY_FILE"
+                rm -f "$temp_file" 2>/dev/null  # Clean up in case mv failed
             fi
-            log_message "INFO" "Version tracking updated with config backup association"
+            log_message "INFO" "Version history updated with config backup association"
         fi
         
         # Clean up old backups
@@ -536,11 +574,14 @@ cleanup_old_backups() {
             if rm -f "$old_backup" 2>/dev/null; then
                 log_message "INFO" "Removed old backup: $(basename "$old_backup")"
                 
-                # Remove from version tracking too
+                # Remove from version history too
                 local backup_name=$(basename "$old_backup")
-                if [ -f "$VERSION_TRACKING_FILE" ]; then
-                    grep -v "|${backup_name}|" "$VERSION_TRACKING_FILE" > "/tmp/version_tracking_cleanup.log" 2>/dev/null
-                    mv "/tmp/version_tracking_cleanup.log" "$VERSION_TRACKING_FILE" 2>/dev/null
+                if [ -f "$VERSION_HISTORY_FILE" ]; then
+                    local cleanup_temp
+                    cleanup_temp=$(mktemp /tmp/version_history_cleanup_XXXXXX.tmp)
+                    grep -v "|${backup_name}|" "$VERSION_HISTORY_FILE" > "$cleanup_temp" 2>/dev/null
+                    mv "$cleanup_temp" "$VERSION_HISTORY_FILE" 2>/dev/null
+                    rm -f "$cleanup_temp" 2>/dev/null  # Clean up in case mv failed
                 fi
             else
                 log_message "WARN" "Failed to remove old backup: $old_backup"
@@ -555,18 +596,23 @@ cleanup_old_backups() {
 
 # Function to list available versions for rollback
 list_available_versions() {
-    if [ ! -f "$VERSION_TRACKING_FILE" ]; then
-        log_message "INFO" "No version tracking file found"
+    if [ ! -f "$VERSION_HISTORY_FILE" ]; then
+        log_message "INFO" "No version history file found"
         return 1
     fi
     
     log_message "INFO" "Listing available versions for rollback"
     
-    # Read version tracking file and display options
+    # Read version history file and display options
     local version_count=0
     while IFS='|' read -r timestamp image_hash config_backup image_tag context; do
         # Skip empty lines and comments
         [ -z "$timestamp" ] || [[ "$timestamp" == \#* ]] && continue
+        
+        # Validate entry format
+        if ! validate_version_history_entry "${timestamp}|${image_hash}|${config_backup}|${image_tag}|${context}"; then
+            continue
+        fi
         
         version_count=$((version_count + 1))
         
@@ -593,7 +639,7 @@ list_available_versions() {
         echo "[$version_count] $display_time | Image: $short_hash | Config: $config_status | Context: $context"
         echo "    Tag: $image_tag"
         
-    done < "$VERSION_TRACKING_FILE"
+    done < "$VERSION_HISTORY_FILE"
     
     if [ "$version_count" -eq 0 ]; then
         log_message "INFO" "No versions found in tracking file"
@@ -608,7 +654,7 @@ list_available_versions() {
 get_version_info() {
     local version_index="$1"
     
-    if [ ! -f "$VERSION_TRACKING_FILE" ]; then
+    if [ ! -f "$VERSION_HISTORY_FILE" ]; then
         return 1
     fi
     
@@ -617,13 +663,18 @@ get_version_info() {
         # Skip empty lines and comments
         [ -z "$timestamp" ] || [[ "$timestamp" == \#* ]] && continue
         
+        # Validate entry format
+        if ! validate_version_history_entry "${timestamp}|${image_hash}|${config_backup}|${image_tag}|${context}"; then
+            continue
+        fi
+        
         current_index=$((current_index + 1))
         
         if [ "$current_index" -eq "$version_index" ]; then
             echo "$timestamp|$image_hash|$config_backup|$image_tag|$context"
             return 0
         fi
-    done < "$VERSION_TRACKING_FILE"
+    done < "$VERSION_HISTORY_FILE"
     
     return 1
 }
@@ -794,8 +845,8 @@ revert_to_version() {
     fi
     
     # Record the revert operation
-    echo "${LOG_TIMESTAMP}|${image_hash}|$([ "$config_reverted" = "true" ] && echo "$config_backup" || echo "none")|${image_tag}|REVERT" >> "$VERSION_TRACKING_FILE"
-    log_message "INFO" "Revert operation recorded in version tracking"
+    echo "${LOG_TIMESTAMP}|${image_hash}|$([ "$config_reverted" = "true" ] && echo "$config_backup" || echo "none")|${image_tag}|REVERT" >> "$VERSION_HISTORY_FILE"
+    log_message "INFO" "Revert operation recorded in version history"
     
     return 0
 }
@@ -2843,12 +2894,13 @@ handle_container_update() {
     # Capture current version before update
     log_message "INFO" "Capturing current image hash before update"
     print_message "📸 Capturing current version for rollback..." "$YELLOW"
-    capture_current_image_hash "pre-update"
+    local current_image_hash
+    current_image_hash=$(capture_current_image_hash "pre-update")
     
     # Create config backup with current version
-    if [ -f "$CONFIG_FILE" ]; then
+    if [ -f "$CONFIG_FILE" ] && [ -n "$current_image_hash" ]; then
         log_message "INFO" "Creating config backup before update"
-        backup_config_with_version "pre-update"
+        backup_config_with_version "pre-update" "$current_image_hash"
     fi
     
     # Pull new image
