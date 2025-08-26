@@ -869,8 +869,16 @@
       "supportReport": {
         "title": "Support-Bericht erstellen",
         "description": {
-          "intro": "Support-Berichte sind **für die Fehlerbehebung unerlässlich** und verbessern unsere Fähigkeit, Probleme zu lösen, die Sie erleben, erheblich. Sie liefern Entwicklern entscheidenden Kontext über Ihre Systemkonfiguration, aktuelle Anwendungsprotokolle und Fehlermuster, die andernfalls unmöglich zu diagnostizieren wären.",
-          "githubIssue": "Bitte [erstellen Sie ein GitHub-Issue](https://github.com/tphakala/birdnet-go/issues/new), das Ihr Problem beschreibt, **bevor oder nachdem** Sie diesen Support-Bericht erstellen. Dies ermöglicht eine ordnungsgemäße Verfolgung und Kommunikation bezüglich Ihres Problems."
+          "intro": "Support-Berichte sind **für die Fehlerbehebung unerlässlich** und verbessern unsere Fähigkeit, Probleme zu lösen, die Sie erleben, erheblich. Sie liefern Entwicklern entscheidenden Kontext über Ihre Systemkonfiguration, aktuelle Anwendungsprotokolle und Fehlermuster, die andernfalls unmöglich zu diagnostizieren wären."
+        },
+        "githubRequired": {
+          "title": "Erforderlich: GitHub-Issue für Support-Uploads",
+          "description": "<strong>Support-Uploads erfordern eine GitHub-Issue-Nummer.</strong> Bitte <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">erstellen Sie ein GitHub-Issue</a>, das Ihr Problem beschreibt, <strong>bevor</strong> Sie einen Support-Bericht erstellen. Ohne ein verknüpftes Issue können Entwickler Ihre Support-Daten nicht bearbeiten."
+        },
+        "githubIssue": {
+          "label": "GitHub-Issue-Nummer",
+          "placeholder": "z.B. 123 oder #123",
+          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Bestehende Issues anzeigen</a> oder <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">neues Issue erstellen</a>"
         },
         "whatsIncluded": {
           "title": "Was im Bericht enthalten ist:",
@@ -882,10 +890,14 @@
         "userMessage": {
           "label": "Beschreiben Sie das Problem",
           "placeholder": "Bitte beschreiben Sie das Problem und fügen Sie den GitHub-Issue-Link hinzu, falls zutreffend (z.B. #123)",
-          "githubTip": "💡 Tipp: Wenn Sie ein GitHub-Issue haben, fügen Sie bitte die Issue-Nummer (z.B. #123) ein und erwähnen Sie Ihre System-ID {systemId} im GitHub-Issue, um Entwicklern zu helfen, Ihre Support-Daten zu verknüpfen."
+          "githubTip": "💡 Tipp: Wenn Sie ein GitHub-Issue haben, fügen Sie bitte die Issue-Nummer (z.B. #123) ein und erwähnen Sie Ihre System-ID {systemId} im GitHub-Issue, um Entwicklern zu helfen, Ihre Support-Daten zu verknüpfen.",
+          "labelOptional": "Zusätzliche Details (optional)",
+          "placeholderOptional": "Geben Sie zusätzlichen Kontext zum Problem an, der nicht in Ihrem GitHub-Issue enthalten ist",
+          "systemIdNote": "💡 Tipp: Ihre System-ID {systemId} wird automatisch in den Upload eingeschlossen"
         },
         "uploadOption": {
           "label": "An Entwickler hochladen (empfohlen)",
+          "labelWithRequirement": "An Entwickler hochladen (erfordert GitHub-Issue-Nummer)",
           "details": {
             "sentryUpload": "Daten werden zum [Sentry](https://sentry.io) Cloud-Service hochgeladen",
             "euDataCenter": "Gespeichert im EU-Rechenzentrum (Frankfurt, Deutschland)",
@@ -904,7 +916,8 @@
           "downloadSuccess": "Support-Bericht erfolgreich erstellt! Wird heruntergeladen...",
           "generateSuccess": "Support-Bericht erfolgreich erstellt!",
           "generateFailed": "Fehler beim Erstellen des Support-Berichts: {message}",
-          "error": "Fehler: {message}"
+          "error": "Fehler: {message}",
+          "githubIssueRequired": "Bitte geben Sie eine GitHub-Issue-Nummer ein, um Support-Daten hochzuladen"
         }
       }
     },

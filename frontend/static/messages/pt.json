@@ -868,8 +868,16 @@
       "supportReport": {
         "title": "Gerar relatório de suporte",
         "description": {
-          "intro": "Os relatórios de suporte são **essenciais para solução de problemas** e melhoram drasticamente nossa capacidade de resolver os problemas que você está enfrentando. Eles fornecem aos desenvolvedores contexto crucial sobre a configuração do seu sistema, logs recentes da aplicação e padrões de erro que seriam impossíveis de diagnosticar de outra forma.",
-          "githubIssue": "Por favor [crie um issue no GitHub](https://github.com/tphakala/birdnet-go/issues/new) descrevendo seu problema **antes ou depois** de gerar este relatório de suporte. Isso permite rastreamento e comunicação adequados sobre seu problema."
+          "intro": "Os relatórios de suporte são **essenciais para solução de problemas** e melhoram drasticamente nossa capacidade de resolver os problemas que você está enfrentando. Eles fornecem aos desenvolvedores contexto crucial sobre a configuração do seu sistema, logs recentes da aplicação e padrões de erro que seriam impossíveis de diagnosticar de outra forma."
+        },
+        "githubRequired": {
+          "title": "Obrigatório: Issue do GitHub para envios de suporte",
+          "description": "<strong>Envios de suporte requerem um número de issue do GitHub.</strong> Por favor <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">crie um issue no GitHub</a> descrevendo seu problema <strong>antes</strong> de gerar um relatório de suporte. Sem um issue vinculado, os desenvolvedores não podem agir sobre seus dados de suporte."
+        },
+        "githubIssue": {
+          "label": "Número do issue do GitHub",
+          "placeholder": "#123",
+          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Ver issues existentes</a> ou <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">criar um novo issue</a> primeiro"
         },
         "whatsIncluded": {
           "title": "O que está incluído no relatório:",
@@ -880,11 +888,15 @@
         },
         "userMessage": {
           "label": "Descreva o problema",
+          "labelOptional": "Descreva o problema (opcional)",
           "placeholder": "Por favor descreva o problema e inclua o link do issue do GitHub se aplicável (ex: #123)",
-          "githubTip": "💡 Dica: Se você tem um issue no GitHub, inclua o número do issue (ex: #123) e mencione seu ID do Sistema {systemId} no issue do GitHub para ajudar os desenvolvedores a vincular seus dados de suporte."
+          "placeholderOptional": "Adicione detalhes adicionais sobre o problema...",
+          "githubTip": "💡 Dica: Se você tem um issue no GitHub, inclua o número do issue (ex: #123) e mencione seu ID do Sistema {systemId} no issue do GitHub para ajudar os desenvolvedores a vincular seus dados de suporte.",
+          "systemIdNote": "Mencione seu ID do Sistema {systemId} no issue do GitHub."
         },
         "uploadOption": {
           "label": "Enviar para os desenvolvedores (recomendado)",
+          "labelWithRequirement": "Enviar para os desenvolvedores (issue do GitHub obrigatório)",
           "details": {
             "sentryUpload": "Os dados são enviados para o serviço na nuvem [Sentry](https://sentry.io)",
             "euDataCenter": "Armazenados no centro de dados da UE (Frankfurt, Alemanha)",
@@ -903,7 +915,8 @@
           "downloadSuccess": "Relatório de suporte gerado com sucesso! Baixando...",
           "generateSuccess": "Relatório de suporte gerado com sucesso!",
           "generateFailed": "Falha ao gerar relatório de suporte: {message}",
-          "error": "Erro: {message}"
+          "error": "Erro: {message}",
+          "githubIssueRequired": "O número do issue do GitHub é obrigatório."
         }
       }
     },

@@ -869,8 +869,16 @@
       "supportReport": {
         "title": "Luo tukiraportti",
         "description": {
-          "intro": "Tukiraportit ovat **olennaisia vianetsinnässä** ja parantavat dramaattisesti kykyämme ratkaista kohtaamiasi ongelmia. Ne tarjoavat kehittäjille tärkeää kontekstia järjestelmäsi asetuksista, viimeisimmistä sovelluslokeista ja virhemalleista, joita olisi muuten mahdotonta diagnosoida.",
-          "githubIssue": "[Luo GitHub-ongelmaraportti](https://github.com/tphakala/birdnet-go/issues/new) kuvaten ongelmasi **ennen tai jälkeen** tämän tukiraportin luomisen. Tämä mahdollistaa asianmukaisen seurannan ja viestinnän ongelmastasi."
+          "intro": "Tukiraportit ovat **olennaisia vianetsinnässä** ja parantavat dramaattisesti kykyämme ratkaista kohtaamiasi ongelmia. Ne tarjoavat kehittäjille tärkeää kontekstia järjestelmäsi asetuksista, viimeisimmistä sovelluslokeista ja virhemalleista, joita olisi muuten mahdotonta diagnosoida."
+        },
+        "githubRequired": {
+          "title": "Vaaditaan: GitHub-ongelmaraportti tukilähetyksille",
+          "description": "<strong>Tukilähetykset vaativat GitHub-ongelman numeron.</strong> Ole hyvä ja <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">luo GitHub-ongelma</a> kuvaten ongelmasi <strong>ennen</strong> tukiraportin luomista. Ilman linkitettyä ongelmaa kehittäjät eivät voi käsitellä tukitietojasi."
+        },
+        "githubIssue": {
+          "label": "GitHub-ongelman numero",
+          "placeholder": "#123",
+          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Näytä olemassa olevat ongelmat</a> tai <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">luo uusi ongelma</a> ensin"
         },
         "whatsIncluded": {
           "title": "Mitä raportti sisältää:",
@@ -881,11 +889,15 @@
         },
         "userMessage": {
           "label": "Kuvaile ongelma",
+          "labelOptional": "Kuvaile ongelma (valinnainen)",
           "placeholder": "Kuvaile ongelma ja sisällytä GitHub-ongelman linkki jos saatavilla (esim. #123)",
-          "githubTip": "💡 Vinkki: Jos sinulla on GitHub-ongelma, sisällytä ongelman numero (esim. #123) ja mainitse järjestelmätunnuksesi {systemId} GitHub-ongelmassa auttaaksesi kehittäjiä yhdistämään tukitietosi."
+          "placeholderOptional": "Lisää lisätietoja ongelmasta...",
+          "githubTip": "💡 Vinkki: Jos sinulla on GitHub-ongelma, sisällytä ongelman numero (esim. #123) ja mainitse järjestelmätunnuksesi {systemId} GitHub-ongelmassa auttaaksesi kehittäjiä yhdistämään tukitietosi.",
+          "systemIdNote": "Mainitse järjestelmätunnuksesi {systemId} GitHub-ongelmassa."
         },
         "uploadOption": {
           "label": "Lähetä kehittäjille (suositeltu)",
+          "labelWithRequirement": "Lähetä kehittäjille (GitHub-ongelma vaaditaan)",
           "details": {
             "sentryUpload": "Tiedot ladataan [Sentry](https://sentry.io) -pilvipalveluun",
             "euDataCenter": "Tallennetaan EU:n datakeskukseen (Frankfurt, Saksa)",
@@ -904,7 +916,8 @@
           "downloadSuccess": "Tukiraportti luotu onnistuneesti! Ladataan...",
           "generateSuccess": "Tukiraportti luotu onnistuneesti!",
           "generateFailed": "Tukiraportin luonti epäonnistui: {message}",
-          "error": "Virhe: {message}"
+          "error": "Virhe: {message}",
+          "githubIssueRequired": "GitHub-ongelman numero on pakollinen."
         }
       }
     },

@@ -869,8 +869,16 @@
       "supportReport": {
         "title": "Generar informe de soporte",
         "description": {
-          "intro": "Los informes de soporte son **esenciales para la solución de problemas** y mejoran drásticamente nuestra capacidad para resolver los problemas que estás experimentando. Proporcionan a los desarrolladores contexto crucial sobre la configuración de tu sistema, registros recientes de la aplicación y patrones de errores que serían imposibles de diagnosticar de otra manera.",
-          "githubIssue": "Por favor [crea un issue de GitHub](https://github.com/tphakala/birdnet-go/issues/new) describiendo tu problema **antes o después** de generar este informe de soporte. Esto permite un seguimiento y comunicación adecuados sobre tu problema."
+          "intro": "Los informes de soporte son **esenciales para la solución de problemas** y mejoran drásticamente nuestra capacidad para resolver los problemas que estás experimentando. Proporcionan a los desarrolladores contexto crucial sobre la configuración de tu sistema, registros recientes de la aplicación y patrones de errores que serían imposibles de diagnosticar de otra manera."
+        },
+        "githubRequired": {
+          "title": "Requerido: Issue de GitHub para cargas de soporte",
+          "description": "<strong>Las cargas de soporte requieren un número de issue de GitHub.</strong> Por favor <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">crea un issue de GitHub</a> describiendo tu problema <strong>antes</strong> de generar un informe de soporte. Sin un issue vinculado, los desarrolladores no pueden actuar sobre tus datos de soporte."
+        },
+        "githubIssue": {
+          "label": "Número de issue de GitHub",
+          "placeholder": "p.ej., 123 o #123",
+          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Ver issues existentes</a> o <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">crear un nuevo issue</a> primero"
         },
         "whatsIncluded": {
           "title": "Qué incluye el informe:",
@@ -882,10 +890,14 @@
         "userMessage": {
           "label": "Describe el problema",
           "placeholder": "Por favor describe el problema e incluye el enlace del issue de GitHub si aplica (ej., #123)",
-          "githubTip": "💡 Consejo: Si tienes un issue de GitHub, incluye el número del issue (ej., #123) y menciona tu ID de Sistema {systemId} en el issue de GitHub para ayudar a los desarrolladores a vincular tus datos de soporte."
+          "githubTip": "💡 Consejo: Si tienes un issue de GitHub, incluye el número del issue (ej., #123) y menciona tu ID de Sistema {systemId} en el issue de GitHub para ayudar a los desarrolladores a vincular tus datos de soporte.",
+          "labelOptional": "Detalles adicionales (opcional)",
+          "placeholderOptional": "Proporciona contexto adicional sobre el problema que no esté en tu issue de GitHub",
+          "systemIdNote": "💡 Consejo: Tu ID de sistema {systemId} se incluirá automáticamente en la carga"
         },
         "uploadOption": {
           "label": "Subir a los desarrolladores (recomendado)",
+          "labelWithRequirement": "Subir a los desarrolladores (requiere número de issue de GitHub)",
           "details": {
             "sentryUpload": "Los datos se suben al servicio en la nube [Sentry](https://sentry.io)",
             "euDataCenter": "Almacenados en el centro de datos de la UE (Frankfurt, Alemania)",
@@ -904,7 +916,8 @@
           "downloadSuccess": "¡Volcado de soporte generado exitosamente! Descargando...",
           "generateSuccess": "¡Volcado de soporte generado exitosamente!",
           "generateFailed": "Error al generar el volcado de soporte: {message}",
-          "error": "Error: {message}"
+          "error": "Error: {message}",
+          "githubIssueRequired": "Por favor ingresa un número de issue de GitHub para subir los datos de soporte"
         }
       }
     },

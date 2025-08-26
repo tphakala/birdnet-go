@@ -965,8 +965,16 @@
       "supportReport": {
         "title": "Generate Support Report",
         "description": {
-          "intro": "Support reports are **essential for troubleshooting** and dramatically improve our ability to resolve issues you're experiencing. They provide developers with crucial context about your system configuration, recent application logs, and error patterns that would be impossible to diagnose otherwise.",
-          "githubIssue": "Please [create a GitHub issue](https://github.com/tphakala/birdnet-go/issues/new) describing your problem **before or after** generating this support report. This allows for proper tracking and communication about your issue."
+          "intro": "Support reports are **essential for troubleshooting** and dramatically improve our ability to resolve issues you're experiencing. They provide developers with crucial context about your system configuration, recent application logs, and error patterns that would be impossible to diagnose otherwise."
+        },
+        "githubRequired": {
+          "title": "Required: GitHub Issue for Support Uploads",
+          "description": "<strong>Support uploads require a GitHub issue number.</strong> Please <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">create a GitHub issue</a> describing your problem <strong>before</strong> generating a support report. Without a linked issue, developers cannot act on your support data."
+        },
+        "githubIssue": {
+          "label": "GitHub Issue Number",
+          "placeholder": "e.g., 123 or #123",
+          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">View existing issues</a> or <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">create a new issue</a> first"
         },
         "whatsIncluded": {
           "title": "What's included in the report:",
@@ -978,10 +986,14 @@
         "userMessage": {
           "label": "Describe the issue",
           "placeholder": "Please describe the issue and include GitHub issue link if applicable (e.g., #123)",
-          "githubTip": "💡 Tip: If you have a GitHub issue, please include the issue number (e.g., #123) and mention your System ID {systemId} in the GitHub issue to help developers link your support data."
+          "githubTip": "💡 Tip: If you have a GitHub issue, please include the issue number (e.g., #123) and mention your System ID {systemId} in the GitHub issue to help developers link your support data.",
+          "labelOptional": "Additional details (optional)",
+          "placeholderOptional": "Provide any additional context about the issue that isn't in your GitHub issue",
+          "systemIdNote": "💡 Tip: Your System ID {systemId} will be automatically included in the upload"
         },
         "uploadOption": {
           "label": "Upload to developers (recommended)",
+          "labelWithRequirement": "Upload to developers (requires GitHub issue number)",
           "details": {
             "sentryUpload": "Data is uploaded to [Sentry](https://sentry.io) cloud service",
             "euDataCenter": "Stored in EU data center (Frankfurt, Germany)",
@@ -1000,7 +1012,8 @@
           "downloadSuccess": "Support dump generated successfully! Downloading...",
           "generateSuccess": "Support dump generated successfully!",
           "generateFailed": "Failed to generate support dump: {message}",
-          "error": "Error: {message}"
+          "error": "Error: {message}",
+          "githubIssueRequired": "Please enter a GitHub issue number to upload support data"
         }
       }
     },

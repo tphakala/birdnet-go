@@ -81,6 +81,7 @@
     includeLogs: true,
     includeConfig: true,
     includeSystemInfo: true,
+    githubIssueNumber: '',
     userMessage: '',
     uploadToSentry: true,
   });
@@ -157,6 +158,16 @@
 
   // Support dump generation
   async function generateSupportDump() {
+    // Validate GitHub issue number if uploading
+    if (supportDump.uploadToSentry && !supportDump.githubIssueNumber) {
+      updateStatus(
+        t('settings.support.supportReport.statusMessages.githubIssueRequired'),
+        'error',
+        0
+      );
+      return;
+    }
+
     generating = true;
     statusMessage = '';
     statusType = 'info';
@@ -181,6 +192,9 @@
           include_logs: supportDump.includeLogs,
           include_config: supportDump.includeConfig,
           include_system_info: supportDump.includeSystemInfo,
+          github_issue_number: supportDump.githubIssueNumber
+            ? supportDump.githubIssueNumber.replace('#', '')
+            : '',
           user_message: supportDump.userMessage,
           upload_to_sentry: supportDump.uploadToSentry,
         }),
@@ -348,9 +362,17 @@
               {@html t('settings.support.supportReport.description.intro')}
             </p>
 
-            <p class="text-sm text-base-content/80">
-              {@html t('settings.support.supportReport.description.githubIssue')}
-            </p>
+            <div class="alert alert-warning shadow-sm text-sm">
+              <div class="h-5 w-5 flex-shrink-0">{@html alertIconsSvg.warning}</div>
+              <div class="min-w-0">
+                <span class="font-semibold">
+                  {t('settings.support.supportReport.githubRequired.title')}
+                </span>
+                <div class="mt-1">
+                  {@html t('settings.support.supportReport.githubRequired.description')}
+                </div>
+              </div>
+            </div>
 
             <div class="bg-base-100 rounded-lg p-3 border border-base-300">
               <h4 class="font-semibold text-sm mb-2">
@@ -409,87 +431,115 @@
               disabled={generating}
             />
 
+            <!-- GitHub Issue Number (Required for Upload) -->
+            {#if supportDump.uploadToSentry}
+              <div class="form-control mt-4">
+                <label class="label" for="githubIssueNumber">
+                  <span class="label-text">
+                    {t('settings.support.supportReport.githubIssue.label')}
+                    <span class="text-error">*</span>
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  id="githubIssueNumber"
+                  bind:value={supportDump.githubIssueNumber}
+                  class="input input-bordered input-sm text-base-content"
+                  class:input-error={supportDump.uploadToSentry && !supportDump.githubIssueNumber}
+                  placeholder={t('settings.support.supportReport.githubIssue.placeholder')}
+                  pattern="#?[0-9]+"
+                  required={supportDump.uploadToSentry}
+                  disabled={generating}
+                />
+                <div class="label">
+                  <span class="label-text-alt text-base-content/60">
+                    {@html t('settings.support.supportReport.githubIssue.helper')}
+                  </span>
+                </div>
+              </div>
+            {/if}
+
             <!-- User Message -->
             <div class="form-control mt-4">
               <label class="label" for="userMessage">
                 <span class="label-text"
-                  >{t('settings.support.supportReport.userMessage.label')}</span
+                  >{t('settings.support.supportReport.userMessage.labelOptional')}</span
                 >
               </label>
               <textarea
                 id="userMessage"
                 bind:value={supportDump.userMessage}
                 class="textarea textarea-bordered textarea-sm h-24 text-base-content"
-                placeholder={t('settings.support.supportReport.userMessage.placeholder')}
+                placeholder={t('settings.support.supportReport.userMessage.placeholderOptional')}
                 rows="4"
                 disabled={generating}
               ></textarea>
 
-              <!-- GitHub Issue Note -->
+              <!-- System ID Note -->
               <div class="label">
                 <span class="label-text-alt text-base-content/60">
-                  {t('settings.support.supportReport.userMessage.githubTip', { systemId })}
+                  {t('settings.support.supportReport.userMessage.systemIdNote', { systemId })}
                 </span>
               </div>
             </div>
 
-            <!-- Upload Option (only shown if telemetry is enabled) -->
-            {#if settings.sentry!.enabled}
-              <div class="mt-4">
-                <Checkbox
-                  bind:checked={supportDump.uploadToSentry}
-                  label={t('settings.support.supportReport.uploadOption.label')}
-                  disabled={generating}
-                />
-                <div class="pl-6 mt-2 space-y-2">
-                  <div class="text-xs text-base-content/60">
-                    <p class="flex items-start gap-1">
-                      {@html actionIcons.check}
-                      {@html t('settings.support.supportReport.uploadOption.details.sentryUpload')}
-                    </p>
-                    <p class="flex items-start gap-1">
-                      {@html systemIcons.globe}
-                      {t('settings.support.supportReport.uploadOption.details.euDataCenter')}
-                    </p>
-                    <p class="flex items-start gap-1">
-                      {@html systemIcons.shield}
-                      {t('settings.support.supportReport.uploadOption.details.privacyCompliant')}
-                    </p>
-                  </div>
-                  <div class="text-xs text-warning/80 flex items-center gap-1">
-                    {@html systemIcons.infoCircle}
-                    {t('settings.support.supportReport.uploadOption.details.manualWarning')}
-                  </div>
+            <!-- Upload Option (always available) -->
+            <div class="mt-4">
+              <Checkbox
+                bind:checked={supportDump.uploadToSentry}
+                label={t('settings.support.supportReport.uploadOption.labelWithRequirement')}
+                disabled={generating}
+              />
+              <div class="pl-6 mt-2 space-y-2">
+                <div class="text-xs text-base-content/60">
+                  <p class="flex items-start gap-1">
+                    {@html actionIcons.check}
+                    {@html t('settings.support.supportReport.uploadOption.details.sentryUpload')}
+                  </p>
+                  <p class="flex items-start gap-1">
+                    {@html systemIcons.globe}
+                    {t('settings.support.supportReport.uploadOption.details.euDataCenter')}
+                  </p>
+                  <p class="flex items-start gap-1">
+                    {@html systemIcons.shield}
+                    {t('settings.support.supportReport.uploadOption.details.privacyCompliant')}
+                  </p>
+                </div>
+                <div class="text-xs text-warning/80 flex items-center gap-1">
+                  {@html systemIcons.infoCircle}
+                  {t('settings.support.supportReport.uploadOption.details.manualWarning')}
                 </div>
               </div>
-            {/if}
+            </div>
           </div>
 
           <!-- Status Message -->
           {#if statusMessage}
-            <div class="mt-4">
+            <div class="mt-3 max-w-2xl">
               <div
-                class="alert"
+                class="alert py-2 px-3 text-sm"
                 class:alert-info={statusType === 'info'}
                 class:alert-success={statusType === 'success'}
                 class:alert-error={statusType === 'error'}
               >
-                {#if statusType === 'info'}
-                  {@html alertIconsSvg.info}
-                {:else if statusType === 'success'}
-                  {@html alertIconsSvg.success}
-                {:else if statusType === 'error'}
-                  {@html alertIconsSvg.error}
-                {/if}
-                <span>{statusMessage}</span>
+                <div class="h-4 w-4 flex-shrink-0">
+                  {#if statusType === 'info'}
+                    {@html alertIconsSvg.info}
+                  {:else if statusType === 'success'}
+                    {@html alertIconsSvg.success}
+                  {:else if statusType === 'error'}
+                    {@html alertIconsSvg.error}
+                  {/if}
+                </div>
+                <span class="min-w-0 text-sm">{statusMessage}</span>
               </div>
 
               <!-- Progress Bar -->
               {#if generating && progressPercent > 0}
-                <div class="mt-2">
-                  <div class="w-full bg-base-300 rounded-full h-2">
+                <div class="mt-1">
+                  <div class="w-full bg-base-300 rounded-full h-1.5">
                     <div
-                      class="bg-primary h-2 rounded-full transition-all duration-500"
+                      class="bg-primary h-1.5 rounded-full transition-all duration-500"
                       style:width="{progressPercent}%"
                     ></div>
                   </div>
@@ -505,12 +555,14 @@
               disabled={generating ||
                 (!supportDump.includeLogs &&
                   !supportDump.includeConfig &&
-                  !supportDump.includeSystemInfo)}
+                  !supportDump.includeSystemInfo) ||
+                (supportDump.uploadToSentry && !supportDump.githubIssueNumber)}
               class="btn btn-primary"
               class:btn-disabled={generating ||
                 (!supportDump.includeLogs &&
                   !supportDump.includeConfig &&
-                  !supportDump.includeSystemInfo)}
+                  !supportDump.includeSystemInfo) ||
+                (supportDump.uploadToSentry && !supportDump.githubIssueNumber)}
             >
               {#if !generating}
                 <span class="flex items-center gap-2">
