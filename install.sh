@@ -479,7 +479,9 @@ capture_current_image_hash() {
         if [ -n "$canonical_id" ]; then
             current_image="$BIRDNET_GO_IMAGE"
             image_hash="$canonical_id"
-            log_message "INFO" "Using BIRDNET_GO_IMAGE environment variable: $current_image (ID: ${canonical_id:0:12}...)"
+            # Strip sha256: prefix and use first 12 chars for display
+            local normalized_id="${canonical_id#sha256:}"
+            log_message "INFO" "Using BIRDNET_GO_IMAGE environment variable: $current_image (ID: ${normalized_id:0:12}...)"
         elif safe_docker images --format "{{.Repository}}:{{.Tag}}" | grep -Fxq "${BIRDNET_GO_IMAGE}" 2>/dev/null; then
             # Fall back to checking if image exists in local images (exact match)
             current_image="$BIRDNET_GO_IMAGE"
@@ -533,7 +535,9 @@ capture_current_image_hash() {
         
         if [ -n "$image_hash" ]; then
             log_message "INFO" "Current image: $image_tag"
-            log_message "INFO" "Image hash: $image_hash"
+            # Strip sha256: prefix and use first 12 chars for display
+            local normalized_hash="${image_hash#sha256:}"
+            log_message "INFO" "Image hash: ${normalized_hash:0:12}..."
             
             # Generate fresh timestamp for this capture
             local capture_timestamp
@@ -813,7 +817,7 @@ revert_to_version() {
     
     # First check if image is already available locally
     local local_image_check
-    local_image_check=$(safe_docker images --no-trunc --format "{{.ID}}" | grep "^$image_hash" 2>/dev/null)
+    local_image_check=$(safe_docker images --no-trunc --format "{{.ID}}" | grep -F "$image_hash" 2>/dev/null)
     
     if [ -n "$local_image_check" ]; then
         log_message "INFO" "Target image already available locally: $image_hash"
@@ -821,7 +825,7 @@ revert_to_version() {
         log_message "INFO" "Target image not found locally, attempting to pull: $image_tag"
         
         # Try pulling by tag (hash-based pulls are not typically supported in registries)
-        if ! docker pull "$image_tag" 2>/dev/null; then
+        if ! safe_docker pull "$image_tag" 2>/dev/null; then
             log_message "ERROR" "Failed to pull target image: $image_tag"
             log_message "WARN" "The target image may no longer be available in the registry"
             
@@ -837,7 +841,7 @@ revert_to_version() {
             fi
             
             # Check again for local image
-            local_image_check=$(safe_docker images --no-trunc --format "{{.ID}}" | grep "^$image_hash" 2>/dev/null)
+            local_image_check=$(safe_docker images --no-trunc --format "{{.ID}}" | grep -F "$image_hash" 2>/dev/null)
             if [ -z "$local_image_check" ]; then
                 log_message "ERROR" "Target image not available locally either"
                 print_message "❌ Target image not available locally or remotely" "$RED"
@@ -866,7 +870,8 @@ revert_to_version() {
             
             # Create backup of current config first
             if [ -f "$CONFIG_FILE" ]; then
-                local current_backup="${CONFIG_BACKUP_PREFIX}pre-revert-${LOG_TIMESTAMP}.yaml"
+                local pre_revert_timestamp=$(date '+%Y%m%d-%H%M%S')
+                local current_backup="${CONFIG_BACKUP_PREFIX}pre-revert-${pre_revert_timestamp}.yaml"
                 cp "$CONFIG_FILE" "$CONFIG_DIR/$current_backup" 2>/dev/null
                 log_message "INFO" "Current config backed up as: $current_backup"
             fi
@@ -4089,7 +4094,7 @@ log_message "INFO" "=== Installation Summary ==="
 log_message "INFO" "Process type: $(detect_process_type "$INSTALLATION_TYPE" "$PRESERVED_DATA" "$FRESH_INSTALL")"
 log_message "INFO" "Configuration directory: $CONFIG_DIR"
 log_message "INFO" "Data directory: $DATA_DIR"  
-log_message "INFO" "Web interface port: $WEB_PORT"
+log_message "INFO" "Web interface port: ${WEB_PORT:-8080}"
 log_message "INFO" "Service responsive: $final_service_responsive"
 
 print_message ""
