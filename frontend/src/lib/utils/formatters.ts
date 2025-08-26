@@ -3,13 +3,16 @@
  */
 
 import { safeArrayAccess } from './security';
+import { parseLocalDateString } from './date';
 
 /**
  * Format date to locale string
  */
-export function formatDate(date: Date | string | number): string {
-  const d = new Date(date);
-  if (isNaN(d.getTime())) return '';
+export function formatDate(date: Date | string | number | null | undefined): string {
+  if (date === null || date === undefined) return '';
+
+  const d = typeof date === 'string' ? parseLocalDateString(date) : new Date(date);
+  if (!d || isNaN(d.getTime())) return '';
 
   return d.toLocaleDateString();
 }
@@ -17,9 +20,11 @@ export function formatDate(date: Date | string | number): string {
 /**
  * Format date and time to locale string
  */
-export function formatDateTime(date: Date | string | number): string {
-  const d = new Date(date);
-  if (isNaN(d.getTime())) return '';
+export function formatDateTime(date: Date | string | number | null | undefined): string {
+  if (date === null || date === undefined) return '';
+
+  const d = typeof date === 'string' ? parseLocalDateString(date) : new Date(date);
+  if (!d || isNaN(d.getTime())) return '';
 
   return d.toLocaleString();
 }
@@ -30,8 +35,8 @@ export function formatDateTime(date: Date | string | number): string {
 export function formatDateForInput(date: Date | string | number | null): string {
   if (!date) return '';
 
-  const d = new Date(date);
-  if (isNaN(d.getTime())) return '';
+  const d = typeof date === 'string' ? parseLocalDateString(date) : new Date(date);
+  if (!d || isNaN(d.getTime())) return '';
 
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -119,9 +124,11 @@ export function formatBytes(bytes: number, decimals: number = 2): string {
 /**
  * Format relative time (e.g., "2 hours ago", "in 3 days")
  */
-export function formatRelativeTime(date: Date | string | number): string {
-  const d = new Date(date);
-  if (isNaN(d.getTime())) return '';
+export function formatRelativeTime(date: Date | string | number | null | undefined): string {
+  if (date === null || date === undefined) return '';
+
+  const d = typeof date === 'string' ? parseLocalDateString(date) : new Date(date);
+  if (!d || isNaN(d.getTime())) return '';
 
   const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - d.getTime()) / 1000);
@@ -147,10 +154,10 @@ export function formatRelativeTime(date: Date | string | number): string {
  * Format duration between two dates
  */
 export function formatDuration(start: Date | string | number, end: Date | string | number): string {
-  const startDate = new Date(start);
-  const endDate = new Date(end);
+  const startDate = typeof start === 'string' ? parseLocalDateString(start) : new Date(start);
+  const endDate = typeof end === 'string' ? parseLocalDateString(end) : new Date(end);
 
-  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return '';
+  if (!startDate || !endDate || isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return '';
 
   const diffInSeconds = Math.abs(endDate.getTime() - startDate.getTime()) / 1000;
 
@@ -191,6 +198,5 @@ export function formatFileSize(bytes: number): string {
  * Parse and format ISO date string to local date
  */
 export function parseISODate(isoString: string): Date | null {
-  const date = new Date(isoString);
-  return isNaN(date.getTime()) ? null : date;
+  return parseLocalDateString(isoString);
 }

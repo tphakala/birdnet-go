@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   getLocalDateString,
+  parseLocalDateString,
   isToday,
   isFutureDate,
   parseHour,
@@ -52,6 +53,80 @@ describe('Date Utilities', () => {
 
       const nextDay = new Date('2024-01-01T00:00:00');
       expect(getLocalDateString(nextDay)).toBe('2024-01-01');
+    });
+  });
+
+  describe('parseLocalDateString', () => {
+    it('parses YYYY-MM-DD format at noon to avoid timezone issues', () => {
+      const result = parseLocalDateString('2025-08-25');
+      expect(result).toBeInstanceOf(Date);
+      expect(result?.getHours()).toBe(12); // Should be noon
+      expect(result?.getFullYear()).toBe(2025);
+      expect(result?.getMonth()).toBe(7); // August (0-indexed)
+      expect(result?.getDate()).toBe(25);
+    });
+
+    it('handles ISO 8601 format with time correctly', () => {
+      const result = parseLocalDateString('2025-08-25T10:30:00Z');
+      expect(result).toBeInstanceOf(Date);
+      expect(result?.toISOString()).toBe('2025-08-25T10:30:00.000Z');
+    });
+
+    it('returns same Date object when passed a Date', () => {
+      const date = new Date('2025-08-25T12:00:00');
+      const result = parseLocalDateString(date);
+      expect(result).toBe(date);
+    });
+
+    it('returns null for invalid date strings', () => {
+      expect(parseLocalDateString('invalid')).toBeNull();
+      expect(parseLocalDateString('2025-13-45')).toBeNull(); // Invalid month/day
+      expect(parseLocalDateString('not-a-date')).toBeNull();
+    });
+
+    it('returns null for null or undefined input', () => {
+      expect(parseLocalDateString(null)).toBeNull();
+      expect(parseLocalDateString(undefined)).toBeNull();
+      expect(parseLocalDateString('')).toBeNull();
+    });
+
+    it('handles Date object with invalid time', () => {
+      const invalidDate = new Date('invalid');
+      expect(parseLocalDateString(invalidDate)).toBeNull();
+    });
+
+    it('preserves the date across timezone boundaries', () => {
+      // When parsing 2025-08-25, it should always represent Aug 25 regardless of timezone
+      const date = parseLocalDateString('2025-08-25');
+      expect(date).not.toBeNull();
+      if (date) {
+        expect(getLocalDateString(date)).toBe('2025-08-25');
+      }
+    });
+
+    it('handles edge cases for date boundaries', () => {
+      // First day of month
+      const firstDay = parseLocalDateString('2025-08-01');
+      expect(firstDay?.getDate()).toBe(1);
+
+      // Last day of month
+      const lastDay = parseLocalDateString('2025-08-31');
+      expect(lastDay?.getDate()).toBe(31);
+
+      // Leap year
+      const leapDay = parseLocalDateString('2024-02-29');
+      expect(leapDay?.getDate()).toBe(29);
+      expect(leapDay?.getMonth()).toBe(1); // February
+    });
+
+    it('round-trips correctly with getLocalDateString', () => {
+      const dateString = '2025-08-25';
+      const parsed = parseLocalDateString(dateString);
+      expect(parsed).not.toBeNull();
+      if (parsed) {
+        const formatted = getLocalDateString(parsed);
+        expect(formatted).toBe(dateString);
+      }
     });
   });
 

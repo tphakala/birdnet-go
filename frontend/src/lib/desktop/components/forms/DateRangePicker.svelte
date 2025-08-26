@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { formatDateForInput, formatDate } from '$lib/utils/formatters';
+  import { parseLocalDateString } from '$lib/utils/date';
   import FormField from './FormField.svelte';
   import { alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
@@ -49,8 +50,8 @@
   let effectiveEndLabel = $derived(endLabel ?? t('forms.dateRange.labels.endDate'));
 
   // Convert dates to proper Date objects
-  let startDateObj = $derived(startDate ? new Date(startDate) : null);
-  let endDateObj = $derived(endDate ? new Date(endDate) : null);
+  let startDateObj = $derived(startDate ? parseLocalDateString(startDate) : null);
+  let endDateObj = $derived(endDate ? parseLocalDateString(endDate) : null);
 
   // Format dates for input fields
   let startDateFormatted = $derived(formatDateForInput(startDateObj));
@@ -147,7 +148,7 @@
 
   function handleStartDateChange(value: string | number | boolean | string[]) {
     const dateStr = value as string;
-    const newDate = dateStr ? new Date(dateStr) : null;
+    const newDate = dateStr ? parseLocalDateString(dateStr) : null;
 
     if (newDate && isNaN(newDate.getTime())) {
       error = t('forms.dateRange.errors.invalidStartDate');
@@ -168,7 +169,7 @@
 
   function handleEndDateChange(value: string | number | boolean | string[]) {
     const dateStr = value as string;
-    const newDate = dateStr ? new Date(dateStr) : null;
+    const newDate = dateStr ? parseLocalDateString(dateStr) : null;
 
     if (newDate && isNaN(newDate.getTime())) {
       error = t('forms.dateRange.errors.invalidEndDate');

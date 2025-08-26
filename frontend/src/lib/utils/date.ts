@@ -17,6 +17,37 @@ export function getLocalDateString(date: Date = new Date()): string {
 }
 
 /**
+ * Parse a date string (YYYY-MM-DD format) into a Date object safely
+ * This avoids timezone issues by creating the date at noon local time
+ *
+ * @param dateString - Date string in YYYY-MM-DD format, ISO 8601, or Date object
+ * @returns Date object representing the date in local timezone, or null if invalid
+ * @example
+ * parseLocalDateString('2025-08-25') // Returns Date at noon on Aug 25, 2025
+ * parseLocalDateString('2025-08-25T10:30:00Z') // Returns the exact date/time
+ * parseLocalDateString(new Date()) // Returns the same Date object
+ */
+export function parseLocalDateString(dateString: string | Date | null | undefined): Date | null {
+  if (!dateString) return null;
+
+  // If already a Date object, return it
+  if (dateString instanceof Date) {
+    return isNaN(dateString.getTime()) ? null : dateString;
+  }
+
+  // Handle YYYY-MM-DD format specifically to avoid timezone issues
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    // Parse at noon local time to avoid timezone boundary issues
+    const date = new Date(dateString + 'T12:00:00');
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  // For other formats (ISO 8601 with time), parse normally
+  const date = new Date(dateString);
+  return isNaN(date.getTime()) ? null : date;
+}
+
+/**
  * Check if a date string represents today in the local timezone
  *
  * @param dateString - Date string in YYYY-MM-DD format
