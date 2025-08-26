@@ -28,6 +28,9 @@ LOG_DIR="$HOME/birdnet-go-app/logs"
 LOG_TIMESTAMP=$(date '+%Y%m%d-%H%M%S')
 LOG_FILE="$LOG_DIR/install-${LOG_TIMESTAMP}.log"
 
+# Initialize logging system early
+setup_logging
+
 # Version management configuration
 MAX_CONFIG_BACKUPS=10
 VERSION_HISTORY_FILE="$LOG_DIR/version_history.log"
@@ -64,6 +67,19 @@ append_version_history() {
     if [ -z "$entry" ]; then
         log_message "ERROR" "Cannot append empty entry to version history"
         return 1
+    fi
+    
+    # Validate entry format before writing
+    if ! validate_version_history_entry "$entry"; then
+        log_message "ERROR" "Invalid version history entry format, refusing to append: $entry"
+        return 2
+    fi
+    
+    # Ensure version history file exists with secure permissions
+    if [ ! -f "$VERSION_HISTORY_FILE" ]; then
+        touch "$VERSION_HISTORY_FILE"
+        chmod 600 "$VERSION_HISTORY_FILE" 2>/dev/null
+        log_message "INFO" "Created version history file with secure permissions"
     fi
     
     # Use flock for atomic append operation
@@ -128,8 +144,8 @@ log_message() {
     
     # Only log if LOG_FILE is set and accessible
     if [ -n "$LOG_FILE" ] && [ -w "$LOG_FILE" ]; then
-        # Create timestamp in ISO 8601 format
-        local timestamp=$(date '+%Y-%m-%d %H:%M:%S %Z')
+        # Create timestamp in UTC ISO 8601 format with RFC3339 compliance
+        local timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
         # Sanitize the message before logging
         local sanitized_message
         sanitized_message=$(echo "$message" | sanitize_for_logs)
@@ -413,6 +429,7 @@ log_enhanced_session_info() {
     # Detect and log process type
     local process_type
     process_type=$(detect_process_type "$installation_type" "$preserved_data" "$fresh_install")
+    log_message "INFO" "Process type detected: $process_type"
     
     # Log Docker and service state
     log_docker_state "pre-process"
@@ -463,7 +480,7 @@ capture_current_image_hash() {
             current_image="$BIRDNET_GO_IMAGE"
             image_hash="$canonical_id"
             log_message "INFO" "Using BIRDNET_GO_IMAGE environment variable: $current_image (ID: ${canonical_id:0:12}...)"
-        elif safe_docker images --format "{{.Repository}}:{{.Tag}}" | grep -F -x "${BIRDNET_GO_IMAGE}" 2>/dev/null; then
+        elif safe_docker images --format "{{.Repository}}:{{.Tag}}" | grep -Fxq "${BIRDNET_GO_IMAGE}" 2>/dev/null; then
             # Fall back to checking if image exists in local images (exact match)
             current_image="$BIRDNET_GO_IMAGE"
             log_message "INFO" "Found BIRDNET_GO_IMAGE in local images: $current_image"
@@ -2407,8 +2424,10 @@ configure_location() {
             fi
             # Update config file and return
             sed -i "s/latitude: 00.000/latitude: $lat/" "$CONFIG_FILE"
+            local sed_result=$?
             sed -i "s/longitude: 00.000/longitude: $lon/" "$CONFIG_FILE"
-            log_command_result "sed location configuration" $? "updating coordinates in config file"
+            sed_result=$((sed_result + $?))
+            log_command_result "sed latitude/longitude update" "$sed_result" "updating location coordinates in config file"
             return
         else
             log_message "INFO" "User rejected IP-based location, will configure manually"
@@ -2483,8 +2502,10 @@ configure_location() {
     # Update config file
     log_message "INFO" "Location configured manually, updating config file"
     sed -i "s/latitude: 00.000/latitude: $lat/" "$CONFIG_FILE"
+    local sed_result=$?
     sed -i "s/longitude: 00.000/longitude: $lon/" "$CONFIG_FILE"
-    log_command_result "sed location configuration" $? "updating coordinates in config file"
+    sed_result=$((sed_result + $?))
+    log_command_result "sed latitude/longitude update" "$sed_result" "updating location coordinates in config file"
 }
 
 # Function to configure basic authentication
@@ -3508,8 +3529,6 @@ FRESH_INSTALL="false"
 # Configured timezone (will be set during configuration)
 CONFIGURED_TZ=""
 
-# Initialize logging system early
-setup_logging
 
 # Load telemetry configuration if it exists
 load_telemetry_config
@@ -4056,11 +4075,11 @@ fi
 final_service_responsive="false" 
 if systemctl is-active --quiet birdnet-go.service; then
     # Check if web interface is responding
-    if curl -s -f --connect-timeout 5 "http://localhost:${WEB_PORT}" >/dev/null 2>&1; then
+    if curl -s -f --connect-timeout 5 "http://localhost:${WEB_PORT:-8080}" >/dev/null 2>&1; then
         final_service_responsive="true"
-        log_message "INFO" "Final validation: Web interface responding on port ${WEB_PORT}"
+        log_message "INFO" "Final validation: Web interface responding on port ${WEB_PORT:-8080}"
     else
-        log_message "WARN" "Final validation: Web interface not responding on port ${WEB_PORT}"
+        log_message "WARN" "Final validation: Web interface not responding on port ${WEB_PORT:-8080}"
     fi
 else
     log_message "ERROR" "Final validation: Service not active"
