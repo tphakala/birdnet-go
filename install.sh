@@ -40,6 +40,7 @@ umask 077
 cleanup_temp_files() {
     rm -f /tmp/version_history_*.tmp 2>/dev/null
     rm -f "$LOG_DIR/.last_backup_time" 2>/dev/null
+    rm -f "$VERSION_HISTORY_FILE.lock" 2>/dev/null
 }
 trap cleanup_temp_files EXIT INT TERM
 
@@ -54,6 +55,30 @@ validate_version_history_entry() {
         log_message "WARN" "Invalid version history entry format: $line"
         return 1
     fi
+}
+
+# Atomic append to version history file with locking
+append_version_history() {
+    local entry="$1"
+    
+    if [ -z "$entry" ]; then
+        log_message "ERROR" "Cannot append empty entry to version history"
+        return 1
+    fi
+    
+    # Use flock for atomic append operation
+    (
+        flock -x 200
+        echo "$entry" >> "$VERSION_HISTORY_FILE"
+    ) 200>"$VERSION_HISTORY_FILE.lock"
+    
+    local result=$?
+    if [ $result -eq 0 ]; then
+        log_message "INFO" "Version history entry appended atomically"
+    else
+        log_message "ERROR" "Failed to append to version history (exit code: $result)"
+    fi
+    return $result
 }
 
 # Function to setup logging directory
@@ -88,6 +113,14 @@ setup_logging() {
     fi
 }
 
+# Redact credentials and obvious secrets from log lines
+sanitize_for_logs() {
+    # Redact URL basic-auth creds: scheme://user:pass@host -> scheme://***:***@host
+    # Also redact common secret patterns like password: value
+    sed -E 's#(://)[^/@:]+(:[^/@]*)?@#\1***:***@#g' \
+    | sed -E 's#(password|passwd|pwd|token|secret|api[_-]?key)["'"'"']?\s*[:=]\s*[^"'"'"'[:space:]]+#\1: ***#Ig'
+}
+
 # Function to log messages with timestamps
 log_message() {
     local level="$1"
@@ -97,8 +130,11 @@ log_message() {
     if [ -n "$LOG_FILE" ] && [ -w "$LOG_FILE" ]; then
         # Create timestamp in ISO 8601 format
         local timestamp=$(date '+%Y-%m-%d %H:%M:%S %Z')
+        # Sanitize the message before logging
+        local sanitized_message
+        sanitized_message=$(echo "$message" | sanitize_for_logs)
         # Append to log file
-        echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
+        echo "[$timestamp] [$level] $sanitized_message" >> "$LOG_FILE"
     fi
 }
 
@@ -128,15 +164,19 @@ print_message() {
         echo -e "${color}${message}${NC}"
     fi
     
-    # Log the message (strip ANSI color codes for clean logs)
+    # Strip ANSI and sanitize before logging
+    local log_line
+    log_line="$(echo "$message" | sed 's/\x1b\[[0-9;]*m//g' | sanitize_for_logs)"
+    
+    # Log the message with appropriate level
     if [[ "$message" == *"❌"* ]] || [[ "$message" == *"ERROR"* ]] || [[ "$message" == *"Failed"* ]] || [[ "$message" == *"failed"* ]]; then
-        log_message "ERROR" "$(echo "$message" | sed 's/\x1b\[[0-9;]*m//g')"
+        log_message "ERROR" "$log_line"
     elif [[ "$message" == *"⚠️"* ]] || [[ "$message" == *"WARNING"* ]] || [[ "$message" == *"Warning"* ]]; then
-        log_message "WARN" "$(echo "$message" | sed 's/\x1b\[[0-9;]*m//g')"
+        log_message "WARN" "$log_line"
     elif [[ "$message" == *"✅"* ]] || [[ "$message" == *"Success"* ]]; then
-        log_message "INFO" "$(echo "$message" | sed 's/\x1b\[[0-9;]*m//g')"
+        log_message "INFO" "$log_line"
     else
-        log_message "INFO" "$(echo "$message" | sed 's/\x1b\[[0-9;]*m//g')"
+        log_message "INFO" "$log_line"
     fi
 }
 
@@ -415,11 +455,16 @@ capture_current_image_hash() {
     
     # Check if BIRDNET_GO_IMAGE is set and verify it exists locally
     if [ -n "$BIRDNET_GO_IMAGE" ]; then
-        # Verify the image exists via docker inspect or images
-        if safe_docker inspect "$BIRDNET_GO_IMAGE" >/dev/null 2>&1; then
+        # Try to get canonical image ID via docker inspect
+        local canonical_id
+        canonical_id=$(safe_docker inspect --format '{{.Id}}' "$BIRDNET_GO_IMAGE" 2>/dev/null)
+        
+        if [ -n "$canonical_id" ]; then
             current_image="$BIRDNET_GO_IMAGE"
-            log_message "INFO" "Using BIRDNET_GO_IMAGE environment variable: $current_image"
-        elif safe_docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${BIRDNET_GO_IMAGE}$" 2>/dev/null; then
+            image_hash="$canonical_id"
+            log_message "INFO" "Using BIRDNET_GO_IMAGE environment variable: $current_image (ID: ${canonical_id:0:12}...)"
+        elif safe_docker images --format "{{.Repository}}:{{.Tag}}" | grep -F -x "${BIRDNET_GO_IMAGE}" 2>/dev/null; then
+            # Fall back to checking if image exists in local images (exact match)
             current_image="$BIRDNET_GO_IMAGE"
             log_message "INFO" "Found BIRDNET_GO_IMAGE in local images: $current_image"
         else
@@ -456,16 +501,30 @@ capture_current_image_hash() {
     
     # Get image hash and details
     if [ -n "$current_image" ]; then
-        image_hash=$(safe_docker images --no-trunc --format "{{.ID}}" "$current_image" 2>/dev/null | head -1)
+        # Try to get canonical ID first, fall back to image hash
+        if [ -z "$image_hash" ]; then
+            # Try docker inspect first for canonical ID
+            image_hash=$(safe_docker inspect --format '{{.Id}}' "$current_image" 2>/dev/null)
+            
+            # Fall back to docker images if inspect fails
+            if [ -z "$image_hash" ]; then
+                image_hash=$(safe_docker images --no-trunc --format "{{.ID}}" "$current_image" 2>/dev/null | head -1)
+            fi
+        fi
+        
         image_tag="${current_image}"
         
         if [ -n "$image_hash" ]; then
             log_message "INFO" "Current image: $image_tag"
             log_message "INFO" "Image hash: $image_hash"
             
+            # Generate fresh timestamp for this capture
+            local capture_timestamp
+            capture_timestamp=$(date '+%Y%m%d-%H%M%S')
+            
             # Store in version history file format: timestamp|image_hash|config_backup|image_tag|context
-            echo "${LOG_TIMESTAMP}|${image_hash}|none|${image_tag}|${context}" >> "$VERSION_HISTORY_FILE"
-            log_message "INFO" "Image version captured and recorded in history"
+            local version_entry="${capture_timestamp}|${image_hash}|none|${image_tag}|${context}"
+            append_version_history "$version_entry"
             
             # Return the hash for use by calling functions
             echo "$image_hash"
@@ -506,8 +565,10 @@ backup_config_with_version() {
     
     log_message "INFO" "=== Creating Config Backup ($context) ==="
     
-    # Create backup filename with timestamp
-    local backup_filename="${CONFIG_BACKUP_PREFIX}${LOG_TIMESTAMP}.yaml"
+    # Create backup filename with a per-action timestamp
+    local backup_timestamp
+    backup_timestamp=$(date '+%Y%m%d-%H%M%S')
+    local backup_filename="${CONFIG_BACKUP_PREFIX}${backup_timestamp}.yaml"
     local backup_path="$CONFIG_DIR/$backup_filename"
     
     # Create backup
@@ -520,13 +581,25 @@ backup_config_with_version() {
         
         # Update version history with backup info
         if [ -n "$image_hash" ]; then
-            # Update the entry matching this image_hash to include backup filename
+            # Update only the most recent entry matching this image_hash with empty backup
             local temp_file
             temp_file=$(mktemp /tmp/version_history_XXXXXX.tmp)
             if [ -f "$VERSION_HISTORY_FILE" ]; then
-                # Match by image_hash to update the intended row atomically
+                # Store lines and find last matching row index, then update only that row
                 awk -F'|' -v OFS='|' -v ih="$image_hash" -v bf="$backup_filename" '
-                  $2==ih && $3=="none" { $3=bf } { print }
+                  { lines[NR]=$0 }
+                  $2==ih && $3=="none" { idx=NR }
+                  END {
+                    for (i=1; i<=NR; i++) {
+                      if (i==idx) {
+                        split(lines[i], a, "|"); 
+                        a[3]=bf;
+                        print a[1] OFS a[2] OFS a[3] OFS a[4] OFS a[5]
+                      } else {
+                        print lines[i]
+                      }
+                    }
+                  }
                 ' "$VERSION_HISTORY_FILE" > "$temp_file"
                 mv "$temp_file" "$VERSION_HISTORY_FILE"
                 rm -f "$temp_file" 2>/dev/null  # Clean up in case mv failed
@@ -579,7 +652,8 @@ cleanup_old_backups() {
                 if [ -f "$VERSION_HISTORY_FILE" ]; then
                     local cleanup_temp
                     cleanup_temp=$(mktemp /tmp/version_history_cleanup_XXXXXX.tmp)
-                    grep -v "|${backup_name}|" "$VERSION_HISTORY_FILE" > "$cleanup_temp" 2>/dev/null
+                    # Use grep -F for fixed-string matching to avoid regex interpretation
+                    grep -F -v "|${backup_name}|" "$VERSION_HISTORY_FILE" > "$cleanup_temp" 2>/dev/null
                     mv "$cleanup_temp" "$VERSION_HISTORY_FILE" 2>/dev/null
                     rm -f "$cleanup_temp" 2>/dev/null  # Clean up in case mv failed
                 fi
@@ -844,9 +918,11 @@ revert_to_version() {
         print_message "⚠️ Version reverted, but service may still be starting..." "$YELLOW"
     fi
     
-    # Record the revert operation
-    echo "${LOG_TIMESTAMP}|${image_hash}|$([ "$config_reverted" = "true" ] && echo "$config_backup" || echo "none")|${image_tag}|REVERT" >> "$VERSION_HISTORY_FILE"
-    log_message "INFO" "Revert operation recorded in version history"
+    # Record the revert operation with fresh timestamp
+    local revert_timestamp
+    revert_timestamp=$(date '+%Y%m%d-%H%M%S')
+    local revert_entry="${revert_timestamp}|${image_hash}|$([ "$config_reverted" = "true" ] && echo "$config_backup" || echo "none")|${image_tag}|REVERT"
+    append_version_history "$revert_entry"
     
     return 0
 }
