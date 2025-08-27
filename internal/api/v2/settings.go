@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -18,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // UpdateRequest represents a request to update settings
@@ -717,9 +719,16 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 
 // handleGenericSection handles updates to any settings section using merging
 func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName string, skippedFields *[]string) error {
-	// Use mergeJSONIntoStruct to preserve fields not included in the update
-	if err := mergeJSONIntoStruct(data, sectionPtr); err != nil {
-		return fmt.Errorf("failed to merge settings for section %s: %w", sectionName, err)
+	// Special handling for security section - hash passwords before merging
+	if sectionName == "security" {
+		if err := handleSecuritySectionWithHashing(sectionPtr, data, skippedFields); err != nil {
+			return err
+		}
+	} else {
+		// Use mergeJSONIntoStruct to preserve fields not included in the update
+		if err := mergeJSONIntoStruct(data, sectionPtr); err != nil {
+			return fmt.Errorf("failed to merge settings for section %s: %w", sectionName, err)
+		}
 	}
 
 	// Apply field-level permissions if needed
@@ -747,6 +756,55 @@ func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName stri
 			// The actual blocking happens in updateAllowedFieldsRecursivelyWithTracking
 			*skippedFields = append(*skippedFields, fmt.Sprintf("Section %s has field-level restrictions", sectionName))
 		}
+	}
+
+	return nil
+}
+
+// handleSecuritySectionWithHashing handles security section updates with password hashing
+func handleSecuritySectionWithHashing(sectionPtr any, data json.RawMessage, skippedFields *[]string) error {
+	securitySettings, ok := sectionPtr.(*conf.Security)
+	if !ok {
+		return fmt.Errorf("invalid security section type")
+	}
+
+	// Parse the incoming update data
+	var updateData map[string]any
+	if err := json.Unmarshal(data, &updateData); err != nil {
+		return fmt.Errorf("failed to unmarshal security update data: %w", err)
+	}
+
+	// Store the current password hash if we have one
+	currentPasswordHash := securitySettings.BasicAuth.Password
+
+	// Check if basic auth settings are being updated
+	if basicAuthData, exists := updateData["basicAuth"]; exists {
+		if basicAuthMap, ok := basicAuthData.(map[string]any); ok {
+			// Check if a new password is being set
+			if newPassword, hasPassword := basicAuthMap["password"].(string); hasPassword && newPassword != "" {
+				// Check if the password starts with "$2a$" (bcrypt prefix) - already hashed
+				if !strings.HasPrefix(newPassword, "$2a$") && !strings.HasPrefix(newPassword, "$2b$") && !strings.HasPrefix(newPassword, "$2y$") {
+					// Hash the new password
+					hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+					if err != nil {
+						return fmt.Errorf("failed to hash password: %w", err)
+					}
+					// Replace the plain password with the hashed one
+					basicAuthMap["password"] = string(hashedPassword)
+				}
+				// If it's already hashed, leave it as is
+			} else if !hasPassword || newPassword == "" {
+				// No password in update or empty password - preserve current hash
+				if currentPasswordHash != "" {
+					basicAuthMap["password"] = currentPasswordHash
+				}
+			}
+		}
+	}
+
+	// Now merge the modified data
+	if err := mergeJSONIntoStruct(data, securitySettings); err != nil {
+		return fmt.Errorf("failed to merge security settings: %w", err)
 	}
 
 	return nil
@@ -810,8 +868,53 @@ var securitySectionAllowedFields = map[string]bool{
 
 // validateSecuritySection validates security settings
 func validateSecuritySection(data json.RawMessage) error {
-	// Security settings cannot be updated via API for security reasons
-	return fmt.Errorf("security settings cannot be updated via API")
+	var securitySettings conf.Security
+	if err := json.Unmarshal(data, &securitySettings); err != nil {
+		return err
+	}
+
+	// Validate basic auth password if provided
+	if securitySettings.BasicAuth.Enabled && securitySettings.BasicAuth.Password != "" {
+		// Check minimum password length
+		if len(securitySettings.BasicAuth.Password) < 8 {
+			return fmt.Errorf("password must be at least 8 characters long")
+		}
+		// Check maximum password length (bcrypt has a 72 byte limit)
+		if len(securitySettings.BasicAuth.Password) > 72 {
+			return fmt.Errorf("password must not exceed 72 characters")
+		}
+	}
+
+	// Validate OAuth settings
+	if securitySettings.GoogleAuth.Enabled {
+		if securitySettings.GoogleAuth.ClientID == "" || securitySettings.GoogleAuth.ClientSecret == "" {
+			return fmt.Errorf("google OAuth requires both clientId and clientSecret when enabled")
+		}
+	}
+	
+	if securitySettings.GithubAuth.Enabled {
+		if securitySettings.GithubAuth.ClientID == "" || securitySettings.GithubAuth.ClientSecret == "" {
+			return fmt.Errorf("GitHub OAuth requires both clientId and clientSecret when enabled")
+		}
+	}
+
+	// Validate subnet bypass settings
+	if securitySettings.AllowSubnetBypass.Enabled && securitySettings.AllowSubnetBypass.Subnet != "" {
+		// Validate CIDR format
+		if !strings.Contains(securitySettings.AllowSubnetBypass.Subnet, "/") {
+			return fmt.Errorf("subnet must be in CIDR format (e.g., 192.168.1.0/24)")
+		}
+		// Try to parse each CIDR in the comma-separated list
+		subnets := strings.Split(securitySettings.AllowSubnetBypass.Subnet, ",")
+		for _, subnet := range subnets {
+			_, _, err := net.ParseCIDR(strings.TrimSpace(subnet))
+			if err != nil {
+				return fmt.Errorf("invalid CIDR format: %s", subnet)
+			}
+		}
+	}
+
+	return nil
 }
 
 // validateSecuritySectionValues validates the values of security section fields

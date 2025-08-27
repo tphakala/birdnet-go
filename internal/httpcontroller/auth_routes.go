@@ -3,13 +3,16 @@ package httpcontroller
 import (
 	"crypto/sha256"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/markbates/goth/gothic"
 	"github.com/tphakala/birdnet-go/internal/security"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // initAuthRoutes initializes all authentication related routes
@@ -245,11 +248,25 @@ func (s *Server) handleBasicAuthLogin(c echo.Context) error {
 	// Log basic auth attempt
 	security.LogInfo("Basic authentication login attempt", "username", username)
 
-	// Hash passwords before comparison for constant-time behavior
-	passwordHash := sha256.Sum256([]byte(password))
-	storedPasswordHash := sha256.Sum256([]byte(storedPassword))
+	// Check password - handle both hashed and legacy plaintext passwords
+	var credentialsValid bool
+	if strings.HasPrefix(storedPassword, "$2a$") || strings.HasPrefix(storedPassword, "$2b$") || strings.HasPrefix(storedPassword, "$2y$") {
+		// Password is already hashed with bcrypt
+		err := bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password))
+		credentialsValid = (err == nil)
+		
+		if err != nil && !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			security.LogError("Error comparing bcrypt password", "error", err.Error())
+		}
+	} else {
+		// Legacy: plaintext password comparison (for backwards compatibility)
+		// Hash passwords before comparison for constant-time behavior
+		passwordHash := sha256.Sum256([]byte(password))
+		storedPasswordHash := sha256.Sum256([]byte(storedPassword))
+		credentialsValid = subtle.ConstantTimeCompare(passwordHash[:], storedPasswordHash[:]) == 1
+	}
 
-	if subtle.ConstantTimeCompare(passwordHash[:], storedPasswordHash[:]) != 1 {
+	if !credentialsValid {
 		// Log failed basic auth attempt
 		security.LogWarn("Basic authentication failed: Invalid password", "username", username)
 		return c.HTML(http.StatusUnauthorized, "<div class='text-red-500'>Invalid password</div>")

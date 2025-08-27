@@ -4,12 +4,15 @@ package auth
 import (
 	"crypto/sha256"
 	"crypto/subtle"
+	"errors"
 	"log/slog"
 	"reflect"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth/gothic"
 	"github.com/tphakala/birdnet-go/internal/security"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // SecurityAdapter adapts the security package to our API auth interface
@@ -173,15 +176,33 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 		return "", ErrBasicAuthDisabled // Return the specific error for disabled basic auth
 	}
 
-	// Hash inputs and stored values before comparison to ensure fixed length for ConstantTimeCompare.
+	// Check username with constant-time comparison
 	usernameHash := sha256.Sum256([]byte(username))
-	passwordHash := sha256.Sum256([]byte(password))
 	storedClientIDHash := sha256.Sum256([]byte(storedClientID))
-	storedPasswordHash := sha256.Sum256([]byte(storedPassword))
-
-	// Constant-time comparison on the hashes.
 	userMatch := subtle.ConstantTimeCompare(usernameHash[:], storedClientIDHash[:]) == 1
-	passMatch := subtle.ConstantTimeCompare(passwordHash[:], storedPasswordHash[:]) == 1
+	
+	// Check password - handle both hashed and legacy plaintext passwords
+	var passMatch bool
+	if strings.HasPrefix(storedPassword, "$2a$") || strings.HasPrefix(storedPassword, "$2b$") || strings.HasPrefix(storedPassword, "$2y$") {
+		// Password is already hashed with bcrypt
+		err := bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password))
+		passMatch = (err == nil)
+		
+		if a.logger != nil && err != nil && !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			a.logger.Error("Error comparing bcrypt password", "error", err.Error())
+		}
+	} else {
+		// Legacy: plaintext password comparison (for backwards compatibility)
+		// Use constant-time comparison for security
+		passwordHash := sha256.Sum256([]byte(password))
+		storedPasswordHash := sha256.Sum256([]byte(storedPassword))
+		passMatch = subtle.ConstantTimeCompare(passwordHash[:], storedPasswordHash[:]) == 1
+		
+		if a.logger != nil && passMatch {
+			a.logger.Info("Legacy plaintext password detected - consider re-saving settings to hash password")
+		}
+	}
+	
 	credentialsValid := userMatch && passMatch
 
 	if credentialsValid {
