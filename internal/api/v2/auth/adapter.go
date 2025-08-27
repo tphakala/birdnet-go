@@ -7,7 +7,6 @@ import (
 	"errors"
 	"log/slog"
 	"reflect"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth/gothic"
@@ -183,13 +182,14 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 	
 	// Check password - handle both hashed and legacy plaintext passwords
 	var passMatch bool
-	if strings.HasPrefix(storedPassword, "$2a$") || strings.HasPrefix(storedPassword, "$2b$") || strings.HasPrefix(storedPassword, "$2y$") {
+	// Use bcrypt.Cost to detect hashed password - handles all variants ($2a$, $2b$, $2x$, $2y$)
+	if _, err := bcrypt.Cost([]byte(storedPassword)); err == nil {
 		// Password is already hashed with bcrypt
 		err := bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password))
 		passMatch = (err == nil)
 		
-		if a.logger != nil && err != nil && !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-			a.logger.Error("Error comparing bcrypt password", "error", err.Error())
+		if err != nil && !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			security.LogError("Error comparing bcrypt password", "error", err.Error())
 		}
 	} else {
 		// Legacy: plaintext password comparison (for backwards compatibility)
@@ -198,8 +198,8 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 		storedPasswordHash := sha256.Sum256([]byte(storedPassword))
 		passMatch = subtle.ConstantTimeCompare(passwordHash[:], storedPasswordHash[:]) == 1
 		
-		if a.logger != nil && passMatch {
-			a.logger.Info("Legacy plaintext password detected - consider re-saving settings to hash password")
+		if passMatch {
+			security.LogInfo("Legacy plaintext password detected - consider re-saving settings to hash password")
 		}
 	}
 	

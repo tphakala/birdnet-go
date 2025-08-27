@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -250,7 +249,8 @@ func (s *Server) handleBasicAuthLogin(c echo.Context) error {
 
 	// Check password - handle both hashed and legacy plaintext passwords
 	var credentialsValid bool
-	if strings.HasPrefix(storedPassword, "$2a$") || strings.HasPrefix(storedPassword, "$2b$") || strings.HasPrefix(storedPassword, "$2y$") {
+	// Use bcrypt.Cost to detect hashed password - handles all variants ($2a$, $2b$, $2x$, $2y$)
+	if _, err := bcrypt.Cost([]byte(storedPassword)); err == nil {
 		// Password is already hashed with bcrypt
 		err := bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password))
 		credentialsValid = (err == nil)

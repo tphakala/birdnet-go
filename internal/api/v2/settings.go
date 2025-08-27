@@ -502,6 +502,12 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid JSON in request body", http.StatusBadRequest)
 	}
 
+	// Lock mutex for security section updates to prevent concurrent password modifications
+	if section == "security" {
+		c.settingsMutex.Lock()
+		defer c.settingsMutex.Unlock()
+	}
+	
 	// Update the specific section
 	var skippedFields []string
 	if err := updateSettingsSectionWithTracking(settings, section, requestBody, &skippedFields); err != nil {
@@ -790,9 +796,13 @@ func handleSecuritySectionWithHashing(sectionPtr any, data json.RawMessage, skip
 						basicAuthMap["password"] = currentPasswordHash
 					}
 				} else if newPassword != "" {
-					// Check if the password starts with "$2a$" (bcrypt prefix) - already hashed
-					if !strings.HasPrefix(newPassword, "$2a$") && !strings.HasPrefix(newPassword, "$2b$") && !strings.HasPrefix(newPassword, "$2y$") {
-						// Hash the new password
+					// Use bcrypt.Cost to reliably detect if password is already hashed
+					// This handles all bcrypt variants ($2a$, $2b$, $2x$, $2y$)
+					_, err := bcrypt.Cost([]byte(newPassword))
+					isAlreadyHashed := err == nil
+					
+					if !isAlreadyHashed {
+						// Password is plaintext - hash it
 						hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 						if err != nil {
 							return fmt.Errorf("failed to hash password: %w", err)
@@ -800,7 +810,8 @@ func handleSecuritySectionWithHashing(sectionPtr any, data json.RawMessage, skip
 						// Replace the plain password with the hashed one
 						basicAuthMap["password"] = string(hashedPassword)
 					}
-					// If it's already hashed, leave it as is
+					// If already hashed (shouldn't happen from frontend), leave as is
+					// This handles edge cases like config imports or direct yaml edits
 				}
 			} else if !hasPassword {
 				// No password in update or empty password - preserve current hash
@@ -884,29 +895,46 @@ var securitySectionAllowedFields = map[string]bool{
 
 // validateSecuritySection validates security settings
 func validateSecuritySection(data json.RawMessage) error {
+	// First parse as map to check what fields are actually present
+	var updateMap map[string]any
+	if err := json.Unmarshal(data, &updateMap); err != nil {
+		return err
+	}
+	
 	var securitySettings conf.Security
 	if err := json.Unmarshal(data, &securitySettings); err != nil {
 		return err
 	}
 
-	// Validate basic auth password if provided
-	if securitySettings.BasicAuth.Password != "" {
-		// Trim whitespace to check for whitespace-only passwords
-		trimmedPassword := strings.TrimSpace(securitySettings.BasicAuth.Password)
-		if trimmedPassword == "" {
-			return fmt.Errorf("password cannot be only whitespace")
-		}
-		
-		// For non-hashed passwords, check length requirements
-		if !strings.HasPrefix(securitySettings.BasicAuth.Password, "$2") {
-			// Check minimum password length
-			if len(securitySettings.BasicAuth.Password) < 8 {
-				return fmt.Errorf("password must be at least 8 characters long")
+	// Check if basicAuth was provided in the update
+	if basicAuthData, hasBasicAuth := updateMap["basicAuth"]; hasBasicAuth {
+		if basicAuthMap, ok := basicAuthData.(map[string]any); ok {
+			// Check if password field is explicitly provided
+			if passwordVal, hasPassword := basicAuthMap["password"]; hasPassword {
+				// Password field exists in update - validate it
+				if password, ok := passwordVal.(string); ok && password != "" {
+					// Trim whitespace to check for whitespace-only passwords
+					trimmedPassword := strings.TrimSpace(password)
+					if trimmedPassword == "" {
+						return fmt.Errorf("password cannot be only whitespace")
+					}
+					
+					// For non-hashed passwords, check length requirements
+					// Check for bcrypt prefixes including $2x$ 
+					if !strings.HasPrefix(password, "$2") {
+						// Check minimum password length
+						if len(password) < 8 {
+							return fmt.Errorf("password must be at least 8 characters long")
+						}
+						// Check maximum password length (bcrypt has a 72 byte limit)
+						if len(password) > 72 {
+							return fmt.Errorf("password must not exceed 72 characters")
+						}
+					}
+				}
+				// If password is explicitly set to empty string, that's OK (preserves existing)
 			}
-			// Check maximum password length (bcrypt has a 72 byte limit)
-			if len(securitySettings.BasicAuth.Password) > 72 {
-				return fmt.Errorf("password must not exceed 72 characters")
-			}
+			// If password field not present, that's OK (partial update)
 		}
 	}
 
