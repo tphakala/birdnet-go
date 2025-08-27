@@ -832,12 +832,25 @@ func handleSecuritySectionWithHashing(sectionPtr any, data json.RawMessage, _ *[
 				return fmt.Errorf("failed to marshal modified security data: %w", err)
 			}
 			data = modifiedData
+			
+			// Debug logging to verify password was hashed
+			security.LogInfo("Re-marshaled security data with hashed password", "data_length", len(data))
 		}
 	}
 
 	// Now merge the modified data
 	if err := mergeJSONIntoStruct(data, securitySettings); err != nil {
 		return fmt.Errorf("failed to merge security settings: %w", err)
+	}
+	
+	// Debug: Log the final password after merge
+	if securitySettings.BasicAuth.Password != "" {
+		// Check if it's hashed
+		if strings.HasPrefix(securitySettings.BasicAuth.Password, "$2") {
+			security.LogInfo("Password is hashed after merge", "prefix", securitySettings.BasicAuth.Password[:3])
+		} else {
+			security.LogWarn("WARNING: Password is NOT hashed after merge", "password_length", len(securitySettings.BasicAuth.Password))
+		}
 	}
 
 	return nil
