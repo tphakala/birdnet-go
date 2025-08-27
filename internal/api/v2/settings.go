@@ -768,7 +768,7 @@ func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName stri
 }
 
 // handleSecuritySectionWithHashing handles security section updates with password hashing
-func handleSecuritySectionWithHashing(sectionPtr any, data json.RawMessage, skippedFields *[]string) error {
+func handleSecuritySectionWithHashing(sectionPtr any, data json.RawMessage, _ *[]string) error {
 	securitySettings, ok := sectionPtr.(*conf.Security)
 	if !ok {
 		return fmt.Errorf("invalid security section type")
@@ -906,39 +906,77 @@ func validateSecuritySection(data json.RawMessage) error {
 		return err
 	}
 
-	// Check if basicAuth was provided in the update
-	if basicAuthData, hasBasicAuth := updateMap["basicAuth"]; hasBasicAuth {
-		if basicAuthMap, ok := basicAuthData.(map[string]any); ok {
-			// Check if password field is explicitly provided
-			if passwordVal, hasPassword := basicAuthMap["password"]; hasPassword {
-				// Password field exists in update - validate it
-				if password, ok := passwordVal.(string); ok && password != "" {
-					// Trim whitespace to check for whitespace-only passwords
-					trimmedPassword := strings.TrimSpace(password)
-					if trimmedPassword == "" {
-						return fmt.Errorf("password cannot be only whitespace")
-					}
-					
-					// For non-hashed passwords, check length requirements
-					// Check for bcrypt prefixes including $2x$ 
-					if !strings.HasPrefix(password, "$2") {
-						// Check minimum password length
-						if len(password) < 8 {
-							return fmt.Errorf("password must be at least 8 characters long")
-						}
-						// Check maximum password length (bcrypt has a 72 byte limit)
-						if len(password) > 72 {
-							return fmt.Errorf("password must not exceed 72 characters")
-						}
-					}
-				}
-				// If password is explicitly set to empty string, that's OK (preserves existing)
-			}
-			// If password field not present, that's OK (partial update)
-		}
+	// Validate password if provided in update
+	if err := validatePasswordInUpdate(updateMap); err != nil {
+		return err
 	}
 
 	// Validate OAuth settings
+	if err := validateOAuthConfig(&securitySettings); err != nil {
+		return err
+	}
+
+	// Validate subnet bypass settings
+	if err := validateSubnetBypass(&securitySettings); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validatePasswordInUpdate validates password field if present in update
+func validatePasswordInUpdate(updateMap map[string]any) error {
+	basicAuthData, hasBasicAuth := updateMap["basicAuth"]
+	if !hasBasicAuth {
+		return nil
+	}
+
+	basicAuthMap, ok := basicAuthData.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	passwordVal, hasPassword := basicAuthMap["password"]
+	if !hasPassword {
+		// Password field not present, that's OK (partial update)
+		return nil
+	}
+
+	password, ok := passwordVal.(string)
+	if !ok || password == "" {
+		// Empty password is OK (preserves existing)
+		return nil
+	}
+
+	return validatePasswordStrength(password)
+}
+
+// validatePasswordStrength checks password requirements
+func validatePasswordStrength(password string) error {
+	// Trim whitespace to check for whitespace-only passwords
+	trimmedPassword := strings.TrimSpace(password)
+	if trimmedPassword == "" {
+		return fmt.Errorf("password cannot be only whitespace")
+	}
+	
+	// For non-hashed passwords, check length requirements
+	// Check for bcrypt prefixes including $2x$ 
+	if !strings.HasPrefix(password, "$2") {
+		// Check minimum password length
+		if len(password) < 8 {
+			return fmt.Errorf("password must be at least 8 characters long")
+		}
+		// Check maximum password length (bcrypt has a 72 byte limit)
+		if len(password) > 72 {
+			return fmt.Errorf("password must not exceed 72 characters")
+		}
+	}
+
+	return nil
+}
+
+// validateOAuthConfig validates OAuth settings
+func validateOAuthConfig(securitySettings *conf.Security) error {
 	if securitySettings.GoogleAuth.Enabled {
 		if securitySettings.GoogleAuth.ClientID == "" || securitySettings.GoogleAuth.ClientSecret == "" {
 			return fmt.Errorf("google OAuth requires both clientId and clientSecret when enabled")
@@ -951,195 +989,33 @@ func validateSecuritySection(data json.RawMessage) error {
 		}
 	}
 
-	// Validate subnet bypass settings
-	if securitySettings.AllowSubnetBypass.Enabled && securitySettings.AllowSubnetBypass.Subnet != "" {
-		// Validate CIDR format
-		if !strings.Contains(securitySettings.AllowSubnetBypass.Subnet, "/") {
-			return fmt.Errorf("subnet must be in CIDR format (e.g., 192.168.1.0/24)")
-		}
-		// Try to parse each CIDR in the comma-separated list
-		subnets := strings.Split(securitySettings.AllowSubnetBypass.Subnet, ",")
-		for _, subnet := range subnets {
-			_, _, err := net.ParseCIDR(strings.TrimSpace(subnet))
-			if err != nil {
-				return fmt.Errorf("invalid CIDR format: %s", subnet)
-			}
+	return nil
+}
+
+// validateSubnetBypass validates subnet bypass settings
+func validateSubnetBypass(securitySettings *conf.Security) error {
+	if !securitySettings.AllowSubnetBypass.Enabled || securitySettings.AllowSubnetBypass.Subnet == "" {
+		return nil
+	}
+
+	// Validate CIDR format
+	if !strings.Contains(securitySettings.AllowSubnetBypass.Subnet, "/") {
+		return fmt.Errorf("subnet must be in CIDR format (e.g., 192.168.1.0/24)")
+	}
+	
+	// Try to parse each CIDR in the comma-separated list
+	subnets := strings.Split(securitySettings.AllowSubnetBypass.Subnet, ",")
+	for _, subnet := range subnets {
+		_, _, err := net.ParseCIDR(strings.TrimSpace(subnet))
+		if err != nil {
+			return fmt.Errorf("invalid CIDR format: %s", subnet)
 		}
 	}
 
 	return nil
 }
 
-// validateSecuritySectionValues validates the values of security section fields
-func validateSecuritySectionValues(updateMap map[string]any) error {
-	// Validate host
-	if err := validateHostField(updateMap); err != nil {
-		return err
-	}
 
-	// Validate autoTls
-	if err := validateAutoTLSField(updateMap); err != nil {
-		return err
-	}
-
-	// Validate basicAuth
-	if err := validateBasicAuthField(updateMap); err != nil {
-		return err
-	}
-
-	// Validate OAuth settings
-	if err := validateOAuthSettings("googleAuth", updateMap); err != nil {
-		return err
-	}
-	if err := validateOAuthSettings("githubAuth", updateMap); err != nil {
-		return err
-	}
-
-	// Validate allowSubnetBypass
-	if err := validateSubnetBypassField(updateMap); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// validateHostField validates the host field
-func validateHostField(updateMap map[string]any) error {
-	host, exists := updateMap["host"]
-	if !exists {
-		return nil
-	}
-
-	str, ok := host.(string)
-	if !ok {
-		return fmt.Errorf("host must be a string")
-	}
-
-	if str != "" && len(str) > 255 {
-		return fmt.Errorf("host must not exceed 255 characters")
-	}
-
-	return nil
-}
-
-// validateAutoTLSField validates the autoTls field
-func validateAutoTLSField(updateMap map[string]any) error {
-	autoTls, exists := updateMap["autoTls"]
-	if !exists {
-		return nil
-	}
-
-	if _, ok := autoTls.(bool); !ok {
-		return fmt.Errorf("autoTls must be a boolean value")
-	}
-
-	return nil
-}
-
-// validateBasicAuthField validates the basicAuth field
-func validateBasicAuthField(updateMap map[string]any) error {
-	basicAuth, exists := updateMap["basicAuth"]
-	if !exists {
-		return nil
-	}
-
-	basicAuthMap, ok := basicAuth.(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	// Validate enabled field
-	if enabled, exists := basicAuthMap["enabled"]; exists {
-		if _, ok := enabled.(bool); !ok {
-			return fmt.Errorf("basicAuth.enabled must be a boolean")
-		}
-	}
-	// Password complexity is validated elsewhere
-
-	return nil
-}
-
-// validateSubnetBypassField validates the allowSubnetBypass field
-func validateSubnetBypassField(updateMap map[string]any) error {
-	subnetBypass, exists := updateMap["allowSubnetBypass"]
-	if !exists {
-		return nil
-	}
-
-	bypassMap, ok := subnetBypass.(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	// Validate enabled field
-	if enabled, exists := bypassMap["enabled"]; exists {
-		if _, ok := enabled.(bool); !ok {
-			return fmt.Errorf("allowSubnetBypass.enabled must be a boolean")
-		}
-	}
-
-	// Validate subnet field
-	if subnet, exists := bypassMap["subnet"]; exists {
-		str, ok := subnet.(string)
-		if !ok {
-			return fmt.Errorf("subnet must be a string")
-		}
-
-		if str != "" && !strings.Contains(str, "/") {
-			return fmt.Errorf("subnet must be in CIDR format (e.g., 192.168.1.0/24)")
-		}
-	}
-
-	return nil
-}
-
-// validateOAuthSettings validates OAuth provider settings
-func validateOAuthSettings(providerName string, updateMap map[string]any) error {
-	provider, exists := updateMap[providerName]
-	if !exists {
-		return nil
-	}
-
-	providerMap, ok := provider.(map[string]any)
-	if !ok {
-		return fmt.Errorf("%s must be an object", providerName)
-	}
-
-	// Check enabled field
-	enabled := false
-	if enabledVal, exists := providerMap["enabled"]; exists {
-		if enabledBool, ok := enabledVal.(bool); ok {
-			enabled = enabledBool
-		} else {
-			return fmt.Errorf("%s.enabled must be a boolean", providerName)
-		}
-	}
-
-	// If enabled, validate required fields
-	if enabled {
-		// Check clientId
-		if clientId, exists := providerMap["clientId"]; exists {
-			if str, ok := clientId.(string); !ok || str == "" {
-				return fmt.Errorf("%s.clientId is required when enabled", providerName)
-			}
-		} else if enabled {
-			// clientId field missing when provider is enabled
-			return fmt.Errorf("%s.clientId is required when enabled", providerName)
-		}
-
-		// Check clientSecret
-		if clientSecret, exists := providerMap["clientSecret"]; exists {
-			if str, ok := clientSecret.(string); !ok || str == "" {
-				return fmt.Errorf("%s.clientSecret is required when enabled", providerName)
-			}
-		} else if enabled {
-			// clientSecret field missing when provider is enabled
-			return fmt.Errorf("%s.clientSecret is required when enabled", providerName)
-		}
-	}
-
-	return nil
-}
 
 // mainSectionAllowedFields defines which fields in the main section can be updated via API
 var mainSectionAllowedFields = map[string]bool{
@@ -1153,31 +1029,6 @@ func validateMainSection(data json.RawMessage) error {
 	return fmt.Errorf("main settings cannot be updated via API")
 }
 
-// validateMainSectionValues validates the values of main section fields
-func validateMainSectionValues(updateMap map[string]any) error {
-	// Validate node name
-	if name, exists := updateMap["name"]; exists {
-		if str, ok := name.(string); ok {
-			if str == "" {
-				return fmt.Errorf("node name cannot be empty")
-			}
-			if len(str) > 100 {
-				return fmt.Errorf("node name must not exceed 100 characters")
-			}
-		} else {
-			return fmt.Errorf("node name must be a string")
-		}
-	}
-
-	// Validate timeAs24h
-	if timeAs24h, exists := updateMap["timeAs24h"]; exists {
-		if _, ok := timeAs24h.(bool); !ok {
-			return fmt.Errorf("timeAs24h must be a boolean value")
-		}
-	}
-
-	return nil
-}
 
 // validateBirdNETSection validates BirdNET settings
 func validateBirdNETSection(data json.RawMessage) error {
