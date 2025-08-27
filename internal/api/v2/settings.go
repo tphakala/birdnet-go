@@ -509,7 +509,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	// 	c.settingsMutex.Lock()
 	// 	defer c.settingsMutex.Unlock()
 	// }
-	
+
 	// Update the specific section
 	var skippedFields []string
 	if err := updateSettingsSectionWithTracking(settings, section, requestBody, &skippedFields); err != nil {
@@ -803,7 +803,7 @@ func handleSecuritySectionWithHashing(sectionPtr any, data json.RawMessage, _ *[
 					// This handles all bcrypt variants ($2a$, $2b$, $2x$, $2y$)
 					_, err := bcrypt.Cost([]byte(newPassword))
 					isAlreadyHashed := err == nil
-					
+
 					if !isAlreadyHashed {
 						// Password is plaintext - hash it
 						security.LogInfo("Hashing new password for basic auth update")
@@ -825,7 +825,7 @@ func handleSecuritySectionWithHashing(sectionPtr any, data json.RawMessage, _ *[
 					basicAuthMap["password"] = currentPasswordHash
 				}
 			}
-			
+
 			// Re-marshal the modified data since we changed the password
 			modifiedData, err := json.Marshal(updateData)
 			if err != nil {
@@ -906,7 +906,7 @@ func validateSecuritySection(data json.RawMessage) error {
 	if err := json.Unmarshal(data, &updateMap); err != nil {
 		return err
 	}
-	
+
 	var securitySettings conf.Security
 	if err := json.Unmarshal(data, &securitySettings); err != nil {
 		return err
@@ -964,14 +964,14 @@ func validatePasswordStrength(password string) error {
 	if trimmedPassword == "" {
 		return fmt.Errorf("password cannot be only whitespace")
 	}
-	
+
 	// Use bcrypt.Cost to reliably detect if password is already hashed
 	// This handles all bcrypt variants ($2a$, $2b$, $2x$, $2y$)
 	if _, err := bcrypt.Cost([]byte(password)); err == nil {
 		// Already hashed, skip validation
 		return nil
 	}
-	
+
 	// For plaintext passwords, check length requirements
 	if len(password) < 8 {
 		return fmt.Errorf("password must be at least 8 characters long")
@@ -991,7 +991,7 @@ func validateOAuthConfig(securitySettings *conf.Security) error {
 			return fmt.Errorf("google OAuth requires both clientId and clientSecret when enabled")
 		}
 	}
-	
+
 	if securitySettings.GithubAuth.Enabled {
 		if securitySettings.GithubAuth.ClientID == "" || securitySettings.GithubAuth.ClientSecret == "" {
 			return fmt.Errorf("GitHub OAuth requires both clientId and clientSecret when enabled")
@@ -1011,7 +1011,7 @@ func validateSubnetBypass(securitySettings *conf.Security) error {
 	if !strings.Contains(securitySettings.AllowSubnetBypass.Subnet, "/") {
 		return fmt.Errorf("subnet must be in CIDR format (e.g., 192.168.1.0/24)")
 	}
-	
+
 	// Try to parse each CIDR in the comma-separated list
 	subnets := strings.Split(securitySettings.AllowSubnetBypass.Subnet, ",")
 	for _, subnet := range subnets {
@@ -1024,8 +1024,6 @@ func validateSubnetBypass(securitySettings *conf.Security) error {
 	return nil
 }
 
-
-
 // mainSectionAllowedFields defines which fields in the main section can be updated via API
 var mainSectionAllowedFields = map[string]bool{
 	"name":      true, // Node name is safe to update
@@ -1037,7 +1035,6 @@ func validateMainSection(data json.RawMessage) error {
 	// Main settings cannot be updated via API for security reasons
 	return fmt.Errorf("main settings cannot be updated via API")
 }
-
 
 // validateBirdNETSection validates BirdNET settings
 func validateBirdNETSection(data json.RawMessage) error {
@@ -1109,13 +1106,13 @@ func validateSpeciesSection(data json.RawMessage) error {
 		if config.Interval < 0 {
 			return fmt.Errorf("species config for '%s': interval must be non-negative, got %d", speciesName, config.Interval)
 		}
-		
+
 		// Check if threshold is within valid range
 		if config.Threshold < 0 || config.Threshold > 1 {
 			return fmt.Errorf("species config for '%s': threshold must be between 0 and 1, got %f", speciesName, config.Threshold)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1132,13 +1129,13 @@ func validateRealtimeSection(data json.RawMessage) error {
 		if config.Interval < 0 {
 			return fmt.Errorf("species config for '%s': interval must be non-negative, got %d", speciesName, config.Interval)
 		}
-		
+
 		// Check if threshold is within valid range
 		if config.Threshold < 0 || config.Threshold > 1 {
 			return fmt.Errorf("species config for '%s': threshold must be between 0 and 1, got %f", speciesName, config.Threshold)
 		}
 	}
-	
+
 	return nil
 }
 
