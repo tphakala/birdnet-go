@@ -799,6 +799,13 @@ func handleSecuritySectionWithHashing(sectionPtr any, data json.RawMessage, skip
 					basicAuthMap["password"] = currentPasswordHash
 				}
 			}
+			
+			// Re-marshal the modified data since we changed the password
+			modifiedData, err := json.Marshal(updateData)
+			if err != nil {
+				return fmt.Errorf("failed to marshal modified security data: %w", err)
+			}
+			data = modifiedData
 		}
 	}
 
