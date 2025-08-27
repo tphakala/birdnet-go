@@ -36,6 +36,7 @@ func TestPasswordHashingEndToEnd(t *testing.T) {
 		controlChan:         make(chan string, 10),
 		DisableSaveSettings: true,
 		logger:              log.New(io.Discard, "TEST: ", log.LstdFlags),
+		// settingsMutex is zero-initialized (don't explicitly set)
 	}
 	
 	// Step 1: Submit new password via API
@@ -140,6 +141,7 @@ func TestPasswordValidationIntegration(t *testing.T) {
 				controlChan:         make(chan string, 10),
 				DisableSaveSettings: true,
 				logger:              log.New(io.Discard, "TEST: ", log.LstdFlags),
+				// settingsMutex is zero-initialized
 			}
 			
 			// Create request
@@ -201,6 +203,7 @@ func TestMixedPasswordFormats(t *testing.T) {
 			controlChan:         make(chan string, 10),
 			DisableSaveSettings: true,
 			logger:              log.New(io.Discard, "TEST: ", log.LstdFlags),
+			// settingsMutex is zero-initialized
 		}
 		
 		// Try to update with the same hashed password (shouldn't re-hash)
@@ -242,6 +245,7 @@ func TestMixedPasswordFormats(t *testing.T) {
 			controlChan:         make(chan string, 10),
 			DisableSaveSettings: true,
 			logger:              log.New(io.Discard, "TEST: ", log.LstdFlags),
+			// settingsMutex is zero-initialized
 		}
 		
 		// Update only password
