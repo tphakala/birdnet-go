@@ -781,19 +781,28 @@ func handleSecuritySectionWithHashing(sectionPtr any, data json.RawMessage, skip
 	if basicAuthData, exists := updateData["basicAuth"]; exists {
 		if basicAuthMap, ok := basicAuthData.(map[string]any); ok {
 			// Check if a new password is being set
-			if newPassword, hasPassword := basicAuthMap["password"].(string); hasPassword && newPassword != "" {
-				// Check if the password starts with "$2a$" (bcrypt prefix) - already hashed
-				if !strings.HasPrefix(newPassword, "$2a$") && !strings.HasPrefix(newPassword, "$2b$") && !strings.HasPrefix(newPassword, "$2y$") {
-					// Hash the new password
-					hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-					if err != nil {
-						return fmt.Errorf("failed to hash password: %w", err)
+			if newPassword, hasPassword := basicAuthMap["password"].(string); hasPassword {
+				// Trim whitespace to check if password is effectively empty
+				trimmedPassword := strings.TrimSpace(newPassword)
+				if trimmedPassword == "" {
+					// Treat whitespace-only as empty - preserve current hash
+					if currentPasswordHash != "" {
+						basicAuthMap["password"] = currentPasswordHash
 					}
-					// Replace the plain password with the hashed one
-					basicAuthMap["password"] = string(hashedPassword)
+				} else if newPassword != "" {
+					// Check if the password starts with "$2a$" (bcrypt prefix) - already hashed
+					if !strings.HasPrefix(newPassword, "$2a$") && !strings.HasPrefix(newPassword, "$2b$") && !strings.HasPrefix(newPassword, "$2y$") {
+						// Hash the new password
+						hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+						if err != nil {
+							return fmt.Errorf("failed to hash password: %w", err)
+						}
+						// Replace the plain password with the hashed one
+						basicAuthMap["password"] = string(hashedPassword)
+					}
+					// If it's already hashed, leave it as is
 				}
-				// If it's already hashed, leave it as is
-			} else if !hasPassword || newPassword == "" {
+			} else if !hasPassword {
 				// No password in update or empty password - preserve current hash
 				if currentPasswordHash != "" {
 					basicAuthMap["password"] = currentPasswordHash
@@ -881,14 +890,23 @@ func validateSecuritySection(data json.RawMessage) error {
 	}
 
 	// Validate basic auth password if provided
-	if securitySettings.BasicAuth.Enabled && securitySettings.BasicAuth.Password != "" {
-		// Check minimum password length
-		if len(securitySettings.BasicAuth.Password) < 8 {
-			return fmt.Errorf("password must be at least 8 characters long")
+	if securitySettings.BasicAuth.Password != "" {
+		// Trim whitespace to check for whitespace-only passwords
+		trimmedPassword := strings.TrimSpace(securitySettings.BasicAuth.Password)
+		if trimmedPassword == "" {
+			return fmt.Errorf("password cannot be only whitespace")
 		}
-		// Check maximum password length (bcrypt has a 72 byte limit)
-		if len(securitySettings.BasicAuth.Password) > 72 {
-			return fmt.Errorf("password must not exceed 72 characters")
+		
+		// For non-hashed passwords, check length requirements
+		if !strings.HasPrefix(securitySettings.BasicAuth.Password, "$2") {
+			// Check minimum password length
+			if len(securitySettings.BasicAuth.Password) < 8 {
+				return fmt.Errorf("password must be at least 8 characters long")
+			}
+			// Check maximum password length (bcrypt has a 72 byte limit)
+			if len(securitySettings.BasicAuth.Password) > 72 {
+				return fmt.Errorf("password must not exceed 72 characters")
+			}
 		}
 	}
 
