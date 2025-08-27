@@ -15,14 +15,28 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// getTestController creates a test controller with disabled saving
+// getTestController creates a test controller with disabled saving and proper cleanup
 // Note: DisableHTTPKeepAlivesForTesting() is called in TestMain before any tests run
 func getTestController(t *testing.T, e *echo.Echo) *Controller {
 	t.Helper()
+	
+	// Create channel with proper cleanup
+	controlChan := make(chan string, 10)
+	
+	// Register cleanup to close channels and prevent goroutine leaks
+	t.Cleanup(func() {
+		close(controlChan)
+		
+		// Drain any remaining messages in the channel
+		for len(controlChan) > 0 {
+			<-controlChan
+		}
+	})
+	
 	return &Controller{
 		Echo:                e,
 		Settings:            getTestSettings(t),
-		controlChan:         make(chan string, 10),
+		controlChan:         controlChan,
 		DisableSaveSettings: true, // Disable saving to disk during tests
 		logger:              log.New(os.Stderr, "TEST: ", log.LstdFlags), // Add logger for tests
 	}
@@ -58,11 +72,12 @@ func getTestSettings(t *testing.T) *conf.Settings {
 	settings.BirdNET.RangeFilter.Model = "latest"
 	settings.BirdNET.RangeFilter.Threshold = 0.03
 	
-	// Audio settings
+	// Audio settings with temporary directory for testing
+	tempDir := t.TempDir()
 	settings.Realtime.Audio.Source = "default"
 	settings.Realtime.Audio.Export.Enabled = true
 	settings.Realtime.Audio.Export.Type = "wav"
-	settings.Realtime.Audio.Export.Path = "/clips"
+	settings.Realtime.Audio.Export.Path = tempDir + "/clips"
 	settings.Realtime.Audio.Export.Bitrate = "192k"
 	
 	// Species settings

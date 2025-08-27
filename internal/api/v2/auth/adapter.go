@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"reflect"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth/gothic"
@@ -26,6 +27,16 @@ func NewSecurityAdapter(oauth2Server *security.OAuth2Server, logger *slog.Logger
 		OAuth2Server: oauth2Server,
 		logger:       logger,
 	}
+}
+
+// isBcryptHash checks if a password string is a bcrypt hash by examining its prefix.
+// This is much faster than calling bcrypt.Cost() and provides clear detection.
+// Bcrypt hashes start with known prefixes: $2a$, $2b$, $2y$ (and legacy $2x$).
+func isBcryptHash(password string) bool {
+	return strings.HasPrefix(password, "$2a$") ||
+		strings.HasPrefix(password, "$2b$") ||
+		strings.HasPrefix(password, "$2y$") ||
+		strings.HasPrefix(password, "$2x$") // legacy format, rarely used
 }
 
 // CheckAccess validates if a request has access to protected resources
@@ -157,10 +168,10 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 
 	// Log basic auth attempt
 	security.LogInfo("Basic authentication login attempt", "username", username)
-	
+
 	// Temporary debug logging to diagnose auth issues
 	if a.logger != nil {
-		a.logger.Debug("BasicAuth configuration check", 
+		a.logger.Debug("BasicAuth configuration check",
 			"provided_username", username,
 			"configured_clientid", storedClientID,
 			"clientid_match", username == storedClientID)
@@ -179,15 +190,15 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 	usernameHash := sha256.Sum256([]byte(username))
 	storedClientIDHash := sha256.Sum256([]byte(storedClientID))
 	userMatch := subtle.ConstantTimeCompare(usernameHash[:], storedClientIDHash[:]) == 1
-	
+
 	// Check password - handle both hashed and legacy plaintext passwords
 	var passMatch bool
-	// Use bcrypt.Cost to detect hashed password - handles all variants ($2a$, $2b$, $2x$, $2y$)
-	if _, err := bcrypt.Cost([]byte(storedPassword)); err == nil {
+	// Use prefix checking to detect bcrypt hashes - much faster than bcrypt.Cost()
+	if isBcryptHash(storedPassword) {
 		// Password is already hashed with bcrypt
 		err := bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(password))
 		passMatch = (err == nil)
-		
+
 		if err != nil && !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
 			security.LogError("Error comparing bcrypt password", "error", err.Error())
 		}
@@ -197,12 +208,12 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 		passwordHash := sha256.Sum256([]byte(password))
 		storedPasswordHash := sha256.Sum256([]byte(storedPassword))
 		passMatch = subtle.ConstantTimeCompare(passwordHash[:], storedPasswordHash[:]) == 1
-		
+
 		if passMatch {
 			security.LogInfo("Legacy plaintext password detected - consider re-saving settings to hash password")
 		}
 	}
-	
+
 	credentialsValid := userMatch && passMatch
 
 	if credentialsValid {
