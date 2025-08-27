@@ -18,6 +18,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -768,7 +769,8 @@ func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName stri
 	return nil
 }
 
-// handleSecuritySectionWithHashing handles security section updates with password hashing
+// handleSecuritySectionWithHashing handles security section updates with password hashing.
+// The skippedFields parameter is unused as all security fields are processed for security reasons.
 func handleSecuritySectionWithHashing(sectionPtr any, data json.RawMessage, _ *[]string) error {
 	securitySettings, ok := sectionPtr.(*conf.Security)
 	if !ok {
@@ -804,12 +806,15 @@ func handleSecuritySectionWithHashing(sectionPtr any, data json.RawMessage, _ *[
 					
 					if !isAlreadyHashed {
 						// Password is plaintext - hash it
+						security.LogInfo("Hashing new password for basic auth update")
 						hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 						if err != nil {
+							security.LogError("Failed to hash password during settings update", "error", err.Error())
 							return fmt.Errorf("failed to hash password: %w", err)
 						}
 						// Replace the plain password with the hashed one
 						basicAuthMap["password"] = string(hashedPassword)
+						security.LogInfo("Password successfully hashed and stored")
 					}
 					// If already hashed (shouldn't happen from frontend), leave as is
 					// This handles edge cases like config imports or direct yaml edits
@@ -960,17 +965,20 @@ func validatePasswordStrength(password string) error {
 		return fmt.Errorf("password cannot be only whitespace")
 	}
 	
-	// For non-hashed passwords, check length requirements
-	// Check for bcrypt prefixes including $2x$ 
-	if !strings.HasPrefix(password, "$2") {
-		// Check minimum password length
-		if len(password) < 8 {
-			return fmt.Errorf("password must be at least 8 characters long")
-		}
-		// Check maximum password length (bcrypt has a 72 byte limit)
-		if len(password) > 72 {
-			return fmt.Errorf("password must not exceed 72 characters")
-		}
+	// Use bcrypt.Cost to reliably detect if password is already hashed
+	// This handles all bcrypt variants ($2a$, $2b$, $2x$, $2y$)
+	if _, err := bcrypt.Cost([]byte(password)); err == nil {
+		// Already hashed, skip validation
+		return nil
+	}
+	
+	// For plaintext passwords, check length requirements
+	if len(password) < 8 {
+		return fmt.Errorf("password must be at least 8 characters long")
+	}
+	// Check maximum password length (bcrypt has a 72 byte limit)
+	if len(password) > 72 {
+		return fmt.Errorf("password must not exceed 72 characters")
 	}
 
 	return nil
