@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -127,7 +126,7 @@ func TestEmptyPasswordUpdate(t *testing.T) {
 			"Null password should preserve existing hash")
 	})
 
-	t.Run("Whitespace-only password should preserve existing", func(t *testing.T) {
+	t.Run("Whitespace-only password should be rejected", func(t *testing.T) {
 		controller, _ := createControllerWithPassword(t, "CurrentPasswordXYZ")
 		
 		// Send update with whitespace-only password
@@ -568,7 +567,7 @@ func TestPasswordUpdateRollback(t *testing.T) {
 			controlChan:         make(chan string, 10),
 			DisableSaveSettings: true, // Always disable for tests
 			logger:              log.New(io.Discard, "TEST: ", log.LstdFlags),
-			settingsMutex:       sync.RWMutex{}, // Initialize mutex
+			// settingsMutex is zero-initialized (no manual init needed)
 		}
 		
 		// Attempt to update with invalid password (too short) - should fail validation
