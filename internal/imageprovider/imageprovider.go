@@ -103,9 +103,25 @@ var (
 	// TODO: Call imageProviderLogCloser during graceful shutdown if needed
 )
 
+// SetDebugLogging enables or disables debug logging for the image provider
+func SetDebugLogging(enable bool) {
+	if enable {
+		imageProviderLevelVar.Set(slog.LevelDebug)
+		imageProviderLogger.Info("Debug logging enabled for image provider")
+	} else {
+		imageProviderLevelVar.Set(slog.LevelInfo)
+		imageProviderLogger.Info("Debug logging disabled for image provider")
+	}
+}
+
 func init() {
 	var err error
-	initialLevel := slog.LevelInfo // Set desired initial level
+	// Check if debug mode is enabled in configuration
+	settings := conf.Setting()
+	initialLevel := slog.LevelInfo
+	if settings != nil && settings.Realtime.Dashboard.Thumbnails.Debug {
+		initialLevel = slog.LevelDebug
+	}
 	imageProviderLevelVar.Set(initialLevel)
 
 	// Default level is Info. Set to Debug for more detailed cache/provider info.

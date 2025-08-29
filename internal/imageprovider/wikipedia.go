@@ -4,7 +4,10 @@ package imageprovider
 import (
 	"bytes"
 	"context"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -19,6 +22,16 @@ import (
 )
 
 const wikiProviderName = "wikimedia"
+
+// mwclientDebugWriter implements io.Writer to capture mwclient debug output
+type mwclientDebugWriter struct {
+	logger *slog.Logger
+}
+
+func (w *mwclientDebugWriter) Write(p []byte) (n int, err error) {
+	w.logger.Debug("mwclient debug output", "data", string(p))
+	return len(p), nil
+}
 
 // Error categorization for enhanced diagnostics
 type apiErrorCategory struct {
@@ -120,14 +133,23 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 	logger := imageProviderLogger.With("provider", wikiProviderName)
 	logger.Info("Initializing WikiMedia provider")
 	settings := conf.Setting()
-	client, err := mwclient.New("https://wikipedia.org/w/api.php", "BirdNET-Go")
+	
+	// Enable debug logging if configured
+	if settings.Realtime.Dashboard.Thumbnails.Debug {
+		SetDebugLogging(true)
+		logger.Info("Debug mode enabled for WikiMedia provider", "debug", true)
+	}
+	
+	apiURL := "https://en.wikipedia.org/w/api.php"
+	logger.Debug("Creating mwclient with API URL", "api_url", apiURL, "user_agent", "BirdNET-Go")
+	client, err := mwclient.New(apiURL, "BirdNET-Go")
 	if err != nil {
 		enhancedErr := errors.New(err).
 			Component("imageprovider").
 			Category(errors.CategoryNetwork).
 			Context("provider", wikiProviderName).
 			Context("operation", "create_mwclient").
-			Context("api_url", "https://wikipedia.org/w/api.php").
+			Context("api_url", "https://en.wikipedia.org/w/api.php").
 			Build()
 		logger.Error("Failed to create mwclient for Wikipedia API", "error", enhancedErr)
 		return nil, enhancedErr
@@ -138,6 +160,15 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 	// Background operations: 2 requests per second to respect Wikipedia's rate limits
 	backgroundLimiter := rate.NewLimiter(rate.Limit(2), 2)
 	logger.Info("WikiMedia provider initialized", "user_rate_limit", "none", "background_rate_limit_rps", 2)
+	
+	// Enable debug output for mwclient if debug mode is on
+	if settings.Realtime.Dashboard.Thumbnails.Debug {
+		// Create a debug writer that logs to our logger
+		debugWriter := &mwclientDebugWriter{logger: logger}
+		client.SetDebug(debugWriter)
+		logger.Debug("Enabled mwclient debug output")
+	}
+	
 	return &wikiMediaProvider{
 		client:            client,
 		debug:             settings.Realtime.Dashboard.Thumbnails.Debug,
@@ -152,10 +183,8 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 	var lastErr error
 	for attempt := 0; attempt < l.maxRetries; attempt++ {
 		attemptLogger := logger.With("attempt", attempt+1, "max_attempts", l.maxRetries)
-		attemptLogger.Debug("Attempting Wikipedia API request")
-		// if l.debug {
-		// 	log.Printf("[%s] Debug: API request attempt %d", reqID, attempt+1)
-		// }
+		attemptLogger.Debug("Attempting Wikipedia API request",
+			"species", params["titles"])
 		// Wait for rate limiter if one is provided (only for background operations)
 		if limiter != nil {
 			attemptLogger.Debug("Waiting for rate limiter")
@@ -176,30 +205,81 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 			attemptLogger.Debug("No rate limiting applied (user request)")
 		}
 
-		attemptLogger.Debug("Sending GET request to Wikipedia API")
+		// Construct the full URL for debug logging with proper URL encoding
+		queryParams := make([]string, 0, len(params))
+		for k, v := range params {
+			queryParams = append(queryParams, k+"="+url.QueryEscape(v))
+		}
+		fullURL := "https://en.wikipedia.org/w/api.php?" + strings.Join(queryParams, "&")
+		attemptLogger.Debug("Sending GET request to Wikipedia API", "full_url", fullURL, "params", params)
 		resp, err := l.client.Get(params)
 		if err == nil {
-			attemptLogger.Debug("API request successful")
+			// Log successful response with debug details
+			if respObj, errJson := resp.Object(); errJson == nil {
+				responseStr := respObj.String()
+				previewLen := 500
+				if len(responseStr) < previewLen {
+					previewLen = len(responseStr)
+				}
+				attemptLogger.Debug("API request successful - raw response received", 
+					"response_preview", responseStr[:previewLen],
+					"response_size", len(responseStr))
+			} else {
+				attemptLogger.Debug("API request successful")
+			}
 			return resp, nil // Success
 		}
 
 		// Check if this is a JSON parsing error (Wikipedia returned HTML instead of JSON)
 		if strings.Contains(err.Error(), "invalid character") && strings.Contains(err.Error(), "looking for beginning of value") {
-			// JSON parsing errors are expected behavior (species without Wikipedia pages)
-			// Log at DEBUG level only to avoid notification spam
-			attemptLogger.Debug("Wikipedia returned HTML error page instead of JSON - normal for species without pages",
-				"species_query", params["titles"],
-				"error_type", "json_parsing_expected",
-				"original_error", err.Error(),
-				"reason", "species_likely_has_no_wikipedia_page",
-				"action", "returning_image_not_found_no_retry")
-			
-			// Don't retry JSON parsing errors - Wikipedia page likely doesn't exist
-			return nil, ErrImageNotFound
+			// Make a direct HTTP request to capture the actual error response
+			req, _ := http.NewRequest("GET", fullURL, http.NoBody)
+			req.Header.Set("User-Agent", "BirdNET-Go")
+			httpClient := &http.Client{Timeout: 10 * time.Second}
+			if debugResp, debugErr := httpClient.Do(req); debugErr == nil {
+				if body, readErr := io.ReadAll(debugResp.Body); readErr == nil {
+					// Log the full error response at WARN level
+					if debugResp.StatusCode != 200 {
+						attemptLogger.Warn("Wikipedia API error response",
+							"status_code", debugResp.StatusCode,
+							"content_type", debugResp.Header.Get("Content-Type"),
+							"response_body", string(body),
+							"requested_url", fullURL,
+							"attempt", attempt+1,
+							"max_attempts", l.maxRetries)
+						
+						// Special handling for User-Agent blocks
+						if debugResp.StatusCode == 403 && strings.Contains(string(body), "User-Agent") {
+							attemptLogger.Error("Wikipedia blocked request - User-Agent policy violation",
+								"error_message", string(body),
+								"user_agent", req.Header.Get("User-Agent"),
+								"policy_url", "https://meta.wikimedia.org/wiki/User-Agent_policy",
+								"action_required", "User-Agent needs to be whitelisted or changed")
+						}
+					} else {
+						attemptLogger.Debug("Wikipedia returned non-JSON content",
+							"parsing_error", err.Error(),
+							"attempt", attempt+1,
+							"will_retry", attempt < l.maxRetries-1)
+					}
+				}
+				// Close response body
+				if err := debugResp.Body.Close(); err != nil {
+					attemptLogger.Debug("Failed to close debug response body", "error", err)
+				}
+			} else {
+				attemptLogger.Debug("Unable to diagnose API error",
+					"diagnostic_error", debugErr.Error(),
+					"original_error", err.Error())
+			}
 		}
 
 		lastErr = err
-		attemptLogger.Warn("API request failed", "error", err)
+		attemptLogger.Warn("API request failed",
+			"error", err,
+			"attempted_url", fullURL,
+			"attempt", attempt+1,
+			"will_retry", attempt < l.maxRetries-1)
 		// if l.debug {
 		// 	log.Printf("Debug: API request attempt %d failed: %v", attempt+1, err)
 		// }
@@ -233,44 +313,52 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 // queryAndGetFirstPageWithLimiter queries Wikipedia with given parameters using the specified rate limiter.
 func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(reqID string, params map[string]string, limiter *rate.Limiter) (*jason.Object, error) {
 	logger := imageProviderLogger.With("provider", wikiProviderName, "request_id", reqID, "api_action", params["action"], "titles", params["titles"])
-	logger.Info("Querying Wikipedia API")
+	// Construct URL for debug logging with proper URL encoding
+	queryParams := make([]string, 0, len(params))
+	for k, v := range params {
+		queryParams = append(queryParams, k+"="+url.QueryEscape(v))
+	}
+	fullURL := "https://en.wikipedia.org/w/api.php?" + strings.Join(queryParams, "&")
+	logger.Info("Querying Wikipedia API", "debug_full_url", fullURL)
 	// if l.debug {
 	// 	log.Printf("[%s] Debug: Querying Wikipedia API with params: %v", reqID, params)
 	// }
 
 	resp, err := l.queryWithRetryAndLimiter(reqID, params, limiter)
 	if err != nil {
-		// Error already logged in queryWithRetry
-		// if l.debug {
-		// 	log.Printf("Debug: Wikipedia API query failed after retries: %v", err)
-		// }
-		// Error already enhanced in queryWithRetry
+		// Error already logged and enhanced in queryWithRetry
 		return nil, err
 	}
 
-	// Optionally log raw response at Debug level
-	if logger.Enabled(context.Background(), slog.LevelDebug) { // Check if Debug level is enabled
+	// Log raw response at Debug level for troubleshooting
+	if logger.Enabled(context.Background(), slog.LevelDebug) {
 		if respObj, errJson := resp.Object(); errJson == nil {
-			logger.Debug("Raw Wikipedia API response", "response", respObj.String())
+			responseStr := respObj.String()
+			logger.Debug("Raw Wikipedia API response received",
+				"response_full", responseStr,
+				"response_length", len(responseStr),
+				"request_url", fullURL)
 		} else {
-			logger.Debug("Failed to format raw response for logging", "error", errJson)
+			logger.Debug("Failed to format raw response for logging", "error", errJson, "request_url", fullURL)
 		}
 	}
-	// if l.debug {
-	// 	if obj, err := resp.Object(); err == nil {
-	// 		log.Printf("[%s] Debug: Raw Wikipedia API response: %v", reqID, obj)
-	// 	}
-	// }
 
 	logger.Debug("Parsing pages from API response")
 
 	// First check if the response has a query field at all
 	query, err := resp.GetObject("query")
 	if err != nil {
+		// Log the complete raw response when query field is missing
+		if respObj, errJson := resp.Object(); errJson == nil {
+			logger.Debug("Wikipedia response missing 'query' field - full response dump",
+				"raw_response", respObj.String(),
+				"request_url", fullURL)
+		}
 		// Enhanced logging for missing query field
 		logger.Info("Wikipedia response missing 'query' field - analyzing response structure", 
 			"error", err.Error(),
 			"request_params", params,
+			"request_url", fullURL,
 			"response_analysis", "checking_for_api_errors")
 
 		// Check if there's an error field in the response
@@ -301,10 +389,17 @@ func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(reqID string, params
 	// Try to get pages array from the query object
 	pages, err := query.GetObjectArray("pages")
 	if err != nil {
+		// Log the query object structure when pages field is missing
+		if queryObj, errJson := query.Object(); errJson == nil {
+			logger.Debug("Wikipedia 'query' object structure when 'pages' field missing",
+				"query_object", queryObj.String(),
+				"request_url", fullURL)
+		}
 		// Enhanced logging for missing pages array
 		logger.Info("No 'pages' field in Wikipedia query response - analyzing alternative response structures", 
 			"pages_error", err.Error(),
 			"species_query", params["titles"],
+			"request_url", fullURL,
 			"response_analysis", "checking_redirects_and_normalized_titles")
 
 		// Check for alternative structures that might indicate page issues
@@ -338,37 +433,35 @@ func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(reqID string, params
 		logger.Debug("Wikipedia returned empty pages array - normal for species without pages",
 			"error_type", "empty_pages_array_expected",
 			"species_query", params["titles"],
+			"request_url", fullURL,
 			"response_has_query_field", true,
 			"pages_array_length", 0,
 			"diagnostic_hint", "wikipedia_query_succeeded_but_species_has_no_page")
 		
-		// Log full response structure for debugging if debug level enabled
-		if logger.Enabled(context.Background(), slog.LevelDebug) {
-			if respObj, errJson := resp.Object(); errJson == nil {
-				logger.Debug("Full Wikipedia response structure analysis (empty pages)",
-					"response_json", respObj.String(),
-					"analysis", "complete_api_response_for_debugging")
-			} else {
-				logger.Debug("Could not serialize response for debugging", "serialization_error", errJson)
-			}
+		// Always log full response structure for debugging
+		if respObj, errJson := resp.Object(); errJson == nil {
+			logger.Debug("Full Wikipedia response structure analysis (empty pages)",
+				"response_json", respObj.String(),
+				"request_url", fullURL,
+				"analysis", "complete_api_response_for_debugging")
+		} else {
+			logger.Debug("Could not serialize response for debugging", "serialization_error", errJson, "request_url", fullURL)
 		}
 		
 		// Return specific error indicating page not found
 		return nil, ErrImageNotFound
 	}
 
-	// Optionally log first page content at Debug level
+	// Log first page content at Debug level for troubleshooting
 	if logger.Enabled(context.Background(), slog.LevelDebug) {
 		if firstPageObj, errJson := pages[0].Object(); errJson == nil {
-			logger.Debug("First page content from API response", "page_content", firstPageObj.String())
+			logger.Debug("First page content from API response", 
+				"page_content", firstPageObj.String(),
+				"request_url", fullURL)
+		} else {
+			logger.Debug("Could not format first page for logging", "error", errJson, "request_url", fullURL)
 		}
 	}
-	// if l.debug {
-	// 	if firstPage, err := pages[0].Object(); err == nil {
-	// 		log.Printf("[%s] Debug: First page content: %v", reqID, firstPage)
-	// 		log.Printf("[%s] Debug: Successfully retrieved Wikipedia page", reqID)
-	// 	}
-	// }
 
 	// Use success logging function
 	responseMetadata := map[string]interface{}{
@@ -438,10 +531,6 @@ func (l *wikiMediaProvider) fetchWithLimiter(scientificName string, limiter *rat
 	}
 	logger = logger.With("thumbnail_url", thumbnailURL, "source_file", thumbnailSourceFile)
 	logger.Info("Thumbnail retrieved successfully")
-	// if l.debug {
-	// 	log.Printf("[%s] Debug: Successfully retrieved thumbnail - URL: %s, File: %s", reqID, thumbnailURL, thumbnailSourceFile)
-	// 	log.Printf("[%s] Debug: Thumbnail source file: %s", reqID, thumbnailSourceFile)
-	// }
 
 	authorInfo, err := l.queryAuthorInfo(reqID, thumbnailSourceFile, limiter)
 	if err != nil {
@@ -473,9 +562,6 @@ func (l *wikiMediaProvider) fetchWithLimiter(scientificName string, limiter *rat
 	}
 	logger = logger.With("author", authorInfo.name, "license", authorInfo.licenseName)
 	logger.Info("Author info retrieved successfully")
-	// if l.debug {
-	// 	log.Printf("[%s] Debug: Successfully retrieved author info for %s - Author: %s", reqID, scientificName, authorInfo.name)
-	// }
 
 	result := BirdImage{
 		URL:            thumbnailURL,
@@ -503,15 +589,15 @@ func (l *wikiMediaProvider) fetchWithLimiter(scientificName string, limiter *rat
 
 // queryThumbnail queries Wikipedia for the thumbnail image of the given scientific name.
 // It returns the URL and file name of the thumbnail.
-func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string, limiter *rate.Limiter) (url, fileName string, err error) {
+func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string, limiter *rate.Limiter) (thumbnailURL, fileName string, err error) {
 	logger := imageProviderLogger.With("provider", wikiProviderName, "scientific_name", scientificName, "request_id", reqID)
-	logger.Debug("Querying thumbnail")
-	// if l.debug {
-	// 	log.Printf("[%s] Debug: Querying thumbnail for species: %s", reqID, scientificName)
-	// }
+	logger.Debug("Querying thumbnail",
+		"scientific_name", scientificName)
 
 	params := map[string]string{
 		"action":      "query",
+		"format":      "json",
+		"formatversion": "2",
 		"prop":        "pageimages",
 		"piprop":      "thumbnail|name",
 		"pilicense":   "free",
@@ -528,9 +614,6 @@ func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string, limiter
 		} else {
 			logger.Error("Failed to query thumbnail page", "error", err)
 		}
-		// if l.debug {
-		// 	log.Printf("Debug: Failed to query thumbnail page: %v", err)
-		// }
 		// Return a consistent user-facing error
 		// Check if it's already an enhanced error from queryAndGetFirstPage
 		var enhancedErr *errors.EnhancedError
@@ -547,7 +630,7 @@ func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string, limiter
 		return "", "", enhancedErr
 	}
 
-	url, err = page.GetString("thumbnail", "source")
+	thumbnailURL, err = page.GetString("thumbnail", "source")
 	if err != nil {
 		logger.Debug("No thumbnail URL found in page data", "error", err)
 		// This is common for pages without images or with non-free images
@@ -563,27 +646,25 @@ func (l *wikiMediaProvider) queryThumbnail(reqID, scientificName string, limiter
 		return "", "", ErrImageNotFound
 	}
 
-	logger.Debug("Successfully retrieved thumbnail URL and filename", "url", url, "filename", fileName)
-	// if l.debug {
-	// 	log.Printf("[%s] Debug: Successfully retrieved thumbnail - URL: %s, File: %s", reqID, url, fileName)
-	// 	log.Printf("[%s] Debug: Successfully retrieved thumbnail URL: %s", reqID, url)
-	// 	log.Printf("[%s] Debug: Thumbnail source file: %s", reqID, fileName)
-	// }
+	logger.Debug("Successfully retrieved thumbnail URL and filename",
+		"url", thumbnailURL,
+		"filename", fileName)
 
-	return url, fileName, nil
+	return thumbnailURL, fileName, nil
 }
 
 // queryAuthorInfo queries Wikipedia for the author information of the given thumbnail URL.
 // It returns a wikiMediaAuthor struct containing the author and license information.
 func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailFileName string, limiter *rate.Limiter) (*wikiMediaAuthor, error) {
 	logger := imageProviderLogger.With("provider", wikiProviderName, "request_id", reqID, "filename", thumbnailFileName)
-	logger.Debug("Querying author info for file")
-	// if l.debug {
-	// 	log.Printf("[%s] Debug: Querying author info for thumbnail: %s", reqID, thumbnailURL)
-	// }
+	logger.Debug("Querying author info",
+		"filename", thumbnailFileName,
+		"file_title", "File:"+thumbnailFileName)
 
 	params := map[string]string{
 		"action":    "query",
+		"format":    "json",
+		"formatversion": "2",
 		"prop":      "imageinfo",
 		"iiprop":    "extmetadata",
 		"titles":    "File:" + thumbnailFileName, // Use filename here
@@ -598,9 +679,6 @@ func (l *wikiMediaProvider) queryAuthorInfo(reqID, thumbnailFileName string, lim
 		} else {
 			logger.Error("Failed to query author info page", "error", err)
 		}
-		// if l.debug {
-		// 	log.Printf("Debug: Failed to query author info page: %v", err)
-		// }
 		// Return internal error, fetch will wrap it
 		// Check if it's already an enhanced error from queryAndGetFirstPage
 		var enhancedErr *errors.EnhancedError
