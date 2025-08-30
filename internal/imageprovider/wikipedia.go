@@ -143,10 +143,10 @@ func (l *wikiMediaProvider) resetCircuit() {
 
 // makeAPIRequest performs a direct HTTP GET request to Wikipedia API with proper headers.
 // This replaces the mwclient library to ensure proper User-Agent header handling.
-func (l *wikiMediaProvider) makeAPIRequest(params map[string]string) (*jason.Object, error) {
+// The context is used for rate limiting, cancellation, and deadlines.
+func (l *wikiMediaProvider) makeAPIRequest(ctx context.Context, params map[string]string) (*jason.Object, error) {
 	// Apply global rate limiting - ALL requests must respect the 1 req/sec limit
 	if l.globalLimiter != nil {
-		ctx := context.Background()
 		if err := l.globalLimiter.Wait(ctx); err != nil {
 			return nil, errors.New(err).
 				Component("imageprovider").
@@ -288,13 +288,14 @@ func (l *wikiMediaProvider) makeAPIRequest(params map[string]string) (*jason.Obj
 			l.openCircuit(circuitBreakerServiceUnavailDuration, fmt.Sprintf("Service unavailable (HTTP 503): %s", truncateResponseBody(bodyStr, responseBodyPreviewLimit)))
 		}
 
-		return nil, errors.Newf("Wikipedia API returned status %d: %s", resp.StatusCode, bodyStr).
+		truncatedBody := truncateResponseBody(bodyStr, responseBodyPreviewLimit)
+		return nil, errors.Newf("Wikipedia API returned status %d: %s", resp.StatusCode, truncatedBody).
 			Component("imageprovider").
 			Category(errors.CategoryNetwork).
 			Context("provider", wikiProviderName).
 			Context("operation", "api_error").
 			Context("status_code", resp.StatusCode).
-			Context("response_body", bodyStr).
+			Context("response_body", truncatedBody).
 			Build()
 	}
 
@@ -577,17 +578,48 @@ func checkUserAgentPolicyViolation(reqID string, statusCode int, responseBody []
 		Build()
 }
 
-// handleJSONParsingError handles JSON parsing errors by making a direct HTTP request to diagnose the issue
+// makeRateLimitedRequest makes a rate-limited HTTP request to the given URL.
+// This ensures all requests, including diagnostic requests, respect the global rate limiter.
+// The context is used for rate limiting, cancellation, and deadlines.
+func (l *wikiMediaProvider) makeRateLimitedRequest(ctx context.Context, requestURL string) (*http.Response, error) {
+	// Apply global rate limiting - ALL requests must respect the 1 req/sec limit
+	if l.globalLimiter != nil {
+		if err := l.globalLimiter.Wait(ctx); err != nil {
+			return nil, errors.New(err).
+				Component("imageprovider").
+				Category(errors.CategoryNetwork).
+				Context("provider", wikiProviderName).
+				Context("operation", "global_rate_limit_wait").
+				Build()
+		}
+		imageProviderLogger.Debug("Global rate limiter wait completed for diagnostic request",
+			"provider", wikiProviderName)
+	}
+
+	// Create and execute request
+	req, err := http.NewRequest("GET", requestURL, http.NoBody)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("operation", "create_diagnostic_request").
+			Build()
+	}
+	req.Header.Set("User-Agent", l.userAgent)
+	
+	httpClient := &http.Client{Timeout: diagnosticRequestTimeout}
+	return httpClient.Do(req)
+}
+
+// handleJSONParsingError handles JSON parsing errors by making a rate-limited diagnostic request
 // Always performs diagnostics to identify rate limiting and other error types
 func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, err error, settings *conf.Settings, attemptLogger *slog.Logger, attempt int) error {
 	// Always make a diagnostic request to identify the actual error type
 	// This is important to detect rate limiting and blocking
+	// Use rate-limited request to ensure all requests respect the global limiter
 
-	req, _ := http.NewRequest("GET", fullURL, http.NoBody)
-	req.Header.Set("User-Agent", buildUserAgent(settings.Version))
-	httpClient := &http.Client{Timeout: diagnosticRequestTimeout}
-
-	debugResp, debugErr := httpClient.Do(req)
+	debugResp, debugErr := l.makeRateLimitedRequest(context.Background(), fullURL)
 	if debugErr != nil {
 		attemptLogger.Debug("Unable to diagnose API error",
 			"diagnostic_error", debugErr.Error(),
@@ -670,7 +702,7 @@ func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, err er
 	case wikiErrorUserAgent:
 		// User-agent policy violation - open circuit breaker
 		l.openCircuit(circuitBreakerUserAgentDuration, "User-Agent policy violation")
-		return checkUserAgentPolicyViolation(reqID, debugResp.StatusCode, body, req.Header.Get("User-Agent"), attemptLogger)
+		return checkUserAgentPolicyViolation(reqID, debugResp.StatusCode, body, l.userAgent, attemptLogger)
 
 	case wikiErrorTemporary:
 		// Temporary error - continue with retry logic but with longer backoff
@@ -819,7 +851,8 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 }
 
 // queryWithRetryAndLimiter performs a query with retry logic using the specified rate limiter.
-func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[string]string, limiter *rate.Limiter) (*jason.Object, error) {
+// The context is used for cancellation, deadlines, and rate limiting.
+func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID string, params map[string]string, limiter *rate.Limiter) (*jason.Object, error) {
 	logger := imageProviderLogger.With("provider", wikiProviderName, "request_id", reqID, "api_action", params["action"])
 
 	// Check if circuit breaker is open
@@ -845,7 +878,7 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 		// Wait for rate limiter if one is provided (only for background operations)
 		if limiter != nil {
 			attemptLogger.Debug("Waiting for rate limiter")
-			err := limiter.Wait(context.Background()) // Using Background context for limiter wait
+			err := limiter.Wait(ctx) // Use provided context for cancellation and deadlines
 			if err != nil {
 				enhancedErr := errors.New(err).
 					Component("imageprovider").
@@ -864,7 +897,7 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 
 		// Make the API request using our new method
 		attemptLogger.Debug("Sending GET request to Wikipedia API", "params", params)
-		resp, err := l.makeAPIRequest(params)
+		resp, err := l.makeAPIRequest(ctx, params)
 		if err == nil {
 			// Log successful response with debug details
 			if respObj, errJson := resp.Object(); errJson == nil {
@@ -946,7 +979,7 @@ func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(ctx context.Context,
 	fullURL := wikipediaAPIURL + "?" + strings.Join(queryParams, "&")
 	logger.Info("Querying Wikipedia API", "debug_full_url", fullURL)
 
-	resp, err := l.queryWithRetryAndLimiter(reqID, params, limiter)
+	resp, err := l.queryWithRetryAndLimiter(ctx, reqID, params, limiter)
 	if err != nil {
 		// Error already logged and enhanced in queryWithRetry
 		return nil, err
@@ -1130,8 +1163,8 @@ func (l *wikiMediaProvider) isAllowedToFetch() (allowed bool, reason string) {
 }
 
 // FetchWithContext retrieves the bird image for a given scientific name using a context.
-// If the context indicates a background operation, it uses the background rate limiter.
-// User requests are not rate limited.
+// All requests pass through the global 1 req/s limiter; background operations also
+// use an additional background-specific limiter for more conservative rate limiting.
 func (l *wikiMediaProvider) FetchWithContext(ctx context.Context, scientificName string) (BirdImage, error) {
 	// Check if we're allowed to make requests to WikiMedia
 	if allowed, reason := l.isAllowedToFetch(); !allowed {
