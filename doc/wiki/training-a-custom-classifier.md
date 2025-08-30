@@ -41,7 +41,7 @@ The Background folder should contain:
 
 Here's an example of a complete training data folder structure with multiple classes:
 
-![Complete folder structure for BirdNET training](https://github.com/tphakala/birdnet-go/wiki/images/2025-08-30_19-25-36_folder_structure.PNG)
+![Complete folder structure for BirdNET training](https://raw.githubusercontent.com/tphakala/birdnet-go/main/doc/wiki/images/2025-08-30_19-25-36_folder_structure.PNG)
 
 The structure includes:
 - **Background**: Ambient sounds that should not trigger any detection
@@ -78,11 +78,11 @@ For each class folder:
 
 Most audio editors display audio as waveforms by default:
 
-![Audio editor in waveform view (incorrect for this task)](https://github.com/tphakala/birdnet-go/wiki/images/2025-08-30_18-57-46_waveform.PNG)
+![Audio editor in waveform view (incorrect for this task)](https://raw.githubusercontent.com/tphakala/birdnet-go/main/doc/wiki/images/2025-08-30_18-57-46_waveform.PNG)
 
 However, for this task, you should use **spectrogram view** instead. The spectrogram provides a visual representation of frequency content over time, making it easier to identify and isolate specific sounds:
 
-![Audio editor in spectrogram view (correct for this task)](https://github.com/tphakala/birdnet-go/wiki/images/2025-08-30_18-58-08_spectrogram.PNG)
+![Audio editor in spectrogram view (correct for this task)](https://raw.githubusercontent.com/tphakala/birdnet-go/main/doc/wiki/images/2025-08-30_18-58-08_spectrogram.PNG)
 
 In the spectrogram view, different sounds appear as distinct patterns:
 - Dog barks appear as vertical bands with specific frequency characteristics
@@ -103,29 +103,29 @@ The negative matches are all portions of the audio that do NOT contain your targ
 
 1. **Identify dog barks** in the spectrogram view
 
-![Dog bark visible in spectrogram](https://github.com/tphakala/birdnet-go/wiki/images/2025-08-30_19-00-58_dog_bark.PNG)
+![Dog bark visible in spectrogram](https://raw.githubusercontent.com/tphakala/birdnet-go/main/doc/wiki/images/2025-08-30_19-00-58_dog_bark.PNG)
 
 2. **Delete the dog bark segments** to isolate only the background/negative audio
 
-![Deleting dog bark segments](https://github.com/tphakala/birdnet-go/wiki/images/2025-08-30_19-01-29_2_dog_barks_being_deleted.PNG)
+![Deleting dog bark segments](https://raw.githubusercontent.com/tphakala/birdnet-go/main/doc/wiki/images/2025-08-30_19-01-29_2_dog_barks_being_deleted.PNG)
 
 3. **Combine the remaining segments** into a continuous audio track without any dog barks - in this example selected part will be exported as negative sample
 
-![Continuous clip without dog barks](https://github.com/tphakala/birdnet-go/wiki/images/2025-08-30_19-02-01_continous_clip_of_no_dog_bark.PNG)
+![Continuous clip without dog barks](https://raw.githubusercontent.com/tphakala/birdnet-go/main/doc/wiki/images/2025-08-30_19-02-01_continous_clip_of_no_dog_bark.PNG)
 
 4. **Export the audio** using your audio editor's export function
 
-![Exporting audio](https://github.com/tphakala/birdnet-go/wiki/images/2025-08-30_19-02-25_export_audio.PNG)
+![Exporting audio](https://raw.githubusercontent.com/tphakala/birdnet-go/main/doc/wiki/images/2025-08-30_19-02-25_export_audio.PNG)
 
 5. **Save to the negative folder** (e.g., `-Dog_Dog` or `Background` folder)
 
-![Saving to negative folder](https://github.com/tphakala/birdnet-go/wiki/images/2025-08-30_19-02-57_save_to_negative_folder.PNG)
+![Saving to negative folder](https://raw.githubusercontent.com/tphakala/birdnet-go/main/doc/wiki/images/2025-08-30_19-02-57_save_to_negative_folder.PNG)
 
 ## Step 2: Configure BirdNET Analyzer
 
 Launch BirdNET Analyzer 1.5.1 GUI and navigate to the **Train** tab:
 
-![BirdNET Analyzer Train tab](https://github.com/tphakala/birdnet-go/wiki/images/2025-08-30_19-08-07_birdnet_analyzer_gui_train.PNG)
+![BirdNET Analyzer Train tab](https://raw.githubusercontent.com/tphakala/birdnet-go/main/doc/wiki/images/2025-08-30_19-08-07_birdnet_analyzer_gui_train.PNG)
 
 ### Training Configuration
 
@@ -143,7 +143,7 @@ Configure the following settings:
 | **Overlap** | 1.0 | Increases training data through overlapping |
 | **Model save** | Append | Adds to existing model |
 
-![Training configuration settings](https://github.com/tphakala/birdnet-go/wiki/images/2025-08-30_19-09-58_birdnet_analyzer_gui_values.PNG)
+![Training configuration settings](https://raw.githubusercontent.com/tphakala/birdnet-go/main/doc/wiki/images/2025-08-30_19-09-58_birdnet_analyzer_gui_values.PNG)
 
 ### Key Parameters Explained
 
