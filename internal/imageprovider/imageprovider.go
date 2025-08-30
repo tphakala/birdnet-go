@@ -315,10 +315,16 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 				Build()
 		}
 		
-		// Use WARN level for "not found" errors, ERROR for actual failures
-		if errors.Is(err, ErrImageNotFound) {
+		// Use appropriate log levels based on error type:
+		// DEBUG: Configuration errors (provider not configured)
+		// WARN: "Not found" errors
+		// ERROR: Actual system failures
+		switch {
+		case errors.Is(err, ErrImageNotFound):
 			logger.Warn("Failed to fetch image during refresh", "error", enhancedErr)
-		} else {
+		case enhancedErr.GetCategory() == string(errors.CategoryConfiguration):
+			logger.Debug("Image provider not configured for use during refresh", "error", enhancedErr)
+		default:
 			logger.Error("Failed to fetch image during refresh", "error", enhancedErr)
 		}
 		
