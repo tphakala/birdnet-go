@@ -62,6 +62,13 @@ type ImageProvider interface {
 	Fetch(scientificName string) (BirdImage, error)
 }
 
+// ProviderStatusChecker defines an interface for checking if a provider should actively
+// perform operations (like cache refreshes) without requiring full initialization.
+// This allows providers to be registered for UI discovery while being operationally inactive.
+type ProviderStatusChecker interface {
+	ShouldRefreshCache() bool
+}
+
 // BirdImage represents a cached bird image with its metadata and attribution information
 type BirdImage struct {
 	URL            string    // Direct URL to the bird image
@@ -211,6 +218,18 @@ func (c *BirdImageCache) refreshStaleEntries() {
 	if c.store == nil {
 		logger.Debug("DB store is nil, skipping cache refresh")
 		return
+	}
+
+	// Check if provider supports status checking and should skip refresh
+	providerPtr := c.provider.Load()
+	if providerPtr != nil {
+		provider := *providerPtr
+		if statusChecker, ok := provider.(ProviderStatusChecker); ok {
+			if !statusChecker.ShouldRefreshCache() {
+				logger.Debug("Provider configured to skip cache refresh operations")
+				return
+			}
+		}
 	}
 
 	logger.Debug("Getting all cached entries for refresh check")

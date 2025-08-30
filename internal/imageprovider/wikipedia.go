@@ -412,6 +412,26 @@ func (l *LazyWikiMediaProvider) FetchWithContext(ctx context.Context, scientific
 	return l.provider.FetchWithContext(ctx, scientificName)
 }
 
+// ShouldRefreshCache implements ProviderStatusChecker interface.
+// It checks if WikiMedia provider should actively refresh cache based on current configuration,
+// without requiring full provider initialization. This allows the provider to be registered
+// for UI discovery while preventing unnecessary cache operations when disabled.
+func (l *LazyWikiMediaProvider) ShouldRefreshCache() bool {
+	settings := conf.Setting()
+	if settings == nil {
+		return false
+	}
+
+	// Check if WikiMedia is configured as primary provider
+	if settings.Realtime.Dashboard.Thumbnails.ImageProvider == "wikimedia" {
+		return true
+	}
+
+	// Check if WikiMedia is configured as fallback provider
+	fallback := strings.ToLower(strings.TrimSpace(settings.Realtime.Dashboard.Thumbnails.FallbackPolicy))
+	return fallback == "wikimedia" || fallback == "all"
+}
+
 // truncateResponseBody truncates a response body string to a specified length for logging.
 // This prevents excessive memory usage and log spam when logging error responses.
 func truncateResponseBody(body string, maxLength int) string {
