@@ -2993,6 +2993,112 @@ WantedBy=multi-user.target
 EOF
 }
 
+# Function to check Cockpit installation status
+check_cockpit_status() {
+    local cockpit_status_file="$CONFIG_DIR/cockpit.txt"
+    
+    if [ -f "$cockpit_status_file" ]; then
+        cat "$cockpit_status_file"
+        return 0
+    fi
+    
+    return 1
+}
+
+# Function to save Cockpit status
+save_cockpit_status() {
+    local status="$1"
+    local cockpit_status_file="$CONFIG_DIR/cockpit.txt"
+    
+    echo "$status" > "$cockpit_status_file"
+    log_message "INFO" "Cockpit status saved: $status"
+}
+
+# Function to check if Cockpit is already installed
+is_cockpit_installed() {
+    if command_exists cockpit-ws && systemctl list-unit-files | grep -q cockpit.socket; then
+        return 0
+    fi
+    return 1
+}
+
+# Function to configure Cockpit installation
+configure_cockpit() {
+    local cockpit_status
+    
+    # Check if we already have a status recorded
+    if cockpit_status=$(check_cockpit_status); then
+        case "$cockpit_status" in
+            "installed")
+                if is_cockpit_installed; then
+                    print_message "📊 Cockpit is already installed and configured" "$GREEN"
+                    return 0
+                else
+                    print_message "⚠️ Cockpit status shows installed but not detected, asking user again" "$YELLOW"
+                fi
+                ;;
+            "declined")
+                log_message "INFO" "User previously declined Cockpit installation, skipping prompt"
+                return 1
+                ;;
+        esac
+    fi
+    
+    # Check if Cockpit is already installed without our status file
+    if is_cockpit_installed; then
+        print_message "✅ Cockpit is already installed on this system" "$GREEN"
+        save_cockpit_status "installed"
+        return 0
+    fi
+    
+    print_message "\n🖥️ System Management with Cockpit" "$GREEN"
+    print_message "Cockpit is a web-based server management interface that provides:" "$YELLOW"
+    print_message "  • System monitoring (CPU, memory, disk usage)" "$YELLOW"
+    print_message "  • Service management" "$YELLOW"
+    print_message "  • Log viewing" "$YELLOW"
+    print_message "  • Terminal access" "$YELLOW"
+    print_message "  • Network configuration" "$YELLOW"
+    print_message "\nMore information: https://cockpit-project.org/" "$YELLOW"
+    
+    print_message "\n❓ Would you like to install Cockpit for easy system management? (y/n): " "$YELLOW" "nonewline"
+    read -r install_cockpit
+    
+    if [[ "$install_cockpit" =~ ^[Yy]$ ]]; then
+        log_message "INFO" "User chose to install Cockpit"
+        print_message "\n📦 Installing Cockpit..." "$YELLOW"
+        
+        if sudo apt update -q && sudo apt install -q -y cockpit; then
+            log_message "INFO" "Cockpit installation successful"
+            print_message "✅ Cockpit installed successfully!" "$GREEN"
+            
+            # Enable and start Cockpit socket
+            if sudo systemctl enable --now cockpit.socket; then
+                log_message "INFO" "Cockpit service enabled and started"
+                print_message "✅ Cockpit service enabled and started" "$GREEN"
+                save_cockpit_status "installed"
+                return 0
+            else
+                log_message "ERROR" "Failed to enable Cockpit service"
+                print_message "❌ Failed to enable Cockpit service" "$RED"
+                save_cockpit_status "install_failed"
+                return 1
+            fi
+        else
+            log_message "ERROR" "Cockpit installation failed"
+            print_message "❌ Failed to install Cockpit" "$RED"
+            print_message "You can install it manually later with: sudo apt install cockpit" "$YELLOW"
+            save_cockpit_status "install_failed"
+            return 1
+        fi
+    else
+        log_message "INFO" "User declined Cockpit installation"
+        print_message "ℹ️ Cockpit installation skipped" "$YELLOW"
+        print_message "You can install it later with: sudo apt install cockpit" "$YELLOW"
+        save_cockpit_status "declined"
+        return 1
+    fi
+}
+
 # Function to add systemd service configuration
 add_systemd_config() {
     # Create systemd service
@@ -4349,6 +4455,26 @@ else
     log_message "INFO" "mDNS not available"
 fi
 
+# Display Cockpit URL if installed
+if [ "$(check_cockpit_status 2>/dev/null)" = "installed" ] && is_cockpit_installed; then
+    if [ -n "$IP_ADDR" ]; then
+        log_message "INFO" "Cockpit web interface accessible at: https://${IP_ADDR}:9090"
+        print_message "🖥️ Cockpit system management interface: https://${IP_ADDR}:9090" "$GREEN"
+    else
+        print_message "🖥️ Cockpit system management interface: https://localhost:9090" "$GREEN"
+    fi
+    
+    if check_mdns; then
+        HOSTNAME=$(hostname)
+        print_message "🖥️ Cockpit also available at: https://${HOSTNAME}.local:9090" "$GREEN"
+    fi
+    
+    print_message "ℹ️ Use your system username and password to log into Cockpit" "$YELLOW"
+fi
+
+# Configure Cockpit installation as final step
+configure_cockpit
+
 log_message "INFO" "Install.sh script execution completed successfully"
-log_message "INFO" "=== End of BirdNET-Go Installation/Update Session ==="
+log_message "INFO" "=== End of BirdNET-Go Installation/Update Session ===
 
