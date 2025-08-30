@@ -3102,7 +3102,7 @@ configure_cockpit() {
         
         # Check if it's running
         if is_cockpit_running; then
-            print_message "✅ Cockpit is already installed and running" "$GREEN"
+            print_message "✅ Cockpit system management interface is already installed and running on port 9090" "$GREEN"
             log_message "INFO" "Cockpit is installed and running, updating status file"
             save_cockpit_status "installed"
             return 0
@@ -3115,7 +3115,7 @@ configure_cockpit() {
             if [[ "$enable_cockpit" =~ ^[Yy]$ ]]; then
                 log_message "INFO" "User chose to enable existing Cockpit installation"
                 if sudo systemctl enable --now cockpit.socket; then
-                    print_message "✅ Cockpit enabled and started successfully!" "$GREEN"
+                    print_message "✅ Cockpit system management interface enabled and started successfully on port 9090!" "$GREEN"
                     log_message "INFO" "Cockpit service enabled and started"
                     save_cockpit_status "installed"
                     return 0
@@ -3172,12 +3172,12 @@ configure_cockpit() {
         
         if sudo apt update -q && sudo apt install -q -y cockpit; then
             log_message "INFO" "Cockpit installation successful"
-            print_message "✅ Cockpit installed successfully!" "$GREEN"
+            print_message "✅ Cockpit system management interface installed successfully!" "$GREEN"
             
             # Enable and start Cockpit socket
             if sudo systemctl enable --now cockpit.socket; then
                 log_message "INFO" "Cockpit service enabled and started"
-                print_message "✅ Cockpit service enabled and started" "$GREEN"
+                print_message "✅ Cockpit system management interface enabled and started on port 9090" "$GREEN"
                 save_cockpit_status "installed"
                 return 0
             else
