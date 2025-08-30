@@ -288,11 +288,23 @@ func (c *BirdImageCache) refreshStaleEntries() {
 		batch := staleEntries[i:end]
 		logger.Debug("Processing batch of stale entries", "batch_start_index", i, "batch_end_index", end, "batch_size", len(batch))
 		for _, scientificName := range batch {
+			// Check quit channel first
 			select {
 			case <-c.quit:
 				logger.Info("Cache refresh routine quit signal received during batch processing")
 				return // Exit if we're shutting down
-			case <-time.After(refreshDelay):
+			default:
+				// Continue with refresh
+			}
+			
+			// Create a timer for the delay
+			timer := time.NewTimer(refreshDelay)
+			select {
+			case <-c.quit:
+				timer.Stop()
+				logger.Info("Cache refresh routine quit signal received during batch processing")
+				return // Exit if we're shutting down
+			case <-timer.C:
 				c.refreshEntry(scientificName)
 			}
 		}
