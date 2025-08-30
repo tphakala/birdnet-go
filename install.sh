@@ -3076,13 +3076,13 @@ is_cockpit_running() {
         return 0
     fi
     
-    # Check if cockpit is listening on port 9090
-    if command_exists ss && ss -tlnp 2>/dev/null | grep -q ":9090 "; then
+    # Check if cockpit is listening on port ${COCKPIT_PORT}
+    if command_exists ss && ss -tlnp 2>/dev/null | grep -q ":${COCKPIT_PORT} "; then
         return 0
     fi
     
     # Fallback check with netstat
-    if command_exists netstat && netstat -tln 2>/dev/null | grep -q ":9090 "; then
+    if command_exists netstat && netstat -tln 2>/dev/null | grep -q ":${COCKPIT_PORT} "; then
         return 0
     fi
     
@@ -3102,7 +3102,7 @@ configure_cockpit() {
         
         # Check if it's running
         if is_cockpit_running; then
-            print_message "✅ Cockpit system management interface is already installed and running on port 9090" "$GREEN"
+            print_message "✅ Cockpit system management interface is already installed and running on port ${COCKPIT_PORT}" "$GREEN"
             log_message "INFO" "Cockpit is installed and running, updating status file"
             save_cockpit_status "installed"
             return 0
@@ -3115,7 +3115,7 @@ configure_cockpit() {
             if [[ "$enable_cockpit" =~ ^[Yy]$ ]]; then
                 log_message "INFO" "User chose to enable existing Cockpit installation"
                 if sudo systemctl enable --now cockpit.socket; then
-                    print_message "✅ Cockpit system management interface enabled and started successfully on port 9090!" "$GREEN"
+                    print_message "✅ Cockpit system management interface enabled and started successfully on port ${COCKPIT_PORT}!" "$GREEN"
                     log_message "INFO" "Cockpit service enabled and started"
                     save_cockpit_status "installed"
                     return 0
@@ -3177,7 +3177,7 @@ configure_cockpit() {
             # Enable and start Cockpit socket
             if sudo systemctl enable --now cockpit.socket; then
                 log_message "INFO" "Cockpit service enabled and started"
-                print_message "✅ Cockpit system management interface enabled and started on port 9090" "$GREEN"
+                print_message "✅ Cockpit system management interface enabled and started on port ${COCKPIT_PORT}" "$GREEN"
                 save_cockpit_status "installed"
                 return 0
             else
@@ -3860,6 +3860,7 @@ CONFIG_DIR="$HOME/birdnet-go-app/config"
 DATA_DIR="$HOME/birdnet-go-app/data"
 CONFIG_FILE="$CONFIG_DIR/config.yaml"
 WEB_PORT=8080  # Default web port
+COCKPIT_PORT=9090  # Default Cockpit port
 # MODIFIED: Set default AUDIO_ENV to always include device mapping
 AUDIO_ENV="--device /dev/snd"
 # Flag for fresh installation
@@ -4563,15 +4564,15 @@ fi
 # Display Cockpit URL if installed
 if [ "$(check_cockpit_status 2>/dev/null)" = "installed" ] && is_cockpit_installed; then
     if [ -n "$IP_ADDR" ]; then
-        log_message "INFO" "Cockpit web interface accessible at: https://${IP_ADDR}:9090"
-        print_message "🖥️ Cockpit system management interface: https://${IP_ADDR}:9090" "$GREEN"
+        log_message "INFO" "Cockpit web interface accessible at: https://${IP_ADDR}:${COCKPIT_PORT}"
+        print_message "🖥️ Cockpit system management interface: https://${IP_ADDR}:${COCKPIT_PORT}" "$GREEN"
     else
-        print_message "🖥️ Cockpit system management interface: https://localhost:9090" "$GREEN"
+        print_message "🖥️ Cockpit system management interface: https://localhost:${COCKPIT_PORT}" "$GREEN"
     fi
     
     if check_mdns; then
         HOSTNAME=$(hostname)
-        print_message "🖥️ Cockpit also available at: https://${HOSTNAME}.local:9090" "$GREEN"
+        print_message "🖥️ Cockpit also available at: https://${HOSTNAME}.local:${COCKPIT_PORT}" "$GREEN"
     fi
     
     print_message "ℹ️ Use your system username and password to log into Cockpit" "$YELLOW"
