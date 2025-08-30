@@ -2,6 +2,8 @@ package processor
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"testing"
 	"time"
 
@@ -148,4 +150,136 @@ func TestMqttAction_Execute_Connected(t *testing.T) {
 	require.NoError(t, err)
 	mockClient.AssertExpectations(t)
 	mockClient.AssertNotCalled(t, "Connect", mock.Anything)
+}
+
+func TestIsEOFError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "Direct io.EOF",
+			err:      io.EOF,
+			expected: true,
+		},
+		{
+			name:     "Direct io.ErrUnexpectedEOF",
+			err:      io.ErrUnexpectedEOF,
+			expected: true,
+		},
+		{
+			name:     "Wrapped io.EOF",
+			err:      fmt.Errorf("connection failed: %w", io.EOF),
+			expected: true,
+		},
+		{
+			name:     "Wrapped io.ErrUnexpectedEOF",
+			err:      fmt.Errorf("read failed: %w", io.ErrUnexpectedEOF),
+			expected: true,
+		},
+		{
+			name:     "String containing EOF (uppercase)",
+			err:      fmt.Errorf("unexpected EOF"),
+			expected: true,
+		},
+		{
+			name:     "String containing EOF (lowercase)",
+			err:      fmt.Errorf("connection terminated with eof"),
+			expected: true,
+		},
+		{
+			name:     "String containing EOF (mixed case)",
+			err:      fmt.Errorf("TCP connection closed: Eof"),
+			expected: true,
+		},
+		{
+			name:     "Network error without EOF",
+			err:      fmt.Errorf("connection refused"),
+			expected: false,
+		},
+		{
+			name:     "Timeout error",
+			err:      fmt.Errorf("context deadline exceeded"),
+			expected: false,
+		},
+		{
+			name:     "DNS error",
+			err:      fmt.Errorf("no such host"),
+			expected: false,
+		},
+		{
+			name:     "String containing EOF in the middle of word",
+			err:      fmt.Errorf("buffereof data"),
+			expected: true, // Current implementation uses substring matching
+		},
+		{
+			name:     "Empty error message",
+			err:      fmt.Errorf(""),
+			expected: false,
+		},
+		{
+			name:     "Nil error",
+			err:      nil,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := isEOFError(tt.err)
+			require.Equal(t, tt.expected, result, "isEOFError(%v) should return %v", tt.err, tt.expected)
+		})
+	}
+}
+
+// TestIsEOFErrorBehaviorDocumentation tests edge cases and documents expected behavior
+func TestIsEOFErrorBehaviorDocumentation(t *testing.T) {
+	t.Run("StringMatchingIsCaseInsensitive", func(t *testing.T) {
+		t.Parallel()
+		cases := []error{
+			fmt.Errorf("EOF"),
+			fmt.Errorf("eof"),
+			fmt.Errorf("Eof"),
+			fmt.Errorf("eOf"),
+		}
+		for _, err := range cases {
+			if !isEOFError(err) {
+				t.Errorf("Expected %v to be detected as EOF error", err)
+			}
+		}
+	})
+
+	t.Run("StringMatchingIsSubstringBased", func(t *testing.T) {
+		t.Parallel()
+		// This documents that our string matching is substring-based
+		// which may have false positives but is safer for wrapped errors
+		err := fmt.Errorf("buffereof data") // contains "eof" 
+		if !isEOFError(err) {
+			t.Errorf("Expected buffereof data to be detected as EOF error")
+		}
+		t.Log("Note: This test documents that substring matching can have false positives")
+		t.Log("The string 'buffereof data' contains 'eof' and will be detected as an EOF error")
+		t.Log("This is acceptable as it's better to have false positives than miss wrapped EOF errors")
+	})
+
+	t.Run("ErrorsIsHasPriorityOverStringMatching", func(t *testing.T) {
+		t.Parallel()
+		// Test that errors.Is correctly identifies wrapped io.EOF
+		wrapped := fmt.Errorf("network error: %w", io.EOF)
+		if !isEOFError(wrapped) {
+			t.Errorf("Expected wrapped io.EOF to be detected: %v", wrapped)
+		}
+	})
+
+	t.Run("ExplicitUnexpectedEOFRecognition", func(t *testing.T) {
+		t.Parallel()
+		// Explicitly test that io.ErrUnexpectedEOF is recognized
+		if !isEOFError(io.ErrUnexpectedEOF) {
+			t.Errorf("Expected io.ErrUnexpectedEOF to be detected as EOF error")
+		}
+	})
 }
