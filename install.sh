@@ -3102,7 +3102,7 @@ configure_cockpit() {
         
         # Check if it's running
         if is_cockpit_running; then
-            print_message "✅ Cockpit system management interface is already installed and running on port ${COCKPIT_PORT}" "$GREEN"
+            print_message "✅ Cockpit system management interface is already installed and available at https://${IP_ADDR}:${COCKPIT_PORT}" "$GREEN"
             log_message "INFO" "Cockpit is installed and running, updating status file"
             save_cockpit_status "installed"
             return 0
@@ -3115,7 +3115,7 @@ configure_cockpit() {
             if [[ "$enable_cockpit" =~ ^[Yy]$ ]]; then
                 log_message "INFO" "User chose to enable existing Cockpit installation"
                 if sudo systemctl enable --now cockpit.socket; then
-                    print_message "✅ Cockpit system management interface enabled and started successfully on port ${COCKPIT_PORT}!" "$GREEN"
+                    print_message "✅ Cockpit system management interface enabled and available at https://${IP_ADDR}:${COCKPIT_PORT}!" "$GREEN"
                     log_message "INFO" "Cockpit service enabled and started"
                     save_cockpit_status "installed"
                     return 0
@@ -3177,7 +3177,7 @@ configure_cockpit() {
             # Enable and start Cockpit socket
             if sudo systemctl enable --now cockpit.socket; then
                 log_message "INFO" "Cockpit service enabled and started"
-                print_message "✅ Cockpit system management interface enabled and started on port ${COCKPIT_PORT}" "$GREEN"
+                print_message "✅ Cockpit system management interface enabled and available at https://${IP_ADDR}:${COCKPIT_PORT}" "$GREEN"
                 save_cockpit_status "installed"
                 return 0
             else
