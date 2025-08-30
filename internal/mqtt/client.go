@@ -346,8 +346,12 @@ func (c *client) Connect(ctx context.Context) error {
 			if ms <= 0 {
 				cancelTimeout = uint(CancelDisconnectTimeout.Milliseconds())
 			} else {
-				candidate := uint(ms) / 5
+				candidate := max(1, uint(ms)/5)
 				cancelTimeout = min(uint(CancelDisconnectTimeout.Milliseconds()), candidate)
+				// Final guard against zero
+				if cancelTimeout == 0 {
+					cancelTimeout = uint(CancelDisconnectTimeout.Milliseconds())
+				}
 			}
 			logger.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak", 
 				"timeout_ms", cancelTimeout,
@@ -366,8 +370,12 @@ func (c *client) Connect(ctx context.Context) error {
 			if ms <= 0 {
 				cancelTimeout = uint(CancelDisconnectTimeout.Milliseconds())
 			} else {
-				candidate := uint(ms) / 5
+				candidate := max(1, uint(ms)/5)
 				cancelTimeout = min(uint(CancelDisconnectTimeout.Milliseconds()), candidate)
+				// Final guard against zero
+				if cancelTimeout == 0 {
+					cancelTimeout = uint(CancelDisconnectTimeout.Milliseconds())
+				}
 			}
 			logger.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak", 
 				"timeout_ms", cancelTimeout,
@@ -521,6 +529,14 @@ func (c *client) Disconnect() {
 	if c.config.ShutdownDisconnectTimeout > 0 {
 		timeout = c.config.ShutdownDisconnectTimeout
 	}
+	
+	// Normalize timeout to prevent zero or negative values that could cause underflow
+	// when converted to unsigned types
+	if timeout <= 0 {
+		// Fall back to a safe default if both timeouts are non-positive
+		timeout = GracefulDisconnectTimeout
+	}
+	
 	c.disconnectWithTimeout(timeout)
 }
 

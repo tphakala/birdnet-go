@@ -176,6 +176,11 @@ func TestIsEOFError(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "Wrapped io.ErrUnexpectedEOF",
+			err:      fmt.Errorf("read failed: %w", io.ErrUnexpectedEOF),
+			expected: true,
+		},
+		{
 			name:     "String containing EOF (uppercase)",
 			err:      fmt.Errorf("unexpected EOF"),
 			expected: true,
