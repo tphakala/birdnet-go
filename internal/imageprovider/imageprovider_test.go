@@ -349,6 +349,11 @@ func TestBirdImageCache(t *testing.T) {
 		t.Fatalf("Failed to create default cache: %v", err)
 	}
 	cache.SetImageProvider(mockProvider)
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	tests := []struct {
 		name           string
@@ -403,6 +408,11 @@ func TestBirdImageCacheError(t *testing.T) {
 		t.Fatalf("Failed to create default cache: %v", err)
 	}
 	cache.SetImageProvider(mockProvider)
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	_, err = cache.Get("Turdus merula")
 	if err == nil {
@@ -424,6 +434,11 @@ func TestCreateDefaultCache(t *testing.T) {
 	}
 	if cache == nil {
 		t.Error("CreateDefaultCache() returned nil cache")
+	}
+	if cache != nil {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
 	}
 }
 
@@ -459,6 +474,11 @@ func TestBirdImageCacheMemoryUsage(t *testing.T) {
 		t.Fatalf("Failed to create default cache: %v", err)
 	}
 	cache.SetImageProvider(mockProvider)
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	// Add some entries to the cache
 	_, err = cache.Get("Turdus merula")
@@ -523,6 +543,11 @@ func TestBirdImageCacheDatabaseFailures(t *testing.T) {
 				t.Fatalf("Failed to create cache: %v", err)
 			}
 			cache.SetImageProvider(mockProvider)
+			defer func() {
+				if err := cache.Close(); err != nil {
+					t.Errorf("Failed to close cache: %v", err)
+				}
+			}()
 
 			// Try to get an image
 			got, err := cache.Get("Turdus merula")
@@ -551,6 +576,11 @@ func TestBirdImageCacheNilStore(t *testing.T) {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
 	cache.SetImageProvider(mockProvider)
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	// Try to get an image
 	got, err := cache.Get("Turdus merula")
@@ -659,6 +689,11 @@ func TestConcurrentInitialization(t *testing.T) {
 		t.Fatalf("Failed to create default cache: %v", err)
 	}
 	cache.SetImageProvider(mockProvider)
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	// Number of concurrent requests
 	const numRequests = 10
@@ -735,6 +770,11 @@ func TestInitializationTimeout(t *testing.T) {
 		t.Fatalf("Failed to create default cache: %v", err)
 	}
 	cache.SetImageProvider(mockProvider)
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	// Start a long-running fetch in the background
 	go func() {
@@ -798,6 +838,11 @@ func TestInitializationFailure(t *testing.T) {
 		t.Fatalf("Failed to create default cache: %v", err)
 	}
 	cache.SetImageProvider(mockProvider)
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	// Try to get an image - should fail but not leave initialization flag set
 	_, err = cache.Get("Turdus merula")
@@ -897,6 +942,11 @@ func TestBackgroundRequestsRateLimited(t *testing.T) {
 		t.Fatalf("Failed to create default cache: %v", err)
 	}
 	cache.SetImageProvider(mockProvider)
+	defer func() {
+		if err := cache.Close(); err != nil {
+			t.Errorf("Failed to close cache: %v", err)
+		}
+	}()
 
 	// Pre-populate with stale entries to trigger background refresh
 	staleTime := time.Now().Add(-15 * 24 * time.Hour)
