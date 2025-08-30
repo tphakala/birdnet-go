@@ -3088,14 +3088,16 @@ configure_cockpit() {
         else
             log_message "ERROR" "Cockpit installation failed"
             print_message "❌ Failed to install Cockpit" "$RED"
-            print_message "You can install it manually later with: sudo apt install cockpit" "$YELLOW"
+            print_message "💡 To install Cockpit manually, run: sudo apt install cockpit" "$YELLOW"
+            print_message "   Then enable it with: sudo systemctl enable --now cockpit.socket" "$YELLOW"
             save_cockpit_status "install_failed"
             return 1
         fi
     else
         log_message "INFO" "User declined Cockpit installation"
         print_message "ℹ️ Cockpit installation skipped" "$YELLOW"
-        print_message "You can install it later with: sudo apt install cockpit" "$YELLOW"
+        print_message "💡 To install Cockpit later, run: sudo apt install cockpit" "$YELLOW"
+        print_message "   Then enable it with: sudo systemctl enable --now cockpit.socket" "$YELLOW"
         save_cockpit_status "declined"
         return 1
     fi
@@ -4478,5 +4480,5 @@ fi
 configure_cockpit
 
 log_message "INFO" "Install.sh script execution completed successfully"
-log_message "INFO" "=== End of BirdNET-Go Installation/Update Session ===
+log_message "INFO" "=== End of BirdNET-Go Installation/Update Session ==="
 
