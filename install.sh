@@ -3041,24 +3041,60 @@ save_cockpit_status() {
 
 # Function to check if Cockpit is already installed
 is_cockpit_installed() {
-    # Check if cockpit packages are installed
-    if command_exists cockpit-ws && systemctl list-unit-files | grep -q cockpit.socket; then
+    # Method 1: Check if cockpit packages are installed via dpkg
+    if dpkg-query -W -f='${Status}' cockpit 2>/dev/null | grep -q "install ok installed"; then
         return 0
     fi
+    
+    # Method 2: Check if cockpit-ws command exists
+    if command_exists cockpit-ws; then
+        return 0
+    fi
+    
+    # Method 3: Check if cockpit bridge exists 
+    if command_exists cockpit-bridge; then
+        return 0
+    fi
+    
+    # Method 4: Check if systemd units exist
+    if systemctl list-unit-files 2>/dev/null | grep -E "(cockpit\.(socket|service))" >/dev/null 2>&1; then
+        return 0
+    fi
+    
     return 1
 }
 
 # Function to check if Cockpit service is enabled and running
 is_cockpit_running() {
-    if systemctl is-enabled --quiet cockpit.socket 2>/dev/null && systemctl is-active --quiet cockpit.socket 2>/dev/null; then
+    # Check cockpit.socket first (preferred method)
+    if systemctl is-active --quiet cockpit.socket 2>/dev/null; then
         return 0
     fi
+    
+    # Check cockpit.service as fallback 
+    if systemctl is-active --quiet cockpit.service 2>/dev/null; then
+        return 0
+    fi
+    
+    # Check if cockpit is listening on port 9090
+    if command_exists ss && ss -tlnp 2>/dev/null | grep -q ":9090 "; then
+        return 0
+    fi
+    
+    # Fallback check with netstat
+    if command_exists netstat && netstat -tln 2>/dev/null | grep -q ":9090 "; then
+        return 0
+    fi
+    
     return 1
 }
 
 # Function to configure Cockpit installation
 configure_cockpit() {
     log_message "INFO" "Starting Cockpit configuration check"
+    
+    # Debug: Log detection results for troubleshooting
+    log_message "INFO" "Cockpit detection debug: installed=$(is_cockpit_installed && echo 'true' || echo 'false'), running=$(is_cockpit_running && echo 'true' || echo 'false')"
     
     # STEP 1: Check if Cockpit is already installed on the system
     if is_cockpit_installed; then
