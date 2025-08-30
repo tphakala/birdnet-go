@@ -52,16 +52,16 @@ type ImageProvider interface {
 	Fetch(scientificName string) (BirdImage, error)
 }
 
-// BirdImage represents a cached bird image with its metadata
+// BirdImage represents a cached bird image with its metadata and attribution information
 type BirdImage struct {
-	URL            string
-	ScientificName string
-	LicenseName    string
-	LicenseURL     string
-	AuthorName     string
-	AuthorURL      string
-	CachedAt       time.Time
-	SourceProvider string // The actual provider that supplied the image
+	URL            string    // Direct URL to the bird image
+	ScientificName string    // Scientific name of the bird species
+	LicenseName    string    // Name of the content license (e.g., "CC BY-SA 4.0")
+	LicenseURL     string    // URL to the full license text
+	AuthorName     string    // Name of the image author/photographer
+	AuthorURL      string    // URL to the author's profile or homepage
+	CachedAt       time.Time // Timestamp when the image was cached
+	SourceProvider string    // Name of the provider that supplied the image (e.g., "wikimedia", "avicommons")
 }
 
 // IsNegativeEntry checks if this is a negative cache entry (not found)
@@ -78,7 +78,7 @@ func (b *BirdImage) GetTTL() time.Duration {
 }
 
 // BirdImageCache represents a cache for storing and retrieving bird images.
-// 
+//
 // Thread Safety: BirdImageCache is safe for concurrent use. The provider field can be
 // changed at runtime using SetImageProvider/SetNonBirdImageProvider methods, and is
 // protected using atomic operations. This is necessary because a background refresh
@@ -103,9 +103,25 @@ var (
 	// TODO: Call imageProviderLogCloser during graceful shutdown if needed
 )
 
+// SetDebugLogging enables or disables debug logging for the image provider
+func SetDebugLogging(enable bool) {
+	if enable {
+		imageProviderLevelVar.Set(slog.LevelDebug)
+		imageProviderLogger.Info("Debug logging enabled for image provider")
+	} else {
+		imageProviderLevelVar.Set(slog.LevelInfo)
+		imageProviderLogger.Info("Debug logging disabled for image provider")
+	}
+}
+
 func init() {
 	var err error
-	initialLevel := slog.LevelInfo // Set desired initial level
+	// Check if debug mode is enabled in configuration
+	settings := conf.Setting()
+	initialLevel := slog.LevelInfo
+	if settings != nil && settings.Realtime.Dashboard.Thumbnails.Debug {
+		initialLevel = slog.LevelDebug
+	}
 	imageProviderLevelVar.Set(initialLevel)
 
 	// Default level is Info. Set to Debug for more detailed cache/provider info.
@@ -157,9 +173,6 @@ const (
 func (c *BirdImageCache) startCacheRefresh(quit chan struct{}) {
 	logger := imageProviderLogger.With("provider", c.providerName)
 	logger.Info("Starting cache refresh routine", "ttl", defaultCacheTTL, "interval", refreshInterval)
-	// if c.debug {
-	// 	log.Printf("Debug: Starting cache refresh routine with TTL of %v", defaultCacheTTL)
-	// }
 
 	go func() {
 		ticker := time.NewTicker(refreshInterval)
@@ -173,9 +186,6 @@ func (c *BirdImageCache) startCacheRefresh(quit chan struct{}) {
 			select {
 			case <-quit:
 				logger.Info("Stopping cache refresh routine")
-				// if c.debug {
-				// 	log.Printf("Debug: Stopping cache refresh routine")
-				// }
 				return
 			case <-ticker.C:
 				logger.Debug("Ticker interval elapsed, checking for stale entries")
@@ -210,9 +220,6 @@ func (c *BirdImageCache) refreshStaleEntries() {
 	}
 
 	logger.Debug("Checking entries for staleness", "entry_count", len(entries), "ttl", defaultCacheTTL)
-	// if c.debug {
-	// 	log.Printf("Debug: [%s] Checking %d entries for staleness", c.providerName, len(entries))
-	// }
 
 	// Find stale entries
 	var staleEntries []string // Store only scientific names instead of full entries
@@ -236,16 +243,10 @@ func (c *BirdImageCache) refreshStaleEntries() {
 
 	if len(staleEntries) == 0 {
 		logger.Debug("No stale entries found")
-		// if c.debug {
-		// 	log.Printf("Debug: [%s] No stale entries found", c.providerName)
-		// }
 		return
 	}
 
 	logger.Info("Found stale cache entries to refresh", "count", len(staleEntries))
-	// if c.debug {
-	// 	log.Printf("Debug: [%s] Found %d stale cache entries to refresh", c.providerName, len(staleEntries))
-	// }
 
 	// Process stale entries in batches with rate limiting
 	logger.Debug("Processing stale entries", "batch_size", refreshBatchSize, "delay_between_entries", refreshDelay)
@@ -274,17 +275,11 @@ func (c *BirdImageCache) refreshStaleEntries() {
 func (c *BirdImageCache) refreshEntry(scientificName string) {
 	logger := imageProviderLogger.With("provider", c.providerName, "scientific_name", scientificName)
 	logger.Info("Refreshing cache entry")
-	// if c.debug {
-	// 	log.Printf("Debug: Refreshing cache entry for %s", scientificName)
-	// }
 
 	// Check if provider is set
 	providerPtr := c.provider.Load()
 	if providerPtr == nil {
 		logger.Warn("Cannot refresh entry: provider is nil")
-		// if c.debug {
-		// 	log.Printf("Debug: No provider available for %s", scientificName)
-		// }
 		return
 	}
 	provider := *providerPtr
@@ -363,12 +358,12 @@ func InitCache(providerName string, e ImageProvider, t *observability.Metrics, s
 	settings := conf.Setting()
 
 	quit := make(chan struct{})
-	
+
 	var imageProviderMetrics *metrics.ImageProviderMetrics
 	if t != nil {
 		imageProviderMetrics = t.ImageProvider
 	}
-	
+
 	cache := &BirdImageCache{
 		providerName: providerName, // Set provider name
 		metrics:      imageProviderMetrics,
@@ -377,7 +372,7 @@ func InitCache(providerName string, e ImageProvider, t *observability.Metrics, s
 		// logger:       log.Default(), // Replaced by package logger
 		quit: quit,
 	}
-	
+
 	// Store the provider using atomic pointer
 	cache.provider.Store(&e)
 
@@ -386,9 +381,6 @@ func InitCache(providerName string, e ImageProvider, t *observability.Metrics, s
 		logger.Info("DB store available, loading cached images")
 		if err := cache.loadCachedImages(); err != nil {
 			logger.Error("Error loading cached images", "error", err)
-			// if cache.debug {
-			// 	log.Printf("Debug: Error loading cached images: %v", err)
-			// }
 		}
 	} else {
 		logger.Info("DB store not available, skipping loading cached images")
@@ -408,9 +400,6 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 	// Check if store is nil to prevent nil pointer dereference
 	if c.store == nil {
 		logger.Warn("Cannot load from DB cache: DB store is nil")
-		// if c.debug {
-		// 	log.Printf("Debug [%s]: DB store is nil, cannot load from cache for %s", c.providerName, scientificName)
-		// }
 		return nil, ErrCacheMiss
 	}
 
@@ -841,7 +830,7 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 
 	// 2. Not in DB or DB load failed, fetch from the actual provider
 	logger.Info("Image not found in DB cache, fetching from provider")
-	
+
 	providerPtr := c.provider.Load()
 	if providerPtr == nil {
 		enhancedErr := errors.Newf("image provider for %s is not configured", c.providerName).
@@ -1005,7 +994,7 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 func (c *BirdImageCache) fetchDirect(scientificName string) (BirdImage, error) {
 	logger := imageProviderLogger.With("provider", c.providerName, "scientific_name", scientificName)
 	logger.Debug("Performing direct fetch from provider (bypassing cache checks)")
-	
+
 	providerPtr := c.provider.Load()
 	if providerPtr == nil {
 		enhancedErr := errors.Newf("image provider %s is not configured", c.providerName).
@@ -1084,7 +1073,6 @@ func (c *BirdImageCache) updateMetrics() {
 	// c.metrics.SetMemoryCacheEntries(float64(count)) // Method doesn't exist
 	// c.metrics.SetMemoryCacheSizeBytes(float64(c.MemoryUsage())) // Method doesn't exist
 }
-
 
 // CreateDefaultCache creates the default BirdImageCache (currently Wikimedia Commons via Wikipedia API).
 func CreateDefaultCache(metricsCollector *observability.Metrics, store datastore.Interface) (*BirdImageCache, error) {

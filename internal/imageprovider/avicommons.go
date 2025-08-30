@@ -51,11 +51,16 @@ func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error
 	logger.Info("Initializing AviCommons provider")
 	filePath := "data/latest.json"
 	altFilePath := "internal/imageprovider/data/latest.json"
-	logger.Debug("Attempting to read Avicommons data file", "path", filePath)
+	logger.Debug("Attempting to read Avicommons data file",
+		"primary_path", filePath,
+		"fallback_path", altFilePath)
 	// First try the direct path
 	jsonData, err := fs.ReadFile(dataFs, filePath)
 	if err != nil {
-		logger.Warn("Failed to read data file at primary path, trying alternative", "path", filePath, "error", err, "alternative_path", altFilePath)
+		logger.Debug("Primary path not found, trying alternative path",
+			"primary_path", filePath,
+			"error", err.Error(),
+			"alternative_path", altFilePath)
 		// If that fails, try with the internal/imageprovider prefix
 		jsonData, err = fs.ReadFile(dataFs, altFilePath)
 		if err != nil {
@@ -68,7 +73,10 @@ func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error
 				Context("operation", "read_avicommons_data_file").
 				Context("error_detail", err.Error()).
 				Build()
-			logger.Error("Failed to read Avicommons data file from both paths", "primary_path", filePath, "alternative_path", altFilePath, "error", enhancedErr)
+			logger.Error("Failed to read Avicommons data file from both paths",
+				"primary_path", filePath,
+				"alternative_path", altFilePath,
+				"error", enhancedErr)
 			return nil, enhancedErr
 		}
 	}
@@ -80,10 +88,13 @@ func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error
 			Context("provider", aviCommonsProviderName).
 			Context("operation", "validate_json_data").
 			Build()
-		logger.Error("Avicommons JSON data file is empty", "error", enhancedErr)
+		logger.Error("Avicommons JSON data file is empty",
+			"error", enhancedErr)
 		return nil, enhancedErr
 	}
-	logger.Info("Successfully read Avicommons data file", "size_bytes", len(jsonData))
+	logger.Info("Successfully read Avicommons data file",
+		"size_bytes", len(jsonData),
+		"size_kb", len(jsonData)/1024)
 
 	logger.Debug("Unmarshalling Avicommons JSON data")
 	var data []aviCommonsEntry
@@ -96,7 +107,9 @@ func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error
 			Context("operation", "unmarshal_json_data").
 			Context("error_detail", err.Error()).
 			Build()
-		logger.Error("Failed to unmarshal Avicommons JSON data", "error", enhancedErr)
+		logger.Error("Failed to unmarshal Avicommons JSON data",
+			"data_size_bytes", len(jsonData),
+			"error", enhancedErr)
 		return nil, enhancedErr
 	}
 
@@ -108,12 +121,15 @@ func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error
 			Context("data_size_bytes", len(jsonData)).
 			Context("operation", "validate_unmarshalled_data").
 			Build()
-		logger.Error("Avicommons JSON data unmarshalled to empty slice", "error", enhancedErr)
+		logger.Error("Avicommons JSON data unmarshalled to empty slice",
+			"data_size_bytes", len(jsonData),
+			"error", enhancedErr)
 		return nil, enhancedErr
 	}
 
 	// Build map for faster lookups
-	logger.Debug("Building scientific name lookup map", "entry_count", len(data))
+	logger.Debug("Building scientific name lookup map",
+		"total_entries", len(data))
 	sciNameMap := make(map[string]*aviCommonsEntry, len(data))
 	for i := range data {
 		// Normalize the scientific name for consistent matching
@@ -123,11 +139,9 @@ func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error
 		// This seems acceptable for now, but could be revisited if needed.
 		sciNameMap[normalizedSciName] = &data[i]
 	}
-	logger.Info("Avicommons provider initialized successfully", "total_entries", len(data), "unique_sci_names", len(sciNameMap))
-
-	// if debug {
-	// 	log.Printf("Initialized AviCommonsProvider with %d entries, %d unique scientific names.", len(data), len(sciNameMap))
-	// }
+	logger.Info("Avicommons provider initialized successfully",
+		"total_entries", len(data),
+		"unique_sci_names", len(sciNameMap))
 
 	return &AviCommonsProvider{
 		data:       data,
@@ -139,7 +153,8 @@ func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error
 // Fetch retrieves image information for a given scientific name from the Avicommons data.
 func (p *AviCommonsProvider) Fetch(scientificName string) (BirdImage, error) {
 	logger := imageProviderLogger.With("provider", aviCommonsProviderName, "scientific_name", scientificName)
-	logger.Debug("Fetching image from Avicommons data")
+	logger.Debug("Fetching image from Avicommons data",
+		"scientific_name", scientificName)
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -148,12 +163,10 @@ func (p *AviCommonsProvider) Fetch(scientificName string) (BirdImage, error) {
 	entry, found := p.sciNameMap[normalizedSciName]
 
 	if !found {
-		logger.Warn("Image not found in Avicommons data", "normalized_name", normalizedSciName)
-		// if p.debug {
-		// 	log.Printf("Debug: [%s] Image not found for scientific name: %s (normalized: %s)", aviCommonsProviderName, scientificName, normalizedSciName)
-		// }
-		// Consider returning a specific error type or using a sentinel error
-		return BirdImage{}, ErrImageNotFound // Use the package-level error
+		logger.Debug("Image not found in Avicommons data",
+			"scientific_name", scientificName,
+			"normalized_name", normalizedSciName)
+		return BirdImage{}, ErrImageNotFound
 	}
 
 	// Construct the image URL
@@ -168,10 +181,13 @@ func (p *AviCommonsProvider) Fetch(scientificName string) (BirdImage, error) {
 	// Map license code to name and URL (basic mapping, can be expanded)
 	licenseName, licenseURL := mapAviCommonsLicense(entry.License)
 
-	logger.Info("Image found in Avicommons data", "url", imageURL, "author", entry.By, "license", entry.License)
-	// if p.debug {
-	// 	log.Printf("Debug: [%s] Found image for %s: URL=%s, Author=%s, License=%s", aviCommonsProviderName, scientificName, imageURL, entry.By, entry.License)
-	// }
+	logger.Debug("Image found in Avicommons data",
+		"scientific_name", scientificName,
+		"url", imageURL,
+		"author", entry.By,
+		"license", entry.License,
+		"ebird_code", entry.Code,
+		"photo_key", entry.Key)
 
 	return BirdImage{
 		URL:            imageURL,
@@ -179,7 +195,8 @@ func (p *AviCommonsProvider) Fetch(scientificName string) (BirdImage, error) {
 		LicenseName:    licenseName,
 		LicenseURL:     licenseURL,
 		AuthorName:     entry.By,
-		AuthorURL:      "", // Avicommons doesn't provide author URLs
+		AuthorURL:      "",                     // Avicommons doesn't provide author URLs
+		SourceProvider: aviCommonsProviderName, // Set the provider name
 		// CachedAt is set by the BirdImageCache
 	}, nil
 }
@@ -206,7 +223,9 @@ func mapAviCommonsLicense(code string) (name, url string) {
 	default:
 		// Log only once per unknown code
 		if _, loaded := loggedUnknownLicenses.LoadOrStore(code, true); !loaded {
-			imageProviderLogger.Warn("Unknown Avicommons license code encountered", "code", code)
+			imageProviderLogger.Warn("Unknown Avicommons license code encountered",
+				"license_code", code,
+				"action", "using_code_as_name")
 		}
 		return code, ""
 	}
@@ -223,7 +242,8 @@ func CreateAviCommonsCache(dataFs fs.FS, metrics *observability.Metrics, store d
 	provider, err := NewAviCommonsProvider(dataFs, debug)
 	if err != nil {
 		// Error already enhanced in NewAviCommonsProvider
-		logger.Error("Failed to create AviCommons provider", "error", err)
+		logger.Error("Failed to create AviCommons provider",
+			"error", err)
 		return nil, err
 	}
 
@@ -254,7 +274,8 @@ func RegisterAviCommonsProvider(registry *ImageProviderRegistry, dataFs fs.FS, m
 				Context("error_detail", err.Error()).
 				Build()
 		}
-		logger.Error("Failed to register AviCommons provider cache with registry", "error", enhancedErr)
+		logger.Error("Failed to register AviCommons provider cache with registry",
+			"error", enhancedErr)
 		return enhancedErr
 	}
 
