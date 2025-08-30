@@ -78,8 +78,8 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 			MAX(common_name) as common_name,
 			MAX(species_code) as species_code,
 			COUNT(*) as count,
-			MIN(date || ' ' || time) as first_seen,
-			MAX(date || ' ' || time) as last_seen,
+			MIN(datetime(date || ' ' || time)) as first_seen,
+			MAX(datetime(date || ' ' || time)) as last_seen,
 			AVG(confidence) as avg_confidence,
 			MAX(confidence) as max_confidence
 		FROM notes
