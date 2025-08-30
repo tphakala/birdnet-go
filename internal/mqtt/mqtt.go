@@ -12,15 +12,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
-// Timeout constants for MQTT operations (in milliseconds)
+// Timeout constants for MQTT operations
 const (
-	// GracefulDisconnectTimeoutMs is the timeout for graceful disconnect operations
-	GracefulDisconnectTimeoutMs = 5000
-	// CancelDisconnectTimeoutMs is the timeout for disconnect during cancellation/timeout scenarios
-	CancelDisconnectTimeoutMs = 1000
-	// ShutdownDisconnectTimeoutMs is the timeout for disconnect during application shutdown
+	// GracefulDisconnectTimeout is the timeout for graceful disconnect operations
+	GracefulDisconnectTimeout = 5 * time.Second
+	// CancelDisconnectTimeout is the timeout for disconnect during cancellation/timeout scenarios
+	CancelDisconnectTimeout = 1 * time.Second
+	// ShutdownDisconnectTimeout is the timeout for disconnect during application shutdown
 	// This is shorter than graceful timeout to avoid delaying shutdown
-	ShutdownDisconnectTimeoutMs = 2000
+	ShutdownDisconnectTimeout = 2 * time.Second
 )
 
 // Client defines the interface for MQTT client operations.
@@ -62,8 +62,9 @@ type Config struct {
 	// Connection timeouts
 	ConnectTimeout    time.Duration
 	ReconnectTimeout  time.Duration
-	PublishTimeout    time.Duration
-	DisconnectTimeout time.Duration
+	PublishTimeout       time.Duration
+	DisconnectTimeout    time.Duration
+	ShutdownDisconnectTimeout time.Duration // Timeout for disconnect during shutdown (shorter than normal)
 	// TLS configuration
 	TLS TLSConfig
 }
@@ -134,8 +135,9 @@ func DefaultConfig() Config {
 		ReconnectCooldown: 5 * time.Second,
 		ReconnectDelay:    1 * time.Second,
 		ConnectTimeout:    30 * time.Second,
-		ReconnectTimeout:  5 * time.Second,
-		PublishTimeout:    10 * time.Second,
-		DisconnectTimeout: GracefulDisconnectTimeoutMs * time.Millisecond, // Use constant for consistency
+		ReconnectTimeout:         5 * time.Second,
+		PublishTimeout:           10 * time.Second,
+		DisconnectTimeout:        GracefulDisconnectTimeout, // Use constant for consistency
+		ShutdownDisconnectTimeout: ShutdownDisconnectTimeout, // Shorter timeout for shutdown
 	}
 }

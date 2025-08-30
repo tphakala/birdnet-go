@@ -165,8 +165,8 @@ func (c *client) Connect(ctx context.Context) error {
 
 	// Perform disconnection outside the lock
 	if oldClientToDisconnect != nil {
-		logger.Debug("Disconnecting old client instance", "timeout_ms", GracefulDisconnectTimeoutMs)
-		oldClientToDisconnect.Disconnect(GracefulDisconnectTimeoutMs) // Use longer timeout for graceful disconnect
+		logger.Debug("Disconnecting old client instance", "timeout_ms", uint(GracefulDisconnectTimeout.Milliseconds()))
+		oldClientToDisconnect.Disconnect(uint(GracefulDisconnectTimeout.Milliseconds())) // Use longer timeout for graceful disconnect
 	}
 
 	// --- Re-acquire lock to modify shared state ---
@@ -341,10 +341,17 @@ func (c *client) Connect(ctx context.Context) error {
 		// Cancel the connection attempt to prevent the goroutine from leaking
 		if clientToConnect != nil {
 			// Use dynamic timeout scaling: min of default cancel timeout or 1/5 of configured disconnect timeout
-			cancelTimeout := min(CancelDisconnectTimeoutMs, uint(c.config.DisconnectTimeout.Milliseconds())/5)
+			ms := c.config.DisconnectTimeout.Milliseconds()
+			var cancelTimeout uint
+			if ms <= 0 {
+				cancelTimeout = uint(CancelDisconnectTimeout.Milliseconds())
+			} else {
+				candidate := uint(ms) / 5
+				cancelTimeout = min(uint(CancelDisconnectTimeout.Milliseconds()), candidate)
+			}
 			logger.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak", 
 				"timeout_ms", cancelTimeout,
-				"base_timeout", CancelDisconnectTimeoutMs,
+				"base_timeout", uint(CancelDisconnectTimeout.Milliseconds()),
 				"config_timeout_ms", c.config.DisconnectTimeout.Milliseconds())
 			clientToConnect.Disconnect(cancelTimeout) // Use dynamic timeout for graceful disconnection
 		}
@@ -354,10 +361,17 @@ func (c *client) Connect(ctx context.Context) error {
 		// Cancel the connection attempt to prevent the goroutine from leaking
 		if clientToConnect != nil {
 			// Use dynamic timeout scaling: min of default cancel timeout or 1/5 of configured disconnect timeout
-			cancelTimeout := min(CancelDisconnectTimeoutMs, uint(c.config.DisconnectTimeout.Milliseconds())/5)
+			ms := c.config.DisconnectTimeout.Milliseconds()
+			var cancelTimeout uint
+			if ms <= 0 {
+				cancelTimeout = uint(CancelDisconnectTimeout.Milliseconds())
+			} else {
+				candidate := uint(ms) / 5
+				cancelTimeout = min(uint(CancelDisconnectTimeout.Milliseconds()), candidate)
+			}
 			logger.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak", 
 				"timeout_ms", cancelTimeout,
-				"base_timeout", CancelDisconnectTimeoutMs,
+				"base_timeout", uint(CancelDisconnectTimeout.Milliseconds()),
 				"config_timeout_ms", c.config.DisconnectTimeout.Milliseconds())
 			clientToConnect.Disconnect(cancelTimeout) // Use dynamic timeout for graceful disconnection
 		}
@@ -499,10 +513,19 @@ func (c *client) IsConnected() bool {
 }
 
 // Disconnect closes the connection to the MQTT broker.
-// Uses the configured DisconnectTimeout which defaults to 5 seconds for graceful shutdown.
-// For faster shutdown in time-critical scenarios, consider reducing the timeout
-// in the client configuration before calling this method.
+// Uses ShutdownDisconnectTimeout if configured (non-zero), otherwise falls back to DisconnectTimeout.
+// This allows for shorter timeouts during application shutdown.
 func (c *client) Disconnect() {
+	// Choose timeout: ShutdownDisconnectTimeout if set, otherwise DisconnectTimeout
+	timeout := c.config.DisconnectTimeout
+	if c.config.ShutdownDisconnectTimeout > 0 {
+		timeout = c.config.ShutdownDisconnectTimeout
+	}
+	c.disconnectWithTimeout(timeout)
+}
+
+// disconnectWithTimeout closes the connection with a specific timeout
+func (c *client) disconnectWithTimeout(timeout time.Duration) {
 	c.mu.Lock() // Lock required to safely access reconnectStop, reconnectTimer, internalClient
 
 	logger := mqttLogger.With("broker", c.config.Broker, "client_id", c.config.ClientID)
@@ -530,7 +553,7 @@ func (c *client) Disconnect() {
 		// Check connection status *outside* lock to avoid potential deadlock
 		// if IsConnected internally needs a lock (though it uses RLock)
 		if clientToDisconnect.IsConnected() {
-			disconnectTimeoutMs := uint(c.config.DisconnectTimeout.Milliseconds()) // #nosec G115 -- timeout value conversion safe
+			disconnectTimeoutMs := uint(timeout.Milliseconds()) // #nosec G115 -- timeout value conversion safe
 			logger.Debug("Sending disconnect signal to Paho client", "timeout_ms", disconnectTimeoutMs)
 			clientToDisconnect.Disconnect(disconnectTimeoutMs) // Perform disconnect outside lock
 			c.metrics.UpdateConnectionStatus(false)            // Update metrics after disconnect attempt

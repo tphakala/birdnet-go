@@ -603,7 +603,12 @@ func isEOFError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return errors.Is(err, io.EOF) || strings.Contains(strings.ToLower(err.Error()), "eof")
+	// Check for specific EOF errors first
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	// Fall back to string matching for wrapped or custom EOF errors
+	return strings.Contains(strings.ToLower(err.Error()), "eof")
 }
 
 // publishNewSpeciesDetectionEvent publishes a detection event for new species
