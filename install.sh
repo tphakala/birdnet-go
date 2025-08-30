@@ -2672,32 +2672,49 @@ configure_location() {
     # If automatic location failed or was rejected, continue with manual input
     print_message "1) Enter coordinates manually" "$YELLOW"
     print_message "2) Enter city name for OpenStreetMap lookup" "$YELLOW"
+    print_message "3) Skip location configuration (use default: 0.0, 0.0)" "$YELLOW"
     
     while true; do
-        print_message "❓ Select location input method (1/2): " "$YELLOW" "nonewline"
+        print_message "❓ Select location input method (1-3): " "$YELLOW" "nonewline"
         read -r location_choice
 
         case $location_choice in
             1)
                 while true; do
-                    read -r -p "Enter latitude (-90 to 90): " lat
-                    read -r -p "Enter longitude (-180 to 180): " lon
+                    print_message "Enter latitude (-90 to 90) or 'b' to go back: " "$YELLOW" "nonewline"
+                    read -r lat
+                    
+                    if [ "$lat" = "b" ]; then
+                        break  # Go back to method selection
+                    fi
+                    
+                    print_message "Enter longitude (-180 to 180) or 'b' to go back: " "$YELLOW" "nonewline"
+                    read -r lon
+                    
+                    if [ "$lon" = "b" ]; then
+                        break  # Go back to method selection
+                    fi
                     
                     if [[ "$lat" =~ ^-?[0-9]*\.?[0-9]+$ ]] && \
                        [[ "$lon" =~ ^-?[0-9]*\.?[0-9]+$ ]] && \
                        (( $(echo "$lat >= -90 && $lat <= 90" | bc -l) )) && \
                        (( $(echo "$lon >= -180 && $lon <= 180" | bc -l) )); then
-                        break
+                        log_message "INFO" "User entered coordinates manually: $lat, $lon"
+                        break 2  # Exit both loops
                     else
                         print_message "❌ Invalid coordinates. Please try again." "$RED"
                     fi
                 done
-                break
+                # If we get here, user chose 'b', so continue outer loop
                 ;;
             2)
                 while true; do
-                    print_message "Enter location (e.g., 'Helsinki, Finland', 'New York, US', or 'Sungei Buloh, Singapore'): " "$YELLOW" "nonewline"
+                    print_message "Enter location (e.g., 'Helsinki, Finland', 'New York, US') or 'b' to go back: " "$YELLOW" "nonewline"
                     read -r location
+                    
+                    if [ "$location" = "b" ]; then
+                        break  # Go back to method selection
+                    fi
                     
                     # Split input into city and country
                     city=$(echo "$location" | cut -d',' -f1 | xargs)
@@ -2717,12 +2734,20 @@ configure_location() {
                         log_message "INFO" "OpenStreetMap lookup successful for $city, $country"
                         print_message "✅ Found coordinates for $city, $country: " "$GREEN" "nonewline"
                         print_message "$lat, $lon"
-                        break
+                        break 2  # Exit both loops
                     else
                         log_message "WARN" "OpenStreetMap lookup failed for: $city, $country"
                         print_message "❌ Could not find coordinates. Please try again with format: 'City, Country'" "$RED"
                     fi
                 done
+                # If we get here, user chose 'b', so continue outer loop
+                ;;
+            3)
+                log_message "INFO" "User skipped location configuration"
+                print_message "⚠️ Skipping location configuration - using default coordinates (0.0, 0.0)" "$YELLOW"
+                print_message "💡 You can configure location later in the BirdNET-Go web interface" "$YELLOW"
+                lat="0.0"
+                lon="0.0"
                 break
                 ;;
             *)
