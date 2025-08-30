@@ -196,6 +196,7 @@ func (p *AviCommonsProvider) Fetch(scientificName string) (BirdImage, error) {
 		LicenseURL:     licenseURL,
 		AuthorName:     entry.By,
 		AuthorURL:      "", // Avicommons doesn't provide author URLs
+		SourceProvider: aviCommonsProviderName, // Set the provider name
 		// CachedAt is set by the BirdImageCache
 	}, nil
 }

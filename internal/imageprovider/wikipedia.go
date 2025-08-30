@@ -4,10 +4,12 @@ package imageprovider
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
 	"time"
 
@@ -21,7 +23,141 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const wikiProviderName = "wikimedia"
+const (
+	wikiProviderName = "wikimedia"
+	
+	// User-Agent constants following Wikimedia robot policy
+	// https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy
+	userAgentName    = "BirdNET-Go"
+	userAgentContact = "https://github.com/tphakala/birdnet-go"
+	userAgentLibrary = "Go-HTTP-Client"
+)
+
+// wikiMediaProvider implements the ImageProvider interface for Wikipedia.
+type wikiMediaProvider struct {
+	client            *mwclient.Client
+	debug             bool
+	backgroundLimiter *rate.Limiter // For background refresh operations
+	maxRetries        int
+}
+
+// wikiMediaAuthor represents the author information for a Wikipedia image.
+type wikiMediaAuthor struct {
+	name        string
+	URL         string
+	licenseName string
+	licenseURL  string
+}
+
+// buildUserAgent constructs a user-agent string that complies with Wikimedia's robot policy.
+// Format: <client name>/<version> (<contact information>) <library/framework name>/<version>
+// Reference: https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy
+func buildUserAgent(appVersion string) string {
+	if appVersion == "" {
+		appVersion = "unknown"
+	}
+	
+	goVersion := runtime.Version()
+	
+	// Format: BirdNET-Go/1.0.0 (https://github.com/tphakala/birdnet-go) Go-HTTP-Client/go1.21.0
+	return fmt.Sprintf("%s/%s (%s) %s/%s", 
+		userAgentName, appVersion, userAgentContact, userAgentLibrary, goVersion)
+}
+
+// validateUserAgent logs the constructed user-agent for debugging purposes
+func validateUserAgent(logger *slog.Logger, appVersion string) {
+	userAgent := buildUserAgent(appVersion)
+	logger.Info("Wikipedia user-agent validation",
+		"user_agent", userAgent,
+		"complies_with_policy", "https://foundation.wikimedia.org/wiki/Policy:User-Agent_policy",
+		"contains_app_name", userAgentName,
+		"contains_version", appVersion,
+		"contains_contact", userAgentContact,
+		"contains_library", userAgentLibrary,
+		"go_version", runtime.Version())
+}
+
+// checkUserAgentPolicyViolation checks for Wikipedia user-agent policy violations and returns an error if detected
+func checkUserAgentPolicyViolation(reqID string, statusCode int, responseBody []byte, userAgent string, logger *slog.Logger) error {
+	if statusCode != 403 {
+		return nil
+	}
+	
+	bodyStr := string(responseBody)
+	if !strings.Contains(bodyStr, "User-Agent") && !strings.Contains(bodyStr, "robot policy") {
+		return nil
+	}
+	
+	logger.Error("Wikipedia blocked request - User-Agent policy violation, stopping retries",
+		"error_message", bodyStr,
+		"user_agent", userAgent,
+		"policy_url", "https://foundation.wikimedia.org/wiki/Policy:User-Agent_policy",
+		"action_required", "User-Agent needs to be updated to comply with policy")
+	
+	// This is a permanent failure - return immediately without retrying
+	return errors.Newf("Wikipedia user-agent policy violation: %s", bodyStr).
+		Component("imageprovider").
+		Category(errors.CategoryNetwork).
+		Context("provider", wikiProviderName).
+		Context("request_id", reqID).
+		Context("operation", "user_agent_policy_violation").
+		Context("status_code", statusCode).
+		Context("response_body", bodyStr).
+		Context("user_agent", userAgent).
+		Context("permanent_failure", true).
+		Build()
+}
+
+// handleJSONParsingError handles JSON parsing errors by making a direct HTTP request to diagnose the issue
+func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, err error, settings *conf.Settings, attemptLogger *slog.Logger, attempt int) error {
+	// Make a direct HTTP request to capture the actual error response
+	req, _ := http.NewRequest("GET", fullURL, http.NoBody)
+	req.Header.Set("User-Agent", buildUserAgent(settings.Version))
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	
+	debugResp, debugErr := httpClient.Do(req)
+	if debugErr != nil {
+		attemptLogger.Debug("Unable to diagnose API error",
+			"diagnostic_error", debugErr.Error(),
+			"original_error", err.Error())
+		return nil // Continue with normal retry logic
+	}
+	
+	defer func() {
+		if closeErr := debugResp.Body.Close(); closeErr != nil {
+			attemptLogger.Debug("Failed to close debug response body", "error", closeErr)
+		}
+	}()
+	
+	body, readErr := io.ReadAll(debugResp.Body)
+	if readErr != nil {
+		attemptLogger.Debug("Failed to read debug response body", "error", readErr)
+		return nil // Continue with normal retry logic
+	}
+	
+	// Log the full error response at WARN level
+	if debugResp.StatusCode != 200 {
+		attemptLogger.Warn("Wikipedia API error response",
+			"status_code", debugResp.StatusCode,
+			"content_type", debugResp.Header.Get("Content-Type"),
+			"response_body", string(body),
+			"requested_url", fullURL,
+			"attempt", attempt+1,
+			"max_attempts", l.maxRetries)
+		
+		// Check for user-agent policy violations - this is a permanent failure, don't retry
+		if policyErr := checkUserAgentPolicyViolation(reqID, debugResp.StatusCode, body, req.Header.Get("User-Agent"), attemptLogger); policyErr != nil {
+			return policyErr // Return immediately, don't retry
+		}
+	} else {
+		attemptLogger.Debug("Wikipedia returned non-JSON content",
+			"parsing_error", err.Error(),
+			"attempt", attempt+1,
+			"will_retry", attempt < l.maxRetries-1)
+	}
+	
+	return nil // Continue with normal retry logic
+}
 
 // mwclientDebugWriter implements io.Writer to capture mwclient debug output
 type mwclientDebugWriter struct {
@@ -67,22 +203,6 @@ var (
 		Actionable:  true,
 	}
 )
-
-// wikiMediaProvider implements the ImageProvider interface for Wikipedia.
-type wikiMediaProvider struct {
-	client            *mwclient.Client
-	debug             bool
-	backgroundLimiter *rate.Limiter // For background refresh operations
-	maxRetries        int
-}
-
-// wikiMediaAuthor represents the author information for a Wikipedia image.
-type wikiMediaAuthor struct {
-	name        string
-	URL         string
-	licenseName string
-	licenseURL  string
-}
 
 // logAPIError logs API errors with enhanced diagnostics and categorization
 func logAPIError(logger *slog.Logger, category apiErrorCategory, reqID, species string, params map[string]string, err error) {
@@ -141,8 +261,17 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 	}
 	
 	apiURL := "https://en.wikipedia.org/w/api.php"
-	logger.Debug("Creating mwclient with API URL", "api_url", apiURL, "user_agent", "BirdNET-Go")
-	client, err := mwclient.New(apiURL, "BirdNET-Go")
+	userAgent := buildUserAgent(settings.Version)
+	
+	// Validate and log user-agent for debugging - using WARN level to ensure visibility
+	validateUserAgent(logger, settings.Version)
+	logger.Warn("WikiMedia provider initialization - user-agent constructed", 
+		"user_agent", buildUserAgent(settings.Version),
+		"app_version", settings.Version)
+	
+	logger.Debug("Creating mwclient with API URL", "api_url", apiURL, "user_agent", userAgent)
+	logger.Warn("WikiMedia mwclient created with user-agent", "user_agent", userAgent)
+	client, err := mwclient.New(apiURL, userAgent)
 	if err != nil {
 		enhancedErr := errors.New(err).
 			Component("imageprovider").
@@ -232,45 +361,10 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 
 		// Check if this is a JSON parsing error (Wikipedia returned HTML instead of JSON)
 		if strings.Contains(err.Error(), "invalid character") && strings.Contains(err.Error(), "looking for beginning of value") {
-			// Make a direct HTTP request to capture the actual error response
-			req, _ := http.NewRequest("GET", fullURL, http.NoBody)
-			req.Header.Set("User-Agent", "BirdNET-Go")
-			httpClient := &http.Client{Timeout: 10 * time.Second}
-			if debugResp, debugErr := httpClient.Do(req); debugErr == nil {
-				if body, readErr := io.ReadAll(debugResp.Body); readErr == nil {
-					// Log the full error response at WARN level
-					if debugResp.StatusCode != 200 {
-						attemptLogger.Warn("Wikipedia API error response",
-							"status_code", debugResp.StatusCode,
-							"content_type", debugResp.Header.Get("Content-Type"),
-							"response_body", string(body),
-							"requested_url", fullURL,
-							"attempt", attempt+1,
-							"max_attempts", l.maxRetries)
-						
-						// Special handling for User-Agent blocks
-						if debugResp.StatusCode == 403 && strings.Contains(string(body), "User-Agent") {
-							attemptLogger.Error("Wikipedia blocked request - User-Agent policy violation",
-								"error_message", string(body),
-								"user_agent", req.Header.Get("User-Agent"),
-								"policy_url", "https://meta.wikimedia.org/wiki/User-Agent_policy",
-								"action_required", "User-Agent needs to be whitelisted or changed")
-						}
-					} else {
-						attemptLogger.Debug("Wikipedia returned non-JSON content",
-							"parsing_error", err.Error(),
-							"attempt", attempt+1,
-							"will_retry", attempt < l.maxRetries-1)
-					}
-				}
-				// Close response body
-				if err := debugResp.Body.Close(); err != nil {
-					attemptLogger.Debug("Failed to close debug response body", "error", err)
-				}
-			} else {
-				attemptLogger.Debug("Unable to diagnose API error",
-					"diagnostic_error", debugErr.Error(),
-					"original_error", err.Error())
+			// Get settings to build proper user agent
+			settings := conf.Setting()
+			if policyErr := l.handleJSONParsingError(reqID, fullURL, err, settings, attemptLogger, attempt); policyErr != nil {
+				return nil, policyErr // Return immediately for permanent failures
 			}
 		}
 
@@ -570,6 +664,7 @@ func (l *wikiMediaProvider) fetchWithLimiter(scientificName string, limiter *rat
 		AuthorURL:      authorInfo.URL,
 		LicenseName:    authorInfo.licenseName,
 		LicenseURL:     authorInfo.licenseURL,
+		SourceProvider: wikiProviderName, // Set the provider name
 	}
 	
 	// Enhanced success logging with complete operation summary
