@@ -950,6 +950,11 @@ func (a *MqttAction) Execute(data interface{}) error {
 		// Log the error with retry information if retries are enabled
 		// Sanitize error before logging
 		sanitizedErr := sanitizeError(err)
+		
+		// Check if this is an EOF error which indicates connection was closed unexpectedly
+		// This is a common issue with MQTT brokers and should be treated as retryable
+		isEOFError := strings.Contains(strings.ToLower(err.Error()), "eof")
+		
 		// Add structured logging
 		GetLogger().Error("Failed to publish to MQTT",
 			"component", "analysis.processor.actions",
@@ -960,6 +965,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 			"clip_name", a.Note.ClipName,
 			"topic", a.Settings.Realtime.MQTT.Topic,
 			"retry_enabled", a.RetryConfig.Enabled,
+			"is_eof_error", isEOFError,
 			"operation", "mqtt_publish")
 		if a.RetryConfig.Enabled {
 			log.Printf("❌ Error publishing %s (%s) to MQTT topic %s (confidence: %.2f, clip: %s) (will retry): %v\n",
@@ -967,10 +973,15 @@ func (a *MqttAction) Execute(data interface{}) error {
 		} else {
 			log.Printf("❌ Error publishing %s (%s) to MQTT topic %s (confidence: %.2f, clip: %s): %v\n",
 				a.Note.CommonName, a.Note.ScientificName, a.Settings.Realtime.MQTT.Topic, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
-			// Send notification for non-retryable failures
-			notification.NotifyIntegrationFailure("MQTT", err)
+			// Only send notification for non-EOF errors when retries are disabled
+			// EOF errors are typically transient connection issues
+			if !isEOFError {
+				notification.NotifyIntegrationFailure("MQTT", err)
+			}
 		}
-		return errors.New(err).
+		
+		// Enhance error context with EOF detection
+		enhancedErr := errors.New(err).
 			Component("analysis.processor").
 			Category(errors.CategoryMQTTPublish).
 			Context("operation", "mqtt_publish").
@@ -980,7 +991,10 @@ func (a *MqttAction) Execute(data interface{}) error {
 			Context("clip_name", a.Note.ClipName).
 			Context("integration", "mqtt").
 			Context("retryable", true). // MQTT publish failures are typically retryable
+			Context("is_eof_error", isEOFError).
 			Build()
+		
+		return enhancedErr
 	}
 
 	if a.Settings.Debug {

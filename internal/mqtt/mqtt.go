@@ -125,6 +125,6 @@ func DefaultConfig() Config {
 		ConnectTimeout:    30 * time.Second,
 		ReconnectTimeout:  5 * time.Second,
 		PublishTimeout:    10 * time.Second,
-		DisconnectTimeout: 250 * time.Millisecond,
+		DisconnectTimeout: 5 * time.Second, // Increased from 250ms to allow graceful disconnect
 	}
 }

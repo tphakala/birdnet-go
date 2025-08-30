@@ -165,8 +165,8 @@ func (c *client) Connect(ctx context.Context) error {
 
 	// Perform disconnection outside the lock
 	if oldClientToDisconnect != nil {
-		logger.Debug("Disconnecting old client instance", "timeout_ms", 250)
-		oldClientToDisconnect.Disconnect(250) // Use a short timeout
+		logger.Debug("Disconnecting old client instance", "timeout_ms", 5000)
+		oldClientToDisconnect.Disconnect(5000) // Use longer timeout for graceful disconnect
 	}
 
 	// --- Re-acquire lock to modify shared state ---
@@ -340,16 +340,16 @@ func (c *client) Connect(ctx context.Context) error {
 		logger.Error("MQTT connection attempt timed out by client.go select", "timeout", timeoutDuration)
 		// Cancel the connection attempt to prevent the goroutine from leaking
 		if clientToConnect != nil {
-			logger.Debug("Calling Disconnect(0) to cancel connection attempt and prevent goroutine leak")
-			clientToConnect.Disconnect(0) // Use 0 for immediate disconnection
+			logger.Debug("Calling Disconnect(1000) to cancel connection attempt and prevent goroutine leak")
+			clientToConnect.Disconnect(1000) // Use timeout for graceful disconnection
 		}
 	case <-ctx.Done():
 		connectErr = ctx.Err()
 		logger.Error("Context cancelled during MQTT connection wait", "error", connectErr)
 		// Cancel the connection attempt to prevent the goroutine from leaking
 		if clientToConnect != nil {
-			logger.Debug("Calling Disconnect(0) to cancel connection attempt and prevent goroutine leak")
-			clientToConnect.Disconnect(0) // Use 0 for immediate disconnection
+			logger.Debug("Calling Disconnect(1000) to cancel connection attempt and prevent goroutine leak")
+			clientToConnect.Disconnect(1000) // Use timeout for graceful disconnection
 		}
 	}
 
