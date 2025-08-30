@@ -867,7 +867,7 @@ func TestCheckConnectionCooldown(t *testing.T) {
 
 			// Test the method - acquire read lock as required by the method
 			c.mu.RLock()
-			err := c.checkConnectionCooldown(logger)
+			err := c.checkConnectionCooldownLocked(logger)
 			c.mu.RUnlock()
 
 			// Verify results
@@ -1220,8 +1220,6 @@ func TestPerformConnectionAttempt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			// Create test client
 			config := DefaultConfig()
 			tt.setupConfig(&config)

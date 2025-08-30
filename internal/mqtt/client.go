@@ -140,7 +140,7 @@ func (c *client) Connect(ctx context.Context) error {
 
 	// --- Lock acquisition START ---
 	c.mu.Lock()
-	if err := c.checkConnectionCooldown(logger); err != nil {
+	if err := c.checkConnectionCooldownLocked(logger); err != nil {
 		c.mu.Unlock() // Unlock before returning
 		return err
 	}
@@ -356,9 +356,9 @@ func (c *client) calculateCancelTimeout() uint {
 	return cancelTimeout
 }
 
-// checkConnectionCooldown validates if enough time has passed since the last connection attempt
+// checkConnectionCooldownLocked validates if enough time has passed since the last connection attempt
 // CALLER MUST HOLD c.mu LOCK (either read or write lock)
-func (c *client) checkConnectionCooldown(logger *slog.Logger) error {
+func (c *client) checkConnectionCooldownLocked(logger *slog.Logger) error {
 	// Read shared state - caller must hold lock to prevent races
 	lastConnAttempt := c.lastConnAttempt
 	reconnectCooldown := c.config.ReconnectCooldown
