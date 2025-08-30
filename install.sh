@@ -2672,32 +2672,49 @@ configure_location() {
     # If automatic location failed or was rejected, continue with manual input
     print_message "1) Enter coordinates manually" "$YELLOW"
     print_message "2) Enter city name for OpenStreetMap lookup" "$YELLOW"
+    print_message "3) Skip location configuration (use default: 0.0, 0.0)" "$YELLOW"
     
     while true; do
-        print_message "❓ Select location input method (1/2): " "$YELLOW" "nonewline"
+        print_message "❓ Select location input method (1-3): " "$YELLOW" "nonewline"
         read -r location_choice
 
         case $location_choice in
             1)
                 while true; do
-                    read -r -p "Enter latitude (-90 to 90): " lat
-                    read -r -p "Enter longitude (-180 to 180): " lon
+                    print_message "Enter latitude (-90 to 90) or 'b' to go back: " "$YELLOW" "nonewline"
+                    read -r lat
+                    
+                    if [ "$lat" = "b" ]; then
+                        break  # Go back to method selection
+                    fi
+                    
+                    print_message "Enter longitude (-180 to 180) or 'b' to go back: " "$YELLOW" "nonewline"
+                    read -r lon
+                    
+                    if [ "$lon" = "b" ]; then
+                        break  # Go back to method selection
+                    fi
                     
                     if [[ "$lat" =~ ^-?[0-9]*\.?[0-9]+$ ]] && \
                        [[ "$lon" =~ ^-?[0-9]*\.?[0-9]+$ ]] && \
                        (( $(echo "$lat >= -90 && $lat <= 90" | bc -l) )) && \
                        (( $(echo "$lon >= -180 && $lon <= 180" | bc -l) )); then
-                        break
+                        log_message "INFO" "User entered coordinates manually: $lat, $lon"
+                        break 2  # Exit both loops
                     else
                         print_message "❌ Invalid coordinates. Please try again." "$RED"
                     fi
                 done
-                break
+                # If we get here, user chose 'b', so continue outer loop
                 ;;
             2)
                 while true; do
-                    print_message "Enter location (e.g., 'Helsinki, Finland', 'New York, US', or 'Sungei Buloh, Singapore'): " "$YELLOW" "nonewline"
+                    print_message "Enter location (e.g., 'Helsinki, Finland', 'New York, US') or 'b' to go back: " "$YELLOW" "nonewline"
                     read -r location
+                    
+                    if [ "$location" = "b" ]; then
+                        break  # Go back to method selection
+                    fi
                     
                     # Split input into city and country
                     city=$(echo "$location" | cut -d',' -f1 | xargs)
@@ -2717,12 +2734,20 @@ configure_location() {
                         log_message "INFO" "OpenStreetMap lookup successful for $city, $country"
                         print_message "✅ Found coordinates for $city, $country: " "$GREEN" "nonewline"
                         print_message "$lat, $lon"
-                        break
+                        break 2  # Exit both loops
                     else
                         log_message "WARN" "OpenStreetMap lookup failed for: $city, $country"
                         print_message "❌ Could not find coordinates. Please try again with format: 'City, Country'" "$RED"
                     fi
                 done
+                # If we get here, user chose 'b', so continue outer loop
+                ;;
+            3)
+                log_message "INFO" "User skipped location configuration"
+                print_message "⚠️ Skipping location configuration - using default coordinates (0.0, 0.0)" "$YELLOW"
+                print_message "💡 You can configure location later in the BirdNET-Go web interface" "$YELLOW"
+                lat="0.0"
+                lon="0.0"
                 break
                 ;;
             *)
@@ -2991,6 +3016,192 @@ ExecStopPost=-/usr/bin/docker rm -f birdnet-go
 [Install]
 WantedBy=multi-user.target
 EOF
+}
+
+# Function to check Cockpit installation status
+check_cockpit_status() {
+    local cockpit_status_file="$CONFIG_DIR/cockpit.txt"
+    
+    if [ -f "$cockpit_status_file" ]; then
+        cat "$cockpit_status_file"
+        return 0
+    fi
+    
+    return 1
+}
+
+# Function to save Cockpit status
+save_cockpit_status() {
+    local status="$1"
+    local cockpit_status_file="$CONFIG_DIR/cockpit.txt"
+    
+    echo "$status" > "$cockpit_status_file"
+    log_message "INFO" "Cockpit status saved: $status"
+}
+
+# Function to check if Cockpit is already installed
+is_cockpit_installed() {
+    # Method 1: Check if cockpit packages are installed via dpkg
+    if dpkg-query -W -f='${Status}' cockpit 2>/dev/null | grep -q "install ok installed"; then
+        return 0
+    fi
+    
+    # Method 2: Check if cockpit-ws command exists
+    if command_exists cockpit-ws; then
+        return 0
+    fi
+    
+    # Method 3: Check if cockpit bridge exists 
+    if command_exists cockpit-bridge; then
+        return 0
+    fi
+    
+    # Method 4: Check if systemd units exist
+    if systemctl list-unit-files 2>/dev/null | grep -E "(cockpit\.(socket|service))" >/dev/null 2>&1; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Function to check if Cockpit service is enabled and running
+is_cockpit_running() {
+    # Check cockpit.socket first (preferred method)
+    if systemctl is-active --quiet cockpit.socket 2>/dev/null; then
+        return 0
+    fi
+    
+    # Check cockpit.service as fallback 
+    if systemctl is-active --quiet cockpit.service 2>/dev/null; then
+        return 0
+    fi
+    
+    # Check if cockpit is listening on port ${COCKPIT_PORT}
+    if command_exists ss && ss -tlnp 2>/dev/null | grep -q ":${COCKPIT_PORT} "; then
+        return 0
+    fi
+    
+    # Fallback check with netstat
+    if command_exists netstat && netstat -tln 2>/dev/null | grep -q ":${COCKPIT_PORT} "; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Function to configure Cockpit installation
+configure_cockpit() {
+    log_message "INFO" "Starting Cockpit configuration check"
+    
+    # Debug: Log detection results for troubleshooting
+    log_message "INFO" "Cockpit detection debug: installed=$(is_cockpit_installed && echo 'true' || echo 'false'), running=$(is_cockpit_running && echo 'true' || echo 'false')"
+    
+    # STEP 1: Check if Cockpit is already installed on the system
+    if is_cockpit_installed; then
+        log_message "INFO" "Cockpit is already installed on system"
+        
+        # Check if it's running
+        if is_cockpit_running; then
+            print_message "✅ Cockpit system management interface is already installed and available at https://${IP_ADDR}:${COCKPIT_PORT}" "$GREEN"
+            log_message "INFO" "Cockpit is installed and running, updating status file"
+            save_cockpit_status "installed"
+            return 0
+        else
+            # Cockpit is installed but not running
+            print_message "📊 Cockpit is installed but not currently enabled" "$YELLOW"
+            print_message "❓ Would you like to enable and start Cockpit? (y/n): " "$YELLOW" "nonewline"
+            read -r enable_cockpit
+            
+            if [[ "$enable_cockpit" =~ ^[Yy]$ ]]; then
+                log_message "INFO" "User chose to enable existing Cockpit installation"
+                if sudo systemctl enable --now cockpit.socket; then
+                    print_message "✅ Cockpit system management interface enabled and available at https://${IP_ADDR}:${COCKPIT_PORT}!" "$GREEN"
+                    log_message "INFO" "Cockpit service enabled and started"
+                    save_cockpit_status "installed"
+                    return 0
+                else
+                    print_message "❌ Failed to enable Cockpit service" "$RED"
+                    log_message "ERROR" "Failed to enable existing Cockpit service"
+                    save_cockpit_status "install_failed"
+                    return 1
+                fi
+            else
+                print_message "ℹ️ Cockpit remains disabled" "$YELLOW"
+                print_message "💡 To enable later, run: sudo systemctl enable --now cockpit.socket" "$YELLOW"
+                log_message "INFO" "User declined to enable existing Cockpit installation"
+                save_cockpit_status "declined"
+                return 1
+            fi
+        fi
+    fi
+    
+    # STEP 2: Cockpit is not installed - check user preferences from previous runs
+    local cockpit_status
+    if cockpit_status=$(check_cockpit_status); then
+        case "$cockpit_status" in
+            "declined")
+                log_message "INFO" "User previously declined Cockpit installation, skipping prompt"
+                print_message "📊 Cockpit installation was previously declined" "$YELLOW"
+                return 1
+                ;;
+            "install_failed")
+                log_message "INFO" "Previous Cockpit installation failed, asking user again"
+                print_message "⚠️ Previous Cockpit installation failed, would you like to try again?" "$YELLOW"
+                ;;
+        esac
+    fi
+    
+    # STEP 3: Ask user if they want to install Cockpit
+    print_message "\n🖥️ System Management with Cockpit" "$GREEN"
+    print_message "Cockpit is a web-based server management interface that provides:" "$YELLOW"
+    print_message "  • System monitoring (CPU, memory, disk usage)" "$YELLOW"
+    print_message "  • Service management" "$YELLOW"
+    print_message "  • Log viewing" "$YELLOW"
+    print_message "  • Terminal access" "$YELLOW"
+    print_message "  • Network configuration" "$YELLOW"
+    print_message "  • System package updates" "$YELLOW"
+    print_message "  • Reboot/shutdown control" "$YELLOW"
+    print_message "\nMore information: https://cockpit-project.org/" "$YELLOW"
+    
+    print_message "\n❓ Would you like to install Cockpit for easy system management? (y/n): " "$YELLOW" "nonewline"
+    read -r install_cockpit
+    
+    if [[ "$install_cockpit" =~ ^[Yy]$ ]]; then
+        log_message "INFO" "User chose to install Cockpit"
+        print_message "\n📦 Installing Cockpit..." "$YELLOW"
+        
+        if sudo apt update -q && sudo apt install -q -y cockpit; then
+            log_message "INFO" "Cockpit installation successful"
+            print_message "✅ Cockpit system management interface installed successfully!" "$GREEN"
+            
+            # Enable and start Cockpit socket
+            if sudo systemctl enable --now cockpit.socket; then
+                log_message "INFO" "Cockpit service enabled and started"
+                print_message "✅ Cockpit system management interface enabled and available at https://${IP_ADDR}:${COCKPIT_PORT}" "$GREEN"
+                save_cockpit_status "installed"
+                return 0
+            else
+                log_message "ERROR" "Failed to enable Cockpit service"
+                print_message "❌ Failed to enable Cockpit service" "$RED"
+                save_cockpit_status "install_failed"
+                return 1
+            fi
+        else
+            log_message "ERROR" "Cockpit installation failed"
+            print_message "❌ Failed to install Cockpit" "$RED"
+            print_message "💡 To install Cockpit manually, run: sudo apt install cockpit" "$YELLOW"
+            print_message "   Then enable it with: sudo systemctl enable --now cockpit.socket" "$YELLOW"
+            save_cockpit_status "install_failed"
+            return 1
+        fi
+    else
+        log_message "INFO" "User declined Cockpit installation"
+        print_message "ℹ️ Cockpit installation skipped" "$YELLOW"
+        print_message "💡 To install Cockpit later, run: sudo apt install cockpit" "$YELLOW"
+        print_message "   Then enable it with: sudo systemctl enable --now cockpit.socket" "$YELLOW"
+        save_cockpit_status "declined"
+        return 1
+    fi
 }
 
 # Function to add systemd service configuration
@@ -3649,6 +3860,7 @@ CONFIG_DIR="$HOME/birdnet-go-app/config"
 DATA_DIR="$HOME/birdnet-go-app/data"
 CONFIG_FILE="$CONFIG_DIR/config.yaml"
 WEB_PORT=8080  # Default web port
+COCKPIT_PORT=9090  # Default Cockpit port
 # MODIFIED: Set default AUDIO_ENV to always include device mapping
 AUDIO_ENV="--device /dev/snd"
 # Flag for fresh installation
@@ -4348,6 +4560,26 @@ if check_mdns; then
 else
     log_message "INFO" "mDNS not available"
 fi
+
+# Display Cockpit URL if installed
+if [ "$(check_cockpit_status 2>/dev/null)" = "installed" ] && is_cockpit_installed; then
+    if [ -n "$IP_ADDR" ]; then
+        log_message "INFO" "Cockpit web interface accessible at: https://${IP_ADDR}:${COCKPIT_PORT}"
+        print_message "🖥️ Cockpit system management interface: https://${IP_ADDR}:${COCKPIT_PORT}" "$GREEN"
+    else
+        print_message "🖥️ Cockpit system management interface: https://localhost:${COCKPIT_PORT}" "$GREEN"
+    fi
+    
+    if check_mdns; then
+        HOSTNAME=$(hostname)
+        print_message "🖥️ Cockpit also available at: https://${HOSTNAME}.local:${COCKPIT_PORT}" "$GREEN"
+    fi
+    
+    print_message "ℹ️ Use your system username and password to log into Cockpit" "$YELLOW"
+fi
+
+# Configure Cockpit installation as final step
+configure_cockpit
 
 log_message "INFO" "Install.sh script execution completed successfully"
 log_message "INFO" "=== End of BirdNET-Go Installation/Update Session ==="
