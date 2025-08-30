@@ -109,7 +109,21 @@ func checkUserAgentPolicyViolation(reqID string, statusCode int, responseBody []
 }
 
 // handleJSONParsingError handles JSON parsing errors by making a direct HTTP request to diagnose the issue
+// Only performs detailed diagnostics when debug mode is enabled to avoid performance impact
 func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, err error, settings *conf.Settings, attemptLogger *slog.Logger, attempt int) error {
+	// Quick path: if debug mode is not enabled, just log basic info and return
+	if !l.debug {
+		attemptLogger.Debug("Wikipedia JSON parsing error (normal for missing pages)",
+			"parsing_error", err.Error(),
+			"attempt", attempt+1,
+			"will_retry", attempt < l.maxRetries-1,
+			"diagnostic_mode", "disabled_for_performance")
+		return nil // Continue with normal retry logic
+	}
+
+	// Debug mode is enabled - perform detailed diagnostics
+	attemptLogger.Debug("Debug mode enabled: performing detailed error diagnostics")
+
 	// Make a direct HTTP request to capture the actual error response
 	req, _ := http.NewRequest("GET", fullURL, http.NoBody)
 	req.Header.Set("User-Agent", buildUserAgent(settings.Version))
@@ -137,7 +151,7 @@ func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, err er
 
 	// Log the full error response at WARN level
 	if debugResp.StatusCode != 200 {
-		attemptLogger.Warn("Wikipedia API error response",
+		attemptLogger.Warn("Wikipedia API error response (debug mode)",
 			"status_code", debugResp.StatusCode,
 			"content_type", debugResp.Header.Get("Content-Type"),
 			"response_body", string(body),
@@ -150,8 +164,9 @@ func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, err er
 			return policyErr // Return immediately, don't retry
 		}
 	} else {
-		attemptLogger.Debug("Wikipedia returned non-JSON content",
+		attemptLogger.Debug("Wikipedia returned non-JSON content (debug diagnostics)",
 			"parsing_error", err.Error(),
+			"response_preview", string(body)[:min(len(body), 200)],
 			"attempt", attempt+1,
 			"will_retry", attempt < l.maxRetries-1)
 	}
@@ -374,9 +389,6 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 			"attempted_url", fullURL,
 			"attempt", attempt+1,
 			"will_retry", attempt < l.maxRetries-1)
-		// if l.debug {
-		// 	log.Printf("Debug: API request attempt %d failed: %v", attempt+1, err)
-		// }
 
 		// Wait before retry (exponential backoff)
 		waitDuration := time.Second * time.Duration(1<<attempt)
@@ -414,9 +426,6 @@ func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(reqID string, params
 	}
 	fullURL := "https://en.wikipedia.org/w/api.php?" + strings.Join(queryParams, "&")
 	logger.Info("Querying Wikipedia API", "debug_full_url", fullURL)
-	// if l.debug {
-	// 	log.Printf("[%s] Debug: Querying Wikipedia API with params: %v", reqID, params)
-	// }
 
 	resp, err := l.queryWithRetryAndLimiter(reqID, params, limiter)
 	if err != nil {

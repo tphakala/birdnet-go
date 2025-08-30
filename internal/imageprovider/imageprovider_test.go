@@ -89,10 +89,8 @@ func (m *mockStore) GetImageCache(query datastore.ImageCacheQuery) (*datastore.I
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if img, ok := m.images[query.ScientificName+"_"+query.ProviderName]; ok {
-		//log.Printf("Debug: GetImageCache found entry for %s provider %s", query.ScientificName, query.ProviderName)
 		return img, nil
 	}
-	//log.Printf("Debug: GetImageCache MISS for %s provider %s", query.ScientificName, query.ProviderName)
 	return nil, datastore.ErrImageCacheNotFound
 }
 
@@ -130,13 +128,11 @@ func (m *mockStore) GetAllImageCaches(providerName string) ([]datastore.ImageCac
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	var result []datastore.ImageCache
-	//log.Printf("Debug: GetAllImageCaches called for provider %s. Total items: %d", providerName, len(m.images))
 	for key, img := range m.images {
 		if strings.HasSuffix(key, "_"+providerName) {
 			result = append(result, *img)
 		}
 	}
-	//log.Printf("Debug: GetAllImageCaches returning %d entries for provider %s", len(result), providerName)
 	return result, nil
 }
 
@@ -161,9 +157,9 @@ func (m *mockStore) Save(note *datastore.Note, results []datastore.Results) erro
 func (m *mockStore) Delete(id string) error                                       { return nil }
 func (m *mockStore) Get(id string) (datastore.Note, error)                        { return datastore.Note{}, nil }
 func (m *mockStore) Close() error                                                 { return nil }
-func (m *mockStore) SetMetrics(metrics *datastore.Metrics)               {}
-func (m *mockStore) SetSunCalcMetrics(suncalcMetrics any)        {}
-func (m *mockStore) Optimize(ctx context.Context) error                          { return nil }
+func (m *mockStore) SetMetrics(metrics *datastore.Metrics)                        {}
+func (m *mockStore) SetSunCalcMetrics(suncalcMetrics any)                         {}
+func (m *mockStore) Optimize(ctx context.Context) error                           { return nil }
 func (m *mockStore) GetAllNotes() ([]datastore.Note, error)                       { return []datastore.Note{}, nil }
 func (m *mockStore) GetTopBirdsData(date string, minConf float64) ([]datastore.Note, error) {
 	return nil, nil
@@ -187,7 +183,9 @@ func (m *mockStore) DeleteNoteClipPath(noteID string) error        { return nil 
 func (m *mockStore) GetClipsQualifyingForRemoval(minHours, minClips int) ([]datastore.ClipForRemoval, error) {
 	return nil, nil
 }
-func (m *mockStore) GetNoteReview(noteID string) (*datastore.NoteReview, error)     { return nil, datastore.ErrNoteReviewNotFound }
+func (m *mockStore) GetNoteReview(noteID string) (*datastore.NoteReview, error) {
+	return nil, datastore.ErrNoteReviewNotFound
+}
 func (m *mockStore) SaveNoteReview(review *datastore.NoteReview) error              { return nil }
 func (m *mockStore) GetNoteComments(noteID string) ([]datastore.NoteComment, error) { return nil, nil }
 func (m *mockStore) SaveNoteComment(comment *datastore.NoteComment) error           { return nil }
@@ -199,20 +197,24 @@ func (m *mockStore) GetDailyEvents(date string) (datastore.DailyEvents, error) {
 }
 func (m *mockStore) SaveHourlyWeather(hourlyWeather *datastore.HourlyWeather) error  { return nil }
 func (m *mockStore) GetHourlyWeather(date string) ([]datastore.HourlyWeather, error) { return nil, nil }
-func (m *mockStore) LatestHourlyWeather() (*datastore.HourlyWeather, error)          { return nil, gorm.ErrRecordNotFound }
+func (m *mockStore) LatestHourlyWeather() (*datastore.HourlyWeather, error) {
+	return nil, gorm.ErrRecordNotFound
+}
 func (m *mockStore) GetHourlyDetections(date, hour string, duration, limit, offset int) ([]datastore.Note, error) {
 	return nil, nil
 }
 func (m *mockStore) CountSpeciesDetections(species, date, hour string, duration int) (int64, error) {
 	return 0, nil
 }
-func (m *mockStore) CountSearchResults(query string) (int64, error)         { return 0, nil }
-func (m *mockStore) Transaction(fc func(tx *gorm.DB) error) error           { return nil }
-func (m *mockStore) LockNote(noteID string) error                           { return nil }
-func (m *mockStore) UnlockNote(noteID string) error                         { return nil }
-func (m *mockStore) GetNoteLock(noteID string) (*datastore.NoteLock, error) { return nil, datastore.ErrNoteLockNotFound }
-func (m *mockStore) IsNoteLocked(noteID string) (bool, error)               { return false, nil }
-func (m *mockStore) GetLockedNotesClipPaths() ([]string, error)             { return nil, nil }
+func (m *mockStore) CountSearchResults(query string) (int64, error) { return 0, nil }
+func (m *mockStore) Transaction(fc func(tx *gorm.DB) error) error   { return nil }
+func (m *mockStore) LockNote(noteID string) error                   { return nil }
+func (m *mockStore) UnlockNote(noteID string) error                 { return nil }
+func (m *mockStore) GetNoteLock(noteID string) (*datastore.NoteLock, error) {
+	return nil, datastore.ErrNoteLockNotFound
+}
+func (m *mockStore) IsNoteLocked(noteID string) (bool, error)   { return false, nil }
+func (m *mockStore) GetLockedNotesClipPaths() ([]string, error) { return nil, nil }
 func (m *mockStore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
 	return 0, nil
 }
@@ -818,7 +820,7 @@ func TestInitializationFailure(t *testing.T) {
 // TestUserRequestsNotRateLimited tests that user requests are not subject to rate limiting
 func TestUserRequestsNotRateLimited(t *testing.T) {
 	t.Parallel()
-	
+
 	// Create a mock provider with minimal delay to test rate limiting behavior
 	mockProvider := &mockImageProvider{
 		fetchDelay: 1 * time.Millisecond, // Very fast mock responses
