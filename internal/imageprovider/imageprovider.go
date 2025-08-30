@@ -36,6 +36,16 @@ var ErrCacheMiss = errors.Newf("image not found in cache").
 	Context("error_type", "cache_miss").
 	Build()
 
+// ErrProviderNotConfigured indicates that the provider is not configured for use.
+// This is a normal operational state, not an error - the provider correctly identifies
+// that it should not be used based on current configuration.
+var ErrProviderNotConfigured = errors.Newf("provider not configured for current settings").
+	Component("imageprovider").
+	Category(errors.CategoryConfiguration).
+	Context("error_type", "provider_not_configured").
+	Context("operational_state", "normal").
+	Build()
+
 // contextKey is a type used for context keys to avoid collisions
 type contextKey string
 
@@ -316,14 +326,15 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 		}
 		
 		// Use appropriate log levels based on error type:
-		// DEBUG: Configuration errors (provider not configured)
+		// No logging: Provider not configured (normal operational state)
 		// WARN: "Not found" errors
 		// ERROR: Actual system failures
 		switch {
 		case errors.Is(err, ErrImageNotFound):
 			logger.Warn("Failed to fetch image during refresh", "error", enhancedErr)
-		case enhancedErr.GetCategory() == string(errors.CategoryConfiguration):
-			logger.Debug("Image provider not configured for use during refresh", "error", enhancedErr)
+		case errors.Is(err, ErrProviderNotConfigured):
+			// This is normal - provider correctly identified it's not configured for use
+			// No logging needed as this is expected operational behavior
 		default:
 			logger.Error("Failed to fetch image during refresh", "error", enhancedErr)
 		}

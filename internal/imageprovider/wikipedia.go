@@ -1122,14 +1122,7 @@ func (l *wikiMediaProvider) FetchWithContext(ctx context.Context, scientificName
 			"context", "background_operation",
 			"hint", "WikiMedia is not the configured provider and fallback is disabled")
 
-		return BirdImage{}, errors.Newf("WikiMedia provider is not configured for use: %s", reason).
-			Component("imageprovider").
-			Category(errors.CategoryConfiguration).
-			Context("provider", wikiProviderName).
-			Context("scientific_name", scientificName).
-			Context("config_reason", reason).
-			Context("operation", "fetch_with_context_blocked_by_config").
-			Build()
+		return BirdImage{}, ErrProviderNotConfigured
 	}
 
 	// Check if this is a background operation
@@ -1161,14 +1154,7 @@ func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
 			"config_reason", reason,
 			"hint", "WikiMedia is not the configured provider and fallback is disabled")
 
-		return BirdImage{}, errors.Newf("WikiMedia provider is not configured for use: %s", reason).
-			Component("imageprovider").
-			Category(errors.CategoryConfiguration).
-			Context("provider", wikiProviderName).
-			Context("scientific_name", scientificName).
-			Context("config_reason", reason).
-			Context("operation", "fetch_blocked_by_config").
-			Build()
+		return BirdImage{}, ErrProviderNotConfigured
 	}
 
 	return l.fetchWithLimiter(context.Background(), scientificName, nil)
