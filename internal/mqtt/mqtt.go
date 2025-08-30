@@ -21,6 +21,8 @@ const (
 	// ShutdownDisconnectTimeout is the timeout for disconnect during application shutdown
 	// This is shorter than graceful timeout to avoid delaying shutdown
 	ShutdownDisconnectTimeout = 2 * time.Second
+	// ConnectTimeoutGrace is the additional time to wait beyond ConnectTimeout for cleanup
+	ConnectTimeoutGrace = 500 * time.Millisecond
 )
 
 // Client defines the interface for MQTT client operations.

@@ -357,17 +357,24 @@ func (c *client) calculateCancelTimeout() uint {
 }
 
 // checkConnectionCooldown validates if enough time has passed since the last connection attempt
+// CALLER MUST HOLD c.mu LOCK (either read or write lock)
 func (c *client) checkConnectionCooldown(logger *slog.Logger) error {
-	if time.Since(c.lastConnAttempt) < c.config.ReconnectCooldown {
-		lastAttemptAgo := time.Since(c.lastConnAttempt)
-		logger.Warn("Connection attempt too recent", "last_attempt_ago", lastAttemptAgo, "cooldown", c.config.ReconnectCooldown)
+	// Read shared state - caller must hold lock to prevent races
+	lastConnAttempt := c.lastConnAttempt
+	reconnectCooldown := c.config.ReconnectCooldown
+	broker := c.config.Broker
+	clientID := c.config.ClientID
+	
+	if time.Since(lastConnAttempt) < reconnectCooldown {
+		lastAttemptAgo := time.Since(lastConnAttempt)
+		logger.Warn("Connection attempt too recent", "last_attempt_ago", lastAttemptAgo, "cooldown", reconnectCooldown)
 		return errors.Newf("connection attempt too recent, last attempt was %v ago", lastAttemptAgo).
 			Component("mqtt").
 			Category(errors.CategoryMQTTConnection).
-			Context("broker", c.config.Broker).
-			Context("client_id", c.config.ClientID).
+			Context("broker", broker).
+			Context("client_id", clientID).
 			Context("last_attempt_ago", lastAttemptAgo).
-			Context("cooldown", c.config.ReconnectCooldown).
+			Context("cooldown", reconnectCooldown).
 			Build()
 	}
 	return nil
@@ -437,14 +444,16 @@ func (c *client) performDNSResolution(ctx context.Context, logger *slog.Logger) 
 		logger.Debug("Resolving broker hostname", "host", host)
 		_, err := net.DefaultResolver.LookupHost(dnsCtx, host)
 		if err != nil {
-			// Check if context expired during DNS lookup
-			if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == context.DeadlineExceeded {
-				logger.Error("Context deadline exceeded during DNS resolution", "host", host, "error", ctx.Err())
+			// Prioritize parent context cancellation over DNS-specific errors
+			if ctx.Err() != nil {
+				logger.Error("Context cancelled during DNS resolution", "host", host, "error", ctx.Err())
 				c.mu.Lock()
 				c.lastConnAttempt = time.Now()
 				c.mu.Unlock()
 				return ctx.Err() // Return the original context error
 			}
+			
+			// Handle DNS-specific errors
 			logger.Error("Failed to resolve broker hostname", "host", host, "error", err)
 			var dnsErr *net.DNSError
 			if errors.As(err, &dnsErr) {
@@ -460,6 +469,8 @@ func (c *client) performDNSResolution(ctx context.Context, logger *slog.Logger) 
 					Context("operation", "dns_resolution").
 					Build()
 			}
+			
+			// Handle other network errors
 			c.mu.Lock()
 			c.lastConnAttempt = time.Now()
 			c.mu.Unlock()
@@ -500,8 +511,22 @@ func (c *client) performConnectionAttempt(ctx context.Context, clientToConnect m
 		close(opDone)
 	}()
 
+	// Create timer with grace period to avoid timer leaks
+	timeoutDuration := c.config.ConnectTimeout + ConnectTimeoutGrace
+	timer := time.NewTimer(timeoutDuration)
+	defer timer.Stop() // Ensure timer cleanup
+	
 	select {
 	case <-opDone:
+		// Stop the timer since operation completed
+		if !timer.Stop() {
+			// If Stop returns false, drain the channel to prevent goroutine leak
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		
 		connectErr = token.Error()
 		if connectErr == nil && !clientToConnect.IsConnected() {
 			// If token.Error() is nil but not connected, it implies Paho's WaitTimeout might have returned true
@@ -517,8 +542,7 @@ func (c *client) performConnectionAttempt(ctx context.Context, clientToConnect m
 				Build()
 			logger.Warn("Paho token wait completed but client not connected, no explicit token error.")
 		}
-	case <-time.After(c.config.ConnectTimeout + 500*time.Millisecond): // Add a small grace period over Paho's configured timeout
-		timeoutDuration := c.config.ConnectTimeout + 500*time.Millisecond
+	case <-timer.C:
 		connectErr = errors.Newf("mqtt connection attempt actively timed out by client wrapper after %v", timeoutDuration).
 			Component("mqtt").
 			Category(errors.CategoryMQTTConnection).
@@ -538,6 +562,15 @@ func (c *client) performConnectionAttempt(ctx context.Context, clientToConnect m
 			clientToConnect.Disconnect(cancelTimeout) // Use dynamic timeout for graceful disconnection
 		}
 	case <-ctx.Done():
+		// Stop the timer since context was cancelled
+		if !timer.Stop() {
+			// If Stop returns false, drain the channel to prevent goroutine leak
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		
 		connectErr = ctx.Err()
 		logger.Error("Context cancelled during MQTT connection wait", "error", connectErr)
 		// Cancel the connection attempt to prevent the goroutine from leaking
