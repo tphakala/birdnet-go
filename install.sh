@@ -3058,6 +3058,8 @@ configure_cockpit() {
     print_message "  • Log viewing" "$YELLOW"
     print_message "  • Terminal access" "$YELLOW"
     print_message "  • Network configuration" "$YELLOW"
+    print_message "  • System package updates" "$YELLOW"
+    print_message "  • Reboot/shutdown control" "$YELLOW"
     print_message "\nMore information: https://cockpit-project.org/" "$YELLOW"
     
     print_message "\n❓ Would you like to install Cockpit for easy system management? (y/n): " "$YELLOW" "nonewline"
