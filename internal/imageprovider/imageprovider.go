@@ -78,7 +78,7 @@ func (b *BirdImage) GetTTL() time.Duration {
 }
 
 // BirdImageCache represents a cache for storing and retrieving bird images.
-// 
+//
 // Thread Safety: BirdImageCache is safe for concurrent use. The provider field can be
 // changed at runtime using SetImageProvider/SetNonBirdImageProvider methods, and is
 // protected using atomic operations. This is necessary because a background refresh
@@ -379,12 +379,12 @@ func InitCache(providerName string, e ImageProvider, t *observability.Metrics, s
 	settings := conf.Setting()
 
 	quit := make(chan struct{})
-	
+
 	var imageProviderMetrics *metrics.ImageProviderMetrics
 	if t != nil {
 		imageProviderMetrics = t.ImageProvider
 	}
-	
+
 	cache := &BirdImageCache{
 		providerName: providerName, // Set provider name
 		metrics:      imageProviderMetrics,
@@ -393,7 +393,7 @@ func InitCache(providerName string, e ImageProvider, t *observability.Metrics, s
 		// logger:       log.Default(), // Replaced by package logger
 		quit: quit,
 	}
-	
+
 	// Store the provider using atomic pointer
 	cache.provider.Store(&e)
 
@@ -857,7 +857,7 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 
 	// 2. Not in DB or DB load failed, fetch from the actual provider
 	logger.Info("Image not found in DB cache, fetching from provider")
-	
+
 	providerPtr := c.provider.Load()
 	if providerPtr == nil {
 		enhancedErr := errors.Newf("image provider for %s is not configured", c.providerName).
@@ -1021,7 +1021,7 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 func (c *BirdImageCache) fetchDirect(scientificName string) (BirdImage, error) {
 	logger := imageProviderLogger.With("provider", c.providerName, "scientific_name", scientificName)
 	logger.Debug("Performing direct fetch from provider (bypassing cache checks)")
-	
+
 	providerPtr := c.provider.Load()
 	if providerPtr == nil {
 		enhancedErr := errors.Newf("image provider %s is not configured", c.providerName).
@@ -1100,7 +1100,6 @@ func (c *BirdImageCache) updateMetrics() {
 	// c.metrics.SetMemoryCacheEntries(float64(count)) // Method doesn't exist
 	// c.metrics.SetMemoryCacheSizeBytes(float64(c.MemoryUsage())) // Method doesn't exist
 }
-
 
 // CreateDefaultCache creates the default BirdImageCache (currently Wikimedia Commons via Wikipedia API).
 func CreateDefaultCache(metricsCollector *observability.Metrics, store datastore.Interface) (*BirdImageCache, error) {

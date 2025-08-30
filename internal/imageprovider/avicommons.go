@@ -89,7 +89,7 @@ func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error
 			Context("operation", "validate_json_data").
 			Build()
 		logger.Error("Avicommons JSON data file is empty",
-		"error", enhancedErr)
+			"error", enhancedErr)
 		return nil, enhancedErr
 	}
 	logger.Info("Successfully read Avicommons data file",
@@ -108,8 +108,8 @@ func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error
 			Context("error_detail", err.Error()).
 			Build()
 		logger.Error("Failed to unmarshal Avicommons JSON data",
-		"data_size_bytes", len(jsonData),
-		"error", enhancedErr)
+			"data_size_bytes", len(jsonData),
+			"error", enhancedErr)
 		return nil, enhancedErr
 	}
 
@@ -122,8 +122,8 @@ func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error
 			Context("operation", "validate_unmarshalled_data").
 			Build()
 		logger.Error("Avicommons JSON data unmarshalled to empty slice",
-		"data_size_bytes", len(jsonData),
-		"error", enhancedErr)
+			"data_size_bytes", len(jsonData),
+			"error", enhancedErr)
 		return nil, enhancedErr
 	}
 
@@ -195,7 +195,7 @@ func (p *AviCommonsProvider) Fetch(scientificName string) (BirdImage, error) {
 		LicenseName:    licenseName,
 		LicenseURL:     licenseURL,
 		AuthorName:     entry.By,
-		AuthorURL:      "", // Avicommons doesn't provide author URLs
+		AuthorURL:      "",                     // Avicommons doesn't provide author URLs
 		SourceProvider: aviCommonsProviderName, // Set the provider name
 		// CachedAt is set by the BirdImageCache
 	}, nil
