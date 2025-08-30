@@ -3041,7 +3041,16 @@ save_cockpit_status() {
 
 # Function to check if Cockpit is already installed
 is_cockpit_installed() {
+    # Check if cockpit packages are installed
     if command_exists cockpit-ws && systemctl list-unit-files | grep -q cockpit.socket; then
+        return 0
+    fi
+    return 1
+}
+
+# Function to check if Cockpit service is enabled and running
+is_cockpit_running() {
+    if systemctl is-enabled --quiet cockpit.socket 2>/dev/null && systemctl is-active --quiet cockpit.socket 2>/dev/null; then
         return 0
     fi
     return 1
@@ -3049,33 +3058,64 @@ is_cockpit_installed() {
 
 # Function to configure Cockpit installation
 configure_cockpit() {
-    local cockpit_status
+    log_message "INFO" "Starting Cockpit configuration check"
     
-    # Check if we already have a status recorded
-    if cockpit_status=$(check_cockpit_status); then
-        case "$cockpit_status" in
-            "installed")
-                if is_cockpit_installed; then
-                    print_message "📊 Cockpit is already installed and configured" "$GREEN"
+    # STEP 1: Check if Cockpit is already installed on the system
+    if is_cockpit_installed; then
+        log_message "INFO" "Cockpit is already installed on system"
+        
+        # Check if it's running
+        if is_cockpit_running; then
+            print_message "✅ Cockpit is already installed and running" "$GREEN"
+            log_message "INFO" "Cockpit is installed and running, updating status file"
+            save_cockpit_status "installed"
+            return 0
+        else
+            # Cockpit is installed but not running
+            print_message "📊 Cockpit is installed but not currently enabled" "$YELLOW"
+            print_message "❓ Would you like to enable and start Cockpit? (y/n): " "$YELLOW" "nonewline"
+            read -r enable_cockpit
+            
+            if [[ "$enable_cockpit" =~ ^[Yy]$ ]]; then
+                log_message "INFO" "User chose to enable existing Cockpit installation"
+                if sudo systemctl enable --now cockpit.socket; then
+                    print_message "✅ Cockpit enabled and started successfully!" "$GREEN"
+                    log_message "INFO" "Cockpit service enabled and started"
+                    save_cockpit_status "installed"
                     return 0
                 else
-                    print_message "⚠️ Cockpit status shows installed but not detected, asking user again" "$YELLOW"
+                    print_message "❌ Failed to enable Cockpit service" "$RED"
+                    log_message "ERROR" "Failed to enable existing Cockpit service"
+                    save_cockpit_status "install_failed"
+                    return 1
                 fi
-                ;;
+            else
+                print_message "ℹ️ Cockpit remains disabled" "$YELLOW"
+                print_message "💡 To enable later, run: sudo systemctl enable --now cockpit.socket" "$YELLOW"
+                log_message "INFO" "User declined to enable existing Cockpit installation"
+                save_cockpit_status "declined"
+                return 1
+            fi
+        fi
+    fi
+    
+    # STEP 2: Cockpit is not installed - check user preferences from previous runs
+    local cockpit_status
+    if cockpit_status=$(check_cockpit_status); then
+        case "$cockpit_status" in
             "declined")
                 log_message "INFO" "User previously declined Cockpit installation, skipping prompt"
+                print_message "📊 Cockpit installation was previously declined" "$YELLOW"
                 return 1
+                ;;
+            "install_failed")
+                log_message "INFO" "Previous Cockpit installation failed, asking user again"
+                print_message "⚠️ Previous Cockpit installation failed, would you like to try again?" "$YELLOW"
                 ;;
         esac
     fi
     
-    # Check if Cockpit is already installed without our status file
-    if is_cockpit_installed; then
-        print_message "✅ Cockpit is already installed on this system" "$GREEN"
-        save_cockpit_status "installed"
-        return 0
-    fi
-    
+    # STEP 3: Ask user if they want to install Cockpit
     print_message "\n🖥️ System Management with Cockpit" "$GREEN"
     print_message "Cockpit is a web-based server management interface that provides:" "$YELLOW"
     print_message "  • System monitoring (CPU, memory, disk usage)" "$YELLOW"
