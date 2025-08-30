@@ -33,6 +33,45 @@ const (
 	userAgentName    = "BirdNETGo"
 	userAgentContact = "https://github.com/tphakala/birdnet-go"
 	userAgentLibrary = "Go-HTTP-Client"
+
+	// Circuit breaker timeout durations
+	circuitBreakerRateLimitDuration      = 60 * time.Second  // Rate limit circuit breaker duration
+	circuitBreakerBlockedDuration        = 5 * time.Minute   // Access blocked circuit breaker duration  
+	circuitBreakerUserAgentDuration      = 10 * time.Minute  // User-Agent violation circuit breaker duration
+	circuitBreakerServiceUnavailDuration = 30 * time.Second  // Service unavailable circuit breaker duration
+
+	// HTTP client configuration
+	httpClientTimeout           = 30 * time.Second
+	httpClientIdleConnTimeout   = 90 * time.Second
+	httpClientTLSTimeout        = 10 * time.Second
+	httpClientMaxIdleConns     = 10
+	diagnosticRequestTimeout    = 10 * time.Second
+
+	// Rate limiting configuration
+	globalRateLimitPerSecond     = 1 // Requests per second for global rate limiter
+	backgroundRateLimitPerSecond = 1 // Requests per second for background operations
+
+	// Retry and delay configuration
+	defaultMaxRetries     = 3
+	retryMinDelay         = 2 * time.Second
+	configWaitTimeout     = 10 * time.Second
+	configCheckInterval   = 100 * time.Millisecond
+
+	// Response body size limits
+	responseBodyPreviewLimit = 200 // Bytes to show in error messages
+	responseBodyDebugLimit   = 500 // Bytes to show in debug logs
+
+	// Error detection strings (lowercase for case-insensitive comparison)
+	errorStringUserAgent    = "user-agent"
+	errorStringRobotPolicy  = "robot policy"
+	errorStringRate         = "rate"
+	errorStringLimit        = "limit"
+	errorStringThrottle     = "throttl"
+	errorStringBlocked      = "blocked"
+	errorStringBanned       = "banned"
+	errorStringDenied       = "denied"
+	errorStringHTMLDoctype  = "<!DOCTYPE"
+	errorStringHTMLTag      = "<html"
 )
 
 // wikiMediaProvider implements the ImageProvider interface for Wikipedia.
@@ -226,25 +265,27 @@ func (l *wikiMediaProvider) makeAPIRequest(params map[string]string) (*jason.Obj
 
 		// Check for specific error types and open circuit breaker
 		switch resp.StatusCode {
-		case 403:
+		case http.StatusForbidden:
 			// User-Agent policy violation or rate limiting - open circuit breaker
+			// Convert to lowercase once for efficient comparison
+			bodyLower := strings.ToLower(bodyStr)
 			switch {
-			case strings.Contains(bodyStr, "User-Agent") || strings.Contains(bodyStr, "robot policy"):
-				// User-agent policy violation - circuit breaker for 10 minutes
-				l.openCircuit(10*time.Minute, fmt.Sprintf("User-Agent policy violation (HTTP 403): %s", bodyStr))
-			case strings.Contains(bodyStr, "rate") || strings.Contains(bodyStr, "limit"):
-				// Rate limiting - circuit breaker for 60 seconds
-				l.openCircuit(60*time.Second, fmt.Sprintf("Rate limited (HTTP 403): %s", bodyStr))
+			case strings.Contains(bodyLower, errorStringUserAgent) || strings.Contains(bodyLower, errorStringRobotPolicy):
+				// User-agent policy violation
+				l.openCircuit(circuitBreakerUserAgentDuration, fmt.Sprintf("User-Agent policy violation (HTTP 403): %s", truncateResponseBody(bodyStr, responseBodyPreviewLimit)))
+			case strings.Contains(bodyLower, errorStringRate) || strings.Contains(bodyLower, errorStringLimit):
+				// Rate limiting
+				l.openCircuit(circuitBreakerRateLimitDuration, fmt.Sprintf("Rate limited (HTTP 403): %s", truncateResponseBody(bodyStr, responseBodyPreviewLimit)))
 			default:
-				// Generic 403 - circuit breaker for 5 minutes
-				l.openCircuit(5*time.Minute, fmt.Sprintf("Access blocked (HTTP 403): %s", bodyStr))
+				// Generic 403
+				l.openCircuit(circuitBreakerBlockedDuration, fmt.Sprintf("Access blocked (HTTP 403): %s", truncateResponseBody(bodyStr, responseBodyPreviewLimit)))
 			}
-		case 429:
-			// Explicit rate limiting - circuit breaker for 60 seconds
-			l.openCircuit(60*time.Second, fmt.Sprintf("Rate limited (HTTP 429): %s", bodyStr))
-		case 503:
-			// Service unavailable - circuit breaker for 30 seconds
-			l.openCircuit(30*time.Second, fmt.Sprintf("Service unavailable (HTTP 503): %s", bodyStr))
+		case http.StatusTooManyRequests:
+			// Explicit rate limiting
+			l.openCircuit(circuitBreakerRateLimitDuration, fmt.Sprintf("Rate limited (HTTP 429): %s", truncateResponseBody(bodyStr, responseBodyPreviewLimit)))
+		case http.StatusServiceUnavailable:
+			// Service unavailable
+			l.openCircuit(circuitBreakerServiceUnavailDuration, fmt.Sprintf("Service unavailable (HTTP 503): %s", truncateResponseBody(bodyStr, responseBodyPreviewLimit)))
 		}
 
 		return nil, errors.Newf("Wikipedia API returned status %d: %s", resp.StatusCode, bodyStr).
@@ -261,13 +302,13 @@ func (l *wikiMediaProvider) makeAPIRequest(params map[string]string) (*jason.Obj
 	var jsonData interface{}
 	if err := json.Unmarshal(body, &jsonData); err != nil {
 		// Check if this might be an HTML error page
-		if bytes.Contains(body, []byte("<!DOCTYPE")) || bytes.Contains(body, []byte("<html")) {
+		if bytes.Contains(body, []byte(errorStringHTMLDoctype)) || bytes.Contains(body, []byte(errorStringHTMLTag)) {
 			return nil, errors.Newf("Wikipedia returned HTML instead of JSON (likely an error page)").
 				Component("imageprovider").
 				Category(errors.CategoryNetwork).
 				Context("provider", wikiProviderName).
 				Context("operation", "json_parse_html_detected").
-				Context("response_preview", string(body[:min(len(body), 200)])).
+				Context("response_preview", truncateResponseBody(string(body), responseBodyPreviewLimit)).
 				Build()
 		}
 
@@ -315,7 +356,7 @@ func NewLazyWikiMediaProvider() *LazyWikiMediaProvider {
 func (l *LazyWikiMediaProvider) ensureInitialized() error {
 	l.once.Do(func() {
 		// Wait for valid configuration (with timeout)
-		if !l.waitForValidConfig(10 * time.Second) {
+		if !l.waitForValidConfig(configWaitTimeout) {
 			l.initErr = errors.Newf("configuration not available after timeout").
 				Component("imageprovider").
 				Category(errors.CategoryConfiguration).
@@ -340,7 +381,7 @@ func (l *LazyWikiMediaProvider) ensureInitialized() error {
 // waitForValidConfig waits until configuration is available with a valid version.
 func (l *LazyWikiMediaProvider) waitForValidConfig(timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(configCheckInterval)
 	defer ticker.Stop()
 
 	for time.Now().Before(deadline) {
@@ -369,6 +410,15 @@ func (l *LazyWikiMediaProvider) FetchWithContext(ctx context.Context, scientific
 		return BirdImage{}, err
 	}
 	return l.provider.FetchWithContext(ctx, scientificName)
+}
+
+// truncateResponseBody truncates a response body string to a specified length for logging.
+// This prevents excessive memory usage and log spam when logging error responses.
+func truncateResponseBody(body string, maxLength int) string {
+	if len(body) <= maxLength {
+		return body
+	}
+	return body[:maxLength] + "..."
 }
 
 // buildUserAgent constructs a user-agent string that complies with Wikimedia's robot policy.
@@ -430,39 +480,41 @@ const (
 )
 
 func detectWikipediaErrorType(statusCode int, responseBody []byte, contentType string) (errorType wikiErrorType, message string) {
-	bodyStr := string(responseBody)
+	// Convert to lowercase once for efficient comparison
+	bodyLower := strings.ToLower(string(responseBody))
 
 	// Check status codes first
 	switch statusCode {
-	case 429:
+	case http.StatusTooManyRequests:
 		return wikiErrorRateLimit, "Rate limit exceeded (HTTP 429)"
-	case 403:
-		if strings.Contains(bodyStr, "User-Agent") || strings.Contains(bodyStr, "robot policy") {
+	case http.StatusForbidden:
+		if strings.Contains(bodyLower, errorStringUserAgent) || strings.Contains(bodyLower, errorStringRobotPolicy) {
 			return wikiErrorUserAgent, "User-Agent policy violation"
 		}
-		if strings.Contains(bodyStr, "rate") || strings.Contains(bodyStr, "limit") {
+		if strings.Contains(bodyLower, errorStringRate) || strings.Contains(bodyLower, errorStringLimit) {
 			return wikiErrorRateLimit, "Rate limit exceeded (403 with rate limit message)"
 		}
 		return wikiErrorBlocked, "Access blocked (HTTP 403)"
-	case 503:
+	case http.StatusServiceUnavailable:
 		return wikiErrorTemporary, "Service temporarily unavailable (HTTP 503)"
 	}
 
 	// Check content type - HTML responses usually indicate errors
 	if strings.Contains(contentType, "text/html") {
 		errorMsg := parseHTMLErrorMessage(responseBody)
+		errorMsgLower := strings.ToLower(errorMsg)
 
 		// Check for rate limiting keywords in HTML content
-		if strings.Contains(strings.ToLower(errorMsg), "rate limit") ||
-			strings.Contains(strings.ToLower(errorMsg), "too many requests") ||
-			strings.Contains(strings.ToLower(errorMsg), "throttl") {
+		if strings.Contains(errorMsgLower, errorStringRate+" "+errorStringLimit) ||
+			strings.Contains(errorMsgLower, "too many requests") ||
+			strings.Contains(errorMsgLower, errorStringThrottle) {
 			return wikiErrorRateLimit, "Rate limit detected in HTML response"
 		}
 
 		// Check for blocking keywords
-		if strings.Contains(strings.ToLower(errorMsg), "blocked") ||
-			strings.Contains(strings.ToLower(errorMsg), "banned") ||
-			strings.Contains(strings.ToLower(errorMsg), "denied") {
+		if strings.Contains(errorMsgLower, errorStringBlocked) ||
+			strings.Contains(errorMsgLower, errorStringBanned) ||
+			strings.Contains(errorMsgLower, errorStringDenied) {
 			return wikiErrorBlocked, "Access blocked (detected in HTML)"
 		}
 
@@ -474,30 +526,32 @@ func detectWikipediaErrorType(statusCode int, responseBody []byte, contentType s
 
 // checkUserAgentPolicyViolation checks for Wikipedia user-agent policy violations and returns an error if detected
 func checkUserAgentPolicyViolation(reqID string, statusCode int, responseBody []byte, userAgent string, logger *slog.Logger) error {
-	if statusCode != 403 {
+	if statusCode != http.StatusForbidden {
 		return nil
 	}
 
+	// Convert to lowercase once for efficient comparison
 	bodyStr := string(responseBody)
-	if !strings.Contains(bodyStr, "User-Agent") && !strings.Contains(bodyStr, "robot policy") {
+	bodyLower := strings.ToLower(bodyStr)
+	if !strings.Contains(bodyLower, errorStringUserAgent) && !strings.Contains(bodyLower, errorStringRobotPolicy) {
 		return nil
 	}
 
 	logger.Error("Wikipedia blocked request - User-Agent policy violation, stopping retries",
-		"error_message", bodyStr,
+		"error_message", truncateResponseBody(bodyStr, responseBodyPreviewLimit),
 		"user_agent", userAgent,
 		"policy_url", "https://foundation.wikimedia.org/wiki/Policy:User-Agent_policy",
 		"action_required", "User-Agent needs to be updated to comply with policy")
 
 	// This is a permanent failure - return immediately without retrying
-	return errors.Newf("Wikipedia user-agent policy violation: %s", bodyStr).
+	return errors.Newf("Wikipedia user-agent policy violation: %s", truncateResponseBody(bodyStr, responseBodyPreviewLimit)).
 		Component("imageprovider").
 		Category(errors.CategoryNetwork).
 		Context("provider", wikiProviderName).
 		Context("request_id", reqID).
 		Context("operation", "user_agent_policy_violation").
 		Context("status_code", statusCode).
-		Context("response_body", bodyStr).
+		Context("response_body", truncateResponseBody(bodyStr, responseBodyPreviewLimit)).
 		Context("user_agent", userAgent).
 		Context("permanent_failure", true).
 		Build()
@@ -511,7 +565,7 @@ func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, err er
 
 	req, _ := http.NewRequest("GET", fullURL, http.NoBody)
 	req.Header.Set("User-Agent", buildUserAgent(settings.Version))
-	httpClient := &http.Client{Timeout: 10 * time.Second}
+	httpClient := &http.Client{Timeout: diagnosticRequestTimeout}
 
 	debugResp, debugErr := httpClient.Do(req)
 	if debugErr != nil {
@@ -543,7 +597,7 @@ func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, err er
 		logLevel = slog.LevelError
 	case errorType == wikiErrorUserAgent:
 		logLevel = slog.LevelError
-	case debugResp.StatusCode != 200:
+	case debugResp.StatusCode != http.StatusOK:
 		logLevel = slog.LevelWarn
 	}
 
@@ -558,18 +612,15 @@ func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, err er
 
 	// Log full response body in debug mode
 	if l.debug && len(body) > 0 {
-		bodyPreview := string(body)
-		if len(bodyPreview) > 500 {
-			bodyPreview = bodyPreview[:500] + "..."
-		}
+		bodyPreview := truncateResponseBody(string(body), responseBodyDebugLimit)
 		attemptLogger.Debug("Response body preview", "body", bodyPreview)
 	}
 
 	// Handle different error types
 	switch errorType {
 	case wikiErrorRateLimit:
-		// Rate limiting - open circuit breaker for 60 seconds
-		l.openCircuit(60*time.Second, fmt.Sprintf("Rate limited: %s", errorMsg))
+		// Rate limiting - open circuit breaker
+		l.openCircuit(circuitBreakerRateLimitDuration, fmt.Sprintf("Rate limited: %s", errorMsg))
 		return errors.Newf("Wikipedia rate limit exceeded: %s", errorMsg).
 			Component("imageprovider").
 			Category(errors.CategoryNetwork).
@@ -583,8 +634,8 @@ func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, err er
 			Build()
 
 	case wikiErrorBlocked:
-		// Access blocked - open circuit breaker for 5 minutes
-		l.openCircuit(5*time.Minute, fmt.Sprintf("Access blocked: %s", errorMsg))
+		// Access blocked - open circuit breaker
+		l.openCircuit(circuitBreakerBlockedDuration, fmt.Sprintf("Access blocked: %s", errorMsg))
 		return errors.Newf("Wikipedia access blocked: %s", errorMsg).
 			Component("imageprovider").
 			Category(errors.CategoryNetwork).
@@ -597,8 +648,8 @@ func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, err er
 			Build()
 
 	case wikiErrorUserAgent:
-		// User-agent policy violation - open circuit breaker for 10 minutes
-		l.openCircuit(10*time.Minute, "User-Agent policy violation")
+		// User-agent policy violation - open circuit breaker
+		l.openCircuit(circuitBreakerUserAgentDuration, "User-Agent policy violation")
 		return checkUserAgentPolicyViolation(reqID, debugResp.StatusCode, body, req.Header.Get("User-Agent"), attemptLogger)
 
 	case wikiErrorTemporary:
@@ -715,22 +766,21 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 
 	// Create HTTP client with reasonable timeouts
 	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: httpClientTimeout,
 		Transport: &http.Transport{
-			MaxIdleConns:        10,
-			IdleConnTimeout:     90 * time.Second,
+			MaxIdleConns:        httpClientMaxIdleConns,
+			IdleConnTimeout:     httpClientIdleConnTimeout,
 			DisableCompression:  false, // Allow gzip compression
-			TLSHandshakeTimeout: 10 * time.Second,
+			TLSHandshakeTimeout: httpClientTLSTimeout,
 		},
 	}
 
 	// Global rate limiting for ALL Wikipedia requests to respect their API limits
-	// Wikipedia prefers conservative request rates - 1 request per second
-	globalLimiter := rate.NewLimiter(rate.Limit(1), 1)
+	// Wikipedia prefers conservative request rates
+	globalLimiter := rate.NewLimiter(rate.Limit(globalRateLimitPerSecond), globalRateLimitPerSecond)
 
 	// Additional rate limiting for background cache refresh operations
-	// Background operations get the same 1 req/sec limit (no additional restriction needed)
-	backgroundLimiter := rate.NewLimiter(rate.Limit(1), 1)
+	backgroundLimiter := rate.NewLimiter(rate.Limit(backgroundRateLimitPerSecond), backgroundRateLimitPerSecond)
 
 	logger.Info("WikiMedia provider initialized with conservative rate limits",
 		"global_rate_limit_rps", 1,
@@ -744,7 +794,7 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 		debug:             settings.Realtime.Dashboard.Thumbnails.Debug,
 		globalLimiter:     globalLimiter,
 		backgroundLimiter: backgroundLimiter,
-		maxRetries:        3,
+		maxRetries:        defaultMaxRetries,
 	}, nil
 }
 
@@ -799,12 +849,8 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 			// Log successful response with debug details
 			if respObj, errJson := resp.Object(); errJson == nil {
 				responseStr := respObj.String()
-				previewLen := 500
-				if len(responseStr) < previewLen {
-					previewLen = len(responseStr)
-				}
 				attemptLogger.Debug("API request successful - raw response received",
-					"response_preview", responseStr[:previewLen],
+					"response_preview", truncateResponseBody(responseStr, responseBodyDebugLimit),
 					"response_size", len(responseStr))
 			} else {
 				attemptLogger.Debug("API request successful")
@@ -839,7 +885,7 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 
 		// Wait before retry with minimum delay + exponential backoff
 		// Minimum 2 seconds between retries to be conservative with Wikipedia API
-		minDelay := 2 * time.Second
+		minDelay := retryMinDelay
 		exponentialDelay := time.Second * time.Duration(1<<attempt)
 		waitDuration := max(minDelay, exponentialDelay)
 		attemptLogger.Debug("Waiting before retry",
