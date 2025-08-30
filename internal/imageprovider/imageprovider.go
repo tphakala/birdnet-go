@@ -36,6 +36,16 @@ var ErrCacheMiss = errors.Newf("image not found in cache").
 	Context("error_type", "cache_miss").
 	Build()
 
+// ErrProviderNotConfigured indicates that the provider is not configured for use.
+// This is a normal operational state, not an error - the provider correctly identifies
+// that it should not be used based on current configuration.
+var ErrProviderNotConfigured = errors.Newf("provider not configured for current settings").
+	Component("imageprovider").
+	Category(errors.CategoryConfiguration).
+	Context("error_type", "provider_not_configured").
+	Context("operational_state", "normal").
+	Build()
+
 // contextKey is a type used for context keys to avoid collisions
 type contextKey string
 
@@ -50,6 +60,13 @@ func isRealError(err error) bool {
 // ImageProvider defines the interface for fetching bird images.
 type ImageProvider interface {
 	Fetch(scientificName string) (BirdImage, error)
+}
+
+// ProviderStatusChecker defines an interface for checking if a provider should actively
+// perform operations (like cache refreshes) without requiring full initialization.
+// This allows providers to be registered for UI discovery while being operationally inactive.
+type ProviderStatusChecker interface {
+	ShouldRefreshCache() bool
 }
 
 // BirdImage represents a cached bird image with its metadata and attribution information
@@ -203,6 +220,18 @@ func (c *BirdImageCache) refreshStaleEntries() {
 		return
 	}
 
+	// Check if provider supports status checking and should skip refresh
+	providerPtr := c.provider.Load()
+	if providerPtr != nil {
+		provider := *providerPtr
+		if statusChecker, ok := provider.(ProviderStatusChecker); ok {
+			if !statusChecker.ShouldRefreshCache() {
+				logger.Debug("Provider configured to skip cache refresh operations")
+				return
+			}
+		}
+	}
+
 	logger.Debug("Getting all cached entries for refresh check")
 	entries, err := c.store.GetAllImageCaches(c.providerName) // Use provider name
 	if err != nil {
@@ -314,7 +343,21 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 				Context("operation", "cache_refresh_fetch").
 				Build()
 		}
-		logger.Error("Failed to fetch image during refresh", "error", enhancedErr)
+		
+		// Use appropriate log levels based on error type:
+		// No logging: Provider not configured (normal operational state)
+		// WARN: "Not found" errors
+		// ERROR: Actual system failures
+		switch {
+		case errors.Is(err, ErrImageNotFound):
+			logger.Warn("Failed to fetch image during refresh", "error", enhancedErr)
+		case errors.Is(err, ErrProviderNotConfigured):
+			// This is normal - provider correctly identified it's not configured for use
+			// No logging needed as this is expected operational behavior
+		default:
+			logger.Error("Failed to fetch image during refresh", "error", enhancedErr)
+		}
+		
 		if c.metrics != nil {
 			c.metrics.IncrementDownloadErrorsWithCategory("image-fetch", c.providerName, "cache_refresh_fetch")
 		}
@@ -1076,19 +1119,12 @@ func (c *BirdImageCache) updateMetrics() {
 
 // CreateDefaultCache creates the default BirdImageCache (currently Wikimedia Commons via Wikipedia API).
 func CreateDefaultCache(metricsCollector *observability.Metrics, store datastore.Interface) (*BirdImageCache, error) {
-	// Use the correct constructor name from wikipedia.go
-	provider, err := NewWikiMediaProvider()
-	if err != nil {
-		enhancedErr := errors.New(err).
-			Component("imageprovider").
-			Category(errors.CategoryImageProvider).
-			Context("provider", "wikimedia").
-			Context("operation", "create_default_cache").
-			Build()
-		imageProviderLogger.Error("Failed to create WikiMedia image provider", "error", enhancedErr)
-		return nil, enhancedErr
-	}
+	// Use the lazy-initialized provider to avoid race conditions during startup
+	// where conf.Setting() might not be fully initialized yet
+	provider := NewLazyWikiMediaProvider()
+	
 	// Using "wikimedia" as the provider name aligns with the constructor used
+	// The LazyWikiMediaProvider will handle actual provider creation when first used
 	return InitCache("wikimedia", provider, metricsCollector, store), nil
 }
 
