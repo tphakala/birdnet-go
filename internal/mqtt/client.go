@@ -165,8 +165,8 @@ func (c *client) Connect(ctx context.Context) error {
 
 	// Perform disconnection outside the lock
 	if oldClientToDisconnect != nil {
-		logger.Debug("Disconnecting old client instance", "timeout_ms", 5000)
-		oldClientToDisconnect.Disconnect(5000) // Use longer timeout for graceful disconnect
+		logger.Debug("Disconnecting old client instance", "timeout_ms", GracefulDisconnectTimeoutMs)
+		oldClientToDisconnect.Disconnect(GracefulDisconnectTimeoutMs) // Use longer timeout for graceful disconnect
 	}
 
 	// --- Re-acquire lock to modify shared state ---
@@ -340,16 +340,26 @@ func (c *client) Connect(ctx context.Context) error {
 		logger.Error("MQTT connection attempt timed out by client.go select", "timeout", timeoutDuration)
 		// Cancel the connection attempt to prevent the goroutine from leaking
 		if clientToConnect != nil {
-			logger.Debug("Calling Disconnect(1000) to cancel connection attempt and prevent goroutine leak")
-			clientToConnect.Disconnect(1000) // Use timeout for graceful disconnection
+			// Use dynamic timeout scaling: min of default cancel timeout or 1/5 of configured disconnect timeout
+			cancelTimeout := min(CancelDisconnectTimeoutMs, uint(c.config.DisconnectTimeout.Milliseconds())/5)
+			logger.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak", 
+				"timeout_ms", cancelTimeout,
+				"base_timeout", CancelDisconnectTimeoutMs,
+				"config_timeout_ms", c.config.DisconnectTimeout.Milliseconds())
+			clientToConnect.Disconnect(cancelTimeout) // Use dynamic timeout for graceful disconnection
 		}
 	case <-ctx.Done():
 		connectErr = ctx.Err()
 		logger.Error("Context cancelled during MQTT connection wait", "error", connectErr)
 		// Cancel the connection attempt to prevent the goroutine from leaking
 		if clientToConnect != nil {
-			logger.Debug("Calling Disconnect(1000) to cancel connection attempt and prevent goroutine leak")
-			clientToConnect.Disconnect(1000) // Use timeout for graceful disconnection
+			// Use dynamic timeout scaling: min of default cancel timeout or 1/5 of configured disconnect timeout
+			cancelTimeout := min(CancelDisconnectTimeoutMs, uint(c.config.DisconnectTimeout.Milliseconds())/5)
+			logger.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak", 
+				"timeout_ms", cancelTimeout,
+				"base_timeout", CancelDisconnectTimeoutMs,
+				"config_timeout_ms", c.config.DisconnectTimeout.Milliseconds())
+			clientToConnect.Disconnect(cancelTimeout) // Use dynamic timeout for graceful disconnection
 		}
 	}
 
@@ -489,6 +499,9 @@ func (c *client) IsConnected() bool {
 }
 
 // Disconnect closes the connection to the MQTT broker.
+// Uses the configured DisconnectTimeout which defaults to 5 seconds for graceful shutdown.
+// For faster shutdown in time-critical scenarios, consider reducing the timeout
+// in the client configuration before calling this method.
 func (c *client) Disconnect() {
 	c.mu.Lock() // Lock required to safely access reconnectStop, reconnectTimer, internalClient
 

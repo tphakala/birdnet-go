@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -597,6 +598,14 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 	return nil
 }
 
+// isEOFError checks if an error is an EOF error using both precise matching and string fallback
+func isEOFError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, io.EOF) || strings.Contains(strings.ToLower(err.Error()), "eof")
+}
+
 // publishNewSpeciesDetectionEvent publishes a detection event for new species
 // This helper method handles event bus retrieval, event creation, publishing, and debug logging
 func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, daysSinceFirstSeen int) {
@@ -953,7 +962,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 		
 		// Check if this is an EOF error which indicates connection was closed unexpectedly
 		// This is a common issue with MQTT brokers and should be treated as retryable
-		isEOFError := strings.Contains(strings.ToLower(err.Error()), "eof")
+		isEOFErr := isEOFError(err)
 		
 		// Add structured logging
 		GetLogger().Error("Failed to publish to MQTT",
@@ -965,7 +974,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 			"clip_name", a.Note.ClipName,
 			"topic", a.Settings.Realtime.MQTT.Topic,
 			"retry_enabled", a.RetryConfig.Enabled,
-			"is_eof_error", isEOFError,
+			"is_eof_error", isEOFErr,
 			"operation", "mqtt_publish")
 		if a.RetryConfig.Enabled {
 			log.Printf("❌ Error publishing %s (%s) to MQTT topic %s (confidence: %.2f, clip: %s) (will retry): %v\n",
@@ -975,7 +984,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 				a.Note.CommonName, a.Note.ScientificName, a.Settings.Realtime.MQTT.Topic, a.Note.Confidence, a.Note.ClipName, sanitizedErr)
 			// Only send notification for non-EOF errors when retries are disabled
 			// EOF errors are typically transient connection issues
-			if !isEOFError {
+			if !isEOFErr {
 				notification.NotifyIntegrationFailure("MQTT", err)
 			}
 		}
@@ -991,7 +1000,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 			Context("clip_name", a.Note.ClipName).
 			Context("integration", "mqtt").
 			Context("retryable", true). // MQTT publish failures are typically retryable
-			Context("is_eof_error", isEOFError).
+			Context("is_eof_error", isEOFErr).
 			Build()
 		
 		return enhancedErr

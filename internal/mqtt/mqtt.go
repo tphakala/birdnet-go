@@ -12,6 +12,17 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
+// Timeout constants for MQTT operations (in milliseconds)
+const (
+	// GracefulDisconnectTimeoutMs is the timeout for graceful disconnect operations
+	GracefulDisconnectTimeoutMs = 5000
+	// CancelDisconnectTimeoutMs is the timeout for disconnect during cancellation/timeout scenarios
+	CancelDisconnectTimeoutMs = 1000
+	// ShutdownDisconnectTimeoutMs is the timeout for disconnect during application shutdown
+	// This is shorter than graceful timeout to avoid delaying shutdown
+	ShutdownDisconnectTimeoutMs = 2000
+)
+
 // Client defines the interface for MQTT client operations.
 type Client interface {
 	// Connect attempts to connect to the MQTT broker.
@@ -125,6 +136,6 @@ func DefaultConfig() Config {
 		ConnectTimeout:    30 * time.Second,
 		ReconnectTimeout:  5 * time.Second,
 		PublishTimeout:    10 * time.Second,
-		DisconnectTimeout: 5 * time.Second, // Increased from 250ms to allow graceful disconnect
+		DisconnectTimeout: GracefulDisconnectTimeoutMs * time.Millisecond, // Use constant for consistency
 	}
 }
