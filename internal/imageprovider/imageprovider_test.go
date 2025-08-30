@@ -162,7 +162,7 @@ func (m *mockStore) SetSunCalcMetrics(suncalcMetrics any)                       
 func (m *mockStore) Optimize(ctx context.Context) error                           { return nil }
 func (m *mockStore) GetAllNotes() ([]datastore.Note, error)                       { return []datastore.Note{}, nil }
 func (m *mockStore) GetTopBirdsData(date string, minConf float64) ([]datastore.Note, error) {
-	return nil, nil
+	return []datastore.Note{}, nil
 }
 func (m *mockStore) GetHourlyOccurrences(date, name string, minConf float64) ([24]int, error) {
 	return [24]int{}, nil

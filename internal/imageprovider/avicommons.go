@@ -163,7 +163,7 @@ func (p *AviCommonsProvider) Fetch(scientificName string) (BirdImage, error) {
 	entry, found := p.sciNameMap[normalizedSciName]
 
 	if !found {
-		logger.Warn("Image not found in Avicommons data",
+		logger.Debug("Image not found in Avicommons data",
 			"scientific_name", scientificName,
 			"normalized_name", normalizedSciName)
 		return BirdImage{}, ErrImageNotFound
