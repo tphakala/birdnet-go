@@ -15,6 +15,7 @@ import (
 
 	"log"
 
+	paho "github.com/eclipse/paho.mqtt.golang"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -797,6 +798,463 @@ func TestIsIPAddress(t *testing.T) {
 			if result != tt.expected {
 				t.Errorf("isIPAddress(%q) = %v; want %v", tt.input, result, tt.expected)
 			}
+		})
+	}
+}
+
+// TestCheckConnectionCooldown tests the connection cooldown validation
+func TestCheckConnectionCooldown(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name               string
+		lastAttempt        time.Duration // how long ago was last attempt
+		cooldownPeriod     time.Duration
+		expectError        bool
+		expectedErrorSubstr string
+	}{
+		{
+			name:           "No previous attempt",
+			lastAttempt:    24 * time.Hour, // Very long ago
+			cooldownPeriod: 5 * time.Second,
+			expectError:    false,
+		},
+		{
+			name:               "Recent attempt within cooldown",
+			lastAttempt:        1 * time.Second, // Recent
+			cooldownPeriod:     5 * time.Second,
+			expectError:        true,
+			expectedErrorSubstr: "connection attempt too recent",
+		},
+		{
+			name:           "Attempt just after cooldown period",
+			lastAttempt:    6 * time.Second, // Just outside cooldown
+			cooldownPeriod: 5 * time.Second,
+			expectError:    false,
+		},
+		{
+			name:           "Zero cooldown period",
+			lastAttempt:    1 * time.Second,
+			cooldownPeriod: 0,
+			expectError:    false,
+		},
+		{
+			name:               "Exactly at cooldown boundary",
+			lastAttempt:        5 * time.Second,
+			cooldownPeriod:     5 * time.Second,
+			expectError:        false, // Should be allowed at boundary
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create test client
+			config := DefaultConfig()
+			config.Broker = "tcp://test.example.com:1883"
+			config.ReconnectCooldown = tt.cooldownPeriod
+			metrics, _ := observability.NewMetrics()
+			c := &client{
+				config:          config,
+				metrics:         metrics.MQTT,
+				lastConnAttempt: time.Now().Add(-tt.lastAttempt),
+				reconnectStop:   make(chan struct{}),
+			}
+
+			// Create logger for test
+			logger := mqttLogger.With("broker", config.Broker, "client_id", config.ClientID)
+
+			// Test the method
+			err := c.checkConnectionCooldown(logger)
+
+			// Verify results
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got nil")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.expectedErrorSubstr) {
+					t.Errorf("Expected error to contain %q, got %q", tt.expectedErrorSubstr, err.Error())
+				}
+			} else if err != nil {
+				t.Errorf("Expected no error but got %v", err)
+			}
+		})
+	}
+}
+
+// TestConfigureClientOptions tests the MQTT client options configuration
+func TestConfigureClientOptions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		setupConfig func(*Config)
+		expectError bool
+		errorSubstr string
+		verifyOpts  func(*testing.T, paho.ClientOptions)
+	}{
+		{
+			name: "Basic configuration",
+			setupConfig: func(c *Config) {
+				c.Broker = "tcp://test.example.com:1883"
+				c.ClientID = "test-client"
+				c.Username = "testuser"
+				c.Password = "testpass"
+				c.ConnectTimeout = 10 * time.Second
+			},
+			expectError: false,
+			verifyOpts: func(t *testing.T, opts paho.ClientOptions) {
+				t.Helper()
+				// Note: paho ClientOptions doesn't expose getters for most fields
+				// We can only verify that options creation succeeded
+				// ClientOptions struct cannot be compared directly due to slice fields
+				_ = opts // Just verify it's non-nil and creation succeeded
+			},
+		},
+		{
+			name: "TLS configuration enabled but invalid cert",
+			setupConfig: func(c *Config) {
+				c.Broker = "ssl://test.example.com:8883"
+				c.ClientID = "test-client"
+				c.TLS.Enabled = true
+				c.TLS.CACert = "/nonexistent/ca.crt"
+			},
+			expectError: true,
+			errorSubstr: "does not exist",
+		},
+		{
+			name: "TLS configuration with InsecureSkipVerify",
+			setupConfig: func(c *Config) {
+				c.Broker = "ssl://test.example.com:8883"
+				c.ClientID = "test-client"
+				c.TLS.Enabled = true
+				c.TLS.InsecureSkipVerify = true
+			},
+			expectError: false,
+			verifyOpts: func(t *testing.T, opts paho.ClientOptions) {
+				t.Helper()
+				// ClientOptions struct cannot be compared directly due to slice fields
+				_ = opts // Just verify it's non-nil and creation succeeded
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create test client with config
+			config := DefaultConfig()
+			tt.setupConfig(&config)
+			metrics, _ := observability.NewMetrics()
+			c := &client{
+				config:        config,
+				metrics:       metrics.MQTT,
+				reconnectStop: make(chan struct{}),
+			}
+
+			// Create logger for test
+			logger := mqttLogger.With("broker", config.Broker, "client_id", config.ClientID)
+
+			// Test the method
+			opts, err := c.configureClientOptions(logger)
+
+			// Verify results
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got nil")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorSubstr) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorSubstr, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error but got %v", err)
+					return
+				}
+				if opts == nil {
+					t.Errorf("Expected non-nil options")
+					return
+				}
+				if tt.verifyOpts != nil {
+					tt.verifyOpts(t, *opts)
+				}
+			}
+		})
+	}
+}
+
+// TestPerformDNSResolution tests the DNS resolution functionality
+func TestPerformDNSResolution(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		broker      string
+		expectError bool
+		errorSubstr string
+	}{
+		{
+			name:        "Valid hostname resolution",
+			broker:      "tcp://google.com:1883",
+			expectError: false,
+		},
+		{
+			name:        "IP address (no DNS needed)",
+			broker:      "tcp://8.8.8.8:1883",
+			expectError: false,
+		},
+		{
+			name:        "IPv6 address (no DNS needed)",
+			broker:      "tcp://[::1]:1883",
+			expectError: false,
+		},
+		{
+			name:        "Invalid hostname",
+			broker:      "tcp://this-hostname-does-not-exist.invalid:1883",
+			expectError: true,
+			errorSubstr: "no such host",
+		},
+		{
+			name:        "Invalid broker URL format",
+			broker:      "invalid://[malformed",
+			expectError: true,
+			errorSubstr: "parse",
+		},
+		{
+			name:        "Empty broker URL",
+			broker:      "",
+			expectError: true,
+			errorSubstr: "lookup",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create test client with config
+			config := DefaultConfig()
+			config.Broker = tt.broker
+			metrics, _ := observability.NewMetrics()
+			c := &client{
+				config:        config,
+				metrics:       metrics.MQTT,
+				reconnectStop: make(chan struct{}),
+			}
+
+			// Create context with timeout
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			// Create logger for test
+			logger := mqttLogger.With("broker", config.Broker, "client_id", config.ClientID)
+
+			// Test the method
+			err := c.performDNSResolution(ctx, logger)
+
+			// Verify results
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got nil")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorSubstr) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorSubstr, err.Error())
+				}
+			} else if err != nil {
+				t.Errorf("Expected no error but got %v", err)
+			}
+		})
+	}
+}
+
+// TestCalculateCancelTimeout tests the timeout calculation logic
+func TestCalculateCancelTimeout(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		disconnectTimeout time.Duration
+		expectedTimeout   uint
+		description       string
+	}{
+		{
+			name:              "Normal timeout calculation",
+			disconnectTimeout: 5 * time.Second,
+			expectedTimeout:   uint(CancelDisconnectTimeout.Milliseconds()), // min(1000, 5000/5) = min(1000, 1000) = 1000
+			description:       "Standard case with reasonable timeout",
+		},
+		{
+			name:              "Very short timeout",
+			disconnectTimeout: 500 * time.Millisecond,
+			expectedTimeout:   100, // min(1000, 500/5) = min(1000, 100) = 100
+			description:       "Short timeout calculation: ms/5",
+		},
+		{
+			name:              "Very large timeout",
+			disconnectTimeout: 10 * time.Second,
+			expectedTimeout:   uint(CancelDisconnectTimeout.Milliseconds()), // min(1000, 10000/5) = min(1000, 2000) = 1000
+			description:       "Large timeout should be capped at minimum",
+		},
+		{
+			name:              "Zero timeout",
+			disconnectTimeout: 0,
+			expectedTimeout:   uint(CancelDisconnectTimeout.Milliseconds()), // Should use minimum
+			description:       "Zero timeout should use minimum safe value",
+		},
+		{
+			name:              "Negative timeout",
+			disconnectTimeout: -5 * time.Second,
+			expectedTimeout:   uint(CancelDisconnectTimeout.Milliseconds()), // Should use minimum
+			description:       "Negative timeout should use minimum safe value",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create test client with the specified disconnect timeout
+			config := DefaultConfig()
+			config.DisconnectTimeout = tt.disconnectTimeout
+			metrics, _ := observability.NewMetrics()
+			c := &client{
+				config:        config,
+				metrics:       metrics.MQTT,
+				reconnectStop: make(chan struct{}),
+			}
+
+			// Test the method
+			result := c.calculateCancelTimeout()
+
+			// Verify result
+			if result != tt.expectedTimeout {
+				t.Errorf("%s: expected %v, got %v", tt.description, tt.expectedTimeout, result)
+			}
+
+			// Verify the result is never zero
+			if result == 0 {
+				t.Errorf("Calculated timeout should never be zero, got %v", result)
+			}
+
+			// Verify the result is reasonable (not more than minimum timeout)
+			maxTimeout := uint(CancelDisconnectTimeout.Milliseconds())
+			if result > maxTimeout {
+				t.Errorf("Calculated timeout should be at most %v ms, got %v ms", maxTimeout, result)
+			}
+		})
+	}
+}
+
+// TestPerformConnectionAttempt tests the connection attempt functionality
+func TestPerformConnectionAttempt(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		setupConfig func(*Config)
+		expectError bool
+		errorSubstr string
+		description string
+	}{
+		{
+			name: "Invalid broker URL",
+			setupConfig: func(config *Config) {
+				config.Broker = "invalid://malformed-url"
+			},
+			expectError: true,
+			errorSubstr: "network Error",
+			description: "Should fail with invalid broker URL",
+		},
+		{
+			name: "Connection timeout",
+			setupConfig: func(config *Config) {
+				config.Broker = "tcp://192.0.2.1:1883" // TEST-NET-1 (unreachable)
+				config.ConnectTimeout = 100 * time.Millisecond // Very short timeout
+			},
+			expectError: true,
+			errorSubstr: "not connected",
+			description: "Should timeout on unreachable broker",
+		},
+		{
+			name: "Context cancelled",
+			setupConfig: func(config *Config) {
+				config.Broker = "tcp://192.0.2.1:1883" // TEST-NET-1 (unreachable)
+				config.ConnectTimeout = 5 * time.Second
+			},
+			expectError: true,
+			errorSubstr: "context",
+			description: "Should fail when context is cancelled",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create test client
+			config := DefaultConfig()
+			tt.setupConfig(&config)
+			metrics, _ := observability.NewMetrics()
+			c := &client{
+				config:        config,
+				metrics:       metrics.MQTT,
+				reconnectStop: make(chan struct{}),
+			}
+
+			// Create logger for test
+			logger := mqttLogger.With("broker", config.Broker, "client_id", config.ClientID)
+
+			// Create context with very short timeout for "context cancelled" test
+			var ctx context.Context
+			var cancel context.CancelFunc
+			if tt.name == "Context cancelled" {
+				ctx, cancel = context.WithTimeout(context.Background(), 50*time.Millisecond)
+				defer cancel()
+			} else {
+				ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+			}
+
+			// Create a MQTT client options first (needed for performConnectionAttempt)
+			opts, optsErr := c.configureClientOptions(logger)
+			if optsErr != nil {
+				if tt.expectError && tt.errorSubstr == "invalid broker URL" {
+					// This is expected for invalid URL tests
+					if !strings.Contains(optsErr.Error(), "invalid broker URL") {
+						t.Errorf("Expected 'invalid broker URL' error, got %v", optsErr)
+					}
+					return
+				}
+				t.Errorf("Unexpected error creating client options: %v", optsErr)
+				return
+			}
+			
+			// Create MQTT client
+			clientToConnect := paho.NewClient(opts)
+			
+			// Test the method
+			err := c.performConnectionAttempt(ctx, clientToConnect, logger)
+
+			// Verify results
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got nil")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorSubstr) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorSubstr, err.Error())
+				}
+			} else if err != nil {
+				t.Errorf("Expected no error but got %v", err)
+			}
+
+			// Ensure client is properly cleaned up after test
+			c.Disconnect()
 		})
 	}
 }
