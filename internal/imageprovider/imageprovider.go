@@ -314,7 +314,14 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 				Context("operation", "cache_refresh_fetch").
 				Build()
 		}
-		logger.Error("Failed to fetch image during refresh", "error", enhancedErr)
+		
+		// Use WARN level for "not found" errors, ERROR for actual failures
+		if errors.Is(err, ErrImageNotFound) {
+			logger.Warn("Failed to fetch image during refresh", "error", enhancedErr)
+		} else {
+			logger.Error("Failed to fetch image during refresh", "error", enhancedErr)
+		}
+		
 		if c.metrics != nil {
 			c.metrics.IncrementDownloadErrorsWithCategory("image-fetch", c.providerName, "cache_refresh_fetch")
 		}
@@ -1076,19 +1083,12 @@ func (c *BirdImageCache) updateMetrics() {
 
 // CreateDefaultCache creates the default BirdImageCache (currently Wikimedia Commons via Wikipedia API).
 func CreateDefaultCache(metricsCollector *observability.Metrics, store datastore.Interface) (*BirdImageCache, error) {
-	// Use the correct constructor name from wikipedia.go
-	provider, err := NewWikiMediaProvider()
-	if err != nil {
-		enhancedErr := errors.New(err).
-			Component("imageprovider").
-			Category(errors.CategoryImageProvider).
-			Context("provider", "wikimedia").
-			Context("operation", "create_default_cache").
-			Build()
-		imageProviderLogger.Error("Failed to create WikiMedia image provider", "error", enhancedErr)
-		return nil, enhancedErr
-	}
+	// Use the lazy-initialized provider to avoid race conditions during startup
+	// where conf.Setting() might not be fully initialized yet
+	provider := NewLazyWikiMediaProvider()
+	
 	// Using "wikimedia" as the provider name aligns with the constructor used
+	// The LazyWikiMediaProvider will handle actual provider creation when first used
 	return InitCache("wikimedia", provider, metricsCollector, store), nil
 }
 

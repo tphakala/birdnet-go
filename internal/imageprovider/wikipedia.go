@@ -4,6 +4,7 @@ package imageprovider
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,9 +12,9 @@ import (
 	"net/url"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
-	"cgt.name/pkg/go-mwclient"
 	"github.com/antonholmquist/jason"
 	"github.com/google/uuid"
 	"github.com/k3a/html2text"
@@ -29,17 +30,25 @@ const (
 
 	// User-Agent constants following Wikimedia robot policy
 	// https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy
-	userAgentName    = "BirdNET-Go"
+	userAgentName    = "BirdNETGo"
 	userAgentContact = "https://github.com/tphakala/birdnet-go"
 	userAgentLibrary = "Go-HTTP-Client"
 )
 
 // wikiMediaProvider implements the ImageProvider interface for Wikipedia.
 type wikiMediaProvider struct {
-	client            *mwclient.Client
+	httpClient        *http.Client // Standard HTTP client for API requests
+	userAgent         string       // User-Agent header value (cached for reuse)
 	debug             bool
-	backgroundLimiter *rate.Limiter // For background refresh operations
+	globalLimiter     *rate.Limiter // Global rate limiter for ALL Wikipedia requests (1 req/sec)
+	backgroundLimiter *rate.Limiter // Additional limiter for background operations
 	maxRetries        int
+
+	// Circuit breaker fields to prevent hammering when rate limited
+	circuitMu        sync.RWMutex
+	circuitOpenUntil time.Time // When the circuit breaker can be closed again
+	circuitFailures  int       // Number of consecutive failures
+	circuitLastError string    // Last error message for logging
 }
 
 // wikiMediaAuthor represents the author information for a Wikipedia image.
@@ -48,6 +57,318 @@ type wikiMediaAuthor struct {
 	URL         string
 	licenseName string
 	licenseURL  string
+}
+
+// isCircuitOpen checks if the circuit breaker is open (blocking requests)
+func (l *wikiMediaProvider) isCircuitOpen() (open bool, reason string) {
+	l.circuitMu.RLock()
+	defer l.circuitMu.RUnlock()
+
+	if time.Now().Before(l.circuitOpenUntil) {
+		return true, l.circuitLastError
+	}
+	return false, ""
+}
+
+// openCircuit opens the circuit breaker for a specified duration
+func (l *wikiMediaProvider) openCircuit(duration time.Duration, errorMsg string) {
+	l.circuitMu.Lock()
+	defer l.circuitMu.Unlock()
+
+	l.circuitOpenUntil = time.Now().Add(duration)
+	l.circuitFailures++
+	l.circuitLastError = errorMsg
+
+	imageProviderLogger.Error("Opening Wikipedia circuit breaker",
+		"provider", wikiProviderName,
+		"duration", duration,
+		"reason", errorMsg,
+		"consecutive_failures", l.circuitFailures)
+}
+
+// resetCircuit resets the circuit breaker on successful request
+func (l *wikiMediaProvider) resetCircuit() {
+	l.circuitMu.Lock()
+	defer l.circuitMu.Unlock()
+
+	if l.circuitFailures > 0 {
+		imageProviderLogger.Info("Resetting Wikipedia circuit breaker after successful request",
+			"provider", wikiProviderName,
+			"previous_failures", l.circuitFailures)
+	}
+
+	l.circuitOpenUntil = time.Time{}
+	l.circuitFailures = 0
+	l.circuitLastError = ""
+}
+
+// makeAPIRequest performs a direct HTTP GET request to Wikipedia API with proper headers.
+// This replaces the mwclient library to ensure proper User-Agent header handling.
+func (l *wikiMediaProvider) makeAPIRequest(params map[string]string) (*jason.Object, error) {
+	// Apply global rate limiting - ALL requests must respect the 1 req/sec limit
+	if l.globalLimiter != nil {
+		ctx := context.Background()
+		if err := l.globalLimiter.Wait(ctx); err != nil {
+			return nil, errors.New(err).
+				Component("imageprovider").
+				Category(errors.CategoryNetwork).
+				Context("provider", wikiProviderName).
+				Context("operation", "global_rate_limit_wait").
+				Build()
+		}
+		imageProviderLogger.Debug("Global rate limiter wait completed",
+			"provider", wikiProviderName)
+	}
+
+	// Verify User-Agent is set
+	if l.userAgent == "" {
+		imageProviderLogger.Error("User-Agent is empty! This will cause Wikipedia to reject the request",
+			"provider", wikiProviderName)
+		return nil, errors.Newf("User-Agent not set for Wikipedia provider").
+			Component("imageprovider").
+			Category(errors.CategoryConfiguration).
+			Context("provider", wikiProviderName).
+			Context("operation", "missing_user_agent").
+			Build()
+	}
+
+	// Build URL with query parameters
+	u, err := url.Parse(wikipediaAPIURL)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("operation", "parse_api_url").
+			Build()
+	}
+
+	// Add query parameters
+	q := u.Query()
+	for k, v := range params {
+		q.Set(k, v)
+	}
+	u.RawQuery = q.Encode()
+	fullURL := u.String()
+
+	// Create HTTP request with proper headers
+	req, err := http.NewRequest("GET", fullURL, http.NoBody)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("operation", "create_request").
+			Context("url", fullURL).
+			Build()
+	}
+
+	// Set User-Agent header - CRITICAL for Wikipedia API
+	req.Header.Set("User-Agent", l.userAgent)
+
+	// Add other standard headers
+	req.Header.Set("Accept", "application/json")
+	// DO NOT set Accept-Encoding manually - let Go's HTTP client handle compression automatically
+	// When we set it manually, we have to decompress manually too!
+
+	// ALWAYS log the User-Agent to debug this issue
+	imageProviderLogger.Info("Setting User-Agent for Wikipedia API request",
+		"provider", wikiProviderName,
+		"user_agent", l.userAgent,
+		"user_agent_length", len(l.userAgent),
+		"url", fullURL)
+
+	// Log full request details in debug mode
+	if l.debug {
+		imageProviderLogger.Debug("Full request headers",
+			"provider", wikiProviderName,
+			"headers", req.Header)
+	}
+
+	// Execute the request
+	resp, err := l.httpClient.Do(req)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("operation", "http_request").
+			Context("url", fullURL).
+			Build()
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && l.debug {
+			imageProviderLogger.Debug("Failed to close response body", "error", closeErr)
+		}
+	}()
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("operation", "read_response").
+			Context("status_code", resp.StatusCode).
+			Build()
+	}
+
+	// Check HTTP status code and handle different error types
+	if resp.StatusCode != http.StatusOK {
+		bodyStr := string(body)
+
+		// Log the error response
+		imageProviderLogger.Warn("Wikipedia API error response",
+			"provider", wikiProviderName,
+			"status_code", resp.StatusCode,
+			"body", bodyStr)
+
+		// Check for specific error types and open circuit breaker
+		switch resp.StatusCode {
+		case 403:
+			// User-Agent policy violation or rate limiting - open circuit breaker
+			switch {
+			case strings.Contains(bodyStr, "User-Agent") || strings.Contains(bodyStr, "robot policy"):
+				// User-agent policy violation - circuit breaker for 10 minutes
+				l.openCircuit(10*time.Minute, fmt.Sprintf("User-Agent policy violation (HTTP 403): %s", bodyStr))
+			case strings.Contains(bodyStr, "rate") || strings.Contains(bodyStr, "limit"):
+				// Rate limiting - circuit breaker for 60 seconds
+				l.openCircuit(60*time.Second, fmt.Sprintf("Rate limited (HTTP 403): %s", bodyStr))
+			default:
+				// Generic 403 - circuit breaker for 5 minutes
+				l.openCircuit(5*time.Minute, fmt.Sprintf("Access blocked (HTTP 403): %s", bodyStr))
+			}
+		case 429:
+			// Explicit rate limiting - circuit breaker for 60 seconds
+			l.openCircuit(60*time.Second, fmt.Sprintf("Rate limited (HTTP 429): %s", bodyStr))
+		case 503:
+			// Service unavailable - circuit breaker for 30 seconds
+			l.openCircuit(30*time.Second, fmt.Sprintf("Service unavailable (HTTP 503): %s", bodyStr))
+		}
+
+		return nil, errors.Newf("Wikipedia API returned status %d: %s", resp.StatusCode, bodyStr).
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("operation", "api_error").
+			Context("status_code", resp.StatusCode).
+			Context("response_body", bodyStr).
+			Build()
+	}
+
+	// Parse JSON response into jason.Object for compatibility
+	var jsonData interface{}
+	if err := json.Unmarshal(body, &jsonData); err != nil {
+		// Check if this might be an HTML error page
+		if bytes.Contains(body, []byte("<!DOCTYPE")) || bytes.Contains(body, []byte("<html")) {
+			return nil, errors.Newf("Wikipedia returned HTML instead of JSON (likely an error page)").
+				Component("imageprovider").
+				Category(errors.CategoryNetwork).
+				Context("provider", wikiProviderName).
+				Context("operation", "json_parse_html_detected").
+				Context("response_preview", string(body[:min(len(body), 200)])).
+				Build()
+		}
+
+		return nil, errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("operation", "json_parse").
+			Context("response_preview", string(body[:min(len(body), 200)])).
+			Build()
+	}
+
+	// Convert to jason.Object
+	jasonObj, err := jason.NewObjectFromBytes(body)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("operation", "jason_convert").
+			Build()
+	}
+
+	return jasonObj, nil
+}
+
+// LazyWikiMediaProvider wraps the actual Wikipedia provider with lazy initialization.
+// This ensures the provider is only created when configuration is properly available,
+// preventing race conditions during startup where conf.Setting() might return nil
+// or have an empty Version field.
+type LazyWikiMediaProvider struct {
+	once     sync.Once
+	provider *wikiMediaProvider
+	initErr  error
+}
+
+// NewLazyWikiMediaProvider creates a new lazy-initialized Wikipedia provider.
+// The actual provider creation is deferred until first use.
+func NewLazyWikiMediaProvider() *LazyWikiMediaProvider {
+	return &LazyWikiMediaProvider{}
+}
+
+// ensureInitialized creates the actual provider on first use, with validation.
+// It uses sync.Once to ensure thread-safe single initialization.
+func (l *LazyWikiMediaProvider) ensureInitialized() error {
+	l.once.Do(func() {
+		// Wait for valid configuration (with timeout)
+		if !l.waitForValidConfig(10 * time.Second) {
+			l.initErr = errors.Newf("configuration not available after timeout").
+				Component("imageprovider").
+				Category(errors.CategoryConfiguration).
+				Context("provider", wikiProviderName).
+				Context("operation", "lazy_init_timeout").
+				Build()
+			imageProviderLogger.Error("LazyWikiMediaProvider: Configuration not available after timeout")
+			return
+		}
+
+		// Create the actual provider with valid configuration
+		l.provider, l.initErr = NewWikiMediaProvider()
+		if l.initErr != nil {
+			imageProviderLogger.Error("LazyWikiMediaProvider: Failed to create provider", "error", l.initErr)
+		} else {
+			imageProviderLogger.Info("LazyWikiMediaProvider: Successfully initialized provider")
+		}
+	})
+	return l.initErr
+}
+
+// waitForValidConfig waits until configuration is available with a valid version.
+func (l *LazyWikiMediaProvider) waitForValidConfig(timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for time.Now().Before(deadline) {
+		settings := conf.Setting()
+		if settings != nil && settings.Version != "" {
+			imageProviderLogger.Debug("LazyWikiMediaProvider: Valid configuration detected",
+				"version", settings.Version)
+			return true
+		}
+		<-ticker.C
+	}
+	return false
+}
+
+// Fetch implements the ImageProvider interface with lazy initialization.
+func (l *LazyWikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
+	if err := l.ensureInitialized(); err != nil {
+		return BirdImage{}, err
+	}
+	return l.provider.Fetch(scientificName)
+}
+
+// FetchWithContext implements context-aware fetching with lazy initialization.
+func (l *LazyWikiMediaProvider) FetchWithContext(ctx context.Context, scientificName string) (BirdImage, error) {
+	if err := l.ensureInitialized(); err != nil {
+		return BirdImage{}, err
+	}
+	return l.provider.FetchWithContext(ctx, scientificName)
 }
 
 // buildUserAgent constructs a user-agent string that complies with Wikimedia's robot policy.
@@ -76,6 +397,79 @@ func validateUserAgent(logger *slog.Logger, appVersion string) {
 		"contains_contact", userAgentContact,
 		"contains_library", userAgentLibrary,
 		"go_version", runtime.Version())
+}
+
+// parseHTMLErrorMessage extracts meaningful error message from HTML error page
+func parseHTMLErrorMessage(htmlContent []byte) string {
+	// Try to parse HTML to validate it's valid HTML
+	_, err := html.Parse(bytes.NewReader(htmlContent))
+	if err != nil {
+		// Fallback to simple string extraction if HTML parsing fails
+		bodyStr := string(htmlContent)
+		if idx := strings.Index(bodyStr, "<title>"); idx != -1 {
+			if endIdx := strings.Index(bodyStr[idx:], "</title>"); endIdx != -1 {
+				return strings.TrimSpace(bodyStr[idx+7 : idx+endIdx])
+			}
+		}
+		return "HTML error page (unable to parse)"
+	}
+
+	// Extract text content using html2text for valid HTML
+	return html2text.HTML2Text(string(htmlContent))
+}
+
+// detectErrorType analyzes response to determine error type and appropriate action
+type wikiErrorType int
+
+const (
+	wikiErrorUnknown wikiErrorType = iota
+	wikiErrorRateLimit
+	wikiErrorBlocked
+	wikiErrorUserAgent
+	wikiErrorTemporary
+)
+
+func detectWikipediaErrorType(statusCode int, responseBody []byte, contentType string) (errorType wikiErrorType, message string) {
+	bodyStr := string(responseBody)
+
+	// Check status codes first
+	switch statusCode {
+	case 429:
+		return wikiErrorRateLimit, "Rate limit exceeded (HTTP 429)"
+	case 403:
+		if strings.Contains(bodyStr, "User-Agent") || strings.Contains(bodyStr, "robot policy") {
+			return wikiErrorUserAgent, "User-Agent policy violation"
+		}
+		if strings.Contains(bodyStr, "rate") || strings.Contains(bodyStr, "limit") {
+			return wikiErrorRateLimit, "Rate limit exceeded (403 with rate limit message)"
+		}
+		return wikiErrorBlocked, "Access blocked (HTTP 403)"
+	case 503:
+		return wikiErrorTemporary, "Service temporarily unavailable (HTTP 503)"
+	}
+
+	// Check content type - HTML responses usually indicate errors
+	if strings.Contains(contentType, "text/html") {
+		errorMsg := parseHTMLErrorMessage(responseBody)
+
+		// Check for rate limiting keywords in HTML content
+		if strings.Contains(strings.ToLower(errorMsg), "rate limit") ||
+			strings.Contains(strings.ToLower(errorMsg), "too many requests") ||
+			strings.Contains(strings.ToLower(errorMsg), "throttl") {
+			return wikiErrorRateLimit, "Rate limit detected in HTML response"
+		}
+
+		// Check for blocking keywords
+		if strings.Contains(strings.ToLower(errorMsg), "blocked") ||
+			strings.Contains(strings.ToLower(errorMsg), "banned") ||
+			strings.Contains(strings.ToLower(errorMsg), "denied") {
+			return wikiErrorBlocked, "Access blocked (detected in HTML)"
+		}
+
+		return wikiErrorTemporary, fmt.Sprintf("HTML error response: %s", errorMsg)
+	}
+
+	return wikiErrorUnknown, "Unknown error type"
 }
 
 // checkUserAgentPolicyViolation checks for Wikipedia user-agent policy violations and returns an error if detected
@@ -110,22 +504,11 @@ func checkUserAgentPolicyViolation(reqID string, statusCode int, responseBody []
 }
 
 // handleJSONParsingError handles JSON parsing errors by making a direct HTTP request to diagnose the issue
-// Only performs detailed diagnostics when debug mode is enabled to avoid performance impact
+// Always performs diagnostics to identify rate limiting and other error types
 func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, err error, settings *conf.Settings, attemptLogger *slog.Logger, attempt int) error {
-	// Quick path: if debug mode is not enabled, just log basic info and return
-	if !l.debug {
-		attemptLogger.Debug("Wikipedia JSON parsing error (normal for missing pages)",
-			"parsing_error", err.Error(),
-			"attempt", attempt+1,
-			"will_retry", attempt < l.maxRetries-1,
-			"diagnostic_mode", "disabled_for_performance")
-		return nil // Continue with normal retry logic
-	}
+	// Always make a diagnostic request to identify the actual error type
+	// This is important to detect rate limiting and blocking
 
-	// Debug mode is enabled - perform detailed diagnostics
-	attemptLogger.Debug("Debug mode enabled: performing detailed error diagnostics")
-
-	// Make a direct HTTP request to capture the actual error response
 	req, _ := http.NewRequest("GET", fullURL, http.NoBody)
 	req.Header.Set("User-Agent", buildUserAgent(settings.Version))
 	httpClient := &http.Client{Timeout: 10 * time.Second}
@@ -150,39 +533,86 @@ func (l *wikiMediaProvider) handleJSONParsingError(reqID, fullURL string, err er
 		return nil // Continue with normal retry logic
 	}
 
-	// Log the full error response at WARN level
-	if debugResp.StatusCode != 200 {
-		attemptLogger.Warn("Wikipedia API error response (debug mode)",
-			"status_code", debugResp.StatusCode,
-			"content_type", debugResp.Header.Get("Content-Type"),
-			"response_body", string(body),
-			"requested_url", fullURL,
-			"attempt", attempt+1,
-			"max_attempts", l.maxRetries)
+	// Detect error type
+	errorType, errorMsg := detectWikipediaErrorType(debugResp.StatusCode, body, debugResp.Header.Get("Content-Type"))
 
-		// Check for user-agent policy violations - this is a permanent failure, don't retry
-		if policyErr := checkUserAgentPolicyViolation(reqID, debugResp.StatusCode, body, req.Header.Get("User-Agent"), attemptLogger); policyErr != nil {
-			return policyErr // Return immediately, don't retry
-		}
-	} else {
-		attemptLogger.Debug("Wikipedia returned non-JSON content (debug diagnostics)",
-			"parsing_error", err.Error(),
-			"response_preview", string(body)[:min(len(body), 200)],
-			"attempt", attempt+1,
-			"will_retry", attempt < l.maxRetries-1)
+	// Log error details based on severity
+	logLevel := slog.LevelDebug
+	switch {
+	case errorType == wikiErrorRateLimit || errorType == wikiErrorBlocked:
+		logLevel = slog.LevelError
+	case errorType == wikiErrorUserAgent:
+		logLevel = slog.LevelError
+	case debugResp.StatusCode != 200:
+		logLevel = slog.LevelWarn
 	}
 
-	return nil // Continue with normal retry logic
-}
+	attemptLogger.Log(context.Background(), logLevel, "Wikipedia API error diagnosed",
+		"error_type", errorType,
+		"error_message", errorMsg,
+		"status_code", debugResp.StatusCode,
+		"content_type", debugResp.Header.Get("Content-Type"),
+		"requested_url", fullURL,
+		"attempt", attempt+1,
+		"max_attempts", l.maxRetries)
 
-// mwclientDebugWriter implements io.Writer to capture mwclient debug output
-type mwclientDebugWriter struct {
-	logger *slog.Logger
-}
+	// Log full response body in debug mode
+	if l.debug && len(body) > 0 {
+		bodyPreview := string(body)
+		if len(bodyPreview) > 500 {
+			bodyPreview = bodyPreview[:500] + "..."
+		}
+		attemptLogger.Debug("Response body preview", "body", bodyPreview)
+	}
 
-func (w *mwclientDebugWriter) Write(p []byte) (n int, err error) {
-	w.logger.Debug("mwclient debug output", "data", string(p))
-	return len(p), nil
+	// Handle different error types
+	switch errorType {
+	case wikiErrorRateLimit:
+		// Rate limiting - open circuit breaker for 60 seconds
+		l.openCircuit(60*time.Second, fmt.Sprintf("Rate limited: %s", errorMsg))
+		return errors.Newf("Wikipedia rate limit exceeded: %s", errorMsg).
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("request_id", reqID).
+			Context("operation", "rate_limit_exceeded").
+			Context("status_code", debugResp.StatusCode).
+			Context("error_message", errorMsg).
+			Context("permanent_failure", true).
+			Context("retry_after", "60s"). // Suggest retry after 60 seconds
+			Build()
+
+	case wikiErrorBlocked:
+		// Access blocked - open circuit breaker for 5 minutes
+		l.openCircuit(5*time.Minute, fmt.Sprintf("Access blocked: %s", errorMsg))
+		return errors.Newf("Wikipedia access blocked: %s", errorMsg).
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("request_id", reqID).
+			Context("operation", "access_blocked").
+			Context("status_code", debugResp.StatusCode).
+			Context("error_message", errorMsg).
+			Context("permanent_failure", true).
+			Build()
+
+	case wikiErrorUserAgent:
+		// User-agent policy violation - open circuit breaker for 10 minutes
+		l.openCircuit(10*time.Minute, "User-Agent policy violation")
+		return checkUserAgentPolicyViolation(reqID, debugResp.StatusCode, body, req.Header.Get("User-Agent"), attemptLogger)
+
+	case wikiErrorTemporary:
+		// Temporary error - continue with retry logic but with longer backoff
+		attemptLogger.Info("Temporary Wikipedia error, will retry with backoff",
+			"error_message", errorMsg,
+			"attempt", attempt+1,
+			"will_retry", attempt < l.maxRetries-1)
+		return nil
+
+	default:
+		// Unknown error - continue with normal retry logic
+		return nil
+	}
 }
 
 // Error categorization for enhanced diagnostics
@@ -263,7 +693,7 @@ func logAPISuccess(logger *slog.Logger, reqID, species, operation string, params
 }
 
 // NewWikiMediaProvider creates a new Wikipedia media provider.
-// It initializes a new mwclient for interacting with the Wikipedia API.
+// It initializes a standard HTTP client for interacting with the Wikipedia API.
 func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 	// Use the shared imageProviderLogger
 	logger := imageProviderLogger.With("provider", wikiProviderName)
@@ -276,46 +706,43 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 		logger.Info("Debug mode enabled for WikiMedia provider", "debug", true)
 	}
 
-	apiURL := wikipediaAPIURL
+	// Build and validate user-agent
 	userAgent := buildUserAgent(settings.Version)
-
-	// Validate and log user-agent for debugging - using WARN level to ensure visibility
 	validateUserAgent(logger, settings.Version)
 	logger.Info("WikiMedia provider initialization - user-agent constructed",
-		"user_agent", buildUserAgent(settings.Version),
+		"user_agent", userAgent,
 		"app_version", settings.Version)
 
-	logger.Debug("Creating mwclient with API URL", "api_url", apiURL, "user_agent", userAgent)
-	client, err := mwclient.New(apiURL, userAgent)
-	if err != nil {
-		enhancedErr := errors.New(err).
-			Component("imageprovider").
-			Category(errors.CategoryNetwork).
-			Context("provider", wikiProviderName).
-			Context("operation", "create_mwclient").
-			Context("api_url", wikipediaAPIURL).
-			Build()
-		logger.Error("Failed to create mwclient for Wikipedia API", "error", enhancedErr)
-		return nil, enhancedErr
+	// Create HTTP client with reasonable timeouts
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        10,
+			IdleConnTimeout:     90 * time.Second,
+			DisableCompression:  false, // Allow gzip compression
+			TLSHandshakeTimeout: 10 * time.Second,
+		},
 	}
 
-	// Rate limiting is only applied to background cache refresh operations
-	// User requests are not rate limited to ensure UI responsiveness
-	// Background operations: 2 requests per second to respect Wikipedia's rate limits
-	backgroundLimiter := rate.NewLimiter(rate.Limit(2), 2)
-	logger.Info("WikiMedia provider initialized", "user_rate_limit", "none", "background_rate_limit_rps", 2)
+	// Global rate limiting for ALL Wikipedia requests to respect their API limits
+	// Wikipedia prefers conservative request rates - 1 request per second
+	globalLimiter := rate.NewLimiter(rate.Limit(1), 1)
 
-	// Enable debug output for mwclient if debug mode is on
-	if settings.Realtime.Dashboard.Thumbnails.Debug {
-		// Create a debug writer that logs to our logger
-		debugWriter := &mwclientDebugWriter{logger: logger}
-		client.SetDebug(debugWriter)
-		logger.Debug("Enabled mwclient debug output")
-	}
+	// Additional rate limiting for background cache refresh operations
+	// Background operations get the same 1 req/sec limit (no additional restriction needed)
+	backgroundLimiter := rate.NewLimiter(rate.Limit(1), 1)
+
+	logger.Info("WikiMedia provider initialized with conservative rate limits",
+		"global_rate_limit_rps", 1,
+		"background_rate_limit_rps", 1,
+		"http_timeout", "30s",
+		"info", "All requests limited to 1/sec to respect Wikipedia API")
 
 	return &wikiMediaProvider{
-		client:            client,
+		httpClient:        httpClient,
+		userAgent:         userAgent,
 		debug:             settings.Realtime.Dashboard.Thumbnails.Debug,
+		globalLimiter:     globalLimiter,
 		backgroundLimiter: backgroundLimiter,
 		maxRetries:        3,
 	}, nil
@@ -324,6 +751,22 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 // queryWithRetryAndLimiter performs a query with retry logic using the specified rate limiter.
 func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[string]string, limiter *rate.Limiter) (*jason.Object, error) {
 	logger := imageProviderLogger.With("provider", wikiProviderName, "request_id", reqID, "api_action", params["action"])
+
+	// Check if circuit breaker is open
+	if open, reason := l.isCircuitOpen(); open {
+		logger.Warn("Wikipedia circuit breaker is open, rejecting request",
+			"species", params["titles"],
+			"reason", reason)
+		return nil, errors.Newf("Wikipedia API circuit breaker open: %s", reason).
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("request_id", reqID).
+			Context("circuit_breaker", "open").
+			Context("reason", reason).
+			Build()
+	}
+
 	var lastErr error
 	for attempt := 0; attempt < l.maxRetries; attempt++ {
 		attemptLogger := logger.With("attempt", attempt+1, "max_attempts", l.maxRetries)
@@ -349,14 +792,9 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 			attemptLogger.Debug("No rate limiting applied (user request)")
 		}
 
-		// Construct the full URL for debug logging with proper URL encoding
-		queryParams := make([]string, 0, len(params))
-		for k, v := range params {
-			queryParams = append(queryParams, k+"="+url.QueryEscape(v))
-		}
-		fullURL := wikipediaAPIURL + "?" + strings.Join(queryParams, "&")
-		attemptLogger.Debug("Sending GET request to Wikipedia API", "full_url", fullURL, "params", params)
-		resp, err := l.client.Get(params)
+		// Make the API request using our new method
+		attemptLogger.Debug("Sending GET request to Wikipedia API", "params", params)
+		resp, err := l.makeAPIRequest(params)
 		if err == nil {
 			// Log successful response with debug details
 			if respObj, errJson := resp.Object(); errJson == nil {
@@ -371,8 +809,17 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 			} else {
 				attemptLogger.Debug("API request successful")
 			}
+			// Reset circuit breaker on successful request
+			l.resetCircuit()
 			return resp, nil // Success
 		}
+
+		// Build URL for error logging
+		queryParams := make([]string, 0, len(params))
+		for k, v := range params {
+			queryParams = append(queryParams, k+"="+url.QueryEscape(v))
+		}
+		fullURL := wikipediaAPIURL + "?" + strings.Join(queryParams, "&")
 
 		// Check if this is a JSON parsing error (Wikipedia returned HTML instead of JSON)
 		if strings.Contains(err.Error(), "invalid character") && strings.Contains(err.Error(), "looking for beginning of value") {
@@ -390,9 +837,15 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(reqID string, params map[st
 			"attempt", attempt+1,
 			"will_retry", attempt < l.maxRetries-1)
 
-		// Wait before retry (exponential backoff)
-		waitDuration := time.Second * time.Duration(1<<attempt)
-		attemptLogger.Debug("Waiting before retry", "duration", waitDuration)
+		// Wait before retry with minimum delay + exponential backoff
+		// Minimum 2 seconds between retries to be conservative with Wikipedia API
+		minDelay := 2 * time.Second
+		exponentialDelay := time.Second * time.Duration(1<<attempt)
+		waitDuration := max(minDelay, exponentialDelay)
+		attemptLogger.Debug("Waiting before retry",
+			"duration", waitDuration,
+			"min_delay", minDelay,
+			"exponential_delay", exponentialDelay)
 		time.Sleep(waitDuration)
 	}
 
@@ -577,10 +1030,62 @@ func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(ctx context.Context,
 	return pages[0], nil
 }
 
+// isAllowedToFetch checks if the WikiMedia provider is allowed to make requests
+// based on the current configuration. This prevents unnecessary API calls to Wikipedia
+// when the provider is not configured for use.
+func (l *wikiMediaProvider) isAllowedToFetch() (allowed bool, reason string) {
+	settings := conf.Setting()
+	if settings == nil {
+		// If settings are not available, allow for backward compatibility
+		return true, ""
+	}
+
+	thumbnails := settings.Realtime.Dashboard.Thumbnails
+
+	// Case 1: WikiMedia is explicitly configured as the provider
+	if thumbnails.ImageProvider == "wikimedia" {
+		return true, ""
+	}
+
+	// Case 2: Auto mode may select WikiMedia
+	if thumbnails.ImageProvider == "auto" || thumbnails.ImageProvider == "" {
+		return true, ""
+	}
+
+	// Case 3: WikiMedia can be used as a fallback
+	if thumbnails.FallbackPolicy == "all" {
+		return true, ""
+	}
+
+	// WikiMedia is not configured and fallback is disabled
+	reason = fmt.Sprintf("provider=%s, fallback=%s",
+		thumbnails.ImageProvider, thumbnails.FallbackPolicy)
+	return false, reason
+}
+
 // FetchWithContext retrieves the bird image for a given scientific name using a context.
 // If the context indicates a background operation, it uses the background rate limiter.
 // User requests are not rate limited.
 func (l *wikiMediaProvider) FetchWithContext(ctx context.Context, scientificName string) (BirdImage, error) {
+	// Check if we're allowed to make requests to WikiMedia
+	if allowed, reason := l.isAllowedToFetch(); !allowed {
+		logger := imageProviderLogger.With("provider", wikiProviderName)
+		logger.Debug("WikiMedia fetch blocked by configuration",
+			"scientific_name", scientificName,
+			"config_reason", reason,
+			"context", "background_operation",
+			"hint", "WikiMedia is not the configured provider and fallback is disabled")
+
+		return BirdImage{}, errors.Newf("WikiMedia provider is not configured for use: %s", reason).
+			Component("imageprovider").
+			Category(errors.CategoryConfiguration).
+			Context("provider", wikiProviderName).
+			Context("scientific_name", scientificName).
+			Context("config_reason", reason).
+			Context("operation", "fetch_with_context_blocked_by_config").
+			Build()
+	}
+
 	// Check if this is a background operation
 	isBackground := false
 	if ctx != nil {
@@ -594,7 +1099,6 @@ func (l *wikiMediaProvider) FetchWithContext(ctx context.Context, scientificName
 	if isBackground {
 		limiter = l.backgroundLimiter
 	}
-	// For user requests, limiter remains nil (no rate limiting)
 
 	return l.fetchWithLimiter(ctx, scientificName, limiter)
 }
@@ -603,7 +1107,25 @@ func (l *wikiMediaProvider) FetchWithContext(ctx context.Context, scientificName
 // It queries for the thumbnail and author information, then constructs a BirdImage.
 // User requests through this method are not rate limited.
 func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
-	return l.fetchWithLimiter(context.Background(), scientificName, nil) // No rate limiting for user requests
+	// Check if we're allowed to make requests to WikiMedia
+	if allowed, reason := l.isAllowedToFetch(); !allowed {
+		logger := imageProviderLogger.With("provider", wikiProviderName)
+		logger.Debug("WikiMedia fetch blocked by configuration",
+			"scientific_name", scientificName,
+			"config_reason", reason,
+			"hint", "WikiMedia is not the configured provider and fallback is disabled")
+
+		return BirdImage{}, errors.Newf("WikiMedia provider is not configured for use: %s", reason).
+			Component("imageprovider").
+			Category(errors.CategoryConfiguration).
+			Context("provider", wikiProviderName).
+			Context("scientific_name", scientificName).
+			Context("config_reason", reason).
+			Context("operation", "fetch_blocked_by_config").
+			Build()
+	}
+
+	return l.fetchWithLimiter(context.Background(), scientificName, nil)
 }
 
 // fetchWithLimiter retrieves the bird image using the specified rate limiter.
