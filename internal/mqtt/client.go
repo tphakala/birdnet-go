@@ -532,15 +532,28 @@ func (c *client) performConnectionAttempt(ctx context.Context, clientToConnect m
 			// If token.Error() is nil but not connected, it implies Paho's WaitTimeout might have returned true
 			// because the "wait" finished, but the connection itself failed without an error on the token.
 			// This can happen if the timeout was very short.
-			connectErr = errors.Newf("mqtt connection failed post-wait, client not connected").
-				Component("mqtt").
-				Category(errors.CategoryMQTTConnection).
-				Context("broker", c.config.Broker).
-				Context("client_id", c.config.ClientID).
-				Context("operation", "connect_post_wait").
-				Context("connect_timeout", c.config.ConnectTimeout).
-				Build()
-			logger.Warn("Paho token wait completed but client not connected, no explicit token error.")
+			// For very short timeouts (< 500ms), this is likely a timeout scenario
+			if c.config.ConnectTimeout < 500*time.Millisecond {
+				connectErr = errors.Newf("mqtt connection timeout - connection failed with short timeout (%v)", c.config.ConnectTimeout).
+					Component("mqtt").
+					Category(errors.CategoryMQTTConnection).
+					Context("broker", c.config.Broker).
+					Context("client_id", c.config.ClientID).
+					Context("operation", "connect_timeout_short").
+					Context("connect_timeout", c.config.ConnectTimeout).
+					Build()
+				logger.Warn("Connection failed with very short timeout, treating as timeout scenario", "timeout", c.config.ConnectTimeout)
+			} else {
+				connectErr = errors.Newf("mqtt connection failed post-wait, client not connected").
+					Component("mqtt").
+					Category(errors.CategoryMQTTConnection).
+					Context("broker", c.config.Broker).
+					Context("client_id", c.config.ClientID).
+					Context("operation", "connect_post_wait").
+					Context("connect_timeout", c.config.ConnectTimeout).
+					Build()
+				logger.Warn("Paho token wait completed but client not connected, no explicit token error.")
+			}
 		}
 	case <-timer.C:
 		connectErr = errors.Newf("mqtt connection attempt actively timed out by client wrapper after %v", timeoutDuration).
