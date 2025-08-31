@@ -213,6 +213,8 @@ for _, item := range items {
 ## Pre-Commit Checklist
 
 - [ ] Run `golangci-lint run -v` - **MUST have zero errors**
+  - **Always run on full project** - never single files/packages (incomplete results)
+  - **Primary compilation validation** - don't run `go build` separately
 - [ ] Run `go test -race -v`
 - [ ] Check all linter categories above
 - [ ] No disabled linters with `//nolint` without justification
