@@ -1245,6 +1245,7 @@ func (lfc *logFileCollector) processLogPath(w *zip.Writer, logPath string) error
 		return errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
+			Priority(errors.PriorityLow).
 			Context("operation", "stat_log_path").
 			Context("path", logPath).
 			Build()
@@ -1265,6 +1266,7 @@ func (lfc *logFileCollector) processLogDirectory(w *zip.Writer, dirPath string) 
 		return errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
+			Priority(errors.PriorityLow).
 			Context("operation", "read_log_directory").
 			Context("path", dirPath).
 			Build()
@@ -1296,6 +1298,7 @@ func (lfc *logFileCollector) processLogFileEntry(w *zip.Writer, dirPath string, 
 		return errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
+			Priority(errors.PriorityLow).
 			Context("operation", "get_file_info").
 			Context("file", file.Name()).
 			Build()
@@ -1317,6 +1320,7 @@ func (lfc *logFileCollector) processLogFileEntry(w *zip.Writer, dirPath string, 
 		return errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
+			Priority(errors.PriorityLow).
 			Context("operation", "add_log_to_archive").
 			Context("file", file.Name()).
 			Build()
@@ -1338,6 +1342,7 @@ func (lfc *logFileCollector) processSingleLogFile(w *zip.Writer, logPath string,
 		return errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
+			Priority(errors.PriorityLow).
 			Context("operation", "add_single_log_to_archive").
 			Context("file", logPath).
 			Build()
@@ -1370,6 +1375,7 @@ func (lfc *logFileCollector) addJournaldLogs(w *zip.Writer, duration time.Durati
 		return errors.Newf("no journald logs available").
 			Component("support").
 			Category(errors.CategorySystem).
+			Priority(errors.PriorityLow).
 			Context("operation", "get_journald_logs").
 			Build()
 	}
@@ -1389,6 +1395,7 @@ func (lfc *logFileCollector) addJournaldLogs(w *zip.Writer, duration time.Durati
 		return errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
+			Priority(errors.PriorityLow).
 			Context("operation", "create_journald_file").
 			Build()
 	}
@@ -1397,6 +1404,7 @@ func (lfc *logFileCollector) addJournaldLogs(w *zip.Writer, duration time.Durati
 		return errors.New(err).
 			Component("support").
 			Category(errors.CategoryFileIO).
+			Priority(errors.PriorityLow).
 			Context("operation", "write_journald_logs").
 			Build()
 	}
