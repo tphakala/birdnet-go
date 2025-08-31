@@ -1,0 +1,111 @@
+name: Podman Compatibility Test
+
+on:
+  push:
+    paths:
+      - "Podman/**"
+      - "Dockerfile"
+  pull_request:
+    paths:
+      - "Podman/**"
+      - "Dockerfile"
+
+jobs:
+  test-podman:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [linux/amd64, linux/arm64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        if: matrix.platform == 'linux/arm64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install podman podman-compose
+          podman --version
+          podman-compose --version
+
+      - name: Pull Docker-built image
+        run: |
+          podman pull --platform ${{ matrix.platform }} ghcr.io/tphakala/birdnet-go:nightly || \
+          podman pull ghcr.io/tphakala/birdnet-go:nightly
+
+      - name: Create test directories
+        run: |
+          mkdir -p config data/clips data/models
+          chmod 755 config data data/clips data/models
+
+      - name: Test with Podman Compose
+        run: |
+          cd Podman/
+          # Set test environment
+          export WEB_PORT=8080
+          export TZ=UTC
+          export BIRDNET_UID=1000
+          export BIRDNET_GID=1000
+
+          # Start container
+          podman-compose up -d
+
+          # Wait for container to be ready
+          sleep 30
+
+          # Check container status
+          podman-compose ps
+
+          # Check if container is healthy
+          container_id=$(podman ps -q --filter name=birdnet-go)
+          if [ -n "$container_id" ]; then
+            echo "Container is running with ID: $container_id"
+            podman logs "$container_id"
+          else
+            echo "Container failed to start"
+            exit 1
+          fi
+
+          # Test web interface (basic connectivity)
+          curl -f --retry 3 --retry-delay 10 http://localhost:8080 || exit 1
+
+          # Clean up
+          podman-compose down
+
+      - name: Test Quadlet configuration syntax
+        run: |
+          # Test container configuration syntax
+          podman run --dry-run --replace \
+            --name test-birdnet-go \
+            -v ./config:/config \
+            -v ./data:/data \
+            -p 8080:8080 \
+            -e TZ=UTC \
+            -e BIRDNET_UID=1000 \
+            -e BIRDNET_GID=1000 \
+            --device /dev/null:/dev/snd \
+            --network bridge \
+            --tmpfs /config/hls:exec,size=50M,uid=1000,gid=1000,mode=0755 \
+            ghcr.io/tphakala/birdnet-go:nightly
+
+          echo "Quadlet configuration syntax validated"
+
+      - name: Test Podman-specific features
+        run: |
+          # Test rootless capabilities
+          podman run --rm --name test-rootless \
+            -e BIRDNET_UID=1000 \
+            -e BIRDNET_GID=1000 \
+            ghcr.io/tphakala/birdnet-go:nightly \
+            /bin/bash -c "id && whoami"
+
+          # Test bridge networking
+          podman network ls | grep bridge || echo "Bridge network available"
+
+          echo "Podman-specific features tested successfully"

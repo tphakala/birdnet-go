@@ -131,5 +131,30 @@ EXPOSE 80 443 8080 8090
 
 COPY --from=build /home/dev-user/src/BirdNET-Go/bin /usr/bin/
 
+# Add container labels for metadata and compatibility information
+LABEL org.opencontainers.image.title="BirdNET-Go"
+LABEL org.opencontainers.image.description="Real-time bird sound identification using BirdNET"
+LABEL org.opencontainers.image.source="https://github.com/tphakala/birdnet-go"
+LABEL org.opencontainers.image.documentation="https://github.com/tphakala/birdnet-go/blob/main/README.md"
+LABEL org.opencontainers.image.url="https://github.com/tphakala/birdnet-go"
+LABEL org.opencontainers.image.vendor="tphakala"
+
+# Container runtime compatibility labels
+LABEL container.runtime.docker="true"
+LABEL container.runtime.podman="true"
+LABEL container.runtime.oci="true"
+
+# Podman-specific compatibility information
+LABEL podman.compatible="true"
+LABEL podman.rootless="true"
+LABEL podman.userns="keep-id"
+LABEL podman.network.bridge="true"
+
+# Usage information for different runtimes
+LABEL usage.docker="docker run -d --name birdnet-go -p 8080:8080 -v ./config:/config -v ./data:/data --device /dev/snd:/dev/snd ghcr.io/tphakala/birdnet-go:latest"
+LABEL usage.podman="podman run -d --name birdnet-go -p 8080:8080 -v ./config:/config -v ./data:/data --device /dev/snd:/dev/snd ghcr.io/tphakala/birdnet-go:podman-latest"
+LABEL usage.compose.docker="Use Docker/docker-compose.yml"
+LABEL usage.compose.podman="Use Podman/podman-compose.yml"
+
 ENTRYPOINT ["/usr/bin/entrypoint.sh"]
 CMD ["birdnet-go", "realtime"]

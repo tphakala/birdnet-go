@@ -1,0 +1,13 @@
+[Unit]
+Description=BirdNET-Go Bridge Network
+Documentation=man:podman-systemd.unit(5)
+
+[Network]
+NetworkName=birdnet-bridge
+Driver=bridge
+IPAMDriver=host-local
+Subnet=172.16.0.0/24
+Gateway=172.16.0.1
+
+[Install]
+WantedBy=default.target
