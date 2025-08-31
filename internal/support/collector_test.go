@@ -16,6 +16,26 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
+// Test constants
+const (
+	// File sizes for testing
+	testLogSizeLimit  = 5000
+	testLogSizeSmall  = 1000
+	testLogSizeMedium = 4000
+	testLogSizeLarge  = 4500
+	testLogSizeTiny   = 0
+
+	// Test durations
+	testDuration24Hours = 24 * time.Hour
+	testDuration1Hour   = 1 * time.Hour
+	testDuration48Hours = 48 * time.Hour
+	testDuration1Minute = 1 * time.Minute
+
+	// Test sizes in bytes
+	testSize10MB = 10 * 1024 * 1024
+	testSize1KB  = 1024
+)
+
 // TestLogFileCollector_isLogFile tests the log file detection
 func TestLogFileCollector_isLogFile(t *testing.T) {
 	t.Parallel()
@@ -62,7 +82,7 @@ func TestLogFileCollector_isLogFile(t *testing.T) {
 func TestLogFileCollector_isFileWithinTimeRange(t *testing.T) {
 	now := time.Now()
 	lfc := &logFileCollector{
-		cutoffTime: now.Add(-24 * time.Hour), // 24 hours ago
+		cutoffTime: now.Add(-testDuration24Hours), // 24 hours ago
 	}
 
 	tests := []struct {
@@ -70,10 +90,10 @@ func TestLogFileCollector_isFileWithinTimeRange(t *testing.T) {
 		modTime time.Time
 		want    bool
 	}{
-		{"recent file", now.Add(-1 * time.Hour), true},
-		{"file at cutoff", now.Add(-24 * time.Hour), true},
-		{"old file", now.Add(-48 * time.Hour), false},
-		{"future file", now.Add(1 * time.Hour), true},
+		{"recent file", now.Add(-testDuration1Hour), true},
+		{"file at cutoff", now.Add(-testDuration24Hours), true},
+		{"old file", now.Add(-testDuration48Hours), false},
+		{"future file", now.Add(testDuration1Hour), true},
 	}
 
 	for _, tt := range tests {
@@ -96,11 +116,11 @@ func TestLogFileCollector_canAddFile(t *testing.T) {
 		fileSize  int64
 		want      bool
 	}{
-		{"within limit", 1000, 5000, 1000, true},
-		{"exactly at limit", 4000, 5000, 1000, true},
-		{"exceeds limit", 4500, 5000, 1000, false},
-		{"zero file size", 1000, 5000, 0, true},
-		{"already at max", 5000, 5000, 1000, false},
+		{"within limit", testLogSizeSmall, testLogSizeLimit, testLogSizeSmall, true},
+		{"exactly at limit", testLogSizeMedium, testLogSizeLimit, testLogSizeSmall, true},
+		{"exceeds limit", testLogSizeLarge, testLogSizeLimit, testLogSizeSmall, false},
+		{"zero file size", testLogSizeSmall, testLogSizeLimit, testLogSizeTiny, true},
+		{"already at max", testLogSizeLimit, testLogSizeLimit, testLogSizeSmall, false},
 	}
 
 	for _, tt := range tests {
@@ -464,7 +484,7 @@ func TestCollector_collectJournalLogs(t *testing.T) {
 	t.Run("journal not available", func(t *testing.T) {
 		ctx := context.Background()
 		diagnostics := &LogSourceDiagnostics{PathsSearched: []SearchedPath{}, Details: make(map[string]any)}
-		logs, err := c.collectJournalLogs(ctx, 1*time.Hour, false, diagnostics)
+		logs, err := c.collectJournalLogs(ctx, testDuration1Hour, false, diagnostics)
 
 		// If journalctl is not available or service doesn't exist, we should get our sentinel error
 		if err != nil {
@@ -508,7 +528,7 @@ func TestCollectionDiagnostics_Population(t *testing.T) {
 						Summary: DiagnosticSummary{
 							TotalEntries: 10,
 							TimeRange: TimeRange{
-								From: time.Now().Add(-24 * time.Hour),
+								From: time.Now().Add(-testDuration24Hours),
 								To:   time.Now(),
 							},
 						},
@@ -580,12 +600,12 @@ func TestCollector_collectLogFilesWithDiagnostics(t *testing.T) {
 	// Create temp directory structure for testing
 	tempDir := t.TempDir()
 	logDir := filepath.Join(tempDir, "logs")
-	require.NoError(t, os.MkdirAll(logDir, 0o755))
+	require.NoError(t, os.MkdirAll(logDir, defaultDirPermissions))
 
 	// Create test log files
 	testLogContent := "2024-01-15 10:00:00 INFO test log entry\n"
 	logFile1 := filepath.Join(logDir, "app.log")
-	require.NoError(t, os.WriteFile(logFile1, []byte(testLogContent), 0o644))
+	require.NoError(t, os.WriteFile(logFile1, []byte(testLogContent), defaultFilePermissions))
 
 	c := &Collector{
 		configPath: tempDir,
@@ -599,7 +619,7 @@ func TestCollector_collectLogFilesWithDiagnostics(t *testing.T) {
 	}{
 		{
 			name:     "successful log collection",
-			duration: 24 * time.Hour,
+			duration: testDuration24Hours,
 			validate: func(t *testing.T, logs []LogEntry, diag *LogSourceDiagnostics) {
 				t.Helper()
 				// Check that paths were searched
@@ -615,7 +635,7 @@ func TestCollector_collectLogFilesWithDiagnostics(t *testing.T) {
 		},
 		{
 			name:     "old logs filtered by duration",
-			duration: 1 * time.Minute, // Very short duration to filter out test log
+			duration: testDuration1Minute, // Very short duration to filter out test log
 			validate: func(t *testing.T, logs []LogEntry, diag *LogSourceDiagnostics) {
 				t.Helper()
 				// Paths should still be searched
@@ -632,7 +652,7 @@ func TestCollector_collectLogFilesWithDiagnostics(t *testing.T) {
 				Details: make(map[string]any),
 			}
 
-			logs, _, _ := c.collectLogFilesWithDiagnostics(tt.duration, 10*1024*1024, false, diagnostics)
+			logs, _, _ := c.collectLogFilesWithDiagnostics(tt.duration, testSize10MB, false, diagnostics)
 
 			tt.validate(t, logs, diagnostics)
 		})
@@ -654,8 +674,8 @@ func TestCollector_Collect_AlwaysIncludesDiagnostics(t *testing.T) {
 		IncludeLogs:       true,  // Enable logs to avoid validation error
 		IncludeConfig:     false, // Disable config
 		IncludeSystemInfo: false, // Disable system info
-		LogDuration:       1 * time.Hour,
-		MaxLogSize:        1024,
+		LogDuration:       testDuration1Hour,
+		MaxLogSize:        testSize1KB,
 	}
 
 	ctx := context.Background()
@@ -676,8 +696,8 @@ func TestCollector_Collect_AlwaysIncludesDiagnostics(t *testing.T) {
 		IncludeLogs:       true,
 		IncludeConfig:     true,
 		IncludeSystemInfo: true,
-		LogDuration:       1 * time.Hour,
-		MaxLogSize:        1024,
+		LogDuration:       testDuration1Hour,
+		MaxLogSize:        testSize1KB,
 	}
 
 	bundle, err = c.Collect(ctx, opts)

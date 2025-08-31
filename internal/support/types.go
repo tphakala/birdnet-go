@@ -145,12 +145,18 @@ type TimeRange struct {
 // DefaultCollectorOptions returns default collector options with sensible defaults:
 // includes all data types, 4-week log window, 50MB max log size, sensitive data scrubbing and PII anonymization enabled.
 func DefaultCollectorOptions() CollectorOptions {
+	const (
+		defaultLogDurationWeeks = 4
+		defaultMaxLogSizeMB     = 50
+		bytesPerMB              = 1024 * 1024
+	)
+
 	return CollectorOptions{
 		IncludeLogs:       true,
 		IncludeConfig:     true,
 		IncludeSystemInfo: true,
-		LogDuration:       4 * 7 * 24 * time.Hour, // 4 weeks
-		MaxLogSize:        50 * 1024 * 1024,       // 50MB to accommodate more logs
+		LogDuration:       defaultLogDurationWeeks * 7 * 24 * time.Hour, // 4 weeks
+		MaxLogSize:        defaultMaxLogSizeMB * bytesPerMB,             // 50MB to accommodate more logs
 		ScrubSensitive:    true,
 		AnonymizePII:      true,
 	}

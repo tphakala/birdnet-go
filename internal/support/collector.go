@@ -40,6 +40,70 @@ var (
 	ErrJournalNotAvailable = errors.NewStd("journal logs not available")
 )
 
+// Constants for support collector operations
+const (
+	// Log collection limits and thresholds
+	maxJournalLogLines      = 5000 // Maximum journal log lines to prevent timeout
+	logProgressInterval     = 1000 // Report progress every N lines during parsing
+	defaultMaxLogSizeMB     = 50   // Default maximum log size in MB
+	defaultLogDurationWeeks = 4    // Default log collection duration in weeks
+
+	// Memory and disk thresholds
+	bytesPerMB                = 1024 * 1024
+	bytesPerKB                = 1024
+	minDiskSizeMB             = 100 // Skip disks smaller than 100MB
+	microsecondsToNanoseconds = 1000
+
+	// File permissions
+	defaultDirPermissions  = 0o755
+	defaultFilePermissions = 0o644
+
+	// Container and system detection
+	dockerEnvFile       = "/.dockerenv"
+	procCGroupFile      = "/proc/1/cgroup"
+	containerDocker     = "docker"
+	containerContainerd = "containerd"
+
+	// SystemD and journal constants
+	systemdServiceName = "birdnet-go.service"
+	journalTimeFormat  = "2006-01-02 15:04:05"
+	logTimeFormat      = "2006-01-02 15:04:05"
+
+	// Archive file names
+	diagnosticsFileName = "collection_diagnostics.json"
+	metadataFileName    = "metadata.json"
+	configFileName      = "config.json"
+	systemInfoFileName  = "system_info.json"
+	logReadmeFileName   = "logs/README.txt"
+
+	// Redaction and privacy
+	redactionPlaceholder = "[REDACTED]"
+	logReadmeContent     = "No log files were found or all logs were older than the specified duration."
+
+	// Journal command flags
+	journalFlagUnit       = "-u"
+	journalFlagSince      = "--since"
+	journalFlagNoPager    = "--no-pager"
+	journalFlagOutput     = "-o"
+	journalFlagJSON       = "json"
+	journalFlagNoHostname = "--no-hostname"
+	journalFlagLines      = "-n"
+
+	// Journal priority levels (syslog severity)
+	priorityEmergency = "0" // System is unusable
+	priorityAlert     = "1" // Action must be taken immediately
+	priorityCritical  = "2" // Critical conditions
+	priorityError     = "3" // Error conditions
+	priorityWarning   = "4" // Warning conditions
+	priorityNotice    = "5" // Normal but significant condition
+	priorityInfo      = "6" // Informational messages
+	priorityDebug     = "7" // Debug-level messages
+
+	// Exit codes for error context
+	exitCodeGeneralFailure  = 1
+	exitCodeCommandNotFound = 127
+)
+
 // isRunningInDocker detects if the application is running inside a Docker container.
 // This is useful for adjusting log collection strategies, as Docker containers
 // often don't have systemd/journald available.
@@ -51,13 +115,13 @@ var (
 // Returns true if running in Docker, false otherwise.
 func isRunningInDocker() bool {
 	// Check for .dockerenv file
-	if _, err := os.Stat("/.dockerenv"); err == nil {
+	if _, err := os.Stat(dockerEnvFile); err == nil {
 		return true
 	}
 
 	// Check cgroup for docker references
-	if data, err := os.ReadFile("/proc/1/cgroup"); err == nil {
-		if strings.Contains(string(data), "docker") || strings.Contains(string(data), "containerd") {
+	if data, err := os.ReadFile(procCGroupFile); err == nil {
+		if strings.Contains(string(data), containerDocker) || strings.Contains(string(data), containerContainerd) {
 			return true
 		}
 	}
@@ -342,7 +406,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 
 	// Always add diagnostics - this is crucial for troubleshooting collection issues
 	serviceLogger.Debug("support: adding collection diagnostics to archive")
-	diagnosticsFile, err := w.Create("collection_diagnostics.json")
+	diagnosticsFile, err := w.Create(diagnosticsFileName)
 	if err != nil {
 		serviceLogger.Error("support: failed to create diagnostics file in archive", "error", err)
 		return nil, errors.New(err).
@@ -393,12 +457,12 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 	// Get system memory info using gopsutil
 	memInfo, err := mem.VirtualMemory()
 	if err == nil {
-		info.MemoryMB = memInfo.Total / 1024 / 1024
+		info.MemoryMB = memInfo.Total / bytesPerMB
 	} else {
 		// Fallback to runtime memory stats if gopsutil fails
 		var memStats runtime.MemStats
 		runtime.ReadMemStats(&memStats)
-		info.MemoryMB = memStats.Sys / 1024 / 1024
+		info.MemoryMB = memStats.Sys / bytesPerMB
 	}
 
 	// Collect disk information
@@ -411,7 +475,7 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 			}
 
 			// Skip very small filesystems (like /dev, /sys, etc.)
-			if usage.Total < 1024*1024*100 { // Less than 100MB
+			if usage.Total < minDiskSizeMB*bytesPerMB { // Less than 100MB
 				continue
 			}
 
@@ -493,7 +557,7 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 	lowerKey := strings.ToLower(key)
 	for _, sensitive := range sensitiveKeys {
 		if strings.Contains(lowerKey, sensitive) {
-			return "[REDACTED]"
+			return redactionPlaceholder
 		}
 	}
 
@@ -612,29 +676,28 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 // collectJournalLogs collects logs from systemd journal with diagnostics
 func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Duration, anonymizePII bool, diagnostics *LogSourceDiagnostics) ([]LogEntry, error) {
 	// Calculate since time
-	since := time.Now().Add(-duration).Format("2006-01-02 15:04:05")
+	since := time.Now().Add(-duration).Format(journalTimeFormat)
 
-	// Limit to 5000 most recent lines to prevent timeout
-	const maxJournalLines = 5000
+	// Limit to prevent timeout using defined constant
 	serviceLogger.Debug("support: running journalctl",
 		"since", since,
-		"maxLines", maxJournalLines)
+		"maxLines", maxJournalLogLines)
 
 	// Run journalctl command with line limit
 	cmd := exec.CommandContext(ctx, "journalctl",
-		"-u", "birdnet-go.service",
-		"--since", since,
-		"--no-pager",
-		"-o", "json",
-		"--no-hostname",
-		"-n", fmt.Sprintf("%d", maxJournalLines)) // Limit number of lines
+		journalFlagUnit, systemdServiceName,
+		journalFlagSince, since,
+		journalFlagNoPager,
+		journalFlagOutput, journalFlagJSON,
+		journalFlagNoHostname,
+		journalFlagLines, fmt.Sprintf("%d", maxJournalLogLines)) // Limit number of lines
 
 	// Capture command for diagnostics
 	diagnostics.Command = cmd.String()
-	diagnostics.Details["service"] = "birdnet-go.service"
+	diagnostics.Details["service"] = systemdServiceName
 	diagnostics.Details["since"] = since
-	diagnostics.Details["max_lines"] = maxJournalLines
-	diagnostics.Details["output_format"] = "json"
+	diagnostics.Details["max_lines"] = maxJournalLogLines
+	diagnostics.Details["output_format"] = journalFlagJSON
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -666,8 +729,8 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 			continue
 		}
 
-		// Log progress every 1000 lines
-		if i > 0 && i%1000 == 0 {
+		// Log progress every N lines
+		if i > 0 && i%logProgressInterval == 0 {
 			serviceLogger.Debug("support: journal parsing progress",
 				"processed", i,
 				"total", len(lines),
@@ -691,20 +754,20 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 		var ts time.Time
 		if timestamp != "" {
 			if usec, err := strconv.ParseInt(timestamp, 10, 64); err == nil {
-				ts = time.Unix(0, usec*1000)
+				ts = time.Unix(0, usec*microsecondsToNanoseconds)
 			}
 		}
 
 		// Map priority to log level
 		level := "INFO"
 		switch priority {
-		case "0", "1", "2", "3":
+		case priorityEmergency, priorityAlert, priorityCritical, priorityError:
 			level = "ERROR"
-		case "4":
+		case priorityWarning:
 			level = "WARNING"
-		case "5", "6":
+		case priorityNotice, priorityInfo:
 			level = "INFO"
-		case "7":
+		case priorityDebug:
 			level = "DEBUG"
 		}
 
@@ -941,7 +1004,7 @@ func (c *Collector) parseLogLine(line string, anonymizePII bool) *LogEntry {
 
 	// Parse timestamp
 	// IMPORTANT: Database log entries use local time strings, parse as local time
-	timestamp, err := time.ParseInLocation("2006-01-02 15:04:05", parts[0]+" "+parts[1], time.Local)
+	timestamp, err := time.ParseInLocation(logTimeFormat, parts[0]+" "+parts[1], time.Local)
 	if err != nil {
 		return nil
 	}
@@ -1332,13 +1395,13 @@ func (lfc *logFileCollector) addJournaldLogs(w *zip.Writer, duration time.Durati
 
 // addNoLogsNote adds a README when no logs are found
 func (lfc *logFileCollector) addNoLogsNote(w *zip.Writer) {
-	noteFile, err := w.Create("logs/README.txt")
+	noteFile, err := w.Create(logReadmeFileName)
 	if err != nil {
 		// Non-critical error, don't propagate
 		return
 	}
 
-	message := "No log files were found or all logs were older than the specified duration."
+	message := logReadmeContent
 	_, _ = noteFile.Write([]byte(message))
 }
 
@@ -1426,7 +1489,7 @@ func (c *Collector) addLogFileToArchive(w *zip.Writer, sourcePath, archivePath s
 
 // getJournaldLogs retrieves logs from journald as a string
 func (c *Collector) getJournaldLogs(ctx context.Context, duration time.Duration) string {
-	since := time.Now().Add(-duration).Format("2006-01-02 15:04:05")
+	since := time.Now().Add(-duration).Format(journalTimeFormat)
 
 	// Use same line limit as collectJournalLogs
 	const maxJournalLines = 5000
