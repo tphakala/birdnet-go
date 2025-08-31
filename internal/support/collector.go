@@ -138,6 +138,13 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 		Timestamp: time.Now().UTC(),
 		SystemID:  c.systemID,
 		Version:   c.version,
+		Diagnostics: CollectionDiagnostics{
+			LogCollection: LogCollectionDiagnostics{
+				JournalLogs: LogSourceDiagnostics{PathsSearched: []SearchedPath{}, Details: make(map[string]any)},
+				FileLogs:    LogSourceDiagnostics{PathsSearched: []SearchedPath{}, Details: make(map[string]any)},
+				Summary:     DiagnosticSummary{TimeRange: TimeRange{From: time.Now().Add(-opts.LogDuration), To: time.Now()}},
+			},
+		},
 	}
 
 	serviceLogger.Info("support: starting collection",
@@ -151,7 +158,9 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 	// Collect system information
 	if opts.IncludeSystemInfo {
 		serviceLogger.Debug("support: collecting system information")
+		dump.Diagnostics.SystemCollection.Attempted = true
 		dump.SystemInfo = c.collectSystemInfo()
+		dump.Diagnostics.SystemCollection.Successful = true
 		serviceLogger.Debug("support: system information collected",
 			"os", dump.SystemInfo.OS,
 			"arch", dump.SystemInfo.Architecture,
@@ -162,35 +171,23 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 	// Collect configuration (scrubbed)
 	if opts.IncludeConfig {
 		serviceLogger.Debug("support: collecting configuration", "scrub_sensitive", opts.ScrubSensitive)
+		dump.Diagnostics.ConfigCollection.Attempted = true
 		config, err := c.collectConfig(opts.ScrubSensitive)
 		if err != nil {
 			serviceLogger.Error("support: failed to collect configuration", "error", err)
-			return nil, errors.New(err).
-				Component("support").
-				Category(errors.CategoryConfiguration).
-				Context("operation", "collect_config").
-				Context("scrub_sensitive", opts.ScrubSensitive).
-				Build()
+			dump.Diagnostics.ConfigCollection.Error = err.Error()
+			// Don't fail the entire collection - continue with other data
+		} else {
+			dump.Config = config
+			dump.Diagnostics.ConfigCollection.Successful = true
+			serviceLogger.Debug("support: configuration collected successfully")
 		}
-		dump.Config = config
-		serviceLogger.Debug("support: configuration collected successfully")
 	}
 
 	// Collect logs
 	if opts.IncludeLogs {
 		serviceLogger.Debug("support: collecting logs", "duration", opts.LogDuration, "max_size", opts.MaxLogSize, "anonymize_pii", opts.AnonymizePII)
-		logs, err := c.collectLogs(ctx, opts.LogDuration, opts.MaxLogSize, opts.AnonymizePII)
-		if err != nil {
-			serviceLogger.Error("support: failed to collect logs", "error", err)
-			return nil, errors.New(err).
-				Component("support").
-				Category(errors.CategoryFileIO).
-				Context("operation", "collect_logs").
-				Context("log_duration", opts.LogDuration.String()).
-				Context("max_log_size", opts.MaxLogSize).
-				Context("anonymize_pii", opts.AnonymizePII).
-				Build()
-		}
+		logs := c.collectLogs(ctx, opts.LogDuration, opts.MaxLogSize, opts.AnonymizePII, &dump.Diagnostics.LogCollection)
 		dump.Logs = logs
 		serviceLogger.Debug("support: logs collected", "log_count", len(logs))
 	}
@@ -237,11 +234,20 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 	}
 	// Only include basic metadata, not the full dump content
 	metadata := map[string]any{
-		"id":        dump.ID,
-		"timestamp": dump.Timestamp,
-		"system_id": dump.SystemID,
-		"version":   dump.Version,
-		"log_count": len(dump.Logs),
+		"id":                      dump.ID,
+		"timestamp":               dump.Timestamp,
+		"system_id":               dump.SystemID,
+		"version":                 dump.Version,
+		"log_count":               len(dump.Logs),
+		"includes_diagnostics":    true,
+		"config_collection_error": dump.Diagnostics.ConfigCollection.Error != "",
+		"log_collection_summary": map[string]any{
+			"total_entries":      dump.Diagnostics.LogCollection.Summary.TotalEntries,
+			"journal_attempted":  dump.Diagnostics.LogCollection.JournalLogs.Attempted,
+			"journal_successful": dump.Diagnostics.LogCollection.JournalLogs.Successful,
+			"files_attempted":    dump.Diagnostics.LogCollection.FileLogs.Attempted,
+			"files_successful":   dump.Diagnostics.LogCollection.FileLogs.Successful,
+		},
 	}
 	if err := json.NewEncoder(metadataFile).Encode(metadata); err != nil {
 		serviceLogger.Error("support: failed to write metadata to archive", "error", err)
@@ -308,6 +314,27 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 		}
 		serviceLogger.Debug("support: system info added successfully")
 	}
+
+	// Always add diagnostics - this is crucial for troubleshooting collection issues
+	serviceLogger.Debug("support: adding collection diagnostics to archive")
+	diagnosticsFile, err := w.Create("collection_diagnostics.json")
+	if err != nil {
+		serviceLogger.Error("support: failed to create diagnostics file in archive", "error", err)
+		return nil, errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_diagnostics_file").
+			Build()
+	}
+	if err := json.NewEncoder(diagnosticsFile).Encode(dump.Diagnostics); err != nil {
+		serviceLogger.Error("support: failed to write diagnostics to archive", "error", err)
+		return nil, errors.New(err).
+			Component("support").
+			Category(errors.CategoryFileIO).
+			Context("operation", "write_diagnostics").
+			Build()
+	}
+	serviceLogger.Debug("support: collection diagnostics added successfully")
 
 	// Close the archive writer
 	if err := w.Close(); err != nil {
@@ -468,19 +495,22 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 	}
 }
 
-// collectLogs collects recent log entries
-func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, maxSize int64, anonymizePII bool) ([]LogEntry, error) {
+// collectLogs collects recent log entries and captures detailed diagnostic information
+func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, maxSize int64, anonymizePII bool, diagnostics *LogCollectionDiagnostics) []LogEntry {
 	serviceLogger.Debug("support: collectLogs started",
 		"duration", duration,
 		"maxSize", maxSize,
 		"anonymizePII", anonymizePII)
 
 	var logs []LogEntry
+	var totalSize int64
 
 	// Try to collect from journald first (systemd systems)
 	serviceLogger.Debug("support: attempting to collect journal logs")
-	journalLogs, err := c.collectJournalLogs(ctx, duration, anonymizePII)
+	diagnostics.JournalLogs.Attempted = true
+	journalLogs, err := c.collectJournalLogs(ctx, duration, anonymizePII, &diagnostics.JournalLogs)
 	if err != nil {
+		diagnostics.JournalLogs.Error = err.Error()
 		if errors.Is(err, ErrJournalNotAvailable) {
 			serviceLogger.Debug("support: journal logs not available (expected on non-systemd systems)")
 		} else {
@@ -488,29 +518,52 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 		}
 	} else {
 		serviceLogger.Debug("support: collected journal logs", "count", len(journalLogs))
+		diagnostics.JournalLogs.Successful = true
+		diagnostics.JournalLogs.EntriesFound = len(journalLogs)
 		logs = append(logs, journalLogs...)
+		// Estimate size for journal logs
+		for _, entry := range journalLogs {
+			totalSize += int64(len(entry.Message))
+		}
 	}
 
 	// Also check for log files in the data directory
 	serviceLogger.Debug("support: attempting to collect log files")
-	logFiles, err := c.collectLogFiles(duration, maxSize, anonymizePII)
+	diagnostics.FileLogs.Attempted = true
+	logFiles, fileSize, err := c.collectLogFilesWithDiagnostics(duration, maxSize-totalSize, anonymizePII, &diagnostics.FileLogs)
 	if err != nil {
+		diagnostics.FileLogs.Error = err.Error()
 		serviceLogger.Warn("support: error collecting log files", "error", err)
 	} else {
 		serviceLogger.Debug("support: collected log files", "count", len(logFiles))
+		diagnostics.FileLogs.Successful = true
+		diagnostics.FileLogs.EntriesFound = len(logFiles)
 		logs = append(logs, logFiles...)
+		totalSize += fileSize
 	}
 
 	// Sort logs by timestamp
 	serviceLogger.Debug("support: sorting logs by timestamp", "total_logs", len(logs))
 	sortLogsByTime(logs)
 
+	// Update summary diagnostics
+	diagnostics.Summary.TotalEntries = len(logs)
+	diagnostics.Summary.SizeBytes = totalSize
+	diagnostics.Summary.TruncatedBySize = totalSize >= maxSize
+	diagnostics.Summary.TruncatedByTime = duration > 0 // Always filtered by time if duration is specified
+
+	// Set the actual time range of collected logs
+	if len(logs) > 0 {
+		diagnostics.Summary.TimeRange.From = logs[0].Timestamp
+		diagnostics.Summary.TimeRange.To = logs[len(logs)-1].Timestamp
+	}
+
 	serviceLogger.Debug("support: collectLogs completed", "total_logs", len(logs))
-	return logs, nil
+	return logs
 }
 
-// collectJournalLogs collects logs from systemd journal
-func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Duration, anonymizePII bool) ([]LogEntry, error) {
+// collectJournalLogs collects logs from systemd journal with diagnostics
+func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Duration, anonymizePII bool, diagnostics *LogSourceDiagnostics) ([]LogEntry, error) {
 	// Calculate since time
 	since := time.Now().Add(-duration).Format("2006-01-02 15:04:05")
 
@@ -529,11 +582,24 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 		"--no-hostname",
 		"-n", fmt.Sprintf("%d", maxJournalLines)) // Limit number of lines
 
+	// Capture command for diagnostics
+	diagnostics.Command = cmd.String()
+	diagnostics.Details["service"] = "birdnet-go.service"
+	diagnostics.Details["since"] = since
+	diagnostics.Details["max_lines"] = maxJournalLines
+	diagnostics.Details["output_format"] = "json"
+
 	output, err := cmd.Output()
 	if err != nil {
 		// journalctl might not be available or service might not exist
 		// This is not a fatal error, just means no journald logs available
 		serviceLogger.Debug("journalctl unavailable or service not found", "error", err)
+		diagnostics.Details["error_type"] = "command_failed"
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			diagnostics.Details["exit_code"] = exitErr.ExitCode()
+			diagnostics.Details["stderr"] = string(exitErr.Stderr)
+		}
 		return nil, ErrJournalNotAvailable
 	}
 
@@ -615,81 +681,111 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 		"skippedEntries", skippedCount,
 		"resultCount", len(logs))
 
+	// Add parsing diagnostics
+	diagnostics.Details["output_size_bytes"] = len(output)
+	diagnostics.Details["total_lines"] = len(lines)
+	diagnostics.Details["parsed_entries"] = parsedCount
+	diagnostics.Details["skipped_entries"] = skippedCount
+	diagnostics.Details["final_log_count"] = len(logs)
+
 	return logs, nil
 }
 
-// collectLogFiles collects logs from files in the data directory
-func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64, anonymizePII bool) ([]LogEntry, error) {
+// collectLogFilesWithDiagnostics collects logs from files with detailed diagnostic information
+func (c *Collector) collectLogFilesWithDiagnostics(duration time.Duration, maxSize int64, anonymizePII bool, diagnostics *LogSourceDiagnostics) ([]LogEntry, int64, error) {
 	var logs []LogEntry
-
-	// Look for log files in common locations
-	// The logging package creates logs in a "logs" directory
-	logPaths := []string{
-		"logs",                              // Default logs directory from logging package
-		filepath.Join(c.dataPath, "logs"),   // Data directory logs
-		filepath.Join(c.configPath, "logs"), // Config directory logs
-	}
-
-	// Also try to find logs relative to current working directory
-	if cwd, err := os.Getwd(); err == nil {
-		logPaths = append(logPaths, filepath.Join(cwd, "logs"))
-	} else {
-		serviceLogger.Debug("support: could not get working directory", "error", err)
-	}
-
-	serviceLogger.Debug("support: searching for log files", "paths", logPaths)
-
 	cutoffTime := time.Now().Add(-duration)
 	totalSize := int64(0)
 
-	for _, logPath := range logPaths {
+	// Get unique log paths and capture diagnostic information for each
+	uniquePaths := c.getUniqueLogPaths()
+	diagnostics.Details["total_paths_to_search"] = len(uniquePaths)
+
+	for _, logPath := range uniquePaths {
+		searchedPath := SearchedPath{Path: logPath}
+
 		// Check if path exists
 		info, err := os.Stat(logPath)
 		if err != nil {
-			serviceLogger.Debug("support: log path not accessible", "path", logPath, "error", err)
+			if os.IsNotExist(err) {
+				searchedPath.Exists = false
+				searchedPath.Error = "path does not exist"
+			} else {
+				searchedPath.Exists = true
+				searchedPath.Accessible = false
+				searchedPath.Error = err.Error()
+			}
+			diagnostics.PathsSearched = append(diagnostics.PathsSearched, searchedPath)
 			continue
 		}
 
-		// If it's a directory, look for log files
-		if info.IsDir() {
-			serviceLogger.Debug("support: scanning log directory", "path", logPath)
-			files, err := os.ReadDir(logPath)
-			if err != nil {
-				serviceLogger.Warn("support: failed to read log directory", "path", logPath, "error", err)
-				continue
-			}
+		searchedPath.Exists = true
+		searchedPath.Accessible = true
 
-			serviceLogger.Debug("support: found files in directory", "path", logPath, "count", len(files))
-			for _, file := range files {
-				if !strings.HasSuffix(file.Name(), ".log") {
-					continue
-				}
-				fullPath := filepath.Join(logPath, file.Name())
-				serviceLogger.Debug("support: processing log file", "file", fullPath)
-				fileLogs, size := c.parseLogFile(fullPath, cutoffTime, maxSize-totalSize, anonymizePII)
-				serviceLogger.Debug("support: parsed log file", "file", fullPath, "entries", len(fileLogs), "size", size)
-				logs = append(logs, fileLogs...)
-				totalSize += size
-				if totalSize >= maxSize {
-					serviceLogger.Debug("support: reached max size limit", "totalSize", totalSize, "maxSize", maxSize)
-					break
-				}
+		// Process directory or file
+		if info.IsDir() {
+			logCount, dirSize, err := c.processLogDirectory(logPath, cutoffTime, maxSize-totalSize, anonymizePII, &logs, &searchedPath)
+			if err != nil {
+				searchedPath.Error = err.Error()
+			} else {
+				searchedPath.FileCount = logCount
+				totalSize += dirSize
 			}
-		} else {
-			// It's a file
-			serviceLogger.Debug("support: processing single log file", "path", logPath)
+		} else if strings.HasSuffix(strings.ToLower(logPath), "log") {
+			// Single file
 			fileLogs, size := c.parseLogFile(logPath, cutoffTime, maxSize-totalSize, anonymizePII)
 			logs = append(logs, fileLogs...)
+			searchedPath.FileCount = 1
 			totalSize += size
 		}
 
+		diagnostics.PathsSearched = append(diagnostics.PathsSearched, searchedPath)
+
 		if totalSize >= maxSize {
+			diagnostics.Details["stopped_reason"] = "max_size_reached"
 			break
 		}
 	}
 
-	serviceLogger.Debug("support: collectLogFiles completed", "total_entries", len(logs), "total_size", totalSize)
-	return logs, nil
+	diagnostics.Details["files_processed"] = len(diagnostics.PathsSearched)
+	diagnostics.Details["total_size_bytes"] = totalSize
+
+	return logs, totalSize, nil
+}
+
+// processLogDirectory processes all log files in a directory and returns count and size
+func (c *Collector) processLogDirectory(dirPath string, cutoffTime time.Time, maxSize int64, anonymizePII bool, logs *[]LogEntry, searchedPath *SearchedPath) (logFileCount int, totalSize int64, err error) {
+	files, err := os.ReadDir(dirPath)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	for _, file := range files {
+		if totalSize >= maxSize {
+			break
+		}
+
+		filename := file.Name()
+		if !strings.HasSuffix(strings.ToLower(filename), "log") {
+			continue
+		}
+
+		logFileCount++
+		fullPath := filepath.Join(dirPath, filename)
+		fileLogs, size := c.parseLogFile(fullPath, cutoffTime, maxSize-totalSize, anonymizePII)
+		*logs = append(*logs, fileLogs...)
+		totalSize += size
+	}
+
+	return logFileCount, totalSize, nil
+}
+
+// Legacy collectLogFiles method - keeping for compatibility but using new implementation
+func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64, anonymizePII bool) ([]LogEntry, error) {
+	// Use the new diagnostics-enabled method but discard the diagnostic info
+	diagnostics := &LogSourceDiagnostics{PathsSearched: []SearchedPath{}, Details: make(map[string]any)}
+	logs, _, err := c.collectLogFilesWithDiagnostics(duration, maxSize, anonymizePII, diagnostics)
+	return logs, err
 }
 
 // parseLogFile parses a log file and extracts entries

@@ -463,7 +463,8 @@ func TestCollector_collectJournalLogs(t *testing.T) {
 	// so we'll just verify the error type is returned
 	t.Run("journal not available", func(t *testing.T) {
 		ctx := context.Background()
-		logs, err := c.collectJournalLogs(ctx, 1*time.Hour, false)
+		diagnostics := &LogSourceDiagnostics{PathsSearched: []SearchedPath{}, Details: make(map[string]any)}
+		logs, err := c.collectJournalLogs(ctx, 1*time.Hour, false, diagnostics)
 
 		// If journalctl is not available or service doesn't exist, we should get our sentinel error
 		if err != nil {
