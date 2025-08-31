@@ -23,11 +23,25 @@ if [ -n "$GO_FILES" ]; then
     exit 1
   fi
   
+  # Check Go code formatting
+  echo "   Checking Go code formatting..."
+  UNFORMATTED=$(echo "$GO_FILES" | xargs gofmt -l)
+  
+  if [ -n "$UNFORMATTED" ]; then
+    echo "❌ The following Go files need formatting:"
+    echo "$UNFORMATTED" | sed 's/^/     /'
+    echo "💡 Run 'gofmt -w .' to format all files, then re-stage and commit"
+    echo "⚠️  Note: --no-verify bypasses are not accepted in this project"
+    exit 1
+  fi
+  echo "✅ All Go files are properly formatted"
+  
   # Run golangci-lint
   echo "   Linting Go files..."
   if ! golangci-lint run -v; then
     echo "❌ golangci-lint found issues in Go files"
-    echo "💡 Fix the issues above or run: git commit --no-verify to bypass"
+    echo "💡 Fix the issues above before committing"
+    echo "⚠️  Note: --no-verify bypasses are not accepted in this project"
     exit 1
   fi
   echo "✅ golangci-lint passed for all Go files"
@@ -52,7 +66,8 @@ if [ -n "$STAGED_FILES" ]; then
   echo "Checking types for staged files..."
   npm run typecheck || {
     echo "❌ TypeScript errors found in staged files."
-    echo "💡 Fix errors or run: git commit --no-verify to bypass"
+    echo "💡 Fix errors before committing"
+    echo "⚠️  Note: --no-verify bypasses are not accepted in this project"
     exit 1
   }
 else
