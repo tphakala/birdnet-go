@@ -18,8 +18,9 @@ cat << "EOF"
 EOF
 
 
+# Default version (will be set by parse_arguments function)
 BIRDNET_GO_VERSION="nightly"
-BIRDNET_GO_IMAGE="ghcr.io/tphakala/birdnet-go:${BIRDNET_GO_VERSION}"
+BIRDNET_GO_IMAGE=""
 
 # Logging configuration
 LOG_DIR="$HOME/birdnet-go-app/data/logs"
@@ -3339,11 +3340,11 @@ handle_container_update() {
     fi
     
     # Pull new image
-    log_message "INFO" "Pulling latest Docker image: $BIRDNET_GO_IMAGE"
-    print_message "📥 Pulling latest nightly image..." "$YELLOW"
+    log_message "INFO" "Pulling Docker image: $BIRDNET_GO_IMAGE"
+    print_message "📥 Pulling image: $BIRDNET_GO_VERSION..." "$YELLOW"
     if ! docker pull "${BIRDNET_GO_IMAGE}"; then
-        log_message "ERROR" "Failed to pull new Docker image during update"
-        print_message "❌ Failed to pull new image" "$RED"
+        log_message "ERROR" "Failed to pull Docker image during update: $BIRDNET_GO_IMAGE"
+        print_message "❌ Failed to pull image: $BIRDNET_GO_VERSION" "$RED"
         return 1
     fi
     log_message "INFO" "Docker image pull completed successfully"
@@ -3855,6 +3856,69 @@ get_container_version() {
     echo "$current_version"
 }
 
+# Function to show usage information
+show_usage() {
+    echo "Usage: $0 [OPTIONS]"
+    echo "Install or update BirdNET-Go with configurable Docker image version"
+    echo ""
+    echo "OPTIONS:"
+    echo "  -v, --version VERSION    Specify container image version (tag or hash)"
+    echo "                          Default: nightly"
+    echo "                          Examples: latest, v1.2.3, nightly, sha256:abc123..."
+    echo "  -h, --help              Show this help message"
+    echo ""
+    echo "EXAMPLES:"
+    echo "  $0                      # Install using nightly version (default)"
+    echo "  $0 -v latest           # Install using latest stable version"
+    echo "  $0 -v v1.2.3           # Install specific version tag"
+    echo "  $0 --version nightly   # Explicitly use nightly version"
+    echo ""
+}
+
+# Function to parse command line arguments
+parse_arguments() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -v|--version)
+                if [ -n "$2" ] && [[ $2 != -* ]]; then
+                    BIRDNET_GO_VERSION="$2"
+                    shift 2
+                else
+                    echo "❌ Error: --version requires a value" >&2
+                    echo ""
+                    show_usage
+                    exit 1
+                fi
+                ;;
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            -*)
+                echo "❌ Error: Unknown option $1" >&2
+                echo ""
+                show_usage
+                exit 1
+                ;;
+            *)
+                echo "❌ Error: Unexpected argument $1" >&2
+                echo ""
+                show_usage
+                exit 1
+                ;;
+        esac
+    done
+    
+    # Set the Docker image URL after parsing arguments
+    BIRDNET_GO_IMAGE="ghcr.io/tphakala/birdnet-go:${BIRDNET_GO_VERSION}"
+    
+    # Log the version being used
+    echo "🐳 Using BirdNET-Go version: $BIRDNET_GO_VERSION"
+}
+
+# Parse command line arguments first
+parse_arguments "$@"
+
 # Default paths
 CONFIG_DIR="$HOME/birdnet-go-app/config"
 DATA_DIR="$HOME/birdnet-go-app/data"
@@ -3898,7 +3962,11 @@ display_menu() {
     
     if [ "$installation_type" = "full" ]; then
         print_message "🔍 Found existing BirdNET-Go installation (systemd service)" "$YELLOW"
-        print_message "1) Check for updates" "$YELLOW"
+        if [ "$BIRDNET_GO_VERSION" != "nightly" ]; then
+            print_message "1) Install/update to version: $BIRDNET_GO_VERSION" "$YELLOW"
+        else
+            print_message "1) Check for updates" "$YELLOW"
+        fi
         if has_previous_versions; then
             print_message "2) Revert to previous version" "$YELLOW"
         else
@@ -3912,7 +3980,11 @@ display_menu() {
         return 6  # Return number of options
     elif [ "$installation_type" = "docker" ]; then
         print_message "🔍 Found existing BirdNET-Go Docker container/image" "$YELLOW"
-        print_message "1) Check for updates" "$YELLOW"
+        if [ "$BIRDNET_GO_VERSION" != "nightly" ]; then
+            print_message "1) Install/update to version: $BIRDNET_GO_VERSION" "$YELLOW"
+        else
+            print_message "1) Check for updates" "$YELLOW"
+        fi
         if has_previous_versions; then
             print_message "2) Revert to previous version" "$YELLOW"
         else
@@ -3926,7 +3998,11 @@ display_menu() {
         return 6  # Return number of options
     else
         print_message "🔍 Found BirdNET-Go data from previous installation" "$YELLOW"
-        print_message "1) Install using existing data and configuration" "$YELLOW"
+        if [ "$BIRDNET_GO_VERSION" != "nightly" ]; then
+            print_message "1) Install version $BIRDNET_GO_VERSION using existing data and configuration" "$YELLOW"
+        else
+            print_message "1) Install using existing data and configuration" "$YELLOW"
+        fi
         if has_previous_versions; then
             print_message "2) Revert to previous version" "$YELLOW"
         else
@@ -4100,7 +4176,7 @@ handle_docker_install_menu() {
             check_network
             
             log_message "INFO" "Starting Docker image pull: $BIRDNET_GO_IMAGE"
-            print_message "\n🔄 Updating BirdNET-Go Docker image..." "$YELLOW"
+            print_message "\n🔄 Installing BirdNET-Go Docker image: $BIRDNET_GO_VERSION..." "$YELLOW"
             
             if docker pull "${BIRDNET_GO_IMAGE}"; then
                 log_message "INFO" "Docker image pull completed successfully"
@@ -4346,6 +4422,28 @@ handle_menu_selection() {
     fi
 }
 
+# Check if specific version was requested - if so, skip menu and install directly
+if [ "$BIRDNET_GO_VERSION" != "nightly" ] && ([ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]); then
+    print_message "🚀 Installing/updating to version: $BIRDNET_GO_VERSION" "$GREEN"
+    
+    if [ "$INSTALLATION_TYPE" = "full" ]; then
+        check_network
+        if handle_container_update; then
+            exit 0
+        else
+            print_message "❌ Installation/update failed" "$RED"
+            exit 1
+        fi
+    elif [ "$INSTALLATION_TYPE" = "docker" ]; then
+        check_network
+        handle_docker_install_menu "1"
+        exit 0
+    elif [ "$PRESERVED_DATA" = true ]; then
+        handle_preserved_data_menu "1"
+        exit 0
+    fi
+fi
+
 # Menu loop for existing installations
 if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
     while true; do
@@ -4373,6 +4471,11 @@ if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
             # Continue loop to show menu again
         fi
     done
+fi
+
+# Show version being installed for fresh installations  
+if [ "$BIRDNET_GO_VERSION" != "nightly" ]; then
+    print_message "🚀 Installing BirdNET-Go version: $BIRDNET_GO_VERSION" "$GREEN"
 fi
 
 print_message "Note: Root privileges will be required for:" "$YELLOW"
