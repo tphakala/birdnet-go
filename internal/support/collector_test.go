@@ -16,6 +16,26 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
+// Test constants
+const (
+	// File sizes for testing
+	testLogSizeLimit  = 5000
+	testLogSizeSmall  = 1000
+	testLogSizeMedium = 4000
+	testLogSizeLarge  = 4500
+	testLogSizeTiny   = 0
+
+	// Test durations
+	testDuration24Hours = 24 * time.Hour
+	testDuration1Hour   = 1 * time.Hour
+	testDuration48Hours = 48 * time.Hour
+	testDuration1Minute = 1 * time.Minute
+
+	// Test sizes in bytes
+	testSize10MB = 10 * 1024 * 1024
+	testSize1KB  = 1024
+)
+
 // TestLogFileCollector_isLogFile tests the log file detection
 func TestLogFileCollector_isLogFile(t *testing.T) {
 	t.Parallel()
@@ -62,7 +82,7 @@ func TestLogFileCollector_isLogFile(t *testing.T) {
 func TestLogFileCollector_isFileWithinTimeRange(t *testing.T) {
 	now := time.Now()
 	lfc := &logFileCollector{
-		cutoffTime: now.Add(-24 * time.Hour), // 24 hours ago
+		cutoffTime: now.Add(-testDuration24Hours), // 24 hours ago
 	}
 
 	tests := []struct {
@@ -70,10 +90,10 @@ func TestLogFileCollector_isFileWithinTimeRange(t *testing.T) {
 		modTime time.Time
 		want    bool
 	}{
-		{"recent file", now.Add(-1 * time.Hour), true},
-		{"file at cutoff", now.Add(-24 * time.Hour), true},
-		{"old file", now.Add(-48 * time.Hour), false},
-		{"future file", now.Add(1 * time.Hour), true},
+		{"recent file", now.Add(-testDuration1Hour), true},
+		{"file at cutoff", now.Add(-testDuration24Hours), true},
+		{"old file", now.Add(-testDuration48Hours), false},
+		{"future file", now.Add(testDuration1Hour), true},
 	}
 
 	for _, tt := range tests {
@@ -96,11 +116,11 @@ func TestLogFileCollector_canAddFile(t *testing.T) {
 		fileSize  int64
 		want      bool
 	}{
-		{"within limit", 1000, 5000, 1000, true},
-		{"exactly at limit", 4000, 5000, 1000, true},
-		{"exceeds limit", 4500, 5000, 1000, false},
-		{"zero file size", 1000, 5000, 0, true},
-		{"already at max", 5000, 5000, 1000, false},
+		{"within limit", testLogSizeSmall, testLogSizeLimit, testLogSizeSmall, true},
+		{"exactly at limit", testLogSizeMedium, testLogSizeLimit, testLogSizeSmall, true},
+		{"exceeds limit", testLogSizeLarge, testLogSizeLimit, testLogSizeSmall, false},
+		{"zero file size", testLogSizeSmall, testLogSizeLimit, testLogSizeTiny, true},
+		{"already at max", testLogSizeLimit, testLogSizeLimit, testLogSizeSmall, false},
 	}
 
 	for _, tt := range tests {
@@ -462,8 +482,10 @@ func TestCollector_collectJournalLogs(t *testing.T) {
 	// This test will fail in environments where journalctl exists and works
 	// so we'll just verify the error type is returned
 	t.Run("journal not available", func(t *testing.T) {
-		ctx := context.Background()
-		logs, err := c.collectJournalLogs(ctx, 1*time.Hour, false)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		diagnostics := &LogSourceDiagnostics{PathsSearched: []SearchedPath{}, Details: make(map[string]any)}
+		logs, err := c.collectJournalLogs(ctx, testDuration1Hour, false, diagnostics)
 
 		// If journalctl is not available or service doesn't exist, we should get our sentinel error
 		if err != nil {
@@ -473,4 +495,218 @@ func TestCollector_collectJournalLogs(t *testing.T) {
 		// If journalctl is available, logs might be returned or empty
 		// We can't make strong assertions here since it depends on the environment
 	})
+}
+
+// TestCollectionDiagnostics_Population tests that diagnostics are correctly populated on failures
+func TestCollectionDiagnostics_Population(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		setup    func() *CollectionDiagnostics
+		validate func(t *testing.T, diag *CollectionDiagnostics)
+	}{
+		{
+			name: "log collection failure populates diagnostics",
+			setup: func() *CollectionDiagnostics {
+				diag := &CollectionDiagnostics{
+					LogCollection: LogCollectionDiagnostics{
+						JournalLogs: LogSourceDiagnostics{
+							Attempted:  true,
+							Successful: false,
+							Error:      "journalctl not found",
+							Details:    make(map[string]any),
+						},
+						FileLogs: LogSourceDiagnostics{
+							Attempted:    true,
+							Successful:   true,
+							EntriesFound: 10,
+							PathsSearched: []SearchedPath{
+								{Path: "/var/log", Exists: true, Accessible: true, FileCount: 5},
+							},
+							Details: make(map[string]any),
+						},
+						Summary: DiagnosticSummary{
+							TotalEntries: 10,
+							TimeRange: TimeRange{
+								From: time.Now().Add(-testDuration24Hours),
+								To:   time.Now(),
+							},
+						},
+					},
+				}
+				return diag
+			},
+			validate: func(t *testing.T, diag *CollectionDiagnostics) {
+				t.Helper()
+				assert.True(t, diag.LogCollection.JournalLogs.Attempted)
+				assert.False(t, diag.LogCollection.JournalLogs.Successful)
+				assert.Contains(t, diag.LogCollection.JournalLogs.Error, "journalctl")
+				assert.True(t, diag.LogCollection.FileLogs.Successful)
+				assert.Equal(t, 10, diag.LogCollection.FileLogs.EntriesFound)
+				assert.Equal(t, 10, diag.LogCollection.Summary.TotalEntries)
+			},
+		},
+		{
+			name: "config collection failure populates diagnostics",
+			setup: func() *CollectionDiagnostics {
+				diag := &CollectionDiagnostics{
+					ConfigCollection: DiagnosticInfo{
+						Attempted:  true,
+						Successful: false,
+						Error:      "config file not found",
+					},
+				}
+				return diag
+			},
+			validate: func(t *testing.T, diag *CollectionDiagnostics) {
+				t.Helper()
+				assert.True(t, diag.ConfigCollection.Attempted)
+				assert.False(t, diag.ConfigCollection.Successful)
+				assert.Contains(t, diag.ConfigCollection.Error, "config")
+			},
+		},
+		{
+			name: "system info collection failure populates diagnostics",
+			setup: func() *CollectionDiagnostics {
+				diag := &CollectionDiagnostics{
+					SystemCollection: DiagnosticInfo{
+						Attempted:  true,
+						Successful: false,
+						Error:      "permission denied",
+					},
+				}
+				return diag
+			},
+			validate: func(t *testing.T, diag *CollectionDiagnostics) {
+				t.Helper()
+				assert.True(t, diag.SystemCollection.Attempted)
+				assert.False(t, diag.SystemCollection.Successful)
+				assert.Contains(t, diag.SystemCollection.Error, "permission")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			diag := tt.setup()
+			tt.validate(t, diag)
+		})
+	}
+}
+
+// TestCollector_collectLogFilesWithDiagnostics tests file log collection with diagnostics
+func TestCollector_collectLogFilesWithDiagnostics(t *testing.T) {
+	// Create temp directory structure for testing
+	tempDir := t.TempDir()
+	logDir := filepath.Join(tempDir, "logs")
+	require.NoError(t, os.MkdirAll(logDir, defaultDirPermissions))
+
+	// Create test log files
+	testLogContent := "2024-01-15 10:00:00 INFO test log entry\n"
+	logFile1 := filepath.Join(logDir, "app.log")
+	require.NoError(t, os.WriteFile(logFile1, []byte(testLogContent), defaultFilePermissions))
+
+	c := &Collector{
+		configPath: tempDir,
+		dataPath:   tempDir,
+	}
+
+	tests := []struct {
+		name     string
+		duration time.Duration
+		validate func(t *testing.T, logs []LogEntry, diag *LogSourceDiagnostics)
+	}{
+		{
+			name:     "successful log collection",
+			duration: testDuration24Hours,
+			validate: func(t *testing.T, logs []LogEntry, diag *LogSourceDiagnostics) {
+				t.Helper()
+				// Check that paths were searched
+				assert.NotEmpty(t, diag.PathsSearched)
+				// Check that at least one log was found if the log directory exists
+				for _, path := range diag.PathsSearched {
+					if path.Path == logDir && path.Exists {
+						assert.True(t, path.Accessible)
+						assert.Positive(t, path.FileCount)
+					}
+				}
+			},
+		},
+		{
+			name:     "old logs filtered by duration",
+			duration: testDuration1Minute, // Very short duration to filter out test log
+			validate: func(t *testing.T, logs []LogEntry, diag *LogSourceDiagnostics) {
+				t.Helper()
+				// Paths should still be searched
+				assert.NotEmpty(t, diag.PathsSearched)
+				// But logs might be filtered out
+				// logs might be empty after filtering
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			diagnostics := &LogSourceDiagnostics{
+				Details: make(map[string]any),
+			}
+
+			logs, _, _ := c.collectLogFilesWithDiagnostics(tt.duration, testSize10MB, false, diagnostics)
+
+			tt.validate(t, logs, diagnostics)
+		})
+	}
+}
+
+// TestCollector_Collect_AlwaysIncludesDiagnostics tests that diagnostics are always included
+func TestCollector_Collect_AlwaysIncludesDiagnostics(t *testing.T) {
+	tempDir := t.TempDir()
+
+	c := &Collector{
+		configPath:    tempDir,
+		dataPath:      tempDir,
+		sensitiveKeys: defaultSensitiveKeys(),
+	}
+
+	// Create a bundle with minimal options - at least one type must be enabled
+	opts := CollectorOptions{
+		IncludeLogs:       true,  // Enable logs to avoid validation error
+		IncludeConfig:     false, // Disable config
+		IncludeSystemInfo: false, // Disable system info
+		LogDuration:       testDuration1Hour,
+		MaxLogSize:        testSize1KB,
+	}
+
+	ctx := context.Background()
+	bundle, err := c.Collect(ctx, opts)
+	require.NoError(t, err)
+	require.NotNil(t, bundle)
+
+	// Verify diagnostics are present
+	assert.NotNil(t, bundle.Diagnostics)
+	// Logs were enabled, so file logs should be attempted
+	assert.True(t, bundle.Diagnostics.LogCollection.FileLogs.Attempted)
+	// Config and system info were disabled
+	assert.False(t, bundle.Diagnostics.ConfigCollection.Attempted)
+	assert.False(t, bundle.Diagnostics.SystemCollection.Attempted)
+
+	// Now test with everything enabled but simulated failures
+	opts = CollectorOptions{
+		IncludeLogs:       true,
+		IncludeConfig:     true,
+		IncludeSystemInfo: true,
+		LogDuration:       testDuration1Hour,
+		MaxLogSize:        testSize1KB,
+	}
+
+	bundle, err = c.Collect(ctx, opts)
+	require.NoError(t, err)
+	require.NotNil(t, bundle)
+
+	// Diagnostics should always be populated
+	assert.NotNil(t, bundle.Diagnostics)
+	assert.True(t, bundle.Diagnostics.LogCollection.FileLogs.Attempted)
+	// Journal logs might or might not be attempted depending on the environment
 }

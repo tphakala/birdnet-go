@@ -9,14 +9,15 @@ import (
 // and system information used for troubleshooting and debugging BirdNET-Go issues.
 // The data is privacy-scrubbed before collection to remove sensitive information.
 type SupportDump struct {
-	ID          string           `json:"id"`
-	Timestamp   time.Time        `json:"timestamp"`
-	SystemID    string           `json:"system_id"`
-	Version     string           `json:"version"`
-	Logs        []LogEntry       `json:"logs"`
-	Config      map[string]any   `json:"config"`
-	SystemInfo  SystemInfo       `json:"system_info"`
-	Attachments []AttachmentInfo `json:"attachments"`
+	ID          string                `json:"id"`
+	Timestamp   time.Time             `json:"timestamp"`
+	SystemID    string                `json:"system_id"`
+	Version     string                `json:"version"`
+	Logs        []LogEntry            `json:"logs"`
+	Config      map[string]any        `json:"config"`
+	SystemInfo  SystemInfo            `json:"system_info"`
+	Attachments []AttachmentInfo      `json:"attachments"`
+	Diagnostics CollectionDiagnostics `json:"diagnostics"` // Diagnostic information about collection process
 }
 
 // LogEntry represents a single log entry from application logs or system journals.
@@ -81,6 +82,66 @@ type CollectorOptions struct {
 	AnonymizePII      bool          `json:"anonymize_pii"`
 }
 
+// CollectionDiagnostics contains diagnostic information about the support data collection process.
+// This helps troubleshoot why certain data might be missing from support dumps.
+type CollectionDiagnostics struct {
+	LogCollection    LogCollectionDiagnostics `json:"log_collection"`    // Diagnostics for log collection
+	ConfigCollection DiagnosticInfo           `json:"config_collection"` // Diagnostics for config collection
+	SystemCollection DiagnosticInfo           `json:"system_collection"` // Diagnostics for system info collection
+}
+
+// LogCollectionDiagnostics contains detailed information about log collection attempts
+type LogCollectionDiagnostics struct {
+	JournalLogs LogSourceDiagnostics `json:"journal_logs"` // Journal/systemd log collection results
+	FileLogs    LogSourceDiagnostics `json:"file_logs"`    // File-based log collection results
+	Summary     DiagnosticSummary    `json:"summary"`      // Overall log collection summary
+}
+
+// LogSourceDiagnostics contains diagnostics for a specific log source (journal or files).
+// Thread-safety note: The Details map is currently only accessed from single-threaded
+// contexts within the collection methods. If concurrent access is needed in the future,
+// synchronization (e.g., sync.RWMutex) should be added.
+type LogSourceDiagnostics struct {
+	Attempted     bool           `json:"attempted"`         // Whether collection was attempted
+	Successful    bool           `json:"successful"`        // Whether collection succeeded
+	Error         string         `json:"error,omitempty"`   // Error message if failed
+	EntriesFound  int            `json:"entries_found"`     // Number of log entries found
+	PathsSearched []SearchedPath `json:"paths_searched"`    // Paths that were searched (for file logs)
+	Command       string         `json:"command,omitempty"` // Command executed (for journal logs)
+	Details       map[string]any `json:"details,omitempty"` // Additional diagnostic details (not thread-safe)
+}
+
+// SearchedPath represents a path that was searched during log collection
+type SearchedPath struct {
+	Path       string `json:"path"`            // The path that was searched
+	Exists     bool   `json:"exists"`          // Whether the path exists
+	Accessible bool   `json:"accessible"`      // Whether the path was readable
+	FileCount  int    `json:"file_count"`      // Number of log files found
+	Error      string `json:"error,omitempty"` // Error encountered if any
+}
+
+// DiagnosticInfo contains basic diagnostic information for a collection operation
+type DiagnosticInfo struct {
+	Attempted  bool   `json:"attempted"`       // Whether collection was attempted
+	Successful bool   `json:"successful"`      // Whether collection succeeded
+	Error      string `json:"error,omitempty"` // Error message if failed
+}
+
+// DiagnosticSummary provides an overall summary of the collection process
+type DiagnosticSummary struct {
+	TotalEntries    int       `json:"total_entries"`     // Total log entries collected across all sources
+	TimeRange       TimeRange `json:"time_range"`        // Time range of collected logs
+	SizeBytes       int64     `json:"size_bytes"`        // Approximate size of collected logs
+	TruncatedBySize bool      `json:"truncated_by_size"` // Whether collection was truncated due to size limits
+	TruncatedByTime bool      `json:"truncated_by_time"` // Whether logs were filtered by time range
+}
+
+// TimeRange represents a time range for log collection
+type TimeRange struct {
+	From time.Time `json:"from"` // Start time for log collection
+	To   time.Time `json:"to"`   // End time for log collection
+}
+
 // DefaultCollectorOptions returns default collector options with sensible defaults:
 // includes all data types, 4-week log window, 50MB max log size, sensitive data scrubbing and PII anonymization enabled.
 func DefaultCollectorOptions() CollectorOptions {
@@ -88,8 +149,8 @@ func DefaultCollectorOptions() CollectorOptions {
 		IncludeLogs:       true,
 		IncludeConfig:     true,
 		IncludeSystemInfo: true,
-		LogDuration:       4 * 7 * 24 * time.Hour, // 4 weeks
-		MaxLogSize:        50 * 1024 * 1024,       // 50MB to accommodate more logs
+		LogDuration:       defaultLogDurationWeeks * 7 * 24 * time.Hour, // 4 weeks
+		MaxLogSize:        defaultMaxLogSizeMB * bytesPerMB,             // 50MB to accommodate more logs
 		ScrubSensitive:    true,
 		AnonymizePII:      true,
 	}
