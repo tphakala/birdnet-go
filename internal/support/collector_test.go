@@ -482,7 +482,8 @@ func TestCollector_collectJournalLogs(t *testing.T) {
 	// This test will fail in environments where journalctl exists and works
 	// so we'll just verify the error type is returned
 	t.Run("journal not available", func(t *testing.T) {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		diagnostics := &LogSourceDiagnostics{PathsSearched: []SearchedPath{}, Details: make(map[string]any)}
 		logs, err := c.collectJournalLogs(ctx, testDuration1Hour, false, diagnostics)
 

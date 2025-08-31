@@ -50,7 +50,6 @@ const (
 
 	// Memory and disk thresholds
 	bytesPerMB                = 1024 * 1024
-	bytesPerKB                = 1024
 	minDiskSizeMB             = 100 // Skip disks smaller than 100MB
 	microsecondsToNanoseconds = 1000
 
@@ -72,7 +71,7 @@ const (
 	// Archive file names
 	diagnosticsFileName = "collection_diagnostics.json"
 	metadataFileName    = "metadata.json"
-	configFileName      = "config.json"
+	configYAMLFileName  = "config.yaml"
 	systemInfoFileName  = "system_info.json"
 	logReadmeFileName   = "logs/README.txt"
 
@@ -311,7 +310,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 
 	// Add metadata (keep this as JSON for easy parsing)
 	serviceLogger.Debug("support: adding metadata to archive", "dump_id", dump.ID)
-	metadataFile, err := w.Create("metadata.json")
+	metadataFile, err := w.Create(metadataFileName)
 	if err != nil {
 		serviceLogger.Error("support: failed to create metadata file in archive", "error", err)
 		return nil, errors.New(err).
@@ -384,7 +383,7 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 	// Add system info
 	if opts.IncludeSystemInfo {
 		serviceLogger.Debug("support: adding system info to archive")
-		sysInfoFile, err := w.Create("system_info.json")
+		sysInfoFile, err := w.Create(systemInfoFileName)
 		if err != nil {
 			serviceLogger.Error("support: failed to create system info file in archive", "error", err)
 			return nil, errors.New(err).
@@ -661,7 +660,19 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 	diagnostics.Summary.TotalEntries = len(logs)
 	diagnostics.Summary.SizeBytes = totalSize
 	diagnostics.Summary.TruncatedBySize = totalSize >= maxSize
-	diagnostics.Summary.TruncatedByTime = duration > 0 // Always filtered by time if duration is specified
+
+	// Set TruncatedByTime only when entries were actually filtered out by time window
+	var truncatedByTime bool
+	if duration > 0 && len(logs) > 0 {
+		cutoff := time.Now().Add(-duration)
+		// If the earliest log is very close to the cutoff time (within 1 minute),
+		// it's likely that older entries were filtered out
+		earliestLog := logs[0].Timestamp
+		if earliestLog.Sub(cutoff).Abs() <= time.Minute {
+			truncatedByTime = true
+		}
+	}
+	diagnostics.Summary.TruncatedByTime = truncatedByTime
 
 	// Set the actual time range of collected logs
 	if len(logs) > 0 {
