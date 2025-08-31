@@ -16,13 +16,6 @@ This directory contains Podman-specific configuration files for running BirdNET-
   - Requires ports 80 and 443 for ACME challenges
   - Requires a valid domain name
 
-### CI/Testing Files
-
-- **`podman-compose.ci.yml`** - CI-specific configuration for GitHub Actions
-  - **DO NOT USE IN PRODUCTION**
-  - Removes audio device requirements for CI environments
-  - Sets `BIRDNET_REALTIME_AUDIO_ENABLED=false`
-  - Used only for testing container functionality and web interface
 
 ## Quadlet Integration
 
@@ -62,14 +55,13 @@ The script will:
 4. Set up Quadlet systemd integration
 5. Configure and start BirdNET-Go
 
-## CI/Testing
+## Compatibility
 
-For CI environments without audio hardware:
+BirdNET-Go container images are built following the OCI (Open Container Initiative) standard, making them compatible with both Docker and Podman runtimes. The same image works with both tools - the `podman-*` prefixed tags are provided for easier discovery by Podman users.
 
-```bash
-cd Podman/
-podman-compose -f podman-compose.ci.yml up -d
-```
+### System Requirements
 
-This configuration is specifically designed to work in GitHub Actions and other CI environments where `/dev/snd` is not available.
+- **Podman 5.4+** for full feature support (including Quadlet)
+- **Debian 13+**, **Ubuntu 25.04+**, or compatible distributions
+- Audio device access for real-time bird detection (optional for file processing)
 
