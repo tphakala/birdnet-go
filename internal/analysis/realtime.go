@@ -1269,12 +1269,14 @@ func initializeBuffers(sources []string) error {
 	var initErrors []string
 
 	// Initialize analysis buffers
-	if err := myaudio.InitAnalysisBuffers(conf.BufferSize*3, sources); err != nil { // 3x buffer size to avoid underruns
+	const analysisBufferSize = conf.BufferSize * 6 // 6x buffer size to avoid underruns
+	if err := myaudio.InitAnalysisBuffers(analysisBufferSize, sources); err != nil {
 		initErrors = append(initErrors, fmt.Sprintf("failed to initialize analysis buffers: %v", err))
 	}
 
 	// Initialize capture buffers
-	if err := myaudio.InitCaptureBuffers(60, conf.SampleRate, conf.BitDepth/8, sources); err != nil {
+	const captureBufferSize = 60 // Capture buffer size of 60 seconds
+	if err := myaudio.InitCaptureBuffers(captureBufferSize, conf.SampleRate, conf.BitDepth/8, sources); err != nil {
 		initErrors = append(initErrors, fmt.Sprintf("failed to initialize capture buffers: %v", err))
 	}
 
@@ -1538,14 +1540,14 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 			if registry == nil {
 				return nil, fmt.Errorf("audio source registry not available")
 			}
-			
+
 			var failedSources []string
 			for _, url := range settings.Realtime.RTSP.URLs {
 				if url == "" {
 					log.Printf("⚠️ Skipping empty RTSP URL")
 					continue
 				}
-				
+
 				// Register the source
 				source, err := registry.RegisterSource(url, myaudio.SourceConfig{
 					ID:          "", // Let registry generate UUID
@@ -1558,7 +1560,7 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 					failedSources = append(failedSources, safeURL)
 					continue
 				}
-				
+
 				sources = append(sources, source.ID)
 			}
 
