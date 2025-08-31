@@ -1,0 +1,24 @@
+[Unit]
+Description=BirdNET-Go Container
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=ghcr.io/tphakala/birdnet-go:nightly
+ContainerName=birdnet-go
+Volume=./config:/config
+Volume=./data:/data
+PublishPort=8080:8080
+Environment=TZ=UTC
+Environment=BIRDNET_UID=1000
+Environment=BIRDNET_GID=1000
+Device=/dev/snd:/dev/snd
+Network=bridge
+Tmpfs=/config/hls:exec,size=50M,uid=1000,gid=1000,mode=0755
+
+[Service]
+Restart=always
+TimeoutStartSec=900
+
+[Install]
+WantedBy=default.target
