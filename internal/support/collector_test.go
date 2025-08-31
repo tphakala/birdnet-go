@@ -270,13 +270,13 @@ func TestCollector_scrubConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "scrub array values",
+			name: "sanitize RTSP URLs with credentials",
 			config: map[string]any{
-				"urls": []any{"http://example.com", "http://secret.com"},
+				"urls": []any{"rtsp://user:pass@192.168.1.100:554/stream", "http://example.com"},
 				"data": []any{"safe1", "safe2"},
 			},
 			want: map[string]any{
-				"urls": "[REDACTED]",
+				"urls": []any{"rtsp://192.168.1.100:554/stream", "http://example.com"},
 				"data": []any{"safe1", "safe2"},
 			},
 		},
@@ -394,30 +394,6 @@ func TestAnonymizeIPAddress(t *testing.T) {
 	}
 }
 
-// TestAnonymizeURL tests URL anonymization
-func TestAnonymizeURL(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{"http url", "http://example.com/path", "url-"},
-		{"https url", "https://192.168.1.1:8080/api/v1", "url-"},
-		{"rtsp url", "rtsp://user:pass@camera.local:554/stream", "url-"},
-		{"invalid url", "not-a-url", "url-"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			result := privacy.AnonymizeURL(tt.input)
-			assert.True(t, strings.HasPrefix(result, tt.expected), "Expected %s prefix for %s, got %s", tt.expected, tt.input, result)
-		})
-	}
-}
-
 // TestScrubLogMessage tests comprehensive log message scrubbing
 func TestScrubLogMessage(t *testing.T) {
 	t.Parallel()
@@ -488,7 +464,7 @@ func TestCollector_collectJournalLogs(t *testing.T) {
 	t.Run("journal not available", func(t *testing.T) {
 		ctx := context.Background()
 		logs, err := c.collectJournalLogs(ctx, 1*time.Hour, false)
-		
+
 		// If journalctl is not available or service doesn't exist, we should get our sentinel error
 		if err != nil {
 			require.ErrorIs(t, err, ErrJournalNotAvailable, "Expected ErrJournalNotAvailable when journal is not available")

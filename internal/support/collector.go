@@ -73,11 +73,10 @@ func defaultSensitiveKeys() []string {
 	return []string{
 		"password", "token", "secret", "key", "api_key", "api_token",
 		"client_id", "client_secret", "webhook_url", "mqtt_password",
-		"id", "apikey", "username", "broker", "topic", "urls",
+		"apikey", "username", "broker", "topic",
 		"mqtt_username", "mqtt_topic", "birdweather_id",
 	}
 }
-
 
 // NewCollector creates a new support data collector
 func NewCollector(configPath, dataPath, systemID, version string) *Collector {
@@ -438,7 +437,7 @@ func (c *Collector) scrubConfig(config map[string]any) map[string]any {
 
 // scrubValue recursively scrubs sensitive values
 func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) any {
-	// Check if key is sensitive
+	// Check if key is sensitive - if so, completely redact it
 	lowerKey := strings.ToLower(key)
 	for _, sensitive := range sensitiveKeys {
 		if strings.Contains(lowerKey, sensitive) {
@@ -460,6 +459,10 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 			scrubbed[i] = c.scrubValue(key, item, sensitiveKeys)
 		}
 		return scrubbed
+	case string:
+		// Sanitize any RTSP URLs found in string values to remove credentials
+		// This preserves URL structure while removing sensitive authentication info
+		return privacy.SanitizeRTSPUrls(v)
 	default:
 		return value
 	}
@@ -467,11 +470,11 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 
 // collectLogs collects recent log entries
 func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, maxSize int64, anonymizePII bool) ([]LogEntry, error) {
-	serviceLogger.Debug("support: collectLogs started", 
-		"duration", duration, 
+	serviceLogger.Debug("support: collectLogs started",
+		"duration", duration,
 		"maxSize", maxSize,
 		"anonymizePII", anonymizePII)
-	
+
 	var logs []LogEntry
 
 	// Try to collect from journald first (systemd systems)
@@ -513,7 +516,7 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 
 	// Limit to 5000 most recent lines to prevent timeout
 	const maxJournalLines = 5000
-	serviceLogger.Debug("support: running journalctl", 
+	serviceLogger.Debug("support: running journalctl",
 		"since", since,
 		"maxLines", maxJournalLines)
 
@@ -539,12 +542,12 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 	// Parse JSON output line by line
 	lines := strings.Split(string(output), "\n")
 	serviceLogger.Debug("support: parsing journal entries", "lineCount", len(lines))
-	
+
 	// Pre-allocate logs slice based on number of lines
 	logs := make([]LogEntry, 0, len(lines))
 	parsedCount := 0
 	skippedCount := 0
-	
+
 	for i, line := range lines {
 		if line == "" {
 			continue
@@ -552,8 +555,8 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 
 		// Log progress every 1000 lines
 		if i > 0 && i%1000 == 0 {
-			serviceLogger.Debug("support: journal parsing progress", 
-				"processed", i, 
+			serviceLogger.Debug("support: journal parsing progress",
+				"processed", i,
 				"total", len(lines),
 				"parsed", parsedCount,
 				"skipped", skippedCount)
@@ -606,7 +609,7 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 		parsedCount++
 	}
 
-	serviceLogger.Debug("support: journal parsing completed", 
+	serviceLogger.Debug("support: journal parsing completed",
 		"totalLines", len(lines),
 		"parsedEntries", parsedCount,
 		"skippedEntries", skippedCount,
@@ -1258,10 +1261,10 @@ func (c *Collector) addLogFileToArchive(w *zip.Writer, sourcePath, archivePath s
 // getJournaldLogs retrieves logs from journald as a string
 func (c *Collector) getJournaldLogs(ctx context.Context, duration time.Duration) string {
 	since := time.Now().Add(-duration).Format("2006-01-02 15:04:05")
-	
+
 	// Use same line limit as collectJournalLogs
 	const maxJournalLines = 5000
-	
+
 	cmd := exec.CommandContext(ctx, "journalctl",
 		"-u", "birdnet-go.service",
 		"--since", since,
