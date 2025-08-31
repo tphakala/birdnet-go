@@ -1,0 +1,44 @@
+# CI/Testing Configuration for Podman Compose
+# This file is used for GitHub Actions and other CI environments where audio hardware is not available.
+# It removes the /dev/snd device requirement that would cause tests to fail in containerized CI runners.
+#
+# DO NOT USE THIS FILE IN PRODUCTION - use podman-compose.yml or podman-compose.autotls.yml instead
+#
+# Key differences from production compose files:
+# - No audio device mounting (/dev/snd)
+# - Sets BIRDNET_REALTIME_AUDIO_ENABLED=false to disable audio processing
+# - Intended only for testing web interface and container functionality
+
+version: "3.8"
+
+services:
+  birdnet-go:
+    image: ghcr.io/tphakala/birdnet-go:nightly
+    container_name: birdnet-go
+    restart: unless-stopped
+    network_mode: bridge
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    environment:
+      - TZ=${TZ:-UTC}
+      - BIRDNET_UID=${BIRDNET_UID:-1000}
+      - BIRDNET_GID=${BIRDNET_GID:-1000}
+      # CI-specific: Disable audio processing since no hardware available
+      - BIRDNET_REALTIME_AUDIO_ENABLED=false
+    volumes:
+      - ./config:/config
+      - ./data:/data
+    # Mount HLS stream segment files directory as tmpfs (RAM disk)
+    tmpfs:
+      - /config/hls:exec,size=50M,uid=${BIRDNET_UID:-1000},gid=${BIRDNET_GID:-1000},mode=0755
+    # NOTE: Audio device removed for CI environment
+    # In production, use podman-compose.yml which includes:
+    # devices:
+    #   - /dev/snd:/dev/snd
+
+volumes:
+  config:
+    driver: local
+  data:
+    driver: local
+
