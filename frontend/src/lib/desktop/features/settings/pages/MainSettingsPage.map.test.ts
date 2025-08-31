@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import type { SettingsFormData } from '$lib/stores/settings';
+import { settingsActions, settingsStore } from '$lib/stores/settings';
 import { render, screen } from '@testing-library/svelte';
 import { get } from 'svelte/store';
-import { settingsStore, settingsActions } from '$lib/stores/settings';
-import type { SettingsFormData } from '$lib/stores/settings';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MainSettingsPage from './MainSettingsPage.svelte';
 
 // Mock MapLibre GL JS

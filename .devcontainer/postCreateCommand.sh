@@ -6,6 +6,9 @@ echo "Setting up BirdNET-Go development environment..."
 # Update package list
 sudo apt-get update -q
 
+# Install podman
+sudo apt-get install -y podman
+
 # Install required runtime dependencies
 sudo apt-get install -y ca-certificates libasound2 ffmpeg sox alsa-utils
 
@@ -144,7 +147,7 @@ echo "Linting:"
 echo "  - golangci-lint run        (comprehensive Go linting)"
 echo "  - task frontend-lint       (frontend ESLint + Prettier + Stylelint)"
 echo "  - npm run ast:security     (AST-grep security scanning)"
-echo ""  
+echo ""
 echo "Build commands:"
 echo "  - task                     (default build - compiles Go with embedded frontend)"
 echo "  - task linux_amd64         (cross-platform Linux AMD64 build)"

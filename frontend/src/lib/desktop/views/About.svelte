@@ -1,9 +1,9 @@
 <!--
   About Page Component
-  
+
   Purpose: Displays information about BirdNET-Go including overview, key features,
   credits, technology stack, license, and version information.
-  
+
   Features:
   - Product overview and description
   - Key features list with icons
@@ -11,19 +11,19 @@
   - Technology stack display
   - License information
   - Version and build date display (when available)
-  
+
   Props: None - This is a standalone page component
-  
+
   Usage:
   This component is rendered as a page view in the main application router.
   It provides static content with internationalization support via the t() function.
-  
+
   @component
 -->
 <script lang="ts">
   import Card from '$lib/desktop/components/ui/Card.svelte';
-  import { systemIcons, alertIconsSvg, dataIcons } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
+  import { alertIconsSvg, dataIcons, systemIcons } from '$lib/utils/icons';
 
   // TypeScript interface for version settings
   interface VersionSettings {
@@ -50,7 +50,7 @@
         class="w-36 h-36 rounded-full bg-gradient-to-b from-base-200 to-base-100 flex items-center justify-center p-1 ring-1 ring-base-content/10"
       >
         <img
-          src="/assets/images/BirdNET-Go-logo.webp"
+          src="/assets/images/mark.png"
           alt={t('about.logoAlt')}
           class="w-full h-full object-contain rounded-full"
           style:transform="scale(1)"

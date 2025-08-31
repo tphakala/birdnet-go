@@ -1,17 +1,17 @@
 <script lang="ts">
-  import ReconnectingEventSource from 'reconnecting-eventsource';
-  import { cn } from '$lib/utils/cn';
-  import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
+  import { api, ApiError } from '$lib/utils/api';
+  import { cn } from '$lib/utils/cn';
   import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
   import { loggers } from '$lib/utils/logger';
   import {
     type Notification,
-    mergeAndDeduplicateNotifications,
-    isValidNotification,
     isExistingNotification,
+    isValidNotification,
+    mergeAndDeduplicateNotifications,
     shouldShowNotification,
   } from '$lib/utils/notifications';
+  import ReconnectingEventSource from 'reconnecting-eventsource';
 
   const logger = loggers.ui;
 
@@ -377,7 +377,7 @@
     if ('Notification' in globalThis.window && globalThis.Notification.permission === 'granted') {
       new globalThis.Notification(notification.title, {
         body: notification.message,
-        icon: '/assets/images/favicon-32x32.png',
+        icon: '/assets/images/mark-32x32.png',
         tag: notification.id,
       });
     }
