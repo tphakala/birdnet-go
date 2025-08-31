@@ -140,6 +140,25 @@ func SanitizeRTSPUrl(source string) string {
 	return parsedURL.String()
 }
 
+// SanitizeURL removes sensitive information from any URL and returns a display-friendly version
+// It strips credentials while preserving the host, port, and path for debugging
+func SanitizeURL(source string) string {
+	// Parse the URL using standard library
+	parsedURL, err := url.Parse(source)
+	if err != nil {
+		// If parsing fails, return original to avoid data loss
+		return source
+	}
+
+	// Remove user credentials from any URL scheme
+	parsedURL.User = nil
+	
+	// Keep path, query, and fragment for debugging purposes
+	
+	// Return sanitized URL
+	return parsedURL.String()
+}
+
 // SanitizeRTSPUrls finds and sanitizes all RTSP URLs in a given text
 // It uses regex pattern matching to identify RTSP URLs and replaces them with sanitized versions
 func SanitizeRTSPUrls(text string) string {

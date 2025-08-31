@@ -428,15 +428,29 @@ func (c *Collector) collectConfig(scrub bool) (map[string]any, error) {
 
 // scrubConfig removes sensitive information from configuration
 func (c *Collector) scrubConfig(config map[string]any) map[string]any {
-	scrubbed := make(map[string]any)
+	// Use the new intelligent config sanitizer
+	sanitizer := privacy.NewConfigSanitizer()
+	
+	// Convert map[string]any to map[string]interface{} for the sanitizer
+	configInterface := make(map[string]interface{})
 	for k, v := range config {
-		scrubbed[k] = c.scrubValue(k, v, c.sensitiveKeys)
+		configInterface[k] = v
 	}
-
-	return scrubbed
+	
+	// Sanitize the configuration
+	sanitized := sanitizer.SanitizeConfig(configInterface)
+	
+	// Convert back to map[string]any
+	result := make(map[string]any)
+	for k, v := range sanitized {
+		result[k] = v
+	}
+	
+	return result
 }
 
-// scrubValue recursively scrubs sensitive values
+// scrubValue recursively scrubs sensitive values (kept for backward compatibility)
+// Deprecated: Use ConfigSanitizer instead
 func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) any {
 	// Check if key is sensitive
 	lowerKey := strings.ToLower(key)
