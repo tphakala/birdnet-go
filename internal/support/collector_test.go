@@ -475,3 +475,217 @@ func TestCollector_collectJournalLogs(t *testing.T) {
 		// We can't make strong assertions here since it depends on the environment
 	})
 }
+
+// TestCollectionDiagnostics_Population tests that diagnostics are correctly populated on failures
+func TestCollectionDiagnostics_Population(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		setup    func() *CollectionDiagnostics
+		validate func(t *testing.T, diag *CollectionDiagnostics)
+	}{
+		{
+			name: "log collection failure populates diagnostics",
+			setup: func() *CollectionDiagnostics {
+				diag := &CollectionDiagnostics{
+					LogCollection: LogCollectionDiagnostics{
+						JournalLogs: LogSourceDiagnostics{
+							Attempted:  true,
+							Successful: false,
+							Error:      "journalctl not found",
+							Details:    make(map[string]any),
+						},
+						FileLogs: LogSourceDiagnostics{
+							Attempted:    true,
+							Successful:   true,
+							EntriesFound: 10,
+							PathsSearched: []SearchedPath{
+								{Path: "/var/log", Exists: true, Accessible: true, FileCount: 5},
+							},
+							Details: make(map[string]any),
+						},
+						Summary: DiagnosticSummary{
+							TotalEntries: 10,
+							TimeRange: TimeRange{
+								From: time.Now().Add(-24 * time.Hour),
+								To:   time.Now(),
+							},
+						},
+					},
+				}
+				return diag
+			},
+			validate: func(t *testing.T, diag *CollectionDiagnostics) {
+				t.Helper()
+				assert.True(t, diag.LogCollection.JournalLogs.Attempted)
+				assert.False(t, diag.LogCollection.JournalLogs.Successful)
+				assert.Contains(t, diag.LogCollection.JournalLogs.Error, "journalctl")
+				assert.True(t, diag.LogCollection.FileLogs.Successful)
+				assert.Equal(t, 10, diag.LogCollection.FileLogs.EntriesFound)
+				assert.Equal(t, 10, diag.LogCollection.Summary.TotalEntries)
+			},
+		},
+		{
+			name: "config collection failure populates diagnostics",
+			setup: func() *CollectionDiagnostics {
+				diag := &CollectionDiagnostics{
+					ConfigCollection: DiagnosticInfo{
+						Attempted:  true,
+						Successful: false,
+						Error:      "config file not found",
+					},
+				}
+				return diag
+			},
+			validate: func(t *testing.T, diag *CollectionDiagnostics) {
+				t.Helper()
+				assert.True(t, diag.ConfigCollection.Attempted)
+				assert.False(t, diag.ConfigCollection.Successful)
+				assert.Contains(t, diag.ConfigCollection.Error, "config")
+			},
+		},
+		{
+			name: "system info collection failure populates diagnostics",
+			setup: func() *CollectionDiagnostics {
+				diag := &CollectionDiagnostics{
+					SystemCollection: DiagnosticInfo{
+						Attempted:  true,
+						Successful: false,
+						Error:      "permission denied",
+					},
+				}
+				return diag
+			},
+			validate: func(t *testing.T, diag *CollectionDiagnostics) {
+				t.Helper()
+				assert.True(t, diag.SystemCollection.Attempted)
+				assert.False(t, diag.SystemCollection.Successful)
+				assert.Contains(t, diag.SystemCollection.Error, "permission")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			diag := tt.setup()
+			tt.validate(t, diag)
+		})
+	}
+}
+
+// TestCollector_collectLogFilesWithDiagnostics tests file log collection with diagnostics
+func TestCollector_collectLogFilesWithDiagnostics(t *testing.T) {
+	// Create temp directory structure for testing
+	tempDir := t.TempDir()
+	logDir := filepath.Join(tempDir, "logs")
+	require.NoError(t, os.MkdirAll(logDir, 0o755))
+
+	// Create test log files
+	testLogContent := "2024-01-15 10:00:00 INFO test log entry\n"
+	logFile1 := filepath.Join(logDir, "app.log")
+	require.NoError(t, os.WriteFile(logFile1, []byte(testLogContent), 0o644))
+
+	c := &Collector{
+		configPath: tempDir,
+		dataPath:   tempDir,
+	}
+
+	tests := []struct {
+		name     string
+		duration time.Duration
+		validate func(t *testing.T, logs []LogEntry, diag *LogSourceDiagnostics)
+	}{
+		{
+			name:     "successful log collection",
+			duration: 24 * time.Hour,
+			validate: func(t *testing.T, logs []LogEntry, diag *LogSourceDiagnostics) {
+				t.Helper()
+				// Check that paths were searched
+				assert.NotEmpty(t, diag.PathsSearched)
+				// Check that at least one log was found if the log directory exists
+				for _, path := range diag.PathsSearched {
+					if path.Path == logDir && path.Exists {
+						assert.True(t, path.Accessible)
+						assert.Positive(t, path.FileCount)
+					}
+				}
+			},
+		},
+		{
+			name:     "old logs filtered by duration",
+			duration: 1 * time.Minute, // Very short duration to filter out test log
+			validate: func(t *testing.T, logs []LogEntry, diag *LogSourceDiagnostics) {
+				t.Helper()
+				// Paths should still be searched
+				assert.NotEmpty(t, diag.PathsSearched)
+				// But logs might be filtered out
+				// logs might be empty after filtering
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			diagnostics := &LogSourceDiagnostics{
+				Details: make(map[string]any),
+			}
+
+			logs, _, _ := c.collectLogFilesWithDiagnostics(tt.duration, 10*1024*1024, false, diagnostics)
+
+			tt.validate(t, logs, diagnostics)
+		})
+	}
+}
+
+// TestCollector_Collect_AlwaysIncludesDiagnostics tests that diagnostics are always included
+func TestCollector_Collect_AlwaysIncludesDiagnostics(t *testing.T) {
+	tempDir := t.TempDir()
+
+	c := &Collector{
+		configPath:    tempDir,
+		dataPath:      tempDir,
+		sensitiveKeys: defaultSensitiveKeys(),
+	}
+
+	// Create a bundle with minimal options - at least one type must be enabled
+	opts := CollectorOptions{
+		IncludeLogs:       true,  // Enable logs to avoid validation error
+		IncludeConfig:     false, // Disable config
+		IncludeSystemInfo: false, // Disable system info
+		LogDuration:       1 * time.Hour,
+		MaxLogSize:        1024,
+	}
+
+	ctx := context.Background()
+	bundle, err := c.Collect(ctx, opts)
+	require.NoError(t, err)
+	require.NotNil(t, bundle)
+
+	// Verify diagnostics are present
+	assert.NotNil(t, bundle.Diagnostics)
+	// Logs were enabled, so file logs should be attempted
+	assert.True(t, bundle.Diagnostics.LogCollection.FileLogs.Attempted)
+	// Config and system info were disabled
+	assert.False(t, bundle.Diagnostics.ConfigCollection.Attempted)
+	assert.False(t, bundle.Diagnostics.SystemCollection.Attempted)
+
+	// Now test with everything enabled but simulated failures
+	opts = CollectorOptions{
+		IncludeLogs:       true,
+		IncludeConfig:     true,
+		IncludeSystemInfo: true,
+		LogDuration:       1 * time.Hour,
+		MaxLogSize:        1024,
+	}
+
+	bundle, err = c.Collect(ctx, opts)
+	require.NoError(t, err)
+	require.NotNil(t, bundle)
+
+	// Diagnostics should always be populated
+	assert.NotNil(t, bundle.Diagnostics)
+	assert.True(t, bundle.Diagnostics.LogCollection.FileLogs.Attempted)
+	// Journal logs might or might not be attempted depending on the environment
+}

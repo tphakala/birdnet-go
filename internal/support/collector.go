@@ -40,6 +40,31 @@ var (
 	ErrJournalNotAvailable = errors.NewStd("journal logs not available")
 )
 
+// isRunningInDocker detects if the application is running inside a Docker container.
+// This is useful for adjusting log collection strategies, as Docker containers
+// often don't have systemd/journald available.
+//
+// Detection methods:
+//  1. Check for /.dockerenv file (standard Docker marker)
+//  2. Check /proc/1/cgroup for docker references
+//
+// Returns true if running in Docker, false otherwise.
+func isRunningInDocker() bool {
+	// Check for .dockerenv file
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return true
+	}
+
+	// Check cgroup for docker references
+	if data, err := os.ReadFile("/proc/1/cgroup"); err == nil {
+		if strings.Contains(string(data), "docker") || strings.Contains(string(data), "containerd") {
+			return true
+		}
+	}
+
+	return false
+}
+
 func init() {
 	var err error
 	// Define log file path relative to working directory
@@ -495,7 +520,20 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 	}
 }
 
-// collectLogs collects recent log entries and captures detailed diagnostic information
+// collectLogs collects recent log entries and captures detailed diagnostic information.
+// This method NEVER returns an error - it always returns logs (even empty) with diagnostics.
+//
+// Collection strategy:
+//  1. First attempts journal logs (systemd) - may fail on Docker/non-systemd systems
+//  2. Then attempts file logs from known paths - gracefully handles missing/inaccessible paths
+//  3. Combines and sorts all logs by timestamp
+//  4. Populates comprehensive diagnostics about what was attempted and what failed
+//
+// The diagnostics parameter is populated with detailed information about:
+//   - Which log sources were attempted and their success/failure states
+//   - Paths that were searched and their accessibility status
+//   - Error messages for any failures
+//   - Summary statistics about collected logs
 func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, maxSize int64, anonymizePII bool, diagnostics *LogCollectionDiagnostics) []LogEntry {
 	serviceLogger.Debug("support: collectLogs started",
 		"duration", duration,
@@ -506,24 +544,33 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 	var totalSize int64
 
 	// Try to collect from journald first (systemd systems)
-	serviceLogger.Debug("support: attempting to collect journal logs")
-	diagnostics.JournalLogs.Attempted = true
-	journalLogs, err := c.collectJournalLogs(ctx, duration, anonymizePII, &diagnostics.JournalLogs)
-	if err != nil {
-		diagnostics.JournalLogs.Error = err.Error()
-		if errors.Is(err, ErrJournalNotAvailable) {
-			serviceLogger.Debug("support: journal logs not available (expected on non-systemd systems)")
-		} else {
-			serviceLogger.Warn("support: error collecting journal logs", "error", err)
+	// Skip journal collection if running in Docker as it's unlikely to be available
+	if isRunningInDocker() {
+		serviceLogger.Debug("support: running in Docker, skipping journal log collection")
+		diagnostics.JournalLogs.Attempted = false
+		diagnostics.JournalLogs.Details = map[string]any{
+			"skipped_reason": "running_in_docker",
 		}
 	} else {
-		serviceLogger.Debug("support: collected journal logs", "count", len(journalLogs))
-		diagnostics.JournalLogs.Successful = true
-		diagnostics.JournalLogs.EntriesFound = len(journalLogs)
-		logs = append(logs, journalLogs...)
-		// Estimate size for journal logs
-		for _, entry := range journalLogs {
-			totalSize += int64(len(entry.Message))
+		serviceLogger.Debug("support: attempting to collect journal logs")
+		diagnostics.JournalLogs.Attempted = true
+		journalLogs, err := c.collectJournalLogs(ctx, duration, anonymizePII, &diagnostics.JournalLogs)
+		if err != nil {
+			diagnostics.JournalLogs.Error = err.Error()
+			if errors.Is(err, ErrJournalNotAvailable) {
+				serviceLogger.Debug("support: journal logs not available (expected on non-systemd systems)")
+			} else {
+				serviceLogger.Warn("support: error collecting journal logs", "error", err)
+			}
+		} else {
+			serviceLogger.Debug("support: collected journal logs", "count", len(journalLogs))
+			diagnostics.JournalLogs.Successful = true
+			diagnostics.JournalLogs.EntriesFound = len(journalLogs)
+			logs = append(logs, journalLogs...)
+			// Estimate size for journal logs
+			for _, entry := range journalLogs {
+				totalSize += int64(len(entry.Message))
+			}
 		}
 	}
 
@@ -691,14 +738,29 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 	return logs, nil
 }
 
-// collectLogFilesWithDiagnostics collects logs from files with detailed diagnostic information
+// collectLogFilesWithDiagnostics collects logs from files with detailed diagnostic information.
+// This method searches multiple predefined paths for log files and captures diagnostics
+// about each path searched, including:
+//   - Whether the path exists
+//   - Whether it's accessible (permission issues)
+//   - How many log files were found
+//   - Any errors encountered
+//
+// The method never fails completely - it will return whatever logs it can collect,
+// along with diagnostic information about any issues encountered.
+//
+// Note: The Details map in diagnostics may be accessed concurrently if this method
+// is called from multiple goroutines. Currently this is not the case, but if that
+// changes in the future, synchronization should be added.
 func (c *Collector) collectLogFilesWithDiagnostics(duration time.Duration, maxSize int64, anonymizePII bool, diagnostics *LogSourceDiagnostics) ([]LogEntry, int64, error) {
 	var logs []LogEntry
 	cutoffTime := time.Now().Add(-duration)
 	totalSize := int64(0)
 
 	// Get unique log paths and capture diagnostic information for each
+	// These paths include both configured paths and common default locations
 	uniquePaths := c.getUniqueLogPaths()
+	// TODO: Add mutex protection if this method becomes concurrent
 	diagnostics.Details["total_paths_to_search"] = len(uniquePaths)
 
 	for _, logPath := range uniquePaths {
@@ -726,7 +788,12 @@ func (c *Collector) collectLogFilesWithDiagnostics(duration time.Duration, maxSi
 		if info.IsDir() {
 			logCount, dirSize, err := c.processLogDirectory(logPath, cutoffTime, maxSize-totalSize, anonymizePII, &logs, &searchedPath)
 			if err != nil {
-				searchedPath.Error = err.Error()
+				// Enhanced error context for directory processing failures
+				if os.IsPermission(err) {
+					searchedPath.Error = fmt.Sprintf("permission denied: %v", err)
+				} else {
+					searchedPath.Error = err.Error()
+				}
 			} else {
 				searchedPath.FileCount = logCount
 				totalSize += dirSize
@@ -754,6 +821,9 @@ func (c *Collector) collectLogFilesWithDiagnostics(duration time.Duration, maxSi
 }
 
 // processLogDirectory processes all log files in a directory and returns count and size
+// processLogDirectory processes a directory for log files.
+// Returns the number of log files processed, total size of logs, and any error encountered.
+// Errors are non-fatal and just mean some files couldn't be processed.
 func (c *Collector) processLogDirectory(dirPath string, cutoffTime time.Time, maxSize int64, anonymizePII bool, logs *[]LogEntry, searchedPath *SearchedPath) (logFileCount int, totalSize int64, err error) {
 	files, err := os.ReadDir(dirPath)
 	if err != nil {

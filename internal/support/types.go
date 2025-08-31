@@ -97,7 +97,10 @@ type LogCollectionDiagnostics struct {
 	Summary     DiagnosticSummary    `json:"summary"`      // Overall log collection summary
 }
 
-// LogSourceDiagnostics contains diagnostics for a specific log source (journal or files)
+// LogSourceDiagnostics contains diagnostics for a specific log source (journal or files).
+// Thread-safety note: The Details map is currently only accessed from single-threaded
+// contexts within the collection methods. If concurrent access is needed in the future,
+// synchronization (e.g., sync.RWMutex) should be added.
 type LogSourceDiagnostics struct {
 	Attempted     bool           `json:"attempted"`         // Whether collection was attempted
 	Successful    bool           `json:"successful"`        // Whether collection succeeded
@@ -105,7 +108,7 @@ type LogSourceDiagnostics struct {
 	EntriesFound  int            `json:"entries_found"`     // Number of log entries found
 	PathsSearched []SearchedPath `json:"paths_searched"`    // Paths that were searched (for file logs)
 	Command       string         `json:"command,omitempty"` // Command executed (for journal logs)
-	Details       map[string]any `json:"details,omitempty"` // Additional diagnostic details
+	Details       map[string]any `json:"details,omitempty"` // Additional diagnostic details (not thread-safe)
 }
 
 // SearchedPath represents a path that was searched during log collection
