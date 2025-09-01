@@ -211,7 +211,6 @@ func detectSourceTypeFromString(connectionString string) SourceType {
 	return SourceTypeAudioCard
 }
 
-
 // ListSources returns all registered sources (without connection strings) in deterministic order
 func (r *AudioSourceRegistry) ListSources() []*AudioSource {
 	r.mu.RLock()
@@ -282,7 +281,7 @@ func (r *AudioSourceRegistry) ReleaseSourceReference(sourceID string) error {
 	// Handle reference counting - if no refCount entry exists, treat as 0 and remove immediately
 	refCountPtr, refCountExists := r.refCounts[sourceID]
 	var newCount int32
-	
+
 	if !refCountExists {
 		// No refCount entry means this source was never acquired, treat as 0 and remove
 		newCount = -1 // This will trigger removal below
@@ -377,12 +376,12 @@ func (r *AudioSourceRegistry) RemoveSourceIfUnused(sourceID string, checkers ...
 	for _, checker := range checkers {
 		if checker(sourceID) {
 			return RemoveSourceInUse, errors.Newf("source %s is still in use", sourceID).
-			Component("myaudio").
-			Category(errors.CategoryState).
-			Context("operation", "remove_source_if_unused").
-			Context("source_id", sourceID).
-			Context("reason", "buffer_checker_reported_in_use").
-			Build()
+				Component("myaudio").
+				Category(errors.CategoryState).
+				Context("operation", "remove_source_if_unused").
+				Context("source_id", sourceID).
+				Context("reason", "buffer_checker_reported_in_use").
+				Build()
 		}
 	}
 
@@ -479,20 +478,24 @@ func (r *AudioSourceRegistry) validateConnectionString(connectionString string, 
 		return r.validateAudioDevice(connectionString)
 	}
 
-	// For other types (RTSP, files), check for shell injection attempts - be strict for security
-	// Don't allow any shell metacharacters to prevent command injection
-	if strings.ContainsAny(connectionString, ";&|`$\n\r") ||
-		strings.Contains(connectionString, "$(") ||
-		strings.Contains(connectionString, "${") ||
-		strings.Contains(connectionString, "<(") ||
-		strings.Contains(connectionString, ">(") {
-		return errors.Newf("dangerous pattern detected in connection string").
-			Component("myaudio").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_connection_string").
-			Context("source_type", sourceType).
-			Context("reason", "shell_injection_prevention").
-			Build()
+	// Skip dangerous pattern check for RTSP URLs since they have their own validation
+	// and need to support query parameters with ampersands (e.g., ?channel=1&subtype=0)
+	if sourceType != SourceTypeRTSP {
+		// For other types (files), check for shell injection attempts - be strict for security
+		// Don't allow any shell metacharacters to prevent command injection
+		if strings.ContainsAny(connectionString, ";&|`$\n\r") ||
+			strings.Contains(connectionString, "$(") ||
+			strings.Contains(connectionString, "${") ||
+			strings.Contains(connectionString, "<(") ||
+			strings.Contains(connectionString, ">(") {
+			return errors.Newf("dangerous pattern detected in connection string").
+				Component("myaudio").
+				Category(errors.CategoryValidation).
+				Context("operation", "validate_connection_string").
+				Context("source_type", sourceType).
+				Context("reason", "shell_injection_prevention").
+				Build()
+		}
 	}
 
 	// Type-specific validation
@@ -517,7 +520,7 @@ func (r *AudioSourceRegistry) validateRTSPURL(rtspURL string) error {
 	// This avoids breaking existing configurations with complex passwords
 	// that may contain special characters like colons, which are valid in FFmpeg
 	// but cause url.Parse() to fail due to Go's strict userinfo parsing
-	
+
 	// Check for empty URL
 	if rtspURL == "" {
 		return errors.Newf("RTSP URL cannot be empty").
@@ -530,9 +533,9 @@ func (r *AudioSourceRegistry) validateRTSPURL(rtspURL string) error {
 
 	// Check scheme prefix (case-insensitive)
 	lowerURL := strings.ToLower(rtspURL)
-	if !strings.HasPrefix(lowerURL, "rtsp://") && 
-	   !strings.HasPrefix(lowerURL, "rtsps://") && 
-	   !strings.HasPrefix(lowerURL, "test://") {
+	if !strings.HasPrefix(lowerURL, "rtsp://") &&
+		!strings.HasPrefix(lowerURL, "rtsps://") &&
+		!strings.HasPrefix(lowerURL, "test://") {
 		return errors.Newf("invalid scheme, expected rtsp://, rtsps://, or test://").
 			Component("myaudio").
 			Category(errors.CategoryRTSP).
@@ -832,11 +835,11 @@ func (r *AudioSourceRegistry) parseWindowsDeviceName(deviceString string) string
 func (r *AudioSourceRegistry) parseLinuxDeviceParams(params, deviceString string) string {
 	// Split by comma to get parameters
 	parts := strings.Split(params, ",")
-	
+
 	// Check if it's CARD=...,DEV=... format
 	var cardName, devNum string
 	hasCardFormat := false
-	
+
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if strings.HasPrefix(part, "CARD=") {
@@ -847,20 +850,20 @@ func (r *AudioSourceRegistry) parseLinuxDeviceParams(params, deviceString string
 			hasCardFormat = true
 		}
 	}
-	
+
 	// Handle CARD=...,DEV=... format
 	if hasCardFormat && cardName != "" && devNum != "" {
 		friendlyCardName := r.resolveFriendlyCardName(cardName)
 		return fmt.Sprintf("%s #%s", friendlyCardName, devNum)
 	}
-	
+
 	// Handle simple numeric format like "0,0"
 	if !hasCardFormat && len(parts) >= 2 {
 		cardNum := strings.TrimSpace(parts[0])
 		devNum := strings.TrimSpace(parts[1])
 		return fmt.Sprintf("Audio Card %s Device %s", cardNum, devNum)
 	}
-	
+
 	// Fallback
 	return fmt.Sprintf("Audio Device (%s)", deviceString)
 }
