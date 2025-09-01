@@ -7,16 +7,6 @@ https://creativecommons.org/licenses/by-nc-sa/4.0/
 
 ## Dependencies
 
-### cgt.name/pkg/go-mwclient
-
-License: https://github.com/cgt/go-mwclient.git/blob/v1.3.0/COPYING
-Source: CC0-1.0
-
-### cgt.name/pkg/go-mwclient/params
-
-License: https://github.com/cgt/go-mwclient.git/blob/v1.3.0/params/LICENSE
-Source: BSD-3-Clause
-
 ### cloud.google.com/go/auth
 
 License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.16.5/auth/LICENSE
@@ -252,11 +242,6 @@ Source: MIT
 License: https://github.com/mattn/go-sqlite3/blob/v1.14.32/LICENSE
 Source: MIT
 
-### github.com/mrjones/oauth
-
-License: Unknown
-Source: Unknown
-
 ### github.com/munnerz/goautoneg
 
 License: https://github.com/munnerz/goautoneg/blob/a7dc8b61c822/LICENSE
@@ -359,7 +344,7 @@ Source: MIT
 
 ### github.com/stretchr/testify
 
-License: https://github.com/stretchr/testify/blob/v1.11.0/LICENSE
+License: https://github.com/stretchr/testify/blob/v1.11.1/LICENSE
 Source: MIT
 
 ### github.com/subosito/gotenv
