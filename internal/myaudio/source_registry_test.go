@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
-	
+
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
@@ -21,8 +21,8 @@ func getTestLogger() *slog.Logger {
 func TestSourceRegistration(t *testing.T) {
 	// Create a fresh registry for testing
 	registry := &AudioSourceRegistry{
-		sources:           make(map[string]*AudioSource),
-		connectionMap:     make(map[string]string),
+		sources:       make(map[string]*AudioSource),
+		connectionMap: make(map[string]string),
 		refCounts:     make(map[string]*int32),
 		logger:        getTestLogger(),
 	}
@@ -64,13 +64,88 @@ func TestSourceRegistration(t *testing.T) {
 	}
 }
 
+func TestRTSPValidationWithQueryParameters(t *testing.T) {
+	registry := &AudioSourceRegistry{
+		sources:       make(map[string]*AudioSource),
+		connectionMap: make(map[string]string),
+		refCounts:     make(map[string]*int32),
+		logger:        getTestLogger(),
+	}
+
+	testCases := []struct {
+		name        string
+		rtspURL     string
+		shouldPass  bool
+		description string
+	}{
+		{
+			name:        "RTSP URL with ampersand in query params",
+			rtspURL:     "rtsp://USER:PASS@192.168.1.100:554/cam/realmonitor?channel=1&subtype=0",
+			shouldPass:  true,
+			description: "Should allow ampersands in query parameters",
+		},
+		{
+			name:        "RTSP URL with multiple query params",
+			rtspURL:     "rtsp://admin:password@192.168.1.100/stream?quality=high&framerate=30&resolution=1080p",
+			shouldPass:  true,
+			description: "Should allow multiple query parameters with ampersands",
+		},
+		{
+			name:        "Basic RTSP URL without query params",
+			rtspURL:     "rtsp://192.168.1.100/stream",
+			shouldPass:  true,
+			description: "Should allow basic RTSP URLs",
+		},
+		{
+			name:        "RTSP URL with credentials and query params",
+			rtspURL:     "rtsp://user:pass@192.168.1.100:8554/live.sdp?transport=tcp&unicast=true",
+			shouldPass:  true,
+			description: "Should allow credentials with query parameters",
+		},
+		{
+			name:        "Empty RTSP URL",
+			rtspURL:     "",
+			shouldPass:  false,
+			description: "Should reject empty URLs",
+		},
+		{
+			name:        "Invalid scheme",
+			rtspURL:     "http://192.168.1.100/stream",
+			shouldPass:  false,
+			description: "Should reject non-RTSP schemes",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config := SourceConfig{
+				ID:          "test_rtsp",
+				DisplayName: "Test RTSP",
+				Type:        SourceTypeRTSP,
+			}
+
+			_, err := registry.RegisterSource(tc.rtspURL, config)
+
+			if tc.shouldPass {
+				if err != nil {
+					t.Errorf("%s: expected success but got error: %v", tc.description, err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("%s: expected error but got success", tc.description)
+				}
+			}
+		})
+	}
+}
+
 func TestRTSPCredentialSanitization(t *testing.T) {
 	registry := GetRegistry()
 
 	testCases := []struct {
-		name        string
-		input       string
-		shouldHide  bool
+		name       string
+		input      string
+		shouldHide bool
 	}{
 		{
 			name:       "RTSP with credentials",
@@ -104,7 +179,7 @@ func TestRTSPCredentialSanitization(t *testing.T) {
 			if tc.shouldHide {
 				// Should not contain credentials in safe string
 				if strings.Contains(source.SafeString, "secret123") ||
-				   strings.Contains(source.SafeString, "admin:secret123") {
+					strings.Contains(source.SafeString, "admin:secret123") {
 					t.Errorf("Safe string contains credentials: %s", source.SafeString)
 				}
 			}
@@ -123,8 +198,8 @@ func TestRTSPCredentialSanitization(t *testing.T) {
 
 func TestSourceIDGeneration(t *testing.T) {
 	registry := &AudioSourceRegistry{
-		sources:           make(map[string]*AudioSource),
-		connectionMap:     make(map[string]string),
+		sources:       make(map[string]*AudioSource),
+		connectionMap: make(map[string]string),
 		refCounts:     make(map[string]*int32),
 		logger:        getTestLogger(),
 	}
@@ -148,7 +223,7 @@ func TestConcurrentSourceAccess(t *testing.T) {
 
 	// Test concurrent registration
 	done := make(chan bool, 10)
-	
+
 	for i := 0; i < 10; i++ {
 		go func(id int) {
 			source := registry.GetOrCreateSource(
@@ -177,13 +252,13 @@ func TestConcurrentSourceAccess(t *testing.T) {
 func TestBackwardCompatibility(t *testing.T) {
 	// Test that GetOrCreateSource works correctly
 	testURL := "rtsp://test.local/stream"
-	
+
 	// This should auto-register the source
 	source := registry.GetOrCreateSource(testURL, SourceTypeRTSP)
 	if source == nil {
 		t.Fatal("GetOrCreateSource returned nil")
 	}
-	
+
 	// Should return a source with an ID, not the original URL
 	if source.ID == testURL {
 		t.Errorf("Source should have generated ID, not original URL")
@@ -198,7 +273,7 @@ func TestBackwardCompatibility(t *testing.T) {
 
 func TestSourceMetricsUpdate(t *testing.T) {
 	registry := GetRegistry()
-	
+
 	source := registry.GetOrCreateSource("rtsp://metrics.test/stream", SourceTypeRTSP)
 	initialBytes := source.TotalBytes
 	initialErrors := source.ErrorCount
@@ -210,19 +285,19 @@ func TestSourceMetricsUpdate(t *testing.T) {
 	// Verify updates
 	updatedSource, _ := registry.GetSourceByID(source.ID)
 	if updatedSource.TotalBytes != initialBytes+1024+2048 {
-		t.Errorf("Expected total bytes %d, got %d", 
+		t.Errorf("Expected total bytes %d, got %d",
 			initialBytes+1024+2048, updatedSource.TotalBytes)
 	}
 	if updatedSource.ErrorCount != initialErrors+1 {
-		t.Errorf("Expected error count %d, got %d", 
+		t.Errorf("Expected error count %d, got %d",
 			initialErrors+1, updatedSource.ErrorCount)
 	}
 }
 
 func TestSourceStats(t *testing.T) {
 	registry := &AudioSourceRegistry{
-		sources:           make(map[string]*AudioSource),
-		connectionMap:     make(map[string]string),
+		sources:       make(map[string]*AudioSource),
+		connectionMap: make(map[string]string),
 		refCounts:     make(map[string]*int32),
 		logger:        getTestLogger(),
 	}
