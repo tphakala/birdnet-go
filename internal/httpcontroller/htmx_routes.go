@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/buildinfo"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/security"
@@ -50,12 +51,21 @@ type RenderData struct {
 	Page            string
 	Title           string
 	Settings        *conf.Settings
+	Version         string
 	Locales         []LocaleData
 	Charts          template.HTML
 	ContentTemplate string
 	PreloadFragment string
 	Security        *Security
 	CSRFToken       string
+}
+
+// getVersionString safely extracts the version from the runtime context
+func (s *Server) getVersionString() string {
+	if s.RuntimeContext != nil && s.RuntimeContext.Version() != "" {
+		return s.RuntimeContext.Version()
+	}
+	return buildinfo.UnknownValue
 }
 
 // initRoutes initializes the routes for the server.
@@ -314,6 +324,7 @@ func (s *Server) initRoutes() {
 			Page:     "svelte-standalone",
 			Title:    "Detection Details",
 			Settings: s.Settings,
+			Version:  s.getVersionString(),
 			Security: &Security{
 				Enabled:       s.isAuthenticationEnabled(c),
 				AccessAllowed: s.IsAccessAllowed(c),
@@ -414,6 +425,7 @@ func (s *Server) handlePageRequest(c echo.Context) error {
 		Page:     pageRoute.TemplateName,
 		Title:    pageRoute.Title,
 		Settings: s.Settings,
+		Version:  s.getVersionString(),
 		Security: &Security{
 			Enabled:       s.isAuthenticationEnabled(c),
 			AccessAllowed: s.IsAccessAllowed(c),

@@ -8,9 +8,8 @@ import (
 )
 
 // InitializeErrorIntegration sets up the error package to use telemetry when enabled
-func InitializeErrorIntegration() {
+func InitializeErrorIntegration(settings *conf.Settings) {
 	// Defensive check: ensure settings are available
-	settings := conf.GetSettings()
 	if settings == nil {
 		// If settings are not available, disable telemetry
 		reporter := errors.NewSentryReporter(false)

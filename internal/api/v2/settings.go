@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/buildinfo"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -194,7 +195,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	}
 
 	// Update the cached telemetry state after settings change
-	telemetry.UpdateTelemetryEnabled()
+	telemetry.UpdateTelemetryEnabled(settings.Sentry.Enabled)
 
 	c.logAPIRequest(ctx, slog.LevelInfo, "Settings updated and saved successfully", "skipped_fields_count", len(skippedFields))
 	return ctx.JSON(http.StatusOK, map[string]any{
@@ -527,7 +528,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	}
 
 	// Update the cached telemetry state after settings change
-	telemetry.UpdateTelemetryEnabled()
+	telemetry.UpdateTelemetryEnabled(settings.Sentry.Enabled)
 
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":       fmt.Sprintf("%s settings updated successfully", section),
@@ -1623,11 +1624,18 @@ func (c *Controller) GetSystemID(ctx echo.Context) error {
 		}
 	}
 
-	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved system ID successfully", "system_id", settings.SystemID)
+	// Use BuildInfo interface methods for safe access, rely solely on c.Runtime.SystemID
+	systemID := buildinfo.UnknownValue
+	if c.Runtime != nil && c.Runtime.SystemID() != "" {
+		systemID = c.Runtime.SystemID()
+		c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved system ID successfully", "system_id", systemID)
+	} else {
+		c.logAPIRequest(ctx, slog.LevelWarn, "System ID not available, using fallback value", "fallback", buildinfo.UnknownValue)
+	}
 
-	// Return system ID in the format expected by the frontend
+	// Return system ID in the format expected by the frontend (always 200 OK)
 	response := map[string]string{
-		"systemID": settings.SystemID,
+		"systemID": systemID,
 	}
 
 	return ctx.JSON(http.StatusOK, response)

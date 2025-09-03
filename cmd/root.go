@@ -3,7 +3,6 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -15,32 +14,35 @@ import (
 	"github.com/tphakala/birdnet-go/cmd/rangefilter"
 	"github.com/tphakala/birdnet-go/cmd/realtime"
 	"github.com/tphakala/birdnet-go/cmd/support"
+	runtimectx "github.com/tphakala/birdnet-go/internal/buildinfo"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // RootCommand creates and returns the root command
-func RootCommand(settings *conf.Settings) *cobra.Command {
+func RootCommand(config *conf.Settings, runtime *runtimectx.Context) *cobra.Command {
+	// Compute safe version string
+	version := runtimectx.UnknownValue
+	if runtime != nil && runtime.Version() != "" {
+		version = runtime.Version()
+	}
+
 	// Create the root command
 	rootCmd := &cobra.Command{
 		Use:   "birdnet",
-		Short: "BirdNET-Go CLI",
+		Short: fmt.Sprintf("BirdNET-Go %s CLI", version),
 	}
 
-	// Set up the global flags for the root command.
-	err := setupFlags(rootCmd, settings)
-	if err != nil {
-		log.Printf("error setting up flags: %v\n", err)
-	}
+	// Note: Flag setup moved to PersistentPreRunE to ensure errors are surfaced
 
 	// Add sub-commands to the root command.
-	fileCmd := file.Command(settings)
-	directoryCmd := directory.Command(settings)
-	realtimeCmd := realtime.Command(settings)
+	fileCmd := file.Command(config)
+	directoryCmd := directory.Command(config)
+	realtimeCmd := realtime.Command(config, runtime)
 	authorsCmd := authors.Command()
 	licenseCmd := license.Command()
-	rangeCmd := rangefilter.Command(settings)
-	supportCmd := support.Command(settings)
-	benchmarkCmd := benchmark.Command(settings)
+	rangeCmd := rangefilter.Command(config)
+	supportCmd := support.Command(config, runtime) // Support needs both
+	benchmarkCmd := benchmark.Command(config)
 
 	subcommands := []*cobra.Command{
 		fileCmd,
@@ -56,6 +58,11 @@ func RootCommand(settings *conf.Settings) *cobra.Command {
 	rootCmd.AddCommand(subcommands...)
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		// Set up flags first, surface any binding errors
+		if err := setupFlags(cmd.Root(), config); err != nil {
+			return fmt.Errorf("error setting up flags: %w", err)
+		}
+
 		// Skip setup for authors and license commands
 		if cmd.Name() != authorsCmd.Name() && cmd.Name() != licenseCmd.Name() {
 			if err := initialize(); err != nil {
