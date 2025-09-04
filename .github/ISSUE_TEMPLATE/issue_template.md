@@ -6,7 +6,8 @@ labels: ""
 assignees: ""
 ---
 
-Please fill in this issue template, I cannot help if I don't have basic details like application version etc.
+1. Please check that you are running latest release avaialble at https://github.com/tphakala/birdnet-go/releases
+2. Please fill in this issue template in as detail as possible
 
 ## Issue Type
 
@@ -17,6 +18,12 @@ Please fill in this issue template, I cannot help if I don't have basic details 
 ## Description
 
 [A clear and concise description of the issue or feature request]
+
+## If RTSP issue, please provide exact make and model of your RTSP source device (camera etc)
+
+1. [Device type - camera etc]
+2. [Make]
+3. [Model]
 
 ## Steps to Reproduce (for bugs)
 
@@ -42,11 +49,13 @@ Please fill in this issue template, I cannot help if I don't have basic details 
 
 Provide the following line from your system:
 
-```
+```bash
 $ ./birdnet-go
 [Paste the output line here, which should look like this:]
 BirdNET-Go build date: YYYY-MM-DDTHH:MM:SSZ, using config file: /path/to/config.yaml
 ```
+
+Or copy paste release information from Web UI
 
 ### System Information
 
