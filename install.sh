@@ -3168,6 +3168,77 @@ cleanup_cockpit_systemd() {
     sudo systemctl daemon-reload >/dev/null 2>&1 || true
 }
 
+# Function to install cockpit with backports support
+install_cockpit_with_backports() {
+    local codename distro_id
+    
+    # Get distribution info from /etc/os-release
+    if [ -f "/etc/os-release" ]; then
+        distro_id=$(grep "^ID=" /etc/os-release 2>/dev/null | cut -d'=' -f2 | tr -d '"')
+        codename=$(grep "^VERSION_CODENAME=" /etc/os-release 2>/dev/null | cut -d'=' -f2 | tr -d '"')
+        # Fallback for Ubuntu
+        [ -z "$codename" ] && codename=$(grep "^UBUNTU_CODENAME=" /etc/os-release 2>/dev/null | cut -d'=' -f2 | tr -d '"')
+    fi
+    
+    if [ -z "$codename" ] || [ -z "$distro_id" ]; then
+        log_message "WARN" "Could not detect distribution or codename, installing cockpit from main repository"
+        sudo apt install -qq -y cockpit >/dev/null 2>&1
+        return $?
+    fi
+    
+    log_message "INFO" "Detected $distro_id with codename: $codename"
+    
+    case "$distro_id" in
+        "debian")
+            # Add Debian backports repository if not present
+            local backports_file="/etc/apt/sources.list.d/backports.list"
+            local backports_line="deb http://deb.debian.org/debian ${codename}-backports main"
+            
+            if [ ! -f "$backports_file" ] || ! grep -q "${codename}-backports" "$backports_file" 2>/dev/null; then
+                log_message "INFO" "Adding Debian backports repository for $codename"
+                echo "$backports_line" | sudo tee "$backports_file" >/dev/null 2>&1
+                if [ $? -eq 0 ]; then
+                    log_message "INFO" "Backports repository added, updating package lists"
+                    sudo apt update -qq >/dev/null 2>&1
+                else
+                    log_message "ERROR" "Failed to add backports repository"
+                fi
+            else
+                log_message "INFO" "Debian backports repository already configured"
+            fi
+            
+            # Try installing from backports
+            log_message "INFO" "Attempting to install cockpit from Debian ${codename}-backports"
+            if sudo apt install -qq -y -t "${codename}-backports" cockpit; then
+                log_message "INFO" "Cockpit installed successfully from Debian ${codename}-backports"
+                return 0
+            else
+                log_message "WARN" "Backports installation failed for Debian, trying main repository"
+            fi
+            ;;
+            
+        "ubuntu")
+            # Ubuntu has backports enabled by default
+            log_message "INFO" "Attempting to install cockpit from Ubuntu ${codename}-backports"
+            if sudo apt install -qq -y -t "${codename}-backports" cockpit; then
+                log_message "INFO" "Cockpit installed successfully from Ubuntu ${codename}-backports"
+                return 0
+            else
+                log_message "WARN" "Backports installation failed for Ubuntu, trying main repository"
+            fi
+            ;;
+            
+        *)
+            log_message "INFO" "Unsupported distribution for backports: $distro_id, using main repository"
+            ;;
+    esac
+    
+    # Fallback to main repository
+    log_message "INFO" "Installing cockpit from main repository"
+    sudo apt install -qq -y cockpit
+    return $?
+}
+
 # Function to configure Cockpit installation
 configure_cockpit() {
     log_message "INFO" "Starting Cockpit configuration check"
@@ -3261,7 +3332,7 @@ configure_cockpit() {
         log_message "INFO" "User chose to install Cockpit"
         print_message "\n📦 Installing Cockpit..." "$YELLOW"
         
-        if sudo apt install -qq -y cockpit; then
+        if install_cockpit_with_backports; then
             log_message "INFO" "Cockpit installation successful"
             
             # Enable and start Cockpit socket
@@ -3279,7 +3350,7 @@ configure_cockpit() {
         else
             log_message "ERROR" "Cockpit installation failed"
             print_message "❌ Failed to install Cockpit" "$RED"
-            print_message "💡 To install Cockpit manually, run: sudo apt install cockpit" "$YELLOW"
+            print_message "💡 To install Cockpit manually, try: sudo apt install cockpit" "$YELLOW"
             print_message "   Then enable it with: sudo systemctl enable --now cockpit.socket" "$YELLOW"
             save_cockpit_status "install_failed"
             return 1
@@ -3287,7 +3358,7 @@ configure_cockpit() {
     else
         log_message "INFO" "User declined Cockpit installation"
         print_message "ℹ️ Cockpit installation skipped" "$YELLOW"
-        print_message "💡 To install Cockpit later, run: sudo apt install cockpit" "$YELLOW"
+        print_message "💡 To install Cockpit later, try: sudo apt install cockpit" "$YELLOW"
         print_message "   Then enable it with: sudo systemctl enable --now cockpit.socket" "$YELLOW"
         save_cockpit_status "declined"
         return 1
