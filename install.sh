@@ -22,6 +22,9 @@ EOF
 BIRDNET_GO_VERSION="nightly"
 BIRDNET_GO_IMAGE=""
 
+# Flag to track if Docker image was changed during update/rollback
+IMAGE_CHANGED="false"
+
 # Logging configuration
 LOG_DIR="$HOME/birdnet-go-app/data/logs"
 # Generate timestamped log file name: install-YYYYMMDD-HHMMSS.log
@@ -912,6 +915,9 @@ revert_to_version() {
     local version_index="$1"
     local revert_config="${2:-ask}"
     
+    # Mark image as changed since we're reverting to a different version
+    IMAGE_CHANGED="true"
+    
     log_message "INFO" "=== Starting Version Revert Process ==="
     
     # Get version info
@@ -1039,14 +1045,14 @@ revert_to_version() {
         return 1
     fi
     
-    # Start the service
-    log_message "INFO" "Starting service with reverted image"
+    # Restart the service to ensure container uses the reverted image
+    log_message "INFO" "Restarting service with reverted image"
     sudo systemctl daemon-reload
     log_command_result "systemctl daemon-reload" $? "reloading systemd after revert"
     
-    if sudo systemctl start birdnet-go.service; then
-        log_command_result "systemctl start birdnet-go.service" $? "starting reverted service"
-        log_message "INFO" "Service started successfully with reverted image"
+    if sudo systemctl restart birdnet-go.service; then
+        log_command_result "systemctl restart birdnet-go.service" $? "restarting reverted service"
+        log_message "INFO" "Service restarted successfully with reverted image"
     else
         log_message "ERROR" "Failed to start service with reverted image"
         # Restore original image setting
@@ -1521,6 +1527,7 @@ check_directory() {
 # Telemetry Configuration
 TELEMETRY_ENABLED=false
 TELEMETRY_INSTALL_ID=""
+TELEMETRY_CONFIGURED="false"
 SENTRY_DSN="https://b9269b6c0f8fae154df65be5a97e0435@o4509553065525248.ingest.de.sentry.io/4509553112186960"
 
 # Function to generate anonymous install ID
@@ -1539,6 +1546,10 @@ load_telemetry_config() {
         # Load existing config
         TELEMETRY_ENABLED=$(grep "^enabled=" "$telemetry_file" 2>/dev/null | cut -d'=' -f2 || echo "false")
         TELEMETRY_INSTALL_ID=$(grep "^install_id=" "$telemetry_file" 2>/dev/null | cut -d'=' -f2 || echo "")
+        TELEMETRY_CONFIGURED="true"
+    else
+        # No telemetry file exists - telemetry has not been configured yet
+        TELEMETRY_CONFIGURED="false"
     fi
     
     # Generate install ID if missing
@@ -1726,9 +1737,36 @@ pull_docker_image() {
         exit 1
     fi
 
+    # Get current image hash before pull (if image exists locally)
+    local pre_pull_hash=""
+    if docker inspect "${BIRDNET_GO_IMAGE}" >/dev/null 2>&1; then
+        pre_pull_hash=$(docker inspect --format='{{.Id}}' "${BIRDNET_GO_IMAGE}" 2>/dev/null || echo "")
+        log_message "INFO" "Current image hash before pull: ${pre_pull_hash:0:20}..."
+    else
+        log_message "INFO" "Image not found locally, will be fresh pull"
+    fi
+
     if docker pull "${BIRDNET_GO_IMAGE}"; then
         log_message "INFO" "Docker image pulled successfully: $BIRDNET_GO_IMAGE"
-        print_message "✅ Docker image pulled successfully" "$GREEN"
+        
+        # Get image hash after pull and compare
+        local post_pull_hash=""
+        post_pull_hash=$(docker inspect --format='{{.Id}}' "${BIRDNET_GO_IMAGE}" 2>/dev/null || echo "")
+        
+        if [ -n "$pre_pull_hash" ] && [ "$pre_pull_hash" = "$post_pull_hash" ]; then
+            log_message "INFO" "No image update detected, same hash: ${pre_pull_hash:0:20}..."
+            print_message "✅ Docker image is already up to date" "$GREEN"
+            IMAGE_CHANGED="false"
+        else
+            if [ -n "$pre_pull_hash" ]; then
+                log_message "INFO" "Image updated from ${pre_pull_hash:0:20}... to ${post_pull_hash:0:20}..."
+                print_message "✅ Docker image updated successfully!" "$GREEN"
+            else
+                log_message "INFO" "Fresh image pulled: ${post_pull_hash:0:20}..."
+                print_message "✅ Docker image pulled successfully" "$GREEN"
+            fi
+            IMAGE_CHANGED="true"
+        fi
     else
         log_message "ERROR" "Docker image pull failed: $BIRDNET_GO_IMAGE"
         send_telemetry_event "error" "Docker image pull failed" "error" "step=pull_docker_image,image=${BIRDNET_GO_IMAGE}"
@@ -3042,24 +3080,31 @@ save_cockpit_status() {
 
 # Function to check if Cockpit is already installed
 is_cockpit_installed() {
-    # Method 1: Check if cockpit packages are installed via dpkg
-    if dpkg-query -W -f='${Status}' cockpit 2>/dev/null | grep -q "install ok installed"; then
+    # Method 1: Check if cockpit packages are actually installed (not just config files remaining)
+    # Check multiple common cockpit packages to be thorough
+    local cockpit_packages=("cockpit" "cockpit-ws" "cockpit-bridge" "cockpit-system")
+    for package in "${cockpit_packages[@]}"; do
+        if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
+            return 0
+        fi
+    done
+    
+    # Method 2: Check if cockpit-ws command exists and is executable
+    if command_exists cockpit-ws && [ -x "$(command -v cockpit-ws)" ]; then
         return 0
     fi
     
-    # Method 2: Check if cockpit-ws command exists
-    if command_exists cockpit-ws; then
+    # Method 3: Check if cockpit bridge exists and is executable
+    if command_exists cockpit-bridge && [ -x "$(command -v cockpit-bridge)" ]; then
         return 0
     fi
     
-    # Method 3: Check if cockpit bridge exists 
-    if command_exists cockpit-bridge; then
-        return 0
-    fi
-    
-    # Method 4: Check if systemd units exist
-    if systemctl list-unit-files 2>/dev/null | grep -E "(cockpit\.(socket|service))" >/dev/null 2>&1; then
-        return 0
+    # Method 4: Check if cockpit systemd unit files exist and are not masked
+    if systemctl list-unit-files cockpit.socket 2>/dev/null | grep -E "cockpit\.socket\s+(enabled|disabled|static)" >/dev/null 2>&1; then
+        # Double check that the unit file actually exists and is not just a leftover
+        if [ -f "/lib/systemd/system/cockpit.socket" ] || [ -f "/etc/systemd/system/cockpit.socket" ]; then
+            return 0
+        fi
     fi
     
     return 1
@@ -3067,9 +3112,19 @@ is_cockpit_installed() {
 
 # Function to check if Cockpit service is enabled and running
 is_cockpit_running() {
-    # Check cockpit.socket first (preferred method)
+    # First check if cockpit is actually installed before checking if it's running
+    if ! is_cockpit_installed; then
+        return 1
+    fi
+    
+    # Check cockpit.socket first (preferred method) - ensure it's not masked
     if systemctl is-active --quiet cockpit.socket 2>/dev/null; then
         return 0
+    fi
+    
+    # Check if cockpit.socket is masked (which means it was disabled/removed)
+    if systemctl is-masked --quiet cockpit.socket 2>/dev/null; then
+        return 1
     fi
     
     # Check cockpit.service as fallback 
@@ -3090,12 +3145,41 @@ is_cockpit_running() {
     return 1
 }
 
+# Function to clean up leftover cockpit systemd units
+cleanup_cockpit_systemd() {
+    log_message "INFO" "Cleaning up leftover Cockpit systemd units"
+    
+    # Unmask and disable any masked cockpit services
+    if systemctl is-masked --quiet cockpit.socket 2>/dev/null; then
+        log_message "INFO" "Unmasking cockpit.socket"
+        sudo systemctl unmask cockpit.socket >/dev/null 2>&1 || true
+    fi
+    
+    if systemctl is-masked --quiet cockpit.service 2>/dev/null; then
+        log_message "INFO" "Unmasking cockpit.service" 
+        sudo systemctl unmask cockpit.service >/dev/null 2>&1 || true
+    fi
+    
+    # Reset any failed states
+    sudo systemctl reset-failed cockpit.socket >/dev/null 2>&1 || true
+    sudo systemctl reset-failed cockpit.service >/dev/null 2>&1 || true
+    
+    # Reload systemd to pick up any changes
+    sudo systemctl daemon-reload >/dev/null 2>&1 || true
+}
+
 # Function to configure Cockpit installation
 configure_cockpit() {
     log_message "INFO" "Starting Cockpit configuration check"
     
     # Debug: Log detection results for troubleshooting
     log_message "INFO" "Cockpit detection debug: installed=$(is_cockpit_installed && echo 'true' || echo 'false'), running=$(is_cockpit_running && echo 'true' || echo 'false')"
+    
+    # Clean up any leftover systemd state before proceeding
+    if ! is_cockpit_installed && (systemctl is-masked --quiet cockpit.socket 2>/dev/null || systemctl is-masked --quiet cockpit.service 2>/dev/null); then
+        log_message "INFO" "Cockpit not installed but systemd units are masked, cleaning up"
+        cleanup_cockpit_systemd
+    fi
     
     # STEP 1: Check if Cockpit is already installed on the system
     if is_cockpit_installed; then
@@ -3115,14 +3199,20 @@ configure_cockpit() {
             
             if [[ "$enable_cockpit" =~ ^[Yy]$ ]]; then
                 log_message "INFO" "User chose to enable existing Cockpit installation"
-                if sudo systemctl enable --now cockpit.socket; then
+                
+                # Clean up any masked state first
+                cleanup_cockpit_systemd
+                
+                if sudo systemctl enable --now cockpit.socket >/dev/null 2>&1; then
                     print_message "✅ Cockpit system management interface enabled and available at https://${IP_ADDR}:${COCKPIT_PORT}!" "$GREEN"
                     log_message "INFO" "Cockpit service enabled and started"
                     save_cockpit_status "installed"
                     return 0
                 else
-                    print_message "❌ Failed to enable Cockpit service" "$RED"
-                    log_message "ERROR" "Failed to enable existing Cockpit service"
+                    log_message "ERROR" "Failed to enable existing Cockpit service, may need reinstallation"
+                    print_message "❌ Failed to enable Cockpit service - it may need to be reinstalled" "$RED"
+                    print_message "💡 Try: sudo apt purge cockpit* && sudo apt autoremove" "$YELLOW"
+                    print_message "   Then rerun this installer to install Cockpit fresh" "$YELLOW"
                     save_cockpit_status "install_failed"
                     return 1
                 fi
@@ -3171,14 +3261,13 @@ configure_cockpit() {
         log_message "INFO" "User chose to install Cockpit"
         print_message "\n📦 Installing Cockpit..." "$YELLOW"
         
-        if sudo apt update -q && sudo apt install -q -y cockpit; then
+        if sudo apt install -qq -y cockpit; then
             log_message "INFO" "Cockpit installation successful"
-            print_message "✅ Cockpit system management interface installed successfully!" "$GREEN"
             
             # Enable and start Cockpit socket
             if sudo systemctl enable --now cockpit.socket; then
                 log_message "INFO" "Cockpit service enabled and started"
-                print_message "✅ Cockpit system management interface enabled and available at https://${IP_ADDR}:${COCKPIT_PORT}" "$GREEN"
+                print_message "✅ Cockpit system management interface installed successfully!" "$GREEN"
                 save_cockpit_status "installed"
                 return 0
             else
@@ -3537,17 +3626,29 @@ start_birdnet_go() {
     log_message "INFO" "Starting BirdNET-Go service"
     print_message "\n🚀 Starting BirdNET-Go..." "$GREEN"
     
-    # Check if container is already running
+    # Check if we need to restart due to image change or just start
+    local action="start"
+    local action_msg="Starting"
+    
     if check_container_running; then
-        log_message "INFO" "BirdNET-Go container already running, skipping startup"
-        print_message "✅ BirdNET-Go container is already running" "$GREEN"
-        return 0
+        if [ "$IMAGE_CHANGED" = "true" ]; then
+            log_message "INFO" "Container running but Docker image changed, restarting to use new image"
+            print_message "🔄 Docker image updated - restarting container to use new version..." "$YELLOW"
+            action="restart"
+            action_msg="Restarting"
+        else
+            log_message "INFO" "BirdNET-Go container already running, no image changes detected"
+            print_message "✅ BirdNET-Go container is already running" "$GREEN"
+            return 0
+        fi
+    else
+        log_message "INFO" "Container not running, starting service"
     fi
     
-    # Start the service
-    log_message "INFO" "Executing systemctl start birdnet-go.service"
-    sudo systemctl start birdnet-go.service
-    log_command_result "systemctl start birdnet-go.service" $? "starting BirdNET-Go service"
+    # Start or restart the service
+    log_message "INFO" "Executing systemctl $action birdnet-go.service"
+    sudo systemctl $action birdnet-go.service
+    log_command_result "systemctl $action birdnet-go.service" $? "${action_msg} BirdNET-Go service"
     
     # Check if service started
     if ! sudo systemctl is-active --quiet birdnet-go.service; then
@@ -4584,7 +4685,7 @@ configure_locale
 configure_auth
 
 # Configure telemetry (only if not already configured or fresh install)
-if [ "$FRESH_INSTALL" = "true" ] || [ "$TELEMETRY_ENABLED" = "" ]; then
+if [ "$FRESH_INSTALL" = "true" ] || [ "$TELEMETRY_CONFIGURED" = "false" ]; then
     configure_telemetry
 else
     print_message "\n📊 Using existing telemetry configuration: $([ "$TELEMETRY_ENABLED" = "true" ] && echo "enabled" || echo "disabled")" "$GREEN"
@@ -4637,6 +4738,12 @@ log_message "INFO" "Data directory: $DATA_DIR"
 log_message "INFO" "Web interface port: ${WEB_PORT:-8080}"
 log_message "INFO" "Service responsive: $final_service_responsive"
 
+# Configure Cockpit installation before completion message
+configure_cockpit
+
+# Get IP address for final output
+IP_ADDR=$(get_ip_address)
+
 print_message ""
 print_message "✅ Installation completed!" "$GREEN"
 print_message "📁 Configuration directory: " "$GREEN" "nonewline"
@@ -4644,11 +4751,25 @@ print_message "$CONFIG_DIR"
 print_message "📁 Data directory: " "$GREEN" "nonewline"
 print_message "$DATA_DIR"
 
-# Get IP address
-IP_ADDR=$(get_ip_address)
+# Display Cockpit URL if installed
+if [ "$(check_cockpit_status 2>/dev/null)" = "installed" ] && is_cockpit_installed; then
+    if [ -n "$IP_ADDR" ]; then
+        log_message "INFO" "Cockpit web interface accessible at: https://${IP_ADDR}:${COCKPIT_PORT}"
+        print_message "🖥️ Cockpit system management interface enabled and available at https://${IP_ADDR}:${COCKPIT_PORT}" "$GREEN"
+    else
+        print_message "🖥️ Cockpit system management interface enabled and available at https://localhost:${COCKPIT_PORT}" "$GREEN"
+    fi
+    
+    if check_mdns; then
+        HOSTNAME=$(hostname)
+        print_message "🖥️ Cockpit also available at: https://${HOSTNAME}.local:${COCKPIT_PORT}" "$GREEN"
+    fi
+fi
+
+# Display BirdNET-Go URLs prominently at the end
 if [ -n "$IP_ADDR" ]; then
     log_message "INFO" "Web interface accessible at: http://${IP_ADDR}:${WEB_PORT}"
-    print_message "🌐 BirdNET-Go web interface is available at http://${IP_ADDR}:${WEB_PORT}" "$GREEN"
+    print_message "🐦 BirdNET-Go web interface is available at http://${IP_ADDR}:${WEB_PORT}" "$GREEN"
 else
     log_message "WARN" "Could not determine IP address for web interface access"
     print_message "⚠️ Could not determine IP address - you may access BirdNET-Go at http://localhost:${WEB_PORT}" "$YELLOW"
@@ -4659,30 +4780,10 @@ fi
 if check_mdns; then
     HOSTNAME=$(hostname)
     log_message "INFO" "mDNS available, accessible at: http://${HOSTNAME}.local:${WEB_PORT}"
-    print_message "🌐 Also available at http://${HOSTNAME}.local:${WEB_PORT}" "$GREEN"
+    print_message "🐦 Also available at http://${HOSTNAME}.local:${WEB_PORT}" "$GREEN"
 else
     log_message "INFO" "mDNS not available"
 fi
-
-# Display Cockpit URL if installed
-if [ "$(check_cockpit_status 2>/dev/null)" = "installed" ] && is_cockpit_installed; then
-    if [ -n "$IP_ADDR" ]; then
-        log_message "INFO" "Cockpit web interface accessible at: https://${IP_ADDR}:${COCKPIT_PORT}"
-        print_message "🖥️ Cockpit system management interface: https://${IP_ADDR}:${COCKPIT_PORT}" "$GREEN"
-    else
-        print_message "🖥️ Cockpit system management interface: https://localhost:${COCKPIT_PORT}" "$GREEN"
-    fi
-    
-    if check_mdns; then
-        HOSTNAME=$(hostname)
-        print_message "🖥️ Cockpit also available at: https://${HOSTNAME}.local:${COCKPIT_PORT}" "$GREEN"
-    fi
-    
-    print_message "ℹ️ Use your system username and password to log into Cockpit" "$YELLOW"
-fi
-
-# Configure Cockpit installation as final step
-configure_cockpit
 
 log_message "INFO" "Install.sh script execution completed successfully"
 log_message "INFO" "=== End of BirdNET-Go Installation/Update Session ==="
