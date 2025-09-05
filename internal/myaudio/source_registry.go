@@ -478,9 +478,24 @@ func (r *AudioSourceRegistry) validateConnectionString(connectionString string, 
 		return r.validateAudioDevice(connectionString)
 	}
 
-	// Skip dangerous pattern check for RTSP URLs since they have their own validation
-	// and need to support query parameters with ampersands (e.g., ?channel=1&subtype=0)
-	if sourceType != SourceTypeRTSP {
+	// Check for shell injection attempts - customize patterns based on source type
+	if sourceType == SourceTypeRTSP {
+		// For RTSP URLs, allow query parameters with ampersands (e.g., ?channel=1&subtype=0)
+		// but still block dangerous shell injection patterns
+		if strings.ContainsAny(connectionString, ";\n\r`|") ||
+			strings.Contains(connectionString, "$(") ||
+			strings.Contains(connectionString, "${") ||
+			strings.Contains(connectionString, "<(") ||
+			strings.Contains(connectionString, ">(") {
+			return errors.Newf("dangerous pattern detected in connection string").
+				Component("myaudio").
+				Category(errors.CategoryValidation).
+				Context("operation", "validate_connection_string").
+				Context("source_type", sourceType).
+				Context("reason", "shell_injection_prevention").
+				Build()
+		}
+	} else {
 		// For other types (files), check for shell injection attempts - be strict for security
 		// Don't allow any shell metacharacters to prevent command injection
 		if strings.ContainsAny(connectionString, ";&|`$\n\r") ||
