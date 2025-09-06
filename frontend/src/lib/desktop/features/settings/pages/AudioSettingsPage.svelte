@@ -532,18 +532,18 @@
     </div>
   </SettingsSection>
 
-  <!-- Audio Capture Section -->
+  <!-- Audio Export Section -->
   <SettingsSection
-    title={t('settings.audio.audioCapture.title')}
-    description={t('settings.audio.audioCapture.description')}
+    title={t('settings.audio.audioExport.title')}
+    description={t('settings.audio.audioExport.description')}
     defaultOpen={true}
     hasChanges={audioExportHasChanges}
   >
     <div class="space-y-4">
       <Checkbox
         checked={settings.audio.export.enabled}
-        label={t('settings.audio.audioCapture.enable')}
-        helpText={t('settings.audio.audioCapture.enableHelp')}
+        label={t('settings.audio.audioExport.enable')}
+        helpText={t('settings.audio.audioExport.enableHelp')}
         disabled={store.isLoading || store.isSaving}
         onchange={updateExportEnabled}
       />
@@ -582,7 +582,7 @@
                   });
                 }
               }}
-              min={5}
+              min={10}
               max={60}
               step={1}
               size="sm"
@@ -809,7 +809,7 @@
                 />
                 <div class="label" id="lossless-note">
                   <span class="label-text-alt text-base-content/70"
-                    >{t('settings.audio.audioExport.losslessNote')}</span
+                    >{t('settings.audio.audioCapture.losslessNote')}</span
                   >
                 </div>
               </div>
