@@ -128,7 +128,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	// Initialize log deduplicator with configuration from settings
 	// This addresses separation of concerns by extracting deduplication logic
 	healthCheckInterval := 60 * time.Second // default
-	
+
 	// Validate and use settings if available
 	if settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds > 0 {
 		// Cap at reasonable maximum (1 hour) to prevent misconfiguration
@@ -143,7 +143,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		}
 	}
 	enabled := settings.Realtime.LogDeduplication.Enabled
-	
+
 	logConfig := DeduplicationConfig{
 		HealthCheckInterval: healthCheckInterval,
 		Enabled:             enabled,
@@ -170,7 +170,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 					settings.BirdNET.Latitude,
 				)
 			}
-			
+
 			p.NewSpeciesTracker = NewSpeciesTrackerFromSettings(ds, &hemisphereAwareTracking)
 
 			// Initialize species tracker from database
@@ -263,15 +263,14 @@ func (p *Processor) processDetections(item birdnet.Results) {
 		"elapsed_time_ms", item.ElapsedTime.Milliseconds(),
 		"operation", "process_detections_entry")
 
-	// Delay before a detection is considered final and is flushed.
-	// TODO: make this configurable
-	const delay = 15 * time.Second
+	// Capture length sets before a detection is considered final and is flushed.
+	var captureLength = time.Duration(conf.Setting().Realtime.Audio.Export.Length) * time.Second
 
 	// processResults() returns a slice of detections, we iterate through each and process them
 	// detections are put into pendingDetections map where they are held until flush deadline is reached
 	// once deadline is reached detections are delivered to workers for actions (save to db etc) processing
 	detectionResults := p.processResults(item)
-	
+
 	// Log processing results with deduplication to prevent spam
 	p.logDetectionResults(item.Source.ID, len(item.Results), len(detectionResults))
 
@@ -308,14 +307,14 @@ func (p *Processor) processDetections(item birdnet.Results) {
 				"species", commonName,
 				"confidence", confidence,
 				"source", item.Source.DisplayName,
-				"flush_deadline", item.StartTime.Add(delay),
+				"flush_deadline", item.StartTime.Add(captureLength),
 				"operation", "create_pending_detection")
 			p.pendingDetections[commonName] = PendingDetection{
 				Detection:     detection,
 				Confidence:    confidence,
 				Source:        item.Source.ID,
 				FirstDetected: item.StartTime,
-				FlushDeadline: item.StartTime.Add(delay),
+				FlushDeadline: item.StartTime.Add(captureLength),
 				Count:         1,
 			}
 		}
@@ -369,7 +368,7 @@ func (p *Processor) processResults(item birdnet.Results) []Detections {
 
 		// Determine confidence threshold and check filters
 		baseThreshold := p.getBaseConfidenceThreshold(speciesLowercase)
-		
+
 		// Check if detection should be filtered
 		shouldSkip, _ := p.shouldFilterDetection(result, commonName, speciesLowercase, baseThreshold, item.Source.ID)
 		if shouldSkip {
@@ -478,8 +477,10 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 	// Create file name for audio clip
 	clipName := p.generateClipName(scientificName, result.Confidence)
 
+	var captureLength = time.Duration(conf.Setting().Realtime.Audio.Export.Length) * time.Second
+
 	// Set begin and end time for note
-	beginTime, endTime := item.StartTime, item.StartTime.Add(15*time.Second)
+	beginTime, endTime := item.StartTime, item.StartTime.Add(captureLength)
 
 	// Get occurrence probability for this species at detection time
 	occurrence := p.Bn.GetSpeciesOccurrenceAtTime(result.Species, item.StartTime)
@@ -694,7 +695,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, species str
 	if len(item.Detection.Results) > 0 {
 		confidence = float64(item.Detection.Results[0].Confidence)
 	}
-	
+
 	// Add structured logging
 	GetLogger().Info("Approving detection",
 		"species", species,
@@ -768,13 +769,13 @@ func (p *Processor) pendingDetectionsFlusher() {
 					flushableCount++
 					if shouldDiscard, reason := p.shouldDiscardDetection(&item, minDetections); shouldDiscard {
 						// Add structured logging
-					GetLogger().Info("Discarding detection",
-						"species", species,
-						"source", p.getDisplayNameForSource(item.Source),
-						"reason", reason,
-						"count", item.Count,
-						"operation", "discard_detection")
-					log.Printf("Discarding detection of %s from source %s due to %s\n",
+						GetLogger().Info("Discarding detection",
+							"species", species,
+							"source", p.getDisplayNameForSource(item.Source),
+							"reason", reason,
+							"count", item.Count,
+							"operation", "discard_detection")
+						log.Printf("Discarding detection of %s from source %s due to %s\n",
 							species, p.getDisplayNameForSource(item.Source), reason)
 						delete(p.pendingDetections, species)
 						continue
@@ -797,7 +798,6 @@ func (p *Processor) pendingDetectionsFlusher() {
 		}
 	}()
 }
-
 
 // getActionsForItem determines the actions to be taken for a given detection.
 func (p *Processor) getActionsForItem(detection *Detections) []Action {
@@ -941,7 +941,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	if databaseAction != nil && sseAction != nil {
 		// Create composite action for sequential execution
 		compositeAction := &CompositeAction{
-			Actions: []Action{databaseAction, sseAction},
+			Actions:     []Action{databaseAction, sseAction},
 			Description: "Database save and SSE broadcast (sequential)",
 		}
 		actions = append(actions, compositeAction)
@@ -1146,13 +1146,13 @@ func (p *Processor) getDisplayNameForSource(sourceID string) string {
 		if source, exists := registry.GetSourceByID(sourceID); exists {
 			return source.DisplayName
 		}
-		
+
 		// Try lookup by connection string (handles legacy case)
 		if source, exists := registry.GetSourceByConnection(sourceID); exists {
 			return source.DisplayName
 		}
 	}
-	
+
 	// Fallback: sanitize the source to prevent credential exposure in logs
 	// This handles cases where sourceID might be a raw RTSP URL
 	return privacy.SanitizeRTSPUrl(sourceID)
@@ -1188,7 +1188,7 @@ func (p *Processor) Shutdown() error {
 	p.speciesTrackerMu.RLock()
 	tracker := p.NewSpeciesTracker
 	p.speciesTrackerMu.RUnlock()
-	
+
 	if tracker != nil {
 		if err := tracker.Close(); err != nil {
 			// Add structured logging
@@ -1252,7 +1252,7 @@ func (p *Processor) NewWithSpeciesInfo(
 				} else {
 					// Last resort: create struct with manual sanitization for safety
 					sourceStruct = datastore.AudioSource{
-						ID:          source,                           // Use original as ID
+						ID:          source,                          // Use original as ID
 						SafeString:  privacy.SanitizeRTSPUrl(source), // Sanitize for logging
 						DisplayName: privacy.SanitizeRTSPUrl(source), // Use same for display
 					}
@@ -1261,7 +1261,7 @@ func (p *Processor) NewWithSpeciesInfo(
 		} else {
 			// Fallback when registry not available
 			sourceStruct = datastore.AudioSource{
-				ID:          source,                           // Use original as ID
+				ID:          source,                          // Use original as ID
 				SafeString:  privacy.SanitizeRTSPUrl(source), // Sanitize for logging
 				DisplayName: privacy.SanitizeRTSPUrl(source), // Use same for display
 			}
@@ -1298,7 +1298,7 @@ func (p *Processor) NewWithSpeciesInfo(
 func (p *Processor) logDetectionResults(source string, rawCount, filteredCount int) {
 	// Use the LogDeduplicator to determine if we should log
 	shouldLog, reason := p.logDedup.ShouldLog(source, rawCount, filteredCount)
-	
+
 	if shouldLog {
 		GetLogger().Info("Detection processing results",
 			"source", p.getDisplayNameForSource(source),
