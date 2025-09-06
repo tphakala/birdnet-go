@@ -583,7 +583,7 @@ func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan cha
 	// Calculate the offset to subtract from current time to get the recording start time
 	// This includes the configured pre-capture duration plus an additional 5 seconds offset to
 	// account for BirdNET prediction delay
-	preCaptureOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture) + 5*time.Second
+	preCaptureOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + 5*time.Second
 
 	wg.Add(1)
 	defer func() {

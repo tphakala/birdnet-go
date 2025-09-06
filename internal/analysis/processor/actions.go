@@ -32,33 +32,30 @@ import (
 const (
 	// SSEDatabaseIDTimeout is the maximum time to wait for database ID assignment
 	SSEDatabaseIDTimeout = 10 * time.Second
-	
+
 	// SSEDatabaseCheckInterval is how often to check for database ID
 	SSEDatabaseCheckInterval = 200 * time.Millisecond
-	
+
 	// SSEAudioFileTimeout is the maximum time to wait for audio file to be written
 	SSEAudioFileTimeout = 5 * time.Second
-	
+
 	// SSEAudioCheckInterval is how often to check for audio file
 	SSEAudioCheckInterval = 100 * time.Millisecond
-	
+
 	// MinAudioFileSize is the minimum size in bytes for a valid audio file
 	// Typed as int64 to match os.FileInfo.Size() return type
 	MinAudioFileSize int64 = 1024
-	
+
 	// MQTTPublishTimeout is the timeout for MQTT publish operations
 	MQTTPublishTimeout = 10 * time.Second
-	
-	// AudioSegmentDuration is the duration of audio segments to capture
-	AudioSegmentDuration = 15 * time.Second
-	
+
 	// DatabaseSearchLimit is the maximum number of results when searching for notes
 	DatabaseSearchLimit = 10
-	
+
 	// CompositeActionTimeout is the default timeout for each action in a composite action
 	// This is generous to accommodate slow hardware (e.g., Raspberry Pi with SD cards)
 	CompositeActionTimeout = 30 * time.Second
-	
+
 	// ExecuteCommandTimeout is the timeout for external command execution
 	ExecuteCommandTimeout = 5 * time.Minute
 )
@@ -151,8 +148,8 @@ type SSEAction struct {
 
 // CompositeAction executes multiple actions sequentially, ensuring proper dependency management.
 //
-// This action type was introduced to fix a critical race condition between DatabaseAction 
-// and SSEAction (GitHub issue #1158). The SSEAction depends on DatabaseAction completing 
+// This action type was introduced to fix a critical race condition between DatabaseAction
+// and SSEAction (GitHub issue #1158). The SSEAction depends on DatabaseAction completing
 // first to ensure database IDs are assigned before SSE broadcasts occur.
 //
 // Key Features:
@@ -545,8 +542,9 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 
 	// Save audio clip to file if enabled
 	if a.Settings.Realtime.Audio.Export.Enabled {
+		var CaptureLength = conf.Setting().Realtime.Audio.Export.Length
 		// export audio clip from capture buffer
-		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source.ID, a.Note.BeginTime, int(AudioSegmentDuration.Seconds()))
+		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source.ID, a.Note.BeginTime, CaptureLength)
 		if err != nil {
 			// Add structured logging
 			GetLogger().Error("Failed to read audio segment from buffer",
@@ -620,11 +618,11 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 
 	// Store current time for consistent use throughout
 	var notificationTime time.Time
-	
+
 	// Check notification suppression if tracker is available
 	if a.NewSpeciesTracker != nil {
 		notificationTime = time.Now()
-		
+
 		// Check if notification should be suppressed for this species
 		if a.NewSpeciesTracker.ShouldSuppressNotification(a.Note.ScientificName, notificationTime) {
 			if a.Settings.Debug {
@@ -676,7 +674,7 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 		if a.NewSpeciesTracker != nil && !notificationTime.IsZero() {
 			a.NewSpeciesTracker.RecordNotificationSent(a.Note.ScientificName, notificationTime)
 		}
-		
+
 		if a.Settings.Debug {
 			// Add structured logging
 			GetLogger().Debug("Published new species detection event",
@@ -964,11 +962,11 @@ func (a *MqttAction) Execute(data interface{}) error {
 		// Log the error with retry information if retries are enabled
 		// Sanitize error before logging
 		sanitizedErr := sanitizeError(err)
-		
+
 		// Check if this is an EOF error which indicates connection was closed unexpectedly
 		// This is a common issue with MQTT brokers and should be treated as retryable
 		isEOFErr := isEOFError(err)
-		
+
 		// Add structured logging
 		GetLogger().Error("Failed to publish to MQTT",
 			"component", "analysis.processor.actions",
@@ -993,7 +991,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 				notification.NotifyIntegrationFailure("MQTT", err)
 			}
 		}
-		
+
 		// Enhance error context with EOF detection
 		enhancedErr := errors.New(err).
 			Component("analysis.processor").
@@ -1007,7 +1005,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 			Context("retryable", true). // MQTT publish failures are typically retryable
 			Context("is_eof_error", isEOFErr).
 			Build()
-		
+
 		return enhancedErr
 	}
 
