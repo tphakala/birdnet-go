@@ -824,6 +824,7 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 		soxCmd.Stderr = &soxOutput
 
 		runtime.Gosched()
+
 		if err := soxCmd.Start(); err != nil {
 			return fmt.Errorf("error starting SoX command: %w", err)
 		}
@@ -880,7 +881,12 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 // getSoxSpectrogramArgs returns the common SoX arguments compatible with old HTMX API.
 func getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath string, raw bool) []string {
 	const dynamicRange = "100"
-	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-z", dynamicRange, "-o", absSpectrogramPath}
+
+	// get capture length
+	captureLength := conf.Setting().Realtime.Audio.Export.Length
+	captureLengthStr := strconv.Itoa(captureLength)
+
+	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-d", captureLengthStr, "-z", dynamicRange, "-o", absSpectrogramPath}
 
 	// For compatibility with old HTMX API: add -r flag for raw spectrograms (which is now the default)
 	if raw {

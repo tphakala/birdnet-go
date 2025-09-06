@@ -969,7 +969,11 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 func getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath string) []string {
 	const dynamicRange = "100"
 
-	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-z", dynamicRange, "-o", spectrogramPath}
+	// get capture length
+	captureLength := conf.Setting().Realtime.Audio.Export.Length
+	captureLengthStr := strconv.Itoa(captureLength)
+
+	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-d", captureLengthStr, "-z", dynamicRange, "-o", spectrogramPath}
 	width, _ := strconv.Atoi(widthStr)
 	if width < 800 {
 		args = append(args, "-r")
