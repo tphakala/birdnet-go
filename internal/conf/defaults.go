@@ -56,20 +56,20 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.export.enabled", true)
 	viper.SetDefault("realtime.audio.export.path", "clips/")
 	viper.SetDefault("realtime.audio.export.type", "wav")
-	viper.SetDefault("realtime.audio.export.bitrate", "128k")
+	viper.SetDefault("realtime.audio.export.bitrate", "96k")
 	viper.SetDefault("realtime.audio.export.length", 15)
-	viper.SetDefault("realtime.audio.export.precapture", 3)
+	viper.SetDefault("realtime.audio.export.preCapture", 3)
 	viper.SetDefault("realtime.audio.export.gain", 0.0)
 
 	// Audio normalization configuration (EBU R128 standard)
 	viper.SetDefault("realtime.audio.export.normalization.enabled", false)     // disabled by default
-	viper.SetDefault("realtime.audio.export.normalization.targetlufs", -23.0)  // EBU R128 broadcast standard
-	viper.SetDefault("realtime.audio.export.normalization.loudnessrange", 7.0) // typical range for broadcast
-	viper.SetDefault("realtime.audio.export.normalization.truepeak", -2.0)     // headroom to prevent clipping
+	viper.SetDefault("realtime.audio.export.normalization.targetLUFS", -23.0)  // EBU R128 broadcast standard
+	viper.SetDefault("realtime.audio.export.normalization.loudnessRange", 7.0) // typical range for broadcast
+	viper.SetDefault("realtime.audio.export.normalization.truePeak", -2.0)     // headroom to prevent clipping
 
 	// Audio equalizer configuration
 	viper.SetDefault("realtime.audio.equalizer.enabled", false)
-	viper.SetDefault("realtime.audio.equalizer.filters", []map[string]interface{}{
+	viper.SetDefault("realtime.audio.equalizer.filters", []map[string]any{
 		{
 			"type":      "HighPass",
 			"frequency": 100,

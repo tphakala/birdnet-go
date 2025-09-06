@@ -231,7 +231,7 @@ describe('AudioSettingsPage - Backend Format Validation', () => {
       const mp3Settings: BackendSettings = {
         export: {
           type: 'mp3',
-          bitrate: '128',
+          bitrate: '96',
           retention: {
             maxUsage: '80',
           },
@@ -239,7 +239,7 @@ describe('AudioSettingsPage - Backend Format Validation', () => {
       };
 
       const formatted = formatForBackend(mp3Settings);
-      expect(formatted.export.bitrate).toBe('128k');
+      expect(formatted.export.bitrate).toBe('96k');
       expect(formatted.export.retention.maxUsage).toBe('80%');
 
       // Test invalid bitrate throws error
@@ -396,7 +396,7 @@ describe('AudioSettingsPage - Backend Format Validation', () => {
         enabled: true,
         path: 'clips/',
         type: 'mp3',
-        bitrate: '128k',
+        bitrate: '96k',
         retention: {
           debug: false,
           policy: 'usage',

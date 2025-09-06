@@ -39,24 +39,24 @@ type EqualizerSettings struct {
 }
 
 type ExportSettings struct {
-	Debug         bool                  `json:"debug"`         // true to enable audio export debug
-	Enabled       bool                  `json:"enabled"`       // export audio clips containing indentified bird calls
-	Path          string                `json:"path"`          // path to audio clip export directory
-	Type          string                `json:"type"`          // audio file type, wav, mp3 or flac
-	Bitrate       string                `json:"bitrate"`       // bitrate for audio export
-	Retention     RetentionSettings     `json:"retention"`     // retention settings
-	Length        int                   `json:"length"`        // audio capture length in seconds
-	PreCapture    int                   `json:"preCapture"`    // pre-capture in seconds
-	Gain          float64               `json:"gain"`          // gain in dB for audio capture
-	Normalization NormalizationSettings `json:"normalization"` // audio normalization settings (EBU R128)
+	Debug         bool                  `json:"debug" mapstructure:"debug"`                 // true to enable audio export debug
+	Enabled       bool                  `json:"enabled" mapstructure:"enabled"`             // export audio clips containing indentified bird calls
+	Path          string                `json:"path" mapstructure:"path"`                   // path to audio clip export directory
+	Type          string                `json:"type" mapstructure:"type"`                   // audio file type, wav, mp3 or flac
+	Bitrate       string                `json:"bitrate" mapstructure:"bitrate"`             // bitrate for audio export
+	Retention     RetentionSettings     `json:"retention" mapstructure:"retention"`         // retention settings
+	Length        int                   `json:"length" mapstructure:"length"`               // audio capture length in seconds
+	PreCapture    int                   `json:"preCapture" mapstructure:"preCapture"`       // pre-capture in seconds
+	Gain          float64               `json:"gain" mapstructure:"gain"`                   // gain in dB for audio capture
+	Normalization NormalizationSettings `json:"normalization" mapstructure:"normalization"` // audio normalization settings (EBU R128)
 }
 
 // NormalizationSettings contains audio normalization configuration based on EBU R128 standard
 type NormalizationSettings struct {
-	Enabled       bool    `json:"enabled"`       // true to enable loudness normalization
-	TargetLUFS    float64 `json:"targetLUFS"`    // target integrated loudness in LUFS (default: -23)
-	LoudnessRange float64 `json:"loudnessRange"` // loudness range in LU (default: 7)
-	TruePeak      float64 `json:"truePeak"`      // true peak limit in dBTP (default: -2)
+	Enabled       bool    `json:"enabled" mapstructure:"enabled"`             // true to enable loudness normalization
+	TargetLUFS    float64 `json:"targetLUFS" mapstructure:"targetLUFS"`       // target integrated loudness in LUFS (default: -23)
+	LoudnessRange float64 `json:"loudnessRange" mapstructure:"loudnessRange"` // loudness range in LU (default: 7)
+	TruePeak      float64 `json:"truePeak" mapstructure:"truePeak"`           // true peak limit in dBTP (default: -2)
 }
 
 type RetentionSettings struct {

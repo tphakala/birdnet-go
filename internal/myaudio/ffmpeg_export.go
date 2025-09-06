@@ -356,6 +356,7 @@ func buildFFmpegArgs(tempFilePath string, settings *conf.AudioSettings) []string
 	outputBitrate := getMaxBitrate(settings.Export.Type, settings.Export.Bitrate)
 
 	args := []string{
+		"-hide_banner",     // Suppress FFmpeg banner output for cleaner logs
 		"-f", ffmpegFormat, // Input format based on bit depth
 		"-ar", ffmpegSampleRate, // Sample rate
 		"-ac", ffmpegNumChannels, // Number of channels
@@ -574,6 +575,7 @@ func runCustomFFmpegCommandToBufferWithContext(ctx context.Context, ffmpegPath s
 
 	// Build the base arguments for PCM input from stdin
 	args := []string{
+		"-hide_banner",     // Suppress FFmpeg banner output for cleaner logs
 		"-f", ffmpegFormat, // Input format based on bit depth
 		"-ar", ffmpegSampleRate, // Sample rate
 		"-ac", ffmpegNumChannels, // Number of channels
@@ -748,6 +750,7 @@ func AnalyzeAudioLoudnessWithContext(ctx context.Context, pcmData []byte, ffmpeg
 
 	// Build the FFmpeg command with loudnorm filter in print_format=json mode
 	args := []string{
+		"-hide_banner",     // Suppress FFmpeg banner output for cleaner logs
 		"-f", ffmpegFormat, // Input format based on bit depth
 		"-ar", ffmpegSampleRate, // Sample rate
 		"-ac", ffmpegNumChannels, // Number of channels

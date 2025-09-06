@@ -264,7 +264,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 		"operation", "process_detections_entry")
 
 	// Capture length sets before a detection is considered final and is flushed.
-	var captureLength = time.Duration(conf.Setting().Realtime.Audio.Export.Length) * time.Second
+	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
 
 	// processResults() returns a slice of detections, we iterate through each and process them
 	// detections are put into pendingDetections map where they are held until flush deadline is reached
@@ -477,7 +477,7 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 	// Create file name for audio clip
 	clipName := p.generateClipName(scientificName, result.Confidence)
 
-	var captureLength = time.Duration(conf.Setting().Realtime.Audio.Export.Length) * time.Second
+	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
 
 	// Set begin and end time for note
 	beginTime, endTime := item.StartTime, item.StartTime.Add(captureLength)

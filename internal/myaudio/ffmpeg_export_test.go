@@ -87,6 +87,33 @@ func TestBuildAudioFilter(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("buildAudioFilter() = %v, want %v", got, tt.want)
 			}
+
+			// Additional edge case assertions
+			switch {
+			case tt.settings.Export.Normalization.Enabled:
+				// When normalization is enabled, ensure NO volume filter is present
+				if strings.Contains(got, "volume=") {
+					t.Errorf("Expected no 'volume=' when normalization is enabled, but got: %v", got)
+				}
+				// Ensure loudnorm filter IS present
+				if !strings.Contains(got, "loudnorm=") {
+					t.Errorf("Expected 'loudnorm=' when normalization is enabled, but got: %v", got)
+				}
+			case tt.settings.Export.Gain != 0:
+				// When only gain is set (normalization disabled), ensure NO loudnorm filter
+				if strings.Contains(got, "loudnorm=") {
+					t.Errorf("Expected no 'loudnorm=' when only gain is set, but got: %v", got)
+				}
+				// Ensure volume filter IS present
+				if !strings.Contains(got, "volume=") {
+					t.Errorf("Expected 'volume=' when gain is non-zero, but got: %v", got)
+				}
+			default:
+				// When neither normalization nor gain is set, ensure NO filters
+				if got != "" {
+					t.Errorf("Expected empty filter when no audio processing is needed, but got: %v", got)
+				}
+			}
 		})
 	}
 }
@@ -105,6 +132,11 @@ func TestBuildFFmpegArgs(t *testing.T) {
 	}
 
 	args := buildFFmpegArgs(tempFile, settings)
+
+	// Verify -hide_banner is the first argument
+	if len(args) == 0 || args[0] != "-hide_banner" {
+		t.Errorf("Expected -hide_banner as first argument, got: %v", args)
+	}
 
 	// Check that audio filter is included
 	foundAF := false
@@ -144,5 +176,33 @@ func TestBuildFFmpegArgs(t *testing.T) {
 
 	if !foundLoudnorm {
 		t.Error("Expected loudnorm filter in FFmpeg arguments when normalization is enabled")
+	}
+
+	// Test with no audio filters (gain = 0, normalization disabled)
+	settings.Export.Gain = 0
+	settings.Export.Normalization.Enabled = false
+
+	args = buildFFmpegArgs(tempFile, settings)
+
+	// Ensure -af flag is NOT present when no filters are needed
+	hasAudioFilter := false
+	for _, arg := range args {
+		if arg == "-af" {
+			hasAudioFilter = true
+			break
+		}
+	}
+
+	if hasAudioFilter {
+		t.Error("Expected no -af flag in FFmpeg arguments when no audio filters are needed")
+	}
+
+	// Additional check: ensure neither volume nor loudnorm appears anywhere
+	argsStr := strings.Join(args, " ")
+	if strings.Contains(argsStr, "volume=") {
+		t.Error("Unexpected 'volume=' filter found when no filters should be present")
+	}
+	if strings.Contains(argsStr, "loudnorm=") {
+		t.Error("Unexpected 'loudnorm=' filter found when no filters should be present")
 	}
 }
