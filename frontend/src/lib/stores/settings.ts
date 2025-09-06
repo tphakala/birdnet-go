@@ -168,6 +168,17 @@ export interface ExportSettings {
   debug?: boolean;
   path: string;
   retention: RetentionSettings;
+  length: number; // audio capture length in seconds
+  preCapture: number; // pre-capture in seconds
+  gain: number; // gain in dB for audio capture
+  normalization: NormalizationSettings; // audio normalization settings (EBU R128)
+}
+
+export interface NormalizationSettings {
+  enabled: boolean; // true to enable loudness normalization
+  targetLUFS: number; // target integrated loudness in LUFS (default: -23)
+  loudnessRange: number; // loudness range in LU (default: 7)
+  truePeak: number; // true peak limit in dBTP (default: -2)
 }
 
 export interface RetentionSettings {
@@ -510,6 +521,15 @@ function createEmptySettings(): SettingsFormData {
             maxUsage: '80%',
             minClips: 10,
             keepSpectrograms: false,
+          },
+          length: 15, // Default 15 seconds capture length
+          preCapture: 3, // Default 3 seconds pre-capture
+          gain: 0, // Default 0 dB gain (no amplification)
+          normalization: {
+            enabled: false, // Disabled by default
+            targetLUFS: -23.0, // EBU R128 broadcast standard
+            loudnessRange: 7.0, // Typical range for broadcast
+            truePeak: -2.0, // Headroom to prevent clipping
           },
         },
         soundLevel: {

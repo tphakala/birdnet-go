@@ -17,6 +17,22 @@ import (
 // MinSoundLevelInterval is the minimum sound level interval in seconds to prevent excessive CPU usage
 const MinSoundLevelInterval = 5
 
+// Audio gain limits in dB
+const (
+	MinAudioGain = -40.0 // Minimum allowed audio gain in dB
+	MaxAudioGain = 40.0  // Maximum allowed audio gain in dB
+)
+
+// EBU R128 normalization limits
+const (
+	MinTargetLUFS    = -40.0 // Minimum target loudness in LUFS
+	MaxTargetLUFS    = -10.0 // Maximum target loudness in LUFS
+	MinLoudnessRange = 0.0   // Minimum loudness range in LU
+	MaxLoudnessRange = 20.0  // Maximum loudness range in LU
+	MinTruePeak      = -10.0 // Minimum true peak in dBTP
+	MaxTruePeak      = 0.0   // Maximum true peak in dBTP
+)
+
 // ValidationError represents a collection of validation errors
 type ValidationError struct {
 	Errors []string
@@ -427,6 +443,79 @@ func validateAudioSettings(settings *AudioSettings) error {
 
 	// Validate audio export settings
 	if settings.Export.Enabled {
+		// Validate capture length (10-60 seconds)
+		if settings.Export.Length < 10 || settings.Export.Length > 60 {
+			return errors.New(fmt.Errorf("audio capture length must be between 10 and 60 seconds, got %d", settings.Export.Length)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "audio-export-capture-length").
+				Context("capture_length", settings.Export.Length).
+				Build()
+		}
+
+		// Validate pre-capture (max 1/2 of capture length)
+		maxPreCapture := settings.Export.Length / 2
+		if settings.Export.PreCapture < 0 || settings.Export.PreCapture > maxPreCapture {
+			return errors.New(fmt.Errorf("audio pre-capture must be between 0 and %d seconds (1/2 of capture length), got %d", maxPreCapture, settings.Export.PreCapture)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "audio-export-precapture").
+				Context("precapture", settings.Export.PreCapture).
+				Context("max_precapture", maxPreCapture).
+				Context("capture_length", settings.Export.Length).
+				Build()
+		}
+
+		// Validate gain setting (reasonable range for audio processing)
+		if settings.Export.Gain < MinAudioGain || settings.Export.Gain > MaxAudioGain {
+			return errors.New(fmt.Errorf("audio gain must be between %.0f and +%.0f dB, got %.1f", MinAudioGain, MaxAudioGain, settings.Export.Gain)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "audio-export-gain").
+				Context("gain", settings.Export.Gain).
+				Context("min_gain", MinAudioGain).
+				Context("max_gain", MaxAudioGain).
+				Build()
+		}
+
+		// Validate normalization settings if enabled
+		if settings.Export.Normalization.Enabled {
+			// Validate target LUFS (reasonable range for EBU R128)
+			if settings.Export.Normalization.TargetLUFS < MinTargetLUFS || settings.Export.Normalization.TargetLUFS > MaxTargetLUFS {
+				return errors.New(fmt.Errorf("normalization target LUFS must be between %.0f and %.0f, got %.1f", MinTargetLUFS, MaxTargetLUFS, settings.Export.Normalization.TargetLUFS)).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "audio-normalization-target").
+					Context("target_lufs", settings.Export.Normalization.TargetLUFS).
+					Context("min_target_lufs", MinTargetLUFS).
+					Context("max_target_lufs", MaxTargetLUFS).
+					Build()
+			}
+
+			// Validate loudness range (dynamic range)
+			if settings.Export.Normalization.LoudnessRange < MinLoudnessRange || settings.Export.Normalization.LoudnessRange > MaxLoudnessRange {
+				return errors.New(fmt.Errorf("normalization loudness range must be between %.0f and %.0f LU, got %.1f", MinLoudnessRange, MaxLoudnessRange, settings.Export.Normalization.LoudnessRange)).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "audio-normalization-range").
+					Context("loudness_range", settings.Export.Normalization.LoudnessRange).
+					Context("min_loudness_range", MinLoudnessRange).
+					Context("max_loudness_range", MaxLoudnessRange).
+					Build()
+			}
+
+			// Validate true peak (headroom to prevent clipping)
+			if settings.Export.Normalization.TruePeak < MinTruePeak || settings.Export.Normalization.TruePeak > MaxTruePeak {
+				return errors.New(fmt.Errorf("normalization true peak must be between %.0f and %.0f dBTP, got %.1f", MinTruePeak, MaxTruePeak, settings.Export.Normalization.TruePeak)).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "audio-normalization-peak").
+					Context("true_peak", settings.Export.Normalization.TruePeak).
+					Context("min_true_peak", MinTruePeak).
+					Context("max_true_peak", MaxTruePeak).
+					Build()
+			}
+
+			// Warn if gain is also set (normalization takes precedence)
+			if settings.Export.Gain != 0 {
+				log.Printf("WARNING: Both gain and normalization are configured. Normalization will take precedence, gain setting will be ignored.")
+			}
+		}
+
 		if settings.FfmpegPath == "" {
 			settings.Export.Type = "wav"
 			log.Printf("FFmpeg not available, using WAV format for audio export")
@@ -514,7 +603,7 @@ func validateWeatherSettings(settings *WeatherSettings) error {
 			Context("poll_interval", settings.PollInterval).
 			Build()
 	}
-	
+
 	// Validate Wunderground settings if it's the selected provider
 	if settings.Provider == "wunderground" {
 		if err := settings.Wunderground.ValidateWunderground(); err != nil {
@@ -524,7 +613,7 @@ func validateWeatherSettings(settings *WeatherSettings) error {
 				Build()
 		}
 	}
-	
+
 	return nil
 }
 
@@ -671,7 +760,7 @@ func validateSpeciesConfigSettings(settings *SpeciesSettings) error {
 				Context("interval", config.Interval).
 				Build()
 		}
-		
+
 		// Check if threshold is within valid range
 		if config.Threshold < 0 || config.Threshold > 1 {
 			return errors.New(fmt.Errorf("species config for '%s': threshold must be between 0 and 1, got %f", speciesName, config.Threshold)).

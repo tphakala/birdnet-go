@@ -39,12 +39,24 @@ type EqualizerSettings struct {
 }
 
 type ExportSettings struct {
-	Debug     bool              `json:"debug"`     // true to enable audio export debug
-	Enabled   bool              `json:"enabled"`   // export audio clips containing indentified bird calls
-	Path      string            `json:"path"`      // path to audio clip export directory
-	Type      string            `json:"type"`      // audio file type, wav, mp3 or flac
-	Bitrate   string            `json:"bitrate"`   // bitrate for audio export
-	Retention RetentionSettings `json:"retention"` // retention settings
+	Debug         bool                  `json:"debug" mapstructure:"debug"`                 // true to enable audio export debug
+	Enabled       bool                  `json:"enabled" mapstructure:"enabled"`             // export audio clips containing indentified bird calls
+	Path          string                `json:"path" mapstructure:"path"`                   // path to audio clip export directory
+	Type          string                `json:"type" mapstructure:"type"`                   // audio file type, wav, mp3 or flac
+	Bitrate       string                `json:"bitrate" mapstructure:"bitrate"`             // bitrate for audio export
+	Retention     RetentionSettings     `json:"retention" mapstructure:"retention"`         // retention settings
+	Length        int                   `json:"length" mapstructure:"length"`               // audio capture length in seconds
+	PreCapture    int                   `json:"preCapture" mapstructure:"preCapture"`       // pre-capture in seconds
+	Gain          float64               `json:"gain" mapstructure:"gain"`                   // gain in dB for audio capture
+	Normalization NormalizationSettings `json:"normalization" mapstructure:"normalization"` // audio normalization settings (EBU R128)
+}
+
+// NormalizationSettings contains audio normalization configuration based on EBU R128 standard
+type NormalizationSettings struct {
+	Enabled       bool    `json:"enabled" mapstructure:"enabled"`             // true to enable loudness normalization
+	TargetLUFS    float64 `json:"targetLUFS" mapstructure:"targetLUFS"`       // target integrated loudness in LUFS (default: -23)
+	LoudnessRange float64 `json:"loudnessRange" mapstructure:"loudnessRange"` // loudness range in LU (default: 7)
+	TruePeak      float64 `json:"truePeak" mapstructure:"truePeak"`           // true peak limit in dBTP (default: -2)
 }
 
 type RetentionSettings struct {
@@ -301,12 +313,12 @@ type LogDeduplicationSettings struct {
 
 // SpeciesTrackingSettings contains settings for tracking new species
 type SpeciesTrackingSettings struct {
-	Enabled              bool                     `json:"enabled"`              // true to enable new species tracking
-	NewSpeciesWindowDays int                      `json:"newSpeciesWindowDays"` // Days to consider a species "new" (default: 14)
-	SyncIntervalMinutes  int                      `json:"syncIntervalMinutes"`  // Interval to sync with database (default: 60)
-	NotificationSuppressionHours int             `json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 168)
-	YearlyTracking       YearlyTrackingSettings   `json:"yearlyTracking"`       // Settings for yearly species tracking
-	SeasonalTracking     SeasonalTrackingSettings `json:"seasonalTracking"`     // Settings for seasonal species tracking
+	Enabled                      bool                     `json:"enabled"`                      // true to enable new species tracking
+	NewSpeciesWindowDays         int                      `json:"newSpeciesWindowDays"`         // Days to consider a species "new" (default: 14)
+	SyncIntervalMinutes          int                      `json:"syncIntervalMinutes"`          // Interval to sync with database (default: 60)
+	NotificationSuppressionHours int                      `json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 168)
+	YearlyTracking               YearlyTrackingSettings   `json:"yearlyTracking"`               // Settings for yearly species tracking
+	SeasonalTracking             SeasonalTrackingSettings `json:"seasonalTracking"`             // Settings for seasonal species tracking
 }
 
 // YearlyTrackingSettings contains settings for tracking first arrivals each year
@@ -949,19 +961,10 @@ func Load() (*Settings, error) {
 		}
 	}
 
-	// Log the loaded species settings for debugging
-	/*
-		log.Printf("Loaded Species Settings: Include: %v, Exclude: %v, Threshold: %v",
-			settings.Realtime.Species.Include,
-			settings.Realtime.Species.Exclude,
-			settings.Realtime.Species.Threshold)
-	*/
-
 	// Save settings instance
 	settingsInstance = settings
 	return settingsInstance, nil
 }
-
 
 // initViper initializes viper with default values and reads the configuration file.
 func initViper() error {

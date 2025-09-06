@@ -105,6 +105,15 @@
             minClips: 10,
             keepSpectrograms: false,
           },
+          length: 15, // Default 15 seconds capture length
+          preCapture: 3, // Default 3 seconds pre-capture
+          gain: 0, // Default 0 dB gain (no amplification)
+          normalization: {
+            enabled: false, // Disabled by default
+            targetLUFS: -23.0, // EBU R128 broadcast standard
+            loudnessRange: 7.0, // Typical range for broadcast
+            truePeak: -2.0, // Headroom to prevent clipping
+          },
         },
       };
 

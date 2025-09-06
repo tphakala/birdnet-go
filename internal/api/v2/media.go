@@ -20,8 +20,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/securefs"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -33,7 +33,7 @@ const (
 // Spectrogram size constants
 // Sizes are optimized for different UI contexts:
 // - sm (400px): Compact display in lists and dashboards
-// - md (800px): Standard detail view and review modals  
+// - md (800px): Standard detail view and review modals
 // - lg (1000px): Large display for detailed analysis
 // - xl (1200px): Maximum quality for expert review
 const (
@@ -68,9 +68,9 @@ var (
 	// Image errors
 	ErrImageNotFound             = errors.NewStd("image not found")
 	ErrImageProviderNotAvailable = errors.NewStd("image provider not available")
-	
+
 	// Sentinel errors for nilnil cases
-	ErrSpectrogramExists = errors.NewStd("spectrogram already exists")
+	ErrSpectrogramExists       = errors.NewStd("spectrogram already exists")
 	ErrSpectrogramNotGenerated = errors.NewStd("spectrogram not generated")
 )
 
@@ -228,7 +228,6 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 	return c.HandleError(ctx, err, userMsg, http.StatusInternalServerError)
 }
 
-
 // parseRawParameter parses the raw query parameter for spectrogram generation.
 // It defaults to true for backward compatibility with existing cached spectrograms.
 // Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
@@ -240,12 +239,12 @@ func parseRawParameter(rawParam string) bool {
 
 	// Normalize the parameter to lowercase for consistent parsing
 	normalizedParam := strings.ToLower(rawParam)
-	
+
 	// First try strconv.ParseBool for standard values
 	if parsedRaw, err := strconv.ParseBool(normalizedParam); err == nil {
 		return parsedRaw
 	}
-	
+
 	// Handle additional common boolean representations
 	switch normalizedParam {
 	case "yes", "on":
@@ -362,9 +361,9 @@ func (c *Controller) spectrogramHTTPError(ctx echo.Context, err error) error {
 }
 
 // ServeSpectrogramByID serves a spectrogram image based on note ID using SecureFS
-// 
+//
 // Route: GET /api/v2/spectrogram/:id
-// 
+//
 // Query Parameters:
 //   - size: Spectrogram size - "sm" (400px), "md" (800px), "lg" (1000px), "xl" (1200px)
 //     Default: "md"
@@ -495,7 +494,6 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	return nil
 }
 
-
 // Limit concurrent spectrogram generations to avoid overloading the system
 const maxConcurrentSpectrograms = 4
 
@@ -506,8 +504,8 @@ var (
 
 // Package-level logger for spectrogram generation
 var (
-	spectrogramLogger   *slog.Logger
-	spectrogramLevelVar = new(slog.LevelVar) // Dynamic level control
+	spectrogramLogger      *slog.Logger
+	spectrogramLevelVar    = new(slog.LevelVar) // Dynamic level control
 	closeSpectrogramLogger func() error
 )
 
@@ -826,6 +824,7 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 		soxCmd.Stderr = &soxOutput
 
 		runtime.Gosched()
+
 		if err := soxCmd.Start(); err != nil {
 			return fmt.Errorf("error starting SoX command: %w", err)
 		}
@@ -881,10 +880,14 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 
 // getSoxSpectrogramArgs returns the common SoX arguments compatible with old HTMX API.
 func getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath string, raw bool) []string {
-	const audioLength = "15"
 	const dynamicRange = "100"
-	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-d", audioLength, "-z", dynamicRange, "-o", absSpectrogramPath}
-	
+
+	// get capture length
+	captureLength := conf.Setting().Realtime.Audio.Export.Length
+	captureLengthStr := strconv.Itoa(captureLength)
+
+	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-d", captureLengthStr, "-z", dynamicRange, "-o", absSpectrogramPath}
+
 	// For compatibility with old HTMX API: add -r flag for raw spectrograms (which is now the default)
 	if raw {
 		// Raw mode: no axes, labels, or legends for clean display (old API default behavior)
@@ -1003,7 +1006,7 @@ func (c *Controller) GetSpeciesImage(ctx echo.Context) error {
 	// These are external images from wikimedia/flickr that are stable
 	// Cache with immutable flag to prevent revalidation
 	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", ImageCacheSeconds))
-	
+
 	// Redirect to the image URL
 	return ctx.Redirect(http.StatusFound, birdImage.URL)
 }

@@ -1275,7 +1275,7 @@ func initializeBuffers(sources []string) error {
 	}
 
 	// Initialize capture buffers
-	const captureBufferSize = 60 // Capture buffer size of 60 seconds
+	const captureBufferSize = 120 // Capture buffer size of 120 seconds
 	if err := myaudio.InitCaptureBuffers(captureBufferSize, conf.SampleRate, conf.BitDepth/8, sources); err != nil {
 		initErrors = append(initErrors, fmt.Sprintf("failed to initialize capture buffers: %v", err))
 	}
