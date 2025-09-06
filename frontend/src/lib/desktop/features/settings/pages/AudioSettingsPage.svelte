@@ -532,18 +532,18 @@
     </div>
   </SettingsSection>
 
-  <!-- Audio Export Section -->
+  <!-- Audio Capture Section -->
   <SettingsSection
-    title={t('settings.audio.audioExport.title')}
-    description={t('settings.audio.audioExport.description')}
+    title={t('settings.audio.audioCapture.title')}
+    description={t('settings.audio.audioCapture.description')}
     defaultOpen={true}
     hasChanges={audioExportHasChanges}
   >
     <div class="space-y-4">
       <Checkbox
         checked={settings.audio.export.enabled}
-        label={t('settings.audio.audioExport.enable')}
-        helpText={t('settings.audio.audioExport.enableHelp')}
+        label={t('settings.audio.audioCapture.enable')}
+        helpText={t('settings.audio.audioCapture.enableHelp')}
         disabled={store.isLoading || store.isSaving}
         onchange={updateExportEnabled}
       />

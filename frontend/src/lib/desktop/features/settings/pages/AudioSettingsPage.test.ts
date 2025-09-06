@@ -760,8 +760,9 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
       render(AudioSettingsPage);
 
       await waitFor(() => {
-        // Component should handle error gracefully
-        expect(screen.getByText('Audio Capture')).toBeInTheDocument();
+        // Component should handle error gracefully - there are two "Audio Capture" sections
+        const audioCaptureElements = screen.getAllByText('Audio Capture');
+        expect(audioCaptureElements.length).toBeGreaterThan(0);
       });
     });
   });

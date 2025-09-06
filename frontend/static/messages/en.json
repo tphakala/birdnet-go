@@ -1272,10 +1272,6 @@
         "losslessNote": "Lossless formats preserve original audio quality without compression artifacts."
       },
       "audioExport": {
-        "title": "Audio Clip Export",
-        "description": "Configure how detected bird calls are saved as audio clips",
-        "enable": "Enable Audio Export",
-        "enableHelp": "Save audio clips of detected bird calls for review, sharing, or building custom datasets.",
         "captureSettings": "Capture Settings",
         "lengthLabel": "Capture Length",
         "lengthHelp": "Duration of audio to capture for each detection (10-60 seconds). Longer clips provide more context but use more storage.",
