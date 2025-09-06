@@ -355,17 +355,54 @@ func buildFFmpegArgs(tempFilePath string, settings *conf.AudioSettings) []string
 	outputFormat := getOutputFormat(settings.Export.Type)
 	outputBitrate := getMaxBitrate(settings.Export.Type, settings.Export.Bitrate)
 
-	return []string{
+	args := []string{
 		"-f", ffmpegFormat, // Input format based on bit depth
 		"-ar", ffmpegSampleRate, // Sample rate
 		"-ac", ffmpegNumChannels, // Number of channels
 		"-i", "-", // Read from stdin
+	}
+
+	// Add audio filters for normalization or gain
+	audioFilter := buildAudioFilter(settings)
+	if audioFilter != "" {
+		args = append(args, "-af", audioFilter)
+	}
+
+	// Add output encoding settings
+	args = append(args,
 		"-c:a", outputEncoder,
 		"-b:a", outputBitrate,
 		"-f", outputFormat, // Specify the output format
 		"-y",         // Overwrite output file if it exists
 		tempFilePath, // Write to the temporary file
+	)
+
+	return args
+}
+
+// buildAudioFilter constructs the audio filter string for FFmpeg
+func buildAudioFilter(settings *conf.AudioSettings) string {
+	// Normalization takes precedence over gain
+	if settings.Export.Normalization.Enabled {
+		// Use loudnorm filter for EBU R128 normalization
+		// Format: loudnorm=I=target:TP=truepeak:LRA=range
+		return fmt.Sprintf("loudnorm=I=%.1f:TP=%.1f:LRA=%.1f",
+			settings.Export.Normalization.TargetLUFS,
+			settings.Export.Normalization.TruePeak,
+			settings.Export.Normalization.LoudnessRange)
 	}
+
+	// Apply simple gain if specified (and normalization is disabled)
+	if settings.Export.Gain != 0 {
+		// Use volume filter for gain adjustment
+		// Format: volume=+6dB or volume=-6dB
+		if settings.Export.Gain > 0 {
+			return fmt.Sprintf("volume=+%.1fdB", settings.Export.Gain)
+		}
+		return fmt.Sprintf("volume=%.1fdB", settings.Export.Gain) // Negative sign already included
+	}
+
+	return "" // No audio filtering needed
 }
 
 // getCodec returns the appropriate codec to use with FFmpeg based on the format

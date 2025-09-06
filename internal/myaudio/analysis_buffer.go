@@ -23,17 +23,17 @@ const (
 )
 
 var (
-	overlapSize         int                               // overlapSize is the number of bytes to overlap between chunks
-	readSize            int                               // readSize is the number of bytes to read from the ring buffer
-	analysisBuffers     map[string]*ringbuffer.RingBuffer // analysisBuffers is a map to store ring buffers for each audio source
-	prevData            map[string][]byte                 // prevData is a map to store the previous data for each audio source
-	abMutex             sync.RWMutex                      // Mutex to protect access to the analysisBuffers and prevData maps
-	warningCounter      map[string]int
-	warningCounterMutex sync.Mutex              // Mutex to protect access to warningCounter map
-	analysisMetrics     *metrics.MyAudioMetrics // Global metrics instance for analysis buffer operations
+	overlapSize          int                               // overlapSize is the number of bytes to overlap between chunks
+	readSize             int                               // readSize is the number of bytes to read from the ring buffer
+	analysisBuffers      map[string]*ringbuffer.RingBuffer // analysisBuffers is a map to store ring buffers for each audio source
+	prevData             map[string][]byte                 // prevData is a map to store the previous data for each audio source
+	abMutex              sync.RWMutex                      // Mutex to protect access to the analysisBuffers and prevData maps
+	warningCounter       map[string]int
+	warningCounterMutex  sync.Mutex              // Mutex to protect access to warningCounter map
+	analysisMetrics      *metrics.MyAudioMetrics // Global metrics instance for analysis buffer operations
 	analysisMetricsMutex sync.RWMutex            // Mutex for thread-safe access to analysisMetrics
 	analysisMetricsOnce  sync.Once               // Ensures metrics are only set once
-	readBufferPool      *BufferPool             // Global buffer pool for read operations
+	readBufferPool       *BufferPool             // Global buffer pool for read operations
 )
 
 // init initializes the warningCounter map
@@ -67,7 +67,7 @@ func SecondsToBytes(seconds float64) int {
 // AllocateAnalysisBuffer initializes a ring buffer for a single audio source ID.
 // It returns an error if memory allocation fails or if the input is invalid.
 func AllocateAnalysisBuffer(capacity int, sourceID string) error {
-	
+
 	start := time.Now()
 
 	// Validate inputs
@@ -106,7 +106,7 @@ func AllocateAnalysisBuffer(capacity int, sourceID string) error {
 	if overlapSize == 0 {
 		overlapSize = SecondsToBytes(settings.BirdNET.Overlap)
 		readSize = conf.BufferSize - overlapSize
-		
+
 		// Initialize the read buffer pool if not already done
 		if readBufferPool == nil {
 			var err error
@@ -177,7 +177,7 @@ func AllocateAnalysisBuffer(capacity int, sourceID string) error {
 	analysisBuffers[sourceID] = ab
 	prevData[sourceID] = nil
 	warningCounter[sourceID] = 0
-	
+
 	// Acquire reference to this source using the migrated ID
 	registry := GetRegistry()
 	// Guard against nil registry during initialization to prevent panic
@@ -205,7 +205,7 @@ func AllocateAnalysisBuffer(capacity int, sourceID string) error {
 
 // RemoveAnalysisBuffer safely removes and cleans up a ring buffer for a single source ID.
 func RemoveAnalysisBuffer(sourceID string) error {
-	
+
 	abMutex.Lock()
 	ab, exists := analysisBuffers[sourceID]
 	if !exists {
@@ -220,7 +220,7 @@ func RemoveAnalysisBuffer(sourceID string) error {
 	delete(analysisBuffers, sourceID)
 	delete(prevData, sourceID)
 	delete(warningCounter, sourceID)
-	
+
 	// Clean up buffer pool if this was the last buffer (prevents memory leak)
 	if len(analysisBuffers) == 0 && readBufferPool != nil {
 		// Clear the buffer pool to release all cached buffers
@@ -230,17 +230,17 @@ func RemoveAnalysisBuffer(sourceID string) error {
 		readSize = 0
 	}
 	abMutex.Unlock() // Release lock before calling registry
-	
+
 	// Release reference to this source - registry will auto-remove if count reaches zero
 	registry := GetRegistry()
 	// Guard against nil registry during shutdown to prevent panic
 	if registry != nil {
-			if err := registry.ReleaseSourceReference(sourceID); err != nil {
-				// Log but don't fail - buffer removal succeeded
-				if !errors.Is(err, ErrSourceNotFound) {
-					log.Printf("⚠️ Failed to release source reference: %v", err)
-				}
+		if err := registry.ReleaseSourceReference(sourceID); err != nil {
+			// Log but don't fail - buffer removal succeeded
+			if !errors.Is(err, ErrSourceNotFound) {
+				log.Printf("⚠️ Failed to release source reference: %v", err)
 			}
+		}
 	} else {
 		log.Printf("⚠️ Registry not available during analysis buffer cleanup, skipping source reference release for: %s", sourceID)
 	}
@@ -288,7 +288,7 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 	if displayName == "" {
 		displayName = sourceID
 	}
-	
+
 	start := time.Now()
 
 	abMutex.RLock()
@@ -345,7 +345,7 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 		warningCounter[sourceID]++
 		shouldLog := warningCounter[sourceID]%32 == 1
 		warningCounterMutex.Unlock()
-		
+
 		if shouldLog {
 			log.Printf("⚠️ Analysis buffer for %s is %.2f%% full (used: %d/%d bytes)",
 				displayName, capacityUsed*100, currentLength, capacity)
@@ -365,7 +365,7 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 		err := func() error {
 			abMutex.Lock()
 			defer abMutex.Unlock() // Always unlock, even on panic
-			
+
 			var writeErr error
 			n, writeErr = ab.Write(data) // Write data to the ring buffer
 			return writeErr
@@ -505,7 +505,7 @@ func ReadFromAnalysisBuffer(sourceID string) ([]byte, error) {
 		// Fallback if pool not initialized
 		data = make([]byte, readSize)
 	}
-	
+
 	// Read data from the ring buffer
 	bytesRead, err := ab.Read(data)
 	if err != nil {
@@ -524,7 +524,7 @@ func ReadFromAnalysisBuffer(sourceID string) ([]byte, error) {
 			m.RecordBufferRead("analysis", sourceID, "error")
 			m.RecordBufferReadError("analysis", sourceID, "read_failed")
 		}
-		
+
 		// Return buffer to pool on error
 		if readBufferPool != nil {
 			readBufferPool.Put(data)
@@ -536,7 +536,7 @@ func ReadFromAnalysisBuffer(sourceID string) ([]byte, error) {
 	var fullData []byte
 	prevData[sourceID] = append(prevData[sourceID], data...)
 	fullData = prevData[sourceID]
-	
+
 	// Return buffer to pool after copying data
 	if readBufferPool != nil {
 		readBufferPool.Put(data)
@@ -571,7 +571,7 @@ func ReadFromAnalysisBuffer(sourceID string) ([]byte, error) {
 // Accepts either original source string or migrated source ID
 // This is a thread-safe exported function that encapsulates access to the internal buffer map
 func AnalysisBufferExists(sourceID string) bool {
-	
+
 	abMutex.RLock()
 	defer abMutex.RUnlock()
 	_, exists := analysisBuffers[sourceID]
@@ -580,8 +580,10 @@ func AnalysisBufferExists(sourceID string) bool {
 
 // AnalysisBufferMonitor monitors the buffer and processes audio data when enough data is present.
 func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}, sourceID string) {
-	// preRecordingTime is the time to subtract from the current time to get the start time of the detection
-	const preRecordingTime = -5000 * time.Millisecond
+	// Calculate the offset to subtract from current time to get the recording start time
+	// This includes the configured pre-capture duration plus an additional 5 seconds offset to
+	// account for BirdNET prediction delay
+	preCaptureOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture) + 5*time.Second
 
 	wg.Add(1)
 	defer func() {
@@ -617,15 +619,7 @@ func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan cha
 					m.RecordAnalysisBufferPoll(sourceID, "data_available")
 				}
 
-				/*if err := validatePCMData(data); err != nil {
-					log.Printf("Invalid PCM data for source %s: %v", sourceID, err)
-					if m := getAnalysisMetrics(); m != nil {
-						m.RecordAudioDataValidationError(sourceID, "pcm_validation")
-					}
-					continue
-				}*/
-
-				startTime := time.Now().Add(preRecordingTime)
+				startTime := time.Now().Add(-preCaptureOffset)
 				processingStart := time.Now()
 
 				// DEBUG
@@ -646,42 +640,3 @@ func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan cha
 		}
 	}
 }
-
-/*func validatePCMData(data []byte) error {
-	// Check if the data size is a multiple of the sample size (e.g., 2 bytes for 16-bit audio)
-	if len(data)%2 != 0 {
-		return fmt.Errorf("invalid PCM data size: %d", len(data))
-	}
-
-	// Expected length for 3 seconds of audio data
-	expectedLength := 48000 * 2 * 3 // 48000 samples/sec * 2 bytes/sample * 3 seconds
-	if len(data) != expectedLength {
-		return fmt.Errorf("unexpected PCM data length: %d (expected %d)", len(data), expectedLength)
-	}
-
-	// Check for valid 16-bit signed integer ranges
-	for i := 0; i < len(data); i += 2 {
-		sample := int16(data[i]) | int16(data[i+1])<<8
-		if sample < -32768 || sample > 32767 {
-			return fmt.Errorf("invalid PCM data value at index %d: %d", i, sample)
-		}
-	}
-
-	// Optional: Check for excessive silence (if all values are zero)
-	silenceThreshold := 0.95 // Threshold for detecting silence, adjust as needed
-	silenceCount := 0
-	totalSamples := len(data) / 2
-
-	for i := 0; i < len(data); i += 2 {
-		sample := int16(data[i]) | int16(data[i+1])<<8
-		if sample == 0 {
-			silenceCount++
-		}
-	}
-
-	if float64(silenceCount)/float64(totalSamples) > silenceThreshold {
-		return fmt.Errorf("excessive silence detected in PCM data")
-	}
-
-	return nil
-}*/
