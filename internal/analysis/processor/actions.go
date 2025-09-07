@@ -74,11 +74,12 @@ type ContextAction interface {
 }
 
 type LogAction struct {
-	Settings     *conf.Settings
-	Note         datastore.Note
-	EventTracker *EventTracker
-	Description  string
-	mu           sync.Mutex // Protect concurrent access to Note
+	Settings      *conf.Settings
+	Note          datastore.Note
+	EventTracker  *EventTracker
+	Description   string
+	CorrelationID string     // Detection correlation ID for log tracking
+	mu            sync.Mutex // Protect concurrent access to Note
 }
 
 type DatabaseAction struct {
@@ -90,27 +91,30 @@ type DatabaseAction struct {
 	NewSpeciesTracker *NewSpeciesTracker // Add reference to new species tracker
 	processor         *Processor         // Add reference to processor for source name resolution
 	Description       string
+	CorrelationID     string     // Detection correlation ID for log tracking
 	mu                sync.Mutex // Protect concurrent access to Note and Results
 }
 
 type SaveAudioAction struct {
-	Settings     *conf.Settings
-	ClipName     string
-	pcmData      []byte
-	EventTracker *EventTracker
-	Description  string
-	mu           sync.Mutex // Protect concurrent access to pcmData
+	Settings      *conf.Settings
+	ClipName      string
+	pcmData       []byte
+	EventTracker  *EventTracker
+	Description   string
+	CorrelationID string     // Detection correlation ID for log tracking
+	mu            sync.Mutex // Protect concurrent access to pcmData
 }
 
 type BirdWeatherAction struct {
-	Settings     *conf.Settings
-	Note         datastore.Note
-	pcmData      []byte
-	BwClient     *birdweather.BwClient
-	EventTracker *EventTracker
-	RetryConfig  jobqueue.RetryConfig // Configuration for retry behavior
-	Description  string
-	mu           sync.Mutex // Protect concurrent access to Note and pcmData
+	Settings      *conf.Settings
+	Note          datastore.Note
+	pcmData       []byte
+	BwClient      *birdweather.BwClient
+	EventTracker  *EventTracker
+	RetryConfig   jobqueue.RetryConfig // Configuration for retry behavior
+	Description   string
+	CorrelationID string     // Detection correlation ID for log tracking
+	mu            sync.Mutex // Protect concurrent access to Note and pcmData
 }
 
 type MqttAction struct {
@@ -121,6 +125,7 @@ type MqttAction struct {
 	EventTracker   *EventTracker
 	RetryConfig    jobqueue.RetryConfig // Configuration for retry behavior
 	Description    string
+	CorrelationID  string     // Detection correlation ID for log tracking
 	mu             sync.Mutex // Protect concurrent access to Note
 }
 
@@ -138,6 +143,7 @@ type SSEAction struct {
 	EventTracker   *EventTracker
 	RetryConfig    jobqueue.RetryConfig // Configuration for retry behavior
 	Description    string
+	CorrelationID  string     // Detection correlation ID for log tracking
 	mu             sync.Mutex // Protect concurrent access to Note
 	// SSEBroadcaster is a function that broadcasts detection data
 	// This allows the action to be independent of the specific API implementation
@@ -174,10 +180,11 @@ type SSEAction struct {
 // timeout errors like "database ID not assigned after 10s" that occur when actions
 // execute concurrently on resource-constrained hardware.
 type CompositeAction struct {
-	Actions     []Action       // Actions to execute in sequence
-	Description string         // Human-readable description
-	Timeout     *time.Duration // Optional: per-action timeout override (nil = use default)
-	mu          sync.Mutex     // Protects concurrent access to Actions
+	Actions       []Action       // Actions to execute in sequence
+	Description   string         // Human-readable description
+	Timeout       *time.Duration // Optional: per-action timeout override (nil = use default)
+	CorrelationID string         // Detection correlation ID for log tracking
+	mu            sync.Mutex     // Protects concurrent access to Actions
 }
 
 // GetDescription returns a human-readable description of the LogAction
@@ -424,6 +431,7 @@ func (a *CompositeAction) executeActionWithRecovery(action Action, data interfac
 					Build()
 				GetLogger().Error("Composite action timed out",
 					"component", "analysis.processor.actions",
+					"detection_id", a.CorrelationID,
 					"step", step,
 					"total_steps", total,
 					"action_description", action.GetDescription(),
@@ -434,6 +442,7 @@ func (a *CompositeAction) executeActionWithRecovery(action Action, data interfac
 			// Log other errors
 			GetLogger().Error("Composite action failed",
 				"component", "analysis.processor.actions",
+				"detection_id", a.CorrelationID,
 				"step", step,
 				"total_steps", total,
 				"action_description", action.GetDescription(),
@@ -455,6 +464,7 @@ func (a *CompositeAction) executeActionWithRecovery(action Action, data interfac
 			Build()
 		GetLogger().Error("Composite action timed out",
 			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
 			"step", step,
 			"total_steps", total,
 			"action_description", action.GetDescription(),
@@ -482,6 +492,7 @@ func (a *LogAction) Execute(data interface{}) error {
 		// Add structured logging
 		GetLogger().Error("Failed to log note to file",
 			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
 			"error", err,
 			"species", a.Note.CommonName,
 			"confidence", a.Note.Confidence,
@@ -492,6 +503,7 @@ func (a *LogAction) Execute(data interface{}) error {
 	// Add structured logging for console output
 	GetLogger().Info("Detection logged",
 		"component", "analysis.processor.actions",
+		"detection_id", a.CorrelationID,
 		"species", a.Note.CommonName,
 		"confidence", a.Note.Confidence,
 		"time", a.Note.Time,
@@ -527,6 +539,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 		// Add structured logging
 		GetLogger().Error("Failed to save note and results to database",
 			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
 			"error", err,
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
@@ -542,13 +555,24 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 
 	// Save audio clip to file if enabled
 	if a.Settings.Realtime.Audio.Export.Enabled {
-		captureLength := conf.Setting().Realtime.Audio.Export.Length
+		captureLength := a.Settings.Realtime.Audio.Export.Length
+
+		// debug log note begin, end and capture length
+		GetLogger().Debug("Saving detection audio clip",
+			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
+			"begin_time", a.Note.BeginTime,
+			"end_time", a.Note.EndTime,
+			"capture_length", captureLength,
+			"operation", "note_begin_end_capture_length")
+
 		// export audio clip from capture buffer
 		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source.ID, a.Note.BeginTime, captureLength)
 		if err != nil {
 			// Add structured logging
 			GetLogger().Error("Failed to read audio segment from buffer",
 				"component", "analysis.processor.actions",
+				"detection_id", a.CorrelationID,
 				"error", err,
 				"species", a.Note.CommonName,
 				"source", a.Note.Source.SafeString,
@@ -570,6 +594,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 			// Add structured logging
 			GetLogger().Error("Failed to save audio clip",
 				"component", "analysis.processor.actions",
+				"detection_id", a.CorrelationID,
 				"error", err,
 				"species", a.Note.CommonName,
 				"clip_name", a.Note.ClipName,
@@ -582,6 +607,7 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 			// Add structured logging
 			GetLogger().Debug("Saved audio clip successfully",
 				"component", "analysis.processor.actions",
+				"detection_id", a.CorrelationID,
 				"species", a.Note.CommonName,
 				"clip_name", a.Note.ClipName,
 				"detection_time", a.Note.Time,
@@ -628,6 +654,7 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 			if a.Settings.Debug {
 				GetLogger().Debug("Suppressing duplicate new species notification",
 					"component", "analysis.processor.actions",
+					"detection_id", a.CorrelationID,
 					"species", a.Note.CommonName,
 					"scientific_name", a.Note.ScientificName,
 					"operation", "suppress_notification")
@@ -657,6 +684,7 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 			// Add structured logging
 			GetLogger().Debug("Failed to create detection event",
 				"component", "analysis.processor.actions",
+				"detection_id", a.CorrelationID,
 				"error", err,
 				"species", a.Note.CommonName,
 				"scientific_name", a.Note.ScientificName,
@@ -679,6 +707,7 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 			// Add structured logging
 			GetLogger().Debug("Published new species detection event",
 				"component", "analysis.processor.actions",
+				"detection_id", a.CorrelationID,
 				"species", a.Note.CommonName,
 				"scientific_name", a.Note.ScientificName,
 				"confidence", a.Note.Confidence,
@@ -703,6 +732,7 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 		// Add structured logging
 		GetLogger().Error("Failed to create directory for audio clip",
 			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
 			"error", err,
 			"output_path", outputPath,
 			"clip_name", a.ClipName,
@@ -716,6 +746,7 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 			// Add structured logging
 			GetLogger().Error("Failed to save audio clip to WAV",
 				"component", "analysis.processor.actions",
+				"detection_id", a.CorrelationID,
 				"error", err,
 				"output_path", outputPath,
 				"clip_name", a.ClipName,
@@ -729,6 +760,7 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 			// Add structured logging
 			GetLogger().Error("Failed to export audio clip with FFmpeg",
 				"component", "analysis.processor.actions",
+				"detection_id", a.CorrelationID,
 				"error", err,
 				"output_path", outputPath,
 				"clip_name", a.ClipName,
@@ -765,6 +797,7 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 			// Add structured logging
 			GetLogger().Debug("Skipping BirdWeather upload due to low confidence",
 				"component", "analysis.processor.actions",
+				"detection_id", a.CorrelationID,
 				"species", species,
 				"confidence", a.Note.Confidence,
 				"threshold", a.Settings.Realtime.Birdweather.Threshold,
@@ -802,6 +835,7 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 		// Add structured logging
 		GetLogger().Error("Failed to upload to BirdWeather",
 			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
 			"error", sanitizedErr,
 			"species", note.CommonName,
 			"scientific_name", note.ScientificName,
@@ -839,6 +873,7 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 		// Add structured logging
 		GetLogger().Debug("Successfully uploaded to BirdWeather",
 			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
 			"confidence", a.Note.Confidence,
@@ -865,6 +900,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 		// Add structured logging
 		GetLogger().Warn("MQTT client not connected, skipping publish",
 			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
 			"confidence", a.Note.Confidence,
@@ -914,6 +950,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 			// Add structured logging
 			GetLogger().Warn("Error getting bird image from cache",
 				"component", "analysis.processor.actions",
+				"detection_id", a.CorrelationID,
 				"error", err,
 				"species", a.Note.CommonName,
 				"scientific_name", a.Note.ScientificName,
@@ -926,6 +963,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 		// Add structured logging
 		GetLogger().Warn("BirdImageCache is nil, cannot fetch image",
 			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
 			"operation", "check_bird_image_cache")
@@ -944,6 +982,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 		// Add structured logging
 		GetLogger().Error("Failed to marshal note to JSON",
 			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
 			"error", err,
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
@@ -970,6 +1009,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 		// Add structured logging
 		GetLogger().Error("Failed to publish to MQTT",
 			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
 			"error", sanitizedErr,
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
@@ -1013,6 +1053,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 		// Add structured logging
 		GetLogger().Debug("Successfully published to MQTT",
 			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
 			"confidence", a.Note.Confidence,
@@ -1073,6 +1114,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 			// Add structured logging
 			GetLogger().Warn("Audio file not ready for SSE broadcast",
 				"component", "analysis.processor.actions",
+				"detection_id", a.CorrelationID,
 				"error", err,
 				"species", a.Note.CommonName,
 				"clip_name", a.Note.ClipName,
@@ -1089,6 +1131,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 			// Add structured logging
 			GetLogger().Warn("Database ID not ready for SSE broadcast",
 				"component", "analysis.processor.actions",
+				"detection_id", a.CorrelationID,
 				"error", err,
 				"species", a.Note.CommonName,
 				"note_id", a.Note.ID,
@@ -1107,6 +1150,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 			// Add structured logging
 			GetLogger().Warn("Error getting bird image from cache",
 				"component", "analysis.processor.actions",
+				"detection_id", a.CorrelationID,
 				"error", err,
 				"species", a.Note.CommonName,
 				"scientific_name", a.Note.ScientificName,
@@ -1119,6 +1163,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 		// Add structured logging
 		GetLogger().Warn("BirdImageCache is nil, cannot fetch image",
 			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
 			"operation", "check_bird_image_cache")
@@ -1136,6 +1181,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 		// Add structured logging
 		GetLogger().Error("Failed to broadcast via SSE",
 			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
 			"error", sanitizedErr,
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
@@ -1165,6 +1211,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 		// Add structured logging
 		GetLogger().Debug("Successfully broadcasted via SSE",
 			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
 			"species", a.Note.CommonName,
 			"scientific_name", a.Note.ScientificName,
 			"confidence", a.Note.Confidence,
@@ -1197,6 +1244,7 @@ func (a *SSEAction) waitForAudioFile() error {
 					// Add structured logging
 					GetLogger().Debug("Audio file ready for SSE broadcast",
 						"component", "analysis.processor.actions",
+						"detection_id", a.CorrelationID,
 						"clip_name", a.Note.ClipName,
 						"file_size_bytes", info.Size(),
 						"species", a.Note.CommonName,
@@ -1237,6 +1285,7 @@ func (a *SSEAction) waitForDatabaseID() error {
 				// Add structured logging
 				GetLogger().Debug("Found database ID for SSE broadcast",
 					"component", "analysis.processor.actions",
+					"detection_id", a.CorrelationID,
 					"database_id", updatedNote.ID,
 					"species", a.Note.CommonName,
 					"scientific_name", a.Note.ScientificName,

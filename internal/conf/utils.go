@@ -382,9 +382,23 @@ func GetSoxBinaryName() string {
 	return "sox"
 }
 
+// GetFfprobeBinaryName returns the binary name for ffprobe based on the current OS.
+func GetFfprobeBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return "ffprobe.exe"
+	}
+	return "ffprobe"
+}
+
 // IsFfmpegAvailable checks if ffmpeg is available in the system PATH.
 func IsFfmpegAvailable() bool {
 	_, err := exec.LookPath(GetFfmpegBinaryName())
+	return err == nil
+}
+
+// IsFfprobeAvailable checks if ffprobe is available in the system PATH.
+func IsFfprobeAvailable() bool {
+	_, err := exec.LookPath(GetFfprobeBinaryName())
 	return err == nil
 }
 

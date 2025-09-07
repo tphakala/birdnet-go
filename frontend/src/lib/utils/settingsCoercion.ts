@@ -303,6 +303,57 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
     };
   }
 
+  // Export settings validation
+  if ('export' in settings && settings.export && typeof settings.export === 'object') {
+    const exp = settings.export as unknown as Record<string, unknown>;
+    const coercedExport: Record<string, unknown> = { ...exp };
+
+    // Always coerce enabled to boolean to ensure stable type
+    coercedExport.enabled = coerceBoolean(exp.enabled, false);
+
+    // Clamp capture length between 10 and 60 seconds (backend validation)
+    if ('length' in exp) {
+      coercedExport.length = coerceNumber(exp.length, 10, 60, 15);
+    }
+
+    // After clamping length, clamp pre-capture to max 50% of capture length
+    const captureLength = coerceNumber(coercedExport.length, 10, 60, 15);
+    if ('preCapture' in exp) {
+      const maxPreCapture = Math.floor(captureLength / 2);
+      coercedExport.preCapture = coerceNumber(exp.preCapture, 0, maxPreCapture, 3);
+    }
+
+    // Clamp gain between -40 and +40 dB (backend validation)
+    if ('gain' in exp) {
+      coercedExport.gain = coerceNumber(exp.gain, -40, 40, 0);
+    }
+
+    // Normalization settings
+    if ('normalization' in exp && exp.normalization && typeof exp.normalization === 'object') {
+      const norm = exp.normalization as Record<string, unknown>;
+      const normalizationSettings: Record<string, unknown> = {
+        ...norm,
+        enabled: coerceBoolean(norm.enabled, false),
+      };
+
+      // Only clamp values if they exist, preserving enabled state
+      if ('targetLUFS' in norm) {
+        normalizationSettings.targetLUFS = coerceNumber(norm.targetLUFS, -40, -10, -23);
+      }
+      if ('loudnessRange' in norm) {
+        normalizationSettings.loudnessRange = coerceNumber(norm.loudnessRange, 0, 20, 7);
+      }
+      if ('truePeak' in norm) {
+        normalizationSettings.truePeak = coerceNumber(norm.truePeak, -10, 0, -2);
+      }
+
+      coercedExport.normalization = normalizationSettings;
+    }
+
+    // Cast back to appropriate type for assignment
+    coerced.export = coercedExport as unknown as typeof settings.export;
+  }
+
   return coerced;
 }
 

@@ -18,9 +18,9 @@ var (
 	globalManager *FFmpegManager
 	managerOnce   sync.Once
 	managerMutex  sync.RWMutex
-	
-	integrationLogger *slog.Logger
-	integrationLevelVar = new(slog.LevelVar)
+
+	integrationLogger      *slog.Logger
+	integrationLevelVar    = new(slog.LevelVar)
 	closeIntegrationLogger func() error
 )
 
@@ -62,12 +62,12 @@ func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) er
 			logger = slog.Default()
 		}
 	}
-	
+
 	settings := conf.Setting()
 	if !settings.Realtime.Audio.SoundLevel.Enabled {
 		return nil // Not enabled, no error
 	}
-	
+
 	// Get or create the source in the registry to get proper ID and DisplayName
 	registry := GetRegistry()
 	// Guard against nil registry during initialization to prevent panic
@@ -81,7 +81,7 @@ func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) er
 			Context("operation", "register_sound_level").
 			Build()
 	}
-	
+
 	audioSource := registry.GetOrCreateSource(source, SourceTypeRTSP)
 	if audioSource == nil {
 		logger.Warn("failed to get/create audio source for sound level processor",
@@ -94,7 +94,7 @@ func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) er
 			Context("source", privacy.SanitizeRTSPUrl(source)).
 			Build()
 	}
-	
+
 	// Register the sound level processor using source ID and DisplayName
 	if err := RegisterSoundLevelProcessor(audioSource.ID, audioSource.DisplayName); err != nil {
 		logger.Warn("failed to register sound level processor",
@@ -124,10 +124,10 @@ func getGlobalManager() *FFmpegManager {
 	managerOnce.Do(func() {
 		managerMutex.Lock()
 		defer managerMutex.Unlock()
-		
+
 		// Update logger level based on current configuration
 		UpdateFFmpegLogLevel()
-		
+
 		globalManager = NewFFmpegManager()
 		// Start monitoring with configurable interval
 		settings := conf.Setting()
@@ -137,10 +137,10 @@ func getGlobalManager() *FFmpegManager {
 		}
 		globalManager.StartMonitoring(monitoringInterval)
 	})
-	
+
 	managerMutex.RLock()
 	defer managerMutex.RUnlock()
-	
+
 	// Return nil if manager was shut down
 	return globalManager
 }
@@ -150,7 +150,7 @@ func getGlobalManager() *FFmpegManager {
 func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan struct{}, restartChan chan struct{}, unifiedAudioChan chan UnifiedAudioData) {
 	// Update logger level based on current configuration
 	UpdateFFmpegLogLevel()
-	
+
 	// Note: Sound level processor registration is handled by FFmpegManager.StartStream()
 	// to avoid duplicate registrations and ensure proper lifecycle management
 
@@ -219,7 +219,7 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 func SyncRTSPStreamsWithConfig(audioChan chan UnifiedAudioData) error {
 	// Update logger level based on current configuration
 	UpdateFFmpegLogLevel()
-	
+
 	manager := getGlobalManager()
 	if manager == nil {
 		return errors.Newf("FFmpeg manager is not available").
@@ -251,4 +251,3 @@ func ShutdownFFmpegManager() {
 		// The manager can only be initialized once per process
 	}
 }
-

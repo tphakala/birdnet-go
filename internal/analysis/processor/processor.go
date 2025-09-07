@@ -3,6 +3,7 @@ package processor
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"log"
 	"math"
@@ -83,9 +84,10 @@ type DynamicThreshold struct {
 }
 
 type Detections struct {
-	pcmData3s []byte              // 3s PCM data containing the detection
-	Note      datastore.Note      // Note containing highest match
-	Results   []datastore.Results // Full BirdNET prediction results
+	CorrelationID string              // Unique detection identifier for log correlation
+	pcmData3s     []byte              // 3s PCM data containing the detection
+	Note          datastore.Note      // Note containing highest match
+	Results       []datastore.Results // Full BirdNET prediction results
 }
 
 // PendingDetection struct represents a single detection held in memory,
@@ -263,8 +265,11 @@ func (p *Processor) processDetections(item birdnet.Results) {
 		"elapsed_time_ms", item.ElapsedTime.Milliseconds(),
 		"operation", "process_detections_entry")
 
-	// Capture length sets before a detection is considered final and is flushed.
+	// Detection window sets wait time before a detection is considered final and is flushed.
 	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
+	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
+	// Ensure detectionWindow is non-negative to prevent early flushes
+	detectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
 
 	// processResults() returns a slice of detections, we iterate through each and process them
 	// detections are put into pendingDetections map where they are held until flush deadline is reached
@@ -307,14 +312,14 @@ func (p *Processor) processDetections(item birdnet.Results) {
 				"species", commonName,
 				"confidence", confidence,
 				"source", item.Source.DisplayName,
-				"flush_deadline", item.StartTime.Add(captureLength),
+				"flush_deadline", item.StartTime.Add(detectionWindow),
 				"operation", "create_pending_detection")
 			p.pendingDetections[commonName] = PendingDetection{
 				Detection:     detection,
 				Confidence:    confidence,
 				Source:        item.Source.ID,
 				FirstDetected: item.StartTime,
-				FlushDeadline: item.StartTime.Add(captureLength),
+				FlushDeadline: item.StartTime.Add(detectionWindow),
 				Count:         1,
 			}
 		}
@@ -477,10 +482,13 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 	// Create file name for audio clip
 	clipName := p.generateClipName(scientificName, result.Confidence)
 
+	// Get capture length and pre-capture length for detection end time calculation
 	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
+	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
 
 	// Set begin and end time for note
-	beginTime, endTime := item.StartTime, item.StartTime.Add(captureLength)
+	beginTime := item.StartTime
+	endTime := item.StartTime.Add(captureLength - preCaptureLength)
 
 	// Get occurrence probability for this species at detection time
 	occurrence := p.Bn.GetSpeciesOccurrenceAtTime(result.Species, item.StartTime)
@@ -502,10 +510,14 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 		tracker.UpdateSpecies(scientificName, item.StartTime)
 	}
 
+	// Generate unique correlation ID for detection tracking
+	correlationID := p.generateCorrelationID(commonName, item.StartTime)
+
 	return Detections{
-		pcmData3s: item.PCMdata,
-		Note:      note,
-		Results:   item.Results,
+		CorrelationID: correlationID,
+		pcmData3s:     item.PCMdata,
+		Note:          note,
+		Results:       item.Results,
 	}
 }
 
@@ -882,7 +894,12 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 
 	// Append various default actions based on the application settings
 	if p.Settings.Realtime.Log.Enabled {
-		actions = append(actions, &LogAction{Settings: p.Settings, EventTracker: p.GetEventTracker(), Note: detection.Note})
+		actions = append(actions, &LogAction{
+			Settings:      p.Settings,
+			EventTracker:  p.GetEventTracker(),
+			Note:          detection.Note,
+			CorrelationID: detection.CorrelationID,
+		})
 	}
 
 	// Create DatabaseAction if database is enabled
@@ -899,6 +916,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			Note:              detection.Note,
 			Results:           detection.Results,
 			Ds:                p.Ds,
+			CorrelationID:     detection.CorrelationID,
 		}
 	}
 
@@ -921,6 +939,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			RetryConfig:    sseRetryConfig,
 			SSEBroadcaster: sseBroadcaster,
 			Ds:             p.Ds,
+			CorrelationID:  detection.CorrelationID,
 		}
 	}
 
@@ -941,8 +960,9 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	if databaseAction != nil && sseAction != nil {
 		// Create composite action for sequential execution
 		compositeAction := &CompositeAction{
-			Actions:     []Action{databaseAction, sseAction},
-			Description: "Database save and SSE broadcast (sequential)",
+			Actions:       []Action{databaseAction, sseAction},
+			Description:   "Database save and SSE broadcast (sequential)",
+			CorrelationID: detection.CorrelationID,
 		}
 		actions = append(actions, compositeAction)
 	} else {
@@ -969,12 +989,13 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			}
 
 			actions = append(actions, &BirdWeatherAction{
-				Settings:     p.Settings,
-				EventTracker: p.GetEventTracker(),
-				BwClient:     bwClient,
-				Note:         detection.Note,
-				pcmData:      detection.pcmData3s,
-				RetryConfig:  bwRetryConfig,
+				Settings:      p.Settings,
+				EventTracker:  p.GetEventTracker(),
+				BwClient:      bwClient,
+				Note:          detection.Note,
+				pcmData:       detection.pcmData3s,
+				RetryConfig:   bwRetryConfig,
+				CorrelationID: detection.CorrelationID,
 			})
 		}
 	}
@@ -999,6 +1020,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 				Note:           detection.Note,
 				BirdImageCache: p.BirdImageCache,
 				RetryConfig:    mqttRetryConfig,
+				CorrelationID:  detection.CorrelationID,
 			})
 		}
 	}
@@ -1307,4 +1329,48 @@ func (p *Processor) logDetectionResults(source string, rawCount, filteredCount i
 			"log_reason", reason,
 			"operation", "process_detections_summary")
 	}
+}
+
+// generateCorrelationID creates a unique, human-readable identifier for detection tracking
+// Format: SPEC_HHMM_XXXX (e.g., "CROW_1108_a7f3")
+func (p *Processor) generateCorrelationID(species string, timestamp time.Time) string {
+	// Create species prefix (first 4 characters, uppercase)
+	speciesPrefix := strings.ToUpper(species)
+	if len(speciesPrefix) > 4 {
+		speciesPrefix = speciesPrefix[:4]
+	}
+	// Pad with underscores if too short
+	for len(speciesPrefix) < 4 {
+		speciesPrefix += "_"
+	}
+
+	// Format time as HHMM
+	timeStr := timestamp.Format("1504")
+
+	// Generate 4-character random hex suffix
+	randomSuffix := generateRandomHex(4)
+
+	return fmt.Sprintf("%s_%s_%s", speciesPrefix, timeStr, randomSuffix)
+}
+
+// generateRandomHex generates a random hexadecimal string of specified length
+func generateRandomHex(length int) string {
+	bytes := make([]byte, (length+1)/2) // Round up for odd lengths
+	_, err := rand.Read(bytes)
+	if err != nil {
+		// Fallback to timestamp-based randomness if crypto/rand fails
+		// Build a hex string of exactly the requested length
+		fallback := fmt.Sprintf("%016x", time.Now().UnixNano())
+		// Repeat the fallback string if needed to ensure we have enough length
+		for len(fallback) < length {
+			fallback += fmt.Sprintf("%016x", time.Now().UnixNano())
+		}
+		return fallback[:length]
+	}
+
+	hex := fmt.Sprintf("%x", bytes)
+	if len(hex) > length {
+		hex = hex[:length]
+	}
+	return hex
 }

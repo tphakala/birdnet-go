@@ -757,12 +757,28 @@ describe('AudioSettingsPage - RTSP Stream Configuration', () => {
       // Mock failed API call
       global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
 
-      render(AudioSettingsPage);
+      const { container } = render(AudioSettingsPage);
 
+      // Wait for the component to render completely
       await waitFor(() => {
-        // Component should handle error gracefully
-        expect(screen.getByText('Audio Capture')).toBeInTheDocument();
+        expect(container.querySelector('.settings-page-content')).toBeInTheDocument();
       });
+
+      // Check for main Audio Capture section heading
+      const audioCaptureHeading = screen.getByText('Audio Capture');
+      expect(audioCaptureHeading).toBeInTheDocument();
+
+      // Check for Clip Settings section heading - it appears later in the DOM
+      const clipSettingsHeading = screen.getByText('Clip Settings');
+      expect(clipSettingsHeading).toBeInTheDocument();
+
+      // Verify the RTSP section exists
+      const rtspHeading = screen.getByText('RTSP Source');
+      expect(rtspHeading).toBeInTheDocument();
+
+      // Verify the audio source select element exists using container query
+      const selectElement = container.querySelector('#audio-source') as HTMLSelectElement;
+      expect(selectElement).toBeInTheDocument();
     });
   });
 

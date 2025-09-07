@@ -580,15 +580,14 @@ func AnalysisBufferExists(sourceID string) bool {
 
 // AnalysisBufferMonitor monitors the buffer and processes audio data when enough data is present.
 func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan struct{}, sourceID string) {
-	// Calculate the offset to subtract from current time to get the recording start time
-	// This includes the configured pre-capture duration plus an additional 5 seconds offset to
-	// account for BirdNET prediction delay
-	preCaptureOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + 5*time.Second
-
 	wg.Add(1)
 	defer func() {
 		wg.Done()
 	}()
+
+	// This is the offset to subtract from the begin time of the data to account for BirdNET prediction and
+	// processing delays, goal is to ensure that captured audio clip contains detection sound.
+	const detectionOffset = 7 * time.Second
 
 	// Creating a ticker that ticks every 100ms
 	ticker := time.NewTicker(pollInterval)
@@ -619,11 +618,13 @@ func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan cha
 					m.RecordAnalysisBufferPoll(sourceID, "data_available")
 				}
 
-				startTime := time.Now().Add(-preCaptureOffset)
+				// Calculate the offset dynamically to pick up runtime configuration changes
+				// This includes the configured pre-capture duration plus an additional detection offset to
+				// account for BirdNET prediction delay
+				beginTimeOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + detectionOffset
+				startTime := time.Now().Add(-beginTimeOffset)
 				processingStart := time.Now()
 
-				// DEBUG
-				//log.Printf("Processing data for source ID %s", sourceID)
 				err := ProcessData(bn, data, startTime, sourceID)
 
 				if m := getAnalysisMetrics(); m != nil {

@@ -75,6 +75,7 @@
   };
 
   const inputId = id || generateId();
+  const helpTextId = helpText ? `${inputId}-help` : undefined;
 
   // Constants for clarity
   const DEFAULT_DECIMAL_PLACES = 2;
@@ -157,10 +158,11 @@
     aria-valuenow={value}
     aria-valuetext={displayValue}
     aria-disabled={disabled}
+    aria-describedby={helpTextId}
   />
   {#if helpText}
     <div class="label">
-      <span class="label-text-alt text-base-content/70">{helpText}</span>
+      <span id={helpTextId} class="label-text-alt text-base-content/70">{helpText}</span>
     </div>
   {/if}
 </div>
