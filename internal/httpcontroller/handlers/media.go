@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -24,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
 // MaxClipNameLength is the maximum allowed length for a clip name
@@ -748,7 +750,8 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 		ffmpegArgs := []string{"-hide_banner", "-i", audioClipPath, "-f", "sox", "-"}
 
 		// Build SoX command arguments
-		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath)...)
+		ctx := context.Background()
+		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(ctx, widthStr, heightStr, spectrogramPath, audioClipPath)...)
 
 		logger.Debug("Built command arguments for FFmpeg + SoX pipeline",
 			slog.Any("ffmpeg_args", ffmpegArgs),
@@ -887,7 +890,8 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 		// Use SoX directly for supported formats
 		logger.Debug("Using SoX directly for supported audio format")
 
-		soxArgs := append([]string{audioClipPath}, getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath)...)
+		ctx := context.Background()
+		soxArgs := append([]string{audioClipPath}, getSoxSpectrogramArgs(ctx, widthStr, heightStr, spectrogramPath, audioClipPath)...)
 
 		logger.Debug("Built SoX-only command arguments",
 			slog.Any("sox_args", soxArgs),
@@ -966,12 +970,26 @@ func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) 
 }
 
 // getSoxSpectrogramArgs returns the common SoX arguments for generating a spectrogram
-func getSoxSpectrogramArgs(widthStr, heightStr, spectrogramPath string) []string {
+func getSoxSpectrogramArgs(ctx context.Context, widthStr, heightStr, spectrogramPath, audioPath string) []string {
 	const dynamicRange = "100"
 
-	// get capture length
-	captureLength := conf.Setting().Realtime.Audio.Export.Length
-	captureLengthStr := strconv.Itoa(captureLength)
+	// Get actual audio duration instead of using hardcoded capture length
+	// Use a timeout context to prevent hanging
+	durationCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	duration, err := myaudio.GetAudioDuration(durationCtx, audioPath)
+	if err != nil {
+		// Fall back to capture length from settings if ffprobe fails
+		logging.ForService("htmx_media_handler").Warn("Failed to get audio duration with ffprobe, falling back to capture length",
+			slog.String("error", err.Error()),
+			slog.String("audio_path", audioPath))
+		captureLength := conf.Setting().Realtime.Audio.Export.Length
+		duration = float64(captureLength)
+	}
+
+	// Convert duration to string, rounding to nearest integer
+	captureLengthStr := strconv.Itoa(int(duration + 0.5))
 
 	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-d", captureLengthStr, "-z", dynamicRange, "-o", spectrogramPath}
 	width, _ := strconv.Atoi(widthStr)

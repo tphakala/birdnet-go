@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"golang.org/x/sync/singleflight"
 )
@@ -799,7 +800,7 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 
 	if useFFmpeg {
 		ffmpegArgs := []string{"-hide_banner", "-i", absAudioClipPath, "-f", "sox", "-"}
-		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath, raw)...)
+		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(ctx, widthStr, heightStr, absSpectrogramPath, absAudioClipPath, raw)...)
 
 		if runtime.GOOS == "windows" {
 			// #nosec G204 - ffmpegBinary and soxBinary are validated by ValidateToolPath/exec.LookPath
@@ -849,7 +850,7 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 		}
 		runtime.Gosched()
 	} else {
-		soxArgs := append([]string{absAudioClipPath}, getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath, raw)...)
+		soxArgs := append([]string{absAudioClipPath}, getSoxSpectrogramArgs(ctx, widthStr, heightStr, absSpectrogramPath, absAudioClipPath, raw)...)
 
 		if runtime.GOOS == "windows" {
 			// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
@@ -879,12 +880,26 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 }
 
 // getSoxSpectrogramArgs returns the common SoX arguments compatible with old HTMX API.
-func getSoxSpectrogramArgs(widthStr, heightStr, absSpectrogramPath string, raw bool) []string {
+func getSoxSpectrogramArgs(ctx context.Context, widthStr, heightStr, absSpectrogramPath, audioPath string, raw bool) []string {
 	const dynamicRange = "100"
 
-	// get capture length
-	captureLength := conf.Setting().Realtime.Audio.Export.Length
-	captureLengthStr := strconv.Itoa(captureLength)
+	// Get actual audio duration instead of using hardcoded capture length
+	// Use a timeout context to prevent hanging
+	durationCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	duration, err := myaudio.GetAudioDuration(durationCtx, audioPath)
+	if err != nil {
+		// Fall back to capture length from settings if ffprobe fails
+		spectrogramLogger.Warn("Failed to get audio duration with ffprobe, falling back to capture length",
+			"error", err,
+			"audio_path", audioPath)
+		captureLength := conf.Setting().Realtime.Audio.Export.Length
+		duration = float64(captureLength)
+	}
+
+	// Convert duration to string, rounding to nearest integer
+	captureLengthStr := strconv.Itoa(int(duration + 0.5))
 
 	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-d", captureLengthStr, "-z", dynamicRange, "-o", absSpectrogramPath}
 
