@@ -48,11 +48,23 @@ func getFFmpegFormat(sampleRate, numChannels, bitDepth int) (sampleRateStr, chan
 // Returns the duration in seconds as a float64, or an error if ffprobe fails.
 // The context allows for cancellation and timeout to prevent hanging.
 func GetAudioDuration(ctx context.Context, audioPath string) (float64, error) {
+	// Validate input path
+	if audioPath == "" {
+		return 0, fmt.Errorf("audio path cannot be empty")
+	}
+
+	// Track the actual timeout/deadline for accurate error messages
+	var timeoutDuration time.Duration
+
 	// Create a context with timeout if none exists
 	if ctx == nil {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		timeoutDuration = 5 * time.Second
+		ctx, cancel = context.WithTimeout(context.Background(), timeoutDuration)
 		defer cancel()
+	} else if deadline, ok := ctx.Deadline(); ok {
+		// Calculate remaining time if context has a deadline
+		timeoutDuration = time.Until(deadline)
 	}
 
 	// Get the proper ffprobe binary name based on OS
@@ -78,7 +90,11 @@ func GetAudioDuration(ctx context.Context, audioPath string) (float64, error) {
 		// Check if context was cancelled or timed out
 		if ctx.Err() != nil {
 			if ctx.Err() == context.DeadlineExceeded {
-				return 0, fmt.Errorf("ffprobe timed out after 5 seconds for file: %s", audioPath)
+				// Use the actual timeout duration in the error message
+				if timeoutDuration > 0 {
+					return 0, fmt.Errorf("ffprobe timed out after %v for file: %s", timeoutDuration, audioPath)
+				}
+				return 0, fmt.Errorf("ffprobe timed out for file: %s", audioPath)
 			}
 			return 0, fmt.Errorf("ffprobe cancelled: %w", ctx.Err())
 		}

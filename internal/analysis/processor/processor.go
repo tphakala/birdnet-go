@@ -268,7 +268,8 @@ func (p *Processor) processDetections(item birdnet.Results) {
 	// Detection window sets wait time before a detection is considered final and is flushed.
 	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
 	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
-	detectionWindow := captureLength - preCaptureLength
+	// Ensure detectionWindow is non-negative to prevent early flushes
+	detectionWindow := max(0, captureLength-preCaptureLength)
 
 	// processResults() returns a slice of detections, we iterate through each and process them
 	// detections are put into pendingDetections map where they are held until flush deadline is reached

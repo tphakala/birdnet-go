@@ -100,6 +100,9 @@ const translations: Record<string, string> = {
   'settings.audio.audioCapture.rtspUrlsLabel': 'RTSP URLs',
   'settings.audio.audioCapture.rtspUrlsHelp': 'Enter RTSP stream URLs',
   'settings.audio.errors.devicesLoadFailed': 'Failed to load audio devices',
+  'settings.audio.clipSettings.title': 'Clip Settings',
+  'settings.audio.clipSettings.description':
+    'Configure audio clip capture and processing for identified bird calls',
 };
 
 vi.mock('$lib/i18n', () => ({

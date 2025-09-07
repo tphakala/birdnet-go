@@ -532,10 +532,10 @@
     </div>
   </SettingsSection>
 
-  <!-- Audio Capture Section -->
+  <!-- Clip Settings Section -->
   <SettingsSection
-    title={t('settings.audio.audioCapture.title')}
-    description={t('settings.audio.audioCapture.description')}
+    title={t('settings.audio.clipSettings.title')}
+    description={t('settings.audio.clipSettings.description')}
     defaultOpen={true}
     hasChanges={audioExportHasChanges}
   >
@@ -809,7 +809,7 @@
                 />
                 <div class="label" id="lossless-note">
                   <span class="label-text-alt text-base-content/70"
-                    >{t('settings.audio.audioCapture.losslessNote')}</span
+                    >{t('settings.audio.audioExport.losslessNote')}</span
                   >
                 </div>
               </div>

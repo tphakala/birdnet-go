@@ -1237,9 +1237,13 @@
         "sseEndpoint": "SSE endpoint:",
         "prometheusMetrics": "Prometheus metrics:"
       },
+      "clipSettings": {
+        "title": "Clip Settings",
+        "description": "Configure audio clip capture and processing for identified bird calls"
+      },
       "audioCapture": {
         "title": "Audio Capture",
-        "description": "Configure audio clip capture and processing for identified bird calls",
+        "description": "Configure audio capture settings",
         "enable": "Enable Audio Capture",
         "enableHelp": "Save audio clips of detected bird calls for review, sharing, or building custom datasets.",
         "enableDebug": "Enable Debug Mode",
@@ -1268,8 +1272,7 @@
         "typeLabel": "Export Format",
         "typeHelp": "Audio format for saved clips. WAV and FLAC are lossless (best quality, larger files). MP3, AAC, and Opus are lossy (smaller files, slight quality loss).",
         "bitrateLabel": "Bitrate",
-        "bitrateHelp": "Audio compression bitrate for lossy formats. Range: {min}-{max} kbps. Higher values provide better quality but larger files.",
-        "losslessNote": "Lossless formats preserve original audio quality without compression artifacts."
+        "bitrateHelp": "Audio compression bitrate for lossy formats. Range: {min}-{max} kbps. Higher values provide better quality but larger files."
       },
       "audioExport": {
         "captureSettings": "Capture Settings",

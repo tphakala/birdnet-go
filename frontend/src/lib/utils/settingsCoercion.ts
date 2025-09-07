@@ -308,6 +308,11 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
     const exp = settings.export as unknown as Record<string, unknown>;
     const coercedExport: Record<string, unknown> = { ...exp };
 
+    // Coerce enabled to boolean
+    if ('enabled' in exp) {
+      coercedExport.enabled = coerceBoolean(exp.enabled, false);
+    }
+
     // Clamp capture length between 10 and 60 seconds (backend validation)
     if ('length' in exp) {
       coercedExport.length = coerceNumber(exp.length, 10, 60, 15);

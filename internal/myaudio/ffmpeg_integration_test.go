@@ -3,7 +3,7 @@ package myaudio
 import (
 	"context"
 	"errors"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"testing"
 	"time"
@@ -20,7 +20,7 @@ func TestGetAudioDurationIntegration(t *testing.T) {
 	var testFile string
 
 	// Try to find any audio file
-	err := filepath.Walk(clipsDir, func(path string, info os.FileInfo, err error) error {
+	err := filepath.WalkDir(clipsDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// Return the error to stop walking, not nil
 			return err
@@ -28,13 +28,13 @@ func TestGetAudioDurationIntegration(t *testing.T) {
 		ext := filepath.Ext(path)
 		if ext == ".m4a" || ext == ".mp3" || ext == ".wav" || ext == ".flac" {
 			testFile = path
-			return filepath.SkipAll // Stop walking once we find a file
+			return fs.SkipAll // Stop walking once we find a file
 		}
 		return nil
 	})
 
 	// Check if walk failed (but ignore SkipAll which is expected)
-	if err != nil && !errors.Is(err, filepath.SkipAll) {
+	if err != nil && !errors.Is(err, fs.SkipAll) {
 		t.Logf("Warning: Error walking clips directory: %v", err)
 	}
 

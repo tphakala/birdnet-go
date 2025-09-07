@@ -2,7 +2,9 @@ package myaudio
 
 import (
 	"context"
+	"errors"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 )
@@ -75,29 +77,27 @@ func TestGetAudioDurationTimeout(t *testing.T) {
 		t.Skip("ffprobe not available, skipping test")
 	}
 
-	// Test with very short timeout to trigger timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
-	defer cancel()
+	// Create and immediately cancel context to trigger error
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
 
-	// Sleep to ensure context expires
-	time.Sleep(10 * time.Millisecond)
-
-	_, err := GetAudioDuration(ctx, "/dev/zero")
+	// Use any placeholder path - the context error will be returned first
+	_, err := GetAudioDuration(ctx, "placeholder.wav")
 	if err == nil {
-		t.Error("Expected timeout error, got nil")
+		t.Error("Expected context cancellation error, got nil")
+	}
+
+	// Check that we get a context-related error
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("Expected context.Canceled or context.DeadlineExceeded, got: %v", err)
 	}
 }
 
 // Helper function to check if ffprobe is available
 func isFFprobeAvailable() bool {
-	// Try to run ffprobe -version
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	_, err := GetAudioDuration(ctx, "/dev/null")
-	// If ffprobe is not found, the error will contain "executable file not found"
-	// We consider it available if we get any other error (like invalid file)
-	return err != nil && !os.IsNotExist(err)
+	// Use exec.LookPath to check if ffprobe is in PATH
+	_, err := exec.LookPath("ffprobe")
+	return err == nil
 }
 
 // Helper function to create a test WAV file with specified duration
