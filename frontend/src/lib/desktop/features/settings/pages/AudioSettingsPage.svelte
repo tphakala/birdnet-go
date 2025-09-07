@@ -541,7 +541,7 @@
   >
     <div class="space-y-4">
       <Checkbox
-        bind:checked={settings.audio.export.enabled}
+        checked={settings.audio.export.enabled}
         label={t('settings.audio.audioExport.enable')}
         helpText={t('settings.audio.audioExport.enableHelp')}
         disabled={store.isLoading || store.isSaving}

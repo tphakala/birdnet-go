@@ -990,10 +990,15 @@
         "sseEndpoint": "SSE-päätepiste:",
         "prometheusMetrics": "Prometheus-mittarit:"
       },
+      "clipSettings": {
+        "title": "Leikeasetukset",
+        "description": "Määritä äänileikkeiden tallennus ja käsittely tunnistetuille lintuäänille"
+      },
       "audioExport": {
         "title": "Äänen vienti",
         "description": "Määritä äänileikkeiden tallennus tunnistetuille lintuäänille",
-        "enable": "Ota äänen vienti käyttöön",
+        "enable": "Ota äänen tallennus käyttöön",
+        "enableHelp": "Tallenna havaittujen lintuäänten äänileikkeitä tarkastelua, jakamista tai mukautettujen tietojoukkojen rakentamista varten.",
         "enableDebug": "Ota virheenkorjaustila käyttöön",
         "pathLabel": "Vientipolku",
         "typeLabel": "Vientityyppi",

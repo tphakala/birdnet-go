@@ -1153,10 +1153,15 @@
         "sseEndpoint": "Point de terminaison SSE :",
         "prometheusMetrics": "Métriques Prometheus :"
       },
+      "clipSettings": {
+        "title": "Paramètres des clips",
+        "description": "Configurer la capture et le traitement des clips audio pour les chants d'oiseaux identifiés"
+      },
       "audioExport": {
         "title": "Export audio",
         "description": "Configurer l'enregistrement des clips audio pour les chants d'oiseaux identifiés",
-        "enable": "Activer l'export audio",
+        "enable": "Activer la capture audio",
+        "enableHelp": "Enregistrer des clips audio des chants d'oiseaux détectés pour révision, partage ou création de jeux de données personnalisés.",
         "enableDebug": "Activer le mode débogage",
         "pathLabel": "Chemin d'export",
         "typeLabel": "Type d'export",

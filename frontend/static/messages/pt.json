@@ -996,10 +996,15 @@
         "sseEndpoint": "Endpoint SSE:",
         "prometheusMetrics": "Métricas Prometheus:"
       },
+      "clipSettings": {
+        "title": "Configurações de clipes",
+        "description": "Configurar captura e processamento de clipes de áudio para chamados de pássaros identificados"
+      },
       "audioExport": {
         "title": "Exportação de áudio",
         "description": "Configurar salvamento de clipes de áudio para chamados de pássaros identificados",
-        "enable": "Ativar exportação de áudio",
+        "enable": "Ativar captura de áudio",
+        "enableHelp": "Salvar clipes de áudio de chamados de pássaros detectados para revisão, compartilhamento ou criação de conjuntos de dados personalizados.",
         "enableDebug": "Ativar modo de depuração",
         "pathLabel": "Caminho de exportação",
         "typeLabel": "Tipo de exportação",
