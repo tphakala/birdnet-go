@@ -106,7 +106,7 @@
             keepSpectrograms: false,
           },
           length: 15, // Default 15 seconds capture length
-          preCapture: 3, // Default 3 seconds pre-capture
+          preCapture: 3, // Default 3 seconds pre-detection buffer
           gain: 0, // Default 0 dB gain (no amplification)
           normalization: {
             enabled: false, // Disabled by default
@@ -560,7 +560,7 @@
               label={t('settings.audio.audioExport.lengthLabel')}
               value={settings.audio.export.length}
               onUpdate={value => {
-                // If reducing capture length, also adjust pre-capture if needed
+                // If reducing capture length, also adjust pre-detection buffer if needed
                 const maxPreCapture = Math.floor(value / 2);
                 if (settings.audio.export.preCapture > maxPreCapture) {
                   settingsActions.updateSection('realtime', {
@@ -592,7 +592,7 @@
               helpText={t('settings.audio.audioExport.lengthHelp')}
             />
 
-            <!-- Pre-Capture -->
+            <!-- Pre-Detection Buffer -->
             <InlineSlider
               label={t('settings.audio.audioExport.preCaptureLabel')}
               value={settings.audio.export.preCapture}
