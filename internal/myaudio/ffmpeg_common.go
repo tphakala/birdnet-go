@@ -87,16 +87,16 @@ func GetAudioDuration(ctx context.Context, audioPath string) (float64, error) {
 
 	// Execute ffprobe with context support
 	if err := cmd.Run(); err != nil {
-		// Check if context was cancelled or timed out
+		// Check if context was canceled or timed out
 		if ctx.Err() != nil {
 			if ctx.Err() == context.DeadlineExceeded {
 				// Use the actual timeout duration in the error message
 				if timeoutDuration > 0 {
-					return 0, fmt.Errorf("ffprobe timed out after %v for file: %s", timeoutDuration, audioPath)
+					return 0, fmt.Errorf("ffprobe timed out after %v for file %s: %w", timeoutDuration, audioPath, ctx.Err())
 				}
-				return 0, fmt.Errorf("ffprobe timed out for file: %s", audioPath)
+				return 0, fmt.Errorf("ffprobe timed out for file %s: %w", audioPath, ctx.Err())
 			}
-			return 0, fmt.Errorf("ffprobe cancelled: %w", ctx.Err())
+			return 0, fmt.Errorf("ffprobe canceled: %w", ctx.Err())
 		}
 		// Include stderr in error message for debugging
 		errMsg := stderr.String()

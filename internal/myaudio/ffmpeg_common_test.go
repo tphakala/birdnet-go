@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -16,15 +17,11 @@ func TestGetAudioDuration(t *testing.T) {
 	}
 
 	// Create a test WAV file with known duration (1 second of silence)
-	testFile := t.TempDir() + "/test.wav"
+	testFile := filepath.Join(t.TempDir(), "test.wav")
 	if err := createTestWAVFile(testFile, 1.0); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	defer func() {
-		if err := os.Remove(testFile); err != nil {
-			t.Logf("Failed to remove test file: %v", err)
-		}
-	}()
+	// No need for cleanup - t.TempDir() handles it automatically
 
 	tests := []struct {
 		name         string

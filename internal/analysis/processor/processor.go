@@ -269,7 +269,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
 	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
 	// Ensure detectionWindow is non-negative to prevent early flushes
-	detectionWindow := max(0, captureLength-preCaptureLength)
+	detectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
 
 	// processResults() returns a slice of detections, we iterate through each and process them
 	// detections are put into pendingDetections map where they are held until flush deadline is reached
@@ -1359,7 +1359,13 @@ func generateRandomHex(length int) string {
 	_, err := rand.Read(bytes)
 	if err != nil {
 		// Fallback to timestamp-based randomness if crypto/rand fails
-		return fmt.Sprintf("%x", time.Now().UnixNano()%0xFFFF)[:length]
+		// Build a hex string of exactly the requested length
+		fallback := fmt.Sprintf("%016x", time.Now().UnixNano())
+		// Repeat the fallback string if needed to ensure we have enough length
+		for len(fallback) < length {
+			fallback += fmt.Sprintf("%016x", time.Now().UnixNano())
+		}
+		return fallback[:length]
 	}
 
 	hex := fmt.Sprintf("%x", bytes)

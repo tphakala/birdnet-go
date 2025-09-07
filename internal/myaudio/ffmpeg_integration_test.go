@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -25,7 +26,7 @@ func TestGetAudioDurationIntegration(t *testing.T) {
 			// Return the error to stop walking, not nil
 			return err
 		}
-		ext := filepath.Ext(path)
+		ext := strings.ToLower(filepath.Ext(path))
 		if ext == ".m4a" || ext == ".mp3" || ext == ".wav" || ext == ".flac" {
 			testFile = path
 			return fs.SkipAll // Stop walking once we find a file

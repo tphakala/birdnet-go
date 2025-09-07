@@ -541,9 +541,9 @@
   >
     <div class="space-y-4">
       <Checkbox
-        checked={settings.audio.export.enabled}
-        label={t('settings.audio.audioCapture.enable')}
-        helpText={t('settings.audio.audioCapture.enableHelp')}
+        bind:checked={settings.audio.export.enabled}
+        label={t('settings.audio.audioExport.enable')}
+        helpText={t('settings.audio.audioExport.enableHelp')}
         disabled={store.isLoading || store.isSaving}
         onchange={updateExportEnabled}
       />
@@ -642,17 +642,20 @@
         <div class="mb-6">
           <h4 class="text-lg font-medium mb-4">{t('settings.audio.audioExport.normalization')}</h4>
           <Checkbox
-            checked={settings.audio.export.normalization.enabled}
+            bind:checked={settings.audio.export.normalization.enabled}
             label={t('settings.audio.audioExport.normalizationEnable')}
             helpText={t('settings.audio.audioExport.normalizationHelp')}
             disabled={store.isLoading || store.isSaving}
-            onchange={enabled =>
+            onchange={() =>
               settingsActions.updateSection('realtime', {
                 audio: {
                   ...$audioSettings!,
                   export: {
                     ...settings.audio.export,
-                    normalization: { ...settings.audio.export.normalization, enabled },
+                    normalization: {
+                      ...settings.audio.export.normalization,
+                      enabled: settings.audio.export.normalization.enabled,
+                    },
                   },
                 },
               })}
@@ -749,16 +752,16 @@
             <!-- Export Path -->
             <TextInput
               id="export-path"
-              value={settings.audio.export.path}
+              bind:value={settings.audio.export.path}
               label={t('settings.audio.audioExport.pathLabel')}
               placeholder="clips/"
               helpText={t('settings.audio.audioExport.pathHelp')}
               disabled={store.isLoading || store.isSaving}
-              onchange={value =>
+              onchange={() =>
                 settingsActions.updateSection('realtime', {
                   audio: {
                     ...$audioSettings!,
-                    export: { ...settings.audio.export, path: value },
+                    export: { ...settings.audio.export, path: settings.audio.export.path },
                   },
                 })}
             />
