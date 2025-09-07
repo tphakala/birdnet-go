@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 	
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
@@ -25,7 +26,12 @@ func init() {
 	var err error
 	// Define log file path for processor operations
 	logFilePath := filepath.Join("logs", "analysis-processor.log")
-	initialLevel := slog.LevelInfo // Default to Info level
+	
+	// Set initial level based on global debug flag
+	initialLevel := slog.LevelInfo
+	if conf.Setting().Debug {
+		initialLevel = slog.LevelDebug
+	}
 	processorLevelVar.Set(initialLevel)
 	
 	// Initialize the processor-specific file logger
