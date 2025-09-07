@@ -263,8 +263,10 @@ func (p *Processor) processDetections(item birdnet.Results) {
 		"elapsed_time_ms", item.ElapsedTime.Milliseconds(),
 		"operation", "process_detections_entry")
 
-	// Capture length sets before a detection is considered final and is flushed.
+	// Detection window sets wait time before a detection is considered final and is flushed.
 	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
+	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
+	detectionWindow := captureLength - preCaptureLength
 
 	// processResults() returns a slice of detections, we iterate through each and process them
 	// detections are put into pendingDetections map where they are held until flush deadline is reached
@@ -307,14 +309,14 @@ func (p *Processor) processDetections(item birdnet.Results) {
 				"species", commonName,
 				"confidence", confidence,
 				"source", item.Source.DisplayName,
-				"flush_deadline", item.StartTime.Add(captureLength),
+				"flush_deadline", item.StartTime.Add(detectionWindow),
 				"operation", "create_pending_detection")
 			p.pendingDetections[commonName] = PendingDetection{
 				Detection:     detection,
 				Confidence:    confidence,
 				Source:        item.Source.ID,
 				FirstDetected: item.StartTime,
-				FlushDeadline: item.StartTime.Add(captureLength),
+				FlushDeadline: item.StartTime.Add(detectionWindow),
 				Count:         1,
 			}
 		}
@@ -477,10 +479,13 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 	// Create file name for audio clip
 	clipName := p.generateClipName(scientificName, result.Confidence)
 
+	// Get capture length and pre-capture length for detection end time calculation
 	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
+	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
 
 	// Set begin and end time for note
-	beginTime, endTime := item.StartTime, item.StartTime.Add(captureLength)
+	beginTime := item.StartTime
+	endTime := item.StartTime.Add(captureLength - preCaptureLength)
 
 	// Get occurrence probability for this species at detection time
 	occurrence := p.Bn.GetSpeciesOccurrenceAtTime(result.Species, item.StartTime)

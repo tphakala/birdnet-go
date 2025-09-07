@@ -542,7 +542,18 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 
 	// Save audio clip to file if enabled
 	if a.Settings.Realtime.Audio.Export.Enabled {
-		captureLength := a.Settings.Realtime.Audio.Export.Length
+		// Get capture length in seconds by subtracting begin time from end time
+		// note end time is set in processor.go by subtracting pre-capture length from capture length
+		captureLength := int(a.Note.EndTime.Sub(a.Note.BeginTime).Seconds())
+
+		// debug log note begin, end and capture length
+		GetLogger().Debug("Note begin, end and capture length",
+			"component", "analysis.processor.actions",
+			"begin_time", a.Note.BeginTime,
+			"end_time", a.Note.EndTime,
+			"capture_length", captureLength,
+			"operation", "note_begin_end_capture_length")
+
 		// export audio clip from capture buffer
 		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Note.Source.ID, a.Note.BeginTime, captureLength)
 		if err != nil {
