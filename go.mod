@@ -26,7 +26,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3
-	github.com/tphakala/go-tflite v0.1.1
+	github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e
 	github.com/tphakala/malgo v0.11.22
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.6.0
