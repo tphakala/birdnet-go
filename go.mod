@@ -10,7 +10,7 @@ require (
 	github.com/getsentry/sentry-go/echo v0.35.1
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0
-	github.com/go-echarts/go-echarts/v2 v2.5.2
+	github.com/go-echarts/go-echarts/v2 v2.6.2
 	github.com/google/uuid v1.6.0
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/k3a/html2text v1.2.1
