@@ -69,7 +69,7 @@ Source: MIT
 
 ### github.com/fsnotify/fsnotify
 
-License: https://github.com/fsnotify/fsnotify/blob/v1.8.0/LICENSE
+License: https://github.com/fsnotify/fsnotify/blob/v1.9.0/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/getsentry/sentry-go
@@ -99,12 +99,7 @@ Source: Apache-2.0
 
 ### github.com/go-chi/chi/v5
 
-License: https://github.com/go-chi/chi/blob/v5.2.2/LICENSE
-Source: MIT
-
-### github.com/go-echarts/go-echarts/v2
-
-License: https://github.com/go-echarts/go-echarts/blob/v2.5.2/LICENSE
+License: https://github.com/go-chi/chi/blob/v5.2.3/LICENSE
 Source: MIT
 
 ### github.com/go-logr/logr
@@ -254,7 +249,7 @@ Source: MIT
 
 ### github.com/pelletier/go-toml/v2
 
-License: https://github.com/pelletier/go-toml/blob/v2.2.3/LICENSE
+License: https://github.com/pelletier/go-toml/blob/v2.2.4/LICENSE
 Source: MIT
 
 ### github.com/pkg/sftp
@@ -269,7 +264,7 @@ Source: BSD-3-Clause
 
 ### github.com/prometheus/client_golang/prometheus
 
-License: https://github.com/prometheus/client_golang/blob/v1.23.0/LICENSE
+License: https://github.com/prometheus/client_golang/blob/v1.23.2/LICENSE
 Source: Apache-2.0
 
 ### github.com/prometheus/client_model/go
@@ -279,7 +274,7 @@ Source: Apache-2.0
 
 ### github.com/prometheus/common
 
-License: https://github.com/prometheus/common/blob/v0.65.0/LICENSE
+License: https://github.com/prometheus/common/blob/v0.66.1/LICENSE
 Source: Apache-2.0
 
 ### github.com/prometheus/procfs
@@ -289,7 +284,7 @@ Source: Apache-2.0
 
 ### github.com/sagikazarmark/locafero
 
-License: https://github.com/sagikazarmark/locafero/blob/v0.7.0/LICENSE
+License: https://github.com/sagikazarmark/locafero/blob/v0.11.0/LICENSE
 Source: MIT
 
 ### github.com/shirou/gopsutil/v3
@@ -304,37 +299,37 @@ Source: Apache-2.0
 
 ### github.com/smallnest/ringbuffer
 
-License: https://github.com/smallnest/ringbuffer/blob/35801fa39d0e/LICENSE
+License: https://github.com/smallnest/ringbuffer/blob/0da97b586904/LICENSE
 Source: MIT
 
 ### github.com/sourcegraph/conc
 
-License: https://github.com/sourcegraph/conc/blob/v0.3.0/LICENSE
+License: https://github.com/sourcegraph/conc/blob/5f936abd7ae8/LICENSE
 Source: MIT
 
 ### github.com/spf13/afero
 
-License: https://github.com/spf13/afero/blob/v1.12.0/LICENSE.txt
+License: https://github.com/spf13/afero/blob/v1.15.0/LICENSE.txt
 Source: Apache-2.0
 
 ### github.com/spf13/cast
 
-License: https://github.com/spf13/cast/blob/v1.7.1/LICENSE
+License: https://github.com/spf13/cast/blob/v1.10.0/LICENSE
 Source: MIT
 
 ### github.com/spf13/cobra
 
-License: https://github.com/spf13/cobra/blob/v1.9.1/LICENSE.txt
+License: https://github.com/spf13/cobra/blob/v1.10.1/LICENSE.txt
 Source: Apache-2.0
 
 ### github.com/spf13/pflag
 
-License: https://github.com/spf13/pflag/blob/v1.0.6/LICENSE
+License: https://github.com/spf13/pflag/blob/v1.0.10/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/spf13/viper
 
-License: https://github.com/spf13/viper/blob/v1.20.1/LICENSE
+License: https://github.com/spf13/viper/blob/v1.21.0/LICENSE
 Source: MIT
 
 ### github.com/stretchr/objx
@@ -432,9 +427,19 @@ Source: MIT
 License: https://github.com/uber/mock/blob/v0.6.0/LICENSE
 Source: Apache-2.0
 
+### go.yaml.in/yaml/v2
+
+License: https://github.com/yaml/go-yaml/blob/v2.4.2/LICENSE
+Source: Apache-2.0
+
+### go.yaml.in/yaml/v3
+
+License: https://github.com/yaml/go-yaml/blob/v3.0.4/LICENSE
+Source: MIT
+
 ### golang.org/x/crypto
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.41.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.42.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
@@ -444,27 +449,27 @@ Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
 
-License: https://cs.opensource.google/go/x/oauth2/+/v0.30.0:LICENSE
+License: https://cs.opensource.google/go/x/oauth2/+/v0.31.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sync
 
-License: https://cs.opensource.google/go/x/sync/+/v0.16.0:LICENSE
+License: https://cs.opensource.google/go/x/sync/+/v0.17.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sys
 
-License: https://cs.opensource.google/go/x/sys/+/v0.35.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.36.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term
 
-License: https://cs.opensource.google/go/x/term/+/v0.34.0:LICENSE
+License: https://cs.opensource.google/go/x/term/+/v0.35.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.28.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.29.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
@@ -489,7 +494,7 @@ Source: Apache-2.0
 
 ### google.golang.org/protobuf
 
-License: https://github.com/protocolbuffers/protobuf-go/blob/v1.36.7/LICENSE
+License: https://github.com/protocolbuffers/protobuf-go/blob/v1.36.8/LICENSE
 Source: BSD-3-Clause
 
 ### gopkg.in/natefinch/lumberjack.v2
@@ -514,6 +519,6 @@ Source: MIT
 
 ### gorm.io/gorm
 
-License: https://github.com/go-gorm/gorm/blob/v1.30.1/LICENSE
+License: https://github.com/go-gorm/gorm/blob/v1.30.2/LICENSE
 Source: MIT
 
