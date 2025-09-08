@@ -1,0 +1,382 @@
+package myaudio
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
+)
+
+// Validation constants
+const (
+	// MinValidAudioSize is the minimum size for a valid audio file (1KB)
+	MinValidAudioSize int64 = 1024
+
+	// MaxValidationAttempts is the maximum number of validation attempts
+	MaxValidationAttempts = 3
+
+	// ValidationRetryDelay is the delay between validation attempts
+	ValidationRetryDelay = 100 * time.Millisecond
+
+	// FileStabilityCheckDuration is how long to wait to confirm file size is stable
+	FileStabilityCheckDuration = 50 * time.Millisecond
+)
+
+// Sentinel errors for audio validation
+var (
+	// File state errors
+	ErrAudioFileNotReady   = errors.NewStd("audio file is not ready for processing")
+	ErrAudioFileTooSmall   = errors.NewStd("audio file is too small to be valid")
+	ErrAudioFileCorrupted  = errors.NewStd("audio file appears to be corrupted")
+	ErrAudioFileIncomplete = errors.NewStd("audio file is incomplete or still being written")
+	ErrAudioFileEmpty      = errors.NewStd("audio file is empty")
+	ErrAudioFileInvalid    = errors.NewStd("audio file format is invalid")
+
+	// Validation errors
+	ErrValidationTimeout   = errors.NewStd("audio validation timed out")
+	ErrValidationFailed    = errors.NewStd("audio validation failed")
+	ErrFFprobeNotAvailable = errors.NewStd("ffprobe is not available for validation")
+)
+
+// AudioValidationResult contains the result of audio file validation
+type AudioValidationResult struct {
+	IsValid    bool          // Whether the file is valid and ready
+	IsComplete bool          // Whether the file appears to be completely written
+	FileSize   int64         // Size of the file in bytes
+	Duration   float64       // Duration in seconds (0 if cannot be determined)
+	Format     string        // Audio format (e.g., "wav", "flac", "mp3")
+	SampleRate int           // Sample rate in Hz
+	Channels   int           // Number of channels
+	BitRate    int           // Bit rate in kbps
+	Error      error         // Any error encountered during validation
+	RetryAfter time.Duration // Suggested retry duration if file is not ready
+}
+
+// ValidateAudioFile validates that an audio file is complete and ready for processing.
+// It performs multiple checks including file size, stability, and format validation.
+// Returns detailed validation results including retry suggestions for incomplete files.
+func ValidateAudioFile(ctx context.Context, audioPath string) (*AudioValidationResult, error) {
+	result := &AudioValidationResult{
+		IsValid:    false,
+		IsComplete: false,
+	}
+
+	// Check if file exists
+	fileInfo, err := os.Stat(audioPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			result.Error = errors.New(err).
+				Component("myaudio").
+				Category(errors.CategoryFileIO).
+				Context("operation", "validate_audio_file").
+				Context("file_path", audioPath).
+				Build()
+			return result, result.Error
+		}
+		result.Error = errors.New(err).
+			Component("myaudio").
+			Category(errors.CategoryFileIO).
+			Context("operation", "validate_audio_file").
+			Context("file_path", audioPath).
+			Build()
+		return result, result.Error
+	}
+
+	result.FileSize = fileInfo.Size()
+
+	// Check minimum file size
+	if result.FileSize < MinValidAudioSize {
+		if result.FileSize == 0 {
+			result.Error = errors.Join(ErrAudioFileEmpty, fmt.Errorf("file size is 0 bytes"))
+		} else {
+			result.Error = errors.Join(ErrAudioFileTooSmall, fmt.Errorf("file size %d bytes < minimum %d bytes", result.FileSize, MinValidAudioSize))
+		}
+		result.RetryAfter = ValidationRetryDelay
+		return result, nil // Return nil error to allow retry
+	}
+
+	// Check if file size is stable (not being written)
+	if !isFileSizeStable(audioPath, fileInfo.Size()) {
+		result.Error = errors.Join(ErrAudioFileIncomplete, fmt.Errorf("file size is still changing"))
+		result.RetryAfter = ValidationRetryDelay * 2
+		return result, nil // Return nil error to allow retry
+	}
+
+	// Extract format from extension
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(audioPath), "."))
+	result.Format = ext
+
+	// Validate audio format using ffprobe
+	if err := validateWithFFprobe(ctx, audioPath, result); err != nil {
+		// Check if it's a context error (timeout/cancellation)
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			result.Error = errors.Join(ErrValidationTimeout, err)
+			return result, result.Error
+		}
+
+		// For other errors, the file might be corrupted or invalid
+		result.Error = errors.Join(ErrAudioFileInvalid, err)
+		return result, nil // Return nil to indicate validation completed but file is invalid
+	}
+
+	// Additional validation based on expected duration (if provided in settings)
+	if result.Duration > 0 {
+		expectedDuration := float64(conf.Setting().Realtime.Audio.Export.Length)
+		// Allow 10% tolerance for duration
+		minDuration := expectedDuration * 0.9
+		maxDuration := expectedDuration * 1.1
+
+		switch {
+		case result.Duration < minDuration:
+			result.IsComplete = false
+			result.Error = errors.Join(ErrAudioFileIncomplete,
+				fmt.Errorf("duration %.2fs is less than expected %.2fs", result.Duration, expectedDuration))
+			result.RetryAfter = ValidationRetryDelay * 3
+			return result, nil
+		case result.Duration > maxDuration:
+			// File is longer than expected but might still be valid
+			// Mark as complete but could log warning if needed
+			result.IsComplete = true
+		default:
+			// Duration is within expected range
+			result.IsComplete = true
+		}
+	} else {
+		// If we can't determine duration, assume complete if other checks pass
+		result.IsComplete = true
+	}
+
+	// All checks passed
+	result.IsValid = true
+	result.Error = nil
+	return result, nil
+}
+
+// ValidateAudioFileWithRetry validates an audio file with automatic retry logic.
+// It will retry up to MaxValidationAttempts times with exponential backoff.
+func ValidateAudioFileWithRetry(ctx context.Context, audioPath string) (*AudioValidationResult, error) {
+	var lastResult *AudioValidationResult
+	retryDelay := ValidationRetryDelay
+	startTime := time.Now()
+
+	for attempt := 1; attempt <= MaxValidationAttempts; attempt++ {
+		// Check context before each attempt
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		result, err := ValidateAudioFile(ctx, audioPath)
+
+		if err != nil {
+			// Hard error, don't retry
+			// Log the failure
+			if m := getFileMetrics(); m != nil {
+				m.RecordAudioDataValidationError("validate_with_retry", "hard_error")
+			}
+			return result, err
+		}
+
+		lastResult = result
+
+		// If valid, return immediately
+		if result.IsValid {
+			// Log successful validation with retry info
+			if m := getFileMetrics(); m != nil && attempt > 1 {
+				m.RecordFileOperation("validate_with_retry", result.Format, "success_after_retry")
+			}
+			return result, nil
+		}
+
+		// Log retry attempt if metrics available
+		if m := getFileMetrics(); m != nil {
+			m.RecordFileOperation("validate_retry", result.Format, fmt.Sprintf("attempt_%d", attempt))
+		}
+
+		// If there's a specific retry suggestion, use it
+		if result.RetryAfter > 0 {
+			retryDelay = result.RetryAfter
+		}
+
+		// Don't retry on the last attempt
+		if attempt < MaxValidationAttempts {
+			// Wait before retry with exponential backoff
+			select {
+			case <-time.After(retryDelay):
+				retryDelay *= 2 // Exponential backoff
+			case <-ctx.Done():
+				return lastResult, ctx.Err()
+			}
+		}
+	}
+
+	// All attempts exhausted
+	totalDuration := time.Since(startTime)
+	if m := getFileMetrics(); m != nil {
+		m.RecordFileOperationError("validate_with_retry", "unknown",
+			fmt.Sprintf("exhausted_after_%dms", totalDuration.Milliseconds()))
+	}
+
+	if lastResult != nil && lastResult.Error != nil {
+		return lastResult, lastResult.Error
+	}
+	return lastResult, ErrValidationFailed
+}
+
+// isFileSizeStable checks if a file's size is stable (not being written)
+func isFileSizeStable(path string, initialSize int64) bool {
+	time.Sleep(FileStabilityCheckDuration)
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+
+	return info.Size() == initialSize
+}
+
+// validateWithFFprobe uses ffprobe to validate audio file format and extract metadata
+func validateWithFFprobe(ctx context.Context, audioPath string, result *AudioValidationResult) error {
+	ffprobeBinary := conf.GetFfprobeBinaryName()
+	if ffprobeBinary == "" {
+		return ErrFFprobeNotAvailable
+	}
+
+	// Create context with timeout if not provided
+	if ctx == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+	}
+
+	// Build ffprobe command to get format and stream information
+	cmd := exec.CommandContext(ctx, ffprobeBinary,
+		"-v", "error",
+		"-show_entries", "format=duration,bit_rate:stream=sample_rate,channels,codec_name",
+		"-of", "csv=p=0",
+		audioPath)
+
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		// Check for context errors
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		// Check stderr for specific errors
+		stderrStr := stderr.String()
+		if strings.Contains(stderrStr, "Invalid data found") ||
+			strings.Contains(stderrStr, "could not find codec parameters") {
+			return fmt.Errorf("invalid audio format: %s", stderrStr)
+		}
+		return fmt.Errorf("ffprobe validation failed: %w (stderr: %s)", err, stderrStr)
+	}
+
+	// Parse ffprobe output
+	output := strings.TrimSpace(out.String())
+	if output == "" {
+		return fmt.Errorf("ffprobe returned no data")
+	}
+
+	// Parse the CSV output (format: duration,bit_rate,sample_rate,channels,codec_name)
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		fields := strings.Split(line, ",")
+		if len(fields) >= 2 {
+			// Try to parse duration from the first field
+			if duration, err := strconv.ParseFloat(fields[0], 64); err == nil && duration > 0 {
+				result.Duration = duration
+			}
+			// Try to parse bit rate
+			if len(fields) > 1 {
+				if bitRate, err := strconv.Atoi(fields[1]); err == nil {
+					result.BitRate = bitRate / 1000 // Convert to kbps
+				}
+			}
+			// Try to parse sample rate
+			if len(fields) > 2 {
+				if sampleRate, err := strconv.Atoi(fields[2]); err == nil {
+					result.SampleRate = sampleRate
+				}
+			}
+			// Try to parse channels
+			if len(fields) > 3 {
+				if channels, err := strconv.Atoi(fields[3]); err == nil {
+					result.Channels = channels
+				}
+			}
+		}
+	}
+
+	// Basic validation of parsed data
+	if result.Duration <= 0 && result.SampleRate <= 0 {
+		return fmt.Errorf("unable to extract valid audio metadata")
+	}
+
+	return nil
+}
+
+// QuickValidateAudioFile performs a quick validation check without detailed analysis.
+// This is useful for fast path checks before expensive operations.
+func QuickValidateAudioFile(audioPath string) (bool, error) {
+	fileInfo, err := os.Stat(audioPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	// Quick size check
+	if fileInfo.Size() < MinValidAudioSize {
+		return false, nil
+	}
+
+	// Check if file can be opened (basic accessibility check)
+	file, err := os.Open(audioPath)
+	if err != nil {
+		return false, nil
+	}
+	defer func() {
+		_ = file.Close() // Ignore close errors for read-only operations
+	}()
+
+	// Read first few bytes to check for valid header (basic format check)
+	header := make([]byte, 12)
+	n, err := file.Read(header)
+	if err != nil || n < 12 {
+		return false, nil
+	}
+
+	// Check for common audio file signatures
+	// WAV: "RIFF"
+	if bytes.HasPrefix(header, []byte("RIFF")) && bytes.Contains(header[8:12], []byte("WAVE")) {
+		return true, nil
+	}
+	// FLAC: "fLaC"
+	if bytes.HasPrefix(header, []byte("fLaC")) {
+		return true, nil
+	}
+	// MP3: ID3 or FF FB/FF FA
+	if bytes.HasPrefix(header, []byte("ID3")) ||
+		(header[0] == 0xFF && (header[1]&0xE0) == 0xE0) {
+		return true, nil
+	}
+	// OGG: "OggS"
+	if bytes.HasPrefix(header, []byte("OggS")) {
+		return true, nil
+	}
+
+	// Unknown format, but file exists and has content
+	return true, nil
+}

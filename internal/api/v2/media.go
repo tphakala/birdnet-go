@@ -58,6 +58,7 @@ var (
 	ErrAudioFileNotFound    = errors.NewStd("audio file not found")
 	ErrInvalidAudioPath     = errors.NewStd("invalid audio path")
 	ErrPathTraversalAttempt = errors.NewStd("security error: path attempts to traverse")
+	ErrAudioFileNotReady    = errors.NewStd("audio file is not ready for processing")
 
 	// Configuration errors
 	ErrFFmpegNotConfigured = errors.NewStd("ffmpeg path not set in settings")
@@ -341,6 +342,12 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 // spectrogramHTTPError handles common spectrogram generation errors and converts them to appropriate HTTP responses
 func (c *Controller) spectrogramHTTPError(ctx echo.Context, err error) error {
 	switch {
+	case errors.Is(err, ErrAudioFileNotReady) || errors.Is(err, myaudio.ErrAudioFileIncomplete):
+		// Audio file is not ready yet - client should retry
+		// Set Retry-After header to suggest when to retry (in seconds)
+		ctx.Response().Header().Set("Retry-After", "2")
+		// Use 503 Service Unavailable to indicate temporary unavailability
+		return c.HandleError(ctx, err, "Audio file is still being processed, please retry", http.StatusServiceUnavailable)
 	case errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, os.ErrNotExist):
 		// Handle cases where the source audio file doesn't exist
 		return c.HandleError(ctx, err, "Source audio file not found", http.StatusNotFound)
@@ -496,6 +503,7 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 }
 
 // Limit concurrent spectrogram generations to avoid overloading the system
+// Set to 4 to match the number of cores on Raspberry Pi (most common platform)
 const maxConcurrentSpectrograms = 4
 
 var (
@@ -578,10 +586,70 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		return "", fmt.Errorf("error checking audio file '%s': %w", relAudioPath, err)
 	}
 
-	// --- Calculate paths ---
-	// Absolute path on the host filesystem required for external commands (sox, ffmpeg)
-	// Construct using BaseDir and the validated relative path
+	// Validate that the audio file is complete and ready for processing
 	absAudioPath := filepath.Join(c.SFS.BaseDir(), relAudioPath)
+	validationStart := time.Now()
+	validationResult, err := myaudio.ValidateAudioFileWithRetry(ctx, absAudioPath)
+	validationDuration := time.Since(validationStart)
+
+	if err != nil {
+		// Context errors should be propagated immediately
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			spectrogramLogger.Warn("Audio validation canceled or timed out",
+				"audio_path", audioPath,
+				"error", err.Error(),
+				"validation_duration_ms", validationDuration.Milliseconds())
+			return "", err
+		}
+		// Other validation errors
+		spectrogramLogger.Error("Audio validation failed",
+			"audio_path", audioPath,
+			"error", err.Error(),
+			"validation_duration_ms", validationDuration.Milliseconds())
+		combined := errors.Join(ErrAudioFileNotReady, err)
+		return "", fmt.Errorf("%w", combined)
+	}
+
+	// Check if the file is ready
+	if !validationResult.IsValid {
+		spectrogramLogger.Info("Audio file not ready for processing, client should retry",
+			"audio_path", audioPath,
+			"file_size", validationResult.FileSize,
+			"is_complete", validationResult.IsComplete,
+			"retry_after_ms", validationResult.RetryAfter.Milliseconds(),
+			"validation_duration_ms", validationDuration.Milliseconds(),
+			"validation_error", validationResult.Error)
+
+		// Track retry metrics
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Spectrogram generation deferred - audio not ready",
+				"audio_path", audioPath,
+				"file_size", validationResult.FileSize,
+				"retry_after_ms", validationResult.RetryAfter.Milliseconds(),
+				"component", "media.spectrogram",
+				"metric_type", "audio_not_ready")
+		}
+
+		// Return a specific error that indicates the file is not ready
+		// This will be handled by the HTTP handler to return 503
+		if validationResult.Error != nil {
+			combined := errors.Join(ErrAudioFileNotReady, validationResult.Error)
+			return "", fmt.Errorf("%w", combined)
+		}
+		return "", ErrAudioFileNotReady
+	}
+
+	spectrogramLogger.Debug("Audio file validated successfully",
+		"audio_path", audioPath,
+		"duration", validationResult.Duration,
+		"format", validationResult.Format,
+		"file_size", validationResult.FileSize,
+		"sample_rate", validationResult.SampleRate,
+		"channels", validationResult.Channels,
+		"validation_duration_ms", validationDuration.Milliseconds())
+
+	// --- Calculate paths ---
+	// absAudioPath already defined above for validation
 
 	// Get the base filename and directory relative to the secure root
 	relBaseFilename := strings.TrimSuffix(filepath.Base(relAudioPath), filepath.Ext(relAudioPath))
