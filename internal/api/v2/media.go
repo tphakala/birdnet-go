@@ -561,7 +561,7 @@ func CloseSpectrogramLogger() error {
 // generateSpectrogram creates a spectrogram image for the given audio file path (relative to SecureFS root).
 // It accepts a context for cancellation and timeout.
 // It returns the relative path to the generated spectrogram, suitable for use with c.SFS.ServeFile.
-// Fixed: Moved semaphore acquisition outside singleflight to eliminate double bottleneck.
+// Optimized: Fast path check happens before expensive audio validation.
 func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, width int, raw bool) (string, error) {
 	start := time.Now()
 	spectrogramLogger.Debug("Spectrogram generation requested",
@@ -569,8 +569,9 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		"width", width,
 		"raw", raw,
 		"request_time", start.Format("2006-01-02 15:04:05"))
-	// The audioPath from the DB is already relative to the baseDir. Validate it.
-	relAudioPath, err := c.SFS.ValidateRelativePath(audioPath) // Use the new validator
+
+	// Step 1: Validate the audio path for security (must happen first)
+	relAudioPath, err := c.SFS.ValidateRelativePath(audioPath)
 	if err != nil {
 		// Use proper error type checking instead of string matching
 		if errors.Is(err, securefs.ErrPathTraversal) {
@@ -581,8 +582,47 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		return "", fmt.Errorf("%w", combined)
 	}
 
-	// Check if the audio file exists within the secure context using the validated relative path
-	// Use StatRel as relAudioPath is already validated and relative to baseDir
+	// Step 2: Calculate spectrogram paths early (needed for fast path check)
+	// Get the base filename and directory relative to the secure root
+	relBaseFilename := strings.TrimSuffix(filepath.Base(relAudioPath), filepath.Ext(relAudioPath))
+	relAudioDir := filepath.Dir(relAudioPath)
+
+	// Generate spectrogram filename compatible with old HTMX API format
+	var spectrogramFilename string
+	if raw {
+		// Raw spectrograms use old API format: filename_400px.png (for cache compatibility)
+		spectrogramFilename = fmt.Sprintf("%s_%dpx.png", relBaseFilename, width)
+	} else {
+		// Spectrograms with legends use new suffix: filename_400px-legend.png
+		spectrogramFilename = fmt.Sprintf("%s_%dpx-legend.png", relBaseFilename, width)
+	}
+
+	// Since we're constructing the spectrogram path from an already-validated audio path
+	// and appending a simple formatted filename, we can safely construct the path without
+	// re-validating. The path components are all known to be safe.
+	relSpectrogramPath := filepath.Join(relAudioDir, spectrogramFilename)
+
+	// Generate a unique key for this spectrogram generation request
+	// Include both the path and width to ensure uniqueness
+	spectrogramKey := fmt.Sprintf("%s:%d:%t", relSpectrogramPath, width, raw)
+
+	// Step 3: FAST PATH - Check if spectrogram already exists
+	// This happens BEFORE any expensive operations like audio validation
+	if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
+		spectrogramLogger.Debug("Fast path: spectrogram already exists, returning immediately",
+			"spectrogram_key", spectrogramKey,
+			"relative_spectrogram_path", relSpectrogramPath,
+			"total_duration_ms", time.Since(start).Milliseconds())
+		return relSpectrogramPath, nil
+	} else if !os.IsNotExist(err) {
+		// Unexpected error checking file - let's log it but continue with generation
+		spectrogramLogger.Debug("Fast path: unexpected error checking existing spectrogram, proceeding with generation",
+			"spectrogram_key", spectrogramKey,
+			"error", err.Error())
+	}
+
+	// Step 4: Spectrogram doesn't exist, now check if audio file exists
+	// This check was moved after the fast path to avoid unnecessary stat calls
 	if _, err := c.SFS.StatRel(relAudioPath); err != nil {
 		// Handle file not found specifically, otherwise wrap
 		if os.IsNotExist(err) {
@@ -592,7 +632,8 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		return "", fmt.Errorf("error checking audio file '%s': %w", relAudioPath, err)
 	}
 
-	// Validate that the audio file is complete and ready for processing
+	// Step 5: Validate that the audio file is complete and ready for processing
+	// This expensive operation only happens if we need to generate a spectrogram
 	absAudioPath := filepath.Join(c.SFS.BaseDir(), relAudioPath)
 	validationStart := time.Now()
 	validationResult, err := myaudio.ValidateAudioFileWithRetry(ctx, absAudioPath)
@@ -654,55 +695,14 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		"channels", validationResult.Channels,
 		"validation_duration_ms", validationDuration.Milliseconds())
 
-	// --- Calculate paths ---
-	// absAudioPath already defined above for validation
-
-	// Get the base filename and directory relative to the secure root
-	relBaseFilename := strings.TrimSuffix(filepath.Base(relAudioPath), filepath.Ext(relAudioPath))
-	relAudioDir := filepath.Dir(relAudioPath)
-
-	// Generate spectrogram filename compatible with old HTMX API format
-	var spectrogramFilename string
-	if raw {
-		// Raw spectrograms use old API format: filename_400px.png (for cache compatibility)
-		spectrogramFilename = fmt.Sprintf("%s_%dpx.png", relBaseFilename, width)
-	} else {
-		// Spectrograms with legends use new suffix: filename_400px-legend.png
-		spectrogramFilename = fmt.Sprintf("%s_%dpx-legend.png", relBaseFilename, width)
-	}
-
-	// Since we're constructing the spectrogram path from an already-validated audio path
-	// and appending a simple formatted filename, we can safely construct the path without
-	// re-validating. The path components are all known to be safe.
-	relSpectrogramPath := filepath.Join(relAudioDir, spectrogramFilename)
-
 	// Absolute path for the spectrogram on the host filesystem
 	absSpectrogramPath := filepath.Join(c.SFS.BaseDir(), relSpectrogramPath)
 
-	// Generate a unique key for this spectrogram generation request
-	// Include both the path and width to ensure uniqueness
-	spectrogramKey := fmt.Sprintf("%s:%d:%t", relSpectrogramPath, width, raw)
-
-	// FAST PATH: Check if spectrogram already exists BEFORE acquiring semaphore
-	// This eliminates unnecessary semaphore contention for existing files
-	if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
-		spectrogramLogger.Debug("Fast path: spectrogram already exists, returning immediately",
-			"spectrogram_key", spectrogramKey,
-			"relative_spectrogram_path", relSpectrogramPath,
-			"total_duration_ms", time.Since(start).Milliseconds())
-		return relSpectrogramPath, nil
-	} else if !os.IsNotExist(err) {
-		// Unexpected error checking file - let's log it but continue with generation
-		spectrogramLogger.Debug("Fast path: unexpected error checking existing spectrogram, proceeding with generation",
-			"spectrogram_key", spectrogramKey,
-			"error", err.Error())
-	}
-
-	// File doesn't exist, proceed with generation path
+	// Step 6: Proceed with generation (spectrogram doesn't exist)
 	spectrogramLogger.Debug("Spectrogram does not exist, proceeding with generation",
 		"spectrogram_key", spectrogramKey)
 
-	// PERFORMANCE FIX: Acquire semaphore BEFORE singleflight to eliminate double bottleneck
+	// Acquire semaphore BEFORE singleflight to eliminate double bottleneck
 	// This prevents the old issue where requests would queue at singleflight AND then at semaphore
 	spectrogramLogger.Debug("Acquiring semaphore slot",
 		"spectrogram_key", spectrogramKey,
