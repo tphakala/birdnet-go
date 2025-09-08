@@ -28,6 +28,30 @@ const (
 
 	// FileStabilityCheckDuration is how long to wait to confirm file size is stable
 	FileStabilityCheckDuration = 50 * time.Millisecond
+
+	// DurationTolerancePercent is the acceptable deviation from expected duration (10%)
+	DurationTolerancePercent = 0.1
+
+	// FFprobeTimeout is the maximum time to wait for ffprobe validation
+	FFprobeTimeout = 3 * time.Second
+
+	// RetryDelayMultiplier is the multiplier for exponential backoff
+	RetryDelayMultiplier = 2
+
+	// LongRetryDelayMultiplier is the multiplier for longer retry delays
+	LongRetryDelayMultiplier = 3
+
+	// BitsPerKilobit is the conversion factor from bits to kilobits
+	BitsPerKilobit = 1000
+
+	// AudioHeaderSize is the number of bytes to read for format detection
+	AudioHeaderSize = 12
+
+	// RIFFHeaderOffset is the offset for WAVE format check in RIFF files
+	RIFFHeaderOffset = 8
+
+	// MP3SyncByteMask is the mask for MP3 sync byte validation
+	MP3SyncByteMask = 0xE0
 )
 
 // Sentinel errors for audio validation
@@ -128,25 +152,34 @@ func ValidateAudioFile(ctx context.Context, audioPath string) (*AudioValidationR
 	}
 
 	// Additional validation based on expected duration (if provided in settings)
+	// Only validate duration for files that are expected to match the configured length
+	// Skip duration validation for very short files (likely test files or snippets)
 	if result.Duration > 0 {
 		expectedDuration := float64(conf.Setting().Realtime.Audio.Export.Length)
-		// Allow 10% tolerance for duration
-		minDuration := expectedDuration * 0.9
-		maxDuration := expectedDuration * 1.1
 
-		switch {
-		case result.Duration < minDuration:
-			result.IsComplete = false
-			result.Error = errors.Join(ErrAudioFileIncomplete,
-				fmt.Errorf("duration %.2fs is less than expected %.2fs", result.Duration, expectedDuration))
-			result.RetryAfter = ValidationRetryDelay * 3
-			return result, nil
-		case result.Duration > maxDuration:
-			// File is longer than expected but might still be valid
-			// Mark as complete but could log warning if needed
-			result.IsComplete = true
-		default:
-			// Duration is within expected range
+		// Only validate duration if the file is at least 1 second and expected duration is configured
+		if result.Duration >= 1.0 && expectedDuration > 0 {
+			// Allow configured tolerance for duration
+			minDuration := expectedDuration * (1 - DurationTolerancePercent)
+			maxDuration := expectedDuration * (1 + DurationTolerancePercent)
+
+			switch {
+			case result.Duration < minDuration:
+				result.IsComplete = false
+				result.Error = errors.Join(ErrAudioFileIncomplete,
+					fmt.Errorf("duration %.2fs is less than expected %.2fs", result.Duration, expectedDuration))
+				result.RetryAfter = ValidationRetryDelay * LongRetryDelayMultiplier
+				return result, nil
+			case result.Duration > maxDuration:
+				// File is longer than expected but might still be valid
+				// Mark as complete but could log warning if needed
+				result.IsComplete = true
+			default:
+				// Duration is within expected range
+				result.IsComplete = true
+			}
+		} else {
+			// Short files or no expected duration configured - mark as complete
 			result.IsComplete = true
 		}
 	} else {
@@ -210,7 +243,7 @@ func ValidateAudioFileWithRetry(ctx context.Context, audioPath string) (*AudioVa
 			// Wait before retry with exponential backoff
 			select {
 			case <-time.After(retryDelay):
-				retryDelay *= 2 // Exponential backoff
+				retryDelay *= RetryDelayMultiplier // Exponential backoff
 			case <-ctx.Done():
 				return lastResult, ctx.Err()
 			}
@@ -252,7 +285,7 @@ func validateWithFFprobe(ctx context.Context, audioPath string, result *AudioVal
 	// Create context with timeout if not provided
 	if ctx == nil {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel = context.WithTimeout(context.Background(), FFprobeTimeout)
 		defer cancel()
 	}
 
@@ -300,7 +333,7 @@ func validateWithFFprobe(ctx context.Context, audioPath string, result *AudioVal
 			// Try to parse bit rate
 			if len(fields) > 1 {
 				if bitRate, err := strconv.Atoi(fields[1]); err == nil {
-					result.BitRate = bitRate / 1000 // Convert to kbps
+					result.BitRate = bitRate / BitsPerKilobit // Convert to kbps
 				}
 			}
 			// Try to parse sample rate
@@ -352,15 +385,15 @@ func QuickValidateAudioFile(audioPath string) (bool, error) {
 	}()
 
 	// Read first few bytes to check for valid header (basic format check)
-	header := make([]byte, 12)
+	header := make([]byte, AudioHeaderSize)
 	n, err := file.Read(header)
-	if err != nil || n < 12 {
+	if err != nil || n < AudioHeaderSize {
 		return false, nil
 	}
 
 	// Check for common audio file signatures
 	// WAV: "RIFF"
-	if bytes.HasPrefix(header, []byte("RIFF")) && bytes.Contains(header[8:12], []byte("WAVE")) {
+	if bytes.HasPrefix(header, []byte("RIFF")) && bytes.Contains(header[RIFFHeaderOffset:AudioHeaderSize], []byte("WAVE")) {
 		return true, nil
 	}
 	// FLAC: "fLaC"
@@ -369,7 +402,7 @@ func QuickValidateAudioFile(audioPath string) (bool, error) {
 	}
 	// MP3: ID3 or FF FB/FF FA
 	if bytes.HasPrefix(header, []byte("ID3")) ||
-		(header[0] == 0xFF && (header[1]&0xE0) == 0xE0) {
+		(header[0] == 0xFF && (header[1]&MP3SyncByteMask) == MP3SyncByteMask) {
 		return true, nil
 	}
 	// OGG: "OggS"

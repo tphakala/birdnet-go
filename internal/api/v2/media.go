@@ -345,7 +345,7 @@ func (c *Controller) spectrogramHTTPError(ctx echo.Context, err error) error {
 	case errors.Is(err, ErrAudioFileNotReady) || errors.Is(err, myaudio.ErrAudioFileIncomplete):
 		// Audio file is not ready yet - client should retry
 		// Set Retry-After header to suggest when to retry (in seconds)
-		ctx.Response().Header().Set("Retry-After", "2")
+		ctx.Response().Header().Set("Retry-After", spectrogramRetryAfterSeconds)
 		// Use 503 Service Unavailable to indicate temporary unavailability
 		return c.HandleError(ctx, err, "Audio file is still being processed, please retry", http.StatusServiceUnavailable)
 	case errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, os.ErrNotExist):
@@ -502,9 +502,15 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	return nil
 }
 
-// Limit concurrent spectrogram generations to avoid overloading the system
-// Set to 4 to match the number of cores on Raspberry Pi (most common platform)
+// maxConcurrentSpectrograms limits concurrent spectrogram generations to avoid overloading the system.
+// Set to 4 to match the number of CPU cores on Raspberry Pi 4/5, which is the most common
+// deployment platform for BirdNET-Go. This prevents memory exhaustion and ensures
+// responsive performance on resource-constrained devices.
 const maxConcurrentSpectrograms = 4
+
+// spectrogramRetryAfterSeconds is the suggested retry delay in seconds for 503 responses
+// when audio files are not yet ready for processing
+const spectrogramRetryAfterSeconds = "2"
 
 var (
 	spectrogramSemaphore = make(chan struct{}, maxConcurrentSpectrograms)
