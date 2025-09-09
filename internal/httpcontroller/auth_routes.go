@@ -233,6 +233,7 @@ func (s *Server) handleLoginPage(c echo.Context) error {
 		Page:     "dashboard",
 		Title:    "Dashboard",
 		Settings: s.Settings,
+		Version:  s.getVersionString(),
 	})
 }
 

@@ -24,10 +24,10 @@
 	<link rel="apple-touch-icon" sizes="180x180" href="/assets/images/apple-touch-icon.png">
 	<link rel="shortcut icon" href="/assets/images/favicon.ico">
 
-	<link href="/assets/tailwind.css?v={{.Settings.Version}}" rel="stylesheet" />
-	<link href="/assets/custom.css?v={{.Settings.Version}}" rel="stylesheet" />
+	<link href="/assets/tailwind.css?v={{.Version}}" rel="stylesheet" />
+	<link href="/assets/custom.css?v={{.Version}}" rel="stylesheet" />
 	<!-- htmx -->
-	<script src="/assets/htmx.min.js?v={{.Settings.Version}}" defer></script>
+	<script src="/assets/htmx.min.js?v={{.Version}}" defer></script>
 	<!-- Supply CSRF token in all requests, must be executed before any HTMX requests -->
 	<script>
 		// Configure HTMX to include CSRF token in all requests
@@ -58,15 +58,15 @@
 		});
 	</script>
 	<!-- Custom utilities and Alpine components must load before Alpine.js -->
-	<script src="/assets/util.js?v={{.Settings.Version}}" defer></script>
-	<script src="/assets/notification-utils.js?v={{.Settings.Version}}" defer></script>
-	<script src="/assets/notifications.js?v={{.Settings.Version}}" defer></script>
+	<script src="/assets/util.js?v={{.Version}}" defer></script>
+	<script src="/assets/notification-utils.js?v={{.Version}}" defer></script>
+	<script src="/assets/notifications.js?v={{.Version}}" defer></script>
 	<!-- alpine.js - must load after Alpine components are defined -->
-	<script src="/assets/alpinejs.min.js?v={{.Settings.Version}}" defer></script>
+	<script src="/assets/alpinejs.min.js?v={{.Version}}" defer></script>
 	<!-- HLS.js - HLS streaming support -->
-	<script src="/assets/hls.min.js?v={{.Settings.Version}}" defer></script>
+	<script src="/assets/hls.min.js?v={{.Version}}" defer></script>
 	<!-- Custom utilities -->
-	<script src="/assets/audioplayer.js?v={{.Settings.Version}}" type="module"></script>
+	<script src="/assets/audioplayer.js?v={{.Version}}" type="module"></script>
 	<meta name="csrf-token" content="{{.CSRFToken}}">
 </head>
 

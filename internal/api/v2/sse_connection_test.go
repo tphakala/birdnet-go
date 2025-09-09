@@ -18,6 +18,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	runtimectx "github.com/tphakala/birdnet-go/internal/buildinfo"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
@@ -391,7 +392,8 @@ func setupSSETestServer(t *testing.T) (*httptest.Server, *Controller) {
 	require.NoError(t, err, "Failed to initialize metrics")
 
 	// Create controller WITH route initialization
-	controller, err := NewWithOptions(e, mockDS, settings, nil, nil, controlChan, nil, nil, mockMetrics, true)
+	mockRuntime := runtimectx.NewContext("test-version", "test-build-date", "test-system-id")
+	controller, err := NewWithOptions(e, mockDS, settings, mockRuntime, nil, nil, controlChan, nil, nil, mockMetrics, true)
 	require.NoError(t, err)
 
 	// Wait for goroutines to start
@@ -463,7 +465,8 @@ func setupSSETestServerForBench(b *testing.B) (*httptest.Server, *Controller) {
 	controlChan := make(chan string, 10)
 	mockMetrics, _ := observability.NewMetrics()
 
-	controller, err := NewWithOptions(e, mockDS, settings, nil, nil, controlChan, nil, nil, mockMetrics, true)
+	mockRuntime := runtimectx.NewContext("test-version", "test-build-date", "test-system-id")
+	controller, err := NewWithOptions(e, mockDS, settings, mockRuntime, nil, nil, controlChan, nil, nil, mockMetrics, true)
 	if err != nil {
 		b.Fatal(err)
 	}
