@@ -78,11 +78,14 @@
   // Audio and UI elements
   let audioElement: HTMLAudioElement;
   let playerContainer: HTMLDivElement;
+  // @ts-ignore - Used for template binding, not read in script
   let playPauseButton: HTMLButtonElement;
   let progressBar: HTMLDivElement;
   // svelte-ignore non_reactive_update
+  // @ts-ignore - Used for template binding, not read in script
   let volumeControl: HTMLDivElement;
   // svelte-ignore non_reactive_update
+  // @ts-ignore - Used for template binding, not read in script
   let filterControl: HTMLDivElement;
   // svelte-ignore non_reactive_update
   let volumeSlider: HTMLDivElement;
@@ -382,7 +385,9 @@
     // Retry on any error (likely 503 or temporary failure) up to max retries
     if (spectrogramRetryCount < MAX_SPECTROGRAM_RETRIES) {
       // Use exponential backoff for retry
-      const retryDelay = SPECTROGRAM_RETRY_DELAYS[spectrogramRetryCount] || 4000;
+      // Use Math.min to safely select delay without direct array indexing
+      const delayIndex = Math.min(spectrogramRetryCount, SPECTROGRAM_RETRY_DELAYS.length - 1);
+      const retryDelay = SPECTROGRAM_RETRY_DELAYS.at(delayIndex) || 4000;
 
       logger.debug('Spectrogram load failed, retrying', {
         detectionId,
