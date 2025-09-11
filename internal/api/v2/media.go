@@ -670,12 +670,114 @@ func CloseSpectrogramLogger() error {
 	return nil
 }
 
+// buildSpectrogramPaths constructs the spectrogram file paths from the audio path and parameters.
+// It returns the base filename, audio directory, spectrogram filename, and full relative spectrogram path.
+func buildSpectrogramPaths(relAudioPath string, width int, raw bool) (relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath string) {
+	// Get the base filename and directory relative to the secure root
+	relBaseFilename = strings.TrimSuffix(filepath.Base(relAudioPath), filepath.Ext(relAudioPath))
+	relAudioDir = filepath.Dir(relAudioPath)
+
+	// Generate spectrogram filename compatible with old HTMX API format
+	if raw {
+		// Raw spectrograms use old API format: filename_400px.png (for cache compatibility)
+		spectrogramFilename = fmt.Sprintf("%s_%dpx.png", relBaseFilename, width)
+	} else {
+		// Spectrograms with legends use new suffix: filename_400px-legend.png
+		spectrogramFilename = fmt.Sprintf("%s_%dpx-legend.png", relBaseFilename, width)
+	}
+
+	// Since we're constructing the spectrogram path from an already-validated audio path
+	// and appending a simple formatted filename, we can safely construct the path without
+	// re-validating. The path components are all known to be safe.
+	relSpectrogramPath = filepath.Join(relAudioDir, spectrogramFilename)
+
+	return relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath
+}
+
+// validateSpectrogramInputs validates that the audio file is complete and ready for spectrogram generation.
+// It returns the validation result and any error encountered during validation.
+func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath, audioPath, spectrogramKey string) (*myaudio.AudioValidationResult, error) {
+	spectrogramLogger.Debug("Starting audio validation with FFprobe",
+		"abs_audio_path", absAudioPath,
+		"spectrogram_key", spectrogramKey)
+
+	validationStart := time.Now()
+	validationResult, err := myaudio.ValidateAudioFileWithRetry(ctx, absAudioPath)
+	validationDuration := time.Since(validationStart)
+
+	if err != nil {
+		// Context errors should be propagated immediately
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			spectrogramLogger.Warn("Audio validation canceled or timed out",
+				"audio_path", audioPath,
+				"abs_audio_path", absAudioPath,
+				"error", err.Error(),
+				"validation_duration_ms", validationDuration.Milliseconds(),
+				"spectrogram_key", spectrogramKey)
+			return nil, err
+		}
+		// Other validation errors
+		spectrogramLogger.Error("Audio validation failed with FFprobe",
+			"audio_path", audioPath,
+			"abs_audio_path", absAudioPath,
+			"error", err.Error(),
+			"validation_duration_ms", validationDuration.Milliseconds(),
+			"spectrogram_key", spectrogramKey)
+		return nil, fmt.Errorf("%w: %w", ErrAudioFileNotReady, err)
+	}
+
+	// Check if the file is ready
+	if !validationResult.IsValid {
+		spectrogramLogger.Info("Audio file not ready for processing, client should retry",
+			"audio_path", audioPath,
+			"abs_audio_path", absAudioPath,
+			"file_size", validationResult.FileSize,
+			"is_complete", validationResult.IsComplete,
+			"is_valid", validationResult.IsValid,
+			"retry_after_ms", validationResult.RetryAfter.Milliseconds(),
+			"validation_duration_ms", validationDuration.Milliseconds(),
+			"validation_error", validationResult.Error,
+			"spectrogram_key", spectrogramKey)
+
+		// Track retry metrics
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Spectrogram generation deferred - audio not ready",
+				"audio_path", audioPath,
+				"file_size", validationResult.FileSize,
+				"retry_after_ms", validationResult.RetryAfter.Milliseconds(),
+				"component", "media.spectrogram",
+				"metric_type", "audio_not_ready")
+		}
+
+		// Return a specific error that indicates the file is not ready
+		// This will be handled by the HTTP handler to return 503
+		if validationResult.Error != nil {
+			return validationResult, fmt.Errorf("%w: %w", ErrAudioFileNotReady, validationResult.Error)
+		}
+		return validationResult, ErrAudioFileNotReady
+	}
+
+	spectrogramLogger.Debug("Audio file validated successfully with FFprobe",
+		"audio_path", audioPath,
+		"abs_audio_path", absAudioPath,
+		"duration_seconds", validationResult.Duration,
+		"format", validationResult.Format,
+		"file_size_bytes", validationResult.FileSize,
+		"sample_rate", validationResult.SampleRate,
+		"channels", validationResult.Channels,
+		"bitrate", validationResult.BitRate,
+		"is_valid", validationResult.IsValid,
+		"is_complete", validationResult.IsComplete,
+		"validation_duration_ms", validationDuration.Milliseconds(),
+		"spectrogram_key", spectrogramKey)
+
+	return validationResult, nil
+}
+
 // generateSpectrogram creates a spectrogram image for the given audio file path (relative to SecureFS root).
 // It accepts a context for cancellation and timeout.
 // It returns the relative path to the generated spectrogram, suitable for use with c.SFS.ServeFile.
 // Optimized: Fast path check happens before expensive audio validation.
-//
-//nolint:gocognit // Complex but necessary for comprehensive spectrogram generation with fallbacks
 func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, width int, raw bool) (string, error) {
 	start := time.Now()
 	spectrogramLogger.Debug("Spectrogram generation requested",
@@ -707,24 +809,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	}
 
 	// Step 3: Calculate spectrogram paths early (needed for fast path check)
-	// Get the base filename and directory relative to the secure root
-	relBaseFilename := strings.TrimSuffix(filepath.Base(relAudioPath), filepath.Ext(relAudioPath))
-	relAudioDir := filepath.Dir(relAudioPath)
-
-	// Generate spectrogram filename compatible with old HTMX API format
-	var spectrogramFilename string
-	if raw {
-		// Raw spectrograms use old API format: filename_400px.png (for cache compatibility)
-		spectrogramFilename = fmt.Sprintf("%s_%dpx.png", relBaseFilename, width)
-	} else {
-		// Spectrograms with legends use new suffix: filename_400px-legend.png
-		spectrogramFilename = fmt.Sprintf("%s_%dpx-legend.png", relBaseFilename, width)
-	}
-
-	// Since we're constructing the spectrogram path from an already-validated audio path
-	// and appending a simple formatted filename, we can safely construct the path without
-	// re-validating. The path components are all known to be safe.
-	relSpectrogramPath := filepath.Join(relAudioDir, spectrogramFilename)
+	relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, width, raw)
 
 	spectrogramLogger.Debug("Spectrogram path constructed",
 		"audio_path", audioPath,
@@ -813,79 +898,10 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	// This expensive operation only happens if we need to generate a spectrogram
 	absAudioPath := filepath.Join(c.SFS.BaseDir(), relAudioPath)
 
-	spectrogramLogger.Debug("Starting audio validation with FFprobe",
-		"abs_audio_path", absAudioPath,
-		"spectrogram_key", spectrogramKey)
-
-	validationStart := time.Now()
-	validationResult, err := myaudio.ValidateAudioFileWithRetry(ctx, absAudioPath)
-	validationDuration := time.Since(validationStart)
-
+	_, err = c.validateSpectrogramInputs(ctx, absAudioPath, audioPath, spectrogramKey)
 	if err != nil {
-		// Context errors should be propagated immediately
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-			spectrogramLogger.Warn("Audio validation canceled or timed out",
-				"audio_path", audioPath,
-				"abs_audio_path", absAudioPath,
-				"error", err.Error(),
-				"validation_duration_ms", validationDuration.Milliseconds(),
-				"spectrogram_key", spectrogramKey)
-			return "", err
-		}
-		// Other validation errors
-		spectrogramLogger.Error("Audio validation failed with FFprobe",
-			"audio_path", audioPath,
-			"abs_audio_path", absAudioPath,
-			"error", err.Error(),
-			"validation_duration_ms", validationDuration.Milliseconds(),
-			"spectrogram_key", spectrogramKey)
-		return "", fmt.Errorf("%w: %w", ErrAudioFileNotReady, err)
+		return "", err
 	}
-
-	// Check if the file is ready
-	if !validationResult.IsValid {
-		spectrogramLogger.Info("Audio file not ready for processing, client should retry",
-			"audio_path", audioPath,
-			"abs_audio_path", absAudioPath,
-			"file_size", validationResult.FileSize,
-			"is_complete", validationResult.IsComplete,
-			"is_valid", validationResult.IsValid,
-			"retry_after_ms", validationResult.RetryAfter.Milliseconds(),
-			"validation_duration_ms", validationDuration.Milliseconds(),
-			"validation_error", validationResult.Error,
-			"spectrogram_key", spectrogramKey)
-
-		// Track retry metrics
-		if c.apiLogger != nil {
-			c.apiLogger.Info("Spectrogram generation deferred - audio not ready",
-				"audio_path", audioPath,
-				"file_size", validationResult.FileSize,
-				"retry_after_ms", validationResult.RetryAfter.Milliseconds(),
-				"component", "media.spectrogram",
-				"metric_type", "audio_not_ready")
-		}
-
-		// Return a specific error that indicates the file is not ready
-		// This will be handled by the HTTP handler to return 503
-		if validationResult.Error != nil {
-			return "", fmt.Errorf("%w: %w", ErrAudioFileNotReady, validationResult.Error)
-		}
-		return "", ErrAudioFileNotReady
-	}
-
-	spectrogramLogger.Debug("Audio file validated successfully with FFprobe",
-		"audio_path", audioPath,
-		"abs_audio_path", absAudioPath,
-		"duration_seconds", validationResult.Duration,
-		"format", validationResult.Format,
-		"file_size_bytes", validationResult.FileSize,
-		"sample_rate", validationResult.SampleRate,
-		"channels", validationResult.Channels,
-		"bitrate", validationResult.BitRate,
-		"is_valid", validationResult.IsValid,
-		"is_complete", validationResult.IsComplete,
-		"validation_duration_ms", validationDuration.Milliseconds(),
-		"spectrogram_key", spectrogramKey)
 
 	// Absolute path for the spectrogram on the host filesystem
 	absSpectrogramPath := filepath.Join(c.SFS.BaseDir(), relSpectrogramPath)

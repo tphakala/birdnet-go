@@ -73,9 +73,9 @@ type Controller struct {
 	ctx    context.Context    // Context for managing goroutines
 	cancel context.CancelFunc // Cancel function for graceful shutdown
 
-	// Test synchronization fields
-	goroutinesStarted chan struct{}  // Signals when all background goroutines have started (test only)
-	wg                sync.WaitGroup // Tracks background goroutines for clean shutdown
+	// Test synchronization fields (test-only: used by unit/integration tests — do not use in production)
+	goroutinesStarted chan struct{}  // test-only: signals when all background goroutines have started (populated only in tests)
+	wg                sync.WaitGroup // test-only: tracks background goroutines for clean shutdown (used for test synchronization)
 }
 
 // Define specific errors for token handling failures

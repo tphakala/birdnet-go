@@ -1,6 +1,7 @@
 package api
 
 import (
+	"path"
 	"strings"
 )
 
@@ -12,7 +13,7 @@ import (
 //   - "clips/2024/01/bird.wav" → "2024/01/bird.wav"
 //   - "2024/01/bird.wav" → "2024/01/bird.wav" (unchanged)
 //   - "clips/" → "" (empty string)
-func NormalizeClipPath(path, clipsPrefix string) string {
+func NormalizeClipPath(p, clipsPrefix string) string {
 	// If no prefix is configured, default to "clips/"
 	if clipsPrefix == "" {
 		clipsPrefix = "clips/"
@@ -23,10 +24,25 @@ func NormalizeClipPath(path, clipsPrefix string) string {
 		clipsPrefix += "/"
 	}
 
-	// Strip the prefix if present
-	if strings.HasPrefix(path, clipsPrefix) {
-		return strings.TrimPrefix(path, clipsPrefix)
+	// Strip the prefix if present using strings.CutPrefix (more efficient)
+	if trimmed, ok := strings.CutPrefix(p, clipsPrefix); ok {
+		p = trimmed
 	}
 
-	return path
+	// Normalize and defend against traversal
+	// Convert backslashes to forward slashes for consistency
+	p = path.Clean(strings.ReplaceAll(p, "\\", "/"))
+
+	// Handle the special case where Clean returns "."
+	if p == "." {
+		return ""
+	}
+
+	// Reject paths that would escape the SecureFS root
+	if path.IsAbs(p) || strings.HasPrefix(p, "../") {
+		// Return empty string for invalid paths
+		return ""
+	}
+
+	return p
 }
