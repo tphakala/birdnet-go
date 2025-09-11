@@ -266,18 +266,11 @@ func isFileSizeStable(ctx context.Context, path string, initialSize int64) bool 
 	}
 }
 
-// validateWithFFprobe uses ffprobe to validate audio file format and extract metadata
-func validateWithFFprobe(ctx context.Context, audioPath string, result *AudioValidationResult) error {
+// executeFFprobe runs ffprobe command and returns output
+func executeFFprobe(ctx context.Context, audioPath string) (string, error) {
 	ffprobeBinary := conf.GetFfprobeBinaryName()
 	if ffprobeBinary == "" {
-		return ErrFFprobeNotAvailable
-	}
-
-	// Create context with timeout if not provided
-	if ctx == nil {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(context.Background(), FFprobeTimeout)
-		defer cancel()
+		return "", ErrFFprobeNotAvailable
 	}
 
 	// Build ffprobe command to get format and stream information
@@ -295,60 +288,100 @@ func validateWithFFprobe(ctx context.Context, audioPath string, result *AudioVal
 	if err := cmd.Run(); err != nil {
 		// Check for context errors
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return "", ctx.Err()
 		}
 		// Check stderr for specific errors
 		stderrStr := stderr.String()
 		if strings.Contains(stderrStr, "Invalid data found") ||
 			strings.Contains(stderrStr, "could not find codec parameters") {
-			return fmt.Errorf("invalid audio format: %s", stderrStr)
+			return "", fmt.Errorf("invalid audio format: %s", stderrStr)
 		}
-		return fmt.Errorf("ffprobe validation failed: %w (stderr: %s)", err, stderrStr)
+		return "", fmt.Errorf("ffprobe validation failed: %w (stderr: %s)", err, stderrStr)
 	}
 
-	// Parse ffprobe output
 	output := strings.TrimSpace(out.String())
 	if output == "" {
-		return fmt.Errorf("ffprobe returned no data")
+		return "", fmt.Errorf("ffprobe returned no data")
 	}
 
-	// Parse the CSV output (format: duration,bit_rate,sample_rate,channels,codec_name)
-	// Use Go 1.24's efficient iterator-based string processing
-	// strings.Lines returns an iterator that yields lines without allocating a slice
-	// This is more memory-efficient than strings.Split(output, "\n")
-	for line := range strings.Lines(output) {
-		// Collect fields from the CSV line using iterator
-		// We need to collect them since we access by index
-		var fields []string
-		for field := range strings.SplitSeq(line, ",") {
-			fields = append(fields, field)
-		}
+	return output, nil
+}
 
-		if len(fields) >= 2 {
-			// Try to parse duration from the first field
-			if duration, err := strconv.ParseFloat(fields[0], 64); err == nil && duration > 0 {
-				result.Duration = duration
+// parseFFprobeLine parses a single line of FFprobe CSV output
+func parseFFprobeLine(line string, result *AudioValidationResult) {
+	// Collect fields from the CSV line using Go 1.24 iterator
+	// Pre-allocate for typical case of 3 fields (codec,sample_rate,channels or duration,bitrate)
+	fields := make([]string, 0, 3)
+	for field := range strings.SplitSeq(line, ",") {
+		fields = append(fields, field)
+	}
+
+	if len(fields) < 2 {
+		return
+	}
+
+	// Check if this is format data (duration,bit_rate)
+	if duration, err := strconv.ParseFloat(fields[0], 64); err == nil && strings.Contains(fields[0], ".") {
+		result.Duration = duration
+		if len(fields) > 1 {
+			if bitRate, err := strconv.Atoi(fields[1]); err == nil {
+				result.BitRate = bitRate / BitsPerKilobit
 			}
-			// Try to parse bit rate
-			if len(fields) > 1 {
-				if bitRate, err := strconv.Atoi(fields[1]); err == nil {
-					result.BitRate = bitRate / BitsPerKilobit // Convert to kbps
-				}
-			}
-			// Try to parse sample rate
-			if len(fields) > 2 {
-				if sampleRate, err := strconv.Atoi(fields[2]); err == nil {
-					result.SampleRate = sampleRate
-				}
-			}
-			// Try to parse channels
-			if len(fields) > 3 {
-				if channels, err := strconv.Atoi(fields[3]); err == nil {
-					result.Channels = channels
-				}
-			}
-			break // We only need the first valid line
 		}
+		return
+	}
+
+	// Check if this is stream data (codec_name,sample_rate,channels)
+	if len(fields) >= 3 {
+		if sampleRate, err := strconv.Atoi(fields[1]); err == nil && sampleRate > 0 {
+			result.SampleRate = sampleRate
+			if channels, err := strconv.Atoi(fields[2]); err == nil {
+				result.Channels = channels
+			}
+			if fields[0] != "" {
+				result.Format = fields[0]
+			}
+		}
+		return
+	}
+
+	// Handle truncated stream data (sample_rate,channels only)
+	if len(fields) == 2 {
+		if val1, err1 := strconv.Atoi(fields[0]); err1 == nil {
+			if val2, err2 := strconv.Atoi(fields[1]); err2 == nil {
+				// Both integers, likely sample_rate,channels
+				if val1 > 1000 { // Sample rates are typically > 1000
+					result.SampleRate = val1
+					result.Channels = val2
+				}
+			}
+		}
+	}
+}
+
+// validateWithFFprobe uses ffprobe to validate audio file format and extract metadata
+func validateWithFFprobe(ctx context.Context, audioPath string, result *AudioValidationResult) error {
+	// Create context with timeout if not provided
+	if ctx == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), FFprobeTimeout)
+		defer cancel()
+	}
+
+	// Execute ffprobe command
+	output, err := executeFFprobe(ctx, audioPath)
+	if err != nil {
+		return err
+	}
+
+	// Parse the CSV output line by line
+	// FFprobe outputs stream data first (codec_name,sample_rate,channels)
+	// then format data (duration,bit_rate) on separate lines
+	for line := range strings.Lines(output) {
+		if line == "" {
+			continue
+		}
+		parseFFprobeLine(line, result)
 	}
 
 	// Basic validation of parsed data
