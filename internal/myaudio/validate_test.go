@@ -12,8 +12,7 @@ import (
 // TestValidateAudioFileNoDurationCheck tests that audio files of various durations
 // are all considered valid regardless of the configured capture length
 func TestValidateAudioFileNoDurationCheck(t *testing.T) {
-	// Create a temp directory for test files
-	tmpDir := t.TempDir()
+	t.Parallel()
 
 	// Create test WAV files with different sizes (simulating different durations)
 	testCases := []struct {
@@ -56,6 +55,9 @@ func TestValidateAudioFileNoDurationCheck(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
+			// Create a temp directory for this test
+			tmpDir := t.TempDir()
 			// Create test file with WAV header
 			testFile := filepath.Join(tmpDir, tc.name)
 			createTestWAVFileWithSize(t, testFile, tc.fileSize)
@@ -152,9 +154,11 @@ func createTestWAVFileWithSize(t *testing.T, path string, size int64) {
 
 // TestQuickValidateAudioFile tests the quick validation function
 func TestQuickValidateAudioFile(t *testing.T) {
-	tmpDir := t.TempDir()
+	t.Parallel()
 
 	t.Run("Valid WAV file", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
 		testFile := filepath.Join(tmpDir, "test.wav")
 		createTestWAVFileWithSize(t, testFile, 10*1024) // 10KB file
 
@@ -168,6 +172,8 @@ func TestQuickValidateAudioFile(t *testing.T) {
 	})
 
 	t.Run("Non-existent file", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
 		valid, err := QuickValidateAudioFile(filepath.Join(tmpDir, "nonexistent.wav"))
 		if err != nil {
 			t.Errorf("Unexpected error: %v", err)
@@ -178,6 +184,8 @@ func TestQuickValidateAudioFile(t *testing.T) {
 	})
 
 	t.Run("File too small", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
 		testFile := filepath.Join(tmpDir, "tiny.wav")
 		if err := os.WriteFile(testFile, []byte("small"), 0o644); err != nil {
 			t.Fatal(err)
@@ -220,14 +228,32 @@ func TestValidateAudioFileWithRetry(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Grow the file after a short delay
+		// Channel to coordinate file growth and validation completion
+		validationStarted := make(chan struct{})
+		validationDone := make(chan struct{})
+
+		// Start validation in a goroutine
+		ctx := context.Background()
+		var result *AudioValidationResult
+		var err error
+
 		go func() {
-			time.Sleep(150 * time.Millisecond)
-			createTestWAVFileWithSize(t, testFile, 10*1024)
+			close(validationStarted) // Signal that validation is starting
+			result, err = ValidateAudioFileWithRetry(ctx, testFile)
+			close(validationDone) // Signal that validation is complete
 		}()
 
-		ctx := context.Background()
-		result, err := ValidateAudioFileWithRetry(ctx, testFile)
+		// Wait for validation to start, then grow the file
+		<-validationStarted
+		// Give validation a moment to actually begin processing
+		// This small delay ensures the validator has started checking the small file
+		time.Sleep(50 * time.Millisecond)
+
+		// Now grow the file while validation is retrying
+		createTestWAVFileWithSize(t, testFile, 10*1024)
+
+		// Wait for validation to complete
+		<-validationDone
 
 		// The file should eventually become valid
 		if err == nil && result != nil && result.IsValid {
