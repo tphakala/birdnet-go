@@ -78,15 +78,12 @@
   // Audio and UI elements
   let audioElement: HTMLAudioElement;
   let playerContainer: HTMLDivElement;
-  // @ts-ignore - Used for template binding, not read in script
-  let playPauseButton: HTMLButtonElement;
+  let playPauseButton!: HTMLButtonElement; // Template-only binding
   let progressBar: HTMLDivElement;
   // svelte-ignore non_reactive_update
-  // @ts-ignore - Used for template binding, not read in script
-  let volumeControl: HTMLDivElement;
+  let volumeControl!: HTMLDivElement; // Template-only binding
   // svelte-ignore non_reactive_update
-  // @ts-ignore - Used for template binding, not read in script
-  let filterControl: HTMLDivElement;
+  let filterControl!: HTMLDivElement; // Template-only binding
   // svelte-ignore non_reactive_update
   let volumeSlider: HTMLDivElement;
   // svelte-ignore non_reactive_update
@@ -380,7 +377,7 @@
   };
 
   const handleSpectrogramError = (event: Event) => {
-    const img = event.target as HTMLImageElement;
+    const img = event.currentTarget as HTMLImageElement;
 
     // Retry on any error (likely 503 or temporary failure) up to max retries
     if (spectrogramRetryCount < MAX_SPECTROGRAM_RETRIES) {
@@ -438,6 +435,9 @@
       previousSpectrogramUrl = spectrogramUrl;
       // Start loading when URL changes
       spectrogramLoader.setLoading(true);
+      // Reset retry count and clear any pending retry timer for new spectrogram
+      spectrogramRetryCount = 0;
+      clearSpectrogramRetryTimer();
     }
   });
 
