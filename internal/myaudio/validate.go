@@ -29,9 +29,6 @@ const (
 	// FileStabilityCheckDuration is how long to wait to confirm file size is stable
 	FileStabilityCheckDuration = 50 * time.Millisecond
 
-	// DurationTolerancePercent is the acceptable deviation from expected duration (10%)
-	DurationTolerancePercent = 0.1
-
 	// FFprobeTimeout is the maximum time to wait for ffprobe validation
 	FFprobeTimeout = 3 * time.Second
 
@@ -151,41 +148,12 @@ func ValidateAudioFile(ctx context.Context, audioPath string) (*AudioValidationR
 		return result, nil // Return nil to indicate validation completed but file is invalid
 	}
 
-	// Additional validation based on expected duration (if provided in settings)
-	// Only validate duration for files that are expected to match the configured length
-	// Skip duration validation for very short files (likely test files or snippets)
-	if result.Duration > 0 {
-		expectedDuration := float64(conf.Setting().Realtime.Audio.Export.Length)
-
-		// Only validate duration if the file is at least 1 second and expected duration is configured
-		if result.Duration >= 1.0 && expectedDuration > 0 {
-			// Allow configured tolerance for duration
-			minDuration := expectedDuration * (1 - DurationTolerancePercent)
-			maxDuration := expectedDuration * (1 + DurationTolerancePercent)
-
-			switch {
-			case result.Duration < minDuration:
-				result.IsComplete = false
-				result.Error = errors.Join(ErrAudioFileIncomplete,
-					fmt.Errorf("duration %.2fs is less than expected %.2fs", result.Duration, expectedDuration))
-				result.RetryAfter = ValidationRetryDelay * LongRetryDelayMultiplier
-				return result, nil
-			case result.Duration > maxDuration:
-				// File is longer than expected but might still be valid
-				// Mark as complete but could log warning if needed
-				result.IsComplete = true
-			default:
-				// Duration is within expected range
-				result.IsComplete = true
-			}
-		} else {
-			// Short files or no expected duration configured - mark as complete
-			result.IsComplete = true
-		}
-	} else {
-		// If we can't determine duration, assume complete if other checks pass
-		result.IsComplete = true
-	}
+	// Mark file as complete - we don't validate against expected duration because:
+	// 1. Users can change capture length at any time
+	// 2. Existing files may have been captured with different settings
+	// 3. Files from different sources may have various durations
+	// The important thing is that the file is readable and has valid audio data
+	result.IsComplete = true
 
 	// All checks passed
 	result.IsValid = true

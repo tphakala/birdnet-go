@@ -27,10 +27,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -48,7 +48,7 @@ type Controller struct {
 	logger              *log.Logger
 	controlChan         chan string
 	speciesExcludeMutex sync.RWMutex // Mutex for species exclude list operations
-	DisableSaveSettings bool          // Flag to disable saving settings to disk (for tests)
+	DisableSaveSettings bool         // Flag to disable saving settings to disk (for tests)
 	settingsMutex       sync.RWMutex // Mutex for settings operations
 	detectionCache      *cache.Cache // Cache for detection queries
 	startTime           *time.Time
@@ -72,9 +72,9 @@ type Controller struct {
 	// Cleanup related fields
 	ctx    context.Context    // Context for managing goroutines
 	cancel context.CancelFunc // Cancel function for graceful shutdown
-	
+
 	// Test synchronization fields
-	goroutinesStarted chan struct{} // Signals when all background goroutines have started (test only)
+	goroutinesStarted chan struct{}  // Signals when all background goroutines have started (test only)
 	wg                sync.WaitGroup // Tracks background goroutines for clean shutdown
 }
 
@@ -253,6 +253,9 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		cancel:         cancel,
 	}
 
+	// Update spectrogram logger level based on debug setting
+	UpdateSpectrogramLogLevel(settings.Debug)
+
 	// Initialize structured logger for API requests
 	apiLogPath := "logs/web.log"
 	initialLevel := slog.LevelInfo
@@ -298,9 +301,9 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	c.Group.Use(middleware.Recover())          // Recover should be early
 	c.Group.Use(c.TunnelDetectionMiddleware()) // Add tunnel detection **before** logging
 	// c.Group.Use(middleware.Logger())        // Removed: Use custom LoggingMiddleware below for structured logging
-	c.Group.Use(middleware.CORS())     // CORS handling
+	c.Group.Use(middleware.CORS())          // CORS handling
 	c.Group.Use(middleware.BodyLimit("1M")) // Limit request body to 1MB to prevent DoS attacks
-	c.Group.Use(c.LoggingMiddleware()) // Use custom structured logging middleware
+	c.Group.Use(c.LoggingMiddleware())      // Use custom structured logging middleware
 
 	// NOTE: CSRF Protection Consideration
 	// The V2 API uses Bearer token authentication (Authorization: Bearer <token>)
