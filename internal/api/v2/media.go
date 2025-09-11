@@ -707,10 +707,19 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		"width", width,
 		"raw", raw)
 
-	if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
+	// Also try checking with absolute path as a fallback
+	absCheckPath := filepath.Join(c.SFS.BaseDir(), relSpectrogramPath)
+	spectrogramLogger.Debug("Fast path: checking both relative and absolute paths",
+		"relative_path", relSpectrogramPath,
+		"absolute_path", absCheckPath,
+		"base_dir", c.SFS.BaseDir())
+
+	if statInfo, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
 		spectrogramLogger.Debug("Fast path HIT: spectrogram already exists, returning immediately",
 			"spectrogram_key", spectrogramKey,
 			"relative_spectrogram_path", relSpectrogramPath,
+			"file_size", statInfo.Size(),
+			"mod_time", statInfo.ModTime(),
 			"total_duration_ms", time.Since(start).Milliseconds())
 		return relSpectrogramPath, nil
 	} else if !os.IsNotExist(err) {
@@ -719,6 +728,17 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 			"spectrogram_key", spectrogramKey,
 			"error", err.Error())
 	} else {
+		// Double-check with absolute path
+		if absStatInfo, absErr := os.Stat(absCheckPath); absErr == nil {
+			spectrogramLogger.Warn("Fast path MISS but file exists at absolute path! Path mismatch issue",
+				"spectrogram_key", spectrogramKey,
+				"relative_spectrogram_path", relSpectrogramPath,
+				"absolute_path", absCheckPath,
+				"file_size", absStatInfo.Size(),
+				"mod_time", absStatInfo.ModTime())
+			// Return anyway since file exists
+			return relSpectrogramPath, nil
+		}
 		spectrogramLogger.Debug("Fast path MISS: spectrogram does not exist, will need to generate",
 			"spectrogram_key", spectrogramKey,
 			"relative_spectrogram_path", relSpectrogramPath)
@@ -898,6 +918,17 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 			"width", width,
 			"raw", raw,
 			"generator", "sox_with_ffmpeg_fallback")
+
+		// Ensure the output directory exists
+		outputDir := filepath.Dir(absSpectrogramPath)
+		if err := os.MkdirAll(outputDir, 0o755); err != nil {
+			spectrogramLogger.Error("Failed to create output directory for spectrogram",
+				"output_dir", outputDir,
+				"error", err.Error())
+			return nil, fmt.Errorf("failed to create output directory %s: %w", outputDir, err)
+		}
+		spectrogramLogger.Debug("Ensured output directory exists",
+			"output_dir", outputDir)
 
 		generationStart := time.Now()
 
