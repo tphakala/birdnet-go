@@ -313,9 +313,17 @@ func validateWithFFprobe(ctx context.Context, audioPath string, result *AudioVal
 	}
 
 	// Parse the CSV output (format: duration,bit_rate,sample_rate,channels,codec_name)
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		fields := strings.Split(line, ",")
+	// Use Go 1.24's efficient iterator-based string processing
+	// strings.Lines returns an iterator that yields lines without allocating a slice
+	// This is more memory-efficient than strings.Split(output, "\n")
+	for line := range strings.Lines(output) {
+		// Collect fields from the CSV line using iterator
+		// We need to collect them since we access by index
+		var fields []string
+		for field := range strings.SplitSeq(line, ",") {
+			fields = append(fields, field)
+		}
+
 		if len(fields) >= 2 {
 			// Try to parse duration from the first field
 			if duration, err := strconv.ParseFloat(fields[0], 64); err == nil && duration > 0 {
@@ -339,6 +347,7 @@ func validateWithFFprobe(ctx context.Context, audioPath string, result *AudioVal
 					result.Channels = channels
 				}
 			}
+			break // We only need the first valid line
 		}
 	}
 
