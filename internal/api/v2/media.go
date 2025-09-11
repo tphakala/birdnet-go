@@ -280,16 +280,16 @@ func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 		)
 	}
 
-	// Normalize the path by stripping "clips/" prefix if present
-	// The database stores paths with "clips/" prefix, but SecureFS is already rooted at clips directory
-	normalizedFilename := filename
-	if strings.HasPrefix(filename, "clips/") {
-		normalizedFilename = strings.TrimPrefix(filename, "clips/")
-		if c.apiLogger != nil {
-			c.apiLogger.Debug("Stripped 'clips/' prefix from audio filename",
-				"original_filename", filename,
-				"normalized_filename", normalizedFilename)
-		}
+	// Normalize the path by stripping clips prefix if present
+	// The database stores paths with a configurable prefix (default "clips/"),
+	// but SecureFS is already rooted at the clips directory
+	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
+	normalizedFilename := NormalizeClipPath(filename, clipsPrefix)
+	if normalizedFilename != filename && c.apiLogger != nil {
+		c.apiLogger.Debug("Normalized audio filename",
+			"original_filename", filename,
+			"normalized_filename", normalizedFilename,
+			"clips_prefix", clipsPrefix)
 	}
 
 	// Serve the file using SecureFS. It handles path validation and serves the file.
@@ -340,12 +340,10 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 		ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", originalFilename))
 	}
 
-	// Normalize the path by stripping "clips/" prefix if present
-	// The database stores paths with "clips/" prefix, but SecureFS is already rooted at clips directory
-	normalizedClipPath := clipPath
-	if strings.HasPrefix(clipPath, "clips/") {
-		normalizedClipPath = strings.TrimPrefix(clipPath, "clips/")
-	}
+	// Normalize the path by stripping clips prefix if present
+	// The database stores paths with a configurable prefix, but SecureFS is already rooted at clips directory
+	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
+	normalizedClipPath := NormalizeClipPath(clipPath, clipsPrefix)
 
 	// Serve the file using SecureFS. It handles path validation (relative/absolute within baseDir).
 	// ServeFile internally calls relativePath which ensures the path is within the SecureFS baseDir.
@@ -687,14 +685,15 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		"request_time", start.Format("2006-01-02 15:04:05"))
 
 	// Step 1: Handle path prefix normalization
-	// The database stores paths with "clips/" prefix, but SecureFS is already rooted at clips directory
-	// Strip the "clips/" prefix if present to avoid duplication
-	normalizedPath := audioPath
-	if strings.HasPrefix(audioPath, "clips/") {
-		normalizedPath = strings.TrimPrefix(audioPath, "clips/")
-		spectrogramLogger.Debug("Stripped 'clips/' prefix from audio path",
+	// The database stores paths with a configurable prefix (default "clips/"),
+	// but SecureFS is already rooted at the clips directory
+	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
+	normalizedPath := NormalizeClipPath(audioPath, clipsPrefix)
+	if normalizedPath != audioPath {
+		spectrogramLogger.Debug("Normalized audio path",
 			"original_path", audioPath,
-			"normalized_path", normalizedPath)
+			"normalized_path", normalizedPath,
+			"clips_prefix", clipsPrefix)
 	}
 
 	// Step 2: Validate the normalized audio path for security (must happen first)
@@ -702,11 +701,9 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	if err != nil {
 		// Use proper error type checking instead of string matching
 		if errors.Is(err, securefs.ErrPathTraversal) {
-			combined := errors.Join(ErrPathTraversalAttempt, err)
-			return "", fmt.Errorf("%w", combined)
+			return "", fmt.Errorf("%w: %w", ErrPathTraversalAttempt, err)
 		}
-		combined := errors.Join(ErrInvalidAudioPath, err)
-		return "", fmt.Errorf("%w", combined)
+		return "", fmt.Errorf("%w: %w", ErrInvalidAudioPath, err)
 	}
 
 	// Step 3: Calculate spectrogram paths early (needed for fast path check)
@@ -799,8 +796,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 			spectrogramLogger.Debug("Audio file does not exist",
 				"relative_audio_path", relAudioPath,
 				"error", err.Error())
-			combined := errors.Join(ErrAudioFileNotFound, err)
-			return "", fmt.Errorf("%w at '%s'", combined, relAudioPath)
+			return "", fmt.Errorf("%w: %w (path: %s)", ErrAudioFileNotFound, err, relAudioPath)
 		}
 		spectrogramLogger.Debug("Error checking audio file",
 			"relative_audio_path", relAudioPath,
@@ -843,8 +839,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 			"error", err.Error(),
 			"validation_duration_ms", validationDuration.Milliseconds(),
 			"spectrogram_key", spectrogramKey)
-		combined := errors.Join(ErrAudioFileNotReady, err)
-		return "", fmt.Errorf("%w", combined)
+		return "", fmt.Errorf("%w: %w", ErrAudioFileNotReady, err)
 	}
 
 	// Check if the file is ready
@@ -873,8 +868,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		// Return a specific error that indicates the file is not ready
 		// This will be handled by the HTTP handler to return 503
 		if validationResult.Error != nil {
-			combined := errors.Join(ErrAudioFileNotReady, validationResult.Error)
-			return "", fmt.Errorf("%w", combined)
+			return "", fmt.Errorf("%w: %w", ErrAudioFileNotReady, validationResult.Error)
 		}
 		return "", ErrAudioFileNotReady
 	}

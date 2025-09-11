@@ -51,6 +51,19 @@ const (
 	MP3SyncByteMask = 0xE0
 )
 
+// Error codes for audio validation (used for metrics and debugging)
+const (
+	ErrCodeFileNotReady   = "AUDIO_NOT_READY"
+	ErrCodeFileTooSmall   = "AUDIO_TOO_SMALL"
+	ErrCodeFileCorrupted  = "AUDIO_CORRUPTED"
+	ErrCodeFileIncomplete = "AUDIO_INCOMPLETE"
+	ErrCodeFileEmpty      = "AUDIO_EMPTY"
+	ErrCodeFileInvalid    = "AUDIO_INVALID"
+	ErrCodeTimeout        = "VALIDATION_TIMEOUT"
+	ErrCodeValidationFail = "VALIDATION_FAILED"
+	ErrCodeFFprobeMissing = "FFPROBE_MISSING"
+)
+
 // Sentinel errors for audio validation
 var (
 	// File state errors
@@ -116,17 +129,17 @@ func ValidateAudioFile(ctx context.Context, audioPath string) (*AudioValidationR
 	// Check minimum file size
 	if result.FileSize < MinValidAudioSize {
 		if result.FileSize == 0 {
-			result.Error = errors.Join(ErrAudioFileEmpty, fmt.Errorf("file size is 0 bytes"))
+			result.Error = fmt.Errorf("%w: file size is 0 bytes", ErrAudioFileEmpty)
 		} else {
-			result.Error = errors.Join(ErrAudioFileTooSmall, fmt.Errorf("file size %d bytes < minimum %d bytes", result.FileSize, MinValidAudioSize))
+			result.Error = fmt.Errorf("%w: size %d bytes < minimum %d bytes", ErrAudioFileTooSmall, result.FileSize, MinValidAudioSize)
 		}
 		result.RetryAfter = ValidationRetryDelay
 		return result, nil // Return nil error to allow retry
 	}
 
 	// Check if file size is stable (not being written)
-	if !isFileSizeStable(audioPath, fileInfo.Size()) {
-		result.Error = errors.Join(ErrAudioFileIncomplete, fmt.Errorf("file size is still changing"))
+	if !isFileSizeStable(ctx, audioPath, fileInfo.Size()) {
+		result.Error = fmt.Errorf("%w: file size is still changing", ErrAudioFileIncomplete)
 		result.RetryAfter = ValidationRetryDelay * 2
 		return result, nil // Return nil error to allow retry
 	}
@@ -139,12 +152,12 @@ func ValidateAudioFile(ctx context.Context, audioPath string) (*AudioValidationR
 	if err := validateWithFFprobe(ctx, audioPath, result); err != nil {
 		// Check if it's a context error (timeout/cancellation)
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-			result.Error = errors.Join(ErrValidationTimeout, err)
+			result.Error = fmt.Errorf("%w: %w", ErrValidationTimeout, err)
 			return result, result.Error
 		}
 
 		// For other errors, the file might be corrupted or invalid
-		result.Error = errors.Join(ErrAudioFileInvalid, err)
+		result.Error = fmt.Errorf("%w: ffprobe error: %w", ErrAudioFileInvalid, err)
 		return result, nil // Return nil to indicate validation completed but file is invalid
 	}
 
@@ -232,15 +245,25 @@ func ValidateAudioFileWithRetry(ctx context.Context, audioPath string) (*AudioVa
 }
 
 // isFileSizeStable checks if a file's size is stable (not being written)
-func isFileSizeStable(path string, initialSize int64) bool {
-	time.Sleep(FileStabilityCheckDuration)
+// It uses a ticker with context support for cancellation instead of blocking sleep
+func isFileSizeStable(ctx context.Context, path string, initialSize int64) bool {
+	// Create a ticker for the stability check duration
+	ticker := time.NewTicker(FileStabilityCheckDuration)
+	defer ticker.Stop()
 
-	info, err := os.Stat(path)
-	if err != nil {
+	// Wait for the duration or context cancellation
+	select {
+	case <-ticker.C:
+		// Check the file size after waiting
+		info, err := os.Stat(path)
+		if err != nil {
+			return false
+		}
+		return info.Size() == initialSize
+	case <-ctx.Done():
+		// Context was cancelled, return false
 		return false
 	}
-
-	return info.Size() == initialSize
 }
 
 // validateWithFFprobe uses ffprobe to validate audio file format and extract metadata

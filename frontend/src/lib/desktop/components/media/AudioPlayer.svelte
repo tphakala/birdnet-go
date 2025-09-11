@@ -376,56 +376,44 @@
     clearSpectrogramRetryTimer();
   };
 
-  const handleSpectrogramError = async (event: Event) => {
+  const handleSpectrogramError = (event: Event) => {
     const img = event.target as HTMLImageElement;
 
-    // Check if this is a 503 error by attempting to fetch with HEAD request
-    try {
-      const response = await fetch(img.src, { method: 'HEAD' });
+    // Retry on any error (likely 503 or temporary failure) up to max retries
+    if (spectrogramRetryCount < MAX_SPECTROGRAM_RETRIES) {
+      // Use exponential backoff for retry
+      const retryDelay = SPECTROGRAM_RETRY_DELAYS[spectrogramRetryCount] || 4000;
 
-      if (response.status === 503 && spectrogramRetryCount < MAX_SPECTROGRAM_RETRIES) {
-        // Audio file not ready, retry with exponential backoff
-        const retryDelay = SPECTROGRAM_RETRY_DELAYS[spectrogramRetryCount] || 4000;
-
-        logger.debug('Spectrogram not ready (503), retrying', {
-          detectionId,
-          retryCount: spectrogramRetryCount + 1,
-          retryDelay,
-          retryAfterHeader: response.headers.get('Retry-After'),
-        });
-
-        spectrogramRetryCount++;
-
-        // Schedule retry
-        clearSpectrogramRetryTimer();
-        spectrogramRetryTimer = setTimeout(() => {
-          // Force reload by modifying URL with timestamp
-          const url = new URL(img.src);
-          url.searchParams.set('retry', spectrogramRetryCount.toString());
-          url.searchParams.set('t', Date.now().toString());
-          img.src = url.toString();
-        }, retryDelay);
-
-        return; // Don't set error state yet
-      }
-    } catch (fetchError) {
-      // If HEAD request fails, treat as regular error
-      logger.debug('Failed to check spectrogram error status', {
+      logger.debug('Spectrogram load failed, retrying', {
         detectionId,
-        error: fetchError,
+        retryCount: spectrogramRetryCount + 1,
+        maxRetries: MAX_SPECTROGRAM_RETRIES,
+        retryDelay,
       });
+
+      spectrogramRetryCount++;
+
+      // Schedule retry
+      clearSpectrogramRetryTimer();
+      spectrogramRetryTimer = setTimeout(() => {
+        // Force reload by modifying URL with timestamp
+        const url = new URL(img.src);
+        url.searchParams.set('retry', spectrogramRetryCount.toString());
+        url.searchParams.set('t', Date.now().toString());
+        img.src = url.toString();
+      }, retryDelay);
+
+      return; // Don't set error state yet
     }
 
-    // Max retries exceeded or non-503 error
+    // Max retries exceeded - give up
     spectrogramLoader.setError();
     clearSpectrogramRetryTimer();
 
-    if (spectrogramRetryCount >= MAX_SPECTROGRAM_RETRIES) {
-      logger.warn('Spectrogram loading failed after max retries', {
-        detectionId,
-        retryCount: spectrogramRetryCount,
-      });
-    }
+    logger.warn('Spectrogram loading failed after max retries', {
+      detectionId,
+      retryCount: spectrogramRetryCount,
+    });
   };
 
   const clearSpectrogramRetryTimer = () => {
