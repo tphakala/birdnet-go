@@ -1086,6 +1086,12 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 	} else {
 		soxArgs := append([]string{absAudioClipPath}, getSoxSpectrogramArgs(ctx, widthStr, heightStr, absSpectrogramPath, absAudioClipPath, raw)...)
 
+		// Log the full command being executed
+		spectrogramLogger.Debug("Executing SoX command",
+			"sox_binary", soxBinary,
+			"sox_args", soxArgs,
+			"abs_spectrogram_path", absSpectrogramPath)
+
 		if runtime.GOOS == "windows" {
 			// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
 			soxCmd = exec.CommandContext(ctx, soxBinary, soxArgs...)
@@ -1109,6 +1115,26 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 		"abs_audio_path", absAudioClipPath,
 		"duration_ms", time.Since(start).Milliseconds(),
 		"use_ffmpeg", useFFmpeg)
+
+	// Verify the spectrogram was actually created
+	if _, err := os.Stat(absSpectrogramPath); err != nil {
+		if os.IsNotExist(err) {
+			spectrogramLogger.Error("SoX reported success but spectrogram file was not created",
+				"abs_spectrogram_path", absSpectrogramPath,
+				"abs_audio_path", absAudioClipPath,
+				"width", width,
+				"raw", raw)
+			return fmt.Errorf("spectrogram file was not created at %s despite SoX reporting success", absSpectrogramPath)
+		}
+		spectrogramLogger.Error("Error checking generated spectrogram file",
+			"abs_spectrogram_path", absSpectrogramPath,
+			"error", err.Error())
+		return fmt.Errorf("error verifying spectrogram file: %w", err)
+	}
+
+	spectrogramLogger.Debug("Verified spectrogram file exists on disk",
+		"abs_spectrogram_path", absSpectrogramPath,
+		"abs_audio_path", absAudioClipPath)
 
 	return nil
 }
@@ -1215,6 +1241,26 @@ func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpect
 	spectrogramLogger.Debug("FFmpeg spectrogram generation completed successfully",
 		"abs_audio_path", absAudioClipPath,
 		"duration_ms", time.Since(start).Milliseconds())
+
+	// Verify the spectrogram was actually created
+	if _, err := os.Stat(absSpectrogramPath); err != nil {
+		if os.IsNotExist(err) {
+			spectrogramLogger.Error("FFmpeg reported success but spectrogram file was not created",
+				"abs_spectrogram_path", absSpectrogramPath,
+				"abs_audio_path", absAudioClipPath,
+				"width", width,
+				"raw", raw)
+			return fmt.Errorf("spectrogram file was not created at %s despite FFmpeg reporting success", absSpectrogramPath)
+		}
+		spectrogramLogger.Error("Error checking generated spectrogram file",
+			"abs_spectrogram_path", absSpectrogramPath,
+			"error", err.Error())
+		return fmt.Errorf("error verifying spectrogram file: %w", err)
+	}
+
+	spectrogramLogger.Debug("Verified spectrogram file exists on disk",
+		"abs_spectrogram_path", absSpectrogramPath,
+		"abs_audio_path", absAudioClipPath)
 
 	return nil
 }
