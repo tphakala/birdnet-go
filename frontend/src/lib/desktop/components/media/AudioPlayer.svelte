@@ -109,11 +109,15 @@
     },
   });
 
+  // Spectrogram retry configuration
+  const MAX_SPECTROGRAM_RETRIES = 4;
+  const SPECTROGRAM_RETRY_DELAYS = [500, 1000, 2000, 4000]; // Exponential backoff in ms
+  const SPECTROGRAM_POLL_INTERVAL = 2000; // Poll every 2 seconds
+  const MAX_POLL_DURATION = 5 * 60 * 1000; // Maximum 5 minutes of polling
+
   // Spectrogram retry state
   let spectrogramRetryCount = $state(0);
   let spectrogramRetryTimer: ReturnType<typeof setTimeout> | undefined;
-  const MAX_SPECTROGRAM_RETRIES = 4;
-  const SPECTROGRAM_RETRY_DELAYS = [500, 1000, 2000, 4000]; // Exponential backoff in ms
 
   // Spectrogram generation status
   let spectrogramStatus = $state<{
@@ -122,6 +126,7 @@
     message: string;
   } | null>(null);
   let statusPollTimer: ReturnType<typeof setTimeout> | undefined;
+  let statusPollStartTime: number | undefined;
 
   // Audio processing state
   let audioContext: AudioContext | null = null;
@@ -381,6 +386,17 @@
   const pollSpectrogramStatus = async () => {
     if (!showSpectrogram || !detectionId) return;
 
+    // Check if we've exceeded max polling duration
+    if (statusPollStartTime && Date.now() - statusPollStartTime > MAX_POLL_DURATION) {
+      logger.warn('Spectrogram polling timeout exceeded', {
+        detectionId,
+        pollDurationMs: Date.now() - statusPollStartTime,
+      });
+      clearStatusPollTimer();
+      spectrogramLoader.setError();
+      return;
+    }
+
     try {
       const response = await fetch(
         `/api/v2/spectrogram/${detectionId}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
@@ -405,7 +421,7 @@
         } else if (status.status === 'queued' || status.status === 'generating') {
           // Still processing, continue polling
           clearStatusPollTimer();
-          statusPollTimer = setTimeout(pollSpectrogramStatus, 2000); // Poll every 2 seconds
+          statusPollTimer = setTimeout(pollSpectrogramStatus, SPECTROGRAM_POLL_INTERVAL);
         } else if (status.status === 'failed') {
           // Generation failed
           clearStatusPollTimer();
@@ -422,6 +438,7 @@
       clearTimeout(statusPollTimer);
       statusPollTimer = undefined;
     }
+    statusPollStartTime = undefined;
   };
 
   // Spectrogram loading handlers
@@ -439,6 +456,7 @@
 
     // Start polling for generation status on first error
     if (spectrogramRetryCount === 0) {
+      statusPollStartTime = Date.now();
       pollSpectrogramStatus();
     }
 

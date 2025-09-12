@@ -286,33 +286,23 @@ func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 		)
 	}
 
-	// Normalize the path by stripping clips prefix if present
-	// The database stores paths with a configurable prefix (default "clips/"),
-	// but SecureFS is already rooted at the clips directory
-	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
-	normalizedFilename := NormalizeClipPath(filename, clipsPrefix)
-	if normalizedFilename != filename && c.apiLogger != nil {
-		c.apiLogger.Debug("Normalized audio filename",
-			"original_filename", filename,
-			"normalized_filename", normalizedFilename,
-			"clips_prefix", clipsPrefix)
-	}
-
-	// Check if normalization resulted in an empty path (indicates invalid/traversal path)
-	if normalizedFilename == "" {
+	// Normalize and validate the path using the common helper
+	normalizedFilename, err := c.normalizeAndValidatePathWithLogger(filename, c.apiLogger)
+	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Warn("Invalid file path detected",
 				"original_filename", filename,
+				"error", err.Error(),
 				"path", ctx.Request().URL.Path,
 				"ip", ctx.RealIP(),
 			)
 		}
-		return c.HandleError(ctx, fmt.Errorf("invalid file path: %s", filename), "Invalid file path", http.StatusBadRequest)
+		return c.HandleError(ctx, err, "Invalid file path", http.StatusBadRequest)
 	}
 
 	// Serve the file using SecureFS. It handles path validation and serves the file.
 	// ServeRelativeFile is expected to return appropriate echo.HTTPErrors (400, 404, 500).
-	err := c.SFS.ServeRelativeFile(ctx, normalizedFilename)
+	err = c.SFS.ServeRelativeFile(ctx, normalizedFilename)
 
 	if err != nil {
 		// Error logging is handled within translateSecureFSError
@@ -358,10 +348,11 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 		ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", originalFilename))
 	}
 
-	// Normalize the path by stripping clips prefix if present
-	// The database stores paths with a configurable prefix, but SecureFS is already rooted at clips directory
-	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
-	normalizedClipPath := NormalizeClipPath(clipPath, clipsPrefix)
+	// Normalize and validate the path using the common helper
+	normalizedClipPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.apiLogger)
+	if err != nil {
+		return c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
+	}
 
 	// Serve the file using SecureFS. It handles path validation (relative/absolute within baseDir).
 	// ServeFile internally calls relativePath which ensures the path is within the SecureFS baseDir.
@@ -653,7 +644,17 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	audioPath := detection.ClipName
 	spectrogramKey := fmt.Sprintf("%s_%d_%t", audioPath, width, raw)
 
-	// Check if spectrogram already exists
+	// Check queue status first (more volatile state)
+	spectrogramQueueMutex.RLock()
+	status, existsInQueue := spectrogramQueue[spectrogramKey]
+	spectrogramQueueMutex.RUnlock()
+
+	// If it's actively being processed, return that status immediately
+	if existsInQueue {
+		return ctx.JSON(http.StatusOK, status)
+	}
+
+	// Not in queue, check if spectrogram already exists on disk
 	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
 	normalizedPath := NormalizeClipPath(audioPath, clipsPrefix)
 	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
@@ -671,21 +672,12 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 		}
 	}
 
-	// Check queue status
-	spectrogramQueueMutex.RLock()
-	status, exists := spectrogramQueue[spectrogramKey]
-	spectrogramQueueMutex.RUnlock()
-
-	if !exists {
-		// Not in queue, probably needs to be generated
-		return ctx.JSON(http.StatusOK, SpectrogramQueueStatus{
-			Status:        "not_started",
-			QueuePosition: 0,
-			Message:       "Spectrogram generation not started",
-		})
-	}
-
-	return ctx.JSON(http.StatusOK, status)
+	// Not in queue and doesn't exist on disk
+	return ctx.JSON(http.StatusOK, SpectrogramQueueStatus{
+		Status:        "not_started",
+		QueuePosition: 0,
+		Message:       "Spectrogram generation not started",
+	})
 }
 
 // maxConcurrentSpectrograms limits concurrent spectrogram generations to avoid overloading the system.
@@ -875,21 +867,35 @@ func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath
 }
 
 // normalizeAndValidatePath handles path normalization and validation
-func (c *Controller) normalizeAndValidatePath(audioPath string, start time.Time) (string, error) {
+func (c *Controller) normalizeAndValidatePath(audioPath string, _ time.Time) (string, error) {
+	return c.normalizeAndValidatePathWithLogger(audioPath, spectrogramLogger)
+}
+
+// normalizeAndValidatePathWithLogger is a reusable helper for path normalization and validation.
+// It combines the common pattern of:
+// 1. Getting the clips prefix from settings
+// 2. Normalizing the path
+// 3. Checking for empty/invalid results
+// 4. Validating with SecureFS
+//
+// This reduces duplication across the codebase where this pattern is used.
+func (c *Controller) normalizeAndValidatePathWithLogger(audioPath string, logger *slog.Logger) (string, error) {
 	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
 	normalizedPath := NormalizeClipPath(audioPath, clipsPrefix)
 
-	if normalizedPath != audioPath {
-		spectrogramLogger.Debug("Normalized audio path",
+	if logger != nil && normalizedPath != audioPath {
+		logger.Debug("Normalized audio path",
 			"original_path", audioPath,
 			"normalized_path", normalizedPath,
 			"clips_prefix", clipsPrefix)
 	}
 
 	if normalizedPath == "" {
-		spectrogramLogger.Warn("Invalid audio path detected",
-			"original_path", audioPath,
-			"request_time", start.Format("2006-01-02 15:04:05"))
+		if logger != nil {
+			logger.Warn("Invalid audio path detected",
+				"original_path", audioPath,
+				"clips_prefix", clipsPrefix)
+		}
 		return "", fmt.Errorf("%w: empty normalized path", ErrInvalidAudioPath)
 	}
 
