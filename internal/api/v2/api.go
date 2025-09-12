@@ -48,7 +48,11 @@ type Controller struct {
 	logger              *log.Logger
 	controlChan         chan string
 	speciesExcludeMutex sync.RWMutex // Mutex for species exclude list operations
-	DisableSaveSettings bool         // Flag to disable saving settings to disk (for tests)
+	// DisableSaveSettings is a test-only flag that prevents persisting settings changes to disk.
+	// When set to true, all settings modifications remain in memory only and will not be saved.
+	// WARNING: This field is exclusively for unit/integration testing and must NEVER be used in production.
+	// Thread-safe: can be set before controller initialization, not modified during runtime.
+	DisableSaveSettings bool         // test-only: disables disk persistence of settings (populated only in tests)
 	settingsMutex       sync.RWMutex // Mutex for settings operations
 	detectionCache      *cache.Cache // Cache for detection queries
 	startTime           *time.Time
@@ -73,9 +77,16 @@ type Controller struct {
 	ctx    context.Context    // Context for managing goroutines
 	cancel context.CancelFunc // Cancel function for graceful shutdown
 
-	// Test synchronization fields (test-only: used by unit/integration tests — do not use in production)
-	goroutinesStarted chan struct{}  // test-only: signals when all background goroutines have started (populated only in tests)
-	wg                sync.WaitGroup // test-only: tracks background goroutines for clean shutdown (used for test synchronization)
+	// Test synchronization fields for goroutine lifecycle management
+	// WARNING: These fields are exclusively for unit/integration testing and must NEVER be used in production.
+	// goroutinesStarted signals when all background goroutines have successfully started.
+	// Only populated in test environments to ensure proper test setup before assertions.
+	// Thread-safe: channel operations are synchronized; populated before controller start.
+	goroutinesStarted chan struct{} // test-only: signals when all background goroutines have started (populated only in tests)
+	// wg tracks all background goroutines to ensure clean shutdown during testing.
+	// Used to prevent goroutine leaks and ensure deterministic test cleanup.
+	// Thread-safe: WaitGroup is concurrency-safe by design.
+	wg sync.WaitGroup // test-only: tracks background goroutines for clean shutdown (used for test synchronization)
 }
 
 // Define specific errors for token handling failures

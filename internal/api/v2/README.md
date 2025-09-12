@@ -121,12 +121,13 @@ routeInitializers := []struct {
 
 ### Media (`media.go`)
 
-| Method | Route                          | Handler               | Auth | Description                 |
-| ------ | ------------------------------ | --------------------- | ---- | --------------------------- |
-| GET    | `/media/audio/:filename`       | `ServeAudioClip`      | ❌   | Serve audio file            |
-| GET    | `/media/spectrogram/:filename` | `ServeSpectrogram`    | ❌   | Serve spectrogram image     |
-| GET    | `/media/audio`                 | `ServeAudioByQueryID` | ❌   | Serve audio by detection ID |
-| GET    | `/media/species-image`         | `GetSpeciesImage`     | ❌   | Get species thumbnail image |
+| Method | Route                           | Handler                | Auth | Description                        |
+| ------ | ------------------------------- | ---------------------- | ---- | ---------------------------------- |
+| GET    | `/media/audio/:filename`        | `ServeAudioClip`       | ❌   | Serve audio file                   |
+| GET    | `/media/spectrogram/:filename`  | `ServeSpectrogram`     | ❌   | Serve spectrogram image            |
+| GET    | `/media/audio`                  | `ServeAudioByQueryID`  | ❌   | Serve audio by detection ID        |
+| GET    | `/media/species-image`          | `GetSpeciesImage`      | ❌   | Get species thumbnail image        |
+| GET    | `/spectrogram/:id/status`       | `GetSpectrogramStatus` | ❌   | Get spectrogram generation status  |
 
 ### Notifications (`notifications.go`)
 

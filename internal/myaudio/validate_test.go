@@ -203,9 +203,9 @@ func TestQuickValidateAudioFile(t *testing.T) {
 
 // TestValidateAudioFileWithRetry tests the retry logic
 func TestValidateAudioFileWithRetry(t *testing.T) {
-	tmpDir := t.TempDir()
-
 	t.Run("Valid file on first attempt", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir() // Each subtest gets its own temp directory
 		testFile := filepath.Join(tmpDir, "valid.wav")
 		createTestWAVFileWithSize(t, testFile, 10*1024)
 
@@ -221,6 +221,8 @@ func TestValidateAudioFileWithRetry(t *testing.T) {
 	})
 
 	t.Run("File becomes valid during retry", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir() // Each subtest gets its own temp directory
 		testFile := filepath.Join(tmpDir, "growing.wav")
 
 		// Start with a small file
