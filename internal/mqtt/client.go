@@ -130,19 +130,48 @@ func (c *client) SetDebug(debug bool) {
 // It holds the mutex only while checking state and creating the client instance,
 // releasing it before blocking network operations.
 func (c *client) Connect(ctx context.Context) error {
+	return c.connectWithOptions(ctx, false)
+}
+
+// connectWithOptions is the internal connect method that supports bypassing cooldown for automatic reconnects.
+//
+// The cooldown mechanism serves different purposes for manual vs automatic connections:
+//   - Manual connections (isAutoReconnect=false): Protected by ReconnectCooldown (typically 5s)
+//     to prevent users or external systems from spamming connection attempts
+//   - Automatic reconnects (isAutoReconnect=true): Controlled by ReconnectDelay (typically 1s)
+//     which is applied by the reconnection timer before calling this method
+//
+// This separation is critical because:
+// 1. Automatic reconnects are already rate-limited by ReconnectDelay timer
+// 2. Applying ReconnectCooldown (5s) would block legitimate auto-reconnects scheduled at ReconnectDelay (1s)
+// 3. Manual connection attempts still need protection against rapid retry attempts
+//
+// Timeline example of the conflict this solves:
+// - T+0s: Connection lost, onConnectionLost called
+// - T+1s: ReconnectDelay expires, automatic reconnect attempted
+// - Without bypass: Blocked by 5s cooldown → "connection attempt too recent" error
+// - With bypass: Reconnect proceeds as intended
+func (c *client) connectWithOptions(ctx context.Context, isAutoReconnect bool) error {
 	if err := ctx.Err(); err != nil { // Check context early
 		mqttLogger.Warn("Connect context already cancelled", "error", err)
 		return err
 	}
 
 	logger := mqttLogger.With("broker", c.config.Broker, "client_id", c.config.ClientID)
-	logger.Info("Attempting to connect to MQTT broker")
+	if isAutoReconnect {
+		logger.Info("Attempting automatic reconnect to MQTT broker")
+	} else {
+		logger.Info("Attempting to connect to MQTT broker")
+	}
 
 	// --- Lock acquisition START ---
 	c.mu.Lock()
-	if err := c.checkConnectionCooldownLocked(logger); err != nil {
-		c.mu.Unlock() // Unlock before returning
-		return err
+	// Only check cooldown for manual connection attempts, not automatic reconnects
+	if !isAutoReconnect {
+		if err := c.checkConnectionCooldownLocked(logger); err != nil {
+			c.mu.Unlock() // Unlock before returning
+			return err
+		}
 	}
 
 	// Disconnect existing client if needed - requires lock
@@ -364,16 +393,22 @@ func (c *client) checkConnectionCooldownLocked(logger *slog.Logger) error {
 	reconnectCooldown := c.config.ReconnectCooldown
 	broker := c.config.Broker
 	clientID := c.config.ClientID
-	
+
 	if time.Since(lastConnAttempt) < reconnectCooldown {
 		lastAttemptAgo := time.Since(lastConnAttempt)
-		logger.Warn("Connection attempt too recent", "last_attempt_ago", lastAttemptAgo, "cooldown", reconnectCooldown)
-		return errors.Newf("connection attempt too recent, last attempt was %v ago", lastAttemptAgo).
+		// Round to seconds for better readability
+		lastAttemptRounded := lastAttemptAgo.Round(time.Second)
+		// Handle sub-second durations that round to 0
+		if lastAttemptRounded == 0 && lastAttemptAgo > 0 {
+			lastAttemptRounded = time.Second // Display as "1s ago" instead of "0s ago"
+		}
+		logger.Warn("Connection attempt too recent", "last_attempt_ago", lastAttemptRounded, "cooldown", reconnectCooldown)
+		return errors.Newf("connection attempt too recent, last attempt was %v ago", lastAttemptRounded).
 			Component("mqtt").
 			Category(errors.CategoryMQTTConnection).
 			Context("broker", broker).
 			Context("client_id", clientID).
-			Context("last_attempt_ago", lastAttemptAgo).
+			Context("last_attempt_ago", lastAttemptRounded).
 			Context("cooldown", reconnectCooldown).
 			Build()
 	}
@@ -452,7 +487,7 @@ func (c *client) performDNSResolution(ctx context.Context, logger *slog.Logger) 
 				c.mu.Unlock()
 				return ctx.Err() // Return the original context error
 			}
-			
+
 			// Handle DNS-specific errors
 			logger.Error("Failed to resolve broker hostname", "host", host, "error", err)
 			var dnsErr *net.DNSError
@@ -469,7 +504,7 @@ func (c *client) performDNSResolution(ctx context.Context, logger *slog.Logger) 
 					Context("operation", "dns_resolution").
 					Build()
 			}
-			
+
 			// Handle other network errors
 			c.mu.Lock()
 			c.lastConnAttempt = time.Now()
@@ -515,7 +550,7 @@ func (c *client) performConnectionAttempt(ctx context.Context, clientToConnect m
 	timeoutDuration := c.config.ConnectTimeout + ConnectTimeoutGrace
 	timer := time.NewTimer(timeoutDuration)
 	defer timer.Stop() // Ensure timer cleanup
-	
+
 	select {
 	case <-opDone:
 		// Stop the timer since operation completed
@@ -526,7 +561,7 @@ func (c *client) performConnectionAttempt(ctx context.Context, clientToConnect m
 			default:
 			}
 		}
-		
+
 		connectErr = token.Error()
 		if connectErr == nil && !clientToConnect.IsConnected() {
 			// If token.Error() is nil but not connected, it implies Paho's WaitTimeout might have returned true
@@ -568,7 +603,7 @@ func (c *client) performConnectionAttempt(ctx context.Context, clientToConnect m
 		// Cancel the connection attempt to prevent the goroutine from leaking
 		if clientToConnect != nil {
 			cancelTimeout := c.calculateCancelTimeout()
-			logger.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak", 
+			logger.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak",
 				"timeout_ms", cancelTimeout,
 				"base_timeout", uint(CancelDisconnectTimeout.Milliseconds()),
 				"config_timeout_ms", c.config.DisconnectTimeout.Milliseconds())
@@ -583,13 +618,13 @@ func (c *client) performConnectionAttempt(ctx context.Context, clientToConnect m
 			default:
 			}
 		}
-		
+
 		connectErr = ctx.Err()
 		logger.Error("Context cancelled during MQTT connection wait", "error", connectErr)
 		// Cancel the connection attempt to prevent the goroutine from leaking
 		if clientToConnect != nil {
 			cancelTimeout := c.calculateCancelTimeout()
-			logger.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak", 
+			logger.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak",
 				"timeout_ms", cancelTimeout,
 				"base_timeout", uint(CancelDisconnectTimeout.Milliseconds()),
 				"config_timeout_ms", c.config.DisconnectTimeout.Milliseconds())
@@ -609,14 +644,14 @@ func (c *client) Disconnect() {
 	if c.config.ShutdownDisconnectTimeout > 0 {
 		timeout = c.config.ShutdownDisconnectTimeout
 	}
-	
+
 	// Normalize timeout to prevent zero or negative values that could cause underflow
 	// when converted to unsigned types
 	if timeout <= 0 {
 		// Fall back to a safe default if both timeouts are non-positive
 		timeout = GracefulDisconnectTimeout
 	}
-	
+
 	c.disconnectWithTimeout(timeout)
 }
 
@@ -742,7 +777,8 @@ func (c *client) reconnectWithBackoff() {
 		// Proceed with connect attempt
 	}
 
-	if err := c.Connect(ctx); err != nil {
+	// Use connectWithOptions with isAutoReconnect=true to bypass cooldown check
+	if err := c.connectWithOptions(ctx, true); err != nil {
 		logger.Error("Reconnect attempt failed", "error", err)
 
 		// Extract error category for metrics
@@ -780,12 +816,12 @@ func (c *client) createTLSConfig() (*tls.Config, error) {
 			Context("broker", c.config.Broker).
 			Build()
 	}
-	
+
 	hostname := u.Hostname()
-	
+
 	tlsConfig := &tls.Config{
-		ServerName:         hostname,
-		MinVersion:         tls.VersionTLS12,
+		ServerName: hostname,
+		MinVersion: tls.VersionTLS12,
 		// WARNING: InsecureSkipVerify disables certificate verification.
 		// This makes the connection vulnerable to man-in-the-middle attacks.
 		// Only use for testing or with self-signed certificates in trusted networks.
@@ -802,7 +838,7 @@ func (c *client) createTLSConfig() (*tls.Config, error) {
 				Context("ca_cert_path", c.config.TLS.CACert).
 				Build()
 		}
-		
+
 		caCert, err := os.ReadFile(c.config.TLS.CACert)
 		if err != nil {
 			return nil, errors.Newf("failed to read CA certificate file: %v", err).
@@ -834,7 +870,7 @@ func (c *client) createTLSConfig() (*tls.Config, error) {
 				Context("client_cert_path", c.config.TLS.ClientCert).
 				Build()
 		}
-		
+
 		// Check if client key exists
 		if _, err := os.Stat(c.config.TLS.ClientKey); os.IsNotExist(err) {
 			return nil, errors.Newf("client key file does not exist: %s", c.config.TLS.ClientKey).
@@ -843,7 +879,7 @@ func (c *client) createTLSConfig() (*tls.Config, error) {
 				Context("client_key_path", c.config.TLS.ClientKey).
 				Build()
 		}
-		
+
 		cert, err := tls.LoadX509KeyPair(c.config.TLS.ClientCert, c.config.TLS.ClientKey)
 		if err != nil {
 			return nil, errors.Newf("failed to load client certificate and key: %v", err).
@@ -854,7 +890,7 @@ func (c *client) createTLSConfig() (*tls.Config, error) {
 				Build()
 		}
 		tlsConfig.Certificates = []tls.Certificate{cert}
-		mqttLogger.Debug("Client certificate loaded", 
+		mqttLogger.Debug("Client certificate loaded",
 			"cert_path", c.config.TLS.ClientCert,
 			"key_path", c.config.TLS.ClientKey,
 		)
