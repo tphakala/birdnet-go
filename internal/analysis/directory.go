@@ -287,6 +287,11 @@ func scanDirectory(watchDir string, settings *conf.Settings, processedFiles map[
 			return nil
 		}
 
+		// Skip temporary files that are currently being written
+		if strings.HasSuffix(strings.ToLower(d.Name()), ".temp") {
+			return nil
+		}
+
 		// Check for both .wav and .flac files (case-insensitive)
 		ext := strings.ToLower(filepath.Ext(d.Name()))
 		if ext == ".wav" || ext == ".flac" {

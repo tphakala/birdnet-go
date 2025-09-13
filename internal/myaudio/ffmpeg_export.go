@@ -18,8 +18,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
-// tempExt is the temporary file extension used when exporting audio with FFmpeg
-const tempExt = ".temp"
+// TempExt is the temporary file extension used when exporting audio with FFmpeg.
+// Audio files are written with this suffix during recording and renamed upon
+// completion to ensure atomic file operations.
+const TempExt = ".temp"
 
 // ExportAudioWithFFmpeg exports PCM data to the specified format using FFmpeg
 // outputPath is full path with audio file name and extension based on format
@@ -85,7 +87,7 @@ func ExportAudioWithFFmpeg(pcmData []byte, outputPath string, settings *conf.Aud
 		return enhancedErr
 	}
 
-	// Create a temporary file for FFmpeg output, returns full path with tempExt
+	// Create a temporary file for FFmpeg output, returns full path with TempExt
 	// temporary file is used to perform export as atomic file operation
 	tempFilePath, err := createTempFile(outputPath)
 	if err != nil {
@@ -182,7 +184,7 @@ func createTempFile(outputPath string) (string, error) {
 		return "", enhancedErr
 	}
 
-	tempFilePath := outputPath + tempExt
+	tempFilePath := outputPath + TempExt
 
 	// Record successful operation
 	if fileMetrics != nil {
@@ -194,7 +196,7 @@ func createTempFile(outputPath string) (string, error) {
 	return tempFilePath, nil
 }
 
-// finalizeOutput path removes tempExt from the file name completing atomic file operation
+// finalizeOutput path removes TempExt from the file name completing atomic file operation
 func finalizeOutput(tempFilePath string) error {
 	start := time.Now()
 
@@ -213,12 +215,12 @@ func finalizeOutput(tempFilePath string) error {
 		return enhancedErr
 	}
 
-	if !strings.HasSuffix(tempFilePath, tempExt) {
-		enhancedErr := errors.Newf("temp file path does not have expected temporary extension: %s", tempExt).
+	if !strings.HasSuffix(tempFilePath, TempExt) {
+		enhancedErr := errors.Newf("temp file path does not have expected temporary extension: %s", TempExt).
 			Component("myaudio").
 			Category(errors.CategoryValidation).
 			Context("operation", "finalize_output").
-			Context("expected_extension", tempExt).
+			Context("expected_extension", TempExt).
 			Build()
 
 		if fileMetrics != nil {
@@ -228,8 +230,8 @@ func finalizeOutput(tempFilePath string) error {
 		return enhancedErr
 	}
 
-	// Strip tempExt from the end of the path
-	finalOutputPath := tempFilePath[:len(tempFilePath)-len(tempExt)]
+	// Strip TempExt from the end of the path
+	finalOutputPath := tempFilePath[:len(tempFilePath)-len(TempExt)]
 
 	// Get file format from final output path
 	format := strings.ToLower(filepath.Ext(finalOutputPath))
