@@ -319,11 +319,12 @@ func validateSoundLevelData(data *myaudio.SoundLevelData) error {
 
 // CompactSoundLevelData is a space-efficient version for MQTT publishing
 type CompactSoundLevelData struct {
-	TS    string                     `json:"ts"`  // ISO8601 timestamp
-	Src   string                     `json:"src"` // Source
-	Name  string                     `json:"nm"`  // Name
-	Dur   int                        `json:"dur"` // Duration in seconds
-	Bands map[string]CompactBandData `json:"b"`   // Octave bands
+	TS    string                     `json:"ts"`   // ISO8601 timestamp
+	Node  string                     `json:"node"` // Node name (BirdNET-Go instance)
+	Src   string                     `json:"src"`  // Source
+	Name  string                     `json:"nm"`   // Name
+	Dur   int                        `json:"dur"`  // Duration in seconds
+	Bands map[string]CompactBandData `json:"b"`    // Octave bands
 }
 
 // CompactBandData is a compact representation of octave band data
@@ -335,9 +336,10 @@ type CompactBandData struct {
 }
 
 // toCompactFormat converts sound level data to compact format for MQTT
-func toCompactFormat(data myaudio.SoundLevelData) CompactSoundLevelData {
+func toCompactFormat(data myaudio.SoundLevelData, nodeName string) CompactSoundLevelData {
 	compact := CompactSoundLevelData{
 		TS:    data.Timestamp.Format(time.RFC3339),
+		Node:  nodeName,
 		Src:   data.Source,
 		Name:  data.Name,
 		Dur:   data.Duration,
@@ -425,7 +427,7 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 	sanitizedData := sanitizeSoundLevelData(soundData)
 
 	// Convert to compact format for MQTT to reduce payload size
-	compactData := toCompactFormat(sanitizedData)
+	compactData := toCompactFormat(sanitizedData, settings.Main.Name)
 
 	// Marshal compact sound level data to JSON
 	jsonData, err := json.Marshal(compactData)
