@@ -15,6 +15,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// tempFileExt is the temporary file extension used during audio file creation.
+// Audio files are written with this suffix during recording and renamed upon
+// completion to ensure atomic file operations. This must match the TempExt
+// constant in the myaudio package.
+const tempFileExt = ".temp"
+
 // allowedFileTypes is the list of file extensions that are allowed to be deleted
 var allowedFileTypes = []string{".wav", ".flac", ".aac", ".opus", ".mp3", ".m4a"}
 
@@ -117,8 +123,11 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 		if !info.IsDir() {
 			fileName := info.Name()
 
-			// Skip .temp files as they are currently being written
-			if strings.HasSuffix(fileName, ".temp") {
+			// Skip temporary files that are currently being written.
+			// Audio files are written with .temp suffix during recording
+			// and renamed upon completion to ensure atomic file operations.
+			// Using case-insensitive check to handle edge cases.
+			if strings.HasSuffix(strings.ToLower(fileName), tempFileExt) {
 				return nil
 			}
 

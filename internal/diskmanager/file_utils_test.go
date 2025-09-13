@@ -195,3 +195,62 @@ func TestCleanupReturnValues(t *testing.T) {
 		assert.LessOrEqual(t, result.DiskUtilization, 100, "Disk utilization should be less than or equal to 100%")
 	})
 }
+
+// TestGetAudioFilesIgnoresTempFiles tests that GetAudioFiles correctly ignores .temp files
+func TestGetAudioFilesIgnoresTempFiles(t *testing.T) {
+	// Create a temporary directory
+	tempDir := t.TempDir()
+
+	// Create valid audio files
+	validFiles := []string{
+		"bubo_bubo_80p_20210102T150405Z.wav",
+		"anas_platyrhynchos_70p_20210103T150405Z.mp3",
+	}
+
+	// Create temp files that should be ignored
+	tempFiles := []string{
+		"bubo_bubo_85p_20210102T150405Z.wav.temp",    // Lowercase .temp
+		"corvus_corax_90p_20210104T150405Z.wav.TEMP", // Uppercase .TEMP
+		"parus_major_75p_20210105T150405Z.wav.Temp",  // Mixed case .Temp
+	}
+
+	// Create valid files
+	for _, file := range validFiles {
+		filePath := filepath.Join(tempDir, file)
+		err := os.WriteFile(filePath, []byte("test content"), 0o644)
+		require.NoError(t, err, "Should be able to create valid file: %s", filePath)
+	}
+
+	// Create temp files
+	for _, file := range tempFiles {
+		filePath := filepath.Join(tempDir, file)
+		err := os.WriteFile(filePath, []byte("test content"), 0o644)
+		require.NoError(t, err, "Should be able to create temp file: %s", filePath)
+	}
+
+	// Create a mock DB
+	mockDB := &MockDB{}
+
+	// Call GetAudioFiles
+	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, false)
+
+	// Should not return an error
+	require.NoError(t, err, "Should not return an error")
+
+	// Should return only the valid files, not the temp files
+	assert.Len(t, files, len(validFiles), "Should return only valid files, ignoring .temp files")
+
+	// Verify the correct files were processed
+	processedSpecies := make(map[string]bool)
+	for _, file := range files {
+		processedSpecies[file.Species] = true
+	}
+
+	// Check that only valid files were processed
+	assert.True(t, processedSpecies["bubo_bubo"], "Should process bubo_bubo")
+	assert.True(t, processedSpecies["anas_platyrhynchos"], "Should process anas_platyrhynchos")
+
+	// Check that temp files were not processed
+	assert.False(t, processedSpecies["corvus_corax"], "Should not process corvus_corax from temp file")
+	assert.False(t, processedSpecies["parus_major"], "Should not process parus_major from temp file")
+}
