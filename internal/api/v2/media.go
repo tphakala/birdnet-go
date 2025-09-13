@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -53,13 +54,21 @@ var spectrogramSizes = map[string]int{
 	"xl": SpectrogramSizeXl,
 }
 
+// AudioNotReadyError carries retry information for audio files that are not yet ready
+type AudioNotReadyError struct {
+	RetryAfter time.Duration
+	Err        error
+}
+
+func (e *AudioNotReadyError) Error() string { return e.Err.Error() }
+func (e *AudioNotReadyError) Unwrap() error { return e.Err }
+
 // Sentinel errors for media operations
 var (
 	// Audio file errors
 	ErrAudioFileNotFound    = errors.NewStd("audio file not found")
 	ErrInvalidAudioPath     = errors.NewStd("invalid audio path")
 	ErrPathTraversalAttempt = errors.NewStd("security error: path attempts to traverse")
-	ErrAudioFileNotReady    = errors.NewStd("audio file is not ready for processing")
 
 	// Configuration errors
 	ErrFFmpegNotConfigured = errors.NewStd("ffmpeg path not set in settings")
@@ -368,10 +377,18 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 // spectrogramHTTPError handles common spectrogram generation errors and converts them to appropriate HTTP responses
 func (c *Controller) spectrogramHTTPError(ctx echo.Context, err error) error {
 	switch {
-	case errors.Is(err, ErrAudioFileNotReady) || errors.Is(err, myaudio.ErrAudioFileIncomplete):
+	case errors.Is(err, myaudio.ErrAudioFileNotReady) || errors.Is(err, myaudio.ErrAudioFileIncomplete):
 		// Audio file is not ready yet - client should retry
-		// Set Retry-After header to suggest when to retry (in seconds)
-		ctx.Response().Header().Set("Retry-After", spectrogramRetryAfterSeconds)
+		// Check if we have a dynamic retry duration from validation
+		var anr *AudioNotReadyError
+		if errors.As(err, &anr) && anr.RetryAfter > 0 {
+			// Use the dynamic retry duration from audio validation
+			secs := int(math.Ceil(anr.RetryAfter.Seconds()))
+			ctx.Response().Header().Set("Retry-After", strconv.Itoa(secs))
+		} else {
+			// Fall back to default retry duration
+			ctx.Response().Header().Set("Retry-After", spectrogramRetryAfterSeconds)
+		}
 		// Use 503 Service Unavailable to indicate temporary unavailability
 		return c.HandleError(ctx, err, "Audio file is still being processed, please retry", http.StatusServiceUnavailable)
 	case errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, os.ErrNotExist):
@@ -558,7 +575,7 @@ func (c *Controller) ServeAudioByQueryID(ctx echo.Context) error {
 
 // ServeSpectrogram serves a spectrogram image by filename using SecureFS
 //
-// Route: GET /api/v2/media/spectrogram/:filename
+// Route: GET /media/spectrogram/:filename
 //
 // Query Parameters:
 //   - size: Spectrogram size - "sm" (400px), "md" (800px), "lg" (1000px), "xl" (1200px)
@@ -701,8 +718,8 @@ var (
 
 // SpectrogramQueueStatus tracks the status of a spectrogram generation request
 type SpectrogramQueueStatus struct {
-	Status        string    `json:"status"`        // "queued", "generating", "completed", "failed", "exists"
-	QueuePosition int       `json:"queuePosition"` // Position in queue (0 if generating/completed)
+	Status        string    `json:"status"`        // "queued", "generating", "generated", "failed", "exists", "not_started"
+	QueuePosition int       `json:"queuePosition"` // Position in queue (0 if generating/generated)
 	StartedAt     time.Time `json:"startedAt"`     // When generation started
 	Message       string    `json:"message"`       // Additional status message
 }
@@ -815,7 +832,10 @@ func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath
 			"error", err.Error(),
 			"validation_duration_ms", validationDuration.Milliseconds(),
 			"spectrogram_key", spectrogramKey)
-		return nil, fmt.Errorf("%w: %w", ErrAudioFileNotReady, err)
+		return nil, &AudioNotReadyError{
+			RetryAfter: 2 * time.Second, // Default retry for validation errors
+			Err:        fmt.Errorf("%w: %w", myaudio.ErrAudioFileNotReady, err),
+		}
 	}
 
 	// Check if the file is ready
@@ -844,9 +864,15 @@ func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath
 		// Return a specific error that indicates the file is not ready
 		// This will be handled by the HTTP handler to return 503
 		if validationResult.Error != nil {
-			return validationResult, fmt.Errorf("%w: %w", ErrAudioFileNotReady, validationResult.Error)
+			return validationResult, &AudioNotReadyError{
+				RetryAfter: validationResult.RetryAfter,
+				Err:        fmt.Errorf("%w: %w", myaudio.ErrAudioFileNotReady, validationResult.Error),
+			}
 		}
-		return validationResult, ErrAudioFileNotReady
+		return validationResult, &AudioNotReadyError{
+			RetryAfter: validationResult.RetryAfter,
+			Err:        myaudio.ErrAudioFileNotReady,
+		}
 	}
 
 	spectrogramLogger.Debug("Audio file validated successfully with FFprobe",
@@ -916,12 +942,6 @@ func (c *Controller) checkSpectrogramExists(relSpectrogramPath, spectrogramKey s
 		"spectrogram_key", spectrogramKey,
 		"relative_spectrogram_path", relSpectrogramPath)
 
-	absCheckPath := filepath.Join(c.SFS.BaseDir(), relSpectrogramPath)
-	spectrogramLogger.Debug("Fast path: checking both relative and absolute paths",
-		"relative_path", relSpectrogramPath,
-		"absolute_path", absCheckPath,
-		"base_dir", c.SFS.BaseDir())
-
 	if statInfo, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
 		spectrogramLogger.Debug("Fast path HIT: spectrogram already exists",
 			"spectrogram_key", spectrogramKey,
@@ -934,14 +954,6 @@ func (c *Controller) checkSpectrogramExists(relSpectrogramPath, spectrogramKey s
 			"spectrogram_key", spectrogramKey,
 			"error", err.Error())
 	} else {
-		// Double-check with absolute path
-		if absStatInfo, absErr := os.Stat(absCheckPath); absErr == nil {
-			spectrogramLogger.Warn("Fast path MISS but file exists at absolute path!",
-				"spectrogram_key", spectrogramKey,
-				"file_size", absStatInfo.Size(),
-				"mod_time", absStatInfo.ModTime())
-			return true, nil
-		}
 		spectrogramLogger.Debug("Fast path MISS: spectrogram does not exist",
 			"spectrogram_key", spectrogramKey)
 	}
@@ -1244,23 +1256,21 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	// Clean up queue entry on exit
 	defer c.cleanupQueueStatus(spectrogramKey)
 
-	// Acquire semaphore BEFORE singleflight to eliminate double bottleneck
-	if err := c.acquireSemaphoreSlot(ctx, spectrogramKey); err != nil {
-		return "", err
-	}
-
-	defer func() {
-		<-spectrogramSemaphore
-		spectrogramLogger.Debug("Semaphore slot released",
-			"spectrogram_key", spectrogramKey,
-			"total_duration_ms", time.Since(start).Milliseconds())
-	}()
-
-	// Use singleflight to prevent duplicate generations (now with semaphore already acquired)
+	// Use singleflight to prevent duplicate generations; acquire semaphore only for the winner
 	spectrogramLogger.Debug("Starting singleflight generation",
 		"spectrogram_key", spectrogramKey)
 
 	_, err, _ = spectrogramGroup.Do(spectrogramKey, func() (any, error) {
+		// Acquire semaphore inside singleflight - only the actual worker gets a slot
+		if err := c.acquireSemaphoreSlot(ctx, spectrogramKey); err != nil {
+			return nil, err
+		}
+		defer func() {
+			<-spectrogramSemaphore
+			spectrogramLogger.Debug("Semaphore slot released",
+				"spectrogram_key", spectrogramKey,
+				"total_duration_ms", time.Since(start).Milliseconds())
+		}()
 		return c.performSpectrogramGeneration(ctx, relSpectrogramPath, absAudioPath, absSpectrogramPath, spectrogramKey, width, raw)
 	})
 

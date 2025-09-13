@@ -468,9 +468,7 @@
   };
 
   const handleSpectrogramError = (event: Event) => {
-    const target = event.currentTarget;
-    if (!(target instanceof HTMLImageElement)) return;
-    const img = target;
+    const img = event.currentTarget as HTMLImageElement;
 
     // Start polling for generation status on first error
     if (spectrogramRetryCount === 0) {
