@@ -1,4 +1,9 @@
 // control_test.go: Package api provides tests for API v2 control endpoints.
+//
+// Go 1.25 improvements:
+// - Uses sync.WaitGroup.Go() for cleaner goroutine management
+// - Uses T.Attr() for test metadata
+// LLM GUIDANCE: Always use WaitGroup.Go() instead of manual Add/Done patterns
 
 package api
 
@@ -60,24 +65,27 @@ func runControlEndpointTest(t *testing.T, e *echo.Echo, controller *Controller, 
 }
 
 // runConcurrentControlRequestsTest runs multiple concurrent control requests test
+// Uses Go 1.25's WaitGroup.Go() for automatic goroutine management
 func runConcurrentControlRequestsTest(t *testing.T, e *echo.Echo, controller *Controller, handler func(echo.Context) error, path, expectedSignal string) {
 	t.Helper()
+	t.Attr("component", "control")
+	t.Attr("type", "concurrent")
 
 	// Number of concurrent requests to make
 	numRequests := 5
 
 	// Use a wait group to synchronize the test
+	// Go 1.25: Using WaitGroup.Go() for cleaner code without manual Add/Done
 	var wg sync.WaitGroup
-	wg.Add(numRequests)
 
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	// Launch multiple concurrent requests
+	// Launch multiple concurrent requests using Go 1.25's WaitGroup.Go()
 	for i := 0; i < numRequests; i++ {
-		go func() {
-			defer wg.Done()
+		// Use WaitGroup.Go() to eliminate manual Add/Done management (Go 1.25)
+		wg.Go(func() {
 
 			// Create a new request for each goroutine
 			req := httptest.NewRequest(http.MethodPost, path, http.NoBody).WithContext(ctx)
@@ -86,9 +94,9 @@ func runConcurrentControlRequestsTest(t *testing.T, e *echo.Echo, controller *Co
 
 			// Call the handler
 			err := handler(c)
-			assert.NoError(t, err, "Handler should not return an error during concurrent access")
+			require.NoError(t, err, "Handler should not return an error during concurrent access")
 			assert.Equal(t, http.StatusOK, rec.Code, "Should return OK for concurrent requests")
-		}()
+		})
 	}
 
 	// Wait for all requests to complete
@@ -107,7 +115,9 @@ func runConcurrentControlRequestsTest(t *testing.T, e *echo.Echo, controller *Co
 // runControlActionsWithBlockedChannelTest runs control endpoints test with a blocked channel
 func runControlActionsWithBlockedChannelTest(t *testing.T, handler func(echo.Context) error) {
 	t.Helper()
-	
+	t.Attr("component", "control")
+	t.Attr("type", "blocked-channel")
+
 	// Setup
 	e, _, controller := setupTestEnvironment(t)
 
@@ -115,7 +125,7 @@ func runControlActionsWithBlockedChannelTest(t *testing.T, handler func(echo.Con
 	originalChan := controller.controlChan
 	controlChan := make(chan string)
 	controller.controlChan = controlChan
-	
+
 	// Restore original channel after test
 	defer func() {
 		controller.controlChan = originalChan
@@ -219,8 +229,8 @@ func TestGetAvailableActions(t *testing.T) {
 func TestRestartAnalysis(t *testing.T) {
 	// Setup
 	e, _, controller := setupTestEnvironment(t)
-	
-	runControlEndpointTest(t, e, controller, http.MethodPost, "/api/v2/control/restart", controller.RestartAnalysis, 
+
+	runControlEndpointTest(t, e, controller, http.MethodPost, "/api/v2/control/restart", controller.RestartAnalysis,
 		"Analysis restart signal sent", ActionRestartAnalysis, SignalRestartAnalysis)
 }
 
@@ -228,8 +238,8 @@ func TestRestartAnalysis(t *testing.T) {
 func TestReloadModel(t *testing.T) {
 	// Setup
 	e, _, controller := setupTestEnvironment(t)
-	
-	runControlEndpointTest(t, e, controller, http.MethodPost, "/api/v2/control/reload", controller.ReloadModel, 
+
+	runControlEndpointTest(t, e, controller, http.MethodPost, "/api/v2/control/reload", controller.ReloadModel,
 		"Model reload signal sent", ActionReloadModel, SignalReloadModel)
 }
 
@@ -237,8 +247,8 @@ func TestReloadModel(t *testing.T) {
 func TestRebuildFilter(t *testing.T) {
 	// Setup
 	e, _, controller := setupTestEnvironment(t)
-	
-	runControlEndpointTest(t, e, controller, http.MethodPost, "/api/v2/control/rebuild-filter", controller.RebuildFilter, 
+
+	runControlEndpointTest(t, e, controller, http.MethodPost, "/api/v2/control/rebuild-filter", controller.RebuildFilter,
 		"Filter rebuild signal sent", ActionRebuildFilter, SignalRebuildFilter)
 }
 
@@ -465,7 +475,7 @@ func TestControlEndpointsWithUserAuth(t *testing.T) {
 func TestControlActionsWithBlockedChannel(t *testing.T) {
 	// Setup
 	_, _, controller := setupTestEnvironment(t)
-	
+
 	runControlActionsWithBlockedChannelTest(t, controller.RestartAnalysis)
 }
 
@@ -474,7 +484,7 @@ func TestControlActionsWithBlockedChannel(t *testing.T) {
 func TestConcurrentControlRequests(t *testing.T) {
 	// Setup
 	e, _, controller := setupTestEnvironment(t)
-	
+
 	runConcurrentControlRequestsTest(t, e, controller, controller.RestartAnalysis, "/api/v2/control/restart", SignalRestartAnalysis)
 }
 
@@ -581,16 +591,16 @@ func TestInvalidPayloads(t *testing.T) {
 func TestControlActionsWithBlockedChannel_Advanced(t *testing.T) {
 	// Setup
 	_, _, controller := setupTestEnvironment(t)
-	
+
 	runControlActionsWithBlockedChannelTest(t, controller.RestartAnalysis)
 }
 
 // TestConcurrentControlRequests_Advanced tests that multiple concurrent control requests
 // are handled properly
 func TestConcurrentControlRequests_Advanced(t *testing.T) {
-	// Setup  
+	// Setup
 	e, _, controller := setupTestEnvironment(t)
-	
+
 	runConcurrentControlRequestsTest(t, e, controller, controller.RestartAnalysis, "/api/v2/control/restart", SignalRestartAnalysis)
 }
 

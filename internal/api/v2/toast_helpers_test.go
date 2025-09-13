@@ -1,3 +1,7 @@
+// Go 1.25 improvements:
+// - Uses b.Loop() for benchmark iterations
+// LLM GUIDANCE: Always use b.Loop() instead of manual for i := 0; i < b.N; i++
+
 package api
 
 import (
@@ -125,7 +129,7 @@ func runSendToastTestIsolated(t *testing.T, c *Controller, service *notification
 	toast := notification.NewToast(tc.message, notifToastType).
 		WithComponent("api").
 		WithDuration(tc.duration)
-	
+
 	err := service.CreateWithMetadata(toast.ToNotification())
 
 	if tc.wantError {
@@ -169,7 +173,7 @@ func verifyToastNotification(t *testing.T, notif *notification.Notification, tc 
 
 	// Verify toast-specific metadata
 	verifyToastMetadata(t, notif, tc)
-	
+
 	// Verify notification type mapping
 	verifyNotificationTypeMapping(t, notif, tc.toastType)
 }
@@ -235,46 +239,46 @@ func verifyNotificationTypeMapping(t *testing.T, notif *notification.Notificatio
 func TestController_SendToast_TypeMapping(t *testing.T) {
 	// Test the toast type to notification type mapping specifically
 	tests := []struct {
-		toastType            string
-		expectedNotifType    notification.Type
-		expectedPriority     notification.Priority
-		expectedToastType    notification.ToastType
+		toastType         string
+		expectedNotifType notification.Type
+		expectedPriority  notification.Priority
+		expectedToastType notification.ToastType
 	}{
 		{
-			toastType:            "success",
-			expectedNotifType:    notification.TypeInfo,
-			expectedPriority:     notification.PriorityLow,
-			expectedToastType:    notification.ToastTypeSuccess,
+			toastType:         "success",
+			expectedNotifType: notification.TypeInfo,
+			expectedPriority:  notification.PriorityLow,
+			expectedToastType: notification.ToastTypeSuccess,
 		},
 		{
-			toastType:            "error",
-			expectedNotifType:    notification.TypeError,
-			expectedPriority:     notification.PriorityHigh,
-			expectedToastType:    notification.ToastTypeError,
+			toastType:         "error",
+			expectedNotifType: notification.TypeError,
+			expectedPriority:  notification.PriorityHigh,
+			expectedToastType: notification.ToastTypeError,
 		},
 		{
-			toastType:            "warning",
-			expectedNotifType:    notification.TypeWarning,
-			expectedPriority:     notification.PriorityMedium,
-			expectedToastType:    notification.ToastTypeWarning,
+			toastType:         "warning",
+			expectedNotifType: notification.TypeWarning,
+			expectedPriority:  notification.PriorityMedium,
+			expectedToastType: notification.ToastTypeWarning,
 		},
 		{
-			toastType:            "info",
-			expectedNotifType:    notification.TypeInfo,
-			expectedPriority:     notification.PriorityLow,
-			expectedToastType:    notification.ToastTypeInfo,
+			toastType:         "info",
+			expectedNotifType: notification.TypeInfo,
+			expectedPriority:  notification.PriorityLow,
+			expectedToastType: notification.ToastTypeInfo,
 		},
 		{
-			toastType:            "invalid",
-			expectedNotifType:    notification.TypeInfo,
-			expectedPriority:     notification.PriorityLow,
-			expectedToastType:    notification.ToastTypeInfo,
+			toastType:         "invalid",
+			expectedNotifType: notification.TypeInfo,
+			expectedPriority:  notification.PriorityLow,
+			expectedToastType: notification.ToastTypeInfo,
 		},
 		{
-			toastType:            "",
-			expectedNotifType:    notification.TypeInfo,
-			expectedPriority:     notification.PriorityLow,
-			expectedToastType:    notification.ToastTypeInfo,
+			toastType:         "",
+			expectedNotifType: notification.TypeInfo,
+			expectedPriority:  notification.PriorityLow,
+			expectedToastType: notification.ToastTypeInfo,
 		},
 	}
 
@@ -374,7 +378,8 @@ func BenchmarkController_SendToast(b *testing.B) {
 
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	// Use b.Loop() for benchmark iteration (Go 1.25)
+	for b.Loop() {
 		err := c.SendToast("Benchmark toast message", "info", 1000)
 		if err != nil {
 			b.Fatalf("SendToast() benchmark error = %v", err)

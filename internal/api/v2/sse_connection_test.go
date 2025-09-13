@@ -1,5 +1,17 @@
 // sse_connection_test.go: Tests for SSE connection lifecycle and goroutine cleanup
 // This test suite prevents regression of the critical memory leak issues fixed in PR #1163
+//
+// Go 1.25 improvements:
+// - Uses sync.WaitGroup.Go() for cleaner concurrent goroutine management
+// - Uses T.Attr() for enhanced test metadata
+// - Uses T.Output() for structured test logging
+//
+// LLM GUIDANCE: When updating concurrent tests in this file:
+// 1. Use sync.WaitGroup.Go() instead of manual wg.Add(1) + go func + defer wg.Done()
+// 2. Add T.Attr() metadata for test categorization
+// 3. Use T.Output() for structured logging instead of t.Logf()
+// 4. For benchmark loops, use b.Loop() instead of manual for i := 0; i < b.N; i++
+// 5. Avoid testing/synctest.Test() if code creates background goroutines with time.Sleep
 
 package api
 
@@ -33,7 +45,7 @@ type SSETestConfig struct {
 var sseTestConfigs = []SSETestConfig{
 	// Note: /notifications/stream endpoint requires authentication and is tested separately
 	{
-		endpoint:          "/detections/stream", 
+		endpoint:          "/detections/stream",
 		maxConnections:    3,
 		testTimeout:       5 * time.Second,
 		connectionTimeout: 1 * time.Second,
@@ -51,6 +63,8 @@ var sseTestConfigs = []SSETestConfig{
 func TestSSEConnectionCleanup(t *testing.T) {
 	// Goroutine leak checking is now handled centrally in TestMain
 	// This prevents this test from detecting goroutines from other tests
+	t.Attr("component", "sse")
+	t.Attr("type", "connection-lifecycle")
 
 	for _, config := range sseTestConfigs {
 		// Loop variable capture no longer needed in Go 1.22+
@@ -88,7 +102,6 @@ func testSSEEndpointCleanup(t *testing.T, config SSETestConfig) {
 	})
 }
 
-
 // testSingleConnectionManualDisconnect verifies that manually closing an SSE connection
 // properly cleans up goroutines
 func testSingleConnectionManualDisconnect(t *testing.T, server *httptest.Server, config SSETestConfig) {
@@ -108,7 +121,7 @@ func testSingleConnectionManualDisconnect(t *testing.T, server *httptest.Server,
 
 	// Verify SSE headers (allow charset suffix in Content-Type)
 	contentType := resp.Header.Get("Content-Type")
-	require.True(t, strings.HasPrefix(contentType, "text/event-stream"), 
+	require.True(t, strings.HasPrefix(contentType, "text/event-stream"),
 		"Content-Type should start with text/event-stream, got: %s", contentType)
 	require.Equal(t, "no-cache", resp.Header.Get("Cache-Control"))
 
@@ -174,6 +187,7 @@ func testSingleConnectionContextCancellation(t *testing.T, server *httptest.Serv
 	}()
 
 	// Wait a bit to establish connection
+	// TODO: Consider using testing/synctest.Wait() for deterministic timing
 	time.Sleep(100 * time.Millisecond)
 
 	// Cancel context
@@ -202,11 +216,13 @@ func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, co
 	var wg sync.WaitGroup
 	var connectionsEstablished int32
 
-	// Start multiple concurrent connections
+	// Start multiple concurrent connections using Go 1.25's WaitGroup.Go()
+	// LLM GUIDANCE: This pattern replaces the old wg.Add(1) + go func() + defer wg.Done()
 	for i := 0; i < config.maxConnections; i++ {
-		wg.Add(1)
-		go func(connID int) {
-			defer wg.Done()
+		connID := i
+		// Use WaitGroup.Go() for automatic Add/Done management (Go 1.25)
+		// This eliminates common bugs from forgetting wg.Done() or calling wg.Add() after goroutine starts
+		wg.Go(func() {
 
 			client := createTestHTTPClient(config.testTimeout)
 			defer client.CloseIdleConnections() // Always cleanup
@@ -227,7 +243,7 @@ func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, co
 
 			if resp.StatusCode == http.StatusOK {
 				atomic.AddInt32(&connectionsEstablished, 1)
-				
+
 				// Read a few events
 				scanner := bufio.NewScanner(resp.Body)
 				eventCount := 0
@@ -235,7 +251,7 @@ func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, co
 					eventCount++
 				}
 			}
-		}(i)
+		})
 	}
 
 	// Wait for all connections to complete
@@ -243,7 +259,7 @@ func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, co
 
 	// Cleanup is immediate with DisableKeepAlives=true
 	// At least one connection should have been established
-	require.Positive(t, int(atomic.LoadInt32(&connectionsEstablished)), 
+	require.Positive(t, int(atomic.LoadInt32(&connectionsEstablished)),
 		"At least one connection should have been established")
 }
 
@@ -253,7 +269,7 @@ func testConnectionTimeout(t *testing.T, server *httptest.Server, config SSETest
 	t.Helper()
 	// This test would require modifying the timeout constants for testing
 	// For now, we'll test the behavior with a short-lived connection
-	
+
 	client := createTestHTTPClient(config.connectionTimeout)
 
 	req, err := http.NewRequest("GET", server.URL+"/api/v2"+config.endpoint, http.NoBody)
@@ -283,6 +299,8 @@ func testConnectionTimeout(t *testing.T, server *httptest.Server, config SSETest
 // deadlock issue has been fixed
 func TestSSEUnbufferedChannelFix(t *testing.T) {
 	// Goroutine leak checking is now handled centrally in TestMain
+	t.Attr("component", "sse")
+	t.Attr("issue", "unbuffered-channel-fix")
 
 	// Test the detections endpoint to verify the critical unbuffered channel fix
 	server, controller := setupSSETestServer(t)
@@ -320,6 +338,8 @@ func TestSSEUnbufferedChannelFix(t *testing.T) {
 // and doesn't cause goroutine leaks
 func TestSSERateLimiting(t *testing.T) {
 	// Goroutine leak checking is now handled centrally in TestMain
+	t.Attr("component", "sse")
+	t.Attr("feature", "rate-limiting")
 
 	server, controller := setupSSETestServer(t)
 	defer server.Close()
@@ -353,6 +373,10 @@ func TestSSERateLimiting(t *testing.T) {
 	// Should have some successful connections and some rate limited
 	require.Positive(t, successCount, "Should have some successful connections")
 	require.Positive(t, rateLimitedCount, "Should have some rate limited connections")
+
+	// Use T.Output() for structured logging (Go 1.25)
+	output := t.Output()
+	_, _ = fmt.Fprintf(output, "Rate limiting test results: %d successful, %d rate limited\n", successCount, rateLimitedCount)
 
 	// Close idle connections - should be immediate with DisableKeepAlives
 	client.CloseIdleConnections()
@@ -411,6 +435,7 @@ func setupSSETestServer(t *testing.T) (*httptest.Server, *Controller) {
 }
 
 // Benchmark for SSE connection performance
+// Uses Go 1.25's b.Loop() for iteration
 func BenchmarkSSEConnectionSetup(b *testing.B) {
 	server, controller := setupSSETestServerForBench(b)
 	defer server.Close()
@@ -421,7 +446,8 @@ func BenchmarkSSEConnectionSetup(b *testing.B) {
 
 	b.ReportAllocs()
 	b.ResetTimer()
-	
+
+	// Use b.Loop() for benchmark iteration (Go 1.25)
 	for b.Loop() {
 		req, err := http.NewRequest("GET", server.URL+"/api/v2/notifications/stream", http.NoBody)
 		if err != nil {
@@ -479,4 +505,3 @@ func setupSSETestServerForBench(b *testing.B) (*httptest.Server, *Controller) {
 
 	return httptest.NewServer(e), controller
 }
-

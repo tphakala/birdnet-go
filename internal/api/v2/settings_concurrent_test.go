@@ -1,3 +1,16 @@
+// Package api v2 settings concurrent tests - leverages Go 1.25 features:
+// - testing/synctest for deterministic concurrent testing
+// - sync.WaitGroup.Go() for cleaner goroutine management
+// - T.Attr() and T.Output() for enhanced test metadata and reporting
+//
+// LLM GUIDANCE for updating concurrent tests:
+//  1. Use sync.WaitGroup.Go(func()) instead of wg.Add(1) + go func() + defer wg.Done()
+//     Example: wg.Go(func() { /* work */ })
+//  2. Add test metadata with T.Attr("component", "name") and T.Attr("type", "test-type")
+//  3. Use T.Output() for structured logging: fmt.Fprintf(t.Output(), "message")
+//  4. testing/synctest.Test() creates deterministic "bubbles" but can deadlock with background
+//     goroutines that use time.Sleep() - avoid using it with code that spawns such goroutines
+//  5. For simple concurrent tests, prefer regular WaitGroup.Go() over synctest
 package api
 
 import (
@@ -8,7 +21,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -18,6 +31,8 @@ import (
 // TestConcurrentUpdates verifies the system handles concurrent updates safely
 func TestConcurrentUpdates(t *testing.T) {
 	t.Parallel()
+	t.Attr("component", "settings")
+	t.Attr("type", "concurrent")
 
 	tests := []struct {
 		name        string
@@ -70,20 +85,17 @@ func TestConcurrentUpdates(t *testing.T) {
 			successCount := 0
 			var successMutex sync.Mutex
 
+			// Use Go 1.25 WaitGroup.Go() for cleaner goroutine management
+			// Note: synctest.Test() can cause deadlocks with background goroutines that use time.Sleep
+			// so we use regular concurrent testing with WaitGroup.Go() improvements
 			for i := 0; i < tt.concurrency; i++ {
-				wg.Add(1)
-				go func(goroutineID int) {
-					defer wg.Done()
-
+				goroutineID := i
+				// Use WaitGroup.Go() for automatic Add/Done management (Go 1.25)
+				// This eliminates the need for manual wg.Add(1) and defer wg.Done()
+				wg.Go(func() {
 					_ = runConcurrentScenario(t, tt.scenario, goroutineID, controller, e, errorsChan, &successMutex, &successCount)
-
-					// Add small random delay to increase chance of actual concurrency
-					if tt.scenario != "rapid-sequential" {
-						time.Sleep(time.Duration(goroutineID%10) * time.Millisecond)
-					}
-				}(i)
+				})
 			}
-
 			wg.Wait()
 			close(errorsChan)
 
@@ -106,8 +118,9 @@ func TestConcurrentUpdates(t *testing.T) {
 					"Final value should be one of the concurrent updates")
 			}
 
-			// Log success rate
-			t.Logf("Scenario %s: %d successful operations", tt.scenario, successCount)
+			// Use T.Output() for structured logging
+			output := t.Output()
+			_, _ = fmt.Fprintf(output, "Scenario %s: %d successful operations\n", tt.scenario, successCount)
 		})
 	}
 }
@@ -234,6 +247,8 @@ func runSaveLogicScenario(t *testing.T, goroutineID int, controller *Controller,
 // TestRaceConditionScenarios tests specific race condition scenarios
 func TestRaceConditionScenarios(t *testing.T) {
 	t.Parallel()
+	t.Attr("component", "settings")
+	t.Attr("type", "race-detection")
 
 	tests := []struct {
 		name        string
@@ -245,37 +260,43 @@ func TestRaceConditionScenarios(t *testing.T) {
 			description: "Verify reads during writes return consistent data",
 			scenario: func(t *testing.T, controller *Controller) {
 				t.Helper()
-				// Start a write in background
-				writeDone := make(chan bool)
-				go func() {
-					update := map[string]interface{}{
-						"summaryLimit": 999,
+				// Use synctest.Test for deterministic read/write concurrency (Go 1.25)
+				// This ensures predictable execution order without timing dependencies
+				synctest.Test(t, func(t *testing.T) {
+					t.Helper()
+					var wg sync.WaitGroup
+
+					// Start a write using WaitGroup.Go() (Go 1.25)
+					wg.Go(func() {
+						update := map[string]interface{}{
+							"summaryLimit": 999,
+						}
+						_ = makeSettingsUpdate(t, controller, "dashboard", update)
+					})
+
+					// Perform multiple reads concurrently with the write
+					for i := 0; i < 10; i++ {
+						wg.Go(func() {
+							req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/dashboard", http.NoBody)
+							rec := httptest.NewRecorder()
+							ctx := controller.Echo.NewContext(req, rec)
+							ctx.SetParamNames("section")
+							ctx.SetParamValues("dashboard")
+
+							err := controller.GetSectionSettings(ctx)
+							require.NoError(t, err)
+							assert.Equal(t, http.StatusOK, rec.Code)
+
+							// Parse response to verify it's valid JSON
+							var response map[string]interface{}
+							err = json.Unmarshal(rec.Body.Bytes(), &response)
+							require.NoError(t, err)
+						})
 					}
-					_ = makeSettingsUpdate(t, controller, "dashboard", update)
-					writeDone <- true
-				}()
 
-				// Perform multiple reads during the write
-				for i := 0; i < 10; i++ {
-					req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/dashboard", http.NoBody)
-					rec := httptest.NewRecorder()
-					ctx := controller.Echo.NewContext(req, rec)
-					ctx.SetParamNames("section")
-					ctx.SetParamValues("dashboard")
-
-					err := controller.GetSectionSettings(ctx)
-					require.NoError(t, err)
-					assert.Equal(t, http.StatusOK, rec.Code)
-
-					// Parse response to verify it's valid JSON
-					var response map[string]interface{}
-					err = json.Unmarshal(rec.Body.Bytes(), &response)
-					require.NoError(t, err)
-
-					time.Sleep(1 * time.Millisecond)
-				}
-
-				<-writeDone
+					wg.Wait()
+					synctest.Wait() // Ensure all bubble goroutines complete
+				})
 			},
 		},
 		{
@@ -283,31 +304,33 @@ func TestRaceConditionScenarios(t *testing.T) {
 			description: "Verify nested field updates don't corrupt parent objects",
 			scenario: func(t *testing.T, controller *Controller) {
 				t.Helper()
-				var wg sync.WaitGroup
+				// Use synctest.Test for deterministic nested field updates (Go 1.25)
+				synctest.Test(t, func(t *testing.T) {
+					t.Helper()
+					var wg sync.WaitGroup
 
-				// Update different nested fields concurrently
-				wg.Add(2)
-				go func() {
-					defer wg.Done()
-					update := map[string]interface{}{
-						"thumbnails": map[string]interface{}{
-							"summary": true,
-						},
-					}
-					_ = makeSettingsUpdate(t, controller, "dashboard", update)
-				}()
+					// Update different nested fields concurrently using WaitGroup.Go() (Go 1.25)
+					wg.Go(func() {
+						update := map[string]interface{}{
+							"thumbnails": map[string]interface{}{
+								"summary": true,
+							},
+						}
+						_ = makeSettingsUpdate(t, controller, "dashboard", update)
+					})
 
-				go func() {
-					defer wg.Done()
-					update := map[string]interface{}{
-						"thumbnails": map[string]interface{}{
-							"recent": false,
-						},
-					}
-					_ = makeSettingsUpdate(t, controller, "dashboard", update)
-				}()
+					wg.Go(func() {
+						update := map[string]interface{}{
+							"thumbnails": map[string]interface{}{
+								"recent": false,
+							},
+						}
+						_ = makeSettingsUpdate(t, controller, "dashboard", update)
+					})
 
-				wg.Wait()
+					wg.Wait()
+					synctest.Wait() // Ensure all bubble goroutines complete
+				})
 
 				// Verify both fields were updated
 				settings := controller.Settings
@@ -342,7 +365,7 @@ func makeSettingsUpdate(t *testing.T, controller *Controller, section string, up
 		return fmt.Errorf("failed to marshal update: %w", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+section, 
+	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+section,
 		bytes.NewReader(body))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
