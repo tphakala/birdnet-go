@@ -115,7 +115,14 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 			return err
 		}
 		if !info.IsDir() {
-			ext := filepath.Ext(info.Name())
+			fileName := info.Name()
+
+			// Skip .temp files as they are currently being written
+			if strings.HasSuffix(fileName, ".temp") {
+				return nil
+			}
+
+			ext := filepath.Ext(fileName)
 			if contains(allowedExts, ext) {
 				fileInfo, err := parseFileInfo(path, info)
 				if err != nil {
