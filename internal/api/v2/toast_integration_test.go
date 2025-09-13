@@ -1,3 +1,7 @@
+// Go 1.25 improvements:
+// - Uses b.Loop() for benchmark iterations
+// LLM GUIDANCE: Always use b.Loop() instead of manual for i := 0; i < b.N; i++
+
 package api
 
 import (
@@ -33,9 +37,9 @@ func TestToastIntegrationFlow(t *testing.T) {
 			toastType: "success",
 			duration:  3000,
 			expectedSSEFields: map[string]any{
-				"message": "Operation completed successfully",
-				"type":    "success",
-				"duration": 3000,
+				"message":   "Operation completed successfully",
+				"type":      "success",
+				"duration":  3000,
 				"component": "api",
 			},
 		},
@@ -45,9 +49,9 @@ func TestToastIntegrationFlow(t *testing.T) {
 			toastType: "error",
 			duration:  5000,
 			expectedSSEFields: map[string]any{
-				"message": "Operation failed with error",
-				"type":    "error",
-				"duration": 5000,
+				"message":   "Operation failed with error",
+				"type":      "error",
+				"duration":  5000,
 				"component": "api",
 			},
 		},
@@ -267,7 +271,8 @@ func BenchmarkCompleteToastFlow(b *testing.B) {
 
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	// Use b.Loop() for benchmark iteration (Go 1.25)
+	for b.Loop() {
 		// Step 1: Send toast
 		err := c.SendToast("Benchmark message", "info", 3000)
 		if err != nil {
