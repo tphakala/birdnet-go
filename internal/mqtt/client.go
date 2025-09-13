@@ -133,7 +133,24 @@ func (c *client) Connect(ctx context.Context) error {
 	return c.connectWithOptions(ctx, false)
 }
 
-// connectWithOptions is the internal connect method that supports bypassing cooldown for automatic reconnects
+// connectWithOptions is the internal connect method that supports bypassing cooldown for automatic reconnects.
+//
+// The cooldown mechanism serves different purposes for manual vs automatic connections:
+//   - Manual connections (isAutoReconnect=false): Protected by ReconnectCooldown (typically 5s)
+//     to prevent users or external systems from spamming connection attempts
+//   - Automatic reconnects (isAutoReconnect=true): Controlled by ReconnectDelay (typically 1s)
+//     which is applied by the reconnection timer before calling this method
+//
+// This separation is critical because:
+// 1. Automatic reconnects are already rate-limited by ReconnectDelay timer
+// 2. Applying ReconnectCooldown (5s) would block legitimate auto-reconnects scheduled at ReconnectDelay (1s)
+// 3. Manual connection attempts still need protection against rapid retry attempts
+//
+// Timeline example of the conflict this solves:
+// - T+0s: Connection lost, onConnectionLost called
+// - T+1s: ReconnectDelay expires, automatic reconnect attempted
+// - Without bypass: Blocked by 5s cooldown → "connection attempt too recent" error
+// - With bypass: Reconnect proceeds as intended
 func (c *client) connectWithOptions(ctx context.Context, isAutoReconnect bool) error {
 	if err := ctx.Err(); err != nil { // Check context early
 		mqttLogger.Warn("Connect context already cancelled", "error", err)
@@ -381,6 +398,10 @@ func (c *client) checkConnectionCooldownLocked(logger *slog.Logger) error {
 		lastAttemptAgo := time.Since(lastConnAttempt)
 		// Round to seconds for better readability
 		lastAttemptRounded := lastAttemptAgo.Round(time.Second)
+		// Handle sub-second durations that round to 0
+		if lastAttemptRounded == 0 && lastAttemptAgo > 0 {
+			lastAttemptRounded = time.Second // Display as "1s ago" instead of "0s ago"
+		}
 		logger.Warn("Connection attempt too recent", "last_attempt_ago", lastAttemptRounded, "cooldown", reconnectCooldown)
 		return errors.Newf("connection attempt too recent, last attempt was %v ago", lastAttemptRounded).
 			Component("mqtt").

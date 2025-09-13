@@ -93,7 +93,7 @@ func debugLog(t *testing.T, format string, args ...interface{}) {
 func retryWithTimeout(timeout time.Duration, operation func() error) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	
+
 	backoff := 100 * time.Millisecond
 	maxBackoff := 2 * time.Second
 	var lastErr error
@@ -108,7 +108,7 @@ func retryWithTimeout(timeout time.Duration, operation func() error) error {
 			jitter := time.Duration(rand.Int63n(int64(backoff / 2))) // #nosec G404 -- weak randomness acceptable for test backoff jitter, not security-critical
 			sleepTime := backoff + jitter
 			log.Printf("[DEBUG] Sleeping for %v before next retry", sleepTime)
-			
+
 			timer := time.NewTimer(sleepTime)
 			select {
 			case <-ctx.Done():
@@ -117,7 +117,7 @@ func retryWithTimeout(timeout time.Duration, operation func() error) error {
 			case <-timer.C:
 				// Continue with next retry
 			}
-			
+
 			backoff *= 2
 			if backoff > maxBackoff {
 				backoff = maxBackoff
@@ -708,12 +708,12 @@ func sanitizeClientID(id string) string {
 	sanitized := strings.ReplaceAll(id, "/", "-")
 	sanitized = strings.ReplaceAll(sanitized, " ", "-")
 	sanitized = strings.ReplaceAll(sanitized, ".", "-")
-	
+
 	// Truncate to 23 characters if needed
 	if len(sanitized) > 23 {
 		sanitized = sanitized[:23]
 	}
-	
+
 	return sanitized
 }
 
@@ -722,7 +722,7 @@ func createTestClient(t *testing.T, broker string) (Client, *observability.Metri
 	t.Helper()
 	// Use test name as client ID to ensure uniqueness when running tests in parallel
 	clientID := sanitizeClientID(t.Name())
-	
+
 	testSettings := &conf.Settings{
 		Realtime: conf.RealtimeSettings{
 			MQTT: conf.MQTTSettings{
@@ -807,10 +807,10 @@ func TestCheckConnectionCooldown(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name               string
-		lastAttempt        time.Duration // how long ago was last attempt
-		cooldownPeriod     time.Duration
-		expectError        bool
+		name                string
+		lastAttempt         time.Duration // how long ago was last attempt
+		cooldownPeriod      time.Duration
+		expectError         bool
 		expectedErrorSubstr string
 	}{
 		{
@@ -820,10 +820,10 @@ func TestCheckConnectionCooldown(t *testing.T) {
 			expectError:    false,
 		},
 		{
-			name:               "Recent attempt within cooldown",
-			lastAttempt:        1 * time.Second, // Recent
-			cooldownPeriod:     5 * time.Second,
-			expectError:        true,
+			name:                "Recent attempt within cooldown",
+			lastAttempt:         1 * time.Second, // Recent
+			cooldownPeriod:      5 * time.Second,
+			expectError:         true,
 			expectedErrorSubstr: "connection attempt too recent",
 		},
 		{
@@ -839,10 +839,10 @@ func TestCheckConnectionCooldown(t *testing.T) {
 			expectError:    false,
 		},
 		{
-			name:               "Exactly at cooldown boundary",
-			lastAttempt:        5 * time.Second,
-			cooldownPeriod:     5 * time.Second,
-			expectError:        false, // Should be allowed at boundary
+			name:           "Exactly at cooldown boundary",
+			lastAttempt:    5 * time.Second,
+			cooldownPeriod: 5 * time.Second,
+			expectError:    false, // Should be allowed at boundary
 		},
 	}
 
@@ -909,20 +909,20 @@ func TestConfigureClientOptions(t *testing.T) {
 			expectError: false,
 			verifyOpts: func(t *testing.T, opts paho.ClientOptions) {
 				t.Helper()
-				// Verify broker configuration by creating a client and checking behavior  
+				// Verify broker configuration by creating a client and checking behavior
 				// Note: paho ClientOptions doesn't expose direct getters, but we can verify functionality
 				client := paho.NewClient(&opts)
 				if client == nil {
 					t.Error("Expected client to be created successfully with configured options")
 					return
 				}
-				
+
 				// Verify that options are properly configured by checking if client is not connected initially
 				// (this verifies AutoReconnect=false and ConnectRetry=false are working)
 				if client.IsConnected() {
 					t.Error("Expected client to not be connected initially (AutoReconnect should be disabled)")
 				}
-				
+
 				// Clean up the client
 				client.Disconnect(250)
 			},
@@ -955,12 +955,12 @@ func TestConfigureClientOptions(t *testing.T) {
 					t.Error("Expected client to be created successfully with TLS-configured options")
 					return
 				}
-				
+
 				// Verify that client is not connected initially (AutoReconnect=false)
 				if client.IsConnected() {
 					t.Error("Expected client to not be connected initially (AutoReconnect should be disabled)")
 				}
-				
+
 				// Clean up the client
 				client.Disconnect(250)
 			},
@@ -1199,7 +1199,7 @@ func TestPerformConnectionAttempt(t *testing.T) {
 		{
 			name: "Connection timeout",
 			setupConfig: func(config *Config) {
-				config.Broker = "tcp://192.0.2.1:1883" // TEST-NET-1 (unreachable)
+				config.Broker = "tcp://192.0.2.1:1883"         // TEST-NET-1 (unreachable)
 				config.ConnectTimeout = 100 * time.Millisecond // Very short timeout
 			},
 			expectError: true,
@@ -1257,10 +1257,10 @@ func TestPerformConnectionAttempt(t *testing.T) {
 				t.Errorf("Unexpected error creating client options: %v", optsErr)
 				return
 			}
-			
+
 			// Create MQTT client
 			clientToConnect := paho.NewClient(opts)
-			
+
 			// Test the method
 			err := c.performConnectionAttempt(ctx, clientToConnect, logger)
 
@@ -1279,6 +1279,174 @@ func TestPerformConnectionAttempt(t *testing.T) {
 
 			// Ensure client is properly cleaned up after test
 			c.Disconnect()
+		})
+	}
+}
+
+// TestConnectWithOptions verifies that the automatic reconnection bypasses cooldown
+// while manual connections respect it.
+func TestConnectWithOptions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		isAutoReconnect bool
+		lastAttempt     time.Duration // how long ago was last attempt
+		cooldownPeriod  time.Duration
+		expectError     bool
+		errorSubstr     string
+	}{
+		{
+			name:            "Manual connection respects cooldown",
+			isAutoReconnect: false,
+			lastAttempt:     2 * time.Second,
+			cooldownPeriod:  5 * time.Second,
+			expectError:     true,
+			errorSubstr:     "connection attempt too recent",
+		},
+		{
+			name:            "Automatic reconnect bypasses cooldown",
+			isAutoReconnect: true,
+			lastAttempt:     2 * time.Second,
+			cooldownPeriod:  5 * time.Second,
+			expectError:     false, // Should succeed despite cooldown
+		},
+		{
+			name:            "Manual connection after cooldown",
+			isAutoReconnect: false,
+			lastAttempt:     6 * time.Second,
+			cooldownPeriod:  5 * time.Second,
+			expectError:     false,
+		},
+		{
+			name:            "Automatic reconnect with no cooldown",
+			isAutoReconnect: true,
+			lastAttempt:     0,
+			cooldownPeriod:  5 * time.Second,
+			expectError:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Skip tests that require actual broker connection
+			broker := getBrokerAddress()
+			if broker == "" {
+				t.Skip("No MQTT broker available")
+				return
+			}
+
+			// Create test client
+			config := DefaultConfig()
+			config.Broker = broker
+			config.ReconnectCooldown = tt.cooldownPeriod
+			config.ConnectTimeout = 2 * time.Second
+			metrics, _ := observability.NewMetrics()
+			c := &client{
+				config:          config,
+				metrics:         metrics.MQTT,
+				lastConnAttempt: time.Now().Add(-tt.lastAttempt),
+				reconnectStop:   make(chan struct{}),
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			// Test the connectWithOptions method
+			err := c.connectWithOptions(ctx, tt.isAutoReconnect)
+
+			// Clean up
+			defer c.Disconnect()
+
+			// Verify results
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got nil")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorSubstr) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorSubstr, err.Error())
+				}
+			} else if err != nil {
+				t.Errorf("Expected no error but got %v", err)
+			}
+		})
+	}
+}
+
+// TestTimeRoundingEdgeCase verifies that sub-second durations are handled correctly
+// when rounding time for display in error messages.
+func TestTimeRoundingEdgeCase(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                string
+		lastAttempt         time.Duration // how long ago was last attempt
+		expectedDisplayTime string        // expected time shown in error
+	}{
+		{
+			name:                "Sub-second rounds to 1s",
+			lastAttempt:         500 * time.Millisecond,
+			expectedDisplayTime: "1s",
+		},
+		{
+			name:                "Exactly 1 second",
+			lastAttempt:         1 * time.Second,
+			expectedDisplayTime: "1s",
+		},
+		{
+			name:                "1.4 seconds rounds to 1s",
+			lastAttempt:         1400 * time.Millisecond,
+			expectedDisplayTime: "1s",
+		},
+		{
+			name:                "1.5 seconds rounds to 2s",
+			lastAttempt:         1500 * time.Millisecond,
+			expectedDisplayTime: "2s",
+		},
+		{
+			name:                "2.1 seconds rounds to 2s",
+			lastAttempt:         2100 * time.Millisecond,
+			expectedDisplayTime: "2s",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create test client with cooldown that will trigger
+			config := DefaultConfig()
+			config.Broker = "tcp://test.example.com:1883"
+			config.ReconnectCooldown = 5 * time.Second
+			metrics, _ := observability.NewMetrics()
+			c := &client{
+				config:          config,
+				metrics:         metrics.MQTT,
+				lastConnAttempt: time.Now().Add(-tt.lastAttempt),
+				reconnectStop:   make(chan struct{}),
+			}
+
+			logger := mqttLogger.With("broker", config.Broker, "client_id", config.ClientID)
+
+			// Test the checkConnectionCooldownLocked method
+			c.mu.RLock()
+			err := c.checkConnectionCooldownLocked(logger)
+			c.mu.RUnlock()
+
+			// Should always error since we're within cooldown
+			if err == nil {
+				t.Errorf("Expected error but got nil")
+				return
+			}
+
+			// Check that the error message contains the expected rounded time
+			expectedMsg := fmt.Sprintf("last attempt was %s ago", tt.expectedDisplayTime)
+			if !strings.Contains(err.Error(), expectedMsg) {
+				t.Errorf("Expected error to contain %q, got %q", expectedMsg, err.Error())
+			}
 		})
 	}
 }
