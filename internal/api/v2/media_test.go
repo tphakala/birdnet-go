@@ -58,25 +58,105 @@ func TestInitMediaRoutesRegistration(t *testing.T) {
 	}
 }
 
+// createTestAudioFile creates a valid WAV file for testing that meets the minimum size requirements.
+// The file will be at least 1024 bytes to pass validation.
+func createTestAudioFile(t *testing.T, path string) error {
+	t.Helper()
+
+	// Create a 0.1 second WAV file (100ms) at 44100Hz, 16-bit, mono
+	// This results in a file size of approximately 8864 bytes (44 header + 8820 data)
+	durationSec := 0.1
+	sampleRate := 44100
+	numSamples := int(float64(sampleRate) * durationSec)
+	dataSize := numSamples * 2 // 16-bit = 2 bytes per sample
+
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			t.Logf("Failed to close test audio file: %v", err)
+		}
+	}()
+
+	// Write WAV header
+	header := []byte{
+		'R', 'I', 'F', 'F',
+		byte(dataSize + 36), byte((dataSize + 36) >> 8), byte((dataSize + 36) >> 16), byte((dataSize + 36) >> 24),
+		'W', 'A', 'V', 'E',
+		'f', 'm', 't', ' ',
+		16, 0, 0, 0, // Subchunk1Size
+		1, 0, // AudioFormat (PCM)
+		1, 0, // NumChannels (mono)
+		byte(sampleRate), byte(sampleRate >> 8), byte(sampleRate >> 16), byte(sampleRate >> 24), // SampleRate
+		byte(sampleRate * 2), byte((sampleRate * 2) >> 8), byte((sampleRate * 2) >> 16), byte((sampleRate * 2) >> 24), // ByteRate
+		2, 0, // BlockAlign
+		16, 0, // BitsPerSample
+		'd', 'a', 't', 'a',
+		byte(dataSize), byte(dataSize >> 8), byte(dataSize >> 16), byte(dataSize >> 24),
+	}
+
+	if _, err := file.Write(header); err != nil {
+		return err
+	}
+
+	// Write silence (zeros) as audio data
+	silence := make([]byte, dataSize)
+	_, err = file.Write(silence)
+	return err
+}
+
 // TestServeAudioClip tests the ServeAudioClip handler using SecureFS
 func TestServeAudioClip(t *testing.T) {
 	// Setup test environment with SecureFS rooted in tempDir
 	e, _, tempDir := setupMediaTestEnvironment(t)
 
 	// Create a small test audio file within the secure root
-	smallFilename := "small.mp3"
+	smallFilename := "small.wav"
 	smallFilePath := filepath.Join(tempDir, smallFilename)
-	err := os.WriteFile(smallFilePath, []byte("small audio file content"), 0o600)
+	err := createTestAudioFile(t, smallFilePath)
 	require.NoError(t, err)
 
 	// Create a large test audio file (over 1MB)
-	largeFilename := "large.mp3"
+	// For large files, we'll create a simple binary file that's large enough
+	largeFilename := "large.wav"
 	largeFilePath := filepath.Join(tempDir, largeFilename)
-	largeContent := make([]byte, 1100*1024) // 1.1 MB
+	// Create a large WAV file by writing a proper header and then large data
+	largeFile, err := os.Create(largeFilePath)
+	require.NoError(t, err)
+	defer func() {
+		if err := largeFile.Close(); err != nil {
+			t.Logf("Failed to close large file: %v", err)
+		}
+	}()
+
+	// Write minimal WAV header for a large file
+	dataSize := 1100 * 1024 // 1.1 MB of audio data
+	header := []byte{
+		'R', 'I', 'F', 'F',
+		byte(dataSize + 36), byte((dataSize + 36) >> 8), byte((dataSize + 36) >> 16), byte((dataSize + 36) >> 24),
+		'W', 'A', 'V', 'E',
+		'f', 'm', 't', ' ',
+		16, 0, 0, 0, // Subchunk1Size
+		1, 0, // AudioFormat (PCM)
+		1, 0, // NumChannels (mono)
+		0x44, 0xAC, 0, 0, // SampleRate (44100)
+		0x88, 0x58, 0x01, 0, // ByteRate
+		2, 0, // BlockAlign
+		16, 0, // BitsPerSample
+		'd', 'a', 't', 'a',
+		byte(dataSize), byte(dataSize >> 8), byte(dataSize >> 16), byte(dataSize >> 24),
+	}
+	_, err = largeFile.Write(header)
+	require.NoError(t, err)
+
+	// Write large audio data
+	largeContent := make([]byte, dataSize)
 	for i := range largeContent {
 		largeContent[i] = byte(i % 256)
 	}
-	err = os.WriteFile(largeFilePath, largeContent, 0o600)
+	_, err = largeFile.Write(largeContent)
 	require.NoError(t, err)
 
 	// Test cases
@@ -93,7 +173,7 @@ func TestServeAudioClip(t *testing.T) {
 			filename:       smallFilename,
 			rangeHeader:    "",
 			expectedStatus: http.StatusOK,
-			expectedLength: int64(len("small audio file content")),
+			expectedLength: 8864, // WAV header (44) + audio data (8820)
 			partialContent: false,
 		},
 		{
@@ -101,7 +181,7 @@ func TestServeAudioClip(t *testing.T) {
 			filename:       largeFilename,
 			rangeHeader:    "",
 			expectedStatus: http.StatusOK,
-			expectedLength: 1100 * 1024,
+			expectedLength: 1100*1024 + 44, // Data size + WAV header
 			partialContent: false,
 		},
 		{
@@ -159,7 +239,12 @@ func TestServeAudioClip(t *testing.T) {
 					assert.Equal(t, fmt.Sprintf("%d", tc.expectedLength), rec.Header().Get("Content-Length"))
 					// Content verification for small file
 					if tc.filename == smallFilename {
-						assert.Equal(t, "small audio file content", rec.Body.String())
+						// Check that we got a valid WAV file (starts with "RIFF")
+						body := rec.Body.Bytes()
+						assert.GreaterOrEqual(t, len(body), 4, "Response body should have at least 4 bytes")
+						if len(body) >= 4 {
+							assert.Equal(t, []byte("RIFF"), body[:4], "Should return a WAV file starting with RIFF header")
+						}
 					}
 				}
 			} else {
@@ -188,9 +273,9 @@ func TestServeSpectrogram(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
 	// Create a test audio file within the secure root
-	audioFilename := "audio.mp3"
+	audioFilename := "audio.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	err := os.WriteFile(audioFilePath, []byte("audio file content"), 0o600)
+	err := createTestAudioFile(t, audioFilePath)
 	require.NoError(t, err)
 
 	// --- Simulate Spectrogram Generation (by creating the expected file) ---
@@ -320,9 +405,9 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 	e, _, tempDir := setupMediaTestEnvironment(t)
 
 	// Create test files within the SecureFS root
-	audioFilename := "test.mp3"
+	audioFilename := "test.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	err := os.WriteFile(audioFilePath, []byte("test audio content"), 0o600)
+	err := createTestAudioFile(t, audioFilePath)
 	require.NoError(t, err)
 
 	// Simulate existing spectrogram
@@ -345,30 +430,35 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 		endpoint       string
 		expectedStatus int
 		expectedBody   string
+		isAudioFile    bool // Flag to indicate if this is an audio file that needs special handling
 	}{
 		{
 			name:           "Audio endpoint",
 			endpoint:       "/api/v2/media/audio/" + audioFilename,
 			expectedStatus: http.StatusOK,
-			expectedBody:   "test audio content",
+			expectedBody:   "", // For audio files, we'll check the WAV header instead
+			isAudioFile:    true,
 		},
 		{
 			name:           "Spectrogram endpoint (existing)",
 			endpoint:       "/api/v2/media/spectrogram/" + audioFilename + "?width=800",
 			expectedStatus: http.StatusOK,
 			expectedBody:   spectrogramContent,
+			isAudioFile:    false,
 		},
 		{
 			name:           "Spectrogram endpoint (needs generation - likely fails)",
 			endpoint:       "/api/v2/media/spectrogram/" + audioFilename + "?width=1200",
 			expectedStatus: http.StatusInternalServerError,
 			expectedBody:   "",
+			isAudioFile:    false,
 		},
 		{
 			name:           "Missing audio file",
 			endpoint:       "/api/v2/media/audio/missing.mp3",
 			expectedStatus: http.StatusNotFound,
 			expectedBody:   "",
+			isAudioFile:    false,
 		},
 	}
 
@@ -391,7 +481,17 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 			if tc.expectedStatus == http.StatusOK {
 				body, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
-				assert.Equal(t, tc.expectedBody, string(body))
+
+				if tc.isAudioFile {
+					// For audio files, check that we got a valid WAV file
+					assert.GreaterOrEqual(t, len(body), 4, "Audio response should have at least 4 bytes")
+					if len(body) >= 4 {
+						assert.Equal(t, []byte("RIFF"), body[:4], "Should return a WAV file starting with RIFF header")
+					}
+				} else {
+					// For other files, check the exact content
+					assert.Equal(t, tc.expectedBody, string(body))
+				}
 			}
 		})
 	}
@@ -404,9 +504,9 @@ func TestMediaSecurityScenarios(t *testing.T) {
 	e, _, tempDir := setupMediaTestEnvironment(t)
 
 	// Create a test audio file within the secure root
-	secureFilename := "secure.mp3"
+	secureFilename := "secure.wav"
 	secureFilePath := filepath.Join(tempDir, secureFilename)
-	err := os.WriteFile(secureFilePath, []byte("secure audio content"), 0o600)
+	err := createTestAudioFile(t, secureFilePath)
 	require.NoError(t, err)
 
 	// --- No need to create sensitive file outside tempDir, SecureFS prevents access ---
@@ -607,18 +707,18 @@ func TestServeAudioClipWithUnicodeFilenames(t *testing.T) {
 
 	// Create test files with Unicode filenames
 	unicodeNames := []string{
-		"тест.mp3",    // Cyrillic
-		"테스트.mp3",     // Korean
-		"測試.mp3",      // Chinese
-		"Prüfung.mp3", // German with umlaut
-		"ファイル.mp3",    // Japanese
-		"αρχείο.mp3",  // Greek
+		"тест.wav",    // Cyrillic
+		"테스트.wav",     // Korean
+		"測試.wav",      // Chinese
+		"Prüfung.wav", // German with umlaut
+		"ファイル.wav",    // Japanese
+		"αρχείο.wav",  // Greek
 	}
 
 	for _, name := range unicodeNames {
 		// Use filename directly relative to tempDir (SecureFS root)
 		filePath := filepath.Join(tempDir, name)
-		err := os.WriteFile(filePath, []byte("unicode audio content"), 0o600)
+		err := createTestAudioFile(t, filePath)
 		require.NoError(t, err)
 	}
 
@@ -644,7 +744,12 @@ func TestServeAudioClipWithUnicodeFilenames(t *testing.T) {
 
 			// Check response
 			assert.Equal(t, http.StatusOK, rec.Code)
-			assert.Equal(t, "unicode audio content", rec.Body.String())
+			// Check that we got a valid WAV file (starts with "RIFF")
+			body := rec.Body.Bytes()
+			assert.Greater(t, len(body), 4, "Response body should not be empty")
+			if len(body) > 4 {
+				assert.Equal(t, []byte("RIFF"), body[:4], "Should return a WAV file starting with RIFF header")
+			}
 		})
 	}
 }
@@ -655,9 +760,9 @@ func TestServeSpectrogramRawParameter(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
 	// Create a test audio file within the secure root
-	audioFilename := "rawtest.mp3"
+	audioFilename := "rawtest.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	err := os.WriteFile(audioFilePath, []byte("audio file content"), 0o600)
+	err := createTestAudioFile(t, audioFilePath)
 	require.NoError(t, err)
 
 	// Simulate raw spectrogram (default behavior)
@@ -831,7 +936,7 @@ func TestServeSpectrogramByIDRawParameter(t *testing.T) {
 	// Create a test audio file
 	testFilename := "test_raw_param.wav"
 	filePath := filepath.Join(tempDir, testFilename)
-	err := os.WriteFile(filePath, []byte("test audio content"), 0o600)
+	err := createTestAudioFile(t, filePath)
 	require.NoError(t, err)
 
 	// Simulate raw spectrogram (default behavior)

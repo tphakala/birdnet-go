@@ -465,6 +465,9 @@ describe('AudioPlayer', () => {
   });
 
   it('handles spectrogram error', async () => {
+    // Use fake timers to control retry delays
+    vi.useFakeTimers();
+
     audioPlayerTest.render({
       audioUrl: '/audio/test.mp3',
       detectionId: 'test-123',
@@ -478,14 +481,25 @@ describe('AudioPlayer', () => {
     });
 
     const img = screen.getByAltText('Audio spectrogram');
-    fireEvent.error(img);
 
+    // Trigger error and advance through all retry attempts
+    // The component retries 4 times with delays: 500ms, 1000ms, 2000ms, 4000ms
+    for (let i = 0; i < 5; i++) {
+      fireEvent.error(img);
+      // Advance timers to trigger next retry or final error state
+      await vi.advanceTimersByTimeAsync(4000);
+    }
+
+    // After all retries are exhausted, error state should be shown
     await waitFor(
       () => {
         expect(screen.getByText('Spectrogram unavailable')).toBeInTheDocument();
       },
       { timeout: 1000 }
     );
+
+    // Restore real timers
+    vi.useRealTimers();
   });
 
   it('shows controls when rendered', () => {

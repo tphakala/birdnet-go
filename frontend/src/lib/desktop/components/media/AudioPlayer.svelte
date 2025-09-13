@@ -78,12 +78,12 @@
   // Audio and UI elements
   let audioElement: HTMLAudioElement;
   let playerContainer: HTMLDivElement;
-  let playPauseButton: HTMLButtonElement;
+  let playPauseButton!: HTMLButtonElement; // Template-only binding
   let progressBar: HTMLDivElement;
   // svelte-ignore non_reactive_update
-  let volumeControl: HTMLDivElement;
+  let volumeControl!: HTMLDivElement; // Template-only binding
   // svelte-ignore non_reactive_update
-  let filterControl: HTMLDivElement;
+  let filterControl!: HTMLDivElement; // Template-only binding
   // svelte-ignore non_reactive_update
   let volumeSlider: HTMLDivElement;
   // svelte-ignore non_reactive_update
@@ -103,11 +103,31 @@
   // Spectrogram loading with delayed spinner
   const spectrogramLoader = useDelayedLoading({
     delayMs: 150,
-    timeoutMs: 15000,
+    timeoutMs: 60000, // Increased to 60 seconds for large queues
     onTimeout: () => {
       logger.warn('Spectrogram loading timeout', { detectionId });
     },
   });
+
+  // Spectrogram retry configuration
+  const MAX_SPECTROGRAM_RETRIES = 4;
+  const SPECTROGRAM_RETRY_DELAYS = [500, 1000, 2000, 4000]; // Exponential backoff in ms
+  const SPECTROGRAM_POLL_INTERVAL = 2000; // Poll every 2 seconds
+  const MAX_POLL_DURATION = 5 * 60 * 1000; // Maximum 5 minutes of polling
+
+  // Spectrogram retry state
+  let spectrogramRetryCount = $state(0);
+  let spectrogramRetryTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Spectrogram generation status
+  let spectrogramStatus = $state<{
+    status: string;
+    queuePosition: number;
+    message: string;
+  } | null>(null);
+  let statusPollTimer: ReturnType<typeof setTimeout> | undefined;
+  let statusPollStartTime: number | undefined;
+  let statusPollAbortController: AbortController | undefined;
 
   // Audio processing state
   let audioContext: AudioContext | null = null;
@@ -363,13 +383,156 @@
     updateFilter(newFreq);
   };
 
+  // Poll spectrogram generation status
+  const pollSpectrogramStatus = async () => {
+    if (!showSpectrogram || !detectionId) return;
+
+    // Check if we've exceeded max polling duration
+    if (statusPollStartTime && Date.now() - statusPollStartTime > MAX_POLL_DURATION) {
+      logger.warn('Spectrogram polling timeout exceeded', {
+        detectionId,
+        pollDurationMs: Date.now() - statusPollStartTime,
+      });
+      clearStatusPollTimer();
+      spectrogramLoader.setError();
+      return;
+    }
+
+    // Create new AbortController for this poll request
+    statusPollAbortController = new AbortController();
+
+    try {
+      const response = await fetch(
+        `/api/v2/spectrogram/${detectionId}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`,
+        { signal: statusPollAbortController.signal }
+      );
+
+      if (response.ok) {
+        const status = await response.json();
+        spectrogramStatus = status;
+
+        // Check status and decide what to do
+        if (
+          status.status === 'exists' ||
+          status.status === 'completed' ||
+          status.status === 'generated'
+        ) {
+          // Spectrogram is ready, stop polling and try to load it
+          clearStatusPollTimer();
+          spectrogramStatus = null;
+          // Force reload the image
+          const img = document.querySelector(`#spectrogram-${detectionId}`) as HTMLImageElement;
+          if (img && spectrogramUrl) {
+            const url = new URL(spectrogramUrl, window.location.origin);
+            url.searchParams.set('t', Date.now().toString());
+            img.src = url.toString();
+          }
+        } else if (status.status === 'queued' || status.status === 'generating') {
+          // Still processing, continue polling
+          clearStatusPollTimer();
+          statusPollTimer = setTimeout(pollSpectrogramStatus, SPECTROGRAM_POLL_INTERVAL);
+        } else if (status.status === 'failed') {
+          // Generation failed
+          clearStatusPollTimer();
+          spectrogramLoader.setError();
+        }
+      }
+    } catch (err) {
+      // Ignore abort errors
+      if (err instanceof Error && err.name === 'AbortError') {
+        logger.debug('Spectrogram status poll aborted', { detectionId });
+        return;
+      }
+      logger.error('Failed to poll spectrogram status', { detectionId, error: err });
+    }
+  };
+
+  const clearStatusPollTimer = () => {
+    if (statusPollTimer) {
+      clearTimeout(statusPollTimer);
+      statusPollTimer = undefined;
+    }
+    if (statusPollAbortController) {
+      statusPollAbortController.abort();
+      statusPollAbortController = undefined;
+    }
+    statusPollStartTime = undefined;
+  };
+
   // Spectrogram loading handlers
   const handleSpectrogramLoad = () => {
     spectrogramLoader.setLoading(false);
+    spectrogramRetryCount = 0; // Reset retry count on successful load
+    clearSpectrogramRetryTimer();
+    clearStatusPollTimer(); // Also clear status polling
   };
 
-  const handleSpectrogramError = () => {
+  const handleSpectrogramError = (event: Event) => {
+    const img = event.currentTarget as HTMLImageElement;
+
+    // Start polling for generation status on first error
+    if (spectrogramRetryCount === 0) {
+      statusPollStartTime = Date.now();
+      pollSpectrogramStatus();
+    }
+
+    // Retry on any error (likely 503 or temporary failure) up to max retries
+    if (spectrogramRetryCount < MAX_SPECTROGRAM_RETRIES) {
+      // Use exponential backoff for retry
+      // Use Math.min to safely select delay without direct array indexing
+      const delayIndex = Math.min(spectrogramRetryCount, SPECTROGRAM_RETRY_DELAYS.length - 1);
+      const retryDelay = SPECTROGRAM_RETRY_DELAYS.at(delayIndex) ?? 4000;
+
+      logger.debug('Spectrogram load failed, checking status and retrying', {
+        detectionId,
+        retryCount: spectrogramRetryCount + 1,
+        maxRetries: MAX_SPECTROGRAM_RETRIES,
+        retryDelay,
+        status: spectrogramStatus?.status,
+      });
+
+      spectrogramRetryCount++;
+
+      // Schedule retry
+      clearSpectrogramRetryTimer();
+      spectrogramRetryTimer = setTimeout(() => {
+        // Force reload by modifying URL with timestamp
+        const url = new URL(img.src);
+        url.searchParams.set('retry', spectrogramRetryCount.toString());
+        url.searchParams.set('t', Date.now().toString());
+        img.src = url.toString();
+      }, retryDelay);
+
+      return; // Don't set error state yet
+    }
+
+    // Max retries exceeded - but keep polling if generation is in progress
+    if (spectrogramStatus?.status === 'queued' || spectrogramStatus?.status === 'generating') {
+      logger.info('Spectrogram still generating, continuing to poll', {
+        detectionId,
+        status: spectrogramStatus.status,
+        queuePosition: spectrogramStatus.queuePosition,
+      });
+      // Don't set error, keep polling
+      return;
+    }
+
+    // Really failed - stop everything
     spectrogramLoader.setError();
+    clearSpectrogramRetryTimer();
+    clearStatusPollTimer();
+
+    logger.warn('Spectrogram loading failed after max retries', {
+      detectionId,
+      retryCount: spectrogramRetryCount,
+    });
+  };
+
+  const clearSpectrogramRetryTimer = () => {
+    if (spectrogramRetryTimer) {
+      clearTimeout(spectrogramRetryTimer);
+      spectrogramRetryTimer = undefined;
+    }
   };
 
   // Track previous URL to avoid unnecessary resets
@@ -382,6 +545,11 @@
       previousSpectrogramUrl = spectrogramUrl;
       // Start loading when URL changes
       spectrogramLoader.setLoading(true);
+      // Reset retry count and clear any pending retry timer for new spectrogram
+      spectrogramRetryCount = 0;
+      clearSpectrogramRetryTimer();
+      // Abort any in-flight status polling when URL changes
+      clearStatusPollTimer();
     }
   });
 
@@ -476,6 +644,8 @@
     // Clear any pending timeouts
     clearSliderTimeout();
     clearPlayEndTimeout();
+    clearSpectrogramRetryTimer();
+    clearStatusPollTimer();
     spectrogramLoader.cleanup();
 
     // Remove all tracked event listeners
@@ -574,8 +744,31 @@
           <span class="text-xs text-base-content/50">Spectrogram unavailable</span>
         </div>
       </div>
+    {:else if spectrogramStatus?.status === 'queued' || spectrogramStatus?.status === 'generating'}
+      <!-- Show generation status -->
+      <div
+        class="absolute inset-0 flex flex-col items-center justify-center bg-base-200 bg-opacity-90 rounded-md border border-base-300 p-4"
+        style={responsive
+          ? ''
+          : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
+      >
+        <div class="loading loading-spinner loading-md"></div>
+        <div class="text-sm text-base-content mt-2">
+          {#if spectrogramStatus.status === 'queued'}
+            <span>Position {spectrogramStatus.queuePosition} in queue</span>
+          {:else}
+            <span>Generating spectrogram...</span>
+          {/if}
+        </div>
+        {#if spectrogramStatus.message}
+          <div class="text-xs text-base-content/70 mt-1">
+            {spectrogramStatus.message}
+          </div>
+        {/if}
+      </div>
     {:else}
       <img
+        id={`spectrogram-${detectionId}`}
         src={spectrogramUrl}
         alt="Audio spectrogram"
         loading="lazy"
