@@ -62,8 +62,9 @@ func TestValidateAudioFileNoDurationCheck(t *testing.T) {
 			testFile := filepath.Join(tmpDir, tc.name)
 			createTestWAVFileWithSize(t, testFile, tc.fileSize)
 
-			// Validate the file
-			ctx := context.Background()
+			// Validate the file with timeout
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
 			result, err := ValidateAudioFile(ctx, testFile)
 
 			if err != nil && tc.expectValid {
@@ -209,7 +210,8 @@ func TestValidateAudioFileWithRetry(t *testing.T) {
 		testFile := filepath.Join(tmpDir, "valid.wav")
 		createTestWAVFileWithSize(t, testFile, 10*1024)
 
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		result, err := ValidateAudioFileWithRetry(ctx, testFile)
 
 		if err != nil {

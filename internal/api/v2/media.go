@@ -86,8 +86,8 @@ const (
 	spectrogramStatusGenerated  = "generated"
 	spectrogramStatusQueued     = "queued"
 	spectrogramStatusGenerating = "generating"
-	spectrogramStatusCompleted  = "completed"
 	spectrogramStatusFailed     = "failed"
+	spectrogramStatusNotStarted = "not_started"
 )
 
 // Initialize media routes
@@ -614,7 +614,7 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 // Route: GET /api/v2/spectrogram/:id/status
 //
 // Returns:
-//   - status: "queued", "generating", "completed", "failed", or "exists"
+//   - status: "not_started", "queued", "generating", "generated", "failed", or "exists"
 //   - queuePosition: Position in generation queue (0 if not queued)
 //   - message: Additional status information
 func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
@@ -663,7 +663,7 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, width, raw)
 
 		// Check if file exists
-		if _, err := c.SFS.Stat(relSpectrogramPath); err == nil {
+		if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
 			return ctx.JSON(http.StatusOK, SpectrogramQueueStatus{
 				Status:        spectrogramStatusExists,
 				QueuePosition: 0,
@@ -674,7 +674,7 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 
 	// Not in queue and doesn't exist on disk
 	return ctx.JSON(http.StatusOK, SpectrogramQueueStatus{
-		Status:        "not_started",
+		Status:        spectrogramStatusNotStarted,
 		QueuePosition: 0,
 		Message:       "Spectrogram generation not started",
 	})
@@ -867,7 +867,7 @@ func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath
 }
 
 // normalizeAndValidatePath handles path normalization and validation
-func (c *Controller) normalizeAndValidatePath(audioPath string, _ time.Time) (string, error) {
+func (c *Controller) normalizeAndValidatePath(audioPath string) (string, error) {
 	return c.normalizeAndValidatePathWithLogger(audioPath, spectrogramLogger)
 }
 
@@ -991,9 +991,26 @@ func (c *Controller) initializeQueueStatus(spectrogramKey string) {
 	spectrogramQueueMutex.Lock()
 	defer spectrogramQueueMutex.Unlock()
 
+	// Calculate queue position - 0 if slot immediately available, otherwise position in queue
+	var queuePosition int
+	if len(spectrogramSemaphore) >= maxConcurrentSpectrograms {
+		// All slots are taken, this will be queued
+		// Count how many are already waiting in queue
+		waitingCount := 0
+		for _, status := range spectrogramQueue {
+			if status.Status == spectrogramStatusQueued {
+				waitingCount++
+			}
+		}
+		queuePosition = waitingCount + 1
+	} else {
+		// Slot is available, will run immediately
+		queuePosition = 0
+	}
+
 	spectrogramQueue[spectrogramKey] = &SpectrogramQueueStatus{
 		Status:        spectrogramStatusQueued,
-		QueuePosition: len(spectrogramSemaphore) + 1,
+		QueuePosition: queuePosition,
 		StartedAt:     time.Now(),
 		Message:       "Waiting for generation slot",
 	}
@@ -1017,7 +1034,7 @@ func (c *Controller) acquireSemaphoreSlot(ctx context.Context, spectrogramKey st
 	case spectrogramSemaphore <- struct{}{}:
 		spectrogramLogger.Debug("Semaphore slot acquired successfully",
 			"spectrogram_key", spectrogramKey,
-			"remaining_slots", maxConcurrentSpectrograms-len(spectrogramSemaphore)-1)
+			"remaining_slots", maxConcurrentSpectrograms-len(spectrogramSemaphore))
 
 		c.updateQueueStatus(spectrogramKey, spectrogramStatusGenerating, 0, "Generating spectrogram")
 		return nil
@@ -1168,7 +1185,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		"request_time", start.Format("2006-01-02 15:04:05"))
 
 	// Step 1: Normalize and validate path
-	relAudioPath, err := c.normalizeAndValidatePath(audioPath, start)
+	relAudioPath, err := c.normalizeAndValidatePath(audioPath)
 	if err != nil {
 		return "", err
 	}

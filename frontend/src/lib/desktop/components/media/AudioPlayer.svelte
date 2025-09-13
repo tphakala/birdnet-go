@@ -127,6 +127,7 @@
   } | null>(null);
   let statusPollTimer: ReturnType<typeof setTimeout> | undefined;
   let statusPollStartTime: number | undefined;
+  let statusPollAbortController: AbortController | undefined;
 
   // Audio processing state
   let audioContext: AudioContext | null = null;
@@ -397,9 +398,13 @@
       return;
     }
 
+    // Create new AbortController for this poll request
+    statusPollAbortController = new AbortController();
+
     try {
       const response = await fetch(
-        `/api/v2/spectrogram/${detectionId}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
+        `/api/v2/spectrogram/${detectionId}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`,
+        { signal: statusPollAbortController.signal }
       );
 
       if (response.ok) {
@@ -407,7 +412,11 @@
         spectrogramStatus = status;
 
         // Check status and decide what to do
-        if (status.status === 'exists' || status.status === 'completed') {
+        if (
+          status.status === 'exists' ||
+          status.status === 'completed' ||
+          status.status === 'generated'
+        ) {
           // Spectrogram is ready, stop polling and try to load it
           clearStatusPollTimer();
           spectrogramStatus = null;
@@ -429,6 +438,11 @@
         }
       }
     } catch (err) {
+      // Ignore abort errors
+      if (err instanceof Error && err.name === 'AbortError') {
+        logger.debug('Spectrogram status poll aborted', { detectionId });
+        return;
+      }
       logger.error('Failed to poll spectrogram status', { detectionId, error: err });
     }
   };
@@ -437,6 +451,10 @@
     if (statusPollTimer) {
       clearTimeout(statusPollTimer);
       statusPollTimer = undefined;
+    }
+    if (statusPollAbortController) {
+      statusPollAbortController.abort();
+      statusPollAbortController = undefined;
     }
     statusPollStartTime = undefined;
   };
@@ -532,6 +550,8 @@
       // Reset retry count and clear any pending retry timer for new spectrogram
       spectrogramRetryCount = 0;
       clearSpectrogramRetryTimer();
+      // Abort any in-flight status polling when URL changes
+      clearStatusPollTimer();
     }
   });
 
