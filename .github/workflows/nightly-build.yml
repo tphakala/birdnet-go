@@ -20,13 +20,13 @@ jobs:
         include:
           - goos: linux
             goarch: amd64
-            os: ubuntu-22.04
+            os: ubuntu-24.04
           - goos: linux
             goarch: arm64
-            os: ubuntu-22.04
+            os: ubuntu-24.04
           - goos: windows
             goarch: amd64
-            os: ubuntu-22.04
+            os: ubuntu-24.04
           - goos: darwin
             goarch: arm64
             os: macos-latest
@@ -38,11 +38,11 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           check-latest: true
 
       - name: Install Linux system dependencies
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.os == 'ubuntu-24.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
