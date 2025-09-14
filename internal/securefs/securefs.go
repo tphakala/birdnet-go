@@ -599,12 +599,16 @@ func (sfs *SecureFS) serveInternal(c echo.Context, opener func() (*os.File, stri
 		return echo.NewHTTPError(http.StatusForbidden, "Not a regular file")
 	}
 
-	// Set content type based on file extension using the validated relative path
-	contentType := mime.TypeByExtension(filepath.Ext(effectivePath))
-	if contentType == "" {
-		contentType = "application/octet-stream" // Default content type
+	// Only set content type if not already set by the caller
+	// This allows handlers to set specific Content-Type for audio files
+	if existingContentType := c.Response().Header().Get(echo.HeaderContentType); existingContentType == "" {
+		// Set content type based on file extension using the validated relative path
+		contentType := mime.TypeByExtension(filepath.Ext(effectivePath))
+		if contentType == "" {
+			contentType = "application/octet-stream" // Default content type
+		}
+		c.Response().Header().Set(echo.HeaderContentType, contentType)
 	}
-	c.Response().Header().Set(echo.HeaderContentType, contentType)
 
 	// Use http.ServeContent which properly handles Range requests, caching, etc.
 	// It uses the validated relative path's base name for the download filename suggestion.
@@ -696,11 +700,11 @@ func (sfs *SecureFS) GetCacheStats() CacheStats {
 // StartCacheCleanup starts a background goroutine that periodically cleans expired cache entries
 func (sfs *SecureFS) StartCacheCleanup(interval time.Duration) chan<- struct{} {
 	stopCh := make(chan struct{})
-	
+
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		
+
 		for {
 			select {
 			case <-ticker.C:
@@ -710,7 +714,7 @@ func (sfs *SecureFS) StartCacheCleanup(interval time.Duration) chan<- struct{} {
 			}
 		}
 	}()
-	
+
 	return stopCh
 }
 
@@ -770,7 +774,7 @@ func (sfs *SecureFS) ParentPath(path string) (string, error) {
 
 	// Get the parent directory of the relative path
 	parentRelPath := filepath.Dir(relPath)
-	
+
 	// If parent is "." or same as original, we're at the root
 	if parentRelPath == "." || parentRelPath == relPath {
 		return "", nil

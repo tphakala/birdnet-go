@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -350,18 +351,42 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available for this note", http.StatusNotFound)
 	}
 
-	// Extract the original filename from the clip path for download
-	originalFilename := filepath.Base(clipPath)
-	if originalFilename != "" && originalFilename != "." && originalFilename != "/" {
-		// Set Content-Disposition header to preserve original filename when downloading
-		ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", originalFilename))
-	}
-
 	// Normalize and validate the path using the common helper
 	normalizedClipPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.apiLogger)
 	if err != nil {
 		return c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
 	}
+
+	// Extract the original filename and extension
+	originalFilename := filepath.Base(clipPath)
+	ext := strings.ToLower(filepath.Ext(originalFilename))
+
+	// Set proper Content-Type for audio files BEFORE ServeRelativeFile
+	// This ensures Safari recognizes the file as audio
+	switch ext {
+	case ".flac":
+		ctx.Response().Header().Set("Content-Type", "audio/flac")
+	case ".wav":
+		ctx.Response().Header().Set("Content-Type", "audio/wav")
+	case ".mp3":
+		ctx.Response().Header().Set("Content-Type", "audio/mpeg")
+	case ".m4a":
+		ctx.Response().Header().Set("Content-Type", "audio/mp4")
+	case ".ogg":
+		ctx.Response().Header().Set("Content-Type", "audio/ogg")
+	default:
+		// Let ServeRelativeFile handle the content type
+	}
+
+	// Set Content-Disposition as inline to enable playback in browser
+	// Use filename* for proper UTF-8 filename encoding
+	if originalFilename != "" && originalFilename != "." && originalFilename != "/" {
+		ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename*=UTF-8''%s", url.QueryEscape(originalFilename)))
+	}
+
+	// Ensure Accept-Ranges header is set for iOS Safari
+	// This might be set by middleware but we ensure it's present
+	ctx.Response().Header().Set("Accept-Ranges", "bytes")
 
 	// Serve the file using SecureFS. It handles path validation (relative/absolute within baseDir).
 	// ServeFile internally calls relativePath which ensures the path is within the SecureFS baseDir.
