@@ -1110,7 +1110,7 @@ func (a *SSEAction) Execute(data interface{}) error {
 	// FIXME: delay SSE broadcasts by sleeping here for a moment, this should be
 	// fixed by proper synchronization of audio file writer, database ID assignment
 	// and SSE broadcast.
-	const sleepTime = 3 * time.Second
+	const sleepTime = 5 * time.Second
 	time.Sleep(sleepTime)
 
 	// Wait for audio file to be available if this detection has an audio clip assigned
