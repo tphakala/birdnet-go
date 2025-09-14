@@ -20,6 +20,10 @@ type PoolConfig struct {
 	// MaxParseErrors is the maximum number of parse errors to track
 	// Default: 100
 	MaxParseErrors int
+
+	// MaxPoolSize is the maximum number of slices to keep in the pool
+	// Default: 100 (prevents unbounded pool growth)
+	MaxPoolSize int
 }
 
 // DefaultPoolConfig returns the default pool configuration
@@ -28,6 +32,7 @@ func DefaultPoolConfig() *PoolConfig {
 		InitialCapacity: 1000,
 		MaxPoolCapacity: 10000,
 		MaxParseErrors:  100,
+		MaxPoolSize:     100,
 	}
 }
 
@@ -47,6 +52,12 @@ type PoolMetrics struct {
 
 	// TotalAllocations tracks total memory allocated (in FileInfo entries)
 	TotalAllocations uint64
+
+	// CurrentPoolSize tracks the current number of items in the pool
+	CurrentPoolSize uint64
+
+	// PoolSizeLimit tracks how many times pool size limit was hit
+	PoolSizeLimit uint64
 }
 
 // poolMetricsAtomic holds atomic counters for thread-safe access
@@ -56,6 +67,8 @@ type poolMetricsAtomic struct {
 	SkipCount           atomic.Uint64
 	MaxCapacityObserved atomic.Uint64
 	TotalAllocations    atomic.Uint64
+	CurrentPoolSize     atomic.Uint64
+	PoolSizeLimit       atomic.Uint64
 }
 
 var (
@@ -93,6 +106,8 @@ func GetPoolMetrics() PoolMetrics {
 		SkipCount:           poolMetrics.SkipCount.Load(),
 		MaxCapacityObserved: poolMetrics.MaxCapacityObserved.Load(),
 		TotalAllocations:    poolMetrics.TotalAllocations.Load(),
+		CurrentPoolSize:     poolMetrics.CurrentPoolSize.Load(),
+		PoolSizeLimit:       poolMetrics.PoolSizeLimit.Load(),
 	}
 }
 
@@ -103,13 +118,26 @@ func ResetPoolMetrics() {
 	poolMetrics.SkipCount.Store(0)
 	poolMetrics.MaxCapacityObserved.Store(0)
 	poolMetrics.TotalAllocations.Store(0)
+	poolMetrics.CurrentPoolSize.Store(0)
+	poolMetrics.PoolSizeLimit.Store(0)
 }
 
-// getFileInfoSlice retrieves a FileInfo slice from the pool
-func getFileInfoSlice() *[]FileInfo {
+// PooledSlice wraps a pooled slice with ownership management
+type PooledSlice struct {
+	slice    *[]FileInfo
+	returned bool // Prevents double-return to pool
+}
+
+// getPooledSlice retrieves a FileInfo slice from the pool wrapped with ownership management
+func getPooledSlice() *PooledSlice {
 	poolMetrics.GetCount.Add(1)
 	slice := fileInfoPool.Get().(*[]FileInfo)
 	*slice = (*slice)[:0] // Reset length but keep capacity
+
+	// Decrement pool size counter (item was removed from pool)
+	if current := poolMetrics.CurrentPoolSize.Load(); current > 0 {
+		poolMetrics.CurrentPoolSize.Add(^uint64(0)) // Decrement by 1
+	}
 
 	// Track maximum capacity observed
 	capacity := uint64(cap(*slice))
@@ -120,17 +148,59 @@ func getFileInfoSlice() *[]FileInfo {
 		}
 	}
 
-	return slice
+	return &PooledSlice{
+		slice:    slice,
+		returned: false,
+	}
 }
 
-// putFileInfoSlice returns a FileInfo slice to the pool
-func putFileInfoSlice(slice *[]FileInfo) {
-	if slice == nil || cap(*slice) > poolConfig.MaxPoolCapacity {
+// Release returns the slice to the pool (if not already returned)
+func (ps *PooledSlice) Release() {
+	if ps.returned || ps.slice == nil {
+		return
+	}
+	ps.returned = true
+
+	if cap(*ps.slice) > poolConfig.MaxPoolCapacity {
 		// Don't pool huge slices to avoid memory bloat
 		poolMetrics.SkipCount.Add(1)
 		return
 	}
+
+	// Check if pool size limit is reached
+	currentSize := poolMetrics.CurrentPoolSize.Load()
+	if poolConfig.MaxPoolSize > 0 && int(currentSize) >= poolConfig.MaxPoolSize {
+		// Pool is at capacity, don't add more items
+		poolMetrics.PoolSizeLimit.Add(1)
+		poolMetrics.SkipCount.Add(1)
+		return
+	}
+
 	poolMetrics.PutCount.Add(1)
-	*slice = (*slice)[:0] // Clear the slice
-	fileInfoPool.Put(slice)
+	poolMetrics.CurrentPoolSize.Add(1) // Increment pool size counter
+	*ps.slice = (*ps.slice)[:0]        // Clear the slice
+	fileInfoPool.Put(ps.slice)
+}
+
+// TakeOwnership transfers ownership of the data and releases the pooled slice
+// Returns a new slice with the data, caller owns the returned slice
+func (ps *PooledSlice) TakeOwnership() []FileInfo {
+	if ps.slice == nil {
+		return nil
+	}
+
+	// Create a new slice with exact capacity
+	result := make([]FileInfo, len(*ps.slice))
+	copy(result, *ps.slice)
+
+	// Release the pooled slice back to the pool
+	ps.Release()
+
+	return result
+}
+
+// Data returns a reference to the underlying slice for appending
+// Caller must not retain this reference after Release or TakeOwnership
+func (ps *PooledSlice) Data() *[]FileInfo {
+	return ps.slice
 }

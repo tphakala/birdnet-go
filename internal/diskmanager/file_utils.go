@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -104,23 +105,20 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 	}
 
 	// Use pooled slice to reduce allocations
-	filesPtr := getFileInfoSlice()
-	shouldReturnToPool := true
+	pooledSlice := getPooledSlice()
 	defer func() {
 		// Handle panics and ensure pool cleanup
 		if r := recover(); r != nil {
 			// Always return to pool on panic
-			putFileInfoSlice(filesPtr)
+			pooledSlice.Release()
 			panic(r) // Re-panic after cleanup
-		}
-		// Normal cleanup path
-		if shouldReturnToPool {
-			putFileInfoSlice(filesPtr)
 		}
 	}()
 
 	// Work directly with the pooled slice
+	filesPtr := pooledSlice.Data()
 	files := (*filesPtr)[:0:cap(*filesPtr)]
+	// We'll update the pooled slice reference after appending
 
 	var parseErrorCount int
 	var firstParseError error
@@ -217,19 +215,17 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 		}
 	}
 
+	// Update the pooled slice with the final data
+	*pooledSlice.Data() = files
+
 	// Fast path: if no files found, return early
 	if len(files) == 0 {
+		pooledSlice.Release() // Release the empty pooled slice
 		return nil, nil
 	}
 
-	// Create result slice with exact capacity to avoid over-allocation
-	result := make([]FileInfo, len(files))
-	copy(result, files)
-
-	// Transfer ownership - don't return to pool since we made a copy
-	shouldReturnToPool = false // Prevent pool return after ownership transfer
-
-	return result, nil
+	// Transfer ownership of the data and automatically release the pooled slice
+	return pooledSlice.TakeOwnership(), nil
 }
 
 // parseFileInfo parses the file information from the file path and os.FileInfo
@@ -319,13 +315,8 @@ func contains(slice []string, item string) bool {
 		return false
 	}
 
-	// Check common audio extensions first for better cache locality
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
+	// Use standard library slices.Contains for optimal performance
+	return slices.Contains(slice, item)
 }
 
 // WriteSortedFilesToFile writes the sorted list of files to a text file for investigation
