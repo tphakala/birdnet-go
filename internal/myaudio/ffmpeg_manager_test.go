@@ -348,99 +348,96 @@ func TestFFmpegManager_MonitoringIntegration(t *testing.T) {
 }
 
 // TestFFmpegManager_ConcurrentStreamOperations validates concurrent stream management.
-// MODERNIZATION: Uses Go 1.25's sync.WaitGroup.Go() and testing/synctest for deterministic concurrency testing.
-// Previously used manual WaitGroup.Add/Done patterns with real-time timeouts that could be flaky.
-// With Go 1.25, goroutine management is cleaner and timeout behavior is deterministic.
+// MODERNIZATION: Uses Go 1.25's sync.WaitGroup.Go() for cleaner goroutine management.
+// NOTE: This test doesn't use synctest because:
+// 1. It tests real concurrent behavior with actual mutex contention
+// 2. The lumberjack logger creates persistent background goroutines incompatible with synctest
+// 3. The test timeout is already reasonable (3 seconds) and doesn't need time virtualization
 func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 	t.Attr("component", "ffmpeg-manager")
 	t.Attr("test-type", "concurrency")
 
-	// Go 1.25 synctest: Creates controlled time environment for deterministic timeout testing
-	synctest.Test(t, func(t *testing.T) {
-		t.Helper()
+	manager := NewFFmpegManager()
+	defer manager.Shutdown()
 
-		manager := NewFFmpegManager()
-		defer manager.Shutdown()
+	audioChan := make(chan UnifiedAudioData, 1000)
+	defer close(audioChan)
+	const numStreams = 5     // Reduced from 20 to avoid FFmpeg connection issues
+	const numOperations = 20 // Reduced from 50
 
-		audioChan := make(chan UnifiedAudioData, 1000)
-		defer close(audioChan)
-		const numStreams = 5     // Reduced from 20 to avoid FFmpeg connection issues
-		const numOperations = 20 // Reduced from 50
+	// Generate unique URLs for testing - use localhost to avoid DNS issues
+	urls := make([]string, numStreams)
+	for i := 0; i < numStreams; i++ {
+		urls[i] = fmt.Sprintf("rtsp://localhost:554/stream%d", i)
+	}
 
-		// Generate unique URLs for testing - use localhost to avoid DNS issues
-		urls := make([]string, numStreams)
-		for i := 0; i < numStreams; i++ {
-			urls[i] = fmt.Sprintf("rtsp://localhost:554/stream%d", i)
-		}
+	// Go 1.25: sync.WaitGroup with cleaner goroutine management
+	var wg sync.WaitGroup
 
-		// Go 1.25: sync.WaitGroup with cleaner goroutine management
-		var wg sync.WaitGroup
+	// Concurrent start operations - Go 1.25 WaitGroup.Go() pattern
+	for i := 0; i < numOperations/2; i++ {
+		idx := i // Capture loop variable for closure
+		wg.Go(func() {
+			// Go 1.25: Automatic Add/Done handling with WaitGroup.Go()
+			// Eliminates manual wg.Add(1) and defer wg.Done() boilerplate
+			url := urls[idx%numStreams]
+			err := manager.StartStream(url, "tcp", audioChan)
+			// Error is expected if stream already exists
+			_ = err
+		})
+	}
 
-		// Concurrent start operations - Go 1.25 WaitGroup.Go() pattern
-		for i := 0; i < numOperations/2; i++ {
-			idx := i // Capture loop variable for closure
-			wg.Go(func() {
-				// Go 1.25: Automatic Add/Done handling with WaitGroup.Go()
-				// Eliminates manual wg.Add(1) and defer wg.Done() boilerplate
-				url := urls[idx%numStreams]
-				err := manager.StartStream(url, "tcp", audioChan)
-				// Error is expected if stream already exists
-				_ = err
-			})
-		}
+	// Concurrent restart operations with modern goroutine management
+	for i := 0; i < numOperations/4; i++ {
+		idx := i
+		wg.Go(func() {
+			// Go 1.25: WaitGroup.Go() provides cleaner concurrency patterns
+			url := urls[idx%numStreams]
+			err := manager.RestartStream(url)
+			// Error is expected if stream doesn't exist
+			_ = err
+		})
+	}
 
-		// Concurrent restart operations with modern goroutine management
-		for i := 0; i < numOperations/4; i++ {
-			idx := i
-			wg.Go(func() {
-				// Go 1.25: WaitGroup.Go() provides cleaner concurrency patterns
-				url := urls[idx%numStreams]
-				err := manager.RestartStream(url)
-				// Error is expected if stream doesn't exist
-				_ = err
-			})
-		}
+	// Concurrent stop operations with automatic goroutine tracking
+	for i := 0; i < numOperations/4; i++ {
+		idx := i
+		wg.Go(func() {
+			// Go 1.25: No manual defer wg.Done() needed with WaitGroup.Go()
+			url := urls[idx%numStreams]
+			err := manager.StopStream(url)
+			// Error is expected if stream doesn't exist
+			_ = err
+		})
+	}
 
-		// Concurrent stop operations with automatic goroutine tracking
-		for i := 0; i < numOperations/4; i++ {
-			idx := i
-			wg.Go(func() {
-				// Go 1.25: No manual defer wg.Done() needed with WaitGroup.Go()
-				url := urls[idx%numStreams]
-				err := manager.StopStream(url)
-				// Error is expected if stream doesn't exist
-				_ = err
-			})
-		}
+	// Wait for all operations with timeout
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
 
-		// Wait for all operations with deterministic timeout
-		done := make(chan struct{})
-		go func() {
-			wg.Wait()
-			close(done)
-		}()
+	select {
+	case <-done:
+		// All operations completed
+	// Go 1.25: Real timeout since we're not using synctest
+	// The 3-second timeout is reasonable for concurrent operations
+	case <-time.After(3 * time.Second):
+		t.Fatal("Concurrent operations timed out")
+	}
 
-		select {
-		case <-done:
-			// All operations completed
-		// Go 1.25: time.After() timeout uses fake time in synctest bubble
-		// Timeout behavior is now deterministic instead of real-world 3-second delay
-		case <-time.After(3 * time.Second):
-			t.Fatal("Concurrent operations timed out")
-		}
+	// Verify manager is still in a consistent state
+	activeStreams := manager.GetActiveStreams()
+	health := manager.HealthCheck()
 
-		// Verify manager is still in a consistent state - all verification within synctest bubble
-		activeStreams := manager.GetActiveStreams()
-		health := manager.HealthCheck()
-
-		// Health map should match active streams
-		assert.Len(t, health, len(activeStreams))
-		for _, url := range activeStreams {
-			_, exists := health[url]
-			assert.True(t, exists, "Health info should exist for active stream %s", url)
-		}
-	})
+	// Health map should match active streams
+	assert.Len(t, health, len(activeStreams))
+	for _, url := range activeStreams {
+		_, exists := health[url]
+		assert.True(t, exists, "Health info should exist for active stream %s", url)
+	}
 }
 
 // TestFFmpegManager_StressTestWithHealthChecks validates concurrent operations under stress.
