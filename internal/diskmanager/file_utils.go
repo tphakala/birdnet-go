@@ -107,6 +107,13 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 	filesPtr := getFileInfoSlice()
 	shouldReturnToPool := true
 	defer func() {
+		// Handle panics and ensure pool cleanup
+		if r := recover(); r != nil {
+			// Always return to pool on panic
+			putFileInfoSlice(filesPtr)
+			panic(r) // Re-panic after cleanup
+		}
+		// Normal cleanup path
 		if shouldReturnToPool {
 			putFileInfoSlice(filesPtr)
 		}
@@ -117,7 +124,7 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 
 	var parseErrorCount int
 	var firstParseError error
-	const maxParseErrors = 100 // Limit error tracking to prevent memory bloat
+	maxParseErrors := poolConfig.MaxParseErrors // Use configurable limit
 
 	// Get list of protected clips from database
 	lockedClips, err := getLockedClips(db)
@@ -220,7 +227,7 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 	copy(result, files)
 
 	// Transfer ownership - don't return to pool since we made a copy
-	shouldReturnToPool = true // Pool will be returned by defer
+	shouldReturnToPool = false // Prevent pool return after ownership transfer
 
 	return result, nil
 }
@@ -232,8 +239,12 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 	// Check if the file extension is allowed
 	ext := filepath.Ext(name)
 	if !contains(allowedFileTypes, ext) {
-		// Lightweight error with helpful context
-		return FileInfo{}, fmt.Errorf("file type not eligible: %s (allowed: %v)", ext, allowedFileTypes)
+		// Lightweight error with essential context
+		descriptiveErr := errors.New(fmt.Errorf("diskmanager: file type %s not eligible for cleanup", ext)).
+			Component("diskmanager").
+			Context("allowed_types", allowedFileTypes).
+			Build()
+		return FileInfo{}, descriptiveErr
 	}
 
 	// Remove the extension for parsing
@@ -244,8 +255,12 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 
 	parts := strings.Split(nameWithoutExt, "_")
 	if len(parts) < 3 {
-		// Lightweight error with format hint
-		return FileInfo{}, fmt.Errorf("invalid filename format: %s (expected: species_confidence_timestamp)", name)
+		// Lightweight error with format guidance
+		descriptiveErr := errors.New(fmt.Errorf("diskmanager: invalid filename format: %s", name)).
+			Component("diskmanager").
+			Context("expected_format", "species_confidence_timestamp").
+			Build()
+		return FileInfo{}, descriptiveErr
 	}
 
 	// The species name might contain underscores, so we need to handle the last two parts separately
@@ -255,8 +270,12 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 
 	confidence, err := strconv.Atoi(strings.TrimSuffix(confidenceStr, "p"))
 	if err != nil {
-		// Lightweight error with specific issue
-		return FileInfo{}, fmt.Errorf("invalid confidence value '%s' in filename: %s", confidenceStr, name)
+		// Lightweight error for confidence parsing
+		descriptiveErr := errors.New(fmt.Errorf("diskmanager: invalid confidence value in %s", name)).
+			Component("diskmanager").
+			Context("confidence_string", confidenceStr).
+			Build()
+		return FileInfo{}, descriptiveErr
 	}
 
 	// IMPORTANT: Despite the Z suffix in the filename (which normally indicates UTC),
@@ -272,8 +291,12 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 		// Fallback to original method if this fails, for backward compatibility
 		timestamp, err = time.Parse("20060102T150405Z", timestampStr)
 		if err != nil {
-			// Lightweight error with timestamp issue
-			return FileInfo{}, fmt.Errorf("invalid timestamp '%s' in filename: %s", timestampStr, name)
+			// Lightweight error for timestamp parsing
+			descriptiveErr := errors.New(fmt.Errorf("diskmanager: invalid timestamp in %s", name)).
+				Component("diskmanager").
+				Context("timestamp_string", timestampStr).
+				Build()
+			return FileInfo{}, descriptiveErr
 		}
 		// Convert UTC time to local time explicitly if needed
 		timestamp = timestamp.In(time.Local)
