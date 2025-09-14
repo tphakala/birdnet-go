@@ -1,4 +1,4 @@
-package processor
+package species
 
 import (
 	"errors"
@@ -18,16 +18,16 @@ import (
 // This is likely the source of the bug where all species are marked as new
 func TestWinterSeasonAdjustmentBug(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
-	
+
 	// Simulate species that were detected throughout the previous year
 	historicalData := []datastore.NewSpeciesData{
 		{ScientificName: "Parus major", FirstSeenDate: "2023-01-15"},
 		{ScientificName: "Turdus merula", FirstSeenDate: "2023-06-15"},
 		{ScientificName: "Corvus corvax", FirstSeenDate: "2023-12-25"},
 	}
-	
+
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return(historicalData, nil)
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
@@ -55,7 +55,7 @@ func TestWinterSeasonAdjustmentBug(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -63,15 +63,15 @@ func TestWinterSeasonAdjustmentBug(t *testing.T) {
 	t.Run("winter season in January should use previous year", func(t *testing.T) {
 		// January 15, 2024 - should be in winter season that started Dec 21, 2023
 		januaryTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
-		
+
 		tracker.mu.Lock()
 		season := tracker.getCurrentSeason(januaryTime)
 		shouldAdjust := tracker.shouldAdjustWinter(januaryTime, time.December)
 		tracker.mu.Unlock()
-		
+
 		assert.Equal(t, "winter", season, "January should be in winter season")
 		assert.True(t, shouldAdjust, "Should adjust winter dates in January")
-		
+
 		// Check species status - they should NOT all be new
 		status := tracker.GetSpeciesStatus("Parus major", januaryTime)
 		assert.False(t, status.IsNew, "Species from last year should not be new - this is the bug!")
@@ -139,16 +139,16 @@ func TestWinterSeasonAdjustmentBug(t *testing.T) {
 // TestDatabaseSyncBug tests if database sync is causing the false new species bug
 func TestDatabaseSyncBug(t *testing.T) {
 	t.Parallel()
-	
+
 	// Create a tracker with long-term historical data
 	ds := &MockSpeciesDatastore{}
-	
+
 	// Species detected over a year ago
 	oldData := []datastore.NewSpeciesData{
 		{ScientificName: "Parus major", FirstSeenDate: "2022-06-15"},
 		{ScientificName: "Turdus merula", FirstSeenDate: "2022-07-20"},
 	}
-	
+
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return(oldData, nil).Once()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
@@ -166,7 +166,7 @@ func TestDatabaseSyncBug(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -179,7 +179,7 @@ func TestDatabaseSyncBug(t *testing.T) {
 	// Mock returns empty data on second call (simulating data loss)
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Once()
-	
+
 	// Force a sync after the interval
 	time.Sleep(time.Second * 2)
 	err = tracker.SyncIfNeeded()
@@ -193,7 +193,7 @@ func TestDatabaseSyncBug(t *testing.T) {
 // TestYearResetLogic tests the year reset behavior comprehensively
 func TestYearResetLogic(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -212,7 +212,7 @@ func TestYearResetLogic(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2023)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
@@ -227,18 +227,18 @@ func TestYearResetLogic(t *testing.T) {
 
 	// Check status just after midnight on Jan 1, 2024
 	jan2024 := time.Date(2024, 1, 1, 0, 0, 1, 0, time.UTC)
-	
+
 	// This should trigger year reset
 	status = tracker.GetSpeciesStatus("Parus major", jan2024)
-	
+
 	// After year reset, the species hasn't been seen in 2024 yet
 	assert.True(t, status.IsNewThisYear, "Should be new this year after reset (not seen in 2024)")
 	assert.Nil(t, status.FirstThisYear, "FirstThisYear should be nil (not detected in 2024)")
-	
+
 	// Now detect it in 2024
 	tracker.UpdateSpecies("Parus major", jan2024)
 	status = tracker.GetSpeciesStatus("Parus major", jan2024)
-	
+
 	assert.True(t, status.IsNewThisYear, "Should still be new (just detected)")
 	assert.NotNil(t, status.FirstThisYear, "FirstThisYear should be set after detection")
 }
@@ -246,7 +246,7 @@ func TestYearResetLogic(t *testing.T) {
 // TestCheckAndUpdateSpecies tests the atomic check and update operation
 func TestCheckAndUpdateSpecies(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -257,7 +257,7 @@ func TestCheckAndUpdateSpecies(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -283,7 +283,7 @@ func TestCheckAndUpdateSpecies(t *testing.T) {
 // TestNotificationSuppressionSystem tests the notification suppression system
 func TestNotificationSuppressionSystem(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -295,7 +295,7 @@ func TestNotificationSuppressionSystem(t *testing.T) {
 		NotificationSuppressionHours: 24, // 24 hour suppression
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -321,7 +321,7 @@ func TestNotificationSuppressionSystem(t *testing.T) {
 // TestNotificationSuppressionWhenDisabled tests when suppression is disabled
 func TestNotificationSuppressionWhenDisabled(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -333,7 +333,7 @@ func TestNotificationSuppressionWhenDisabled(t *testing.T) {
 		NotificationSuppressionHours: 0, // Disabled
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -351,7 +351,7 @@ func TestNotificationSuppressionWhenDisabled(t *testing.T) {
 // TestNotificationRecordCleanup tests cleanup of old notification records
 func TestNotificationRecordCleanup(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -363,14 +363,14 @@ func TestNotificationRecordCleanup(t *testing.T) {
 		NotificationSuppressionHours: 24,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
 	currentTime := time.Now()
 
 	// Add old and recent notification records
-	oldTime := currentTime.Add(-72 * time.Hour) // 3 days ago (outside 24h window)
+	oldTime := currentTime.Add(-72 * time.Hour)    // 3 days ago (outside 24h window)
 	recentTime := currentTime.Add(-30 * time.Hour) // 30 hours ago (outside 24h window)
 
 	tracker.RecordNotificationSent("Old Species", oldTime)
@@ -392,7 +392,7 @@ func TestNotificationRecordCleanup(t *testing.T) {
 // TestCacheCleanup tests the cache cleanup mechanism
 func TestCacheCleanup(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -403,7 +403,7 @@ func TestCacheCleanup(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -431,7 +431,7 @@ func TestCacheCleanup(t *testing.T) {
 // TestIsSeasonMapInitialized tests the helper method
 func TestIsSeasonMapInitialized(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -446,7 +446,7 @@ func TestIsSeasonMapInitialized(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 
 	// Before any updates, maps may not be initialized
 	assert.False(t, tracker.IsSeasonMapInitialized("spring"), "Spring map not initialized")
@@ -463,7 +463,7 @@ func TestIsSeasonMapInitialized(t *testing.T) {
 // TestClearCacheForTesting tests the test helper method
 func TestClearCacheForTesting(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -474,7 +474,7 @@ func TestClearCacheForTesting(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -498,9 +498,9 @@ func TestClearCacheForTesting(t *testing.T) {
 // TestInitFromDatabaseError tests error handling in initialization
 func TestInitFromDatabaseError(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
-	
+
 	// Mock returns error
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return(nil, errors.New("database error"))
@@ -511,7 +511,7 @@ func TestInitFromDatabaseError(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.Error(t, err, "Should return error from database")
 	assert.Contains(t, err.Error(), "database error")
@@ -520,7 +520,7 @@ func TestInitFromDatabaseError(t *testing.T) {
 // TestInitFromDatabaseNilDatastore tests nil datastore handling
 func TestInitFromDatabaseNilDatastore(t *testing.T) {
 	t.Parallel()
-	
+
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
 		NewSpeciesWindowDays: 14,
@@ -528,7 +528,7 @@ func TestInitFromDatabaseNilDatastore(t *testing.T) {
 	}
 
 	// Create tracker with nil datastore
-	tracker := NewSpeciesTrackerFromSettings(nil, settings)
+	tracker := NewTrackerFromSettings(nil, settings)
 	err := tracker.InitFromDatabase()
 	require.Error(t, err, "Should error with nil datastore")
 	assert.Contains(t, err.Error(), "datastore is nil")
@@ -537,7 +537,7 @@ func TestInitFromDatabaseNilDatastore(t *testing.T) {
 // TestGetYearDateRange tests year date range calculation
 func TestGetYearDateRange(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -551,7 +551,7 @@ func TestGetYearDateRange(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 
 	testCases := []struct {
 		now         time.Time
@@ -587,7 +587,7 @@ func TestGetYearDateRange(t *testing.T) {
 // TestGetSeasonDateRange tests season date range calculation
 func TestGetSeasonDateRange(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -605,7 +605,7 @@ func TestGetSeasonDateRange(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 
 	testCases := []struct {
 		season      string
@@ -658,7 +658,7 @@ func TestGetSeasonDateRange(t *testing.T) {
 // TestIsWithinCurrentYear tests year boundary checks
 func TestIsWithinCurrentYear(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -672,12 +672,12 @@ func TestIsWithinCurrentYear(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2024)
 
 	testCases := []struct {
-		detection time.Time
-		expected  bool
+		detection   time.Time
+		expected    bool
 		description string
 	}{
 		{time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC), true, "Current year"},
@@ -698,7 +698,7 @@ func TestIsWithinCurrentYear(t *testing.T) {
 // TestLoadYearlyDataError tests error handling in yearly data loading
 func TestLoadYearlyDataError(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -717,7 +717,7 @@ func TestLoadYearlyDataError(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.Error(t, err, "Should return error from yearly data loading")
 	assert.Contains(t, err.Error(), "yearly data error")
@@ -726,11 +726,11 @@ func TestLoadYearlyDataError(t *testing.T) {
 // TestLoadSeasonalDataError tests error handling in seasonal data loading
 func TestLoadSeasonalDataError(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Once()
-	
+
 	// First call succeeds for yearly, second fails for seasonal
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Once() // yearly succeeds
@@ -753,7 +753,7 @@ func TestLoadSeasonalDataError(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.Error(t, err, "Should return error from seasonal data loading")
 	assert.Contains(t, err.Error(), "seasonal data error")
@@ -762,7 +762,7 @@ func TestLoadSeasonalDataError(t *testing.T) {
 // TestTrackerClose tests resource cleanup
 func TestTrackerClose(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -770,8 +770,8 @@ func TestTrackerClose(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	
+	tracker := NewTrackerFromSettings(ds, settings)
+
 	// Close should not error
 	err := tracker.Close()
 	assert.NoError(t, err, "Close should not error")
@@ -780,7 +780,7 @@ func TestTrackerClose(t *testing.T) {
 // TestConcurrentNotificationOperations tests thread safety of notification system
 func TestConcurrentNotificationOperations(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -792,7 +792,7 @@ func TestConcurrentNotificationOperations(t *testing.T) {
 		NotificationSuppressionHours: 24,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -826,7 +826,7 @@ func TestConcurrentNotificationOperations(t *testing.T) {
 // TestSeasonCachingLogic tests the season caching mechanism
 func TestSeasonCachingLogic(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -838,7 +838,7 @@ func TestSeasonCachingLogic(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 
 	// First call should compute season
 	time1 := time.Date(2024, 7, 15, 10, 0, 0, 0, time.UTC)
@@ -866,7 +866,7 @@ func TestSeasonCachingLogic(t *testing.T) {
 // TestIsSameSeasonPeriod tests the season period comparison
 func TestIsSameSeasonPeriod(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -874,7 +874,7 @@ func TestIsSameSeasonPeriod(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 
 	testCases := []struct {
 		time1       time.Time
@@ -921,7 +921,7 @@ func TestIsSameSeasonPeriod(t *testing.T) {
 // TestNotificationSuppressionWithNegativeValue tests negative suppression hours
 func TestNotificationSuppressionWithNegativeValue(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -933,12 +933,12 @@ func TestNotificationSuppressionWithNegativeValue(t *testing.T) {
 		NotificationSuppressionHours: -1, // Negative value should use default
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	
+	tracker := NewTrackerFromSettings(ds, settings)
+
 	// Check that default was applied
 	tracker.mu.Lock()
 	suppressionWindow := tracker.notificationSuppressionWindow
 	tracker.mu.Unlock()
-	
+
 	assert.Equal(t, 168*time.Hour, suppressionWindow, "Negative value should use default 168 hours")
 }

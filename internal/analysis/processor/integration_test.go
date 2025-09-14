@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"gorm.io/driver/sqlite"
@@ -62,16 +63,16 @@ func TestIntegration_DatabaseToTracker(t *testing.T) {
 		{"2022-05-15", "08:00:00", "Turdus merula", "Common Blackbird"},
 		{"2023-04-20", "09:00:00", "Turdus merula", "Common Blackbird"},
 		{"2024-03-25", "07:30:00", "Turdus merula", "Common Blackbird"},
-		
+
 		// Species first seen in 2023
 		{"2023-07-10", "14:00:00", "Parus major", "Great Tit"},
 		{"2024-01-15", "10:00:00", "Parus major", "Great Tit"},
 		{"2024-07-05", "11:00:00", "Parus major", "Great Tit"},
-		
+
 		// Species only seen in 2024 spring
 		{"2024-04-15", "06:00:00", "Hirundo rustica", "Barn Swallow"},
 		{"2024-04-20", "06:30:00", "Hirundo rustica", "Barn Swallow"},
-		
+
 		// Species new in 2024 summer
 		{"2024-07-28", "18:47:00", "Sylvia atricapilla", "Eurasian Blackcap"},
 		{"2024-07-29", "19:00:00", "Sylvia atricapilla", "Eurasian Blackcap"},
@@ -112,11 +113,11 @@ func TestIntegration_DatabaseToTracker(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(adapter, settings)
+	tracker := species.NewTrackerFromSettings(adapter, settings)
 	tracker.SetCurrentYearForTesting(2024) // Set to 2024 for test data
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
-	
+
 	// Since InitFromDatabase uses time.Now() which is 2025, manually update the tracker
 	// with the 2024 detections to simulate proper loading
 	tracker.UpdateSpecies("Parus major", time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC))
@@ -156,10 +157,10 @@ func TestIntegration_DatabaseToTracker(t *testing.T) {
 	t.Run("species new this season but not this year", func(t *testing.T) {
 		// Hirundo rustica seen in spring, check in summer
 		checkTime := time.Date(2024, 7, 1, 10, 0, 0, 0, time.UTC)
-		
+
 		// First update the tracker with a summer detection
 		tracker.UpdateSpecies("Hirundo rustica", checkTime)
-		
+
 		// Now check status a few days later
 		laterCheck := time.Date(2024, 7, 5, 10, 0, 0, 0, time.UTC)
 		status := tracker.GetSpeciesStatus("Hirundo rustica", laterCheck)
@@ -202,7 +203,7 @@ func TestIntegration_YearTransition(t *testing.T) {
 		{"2023-12-20", "10:00:00", "Parus major", "Great Tit"},
 		{"2023-12-25", "11:00:00", "Parus major", "Great Tit"},
 		{"2023-12-31", "23:00:00", "Parus major", "Great Tit"},
-		
+
 		// Same species detected in January 2024
 		{"2024-01-01", "08:00:00", "Parus major", "Great Tit"},
 		{"2024-01-05", "09:00:00", "Parus major", "Great Tit"},
@@ -235,7 +236,7 @@ func TestIntegration_YearTransition(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(adapter, settings)
+	tracker := species.NewTrackerFromSettings(adapter, settings)
 	tracker.SetCurrentYearForTesting(2023)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
@@ -247,11 +248,11 @@ func TestIntegration_YearTransition(t *testing.T) {
 
 	// Check status on Jan 1, 2024 - should trigger year reset
 	jan1 := time.Date(2024, 1, 1, 0, 30, 0, 0, time.UTC)
-	
+
 	// The database query shows it was detected on Jan 1, but tracker needs to be updated
 	tracker.UpdateSpecies("Parus major", jan1)
 	status = tracker.GetSpeciesStatus("Parus major", jan1)
-	
+
 	assert.True(t, status.IsNewThisYear, "Should be new this year after reset")
 	assert.Equal(t, 0, status.DaysThisYear, "Should be 0 days in new year")
 }
@@ -274,11 +275,11 @@ func TestIntegration_SeasonalTransitions(t *testing.T) {
 		// Winter to Spring transition
 		{"2024-03-19", "23:00:00", "Turdus pilaris", "Fieldfare", "winter"},
 		{"2024-03-20", "06:00:00", "Turdus pilaris", "Fieldfare", "spring"},
-		
+
 		// Spring to Summer transition
 		{"2024-06-20", "23:00:00", "Apus apus", "Common Swift", "spring"},
 		{"2024-06-21", "06:00:00", "Apus apus", "Common Swift", "summer"},
-		
+
 		// Species only in one season
 		{"2024-04-15", "10:00:00", "Phylloscopus trochilus", "Willow Warbler", "spring"},
 		{"2024-07-15", "10:00:00", "Hippolais icterina", "Icterine Warbler", "summer"},
@@ -315,7 +316,7 @@ func TestIntegration_SeasonalTransitions(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(adapter, settings)
+	tracker := species.NewTrackerFromSettings(adapter, settings)
 	tracker.SetCurrentYearForTesting(2024) // Set to 2024 for test dates
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
@@ -332,7 +333,7 @@ func TestIntegration_SeasonalTransitions(t *testing.T) {
 		springCheck := time.Date(2024, 3, 20, 6, 30, 0, 0, time.UTC)
 		tracker.UpdateSpecies("Turdus pilaris", springCheck)
 		status = tracker.GetSpeciesStatus("Turdus pilaris", springCheck)
-		
+
 		// Debug: If season is not spring, it might be a boundary issue
 		if status.CurrentSeason != "spring" {
 			t.Logf("Expected spring but got %s on %s", status.CurrentSeason, springCheck.Format("2006-01-02 15:04"))
@@ -349,24 +350,24 @@ func TestIntegration_SeasonalTransitions(t *testing.T) {
 		// Get new species in spring
 		springNew, err := ds.GetNewSpeciesDetections("2024-03-20", "2024-06-20", 10, 0)
 		require.NoError(t, err)
-		
+
 		springSpeciesMap := make(map[string]bool)
 		for _, sp := range springNew {
 			springSpeciesMap[sp.ScientificName] = true
 		}
-		
+
 		assert.True(t, springSpeciesMap["Phylloscopus trochilus"], "Willow Warbler should be new in spring")
 		assert.True(t, springSpeciesMap["Apus apus"], "Common Swift first seen in spring period")
-		
+
 		// Get new species in summer
 		summerNew, err := ds.GetNewSpeciesDetections("2024-06-21", "2024-09-21", 10, 0)
 		require.NoError(t, err)
-		
+
 		summerSpeciesMap := make(map[string]bool)
 		for _, sp := range summerNew {
 			summerSpeciesMap[sp.ScientificName] = true
 		}
-		
+
 		assert.True(t, summerSpeciesMap["Hippolais icterina"], "Icterine Warbler should be new in summer")
 		assert.False(t, summerSpeciesMap["Apus apus"], "Common Swift should not be new in summer")
 	})
@@ -394,7 +395,7 @@ func TestIntegration_EmptyAndNullDates(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(adapter, settings)
+	tracker := species.NewTrackerFromSettings(adapter, settings)
 	err = tracker.InitFromDatabase()
 	require.NoError(t, err)
 

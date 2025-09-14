@@ -1,6 +1,6 @@
 // new_species_tracker_daterange_test.go
 // Critical tests for date range calculations and period logic
-package processor
+package species
 
 import (
 	"testing"
@@ -18,14 +18,14 @@ func TestGetYearDateRange_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name               string
-		currentTime        time.Time
-		resetMonth         int
-		resetDay           int
-		overrideYear       int // For testing with SetCurrentYearForTesting
-		expectedStartDate  string
-		expectedEndDate    string
-		description        string
+		name              string
+		currentTime       time.Time
+		resetMonth        int
+		resetDay          int
+		overrideYear      int // For testing with SetCurrentYearForTesting
+		expectedStartDate string
+		expectedEndDate   string
+		description       string
 	}{
 		// Standard January 1 reset tests
 		{
@@ -162,7 +162,7 @@ func TestGetYearDateRange_CriticalReliability(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(nil, settings)
+			tracker := NewTrackerFromSettings(nil, settings)
 			require.NotNil(t, tracker)
 
 			// Override year if specified (for testing)
@@ -189,13 +189,13 @@ func TestGetSeasonDateRange_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name              string
-		seasonName        string
-		currentTime       time.Time
-		customSeasons     map[string]conf.Season
-		expectedStart     string
-		expectedEnd       string
-		description       string
+		name          string
+		seasonName    string
+		currentTime   time.Time
+		customSeasons map[string]conf.Season
+		expectedStart string
+		expectedEnd   string
+		description   string
 	}{
 		// Default seasons (Northern Hemisphere)
 		{
@@ -327,7 +327,7 @@ func TestGetSeasonDateRange_CriticalReliability(t *testing.T) {
 				t.Skip("Custom seasons not yet implemented")
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(nil, settings)
+			tracker := NewTrackerFromSettings(nil, settings)
 			require.NotNil(t, tracker)
 
 			// Test getSeasonDateRange
@@ -341,7 +341,7 @@ func TestGetSeasonDateRange_CriticalReliability(t *testing.T) {
 			if tt.expectedStart != "" {
 				t.Logf("✓ Season range correct: %s to %s", startDate, endDate)
 			} else {
-				t.Logf("✓ Correctly returned empty for invalid season") 
+				t.Logf("✓ Correctly returned empty for invalid season")
 			}
 		})
 	}
@@ -353,13 +353,13 @@ func TestIsWithinCurrentYear_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name          string
-		detectionTime time.Time
-		currentYear   int
-		resetMonth    int
-		resetDay      int
+		name           string
+		detectionTime  time.Time
+		currentYear    int
+		resetMonth     int
+		resetDay       int
 		expectedWithin bool
-		description   string
+		description    string
 	}{
 		// Standard calendar year (Jan 1 reset)
 		{
@@ -464,7 +464,7 @@ func TestIsWithinCurrentYear_CriticalReliability(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(nil, settings)
+			tracker := NewTrackerFromSettings(nil, settings)
 			require.NotNil(t, tracker)
 
 			// Always set the current year for testing to ensure consistent behavior
@@ -556,7 +556,7 @@ func TestShouldResetYear_CriticalReliability(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(nil, settings)
+			tracker := NewTrackerFromSettings(nil, settings)
 			require.NotNil(t, tracker)
 
 			// Set current year
@@ -584,7 +584,7 @@ func TestCheckAndResetPeriods_DateRange(t *testing.T) {
 		currentTime      time.Time
 		initialYear      int
 		initialSeason    string
-		setupTracker     func(*NewSpeciesTracker)
+		setupTracker     func(*SpeciesTracker)
 		expectedYear     int
 		expectedSeason   string
 		expectYearReset  bool
@@ -596,7 +596,7 @@ func TestCheckAndResetPeriods_DateRange(t *testing.T) {
 			time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 			2024,
 			"winter",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				// Add some data that should be cleared
 				tracker.speciesThisYear["Old_Species"] = time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)
 			},
@@ -611,7 +611,7 @@ func TestCheckAndResetPeriods_DateRange(t *testing.T) {
 			time.Date(2024, 6, 21, 0, 0, 0, 0, time.UTC), // Summer solstice
 			2024,
 			"spring",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.seasonalEnabled = true
 			},
 			2024,
@@ -637,7 +637,7 @@ func TestCheckAndResetPeriods_DateRange(t *testing.T) {
 			time.Date(2025, 3, 20, 0, 0, 0, 0, time.UTC), // New year and spring equinox
 			2024,
 			"winter",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.seasonalEnabled = true
 				tracker.speciesThisYear["Old_Species"] = time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC)
 			},
@@ -678,7 +678,7 @@ func TestCheckAndResetPeriods_DateRange(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(nil, settings)
+			tracker := NewTrackerFromSettings(nil, settings)
 			require.NotNil(t, tracker)
 
 			// Set initial state

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
+	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -88,8 +89,8 @@ type DatabaseAction struct {
 	Note              datastore.Note
 	Results           []datastore.Results
 	EventTracker      *EventTracker
-	NewSpeciesTracker *NewSpeciesTracker // Add reference to new species tracker
-	processor         *Processor         // Add reference to processor for source name resolution
+	NewSpeciesTracker *species.SpeciesTracker // Add reference to new species tracker
+	processor         *Processor              // Add reference to processor for source name resolution
 	Description       string
 	CorrelationID     string     // Detection correlation ID for log tracking
 	mu                sync.Mutex // Protect concurrent access to Note and Results
@@ -479,10 +480,10 @@ func (a *LogAction) Execute(data interface{}) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	species := strings.ToLower(a.Note.CommonName)
+	speciesName := strings.ToLower(a.Note.CommonName)
 
 	// Check if the event should be handled for this species
-	if !a.EventTracker.TrackEvent(species, LogToFile) {
+	if !a.EventTracker.TrackEvent(speciesName, LogToFile) {
 		return nil
 	}
 
@@ -518,10 +519,10 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	species := strings.ToLower(a.Note.CommonName)
+	speciesName := strings.ToLower(a.Note.CommonName)
 
 	// Check event frequency
-	if !a.EventTracker.TrackEvent(species, DatabaseSave) {
+	if !a.EventTracker.TrackEvent(speciesName, DatabaseSave) {
 		return nil
 	}
 
@@ -779,10 +780,10 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	species := strings.ToLower(a.Note.CommonName)
+	speciesName := strings.ToLower(a.Note.CommonName)
 
 	// Check event frequency
-	if !a.EventTracker.TrackEvent(species, BirdWeatherSubmit) {
+	if !a.EventTracker.TrackEvent(speciesName, BirdWeatherSubmit) {
 		return nil
 	}
 
@@ -798,12 +799,12 @@ func (a *BirdWeatherAction) Execute(data interface{}) error {
 			GetLogger().Debug("Skipping BirdWeather upload due to low confidence",
 				"component", "analysis.processor.actions",
 				"detection_id", a.CorrelationID,
-				"species", species,
+				"species", speciesName,
 				"confidence", a.Note.Confidence,
 				"threshold", a.Settings.Realtime.Birdweather.Threshold,
 				"operation", "birdweather_threshold_check")
 			log.Printf("⛔ Skipping BirdWeather upload for %s: confidence %.2f below threshold %.2f\n",
-				species, a.Note.Confidence, a.Settings.Realtime.Birdweather.Threshold)
+				speciesName, a.Note.Confidence, a.Settings.Realtime.Birdweather.Threshold)
 		}
 		return nil
 	}
@@ -921,10 +922,10 @@ func (a *MqttAction) Execute(data interface{}) error {
 			Build()
 	}
 
-	species := strings.ToLower(a.Note.CommonName)
+	speciesName := strings.ToLower(a.Note.CommonName)
 
 	// Check event frequency
-	if !a.EventTracker.TrackEvent(species, MQTTPublish) {
+	if !a.EventTracker.TrackEvent(speciesName, MQTTPublish) {
 		return nil
 	}
 
@@ -1099,10 +1100,10 @@ func (a *SSEAction) Execute(data interface{}) error {
 		return nil // Silently skip if no broadcaster is configured
 	}
 
-	species := strings.ToLower(a.Note.CommonName)
+	speciesName := strings.ToLower(a.Note.CommonName)
 
 	// Check event frequency
-	if !a.EventTracker.TrackEvent(species, SSEBroadcast) {
+	if !a.EventTracker.TrackEvent(speciesName, SSEBroadcast) {
 		return nil
 	}
 

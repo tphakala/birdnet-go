@@ -1,5 +1,5 @@
-// new_species_tracker.go
-package processor
+// species_tracker.go
+package species
 
 import (
 	"log/slog"
@@ -80,7 +80,7 @@ func Close() error {
 	return nil
 }
 
-// SpeciesDatastore defines the minimal interface needed by NewSpeciesTracker
+// SpeciesDatastore defines the minimal interface needed by SpeciesTracker
 type SpeciesDatastore interface {
 	GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error)
 	GetSpeciesFirstDetectionInPeriod(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error)
@@ -112,9 +112,9 @@ type cachedSpeciesStatus struct {
 	timestamp time.Time
 }
 
-// NewSpeciesTracker tracks species detections and identifies new species
+// SpeciesTracker tracks species detections and identifies new species
 // within a configurable time window. Designed for minimal memory allocations.
-type NewSpeciesTracker struct {
+type SpeciesTracker struct {
 	mu sync.RWMutex
 
 	// Lifetime tracking (existing)
@@ -165,9 +165,9 @@ type seasonDates struct {
 	day   int
 }
 
-// NewSpeciesTrackerFromSettings creates a tracker from configuration settings
+// NewTrackerFromSettings creates a tracker from configuration settings
 // Note: All time calculations use the system's local timezone via time.Now()
-func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingSettings) *NewSpeciesTracker {
+func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingSettings) *SpeciesTracker {
 	now := time.Now() // Uses system local timezone
 
 	// Log initialization
@@ -178,7 +178,7 @@ func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTr
 		"seasonal_enabled", settings.SeasonalTracking.Enabled,
 		"current_time", now.Format("2006-01-02 15:04:05"))
 
-	tracker := &NewSpeciesTracker{
+	tracker := &SpeciesTracker{
 		// Lifetime tracking
 		speciesFirstSeen: make(map[string]time.Time, initialSpeciesCapacity),
 		windowDays:       settings.NewSpeciesWindowDays,
@@ -246,7 +246,7 @@ func NewSpeciesTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTr
 }
 
 // initializeDefaultSeasons sets up the default Northern Hemisphere seasons
-func (t *NewSpeciesTracker) initializeDefaultSeasons() {
+func (t *SpeciesTracker) initializeDefaultSeasons() {
 	t.seasons["spring"] = seasonDates{month: 3, day: 20}  // March 20
 	t.seasons["summer"] = seasonDates{month: 6, day: 21}  // June 21
 	t.seasons["fall"] = seasonDates{month: 9, day: 22}    // September 22
@@ -255,30 +255,30 @@ func (t *NewSpeciesTracker) initializeDefaultSeasons() {
 
 // shouldAdjustWinter adjusts the season start year only when the season month is December
 // and the current month is before winterAdjustmentCutoffMonth (Jan-May)
-func (t *NewSpeciesTracker) shouldAdjustWinter(now time.Time, seasonMonth time.Month) bool {
+func (t *SpeciesTracker) shouldAdjustWinter(now time.Time, seasonMonth time.Month) bool {
 	return seasonMonth == time.December && now.Month() < winterAdjustmentCutoffMonth
 }
 
 // shouldAdjustSeasonToPreviousYear determines if a season should use the previous year
 // This handles cases where we're requesting a season range that occurred in the previous year
 // The main use case is requesting "fall" season when we're currently in winter months
-func (t *NewSpeciesTracker) shouldAdjustSeasonToPreviousYear(now time.Time, seasonMonth time.Month) bool {
+func (t *SpeciesTracker) shouldAdjustSeasonToPreviousYear(now time.Time, seasonMonth time.Month) bool {
 	// Winter season (December) - adjust if we're in early months of next year
 	// This is the original winter adjustment logic
 	if seasonMonth == time.December && now.Month() < winterAdjustmentCutoffMonth {
 		return true
 	}
-	
+
 	// Fall season (September) - adjust if we're in winter months (Dec, Jan, Feb)
 	// When in winter, asking for fall should return the recently passed fall
 	if seasonMonth == time.September && (now.Month() == time.December || now.Month() == time.January || now.Month() == time.February) {
 		return true
 	}
-	
+
 	// For other seasons (spring, summer), don't adjust to previous year
 	// Spring in January should return upcoming spring, not previous spring
 	// Summer in January should return upcoming summer, not previous summer
-	
+
 	return false
 }
 
@@ -298,7 +298,7 @@ func (t *NewSpeciesTracker) shouldAdjustSeasonToPreviousYear(now time.Time, seas
 // specific year boundaries need to be simulated.
 //
 // This method provides controlled access to the currentYear field for test scenarios only.
-func (t *NewSpeciesTracker) SetCurrentYearForTesting(year int) {
+func (t *SpeciesTracker) SetCurrentYearForTesting(year int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.currentYear = year
@@ -319,7 +319,7 @@ func (t *NewSpeciesTracker) SetCurrentYearForTesting(year int) {
 // specific seasonal tracking scenarios.
 //
 // This method provides controlled access to the season cache for test scenarios only.
-func (t *NewSpeciesTracker) SetCurrentSeasonForTesting(season string) {
+func (t *SpeciesTracker) SetCurrentSeasonForTesting(season string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.cachedSeason = season
@@ -327,7 +327,7 @@ func (t *NewSpeciesTracker) SetCurrentSeasonForTesting(season string) {
 }
 
 // getCurrentSeason determines which season we're currently in with intelligent caching
-func (t *NewSpeciesTracker) getCurrentSeason(currentTime time.Time) string {
+func (t *SpeciesTracker) getCurrentSeason(currentTime time.Time) string {
 	// Check cache first - if valid entry exists and the input time is reasonably close to cached time
 	if t.cachedSeason != "" &&
 		t.isSameSeasonPeriod(currentTime, t.seasonCacheForTime) &&
@@ -349,7 +349,7 @@ func (t *NewSpeciesTracker) getCurrentSeason(currentTime time.Time) string {
 
 // isSameSeasonPeriod checks if two times are likely in the same season period
 // This helps avoid cache misses for times that are very close together
-func (t *NewSpeciesTracker) isSameSeasonPeriod(time1, time2 time.Time) bool {
+func (t *SpeciesTracker) isSameSeasonPeriod(time1, time2 time.Time) bool {
 	// If times are in different years, they could be in different seasons
 	if time1.Year() != time2.Year() {
 		return false
@@ -370,7 +370,7 @@ func (t *NewSpeciesTracker) isSameSeasonPeriod(time1, time2 time.Time) bool {
 }
 
 // computeCurrentSeason performs the actual season calculation (moved from getCurrentSeason)
-func (t *NewSpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
+func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 	currentMonth := int(currentTime.Month())
 	currentDay := currentTime.Day()
 
@@ -384,7 +384,7 @@ func (t *NewSpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 	// Check seasons in a deterministic order to handle boundaries correctly
 	// Order: winter, spring, summer, fall (in chronological order within a year)
 	seasonOrder := []string{"winter", "spring", "summer", "fall"}
-	
+
 	// Find the most recent season start date
 	var currentSeason string
 	var latestDate time.Time
@@ -436,12 +436,12 @@ func (t *NewSpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 }
 
 // checkAndResetPeriods checks if we need to reset yearly or seasonal tracking
-func (t *NewSpeciesTracker) checkAndResetPeriods(currentTime time.Time) {
+func (t *SpeciesTracker) checkAndResetPeriods(currentTime time.Time) {
 	// Check for yearly reset
 	if t.yearlyEnabled && t.shouldResetYear(currentTime) {
 		oldYear := t.currentYear
 		t.speciesThisYear = make(map[string]time.Time)
-		t.currentYear = t.getTrackingYear(currentTime)  // Use tracking year, not calendar year
+		t.currentYear = t.getTrackingYear(currentTime) // Use tracking year, not calendar year
 		// Clear status cache when year resets to ensure fresh calculations
 		t.statusCache = make(map[string]cachedSpeciesStatus)
 		logger.Debug("Reset yearly tracking",
@@ -464,53 +464,52 @@ func (t *NewSpeciesTracker) checkAndResetPeriods(currentTime time.Time) {
 }
 
 // shouldResetYear determines if we should reset yearly tracking
-func (t *NewSpeciesTracker) shouldResetYear(currentTime time.Time) bool {
+func (t *SpeciesTracker) shouldResetYear(currentTime time.Time) bool {
 	// If we've never reset before (currentYear is 0), we need to reset
 	if t.currentYear == 0 {
 		return true
 	}
 
 	currentCalendarYear := currentTime.Year()
-	
+
 	// Handle standard January 1st resets
 	if t.resetMonth == 1 && t.resetDay == 1 {
 		// Standard calendar year - reset if we're in a later year
 		return currentCalendarYear > t.currentYear
 	}
-	
-	// Handle custom reset dates  
+
+	// Handle custom reset dates
 	resetDate := time.Date(currentCalendarYear, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, currentTime.Location())
-	
+
 	// If we're in a later calendar year, definitely reset
 	if currentCalendarYear > t.currentYear {
 		return true
 	}
-	
-	// If we're in an earlier calendar year (shouldn't happen normally), don't reset  
+
+	// If we're in an earlier calendar year (shouldn't happen normally), don't reset
 	if currentCalendarYear < t.currentYear {
 		return false
 	}
-	
+
 	// Same calendar year - reset only on the exact reset day
 	// This handles the case where we reach the reset day but not necessarily at midnight
-	if currentCalendarYear == t.currentYear && 
-	   currentTime.Month() == resetDate.Month() && 
-	   currentTime.Day() == resetDate.Day() {
+	if currentCalendarYear == t.currentYear &&
+		currentTime.Month() == resetDate.Month() &&
+		currentTime.Day() == resetDate.Day() {
 		return true
 	}
-	
+
 	return false
 }
 
-
 // getTrackingYear determines which tracking year a given time falls into
 // This handles custom reset dates (e.g., fiscal years starting July 1st)
-func (t *NewSpeciesTracker) getTrackingYear(now time.Time) int {
+func (t *SpeciesTracker) getTrackingYear(now time.Time) int {
 	currentYear := now.Year()
-	
+
 	// If current time is before this year's reset date, we're still in the previous tracking year
 	currentYearResetDate := time.Date(currentYear, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
-	
+
 	if now.Before(currentYearResetDate) {
 		// We haven't reached this year's reset date yet, so we're still in the previous tracking year
 		return currentYear - 1
@@ -522,7 +521,7 @@ func (t *NewSpeciesTracker) getTrackingYear(now time.Time) int {
 
 // InitFromDatabase populates the tracker from historical data
 // This should be called once during initialization
-func (t *NewSpeciesTracker) InitFromDatabase() error {
+func (t *SpeciesTracker) InitFromDatabase() error {
 	if t.ds == nil {
 		return errors.Newf("datastore is nil").
 			Component("new-species-tracker").
@@ -585,7 +584,7 @@ func (t *NewSpeciesTracker) InitFromDatabase() error {
 }
 
 // loadLifetimeDataFromDatabase loads all-time first detection data
-func (t *NewSpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
+func (t *SpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 	endDate := now.Format("2006-01-02")
 	startDate := "1900-01-01" // Load from beginning of time to get all historical data
 
@@ -630,7 +629,7 @@ func (t *NewSpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 }
 
 // loadYearlyDataFromDatabase loads first detection data for the current year
-func (t *NewSpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
+func (t *SpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 	startDate, endDate := t.getYearDateRange(now)
 
 	// Use GetSpeciesFirstDetectionInPeriod for yearly tracking
@@ -679,11 +678,11 @@ func (t *NewSpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 }
 
 // loadSeasonalDataFromDatabase loads first detection data for each season in the current year
-func (t *NewSpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
+func (t *SpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 	// Preserve existing seasonal maps if we have them
 	existingSeasonData := t.speciesBySeason
 	hasExistingData := len(existingSeasonData) > 0
-	
+
 	// Initialize seasonal maps
 	t.speciesBySeason = make(map[string]map[string]time.Time)
 
@@ -757,11 +756,11 @@ func (t *NewSpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 }
 
 // getYearDateRange calculates the start and end dates for yearly tracking
-func (t *NewSpeciesTracker) getYearDateRange(now time.Time) (startDate, endDate string) {
+func (t *SpeciesTracker) getYearDateRange(now time.Time) (startDate, endDate string) {
 	// Use t.currentYear if explicitly set for testing, otherwise use the provided time's year
 	currentYear := now.Year()
 	useOverride := t.currentYear != 0 && t.currentYear != time.Now().Year()
-	
+
 	if useOverride {
 		// Only use t.currentYear if it was explicitly set for testing (different from real current year)
 		currentYear = t.currentYear
@@ -769,7 +768,7 @@ func (t *NewSpeciesTracker) getYearDateRange(now time.Time) (startDate, endDate 
 
 	// Determine the tracking year based on reset date
 	var trackingYear int
-	
+
 	if useOverride {
 		// When year is overridden for testing, use it directly as the tracking year
 		trackingYear = currentYear
@@ -777,7 +776,7 @@ func (t *NewSpeciesTracker) getYearDateRange(now time.Time) (startDate, endDate 
 		// Normal operation: determine based on reset date
 		// If current time is before this year's reset date, we're still in the previous tracking year
 		currentYearResetDate := time.Date(currentYear, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
-		
+
 		if now.Before(currentYearResetDate) {
 			// We haven't reached this year's reset date yet, so we're still in the previous tracking year
 			trackingYear = currentYear - 1
@@ -799,7 +798,7 @@ func (t *NewSpeciesTracker) getYearDateRange(now time.Time) (startDate, endDate 
 }
 
 // getSeasonDateRange calculates the start and end dates for a specific season
-func (t *NewSpeciesTracker) getSeasonDateRange(seasonName string, now time.Time) (startDate, endDate string) {
+func (t *SpeciesTracker) getSeasonDateRange(seasonName string, now time.Time) (startDate, endDate string) {
 	season, exists := t.seasons[seasonName]
 	if !exists || season.month <= 0 || season.day <= 0 {
 		// Return empty strings for unknown or invalid season
@@ -831,30 +830,30 @@ func (t *NewSpeciesTracker) getSeasonDateRange(seasonName string, now time.Time)
 }
 
 // isWithinCurrentYear checks if a detection time falls within the current tracking year
-func (t *NewSpeciesTracker) isWithinCurrentYear(detectionTime time.Time) bool {
+func (t *SpeciesTracker) isWithinCurrentYear(detectionTime time.Time) bool {
 	// Handle uninitialized currentYear (0) - use detection time's year
 	if t.currentYear == 0 {
 		// When currentYear is not set, any detection is considered within the current year
 		// This matches the test expectation for year_zero_unset case
 		return true
 	}
-	
+
 	// For fiscal/academic years, we need to determine which fiscal year the detection falls into
 	// and compare it with the current tracking year
-	
+
 	// Standard calendar year case (reset on Jan 1)
 	if t.resetMonth == 1 && t.resetDay == 1 {
 		return detectionTime.Year() == t.currentYear
 	}
-	
+
 	// Custom fiscal year case
 	// For fiscal years, determine which fiscal year the detection falls into
 	// and check if it matches the current tracking year
-	
+
 	// Calculate the reset date for the detection's calendar year
 	detectionCalendarYear := detectionTime.Year()
 	resetDateThisYear := time.Date(detectionCalendarYear, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, detectionTime.Location())
-	
+
 	var detectionFiscalYear int
 	if detectionTime.Before(resetDateThisYear) {
 		// Detection is before reset date, so it's in the previous fiscal year
@@ -865,15 +864,15 @@ func (t *NewSpeciesTracker) isWithinCurrentYear(detectionTime time.Time) bool {
 		// For example: July 2, 2024 with July 1 reset is in fiscal year 2025 (July 1, 2024 - June 30, 2025)
 		detectionFiscalYear = detectionCalendarYear + 1
 	}
-	
+
 	// For testing purposes, when currentYear=2024, we want both fiscal years 2024 and 2025 to be considered "current"
 	// This matches the test expectation that both June 30, 2024 and July 2, 2024 are within current year
-	return detectionFiscalYear == t.currentYear || detectionFiscalYear == t.currentYear + 1
+	return detectionFiscalYear == t.currentYear || detectionFiscalYear == t.currentYear+1
 }
 
 // GetSpeciesStatus returns the tracking status for a species with caching for performance
 // This method implements cache-first lookup with TTL validation to minimize expensive computations
-func (t *NewSpeciesTracker) GetSpeciesStatus(scientificName string, currentTime time.Time) SpeciesStatus {
+func (t *SpeciesTracker) GetSpeciesStatus(scientificName string, currentTime time.Time) SpeciesStatus {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -882,7 +881,7 @@ func (t *NewSpeciesTracker) GetSpeciesStatus(scientificName string, currentTime 
 		// Check if cache is still valid (within TTL and same year)
 		cacheValid := currentTime.Sub(cached.timestamp) < t.cacheTTL
 		sameYear := currentTime.Year() == cached.timestamp.Year()
-		
+
 		if cacheValid && sameYear {
 			// Cache hit - return cached result directly
 			return cached.status
@@ -941,7 +940,7 @@ func (t *NewSpeciesTracker) GetSpeciesStatus(scientificName string, currentTime 
 
 // buildSpeciesStatusWithBuffer builds species status reusing the pre-allocated buffer
 // This method is used by GetSpeciesStatus to maintain the buffer optimization
-func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, currentTime time.Time, currentSeason string) SpeciesStatus {
+func (t *SpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, currentTime time.Time, currentSeason string) SpeciesStatus {
 	// Lifetime tracking
 	firstSeen, exists := t.speciesFirstSeen[scientificName]
 
@@ -1037,12 +1036,12 @@ func (t *NewSpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, 
 
 // cleanupExpiredCache removes expired entries from the status cache to prevent memory leaks
 // cleanupExpiredCache removes expired entries and enforces size limits with LRU eviction
-func (t *NewSpeciesTracker) cleanupExpiredCache(currentTime time.Time) {
+func (t *SpeciesTracker) cleanupExpiredCache(currentTime time.Time) {
 	t.cleanupExpiredCacheWithForce(currentTime, false)
 }
 
 // cleanupExpiredCacheWithForce allows forcing cleanup even if recently performed (for testing)
-func (t *NewSpeciesTracker) cleanupExpiredCacheWithForce(currentTime time.Time, force bool) {
+func (t *SpeciesTracker) cleanupExpiredCacheWithForce(currentTime time.Time, force bool) {
 
 	// Skip if recently performed (unless forced)
 	if !force && currentTime.Sub(t.lastCacheCleanup) <= t.cacheTTL*10 {
@@ -1103,7 +1102,7 @@ func (t *NewSpeciesTracker) cleanupExpiredCacheWithForce(currentTime time.Time, 
 // This method significantly reduces mutex contention and redundant computations compared to
 // calling GetSpeciesStatus individually for each species. It performs expensive operations
 // like checkAndResetPeriods() and getCurrentSeason() only once for the entire batch.
-func (t *NewSpeciesTracker) GetBatchSpeciesStatus(scientificNames []string, currentTime time.Time) map[string]SpeciesStatus {
+func (t *SpeciesTracker) GetBatchSpeciesStatus(scientificNames []string, currentTime time.Time) map[string]SpeciesStatus {
 	if len(scientificNames) == 0 {
 		return make(map[string]SpeciesStatus)
 	}
@@ -1130,7 +1129,7 @@ func (t *NewSpeciesTracker) GetBatchSpeciesStatus(scientificNames []string, curr
 // buildSpeciesStatusLocked builds a species status without acquiring locks or performing
 // expensive period checks. This is used internally by GetBatchSpeciesStatus.
 // Assumes the caller already holds the mutex lock.
-func (t *NewSpeciesTracker) buildSpeciesStatusLocked(scientificName string, currentTime time.Time, currentSeason string) SpeciesStatus {
+func (t *SpeciesTracker) buildSpeciesStatusLocked(scientificName string, currentTime time.Time, currentSeason string) SpeciesStatus {
 	// Lifetime tracking
 	firstSeen, exists := t.speciesFirstSeen[scientificName]
 
@@ -1221,7 +1220,7 @@ func (t *NewSpeciesTracker) buildSpeciesStatusLocked(scientificName string, curr
 
 // UpdateSpecies updates the first seen time for a species if necessary
 // Returns true if this is a new species detection
-func (t *NewSpeciesTracker) UpdateSpecies(scientificName string, detectionTime time.Time) bool {
+func (t *SpeciesTracker) UpdateSpecies(scientificName string, detectionTime time.Time) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -1301,7 +1300,7 @@ func (t *NewSpeciesTracker) UpdateSpecies(scientificName string, detectionTime t
 }
 
 // IsNewSpecies checks if a species is considered "new" within the configured window
-func (t *NewSpeciesTracker) IsNewSpecies(scientificName string) bool {
+func (t *SpeciesTracker) IsNewSpecies(scientificName string) bool {
 	t.mu.RLock()
 	firstSeen, exists := t.speciesFirstSeen[scientificName]
 	t.mu.RUnlock()
@@ -1316,7 +1315,7 @@ func (t *NewSpeciesTracker) IsNewSpecies(scientificName string) bool {
 
 // SyncIfNeeded checks if a database sync is needed and performs it
 // This helps keep the tracker updated with any database changes
-func (t *NewSpeciesTracker) SyncIfNeeded() error {
+func (t *SpeciesTracker) SyncIfNeeded() error {
 	t.mu.RLock()
 	elapsed := time.Since(t.lastSyncTime)
 	interval := t.syncIntervalMins
@@ -1377,12 +1376,12 @@ func (t *NewSpeciesTracker) SyncIfNeeded() error {
 }
 
 // GetWindowDays returns the configured window for new species
-func (t *NewSpeciesTracker) GetWindowDays() int {
+func (t *SpeciesTracker) GetWindowDays() int {
 	return t.windowDays
 }
 
 // GetSpeciesCount returns the number of tracked species
-func (t *NewSpeciesTracker) GetSpeciesCount() int {
+func (t *SpeciesTracker) GetSpeciesCount() int {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return len(t.speciesFirstSeen)
@@ -1390,7 +1389,7 @@ func (t *NewSpeciesTracker) GetSpeciesCount() int {
 
 // PruneOldEntries removes species entries older than 2x their respective window periods
 // This prevents unbounded memory growth over time using period-specific cutoff times
-func (t *NewSpeciesTracker) PruneOldEntries() int {
+func (t *SpeciesTracker) PruneOldEntries() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -1422,7 +1421,7 @@ func (t *NewSpeciesTracker) PruneOldEntries() int {
 			// If we haven't reached reset date this year, adjust to last year's reset
 			currentYearStart = currentYearStart.AddDate(-1, 0, 0)
 		}
-		
+
 		// Only prune entries from before the current tracking year
 		for scientificName, firstSeen := range t.speciesThisYear {
 			if firstSeen.Before(currentYearStart) {
@@ -1441,7 +1440,7 @@ func (t *NewSpeciesTracker) PruneOldEntries() int {
 	if t.seasonalEnabled {
 		// Calculate cutoff: 1 year ago
 		seasonCutoff := now.AddDate(-1, 0, 0)
-		
+
 		for season, speciesMap := range t.speciesBySeason {
 			// Check if this is an old season by looking at the oldest entry
 			isOldSeason := true
@@ -1451,7 +1450,7 @@ func (t *NewSpeciesTracker) PruneOldEntries() int {
 					break
 				}
 			}
-			
+
 			// If all entries in this season are old, remove the entire season
 			if isOldSeason && len(speciesMap) > 0 {
 				prunedFromSeason := len(speciesMap)
@@ -1474,7 +1473,7 @@ func (t *NewSpeciesTracker) PruneOldEntries() int {
 }
 
 // cleanupOldNotificationRecordsLocked is an internal version that assumes lock is already held
-func (t *NewSpeciesTracker) cleanupOldNotificationRecordsLocked(currentTime time.Time) int {
+func (t *SpeciesTracker) cleanupOldNotificationRecordsLocked(currentTime time.Time) int {
 	if t.notificationLastSent == nil || t.notificationSuppressionWindow <= 0 {
 		return 0
 	}
@@ -1498,7 +1497,7 @@ func (t *NewSpeciesTracker) cleanupOldNotificationRecordsLocked(currentTime time
 // This prevents race conditions where multiple concurrent detections of the same species
 // could all be considered "new" before any of them update the tracker.
 // Returns (isNew, daysSinceFirstSeen)
-func (t *NewSpeciesTracker) CheckAndUpdateSpecies(scientificName string, detectionTime time.Time) (isNew bool, daysSinceFirstSeen int) {
+func (t *SpeciesTracker) CheckAndUpdateSpecies(scientificName string, detectionTime time.Time) (isNew bool, daysSinceFirstSeen int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -1525,7 +1524,7 @@ func (t *NewSpeciesTracker) CheckAndUpdateSpecies(scientificName string, detecti
 			// Calculate days since first seen using duration-based calculation for precision
 			timeDiff := detectionTime.Sub(firstSeen)
 			daysSince := int(timeDiff / (24 * time.Hour))
-			
+
 			// Defensive check: prevent negative days due to floating point precision or other edge cases
 			if daysSince < 0 {
 				// Log the anomaly for investigation but handle gracefully
@@ -1535,7 +1534,7 @@ func (t *NewSpeciesTracker) CheckAndUpdateSpecies(scientificName string, detecti
 					"first_seen", firstSeen.Format("2006-01-02 15:04:05.000"),
 					"calculated_days", daysSince,
 					"time_diff_hours", detectionTime.Sub(firstSeen).Hours())
-				
+
 				// Treat as earliest detection (safest approach)
 				t.speciesFirstSeen[scientificName] = detectionTime
 				daysSinceFirstSeen = 0
@@ -1572,7 +1571,7 @@ func (t *NewSpeciesTracker) CheckAndUpdateSpecies(scientificName string, detecti
 
 // IsSeasonMapInitialized checks if the season map is properly initialized for the given season.
 // This method provides safe access to internal state for testing purposes.
-func (t *NewSpeciesTracker) IsSeasonMapInitialized(season string) bool {
+func (t *SpeciesTracker) IsSeasonMapInitialized(season string) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -1585,7 +1584,7 @@ func (t *NewSpeciesTracker) IsSeasonMapInitialized(season string) bool {
 
 // GetSeasonMapCount returns the number of species tracked for the given season.
 // This method provides safe access to internal state for testing purposes.
-func (t *NewSpeciesTracker) GetSeasonMapCount(season string) int {
+func (t *SpeciesTracker) GetSeasonMapCount(season string) int {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -1599,7 +1598,7 @@ func (t *NewSpeciesTracker) GetSeasonMapCount(season string) int {
 // ExpireCacheForTesting forces cache expiration for the given species for testing purposes.
 // This method should only be used in tests to simulate cache expiration without
 // manipulating internal state directly.
-func (t *NewSpeciesTracker) ExpireCacheForTesting(scientificName string) {
+func (t *SpeciesTracker) ExpireCacheForTesting(scientificName string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -1612,7 +1611,7 @@ func (t *NewSpeciesTracker) ExpireCacheForTesting(scientificName string) {
 
 // ClearCacheForTesting clears the entire status cache for testing purposes.
 // This method should only be used in tests.
-func (t *NewSpeciesTracker) ClearCacheForTesting() {
+func (t *SpeciesTracker) ClearCacheForTesting() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -1622,7 +1621,7 @@ func (t *NewSpeciesTracker) ClearCacheForTesting() {
 // ShouldSuppressNotification checks if a notification for this species should be suppressed
 // based on when the last notification was sent for this species.
 // Returns true if notification should be suppressed, false if it should be sent.
-func (t *NewSpeciesTracker) ShouldSuppressNotification(scientificName string, currentTime time.Time) bool {
+func (t *SpeciesTracker) ShouldSuppressNotification(scientificName string, currentTime time.Time) bool {
 	t.mu.RLock()
 	lastSent, exists := t.notificationLastSent[scientificName]
 	window := t.notificationSuppressionWindow
@@ -1649,7 +1648,7 @@ func (t *NewSpeciesTracker) ShouldSuppressNotification(scientificName string, cu
 
 // RecordNotificationSent records that a notification was sent for a species.
 // This is used to prevent duplicate notifications within the suppression window.
-func (t *NewSpeciesTracker) RecordNotificationSent(scientificName string, sentTime time.Time) {
+func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime time.Time) {
 	// Early return when suppression is disabled to avoid unnecessary operations
 	if t.notificationSuppressionWindow <= 0 {
 		return
@@ -1673,7 +1672,7 @@ func (t *NewSpeciesTracker) RecordNotificationSent(scientificName string, sentTi
 
 // CleanupOldNotificationRecords removes notification records older than 2x the suppression window
 // to prevent unbounded memory growth.
-func (t *NewSpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) int {
+func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) int {
 	// Early return if suppression is disabled (0 window)
 	if t.notificationSuppressionWindow <= 0 {
 		return 0
@@ -1695,7 +1694,7 @@ func (t *NewSpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time)
 
 // Close releases resources associated with the species tracker, including the logger.
 // This should be called during application shutdown or when the tracker is no longer needed.
-func (t *NewSpeciesTracker) Close() error {
+func (t *SpeciesTracker) Close() error {
 	// Close the shared logger used by all tracker instances
 	// Note: This is a package-level resource shared across all tracker instances
 	if err := Close(); err != nil {

@@ -1,6 +1,6 @@
 // new_species_tracker_utility_test.go
 // Critical tests for utility and helper functions
-package processor
+package species
 
 import (
 	"testing"
@@ -18,10 +18,10 @@ func TestGetWindowDays_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name         string
-		windowDays   int
-		expected     int
-		description  string
+		name        string
+		windowDays  int
+		expected    int
+		description string
 	}{
 		{
 			"standard_14_days",
@@ -65,7 +65,7 @@ func TestGetWindowDays_CriticalReliability(t *testing.T) {
 				NewSpeciesWindowDays: tt.windowDays,
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(nil, settings)
+			tracker := NewTrackerFromSettings(nil, settings)
 			require.NotNil(t, tracker)
 
 			// Test GetWindowDays
@@ -86,13 +86,13 @@ func TestGetSpeciesCount_CriticalReliability(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		setupSpecies  func(*NewSpeciesTracker)
+		setupSpecies  func(*SpeciesTracker)
 		expectedCount int
 		description   string
 	}{
 		{
 			"empty_tracker",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				// No species added
 			},
 			0,
@@ -100,7 +100,7 @@ func TestGetSpeciesCount_CriticalReliability(t *testing.T) {
 		},
 		{
 			"single_species",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.speciesFirstSeen["Species_1"] = time.Now()
 			},
 			1,
@@ -108,7 +108,7 @@ func TestGetSpeciesCount_CriticalReliability(t *testing.T) {
 		},
 		{
 			"multiple_species",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				now := time.Now()
 				for i := 0; i < 100; i++ {
 					speciesName := "Species_" + string(rune(i))
@@ -120,17 +120,17 @@ func TestGetSpeciesCount_CriticalReliability(t *testing.T) {
 		},
 		{
 			"only_lifetime_counted",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				now := time.Now()
 				// Add to lifetime tracking
 				tracker.speciesFirstSeen["Lifetime_1"] = now
 				tracker.speciesFirstSeen["Lifetime_2"] = now
-				
+
 				// Add to yearly tracking (should not be counted)
 				tracker.yearlyEnabled = true
 				tracker.speciesThisYear["Yearly_1"] = now
 				tracker.speciesThisYear["Yearly_2"] = now
-				
+
 				// Add to seasonal tracking (should not be counted)
 				tracker.seasonalEnabled = true
 				tracker.speciesBySeason["spring"] = map[string]time.Time{
@@ -152,7 +152,7 @@ func TestGetSpeciesCount_CriticalReliability(t *testing.T) {
 				Enabled: true,
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(nil, settings)
+			tracker := NewTrackerFromSettings(nil, settings)
 			require.NotNil(t, tracker)
 
 			// Setup species
@@ -176,14 +176,14 @@ func TestIsSeasonMapInitialized_CriticalReliability(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		setupTracker   func(*NewSpeciesTracker)
+		setupTracker   func(*SpeciesTracker)
 		seasonToCheck  string
 		expectedResult bool
 		description    string
 	}{
 		{
 			"seasonal_disabled",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.seasonalEnabled = false
 			},
 			"spring",
@@ -192,7 +192,7 @@ func TestIsSeasonMapInitialized_CriticalReliability(t *testing.T) {
 		},
 		{
 			"season_not_initialized",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.seasonalEnabled = true
 				// Don't initialize any season maps
 			},
@@ -202,7 +202,7 @@ func TestIsSeasonMapInitialized_CriticalReliability(t *testing.T) {
 		},
 		{
 			"season_initialized_empty",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.seasonalEnabled = true
 				tracker.speciesBySeason["spring"] = make(map[string]time.Time)
 			},
@@ -212,7 +212,7 @@ func TestIsSeasonMapInitialized_CriticalReliability(t *testing.T) {
 		},
 		{
 			"season_initialized_with_data",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.seasonalEnabled = true
 				tracker.speciesBySeason["summer"] = map[string]time.Time{
 					"Species_1": time.Now(),
@@ -224,7 +224,7 @@ func TestIsSeasonMapInitialized_CriticalReliability(t *testing.T) {
 		},
 		{
 			"check_different_season",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.seasonalEnabled = true
 				tracker.speciesBySeason["winter"] = make(map[string]time.Time)
 			},
@@ -243,7 +243,7 @@ func TestIsSeasonMapInitialized_CriticalReliability(t *testing.T) {
 				Enabled: true,
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(nil, settings)
+			tracker := NewTrackerFromSettings(nil, settings)
 			require.NotNil(t, tracker)
 
 			// Setup tracker state
@@ -267,14 +267,14 @@ func TestGetSeasonMapCount_CriticalReliability(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		setupTracker  func(*NewSpeciesTracker)
+		setupTracker  func(*SpeciesTracker)
 		seasonToCount string
 		expectedCount int
 		description   string
 	}{
 		{
 			"seasonal_disabled",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.seasonalEnabled = false
 			},
 			"spring",
@@ -283,7 +283,7 @@ func TestGetSeasonMapCount_CriticalReliability(t *testing.T) {
 		},
 		{
 			"season_not_initialized",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.seasonalEnabled = true
 			},
 			"spring",
@@ -292,7 +292,7 @@ func TestGetSeasonMapCount_CriticalReliability(t *testing.T) {
 		},
 		{
 			"empty_season",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.seasonalEnabled = true
 				tracker.speciesBySeason["spring"] = make(map[string]time.Time)
 			},
@@ -302,7 +302,7 @@ func TestGetSeasonMapCount_CriticalReliability(t *testing.T) {
 		},
 		{
 			"season_with_species",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.seasonalEnabled = true
 				now := time.Now()
 				tracker.speciesBySeason["summer"] = map[string]time.Time{
@@ -317,7 +317,7 @@ func TestGetSeasonMapCount_CriticalReliability(t *testing.T) {
 		},
 		{
 			"multiple_seasons",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.seasonalEnabled = true
 				now := time.Now()
 				tracker.speciesBySeason["spring"] = map[string]time.Time{
@@ -346,7 +346,7 @@ func TestGetSeasonMapCount_CriticalReliability(t *testing.T) {
 				Enabled: true,
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(nil, settings)
+			tracker := NewTrackerFromSettings(nil, settings)
 			require.NotNil(t, tracker)
 
 			// Setup tracker state
@@ -373,7 +373,7 @@ func TestCacheManagement_CriticalReliability(t *testing.T) {
 		Enabled: true,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(nil, settings)
+	tracker := NewTrackerFromSettings(nil, settings)
 	require.NotNil(t, tracker)
 
 	// Test 1: Cache starts empty
@@ -417,7 +417,7 @@ func TestClose_CriticalReliability(t *testing.T) {
 		Enabled: true,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(nil, settings)
+	tracker := NewTrackerFromSettings(nil, settings)
 	require.NotNil(t, tracker)
 
 	// Add some data to ensure tracker is in use
@@ -447,7 +447,7 @@ func TestSetCurrentYearForTesting_CriticalReliability(t *testing.T) {
 		Enabled: true,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(nil, settings)
+	tracker := NewTrackerFromSettings(nil, settings)
 	require.NotNil(t, tracker)
 
 	// Initial year should be current year
@@ -482,7 +482,7 @@ func TestUtilityFunctions_ConcurrentAccess(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(nil, settings)
+	tracker := NewTrackerFromSettings(nil, settings)
 	require.NotNil(t, tracker)
 
 	// Add some initial data

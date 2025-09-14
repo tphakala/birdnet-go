@@ -1,6 +1,6 @@
 // new_species_tracker_cleanup_test.go
 // Critical tests for data cleanup and notification suppression functions
-package processor
+package species
 
 import (
 	"testing"
@@ -19,14 +19,14 @@ func TestPruneOldEntries_CriticalReliability(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		setupData      func(*NewSpeciesTracker, time.Time)
+		setupData      func(*SpeciesTracker, time.Time)
 		currentTime    time.Time
 		expectedPruned int
 		description    string
 	}{
 		{
 			"no_old_entries",
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				// Add recent entries only
 				tracker.speciesFirstSeen["Recent_Species_1"] = now.AddDate(0, 0, -5)
 				tracker.speciesFirstSeen["Recent_Species_2"] = now.AddDate(0, 0, -10)
@@ -37,12 +37,12 @@ func TestPruneOldEntries_CriticalReliability(t *testing.T) {
 		},
 		{
 			"prune_lifetime_old_entries",
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				// Lifetime entries are pruned after 10 years, NOT 2x window
 				tracker.speciesFirstSeen["Very_Old_Species"] = now.AddDate(-11, 0, 0) // 11 years ago - should be pruned
-				tracker.speciesFirstSeen["Old_Species_1"] = now.AddDate(0, 0, -30)   // 30 days ago - should NOT be pruned
-				tracker.speciesFirstSeen["Old_Species_2"] = now.AddDate(0, 0, -40)   // 40 days ago - should NOT be pruned
-				tracker.speciesFirstSeen["Recent_Species"] = now.AddDate(0, 0, -20)  // 20 days ago - should NOT be pruned
+				tracker.speciesFirstSeen["Old_Species_1"] = now.AddDate(0, 0, -30)    // 30 days ago - should NOT be pruned
+				tracker.speciesFirstSeen["Old_Species_2"] = now.AddDate(0, 0, -40)    // 40 days ago - should NOT be pruned
+				tracker.speciesFirstSeen["Recent_Species"] = now.AddDate(0, 0, -20)   // 20 days ago - should NOT be pruned
 			},
 			time.Now(),
 			1,
@@ -50,14 +50,14 @@ func TestPruneOldEntries_CriticalReliability(t *testing.T) {
 		},
 		{
 			"prune_yearly_tracking",
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				// Yearly tracking prunes entries from before the current tracking year
 				tracker.yearlyEnabled = true
 				tracker.yearlyWindowDays = 7
 				tracker.resetMonth = 1 // January reset
 				tracker.resetDay = 1
 				// Add entry from last year (before Jan 1)
-				tracker.speciesThisYear["Last_Year_Species"] = now.AddDate(-1, 0, 0) // 1 year ago - should be pruned
+				tracker.speciesThisYear["Last_Year_Species"] = now.AddDate(-1, 0, 0)  // 1 year ago - should be pruned
 				tracker.speciesThisYear["This_Year_Species"] = now.AddDate(0, 0, -10) // 10 days ago - should NOT be pruned
 			},
 			time.Now(),
@@ -66,7 +66,7 @@ func TestPruneOldEntries_CriticalReliability(t *testing.T) {
 		},
 		{
 			"prune_seasonal_tracking",
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				// Seasonal tracking prunes entire seasons older than 1 year
 				tracker.seasonalEnabled = true
 				tracker.seasonalWindowDays = 7
@@ -86,7 +86,7 @@ func TestPruneOldEntries_CriticalReliability(t *testing.T) {
 		},
 		{
 			"prune_notification_records",
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				// Notification window is 168 hours (7 days)
 				tracker.notificationSuppressionWindow = 168 * time.Hour
 				tracker.notificationLastSent["Old_Notif_Species"] = now.Add(-170 * time.Hour)
@@ -98,7 +98,7 @@ func TestPruneOldEntries_CriticalReliability(t *testing.T) {
 		},
 		{
 			"empty_season_map_removal",
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				tracker.seasonalEnabled = true
 				tracker.seasonalWindowDays = 7
 				// Create season with all old entries (older than 1 year) that will be pruned
@@ -116,10 +116,10 @@ func TestPruneOldEntries_CriticalReliability(t *testing.T) {
 		},
 		{
 			"boundary_conditions",
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				// Test exact boundary (10 years for lifetime tracking)
 				// PruneOldEntries uses Before() which means entries at exactly 10 years ARE pruned
-				tracker.speciesFirstSeen["Exactly_At_Boundary"] = now.AddDate(-10, 0, 0) // Exactly 10 years - will be pruned
+				tracker.speciesFirstSeen["Exactly_At_Boundary"] = now.AddDate(-10, 0, 0)  // Exactly 10 years - will be pruned
 				tracker.speciesFirstSeen["Just_Before_Boundary"] = now.AddDate(-10, 0, 1) // Just under 10 years - not pruned
 				tracker.speciesFirstSeen["Just_After_Boundary"] = now.AddDate(-10, 0, -1) // Just over 10 years - will be pruned
 			},
@@ -129,7 +129,7 @@ func TestPruneOldEntries_CriticalReliability(t *testing.T) {
 		},
 		{
 			"massive_dataset_pruning",
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				// Add 1000 very old entries (> 10 years) and 100 recent ones
 				for i := 0; i < 1000; i++ {
 					speciesName := "Very_Old_Species_" + string(rune(i))
@@ -157,7 +157,7 @@ func TestPruneOldEntries_CriticalReliability(t *testing.T) {
 				NotificationSuppressionHours: 168, // 7 days
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(nil, settings)
+			tracker := NewTrackerFromSettings(nil, settings)
 			require.NotNil(t, tracker)
 
 			// Setup test data
@@ -300,7 +300,7 @@ func TestNotificationSuppression_CriticalReliability(t *testing.T) {
 				NotificationSuppressionHours: tt.suppressionHours,
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(nil, settings)
+			tracker := NewTrackerFromSettings(nil, settings)
 			require.NotNil(t, tracker)
 
 			// Setup last sent time if provided
@@ -330,7 +330,7 @@ func TestRecordNotificationSent_CriticalReliability(t *testing.T) {
 		NotificationSuppressionHours: 168,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(nil, settings)
+	tracker := NewTrackerFromSettings(nil, settings)
 	require.NotNil(t, tracker)
 
 	// Test 1: Record single notification
@@ -375,16 +375,16 @@ func TestCleanupOldNotificationRecords_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		setupRecords   func(*NewSpeciesTracker, time.Time)
-		currentTime    time.Time
-		windowHours    int
+		name            string
+		setupRecords    func(*SpeciesTracker, time.Time)
+		currentTime     time.Time
+		windowHours     int
 		expectedCleaned int
-		description    string
+		description     string
 	}{
 		{
 			"no_old_records",
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				tracker.notificationLastSent["Recent_1"] = now.Add(-1 * time.Hour)
 				tracker.notificationLastSent["Recent_2"] = now.Add(-6 * time.Hour)
 			},
@@ -395,7 +395,7 @@ func TestCleanupOldNotificationRecords_CriticalReliability(t *testing.T) {
 		},
 		{
 			"clean_old_records",
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				tracker.notificationLastSent["Old_1"] = now.Add(-170 * time.Hour) // Just past window
 				tracker.notificationLastSent["Old_2"] = now.Add(-200 * time.Hour)
 				tracker.notificationLastSent["Recent"] = now.Add(-100 * time.Hour)
@@ -407,10 +407,10 @@ func TestCleanupOldNotificationRecords_CriticalReliability(t *testing.T) {
 		},
 		{
 			"exactly_at_cutoff",
-			func(tracker *NewSpeciesTracker, now time.Time) {
-				tracker.notificationLastSent["Exactly"] = now.Add(-168 * time.Hour) // Exactly at window - NOT cleaned
+			func(tracker *SpeciesTracker, now time.Time) {
+				tracker.notificationLastSent["Exactly"] = now.Add(-168 * time.Hour)    // Exactly at window - NOT cleaned
 				tracker.notificationLastSent["JustBefore"] = now.Add(-167 * time.Hour) // Within window - NOT cleaned
-				tracker.notificationLastSent["JustAfter"] = now.Add(-169 * time.Hour) // Past window - WILL be cleaned
+				tracker.notificationLastSent["JustAfter"] = now.Add(-169 * time.Hour)  // Past window - WILL be cleaned
 			},
 			time.Now(),
 			168,
@@ -419,7 +419,7 @@ func TestCleanupOldNotificationRecords_CriticalReliability(t *testing.T) {
 		},
 		{
 			"suppression_disabled",
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				tracker.notificationLastSent["Any_1"] = now.Add(-1000 * time.Hour)
 				tracker.notificationLastSent["Any_2"] = now.Add(-2000 * time.Hour)
 			},
@@ -430,7 +430,7 @@ func TestCleanupOldNotificationRecords_CriticalReliability(t *testing.T) {
 		},
 		{
 			"large_dataset_cleanup",
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				// Add 500 old records and 100 recent ones
 				for i := 0; i < 500; i++ {
 					species := "Old_" + string(rune(i))
@@ -458,7 +458,7 @@ func TestCleanupOldNotificationRecords_CriticalReliability(t *testing.T) {
 				NotificationSuppressionHours: tt.windowHours,
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(nil, settings)
+			tracker := NewTrackerFromSettings(nil, settings)
 			require.NotNil(t, tracker)
 
 			// Setup test records
@@ -496,7 +496,7 @@ func TestNotificationSystem_ConcurrentAccess(t *testing.T) {
 		NotificationSuppressionHours: 168,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(nil, settings)
+	tracker := NewTrackerFromSettings(nil, settings)
 	require.NotNil(t, tracker)
 
 	// Run concurrent operations

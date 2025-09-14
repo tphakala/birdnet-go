@@ -1,4 +1,4 @@
-package processor
+package species
 
 import (
 	"testing"
@@ -11,8 +11,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
-// TestNewSpeciesTracker_Close tests the Close method
-func TestNewSpeciesTracker_Close(t *testing.T) {
+// TestSpeciesTracker_Close tests the Close method
+func TestSpeciesTracker_Close(t *testing.T) {
 	t.Parallel()
 
 	ds := &MockSpeciesDatastore{}
@@ -20,13 +20,13 @@ func TestNewSpeciesTracker_Close(t *testing.T) {
 		Enabled: true,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	
+	tracker := NewTrackerFromSettings(ds, settings)
+
 	// Test Close doesn't panic
 	assert.NotPanics(t, func() {
 		_ = tracker.Close()
 	})
-	
+
 	// Test Close is idempotent
 	assert.NotPanics(t, func() {
 		_ = tracker.Close()
@@ -34,8 +34,8 @@ func TestNewSpeciesTracker_Close(t *testing.T) {
 	})
 }
 
-// TestNewSpeciesTracker_SetCurrentYearForTesting tests SetCurrentYearForTesting
-func TestNewSpeciesTracker_SetCurrentYearForTesting(t *testing.T) {
+// TestSpeciesTracker_SetCurrentYearForTesting tests SetCurrentYearForTesting
+func TestSpeciesTracker_SetCurrentYearForTesting(t *testing.T) {
 	t.Parallel()
 
 	ds := &MockSpeciesDatastore{}
@@ -48,24 +48,24 @@ func TestNewSpeciesTracker_SetCurrentYearForTesting(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	
+	tracker := NewTrackerFromSettings(ds, settings)
+
 	// Set a specific year for testing
 	testYear := 2024
 	tracker.SetCurrentYearForTesting(testYear)
-	
+
 	// Verify it affects year calculations
 	now := time.Now()
 	start, _ := tracker.getYearDateRange(now)
 	parsedStart, _ := time.Parse("2006-01-02", start)
 	assert.Equal(t, testYear, parsedStart.Year())
-	
+
 	// Test with different year
 	tracker.SetCurrentYearForTesting(2025)
 	start, _ = tracker.getYearDateRange(now)
 	parsedStart, _ = time.Parse("2006-01-02", start)
 	assert.Equal(t, 2025, parsedStart.Year())
-	
+
 	// Reset to 0 should use current year
 	tracker.SetCurrentYearForTesting(0)
 	start, _ = tracker.getYearDateRange(now)
@@ -74,15 +74,15 @@ func TestNewSpeciesTracker_SetCurrentYearForTesting(t *testing.T) {
 	assert.Equal(t, currentYear, parsedStart.Year())
 }
 
-// TestNewSpeciesTracker_shouldResetYear tests shouldResetYear method
-func TestNewSpeciesTracker_shouldResetYear(t *testing.T) {
+// TestSpeciesTracker_shouldResetYear tests shouldResetYear method
+func TestSpeciesTracker_shouldResetYear(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		currentYear    int
-		testTime       time.Time
-		expectedReset  bool
+		name          string
+		currentYear   int
+		testTime      time.Time
+		expectedReset bool
 	}{
 		{
 			name:          "same year no reset",
@@ -120,23 +120,23 @@ func TestNewSpeciesTracker_shouldResetYear(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			// Set the current tracking year for testing
 			tracker.SetCurrentYearForTesting(tt.currentYear)
-			
+
 			shouldReset := tracker.shouldResetYear(tt.testTime)
 			assert.Equal(t, tt.expectedReset, shouldReset)
 		})
 	}
 }
 
-// TestNewSpeciesTracker_loadYearlyDataFromDatabase tests loadYearlyDataFromDatabase
-func TestNewSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
+// TestSpeciesTracker_loadYearlyDataFromDatabase tests loadYearlyDataFromDatabase
+func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 	t.Parallel()
 
 	t.Run("successful load", func(t *testing.T) {
 		ds := &MockSpeciesDatastore{}
-		
+
 		// Mock data
 		yearlyData := []datastore.NewSpeciesData{
 			{
@@ -150,10 +150,10 @@ func TestNewSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 				FirstSeenDate:  time.Now().Add(-5 * 24 * time.Hour).Format("2006-01-02"),
 			},
 		}
-		
+
 		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, 10000, 0).
 			Return(yearlyData, nil)
-		
+
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled: true,
 			YearlyTracking: conf.YearlyTrackingSettings{
@@ -162,12 +162,12 @@ func TestNewSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 				ResetDay:   1,
 			},
 		}
-		
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+
+		tracker := NewTrackerFromSettings(ds, settings)
 		now := time.Now()
 		err := tracker.loadYearlyDataFromDatabase(now)
 		require.NoError(t, err)
-		
+
 		// Check data was loaded
 		tracker.mu.RLock()
 		assert.Len(t, tracker.speciesThisYear, 2)
@@ -180,23 +180,23 @@ func TestNewSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 		ds := &MockSpeciesDatastore{}
 		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, 10000, 0).
 			Return([]datastore.NewSpeciesData{}, nil)
-		
+
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled: true,
 			YearlyTracking: conf.YearlyTrackingSettings{
 				Enabled: true,
 			},
 		}
-		
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
-		
+
+		tracker := NewTrackerFromSettings(ds, settings)
+
 		// Pre-populate some data
 		tracker.speciesThisYear["Existing"] = time.Now().Add(-20 * 24 * time.Hour)
-		
+
 		now := time.Now()
 		err := tracker.loadYearlyDataFromDatabase(now)
 		require.NoError(t, err)
-		
+
 		// Check existing data preserved
 		tracker.mu.RLock()
 		assert.Contains(t, tracker.speciesThisYear, "Existing")
@@ -207,28 +207,28 @@ func TestNewSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 		ds := &MockSpeciesDatastore{}
 		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, 10000, 0).
 			Return(nil, assert.AnError)
-		
+
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled: true,
 			YearlyTracking: conf.YearlyTrackingSettings{
 				Enabled: true,
 			},
 		}
-		
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+
+		tracker := NewTrackerFromSettings(ds, settings)
 		now := time.Now()
 		err := tracker.loadYearlyDataFromDatabase(now)
 		assert.Error(t, err)
 	})
 }
 
-// TestNewSpeciesTracker_loadSeasonalDataFromDatabase tests loadSeasonalDataFromDatabase
-func TestNewSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
+// TestSpeciesTracker_loadSeasonalDataFromDatabase tests loadSeasonalDataFromDatabase
+func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 	t.Parallel()
 
 	t.Run("successful load", func(t *testing.T) {
 		ds := &MockSpeciesDatastore{}
-		
+
 		// Mock data
 		seasonalData := []datastore.NewSpeciesData{
 			{
@@ -242,19 +242,19 @@ func TestNewSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 				FirstSeenDate:  time.Now().Add(-1 * 24 * time.Hour).Format("2006-01-02"),
 			},
 		}
-		
+
 		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, 10000, 0).
 			Return(seasonalData, nil)
-		
+
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled: true,
 			SeasonalTracking: conf.SeasonalTrackingSettings{
 				Enabled: true,
 			},
 		}
-		
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
-		
+
+		tracker := NewTrackerFromSettings(ds, settings)
+
 		// Initialize season maps
 		tracker.seasons = map[string]seasonDates{
 			"Spring": {month: 3, day: 1},
@@ -263,11 +263,11 @@ func TestNewSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 			"Winter": {month: 12, day: 1},
 		}
 		tracker.currentSeason = "Spring"
-		
+
 		now := time.Now()
 		err := tracker.loadSeasonalDataFromDatabase(now)
 		require.NoError(t, err)
-		
+
 		// Check data was loaded
 		tracker.mu.RLock()
 		if tracker.speciesBySeason != nil && tracker.speciesBySeason["Spring"] != nil {
@@ -280,17 +280,17 @@ func TestNewSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 
 	t.Run("no season maps", func(t *testing.T) {
 		ds := &MockSpeciesDatastore{}
-		
+
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled: true,
 			SeasonalTracking: conf.SeasonalTrackingSettings{
 				Enabled: true,
 			},
 		}
-		
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+
+		tracker := NewTrackerFromSettings(ds, settings)
 		tracker.seasons = nil // No season maps
-		
+
 		now := time.Now()
 		err := tracker.loadSeasonalDataFromDatabase(now)
 		// Should not error but not load anything
@@ -304,22 +304,22 @@ func TestNewSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 		ds := &MockSpeciesDatastore{}
 		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, 10000, 0).
 			Return([]datastore.NewSpeciesData{}, nil)
-		
+
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled: true,
 			SeasonalTracking: conf.SeasonalTrackingSettings{
 				Enabled: true,
 			},
 		}
-		
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
-		
+
+		tracker := NewTrackerFromSettings(ds, settings)
+
 		// Initialize season
 		tracker.seasons = map[string]seasonDates{
 			"Spring": {month: 3, day: 1},
 		}
 		tracker.currentSeason = "Spring"
-		
+
 		// Pre-populate some data
 		if tracker.speciesBySeason == nil {
 			tracker.speciesBySeason = make(map[string]map[string]time.Time)
@@ -328,11 +328,11 @@ func TestNewSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 			tracker.speciesBySeason["Spring"] = make(map[string]time.Time)
 		}
 		tracker.speciesBySeason["Spring"]["Existing"] = time.Now().Add(-10 * 24 * time.Hour)
-		
+
 		now := time.Now()
 		err := tracker.loadSeasonalDataFromDatabase(now)
 		require.NoError(t, err)
-		
+
 		// Check existing data preserved
 		tracker.mu.RLock()
 		if tracker.speciesBySeason != nil && tracker.speciesBySeason["Spring"] != nil {
@@ -342,8 +342,8 @@ func TestNewSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 	})
 }
 
-// TestNewSpeciesTracker_getYearDateRange tests getYearDateRange
-func TestNewSpeciesTracker_getYearDateRange(t *testing.T) {
+// TestSpeciesTracker_getYearDateRange tests getYearDateRange
+func TestSpeciesTracker_getYearDateRange(t *testing.T) {
 	t.Parallel()
 
 	t.Run("standard year range", func(t *testing.T) {
@@ -354,10 +354,10 @@ func TestNewSpeciesTracker_getYearDateRange(t *testing.T) {
 				ResetDay:   1,
 			},
 		}
-		
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+
+		tracker := NewTrackerFromSettings(ds, settings)
 		tracker.SetCurrentYearForTesting(2024)
-		
+
 		now := time.Now()
 		start, end := tracker.getYearDateRange(now)
 		assert.Equal(t, "2024-01-01", start)
@@ -372,15 +372,15 @@ func TestNewSpeciesTracker_getYearDateRange(t *testing.T) {
 				ResetDay:   15,
 			},
 		}
-		
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+
+		tracker := NewTrackerFromSettings(ds, settings)
 		tracker.SetCurrentYearForTesting(2024)
-		
+
 		// After reset date in year
 		// Note: Can't directly set lastYearReset (private field)
 		now := time.Now()
 		start, end := tracker.getYearDateRange(now)
-		
+
 		// Should be from July 15, 2024 to July 14, 2025
 		assert.Equal(t, "2024-07-15", start)
 		assert.Equal(t, "2025-07-14", end)
@@ -394,11 +394,11 @@ func TestNewSpeciesTracker_getYearDateRange(t *testing.T) {
 				ResetDay:   1,
 			},
 		}
-		
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+
+		tracker := NewTrackerFromSettings(ds, settings)
 		// Set to February 2024
 		testTime := time.Date(2024, 2, 15, 0, 0, 0, 0, time.UTC)
-		
+
 		// Should be from October 1, 2023 to September 30, 2024
 		start, end := tracker.getYearDateRange(testTime)
 		assert.Equal(t, "2023-10-01", start)
@@ -406,8 +406,8 @@ func TestNewSpeciesTracker_getYearDateRange(t *testing.T) {
 	})
 }
 
-// TestNewSpeciesTracker_getSeasonDateRange tests getSeasonDateRange
-func TestNewSpeciesTracker_getSeasonDateRange(t *testing.T) {
+// TestSpeciesTracker_getSeasonDateRange tests getSeasonDateRange
+func TestSpeciesTracker_getSeasonDateRange(t *testing.T) {
 	t.Parallel()
 
 	t.Run("spring season", func(t *testing.T) {
@@ -417,14 +417,14 @@ func TestNewSpeciesTracker_getSeasonDateRange(t *testing.T) {
 				Enabled: true,
 			},
 		}
-		
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+
+		tracker := NewTrackerFromSettings(ds, settings)
 		tracker.seasons = map[string]seasonDates{
 			"Spring": {month: 3, day: 1},
 		}
 		tracker.currentSeason = "Spring"
 		tracker.SetCurrentYearForTesting(2024)
-		
+
 		now := time.Now()
 		start, end := tracker.getSeasonDateRange("Spring", now)
 		assert.Equal(t, "2024-03-01", start)
@@ -438,14 +438,14 @@ func TestNewSpeciesTracker_getSeasonDateRange(t *testing.T) {
 				Enabled: true,
 			},
 		}
-		
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+
+		tracker := NewTrackerFromSettings(ds, settings)
 		tracker.seasons = map[string]seasonDates{
 			"Winter": {month: 12, day: 1},
 		}
 		tracker.currentSeason = "Winter"
 		tracker.SetCurrentYearForTesting(2024)
-		
+
 		// In December - winter extends to next year
 		now := time.Date(2024, 12, 15, 0, 0, 0, 0, time.UTC)
 		start, end := tracker.getSeasonDateRange("Winter", now)
@@ -460,10 +460,10 @@ func TestNewSpeciesTracker_getSeasonDateRange(t *testing.T) {
 				Enabled: true,
 			},
 		}
-		
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+
+		tracker := NewTrackerFromSettings(ds, settings)
 		tracker.currentSeason = ""
-		
+
 		now := time.Now()
 		start, end := tracker.getSeasonDateRange("", now)
 		assert.Empty(t, start)
@@ -473,13 +473,13 @@ func TestNewSpeciesTracker_getSeasonDateRange(t *testing.T) {
 	t.Run("invalid season format", func(t *testing.T) {
 		ds := &MockSpeciesDatastore{}
 		settings := &conf.SpeciesTrackingSettings{}
-		
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+
+		tracker := NewTrackerFromSettings(ds, settings)
 		tracker.seasons = map[string]seasonDates{
 			"BadSeason": {month: 0, day: 0}, // Invalid
 		}
 		tracker.currentSeason = "BadSeason"
-		
+
 		now := time.Now()
 		start, end := tracker.getSeasonDateRange("BadSeason", now)
 		assert.Empty(t, start)
@@ -487,8 +487,8 @@ func TestNewSpeciesTracker_getSeasonDateRange(t *testing.T) {
 	})
 }
 
-// TestNewSpeciesTracker_isWithinCurrentYear tests isWithinCurrentYear
-func TestNewSpeciesTracker_isWithinCurrentYear(t *testing.T) {
+// TestSpeciesTracker_isWithinCurrentYear tests isWithinCurrentYear
+func TestSpeciesTracker_isWithinCurrentYear(t *testing.T) {
 	t.Parallel()
 
 	ds := &MockSpeciesDatastore{}
@@ -498,14 +498,14 @@ func TestNewSpeciesTracker_isWithinCurrentYear(t *testing.T) {
 			ResetDay:   1,
 		},
 	}
-	
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+
+	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2024)
-	
+
 	tests := []struct {
-		name      string
-		testTime  time.Time
-		expected  bool
+		name     string
+		testTime time.Time
+		expected bool
 	}{
 		{
 			name:     "current year",
@@ -533,7 +533,7 @@ func TestNewSpeciesTracker_isWithinCurrentYear(t *testing.T) {
 			expected: false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := tracker.isWithinCurrentYear(tt.testTime)
@@ -542,8 +542,8 @@ func TestNewSpeciesTracker_isWithinCurrentYear(t *testing.T) {
 	}
 }
 
-// TestNewSpeciesTracker_yearlyResetBoundaries tests yearly reset with custom boundaries
-func TestNewSpeciesTracker_yearlyResetBoundaries(t *testing.T) {
+// TestSpeciesTracker_yearlyResetBoundaries tests yearly reset with custom boundaries
+func TestSpeciesTracker_yearlyResetBoundaries(t *testing.T) {
 	t.Parallel()
 
 	t.Run("mid-year reset", func(t *testing.T) {
@@ -555,19 +555,19 @@ func TestNewSpeciesTracker_yearlyResetBoundaries(t *testing.T) {
 				ResetDay:   1,
 			},
 		}
-		
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
-		
+
+		tracker := NewTrackerFromSettings(ds, settings)
+
 		// Test detection before reset date (June 30, 2024)
 		beforeReset := time.Date(2024, 6, 30, 0, 0, 0, 0, time.UTC)
 		tracker.SetCurrentYearForTesting(2024)
 		isWithin := tracker.isWithinCurrentYear(beforeReset)
-		
+
 		// June 30, 2024 is within current tracking year (July 1, 2023 - June 30, 2024)
 		// since we haven't reached the July 1, 2024 reset date yet
 		assert.True(t, isWithin)
-		
-		// Test detection after reset date (July 2, 2024) 
+
+		// Test detection after reset date (July 2, 2024)
 		afterReset := time.Date(2024, 7, 2, 0, 0, 0, 0, time.UTC)
 		isWithin = tracker.isWithinCurrentYear(afterReset)
 		// July 2, 2024 is within new tracking year (July 1, 2024 - June 30, 2025)

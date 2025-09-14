@@ -7,39 +7,39 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
 )
 
 // Test constants for better readability and maintainability
 const (
-	testSpeciesCommonName   = "Test Bird"
+	testSpeciesCommonName     = "Test Bird"
 	testSpeciesScientificName = "Testus birdus"
-	testConfidence          = 0.95
-	testConfidenceDelta     = 0.001
-	testSource              = "test-source"
-	testWindowDays          = 14
-	testSyncIntervalMins    = 60
-	testCacheTTL            = 30 * time.Second
-	testSeasonCacheTTL      = time.Hour
-	testDaysWithinWindow    = 5
-	testDaysOutsideWindow   = 15
-	testConsumerName        = "test-detection-consumer"
+	testConfidence            = 0.95
+	testConfidenceDelta       = 0.001
+	testSource                = "test-source"
+	testWindowDays            = 14
+	testSyncIntervalMins      = 60
+	testCacheTTL              = 30 * time.Second
+	testSeasonCacheTTL        = time.Hour
+	testDaysWithinWindow      = 5
+	testDaysOutsideWindow     = 15
+	testConsumerName          = "test-detection-consumer"
 )
-
 
 // TestDetectionEventCreation tests the creation of detection events
 func TestDetectionEventCreation(t *testing.T) {
 	t.Parallel()
-	
+
 	// Test creating a new species detection event
 	event, err := events.NewDetectionEvent(
 		testSpeciesCommonName,
 		testSpeciesScientificName,
 		testConfidence,
 		testSource,
-		true,  // isNewSpecies
-		0,     // daysSinceFirstSeen
+		true, // isNewSpecies
+		0,    // daysSinceFirstSeen
 	)
 	require.NoError(t, err)
 
@@ -57,7 +57,7 @@ func TestDetectionEventCreation(t *testing.T) {
 // TestSpeciesStatusTracking tests species status tracking functionality
 func TestSpeciesStatusTracking(t *testing.T) {
 	t.Parallel()
-	
+
 	// Create mock datastore using testify/mock
 	mockDS := &MockSpeciesDatastore{}
 	// Note: This test doesn't call InitFromDatabase, so no expectation is needed
@@ -77,7 +77,7 @@ func TestSpeciesStatusTracking(t *testing.T) {
 			Enabled: false,
 		},
 	}
-	tracker := NewSpeciesTrackerFromSettings(mockDS, settings)
+	tracker := species.NewTrackerFromSettings(mockDS, settings)
 	status := tracker.GetSpeciesStatus(testSpeciesScientificName, now)
 	assert.True(t, status.IsNew)
 	assert.Equal(t, 0, status.DaysSinceFirst)
@@ -87,7 +87,7 @@ func TestSpeciesStatusTracking(t *testing.T) {
 
 	// Check again - should still be new (same day)
 	status = tracker.GetSpeciesStatus(testSpeciesScientificName, now)
-	assert.True(t, status.IsNew)  // Still within the window
+	assert.True(t, status.IsNew) // Still within the window
 	assert.Equal(t, 0, status.DaysSinceFirst)
 
 	// Check after testDaysWithinWindow days - still within window
@@ -101,7 +101,7 @@ func TestSpeciesStatusTracking(t *testing.T) {
 	status = tracker.GetSpeciesStatus(testSpeciesScientificName, future)
 	assert.False(t, status.IsNew)
 	assert.Equal(t, testDaysOutsideWindow, status.DaysSinceFirst)
-	
+
 	// No expectations to verify since this test doesn't call InitFromDatabase
 }
 

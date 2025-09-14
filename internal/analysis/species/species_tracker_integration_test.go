@@ -1,6 +1,6 @@
 // new_species_tracker_integration_test.go
 // Integration tests for complete species tracking workflow
-package processor
+package species
 
 import (
 	"fmt"
@@ -23,12 +23,12 @@ func TestFullWorkflow_BasicTracking(t *testing.T) {
 
 	// Create a mock datastore
 	ds := &MockSpeciesDatastore{}
-	
+
 	// Setup mock to return empty results for any date range
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil)
 	// Basic tracking doesn't use yearly/seasonal, so this may not be called
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
-	
+
 	// Verify all mock expectations are met
 	t.Cleanup(func() { ds.AssertExpectations(t) })
 
@@ -39,7 +39,7 @@ func TestFullWorkflow_BasicTracking(t *testing.T) {
 	}
 
 	// Create tracker
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 
 	// Initialize from database
@@ -89,7 +89,7 @@ func TestFullWorkflow_YearlyTracking(t *testing.T) {
 
 	// Create mock datastore
 	ds := &MockSpeciesDatastore{}
-	
+
 	// Setup mock responses for yearly data
 	yearlyData := []datastore.NewSpeciesData{
 		{
@@ -97,18 +97,18 @@ func TestFullWorkflow_YearlyTracking(t *testing.T) {
 			FirstSeenDate:  "2024-03-15",
 		},
 	}
-	
+
 	// Set up mocks carefully to match actual implementation behavior
 	// For lifetime tracking (GetNewSpeciesDetections), return empty to simulate
 	// that this species has never been seen before in lifetime tracking
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil)
-	
+
 	// For yearly tracking, return the species data for 2024
 	ds.On("GetSpeciesFirstDetectionInPeriod", "2024-01-01", "2024-12-31", mock.Anything, mock.Anything).Return(yearlyData, nil).Once()
-	
-	// Default handler for other period queries  
+
+	// Default handler for other period queries
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
-	
+
 	// Verify all mock expectations are met
 	t.Cleanup(func() { ds.AssertExpectations(t) })
 
@@ -123,7 +123,7 @@ func TestFullWorkflow_YearlyTracking(t *testing.T) {
 		NewSpeciesWindowDays: 7,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 
 	// Set current year for testing
@@ -166,7 +166,7 @@ func TestFullWorkflow_SeasonalTracking(t *testing.T) {
 
 	// Create mock datastore
 	ds := &MockSpeciesDatastore{}
-	
+
 	// Setup mock for seasonal data
 	springData := []datastore.NewSpeciesData{
 		{
@@ -174,11 +174,11 @@ func TestFullWorkflow_SeasonalTracking(t *testing.T) {
 			FirstSeenDate:  "2024-04-15",
 		},
 	}
-	
+
 	// Mock will return seasonal data
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(springData, nil).Maybe()
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
-	
+
 	// Verify all mock expectations are met
 	t.Cleanup(func() { ds.AssertExpectations(t) })
 
@@ -186,13 +186,13 @@ func TestFullWorkflow_SeasonalTracking(t *testing.T) {
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled: true,
 		SeasonalTracking: conf.SeasonalTrackingSettings{
-			Enabled: true,
+			Enabled:    true,
 			WindowDays: 7, // Set seasonal window days explicitly
 		},
 		NewSpeciesWindowDays: 7,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 
 	// Initialize with spring season using safe test helper
@@ -218,7 +218,7 @@ func TestFullWorkflow_SeasonalTracking(t *testing.T) {
 	// Simulate season transition to summer
 	summerTime := time.Date(2024, 6, 21, 0, 0, 0, 0, time.UTC) // Summer solstice
 	tracker.checkAndResetPeriods(summerTime)
-	
+
 	// Spring bird should be new in summer
 	status = tracker.GetSpeciesStatus("Spring_Bird", summerTime)
 	assert.True(t, status.IsNew, "Spring bird should be new in summer")
@@ -233,11 +233,11 @@ func TestFullWorkflow_CombinedTracking(t *testing.T) {
 
 	// Create mock datastore
 	ds := &MockSpeciesDatastore{}
-	
+
 	// Setup default mock responses
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
-	
+
 	// Verify all mock expectations are met
 	t.Cleanup(func() { ds.AssertExpectations(t) })
 
@@ -255,7 +255,7 @@ func TestFullWorkflow_CombinedTracking(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 
 	// Initialize tracker
@@ -297,7 +297,7 @@ func TestFullWorkflow_CombinedTracking(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			
+
 			// Mix different operations
 			switch id % 3 {
 			case 0:
@@ -329,7 +329,7 @@ func TestFullWorkflow_ErrorRecovery(t *testing.T) {
 		NewSpeciesWindowDays: 7,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(nil, settings)
+	tracker := NewTrackerFromSettings(nil, settings)
 	require.NotNil(t, tracker)
 
 	// InitFromDatabase correctly returns error when datastore is nil
@@ -347,11 +347,11 @@ func TestFullWorkflow_ErrorRecovery(t *testing.T) {
 	errorDS.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData(nil), fmt.Errorf("database error"))
 	// Basic tracking doesn't use yearly/seasonal, so this may not be called
 	errorDS.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData(nil), fmt.Errorf("database error")).Maybe()
-	
+
 	// Verify error mock expectations are met
 	t.Cleanup(func() { errorDS.AssertExpectations(t) })
 
-	tracker2 := NewSpeciesTrackerFromSettings(errorDS, settings)
+	tracker2 := NewTrackerFromSettings(errorDS, settings)
 	require.NotNil(t, tracker2)
 
 	// InitFromDatabase properly returns error when datastore fails (expected behavior)
@@ -376,7 +376,7 @@ func TestFullWorkflow_MemoryManagement(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
-	
+
 	// Verify all mock expectations are met
 	t.Cleanup(func() { ds.AssertExpectations(t) })
 
@@ -385,7 +385,7 @@ func TestFullWorkflow_MemoryManagement(t *testing.T) {
 		NewSpeciesWindowDays: 7,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 
 	// Add many species to test memory management
@@ -425,7 +425,7 @@ func TestFullWorkflow_MemoryManagement(t *testing.T) {
 	tracker.mu.RLock()
 	cacheSize := len(tracker.statusCache)
 	tracker.mu.RUnlock()
-	
+
 	assert.LessOrEqual(t, cacheSize, 1000, "Cache should be bounded")
 
 	t.Log("✓ Memory management workflow completed successfully")
@@ -439,17 +439,17 @@ func TestFullWorkflow_NotificationSystem(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
-	
+
 	// Verify all mock expectations are met
 	t.Cleanup(func() { ds.AssertExpectations(t) })
 
 	settings := &conf.SpeciesTrackingSettings{
-		Enabled:              true,
-		NewSpeciesWindowDays: 7,
+		Enabled:                      true,
+		NewSpeciesWindowDays:         7,
 		NotificationSuppressionHours: 168, // 7 days - required for notification system to work
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 
 	currentTime := time.Now()
@@ -465,7 +465,7 @@ func TestFullWorkflow_NotificationSystem(t *testing.T) {
 	tracker.mu.RLock()
 	lastSent, exists := tracker.notificationLastSent["Notifiable_Species"]
 	tracker.mu.RUnlock()
-	
+
 	assert.True(t, exists, "Notification record should exist")
 	assert.Equal(t, currentTime.Unix(), lastSent.Unix(), "Notification time should match")
 
@@ -475,7 +475,7 @@ func TestFullWorkflow_NotificationSystem(t *testing.T) {
 	tracker.notificationLastSent["Old_Species_1"] = currentTime.Add(-30 * 24 * time.Hour)
 	tracker.notificationLastSent["Old_Species_2"] = currentTime.Add(-15 * 24 * time.Hour)
 	tracker.notificationLastSent["Recent_Species"] = currentTime.Add(-1 * time.Hour)
-	
+
 	tracker.cleanupOldNotificationRecordsLocked(currentTime)
 	tracker.mu.Unlock()
 
@@ -503,7 +503,7 @@ func TestFullWorkflow_PerformanceUnderLoad(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
-	
+
 	// Verify all mock expectations are met
 	t.Cleanup(func() { ds.AssertExpectations(t) })
 
@@ -518,7 +518,7 @@ func TestFullWorkflow_PerformanceUnderLoad(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 
 	// Measure detection performance
@@ -532,7 +532,7 @@ func TestFullWorkflow_PerformanceUnderLoad(t *testing.T) {
 		wg.Add(1)
 		go func(goroutineID int) {
 			defer wg.Done()
-			
+
 			for i := 0; i < detectionsPerGoroutine; i++ {
 				// Mix new and existing species
 				var species string
@@ -543,10 +543,10 @@ func TestFullWorkflow_PerformanceUnderLoad(t *testing.T) {
 					// Existing species (causes cache hits)
 					species = fmt.Sprintf("Species_%d", i%100)
 				}
-				
+
 				detectionTime := time.Now().Add(time.Duration(-i) * time.Hour)
 				tracker.CheckAndUpdateSpecies(species, detectionTime)
-				
+
 				// Occasionally check status (read operation)
 				if i%5 == 0 {
 					tracker.GetSpeciesStatus(species, detectionTime)

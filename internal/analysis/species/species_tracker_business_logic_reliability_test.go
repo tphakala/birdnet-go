@@ -1,7 +1,7 @@
 // new_species_tracker_business_logic_reliability_test.go
 // Critical reliability tests for core business logic functions
 // Targets high-impact functions that drive species status calculations and seasonal logic
-package processor
+package species
 
 import (
 	"testing"
@@ -53,19 +53,19 @@ func TestBuildSpeciesStatusLocked_CriticalReliability(t *testing.T) {
 			},
 			[]datastore.NewSpeciesData{}, // New this year
 			[]datastore.NewSpeciesData{}, // New this season
-			false, 463, // Days since 2023-03-10 to 2024-06-15 (>14 days, so not new)
+			false, 463,                   // Days since 2023-03-10 to 2024-06-15 (>14 days, so not new)
 			"Species with lifetime history but new to current year/season",
 		},
 		{
 			"existing_all_periods_old",
-			"Old_Known_Species", 
+			"Old_Known_Species",
 			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
 			"summer",
 			[]datastore.NewSpeciesData{
 				{ScientificName: "Old_Known_Species", FirstSeenDate: "2023-03-10"},
 			},
 			[]datastore.NewSpeciesData{
-				{ScientificName: "Old_Known_Species", FirstSeenDate: "2024-03-01"}, 
+				{ScientificName: "Old_Known_Species", FirstSeenDate: "2024-03-01"},
 			},
 			[]datastore.NewSpeciesData{
 				{ScientificName: "Old_Known_Species", FirstSeenDate: "2024-06-01"},
@@ -85,14 +85,14 @@ func TestBuildSpeciesStatusLocked_CriticalReliability(t *testing.T) {
 				{ScientificName: "Seasonal_Transition_Species", FirstSeenDate: "2024-03-15"},
 			},
 			[]datastore.NewSpeciesData{}, // New to summer season
-			false, 78, // Days since spring detection (>14 days, so not new)
+			false, 78,                    // Days since spring detection (>14 days, so not new)
 			"Species transitioning between seasons should handle correctly",
 		},
 		{
 			"within_new_species_window",
 			"Recent_Species",
 			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
-			"summer", 
+			"summer",
 			[]datastore.NewSpeciesData{
 				{ScientificName: "Recent_Species", FirstSeenDate: "2024-06-10"}, // 5 days ago
 			},
@@ -131,8 +131,8 @@ func TestBuildSpeciesStatusLocked_CriticalReliability(t *testing.T) {
 				{ScientificName: "Year_Boundary_Species", FirstSeenDate: "2023-12-28"}, // Previous year
 			},
 			[]datastore.NewSpeciesData{}, // New this year
-			[]datastore.NewSpeciesData{}, // New this season  
-			true, 8, // Days since late December detection
+			[]datastore.NewSpeciesData{}, // New this season
+			true, 8,                      // Days since late December detection
 			"Year boundary crossing should calculate days correctly",
 		},
 		{
@@ -184,7 +184,7 @@ func TestBuildSpeciesStatusLocked_CriticalReliability(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			require.NotNil(t, tracker)
 			require.NoError(t, tracker.InitFromDatabase())
 
@@ -193,22 +193,22 @@ func TestBuildSpeciesStatusLocked_CriticalReliability(t *testing.T) {
 			status := tracker.GetSpeciesStatus(tt.speciesName, tt.currentTime)
 
 			// Verify business logic correctness
-			assert.Equal(t, tt.expectedNew, status.IsNew, 
+			assert.Equal(t, tt.expectedNew, status.IsNew,
 				"IsNew status incorrect for scenario: %s", tt.name)
-			assert.Equal(t, tt.expectedDays, status.DaysSinceFirst, 
-				"DaysSinceFirst incorrect for scenario: %s (expected %d, got %d)", 
+			assert.Equal(t, tt.expectedDays, status.DaysSinceFirst,
+				"DaysSinceFirst incorrect for scenario: %s (expected %d, got %d)",
 				tt.name, tt.expectedDays, status.DaysSinceFirst)
-			
+
 			// Verify status fields are consistent
-			assert.False(t, status.FirstSeenTime.IsZero(), 
+			assert.False(t, status.FirstSeenTime.IsZero(),
 				"FirstSeenTime should be populated")
-			assert.False(t, status.LastUpdatedTime.IsZero(), 
+			assert.False(t, status.LastUpdatedTime.IsZero(),
 				"LastUpdatedTime should be populated")
-			assert.GreaterOrEqual(t, status.DaysSinceFirst, 0, 
+			assert.GreaterOrEqual(t, status.DaysSinceFirst, 0,
 				"DaysSinceFirst should never be negative")
 
 			t.Logf("✓ Business logic correct: IsNew=%v, Days=%d", status.IsNew, status.DaysSinceFirst)
-			
+
 			// Test that the logic is deterministic
 			status2 := tracker.GetSpeciesStatus(tt.speciesName, tt.currentTime)
 			assert.Equal(t, status.IsNew, status2.IsNew, "Logic should be deterministic")
@@ -225,10 +225,10 @@ func TestComputeCurrentSeason_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name          string
-		currentTime   time.Time
+		name           string
+		currentTime    time.Time
 		expectedSeason string
-		description   string
+		description    string
 	}{
 		{
 			"spring_start_march_21",
@@ -239,11 +239,11 @@ func TestComputeCurrentSeason_CriticalReliability(t *testing.T) {
 		{
 			"spring_end_june_20",
 			time.Date(2024, 6, 20, 12, 0, 0, 0, time.UTC),
-			"spring", 
+			"spring",
 			"Last day of spring should be Spring",
 		},
 		{
-			"summer_start_june_21", 
+			"summer_start_june_21",
 			time.Date(2024, 6, 21, 12, 0, 0, 0, time.UTC),
 			"summer",
 			"Summer solstice should be calculated as Summer",
@@ -252,7 +252,7 @@ func TestComputeCurrentSeason_CriticalReliability(t *testing.T) {
 			"summer_end_september_20",
 			time.Date(2024, 9, 20, 12, 0, 0, 0, time.UTC),
 			"summer",
-			"Last day of summer should be Summer", 
+			"Last day of summer should be Summer",
 		},
 		{
 			"autumn_start_september_21",
@@ -311,7 +311,7 @@ func TestComputeCurrentSeason_CriticalReliability(t *testing.T) {
 		{
 			"year_boundary_december_31",
 			time.Date(2024, 12, 31, 23, 59, 0, 0, time.UTC),
-			"winter", 
+			"winter",
 			"New Year's Eve should be Winter",
 		},
 		{
@@ -342,7 +342,7 @@ func TestComputeCurrentSeason_CriticalReliability(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			require.NotNil(t, tracker)
 			require.NoError(t, tracker.InitFromDatabase())
 
@@ -356,7 +356,7 @@ func TestComputeCurrentSeason_CriticalReliability(t *testing.T) {
 
 			// Test season consistency - same time should always return same season
 			actualSeason2 := tracker.getCurrentSeason(tt.currentTime)
-			assert.Equal(t, actualSeason, actualSeason2, 
+			assert.Equal(t, actualSeason, actualSeason2,
 				"Season calculation should be deterministic")
 
 			tracker.ClearCacheForTesting()
@@ -370,10 +370,10 @@ func TestDateRangeFunctions_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name         string
-		testTime     time.Time
-		testSeason   string
-		description  string
+		name        string
+		testTime    time.Time
+		testSeason  string
+		description string
 	}{
 		{
 			"mid_year_ranges",
@@ -394,7 +394,7 @@ func TestDateRangeFunctions_CriticalReliability(t *testing.T) {
 			"Year end should calculate ranges correctly",
 		},
 		{
-			"leap_year_ranges", 
+			"leap_year_ranges",
 			time.Date(2024, 2, 29, 12, 0, 0, 0, time.UTC),
 			"winter",
 			"Leap year should handle date ranges correctly",
@@ -426,7 +426,7 @@ func TestDateRangeFunctions_CriticalReliability(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			require.NotNil(t, tracker)
 			require.NoError(t, tracker.InitFromDatabase())
 
@@ -434,14 +434,14 @@ func TestDateRangeFunctions_CriticalReliability(t *testing.T) {
 			yearStart, yearEnd := tracker.getYearDateRange(tt.testTime)
 			assert.NotEmpty(t, yearStart, "Year start date should not be empty")
 			assert.NotEmpty(t, yearEnd, "Year end date should not be empty")
-			
+
 			// Verify year range format and logic
 			assert.Regexp(t, `^\d{4}-01-01$`, yearStart, "Year start should be January 1st")
-			assert.Regexp(t, `^\d{4}-12-31$`, yearEnd, "Year end should be December 31st") 
-			
+			assert.Regexp(t, `^\d{4}-12-31$`, yearEnd, "Year end should be December 31st")
+
 			t.Logf("✓ Year range: %s to %s", yearStart, yearEnd)
 
-			// Test season date range calculation  
+			// Test season date range calculation
 			seasonStart, seasonEnd := tracker.getSeasonDateRange(tt.testSeason, tt.testTime)
 			assert.NotEmpty(t, seasonStart, "Season start date should not be empty")
 			assert.NotEmpty(t, seasonEnd, "Season end date should not be empty")

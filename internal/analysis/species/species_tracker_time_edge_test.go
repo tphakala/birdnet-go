@@ -1,7 +1,7 @@
 // new_species_tracker_time_edge_test.go
-// Time-based edge cases and boundary condition tests for species tracker  
+// Time-based edge cases and boundary condition tests for species tracker
 // Critical for data integrity across time boundaries and clock changes
-package processor
+package species
 
 import (
 	"fmt"
@@ -22,11 +22,11 @@ func TestTimeZoneTransitions(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name         string
-		fromTZ       string
-		toTZ         string 
-		testTime     time.Time
-		description  string
+		name        string
+		fromTZ      string
+		toTZ        string
+		testTime    time.Time
+		description string
 	}{
 		{
 			"daylight_saving_spring", "America/New_York", "America/New_York",
@@ -34,7 +34,7 @@ func TestTimeZoneTransitions(t *testing.T) {
 			"Spring forward daylight saving transition",
 		},
 		{
-			"daylight_saving_fall", "America/New_York", "America/New_York", 
+			"daylight_saving_fall", "America/New_York", "America/New_York",
 			time.Date(2024, 11, 3, 1, 30, 0, 0, time.UTC), // DST transition
 			"Fall back daylight saving transition",
 		},
@@ -46,7 +46,7 @@ func TestTimeZoneTransitions(t *testing.T) {
 		{
 			"utc_to_local", "UTC", "America/Chicago",
 			time.Date(2024, 8, 15, 18, 0, 0, 0, time.UTC),
-			"UTC to Central Time transition", 
+			"UTC to Central Time transition",
 		},
 	}
 
@@ -57,7 +57,7 @@ func TestTimeZoneTransitions(t *testing.T) {
 			// Load time zones
 			fromLoc, err := time.LoadLocation(tt.fromTZ)
 			require.NoError(t, err, "Failed to load 'from' timezone")
-			
+
 			toLoc, err := time.LoadLocation(tt.toTZ)
 			require.NoError(t, err, "Failed to load 'to' timezone")
 
@@ -82,14 +82,14 @@ func TestTimeZoneTransitions(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			require.NotNil(t, tracker)
 			require.NoError(t, tracker.InitFromDatabase())
 
 			// Test detections in first timezone
 			timeInFrom := tt.testTime.In(fromLoc)
 			species1 := "TZ_Test_Species_1"
-			
+
 			isNew1, days1 := tracker.CheckAndUpdateSpecies(species1, timeInFrom)
 			assert.True(t, isNew1, "First detection should be new")
 			assert.Equal(t, 0, days1, "First detection should have 0 days")
@@ -97,14 +97,14 @@ func TestTimeZoneTransitions(t *testing.T) {
 			// Simulate time zone change - same time but different timezone
 			timeInTo := tt.testTime.In(toLoc)
 			species2 := "TZ_Test_Species_2"
-			
+
 			isNew2, days2 := tracker.CheckAndUpdateSpecies(species2, timeInTo)
 			assert.True(t, isNew2, "New species should be new regardless of timezone")
 			assert.Equal(t, 0, days2, "New species should have 0 days")
 
 			// Test that original species is still tracked correctly
 			status1 := tracker.GetSpeciesStatus(species1, timeInTo)
-			assert.True(t, status1.IsNew || status1.DaysSinceFirst <= 14, 
+			assert.True(t, status1.IsNew || status1.DaysSinceFirst <= 14,
 				"Original species should still be tracked correctly after timezone change")
 
 			// Test with a time that's 1 hour offset between zones (common DST case)
@@ -116,7 +116,7 @@ func TestTimeZoneTransitions(t *testing.T) {
 			isNew3a, days3a := tracker.CheckAndUpdateSpecies(species3, timeInFromOffset)
 			assert.True(t, isNew3a, "Species should be new in first timezone")
 			assert.Equal(t, 0, days3a, "New species should have 0 days")
-			
+
 			// Same species, different representation of time
 			status3b := tracker.GetSpeciesStatus(species3, timeInToOffset)
 			// Should recognize it's the same species even with timezone difference
@@ -144,7 +144,7 @@ func TestClockSkewScenarios(t *testing.T) {
 			"Small clock jump forward (NTP adjustment)",
 		},
 		{
-			"small_backward_skip", -5 * time.Minute, false, 
+			"small_backward_skip", -5 * time.Minute, false,
 			"Small clock jump backward (NTP adjustment)",
 		},
 		{
@@ -186,14 +186,14 @@ func TestClockSkewScenarios(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			require.NotNil(t, tracker)
 			require.NoError(t, tracker.InitFromDatabase())
 
 			// Establish baseline with initial time
 			baseTime := time.Now()
 			species1 := "Clock_Test_Species_1"
-			
+
 			isNew1, days1 := tracker.CheckAndUpdateSpecies(species1, baseTime)
 			assert.True(t, isNew1, "Initial detection should be new")
 			assert.Equal(t, 0, days1, "Initial detection should have 0 days")
@@ -201,7 +201,7 @@ func TestClockSkewScenarios(t *testing.T) {
 			// Simulate clock change
 			skewedTime := baseTime.Add(tt.clockChange)
 			species2 := "Clock_Test_Species_2"
-			
+
 			// Test new species detection after clock skew
 			isNew2, days2 := tracker.CheckAndUpdateSpecies(species2, skewedTime)
 			assert.True(t, isNew2, "New species should be new regardless of clock skew")
@@ -209,13 +209,13 @@ func TestClockSkewScenarios(t *testing.T) {
 
 			// Test existing species status after clock skew
 			status1 := tracker.GetSpeciesStatus(species1, skewedTime)
-			
+
 			if tt.expectIssue {
 				// For large backward jumps, we might see unusual behavior
-				t.Logf("Clock skew may cause issues: days=%d, isNew=%v", 
+				t.Logf("Clock skew may cause issues: days=%d, isNew=%v",
 					status1.DaysSinceFirst, status1.IsNew)
 				// But the system should still function
-				assert.GreaterOrEqual(t, status1.DaysSinceFirst, -1, 
+				assert.GreaterOrEqual(t, status1.DaysSinceFirst, -1,
 					"Days since first should not be extremely negative")
 			} else {
 				// Normal clock skew should not cause major issues
@@ -226,7 +226,7 @@ func TestClockSkewScenarios(t *testing.T) {
 			// Test that tracker continues to function normally
 			species3 := "Clock_Test_Species_3"
 			furtherTime := skewedTime.Add(time.Hour)
-			
+
 			isNew3, days3 := tracker.CheckAndUpdateSpecies(species3, furtherTime)
 			assert.True(t, isNew3, "Tracker should continue functioning after clock skew")
 			assert.Equal(t, 0, days3, "New species should still work correctly")
@@ -255,7 +255,7 @@ func TestLeapYearHandling(t *testing.T) {
 		},
 		{
 			"leap_year_feb_29", 2024, time.February, 29, true,
-			"Feb 29 in leap year (2024)", 
+			"Feb 29 in leap year (2024)",
 		},
 		{
 			"non_leap_year_feb_28", 2023, time.February, 28, false,
@@ -302,7 +302,7 @@ func TestLeapYearHandling(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			require.NotNil(t, tracker)
 			require.NoError(t, tracker.InitFromDatabase())
 
@@ -324,14 +324,14 @@ func TestLeapYearHandling(t *testing.T) {
 				// Test detection 7 days later (into March for short February)
 				weekLater := testTime.Add(7 * 24 * time.Hour)
 				species2 := "Leap_Boundary_Species"
-				
+
 				isNew2, days2 := tracker.CheckAndUpdateSpecies(species2, weekLater)
 				assert.True(t, isNew2, "New species should be new")
 				assert.Equal(t, 0, days2, "New species should have 0 days")
-				
+
 				// Check original species status after leap year boundary
 				status1Later := tracker.GetSpeciesStatus(species1, weekLater)
-				assert.Equal(t, 7, status1Later.DaysSinceFirst, 
+				assert.Equal(t, 7, status1Later.DaysSinceFirst,
 					"Should correctly calculate days across leap year boundary")
 			}
 
@@ -339,7 +339,7 @@ func TestLeapYearHandling(t *testing.T) {
 			if tt.testMonth == time.December && tt.testDay >= 25 {
 				nextYearTime := time.Date(tt.year+1, time.January, 2, 12, 0, 0, 0, time.UTC)
 				status1NextYear := tracker.GetSpeciesStatus(species1, nextYearTime)
-				
+
 				expectedDays := int(nextYearTime.Sub(testTime).Hours() / 24)
 				assert.Equal(t, expectedDays, status1NextYear.DaysSinceFirst,
 					"Should correctly calculate days across year boundary")
@@ -376,7 +376,7 @@ func TestInvalidDetectionTimes(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 	require.NoError(t, tracker.InitFromDatabase())
 
@@ -415,9 +415,9 @@ func TestInvalidDetectionTimes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Testing invalid time scenario: %s", tt.description)
-			
+
 			species := fmt.Sprintf("Invalid_Time_Species_%s", tt.name)
-			
+
 			if tt.shouldPanic {
 				assert.Panics(t, func() {
 					tracker.CheckAndUpdateSpecies(species, tt.testTime)
@@ -427,13 +427,13 @@ func TestInvalidDetectionTimes(t *testing.T) {
 				assert.NotPanics(t, func() {
 					isNew, days := tracker.CheckAndUpdateSpecies(species, tt.testTime)
 					t.Logf("Time %v: isNew=%v, days=%d", tt.testTime, isNew, days)
-					
+
 					// Basic sanity checks
 					assert.GreaterOrEqual(t, days, 0, "Days should not be negative")
-					
+
 					// Test status retrieval too
 					status := tracker.GetSpeciesStatus(species, tt.testTime)
-					assert.GreaterOrEqual(t, status.DaysSinceFirst, 0, 
+					assert.GreaterOrEqual(t, status.DaysSinceFirst, 0,
 						"Status days should not be negative")
 				}, "Should not panic for time: %v", tt.testTime)
 			}
