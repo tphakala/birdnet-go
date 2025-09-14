@@ -140,7 +140,6 @@ var cpuCache = &CPUCache{
 	lastUpdated: time.Now(),
 }
 
-
 // UpdateCPUCache updates the cached CPU usage data
 func UpdateCPUCache(ctx context.Context) {
 	for {
@@ -281,11 +280,10 @@ func (c *Controller) initSystemRoutes() {
 	}
 
 	// Start CPU usage monitoring in background with controller's context for controlled shutdown
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
+	// Go 1.25: Using WaitGroup.Go() for cleaner goroutine management
+	c.wg.Go(func() {
 		UpdateCPUCache(c.ctx)
-	}()
+	})
 
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Started CPU usage monitoring")
@@ -1446,8 +1444,7 @@ func (c *Controller) GetEqualizerConfig(ctx echo.Context) error {
 
 	// Set cache headers for static configuration data
 	ctx.Response().Header().Set("Cache-Control", "public, max-age=3600")
-	
+
 	// Return the equalizer filter configuration
 	return ctx.JSON(http.StatusOK, conf.EqFilterConfig)
 }
-

@@ -636,18 +636,16 @@ func TestDDoSProtection(t *testing.T) {
 	concurrentRequests := 50
 
 	// Create a wait group to synchronize goroutines
+	// Go 1.25: Using WaitGroup.Go() for automatic Add/Done management
 	var wg sync.WaitGroup
-	wg.Add(concurrentRequests)
 
 	// Create channels to collect results
 	responseTimesChan := make(chan time.Duration, concurrentRequests)
 	statusCodesChan := make(chan int, concurrentRequests)
 
-	// Launch concurrent requests
+	// Launch concurrent requests using Go 1.25 WaitGroup.Go() pattern
 	for i := 0; i < concurrentRequests; i++ {
-		go func(index int) {
-			defer wg.Done()
-
+		wg.Go(func() {
 			// Create request with query parameters
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections?search=test", http.NoBody)
 			rec := httptest.NewRecorder()
@@ -666,7 +664,7 @@ func TestDDoSProtection(t *testing.T) {
 			responseTime := time.Since(startTime)
 			responseTimesChan <- responseTime
 			statusCodesChan <- rec.Code
-		}(i)
+		})
 	}
 
 	// Wait for all requests to complete
