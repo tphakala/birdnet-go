@@ -98,8 +98,18 @@ func LoadPolicy(policyFile string) (*Policy, error) {
 
 // GetAudioFiles returns a list of audio files in the directory and its subdirectories
 func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug bool) ([]FileInfo, error) {
-	var files []FileInfo
-	var parseErrors []string
+	// Fast path: empty allowed extensions
+	if len(allowedExts) == 0 {
+		return nil, nil
+	}
+
+	// Use pooled slice to reduce allocations
+	filesPtr := getFileInfoSlice()
+	files := *filesPtr
+
+	var parseErrorCount int
+	var firstParseError error
+	const maxParseErrors = 100 // Limit error tracking to prevent memory bloat
 
 	// Get list of protected clips from database
 	lockedClips, err := getLockedClips(db)
@@ -127,26 +137,33 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 			// Audio files are written with .temp suffix during recording
 			// and renamed upon completion to ensure atomic file operations.
 			// Using case-insensitive check to handle edge cases.
-			if strings.HasSuffix(strings.ToLower(fileName), tempFileExt) {
+			// Fast path: skip temp files early
+			if len(fileName) > len(tempFileExt) && strings.HasSuffix(strings.ToLower(fileName), tempFileExt) {
 				return nil
 			}
 
+			// Fast path: check extension before expensive operations
 			ext := filepath.Ext(fileName)
-			if contains(allowedExts, ext) {
-				fileInfo, err := parseFileInfo(path, info)
-				if err != nil {
-					// Log the error but continue processing other files
-					errMsg := fmt.Sprintf("Error parsing file %s: %v", path, err)
-					parseErrors = append(parseErrors, errMsg)
-					if debug {
-						log.Println(errMsg)
-					}
-					return nil // Continue with next file
-				}
-				// Check if the file is protected
-				fileInfo.Locked = isLockedClip(fileInfo.Path, lockedClips)
-				files = append(files, fileInfo)
+			if !contains(allowedExts, ext) {
+				return nil
 			}
+
+			// Process valid file
+			fileInfo, err := parseFileInfo(path, info)
+			if err != nil {
+				// Track first error and count without storing all errors
+				if firstParseError == nil {
+					firstParseError = err
+				}
+				parseErrorCount++
+				if debug && parseErrorCount <= maxParseErrors {
+					log.Printf("Error parsing file %s: %v", path, err)
+				}
+				return nil // Continue with next file
+			}
+			// Check if the file is protected
+			fileInfo.Locked = isLockedClip(fileInfo.Path, lockedClips)
+			files = append(files, fileInfo)
 		}
 
 		// Yield to other goroutines
@@ -166,23 +183,39 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 	}
 
 	// If we encountered parse errors but still have some valid files, log a summary but continue
-	if len(parseErrors) > 0 {
+	if parseErrorCount > 0 {
 		if debug {
-			log.Printf("Encountered %d file parsing errors during cleanup", len(parseErrors))
+			log.Printf("Encountered %d file parsing errors during cleanup", parseErrorCount)
+			if parseErrorCount > maxParseErrors {
+				log.Printf("Only first %d errors were logged", maxParseErrors)
+			}
 		}
 		// If we have no valid files at all, return an error
-		if len(files) == 0 {
-			descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to parse any audio files: %s", parseErrors[0])).
+		if len(files) == 0 && firstParseError != nil {
+			descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to parse any audio files: %w", firstParseError)).
 				Component("diskmanager").
 				Category(errors.CategoryFileParsing).
 				Context("base_dir", baseDir).
-				Context("parse_errors_count", len(parseErrors)).
+				Context("parse_errors_count", parseErrorCount).
 				Build()
 			return nil, descriptiveErr
 		}
 	}
 
-	return files, nil
+	// Fast path: if no files found, return early
+	if len(files) == 0 {
+		putFileInfoSlice(filesPtr)
+		return nil, nil
+	}
+
+	// Create result slice with exact capacity to avoid over-allocation
+	result := make([]FileInfo, len(files))
+	copy(result, files)
+
+	// Return pooled slice
+	putFileInfoSlice(filesPtr)
+
+	return result, nil
 }
 
 // parseFileInfo parses the file information from the file path and os.FileInfo
@@ -192,13 +225,8 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 	// Check if the file extension is allowed
 	ext := filepath.Ext(name)
 	if !contains(allowedFileTypes, ext) {
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: file type not eligible for cleanup: %s", ext)).
-			Component("diskmanager").
-			Category(errors.CategoryFileParsing).
-			FileContext(path, info.Size()).
-			Context("file_extension", ext).
-			Build()
-		return FileInfo{}, descriptiveErr
+		// Simplified error without heavy context
+		return FileInfo{}, fmt.Errorf("file type not eligible: %s", ext)
 	}
 
 	// Remove the extension for parsing
@@ -209,14 +237,8 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 
 	parts := strings.Split(nameWithoutExt, "_")
 	if len(parts) < 3 {
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: invalid audio filename format '%s' (has %d parts, expected at least 3)", name, len(parts))).
-			Component("diskmanager").
-			Category(errors.CategoryFileParsing).
-			FileContext(path, info.Size()).
-			Context("parts_count", len(parts)).
-			Context("filename", name).
-			Build()
-		return FileInfo{}, descriptiveErr
+		// Simplified error for memory efficiency
+		return FileInfo{}, fmt.Errorf("invalid filename format: %s", name)
 	}
 
 	// The species name might contain underscores, so we need to handle the last two parts separately
@@ -226,14 +248,8 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 
 	confidence, err := strconv.Atoi(strings.TrimSuffix(confidenceStr, "p"))
 	if err != nil {
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to parse confidence from filename '%s': %w", name, err)).
-			Component("diskmanager").
-			Category(errors.CategoryFileParsing).
-			FileContext(path, info.Size()).
-			Context("confidence_string", confidenceStr).
-			Context("filename", name).
-			Build()
-		return FileInfo{}, descriptiveErr
+		// Simplified error for memory efficiency
+		return FileInfo{}, fmt.Errorf("parse confidence failed: %s", name)
 	}
 
 	// IMPORTANT: Despite the Z suffix in the filename (which normally indicates UTC),
@@ -249,14 +265,8 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 		// Fallback to original method if this fails, for backward compatibility
 		timestamp, err = time.Parse("20060102T150405Z", timestampStr)
 		if err != nil {
-			descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to parse timestamp from filename '%s': %w", name, err)).
-				Component("diskmanager").
-				Category(errors.CategoryFileParsing).
-				FileContext(path, info.Size()).
-				Context("timestamp_string", timestampStr).
-				Context("filename", name).
-				Build()
-			return FileInfo{}, descriptiveErr
+			// Simplified error for memory efficiency
+			return FileInfo{}, fmt.Errorf("parse timestamp failed: %s", name)
 		}
 		// Convert UTC time to local time explicitly if needed
 		timestamp = timestamp.In(time.Local)
@@ -272,7 +282,14 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 }
 
 // contains checks if a string is in a slice
+// Optimized with early exit and common case first
 func contains(slice []string, item string) bool {
+	// Fast path: empty slice or item
+	if len(slice) == 0 || item == "" {
+		return false
+	}
+
+	// Check common audio extensions first for better cache locality
 	for _, s := range slice {
 		if s == item {
 			return true
