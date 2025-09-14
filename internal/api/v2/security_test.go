@@ -625,6 +625,11 @@ func TestInputValidation(t *testing.T) {
 
 // TestDDoSProtection tests the API's resilience to high-volume requests
 func TestDDoSProtection(t *testing.T) {
+	// Go 1.25: Add test metadata for better organization and reporting
+	t.Attr("component", "security")
+	t.Attr("type", "performance")
+	t.Attr("feature", "ddos-protection")
+
 	// Setup
 	e, mockDS, controller := setupTestEnvironment(t)
 

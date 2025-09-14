@@ -499,6 +499,11 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 
 // TestMediaSecurityScenarios tests various security scenarios using SecureFS
 func TestMediaSecurityScenarios(t *testing.T) {
+	// Go 1.25: Add test metadata for better organization and reporting
+	t.Attr("component", "media")
+	t.Attr("type", "security")
+	t.Attr("feature", "path-traversal-protection")
+
 	// Setup test environment (SecureFS handles security)
 	// We need the echo instance to serve requests directly
 	e, _, tempDir := setupMediaTestEnvironment(t)

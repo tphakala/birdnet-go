@@ -27,6 +27,11 @@ import (
 // TestGetSpeciesSummary tests the species summary endpoint
 func TestGetSpeciesSummary(t *testing.T) {
 	t.Parallel()
+	// Go 1.25: Add test metadata for better organization and reporting
+	t.Attr("component", "analytics")
+	t.Attr("type", "integration")
+	t.Attr("feature", "species-summary")
+
 	// Setup
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
@@ -101,6 +106,11 @@ func TestGetSpeciesSummary(t *testing.T) {
 // TestGetSpeciesSummaryDatabaseError tests that database errors are properly handled and return 500
 func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
 	t.Parallel()
+	// Go 1.25: Add test metadata for better organization and reporting
+	t.Attr("component", "analytics")
+	t.Attr("type", "error-handling")
+	t.Attr("feature", "database-error")
+
 	// Setup
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
@@ -121,18 +131,18 @@ func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
 
 	// Test - HandleError returns nil and writes JSON response
 	err := handler(c)
-	
+
 	// The controller's HandleError method returns a JSON response, not an error
 	require.NoError(t, err)
-	
+
 	// Check response code
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
-	
+
 	// Parse error response
 	var errorResponse map[string]any
 	err = json.Unmarshal(rec.Body.Bytes(), &errorResponse)
 	require.NoError(t, err)
-	
+
 	// Check error message
 	assert.Contains(t, errorResponse["message"], "Failed to get species summary data")
 
@@ -143,6 +153,11 @@ func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
 // TestGetSpeciesSummaryWithDateFilters tests the species summary endpoint with date filtering
 func TestGetSpeciesSummaryWithDateFilters(t *testing.T) {
 	t.Parallel()
+	// Go 1.25: Add test metadata for better organization and reporting
+	t.Attr("component", "analytics")
+	t.Attr("type", "filtering")
+	t.Attr("feature", "date-filters")
+
 	// Setup
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
@@ -197,6 +212,11 @@ func TestGetSpeciesSummaryWithDateFilters(t *testing.T) {
 // TestGetHourlyAnalytics tests the hourly analytics endpoint
 func TestGetHourlyAnalytics(t *testing.T) {
 	t.Parallel()
+	// Go 1.25: Add test metadata for better organization and reporting
+	t.Attr("component", "analytics")
+	t.Attr("type", "integration")
+	t.Attr("feature", "hourly-analytics")
+
 	// Setup
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
@@ -404,6 +424,11 @@ func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
 // TestGetInvalidAnalyticsRequests tests various invalid requests to analytics endpoints
 func TestGetInvalidAnalyticsRequests(t *testing.T) {
 	t.Parallel()
+	// Go 1.25: Add test metadata for better organization and reporting
+	t.Attr("component", "analytics")
+	t.Attr("type", "validation")
+	t.Attr("feature", "input-validation")
+
 	testCases := []struct {
 		name           string
 		method         string
@@ -545,6 +570,11 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 // correctly counts multiple detections of the same species
 func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	t.Parallel()
+	// Go 1.25: Add test metadata for better organization and reporting
+	t.Attr("component", "analytics")
+	t.Attr("type", "integration")
+	t.Attr("feature", "species-summary")
+
 	// Create a new echo instance
 	e := echo.New()
 
