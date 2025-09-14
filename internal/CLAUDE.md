@@ -35,7 +35,7 @@
 
 ## Go 1.25 Testing Features
 
-See [Go 1.25 Release Notes](https://tip.golang.org/doc/go1.25) for complete changelog.
+See [Go 1.25 Release Notes](https://go.dev/doc/go1.25) for complete changelog.
 
 ### testing/synctest - Deterministic Concurrent Testing
 
