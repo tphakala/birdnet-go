@@ -414,7 +414,7 @@ func (m *FFmpegManager) checkStreamHealth() {
 					Category(errors.CategoryRTSP).
 					Context("operation", "health_check_restart").
 					Context("url", privacy.SanitizeRTSPUrl(url)).
-					Context("last_data_seconds_ago", time.Since(h.LastDataReceived).Seconds()).
+					Context("last_data_seconds_ago", getTimeSinceDataSeconds(h.LastDataReceived)).
 					Context("restart_count", h.RestartCount).
 					Context("health_status", "unhealthy").
 					Build()
@@ -444,7 +444,7 @@ func (m *FFmpegManager) checkStreamHealth() {
 				"pid", currentPID,
 				"is_receiving_data", h.IsReceivingData,
 				"bytes_per_second", h.BytesPerSecond,
-				"last_data_ago_seconds", time.Since(h.LastDataReceived).Seconds(),
+				"last_data_ago_seconds", getTimeSinceDataSeconds(h.LastDataReceived),
 				"operation", "health_check_healthy")
 		}
 	}

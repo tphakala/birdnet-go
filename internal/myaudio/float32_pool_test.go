@@ -193,6 +193,7 @@ func TestFloat32PoolClear(t *testing.T) {
 
 // TestFloat32PoolStress performs a stress test with many goroutines
 func TestFloat32PoolStress(t *testing.T) {
+	t.Attr("kind", "stress")
 	if testing.Short() {
 		t.Skip("Skipping stress test in short mode")
 	}

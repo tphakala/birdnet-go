@@ -304,8 +304,7 @@ func TestCircuitBreaker_ProcessStabilityValidation(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Go 1.25 synctest: Creates controlled time environment for deterministic stability testing
-			synctest.Test(t, func(t *testing.T) {
-				t.Helper()
+			synctest.Test(t, func(t *testing.T) { //nolint:thelper // Test body, not a helper
 
 				// Reset to initial state
 				stream.setConsecutiveFailures(5)

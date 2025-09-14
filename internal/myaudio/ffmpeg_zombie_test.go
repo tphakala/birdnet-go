@@ -25,8 +25,7 @@ func TestFFmpegStream_ZombieCreationOnProcessExit(t *testing.T) {
 		t.Skip("Zombie process testing is Unix-specific")
 	}
 
-	synctest.Test(t, func(t *testing.T) {
-		t.Helper()
+	synctest.Test(t, func(t *testing.T) { //nolint:thelper // Test body, not a helper
 		audioChan := make(chan UnifiedAudioData, 10)
 		defer close(audioChan)
 		stream := NewFFmpegStream("test://zombie-exit", "tcp", audioChan)

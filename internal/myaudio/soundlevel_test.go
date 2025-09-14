@@ -71,9 +71,9 @@ func TestNewSoundLevelProcessor_IntervalClamping(t *testing.T) {
 			settings.Realtime.Audio.SoundLevel.Interval = tt.configInterval
 
 			// Restore original value after test
-			defer func() {
+			t.Cleanup(func() {
 				settings.Realtime.Audio.SoundLevel.Interval = originalInterval
-			}()
+			})
 
 			// Create processor
 			processor, err := newSoundLevelProcessor("test-source", "test-name")
@@ -125,9 +125,9 @@ func TestNewSoundLevelProcessor_BufferSizing(t *testing.T) {
 			settings.Realtime.Audio.SoundLevel.Interval = tt.interval
 
 			// Restore original value after test
-			defer func() {
+			t.Cleanup(func() {
 				settings.Realtime.Audio.SoundLevel.Interval = originalInterval
-			}()
+			})
 
 			// Create processor
 			processor, err := newSoundLevelProcessor("test-source", "test-name")
@@ -184,9 +184,9 @@ func TestNewSoundLevelProcessor_InitialState(t *testing.T) {
 	settings.Realtime.Audio.SoundLevel.Interval = 10
 
 	// Restore original value after test
-	defer func() {
+	t.Cleanup(func() {
 		settings.Realtime.Audio.SoundLevel.Interval = originalInterval
-	}()
+	})
 
 	processor, err := newSoundLevelProcessor("test-source", "test-name")
 	require.NoError(t, err)
@@ -218,9 +218,9 @@ func TestSoundLevelProcessor_ThreadSafety(t *testing.T) {
 	settings.Realtime.Audio.SoundLevel.Interval = 5
 
 	// Restore original value after test
-	defer func() {
+	t.Cleanup(func() {
 		settings.Realtime.Audio.SoundLevel.Interval = originalInterval
-	}()
+	})
 
 	processor, err := newSoundLevelProcessor("test-source", "test-name")
 	require.NoError(t, err)
@@ -258,9 +258,9 @@ func TestIntervalAggregator_DataFlow(t *testing.T) {
 	settings.Realtime.Audio.SoundLevel.Interval = 5
 
 	// Restore original value after test
-	defer func() {
+	t.Cleanup(func() {
 		settings.Realtime.Audio.SoundLevel.Interval = originalInterval
-	}()
+	})
 
 	processor, err := newSoundLevelProcessor("test-source", "test-name")
 	require.NoError(t, err)
@@ -300,9 +300,9 @@ func TestProcessAudioData_IntervalCompletion(t *testing.T) {
 	settings.Realtime.Audio.SoundLevel.Interval = 5 // 5 second interval
 
 	// Restore original value after test
-	defer func() {
+	t.Cleanup(func() {
 		settings.Realtime.Audio.SoundLevel.Interval = originalInterval
-	}()
+	})
 
 	processor, err := newSoundLevelProcessor("test-source", "test-name")
 	require.NoError(t, err)

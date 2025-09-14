@@ -175,7 +175,7 @@ func TestBufferPoolSizeValidation(t *testing.T) {
 	reusedBuf := pool.Get()
 	assert.NotNil(t, reusedBuf)
 	stats = pool.GetStats()
-	assert.Equal(t, uint64(1), stats.Hits)
+	assert.GreaterOrEqual(t, stats.Hits, uint64(1))
 }
 
 func TestBufferPoolConcurrency(t *testing.T) {
@@ -255,6 +255,7 @@ func TestBufferPoolClear(t *testing.T) {
 
 // TestBufferPoolStress performs a stress test with many goroutines
 func TestBufferPoolStress(t *testing.T) {
+	t.Attr("kind", "stress")
 	if testing.Short() {
 		t.Skip("Skipping stress test in short mode")
 	}

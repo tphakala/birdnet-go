@@ -31,8 +31,7 @@ func TestFFmpegStream_ProcessCleanupNoZombies(t *testing.T) {
 	}
 
 	// Go 1.25 synctest: Creates controlled time environment for deterministic process testing
-	synctest.Test(t, func(t *testing.T) {
-		t.Helper()
+	synctest.Test(t, func(t *testing.T) { //nolint:thelper // Test body, not a helper
 
 		// Go 1.25: Mock command duration uses fake time - 100ms advances instantly
 		mockCmd := createMockFFmpegCommand(t, 100*time.Millisecond)
@@ -129,8 +128,7 @@ func TestFFmpegStream_RapidRestartNoZombies(t *testing.T) {
 	}
 
 	// Go 1.25 synctest: Creates controlled time environment for deterministic rapid restart testing
-	synctest.Test(t, func(t *testing.T) {
-		t.Helper()
+	synctest.Test(t, func(t *testing.T) { //nolint:thelper // Test body, not a helper
 
 		audioChan := make(chan UnifiedAudioData, 10)
 		defer close(audioChan)
@@ -192,9 +190,6 @@ func TestFFmpegStream_ProcessGroupCleanup(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Process group testing is Unix-specific")
 	}
-
-	// NOTE: This test doesn't use synctest because it tests real OS process group operations
-	// that require actual process creation and cleanup which cannot be virtualized.
 
 	// Create a mock ffmpeg that spawns child processes
 	mockCmd := createMockFFmpegWithChildren(t)
@@ -373,8 +368,7 @@ func getChildProcesses(t *testing.T, parentPid int) []int {
 // With synctest, goroutine lifecycle testing becomes deterministic and runs instantly.
 func TestFFmpegStream_WaitGoroutineLeak(t *testing.T) {
 	// Go 1.25 synctest: Creates controlled environment for deterministic goroutine leak testing
-	synctest.Test(t, func(t *testing.T) {
-		t.Helper()
+	synctest.Test(t, func(t *testing.T) { //nolint:thelper // Test body, not a helper
 
 		initialGoroutines := runtime.NumGoroutine()
 
@@ -427,8 +421,7 @@ func TestFFmpegStream_ProcessReapingAfterExit(t *testing.T) {
 	}
 
 	// Go 1.25 synctest: Creates controlled time environment for deterministic process reaping testing
-	synctest.Test(t, func(t *testing.T) {
-		t.Helper()
+	synctest.Test(t, func(t *testing.T) { //nolint:thelper // Test body, not a helper
 
 		audioChan := make(chan UnifiedAudioData, 10)
 		defer close(audioChan)

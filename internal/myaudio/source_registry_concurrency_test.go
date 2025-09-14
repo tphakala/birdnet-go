@@ -293,8 +293,7 @@ func TestConcurrentMigrationAndCleanup(t *testing.T) {
 	t.Attr("component", "source-registry")
 	t.Attr("test-type", "concurrency")
 
-	synctest.Test(t, func(t *testing.T) {
-		t.Helper()
+	synctest.Test(t, func(t *testing.T) { //nolint:thelper // Test body, not a helper
 		registry := GetRegistry()
 
 		// Clear any existing sources
