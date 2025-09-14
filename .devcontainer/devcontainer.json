@@ -169,7 +169,7 @@
 	},
 	"features": {
 		"ghcr.io/devcontainers/features/go:1": {
-			"version": "1.24.6"
+			"version": "1.25.1"
 		},
 		"ghcr.io/devcontainers/features/node:1": {
 			"version": "20",
