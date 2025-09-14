@@ -30,7 +30,7 @@ if [ -n "$GO_FILES" ]; then
   if [ -n "$UNFORMATTED" ]; then
     echo "❌ The following Go files need formatting:"
     echo "$UNFORMATTED" | sed 's/^/     /'
-    echo "💡 Run 'gofmt -w .' to format all files, then re-stage and commit"
+    echo "💡 Run 'gofmt -w' to format files needed, then re-stage and commit"
     echo "⚠️  Note: --no-verify bypasses are not accepted in this project"
     exit 1
   fi
