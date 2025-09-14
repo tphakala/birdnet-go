@@ -25,27 +25,113 @@
 
 ## Testing
 
+- **Prefer `testing/synctest` over `time.Sleep()`** (Go 1.25)
 - `t.Parallel()` only for independent tests
-- No `time.Sleep()` - use channels/sync
 - Use `t.TempDir()` for temp files
 - Test with `go test -race`
 - Table-driven tests with `t.Run()`
 - `b.ResetTimer()` after benchmark setup
+- Use `t.Attr()` for test metadata (Go 1.25)
 
-## Benchmarks (Go 1.24)
+## Go 1.25 Testing Features
+
+See [Go 1.25 Release Notes](https://tip.golang.org/doc/go1.25) for complete changelog.
+
+### testing/synctest - Deterministic Concurrent Testing
+
+Replace flaky sleep-based tests with deterministic scheduling:
+
+```go
+// ❌ Old pattern - unreliable timing
+time.Sleep(100 * time.Millisecond)
+
+// ✅ New pattern - deterministic
+import "testing/synctest"
+
+func TestConcurrent(t *testing.T) {
+    synctest.Test(t, func() {
+        // Time moves instantly when all goroutines are blocked
+        // Perfect for testing timeouts, retries, rate limiting
+    })
+}
+```
+
+### sync.WaitGroup.Go() - Cleaner Goroutines
+
+```go
+// ❌ Old pattern
+var wg sync.WaitGroup
+wg.Add(1)
+go func() {
+    defer wg.Done()
+    // work
+}()
+
+// ✅ New pattern - automatic Add/Done
+var wg sync.WaitGroup
+wg.Go(func() {
+    // work
+})
+```
+
+### Test Output & Attributes
+
+```go
+func TestAPI(t *testing.T) {
+    // Add test metadata
+    t.Attr("component", "api")
+    t.Attr("version", "v2")
+    
+    // Structured output
+    output := t.Output()
+    fmt.Fprintf(output, "Request: %v\n", req)
+}
+```
+
+### runtime/trace.FlightRecorder - Production Diagnostics
+
+Capture lightweight traces only when needed:
+
+```go
+import "runtime/trace"
+
+recorder := trace.NewFlightRecorder()
+defer recorder.Stop()
+
+// Process audio/data
+if err != nil {
+    // Save trace only on error
+    recorder.WriteTo(errorLog)
+}
+```
+
+### encoding/json/v2 (Experimental)
+
+For performance-critical JSON operations:
+
+```go
+import jsonv2 "encoding/json/v2"
+
+// ~2x faster for API responses
+data, err := jsonv2.Marshal(response)
+```
+
+## Benchmarks (Go 1.25)
 
 - Use `b.Loop()` instead of manual `for i := 0; i < b.N; i++`
 - Use `b.TempDir()` instead of `os.MkdirTemp()`
 - Call `b.ReportAllocs()` to track memory allocations
-- Use `runtime.AddCleanup()` instead of `runtime.SetFinalizer()`
+- Container-aware GOMAXPROCS adjusts CPU automatically
 
-## Modern Go (1.22+)
+## Modern Go (1.25+)
 
 - `any` not `interface{}`
 - `for i := range n` for loops
 - Pre-compile regex at package level
 - Store interfaces in `atomic.Value` directly
-- Use `os.Root` for filesystem sandboxing (1.24)
+- Use `os.Root` for filesystem sandboxing
+- Use `sync.WaitGroup.Go()` for goroutines
+- Use `testing/synctest` for concurrent tests
 
 ## Standard Library First
 
