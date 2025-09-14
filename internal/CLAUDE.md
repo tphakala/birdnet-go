@@ -129,9 +129,9 @@ data, err := jsonv2.Marshal(response)
 - `for i := range n` for loops
 - Pre-compile regex at package level
 - Store interfaces in `atomic.Value` directly
-- Use `os.Root` for filesystem sandboxing
-- Use `sync.WaitGroup.Go()` for goroutines
-- Use `testing/synctest` for concurrent tests
+- Use `os.Root` for filesystem sandboxing (https://go.dev/blog/osroot)
+- Use `sync.WaitGroup.Go()` for goroutines (https://pkg.go.dev/sync#WaitGroup.Go)
+- Use `testing/synctest` for concurrent tests (https://go.dev/blog/synctest)
 
 ## Standard Library First
 
