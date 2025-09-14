@@ -178,8 +178,15 @@ func (ps *PooledSlice) Release() {
 
 	poolMetrics.PutCount.Add(1)
 	poolMetrics.CurrentPoolSize.Add(1) // Increment pool size counter
-	*ps.slice = (*ps.slice)[:0]        // Clear the slice
+
+	// Zero out elements to release string references before pooling
+	for i := range *ps.slice {
+		(*ps.slice)[i] = FileInfo{} // Zero value releases all references
+	}
+	*ps.slice = (*ps.slice)[:0] // Reset slice length
+
 	fileInfoPool.Put(ps.slice)
+	ps.slice = nil // Clear the reference from PooledSlice
 }
 
 // TakeOwnership transfers ownership of the data and releases the pooled slice
@@ -203,4 +210,14 @@ func (ps *PooledSlice) TakeOwnership() []FileInfo {
 // Caller must not retain this reference after Release or TakeOwnership
 func (ps *PooledSlice) Data() *[]FileInfo {
 	return ps.slice
+}
+
+// SetData replaces the contents while preserving the pooled backing array
+// This properly reuses the pooled memory instead of allocating new slices
+func (ps *PooledSlice) SetData(data []FileInfo) {
+	if ps.slice == nil {
+		return
+	}
+	// Reuse the backing array by appending into the cleared slice
+	*ps.slice = append((*ps.slice)[:0], data...)
 }

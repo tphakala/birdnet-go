@@ -215,8 +215,8 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 		}
 	}
 
-	// Update the pooled slice with the final data
-	*pooledSlice.Data() = files
+	// Update the pooled slice with the final data while preserving the backing array
+	pooledSlice.SetData(files)
 
 	// Fast path: if no files found, return early
 	if len(files) == 0 {
