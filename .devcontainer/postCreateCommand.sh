@@ -60,27 +60,57 @@ fi
 if [ ! -z "$TFLITE_LIB_ARCH" ] && [ ! -f "$TFLITE_LIB_DIR/$LIB_FILENAME" ]; then
     echo "Downloading TensorFlow Lite C library $TFLITE_VERSION for $ARCH..."
     
+    # Create temporary extraction directory
+    TEMP_EXTRACT_DIR=$(mktemp -d)
+    
     # Download the library
     wget -q "https://github.com/tphakala/tflite_c/releases/download/$TFLITE_VERSION/tflite_c_${TFLITE_VERSION}_${TFLITE_LIB_ARCH}" -O /tmp/tflite_c.tar.gz
     
-    # Extract the library
-    tar -xzf /tmp/tflite_c.tar.gz -C /tmp
+    # Extract the library to temporary directory
+    tar -xzf /tmp/tflite_c.tar.gz -C "$TEMP_EXTRACT_DIR"
+    
+    # Find the actual library file in the extraction directory
+    FOUND_LIBS=$(find "$TEMP_EXTRACT_DIR" -name "$LIB_FILENAME" -o -name "libtensorflowlite_c*.so*" | head -10)
+    LIB_COUNT=$(echo "$FOUND_LIBS" | wc -l)
+    
+    if [ -z "$FOUND_LIBS" ] || [ "$LIB_COUNT" -eq 0 ]; then
+        echo "Error: No TensorFlow Lite C library found in extracted archive"
+        echo "Expected: $LIB_FILENAME or libtensorflowlite_c*.so*"
+        echo "Archive contents:"
+        find "$TEMP_EXTRACT_DIR" -type f | head -20
+        rm -rf "$TEMP_EXTRACT_DIR" /tmp/tflite_c.tar.gz
+        exit 1
+    elif [ "$LIB_COUNT" -eq 1 ]; then
+        ACTUAL_LIB_PATH="$FOUND_LIBS"
+    else
+        # Multiple matches - prefer exact filename match, otherwise pick first
+        EXACT_MATCH=$(echo "$FOUND_LIBS" | grep "$LIB_FILENAME" | head -1)
+        if [ ! -z "$EXACT_MATCH" ]; then
+            ACTUAL_LIB_PATH="$EXACT_MATCH"
+        else
+            ACTUAL_LIB_PATH=$(echo "$FOUND_LIBS" | head -1)
+        fi
+        echo "Warning: Multiple library files found, using: $(basename "$ACTUAL_LIB_PATH")"
+    fi
+    
+    # Get the actual filename from the found library
+    ACTUAL_LIB_NAME=$(basename "$ACTUAL_LIB_PATH")
     
     # Move to system library directory
-    sudo mv "/tmp/$LIB_FILENAME" "$TFLITE_LIB_DIR/"
+    sudo mv "$ACTUAL_LIB_PATH" "$TFLITE_LIB_DIR/$ACTUAL_LIB_NAME"
     
     # Create symbolic links for the library
     cd $TFLITE_LIB_DIR
-    sudo ln -sf $LIB_FILENAME libtensorflowlite_c.so.2
+    sudo ln -sf "$ACTUAL_LIB_NAME" libtensorflowlite_c.so.2
     sudo ln -sf libtensorflowlite_c.so.2 libtensorflowlite_c.so
     
     # Update library cache
     sudo ldconfig
     
     # Clean up
-    rm -f /tmp/tflite_c.tar.gz
+    rm -rf "$TEMP_EXTRACT_DIR" /tmp/tflite_c.tar.gz
     
-    echo "✓ TensorFlow Lite C library installed at $TFLITE_LIB_DIR"
+    echo "✓ TensorFlow Lite C library installed at $TFLITE_LIB_DIR/$ACTUAL_LIB_NAME"
 else
     if [ -f "$TFLITE_LIB_DIR/$LIB_FILENAME" ]; then
         echo "✓ TensorFlow Lite C library already exists at $TFLITE_LIB_DIR"
