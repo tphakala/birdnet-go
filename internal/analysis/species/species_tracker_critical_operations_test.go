@@ -1,7 +1,7 @@
 // new_species_tracker_critical_operations_test.go
 // Critical reliability tests for core species tracking operations
 // Targets UpdateSpecies, checkAndResetPeriods, and batch operations for maximum reliability
-package processor
+package species
 
 import (
 	"fmt"
@@ -41,8 +41,8 @@ func TestUpdateSpecies_CriticalReliability(t *testing.T) {
 			"completely_new_species",
 			"Brand_New_Species",
 			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
-			map[string]time.Time{}, // No existing lifetime data
-			map[string]time.Time{}, // No existing yearly data
+			map[string]time.Time{},                        // No existing lifetime data
+			map[string]time.Time{},                        // No existing yearly data
 			map[string]map[string]time.Time{"summer": {}}, // No existing seasonal data
 			true, true,
 			true, // Should be marked as new
@@ -117,7 +117,7 @@ func TestUpdateSpecies_CriticalReliability(t *testing.T) {
 			true, true,
 			true, // New lifetime
 			time.Date(2023, 6, 15, 12, 0, 0, 0, time.UTC),
-			nil, // Should NOT update yearly (different year)
+			nil,          // Should NOT update yearly (different year)
 			&time.Time{}, // Should update seasonal
 			"Detection from previous year should not update current year tracking",
 		},
@@ -147,7 +147,7 @@ func TestUpdateSpecies_CriticalReliability(t *testing.T) {
 			false, true, // Yearly disabled, seasonal enabled
 			true,
 			time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC),
-			nil, // Yearly tracking disabled
+			nil,          // Yearly tracking disabled
 			&time.Time{}, // Seasonal should still work
 			"With yearly disabled, seasonal tracking should still function",
 		},
@@ -195,7 +195,7 @@ func TestUpdateSpecies_CriticalReliability(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			require.NotNil(t, tracker)
 			require.NoError(t, tracker.InitFromDatabase())
 
@@ -209,7 +209,7 @@ func TestUpdateSpecies_CriticalReliability(t *testing.T) {
 
 			// Test UpdateSpecies
 			isNew := tracker.UpdateSpecies(tt.speciesName, tt.detectionTime)
-			
+
 			// Verify results
 			assert.Equal(t, tt.expectedNewSpecies, isNew,
 				"IsNew result incorrect for scenario: %s", tt.name)
@@ -252,18 +252,18 @@ func TestCheckAndResetPeriods_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name              string
-		currentTime       time.Time
-		initialYear       int
-		initialSeason     string
-		yearlyEnabled     bool
-		seasonalEnabled   bool
-		resetMonth        int
-		resetDay          int
-		expectYearReset   bool
+		name               string
+		currentTime        time.Time
+		initialYear        int
+		initialSeason      string
+		yearlyEnabled      bool
+		seasonalEnabled    bool
+		resetMonth         int
+		resetDay           int
+		expectYearReset    bool
 		expectSeasonChange bool
-		newSeason         string
-		description       string
+		newSeason          string
+		description        string
 	}{
 		{
 			"year_reset_january_1",
@@ -381,14 +381,14 @@ func TestCheckAndResetPeriods_CriticalReliability(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			require.NotNil(t, tracker)
 			require.NoError(t, tracker.InitFromDatabase())
 
 			// Set initial state
 			tracker.currentYear = tt.initialYear
 			tracker.currentSeason = tt.initialSeason
-			
+
 			// Add some test data that should be cleared on reset
 			if tt.expectYearReset {
 				tracker.speciesThisYear["Test_Species"] = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -462,24 +462,24 @@ func TestGetBatchSpeciesStatus_CriticalReliability(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 	require.NoError(t, tracker.InitFromDatabase())
 
 	// Setup test data
 	currentTime := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
-	
+
 	// Add various species with different statuses
-	tracker.UpdateSpecies("Recent_Species", currentTime.Add(-5*24*time.Hour))  // 5 days ago (new)
-	tracker.UpdateSpecies("Older_Species", currentTime.Add(-20*24*time.Hour))  // 20 days ago (not new)
+	tracker.UpdateSpecies("Recent_Species", currentTime.Add(-5*24*time.Hour))    // 5 days ago (new)
+	tracker.UpdateSpecies("Older_Species", currentTime.Add(-20*24*time.Hour))    // 20 days ago (not new)
 	tracker.UpdateSpecies("Very_Old_Species", currentTime.Add(-60*24*time.Hour)) // 60 days ago
-	tracker.UpdateSpecies("Today_Species", currentTime) // Today
+	tracker.UpdateSpecies("Today_Species", currentTime)                          // Today
 
 	tests := []struct {
-		name           string
-		speciesList    []string
-		expectedCount  int
-		description    string
+		name          string
+		speciesList   []string
+		expectedCount int
+		description   string
 	}{
 		{
 			"empty_batch",
@@ -538,7 +538,7 @@ func TestGetBatchSpeciesStatus_CriticalReliability(t *testing.T) {
 				assert.True(t, exists, "Species %s should be in results", species)
 				assert.GreaterOrEqual(t, status.DaysSinceFirst, 0,
 					"Days should never be negative")
-				
+
 				// Verify status consistency
 				switch species {
 				case "Recent_Species":
@@ -574,14 +574,14 @@ func TestGetBatchSpeciesStatus_CriticalReliability(t *testing.T) {
 			wg.Add(1)
 			go func(id int) {
 				defer wg.Done()
-				
+
 				results := tracker.GetBatchSpeciesStatus(species, currentTime)
 				assert.Len(t, results, len(species),
 					"Concurrent batch %d should return correct count", id)
-				
+
 				for _, s := range species {
 					_, exists := results[s]
-					assert.True(t, exists, 
+					assert.True(t, exists,
 						"Concurrent batch %d should have species %s", id, s)
 				}
 			}(i)

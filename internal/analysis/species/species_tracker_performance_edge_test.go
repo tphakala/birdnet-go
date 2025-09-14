@@ -1,7 +1,7 @@
-// new_species_tracker_performance_edge_test.go  
+// new_species_tracker_performance_edge_test.go
 // Performance and memory edge case tests for species tracker
 // Critical for preventing OOM crashes and performance degradation under load
-package processor
+package species
 
 import (
 	"fmt"
@@ -58,7 +58,7 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 
 			// Create tracker with realistic database data
 			ds := &MockSpeciesDatastore{}
-			
+
 			// Simulate large database with many species
 			lifetimeData := make([]datastore.NewSpeciesData, tt.speciesCount)
 			for i := 0; i < tt.speciesCount; i++ {
@@ -87,7 +87,7 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			require.NotNil(t, tracker)
 
 			// Initialize with large dataset
@@ -99,7 +99,7 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 			runtime.GC()
 			runtime.ReadMemStats(&m2)
 			afterInitMemory := m2.Alloc
-			
+
 			// Calculate init increase safely to avoid underflow
 			var initIncrease int64
 			if afterInitMemory >= initialMemory {
@@ -107,28 +107,28 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 			} else {
 				initIncrease = 0
 			}
-			
-			t.Logf("Memory after init: %d KB (increase: %d KB)", 
+
+			t.Logf("Memory after init: %d KB (increase: %d KB)",
 				afterInitMemory/1024, initIncrease/1024)
 
 			// Perform intensive operations
 			currentTime := time.Now()
 			operationCount := 0
-			
+
 			for i := 0; i < tt.cacheOperations; i++ {
 				speciesName := fmt.Sprintf("Species_%06d", i%tt.speciesCount)
-				
+
 				// Mix of operations that stress memory
 				switch i % 4 {
 				case 0:
 					status := tracker.GetSpeciesStatus(speciesName, currentTime)
 					assert.GreaterOrEqual(t, status.DaysSinceFirst, 0)
-					
+
 				case 1:
 					isNew, days := tracker.CheckAndUpdateSpecies(speciesName, currentTime)
 					assert.GreaterOrEqual(t, days, 0)
 					_ = isNew
-					
+
 				case 2:
 					// Batch operations
 					batchSpecies := []string{
@@ -138,14 +138,14 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 					}
 					statuses := tracker.GetBatchSpeciesStatus(batchSpecies, currentTime)
 					assert.LessOrEqual(t, len(statuses), 3)
-					
+
 				case 3:
 					isNew := tracker.IsNewSpecies(speciesName)
 					_ = isNew
 				}
-				
+
 				operationCount++
-				
+
 				// Force cleanup periodically if requested
 				if tt.forceCleanup && i%1000 == 0 {
 					tracker.ClearCacheForTesting()
@@ -166,8 +166,8 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 			} else {
 				totalIncrease = 0
 			}
-			
-			t.Logf("Final memory: %d KB (total increase: %d KB)", 
+
+			t.Logf("Final memory: %d KB (total increase: %d KB)",
 				finalMemory/1024, totalIncrease/1024)
 			t.Logf("Operations completed: %d", operationCount)
 
@@ -181,8 +181,8 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 				memoryIncrease = 0
 			}
 			maxReasonableIncrease := int64(100 * 1024 * 1024) // 100MB max increase
-			
-			assert.Less(t, memoryIncrease, maxReasonableIncrease, 
+
+			assert.Less(t, memoryIncrease, maxReasonableIncrease,
 				"Memory increase should be reasonable (<%d MB)", maxReasonableIncrease/(1024*1024))
 
 			// Verify tracker is still functional
@@ -195,16 +195,16 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 			speciesCountBefore := tracker.GetSpeciesCount()
 			tracker.ClearCacheForTesting()
 			runtime.GC()
-			
+
 			var m4 runtime.MemStats
 			runtime.ReadMemStats(&m4)
 			afterCleanupMemory := m4.Alloc
-			
+
 			t.Logf("Memory after cleanup: %d KB", afterCleanupMemory/1024)
 			t.Logf("Species count before cleanup: %d", speciesCountBefore)
-			
+
 			// Memory should be reduced after cleanup
-			assert.Less(t, afterCleanupMemory, finalMemory, 
+			assert.Less(t, afterCleanupMemory, finalMemory,
 				"Memory should decrease after cache cleanup")
 		})
 	}
@@ -219,11 +219,11 @@ func TestPerformanceUnderSustainedLoad(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name               string
-		durationSeconds    int
+		name                string
+		durationSeconds     int
 		operationsPerSecond int
-		speciesCount       int
-		description        string
+		speciesCount        int
+		description         string
 	}{
 		{
 			"moderate_sustained_load", 10, 100, 50,
@@ -231,7 +231,7 @@ func TestPerformanceUnderSustainedLoad(t *testing.T) {
 		},
 		{
 			"high_sustained_load", 15, 200, 100,
-			"15 seconds at 200 ops/sec with 100 species", 
+			"15 seconds at 200 ops/sec with 100 species",
 		},
 		{
 			"burst_then_sustained", 12, 500, 25,
@@ -264,7 +264,7 @@ func TestPerformanceUnderSustainedLoad(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			require.NotNil(t, tracker)
 			require.NoError(t, tracker.InitFromDatabase())
 
@@ -283,7 +283,7 @@ func TestPerformanceUnderSustainedLoad(t *testing.T) {
 			// Sustained load test
 			startTime := time.Now()
 			endTime := startTime.Add(time.Duration(tt.durationSeconds) * time.Second)
-			
+
 			operationTicker := time.NewTicker(time.Second / time.Duration(tt.operationsPerSecond))
 			defer operationTicker.Stop()
 
@@ -292,28 +292,28 @@ func TestPerformanceUnderSustainedLoad(t *testing.T) {
 				case <-operationTicker.C:
 					// Measure operation response time
 					opStart := time.Now()
-					
+
 					// Rotate through different operations
 					speciesName := species[totalOperations%len(species)]
 					currentTime := time.Now()
-					
+
 					switch totalOperations % 3 {
 					case 0:
 						isNew, days := tracker.CheckAndUpdateSpecies(speciesName, currentTime)
 						_ = isNew
 						_ = days
-						
+
 					case 1:
 						status := tracker.GetSpeciesStatus(speciesName, currentTime)
 						_ = status
-						
+
 					case 2:
 						isNew := tracker.IsNewSpecies(speciesName)
 						_ = isNew
 					}
-					
+
 					opDuration := time.Since(opStart)
-					
+
 					// Track performance metrics
 					totalOperations++
 					responseTimeSum += opDuration
@@ -323,7 +323,7 @@ func TestPerformanceUnderSustainedLoad(t *testing.T) {
 					if opDuration < minResponseTime {
 						minResponseTime = opDuration
 					}
-					
+
 				default:
 					// Allow other goroutines to run
 					time.Sleep(time.Microsecond)
@@ -345,11 +345,11 @@ func TestPerformanceUnderSustainedLoad(t *testing.T) {
 			// Performance assertions
 			assert.Greater(t, totalOperations, tt.operationsPerSecond*tt.durationSeconds/2,
 				"Should complete at least 50% of target operations")
-			
+
 			// Response time should be reasonable (< 10ms for normal operations)
 			assert.Less(t, avgResponseTime, 10*time.Millisecond,
 				"Average response time should be under 10ms")
-			
+
 			assert.Less(t, maxResponseTime, 100*time.Millisecond,
 				"Max response time should be under 100ms")
 
@@ -398,7 +398,7 @@ func TestCacheEvictionUnderPressure(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 	require.NoError(t, tracker.InitFromDatabase())
 
@@ -406,17 +406,17 @@ func TestCacheEvictionUnderPressure(t *testing.T) {
 	// Target cache size is 800 entries according to implementation
 	const targetCacheSize = 800
 	const overflowSpecies = 1200 // 50% over target
-	
+
 	currentTime := time.Now()
-	
+
 	// Populate cache beyond target size
 	for i := 0; i < overflowSpecies; i++ {
 		speciesName := fmt.Sprintf("Cache_Test_Species_%04d", i)
-		
+
 		// Access species to populate cache
 		status := tracker.GetSpeciesStatus(speciesName, currentTime)
 		assert.GreaterOrEqual(t, status.DaysSinceFirst, 0)
-		
+
 		// Every 100 species, check memory didn't grow unboundedly
 		if i%100 == 0 && i > 0 {
 			runtime.GC()
@@ -427,14 +427,14 @@ func TestCacheEvictionUnderPressure(t *testing.T) {
 	}
 
 	// Verify system is still responsive after cache pressure
-	testSpecies := "Post_Pressure_Test_Species" 
+	testSpecies := "Post_Pressure_Test_Species"
 	isNew, days := tracker.CheckAndUpdateSpecies(testSpecies, currentTime)
 	assert.True(t, isNew)
 	assert.Equal(t, 0, days)
 
 	// Test that cleanup works effectively
 	tracker.ClearCacheForTesting()
-	
+
 	// After cleanup, verify system is still functional
 	anotherTestSpecies := "Post_Cleanup_Test_Species"
 	isNew2, days2 := tracker.CheckAndUpdateSpecies(anotherTestSpecies, currentTime)

@@ -1,4 +1,4 @@
-package processor
+package species
 
 import (
 	"errors"
@@ -28,7 +28,7 @@ func TestIsNewSpecies(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -78,7 +78,7 @@ func TestGetBatchSpeciesStatus(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -120,12 +120,12 @@ func TestSyncIfNeeded(t *testing.T) {
 			SyncIntervalMinutes:  60, // 60 minutes
 		}
 
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+		tracker := NewTrackerFromSettings(ds, settings)
 		tracker.lastSyncTime = time.Now() // Just synced
 
 		err := tracker.SyncIfNeeded()
 		require.NoError(t, err, "Should not error when sync not needed")
-		
+
 		// Verify no database calls were made
 		ds.AssertNotCalled(t, "GetNewSpeciesDetections")
 	})
@@ -143,12 +143,12 @@ func TestSyncIfNeeded(t *testing.T) {
 			SyncIntervalMinutes:  1, // 1 minute for testing
 		}
 
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+		tracker := NewTrackerFromSettings(ds, settings)
 		tracker.lastSyncTime = time.Now().Add(-2 * time.Minute) // 2 minutes ago
 
 		err := tracker.SyncIfNeeded()
 		require.NoError(t, err, "Should sync successfully")
-		
+
 		// Verify database was called
 		ds.AssertCalled(t, "GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	})
@@ -164,7 +164,7 @@ func TestSyncIfNeeded(t *testing.T) {
 			SyncIntervalMinutes:  1,
 		}
 
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+		tracker := NewTrackerFromSettings(ds, settings)
 		// Add existing data
 		tracker.speciesFirstSeen["Existing"] = time.Now()
 		tracker.lastSyncTime = time.Now().Add(-2 * time.Minute)
@@ -172,7 +172,7 @@ func TestSyncIfNeeded(t *testing.T) {
 		err := tracker.SyncIfNeeded()
 		// Should not error if we have existing data
 		require.NoError(t, err, "Should continue with existing data on sync error")
-		
+
 		// Verify existing data is preserved
 		assert.Contains(t, tracker.speciesFirstSeen, "Existing", "Existing data should be preserved")
 	})
@@ -192,7 +192,7 @@ func TestCleanupExpiredCache(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -240,7 +240,7 @@ func TestCleanupExpiredCacheLRU(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -269,7 +269,7 @@ func TestCleanupExpiredCacheLRU(t *testing.T) {
 	tracker.mu.RUnlock()
 
 	assert.LessOrEqual(t, cacheSize, maxStatusCacheSize, "Cache should be reduced to max size")
-	
+
 	// Verify newer entries remain (lower indices)
 	tracker.mu.RLock()
 	_, hasNewer := tracker.statusCache["Species10"]
@@ -306,7 +306,7 @@ func TestCheckAndUpdateSpeciesAtomic(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -330,7 +330,7 @@ func TestCheckAndUpdateSpeciesAtomic(t *testing.T) {
 		// Add old species
 		oldTime := now.Add(-30 * 24 * time.Hour)
 		tracker.CheckAndUpdateSpecies("Old Species", oldTime)
-		
+
 		// Check it now
 		isNew, daysSince := tracker.CheckAndUpdateSpecies("Old Species", now)
 		assert.False(t, isNew, "Should not be new")
@@ -340,13 +340,13 @@ func TestCheckAndUpdateSpeciesAtomic(t *testing.T) {
 	t.Run("earlier detection updates record", func(t *testing.T) {
 		// First detection
 		tracker.CheckAndUpdateSpecies("Test Species", now)
-		
+
 		// Earlier detection
 		earlierTime := now.Add(-10 * 24 * time.Hour)
 		isNew, daysSince := tracker.CheckAndUpdateSpecies("Test Species", earlierTime)
 		assert.True(t, isNew, "Should be new (within window)")
 		assert.Equal(t, 0, daysSince, "Should be 0 (just detected)")
-		
+
 		// Verify it updated the record
 		tracker.mu.RLock()
 		firstSeen := tracker.speciesFirstSeen["Test Species"]
@@ -377,12 +377,12 @@ func TestIsSeasonMapInitializedAndCount(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 
 	t.Run("uninitialized season", func(t *testing.T) {
 		initialized := tracker.IsSeasonMapInitialized("spring")
 		assert.False(t, initialized, "Spring should not be initialized")
-		
+
 		count := tracker.GetSeasonMapCount("spring")
 		assert.Equal(t, 0, count, "Count should be 0 for uninitialized season")
 	})
@@ -395,7 +395,7 @@ func TestIsSeasonMapInitializedAndCount(t *testing.T) {
 
 		initialized := tracker.IsSeasonMapInitialized("spring")
 		assert.True(t, initialized, "Spring should be initialized")
-		
+
 		count := tracker.GetSeasonMapCount("spring")
 		assert.Equal(t, 2, count, "Count should be 2 for spring")
 	})
@@ -410,11 +410,11 @@ func TestIsSeasonMapInitializedAndCount(t *testing.T) {
 				Enabled: false,
 			},
 		}
-		tracker2 := NewSpeciesTrackerFromSettings(ds, settings2)
+		tracker2 := NewTrackerFromSettings(ds, settings2)
 
 		initialized := tracker2.IsSeasonMapInitialized("spring")
 		assert.False(t, initialized, "Should be false when seasonal tracking disabled")
-		
+
 		count := tracker2.GetSeasonMapCount("spring")
 		assert.Equal(t, 0, count, "Count should be 0 when seasonal tracking disabled")
 	})
@@ -434,7 +434,7 @@ func TestExpireCacheForTesting(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -472,7 +472,7 @@ func TestClearCacheForTestingMethod(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -515,7 +515,7 @@ func TestShouldSuppressNotificationMethod(t *testing.T) {
 		NotificationSuppressionHours: 24,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -530,7 +530,7 @@ func TestShouldSuppressNotificationMethod(t *testing.T) {
 	t.Run("recent notification", func(t *testing.T) {
 		// Record notification
 		tracker.RecordNotificationSent(species, now)
-		
+
 		// Check 1 hour later
 		suppress := tracker.ShouldSuppressNotification(species, now.Add(1*time.Hour))
 		assert.True(t, suppress, "Should suppress within window")
@@ -550,9 +550,9 @@ func TestShouldSuppressNotificationMethod(t *testing.T) {
 			SyncIntervalMinutes:          60,
 			NotificationSuppressionHours: 0, // Disabled
 		}
-		tracker2 := NewSpeciesTrackerFromSettings(ds, settings2)
+		tracker2 := NewTrackerFromSettings(ds, settings2)
 		tracker2.RecordNotificationSent("Species", now)
-		
+
 		suppress := tracker2.ShouldSuppressNotification("Species", now.Add(1*time.Minute))
 		assert.False(t, suppress, "Should never suppress when disabled")
 	})
@@ -573,7 +573,7 @@ func TestRecordNotificationSentMethod(t *testing.T) {
 		NotificationSuppressionHours: 24,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -581,12 +581,12 @@ func TestRecordNotificationSentMethod(t *testing.T) {
 
 	t.Run("record notification", func(t *testing.T) {
 		tracker.RecordNotificationSent("Species1", now)
-		
+
 		// Verify it was recorded
 		tracker.mu.RLock()
 		sentTime, exists := tracker.notificationLastSent["Species1"]
 		tracker.mu.RUnlock()
-		
+
 		assert.True(t, exists, "Notification should be recorded")
 		assert.Equal(t, now.Unix(), sentTime.Unix(), "Time should match")
 	})
@@ -599,16 +599,16 @@ func TestRecordNotificationSentMethod(t *testing.T) {
 			SyncIntervalMinutes:          60,
 			NotificationSuppressionHours: 0,
 		}
-		tracker2 := NewSpeciesTrackerFromSettings(ds, settings2)
-		
+		tracker2 := NewTrackerFromSettings(ds, settings2)
+
 		// Should not panic or error
 		tracker2.RecordNotificationSent("Species", now)
-		
+
 		// Map should not be initialized when suppression is disabled
 		tracker2.mu.RLock()
 		mapSize := len(tracker2.notificationLastSent)
 		tracker2.mu.RUnlock()
-		
+
 		assert.Equal(t, 0, mapSize, "Map should not be populated when suppression disabled")
 	})
 }
@@ -628,7 +628,7 @@ func TestCleanupOldNotificationRecordsMethod(t *testing.T) {
 		NotificationSuppressionHours: 24,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -658,8 +658,8 @@ func TestCleanupOldNotificationRecordsMethod(t *testing.T) {
 			SyncIntervalMinutes:          60,
 			NotificationSuppressionHours: 0,
 		}
-		tracker2 := NewSpeciesTrackerFromSettings(ds, settings2)
-		
+		tracker2 := NewTrackerFromSettings(ds, settings2)
+
 		cleaned := tracker2.CleanupOldNotificationRecords(now)
 		assert.Equal(t, 0, cleaned, "Should not clean when suppression disabled")
 	})
@@ -676,12 +676,12 @@ func TestCloseMethod(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	
+	tracker := NewTrackerFromSettings(ds, settings)
+
 	// Close should not error
 	err := tracker.Close()
 	require.NoError(t, err, "Close should not error")
-	
+
 	// Calling close multiple times should be safe
 	err = tracker.Close()
 	assert.NoError(t, err, "Multiple close calls should not error")
@@ -690,7 +690,7 @@ func TestCloseMethod(t *testing.T) {
 // TestPackageLevelClose tests the package-level Close function
 func TestPackageLevelClose(t *testing.T) {
 	t.Parallel()
-	
+
 	// This tests the package-level Close() function
 	err := Close()
 	assert.NoError(t, err, "Package-level Close should not error")
@@ -726,7 +726,7 @@ func TestCheckAndResetPeriods(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2023)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
@@ -763,7 +763,7 @@ func TestIsSameSeasonPeriodComprehensive(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 
 	testCases := []struct {
 		time1       time.Time
@@ -850,7 +850,7 @@ func TestPruneOldEntriesComprehensive(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -859,22 +859,22 @@ func TestPruneOldEntriesComprehensive(t *testing.T) {
 	// Add old and recent entries for all tracking types
 	tracker.mu.Lock()
 	// Lifetime - only entries older than 10 years are pruned
-	tracker.speciesFirstSeen["VeryOldLifetime"] = now.AddDate(-11, 0, 0) // 11 years ago - WILL be pruned
-	tracker.speciesFirstSeen["OldLifetime"] = now.Add(-30 * 24 * time.Hour) // 30 days ago - will NOT be pruned
+	tracker.speciesFirstSeen["VeryOldLifetime"] = now.AddDate(-11, 0, 0)       // 11 years ago - WILL be pruned
+	tracker.speciesFirstSeen["OldLifetime"] = now.Add(-30 * 24 * time.Hour)    // 30 days ago - will NOT be pruned
 	tracker.speciesFirstSeen["RecentLifetime"] = now.Add(-10 * 24 * time.Hour) // 10 days ago - will NOT be pruned
-	
+
 	// Yearly - only entries from before the current tracking year are pruned
-	tracker.speciesThisYear["LastYearEntry"] = now.AddDate(-1, 0, 0) // 1 year ago - WILL be pruned
-	tracker.speciesThisYear["OldYearly"] = now.Add(-70 * 24 * time.Hour) // 70 days ago - will NOT be pruned (still this year)
+	tracker.speciesThisYear["LastYearEntry"] = now.AddDate(-1, 0, 0)        // 1 year ago - WILL be pruned
+	tracker.speciesThisYear["OldYearly"] = now.Add(-70 * 24 * time.Hour)    // 70 days ago - will NOT be pruned (still this year)
 	tracker.speciesThisYear["RecentYearly"] = now.Add(-20 * 24 * time.Hour) // 20 days ago - will NOT be pruned
-	
+
 	// Seasonal - entire seasons older than 1 year are pruned
 	tracker.speciesBySeason["old_spring"] = make(map[string]time.Time)
 	tracker.speciesBySeason["old_spring"]["VeryOldSeasonal"] = now.AddDate(-2, 0, 0) // 2 years ago - WILL be pruned (entire season)
 	tracker.speciesBySeason["current_spring"] = make(map[string]time.Time)
-	tracker.speciesBySeason["current_spring"]["OldSeasonal"] = now.Add(-50 * 24 * time.Hour) // 50 days ago - will NOT be pruned
+	tracker.speciesBySeason["current_spring"]["OldSeasonal"] = now.Add(-50 * 24 * time.Hour)    // 50 days ago - will NOT be pruned
 	tracker.speciesBySeason["current_spring"]["RecentSeasonal"] = now.Add(-15 * 24 * time.Hour) // 15 days ago - will NOT be pruned
-	
+
 	// Notifications
 	tracker.notificationLastSent = make(map[string]time.Time)
 	tracker.notificationLastSent["OldNotification"] = now.Add(-72 * time.Hour)
@@ -906,7 +906,7 @@ func TestPruneOldEntriesComprehensive(t *testing.T) {
 	assert.False(t, hasLastYearEntry, "Last year's yearly entry should be pruned")
 	assert.False(t, hasOldSpring, "Old spring season (2 years ago) should be pruned entirely")
 	assert.False(t, hasOldNotification, "Old notification should be pruned")
-	
+
 	// These should remain (not old enough to prune)
 	assert.True(t, hasOldLifetime, "30-day-old lifetime entry should remain")
 	assert.True(t, hasRecentLifetime, "Recent lifetime should remain")
@@ -947,7 +947,7 @@ func TestConcurrentOperationsStress(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -965,7 +965,7 @@ func TestConcurrentOperationsStress(t *testing.T) {
 			for j := 0; j < numOperations; j++ {
 				sp := species[j%len(species)]
 				op := (id + j) % 10
-				
+
 				switch op {
 				case 0, 1:
 					_ = tracker.UpdateSpecies(sp, now.Add(time.Duration(j)*time.Hour))
@@ -1011,10 +1011,10 @@ func TestLoadDataErrorPaths(t *testing.T) {
 			SyncIntervalMinutes:  60,
 		}
 
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+		tracker := NewTrackerFromSettings(ds, settings)
 		err := tracker.InitFromDatabase()
 		require.NoError(t, err, "Should not error on invalid date")
-		
+
 		// Species with invalid date should be skipped
 		assert.Equal(t, 0, tracker.GetSpeciesCount(), "Species with invalid date should be skipped")
 	})
@@ -1032,10 +1032,10 @@ func TestLoadDataErrorPaths(t *testing.T) {
 			SyncIntervalMinutes:  60,
 		}
 
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+		tracker := NewTrackerFromSettings(ds, settings)
 		err := tracker.InitFromDatabase()
 		require.NoError(t, err, "Should not error on empty date")
-		
+
 		// Species with empty date should be skipped
 		assert.Equal(t, 0, tracker.GetSpeciesCount(), "Species with empty date should be skipped")
 	})
@@ -1044,7 +1044,7 @@ func TestLoadDataErrorPaths(t *testing.T) {
 // TestSetCurrentYearForTesting tests the testing helper
 func TestSetCurrentYearForTestingMethod(t *testing.T) {
 	// Note: This test doesn't use t.Parallel() because it modifies internal state
-	
+
 	ds := &MockSpeciesDatastore{}
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -1058,15 +1058,15 @@ func TestSetCurrentYearForTestingMethod(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
-	
+	tracker := NewTrackerFromSettings(ds, settings)
+
 	// Set year for testing
 	tracker.SetCurrentYearForTesting(2025)
-	
+
 	// Verify it was set
 	tracker.mu.RLock()
 	currentYear := tracker.currentYear
 	tracker.mu.RUnlock()
-	
+
 	assert.Equal(t, 2025, currentYear, "Year should be set to 2025")
 }

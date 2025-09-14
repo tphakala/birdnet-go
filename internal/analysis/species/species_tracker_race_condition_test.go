@@ -1,7 +1,7 @@
 // new_species_tracker_race_condition_test.go
 // Targeted race condition tests to isolate and demonstrate concurrency bugs
 // CRITICAL: This test demonstrates a real race condition in CheckAndUpdateSpecies
-package processor
+package species
 
 import (
 	"fmt"
@@ -44,7 +44,7 @@ func TestRaceConditionInTimeCalculation(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 	require.NoError(t, tracker.InitFromDatabase())
 
@@ -77,22 +77,22 @@ func TestRaceConditionInTimeCalculation(t *testing.T) {
 			for op := 0; op < opsPerGR; op++ {
 				// Focus on a small set of species to maximize contention
 				speciesName := species[op%len(species)]
-				
+
 				// Use slightly different times to trigger the race condition
 				// The issue seems to be when one goroutine updates firstSeen while another calculates
 				detectionTime := baseTime.Add(time.Duration(grID*op) * time.Microsecond)
-				
+
 				isNew, days := tracker.CheckAndUpdateSpecies(speciesName, detectionTime)
-				
+
 				atomic.AddInt64(&totalOps, 1)
-				
+
 				// Check for negative days (the race condition symptom)
 				if days < 0 {
 					atomic.AddInt64(&negativeResults, 1)
 					mutex.Lock()
 					if len(negativeExamples) < 5 { // Collect examples
-						negativeExamples = append(negativeExamples, 
-							fmt.Sprintf("Species: %s, Days: %d, IsNew: %v, GR: %d, Op: %d", 
+						negativeExamples = append(negativeExamples,
+							fmt.Sprintf("Species: %s, Days: %d, IsNew: %v, GR: %d, Op: %d",
 								speciesName, days, isNew, grID, op))
 					}
 					mutex.Unlock()
@@ -117,14 +117,14 @@ func TestRaceConditionInTimeCalculation(t *testing.T) {
 	// The race condition is real but intermittent
 	// We'll document it rather than fail the test every time
 	if negativeResults > 0 {
-		t.Logf("🔥 RACE CONDITION CONFIRMED: %d/%d operations returned negative days", 
+		t.Logf("🔥 RACE CONDITION CONFIRMED: %d/%d operations returned negative days",
 			negativeResults, totalOps)
 		t.Logf("🐛 BUG ANALYSIS:")
 		t.Logf("   - Occurs under high concurrency on same species")
 		t.Logf("   - CheckAndUpdateSpecies time calculation is not atomic")
 		t.Logf("   - One goroutine updates firstSeen while another calculates days")
 		t.Logf("   - Result: negative days calculation")
-		
+
 		// Allow up to 1% error rate for documentation purposes
 		errorRate := float64(negativeResults) / float64(totalOps)
 		if errorRate > 0.01 {
@@ -143,50 +143,50 @@ func TestRaceConditionInTimeCalculation(t *testing.T) {
 // This test demonstrates how to fix the race condition in CheckAndUpdateSpecies
 func TestRaceConditionFixDemo(t *testing.T) {
 	t.Skip("Demo test - shows how race condition could be fixed")
-	
+
 	// PROPOSED FIX: The race condition occurs because:
 	// 1. Goroutine A reads firstSeen time
-	// 2. Goroutine B updates firstSeen to earlier time  
+	// 2. Goroutine B updates firstSeen to earlier time
 	// 3. Goroutine A calculates days using old firstSeen vs new detection time
 	// 4. Result: negative days
-	
+
 	// FIX APPROACH 1: Make the read-calculate-update atomic
 	/*
-	func (t *NewSpeciesTracker) CheckAndUpdateSpecies(scientificName string, detectionTime time.Time) (isNew bool, daysSinceFirstSeen int) {
-		t.mu.Lock()
-		defer t.mu.Unlock()
+		func (t *SpeciesTracker) CheckAndUpdateSpecies(scientificName string, detectionTime time.Time) (isNew bool, daysSinceFirstSeen int) {
+			t.mu.Lock()
+			defer t.mu.Unlock()
 
-		// ATOMIC: read and calculate in single critical section
-		firstSeen, exists := t.speciesFirstSeen[scientificName]
-		if !exists {
-			isNew = true
-			daysSinceFirstSeen = 0
-			t.speciesFirstSeen[scientificName] = detectionTime
-		} else {
-			// Calculate days BEFORE any updates
-			daysSince := int(detectionTime.Sub(firstSeen).Hours() / hoursPerDay)
-			
-			if detectionTime.Before(firstSeen) {
-				// Update to earlier time
-				t.speciesFirstSeen[scientificName] = detectionTime
-				daysSinceFirstSeen = 0  // Earliest detection is always 0
+			// ATOMIC: read and calculate in single critical section
+			firstSeen, exists := t.speciesFirstSeen[scientificName]
+			if !exists {
 				isNew = true
+				daysSinceFirstSeen = 0
+				t.speciesFirstSeen[scientificName] = detectionTime
 			} else {
-				daysSinceFirstSeen = daysSince
-				isNew = daysSince <= t.windowDays
+				// Calculate days BEFORE any updates
+				daysSince := int(detectionTime.Sub(firstSeen).Hours() / hoursPerDay)
+
+				if detectionTime.Before(firstSeen) {
+					// Update to earlier time
+					t.speciesFirstSeen[scientificName] = detectionTime
+					daysSinceFirstSeen = 0  // Earliest detection is always 0
+					isNew = true
+				} else {
+					daysSinceFirstSeen = daysSince
+					isNew = daysSince <= t.windowDays
+				}
 			}
+
+			// ... rest of yearly/seasonal logic
+			return
 		}
-		
-		// ... rest of yearly/seasonal logic
-		return
-	}
 	*/
-	
+
 	t.Logf("This test demonstrates the proposed fix for the race condition")
 	t.Logf("The key is to make the read-calculate-update operation atomic")
 }
 
-// TestHighContentionScenario creates maximum contention to reliably trigger race conditions  
+// TestHighContentionScenario creates maximum contention to reliably trigger race conditions
 func TestHighContentionScenario(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping high contention test in short mode")
@@ -214,7 +214,7 @@ func TestHighContentionScenario(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 	require.NoError(t, tracker.InitFromDatabase())
 
@@ -240,14 +240,14 @@ func TestHighContentionScenario(t *testing.T) {
 			for op := 0; op < opsPerGR; op++ {
 				// Use microsecond-level time differences to maximize race condition chances
 				detectionTime := baseTime.Add(time.Duration(grID*1000+op) * time.Microsecond)
-				
+
 				isNew, days := tracker.CheckAndUpdateSpecies(species, detectionTime)
-				
+
 				atomic.AddInt64(&totalCount, 1)
 				if days < 0 {
 					atomic.AddInt64(&negativeCount, 1)
 				}
-				
+
 				_ = isNew // Use the result to prevent optimization
 			}
 		}(i)
@@ -256,10 +256,10 @@ func TestHighContentionScenario(t *testing.T) {
 	wg.Wait()
 
 	t.Logf("High contention test results:")
-	t.Logf("  Single species: %s", species)  
+	t.Logf("  Single species: %s", species)
 	t.Logf("  Total operations: %d", atomic.LoadInt64(&totalCount))
 	t.Logf("  Negative day results: %d", atomic.LoadInt64(&negativeCount))
-	
+
 	if atomic.LoadInt64(&negativeCount) > 0 {
 		errorRate := float64(atomic.LoadInt64(&negativeCount)) / float64(atomic.LoadInt64(&totalCount)) * 100
 		t.Logf("  🔥 Race condition rate: %.2f%%", errorRate)

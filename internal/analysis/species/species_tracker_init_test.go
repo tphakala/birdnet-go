@@ -1,6 +1,6 @@
 // new_species_tracker_init_test.go
 // Critical tests for initialization and atomic operations
-package processor
+package species
 
 import (
 	"fmt"
@@ -146,14 +146,14 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Testing: %s", tt.description)
 
-			var tracker *NewSpeciesTracker
+			var tracker *SpeciesTracker
 			if tt.setupMock != nil {
 				ds := &MockSpeciesDatastore{}
 				tt.setupMock(ds)
-				tracker = NewSpeciesTrackerFromSettings(ds, tt.settings)
+				tracker = NewTrackerFromSettings(ds, tt.settings)
 			} else {
 				// Test with nil datastore
-				tracker = NewSpeciesTrackerFromSettings(nil, tt.settings)
+				tracker = NewTrackerFromSettings(nil, tt.settings)
 			}
 			require.NotNil(t, tracker)
 
@@ -165,10 +165,10 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 				t.Logf("✓ Error correctly returned: %v", err)
 			} else {
 				require.NoError(t, err, "Initialization should succeed")
-				
+
 				// Verify sync time was set
 				assert.False(t, tracker.lastSyncTime.IsZero(), "Sync time should be set")
-				
+
 				// Verify data was loaded based on settings
 				if tt.settings.YearlyTracking.Enabled {
 					assert.NotNil(t, tracker.speciesThisYear, "Yearly tracking should be initialized")
@@ -176,7 +176,7 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 				if tt.settings.SeasonalTracking.Enabled {
 					assert.NotNil(t, tracker.speciesBySeason, "Seasonal tracking should be initialized")
 				}
-				
+
 				t.Logf("✓ Initialization successful")
 			}
 		})
@@ -189,13 +189,13 @@ func TestCheckAndUpdateSpecies_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name               string
-		speciesName        string
-		detectionTime      time.Time
-		setupTracker       func(*NewSpeciesTracker, time.Time)
-		expectedIsNew      bool
-		expectedDays       int
-		description        string
+		name          string
+		speciesName   string
+		detectionTime time.Time
+		setupTracker  func(*SpeciesTracker, time.Time)
+		expectedIsNew bool
+		expectedDays  int
+		description   string
 	}{
 		{
 			"brand_new_species",
@@ -210,7 +210,7 @@ func TestCheckAndUpdateSpecies_CriticalReliability(t *testing.T) {
 			"existing_recent_species",
 			"Recent_Species",
 			time.Now(),
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				tracker.speciesFirstSeen["Recent_Species"] = now.AddDate(0, 0, -5) // 5 days ago
 			},
 			true, // Still within 14-day window
@@ -221,7 +221,7 @@ func TestCheckAndUpdateSpecies_CriticalReliability(t *testing.T) {
 			"existing_old_species",
 			"Old_Species",
 			time.Now(),
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				tracker.speciesFirstSeen["Old_Species"] = now.AddDate(0, 0, -20) // 20 days ago
 			},
 			false, // Outside 14-day window
@@ -232,7 +232,7 @@ func TestCheckAndUpdateSpecies_CriticalReliability(t *testing.T) {
 			"earlier_detection_updates",
 			"Updated_Species",
 			time.Now().AddDate(0, 0, -10), // Detection 10 days ago
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				tracker.speciesFirstSeen["Updated_Species"] = now.AddDate(0, 0, 5) // Originally 5 days from detection (5 days ago)
 			},
 			true, // New earliest detection
@@ -243,7 +243,7 @@ func TestCheckAndUpdateSpecies_CriticalReliability(t *testing.T) {
 			"later_detection_no_update",
 			"No_Update_Species",
 			time.Now(),
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				tracker.speciesFirstSeen["No_Update_Species"] = now.AddDate(0, 0, -10) // 10 days ago
 			},
 			true, // Still within window
@@ -254,7 +254,7 @@ func TestCheckAndUpdateSpecies_CriticalReliability(t *testing.T) {
 			"exactly_at_window_boundary",
 			"Boundary_Species",
 			time.Now(),
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				tracker.speciesFirstSeen["Boundary_Species"] = now.AddDate(0, 0, -14) // Exactly 14 days
 			},
 			true, // Exactly at boundary is still "new"
@@ -265,7 +265,7 @@ func TestCheckAndUpdateSpecies_CriticalReliability(t *testing.T) {
 			"yearly_tracking_update",
 			"Yearly_Species",
 			time.Now(),
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				tracker.yearlyEnabled = true
 				tracker.currentYear = now.Year()
 				// Species not seen this year yet
@@ -278,7 +278,7 @@ func TestCheckAndUpdateSpecies_CriticalReliability(t *testing.T) {
 			"seasonal_tracking_update",
 			"Seasonal_Species",
 			time.Now(),
-			func(tracker *NewSpeciesTracker, now time.Time) {
+			func(tracker *SpeciesTracker, now time.Time) {
 				tracker.seasonalEnabled = true
 				tracker.currentSeason = "summer"
 				// Initialize season map
@@ -300,7 +300,7 @@ func TestCheckAndUpdateSpecies_CriticalReliability(t *testing.T) {
 				NewSpeciesWindowDays: 14,
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(nil, settings)
+			tracker := NewTrackerFromSettings(nil, settings)
 			require.NotNil(t, tracker)
 
 			// Setup initial state if needed
@@ -351,7 +351,7 @@ func TestCheckAndUpdateSpecies_Atomicity(t *testing.T) {
 		NewSpeciesWindowDays: 14,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(nil, settings)
+	tracker := NewTrackerFromSettings(nil, settings)
 	require.NotNil(t, tracker)
 
 	// Test concurrent updates to same species
@@ -371,11 +371,11 @@ func TestCheckAndUpdateSpecies_Atomicity(t *testing.T) {
 		wg.Add(1)
 		go func(offset int) {
 			defer wg.Done()
-			
+
 			// Each goroutine tries to update with a slightly different time
 			detectionTime := now.AddDate(0, 0, -offset%20) // Vary from 0-19 days ago
 			isNew, days := tracker.CheckAndUpdateSpecies(species, detectionTime)
-			
+
 			results <- struct {
 				isNew bool
 				days  int
@@ -418,7 +418,7 @@ func TestIsNewSpecies_CriticalReliability(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		setupTracker  func(*NewSpeciesTracker)
+		setupTracker  func(*SpeciesTracker)
 		speciesName   string
 		expectedIsNew bool
 		description   string
@@ -432,7 +432,7 @@ func TestIsNewSpecies_CriticalReliability(t *testing.T) {
 		},
 		{
 			"recent_species",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.speciesFirstSeen["Recent_Species"] = time.Now().AddDate(0, 0, -5)
 			},
 			"Recent_Species",
@@ -441,7 +441,7 @@ func TestIsNewSpecies_CriticalReliability(t *testing.T) {
 		},
 		{
 			"old_species",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.speciesFirstSeen["Old_Species"] = time.Now().AddDate(0, 0, -20)
 			},
 			"Old_Species",
@@ -450,7 +450,7 @@ func TestIsNewSpecies_CriticalReliability(t *testing.T) {
 		},
 		{
 			"exactly_at_boundary",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.speciesFirstSeen["Boundary_Species"] = time.Now().AddDate(0, 0, -14)
 			},
 			"Boundary_Species",
@@ -459,7 +459,7 @@ func TestIsNewSpecies_CriticalReliability(t *testing.T) {
 		},
 		{
 			"just_past_boundary",
-			func(tracker *NewSpeciesTracker) {
+			func(tracker *SpeciesTracker) {
 				tracker.speciesFirstSeen["Past_Boundary"] = time.Now().AddDate(0, 0, -15)
 			},
 			"Past_Boundary",
@@ -478,7 +478,7 @@ func TestIsNewSpecies_CriticalReliability(t *testing.T) {
 				NewSpeciesWindowDays: 14,
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(nil, settings)
+			tracker := NewTrackerFromSettings(nil, settings)
 			require.NotNil(t, tracker)
 
 			// Setup initial state
@@ -508,7 +508,7 @@ func TestIsNewSpecies_ThreadSafety(t *testing.T) {
 		NewSpeciesWindowDays: 14,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(nil, settings)
+	tracker := NewTrackerFromSettings(nil, settings)
 	require.NotNil(t, tracker)
 
 	// Add some test data
@@ -534,7 +534,7 @@ func TestIsNewSpecies_ThreadSafety(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			
+
 			for _, species := range speciesToTest {
 				isNew := tracker.IsNewSpecies(species)
 				if isNew != expectedResults[species] {

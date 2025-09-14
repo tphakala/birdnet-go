@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
+	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -42,14 +43,14 @@ type Processor struct {
 	mqttMutex           sync.RWMutex // Mutex to protect MQTT client access
 	BirdImageCache      *imageprovider.BirdImageCache
 	EventTracker        *EventTracker
-	eventTrackerMu      sync.RWMutex         // Mutex to protect EventTracker access
-	NewSpeciesTracker   *NewSpeciesTracker   // Tracks new species detections
-	speciesTrackerMu    sync.RWMutex         // Mutex to protect NewSpeciesTracker access
-	lastSyncAttempt     time.Time            // Last time sync was attempted
-	syncMutex           sync.Mutex           // Mutex to protect sync operations
-	syncInProgress      atomic.Bool          // Flag to prevent overlapping syncs
-	LastDogDetection    map[string]time.Time // keep track of dog barks per audio source
-	LastHumanDetection  map[string]time.Time // keep track of human vocal per audio source
+	eventTrackerMu      sync.RWMutex            // Mutex to protect EventTracker access
+	NewSpeciesTracker   *species.SpeciesTracker // Tracks new species detections
+	speciesTrackerMu    sync.RWMutex            // Mutex to protect NewSpeciesTracker access
+	lastSyncAttempt     time.Time               // Last time sync was attempted
+	syncMutex           sync.Mutex              // Mutex to protect sync operations
+	syncInProgress      atomic.Bool             // Flag to prevent overlapping syncs
+	LastDogDetection    map[string]time.Time    // keep track of dog barks per audio source
+	LastHumanDetection  map[string]time.Time    // keep track of human vocal per audio source
 	Metrics             *observability.Metrics
 	DynamicThresholds   map[string]*DynamicThreshold
 	thresholdsMutex     sync.RWMutex // Mutex to protect access to DynamicThresholds
@@ -173,7 +174,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 				)
 			}
 
-			p.NewSpeciesTracker = NewSpeciesTrackerFromSettings(ds, &hemisphereAwareTracking)
+			p.NewSpeciesTracker = species.NewTrackerFromSettings(ds, &hemisphereAwareTracking)
 
 			// Initialize species tracker from database
 			if err := p.NewSpeciesTracker.InitFromDatabase(); err != nil {
@@ -701,7 +702,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 }
 
 // processApprovedDetection handles an approved detection by sending it to the worker queue
-func (p *Processor) processApprovedDetection(item *PendingDetection, species string) {
+func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName string) {
 	// Safely get confidence value
 	var confidence float64
 	if len(item.Detection.Results) > 0 {
@@ -710,14 +711,14 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, species str
 
 	// Add structured logging
 	GetLogger().Info("Approving detection",
-		"species", species,
+		"species", speciesName,
 		"source", p.getDisplayNameForSource(item.Source),
 		"match_count", item.Count,
 		"confidence", confidence,
 		"has_results", len(item.Detection.Results) > 0,
 		"operation", "approve_detection")
 	log.Printf("Approving detection of %s from source %s, matched %d times\n",
-		species, p.getDisplayNameForSource(item.Source), item.Count)
+		speciesName, p.getDisplayNameForSource(item.Source), item.Count)
 
 	item.Detection.Note.BeginTime = item.FirstDetected
 	actionList := p.getActionsForItem(&item.Detection)
@@ -728,18 +729,18 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, species str
 			if err.Error() == "worker queue is full" {
 				// Add structured logging
 				GetLogger().Warn("Worker queue is full, dropping task",
-					"species", species,
+					"species", speciesName,
 					"operation", "enqueue_task",
 					"error", "queue_full")
-				log.Printf("❌ Worker queue is full, dropping task for %s", species)
+				log.Printf("❌ Worker queue is full, dropping task for %s", speciesName)
 			} else {
 				sanitizedErr := sanitizeError(err)
 				// Add structured logging
 				GetLogger().Error("Failed to enqueue task",
 					"error", sanitizedErr,
-					"species", species,
+					"species", speciesName,
 					"operation", "enqueue_task")
-				log.Printf("Failed to enqueue task for %s: %v", species, sanitizedErr)
+				log.Printf("Failed to enqueue task for %s: %v", speciesName, sanitizedErr)
 			}
 			continue
 		}
@@ -1333,9 +1334,9 @@ func (p *Processor) logDetectionResults(source string, rawCount, filteredCount i
 
 // generateCorrelationID creates a unique, human-readable identifier for detection tracking
 // Format: SPEC_HHMM_XXXX (e.g., "CROW_1108_a7f3")
-func (p *Processor) generateCorrelationID(species string, timestamp time.Time) string {
+func (p *Processor) generateCorrelationID(speciesName string, timestamp time.Time) string {
 	// Create species prefix (first 4 characters, uppercase)
-	speciesPrefix := strings.ToUpper(species)
+	speciesPrefix := strings.ToUpper(speciesName)
 	if len(speciesPrefix) > 4 {
 		speciesPrefix = speciesPrefix[:4]
 	}

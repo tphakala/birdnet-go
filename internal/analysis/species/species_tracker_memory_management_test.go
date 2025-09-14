@@ -1,7 +1,7 @@
 // new_species_tracker_memory_management_test.go
 // Critical reliability tests for memory management and cache operations
 // Targets cleanupExpiredCache and related functions to prevent OOM crashes
-package processor
+package species
 
 import (
 	"fmt"
@@ -85,7 +85,7 @@ func TestCleanupExpiredCache_CriticalReliability(t *testing.T) {
 		{
 			"skip_cleanup_if_recent",
 			100, 50, 50,
-			false, // Don't force - should skip if recent
+			false,    // Don't force - should skip if recent
 			100, 100, // Nothing removed if cleanup was recent
 			"Cleanup should be skipped if performed recently",
 		},
@@ -108,14 +108,14 @@ func TestCleanupExpiredCache_CriticalReliability(t *testing.T) {
 				SyncIntervalMinutes:  60,
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			require.NotNil(t, tracker)
 			require.NoError(t, tracker.InitFromDatabase())
 
 			// Set up cache with test data
 			currentTime := time.Now()
 			expiredTime := currentTime.Add(-2 * tracker.cacheTTL) // Well past TTL
-			validTime := currentTime.Add(-tracker.cacheTTL / 2)    // Still within TTL
+			validTime := currentTime.Add(-tracker.cacheTTL / 2)   // Still within TTL
 
 			// Add expired entries
 			for i := 0; i < tt.expiredEntries; i++ {
@@ -184,7 +184,7 @@ func TestCleanupExpiredCache_CriticalReliability(t *testing.T) {
 						validCount++
 					}
 				}
-				
+
 				if tt.initialCacheSize <= 1000 { // If not triggering LRU
 					assert.Equal(t, tt.validEntries, validCount,
 						"All valid entries should be preserved when not over limit")
@@ -193,7 +193,7 @@ func TestCleanupExpiredCache_CriticalReliability(t *testing.T) {
 
 			t.Logf("✓ Cache cleanup: %d -> %d entries (removed %d)",
 				initialSize, finalSize, initialSize-finalSize)
-			
+
 			if tt.initialCacheSize > 0 {
 				memoryReduction := int64(0)
 				if beforeMemory > afterMemory {
@@ -229,7 +229,7 @@ func TestCacheLRUEviction_CriticalReliability(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 	require.NoError(t, tracker.InitFromDatabase())
 
@@ -247,7 +247,7 @@ func TestCacheLRUEviction_CriticalReliability(t *testing.T) {
 		speciesName := fmt.Sprintf("LRU_Test_Species_%04d", i)
 		// Older entries have earlier timestamps (but within TTL)
 		entryTime := currentTime.Add(-time.Duration(totalEntries-i) * time.Second)
-		
+
 		tracker.statusCache[speciesName] = cachedSpeciesStatus{
 			status: SpeciesStatus{
 				FirstSeenTime:   entryTime,
@@ -273,7 +273,7 @@ func TestCacheLRUEviction_CriticalReliability(t *testing.T) {
 	// Verify that newer entries were kept (higher indices)
 	keptCount := 0
 	removedCount := 0
-	
+
 	for i := 0; i < totalEntries; i++ {
 		speciesName := fmt.Sprintf("LRU_Test_Species_%04d", i)
 		if _, exists := tracker.statusCache[speciesName]; exists {
@@ -298,18 +298,18 @@ func TestBuildSpeciesStatusWithBuffer_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name                  string
-		speciesName           string
-		currentTime           time.Time
-		lifetimeFirstSeen     *time.Time
-		yearlyFirstSeen       *time.Time
-		seasonalFirstSeen     *time.Time
-		windowDays            int
-		expectedIsNew         bool
-		expectedDaysSince     int
-		expectedIsNewYear     bool
-		expectedIsNewSeason   bool
-		description           string
+		name                string
+		speciesName         string
+		currentTime         time.Time
+		lifetimeFirstSeen   *time.Time
+		yearlyFirstSeen     *time.Time
+		seasonalFirstSeen   *time.Time
+		windowDays          int
+		expectedIsNew       bool
+		expectedDaysSince   int
+		expectedIsNewYear   bool
+		expectedIsNewSeason bool
+		description         string
 	}{
 		{
 			"completely_new_species",
@@ -402,7 +402,7 @@ func TestBuildSpeciesStatusWithBuffer_CriticalReliability(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			require.NotNil(t, tracker)
 			require.NoError(t, tracker.InitFromDatabase())
 
@@ -491,7 +491,7 @@ func TestConcurrentCacheOperations_CriticalReliability(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 	require.NoError(t, tracker.InitFromDatabase())
 
@@ -514,19 +514,19 @@ func TestConcurrentCacheOperations_CriticalReliability(t *testing.T) {
 				case 0: // Add to cache
 					speciesName := fmt.Sprintf("Concurrent_Species_%d_%d", id, op)
 					tracker.UpdateSpecies(speciesName, currentTime)
-					
+
 				case 1: // Read from cache
 					speciesName := fmt.Sprintf("Concurrent_Species_%d_%d", id, op-1)
 					status := tracker.GetSpeciesStatus(speciesName, currentTime)
 					if status.DaysSinceFirst < 0 {
 						errors <- fmt.Errorf("negative days for species %s", speciesName)
 					}
-					
+
 				case 2: // Force cleanup - need to hold lock since this is an internal function
 					tracker.mu.Lock()
 					tracker.cleanupExpiredCacheWithForce(currentTime, true)
 					tracker.mu.Unlock()
-					
+
 				case 3: // Batch operation
 					species := []string{
 						fmt.Sprintf("Batch_Species_%d_A", id),

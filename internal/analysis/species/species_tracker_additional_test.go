@@ -1,4 +1,4 @@
-package processor
+package species
 
 import (
 	"sync"
@@ -44,7 +44,7 @@ func TestUpdateSpeciesComprehensive(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2024)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
@@ -142,19 +142,19 @@ func TestBuildSpeciesStatusLocked(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
 	now := time.Date(2024, 7, 15, 10, 0, 0, 0, time.UTC)
-	
+
 	// Add test data
 	tracker.mu.Lock()
 	tracker.speciesFirstSeen["Test Species"] = now.Add(-10 * 24 * time.Hour)
 	tracker.speciesThisYear["Test Species"] = now.Add(-5 * 24 * time.Hour)
 	tracker.speciesBySeason["summer"] = make(map[string]time.Time)
 	tracker.speciesBySeason["summer"]["Test Species"] = now.Add(-3 * 24 * time.Hour)
-	
+
 	// Build status
 	status := tracker.buildSpeciesStatusLocked("Test Species", now, "summer")
 	tracker.mu.Unlock()
@@ -181,13 +181,13 @@ func TestShouldResetYear(t *testing.T) {
 		SyncIntervalMinutes:  60,
 		YearlyTracking: conf.YearlyTrackingSettings{
 			Enabled:    true,
-			ResetMonth: 3,  // March
+			ResetMonth: 3, // March
 			ResetDay:   15,
 			WindowDays: 30,
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2023)
 
 	testCases := []struct {
@@ -248,7 +248,7 @@ func TestComputeCurrentSeasonEdgeCases(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 
 	testCases := []struct {
 		date           time.Time
@@ -260,13 +260,13 @@ func TestComputeCurrentSeasonEdgeCases(t *testing.T) {
 		{time.Date(2024, 6, 21, 0, 0, 0, 0, time.UTC), "summer", "Summer solstice"},
 		{time.Date(2024, 9, 22, 0, 0, 0, 0, time.UTC), "fall", "Fall equinox"},
 		{time.Date(2024, 12, 21, 0, 0, 0, 0, time.UTC), "winter", "Winter solstice"},
-		
+
 		// Test day before boundaries
 		{time.Date(2024, 3, 19, 23, 59, 59, 0, time.UTC), "winter", "Day before spring"},
 		{time.Date(2024, 6, 20, 23, 59, 59, 0, time.UTC), "spring", "Day before summer"},
 		{time.Date(2024, 9, 21, 23, 59, 59, 0, time.UTC), "summer", "Day before fall"},
 		{time.Date(2024, 12, 20, 23, 59, 59, 0, time.UTC), "fall", "Day before winter"},
-		
+
 		// Test mid-season
 		{time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC), "winter", "Mid-January"},
 		{time.Date(2024, 4, 15, 12, 0, 0, 0, time.UTC), "spring", "Mid-April"},
@@ -298,7 +298,7 @@ func TestGetSpeciesStatusCacheHit(t *testing.T) {
 		SyncIntervalMinutes:  60,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -351,7 +351,7 @@ func TestConcurrentBatchOperations(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -394,7 +394,7 @@ func TestNotificationSuppressionEdgeCases(t *testing.T) {
 			NotificationSuppressionHours: 24,
 		}
 
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+		tracker := NewTrackerFromSettings(ds, settings)
 		err := tracker.InitFromDatabase()
 		require.NoError(t, err)
 
@@ -418,7 +418,7 @@ func TestNotificationSuppressionEdgeCases(t *testing.T) {
 			NotificationSuppressionHours: 1,
 		}
 
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+		tracker := NewTrackerFromSettings(ds, settings)
 		err := tracker.InitFromDatabase()
 		require.NoError(t, err)
 
@@ -449,7 +449,7 @@ func TestCleanupOldNotificationRecordsLocked(t *testing.T) {
 		NotificationSuppressionHours: 24,
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -499,7 +499,7 @@ func TestEmptySeasonMap(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 
 	// Should initialize default seasons
 	tracker.mu.RLock()
@@ -532,12 +532,12 @@ func TestInitFromDatabaseWithValidData(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return(historicalData, nil)
-	ds.On("GetSpeciesFirstDetectionInPeriod", 
-		mock.AnythingOfType("string"), mock.AnythingOfType("string"), 
+	ds.On("GetSpeciesFirstDetectionInPeriod",
+		mock.AnythingOfType("string"), mock.AnythingOfType("string"),
 		mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return(yearlyData, nil).Once()
-	ds.On("GetSpeciesFirstDetectionInPeriod", 
-		mock.AnythingOfType("string"), mock.AnythingOfType("string"), 
+	ds.On("GetSpeciesFirstDetectionInPeriod",
+		mock.AnythingOfType("string"), mock.AnythingOfType("string"),
 		mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return(seasonalData, nil)
 
@@ -557,7 +557,7 @@ func TestInitFromDatabaseWithValidData(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 

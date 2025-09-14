@@ -1,4 +1,4 @@
-package processor
+package species
 
 import (
 	"testing"
@@ -33,7 +33,7 @@ func TestNotificationSuppression(t *testing.T) {
 	}
 
 	// Create tracker
-	tracker := NewSpeciesTrackerFromSettings(mockDS, settings)
+	tracker := NewTrackerFromSettings(mockDS, settings)
 
 	// Test species
 	species1 := "Cardinalis cardinalis" //nolint:misspell // Scientific name, not a misspelling
@@ -92,7 +92,7 @@ func TestNotificationSuppression(t *testing.T) {
 // TestNotificationSuppressionThreadSafety tests thread safety of notification suppression
 func TestNotificationSuppressionThreadSafety(t *testing.T) {
 	t.Parallel()
-	
+
 	// Create a mock datastore
 	mockDS := &mockSpeciesDatastore{}
 
@@ -105,7 +105,7 @@ func TestNotificationSuppressionThreadSafety(t *testing.T) {
 	}
 
 	// Create tracker
-	tracker := NewSpeciesTrackerFromSettings(mockDS, settings)
+	tracker := NewTrackerFromSettings(mockDS, settings)
 
 	// Run concurrent operations
 	done := make(chan bool)

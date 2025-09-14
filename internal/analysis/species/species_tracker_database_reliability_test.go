@@ -1,7 +1,7 @@
 // new_species_tracker_database_reliability_test.go
 // Critical reliability tests for database loading and synchronization functions
 // Targets highest-impact functions with insufficient test coverage for maximum reliability improvement
-package processor
+package species
 
 import (
 	"fmt"
@@ -22,17 +22,17 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
 	// Use recent dates to avoid pruning issues
-	recentDate := time.Now().AddDate(0, 0, -5).Format("2006-01-02") // 5 days ago
-	olderRecentDate := time.Now().AddDate(0, 0, -10).Format("2006-01-02") // 10 days ago  
-	newerRecentDate := time.Now().AddDate(0, 0, -2).Format("2006-01-02") // 2 days ago
+	recentDate := time.Now().AddDate(0, 0, -5).Format("2006-01-02")       // 5 days ago
+	olderRecentDate := time.Now().AddDate(0, 0, -10).Format("2006-01-02") // 10 days ago
+	newerRecentDate := time.Now().AddDate(0, 0, -2).Format("2006-01-02")  // 2 days ago
 
 	tests := []struct {
-		name           string
-		mockData       []datastore.NewSpeciesData
-		mockError      error
-		expectedError  bool
-		expectedCount  int
-		description    string
+		name          string
+		mockData      []datastore.NewSpeciesData
+		mockError     error
+		expectedError bool
+		expectedCount int
+		description   string
 	}{
 		{
 			"empty_database_graceful_handling",
@@ -51,7 +51,7 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 			"Single valid species should load correctly",
 		},
 		{
-			"large_dataset_performance", 
+			"large_dataset_performance",
 			generateLargeDataset(1000),
 			nil,
 			false, 1000,
@@ -91,7 +91,7 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 			"extreme_date_values",
 			[]datastore.NewSpeciesData{
 				{ScientificName: "Future_Species", FirstSeenDate: "2030-12-31"},
-				{ScientificName: "Past_Species", FirstSeenDate: "1900-01-01"},  
+				{ScientificName: "Past_Species", FirstSeenDate: "1900-01-01"},
 				{ScientificName: "Current_Species", FirstSeenDate: recentDate},
 			},
 			nil,
@@ -113,7 +113,7 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(tt.mockData, nil)
 			}
-			
+
 			// Mock other required methods
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil)
@@ -125,7 +125,7 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 				SyncIntervalMinutes:  60,
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			require.NotNil(t, tracker)
 
 			// Test the critical loadLifetimeDataFromDatabase function
@@ -137,12 +137,12 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 				t.Logf("✓ Error correctly handled: %v", err)
 			} else {
 				require.NoError(t, err, "No error expected for scenario: %s", tt.name)
-				
+
 				// Verify data was loaded correctly
 				actualCount := tracker.GetSpeciesCount()
-				assert.Equal(t, tt.expectedCount, actualCount, 
+				assert.Equal(t, tt.expectedCount, actualCount,
 					"Species count mismatch for scenario: %s", tt.name)
-				
+
 				t.Logf("✓ Successfully loaded %d species", actualCount)
 			}
 
@@ -151,7 +151,7 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 			isNew, days := tracker.CheckAndUpdateSpecies(testSpecies, now)
 			assert.True(t, isNew, "System should remain functional after data loading")
 			assert.Equal(t, 0, days, "New species should have 0 days")
-			
+
 			// Cleanup
 			tracker.ClearCacheForTesting()
 		})
@@ -166,7 +166,7 @@ func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 	// Use current year and recent dates
 	currentYear := time.Now().Year()
 	currentTime := time.Now()
-	recentDate := currentTime.AddDate(0, 0, -5).Format("2006-01-02") // 5 days ago
+	recentDate := currentTime.AddDate(0, 0, -5).Format("2006-01-02")       // 5 days ago
 	olderRecentDate := currentTime.AddDate(0, 0, -10).Format("2006-01-02") // 10 days ago
 
 	tests := []struct {
@@ -197,7 +197,7 @@ func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 			"Year boundary (December 31st) should be handled correctly",
 		},
 		{
-			"year_boundary_january", 
+			"year_boundary_january",
 			time.Date(currentYear, 1, 1, 0, 1, 0, 0, time.UTC),
 			[]datastore.NewSpeciesData{
 				{ScientificName: "Jan_Species", FirstSeenDate: recentDate},
@@ -227,7 +227,7 @@ func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 			time.Date(currentYear, 6, 15, 12, 0, 0, 0, time.UTC),
 			[]datastore.NewSpeciesData{
 				{ScientificName: "Good_Species", FirstSeenDate: recentDate},
-				{ScientificName: "", FirstSeenDate: olderRecentDate}, // Empty name
+				{ScientificName: "", FirstSeenDate: olderRecentDate},              // Empty name
 				{ScientificName: "Bad_Date_Species", FirstSeenDate: "2024-13-45"}, // Invalid date
 				{ScientificName: "Another_Good_Species", FirstSeenDate: recentDate},
 			},
@@ -240,11 +240,11 @@ func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Testing yearly data loading: %s", tt.description)
 
-			// Create mock datastore 
+			// Create mock datastore
 			ds := &MockSpeciesDatastore{}
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil) // Lifetime data
-			
+
 			if tt.mockError != nil {
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, tt.mockError)
@@ -265,7 +265,7 @@ func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 				},
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			require.NotNil(t, tracker)
 
 			// Test loadYearlyDataFromDatabase directly
@@ -276,40 +276,40 @@ func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 				t.Logf("✓ Error correctly handled: %v", err)
 			} else {
 				require.NoError(t, err, "No error expected for scenario: %s", tt.name)
-				
+
 				// Verify yearly tracking is functional after loading
 				testSpecies := "Yearly_Test_Species"
 				isNew, days := tracker.CheckAndUpdateSpecies(testSpecies, tt.currentTime)
 				assert.True(t, isNew, "Yearly tracking should be functional after data loading")
 				assert.Equal(t, 0, days, "New species should have 0 days in new year context")
-				
+
 				t.Logf("✓ Yearly data loading successful for time: %v", tt.currentTime.Format("2006-01-02"))
 			}
 
 			// Test system stability
 			status := tracker.GetSpeciesStatus("Test_Species", tt.currentTime)
 			assert.GreaterOrEqual(t, status.DaysSinceFirst, 0, "Status queries should remain functional")
-			
+
 			tracker.ClearCacheForTesting()
 		})
 	}
 }
 
-// TestSyncIfNeeded_CriticalReliability tests database synchronization reliability  
+// TestSyncIfNeeded_CriticalReliability tests database synchronization reliability
 // CRITICAL: Keeps tracker and database consistent - failures cause data loss
 func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name               string
-		lastSyncTime       time.Time
-		currentTime        time.Time
-		syncInterval       int
-		databaseChanges    bool
-		databaseError      error
-		expectSync         bool
-		expectError        bool
-		description        string
+		name            string
+		lastSyncTime    time.Time
+		currentTime     time.Time
+		syncInterval    int
+		databaseChanges bool
+		databaseError   error
+		expectSync      bool
+		expectError     bool
+		description     string
 	}{
 		{
 			"sync_not_needed_recent",
@@ -321,10 +321,10 @@ func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
 			"Recent sync should not trigger another sync",
 		},
 		{
-			"sync_needed_interval_exceeded", 
+			"sync_needed_interval_exceeded",
 			time.Now().Add(-90 * time.Minute), // 90 minutes ago
 			time.Now(),
-			60, // 60 minute interval  
+			60, // 60 minute interval
 			true, nil,
 			true, false,
 			"Sync interval exceeded should trigger database sync",
@@ -373,19 +373,19 @@ func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
 
 			// Create mock datastore
 			ds := &MockSpeciesDatastore{}
-			
+
 			// Setup mock data for initial load and sync calls with recent dates
-			recentDate := time.Now().AddDate(0, 0, -5).Format("2006-01-02") // 5 days ago
+			recentDate := time.Now().AddDate(0, 0, -5).Format("2006-01-02")      // 5 days ago
 			newerRecentDate := time.Now().AddDate(0, 0, -2).Format("2006-01-02") // 2 days ago
-			
+
 			initialData := []datastore.NewSpeciesData{
 				{ScientificName: "Initial_Species", FirstSeenDate: recentDate},
 			}
-			
+
 			// Setup sync data based on test scenario
 			var syncData []datastore.NewSpeciesData
 			var syncError error
-			
+
 			if tt.expectSync {
 				switch {
 				case tt.databaseError != nil:
@@ -403,7 +403,7 @@ func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
 			// First call for InitFromDatabase (during tracker creation)
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return(initialData, nil).Once()
-			
+
 			// Subsequent calls for sync
 			if tt.expectSync && syncError != nil {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -412,7 +412,7 @@ func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(syncData, nil).Once()
 			}
-			
+
 			// Always setup for period data calls
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil)
@@ -424,14 +424,14 @@ func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
 				SyncIntervalMinutes:  tt.syncInterval,
 			}
 
-			tracker := NewSpeciesTrackerFromSettings(ds, settings)
+			tracker := NewTrackerFromSettings(ds, settings)
 			require.NotNil(t, tracker)
 			require.NoError(t, tracker.InitFromDatabase())
 
 			// Simulate passage of time by manipulating last sync time directly (test access)
 			tracker.lastSyncTime = tt.lastSyncTime
 			initialCount := tracker.GetSpeciesCount()
-			
+
 			// Test SyncIfNeeded
 			err := tracker.SyncIfNeeded()
 
@@ -440,13 +440,13 @@ func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
 				t.Logf("✓ Sync error correctly handled: %v", err)
 			} else {
 				require.NoError(t, err, "No sync error expected for scenario: %s", tt.name)
-				
+
 				if tt.expectSync && tt.databaseChanges && !tt.expectError {
 					// Should have reloaded data with new species
 					finalCount := tracker.GetSpeciesCount()
 					// For now, just check that sync completed without crashing
 					t.Logf("Sync completed: %d -> %d species", initialCount, finalCount)
-					
+
 					// The exact count may vary based on implementation, but system should be functional
 					assert.GreaterOrEqual(t, finalCount, 0, "Species count should be valid")
 				}
@@ -468,19 +468,19 @@ func generateLargeDataset(count int) []datastore.NewSpeciesData {
 	data := make([]datastore.NewSpeciesData, count)
 	// Use current time minus a few days to ensure data is recent
 	baseDate := time.Now().AddDate(0, 0, -10) // 10 days ago
-	
+
 	for i := 0; i < count; i++ {
 		// Generate species name and date
 		speciesName := fmt.Sprintf("Large_Dataset_Species_%06d", i)
 		// Spread across 10 days instead of full year to keep all data recent
-		detectionDate := baseDate.AddDate(0, 0, i%10) 
+		detectionDate := baseDate.AddDate(0, 0, i%10)
 		dateStr := detectionDate.Format("2006-01-02")
-		
+
 		data[i] = datastore.NewSpeciesData{
 			ScientificName: speciesName,
 			FirstSeenDate:  dateStr,
 		}
 	}
-	
+
 	return data
 }

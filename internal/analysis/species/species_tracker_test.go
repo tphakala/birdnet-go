@@ -1,4 +1,4 @@
-package processor
+package species
 
 import (
 	"fmt"
@@ -23,7 +23,7 @@ const (
 	seasonalWindowDays = 21 // Default seasonal tracking window
 )
 
-func TestNewSpeciesTracker_NewSpecies(t *testing.T) {
+func TestSpeciesTracker_NewSpecies(t *testing.T) {
 	t.Parallel()
 	// Create mock datastore with some historical species data
 	ds := &MockSpeciesDatastore{}
@@ -54,7 +54,7 @@ func TestNewSpeciesTracker_NewSpecies(t *testing.T) {
 			Enabled: false,
 		},
 	}
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 
 	// Initialize from database
 	err := tracker.InitFromDatabase()
@@ -81,9 +81,9 @@ func TestNewSpeciesTracker_NewSpecies(t *testing.T) {
 	})
 }
 
-// TestNewSpeciesTracker_ConcurrentAccess tests thread safety of the species tracker.
+// TestSpeciesTracker_ConcurrentAccess tests thread safety of the species tracker.
 // Run this test with the Go race detector enabled: go test -race
-func TestNewSpeciesTracker_ConcurrentAccess(t *testing.T) {
+func TestSpeciesTracker_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
 
 	ds := &MockSpeciesDatastore{}
@@ -101,7 +101,7 @@ func TestNewSpeciesTracker_ConcurrentAccess(t *testing.T) {
 			Enabled: false,
 		},
 	}
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -131,7 +131,7 @@ func TestNewSpeciesTracker_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
-func TestNewSpeciesTracker_UpdateSpecies(t *testing.T) {
+func TestSpeciesTracker_UpdateSpecies(t *testing.T) {
 	t.Parallel()
 
 	ds := &MockSpeciesDatastore{}
@@ -149,7 +149,7 @@ func TestNewSpeciesTracker_UpdateSpecies(t *testing.T) {
 			Enabled: false,
 		},
 	}
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -169,7 +169,7 @@ func TestNewSpeciesTracker_UpdateSpecies(t *testing.T) {
 	assert.False(t, isNew, "Expected UpdateSpecies to return false for existing species")
 }
 
-func TestNewSpeciesTracker_EdgeCases(t *testing.T) {
+func TestSpeciesTracker_EdgeCases(t *testing.T) {
 	t.Parallel()
 
 	t.Run("species at exact window boundary", func(t *testing.T) {
@@ -197,7 +197,7 @@ func TestNewSpeciesTracker_EdgeCases(t *testing.T) {
 				Enabled: false,
 			},
 		}
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+		tracker := NewTrackerFromSettings(ds, settings)
 		err := tracker.InitFromDatabase()
 		require.NoError(t, err)
 
@@ -227,7 +227,7 @@ func TestNewSpeciesTracker_EdgeCases(t *testing.T) {
 				Enabled: false,
 			},
 		}
-		tracker := NewSpeciesTrackerFromSettings(ds, settings)
+		tracker := NewTrackerFromSettings(ds, settings)
 		err := tracker.InitFromDatabase()
 		require.NoError(t, err)
 
@@ -240,7 +240,7 @@ func TestNewSpeciesTracker_EdgeCases(t *testing.T) {
 	})
 }
 
-func TestNewSpeciesTracker_PruneOldEntries(t *testing.T) {
+func TestSpeciesTracker_PruneOldEntries(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	historicalData := []datastore.NewSpeciesData{
 		{
@@ -270,7 +270,7 @@ func TestNewSpeciesTracker_PruneOldEntries(t *testing.T) {
 			Enabled: false,
 		},
 	}
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -287,13 +287,13 @@ func TestNewSpeciesTracker_PruneOldEntries(t *testing.T) {
 	// Both remaining species should still be tracked
 	status := tracker.GetSpeciesStatus("Recent Species", time.Now())
 	assert.True(t, status.IsNew, "Recent species should still be marked as new after pruning")
-	
+
 	status30Days := tracker.GetSpeciesStatus("Old Species", time.Now())
 	assert.False(t, status30Days.IsNew, "30-day-old species should not be new but should still be tracked")
 }
 
 // Benchmark tests
-func BenchmarkNewSpeciesTracker_GetSpeciesStatus(b *testing.B) {
+func BenchmarkSpeciesTracker_GetSpeciesStatus(b *testing.B) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -309,7 +309,7 @@ func BenchmarkNewSpeciesTracker_GetSpeciesStatus(b *testing.B) {
 			Enabled: false,
 		},
 	}
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	if err := tracker.InitFromDatabase(); err != nil {
 		b.Fatalf("Failed to initialize tracker from database: %v", err)
 	}
@@ -330,7 +330,7 @@ func BenchmarkNewSpeciesTracker_GetSpeciesStatus(b *testing.B) {
 	}
 }
 
-func BenchmarkNewSpeciesTracker_UpdateSpecies(b *testing.B) {
+func BenchmarkSpeciesTracker_UpdateSpecies(b *testing.B) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -346,7 +346,7 @@ func BenchmarkNewSpeciesTracker_UpdateSpecies(b *testing.B) {
 			Enabled: false,
 		},
 	}
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	if err := tracker.InitFromDatabase(); err != nil {
 		b.Fatalf("Failed to initialize tracker from database: %v", err)
 	}
@@ -365,7 +365,7 @@ func BenchmarkNewSpeciesTracker_UpdateSpecies(b *testing.B) {
 	}
 }
 
-func BenchmarkNewSpeciesTracker_ConcurrentOperations(b *testing.B) {
+func BenchmarkSpeciesTracker_ConcurrentOperations(b *testing.B) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -381,7 +381,7 @@ func BenchmarkNewSpeciesTracker_ConcurrentOperations(b *testing.B) {
 			Enabled: false,
 		},
 	}
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	if err := tracker.InitFromDatabase(); err != nil {
 		b.Fatalf("Failed to initialize tracker from database: %v", err)
 	}
@@ -415,7 +415,7 @@ func BenchmarkNewSpeciesTracker_ConcurrentOperations(b *testing.B) {
 	})
 }
 
-func BenchmarkNewSpeciesTracker_MapMemoryUsage(b *testing.B) {
+func BenchmarkSpeciesTracker_MapMemoryUsage(b *testing.B) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -431,7 +431,7 @@ func BenchmarkNewSpeciesTracker_MapMemoryUsage(b *testing.B) {
 			Enabled: false,
 		},
 	}
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	if err := tracker.InitFromDatabase(); err != nil {
 		b.Fatalf("Failed to initialize tracker from database: %v", err)
 	}
@@ -458,7 +458,7 @@ func BenchmarkNewSpeciesTracker_MapMemoryUsage(b *testing.B) {
 
 // Multi-period tracking tests
 
-func TestNewSpeciesTrackerFromSettings_BasicConfiguration(t *testing.T) {
+func TestNewTrackerFromSettings_BasicConfiguration(t *testing.T) {
 	t.Parallel()
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
@@ -489,7 +489,7 @@ func TestNewSpeciesTrackerFromSettings_BasicConfiguration(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker, "Expected tracker to be created")
 
 	// Initialize the tracker to properly set up internal state
@@ -552,7 +552,7 @@ func TestMultiPeriodTracking_YearlyTracking(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -642,7 +642,7 @@ func TestMultiPeriodTracking_YearlyTracking(t *testing.T) {
 
 func TestMultiPeriodTracking_SeasonalTracking(t *testing.T) {
 	t.Parallel()
-	
+
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -668,7 +668,7 @@ func TestMultiPeriodTracking_SeasonalTracking(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err, "Expected tracker initialization to succeed")
 
@@ -710,7 +710,7 @@ func TestSeasonDetection(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 
 	testCases := []struct {
 		name           string
@@ -768,7 +768,7 @@ func TestMultiPeriodTracking_CrossPeriodScenarios(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2024) // Set to 2024 for test dates
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
@@ -830,7 +830,7 @@ func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2024) // Set to 2024 for test dates
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
@@ -888,7 +888,7 @@ func TestMultiPeriodTracking_YearReset(t *testing.T) {
 	}
 
 	// Create tracker and set to 2023 to simulate starting in previous year
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2023) // Use test helper method
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)

@@ -1,4 +1,4 @@
-package processor
+package species
 
 import (
 	"sync"
@@ -45,7 +45,7 @@ func TestSeasonalPeriodInitialization(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 
 	err := tracker.InitFromDatabase()
@@ -90,7 +90,7 @@ func TestSeasonalPeriodInitialization(t *testing.T) {
 		assert.True(t, isNew, "Expected %s to be new on first detection", test.scientificName)
 
 		status := tracker.GetSpeciesStatus(test.scientificName, test.detectionDate)
-		assert.Equal(t, test.expectedSeason, status.CurrentSeason, 
+		assert.Equal(t, test.expectedSeason, status.CurrentSeason,
 			"Expected %s to be detected in %s season", test.scientificName, test.expectedSeason)
 		assert.True(t, status.IsNewThisSeason, "Expected %s to be new this season", test.scientificName)
 		assert.NotNil(t, status.FirstThisSeason, "Expected FirstThisSeason to be non-nil")
@@ -130,7 +130,7 @@ func TestSeasonalTrackingWithNilMaps(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 
 	// Initialize tracker to ensure proper setup
@@ -151,7 +151,7 @@ func TestSeasonalTrackingWithNilMaps(t *testing.T) {
 	for i, test := range testDates {
 		// This should not panic even if maps aren't initialized
 		isNew := tracker.UpdateSpecies("Parus major", test.date)
-		
+
 		// Only the first detection should be new - after that, it's a "known" species
 		// The test name suggests this is about nil map handling, not new species detection
 		if i == 0 {
@@ -162,7 +162,7 @@ func TestSeasonalTrackingWithNilMaps(t *testing.T) {
 
 		status := tracker.GetSpeciesStatus("Parus major", test.date)
 		assert.Equal(t, test.expectedSeason, status.CurrentSeason)
-		
+
 		// The key test is that this doesn't panic even with nil maps
 		// and that seasonal detection works properly
 		assert.NotNil(t, status, "Status should not be nil")
@@ -208,7 +208,7 @@ func TestYearlyTrackingAcrossYearBoundary(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2023)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
@@ -229,7 +229,7 @@ func TestYearlyTrackingAcrossYearBoundary(t *testing.T) {
 	// Now detect it in 2024
 	isNew := tracker.UpdateSpecies("Turdus merula", jan2024)
 	t.Logf("UpdateSpecies returned isNew=%v for detection on %s", isNew, jan2024.Format("2006-01-02"))
-	
+
 	// Check internal state directly
 	tracker.mu.RLock()
 	yearMapSize := len(tracker.speciesThisYear)
@@ -241,9 +241,9 @@ func TestYearlyTrackingAcrossYearBoundary(t *testing.T) {
 		yearTimeStr = yearTime.Format("2006-01-02")
 	}
 	t.Logf("After update: currentYear=%d, yearMapSize=%d, species in year map=%v, yearTime=%s", currentYear, yearMapSize, inYearMap, yearTimeStr)
-	
+
 	status = tracker.GetSpeciesStatus("Turdus merula", jan2024)
-	t.Logf("Status after update: IsNewThisYear=%v, FirstThisYear=%v, DaysThisYear=%d", 
+	t.Logf("Status after update: IsNewThisYear=%v, FirstThisYear=%v, DaysThisYear=%d",
 		status.IsNewThisYear, status.FirstThisYear, status.DaysThisYear)
 
 	assert.True(t, status.IsNewThisYear, "Expected species to still be new this year (within window)")
@@ -290,7 +290,7 @@ func TestSpeciesStatusForDailySummaryCard(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err)
 
@@ -377,7 +377,7 @@ func TestBatchSpeciesStatusPerformance(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	_ = tracker.InitFromDatabase()
 
 	// Simulate many species for dashboard
@@ -436,7 +436,7 @@ func BenchmarkBatchSpeciesStatusPerformance(b *testing.B) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	_ = tracker.InitFromDatabase()
 
 	// Simulate many species for dashboard
@@ -489,7 +489,7 @@ func TestConcurrentSeasonalUpdates(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	_ = tracker.InitFromDatabase()
 
 	// Run concurrent updates across season boundaries
@@ -536,7 +536,7 @@ func TestSeasonalWindowExpiration(t *testing.T) {
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
-		NewSpeciesWindowDays: 7,  // Short lifetime window
+		NewSpeciesWindowDays: 7, // Short lifetime window
 		SyncIntervalMinutes:  60,
 		YearlyTracking: conf.YearlyTrackingSettings{
 			Enabled:    true,
@@ -550,7 +550,7 @@ func TestSeasonalWindowExpiration(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2024) // Set to 2024 for test dates
 	_ = tracker.InitFromDatabase()
 
@@ -578,11 +578,11 @@ func TestSeasonalWindowExpiration(t *testing.T) {
 			checkTime := detectionTime.Add(time.Duration(tc.daysLater) * 24 * time.Hour)
 			status := tracker.GetSpeciesStatus(species, checkTime)
 
-			assert.Equal(t, tc.expectNew, status.IsNew, 
+			assert.Equal(t, tc.expectNew, status.IsNew,
 				"%s: IsNew mismatch", tc.description)
-			assert.Equal(t, tc.expectNewYear, status.IsNewThisYear, 
+			assert.Equal(t, tc.expectNewYear, status.IsNewThisYear,
 				"%s: IsNewThisYear mismatch", tc.description)
-			assert.Equal(t, tc.expectNewSeason, status.IsNewThisSeason, 
+			assert.Equal(t, tc.expectNewSeason, status.IsNewThisSeason,
 				"%s: IsNewThisSeason mismatch", tc.description)
 		})
 	}
@@ -614,7 +614,7 @@ func TestSpeciesStatusCaching(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	_ = tracker.InitFromDatabase()
 
 	species := "Parus major"
@@ -623,7 +623,7 @@ func TestSpeciesStatusCaching(t *testing.T) {
 
 	// First call - should compute and cache
 	status1 := tracker.GetSpeciesStatus(species, currentTime)
-	
+
 	// Second call within cache TTL - should return cached result
 	status2 := tracker.GetSpeciesStatus(species, currentTime)
 
@@ -663,7 +663,7 @@ func TestDefaultSeasonInitialization(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 
 	// Verify default seasons are initialized
@@ -699,7 +699,7 @@ func TestDefaultSeasonInitialization(t *testing.T) {
 		// This should not panic
 		tracker.UpdateSpecies("Test species", test.date)
 		status := tracker.GetSpeciesStatus("Test species", test.date)
-		assert.Equal(t, test.season, status.CurrentSeason, 
+		assert.Equal(t, test.season, status.CurrentSeason,
 			"Expected season '%s' for date %s", test.season, test.date.Format("2006-01-02"))
 	}
 }
@@ -734,7 +734,7 @@ func TestSeasonMapInitializationOnTransition(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	require.NotNil(t, tracker)
 
 	// Start in winter
@@ -761,7 +761,7 @@ func TestSeasonMapInitializationOnTransition(t *testing.T) {
 	// Test getting status for a species in a season that hasn't been initialized yet
 	// This simulates the case where GetSpeciesStatus is called before any UpdateSpecies in that season
 	summerTime := time.Date(2024, 7, 15, 10, 0, 0, 0, time.UTC)
-	
+
 	// This should not panic even if summer map doesn't exist
 	status := tracker.GetSpeciesStatus("New Species", summerTime)
 	assert.Equal(t, "summer", status.CurrentSeason, "Should correctly identify summer season")
@@ -791,13 +791,13 @@ func TestInitFromDatabaseWithSeasonalTracking(t *testing.T) {
 			FirstSeenDate:  "2023-05-15", // Spring last year
 		},
 		{
-			ScientificName: "Turdus pilaris", // Fieldfare  
+			ScientificName: "Turdus pilaris", // Fieldfare
 			CommonName:     "Fieldfare",
 			FirstSeenDate:  "2023-12-25", // Winter last year
 		},
 		{
 			ScientificName: "Sylvia curruca", // Lesser Whitethroat
-			CommonName:     "Lesser Whitethroat", 
+			CommonName:     "Lesser Whitethroat",
 			FirstSeenDate:  "2024-06-25", // Summer this year
 		},
 	}
@@ -830,9 +830,9 @@ func TestInitFromDatabaseWithSeasonalTracking(t *testing.T) {
 		},
 	}
 
-	tracker := NewSpeciesTrackerFromSettings(ds, settings)
+	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2024) // Set to 2024 for test
-	
+
 	// InitFromDatabase should handle historical data gracefully
 	err := tracker.InitFromDatabase()
 	require.NoError(t, err, "InitFromDatabase should not error with seasonal tracking enabled")

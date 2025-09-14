@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
@@ -32,14 +32,14 @@ type SpeciesDailySummary struct {
 	FirstHeard         string `json:"first_heard,omitempty"`
 	LatestHeard        string `json:"latest_heard,omitempty"`
 	ThumbnailURL       string `json:"thumbnail_url,omitempty"`
-	IsNewSpecies       bool   `json:"is_new_species,omitempty"`       // First seen within tracking window
+	IsNewSpecies       bool   `json:"is_new_species,omitempty"`        // First seen within tracking window
 	DaysSinceFirstSeen int    `json:"days_since_first_seen,omitempty"` // Days since species was first detected
 	// Multi-period tracking metadata
-	IsNewThisYear      bool   `json:"is_new_this_year,omitempty"`      // First time this year
-	IsNewThisSeason    bool   `json:"is_new_this_season,omitempty"`    // First time this season  
-	DaysThisYear       int    `json:"days_this_year,omitempty"`        // Days since first this year
-	DaysThisSeason     int    `json:"days_this_season,omitempty"`      // Days since first this season
-	CurrentSeason      string `json:"current_season,omitempty"`        // Current season name
+	IsNewThisYear   bool   `json:"is_new_this_year,omitempty"`   // First time this year
+	IsNewThisSeason bool   `json:"is_new_this_season,omitempty"` // First time this season
+	DaysThisYear    int    `json:"days_this_year,omitempty"`     // Days since first this year
+	DaysThisSeason  int    `json:"days_this_season,omitempty"`   // Days since first this season
+	CurrentSeason   string `json:"current_season,omitempty"`     // Current season name
 }
 
 // SpeciesSummary represents a bird in the overall species summary API response
@@ -111,7 +111,7 @@ func (c *Controller) initAnalyticsRoutes() {
 	timeGroup.GET("/hourly", c.GetHourlyAnalytics)
 	timeGroup.GET("/hourly/batch", c.GetBatchHourlySpeciesData) // Batch hourly data for multiple species
 	timeGroup.GET("/daily", c.GetDailyAnalytics)
-	timeGroup.GET("/daily/batch", c.GetBatchDailySpeciesData)   // Batch daily trends for multiple species
+	timeGroup.GET("/daily/batch", c.GetBatchDailySpeciesData)         // Batch daily trends for multiple species
 	timeGroup.GET("/distribution/hourly", c.GetTimeOfDayDistribution) // Renamed endpoint for time-of-day distribution
 }
 
@@ -548,9 +548,9 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 			statusTime = time.Date(parsedDate.Year(), parsedDate.Month(), parsedDate.Day(), 23, 59, 59, 0, parsedDate.Location())
 		}
 	}
-	
+
 	// Batch fetch species tracking status to avoid N+1 queries
-	var batchSpeciesStatus map[string]processor.SpeciesStatus
+	var batchSpeciesStatus map[string]species.SpeciesStatus
 	if c.Processor != nil && c.Processor.NewSpeciesTracker != nil && len(scientificNames) > 0 {
 		batchSpeciesStatus = c.Processor.NewSpeciesTracker.GetBatchSpeciesStatus(scientificNames, statusTime)
 	}
@@ -582,31 +582,31 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 			LatestHeard:    data.Latest,
 			ThumbnailURL:   thumbnailURL,
 		}
-		
+
 		// Add species tracking metadata from batch results
 		if status, exists := batchSpeciesStatus[scientificName]; exists {
 			speciesSummary.IsNewSpecies = status.IsNew
-			
+
 			// Only set days fields if they have valid values (>= 0)
 			if status.DaysSinceFirst >= 0 {
 				speciesSummary.DaysSinceFirstSeen = status.DaysSinceFirst
 			}
-			
+
 			// Multi-period tracking metadata
 			speciesSummary.IsNewThisYear = status.IsNewThisYear
 			speciesSummary.IsNewThisSeason = status.IsNewThisSeason
-			
+
 			if status.DaysThisYear >= 0 {
 				speciesSummary.DaysThisYear = status.DaysThisYear
 			}
-			
+
 			if status.DaysThisSeason >= 0 {
 				speciesSummary.DaysThisSeason = status.DaysThisSeason
 			}
-			
+
 			speciesSummary.CurrentSeason = status.CurrentSeason
 		}
-		
+
 		result = append(result, speciesSummary)
 	}
 
@@ -696,7 +696,6 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	for i := range summaryData {
 		scientificNames = append(scientificNames, summaryData[i].ScientificName)
 	}
-
 
 	// Batch fetch thumbnail URLs (cached only for fast response)
 	var thumbnailURLs map[string]imageprovider.BirdImage
@@ -801,7 +800,7 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	// Get query parameters
 	date := ctx.QueryParam("date")
-	species := ctx.QueryParam("species")
+	speciesParam := ctx.QueryParam("species")
 
 	// Validate required parameters
 	if date == "" {
@@ -815,7 +814,7 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Missing required parameter: date")
 	}
 
-	if species == "" {
+	if speciesParam == "" {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Missing required parameter in hourly analytics",
 				"parameter", "species",
@@ -842,19 +841,19 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Retrieving hourly analytics",
 			"date", date,
-			"species", species,
+			"species", speciesParam,
 			"ip", ctx.RealIP(),
 			"path", ctx.Request().URL.Path,
 		)
 	}
 
 	// Get hourly analytics data from the datastore
-	hourlyData, err := c.DS.GetHourlyAnalyticsData(date, species)
+	hourlyData, err := c.DS.GetHourlyAnalyticsData(date, speciesParam)
 	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to get hourly analytics data",
 				"date", date,
-				"species", species,
+				"species", speciesParam,
 				"error", err.Error(),
 				"ip", ctx.RealIP(),
 				"path", ctx.Request().URL.Path,
@@ -880,7 +879,7 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	// Build the response
 	response := map[string]any{
 		"date":    date,
-		"species": species,
+		"species": speciesParam,
 		"counts":  hourlyCountsArray,
 		"total":   total,
 	}
@@ -888,7 +887,7 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Hourly analytics retrieved",
 			"date", date,
-			"species", species,
+			"species", speciesParam,
 			"total", total,
 			"ip", ctx.RealIP(),
 			"path", ctx.Request().URL.Path,
@@ -904,7 +903,7 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	// Get query parameters
 	startDate := ctx.QueryParam("start_date")
 	endDate := ctx.QueryParam("end_date")
-	species := ctx.QueryParam("species")
+	speciesParam := ctx.QueryParam("species")
 
 	// --- Enhanced Validation ---
 	// Check for empty required parameter first
@@ -982,20 +981,20 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 		c.apiLogger.Info("Retrieving daily analytics",
 			"start_date", startDate,
 			"end_date", endDate,
-			"species", species,
+			"species", speciesParam,
 			"ip", ctx.RealIP(),
 			"path", ctx.Request().URL.Path,
 		)
 	}
 
 	// Get daily analytics data from the datastore
-	dailyData, err := c.DS.GetDailyAnalyticsData(startDate, endDate, species)
+	dailyData, err := c.DS.GetDailyAnalyticsData(startDate, endDate, speciesParam)
 	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to get daily analytics data",
 				"start_date", startDate,
 				"end_date", endDate,
-				"species", species,
+				"species", speciesParam,
 				"error", err.Error(),
 				"ip", ctx.RealIP(),
 				"path", ctx.Request().URL.Path,
@@ -1019,7 +1018,7 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	}{
 		StartDate: startDate,
 		EndDate:   endDate,
-		Species:   species,
+		Species:   speciesParam,
 		Data:      make([]DailyResponse, 0, len(dailyData)),
 	}
 
@@ -1039,7 +1038,7 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 		c.apiLogger.Info("Daily analytics retrieved",
 			"start_date", startDate,
 			"end_date", endDate,
-			"species", species,
+			"species", speciesParam,
 			"data_points", len(response.Data),
 			"total", totalCount,
 			"ip", ctx.RealIP(),
@@ -1056,7 +1055,7 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 	// Get query parameters
 	startDate := ctx.QueryParam("start_date")
 	endDate := ctx.QueryParam("end_date")
-	species := ctx.QueryParam("species") // Optional species filter
+	speciesParam := ctx.QueryParam("species") // Optional species filter
 
 	// Set default date range if not provided (before validation)
 	if startDate == "" {
@@ -1070,7 +1069,7 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 		c.apiLogger.Info("Retrieving time of day distribution",
 			"start_date", startDate,
 			"end_date", endDate,
-			"species", species,
+			"species", speciesParam,
 			"ip", ctx.RealIP(),
 			"path", ctx.Request().URL.Path,
 		)
@@ -1105,13 +1104,13 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 	}
 
 	// Get hourly distribution data from the datastore
-	hourlyData, err := c.DS.GetHourlyDistribution(startDate, endDate, species)
+	hourlyData, err := c.DS.GetHourlyDistribution(startDate, endDate, speciesParam)
 	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to get hourly distribution data",
 				"start_date", startDate,
 				"end_date", endDate,
-				"species", species,
+				"species", speciesParam,
 				"error", err.Error(),
 				"ip", ctx.RealIP(),
 				"path", ctx.Request().URL.Path,
@@ -1131,7 +1130,7 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 			c.apiLogger.Info("No hourly distribution data available",
 				"start_date", startDate,
 				"end_date", endDate,
-				"species", species,
+				"species", speciesParam,
 				"ip", ctx.RealIP(),
 				"path", ctx.Request().URL.Path,
 			)
@@ -1159,7 +1158,7 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 		c.apiLogger.Info("Hourly distribution retrieved",
 			"start_date", startDate,
 			"end_date", endDate,
-			"species", species,
+			"species", speciesParam,
 			"total", totalCount,
 			"ip", ctx.RealIP(),
 			"path", ctx.Request().URL.Path,
@@ -1395,15 +1394,15 @@ func parseAndValidateDateRange(startDateStr, endDateStr string) error {
 // Returns thumbnail URLs for multiple species in a single request
 func (c *Controller) GetSpeciesThumbnails(ctx echo.Context) error {
 	// Get species list from query parameters
-	species := ctx.QueryParams()["species"]
+	speciesParams := ctx.QueryParams()["species"]
 
-	if len(species) == 0 {
+	if len(speciesParams) == 0 {
 		return echo.NewHTTPError(http.StatusBadRequest, "No species provided")
 	}
 
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Retrieving thumbnails for species",
-			"count", len(species),
+			"count", len(speciesParams),
 			"ip", ctx.RealIP(),
 			"path", ctx.Request().URL.Path,
 		)
@@ -1415,7 +1414,7 @@ func (c *Controller) GetSpeciesThumbnails(ctx echo.Context) error {
 	// Use the image cache if available
 	if c.BirdImageCache != nil {
 		// Get thumbnails in batch
-		images := c.BirdImageCache.GetBatch(species)
+		images := c.BirdImageCache.GetBatch(speciesParams)
 
 		// Convert to simple map of scientific name -> URL
 		for name := range images {
@@ -1427,21 +1426,21 @@ func (c *Controller) GetSpeciesThumbnails(ctx echo.Context) error {
 		}
 
 		// Add placeholder for any missing species
-		for _, name := range species {
+		for _, name := range speciesParams {
 			if _, exists := result[name]; !exists {
 				result[name] = placeholderImageURL
 			}
 		}
 	} else {
 		// No image cache, return placeholders for all
-		for _, name := range species {
+		for _, name := range speciesParams {
 			result[name] = placeholderImageURL
 		}
 	}
 
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Thumbnails retrieved",
-			"requested", len(species),
+			"requested", len(speciesParams),
 			"found", len(result),
 			"ip", ctx.RealIP(),
 			"path", ctx.Request().URL.Path,
@@ -1460,7 +1459,7 @@ func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
 	// Parse parameters
 	speciesParams := ctx.QueryParams()["species"]
 	date := ctx.QueryParam("date")
-	
+
 	// Validate required parameters
 	if len(speciesParams) == 0 {
 		if c.apiLogger != nil {
@@ -1532,27 +1531,27 @@ func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
 	processingErrors := make([]string, 0)
 	seen := make(map[string]bool)
 
-	for _, species := range speciesParams {
+	for _, speciesItem := range speciesParams {
 		// Trim whitespace from species name
-		species = strings.TrimSpace(species)
-		if species == "" {
+		speciesItem = strings.TrimSpace(speciesItem)
+		if speciesItem == "" {
 			continue
 		}
 
 		// Skip if already processed
-		if seen[species] {
+		if seen[speciesItem] {
 			continue
 		}
-		seen[species] = true
+		seen[speciesItem] = true
 
 		// Get hourly data for this species
-		hourlyData, err := c.DS.GetHourlyAnalyticsData(date, species)
+		hourlyData, err := c.DS.GetHourlyAnalyticsData(date, speciesItem)
 		if err != nil {
-			errorMsg := fmt.Sprintf("Failed to get hourly data for species %s: %v", species, err)
+			errorMsg := fmt.Sprintf("Failed to get hourly data for species %s: %v", speciesItem, err)
 			processingErrors = append(processingErrors, errorMsg)
 			if c.apiLogger != nil {
 				c.apiLogger.Error("Error getting hourly data for species in batch request",
-					"species", species, "date", date, "error", err.Error(), "ip", ip, "path", path)
+					"species", speciesItem, "date", date, "error", err.Error(), "ip", ip, "path", path)
 			}
 			continue
 		}
@@ -1570,7 +1569,7 @@ func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
 			}
 		}
 
-		results[species] = hourlyDistribution
+		results[speciesItem] = hourlyDistribution
 	}
 
 	// Log partial failures if any
@@ -1672,19 +1671,19 @@ func (c *Controller) GetBatchDailySpeciesData(ctx echo.Context) error {
 	// Deduplicate species list to avoid redundant DB calls and result overwrites
 	uniqueSpecies := make([]string, 0, len(speciesParams))
 	seen := make(map[string]bool)
-	
-	for _, species := range speciesParams {
+
+	for _, speciesItem := range speciesParams {
 		// Trim whitespace from species name
-		trimmedSpecies := strings.TrimSpace(species)
+		trimmedSpecies := strings.TrimSpace(speciesItem)
 		if trimmedSpecies == "" {
 			continue // Skip empty entries
 		}
-		
+
 		// Skip if already seen (case-sensitive deduplication)
 		if seen[trimmedSpecies] {
 			continue
 		}
-		
+
 		// Add to unique list and mark as seen
 		seen[trimmedSpecies] = true
 		uniqueSpecies = append(uniqueSpecies, trimmedSpecies)
@@ -1727,17 +1726,17 @@ func (c *Controller) GetBatchDailySpeciesData(ctx echo.Context) error {
 	results := make(map[string]SpeciesDailyData)
 	processingErrors := make([]string, 0)
 
-	for _, species := range uniqueSpecies {
+	for _, speciesItem := range uniqueSpecies {
 		// Species is already trimmed and validated in deduplication step
-		
+
 		// Get daily data for this species
-		dailyData, err := c.DS.GetDailyAnalyticsData(startDate, endDate, species)
+		dailyData, err := c.DS.GetDailyAnalyticsData(startDate, endDate, speciesItem)
 		if err != nil {
-			errorMsg := fmt.Sprintf("Failed to get daily data for species %s: %v", species, err)
+			errorMsg := fmt.Sprintf("Failed to get daily data for species %s: %v", speciesItem, err)
 			processingErrors = append(processingErrors, errorMsg)
 			if c.apiLogger != nil {
 				c.apiLogger.Error("Error getting daily data for species in batch request",
-					"species", species, "start_date", startDate, "end_date", endDate, 
+					"species", speciesItem, "start_date", startDate, "end_date", endDate,
 					"error", err.Error(), "ip", ip, "path", path)
 			}
 			continue
@@ -1754,10 +1753,10 @@ func (c *Controller) GetBatchDailySpeciesData(ctx echo.Context) error {
 			totalCount += data.Count
 		}
 
-		results[species] = SpeciesDailyData{
+		results[speciesItem] = SpeciesDailyData{
 			StartDate: startDate,
 			EndDate:   endDate,
-			Species:   species,
+			Species:   speciesItem,
 			Data:      responseData,
 			Total:     totalCount,
 		}
