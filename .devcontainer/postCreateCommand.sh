@@ -12,6 +12,84 @@ sudo apt-get install -y ca-certificates libasound2 ffmpeg sox alsa-utils
 # Install development tools (git is already included)
 sudo apt-get install -y nano vim curl wget git dialog build-essential fish
 
+# Clone TensorFlow source for compilation (headers needed for CGO)
+echo "Setting up TensorFlow source..."
+TFLITE_VERSION="v2.17.1"
+TENSORFLOW_DIR="/home/dev-user/src/tensorflow"
+
+if [ ! -f "$TENSORFLOW_DIR/tensorflow/lite/c/c_api.h" ]; then
+    echo "Cloning TensorFlow $TFLITE_VERSION source (sparse checkout for headers only)..."
+    mkdir -p /home/dev-user/src
+    
+    # Clone with filter to minimize download size
+    git clone --branch $TFLITE_VERSION --filter=blob:none --depth 1 https://github.com/tensorflow/tensorflow.git $TENSORFLOW_DIR
+    
+    # Setup sparse checkout to only get header files
+    git -C $TENSORFLOW_DIR config core.sparseCheckout true
+    echo "**/*.h" >> $TENSORFLOW_DIR/.git/info/sparse-checkout
+    
+    # Apply sparse checkout
+    git -C $TENSORFLOW_DIR checkout
+    
+    echo "✓ TensorFlow headers installed at $TENSORFLOW_DIR"
+else
+    echo "✓ TensorFlow headers already exist at $TENSORFLOW_DIR"
+fi
+
+# Ensure correct ownership
+sudo chown -R dev-user:dev-user /home/dev-user/src
+
+# Download and install TensorFlow Lite C library
+echo "Setting up TensorFlow Lite C library..."
+TFLITE_VERSION="v2.17.1"
+TFLITE_LIB_DIR="/usr/lib"
+ARCH=$(uname -m)
+
+# Determine the correct architecture
+if [ "$ARCH" = "x86_64" ]; then
+    TFLITE_LIB_ARCH="linux_amd64.tar.gz"
+    LIB_FILENAME="libtensorflowlite_c.so.${TFLITE_VERSION#v}"
+elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+    TFLITE_LIB_ARCH="linux_arm64.tar.gz"
+    LIB_FILENAME="libtensorflowlite_c.so.${TFLITE_VERSION#v}"
+else
+    echo "Warning: Unsupported architecture $ARCH for TensorFlow Lite"
+    TFLITE_LIB_ARCH=""
+fi
+
+if [ ! -z "$TFLITE_LIB_ARCH" ] && [ ! -f "$TFLITE_LIB_DIR/$LIB_FILENAME" ]; then
+    echo "Downloading TensorFlow Lite C library $TFLITE_VERSION for $ARCH..."
+    
+    # Download the library
+    wget -q "https://github.com/tphakala/tflite_c/releases/download/$TFLITE_VERSION/tflite_c_${TFLITE_VERSION}_${TFLITE_LIB_ARCH}" -O /tmp/tflite_c.tar.gz
+    
+    # Extract the library
+    tar -xzf /tmp/tflite_c.tar.gz -C /tmp
+    
+    # Move to system library directory
+    sudo mv "/tmp/$LIB_FILENAME" "$TFLITE_LIB_DIR/"
+    
+    # Create symbolic links for the library
+    cd $TFLITE_LIB_DIR
+    sudo ln -sf $LIB_FILENAME libtensorflowlite_c.so.2
+    sudo ln -sf libtensorflowlite_c.so.2 libtensorflowlite_c.so
+    
+    # Update library cache
+    sudo ldconfig
+    
+    # Clean up
+    rm -f /tmp/tflite_c.tar.gz
+    
+    echo "✓ TensorFlow Lite C library installed at $TFLITE_LIB_DIR"
+else
+    if [ -f "$TFLITE_LIB_DIR/$LIB_FILENAME" ]; then
+        echo "✓ TensorFlow Lite C library already exists at $TFLITE_LIB_DIR"
+    fi
+fi
+
+# Return to working directory
+cd /workspaces/birdnet-go
+
 # Install Go development tools
 echo "Installing Go tools..."
 go install github.com/air-verse/air@latest
@@ -106,6 +184,22 @@ echo "npm version: $(npm --version)"
 echo "Task version: $(task --version)"
 echo "golangci-lint version: $(golangci-lint --version)"
 echo "Oh My Posh version: $(oh-my-posh version)"
+
+# Verify TensorFlow setup
+echo ""
+echo "=== TensorFlow Setup ==="
+if [ -f "/home/dev-user/src/tensorflow/tensorflow/lite/c/c_api.h" ]; then
+    echo "✓ TensorFlow headers: Available"
+else
+    echo "✗ TensorFlow headers: Missing"
+fi
+
+if [ -f "/usr/lib/libtensorflowlite_c.so" ]; then
+    echo "✓ TensorFlow Lite C library: Available"
+    ls -la /usr/lib/libtensorflowlite_c.so* | head -3
+else
+    echo "✗ TensorFlow Lite C library: Missing"
+fi
 
 # Display available linting commands
 echo ""
