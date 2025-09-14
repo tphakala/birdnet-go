@@ -105,7 +105,15 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 
 	// Use pooled slice to reduce allocations
 	filesPtr := getFileInfoSlice()
-	files := *filesPtr
+	shouldReturnToPool := true
+	defer func() {
+		if shouldReturnToPool {
+			putFileInfoSlice(filesPtr)
+		}
+	}()
+
+	// Work directly with the pooled slice
+	files := (*filesPtr)[:0:cap(*filesPtr)]
 
 	var parseErrorCount int
 	var firstParseError error
@@ -138,7 +146,7 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 			// and renamed upon completion to ensure atomic file operations.
 			// Using case-insensitive check to handle edge cases.
 			// Fast path: skip temp files early
-			if len(fileName) > len(tempFileExt) && strings.HasSuffix(strings.ToLower(fileName), tempFileExt) {
+			if strings.HasSuffix(strings.ToLower(fileName), tempFileExt) {
 				return nil
 			}
 
@@ -204,7 +212,6 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 
 	// Fast path: if no files found, return early
 	if len(files) == 0 {
-		putFileInfoSlice(filesPtr)
 		return nil, nil
 	}
 
@@ -212,8 +219,8 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 	result := make([]FileInfo, len(files))
 	copy(result, files)
 
-	// Return pooled slice
-	putFileInfoSlice(filesPtr)
+	// Transfer ownership - don't return to pool since we made a copy
+	shouldReturnToPool = true // Pool will be returned by defer
 
 	return result, nil
 }
@@ -225,8 +232,8 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 	// Check if the file extension is allowed
 	ext := filepath.Ext(name)
 	if !contains(allowedFileTypes, ext) {
-		// Simplified error without heavy context
-		return FileInfo{}, fmt.Errorf("file type not eligible: %s", ext)
+		// Lightweight error with helpful context
+		return FileInfo{}, fmt.Errorf("file type not eligible: %s (allowed: %v)", ext, allowedFileTypes)
 	}
 
 	// Remove the extension for parsing
@@ -237,8 +244,8 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 
 	parts := strings.Split(nameWithoutExt, "_")
 	if len(parts) < 3 {
-		// Simplified error for memory efficiency
-		return FileInfo{}, fmt.Errorf("invalid filename format: %s", name)
+		// Lightweight error with format hint
+		return FileInfo{}, fmt.Errorf("invalid filename format: %s (expected: species_confidence_timestamp)", name)
 	}
 
 	// The species name might contain underscores, so we need to handle the last two parts separately
@@ -248,8 +255,8 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 
 	confidence, err := strconv.Atoi(strings.TrimSuffix(confidenceStr, "p"))
 	if err != nil {
-		// Simplified error for memory efficiency
-		return FileInfo{}, fmt.Errorf("parse confidence failed: %s", name)
+		// Lightweight error with specific issue
+		return FileInfo{}, fmt.Errorf("invalid confidence value '%s' in filename: %s", confidenceStr, name)
 	}
 
 	// IMPORTANT: Despite the Z suffix in the filename (which normally indicates UTC),
@@ -265,8 +272,8 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 		// Fallback to original method if this fails, for backward compatibility
 		timestamp, err = time.Parse("20060102T150405Z", timestampStr)
 		if err != nil {
-			// Simplified error for memory efficiency
-			return FileInfo{}, fmt.Errorf("parse timestamp failed: %s", name)
+			// Lightweight error with timestamp issue
+			return FileInfo{}, fmt.Errorf("invalid timestamp '%s' in filename: %s", timestampStr, name)
 		}
 		// Convert UTC time to local time explicitly if needed
 		timestamp = timestamp.In(time.Local)

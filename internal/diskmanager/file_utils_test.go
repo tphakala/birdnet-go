@@ -17,15 +17,15 @@ func TestInvalidFileNameErrorMessages(t *testing.T) {
 		expectedErrText string
 	}{
 		// Too few parts
-		{"bubo_bubo.wav", "invalid filename format: bubo_bubo.wav"},
-		// This actually gets parsed as species="bubo", confidence="bubo_80p", which fails at the confidence parsing step
-		{"bubo_bubo_80p.wav", "parse confidence failed: bubo_bubo_80p.wav"},
+		{"bubo_bubo.wav", "invalid filename format: bubo_bubo.wav (expected: species_confidence_timestamp)"},
+		// This actually gets parsed as species="bubo", confidence="bubo", which fails at the confidence parsing step
+		{"bubo_bubo_80p.wav", "invalid confidence value 'bubo' in filename: bubo_bubo_80p.wav"},
 
 		// Invalid confidence value
-		{"bubo_bubo_XXp_20210102T150405Z.wav", "parse confidence failed: bubo_bubo_XXp_20210102T150405Z.wav"},
+		{"bubo_bubo_XXp_20210102T150405Z.wav", "invalid confidence value 'XXp' in filename: bubo_bubo_XXp_20210102T150405Z.wav"},
 
 		// Invalid timestamp format
-		{"bubo_bubo_80p_invalid.wav", "parse timestamp failed: bubo_bubo_80p_invalid.wav"},
+		{"bubo_bubo_80p_invalid.wav", "invalid timestamp 'invalid' in filename: bubo_bubo_80p_invalid.wav"},
 	}
 
 	for _, tc := range testCases {
