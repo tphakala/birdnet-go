@@ -23,18 +23,24 @@ if [ -n "$GO_FILES" ]; then
     exit 1
   fi
   
-  # Check Go code formatting
+  # Check and auto-format Go files
   echo "   Checking Go code formatting..."
   UNFORMATTED=$(echo "$GO_FILES" | xargs gofmt -l)
   
   if [ -n "$UNFORMATTED" ]; then
-    echo "❌ The following Go files need formatting:"
+    echo "🔧 Auto-formatting Go files:"
     echo "$UNFORMATTED" | sed 's/^/     /'
-    echo "💡 Run 'gofmt -w' to format files needed, then re-stage and commit"
-    echo "⚠️  Note: --no-verify bypasses are not accepted in this project"
-    exit 1
+    
+    # Format the files
+    echo "$UNFORMATTED" | xargs gofmt -w
+    
+    # Re-stage the formatted files
+    echo "$UNFORMATTED" | xargs git add
+    
+    echo "✅ Go files formatted and re-staged automatically"
+  else
+    echo "✅ All Go files are properly formatted"
   fi
-  echo "✅ All Go files are properly formatted"
   
   # Run golangci-lint
   echo "   Linting Go files..."
