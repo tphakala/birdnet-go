@@ -75,7 +75,7 @@ func TestGetDetections(t *testing.T) {
 			ID:             1,
 			Date:           "2025-03-07",
 			Time:           "08:15:00",
-			Source: testRealtimeSource(),
+			Source:         testRealtimeSource(),
 			SpeciesCode:    "AMCRO",
 			ScientificName: "Corvus brachyrhynchos",
 			CommonName:     "American Crow",
@@ -98,7 +98,7 @@ func TestGetDetections(t *testing.T) {
 			ID:             2,
 			Date:           "2025-03-07",
 			Time:           "09:30:00",
-			Source: testRealtimeSource(),
+			Source:         testRealtimeSource(),
 			SpeciesCode:    "RBWO",
 			ScientificName: "Melanerpes carolinus",
 			CommonName:     "Red-bellied Woodpecker",
@@ -330,7 +330,7 @@ func TestGetDetection(t *testing.T) {
 		ID:             1,
 		Date:           "2025-03-07",
 		Time:           "08:15:00",
-		Source: testRealtimeSource(),
+		Source:         testRealtimeSource(),
 		SpeciesCode:    "AMCRO",
 		ScientificName: "Corvus brachyrhynchos",
 		CommonName:     "American Crow",
@@ -438,7 +438,7 @@ func TestGetRecentDetections(t *testing.T) {
 			ID:             1,
 			Date:           "2025-03-07",
 			Time:           "08:15:00",
-			Source: testRealtimeSource(),
+			Source:         testRealtimeSource(),
 			SpeciesCode:    "AMCRO",
 			ScientificName: "Corvus brachyrhynchos",
 			CommonName:     "American Crow",
@@ -452,7 +452,7 @@ func TestGetRecentDetections(t *testing.T) {
 			ID:             2,
 			Date:           "2025-03-07",
 			Time:           "09:30:00",
-			Source: testRealtimeSource(),
+			Source:         testRealtimeSource(),
 			SpeciesCode:    "RBWO",
 			ScientificName: "Melanerpes carolinus",
 			CommonName:     "Red-bellied Woodpecker",
@@ -1275,6 +1275,11 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 
 // TestTrueConcurrentReviewAccess tests true concurrent review access
 func TestTrueConcurrentReviewAccess(t *testing.T) {
+	// Go 1.25: Add test metadata for better test organization and reporting
+	t.Attr("component", "detections")
+	t.Attr("type", "concurrent")
+	t.Attr("feature", "review")
+
 	// Setup with a fresh test environment
 	e, mockDS, controller := setupTestEnvironment(t)
 
@@ -1304,8 +1309,8 @@ func TestTrueConcurrentReviewAccess(t *testing.T) {
 	numConcurrent := 10
 
 	// Create waitgroups to coordinate goroutines
+	// Go 1.25: Using WaitGroup.Go() for automatic Add/Done management
 	var wg sync.WaitGroup
-	wg.Add(numConcurrent)
 
 	// Create a barrier to ensure goroutines start roughly at the same time
 	var barrier sync.WaitGroup
@@ -1328,11 +1333,9 @@ func TestTrueConcurrentReviewAccess(t *testing.T) {
 	mockDS.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil).Maybe()
 	mockDS.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil).Maybe()
 
-	// Launch concurrent requests
+	// Launch concurrent requests using Go 1.25 WaitGroup.Go() pattern
 	for i := 0; i < numConcurrent; i++ {
-		go func(i int) {
-			defer wg.Done()
-
+		wg.Go(func() {
 			// Wait for the barrier to be lifted
 			barrier.Wait()
 
@@ -1366,7 +1369,7 @@ func TestTrueConcurrentReviewAccess(t *testing.T) {
 			} else {
 				atomic.AddInt32(&failures, 1)
 			}
-		}(i)
+		})
 	}
 
 	// Lift the barrier to start all goroutines roughly simultaneously
@@ -1387,6 +1390,11 @@ func TestTrueConcurrentReviewAccess(t *testing.T) {
 
 // TestTrueConcurrentPlatformSpecific tests platform-specific concurrency
 func TestTrueConcurrentPlatformSpecific(t *testing.T) {
+	// Go 1.25: Add test metadata for better test organization and reporting
+	t.Attr("component", "detections")
+	t.Attr("type", "concurrent")
+	t.Attr("feature", "platform-specific")
+
 	// Setup with a fresh test environment
 	e, mockDS, controller := setupTestEnvironment(t)
 
@@ -1430,8 +1438,8 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 	mockDS.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil).Maybe()
 
 	// Create wait group and barrier
+	// Go 1.25: Using WaitGroup.Go() for automatic Add/Done management
 	var wg sync.WaitGroup
-	wg.Add(numConcurrent)
 	var barrier sync.WaitGroup
 	barrier.Add(1)
 
@@ -1442,10 +1450,10 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 	done := make(chan bool)
 
 	go func() {
-		// Launch concurrent requests
+		// Launch concurrent requests using Go 1.25 WaitGroup.Go() pattern
 		for i := 0; i < numConcurrent; i++ {
-			go func(i int) {
-				defer wg.Done()
+			wg.Go(func() {
+				goroutineID := i
 
 				// Wait for barrier
 				barrier.Wait()
@@ -1457,7 +1465,7 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 				// Add small stagger time to simulate more realistic conditions
 				// (especially important on Windows)
 				if runtime.GOOS == "windows" {
-					time.Sleep(time.Duration(i) * 10 * time.Millisecond)
+					time.Sleep(time.Duration(goroutineID) * 10 * time.Millisecond)
 				}
 
 				req, _ := http.NewRequest(
@@ -1473,8 +1481,8 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 				// Track results
 				if err == nil {
 					defer func() {
-					_ = resp.Body.Close() // Safe to ignore in test cleanup
-				}()
+						_ = resp.Body.Close() // Safe to ignore in test cleanup
+					}()
 
 					switch resp.StatusCode {
 					case http.StatusOK:
@@ -1489,7 +1497,7 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 					t.Logf("Request error: %v", err)
 					atomic.AddInt32(&failures, 1)
 				}
-			}(i)
+			})
 		}
 
 		// Start all goroutines

@@ -37,7 +37,7 @@ type GenerateSupportDumpResponse struct {
 // GenerateSupportDump handles the generation and optional upload of support dumps
 func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	c.apiLogger.Debug("Support dump generation started")
-	
+
 	// Parse JSON request
 	var req GenerateSupportDumpRequest
 	if err := ctx.Bind(&req); err != nil {
@@ -125,7 +125,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 			Message: err.Error(),
 		})
 	}
-	c.apiLogger.Debug("Support archive created successfully", 
+	c.apiLogger.Debug("Support archive created successfully",
 		"dump_id", dump.ID,
 		"archive_size", len(archiveData))
 
@@ -263,12 +263,11 @@ func (c *Controller) initSupportRoutes() {
 	c.Group.GET("/support/status", c.GetSupportStatus, c.authMiddlewareFn)
 
 	// Start cleanup goroutine for old support dumps with proper context
+	// Go 1.25: Using WaitGroup.Go() for automatic Add/Done management
 	if c.ctx != nil {
-		c.wg.Add(1)
-		go func() {
-			defer c.wg.Done()
+		c.wg.Go(func() {
 			c.startSupportDumpCleanup(c.ctx)
-		}()
+		})
 	}
 }
 

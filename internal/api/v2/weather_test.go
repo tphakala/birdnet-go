@@ -21,7 +21,7 @@ import (
 // runGetHourlyWeatherForDayNoDataTest runs the hourly weather endpoint test with no data for a given date
 func runGetHourlyWeatherForDayNoDataTest(t *testing.T, date string) {
 	t.Helper()
-	
+
 	// Setup
 	e, mockDS, controller := setupWeatherTestEnvironment(t)
 
@@ -60,6 +60,11 @@ func runGetHourlyWeatherForDayNoDataTest(t *testing.T, date string) {
 
 // TestGetDailyWeather tests the daily weather endpoint
 func TestGetDailyWeather(t *testing.T) {
+	// Go 1.25: Add test metadata for better organization and reporting
+	t.Attr("component", "weather")
+	t.Attr("type", "integration")
+	t.Attr("feature", "daily-weather")
+
 	// Setup
 	e, mockDS, controller := setupWeatherTestEnvironment(t)
 
@@ -135,6 +140,11 @@ func setupWeatherTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Con
 
 // TestGetDailyWeatherMissingDate tests the daily weather endpoint with missing date
 func TestGetDailyWeatherMissingDate(t *testing.T) {
+	// Go 1.25: Add test metadata for better organization and reporting
+	t.Attr("component", "weather")
+	t.Attr("type", "validation")
+	t.Attr("feature", "missing-date")
+
 	// Setup
 	e, _, controller := setupWeatherTestEnvironment(t)
 
@@ -165,6 +175,11 @@ func TestGetDailyWeatherMissingDate(t *testing.T) {
 
 // TestGetDailyWeatherDatabaseError tests the daily weather endpoint with database error
 func TestGetDailyWeatherDatabaseError(t *testing.T) {
+	// Go 1.25: Add test metadata for better organization and reporting
+	t.Attr("component", "weather")
+	t.Attr("type", "error-handling")
+	t.Attr("feature", "database-error")
+
 	// Setup
 	e, mockDS, controller := setupWeatherTestEnvironment(t)
 
