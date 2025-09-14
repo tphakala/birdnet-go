@@ -587,7 +587,7 @@ func AnalysisBufferMonitor(wg *sync.WaitGroup, bn *birdnet.BirdNET, quitChan cha
 
 	// This is the offset to subtract from the begin time of the data to account for BirdNET prediction and
 	// processing delays, goal is to ensure that captured audio clip contains detection sound.
-	const detectionOffset = 7 * time.Second
+	const detectionOffset = 10 * time.Second
 
 	// Creating a ticker that ticks every 100ms
 	ticker := time.NewTicker(pollInterval)
