@@ -69,7 +69,7 @@ func TestNewSoundLevelProcessor_IntervalClamping(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Modify the settings directly
 			settings.Realtime.Audio.SoundLevel.Interval = tt.configInterval
-			
+
 			// Restore original value after test
 			defer func() {
 				settings.Realtime.Audio.SoundLevel.Interval = originalInterval
@@ -98,9 +98,9 @@ func TestNewSoundLevelProcessor_BufferSizing(t *testing.T) {
 	originalInterval := settings.Realtime.Audio.SoundLevel.Interval
 
 	tests := []struct {
-		name                  string
-		interval              int
-		expectedBufferSize    int
+		name               string
+		interval           int
+		expectedBufferSize int
 	}{
 		{
 			name:               "minimum_interval_buffer",
@@ -123,7 +123,7 @@ func TestNewSoundLevelProcessor_BufferSizing(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Modify the settings directly
 			settings.Realtime.Audio.SoundLevel.Interval = tt.interval
-			
+
 			// Restore original value after test
 			defer func() {
 				settings.Realtime.Audio.SoundLevel.Interval = originalInterval
@@ -182,7 +182,7 @@ func TestNewSoundLevelProcessor_InitialState(t *testing.T) {
 	// Save original interval value
 	originalInterval := settings.Realtime.Audio.SoundLevel.Interval
 	settings.Realtime.Audio.SoundLevel.Interval = 10
-	
+
 	// Restore original value after test
 	defer func() {
 		settings.Realtime.Audio.SoundLevel.Interval = originalInterval
@@ -216,7 +216,7 @@ func TestSoundLevelProcessor_ThreadSafety(t *testing.T) {
 	// Save original interval value
 	originalInterval := settings.Realtime.Audio.SoundLevel.Interval
 	settings.Realtime.Audio.SoundLevel.Interval = 5
-	
+
 	// Restore original value after test
 	defer func() {
 		settings.Realtime.Audio.SoundLevel.Interval = originalInterval
@@ -233,12 +233,10 @@ func TestSoundLevelProcessor_ThreadSafety(t *testing.T) {
 	numGoroutines := 10
 
 	for range numGoroutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			// Process audio data concurrently
 			_, _ = processor.ProcessAudioData(testData)
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -246,7 +244,6 @@ func TestSoundLevelProcessor_ThreadSafety(t *testing.T) {
 	// If we get here without panicking, thread safety is working
 	// Test completed successfully if we reach this point without panics
 }
-
 
 // TestIntervalAggregator_DataFlow tests that data flows correctly through the interval aggregator
 func TestIntervalAggregator_DataFlow(t *testing.T) {
@@ -259,7 +256,7 @@ func TestIntervalAggregator_DataFlow(t *testing.T) {
 	// Save original interval value
 	originalInterval := settings.Realtime.Audio.SoundLevel.Interval
 	settings.Realtime.Audio.SoundLevel.Interval = 5
-	
+
 	// Restore original value after test
 	defer func() {
 		settings.Realtime.Audio.SoundLevel.Interval = originalInterval
@@ -301,7 +298,7 @@ func TestProcessAudioData_IntervalCompletion(t *testing.T) {
 	// Save original interval value
 	originalInterval := settings.Realtime.Audio.SoundLevel.Interval
 	settings.Realtime.Audio.SoundLevel.Interval = 5 // 5 second interval
-	
+
 	// Restore original value after test
 	defer func() {
 		settings.Realtime.Audio.SoundLevel.Interval = originalInterval
@@ -324,7 +321,7 @@ func TestProcessAudioData_IntervalCompletion(t *testing.T) {
 	result, err := processor.ProcessAudioData(oneSecondData)
 	require.NoError(t, err)
 	assert.NotNil(t, result, "should return data when interval completes")
-	
+
 	if result != nil {
 		assert.Equal(t, "test-source", result.Source)
 		assert.Equal(t, "test-name", result.Name)
@@ -356,7 +353,7 @@ func TestProcessAudioData_OddByteCount(t *testing.T) {
 
 	// Create data with odd number of bytes (should be truncated to even)
 	oddData := make([]byte, 1001)
-	
+
 	// Should not panic and process normally
 	result, err := processor.ProcessAudioData(oddData)
 	assert.True(t, err == nil || errors.Is(err, ErrIntervalIncomplete), "should return no error or ErrIntervalIncomplete")

@@ -19,6 +19,9 @@ import (
 // TestFFmpegStream_ProcessCleanupNoZombies validates that ffmpeg processes are properly cleaned up
 // without leaving zombie processes when the stream is stopped
 func TestFFmpegStream_ProcessCleanupNoZombies(t *testing.T) {
+	t.Attr("component", "ffmpeg")
+	t.Attr("test-type", "zombie-prevention")
+
 	if runtime.GOOS == "windows" {
 		t.Skip("Zombie process testing is Unix-specific")
 	}
@@ -102,6 +105,9 @@ func TestFFmpegStream_CleanupTimeoutHandling(t *testing.T) {
 
 // TestFFmpegStream_RapidRestartNoZombies tests that rapid restarts don't create zombie processes
 func TestFFmpegStream_RapidRestartNoZombies(t *testing.T) {
+	t.Attr("component", "ffmpeg")
+	t.Attr("test-type", "zombie-prevention")
+
 	if runtime.GOOS == "windows" {
 		t.Skip("Zombie process testing is Unix-specific")
 	}
@@ -201,6 +207,9 @@ func TestFFmpegStream_ProcessGroupCleanup(t *testing.T) {
 
 // TestFFmpegStream_ConcurrentCleanup tests that concurrent cleanup operations don't cause issues
 func TestFFmpegStream_ConcurrentCleanup(t *testing.T) {
+	t.Attr("component", "ffmpeg")
+	t.Attr("test-type", "concurrency")
+
 	if runtime.GOOS == "windows" {
 		t.Skip("Zombie process testing is Unix-specific")
 	}
@@ -223,11 +232,9 @@ func TestFFmpegStream_ConcurrentCleanup(t *testing.T) {
 	// Attempt concurrent cleanups
 	var wg sync.WaitGroup
 	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			stream.cleanupProcess()
-		}()
+		})
 	}
 
 	wg.Wait()

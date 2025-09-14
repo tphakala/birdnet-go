@@ -6,11 +6,15 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
 // TestRaceConditionFix verifies that GetOrCreateSource prevents race conditions
 func TestRaceConditionFix(t *testing.T) {
+	t.Attr("component", "source-registry")
+	t.Attr("test-type", "concurrency")
+
 	registry := &AudioSourceRegistry{
 		sources:       make(map[string]*AudioSource),
 		connectionMap: make(map[string]string),
@@ -21,21 +25,19 @@ func TestRaceConditionFix(t *testing.T) {
 	// Test concurrent migrations of the same source
 	const numGoroutines = 100
 	const testURL = "rtsp://race-test.local/stream"
-	
+
 	results := make(chan string, numGoroutines)
 	var wg sync.WaitGroup
-	wg.Add(numGoroutines)
 
 	for i := 0; i < numGoroutines; i++ {
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			source := registry.GetOrCreateSource(testURL, SourceTypeRTSP)
 			var id string
 			if source != nil {
 				id = source.ID
 			}
 			results <- id
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -66,6 +68,8 @@ func TestRaceConditionFix(t *testing.T) {
 
 // TestMemoryLeakFix verifies that sources can be properly cleaned up
 func TestMemoryLeakFix(t *testing.T) {
+	t.Attr("component", "source-registry")
+	t.Attr("test-type", "cleanup")
 	registry := &AudioSourceRegistry{
 		sources:       make(map[string]*AudioSource),
 		connectionMap: make(map[string]string),
@@ -76,7 +80,7 @@ func TestMemoryLeakFix(t *testing.T) {
 	// Register multiple sources
 	urls := []string{
 		"rtsp://cam1.local/stream",
-		"rtsp://cam2.local/stream", 
+		"rtsp://cam2.local/stream",
 		"rtsp://cam3.local/stream",
 	}
 
@@ -121,6 +125,8 @@ func TestMemoryLeakFix(t *testing.T) {
 
 // TestInactiveSourceCleanup verifies that inactive sources can be cleaned up
 func TestInactiveSourceCleanup(t *testing.T) {
+	t.Attr("component", "source-registry")
+	t.Attr("test-type", "cleanup")
 	registry := &AudioSourceRegistry{
 		sources:       make(map[string]*AudioSource),
 		connectionMap: make(map[string]string),
@@ -176,7 +182,7 @@ func TestInactiveSourceCleanup(t *testing.T) {
 	_, recentExists := registry.sources["recent_001"]
 	_, oldExists := registry.sources["old_001"]
 	registry.mu.RUnlock()
-	
+
 	if !activeExists {
 		t.Error("Active source should not be removed")
 	}
@@ -190,13 +196,15 @@ func TestInactiveSourceCleanup(t *testing.T) {
 
 // TestURLValidation verifies that dangerous URLs are rejected
 func TestURLValidation(t *testing.T) {
+	t.Attr("component", "source-registry")
+	t.Attr("test-type", "validation")
 	registry := GetRegistry()
 
 	testCases := []struct {
-		name        string
-		url         string
-		sourceType  SourceType
-		shouldFail  bool
+		name          string
+		url           string
+		sourceType    SourceType
+		shouldFail    bool
 		errorContains string
 	}{
 		{
@@ -218,17 +226,17 @@ func TestURLValidation(t *testing.T) {
 			shouldFail: true, // Semicolons are rejected for security - this is command injection
 		},
 		{
-			name:       "Shell variable injection",
-			url:        "rtsp://test.com/stream$(whoami)",
-			sourceType: SourceTypeRTSP,
-			shouldFail: true,
+			name:          "Shell variable injection",
+			url:           "rtsp://test.com/stream$(whoami)",
+			sourceType:    SourceTypeRTSP,
+			shouldFail:    true,
 			errorContains: "dangerous pattern",
 		},
 		{
-			name:       "Pipe injection",
-			url:        "test.wav | cat /etc/passwd",
-			sourceType: SourceTypeFile,
-			shouldFail: true,
+			name:          "Pipe injection",
+			url:           "test.wav | cat /etc/passwd",
+			sourceType:    SourceTypeFile,
+			shouldFail:    true,
 			errorContains: "dangerous pattern",
 		},
 		{
@@ -238,17 +246,17 @@ func TestURLValidation(t *testing.T) {
 			shouldFail: false,
 		},
 		{
-			name:       "Invalid audio device",
-			url:        "/dev/null",
-			sourceType: SourceTypeAudioCard,
-			shouldFail: true,
+			name:          "Invalid audio device",
+			url:           "/dev/null",
+			sourceType:    SourceTypeAudioCard,
+			shouldFail:    true,
 			errorContains: "invalid audio device",
 		},
 		{
-			name:       "Directory traversal in file",
-			url:        "../../../etc/passwd",
-			sourceType: SourceTypeFile,
-			shouldFail: true,
+			name:          "Directory traversal in file",
+			url:           "../../../etc/passwd",
+			sourceType:    SourceTypeFile,
+			shouldFail:    true,
 			errorContains: "directory traversal",
 		},
 		{
@@ -282,49 +290,54 @@ func TestURLValidation(t *testing.T) {
 
 // TestConcurrentMigrationAndCleanup tests that migration and cleanup don't race
 func TestConcurrentMigrationAndCleanup(t *testing.T) {
-	registry := GetRegistry()
+	t.Attr("component", "source-registry")
+	t.Attr("test-type", "concurrency")
 
-	// Clear any existing sources
-	for id := range registry.sources {
-		_ = registry.RemoveSource(id)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		t.Helper()
+		registry := GetRegistry()
 
-	const numOperations = 50
-	var wg sync.WaitGroup
-	wg.Add(numOperations * 2)
+		// Clear any existing sources
+		for id := range registry.sources {
+			_ = registry.RemoveSource(id)
+		}
 
-	// Create start barrier for coordinating creators and removers
-	startCh := make(chan struct{})
-	var creatorsStarted sync.WaitGroup
-	creatorsStarted.Add(numOperations)
+		const numOperations = 50
+		var wg sync.WaitGroup
 
-	// Half the goroutines create sources
-	for i := 0; i < numOperations; i++ {
-		go func(id int) {
-			defer wg.Done()
-			defer creatorsStarted.Done() // Signal that this creator has started
-			url := fmt.Sprintf("rtsp://concurrent-%d.local/stream", id)
-			registry.GetOrCreateSource(url, SourceTypeRTSP)
-		}(i)
-	}
+		// Create start barrier for coordinating creators and removers
+		startCh := make(chan struct{})
+		var creatorsStarted sync.WaitGroup
 
-	// Wait for all creators to start, then release removers
-	go func() {
-		creatorsStarted.Wait()
-		close(startCh) // Release all removers
-	}()
+		// Half the goroutines create sources
+		for i := 0; i < numOperations; i++ {
+			id := i
+			creatorsStarted.Add(1)
+			wg.Go(func() {
+				defer creatorsStarted.Done() // Signal that this creator has started
+				url := fmt.Sprintf("rtsp://concurrent-%d.local/stream", id)
+				registry.GetOrCreateSource(url, SourceTypeRTSP)
+			})
+		}
 
-	// Other half try to remove sources - wait for start signal
-	for i := 0; i < numOperations; i++ {
-		go func(id int) {
-			defer wg.Done()
-			<-startCh // Wait for creators to start before proceeding
-			url := fmt.Sprintf("rtsp://concurrent-%d.local/stream", id)
-			_ = registry.RemoveSourceByConnection(url)
-		}(i)
-	}
+		// Wait for all creators to start, then release removers
+		wg.Go(func() {
+			creatorsStarted.Wait()
+			close(startCh) // Release all removers
+		})
 
-	wg.Wait()
+		// Other half try to remove sources - wait for start signal
+		for i := 0; i < numOperations; i++ {
+			id := i
+			wg.Go(func() {
+				<-startCh // Wait for creators to start before proceeding
+				url := fmt.Sprintf("rtsp://concurrent-%d.local/stream", id)
+				_ = registry.RemoveSourceByConnection(url)
+			})
+		}
+
+		wg.Wait()
+	})
 
 	// The registry should be in a consistent state
 	// Some sources may remain (those created after removal attempts)
@@ -337,7 +350,7 @@ func TestConcurrentMigrationAndCleanup(t *testing.T) {
 			t.Errorf("Failed to get connection string for source %s: %v", source.ID, err)
 			continue
 		}
-		
+
 		// Verify the source can be found by its connection string
 		foundSource, exists := registry.GetSourceByConnection(connStr)
 		if !exists {
