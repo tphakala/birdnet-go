@@ -1,4 +1,7 @@
 // species_tracker.go
+
+// Package species provides functionality for tracking and analyzing
+// bird species detections over various time periods.
 package species
 
 import (
