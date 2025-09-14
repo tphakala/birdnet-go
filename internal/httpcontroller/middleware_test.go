@@ -126,3 +126,43 @@ func TestCacheControlMiddleware_IOSSafariCompatibility(t *testing.T) {
 			"Accept-Ranges: bytes header must be present for iOS Safari compatibility on path %s", path)
 	}
 }
+
+// TestCacheControlMiddleware_ContentTypePreservation tests that when Content-Type
+// is already set by a handler (e.g., for audio files), the middleware doesn't override it
+func TestCacheControlMiddleware_ContentTypePreservation(t *testing.T) {
+	s := &Server{
+		Echo:     echo.New(),
+		Settings: &conf.Settings{},
+	}
+
+	middleware := s.CacheControlMiddleware()
+
+	// Test that pre-set Content-Type headers are preserved
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/audio/12345", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := s.Echo.NewContext(req, rec)
+
+	// Simulate handler setting Content-Type before middleware processes it
+	presetContentType := "audio/flac"
+
+	handler := func(c echo.Context) error {
+		// Handler sets Content-Type first (simulates what media.go does)
+		c.Response().Header().Set("Content-Type", presetContentType)
+		return c.String(http.StatusOK, "audio data")
+	}
+
+	err := middleware(handler)(c)
+	require.NoError(t, err)
+
+	// Verify the preset Content-Type is preserved
+	actualContentType := rec.Header().Get("Content-Type")
+	assert.Equal(t, presetContentType, actualContentType,
+		"Preset Content-Type should be preserved by middleware")
+
+	// Verify other audio-specific headers are still set
+	acceptRanges := rec.Header().Get("Accept-Ranges")
+	assert.Equal(t, "bytes", acceptRanges, "Accept-Ranges should still be set")
+
+	cacheControl := rec.Header().Get("Cache-Control")
+	assert.Equal(t, "no-store", cacheControl, "Cache-Control should still be set")
+}
