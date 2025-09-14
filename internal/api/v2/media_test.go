@@ -901,31 +901,147 @@ func TestServeAudioByID(t *testing.T) {
 	mockDS.On("GetNoteClipPath", "999").Return("", errors.New("record not found"))
 	controller.DS = mockDS
 
-	t.Run("Valid audio by ID with Content-Disposition header", func(t *testing.T) {
-		// Create request
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/audio/123", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.SetParamNames("id")
-		c.SetParamValues("123")
+	// Test cases for different scenarios
+	tests := []struct {
+		name                   string
+		audioID                string
+		expectedStatus         int
+		expectedContentType    string
+		expectedDisposition    string
+		shouldHaveAcceptRanges bool
+	}{
+		{
+			name:                   "Valid audio by ID with iOS Safari headers",
+			audioID:                "123",
+			expectedStatus:         http.StatusOK,
+			expectedContentType:    MimeTypeWAV,
+			expectedDisposition:    fmt.Sprintf("inline; filename*=UTF-8''%s", testFilename),
+			shouldHaveAcceptRanges: true,
+		},
+		{
+			name:           "Invalid audio ID returns 404",
+			audioID:        "999",
+			expectedStatus: http.StatusNotFound,
+		},
+	}
 
-		// Call handler
-		handlerErr := controller.ServeAudioByID(c)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create request
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/audio/"+tc.audioID, http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetParamNames("id")
+			c.SetParamValues(tc.audioID)
 
-		// Check for handler error
-		require.NoError(t, handlerErr)
+			// Call handler
+			handlerErr := controller.ServeAudioByID(c)
 
-		// Check response
-		assert.Equal(t, http.StatusOK, rec.Code)
-		assert.Equal(t, testContent, rec.Body.String())
+			// Check for handler error on successful requests
+			if tc.expectedStatus == http.StatusOK {
+				require.NoError(t, handlerErr)
+			}
 
-		// Check Content-Disposition header is set with original filename
-		expectedHeader := fmt.Sprintf("attachment; filename=%q", testFilename)
-		assert.Equal(t, expectedHeader, rec.Header().Get("Content-Disposition"))
-	})
+			// Check response status
+			assert.Equal(t, tc.expectedStatus, rec.Code)
+
+			// For successful requests, validate headers
+			if tc.expectedStatus == http.StatusOK {
+				assert.Equal(t, testContent, rec.Body.String())
+
+				// Check Content-Type header for iOS Safari compatibility
+				if tc.expectedContentType != "" {
+					assert.Equal(t, tc.expectedContentType, rec.Header().Get("Content-Type"))
+				}
+
+				// Check Content-Disposition for browser playback
+				if tc.expectedDisposition != "" {
+					assert.Equal(t, tc.expectedDisposition, rec.Header().Get("Content-Disposition"))
+				}
+
+				// Check Accept-Ranges for iOS Safari streaming
+				if tc.shouldHaveAcceptRanges {
+					assert.Equal(t, "bytes", rec.Header().Get("Accept-Ranges"))
+				}
+			}
+		})
+	}
 
 	// Note: Error cases are omitted as they are tested elsewhere and the main
 	// goal of this test is to verify Content-Disposition header functionality
+}
+
+// TestServeAudioByID_AudioFormats tests different audio format MIME type handling
+func TestServeAudioByID_AudioFormats(t *testing.T) {
+	// Setup test environment
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	// Test cases for different audio formats
+	audioFormats := []struct {
+		filename     string
+		expectedMIME string
+	}{
+		{"test.wav", MimeTypeWAV},
+		{"test.flac", MimeTypeFLAC},
+		{"test.mp3", MimeTypeMP3},
+		{"test.m4a", MimeTypeM4A},
+		{"test.ogg", MimeTypeOGG},
+		{"test.unknown", ""}, // Should let ServeRelativeFile handle
+	}
+
+	// Setup mock data store
+	mockDS := &MockDataStore{}
+	controller.DS = mockDS
+
+	// Using Go 1.25's modern range over int syntax for cleaner iteration
+	for i := range len(audioFormats) {
+		format := audioFormats[i]
+		t.Run(fmt.Sprintf("Audio format %s", format.filename), func(t *testing.T) {
+			// Create test file
+			filePath := filepath.Join(tempDir, format.filename)
+			testContent := fmt.Sprintf("test audio content %d", i)
+			err := os.WriteFile(filePath, []byte(testContent), 0o600)
+			require.NoError(t, err)
+
+			// Use Go 1.25 t.Cleanup for modern resource management
+			t.Cleanup(func() {
+				if err := os.Remove(filePath); err != nil {
+					t.Logf("Failed to remove test file %s: %v", filePath, err)
+				}
+			})
+
+			// Setup mock to return this filename
+			audioID := fmt.Sprintf("test%d", i)
+			mockDS.On("GetNoteClipPath", audioID).Return(format.filename, nil).Once()
+
+			// Create request
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/audio/"+audioID, http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetParamNames("id")
+			c.SetParamValues(audioID)
+
+			// Call handler
+			handlerErr := controller.ServeAudioByID(c)
+			require.NoError(t, handlerErr)
+
+			// Check response
+			assert.Equal(t, http.StatusOK, rec.Code)
+			assert.Equal(t, testContent, rec.Body.String())
+
+			// Check Content-Type if expected
+			if format.expectedMIME != "" {
+				assert.Equal(t, format.expectedMIME, rec.Header().Get("Content-Type"),
+					"Content-Type should match expected MIME type for %s", format.filename)
+			}
+
+			// All audio files should have these headers for iOS Safari
+			assert.Equal(t, "bytes", rec.Header().Get("Accept-Ranges"),
+				"Accept-Ranges header required for iOS Safari")
+			assert.Contains(t, rec.Header().Get("Content-Disposition"), "inline",
+				"Content-Disposition should use inline for browser playback")
+		})
+	}
 }
 
 // TestServeSpectrogramByIDRawParameter tests the raw parameter parsing for ID-based spectrogram endpoint
@@ -1082,6 +1198,48 @@ func TestServeSpectrogramByIDRawParameter(t *testing.T) {
 			if tc.expectedStatus == http.StatusOK {
 				assert.Equal(t, tc.expectedBody, rec.Body.String())
 			}
+		})
+	}
+}
+
+// TestIsValidFilename tests the isValidFilename function for various edge cases
+func TestIsValidFilename(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		expected bool
+	}{
+		// Valid filenames
+		{"valid audio file", "audio.wav", true},
+		{"valid with spaces", "my audio file.flac", true},
+		{"valid with numbers", "clip_123.mp3", true},
+		{"valid with special chars", "bird-song.m4a", true},
+		{"valid unicode", "птица.ogg", true},
+
+		// Invalid filenames - empty/special cases
+		{"empty string", "", false},
+		{"current directory", ".", false},
+		{"root directory", "/", false},
+
+		// Invalid filenames - security risks
+		{"path with forward slash", "path/to/file.wav", false},
+		{"path with backslash", "path\\to\\file.wav", false},
+		{"relative path up", "../audio.wav", false},
+
+		// Invalid filenames - control characters
+		{"null byte", "file\x00.wav", false},
+		{"tab character", "file\t.wav", false},
+		{"newline character", "file\n.wav", false},
+		{"carriage return", "file\r.wav", false},
+		{"control character", "file\x01.wav", false},
+		{"delete character", "file\x7f.wav", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isValidFilename(tt.filename)
+			assert.Equal(t, tt.expected, result,
+				"isValidFilename(%q) = %v, want %v", tt.filename, result, tt.expected)
 		})
 	}
 }

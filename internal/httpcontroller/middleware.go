@@ -127,7 +127,7 @@ func (s *Server) CacheControlMiddleware() echo.MiddlewareFunc {
 				// Svelte assets - use version-based caching
 				// Browser caches but checks ETag on each request for cache busting
 				c.Response().Header().Set("Cache-Control", "public, max-age=3600, must-revalidate")
-				
+
 				// Generate ETag based on version and build date for cache busting
 				if s.Settings.Version != "" {
 					etag := fmt.Sprintf(`"%s-%s"`, s.Settings.Version, s.Settings.BuildDate)
@@ -142,12 +142,15 @@ func (s *Server) CacheControlMiddleware() echo.MiddlewareFunc {
 			case strings.HasSuffix(path, ".png"), strings.HasSuffix(path, ".jpg"),
 				strings.HasSuffix(path, ".ico"), strings.HasSuffix(path, ".svg"):
 				c.Response().Header().Set("Cache-Control", "public, max-age=604800, immutable")
-			case strings.HasPrefix(path, "/api/v1/media/audio"):
+			case strings.HasPrefix(path, "/api/v1/media/audio"),
+				strings.HasPrefix(path, "/api/v2/audio"):
+				// iOS Safari requires Accept-Ranges header for audio playback
 				c.Response().Header().Set("Cache-Control", "no-store")
 				c.Response().Header().Set("X-Content-Type-Options", "nosniff")
 				c.Response().Header().Set("Accept-Ranges", "bytes")
 				s.Debug("CacheControlMiddleware: Set headers for audio file: %s", path)
-			case strings.HasPrefix(path, "/api/v1/media/spectrogram"):
+			case strings.HasPrefix(path, "/api/v1/media/spectrogram"),
+				strings.HasPrefix(path, "/api/v2/spectrogram"):
 				c.Response().Header().Set("Cache-Control", "public, max-age=2592000, immutable") // Cache spectrograms for 30 days
 				s.Debug("CacheControlMiddleware: Set headers for spectrogram: %s", path)
 			case strings.HasPrefix(path, "/api/v1/"):

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,12 +47,43 @@ const (
 	SpectrogramSizeXl = 1200
 )
 
+// Audio MIME type constants for consistent handling across endpoints
+const (
+	MimeTypeFLAC = "audio/flac"
+	MimeTypeWAV  = "audio/wav"
+	MimeTypeMP3  = "audio/mpeg"
+	MimeTypeM4A  = "audio/mp4"
+	MimeTypeOGG  = "audio/ogg"
+)
+
 // spectrogramSizes maps size names to pixel widths
 var spectrogramSizes = map[string]int{
 	"sm": SpectrogramSizeSm,
 	"md": SpectrogramSizeMd,
 	"lg": SpectrogramSizeLg,
 	"xl": SpectrogramSizeXl,
+}
+
+// isValidFilename checks if a filename is valid for use in Content-Disposition header
+func isValidFilename(filename string) bool {
+	// Reject empty, current dir, or root dir references
+	if filename == "" || filename == "." || filename == "/" {
+		return false
+	}
+
+	// Reject filenames with path separators (security check)
+	if strings.ContainsAny(filename, "/\\") {
+		return false
+	}
+
+	// Additional safety: reject control characters and null bytes
+	for _, r := range filename {
+		if r < 32 || r == 127 {
+			return false
+		}
+	}
+
+	return true
 }
 
 // AudioNotReadyError carries retry information for audio files that are not yet ready
@@ -350,18 +382,43 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available for this note", http.StatusNotFound)
 	}
 
-	// Extract the original filename from the clip path for download
-	originalFilename := filepath.Base(clipPath)
-	if originalFilename != "" && originalFilename != "." && originalFilename != "/" {
-		// Set Content-Disposition header to preserve original filename when downloading
-		ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", originalFilename))
-	}
-
 	// Normalize and validate the path using the common helper
 	normalizedClipPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.apiLogger)
 	if err != nil {
 		return c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
 	}
+
+	// Extract the original filename and extension
+	originalFilename := filepath.Base(clipPath)
+	ext := strings.ToLower(filepath.Ext(originalFilename))
+
+	// Set proper Content-Type for audio files BEFORE ServeRelativeFile
+	// This ensures Safari recognizes the file as audio
+	switch ext {
+	case ".flac":
+		ctx.Response().Header().Set("Content-Type", MimeTypeFLAC)
+	case ".wav":
+		ctx.Response().Header().Set("Content-Type", MimeTypeWAV)
+	case ".mp3":
+		ctx.Response().Header().Set("Content-Type", MimeTypeMP3)
+	case ".m4a":
+		ctx.Response().Header().Set("Content-Type", MimeTypeM4A)
+	case ".ogg":
+		ctx.Response().Header().Set("Content-Type", MimeTypeOGG)
+	default:
+		// Let ServeRelativeFile handle the content type
+	}
+
+	// Set Content-Disposition as inline to enable playback in browser
+	// Use filename* for proper UTF-8 filename encoding
+	// Only set filename if we have a valid, non-empty filename
+	if isValidFilename(originalFilename) {
+		ctx.Response().Header().Set("Content-Disposition", fmt.Sprintf("inline; filename*=UTF-8''%s", url.QueryEscape(originalFilename)))
+	}
+
+	// Ensure Accept-Ranges header is set for iOS Safari
+	// This might be set by middleware but we ensure it's present
+	ctx.Response().Header().Set("Accept-Ranges", "bytes")
 
 	// Serve the file using SecureFS. It handles path validation (relative/absolute within baseDir).
 	// ServeFile internally calls relativePath which ensures the path is within the SecureFS baseDir.
