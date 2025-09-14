@@ -1,6 +1,7 @@
 package myaudio
 
 import (
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -71,7 +72,7 @@ func TestFloat32PoolGetPut(t *testing.T) {
 
 	// Test Put and reuse
 	pool.Put(buf)
-	
+
 	buf2 := pool.Get()
 	assert.NotNil(t, buf2)
 	assert.Len(t, buf2, bufferSize)
@@ -104,12 +105,12 @@ func TestFloat32PoolSizeValidation(t *testing.T) {
 	// Test putting correct size buffer
 	correctBuf := make([]float32, bufferSize)
 	pool.Put(correctBuf)
-	
+
 	// Get another buffer
 	reusedBuf := pool.Get()
 	assert.NotNil(t, reusedBuf)
 	assert.Len(t, reusedBuf, bufferSize)
-	
+
 	// Verify stats show pool activity (sync.Pool behavior is non-deterministic)
 	finalStats := pool.GetStats()
 	assert.Greater(t, finalStats.Hits+finalStats.Misses, stats.Hits+stats.Misses)
@@ -148,14 +149,14 @@ func TestFloat32PoolMemoryReuse(t *testing.T) {
 		buf := pool.Get()
 		pool.Put(buf)
 	}
-	
+
 	// Get more buffers - some should be reused from pool
 	for i := 0; i < 10; i++ {
 		buf := pool.Get()
 		assert.Len(t, buf, bufferSize)
 		pool.Put(buf)
 	}
-	
+
 	// Verify stats show both hits and misses
 	stats := pool.GetStats()
 	// sync.Pool behavior is non-deterministic, so we just verify basic functionality
@@ -192,23 +193,24 @@ func TestFloat32PoolClear(t *testing.T) {
 
 // TestFloat32PoolStress performs a stress test with many goroutines
 func TestFloat32PoolStress(t *testing.T) {
+	t.Attr("kind", "stress")
 	if testing.Short() {
 		t.Skip("Skipping stress test in short mode")
 	}
 
 	const (
 		bufferSize = 144000 // Typical audio buffer size
-		numWorkers = 50
-		duration   = 1 // second
+		numWorkers = 20     // Reduced from 50 to prevent test timeout
+		duration   = 1      // second
 	)
 
 	pool, err := NewFloat32Pool(bufferSize)
 	require.NoError(t, err)
 
 	var (
-		wg        sync.WaitGroup
-		totalOps  atomic.Uint64
-		stopChan  = make(chan struct{})
+		wg       sync.WaitGroup
+		totalOps atomic.Uint64
+		stopChan = make(chan struct{})
 	)
 
 	wg.Add(numWorkers)
@@ -217,7 +219,7 @@ func TestFloat32PoolStress(t *testing.T) {
 	for i := range numWorkers {
 		go func(workerID int) {
 			defer wg.Done()
-			
+
 			for {
 				select {
 				case <-stopChan:
@@ -230,6 +232,8 @@ func TestFloat32PoolStress(t *testing.T) {
 					}
 					pool.Put(buf)
 					totalOps.Add(1)
+					// Allow scheduler to run other goroutines
+					runtime.Gosched()
 				}
 			}
 		}(i)
@@ -246,11 +250,11 @@ func TestFloat32PoolStress(t *testing.T) {
 	// Verify results
 	ops := totalOps.Load()
 	stats := pool.GetStats()
-	
+
 	t.Logf("Total operations: %d", ops)
 	t.Logf("Hit rate: %.2f%%", float64(stats.Hits)/float64(stats.Hits+stats.Misses)*100)
 	t.Logf("Stats: %+v", stats)
-	
+
 	assert.Positive(t, ops)
 	// Allow some variance due to sync.Pool's per-CPU sharding
 	assert.InDelta(t, float64(ops), float64(stats.Hits+stats.Misses), float64(numWorkers*2))

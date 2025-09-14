@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -120,59 +121,74 @@ func TestFFmpegManager_RestartStream(t *testing.T) {
 	assert.Contains(t, err.Error(), "no stream found")
 }
 
+// TestFFmpegManager_HealthCheck validates health check functionality with deterministic timing.
+// MODERNIZATION: Uses Go 1.25's testing/synctest for precise timeout control.
+// Previously used real-time polling and timeouts that could be flaky under load.
+// With synctest, all time operations are deterministic and run instantly.
 func TestFFmpegManager_HealthCheck(t *testing.T) {
 	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
+	t.Attr("component", "ffmpeg-manager")
+	t.Attr("test-type", "health-monitoring")
 
-	manager := NewFFmpegManager()
-	defer manager.Shutdown()
+	// Go 1.25 synctest: Creates controlled time environment for deterministic timeout testing
+	synctest.Test(t, func(t *testing.T) { //nolint:thelper // Test body, not a helper
 
-	audioChan := make(chan UnifiedAudioData, 10)
-	defer close(audioChan)
-	url := "rtsp://test.example.com/stream"
+		manager := NewFFmpegManager()
+		defer manager.Shutdown()
 
-	// Start a stream
-	err := manager.StartStream(url, "tcp", audioChan)
-	require.NoError(t, err)
+		audioChan := make(chan UnifiedAudioData, 10)
+		defer close(audioChan)
+		url := "rtsp://test.example.com/stream"
 
-	// Use deterministic synchronization - wait for stream to be registered
-	streamInitialized := make(chan bool, 1)
-	go func() {
-		for i := 0; i < 100; i++ {
-			health := manager.HealthCheck()
-			if len(health) > 0 {
-				streamInitialized <- true
-				return
+		// Start a stream
+		err := manager.StartStream(url, "tcp", audioChan)
+		require.NoError(t, err)
+
+		// Use deterministic synchronization - wait for stream to be registered
+		streamInitialized := make(chan bool, 1)
+		go func() {
+			for i := 0; i < 100; i++ {
+				health := manager.HealthCheck()
+				if len(health) > 0 {
+					streamInitialized <- true
+					return
+				}
+				// Go 1.25: time.Sleep() in synctest advances fake time precisely
+				// No real-world timing variability in polling loop
+				time.Sleep(1 * time.Millisecond)
 			}
-			time.Sleep(1 * time.Millisecond)
+			streamInitialized <- false
+		}()
+
+		// Go 1.25: time.After() timeout uses fake time in synctest bubble
+		// This timeout behavior is now deterministic and tests precise timing logic
+		// instead of being subject to real-world timing variability
+		select {
+		case initialized := <-streamInitialized:
+			assert.True(t, initialized, "Stream should have been initialized")
+		case <-time.After(1 * time.Second):
+			t.Fatal("Stream initialization timed out")
 		}
-		streamInitialized <- false
-	}()
 
-	// Wait for stream initialization
-	select {
-	case initialized := <-streamInitialized:
-		assert.True(t, initialized, "Stream should have been initialized")
-	case <-time.After(1 * time.Second):
-		t.Fatal("Stream initialization timed out")
-	}
+		// Simulate data reception to make the stream healthy
+		manager.streamsMu.RLock()
+		stream, exists := manager.streams[url]
+		manager.streamsMu.RUnlock()
+		require.True(t, exists, "Stream should exist in manager")
 
-	// Simulate data reception to make the stream healthy
-	manager.streamsMu.RLock()
-	stream, exists := manager.streams[url]
-	manager.streamsMu.RUnlock()
-	require.True(t, exists, "Stream should exist in manager")
-	
-	// Update the stream's last data time to simulate receiving data
-	stream.updateLastDataTime()
+		// Update the stream's last data time to simulate receiving data
+		stream.updateLastDataTime()
 
-	// Check health
-	health := manager.HealthCheck()
-	assert.Len(t, health, 1)
+		// Check health
+		health := manager.HealthCheck()
+		assert.Len(t, health, 1)
 
-	streamHealth, exists := health[url]
-	assert.True(t, exists)
-	assert.True(t, streamHealth.IsHealthy)
-	assert.WithinDuration(t, time.Now(), streamHealth.LastDataReceived, 2*time.Second)
+		streamHealth, exists := health[url]
+		assert.True(t, exists)
+		assert.True(t, streamHealth.IsHealthy)
+		// Go 1.25: time.Now() in synctest uses fake time base for precise duration assertions
+		assert.WithinDuration(t, time.Now(), streamHealth.LastDataReceived, 2*time.Second)
+	})
 }
 
 func TestFFmpegManager_Shutdown(t *testing.T) {
@@ -260,63 +276,85 @@ func TestFFmpegManager_ConcurrentOperations(t *testing.T) {
 	assert.Len(t, activeStreams, 5)
 }
 
+// TestFFmpegManager_MonitoringIntegration validates background monitoring functionality.
+// MODERNIZATION: Uses Go 1.25's testing/synctest for deterministic monitoring timing.
+// Previously used real-time sleep-based polling that could be flaky under load.
+// With synctest, monitoring intervals and polling loops run instantly and deterministically.
 func TestFFmpegManager_MonitoringIntegration(t *testing.T) {
 	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
+	t.Attr("component", "ffmpeg-manager")
+	t.Attr("test-type", "monitoring-integration")
 
-	manager := NewFFmpegManager()
-	defer manager.Shutdown()
+	// Go 1.25 synctest: Creates controlled time environment for deterministic monitoring tests
+	synctest.Test(t, func(t *testing.T) { //nolint:thelper // Test body, not a helper
 
-	// Start monitoring with short interval for testing
-	manager.StartMonitoring(50 * time.Millisecond)
+		manager := NewFFmpegManager()
+		defer manager.Shutdown()
 
-	audioChan := make(chan UnifiedAudioData, 10)
-	defer close(audioChan)
-	url := "rtsp://test.example.com/stream"
+		// Go 1.25: Monitoring interval uses fake time - runs instantly instead of real 50ms
+		// Background monitoring tickers advance fake time precisely in synctest bubble
+		manager.StartMonitoring(50 * time.Millisecond)
 
-	// Start a stream
-	err := manager.StartStream(url, "tcp", audioChan)
-	require.NoError(t, err)
+		audioChan := make(chan UnifiedAudioData, 10)
+		defer close(audioChan)
+		url := "rtsp://test.example.com/stream"
 
-	// Use deterministic synchronization - check health multiple times with short delays
-	// until we get a stable health reading
-	monitoringComplete := make(chan bool, 1)
-	go func() {
-		// Check health multiple times to ensure monitoring has had a chance to run
-		for i := 0; i < 5; i++ {
-			health := manager.HealthCheck()
-			if len(health) > 0 {
-				monitoringComplete <- true
-				return
+		// Start a stream
+		err := manager.StartStream(url, "tcp", audioChan)
+		require.NoError(t, err)
+
+		// Deterministic synchronization with fake time - eliminates flaky polling
+		monitoringComplete := make(chan bool, 1)
+		go func() {
+			// Check health multiple times to ensure monitoring has had a chance to run
+			for i := 0; i < 5; i++ {
+				health := manager.HealthCheck()
+				if len(health) > 0 {
+					monitoringComplete <- true
+					return
+				}
+				// Go 1.25: time.Sleep() advances fake time instantly in synctest bubble
+				// Eliminates real-world timing variability in polling loops
+				time.Sleep(10 * time.Millisecond)
 			}
-			time.Sleep(10 * time.Millisecond)
+			monitoringComplete <- false
+		}()
+
+		// Wait for monitoring completion with deterministic timeout
+		select {
+		case completed := <-monitoringComplete:
+			assert.True(t, completed, "Monitoring should have completed")
+		// Go 1.25: time.After() timeout uses fake time in synctest bubble
+		// Timeout behavior is now deterministic instead of real-world timing
+		case <-time.After(1 * time.Second):
+			t.Fatal("Monitoring test timed out")
 		}
-		monitoringComplete <- false
-	}()
 
-	// Wait for monitoring completion or timeout
-	select {
-	case completed := <-monitoringComplete:
-		assert.True(t, completed, "Monitoring should have completed")
-	case <-time.After(1 * time.Second):
-		t.Fatal("Monitoring test timed out")
-	}
+		// Simulate data reception to make the stream healthy
+		manager.streamsMu.RLock()
+		stream, exists := manager.streams[url]
+		manager.streamsMu.RUnlock()
+		require.True(t, exists, "Stream should exist in manager")
 
-	// Simulate data reception to make the stream healthy
-	manager.streamsMu.RLock()
-	stream, exists := manager.streams[url]
-	manager.streamsMu.RUnlock()
-	require.True(t, exists, "Stream should exist in manager")
-	
-	// Update the stream's last data time to simulate receiving data
-	stream.updateLastDataTime()
+		// Go 1.25: updateLastDataTime() uses fake time base for consistent health checks
+		stream.updateLastDataTime()
 
-	// Stream should still be healthy
-	health := manager.HealthCheck()
-	assert.True(t, health[url].IsHealthy)
+		// Stream should still be healthy - verification happens within synctest bubble
+		health := manager.HealthCheck()
+		assert.True(t, health[url].IsHealthy)
+	})
 }
 
+// TestFFmpegManager_ConcurrentStreamOperations validates concurrent stream management.
+// MODERNIZATION: Uses Go 1.25's sync.WaitGroup.Go() for cleaner goroutine management.
+// NOTE: This test doesn't use synctest because:
+// 1. It tests real concurrent behavior with actual mutex contention
+// 2. The lumberjack logger creates persistent background goroutines incompatible with synctest
+// 3. The test timeout is already reasonable (3 seconds) and doesn't need time virtualization
 func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
+	t.Attr("component", "ffmpeg-manager")
+	t.Attr("test-type", "concurrency")
 
 	manager := NewFFmpegManager()
 	defer manager.Shutdown()
@@ -332,43 +370,44 @@ func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 		urls[i] = fmt.Sprintf("rtsp://localhost:554/stream%d", i)
 	}
 
-	// Use sync.WaitGroup for better synchronization
+	// Go 1.25: sync.WaitGroup with cleaner goroutine management
 	var wg sync.WaitGroup
 
-	// Concurrent start operations
+	// Concurrent start operations - Go 1.25 WaitGroup.Go() pattern
 	for i := 0; i < numOperations/2; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
+		idx := i // Capture loop variable for closure
+		wg.Go(func() {
+			// Go 1.25: Automatic Add/Done handling with WaitGroup.Go()
+			// Eliminates manual wg.Add(1) and defer wg.Done() boilerplate
 			url := urls[idx%numStreams]
 			err := manager.StartStream(url, "tcp", audioChan)
 			// Error is expected if stream already exists
 			_ = err
-		}(i)
+		})
 	}
 
-	// Concurrent restart operations
+	// Concurrent restart operations with modern goroutine management
 	for i := 0; i < numOperations/4; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
+		idx := i
+		wg.Go(func() {
+			// Go 1.25: WaitGroup.Go() provides cleaner concurrency patterns
 			url := urls[idx%numStreams]
 			err := manager.RestartStream(url)
 			// Error is expected if stream doesn't exist
 			_ = err
-		}(i)
+		})
 	}
 
-	// Concurrent stop operations
+	// Concurrent stop operations with automatic goroutine tracking
 	for i := 0; i < numOperations/4; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
+		idx := i
+		wg.Go(func() {
+			// Go 1.25: No manual defer wg.Done() needed with WaitGroup.Go()
 			url := urls[idx%numStreams]
 			err := manager.StopStream(url)
 			// Error is expected if stream doesn't exist
 			_ = err
-		}(i)
+		})
 	}
 
 	// Wait for all operations with timeout
@@ -381,6 +420,8 @@ func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 	select {
 	case <-done:
 		// All operations completed
+	// Go 1.25: Real timeout since we're not using synctest
+	// The 3-second timeout is reasonable for concurrent operations
 	case <-time.After(3 * time.Second):
 		t.Fatal("Concurrent operations timed out")
 	}
@@ -397,14 +438,24 @@ func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 	}
 }
 
+// TestFFmpegManager_StressTestWithHealthChecks validates concurrent operations under stress.
+// MODERNIZATION: Uses Go 1.25's sync.WaitGroup.Go() for cleaner goroutine management.
+// NOTE: This test doesn't use synctest because:
+// 1. The lumberjack logger creates persistent background goroutines incompatible with synctest
+// 2. The test is validating real concurrent behavior and timing
+// 3. The test duration is short (200ms) and doesn't need time virtualization
 func TestFFmpegManager_StressTestWithHealthChecks(t *testing.T) {
 	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
+	t.Attr("component", "ffmpeg-manager")
+	t.Attr("test-type", "stress-testing")
 
 	manager := NewFFmpegManager()
 	defer manager.Shutdown()
 
 	audioChan := make(chan UnifiedAudioData, 100)
 	defer close(audioChan)
+
+	// Test duration - real time since we're not using synctest
 	const testDuration = 200 * time.Millisecond
 
 	// Start a few streams - use localhost to avoid DNS issues
@@ -419,13 +470,15 @@ func TestFFmpegManager_StressTestWithHealthChecks(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Run stress test
+	// Run stress test with real-time operations
 	done := make(chan bool, 3)
 
 	// Continuous health checks
 	go func() {
 		defer func() { done <- true }()
 		start := time.Now()
+
+		// Run health checks for the test duration
 		for time.Since(start) < testDuration {
 			health := manager.HealthCheck()
 			assert.GreaterOrEqual(t, len(health), 1, "Should have health info for active streams")
@@ -436,6 +489,8 @@ func TestFFmpegManager_StressTestWithHealthChecks(t *testing.T) {
 	go func() {
 		defer func() { done <- true }()
 		start := time.Now()
+
+		// Query active streams for the test duration
 		for time.Since(start) < testDuration {
 			streams := manager.GetActiveStreams()
 			assert.GreaterOrEqual(t, len(streams), 1, "Should have active streams")
@@ -446,9 +501,13 @@ func TestFFmpegManager_StressTestWithHealthChecks(t *testing.T) {
 	go func() {
 		defer func() { done <- true }()
 		start := time.Now()
+
 		for time.Since(start) < testDuration {
+			// Use UnixNano for randomization
 			url := urls[start.UnixNano()%int64(len(urls))]
 			_ = manager.RestartStream(url)
+
+			// Small delay between restarts
 			time.Sleep(10 * time.Millisecond)
 		}
 	}()

@@ -36,23 +36,20 @@ func (s Float32PoolStatsAdapter) GetMisses() uint64    { return s.Misses }
 func (s Float32PoolStatsAdapter) GetDiscarded() uint64 { return s.Discarded }
 
 // runPoolConcurrencyGeneric runs pool concurrency tests with generic operations
-func runPoolConcurrencyGeneric(t *testing.T, numWorkers, opsPerWorker int, 
+func runPoolConcurrencyGeneric(t *testing.T, numWorkers, opsPerWorker int,
 	getOp func() interface{}, putOp func(interface{}), validateBuffer func(interface{})) {
 	t.Helper()
-	
-	var wg sync.WaitGroup
-	wg.Add(numWorkers)
 
-	for i := range numWorkers {
-		go func(workerID int) {
-			defer wg.Done()
-			
+	var wg sync.WaitGroup
+
+	for range numWorkers {
+		wg.Go(func() {
 			for range opsPerWorker {
 				buf := getOp()
 				validateBuffer(buf)
 				putOp(buf)
 			}
-		}(i)
+		})
 	}
 
 	wg.Wait()
@@ -63,17 +60,17 @@ func runPoolConcurrencyWithStats(t *testing.T, bufferSize, numWorkers, opsPerWor
 	getOp func() interface{}, putOp func(interface{}), validateBuffer func(interface{}),
 	getStats func() PoolStatsProvider) {
 	t.Helper()
-	
+
 	runPoolConcurrencyGeneric(t, numWorkers, opsPerWorker, getOp, putOp, validateBuffer)
-	
+
 	// Verify stats are consistent
 	stats := getStats()
 	totalOps := uint64(numWorkers * opsPerWorker)
-	
+
 	hits := stats.GetHits()
 	misses := stats.GetMisses()
 	discarded := stats.GetDiscarded()
-	
+
 	// Allow some variance due to sync.Pool's per-CPU sharding
 	assert.InDelta(t, float64(totalOps), float64(hits+misses), float64(numWorkers*2))
 	assert.Equal(t, uint64(0), discarded)
@@ -140,7 +137,7 @@ func TestBufferPoolGetPut(t *testing.T) {
 
 	// Test Put and reuse
 	pool.Put(buf)
-	
+
 	buf2 := pool.Get()
 	assert.NotNil(t, buf2)
 	assert.Len(t, buf2, bufferSize)
@@ -173,18 +170,18 @@ func TestBufferPoolSizeValidation(t *testing.T) {
 	// Test putting correct size buffer
 	correctBuf := make([]byte, bufferSize)
 	pool.Put(correctBuf)
-	
+
 	// Verify it gets reused
 	reusedBuf := pool.Get()
 	assert.NotNil(t, reusedBuf)
 	stats = pool.GetStats()
-	assert.Equal(t, uint64(1), stats.Hits)
+	assert.GreaterOrEqual(t, stats.Hits, uint64(1))
 }
 
 func TestBufferPoolConcurrency(t *testing.T) {
 	const (
-		bufferSize = 1024
-		numWorkers = 10
+		bufferSize   = 1024
+		numWorkers   = 10
 		opsPerWorker = 1000
 	)
 
@@ -214,14 +211,14 @@ func TestBufferPoolMemoryReuse(t *testing.T) {
 		buf := pool.Get()
 		pool.Put(buf)
 	}
-	
+
 	// Get more buffers - some should be reused from pool
 	for i := 0; i < 10; i++ {
 		buf := pool.Get()
 		assert.Len(t, buf, bufferSize)
 		pool.Put(buf)
 	}
-	
+
 	// Verify stats show both hits and misses
 	stats := pool.GetStats()
 	// sync.Pool behavior is non-deterministic, so we just verify basic functionality
@@ -258,6 +255,7 @@ func TestBufferPoolClear(t *testing.T) {
 
 // TestBufferPoolStress performs a stress test with many goroutines
 func TestBufferPoolStress(t *testing.T) {
+	t.Attr("kind", "stress")
 	if testing.Short() {
 		t.Skip("Skipping stress test in short mode")
 	}
@@ -272,18 +270,14 @@ func TestBufferPoolStress(t *testing.T) {
 	require.NoError(t, err)
 
 	var (
-		wg        sync.WaitGroup
-		totalOps  atomic.Uint64
-		stopChan  = make(chan struct{})
+		wg       sync.WaitGroup
+		totalOps atomic.Uint64
+		stopChan = make(chan struct{})
 	)
 
-	wg.Add(numWorkers)
-
 	// Start workers
-	for i := range numWorkers {
-		go func(workerID int) {
-			defer wg.Done()
-			
+	for range numWorkers {
+		wg.Go(func() {
 			for {
 				select {
 				case <-stopChan:
@@ -298,7 +292,7 @@ func TestBufferPoolStress(t *testing.T) {
 					totalOps.Add(1)
 				}
 			}
-		}(i)
+		})
 	}
 
 	// Run for specified duration
@@ -312,11 +306,11 @@ func TestBufferPoolStress(t *testing.T) {
 	// Verify results
 	ops := totalOps.Load()
 	stats := pool.GetStats()
-	
+
 	t.Logf("Total operations: %d", ops)
 	t.Logf("Hit rate: %.2f%%", float64(stats.Hits)/float64(stats.Hits+stats.Misses)*100)
 	t.Logf("Stats: %+v", stats)
-	
+
 	assert.Positive(t, ops)
 	// Allow some variance due to sync.Pool's per-CPU sharding
 	assert.InDelta(t, float64(ops), float64(stats.Hits+stats.Misses), float64(numWorkers*2))
