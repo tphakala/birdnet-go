@@ -95,7 +95,8 @@ func TestFFmpegStream_ZombiePreventionWithWaitTimeout(t *testing.T) {
 		stream := NewFFmpegStream(fmt.Sprintf("test://zombie-timeout-%d", i), "tcp", audioChan)
 
 		// Create a process that's hard to kill
-		cmd := exec.Command("sh", "-c", `trap '' TERM; sleep 10`)
+		// Reduced sleep from 10s to 2s to prevent test timeout
+		cmd := exec.Command("sh", "-c", `trap '' TERM; sleep 2`)
 
 		stream.cmdMu.Lock()
 		stream.cmd = cmd
@@ -121,7 +122,8 @@ func TestFFmpegStream_ZombiePreventionWithWaitTimeout(t *testing.T) {
 	}
 
 	// Wait for all processes to be cleaned up
-	waitTime := 6 * time.Second // Longer than cleanup timeout
+	// Reduced wait time from 6s to 2s to prevent test timeout
+	waitTime := 2 * time.Second // Slightly longer than cleanup timeout
 	if testing.Short() {
 		waitTime = 1 * time.Second
 	}

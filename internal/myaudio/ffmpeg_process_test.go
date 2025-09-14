@@ -71,60 +71,49 @@ func TestFFmpegStream_ProcessCleanupNoZombies(t *testing.T) {
 
 // TestFFmpegStream_CleanupTimeoutHandling tests that processes are still properly reaped
 // even when the cleanup timeout expires.
-// MODERNIZATION: Uses Go 1.25's testing/synctest for deterministic timeout duration testing.
-// Previously used real-time duration measurement that could be flaky under system load.
-// With synctest, timeout duration assertions become precise and deterministic.
+// NOTE: This test doesn't use synctest because cleanupProcess uses real OS process waits
+// that need actual time to complete and cannot be virtualized.
 func TestFFmpegStream_CleanupTimeoutHandling(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Zombie process testing is Unix-specific")
 	}
 
-	// Go 1.25 synctest: Creates controlled time environment for precise timeout testing
-	synctest.Test(t, func(t *testing.T) {
-		t.Helper()
+	// Create a process that ignores SIGKILL (simulating a stuck process)
+	mockCmd := createStubbornMockProcess(t)
 
-		// Create a process that ignores SIGKILL (simulating a stuck process)
-		mockCmd := createStubbornMockProcess(t)
+	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
+	stream := NewFFmpegStream("test://timeout", "tcp", audioChan)
 
-		audioChan := make(chan UnifiedAudioData, 10)
-		defer close(audioChan)
-		stream := NewFFmpegStream("test://timeout", "tcp", audioChan)
+	// Replace the command with our stubborn mock
+	stream.cmdMu.Lock()
+	stream.cmd = mockCmd
+	stream.processStartTime = time.Now()
+	stream.cmdMu.Unlock()
 
-		// Replace the command with our stubborn mock
-		stream.cmdMu.Lock()
-		stream.cmd = mockCmd
-		// Go 1.25: time.Now() returns fake time base for consistent duration measurement
-		stream.processStartTime = time.Now()
-		stream.cmdMu.Unlock()
+	// Start the mock process
+	err := mockCmd.Start()
+	require.NoError(t, err)
+	pid := mockCmd.Process.Pid
 
-		// Start the mock process
-		err := mockCmd.Start()
-		require.NoError(t, err)
-		pid := mockCmd.Process.Pid
+	// Wait for process to start
+	time.Sleep(50 * time.Millisecond)
 
-		// Go 1.25: Process startup synchronization with fake time - no real delays
-		time.Sleep(50 * time.Millisecond)
+	// Try to clean up the process - this should timeout
+	start := time.Now()
+	stream.cleanupProcess()
+	duration := time.Since(start)
 
-		// Try to clean up the process - this should timeout with deterministic duration
-		// Go 1.25: time.Now() and time.Since() use fake time for precise measurement
-		start := time.Now()
-		stream.cleanupProcess()
-		duration := time.Since(start)
+	// Verify the cleanup timed out as expected
+	assert.Greater(t, duration, processCleanupTimeout-time.Second)
+	assert.Less(t, duration, processCleanupTimeout+2*time.Second)
 
-		// Go 1.25: Duration assertions with fake time are perfectly precise
-		// No more flaky real-world timing variations in timeout validation
-		assert.Greater(t, duration, processCleanupTimeout-time.Second)
-		assert.Less(t, duration, processCleanupTimeout+2*time.Second)
+	// Force kill the stubborn process
+	_ = mockCmd.Process.Signal(syscall.SIGKILL)
+	time.Sleep(100 * time.Millisecond)
 
-		// Force kill the stubborn process
-		_ = mockCmd.Process.Signal(syscall.SIGKILL)
-		// Go 1.25: Final cleanup wait advances fake time instantly
-		time.Sleep(100 * time.Millisecond)
-
-		// Even after timeout, the process should eventually be reaped
-		// All verification happens within synctest bubble for deterministic behavior
-		assertNoZombieProcess(t, pid)
-	})
+	// Even after timeout, the process should eventually be reaped
+	assertNoZombieProcess(t, pid)
 }
 
 // TestFFmpegStream_RapidRestartNoZombies tests that rapid restarts don't create zombie processes.
@@ -204,52 +193,47 @@ func TestFFmpegStream_ProcessGroupCleanup(t *testing.T) {
 		t.Skip("Process group testing is Unix-specific")
 	}
 
-	// Go 1.25 synctest: Creates controlled time environment for deterministic process group testing
-	synctest.Test(t, func(t *testing.T) {
-		t.Helper()
+	// NOTE: This test doesn't use synctest because it tests real OS process group operations
+	// that require actual process creation and cleanup which cannot be virtualized.
 
-		// Create a mock ffmpeg that spawns child processes
-		mockCmd := createMockFFmpegWithChildren(t)
+	// Create a mock ffmpeg that spawns child processes
+	mockCmd := createMockFFmpegWithChildren(t)
 
-		audioChan := make(chan UnifiedAudioData, 10)
-		defer close(audioChan)
-		stream := NewFFmpegStream("test://process-group", "tcp", audioChan)
+	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
+	stream := NewFFmpegStream("test://process-group", "tcp", audioChan)
 
-		// Set up process group
-		setupProcessGroup(mockCmd)
+	// Set up process group
+	setupProcessGroup(mockCmd)
 
-		stream.cmdMu.Lock()
-		stream.cmd = mockCmd
-		// Go 1.25: time.Now() returns fake time base for consistent process tracking
-		stream.processStartTime = time.Now()
-		stream.cmdMu.Unlock()
+	stream.cmdMu.Lock()
+	stream.cmd = mockCmd
+	stream.processStartTime = time.Now()
+	stream.cmdMu.Unlock()
 
-		// Start the mock process
-		err := mockCmd.Start()
-		require.NoError(t, err)
-		parentPid := mockCmd.Process.Pid
+	// Start the mock process
+	err := mockCmd.Start()
+	require.NoError(t, err)
+	parentPid := mockCmd.Process.Pid
 
-		// Go 1.25: time.Sleep() advances fake time instantly in synctest bubble
-		// Eliminates real-world timing variability for child process spawning
-		time.Sleep(100 * time.Millisecond)
+	// Wait for child processes to spawn
+	time.Sleep(100 * time.Millisecond)
 
-		// Get child PIDs before cleanup
-		childPids := getChildProcesses(t, parentPid)
-		assert.NotEmpty(t, childPids, "Mock process should have spawned children")
+	// Get child PIDs before cleanup
+	childPids := getChildProcesses(t, parentPid)
+	assert.NotEmpty(t, childPids, "Mock process should have spawned children")
 
-		// Clean up the process
-		stream.cleanupProcess()
+	// Clean up the process
+	stream.cleanupProcess()
 
-		// Go 1.25: Cleanup wait advances fake time instantly
-		// No more flaky real-time delays for process group cleanup verification
-		time.Sleep(200 * time.Millisecond)
+	// Wait for cleanup to complete
+	time.Sleep(200 * time.Millisecond)
 
-		// Verify parent and all children are gone - all verification within synctest bubble
-		assertNoZombieProcess(t, parentPid)
-		for _, childPid := range childPids {
-			assertNoZombieProcess(t, childPid)
-		}
-	})
+	// Verify parent and all children are gone
+	assertNoZombieProcess(t, parentPid)
+	for _, childPid := range childPids {
+		assertNoZombieProcess(t, childPid)
+	}
 }
 
 // TestFFmpegStream_ConcurrentCleanup tests that concurrent cleanup operations don't cause issues

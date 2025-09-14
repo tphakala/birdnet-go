@@ -251,7 +251,8 @@ func TestFFmpegStream_ConcurrentRestartRequests(t *testing.T) {
 	stream := NewFFmpegStream("test://concurrent-restarts", "tcp", audioChan)
 
 	// Start a mock process
-	mockCmd := exec.Command("sleep", "10")
+	// Reduced sleep from 10s to 2s to prevent test timeout
+	mockCmd := exec.Command("sleep", "2")
 	stream.cmdMu.Lock()
 	stream.cmd = mockCmd
 	stream.processStartTime = time.Now()
@@ -283,7 +284,7 @@ func TestFFmpegStream_ConcurrentRestartRequests(t *testing.T) {
 	wg.Wait()
 
 	// Give time for all operations to complete
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond) // Reduced from 500ms
 
 	// Verify no zombie
 	assertNoZombieProcess(t, pid)
