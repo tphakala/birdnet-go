@@ -2,6 +2,7 @@
 package diskmanager
 
 import (
+	"context"
 	"encoding/csv"
 	"fmt"
 	"log"
@@ -99,9 +100,20 @@ func LoadPolicy(policyFile string) (*Policy, error) {
 
 // GetAudioFiles returns a list of audio files in the directory and its subdirectories
 func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug bool) ([]FileInfo, error) {
+	return GetAudioFilesContext(context.Background(), baseDir, allowedExts, db, debug)
+}
+
+// GetAudioFilesContext returns a list of audio files in the directory and its subdirectories with context support for cancellation
+func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []string, db Interface, debug bool) ([]FileInfo, error) {
 	// Fast path: empty allowed extensions
 	if len(allowedExts) == 0 {
 		return nil, nil
+	}
+
+	// Normalize extensions to lowercase once for case-insensitive matching
+	allowedExts = append([]string(nil), allowedExts...)
+	for i := range allowedExts {
+		allowedExts[i] = strings.ToLower(allowedExts[i])
 	}
 
 	// Use pooled slice to reduce allocations
@@ -122,7 +134,7 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 
 	var parseErrorCount int
 	var firstParseError error
-	maxParseErrors := poolConfig.MaxParseErrors // Use configurable limit
+	maxParseErrors := loadPoolConfig().MaxParseErrors // Use configurable limit
 
 	// Get list of protected clips from database
 	lockedClips, err := getLockedClips(db)
@@ -139,7 +151,20 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 		log.Printf("Found %d protected clips", len(lockedClips))
 	}
 
+	// Build a set of basenames for fast O(1) membership checks
+	lockedSet := make(map[string]struct{}, len(lockedClips))
+	for _, p := range lockedClips {
+		lockedSet[filepath.Base(p)] = struct{}{}
+	}
+
 	err = filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		if err != nil {
 			return err
 		}
@@ -155,8 +180,8 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 				return nil
 			}
 
-			// Fast path: check extension before expensive operations
-			ext := filepath.Ext(fileName)
+			// Fast path: check extension before expensive operations (case-insensitive)
+			ext := strings.ToLower(filepath.Ext(fileName))
 			if !contains(allowedExts, ext) {
 				return nil
 			}
@@ -174,8 +199,8 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 				}
 				return nil // Continue with next file
 			}
-			// Check if the file is protected
-			fileInfo.Locked = isLockedClip(fileInfo.Path, lockedClips)
+			// Check if the file is protected using O(1) lookup
+			_, fileInfo.Locked = lockedSet[filepath.Base(fileInfo.Path)]
 			files = append(files, fileInfo)
 		}
 
@@ -186,6 +211,11 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 	})
 
 	if err != nil {
+		// Check if it was a context cancellation
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err // Return context error directly for proper handling
+		}
+
 		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to walk directory for audio files: %w", err)).
 			Component("diskmanager").
 			Category(errors.CategoryFileIO).
@@ -232,8 +262,8 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 	name := filepath.Base(info.Name())
 
-	// Check if the file extension is allowed
-	ext := filepath.Ext(name)
+	// Check if the file extension is allowed (case-insensitive)
+	ext := strings.ToLower(filepath.Ext(name))
 	if !contains(allowedFileTypes, ext) {
 		// Lightweight error with essential context
 		descriptiveErr := errors.New(fmt.Errorf("diskmanager: file type %s not eligible for cleanup", ext)).

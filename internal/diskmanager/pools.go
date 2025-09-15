@@ -20,10 +20,6 @@ type PoolConfig struct {
 	// MaxParseErrors is the maximum number of parse errors to track
 	// Default: 100
 	MaxParseErrors int
-
-	// MaxPoolSize is the maximum number of slices to keep in the pool
-	// Default: 100 (prevents unbounded pool growth)
-	MaxPoolSize int
 }
 
 // DefaultPoolConfig returns the default pool configuration
@@ -32,7 +28,6 @@ func DefaultPoolConfig() *PoolConfig {
 		InitialCapacity: 1000,
 		MaxPoolCapacity: 10000,
 		MaxParseErrors:  100,
-		MaxPoolSize:     100,
 	}
 }
 
@@ -55,9 +50,6 @@ type PoolMetrics struct {
 
 	// CurrentPoolSize tracks the current number of items in the pool
 	CurrentPoolSize uint64
-
-	// PoolSizeLimit tracks how many times pool size limit was hit
-	PoolSizeLimit uint64
 }
 
 // poolMetricsAtomic holds atomic counters for thread-safe access
@@ -68,12 +60,11 @@ type poolMetricsAtomic struct {
 	MaxCapacityObserved atomic.Uint64
 	TotalAllocations    atomic.Uint64
 	CurrentPoolSize     atomic.Uint64
-	PoolSizeLimit       atomic.Uint64
 }
 
 var (
-	// poolConfig holds the current pool configuration
-	poolConfig = DefaultPoolConfig()
+	// poolConfig holds the current pool configuration (thread-safe)
+	poolConfig atomic.Pointer[PoolConfig]
 
 	// poolMetrics tracks pool usage statistics
 	poolMetrics poolMetricsAtomic
@@ -82,20 +73,51 @@ var (
 	fileInfoPool = sync.Pool{
 		New: func() any {
 			// Pre-allocate with configured capacity
-			slice := make([]FileInfo, 0, poolConfig.InitialCapacity)
-			poolMetrics.TotalAllocations.Add(uint64(poolConfig.InitialCapacity))
+			cfg := loadPoolConfig()
+			slice := make([]FileInfo, 0, cfg.InitialCapacity)
+			poolMetrics.TotalAllocations.Add(uint64(cfg.InitialCapacity))
 			return &slice
 		},
 	}
 )
 
-// SetPoolConfig updates the pool configuration
-// This should be called before any pool operations
+func init() {
+	// Initialize with default config
+	poolConfig.Store(DefaultPoolConfig())
+}
+
+// SetPoolConfig updates the pool configuration thread-safely.
+// Creates a defensive copy and validates values to prevent external mutation.
+// This should ideally be called during initialization before heavy pool usage.
 func SetPoolConfig(config *PoolConfig) {
 	if config == nil {
 		config = DefaultPoolConfig()
 	}
-	poolConfig = config
+
+	// Create defensive copy to prevent external mutation
+	newConfig := &PoolConfig{
+		InitialCapacity: clampInt(config.InitialCapacity, 100, 100000),
+		MaxPoolCapacity: clampInt(config.MaxPoolCapacity, 1000, 1000000),
+		MaxParseErrors:  clampInt(config.MaxParseErrors, 10, 10000),
+	}
+
+	poolConfig.Store(newConfig)
+}
+
+// loadPoolConfig returns the current pool configuration thread-safely
+func loadPoolConfig() *PoolConfig {
+	return poolConfig.Load()
+}
+
+// clampInt constrains a value between minVal and maxVal
+func clampInt(value, minVal, maxVal int) int {
+	if value < minVal {
+		return minVal
+	}
+	if value > maxVal {
+		return maxVal
+	}
+	return value
 }
 
 // GetPoolMetrics returns a copy of current pool metrics
@@ -107,7 +129,6 @@ func GetPoolMetrics() PoolMetrics {
 		MaxCapacityObserved: poolMetrics.MaxCapacityObserved.Load(),
 		TotalAllocations:    poolMetrics.TotalAllocations.Load(),
 		CurrentPoolSize:     poolMetrics.CurrentPoolSize.Load(),
-		PoolSizeLimit:       poolMetrics.PoolSizeLimit.Load(),
 	}
 }
 
@@ -119,7 +140,6 @@ func ResetPoolMetrics() {
 	poolMetrics.MaxCapacityObserved.Store(0)
 	poolMetrics.TotalAllocations.Store(0)
 	poolMetrics.CurrentPoolSize.Store(0)
-	poolMetrics.PoolSizeLimit.Store(0)
 }
 
 // PooledSlice wraps a pooled slice with ownership management
@@ -161,29 +181,21 @@ func (ps *PooledSlice) Release() {
 	}
 	ps.returned = true
 
-	if cap(*ps.slice) > poolConfig.MaxPoolCapacity {
+	cfg := loadPoolConfig()
+	if cap(*ps.slice) > cfg.MaxPoolCapacity {
 		// Don't pool huge slices to avoid memory bloat
 		poolMetrics.SkipCount.Add(1)
 		return
 	}
 
-	// Check if pool size limit is reached
-	currentSize := poolMetrics.CurrentPoolSize.Load()
-	if poolConfig.MaxPoolSize > 0 && int(currentSize) >= poolConfig.MaxPoolSize {
-		// Pool is at capacity, don't add more items
-		poolMetrics.PoolSizeLimit.Add(1)
-		poolMetrics.SkipCount.Add(1)
-		return
-	}
-
+	// Always put back to pool - let sync.Pool manage its own size
+	// sync.Pool is designed as a lossy cache that responds to memory pressure
 	poolMetrics.PutCount.Add(1)
 	poolMetrics.CurrentPoolSize.Add(1) // Increment pool size counter
 
-	// Zero out elements to release string references before pooling
-	for i := range *ps.slice {
-		(*ps.slice)[i] = FileInfo{} // Zero value releases all references
-	}
-	*ps.slice = (*ps.slice)[:0] // Reset slice length
+	// Drop references before pooling (Go 1.21+)
+	clear(*ps.slice)            // Zero used elements
+	*ps.slice = (*ps.slice)[:0] // Reset length
 
 	fileInfoPool.Put(ps.slice)
 	ps.slice = nil // Clear the reference from PooledSlice
@@ -220,4 +232,14 @@ func (ps *PooledSlice) SetData(data []FileInfo) {
 	}
 	// Reuse the backing array by appending into the cleared slice
 	*ps.slice = append((*ps.slice)[:0], data...)
+
+	// Track capacity growth if append reallocated
+	if newCap := uint64(cap(*ps.slice)); newCap > poolMetrics.MaxCapacityObserved.Load() {
+		for {
+			old := poolMetrics.MaxCapacityObserved.Load()
+			if newCap <= old || poolMetrics.MaxCapacityObserved.CompareAndSwap(old, newCap) {
+				break
+			}
+		}
+	}
 }
