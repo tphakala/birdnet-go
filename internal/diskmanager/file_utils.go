@@ -2,12 +2,14 @@
 package diskmanager
 
 import (
+	"context"
 	"encoding/csv"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -98,8 +100,41 @@ func LoadPolicy(policyFile string) (*Policy, error) {
 
 // GetAudioFiles returns a list of audio files in the directory and its subdirectories
 func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug bool) ([]FileInfo, error) {
-	var files []FileInfo
-	var parseErrors []string
+	return GetAudioFilesContext(context.Background(), baseDir, allowedExts, db, debug)
+}
+
+// GetAudioFilesContext returns a list of audio files in the directory and its subdirectories with context support for cancellation
+func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []string, db Interface, debug bool) ([]FileInfo, error) {
+	// Fast path: empty allowed extensions
+	if len(allowedExts) == 0 {
+		return nil, nil
+	}
+
+	// Normalize extensions to lowercase once for case-insensitive matching
+	allowedExts = append([]string(nil), allowedExts...)
+	for i := range allowedExts {
+		allowedExts[i] = strings.ToLower(allowedExts[i])
+	}
+
+	// Use pooled slice to reduce allocations
+	pooledSlice := getPooledSlice()
+	defer func() {
+		// Handle panics and ensure pool cleanup
+		if r := recover(); r != nil {
+			// Always return to pool on panic
+			pooledSlice.Release()
+			panic(r) // Re-panic after cleanup
+		}
+	}()
+
+	// Work directly with the pooled slice
+	filesPtr := pooledSlice.Data()
+	files := (*filesPtr)[:0:cap(*filesPtr)]
+	// We'll update the pooled slice reference after appending
+
+	var parseErrorCount int
+	var firstParseError error
+	maxParseErrors := loadPoolConfig().MaxParseErrors // Use configurable limit
 
 	// Get list of protected clips from database
 	lockedClips, err := getLockedClips(db)
@@ -116,7 +151,20 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 		log.Printf("Found %d protected clips", len(lockedClips))
 	}
 
+	// Build a set of basenames for fast O(1) membership checks
+	lockedSet := make(map[string]struct{}, len(lockedClips))
+	for _, p := range lockedClips {
+		lockedSet[filepath.Base(p)] = struct{}{}
+	}
+
 	err = filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		if err != nil {
 			return err
 		}
@@ -127,26 +175,33 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 			// Audio files are written with .temp suffix during recording
 			// and renamed upon completion to ensure atomic file operations.
 			// Using case-insensitive check to handle edge cases.
+			// Fast path: skip temp files early
 			if strings.HasSuffix(strings.ToLower(fileName), tempFileExt) {
 				return nil
 			}
 
-			ext := filepath.Ext(fileName)
-			if contains(allowedExts, ext) {
-				fileInfo, err := parseFileInfo(path, info)
-				if err != nil {
-					// Log the error but continue processing other files
-					errMsg := fmt.Sprintf("Error parsing file %s: %v", path, err)
-					parseErrors = append(parseErrors, errMsg)
-					if debug {
-						log.Println(errMsg)
-					}
-					return nil // Continue with next file
-				}
-				// Check if the file is protected
-				fileInfo.Locked = isLockedClip(fileInfo.Path, lockedClips)
-				files = append(files, fileInfo)
+			// Fast path: check extension before expensive operations (case-insensitive)
+			ext := strings.ToLower(filepath.Ext(fileName))
+			if !contains(allowedExts, ext) {
+				return nil
 			}
+
+			// Process valid file
+			fileInfo, err := parseFileInfo(path, info)
+			if err != nil {
+				// Track first error and count without storing all errors
+				if firstParseError == nil {
+					firstParseError = err
+				}
+				parseErrorCount++
+				if debug && parseErrorCount <= maxParseErrors {
+					log.Printf("Error parsing file %s: %v", path, err)
+				}
+				return nil // Continue with next file
+			}
+			// Check if the file is protected using O(1) lookup
+			_, fileInfo.Locked = lockedSet[filepath.Base(fileInfo.Path)]
+			files = append(files, fileInfo)
 		}
 
 		// Yield to other goroutines
@@ -156,6 +211,11 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 	})
 
 	if err != nil {
+		// Check if it was a context cancellation
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err // Return context error directly for proper handling
+		}
+
 		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to walk directory for audio files: %w", err)).
 			Component("diskmanager").
 			Category(errors.CategoryFileIO).
@@ -166,37 +226,49 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 	}
 
 	// If we encountered parse errors but still have some valid files, log a summary but continue
-	if len(parseErrors) > 0 {
+	if parseErrorCount > 0 {
 		if debug {
-			log.Printf("Encountered %d file parsing errors during cleanup", len(parseErrors))
+			log.Printf("Encountered %d file parsing errors during cleanup", parseErrorCount)
+			if parseErrorCount > maxParseErrors {
+				log.Printf("Only first %d errors were logged", maxParseErrors)
+			}
 		}
 		// If we have no valid files at all, return an error
-		if len(files) == 0 {
-			descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to parse any audio files: %s", parseErrors[0])).
+		if len(files) == 0 && firstParseError != nil {
+			descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to parse any audio files: %w", firstParseError)).
 				Component("diskmanager").
 				Category(errors.CategoryFileParsing).
 				Context("base_dir", baseDir).
-				Context("parse_errors_count", len(parseErrors)).
+				Context("parse_errors_count", parseErrorCount).
 				Build()
 			return nil, descriptiveErr
 		}
 	}
 
-	return files, nil
+	// Update the pooled slice with the final data while preserving the backing array
+	pooledSlice.SetData(files)
+
+	// Fast path: if no files found, return early
+	if len(files) == 0 {
+		pooledSlice.Release() // Release the empty pooled slice
+		return nil, nil
+	}
+
+	// Transfer ownership of the data and automatically release the pooled slice
+	return pooledSlice.TakeOwnership(), nil
 }
 
 // parseFileInfo parses the file information from the file path and os.FileInfo
 func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 	name := filepath.Base(info.Name())
 
-	// Check if the file extension is allowed
-	ext := filepath.Ext(name)
+	// Check if the file extension is allowed (case-insensitive)
+	ext := strings.ToLower(filepath.Ext(name))
 	if !contains(allowedFileTypes, ext) {
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: file type not eligible for cleanup: %s", ext)).
+		// Lightweight error with essential context
+		descriptiveErr := errors.New(fmt.Errorf("diskmanager: file type %s not eligible for cleanup", ext)).
 			Component("diskmanager").
-			Category(errors.CategoryFileParsing).
-			FileContext(path, info.Size()).
-			Context("file_extension", ext).
+			Context("allowed_types", allowedFileTypes).
 			Build()
 		return FileInfo{}, descriptiveErr
 	}
@@ -209,12 +281,10 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 
 	parts := strings.Split(nameWithoutExt, "_")
 	if len(parts) < 3 {
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: invalid audio filename format '%s' (has %d parts, expected at least 3)", name, len(parts))).
+		// Lightweight error with format guidance
+		descriptiveErr := errors.New(fmt.Errorf("diskmanager: invalid filename format: %s", name)).
 			Component("diskmanager").
-			Category(errors.CategoryFileParsing).
-			FileContext(path, info.Size()).
-			Context("parts_count", len(parts)).
-			Context("filename", name).
+			Context("expected_format", "species_confidence_timestamp").
 			Build()
 		return FileInfo{}, descriptiveErr
 	}
@@ -226,12 +296,10 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 
 	confidence, err := strconv.Atoi(strings.TrimSuffix(confidenceStr, "p"))
 	if err != nil {
-		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to parse confidence from filename '%s': %w", name, err)).
+		// Lightweight error for confidence parsing
+		descriptiveErr := errors.New(fmt.Errorf("diskmanager: invalid confidence value in %s", name)).
 			Component("diskmanager").
-			Category(errors.CategoryFileParsing).
-			FileContext(path, info.Size()).
 			Context("confidence_string", confidenceStr).
-			Context("filename", name).
 			Build()
 		return FileInfo{}, descriptiveErr
 	}
@@ -249,12 +317,10 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 		// Fallback to original method if this fails, for backward compatibility
 		timestamp, err = time.Parse("20060102T150405Z", timestampStr)
 		if err != nil {
-			descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to parse timestamp from filename '%s': %w", name, err)).
+			// Lightweight error for timestamp parsing
+			descriptiveErr := errors.New(fmt.Errorf("diskmanager: invalid timestamp in %s", name)).
 				Component("diskmanager").
-				Category(errors.CategoryFileParsing).
-				FileContext(path, info.Size()).
 				Context("timestamp_string", timestampStr).
-				Context("filename", name).
 				Build()
 			return FileInfo{}, descriptiveErr
 		}
@@ -272,13 +338,15 @@ func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
 }
 
 // contains checks if a string is in a slice
+// Optimized with early exit and common case first
 func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
+	// Fast path: empty slice or item
+	if len(slice) == 0 || item == "" {
+		return false
 	}
-	return false
+
+	// Use standard library slices.Contains for optimal performance
+	return slices.Contains(slice, item)
 }
 
 // WriteSortedFilesToFile writes the sorted list of files to a text file for investigation
