@@ -154,9 +154,17 @@ func getPooledSlice() *PooledSlice {
 	slice := fileInfoPool.Get().(*[]FileInfo)
 	*slice = (*slice)[:0] // Reset length but keep capacity
 
-	// Decrement pool size counter (item was removed from pool)
-	if current := poolMetrics.CurrentPoolSize.Load(); current > 0 {
-		poolMetrics.CurrentPoolSize.Add(^uint64(0)) // Decrement by 1
+	// Atomically decrement pool size counter using CAS to prevent underflow
+	for {
+		current := poolMetrics.CurrentPoolSize.Load()
+		if current == 0 {
+			break // Already at zero, nothing to decrement
+		}
+		// Try to atomically set to current-1
+		if poolMetrics.CurrentPoolSize.CompareAndSwap(current, current-1) {
+			break // Successfully decremented
+		}
+		// CAS failed, another thread modified the value, retry
 	}
 
 	// Track maximum capacity observed
