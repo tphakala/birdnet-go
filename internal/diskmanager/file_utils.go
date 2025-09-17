@@ -103,6 +103,84 @@ func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug boo
 	return GetAudioFilesContext(context.Background(), baseDir, allowedExts, db, debug)
 }
 
+// createWalkFunc creates the filepath.Walk function with all necessary context
+func createWalkFunc(ctx context.Context, allowedExts []string, lockedSet map[string]struct{},
+	files *[]FileInfo, parseErrorCount *int, firstParseError *error, maxParseErrors int, debug bool) filepath.WalkFunc { //nolint:gocritic // pointer needed to accumulate state across walk iterations
+	return func(path string, info os.FileInfo, err error) error {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if err != nil {
+			return handleWalkError(err, path, debug)
+		}
+
+		if !info.IsDir() {
+			processFile(path, info, allowedExts, lockedSet, files, parseErrorCount, firstParseError, maxParseErrors, debug)
+		}
+
+		// Yield to other goroutines
+		runtime.Gosched()
+		return nil
+	}
+}
+
+// handleWalkError handles errors during filepath.Walk, specifically temp file race conditions
+func handleWalkError(err error, path string, debug bool) error {
+	// Handle race condition where temp files are renamed between directory
+	// listing and lstat call. If the error is "no such file or directory"
+	// and the path appears to be a temp file, continue walking.
+	if os.IsNotExist(err) && strings.HasSuffix(strings.ToLower(path), tempFileExt) {
+		if debug {
+			log.Printf("Skipping missing temp file (likely renamed during processing): %s", path)
+		}
+		return nil // Continue walking
+	}
+	return err
+}
+
+// processFile processes a single file during directory walking
+func processFile(path string, info os.FileInfo, allowedExts []string, lockedSet map[string]struct{},
+	files *[]FileInfo, parseErrorCount *int, firstParseError *error, maxParseErrors int, debug bool) { //nolint:gocritic // pointer needed to accumulate state across walk iterations
+	fileName := info.Name()
+
+	// Skip temporary files that are currently being written.
+	// Audio files are written with .temp suffix during recording
+	// and renamed upon completion to ensure atomic file operations.
+	// Using case-insensitive check to handle edge cases.
+	// Fast path: skip temp files early
+	if strings.HasSuffix(strings.ToLower(fileName), tempFileExt) {
+		return
+	}
+
+	// Fast path: check extension before expensive operations (case-insensitive)
+	ext := strings.ToLower(filepath.Ext(fileName))
+	if !contains(allowedExts, ext) {
+		return
+	}
+
+	// Process valid file
+	fileInfo, err := parseFileInfo(path, info)
+	if err != nil {
+		// Track first error and count without storing all errors
+		if *firstParseError == nil {
+			*firstParseError = err
+		}
+		*parseErrorCount++
+		if debug && *parseErrorCount <= maxParseErrors {
+			log.Printf("Error parsing file %s: %v", path, err)
+		}
+		return // Continue with next file
+	}
+
+	// Check if the file is protected using O(1) lookup
+	_, fileInfo.Locked = lockedSet[filepath.Base(fileInfo.Path)]
+	*files = append(*files, fileInfo)
+}
+
 // GetAudioFilesContext returns a list of audio files in the directory and its subdirectories with context support for cancellation
 func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []string, db Interface, debug bool) ([]FileInfo, error) {
 	// Fast path: empty allowed extensions
@@ -157,58 +235,7 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 		lockedSet[filepath.Base(p)] = struct{}{}
 	}
 
-	err = filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
-		// Check for context cancellation
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			fileName := info.Name()
-
-			// Skip temporary files that are currently being written.
-			// Audio files are written with .temp suffix during recording
-			// and renamed upon completion to ensure atomic file operations.
-			// Using case-insensitive check to handle edge cases.
-			// Fast path: skip temp files early
-			if strings.HasSuffix(strings.ToLower(fileName), tempFileExt) {
-				return nil
-			}
-
-			// Fast path: check extension before expensive operations (case-insensitive)
-			ext := strings.ToLower(filepath.Ext(fileName))
-			if !contains(allowedExts, ext) {
-				return nil
-			}
-
-			// Process valid file
-			fileInfo, err := parseFileInfo(path, info)
-			if err != nil {
-				// Track first error and count without storing all errors
-				if firstParseError == nil {
-					firstParseError = err
-				}
-				parseErrorCount++
-				if debug && parseErrorCount <= maxParseErrors {
-					log.Printf("Error parsing file %s: %v", path, err)
-				}
-				return nil // Continue with next file
-			}
-			// Check if the file is protected using O(1) lookup
-			_, fileInfo.Locked = lockedSet[filepath.Base(fileInfo.Path)]
-			files = append(files, fileInfo)
-		}
-
-		// Yield to other goroutines
-		runtime.Gosched()
-
-		return nil
-	})
+	err = filepath.Walk(baseDir, createWalkFunc(ctx, allowedExts, lockedSet, &files, &parseErrorCount, &firstParseError, maxParseErrors, debug))
 
 	if err != nil {
 		// Check if it was a context cancellation
