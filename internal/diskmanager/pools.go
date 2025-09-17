@@ -185,6 +185,12 @@ func (ps *PooledSlice) Release() {
 	if cap(*ps.slice) > cfg.MaxPoolCapacity {
 		// Don't pool huge slices to avoid memory bloat
 		poolMetrics.SkipCount.Add(1)
+
+		// Clear references to prevent memory leaks (Go 1.21+ clear function)
+		// Even though we're not pooling, we must drop all references
+		clear(*ps.slice)            // Zero out all elements
+		*ps.slice = (*ps.slice)[:0] // Reset length to 0
+		ps.slice = nil              // Drop the slice reference
 		return
 	}
 
