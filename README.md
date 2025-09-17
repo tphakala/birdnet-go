@@ -106,6 +106,22 @@ Use "birdnet [command] --help" for more information about a command.
 
 There is more detailed usage documentation at [Wiki](doc/wiki/guide.md)
 
+## Related Projects
+
+### Core & Extensions
+- [BirdNET-Analyzer](https://github.com/birdnet-team/BirdNET-Analyzer) - Upstream project providing the BirdNET AI model for bird sound identification
+- [BirdNET-Go Classifiers](https://github.com/tphakala/birdnet-go-classifiers) - Enhanced BirdNET classifiers optimized for specific regions and use cases
+
+### System Integration
+- [Cockpit BirdNET-Go](https://github.com/tphakala/cockpit-birdnet-go) - Web-based system management plugin for BirdNET-Go using Cockpit framework
+
+### Migration Tools
+- [BirdNET-Pi2Go](https://github.com/tphakala/birdnet-pi2go) - Database conversion tool for migrating from BirdNET-Pi to BirdNET-Go
+
+### Hardware Solutions
+- [BirdNET-Go ESP32 RTSP Microphone](https://github.com/Sukecz/birdnetgo-esp32-rtsp-mic) - ESP32-based RTSP streaming microphone for remote audio capture
+- [ESP32 Audio Streamer](https://github.com/jpmurray/esp32-audio-streamer) - Alternative ESP32 RTSP streaming solution for BirdNET-Go audio input
+
 ## License
 
 Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
