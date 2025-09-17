@@ -71,38 +71,8 @@ bash ./install.sh
 
 For detailed installation instructions, see the [installation documentation](doc/wiki/installation.md). For securing your BirdNET-Go installation, see the [security documentation](doc/wiki/security.md). See [recommended hardware](doc/wiki/hardware.md) for optimal performance.
 
-## Building
 
-For instructions on how to build the project, see the [building documentation](doc/wiki/building.md).
 
-## Usage
-
-```bash
-BirdNET-Go CLI
-
-Usage:
-  birdnet-go [command]
-
-Available Commands:
-  authors     Print the list of authors
-  benchmark   Run performance benchmark
-  directory   Analyze all *.wav files in a directory
-  file        Analyze an audio file
-  help        Help about any command
-  license     Print the license of Go-BirdNET
-  rangefilter Manage the range filter database
-  realtime    Analyze audio in realtime mode
-  support     Generate a support bundle
-
-Flags:
-      --debug               Enable debug output
-  -h, --help                help for birdnet
-      --locale string       Set the locale for labels. Accepts full name or 2-letter code. (default "finnish")
-      --overlap float       Overlap value between 0.0 and 2.9 (High values like 2.7 enable Deep Detection)
-      --sensitivity float   Sigmoid sensitivity value between 0.0 and 1.5 (default 1)
-      --threshold float     Confidency threshold for detections, value between 0.1 to 1.0 (default 0.8)
-
-Use "birdnet [command] --help" for more information about a command.
 
 There is more detailed usage documentation at [Wiki](doc/wiki/guide.md)
 
@@ -137,4 +107,3 @@ Please let me know if you are missing from contributors list!
 BirdNET AI model by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology. Stefan Kahl, Connor Wood, Maximilian Eibl, Holger Klinck.
 
 BirdNET label translations by Patrick Levin for BirdNET-Pi project by Patrick McGuire.
-```
