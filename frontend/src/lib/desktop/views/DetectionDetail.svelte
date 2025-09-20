@@ -437,7 +437,7 @@
             <div class="flex flex-col gap-2 mt-4" role="group" aria-label="Detection actions">
               {#if detection.clipName}
                 <a
-                  href="/api/v2/media/audio/{detection.clipName}"
+                  href={`/api/v2/media/audio/${detection.clipName}`}
                   download
                   class="btn btn-ghost btn-sm gap-2"
                   aria-label="Download audio clip for {detection.commonName} detection"
@@ -979,9 +979,8 @@
     width: 100%;
     max-width: 1200px; /* Limit maximum width for very large screens */
     margin: 0 auto; /* Center the container */
-    aspect-ratio: var(
-      --spectrogram-aspect-ratio
-    ); /* Use CSS variable for consistent aspect ratio */
+    min-height: var(--spectrogram-min-height, 60px); /* Fallback to 60px if var not defined */
+    aspect-ratio: var(--spectrogram-aspect-ratio, 2 / 1); /* Fallback to 2:1 if var not defined */
 
     background: linear-gradient(to bottom, rgb(128 128 128 / 0.05), rgb(128 128 128 / 0.02));
     border-radius: 0.5rem;
