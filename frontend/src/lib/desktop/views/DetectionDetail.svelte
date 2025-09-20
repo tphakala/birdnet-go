@@ -437,7 +437,7 @@
             <div class="flex flex-col gap-2 mt-4" role="group" aria-label="Detection actions">
               {#if detection.clipName}
                 <a
-                  href="/api/v2/media/audio/{detection.clipName}"
+                  href={`/api/v2/media/audio/${detection.clipName}`}
                   download
                   class="btn btn-ghost btn-sm gap-2"
                   aria-label="Download audio clip for {detection.commonName} detection"
@@ -489,7 +489,7 @@
       >
         <div class="flex justify-between">
           <span class="text-base-content/60">{t('detections.metadata.source')}:</span>
-          <span>{detection.source || 'Unknown'}</span>
+          <span>{detection.source ?? 'Unknown'}</span>
         </div>
         <div class="flex justify-between">
           <span class="text-base-content/60">{t('detections.metadata.duration')}:</span>
@@ -657,7 +657,7 @@
             role="list"
             aria-label="Subspecies list"
           >
-            {#each subspeciesList as subspecies}
+            {#each subspeciesList as subspecies (subspecies.scientific_name)}
               <div class="bg-base-200 rounded-lg p-3" role="listitem">
                 <p class="font-medium italic" aria-label="Scientific name">
                   {subspecies.scientific_name}
@@ -743,15 +743,17 @@
       <div class="card-body">
         <h2 id="media-heading" class="text-xl font-semibold mb-4">{t('detections.media.title')}</h2>
         <div role="region" aria-label="Audio recording and spectrogram for {detection.commonName}">
-          <AudioPlayer
-            audioUrl="/api/v2/audio/{detection.id}"
-            detectionId={detection.id.toString()}
-            showSpectrogram={true}
-            spectrogramSize="xl"
-            spectrogramRaw={false}
-            responsive={true}
-            className="w-full"
-          />
+          <div class="detail-audio-container">
+            <AudioPlayer
+              audioUrl={`/api/v2/audio/${detection.id}`}
+              detectionId={detection.id.toString()}
+              showSpectrogram={true}
+              spectrogramSize="xl"
+              spectrogramRaw={false}
+              responsive={true}
+              className="w-full"
+            />
+          </div>
         </div>
       </div>
     </section>
@@ -969,3 +971,53 @@
     </section>
   {/if}
 </main>
+
+<style>
+  /* Detail view audio container - 2:1 aspect ratio matching spectrogram dimensions */
+  .detail-audio-container {
+    position: relative;
+    width: 100%;
+    max-width: 1200px; /* Limit maximum width for very large screens */
+    margin: 0 auto; /* Center the container */
+    min-height: var(--spectrogram-min-height, 60px); /* Fallback to 60px if var not defined */
+    aspect-ratio: var(--spectrogram-aspect-ratio, 2 / 1); /* Fallback to 2:1 if var not defined */
+    background: linear-gradient(to bottom, rgb(128 128 128 / 0.05), rgb(128 128 128 / 0.02));
+    border-radius: 0.5rem;
+    overflow: hidden;
+  }
+
+  /* Ensure AudioPlayer fills container - using more specific selectors to avoid !important */
+  .detail-audio-container :global(.group) {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  /* Override any conflicting styles with higher specificity */
+  .detail-audio-container > :global(div > .group) {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  /* Spectrogram image sizing for detail view
+     Use 'contain' to show the full spectrogram for detailed analysis without cropping.
+     This differs from table/card views which use 'cover' for space-efficient previews. */
+  .detail-audio-container :global(img) {
+    object-fit: contain; /* Show full spectrogram for detailed analysis */
+    height: 100%;
+    width: 100%;
+  }
+
+  /* Higher specificity for image styles if needed */
+  .detail-audio-container :global(.group img),
+  .detail-audio-container :global(div img) {
+    object-fit: contain;
+    height: 100%;
+    width: 100%;
+  }
+</style>

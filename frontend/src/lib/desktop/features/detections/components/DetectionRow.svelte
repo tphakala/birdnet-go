@@ -317,17 +317,18 @@
 
 <!-- Recording/Spectrogram -->
 <td class="hidden md:table-cell">
-  <AudioPlayer
-    audioUrl="/api/v2/audio/{detection.id}"
-    detectionId={detection.id.toString()}
-    width={200}
-    height={80}
-    showSpectrogram={true}
-    showDownload={true}
-    spectrogramSize="sm"
-    spectrogramRaw={true}
-    className="w-full max-w-[200px]"
-  />
+  <div class="dr-audio-player-container">
+    <AudioPlayer
+      audioUrl={`/api/v2/audio/${detection.id}`}
+      detectionId={detection.id.toString()}
+      showSpectrogram={true}
+      showDownload={true}
+      spectrogramSize="sm"
+      spectrogramRaw={true}
+      responsive={true}
+      className="w-full"
+    />
+  </div>
 </td>
 
 <!-- Action Menu -->
@@ -382,5 +383,50 @@
     width: 100%;
     height: 100%;
     object-fit: contain;
+  }
+
+  /* DR Audio Player Container - 2:1 aspect ratio matching spectrogram dimensions */
+  .dr-audio-player-container {
+    position: relative;
+    width: 100%;
+    max-width: 200px; /* Constrain maximum width in table */
+    min-height: var(--spectrogram-min-height, 60px); /* Fallback to 60px if var not defined */
+    aspect-ratio: var(--spectrogram-aspect-ratio, 2 / 1); /* Fallback to 2:1 if var not defined */
+    background: linear-gradient(to bottom, rgb(128 128 128 / 0.1), rgb(128 128 128 / 0.05));
+    border-radius: 0.5rem;
+    overflow: hidden; /* Contain the AudioPlayer content */
+  }
+
+  /* Ensure AudioPlayer fills container - using more specific selectors to avoid !important */
+  .dr-audio-player-container :global(.group) {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  /* Override any conflicting styles with higher specificity */
+  .dr-audio-player-container > :global(div > .group) {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  /* Responsive spectrogram sizing */
+  .dr-audio-player-container :global(img) {
+    object-fit: cover;
+    height: 100%;
+    width: 100%;
+  }
+
+  /* Higher specificity for image styles if needed */
+  .dr-audio-player-container :global(.group img),
+  .dr-audio-player-container :global(div img) {
+    object-fit: cover;
+    height: 100%;
+    width: 100%;
   }
 </style>

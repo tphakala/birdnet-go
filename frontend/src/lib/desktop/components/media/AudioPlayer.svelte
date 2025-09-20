@@ -19,6 +19,8 @@
   - showDownload: Show download button (default: true)
   - className: Additional CSS classes
   - responsive: Enable responsive sizing (default: false)
+    When true, the component adapts to its container width and maintains aspect ratio.
+    Use for flexible layouts like cards and tables. When false, uses fixed dimensions.
   - spectrogramSize: Spectrogram display size - sm/md/lg/xl (default: md)
   - spectrogramRaw: Display raw spectrogram without axes (default: false)
   - onPlayStart: Callback when audio starts playing (freezes SSE updates)
@@ -28,7 +30,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
-  import { mediaIcons } from '$lib/utils/icons.js';
+  import { mediaIcons, alertIconsSvg } from '$lib/utils/icons.js';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
@@ -710,11 +712,12 @@
     {#if spectrogramLoader.showSpinner}
       <div
         class="absolute inset-0 flex items-center justify-center bg-base-200 bg-opacity-75 rounded-md border border-base-300"
-        style={responsive
-          ? ''
-          : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
       >
-        <div class="loading loading-spinner loading-md text-primary"></div>
+        <div
+          class="loading loading-spinner loading-sm md:loading-md text-primary"
+          role="status"
+          aria-label="Loading spectrogram"
+        ></div>
       </div>
     {/if}
 
@@ -726,42 +729,32 @@
           ? 'height: 80px;'
           : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
       >
-        <div class="text-center">
-          <svg
-            class="w-8 h-8 mx-auto mb-1 text-base-content/30"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span class="text-xs text-base-content/50">Spectrogram unavailable</span>
+        <div class="text-center p-2">
+          <div class="w-6 h-6 sm:w-8 sm:h-8 mx-auto mb-1 text-base-content/30" aria-hidden="true">
+            {@html alertIconsSvg.error}
+          </div>
+          <span class="text-xs sm:text-sm text-base-content/50">Spectrogram unavailable</span>
         </div>
       </div>
     {:else if spectrogramStatus?.status === 'queued' || spectrogramStatus?.status === 'generating'}
       <!-- Show generation status -->
       <div
-        class="absolute inset-0 flex flex-col items-center justify-center bg-base-200 bg-opacity-90 rounded-md border border-base-300 p-4"
-        style={responsive
-          ? ''
-          : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
+        class="absolute inset-0 flex flex-col items-center justify-center bg-base-200 bg-opacity-90 rounded-md border border-base-300 p-2"
       >
-        <div class="loading loading-spinner loading-md"></div>
-        <div class="text-sm text-base-content mt-2">
+        <div
+          class="loading loading-spinner loading-xs sm:loading-sm md:loading-md"
+          role="status"
+          aria-label="Generating spectrogram"
+        ></div>
+        <div class="text-xs sm:text-sm text-base-content mt-1" role="status" aria-live="polite">
           {#if spectrogramStatus.status === 'queued'}
-            <span>Position {spectrogramStatus.queuePosition} in queue</span>
+            <span>Queue: {spectrogramStatus.queuePosition}</span>
           {:else}
-            <span>Generating spectrogram...</span>
+            <span>Generating...</span>
           {/if}
         </div>
         {#if spectrogramStatus.message}
-          <div class="text-xs text-base-content/70 mt-1">
+          <div class="text-xs sm:text-sm text-base-content/70 mt-0.5">
             {spectrogramStatus.message}
           </div>
         {/if}
