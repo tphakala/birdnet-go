@@ -1,3 +1,42 @@
+<!--
+DashboardPage.svelte - Main dashboard page with bird detection summaries
+
+Purpose:
+- Central dashboard displaying daily species summaries and recent detections
+- Manages date persistence with hybrid URL/localStorage approach
+- Provides real-time updates via Server-Sent Events (SSE)
+- Handles date navigation with smart sticky date selection
+
+Features:
+- Sticky date selection (30-minute retention in localStorage)
+- URL-based date sharing for bookmarking/sharing specific dates
+- Real-time detection updates via SSE with animations
+- Adjacent date preloading for smooth navigation
+- Browser back/forward button support
+- "Today" button resets date persistence to current date
+- Dashboard navigation from sidebar resets to current date
+
+Date Persistence Strategy:
+- Priority: URL parameter > Recent localStorage (within 30 min) > Current date
+- URL parameter allows direct navigation and sharing
+- localStorage provides sticky behavior for return visits
+- Automatic cleanup after 30-minute retention period
+- Reset mechanisms via "Today" button and dashboard navigation
+
+Props: None (Page component)
+
+State Management:
+- selectedDate: Currently viewed date (YYYY-MM-DD format)
+- dailySummary: Array of species detection summaries for the selected date
+- recentDetections: Array of recent individual detections
+- Real-time updates tracked via newDetectionIds and hourlyUpdates
+
+Performance Optimizations:
+- Adjacent date preloading for instant navigation
+- Debounced SSE updates to prevent excessive re-renders
+- Efficient animation cleanup with requestAnimationFrame
+- Map-based lookups for O(1) species updates
+-->
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import ReconnectingEventSource from 'reconnecting-eventsource';
@@ -11,7 +50,12 @@
     parseHour,
     parseLocalDateString,
   } from '$lib/utils/date';
-  import { getInitialDate, persistDate, getDateFromURL } from '$lib/utils/datePersistence';
+  import {
+    getInitialDate,
+    persistDate,
+    getDateFromURL,
+    resetDateToToday,
+  } from '$lib/utils/datePersistence';
   import { getLogger } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
 
@@ -567,9 +611,27 @@
     }
   }
 
+  /**
+   * Handle date change from DatePicker component
+   * Persists the new date to both URL and localStorage for sticky behavior
+   */
   function handleDateChange(date: string) {
     selectedDate = date;
     persistDate(date);
+    handleDateChangeWithCleanup();
+    fetchDailySummary();
+  }
+
+  /**
+   * Navigate to today's date and reset date persistence
+   * Called when user clicks "Today" button in DatePicker
+   * Clears both URL parameter and localStorage to show current date
+   */
+  function goToToday() {
+    // Reset date persistence and navigate to today
+    resetDateToToday();
+    const currentDate = getLocalDateString();
+    selectedDate = currentDate;
     handleDateChangeWithCleanup();
     fetchDailySummary();
   }
@@ -991,6 +1053,7 @@
     {showThumbnails}
     onPreviousDay={previousDay}
     onNextDay={nextDay}
+    onGoToToday={goToToday}
     onDateChange={handleDateChange}
   />
 

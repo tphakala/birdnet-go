@@ -11,7 +11,15 @@ const logger = loggers.ui;
 // Configuration constants
 export const DATE_STORAGE_KEY = 'dashboard-selected-date';
 export const DATE_URL_PARAM = 'date';
-export const DATE_RETENTION_MINUTES = 30; // Configurable retention time (15-30 minutes recommended)
+
+/**
+ * Retention time in minutes for sticky date selection.
+ * - Lower values (15-20 min): Better for transient browsing sessions
+ * - Default (30 min): Balanced for most use cases
+ * - Higher values (30-45 min): Better for persistent analytical workflows
+ * After this period expires, the dashboard will show the current date.
+ */
+export const DATE_RETENTION_MINUTES = 30;
 export const DATE_RETENTION_MS = DATE_RETENTION_MINUTES * 60 * 1000;
 
 // TypeScript interfaces
@@ -228,6 +236,22 @@ export function persistDate(date: string, config?: DatePersistenceConfig): void 
 }
 
 /**
+ * Reset date persistence to current date
+ * Clears both URL parameter and localStorage
+ * @param config - Optional configuration for storage and URL parameters
+ */
+export function resetDateToToday(config?: DatePersistenceConfig): void {
+  const { storageKey = DATE_STORAGE_KEY, urlParam = DATE_URL_PARAM } = config ?? {};
+
+  // Clear stored date
+  clearStoredDate(storageKey);
+
+  // Remove date from URL (updateURLWithDate already does this for current date)
+  const currentDate = getLocalDateString();
+  updateURLWithDate(currentDate, urlParam);
+}
+
+/**
  * Create a date persistence manager for use in components
  * Provides a convenient interface for date persistence operations
  */
@@ -236,6 +260,7 @@ export function createDatePersistence(config?: DatePersistenceConfig) {
     getInitial: () => getInitialDate(config),
     persist: (date: string) => persistDate(date, config),
     clear: () => clearStoredDate(config?.storageKey),
+    reset: () => resetDateToToday(config),
     getFromURL: () => getDateFromURL(config?.urlParam),
     getFromStorage: () => getStoredDate(config?.storageKey, config?.retentionMs),
   };

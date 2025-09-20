@@ -137,6 +137,7 @@ Responsive Breakpoints:
     showThumbnails?: boolean;
     onPreviousDay: () => void;
     onNextDay: () => void;
+    onGoToToday: () => void;
     onDateChange: (_date: string) => void;
   }
 
@@ -148,6 +149,7 @@ Responsive Breakpoints:
     showThumbnails = true,
     onPreviousDay,
     onNextDay,
+    onGoToToday,
     onDateChange,
   }: Props = $props();
 
@@ -497,7 +499,12 @@ Responsive Breakpoints:
     </button>
 
     <!-- Date picker with consistent width -->
-    <DatePicker value={selectedDate} onChange={onDateChange} className="mx-2 flex-grow" />
+    <DatePicker
+      value={selectedDate}
+      onChange={onDateChange}
+      onTodayClick={onGoToToday}
+      className="mx-2 flex-grow"
+    />
 
     <!-- Next day button -->
     <button
