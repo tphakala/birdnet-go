@@ -65,6 +65,37 @@ Performance Optimizations:
   const ANIMATION_CLEANUP_DELAY = 2200; // Slightly longer than 2s animation duration
   const MIN_FETCH_LIMIT = 10; // Minimum number of detections to fetch for SSE processing
 
+  // SSE Detection Data Type
+  type SSEDetectionData = {
+    ID: number;
+    CommonName: string;
+    ScientificName: string;
+    Confidence: number;
+    Date: string; // YYYY-MM-DD
+    Time: string; // HH:MM:SS
+    SpeciesCode: string;
+    Verified?: Detection['verified'];
+    Locked?: boolean;
+    Source?: string;
+    BeginTime?: string;
+    EndTime?: string;
+    eventType?: string;
+  };
+
+  function isSSEDetectionData(v: unknown): v is SSEDetectionData {
+    if (!v || typeof v !== 'object') return false;
+    const o = v as Record<string, unknown>;
+    return (
+      typeof o.ID === 'number' &&
+      typeof o.CommonName === 'string' &&
+      typeof o.ScientificName === 'string' &&
+      typeof o.Confidence === 'number' &&
+      typeof o.Date === 'string' &&
+      typeof o.Time === 'string' &&
+      typeof o.SpeciesCode === 'string'
+    );
+  }
+
   // State management
   let dailySummary = $state<DailySpeciesSummary[]>([]);
   let recentDetections = $state<Detection[]>([]);
@@ -473,22 +504,26 @@ Performance Optimizations:
   }
 
   // Helper function to process SSE detection data
-  function handleSSEDetection(detectionData: any) {
+  function handleSSEDetection(detectionData: unknown) {
+    if (!isSSEDetectionData(detectionData)) {
+      logger.warn('SSE detection payload missing required fields');
+      return;
+    }
     try {
       // Convert SSEDetectionData to Detection format
       const detection: Detection = {
-        id: detectionData.ID as number,
-        commonName: detectionData.CommonName as string,
-        scientificName: detectionData.ScientificName as string,
-        confidence: detectionData.Confidence as number,
-        date: detectionData.Date as string,
-        time: detectionData.Time as string,
-        speciesCode: detectionData.SpeciesCode as string,
-        verified: (detectionData.Verified || 'unverified') as Detection['verified'],
-        locked: (detectionData.Locked || false) as boolean,
-        source: (detectionData.Source || '') as string,
-        beginTime: (detectionData.BeginTime || '') as string,
-        endTime: (detectionData.EndTime || '') as string,
+        id: detectionData.ID,
+        commonName: detectionData.CommonName,
+        scientificName: detectionData.ScientificName,
+        confidence: detectionData.Confidence,
+        date: detectionData.Date,
+        time: detectionData.Time,
+        speciesCode: detectionData.SpeciesCode,
+        verified: detectionData.Verified ?? 'unverified',
+        locked: detectionData.Locked ?? false,
+        source: detectionData.Source ?? '',
+        beginTime: detectionData.BeginTime ?? '',
+        endTime: detectionData.EndTime ?? '',
       };
 
       handleNewDetection(detection);

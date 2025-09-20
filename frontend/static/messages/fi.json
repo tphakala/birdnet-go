@@ -99,7 +99,8 @@
       "editSpecies": "Muokkaa lajia",
       "removeSpecies": "Poista laji",
       "dismissError": "Hylkää virhe",
-      "downloadCsv": "Lataa lajilista CSV-tiedostona"
+      "downloadCsv": "Lataa lajilista CSV-tiedostona",
+      "calendarNavigation": "Kalenterinavigointi: käytä nuolinäppäimiä siirtymiseen, Enter valitsee, Esc sulkee"
     },
     "modal": {
       "confirmAction": "Vahvista toiminto",
@@ -1488,7 +1489,11 @@
         "calendarClosed": "Kalenteri suljettu",
         "monthChanged": "Näytetään {month} {year}",
         "dayUnavailable": "Päivä {day} ei ole valittavissa",
-        "todayButton": "Valitse tämän päivän päivämäärä: {today}"
+        "todayButton": "Valitse tämän päivän päivämäärä: {today}",
+        "previousMonth": "Edellinen kuukausi",
+        "nextMonth": "Seuraava kuukausi",
+        "openButton": "Valitse päivämäärä",
+        "calendarDialogLabel": "Päivämäärävalitsimen kalenteri"
       },
       "status": {
         "loading": "Ladataan kalenteria...",

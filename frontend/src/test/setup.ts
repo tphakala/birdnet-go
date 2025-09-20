@@ -94,6 +94,19 @@ const translations: Record<string, string> = {
   'components.forms.numberField.adjustedToMinimum': 'Value was adjusted to minimum ({value})',
   'components.forms.numberField.adjustedToMaximum': 'Value was adjusted to maximum ({value})',
   'components.datePicker.today': 'Today',
+  'components.datePicker.aria.openButton': 'Select date',
+  'components.datePicker.aria.calendarDialogLabel': 'Date picker calendar',
+  'components.datePicker.aria.previousMonth': 'Previous month',
+  'components.datePicker.aria.nextMonth': 'Next month',
+  'components.datePicker.aria.dateSelected': 'Date {date} selected',
+  'components.datePicker.aria.dayUnavailable': 'Day {day} is not available for selection',
+  'components.datePicker.aria.todayButton': "Select today's date: {today}",
+  'components.datePicker.feedback.invalidDateFormat':
+    'Invalid date format. Please use YYYY-MM-DD format',
+  'common.aria.calendarNavigation':
+    'Use arrow keys to navigate calendar, Enter to select, Escape to close',
+  'common.validation.invalid': 'Invalid value',
+  'forms.placeholders.date': 'Select date',
   // Audio Settings translations
   'settings.audio.audioCapture.title': 'Audio Capture',
   'settings.audio.audioCapture.description': 'Configure audio capture settings',
