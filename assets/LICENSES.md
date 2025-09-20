@@ -74,12 +74,12 @@ Source: BSD-3-Clause
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.35.1/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.35.2/LICENSE
 Source: MIT
 
 ### github.com/getsentry/sentry-go/echo
 
-License: https://github.com/getsentry/sentry-go/blob/echo/v0.35.1/echo/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/echo/v0.35.2/echo/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -444,7 +444,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.43.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.44.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -474,7 +474,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
 
-License: https://cs.opensource.google/go/x/time/+/v0.12.0:LICENSE
+License: https://cs.opensource.google/go/x/time/+/v0.13.0:LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/api
@@ -519,6 +519,6 @@ Source: MIT
 
 ### gorm.io/gorm
 
-License: https://github.com/go-gorm/gorm/blob/v1.30.2/LICENSE
+License: https://github.com/go-gorm/gorm/blob/v1.31.0/LICENSE
 Source: MIT
 
