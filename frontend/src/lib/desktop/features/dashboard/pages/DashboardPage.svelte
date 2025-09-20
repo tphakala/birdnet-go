@@ -11,6 +11,7 @@
     parseHour,
     parseLocalDateString,
   } from '$lib/utils/date';
+  import { getInitialDate, persistDate, getDateFromURL } from '$lib/utils/datePersistence';
   import { getLogger } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
 
@@ -23,7 +24,7 @@
   // State management
   let dailySummary = $state<DailySpeciesSummary[]>([]);
   let recentDetections = $state<Detection[]>([]);
-  let selectedDate = $state(getLocalDateString());
+  let selectedDate = $state(getInitialDate());
   let isLoadingSummary = $state(true);
   let isLoadingDetections = $state(true);
   let summaryError = $state<string | null>(null);
@@ -453,6 +454,9 @@
   }
 
   onMount(() => {
+    // Persist the initial date to URL (in case it came from localStorage)
+    persistDate(selectedDate);
+
     fetchDailySummary();
     fetchRecentDetections();
     fetchDashboardConfig();
@@ -463,7 +467,30 @@
     // Initial preload of adjacent dates (reactive effect will handle subsequent preloads)
     triggerAdjacentPreload(selectedDate);
 
+    // Handle browser navigation (back/forward)
+    const handlePopState = () => {
+      const urlDate = getDateFromURL();
+      if (urlDate && urlDate !== selectedDate) {
+        selectedDate = urlDate;
+        handleDateChangeWithCleanup();
+        fetchDailySummary();
+      } else if (!urlDate) {
+        // If no date in URL, use current date
+        const currentDate = getLocalDateString();
+        if (currentDate !== selectedDate) {
+          selectedDate = currentDate;
+          handleDateChangeWithCleanup();
+          fetchDailySummary();
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
     return () => {
+      // Clean up browser navigation listener
+      window.removeEventListener('popstate', handlePopState);
+
       // Clean up SSE connection
       if (eventSource) {
         eventSource.close();
@@ -520,7 +547,9 @@
     const date = parseLocalDateString(selectedDate);
     if (!date) return;
     date.setDate(date.getDate() - 1);
-    selectedDate = getLocalDateString(date);
+    const newDateString = getLocalDateString(date);
+    selectedDate = newDateString;
+    persistDate(newDateString);
     handleDateChangeWithCleanup();
     fetchDailySummary();
   }
@@ -532,6 +561,7 @@
     const newDateString = getLocalDateString(date);
     if (!isFutureDate(newDateString)) {
       selectedDate = newDateString;
+      persistDate(newDateString);
       handleDateChangeWithCleanup();
       fetchDailySummary();
     }
@@ -539,6 +569,7 @@
 
   function handleDateChange(date: string) {
     selectedDate = date;
+    persistDate(date);
     handleDateChangeWithCleanup();
     fetchDailySummary();
   }
