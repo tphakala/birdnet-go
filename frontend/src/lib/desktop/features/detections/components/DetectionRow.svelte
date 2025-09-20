@@ -319,7 +319,7 @@
 <td class="hidden md:table-cell">
   <div class="dr-audio-player-container">
     <AudioPlayer
-      audioUrl="/api/v2/audio/{detection.id}"
+      audioUrl={`/api/v2/audio/${detection.id}`}
       detectionId={detection.id.toString()}
       showSpectrogram={true}
       showDownload={true}

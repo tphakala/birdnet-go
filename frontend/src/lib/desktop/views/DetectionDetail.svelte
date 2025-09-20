@@ -489,7 +489,7 @@
       >
         <div class="flex justify-between">
           <span class="text-base-content/60">{t('detections.metadata.source')}:</span>
-          <span>{detection.source || 'Unknown'}</span>
+          <span>{detection.source ?? 'Unknown'}</span>
         </div>
         <div class="flex justify-between">
           <span class="text-base-content/60">{t('detections.metadata.duration')}:</span>
@@ -657,7 +657,7 @@
             role="list"
             aria-label="Subspecies list"
           >
-            {#each subspeciesList as subspecies}
+            {#each subspeciesList as subspecies (subspecies.scientific_name)}
               <div class="bg-base-200 rounded-lg p-3" role="listitem">
                 <p class="font-medium italic" aria-label="Scientific name">
                   {subspecies.scientific_name}
@@ -745,7 +745,7 @@
         <div role="region" aria-label="Audio recording and spectrogram for {detection.commonName}">
           <div class="detail-audio-container">
             <AudioPlayer
-              audioUrl="/api/v2/audio/{detection.id}"
+              audioUrl={`/api/v2/audio/${detection.id}`}
               detectionId={detection.id.toString()}
               showSpectrogram={true}
               spectrogramSize="xl"

@@ -30,7 +30,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
-  import { mediaIcons } from '$lib/utils/icons.js';
+  import { mediaIcons, alertIconsSvg } from '$lib/utils/icons.js';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
@@ -730,20 +730,9 @@
           : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
       >
         <div class="text-center p-2">
-          <svg
-            class="w-6 h-6 sm:w-8 sm:h-8 mx-auto mb-1 text-base-content/30"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
+          <div class="w-6 h-6 sm:w-8 sm:h-8 mx-auto mb-1 text-base-content/30" aria-hidden="true">
+            {@html alertIconsSvg.error}
+          </div>
           <span class="text-xs sm:text-sm text-base-content/50">Spectrogram unavailable</span>
         </div>
       </div>

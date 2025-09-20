@@ -273,7 +273,7 @@
 
         <!-- Detection Rows -->
         <div class="divide-y divide-base-200">
-          {#each data.slice(0, selectedLimit) as detection}
+          {#each data.slice(0, selectedLimit) as detection (detection.id)}
             {@const isNew = ENABLE_NEW_DETECTION_ANIMATIONS && newDetectionIds.has(detection.id)}
             <div
               class="detection-grid-dashboard detection-row"
