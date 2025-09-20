@@ -27,8 +27,6 @@ Features:
 -->
 
 <script lang="ts">
-  import { safeArrayAccess } from '$lib/utils/security';
-
   interface Props {
     showSpinner?: boolean;
     showThumbnails?: boolean;
@@ -37,17 +35,14 @@ Features:
 
   let { showSpinner = false, showThumbnails = true, speciesCount = 8 }: Props = $props();
 
-  // Generate realistic skeleton data using $state.raw for performance
+  // Generate skeleton data using $state.raw for performance
   const skeletonSpecies = $state.raw(
     Array(speciesCount)
       .fill(null)
       .map((_, i) => ({
         id: i,
         nameWidth: `${60 + Math.random() * 40}%`, // Vary widths realistically
-        detectionCount: Math.floor(Math.random() * 20) + 1,
-        hourlyPattern: Array(24)
-          .fill(null)
-          .map(() => (Math.random() > 0.7 ? 1 : 0)),
+        detectionCount: 0, // Empty progress bar for skeleton
       }))
   );
 </script>
@@ -134,62 +129,38 @@ Features:
 
               <!-- Total detections skeleton -->
               <td class="py-1 px-3 hidden 2xl:table-cell" role="cell">
-                <div class="w-full bg-base-300 rounded-full overflow-hidden relative">
-                  <div
-                    class="h-6 bg-base-200 rounded-full animate-pulse"
-                    style:width="{species.detectionCount * 4}%"
-                  ></div>
+                <div class="w-full bg-base-300 rounded-full overflow-hidden relative h-6">
+                  <!-- Empty progress bar for skeleton -->
                 </div>
               </td>
 
               <!-- Hourly counts skeleton -->
-              {#each species.hourlyPattern as hasData}
+              {#each Array(24) as _}
                 <td
-                  class="hour-data hourly-count text-center py-0 px-0
-                         {hasData ? 'heatmap-color-3' : 'heatmap-color-0'}"
+                  class="hour-data hourly-count text-center py-0 px-0 heatmap-color-0"
                   role="cell"
                 >
-                  {#if hasData}
-                    <div class="h-4 w-4 bg-base-300 rounded mx-auto animate-pulse opacity-60"></div>
-                  {:else}
-                    <span class="opacity-30">-</span>
-                  {/if}
+                  <span class="opacity-30">-</span>
                 </td>
               {/each}
 
               <!-- Bi-hourly counts skeleton -->
-              {#each Array(12) as _, i}
-                {@const hour = i * 2}
-                {@const hasData =
-                  safeArrayAccess(species.hourlyPattern, hour) ||
-                  safeArrayAccess(species.hourlyPattern, hour + 1)}
+              {#each Array(12) as _}
                 <td
-                  class="hour-data bi-hourly-count bi-hourly text-center py-0 px-0
-                         {hasData ? 'heatmap-color-2' : 'heatmap-color-0'}"
+                  class="hour-data bi-hourly-count bi-hourly text-center py-0 px-0 heatmap-color-0"
                   role="cell"
                 >
-                  {#if hasData}
-                    <div class="h-4 w-4 bg-base-300 rounded mx-auto animate-pulse opacity-60"></div>
-                  {:else}
-                    <span class="opacity-30">-</span>
-                  {/if}
+                  <span class="opacity-30">-</span>
                 </td>
               {/each}
 
               <!-- Six-hourly counts skeleton -->
-              {#each Array(4) as _, i}
-                {@const hour = i * 6}
-                {@const hasData = species.hourlyPattern.slice(hour, hour + 6).some(Boolean)}
+              {#each Array(4) as _}
                 <td
-                  class="hour-data six-hourly-count six-hourly text-center py-0 px-0
-                         {hasData ? 'heatmap-color-1' : 'heatmap-color-0'}"
+                  class="hour-data six-hourly-count six-hourly text-center py-0 px-0 heatmap-color-0"
                   role="cell"
                 >
-                  {#if hasData}
-                    <div class="h-4 w-4 bg-base-300 rounded mx-auto animate-pulse opacity-60"></div>
-                  {:else}
-                    <span class="opacity-30">-</span>
-                  {/if}
+                  <span class="opacity-30">-</span>
                 </td>
               {/each}
             </tr>

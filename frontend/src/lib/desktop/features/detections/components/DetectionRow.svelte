@@ -317,17 +317,18 @@
 
 <!-- Recording/Spectrogram -->
 <td class="hidden md:table-cell">
-  <AudioPlayer
-    audioUrl="/api/v2/audio/{detection.id}"
-    detectionId={detection.id.toString()}
-    width={200}
-    height={80}
-    showSpectrogram={true}
-    showDownload={true}
-    spectrogramSize="sm"
-    spectrogramRaw={true}
-    className="w-full max-w-[200px]"
-  />
+  <div class="dr-audio-player-container">
+    <AudioPlayer
+      audioUrl="/api/v2/audio/{detection.id}"
+      detectionId={detection.id.toString()}
+      showSpectrogram={true}
+      showDownload={true}
+      spectrogramSize="sm"
+      spectrogramRaw={true}
+      responsive={true}
+      className="w-full"
+    />
+  </div>
 </td>
 
 <!-- Action Menu -->
@@ -382,5 +383,33 @@
     width: 100%;
     height: 100%;
     object-fit: contain;
+  }
+
+  /* DR Audio Player Container - 2:1 aspect ratio matching spectrogram dimensions */
+  .dr-audio-player-container {
+    position: relative;
+    width: 100%;
+    max-width: 200px; /* Constrain maximum width in table */
+    min-height: 60px; /* Ensure minimum height for spinner */
+    aspect-ratio: 2 / 1; /* Match spectrogram generation aspect ratio (width:height = 2:1) */
+    background: linear-gradient(to bottom, rgb(128 128 128 / 0.1), rgb(128 128 128 / 0.05));
+    border-radius: 0.5rem;
+    overflow: hidden; /* Contain the AudioPlayer content */
+  }
+
+  /* Ensure AudioPlayer fills container */
+  .dr-audio-player-container :global(.group) {
+    width: 100% !important;
+    height: 100% !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+  }
+
+  /* Responsive spectrogram sizing */
+  .dr-audio-player-container :global(img) {
+    object-fit: cover !important;
+    height: 100% !important;
+    width: 100% !important;
   }
 </style>

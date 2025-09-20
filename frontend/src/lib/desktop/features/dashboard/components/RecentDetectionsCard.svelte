@@ -341,6 +341,7 @@
                     showSpectrogram={true}
                     spectrogramSize="sm"
                     spectrogramRaw={true}
+                    responsive={true}
                     className="w-full"
                     onPlayStart={onFreezeStart}
                     onPlayEnd={onFreezeEnd}
@@ -467,50 +468,27 @@
   .rd-audio-player-container {
     position: relative;
     width: 100%;
-    background: linear-gradient(to bottom, rgb(128 128 128 / 0.4), rgb(128 128 128 / 0.1));
+    min-height: 60px; /* Ensure minimum height for spinner */
+    aspect-ratio: 2 / 1; /* Match spectrogram generation aspect ratio (width:height = 2:1) */
+    background: linear-gradient(to bottom, rgb(128 128 128 / 0.1), rgb(128 128 128 / 0.05));
     border-radius: 0.5rem;
+    overflow: hidden; /* Contain the AudioPlayer content */
   }
 
-  /* Audio player skeleton (before content loads) */
-  .rd-audio-player-container::before {
-    content: '';
-    width: 1px;
-    margin-left: -1px;
-    float: left;
-    height: 0;
-    padding-top: 50%; /* Maintains a 2:1 ratio */
-  }
-
-  .rd-audio-player-container::after {
-    content: '';
-    display: table;
-    clear: both;
-  }
-
-  /* Add shimmer effect to audio player container while loading */
-  .rd-audio-player-container:not(:has(img)) {
-    background: linear-gradient(
-      90deg,
-      oklch(var(--b2) / 0.4) 0%,
-      oklch(var(--b2) / 0.2) 50%,
-      oklch(var(--b2) / 0.4) 100%
-    );
-    background-size: 200% 100%;
-    animation: shimmer 1.5s infinite;
-  }
-
-  /* Ensure AudioPlayer fills container width */
+  /* Ensure AudioPlayer fills container */
   .rd-audio-player-container :global(.group) {
     width: 100% !important;
-    height: auto !important;
+    height: 100% !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
   }
 
-  /* Responsive spectrogram sizing - let it maintain natural aspect ratio */
+  /* Responsive spectrogram sizing */
   .rd-audio-player-container :global(img) {
-    object-fit: contain !important;
-    height: auto !important;
+    object-fit: cover !important;
+    height: 100% !important;
     width: 100% !important;
-    max-width: 400px;
 
     /* Smooth fade-in for spectrogram to prevent flash */
     animation: fadeIn 0.3s ease-out;

@@ -743,15 +743,17 @@
       <div class="card-body">
         <h2 id="media-heading" class="text-xl font-semibold mb-4">{t('detections.media.title')}</h2>
         <div role="region" aria-label="Audio recording and spectrogram for {detection.commonName}">
-          <AudioPlayer
-            audioUrl="/api/v2/audio/{detection.id}"
-            detectionId={detection.id.toString()}
-            showSpectrogram={true}
-            spectrogramSize="xl"
-            spectrogramRaw={false}
-            responsive={true}
-            className="w-full"
-          />
+          <div class="detail-audio-container">
+            <AudioPlayer
+              audioUrl="/api/v2/audio/{detection.id}"
+              detectionId={detection.id.toString()}
+              showSpectrogram={true}
+              spectrogramSize="xl"
+              spectrogramRaw={false}
+              responsive={true}
+              className="w-full"
+            />
+          </div>
         </div>
       </div>
     </section>
@@ -969,3 +971,33 @@
     </section>
   {/if}
 </main>
+
+<style>
+  /* Detail view audio container - 2:1 aspect ratio matching spectrogram dimensions */
+  .detail-audio-container {
+    position: relative;
+    width: 100%;
+    max-width: 1200px; /* Limit maximum width for very large screens */
+    margin: 0 auto; /* Center the container */
+    aspect-ratio: 2 / 1; /* Match spectrogram generation aspect ratio (width:height = 2:1) */
+    background: linear-gradient(to bottom, rgb(128 128 128 / 0.05), rgb(128 128 128 / 0.02));
+    border-radius: 0.5rem;
+    overflow: hidden;
+  }
+
+  /* Ensure AudioPlayer fills container */
+  .detail-audio-container :global(.group) {
+    width: 100% !important;
+    height: 100% !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+  }
+
+  /* Spectrogram image sizing for detail view */
+  .detail-audio-container :global(img) {
+    object-fit: contain !important; /* Use contain to show full spectrogram without distortion */
+    height: 100% !important;
+    width: 100% !important;
+  }
+</style>

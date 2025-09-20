@@ -710,9 +710,6 @@
     {#if spectrogramLoader.showSpinner}
       <div
         class="absolute inset-0 flex items-center justify-center bg-base-200 bg-opacity-75 rounded-md border border-base-300"
-        style={responsive
-          ? ''
-          : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
       >
         <div class="loading loading-spinner loading-md text-primary"></div>
       </div>
@@ -747,21 +744,18 @@
     {:else if spectrogramStatus?.status === 'queued' || spectrogramStatus?.status === 'generating'}
       <!-- Show generation status -->
       <div
-        class="absolute inset-0 flex flex-col items-center justify-center bg-base-200 bg-opacity-90 rounded-md border border-base-300 p-4"
-        style={responsive
-          ? ''
-          : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
+        class="absolute inset-0 flex flex-col items-center justify-center bg-base-200 bg-opacity-90 rounded-md border border-base-300 p-2"
       >
-        <div class="loading loading-spinner loading-md"></div>
-        <div class="text-sm text-base-content mt-2">
+        <div class="loading loading-spinner loading-sm"></div>
+        <div class="text-xs text-base-content mt-1">
           {#if spectrogramStatus.status === 'queued'}
-            <span>Position {spectrogramStatus.queuePosition} in queue</span>
+            <span>Queue: {spectrogramStatus.queuePosition}</span>
           {:else}
-            <span>Generating spectrogram...</span>
+            <span>Generating...</span>
           {/if}
         </div>
         {#if spectrogramStatus.message}
-          <div class="text-xs text-base-content/70 mt-1">
+          <div class="text-xs text-base-content/70 mt-0.5">
             {spectrogramStatus.message}
           </div>
         {/if}
