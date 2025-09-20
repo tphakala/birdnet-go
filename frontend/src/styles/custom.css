@@ -8,6 +8,7 @@
 
 :root {
   --floating-bar-clearance: 4rem; /* 64px - equivalent to mb-16 */
+  --spectrogram-aspect-ratio: 2 / 1; /* Standard aspect ratio for spectrogram images (width:height = 2:1) */
 }
 
 /* Settings page bottom margin for floating bar clearance */

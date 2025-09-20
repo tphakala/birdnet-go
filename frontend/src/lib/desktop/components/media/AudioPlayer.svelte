@@ -711,7 +711,7 @@
       <div
         class="absolute inset-0 flex items-center justify-center bg-base-200 bg-opacity-75 rounded-md border border-base-300"
       >
-        <div class="loading loading-spinner loading-md text-primary"></div>
+        <div class="loading loading-spinner loading-sm md:loading-md text-primary"></div>
       </div>
     {/if}
 
@@ -723,9 +723,9 @@
           ? 'height: 80px;'
           : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
       >
-        <div class="text-center">
+        <div class="text-center p-2">
           <svg
-            class="w-8 h-8 mx-auto mb-1 text-base-content/30"
+            class="w-6 h-6 sm:w-8 sm:h-8 mx-auto mb-1 text-base-content/30"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -738,7 +738,7 @@
               d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          <span class="text-xs text-base-content/50">Spectrogram unavailable</span>
+          <span class="text-xs sm:text-sm text-base-content/50">Spectrogram unavailable</span>
         </div>
       </div>
     {:else if spectrogramStatus?.status === 'queued' || spectrogramStatus?.status === 'generating'}
@@ -746,8 +746,8 @@
       <div
         class="absolute inset-0 flex flex-col items-center justify-center bg-base-200 bg-opacity-90 rounded-md border border-base-300 p-2"
       >
-        <div class="loading loading-spinner loading-sm"></div>
-        <div class="text-xs text-base-content mt-1">
+        <div class="loading loading-spinner loading-xs sm:loading-sm md:loading-md"></div>
+        <div class="text-xs sm:text-sm text-base-content mt-1">
           {#if spectrogramStatus.status === 'queued'}
             <span>Queue: {spectrogramStatus.queuePosition}</span>
           {:else}
@@ -755,7 +755,7 @@
           {/if}
         </div>
         {#if spectrogramStatus.message}
-          <div class="text-xs text-base-content/70 mt-0.5">
+          <div class="text-xs sm:text-sm text-base-content/70 mt-0.5">
             {spectrogramStatus.message}
           </div>
         {/if}

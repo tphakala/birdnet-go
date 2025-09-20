@@ -979,25 +979,45 @@
     width: 100%;
     max-width: 1200px; /* Limit maximum width for very large screens */
     margin: 0 auto; /* Center the container */
-    aspect-ratio: 2 / 1; /* Match spectrogram generation aspect ratio (width:height = 2:1) */
+    aspect-ratio: var(
+      --spectrogram-aspect-ratio
+    ); /* Use CSS variable for consistent aspect ratio */
+
     background: linear-gradient(to bottom, rgb(128 128 128 / 0.05), rgb(128 128 128 / 0.02));
     border-radius: 0.5rem;
     overflow: hidden;
   }
 
-  /* Ensure AudioPlayer fills container */
+  /* Ensure AudioPlayer fills container - using more specific selectors to avoid !important */
   .detail-audio-container :global(.group) {
-    width: 100% !important;
-    height: 100% !important;
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  /* Override any conflicting styles with higher specificity */
+  .detail-audio-container > :global(div > .group) {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
   }
 
   /* Spectrogram image sizing for detail view */
   .detail-audio-container :global(img) {
-    object-fit: contain !important; /* Use contain to show full spectrogram without distortion */
-    height: 100% !important;
-    width: 100% !important;
+    object-fit: contain; /* Use contain to show full spectrogram without distortion */
+    height: 100%;
+    width: 100%;
+  }
+
+  /* Higher specificity for image styles if needed */
+  .detail-audio-container :global(.group img),
+  .detail-audio-container :global(div img) {
+    object-fit: contain;
+    height: 100%;
+    width: 100%;
   }
 </style>
