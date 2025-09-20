@@ -1006,9 +1006,11 @@
     left: 0;
   }
 
-  /* Spectrogram image sizing for detail view */
+  /* Spectrogram image sizing for detail view
+     Use 'contain' to show the full spectrogram for detailed analysis without cropping.
+     This differs from table/card views which use 'cover' for space-efficient previews. */
   .detail-audio-container :global(img) {
-    object-fit: contain; /* Use contain to show full spectrogram without distortion */
+    object-fit: contain; /* Show full spectrogram for detailed analysis */
     height: 100%;
     width: 100%;
   }

@@ -19,6 +19,8 @@
   - showDownload: Show download button (default: true)
   - className: Additional CSS classes
   - responsive: Enable responsive sizing (default: false)
+    When true, the component adapts to its container width and maintains aspect ratio.
+    Use for flexible layouts like cards and tables. When false, uses fixed dimensions.
   - spectrogramSize: Spectrogram display size - sm/md/lg/xl (default: md)
   - spectrogramRaw: Display raw spectrogram without axes (default: false)
   - onPlayStart: Callback when audio starts playing (freezes SSE updates)
@@ -711,7 +713,11 @@
       <div
         class="absolute inset-0 flex items-center justify-center bg-base-200 bg-opacity-75 rounded-md border border-base-300"
       >
-        <div class="loading loading-spinner loading-sm md:loading-md text-primary"></div>
+        <div
+          class="loading loading-spinner loading-sm md:loading-md text-primary"
+          role="status"
+          aria-label="Loading spectrogram"
+        ></div>
       </div>
     {/if}
 
@@ -746,8 +752,12 @@
       <div
         class="absolute inset-0 flex flex-col items-center justify-center bg-base-200 bg-opacity-90 rounded-md border border-base-300 p-2"
       >
-        <div class="loading loading-spinner loading-xs sm:loading-sm md:loading-md"></div>
-        <div class="text-xs sm:text-sm text-base-content mt-1">
+        <div
+          class="loading loading-spinner loading-xs sm:loading-sm md:loading-md"
+          role="status"
+          aria-label="Generating spectrogram"
+        ></div>
+        <div class="text-xs sm:text-sm text-base-content mt-1" role="status" aria-live="polite">
           {#if spectrogramStatus.status === 'queued'}
             <span>Queue: {spectrogramStatus.queuePosition}</span>
           {:else}

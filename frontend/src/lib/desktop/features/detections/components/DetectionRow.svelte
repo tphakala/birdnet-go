@@ -390,7 +390,7 @@
     position: relative;
     width: 100%;
     max-width: 200px; /* Constrain maximum width in table */
-    min-height: 60px; /* Ensure minimum height for spinner */
+    min-height: var(--spectrogram-min-height); /* Use CSS variable for consistent min-height */
     aspect-ratio: var(
       --spectrogram-aspect-ratio
     ); /* Use CSS variable for consistent aspect ratio */

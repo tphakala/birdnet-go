@@ -468,7 +468,7 @@
   .rd-audio-player-container {
     position: relative;
     width: 100%;
-    min-height: 60px; /* Ensure minimum height for spinner */
+    min-height: var(--spectrogram-min-height); /* Use CSS variable for consistent min-height */
     aspect-ratio: var(
       --spectrogram-aspect-ratio
     ); /* Use CSS variable for consistent aspect ratio */
