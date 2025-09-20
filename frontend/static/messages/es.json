@@ -99,7 +99,8 @@
       "editSpecies": "Editar especie",
       "removeSpecies": "Eliminar especie",
       "dismissError": "Descartar error",
-      "downloadCsv": "Descargar lista de especies en CSV"
+      "downloadCsv": "Descargar lista de especies en CSV",
+      "calendarNavigation": "Navegación del calendario: usa las flechas para moverte, Enter para seleccionar, Esc para cerrar"
     },
     "modal": {
       "confirmAction": "Confirmar acción",
@@ -1483,7 +1484,11 @@
         "calendarClosed": "Calendario cerrado",
         "monthChanged": "Mostrando {month} {year}",
         "dayUnavailable": "El día {day} no está disponible para selección",
-        "todayButton": "Seleccionar la fecha de hoy: {today}"
+        "todayButton": "Seleccionar la fecha de hoy: {today}",
+        "previousMonth": "Mes anterior",
+        "nextMonth": "Mes siguiente",
+        "openButton": "Seleccionar fecha",
+        "calendarDialogLabel": "Calendario del selector de fecha"
       },
       "status": {
         "loading": "Cargando calendario...",

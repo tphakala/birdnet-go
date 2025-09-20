@@ -98,7 +98,8 @@
       "editSpecies": "Modifier l'espèce",
       "removeSpecies": "Supprimer l'espèce",
       "dismissError": "Ignorer l'erreur",
-      "downloadCsv": "Télécharger la liste des espèces au format CSV"
+      "downloadCsv": "Télécharger la liste des espèces au format CSV",
+      "calendarNavigation": "Navigation du calendrier : utilisez les flèches pour vous déplacer, Entrée pour sélectionner, Échap pour fermer"
     },
     "modal": {
       "confirmAction": "Confirmer l'action",
@@ -1510,7 +1511,11 @@
         "calendarClosed": "Calendrier fermé",
         "monthChanged": "Affichage {month} {year}",
         "dayUnavailable": "Le jour {day} n'est pas disponible pour la sélection",
-        "todayButton": "Sélectionner la date d'aujourd'hui : {today}"
+        "todayButton": "Sélectionner la date d'aujourd'hui : {today}",
+        "previousMonth": "Mois précédent",
+        "nextMonth": "Mois suivant",
+        "openButton": "Sélectionner une date",
+        "calendarDialogLabel": "Calendrier du sélecteur de date"
       },
       "status": {
         "loading": "Chargement du calendrier...",
