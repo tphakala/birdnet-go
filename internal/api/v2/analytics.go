@@ -165,9 +165,15 @@ func (c *Controller) GetDailySpeciesSummary(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to build response", http.StatusInternalServerError)
 	}
 
-	// 5. Sort by count
+	// 5. Sort by count first, then by latest detection time for stable ordering
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].Count > result[j].Count
+		// Primary sort: by detection count (descending)
+		if result[i].Count != result[j].Count {
+			return result[i].Count > result[j].Count
+		}
+		// Secondary sort: by latest detection time (descending - most recent first)
+		// This ensures stable ordering when counts are equal
+		return result[i].LatestHeard > result[j].LatestHeard
 	})
 
 	// 6. Apply Limit
@@ -342,9 +348,15 @@ func (c *Controller) processSingleDateForBatch(selectedDate string, minConfidenc
 		return nil, err
 	}
 
-	// Sort by count
+	// Sort by count first, then by latest detection time for stable ordering
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].Count > result[j].Count
+		// Primary sort: by detection count (descending)
+		if result[i].Count != result[j].Count {
+			return result[i].Count > result[j].Count
+		}
+		// Secondary sort: by latest detection time (descending - most recent first)
+		// This ensures stable ordering when counts are equal
+		return result[i].LatestHeard > result[j].LatestHeard
 	})
 
 	// Apply limit

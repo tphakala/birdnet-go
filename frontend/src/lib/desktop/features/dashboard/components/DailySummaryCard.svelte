@@ -416,12 +416,21 @@ Responsive Breakpoints:
   );
 
   // Optimized data sorting using $derived.by for better performance
+  // Two-tier sorting: primary by count, secondary by latest detection time
   const sortedData = $derived.by(() => {
     // Early return for empty data
     if (data.length === 0) return [];
 
-    // Use spread + sort for compatibility
-    return [...data].sort((a: DailySpeciesSummary, b: DailySpeciesSummary) => b.count - a.count);
+    // Use spread + sort with stable ordering
+    return [...data].sort((a: DailySpeciesSummary, b: DailySpeciesSummary) => {
+      // Primary sort: by detection count (descending)
+      if (b.count !== a.count) {
+        return b.count - a.count;
+      }
+      // Secondary sort: by latest detection time (descending - most recent first)
+      // This ensures stable ordering when counts are equal
+      return (b.latest_heard ?? '').localeCompare(a.latest_heard ?? '');
+    });
   });
 
   // Optimized max count calculations using $derived.by for better performance
