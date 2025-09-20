@@ -60,7 +60,7 @@ func BenchmarkParseFileInfo(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, err := parseFileInfo(path, mockInfo)
+		_, err := parseFileInfo(path, mockInfo, allowedFileTypes)
 		if err != nil {
 			b.Fatal(err)
 		}
