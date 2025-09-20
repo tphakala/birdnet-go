@@ -1,15 +1,61 @@
+<!--
+DatePicker.svelte - Calendar date selection component
+
+Purpose:
+- Provides an accessible date selection interface with calendar dropdown
+- Supports date validation, keyboard navigation, and range constraints
+- Includes special "Today" button with optional custom behavior
+
+Features:
+- Full keyboard navigation (arrow keys, PageUp/Down, Home/End)
+- Screen reader support with ARIA attributes and live regions
+- Date range validation (min/max date constraints)
+- Visual indicators for today's date and selected date
+- Custom handler support for "Today" button click
+- Responsive button sizing (xs, sm, md, lg)
+- Automatic focus management
+- Click-outside-to-close behavior
+
+Props:
+- value: string - Selected date in YYYY-MM-DD format
+- onChange: (date: string) => void - Callback when date is selected
+- onTodayClick?: () => void - Optional custom handler for Today button (e.g., to reset date persistence)
+- maxDate?: string - Maximum selectable date (defaults to today)
+- minDate?: string - Minimum selectable date
+- className?: string - Additional CSS classes
+- disabled?: boolean - Disable the date picker
+- placeholder?: string - Placeholder text when no date selected
+- size?: ButtonSize - Button size variant ('xs' | 'sm' | 'md' | 'lg')
+
+Keyboard Navigation:
+- Enter/Space: Open calendar (when button focused)
+- Escape: Close calendar
+- Arrow keys: Navigate days (left/right = ±1 day, up/down = ±7 days)
+- PageUp/PageDown: Previous/next month
+- Shift+PageUp/PageDown: Previous/next year
+- Home/End: First/last day of month
+- Enter/Space: Select focused date
+
+Accessibility:
+- ARIA labels for all interactive elements
+- Live region announcements for navigation
+- Keyboard instructions for screen readers
+- Focus management and visual indicators
+-->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { cn } from '$lib/utils/cn';
   import { navigationIcons, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { getLocalDateString } from '$lib/utils/date';
   import { t } from '$lib/i18n';
+  import type { HTMLAttributes } from 'svelte/elements';
 
   type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
-  interface Props {
+  interface Props extends HTMLAttributes<HTMLButtonElement> {
     value: string; // YYYY-MM-DD format
     onChange: (_date: string) => void;
+    onTodayClick?: () => void; // Optional custom handler for Today button
     maxDate?: string;
     minDate?: string;
     className?: string;
@@ -21,12 +67,14 @@
   let {
     value,
     onChange,
+    onTodayClick,
     maxDate = getLocalDateString(new Date()),
     minDate,
     className = '',
     disabled = false,
     placeholder = 'Select date',
     size = 'sm',
+    ...restProps
   }: Props = $props();
 
   // Date validation functions
@@ -365,6 +413,7 @@
   <button
     bind:this={buttonRef}
     type="button"
+    {...restProps}
     class={cn(
       'btn',
       sizeClass(),
@@ -521,10 +570,20 @@
         <button
           type="button"
           class="btn btn-primary btn-sm btn-block"
-          onclick={() => selectDate(new Date())}
+          onclick={() => {
+            if (onTodayClick) {
+              // Use custom handler if provided
+              onTodayClick();
+              showCalendar = false;
+              buttonRef?.focus();
+            } else {
+              // Default behavior: just select today's date
+              selectDate(new Date());
+            }
+          }}
           disabled={!isDateSelectable(new Date())}
         >
-          Today
+          {t('components.datePicker.today')}
         </button>
       </div>
     </div>

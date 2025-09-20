@@ -1,8 +1,44 @@
+<!--
+DesktopSidebar.svelte - Main navigation sidebar for desktop layout
+
+Purpose:
+- Primary navigation menu for the desktop interface
+- Handles authentication state display (login/logout)
+- Manages route navigation with special behaviors for specific routes
+
+Features:
+- Hierarchical navigation with collapsible sections
+- Performance-optimized with cached route calculations
+- Dashboard navigation resets date selection to current date
+- Authentication integration with login/logout functionality
+- Responsive drawer behavior for smaller screens
+- Version display with GitHub repository link
+
+Special Behaviors:
+- Dashboard Link: When clicking the dashboard navigation link (home or "Dashboard" menu item),
+  automatically resets the date persistence to show current date. This ensures users always
+  see today's data when explicitly navigating to the dashboard.
+
+Props:
+- securityEnabled?: boolean - Whether security/auth is enabled
+- accessAllowed?: boolean - Whether user has access to protected routes  
+- version?: string - Version string to display
+- currentRoute?: string - Current active route for highlighting
+- onNavigate?: (url: string) => void - Custom navigation handler
+- className?: string - Additional CSS classes
+- authConfig?: object - Authentication configuration
+
+Performance Optimizations:
+- Route checking cached with $derived to avoid repeated calculations
+- Navigation URLs pre-computed to eliminate string processing
+- CSS containment for improved rendering performance
+-->
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { auth as authStore } from '$lib/stores/auth';
   import { systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { t } from '$lib/i18n';
+  import { resetDateToToday } from '$lib/utils/datePersistence';
   import LoginModal from '../components/modals/LoginModal.svelte';
 
   interface Props {
@@ -84,8 +120,22 @@
     settingsUserInterface: onNavigate ? '/settings/userinterface' : '/ui/settings/userinterface',
   });
 
-  // PERFORMANCE OPTIMIZATION: Simplified navigation function using cached URLs
+  /**
+   * Navigate to a route with special handling for dashboard
+   *
+   * When navigating to the dashboard, automatically resets the date persistence
+   * to show the current date. This ensures users always see today's data when
+   * explicitly clicking the dashboard link, rather than returning to a previously
+   * viewed historical date.
+   *
+   * @param url - The navigation URL from the pre-computed navigationUrls cache
+   */
   function navigate(url: string) {
+    // Special handling for dashboard navigation - reset date to today
+    if (url === navigationUrls.dashboard) {
+      resetDateToToday();
+    }
+
     if (onNavigate) {
       onNavigate(url);
     } else {

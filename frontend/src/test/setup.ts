@@ -93,6 +93,7 @@ const translations: Record<string, string> = {
   'common.buttons.confirm': 'Confirm',
   'components.forms.numberField.adjustedToMinimum': 'Value was adjusted to minimum ({value})',
   'components.forms.numberField.adjustedToMaximum': 'Value was adjusted to maximum ({value})',
+  'components.datePicker.today': 'Today',
   // Audio Settings translations
   'settings.audio.audioCapture.title': 'Audio Capture',
   'settings.audio.audioCapture.description': 'Configure audio capture settings',

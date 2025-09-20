@@ -1491,6 +1491,7 @@
       }
     },
     "datePicker": {
+      "today": "Heute",
       "feedback": {
         "endDateCleared": "Enddatum gelöscht, um gültigen Bereich beizubehalten",
         "startDateCleared": "Startdatum gelöscht, um gültigen Bereich beizubehalten",

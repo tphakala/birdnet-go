@@ -1481,6 +1481,7 @@
       }
     },
     "datePicker": {
+      "today": "Hoje",
       "feedback": {
         "endDateCleared": "Data final limpa para manter intervalo válido",
         "startDateCleared": "Data inicial limpa para manter intervalo válido",

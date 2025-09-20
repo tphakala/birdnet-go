@@ -1627,6 +1627,7 @@
       }
     },
     "datePicker": {
+      "today": "Today",
       "feedback": {
         "endDateCleared": "End date cleared to maintain valid range",
         "startDateCleared": "Start date cleared to maintain valid range",
