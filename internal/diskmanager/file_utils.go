@@ -98,28 +98,39 @@ func LoadPolicy(policyFile string) (*Policy, error) {
 	return policy, nil
 }
 
+// walkState holds the state for directory walking operations
+type walkState struct {
+	ctx            context.Context
+	allowedExts    []string
+	lockedSet      map[string]struct{}
+	files          []FileInfo
+	parseErrorCount int
+	firstParseError error
+	maxParseErrors int
+	debug          bool
+}
+
 // GetAudioFiles returns a list of audio files in the directory and its subdirectories
 func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug bool) ([]FileInfo, error) {
 	return GetAudioFilesContext(context.Background(), baseDir, allowedExts, db, debug)
 }
 
 // createWalkFunc creates the filepath.Walk function with all necessary context
-func createWalkFunc(ctx context.Context, allowedExts []string, lockedSet map[string]struct{},
-	files *[]FileInfo, parseErrorCount *int, firstParseError *error, maxParseErrors int, debug bool) filepath.WalkFunc { //nolint:gocritic // pointer needed to accumulate state across walk iterations
+func createWalkFunc(state *walkState) filepath.WalkFunc {
 	return func(path string, info os.FileInfo, err error) error {
 		// Check for context cancellation
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
+		case <-state.ctx.Done():
+			return state.ctx.Err()
 		default:
 		}
 
 		if err != nil {
-			return handleWalkError(err, path, debug)
+			return handleWalkError(err, path, state.debug)
 		}
 
 		if !info.IsDir() {
-			processFile(path, info, allowedExts, lockedSet, files, parseErrorCount, firstParseError, maxParseErrors, debug)
+			processFile(path, info, state)
 		}
 
 		// Yield to other goroutines
@@ -143,8 +154,7 @@ func handleWalkError(err error, path string, debug bool) error {
 }
 
 // processFile processes a single file during directory walking
-func processFile(path string, info os.FileInfo, allowedExts []string, lockedSet map[string]struct{},
-	files *[]FileInfo, parseErrorCount *int, firstParseError *error, maxParseErrors int, debug bool) { //nolint:gocritic // pointer needed to accumulate state across walk iterations
+func processFile(path string, info os.FileInfo, state *walkState) {
 	fileName := info.Name()
 
 	// Skip temporary files that are currently being written.
@@ -158,27 +168,27 @@ func processFile(path string, info os.FileInfo, allowedExts []string, lockedSet 
 
 	// Fast path: check extension before expensive operations (case-insensitive)
 	ext := strings.ToLower(filepath.Ext(fileName))
-	if !contains(allowedExts, ext) {
+	if !contains(state.allowedExts, ext) {
 		return
 	}
 
 	// Process valid file
-	fileInfo, err := parseFileInfo(path, info)
+	fileInfo, err := parseFileInfo(path, info, state.allowedExts)
 	if err != nil {
 		// Track first error and count without storing all errors
-		if *firstParseError == nil {
-			*firstParseError = err
+		if state.firstParseError == nil {
+			state.firstParseError = err
 		}
-		*parseErrorCount++
-		if debug && *parseErrorCount <= maxParseErrors {
+		state.parseErrorCount++
+		if state.debug && state.parseErrorCount <= state.maxParseErrors {
 			log.Printf("Error parsing file %s: %v", path, err)
 		}
 		return // Continue with next file
 	}
 
 	// Check if the file is protected using O(1) lookup
-	_, fileInfo.Locked = lockedSet[filepath.Base(fileInfo.Path)]
-	*files = append(*files, fileInfo)
+	_, fileInfo.Locked = state.lockedSet[filepath.Base(fileInfo.Path)]
+	state.files = append(state.files, fileInfo)
 }
 
 // GetAudioFilesContext returns a list of audio files in the directory and its subdirectories with context support for cancellation
@@ -235,7 +245,19 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 		lockedSet[filepath.Base(p)] = struct{}{}
 	}
 
-	err = filepath.Walk(baseDir, createWalkFunc(ctx, allowedExts, lockedSet, &files, &parseErrorCount, &firstParseError, maxParseErrors, debug))
+	// Create walk state to hold all the parameters
+	state := &walkState{
+		ctx:             ctx,
+		allowedExts:     allowedExts,
+		lockedSet:       lockedSet,
+		files:           files,
+		parseErrorCount: parseErrorCount,
+		firstParseError: firstParseError,
+		maxParseErrors:  maxParseErrors,
+		debug:           debug,
+	}
+
+	err = filepath.Walk(baseDir, createWalkFunc(state))
 
 	if err != nil {
 		// Check if it was a context cancellation
@@ -253,30 +275,30 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 	}
 
 	// If we encountered parse errors but still have some valid files, log a summary but continue
-	if parseErrorCount > 0 {
+	if state.parseErrorCount > 0 {
 		if debug {
-			log.Printf("Encountered %d file parsing errors during cleanup", parseErrorCount)
-			if parseErrorCount > maxParseErrors {
+			log.Printf("Encountered %d file parsing errors during cleanup", state.parseErrorCount)
+			if state.parseErrorCount > maxParseErrors {
 				log.Printf("Only first %d errors were logged", maxParseErrors)
 			}
 		}
 		// If we have no valid files at all, return an error
-		if len(files) == 0 && firstParseError != nil {
-			descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to parse any audio files: %w", firstParseError)).
+		if len(state.files) == 0 && state.firstParseError != nil {
+			descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to parse any audio files: %w", state.firstParseError)).
 				Component("diskmanager").
 				Category(errors.CategoryFileParsing).
 				Context("base_dir", baseDir).
-				Context("parse_errors_count", parseErrorCount).
+				Context("parse_errors_count", state.parseErrorCount).
 				Build()
 			return nil, descriptiveErr
 		}
 	}
 
 	// Update the pooled slice with the final data while preserving the backing array
-	pooledSlice.SetData(files)
+	pooledSlice.SetData(state.files)
 
 	// Fast path: if no files found, return early
-	if len(files) == 0 {
+	if len(state.files) == 0 {
 		pooledSlice.Release() // Release the empty pooled slice
 		return nil, nil
 	}
@@ -286,20 +308,20 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 }
 
 // parseFileInfo parses the file information from the file path and os.FileInfo
-func parseFileInfo(path string, info os.FileInfo) (FileInfo, error) {
+func parseFileInfo(path string, info os.FileInfo, allowedExts []string) (FileInfo, error) {
 	name := filepath.Base(info.Name())
 
 	// Check if the file extension is allowed (case-insensitive)
 	ext := strings.ToLower(filepath.Ext(name))
-	if !contains(allowedFileTypes, ext) {
+	if !contains(allowedExts, ext) {
 		// Lightweight error with essential context
 		descriptiveErr := errors.New(fmt.Errorf("diskmanager: file type %s not eligible for cleanup", ext)).
 			Component("diskmanager").
-			Context("allowed_types", allowedFileTypes).
+			Context("allowed_types", allowedExts).
 			Build()
 		return FileInfo{}, descriptiveErr
 	}
-
+	
 	// Remove the extension for parsing
 	nameWithoutExt := strings.TrimSuffix(name, ext)
 

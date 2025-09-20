@@ -93,7 +93,7 @@ func TestAgeBasedCleanupFileTypeEligibility(t *testing.T) {
 			mockInfo := createMockFileInfo(tc.name, 1024)
 
 			// Call parseFileInfo directly to test file extension checking
-			_, err := parseFileInfo(filepath.Join(testDir, tc.name), mockInfo)
+			_, err := parseFileInfo(filepath.Join(testDir, tc.name), mockInfo, allowedFileTypes)
 
 			// Debug logging
 			t.Logf("File: %s, Extension: %s, Error: %v",
@@ -535,7 +535,7 @@ func simulateAgeBasedCleanup(
 		}
 
 		// Parse the file info
-		fileData, err := parseFileInfo(filePath, fileInfo)
+		fileData, err := parseFileInfo(filePath, fileInfo, allowedFileTypes)
 		if err != nil {
 			continue
 		}

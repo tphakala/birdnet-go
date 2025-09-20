@@ -40,7 +40,7 @@ func TestInvalidFileNameErrorMessages(t *testing.T) {
 			}
 
 			// Call parseFileInfo and check the error message
-			_, err := parseFileInfo("/test/"+tc.filename, mockInfo)
+			_, err := parseFileInfo("/test/"+tc.filename, mockInfo, allowedFileTypes)
 			require.Error(t, err, "Should return an error for invalid file name")
 			assert.Contains(t, err.Error(), tc.expectedErrText, "Error message should contain expected text")
 		})
@@ -289,4 +289,30 @@ func TestGetAudioFilesHandlesTempFileRaceCondition(t *testing.T) {
 	// We can verify this by checking that the function completes successfully
 	// even in concurrent scenarios (which would be tested in integration tests)
 	t.Log("Race condition handling is verified by continued operation despite temp file disappearance")
+}
+
+// TestHandleWalkError verifies that missing .temp entries during walk are ignored
+func TestHandleWalkError(t *testing.T) {
+	t.Parallel()
+	
+	tempDir := t.TempDir()
+	
+	// Test case 1: os.IsNotExist error for a .temp file should be ignored
+	err := handleWalkError(os.ErrNotExist, filepath.Join(tempDir, "foo.wav.temp"), true)
+	require.NoError(t, err, "missing .temp file should be ignored")
+	
+	// Test case 2: os.IsNotExist error for a .TEMP file (uppercase) should be ignored
+	err = handleWalkError(os.ErrNotExist, filepath.Join(tempDir, "bar.wav.TEMP"), true)
+	require.NoError(t, err, "missing .TEMP file (uppercase) should be ignored")
+	
+	// Test case 3: os.IsNotExist error for a non-temp file should propagate
+	err = handleWalkError(os.ErrNotExist, filepath.Join(tempDir, "baz.wav"), false)
+	require.Error(t, err, "missing non-temp file should not be ignored")
+	require.ErrorIs(t, err, os.ErrNotExist, "should return the original error")
+	
+	// Test case 4: Other errors should always propagate, even for temp files
+	permErr := os.ErrPermission
+	err = handleWalkError(permErr, filepath.Join(tempDir, "denied.wav.temp"), false)
+	require.Error(t, err, "permission error should propagate even for temp files")
+	require.ErrorIs(t, err, permErr, "should return the original error")
 }

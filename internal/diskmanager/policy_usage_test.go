@@ -85,7 +85,7 @@ func TestFileTypesEligibleForDeletion(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.filename, func(t *testing.T) {
 			mockInfo := createMockFileInfo(tc.filename, 1024)
-			fileInfo, err := parseFileInfo("/test/"+tc.filename, mockInfo)
+			fileInfo, err := parseFileInfo("/test/"+tc.filename, mockInfo, allowedFileTypes)
 
 			if tc.eligibleForDeletion {
 				require.NoError(t, err, "File should be eligible for deletion: %s", tc.description)
@@ -147,7 +147,7 @@ func TestParseFileInfoWithDifferentExtensions(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.filename, func(t *testing.T) {
 			mockInfo := createMockFileInfo(tc.filename, 1024)
-			fileInfo, err := parseFileInfo("/test/"+tc.filename, mockInfo)
+			fileInfo, err := parseFileInfo("/test/"+tc.filename, mockInfo, allowedFileTypes)
 
 			if tc.shouldSucceed {
 				require.NoError(t, err, "Should parse successfully")
@@ -172,7 +172,7 @@ func TestParseFileInfoMp3Extension(t *testing.T) {
 	// This test specifically targets the bug in the error message
 	mockInfo := createMockFileInfo("bubo_bubo_80p_20250130T184446Z.mp3", 1024)
 
-	fileInfo, err := parseFileInfo("/test/bubo_bubo_80p_20250130T184446Z.mp3", mockInfo)
+	fileInfo, err := parseFileInfo("/test/bubo_bubo_80p_20250130T184446Z.mp3", mockInfo, allowedFileTypes)
 
 	// The bug would cause an error here because it only trims .wav extension
 	require.NoError(t, err, "Should parse MP3 files correctly")
@@ -239,7 +239,7 @@ func TestParseFileInfoProductionFormat(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.filename, func(t *testing.T) {
 			mockInfo := createMockFileInfo(tc.filename, 1024)
-			fileInfo, err := parseFileInfo("/test/"+tc.filename, mockInfo)
+			fileInfo, err := parseFileInfo("/test/"+tc.filename, mockInfo, allowedFileTypes)
 
 			if tc.shouldSucceed {
 				require.NoError(t, err, "Should parse successfully: "+tc.description)
@@ -862,7 +862,7 @@ func testUsageBasedCleanupWithRealFiles(
 		}
 
 		// Parse the file info
-		fileData, err := parseFileInfo(filePath, fileInfo)
+		fileData, err := parseFileInfo(filePath, fileInfo, allowedFileTypes)
 		if err != nil {
 			continue
 		}
