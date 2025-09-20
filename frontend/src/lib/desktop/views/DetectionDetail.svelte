@@ -981,7 +981,6 @@
     margin: 0 auto; /* Center the container */
     min-height: var(--spectrogram-min-height, 60px); /* Fallback to 60px if var not defined */
     aspect-ratio: var(--spectrogram-aspect-ratio, 2 / 1); /* Fallback to 2:1 if var not defined */
-
     background: linear-gradient(to bottom, rgb(128 128 128 / 0.05), rgb(128 128 128 / 0.02));
     border-radius: 0.5rem;
     overflow: hidden;
