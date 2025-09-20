@@ -48,10 +48,11 @@ Accessibility:
   import { navigationIcons, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
   import { getLocalDateString } from '$lib/utils/date';
   import { t } from '$lib/i18n';
+  import type { HTMLAttributes } from 'svelte/elements';
 
   type ButtonSize = 'xs' | 'sm' | 'md' | 'lg';
 
-  interface Props {
+  interface Props extends HTMLAttributes<HTMLButtonElement> {
     value: string; // YYYY-MM-DD format
     onChange: (_date: string) => void;
     onTodayClick?: () => void; // Optional custom handler for Today button
@@ -73,6 +74,7 @@ Accessibility:
     disabled = false,
     placeholder = 'Select date',
     size = 'sm',
+    ...restProps
   }: Props = $props();
 
   // Date validation functions
@@ -411,6 +413,7 @@ Accessibility:
   <button
     bind:this={buttonRef}
     type="button"
+    {...restProps}
     class={cn(
       'btn',
       sizeClass(),
@@ -571,6 +574,8 @@ Accessibility:
             if (onTodayClick) {
               // Use custom handler if provided
               onTodayClick();
+              showCalendar = false;
+              buttonRef?.focus();
             } else {
               // Default behavior: just select today's date
               selectDate(new Date());
@@ -578,7 +583,7 @@ Accessibility:
           }}
           disabled={!isDateSelectable(new Date())}
         >
-          Today
+          {t('components.datePicker.today')}
         </button>
       </div>
     </div>

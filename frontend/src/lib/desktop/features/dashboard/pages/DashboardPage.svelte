@@ -498,8 +498,10 @@ Performance Optimizations:
   }
 
   onMount(() => {
-    // Persist the initial date to URL (in case it came from localStorage)
-    persistDate(selectedDate);
+    // Persist the initial date to URL only if out of sync
+    if (getDateFromURL() !== selectedDate) {
+      persistDate(selectedDate);
+    }
 
     fetchDailySummary();
     fetchRecentDetections();

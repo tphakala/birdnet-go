@@ -1468,6 +1468,7 @@
       }
     },
     "datePicker": {
+      "today": "Hoy",
       "feedback": {
         "endDateCleared": "Fecha final borrada para mantener rango válido",
         "startDateCleared": "Fecha inicial borrada para mantener rango válido",

@@ -28,6 +28,7 @@ describe('Date Persistence Utilities', () => {
   let originalLocalStorage: Storage;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     // Save originals
     originalLocation = window.location;
     originalLocalStorage = window.localStorage;

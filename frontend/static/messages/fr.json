@@ -1495,6 +1495,7 @@
       }
     },
     "datePicker": {
+      "today": "Aujourd'hui",
       "feedback": {
         "endDateCleared": "Date de fin effacée pour maintenir une plage valide",
         "startDateCleared": "Date de début effacée pour maintenir une plage valide",
