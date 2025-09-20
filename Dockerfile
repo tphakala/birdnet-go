@@ -16,8 +16,8 @@ RUN apt-get update -q && apt-get install -q -y \
     gcc-aarch64-linux-gnu && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Node.js v20 from NodeSource
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+# Install Node.js v24 from NodeSource
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
     apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
