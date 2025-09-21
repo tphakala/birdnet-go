@@ -38,8 +38,14 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { useImageDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
+  import { auth } from '$lib/stores/auth';
 
   const logger = loggers.ui;
+
+  // Get authentication state
+  const isAuthenticated = $derived(
+    ($auth.security.enabled && $auth.security.accessAllowed) || !$auth.security.enabled
+  );
 
   interface Props {
     detection: Detection;
@@ -336,6 +342,7 @@
   <ActionMenu
     {detection}
     {isExcluded}
+    {isAuthenticated}
     onReview={handleReview}
     onToggleSpecies={handleToggleSpecies}
     onToggleLock={handleToggleLock}

@@ -341,6 +341,17 @@
       "page": "Page {current} of {total}",
       "goToPrevious": "Go to previous page",
       "goToNext": "Go to next page"
+    },
+    "actionMenu": {
+      "title": "Actions menu",
+      "noActions": "No actions available",
+      "loginRequired": "Login required for actions",
+      "reviewDetection": "Review detection",
+      "showSpecies": "Show species",
+      "ignoreSpecies": "Ignore species",
+      "lockDetection": "Lock detection",
+      "unlockDetection": "Unlock detection",
+      "deleteDetection": "Delete detection"
     }
   },
   "error": {

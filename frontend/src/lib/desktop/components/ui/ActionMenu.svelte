@@ -18,12 +18,15 @@
   import { cn } from '$lib/utils/cn';
   import type { Detection } from '$lib/types/detection.types';
   import { actionIcons, systemIcons } from '$lib/utils/icons';
+  import { t } from '$lib/i18n';
 
   interface Props {
     /** The detection object containing data for this action menu */
     detection: Detection;
     /** Whether the species is currently excluded from detection */
     isExcluded?: boolean;
+    /** Whether the user is authenticated */
+    isAuthenticated?: boolean;
     /** Callback fired when user clicks review action */
     onReview?: () => void;
     /** Callback fired when user toggles species visibility */
@@ -43,6 +46,7 @@
   let {
     detection,
     isExcluded = false,
+    isAuthenticated = true,
     onReview,
     onToggleSpecies,
     onToggleLock,
@@ -179,7 +183,7 @@
     bind:this={buttonElement}
     onclick={handleOpen}
     class="btn btn-ghost btn-sm min-h-8 h-8 w-8 p-1"
-    aria-label="Actions menu"
+    aria-label={t('search.actionMenu.title')}
     aria-haspopup="true"
     aria-expanded={isOpen}
   >
@@ -192,71 +196,87 @@
       class="fixed menu p-2 shadow-lg bg-base-100 rounded-box w-52 border border-base-300"
       role="menu"
     >
-      <li>
-        <button
-          onclick={() => handleAction(onReview)}
-          class="text-sm w-full text-left"
-          role="menuitem"
-        >
-          <div class="flex items-center gap-2">
-            {@html actionIcons.edit}
-            <span>Review detection</span>
-            {#if detection.review?.verified === 'correct'}
-              <span class="badge badge-success badge-sm">✓</span>
-            {:else if detection.review?.verified === 'false_positive'}
-              <span class="badge badge-error badge-sm">✗</span>
-            {/if}
+      {#if !isAuthenticated}
+        <li>
+          <div class="text-sm text-base-content/60 py-2 px-3">
+            {t('search.actionMenu.noActions')}
           </div>
-        </button>
-      </li>
-
-      <li>
-        <button
-          onclick={() => handleAction(onToggleSpecies)}
-          class="text-sm w-full text-left"
-          role="menuitem"
-        >
-          <div class="flex items-center gap-2">
-            {#if isExcluded}
-              {@html systemIcons.eye}
-            {:else}
-              {@html systemIcons.eyeOff}
-            {/if}
-            <span>{isExcluded ? 'Show species' : 'Ignore species'}</span>
-          </div>
-        </button>
-      </li>
-
-      <li>
-        <button
-          onclick={() => handleAction(onToggleLock)}
-          class="text-sm w-full text-left"
-          role="menuitem"
-        >
-          <div class="flex items-center gap-2">
-            {#if detection.locked}
-              {@html actionIcons.lock}
-            {:else}
-              {@html actionIcons.unlock}
-            {/if}
-            <span>{detection.locked ? 'Unlock detection' : 'Lock detection'}</span>
-          </div>
-        </button>
-      </li>
-
-      {#if !detection.locked}
+        </li>
+      {:else}
         <li>
           <button
-            onclick={() => handleAction(onDelete)}
-            class="text-sm w-full text-left text-error"
+            onclick={() => handleAction(onReview)}
+            class="text-sm w-full text-left"
             role="menuitem"
           >
             <div class="flex items-center gap-2">
-              {@html actionIcons.delete}
-              <span>Delete detection</span>
+              {@html actionIcons.edit}
+              <span>{t('search.actionMenu.reviewDetection')}</span>
+              {#if detection.review?.verified === 'correct'}
+                <span class="badge badge-success badge-sm">✓</span>
+              {:else if detection.review?.verified === 'false_positive'}
+                <span class="badge badge-error badge-sm">✗</span>
+              {/if}
             </div>
           </button>
         </li>
+
+        <li>
+          <button
+            onclick={() => handleAction(onToggleSpecies)}
+            class="text-sm w-full text-left"
+            role="menuitem"
+          >
+            <div class="flex items-center gap-2">
+              {#if isExcluded}
+                {@html systemIcons.eye}
+              {:else}
+                {@html systemIcons.eyeOff}
+              {/if}
+              <span
+                >{isExcluded
+                  ? t('search.actionMenu.showSpecies')
+                  : t('search.actionMenu.ignoreSpecies')}</span
+              >
+            </div>
+          </button>
+        </li>
+
+        <li>
+          <button
+            onclick={() => handleAction(onToggleLock)}
+            class="text-sm w-full text-left"
+            role="menuitem"
+          >
+            <div class="flex items-center gap-2">
+              {#if detection.locked}
+                {@html actionIcons.lock}
+              {:else}
+                {@html actionIcons.unlock}
+              {/if}
+              <span
+                >{detection.locked
+                  ? t('search.actionMenu.unlockDetection')
+                  : t('search.actionMenu.lockDetection')}</span
+              >
+            </div>
+          </button>
+        </li>
+
+        {#if !detection.locked}
+          <li>
+            <button
+              onclick={() => handleAction(onDelete)}
+              class="text-sm w-full text-left text-error"
+              role="menuitem"
+            >
+              <div class="flex items-center gap-2">
+                {@html actionIcons.delete}
+                <span>{t('search.actionMenu.deleteDetection')}</span>
+              </div>
+            </button>
+          </li>
+        {/if}
       {/if}
     </ul>
   {/if}

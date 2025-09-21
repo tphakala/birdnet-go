@@ -117,6 +117,16 @@ const translations: Record<string, string> = {
   'settings.audio.clipSettings.title': 'Clip Settings',
   'settings.audio.clipSettings.description':
     'Configure audio clip capture and processing for identified bird calls',
+  // ActionMenu translations
+  'search.actionMenu.title': 'Actions menu',
+  'search.actionMenu.noActions': 'No actions available',
+  'search.actionMenu.loginRequired': 'Login required for actions',
+  'search.actionMenu.reviewDetection': 'Review detection',
+  'search.actionMenu.showSpecies': 'Show species',
+  'search.actionMenu.ignoreSpecies': 'Ignore species',
+  'search.actionMenu.lockDetection': 'Lock detection',
+  'search.actionMenu.unlockDetection': 'Unlock detection',
+  'search.actionMenu.deleteDetection': 'Delete detection',
 };
 
 vi.mock('$lib/i18n', () => ({

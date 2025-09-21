@@ -11,11 +11,17 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { cn } from '$lib/utils/cn';
+  import { auth } from '$lib/stores/auth';
 
   const logger = loggers.ui;
 
   // Animation control - set to false to disable all animations
   const ENABLE_NEW_DETECTION_ANIMATIONS = false;
+
+  // Get authentication state
+  const isAuthenticated = $derived(
+    ($auth.security.enabled && $auth.security.accessAllowed) || !$auth.security.enabled
+  );
 
   interface Props {
     data: Detection[];
@@ -354,6 +360,7 @@
                 <ActionMenu
                   {detection}
                   isExcluded={false}
+                  {isAuthenticated}
                   onReview={() => handleReview(detection)}
                   onToggleSpecies={() => handleToggleSpecies(detection)}
                   onToggleLock={() => handleToggleLock(detection)}
