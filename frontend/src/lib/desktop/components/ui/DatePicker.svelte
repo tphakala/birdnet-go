@@ -244,7 +244,14 @@ Accessibility:
   // Toggle calendar
   function toggleCalendar() {
     if (disabled) return;
-    showCalendar = !showCalendar;
+    const opening = !showCalendar;
+    showCalendar = opening;
+    ariaMessage = opening
+      ? t('components.datePicker.aria.calendarOpened')
+      : t('components.datePicker.aria.calendarClosed');
+    if (opening) {
+      focusedDate = selectedDate() || new Date();
+    }
   }
 
   // Enhanced keyboard navigation
@@ -378,6 +385,8 @@ Accessibility:
     const target = event.target as Node;
     if (!calendarRef?.contains(target) && !buttonRef?.contains(target)) {
       showCalendar = false;
+      ariaMessage = t('components.datePicker.aria.calendarClosed');
+      buttonRef?.focus();
     }
   }
 
@@ -429,7 +438,7 @@ Accessibility:
     onclick={toggleCalendar}
     onkeydown={handleKeyDown}
     {disabled}
-    aria-label={t('components.datePicker.aria.openButton')}
+    aria-label={t('common.aria.selectDate')}
     aria-expanded={showCalendar}
     aria-haspopup="true"
   >
@@ -469,7 +478,7 @@ Accessibility:
       bind:this={calendarRef}
       class="absolute z-50 mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg p-4 min-w-[280px]"
       role="dialog"
-      aria-label={t('components.datePicker.aria.calendarDialogLabel')}
+      aria-label={t('common.aria.datePickerCalendar')}
     >
       <!-- Month Navigation -->
       <div class="flex items-center justify-between mb-4">
@@ -477,7 +486,7 @@ Accessibility:
           type="button"
           class="btn btn-ghost btn-sm btn-circle"
           onclick={goToPreviousMonth}
-          aria-label={t('components.datePicker.aria.previousMonth')}
+          aria-label={t('common.aria.previousMonth')}
         >
           {@html navigationIcons.arrowLeft}
         </button>
@@ -490,7 +499,7 @@ Accessibility:
           type="button"
           class="btn btn-ghost btn-sm btn-circle"
           onclick={goToNextMonth}
-          aria-label={t('components.datePicker.aria.nextMonth')}
+          aria-label={t('common.aria.nextMonth')}
         >
           {@html navigationIcons.arrowRight}
         </button>
@@ -539,7 +548,7 @@ Accessibility:
               onclick={() => selectDate(date)}
               onkeydown={handleKeyDown}
               disabled={!isDateSelectable(date)}
-              aria-label={cn(
+              aria-label={[
                 date.toLocaleDateString(),
                 isDateSelected(date)
                   ? t('components.datePicker.aria.dateSelected', {
@@ -549,8 +558,10 @@ Accessibility:
                 isToday(date) ? t('components.datePicker.today') : '',
                 !isDateSelectable(date)
                   ? t('components.datePicker.aria.dayUnavailable', { day: date.getDate() })
-                  : ''
-              )}
+                  : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
               aria-selected={isDateSelected(date)}
               aria-current={isToday(date) ? 'date' : undefined}
             >
@@ -584,6 +595,9 @@ Accessibility:
             }
           }}
           disabled={!isDateSelectable(new Date())}
+          aria-label={t('components.datePicker.aria.todayButton', {
+            today: new Date().toLocaleDateString(),
+          })}
         >
           {t('components.datePicker.today')}
         </button>

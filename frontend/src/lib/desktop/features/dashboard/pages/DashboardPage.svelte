@@ -57,7 +57,7 @@ Performance Optimizations:
     resetDateToToday,
   } from '$lib/utils/datePersistence';
   import { getLogger } from '$lib/utils/logger';
-  import { safeArrayAccess } from '$lib/utils/security';
+  import { safeArrayAccess, isPlainObject } from '$lib/utils/security';
 
   const logger = getLogger('app');
 
@@ -83,16 +83,21 @@ Performance Optimizations:
   };
 
   function isSSEDetectionData(v: unknown): v is SSEDetectionData {
-    if (!v || typeof v !== 'object') return false;
+    if (!isPlainObject(v)) return false;
     const o = v as Record<string, unknown>;
+    const dateOk = typeof o.Date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.Date);
+    const timeOk = typeof o.Time === 'string' && /^\d{2}:\d{2}:\d{2}$/.test(o.Time);
     return (
       typeof o.ID === 'number' &&
       typeof o.CommonName === 'string' &&
+      o.CommonName.length > 0 &&
       typeof o.ScientificName === 'string' &&
+      o.ScientificName.length > 0 &&
       typeof o.Confidence === 'number' &&
-      typeof o.Date === 'string' &&
-      typeof o.Time === 'string' &&
-      typeof o.SpeciesCode === 'string'
+      dateOk &&
+      timeOk &&
+      typeof o.SpeciesCode === 'string' &&
+      o.SpeciesCode.length > 0
     );
   }
 
@@ -105,6 +110,9 @@ Performance Optimizations:
   let summaryError = $state<string | null>(null);
   let detectionsError = $state<string | null>(null);
   let showThumbnails = $state(true); // Default to true for backward compatibility
+
+  // SSE throttling timer
+  let sseFetchTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Function to get initial detection limit from localStorage
   function getInitialDetectionLimit(): number {
@@ -506,7 +514,11 @@ Performance Optimizations:
   // Helper function to process SSE detection data
   function handleSSEDetection(detectionData: unknown) {
     if (!isSSEDetectionData(detectionData)) {
-      logger.warn('SSE detection payload missing required fields');
+      const keys =
+        typeof detectionData === 'object' && detectionData !== null
+          ? Object.keys(detectionData as Record<string, unknown>)
+          : [];
+      logger.warn('SSE detection payload missing required fields', { keys });
       return;
     }
     try {
@@ -581,6 +593,12 @@ Performance Optimizations:
       // Clean up debounce timer
       if (updateTimer) {
         clearTimeout(updateTimer);
+      }
+
+      // Clean up SSE fetch throttling timer
+      if (sseFetchTimer) {
+        clearTimeout(sseFetchTimer);
+        sseFetchTimer = null;
       }
 
       // Clean up preload debounce timer
@@ -952,8 +970,7 @@ Performance Optimizations:
 
     // Start batch preloading using untrack to prevent reactive dependencies
     // Fire-and-forget operation for performance optimization
-    // eslint-disable-next-line no-unused-vars
-    const batchPreloadPromise = untrack(() => {
+    void untrack(() => {
       const datesParam = datesToPreload.join(',');
       return fetch(`/api/v2/analytics/species/daily/batch?dates=${datesParam}`)
         .then(response => {
@@ -1066,8 +1083,13 @@ Performance Optimizations:
 
   // Helper function to process a detection update (extracted from handleNewDetection)
   function processDetectionUpdate(detection: Detection) {
-    // Trigger API fetch to get fresh data with animations enabled
-    fetchRecentDetections(true);
+    // Throttle API fetch to prevent request storms during high SSE activity
+    if (!sseFetchTimer) {
+      sseFetchTimer = setTimeout(() => {
+        fetchRecentDetections(true);
+        sseFetchTimer = null;
+      }, 150);
+    }
 
     // Queue daily summary update with debouncing
     queueDailySummaryUpdate(detection);

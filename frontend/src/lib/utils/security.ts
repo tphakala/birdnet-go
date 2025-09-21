@@ -24,6 +24,20 @@
  */
 
 /**
+ * Check if a value is a plain object (not array, null, or other special objects)
+ * Used for type validation in API data processing
+ */
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  // Check if the prototype is exactly Object.prototype or null
+  const proto = Object.getPrototypeOf(value);
+  return proto === null || proto === Object.prototype;
+}
+
+/**
  * Safely access object properties with validation
  * Prevents object injection by using hasOwnProperty check
  */

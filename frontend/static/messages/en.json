@@ -1642,11 +1642,7 @@
         "calendarClosed": "Calendar closed",
         "monthChanged": "Showing {month} {year}",
         "dayUnavailable": "Day {day} is not available for selection",
-        "todayButton": "Select today's date: {today}",
-        "previousMonth": "Previous month",
-        "nextMonth": "Next month",
-        "openButton": "Select date",
-        "calendarDialogLabel": "Date picker calendar"
+        "todayButton": "Select today's date: {today}"
       },
       "status": {
         "loading": "Loading calendar...",

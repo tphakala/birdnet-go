@@ -1489,11 +1489,7 @@
         "calendarClosed": "Kalenteri suljettu",
         "monthChanged": "Näytetään {month} {year}",
         "dayUnavailable": "Päivä {day} ei ole valittavissa",
-        "todayButton": "Valitse tämän päivän päivämäärä: {today}",
-        "previousMonth": "Edellinen kuukausi",
-        "nextMonth": "Seuraava kuukausi",
-        "openButton": "Valitse päivämäärä",
-        "calendarDialogLabel": "Päivämäärävalitsimen kalenteri"
+        "todayButton": "Valitse tämän päivän päivämäärä: {today}"
       },
       "status": {
         "loading": "Ladataan kalenteria...",

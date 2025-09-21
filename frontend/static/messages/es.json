@@ -1484,11 +1484,7 @@
         "calendarClosed": "Calendario cerrado",
         "monthChanged": "Mostrando {month} {year}",
         "dayUnavailable": "El día {day} no está disponible para selección",
-        "todayButton": "Seleccionar la fecha de hoy: {today}",
-        "previousMonth": "Mes anterior",
-        "nextMonth": "Mes siguiente",
-        "openButton": "Seleccionar fecha",
-        "calendarDialogLabel": "Calendario del selector de fecha"
+        "todayButton": "Seleccionar la fecha de hoy: {today}"
       },
       "status": {
         "loading": "Cargando calendario...",

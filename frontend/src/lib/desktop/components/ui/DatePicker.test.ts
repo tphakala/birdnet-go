@@ -804,7 +804,9 @@ describe('DatePicker Component', () => {
       expect(grid).toBeInTheDocument();
 
       // Should have navigation instructions for screen readers - look for the translated text
-      const instructions = screen.getByRole('region', { name: 'Use arrow keys to navigate calendar, Enter to select, Escape to close' });
+      const instructions = screen.getByRole('region', {
+        name: 'Use arrow keys to navigate calendar, Enter to select, Escape to close',
+      });
       expect(instructions).toBeInTheDocument();
     });
 
