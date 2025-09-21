@@ -77,6 +77,10 @@ const translations: Record<string, string> = {
   'common.cancel': 'Cancel',
   'common.aria.closeNotification': 'Close notification',
   'common.aria.closeModal': 'Close modal',
+  'common.aria.selectDate': 'Select date',
+  'common.aria.datePickerCalendar': 'Date picker calendar',
+  'common.aria.previousMonth': 'Previous month',
+  'common.aria.nextMonth': 'Next month',
   'forms.labels.showPassword': 'Show password',
   'forms.labels.hidePassword': 'Hide password',
   'forms.password.strength.label': 'Password Strength:',
@@ -94,6 +98,15 @@ const translations: Record<string, string> = {
   'components.forms.numberField.adjustedToMinimum': 'Value was adjusted to minimum ({value})',
   'components.forms.numberField.adjustedToMaximum': 'Value was adjusted to maximum ({value})',
   'components.datePicker.today': 'Today',
+  'components.datePicker.aria.dateSelected': 'Date {date} selected',
+  'components.datePicker.aria.dayUnavailable': 'Day {day} is not available for selection',
+  'components.datePicker.aria.todayButton': "Select today's date: {today}",
+  'components.datePicker.feedback.invalidDateFormat':
+    'Invalid date format. Please use YYYY-MM-DD format',
+  'common.aria.calendarNavigation':
+    'Use arrow keys to navigate calendar, Enter to select, Escape to close',
+  'common.validation.invalid': 'Invalid value',
+  'forms.placeholders.date': 'Select date',
   // Audio Settings translations
   'settings.audio.audioCapture.title': 'Audio Capture',
   'settings.audio.audioCapture.description': 'Configure audio capture settings',

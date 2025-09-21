@@ -98,7 +98,8 @@
       "editSpecies": "Modifier l'espèce",
       "removeSpecies": "Supprimer l'espèce",
       "dismissError": "Ignorer l'erreur",
-      "downloadCsv": "Télécharger la liste des espèces au format CSV"
+      "downloadCsv": "Télécharger la liste des espèces au format CSV",
+      "calendarNavigation": "Navigation du calendrier : utilisez les flèches pour vous déplacer, Entrée pour sélectionner, Échap pour fermer"
     },
     "modal": {
       "confirmAction": "Confirmer l'action",

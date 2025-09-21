@@ -57,13 +57,49 @@ Performance Optimizations:
     resetDateToToday,
   } from '$lib/utils/datePersistence';
   import { getLogger } from '$lib/utils/logger';
-  import { safeArrayAccess } from '$lib/utils/security';
+  import { safeArrayAccess, isPlainObject } from '$lib/utils/security';
 
   const logger = getLogger('app');
 
   // Constants
   const ANIMATION_CLEANUP_DELAY = 2200; // Slightly longer than 2s animation duration
   const MIN_FETCH_LIMIT = 10; // Minimum number of detections to fetch for SSE processing
+
+  // SSE Detection Data Type
+  type SSEDetectionData = {
+    ID: number;
+    CommonName: string;
+    ScientificName: string;
+    Confidence: number;
+    Date: string; // YYYY-MM-DD
+    Time: string; // HH:MM:SS
+    SpeciesCode: string;
+    Verified?: Detection['verified'];
+    Locked?: boolean;
+    Source?: string;
+    BeginTime?: string;
+    EndTime?: string;
+    eventType?: string;
+  };
+
+  function isSSEDetectionData(v: unknown): v is SSEDetectionData {
+    if (!isPlainObject(v)) return false;
+    const o = v as Record<string, unknown>;
+    const dateOk = typeof o.Date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.Date);
+    const timeOk = typeof o.Time === 'string' && /^\d{2}:\d{2}:\d{2}$/.test(o.Time);
+    return (
+      typeof o.ID === 'number' &&
+      typeof o.CommonName === 'string' &&
+      o.CommonName.length > 0 &&
+      typeof o.ScientificName === 'string' &&
+      o.ScientificName.length > 0 &&
+      typeof o.Confidence === 'number' &&
+      dateOk &&
+      timeOk &&
+      typeof o.SpeciesCode === 'string' &&
+      o.SpeciesCode.length > 0
+    );
+  }
 
   // State management
   let dailySummary = $state<DailySpeciesSummary[]>([]);
@@ -74,6 +110,9 @@ Performance Optimizations:
   let summaryError = $state<string | null>(null);
   let detectionsError = $state<string | null>(null);
   let showThumbnails = $state(true); // Default to true for backward compatibility
+
+  // SSE throttling timer
+  let sseFetchTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Function to get initial detection limit from localStorage
   function getInitialDetectionLimit(): number {
@@ -473,22 +512,30 @@ Performance Optimizations:
   }
 
   // Helper function to process SSE detection data
-  function handleSSEDetection(detectionData: any) {
+  function handleSSEDetection(detectionData: unknown) {
+    if (!isSSEDetectionData(detectionData)) {
+      const keys =
+        typeof detectionData === 'object' && detectionData !== null
+          ? Object.keys(detectionData as Record<string, unknown>)
+          : [];
+      logger.warn('SSE detection payload missing required fields', { keys });
+      return;
+    }
     try {
       // Convert SSEDetectionData to Detection format
       const detection: Detection = {
-        id: detectionData.ID as number,
-        commonName: detectionData.CommonName as string,
-        scientificName: detectionData.ScientificName as string,
-        confidence: detectionData.Confidence as number,
-        date: detectionData.Date as string,
-        time: detectionData.Time as string,
-        speciesCode: detectionData.SpeciesCode as string,
-        verified: (detectionData.Verified || 'unverified') as Detection['verified'],
-        locked: (detectionData.Locked || false) as boolean,
-        source: (detectionData.Source || '') as string,
-        beginTime: (detectionData.BeginTime || '') as string,
-        endTime: (detectionData.EndTime || '') as string,
+        id: detectionData.ID,
+        commonName: detectionData.CommonName,
+        scientificName: detectionData.ScientificName,
+        confidence: detectionData.Confidence,
+        date: detectionData.Date,
+        time: detectionData.Time,
+        speciesCode: detectionData.SpeciesCode,
+        verified: detectionData.Verified ?? 'unverified',
+        locked: detectionData.Locked ?? false,
+        source: detectionData.Source ?? '',
+        beginTime: detectionData.BeginTime ?? '',
+        endTime: detectionData.EndTime ?? '',
       };
 
       handleNewDetection(detection);
@@ -546,6 +593,12 @@ Performance Optimizations:
       // Clean up debounce timer
       if (updateTimer) {
         clearTimeout(updateTimer);
+      }
+
+      // Clean up SSE fetch throttling timer
+      if (sseFetchTimer) {
+        clearTimeout(sseFetchTimer);
+        sseFetchTimer = null;
       }
 
       // Clean up preload debounce timer
@@ -917,8 +970,7 @@ Performance Optimizations:
 
     // Start batch preloading using untrack to prevent reactive dependencies
     // Fire-and-forget operation for performance optimization
-    // eslint-disable-next-line no-unused-vars
-    const batchPreloadPromise = untrack(() => {
+    void untrack(() => {
       const datesParam = datesToPreload.join(',');
       return fetch(`/api/v2/analytics/species/daily/batch?dates=${datesParam}`)
         .then(response => {
@@ -1031,8 +1083,13 @@ Performance Optimizations:
 
   // Helper function to process a detection update (extracted from handleNewDetection)
   function processDetectionUpdate(detection: Detection) {
-    // Trigger API fetch to get fresh data with animations enabled
-    fetchRecentDetections(true);
+    // Throttle API fetch to prevent request storms during high SSE activity
+    if (!sseFetchTimer) {
+      sseFetchTimer = setTimeout(() => {
+        fetchRecentDetections(true);
+        sseFetchTimer = null;
+      }, 150);
+    }
 
     // Queue daily summary update with debouncing
     queueDailySummaryUpdate(detection);

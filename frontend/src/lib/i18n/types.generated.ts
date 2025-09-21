@@ -109,6 +109,7 @@ export type TranslationKey =
   | 'common.aria.selectToday'
   | 'common.aria.dateSelected' // params: date
   | 'common.aria.calendarNavigation'
+  | 'common.aria.downloadCsv'
   | 'common.labels.confidence'
   | 'common.values.yes'
   | 'common.values.no'
@@ -566,6 +567,9 @@ export type TranslationKey =
   | 'settings.main.sections.rangeFilter.speciesCount.helpText'
   | 'settings.main.sections.rangeFilter.speciesCount.loading'
   | 'settings.main.sections.rangeFilter.speciesCount.viewSpecies'
+  | 'settings.main.sections.rangeFilter.downloadTitle'
+  | 'settings.main.sections.rangeFilter.csvDownloaded'
+  | 'settings.main.sections.rangeFilter.csvDownloadFailed'
   | 'settings.main.sections.rangeFilter.modal.title'
   | 'settings.main.sections.rangeFilter.modal.speciesCount'
   | 'settings.main.sections.rangeFilter.modal.threshold'
@@ -662,7 +666,11 @@ export type TranslationKey =
   | 'settings.support.diagnostics.includeSystemInfo'
   | 'settings.support.supportReport.title'
   | 'settings.support.supportReport.description.intro'
-  | 'settings.support.supportReport.description.githubIssue'
+  | 'settings.support.supportReport.githubRequired.title'
+  | 'settings.support.supportReport.githubRequired.description'
+  | 'settings.support.supportReport.githubIssue.label'
+  | 'settings.support.supportReport.githubIssue.placeholder'
+  | 'settings.support.supportReport.githubIssue.helper'
   | 'settings.support.supportReport.whatsIncluded.title'
   | 'settings.support.supportReport.whatsIncluded.applicationLogs'
   | 'settings.support.supportReport.whatsIncluded.configuration'
@@ -671,7 +679,11 @@ export type TranslationKey =
   | 'settings.support.supportReport.userMessage.label'
   | 'settings.support.supportReport.userMessage.placeholder'
   | 'settings.support.supportReport.userMessage.githubTip' // params: systemId
+  | 'settings.support.supportReport.userMessage.labelOptional'
+  | 'settings.support.supportReport.userMessage.placeholderOptional'
+  | 'settings.support.supportReport.userMessage.systemIdNote' // params: systemId
   | 'settings.support.supportReport.uploadOption.label'
+  | 'settings.support.supportReport.uploadOption.labelWithRequirement'
   | 'settings.support.supportReport.uploadOption.details.sentryUpload'
   | 'settings.support.supportReport.uploadOption.details.euDataCenter'
   | 'settings.support.supportReport.uploadOption.details.privacyCompliant'
@@ -685,6 +697,7 @@ export type TranslationKey =
   | 'settings.support.supportReport.statusMessages.generateSuccess'
   | 'settings.support.supportReport.statusMessages.generateFailed' // params: message
   | 'settings.support.supportReport.statusMessages.error' // params: message
+  | 'settings.support.supportReport.statusMessages.githubIssueRequired'
   | 'settings.filters.privacyFiltering.title'
   | 'settings.filters.privacyFiltering.description'
   | 'settings.filters.privacyFiltering.enable'
@@ -753,16 +766,27 @@ export type TranslationKey =
   | 'settings.integration.weather.provider.options.none'
   | 'settings.integration.weather.provider.options.yrno'
   | 'settings.integration.weather.provider.options.openweather'
+  | 'settings.integration.weather.provider.options.wunderground'
+  | 'settings.integration.weather.wunderground.apiKey.label'
+  | 'settings.integration.weather.wunderground.apiKey.helpText'
+  | 'settings.integration.weather.wunderground.stationId.label'
+  | 'settings.integration.weather.wunderground.stationId.helpText'
+  | 'settings.integration.weather.wunderground.endpoint.label'
+  | 'settings.integration.weather.wunderground.endpoint.helpText'
+  | 'settings.integration.weather.wunderground.units.label'
+  | 'settings.integration.weather.wunderground.units.helpText'
   | 'settings.integration.weather.notes.none'
   | 'settings.integration.weather.notes.yrno.description'
   | 'settings.integration.weather.notes.yrno.freeService'
   | 'settings.integration.weather.notes.openweather'
+  | 'settings.integration.weather.notes.wunderground'
   | 'settings.integration.weather.apiKey.label'
   | 'settings.integration.weather.apiKey.helpText'
   | 'settings.integration.weather.units.label'
   | 'settings.integration.weather.units.options.standard'
   | 'settings.integration.weather.units.options.metric'
   | 'settings.integration.weather.units.options.imperial'
+  | 'settings.integration.weather.units.options.ukhybrid'
   | 'settings.integration.weather.test.button'
   | 'settings.integration.weather.test.loading'
   | 'settings.integration.weather.test.noProvider'
@@ -815,12 +839,29 @@ export type TranslationKey =
   | 'settings.audio.soundLevelMonitoring.mqttTopic'
   | 'settings.audio.soundLevelMonitoring.sseEndpoint'
   | 'settings.audio.soundLevelMonitoring.prometheusMetrics'
-  | 'settings.audio.audioExport.title'
-  | 'settings.audio.audioExport.description'
+  | 'settings.audio.clipSettings.title'
+  | 'settings.audio.clipSettings.description'
   | 'settings.audio.audioExport.enable'
   | 'settings.audio.audioExport.enableHelp'
-  | 'settings.audio.audioExport.enableDebug'
-  | 'settings.audio.audioExport.enableDebugHelp'
+  | 'settings.audio.audioExport.captureSettings'
+  | 'settings.audio.audioExport.lengthLabel'
+  | 'settings.audio.audioExport.lengthHelp'
+  | 'settings.audio.audioExport.preCaptureLabel'
+  | 'settings.audio.audioExport.preCaptureHelp' // params: max
+  | 'settings.audio.audioExport.gainLabel'
+  | 'settings.audio.audioExport.gainHelp'
+  | 'settings.audio.audioExport.normalization'
+  | 'settings.audio.audioExport.normalizationEnable'
+  | 'settings.audio.audioExport.normalizationHelp'
+  | 'settings.audio.audioExport.targetLUFSLabel'
+  | 'settings.audio.audioExport.targetLUFSHelp'
+  | 'settings.audio.audioExport.loudnessRangeLabel'
+  | 'settings.audio.audioExport.loudnessRangeHelp'
+  | 'settings.audio.audioExport.truePeakLabel'
+  | 'settings.audio.audioExport.truePeakHelp'
+  | 'settings.audio.audioExport.normalizationNote'
+  | 'settings.audio.audioExport.normalizationNoteDescription'
+  | 'settings.audio.audioExport.fileSettings'
   | 'settings.audio.audioExport.pathLabel'
   | 'settings.audio.audioExport.pathHelp'
   | 'settings.audio.audioExport.typeLabel'
@@ -1066,6 +1107,7 @@ export type TranslationKey =
   | 'media.audio.seekProgress' // params: current, total
   | 'components.forms.numberField.adjustedToMinimum' // params: value
   | 'components.forms.numberField.adjustedToMaximum' // params: value
+  | 'components.datePicker.today'
   | 'components.datePicker.feedback.endDateCleared'
   | 'components.datePicker.feedback.startDateCleared'
   | 'components.datePicker.feedback.invalidDateFormat'
@@ -1158,9 +1200,11 @@ export type TranslationParams = {
   'system.errors.processes': { error: string | number };
   'settings.notFound.message': { section: string | number };
   'settings.support.supportReport.userMessage.githubTip': { systemId: string | number };
+  'settings.support.supportReport.userMessage.systemIdNote': { systemId: string | number };
   'settings.support.supportReport.statusMessages.uploadSuccessWithId': { dumpId: string | number };
   'settings.support.supportReport.statusMessages.generateFailed': { message: string | number };
   'settings.support.supportReport.statusMessages.error': { message: string | number };
+  'settings.audio.audioExport.preCaptureHelp': { max: string | number };
   'settings.audio.audioExport.bitrateHelp': { min: string | number; max: string | number };
   'settings.species.customConfiguration.badges.threshold': { value: string | number };
   'settings.species.customConfiguration.badges.interval': { value: string | number };

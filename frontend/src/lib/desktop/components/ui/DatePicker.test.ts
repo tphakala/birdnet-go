@@ -64,7 +64,7 @@ describe('DatePicker Component', () => {
       expect(button).toHaveClass('btn-disabled');
     });
 
-    it('applies custom className', () => {
+    it('applies custom className to root wrapper', () => {
       const onChange = vi.fn();
       render(DatePicker, {
         value: '',
@@ -72,8 +72,8 @@ describe('DatePicker Component', () => {
         className: 'custom-class',
       });
 
-      const button = screen.getByLabelText('Select date');
-      expect(button).toHaveClass('custom-class');
+      const wrapper = screen.getByLabelText('Select date').parentElement;
+      expect(wrapper).toHaveClass('custom-class');
     });
   });
 
@@ -457,8 +457,8 @@ describe('DatePicker Component', () => {
       const onChange = vi.fn();
       render(DatePicker, { value: 'invalid-date', onChange });
 
-      // Should render without crashing - invalid date shows the i18n key when not translated in tests
-      expect(screen.getByText('common.validation.invalid')).toBeInTheDocument();
+      // Should render without crashing - invalid date shows the translated text
+      expect(screen.getByText('Invalid value')).toBeInTheDocument();
       // Button should still be functional
       expect(screen.getByLabelText('Select date')).toBeInTheDocument();
     });
@@ -604,8 +604,8 @@ describe('DatePicker Component', () => {
       const onChange = vi.fn();
       render(DatePicker, { value: 'invalid-date-format', onChange });
 
-      // Should display validation error - i18n key shows in test environment
-      expect(screen.getByText('common.validation.invalid')).toBeInTheDocument();
+      // Should display validation error - translated text shows
+      expect(screen.getByText('Invalid value')).toBeInTheDocument();
       expect(screen.getByRole('alert')).toBeInTheDocument();
     });
 
@@ -615,7 +615,7 @@ describe('DatePicker Component', () => {
 
       const errorMessage = screen.getByRole('alert');
       expect(errorMessage).toBeInTheDocument();
-      expect(errorMessage).toHaveTextContent('components.datePicker.feedback.invalidDateFormat');
+      expect(errorMessage).toHaveTextContent('Invalid date format. Please use YYYY-MM-DD format');
     });
 
     it('validates date constraints and shows errors', () => {
@@ -803,8 +803,10 @@ describe('DatePicker Component', () => {
       const grid = screen.getByRole('grid');
       expect(grid).toBeInTheDocument();
 
-      // Should have navigation instructions for screen readers - look for the specific aria-label
-      const instructions = screen.getByRole('region', { name: 'common.aria.calendarNavigation' });
+      // Should have navigation instructions for screen readers - look for the translated text
+      const instructions = screen.getByRole('region', {
+        name: 'Use arrow keys to navigate calendar, Enter to select, Escape to close',
+      });
       expect(instructions).toBeInTheDocument();
     });
 

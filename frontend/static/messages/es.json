@@ -99,7 +99,8 @@
       "editSpecies": "Editar especie",
       "removeSpecies": "Eliminar especie",
       "dismissError": "Descartar error",
-      "downloadCsv": "Descargar lista de especies en CSV"
+      "downloadCsv": "Descargar lista de especies en CSV",
+      "calendarNavigation": "Navegación del calendario: usa las flechas para moverte, Enter para seleccionar, Esc para cerrar"
     },
     "modal": {
       "confirmAction": "Confirmar acción",

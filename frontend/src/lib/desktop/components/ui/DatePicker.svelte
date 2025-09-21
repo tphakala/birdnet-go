@@ -44,9 +44,9 @@ Accessibility:
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { cn } from '$lib/utils/cn';
-  import { navigationIcons, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
-  import { getLocalDateString } from '$lib/utils/date';
+  import { cn } from '$lib/utils/cn.js';
+  import { navigationIcons, systemIcons } from '$lib/utils/icons.js'; // Centralized icons
+  import { getLocalDateString } from '$lib/utils/date.js';
   import { t } from '$lib/i18n';
   import type { HTMLAttributes } from 'svelte/elements';
 
@@ -72,7 +72,7 @@ Accessibility:
     minDate,
     className = '',
     disabled = false,
-    placeholder = 'Select date',
+    placeholder = t('forms.placeholders.date'),
     size = 'sm',
     ...restProps
   }: Props = $props();
@@ -145,7 +145,7 @@ Accessibility:
     try {
       const date = selectedDate();
       if (!date) return placeholder;
-      return date.toLocaleDateString('en-US', {
+      return date.toLocaleDateString(undefined, {
         weekday: 'short',
         year: 'numeric',
         month: 'short',
@@ -158,7 +158,7 @@ Accessibility:
 
   // Get month name for calendar header
   const monthYearText = $derived(
-    displayMonth.toLocaleDateString('en-US', {
+    displayMonth.toLocaleDateString(undefined, {
       month: 'long',
       year: 'numeric',
     })
@@ -218,7 +218,7 @@ Accessibility:
   function goToPreviousMonth() {
     displayMonth = new Date(displayMonth.getFullYear(), displayMonth.getMonth() - 1, 1);
     ariaMessage = t('components.datePicker.aria.monthChanged', {
-      month: displayMonth.toLocaleDateString('en-US', { month: 'long' }),
+      month: displayMonth.toLocaleDateString(undefined, { month: 'long' }),
       year: displayMonth.getFullYear(),
     });
   }
@@ -226,7 +226,7 @@ Accessibility:
   function goToNextMonth() {
     displayMonth = new Date(displayMonth.getFullYear(), displayMonth.getMonth() + 1, 1);
     ariaMessage = t('components.datePicker.aria.monthChanged', {
-      month: displayMonth.toLocaleDateString('en-US', { month: 'long' }),
+      month: displayMonth.toLocaleDateString(undefined, { month: 'long' }),
       year: displayMonth.getFullYear(),
     });
   }
@@ -238,12 +238,20 @@ Accessibility:
     const dateStr = getLocalDateString(date);
     onChange(dateStr);
     showCalendar = false;
+    buttonRef?.focus();
   }
 
   // Toggle calendar
   function toggleCalendar() {
     if (disabled) return;
-    showCalendar = !showCalendar;
+    const opening = !showCalendar;
+    showCalendar = opening;
+    ariaMessage = opening
+      ? t('components.datePicker.aria.calendarOpened')
+      : t('components.datePicker.aria.calendarClosed');
+    if (opening) {
+      focusedDate = selectedDate() || new Date();
+    }
   }
 
   // Enhanced keyboard navigation
@@ -306,7 +314,7 @@ Accessibility:
           // Shift + PageUp = Previous year
           displayMonth = new Date(displayMonth.getFullYear() - 1, displayMonth.getMonth(), 1);
           ariaMessage = t('components.datePicker.aria.monthChanged', {
-            month: displayMonth.toLocaleDateString('en-US', { month: 'long' }),
+            month: displayMonth.toLocaleDateString(undefined, { month: 'long' }),
             year: displayMonth.getFullYear(),
           });
         } else {
@@ -321,7 +329,7 @@ Accessibility:
           // Shift + PageDown = Next year
           displayMonth = new Date(displayMonth.getFullYear() + 1, displayMonth.getMonth(), 1);
           ariaMessage = t('components.datePicker.aria.monthChanged', {
-            month: displayMonth.toLocaleDateString('en-US', { month: 'long' }),
+            month: displayMonth.toLocaleDateString(undefined, { month: 'long' }),
             year: displayMonth.getFullYear(),
           });
         } else {
@@ -361,7 +369,7 @@ Accessibility:
       ) {
         displayMonth = new Date(newFocus.getFullYear(), newFocus.getMonth(), 1);
         ariaMessage = t('components.datePicker.aria.monthChanged', {
-          month: displayMonth.toLocaleDateString('en-US', { month: 'long' }),
+          month: displayMonth.toLocaleDateString(undefined, { month: 'long' }),
           year: displayMonth.getFullYear(),
         });
       }
@@ -377,6 +385,8 @@ Accessibility:
     const target = event.target as Node;
     if (!calendarRef?.contains(target) && !buttonRef?.contains(target)) {
       showCalendar = false;
+      ariaMessage = t('components.datePicker.aria.calendarClosed');
+      buttonRef?.focus();
     }
   }
 
@@ -388,8 +398,10 @@ Accessibility:
     };
   });
 
-  // Week day headers
-  const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  // Week day headers (localized)
+  const weekDays = Array.from({ length: 7 }, (_, i) =>
+    new Date(1970, 0, 4 + i).toLocaleDateString(undefined, { weekday: 'short' })
+  );
 
   // Map size prop to CSS class
   const sizeClass = $derived(() => {
@@ -408,7 +420,7 @@ Accessibility:
   });
 </script>
 
-<div class="relative datepicker-wrapper">
+<div class={cn('relative datepicker-wrapper', className)}>
   <!-- Date Input Button -->
   <button
     bind:this={buttonRef}
@@ -421,13 +433,12 @@ Accessibility:
       'font-normal',
       'min-w-[11rem]', // Consistent width to prevent layout shifts
       'justify-start', // Left-align content within button
-      disabled ? 'btn-disabled' : '',
-      className
+      disabled ? 'btn-disabled' : ''
     )}
     onclick={toggleCalendar}
     onkeydown={handleKeyDown}
     {disabled}
-    aria-label="Select date"
+    aria-label={t('common.aria.selectDate')}
     aria-expanded={showCalendar}
     aria-haspopup="true"
   >
@@ -467,7 +478,7 @@ Accessibility:
       bind:this={calendarRef}
       class="absolute z-50 mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg p-4 min-w-[280px]"
       role="dialog"
-      aria-label="Date picker calendar"
+      aria-label={t('common.aria.datePickerCalendar')}
     >
       <!-- Month Navigation -->
       <div class="flex items-center justify-between mb-4">
@@ -475,7 +486,7 @@ Accessibility:
           type="button"
           class="btn btn-ghost btn-sm btn-circle"
           onclick={goToPreviousMonth}
-          aria-label="Previous month"
+          aria-label={t('common.aria.previousMonth')}
         >
           {@html navigationIcons.arrowLeft}
         </button>
@@ -488,7 +499,7 @@ Accessibility:
           type="button"
           class="btn btn-ghost btn-sm btn-circle"
           onclick={goToNextMonth}
-          aria-label="Next month"
+          aria-label={t('common.aria.nextMonth')}
         >
           {@html navigationIcons.arrowRight}
         </button>
@@ -510,7 +521,7 @@ Accessibility:
         aria-labelledby="month-year-heading"
         aria-describedby="calendar-instructions"
       >
-        {#each calendarDays() as date}
+        {#each calendarDays() as date, i (date ? date.getTime() : `empty-${i}`)}
           {#if date}
             <button
               type="button"
@@ -537,18 +548,20 @@ Accessibility:
               onclick={() => selectDate(date)}
               onkeydown={handleKeyDown}
               disabled={!isDateSelectable(date)}
-              aria-label={cn(
+              aria-label={[
                 date.toLocaleDateString(),
                 isDateSelected(date)
                   ? t('components.datePicker.aria.dateSelected', {
                       date: date.toLocaleDateString(),
                     })
                   : '',
-                isToday(date) ? 'Today' : '',
+                isToday(date) ? t('components.datePicker.today') : '',
                 !isDateSelectable(date)
                   ? t('components.datePicker.aria.dayUnavailable', { day: date.getDate() })
-                  : ''
-              )}
+                  : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
               aria-selected={isDateSelected(date)}
               aria-current={isToday(date) ? 'date' : undefined}
             >
@@ -582,6 +595,9 @@ Accessibility:
             }
           }}
           disabled={!isDateSelectable(new Date())}
+          aria-label={t('components.datePicker.aria.todayButton', {
+            today: new Date().toLocaleDateString(),
+          })}
         >
           {t('components.datePicker.today')}
         </button>
