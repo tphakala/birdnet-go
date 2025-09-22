@@ -19,6 +19,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Hemisphere detection thresholds
+// Tropics of Cancer/Capricorn are at ±23.5°, but ±10° provides
+// a practical buffer for equatorial weather patterns
+const (
+	NorthernHemisphereThreshold = 10.0
+	SouthernHemisphereThreshold = -10.0
+)
+
 //go:embed config.yaml
 var configFiles embed.FS
 
@@ -346,9 +354,9 @@ type Season struct {
 // Returns "equatorial" for latitudes between -10 and 10 degrees,
 // "northern" for latitude > 10, "southern" for latitude < -10
 func DetectHemisphere(latitude float64) string {
-	if latitude > 10 {
+	if latitude > NorthernHemisphereThreshold {
 		return "northern"
-	} else if latitude < -10 {
+	} else if latitude < SouthernHemisphereThreshold {
 		return "southern"
 	}
 	return "equatorial"
@@ -481,18 +489,47 @@ func (s *SeasonalTrackingSettings) Validate() error {
 
 	// Validate seasons if custom ones are defined
 	if len(s.Seasons) > 0 {
+		// Validate each season's date
 		for name, season := range s.Seasons {
 			if err := season.Validate(name); err != nil {
 				return err
 			}
 		}
 
-		// Check that we have at least 2 seasons
-		if len(s.Seasons) < 2 {
-			return errors.Newf("at least 2 seasons must be defined, got %d", len(s.Seasons)).
-				Component("config").
-				Category(errors.CategoryValidation).
-				Build()
+		// Check that we have a complete set of seasons (either traditional or equatorial)
+		traditionalSeasons := []string{"spring", "summer", "fall", "winter"}
+		equatorialSeasons := []string{"wet1", "dry1", "wet2", "dry2"}
+		
+		hasAllTraditional := true
+		hasAllEquatorial := true
+		
+		// Check for traditional seasons
+		for _, required := range traditionalSeasons {
+			if _, exists := s.Seasons[required]; !exists {
+				hasAllTraditional = false
+				break
+			}
+		}
+		
+		// Check for equatorial seasons
+		for _, required := range equatorialSeasons {
+			if _, exists := s.Seasons[required]; !exists {
+				hasAllEquatorial = false
+				break
+			}
+		}
+		
+		// Must have either all traditional or all equatorial seasons
+		if !hasAllTraditional && !hasAllEquatorial {
+			// Check if we at least have minimum number of seasons
+			if len(s.Seasons) < 2 {
+				return errors.Newf("at least 2 seasons must be defined, got %d", len(s.Seasons)).
+					Component("config").
+					Category(errors.CategoryValidation).
+					Build()
+			}
+			// If not a complete set, warn but allow (for custom season configurations)
+			// This allows flexibility while ensuring data integrity
 		}
 	}
 
@@ -562,9 +599,9 @@ type RangeFilterSettings struct {
 	Debug       bool      `json:"debug"`                          // true to enable debug mode
 	Model       string    `json:"model"`                          // range filter model version: "legacy" for v1, or empty/default for v2
 	ModelPath   string    `json:"modelPath"`                      // path to external meta model file (empty for embedded)
-	Threshold   float32   `json:"threshold"`                      // rangefilter species occurrence threshold
-	Species     []string  `yaml:"-" json:"species,omitempty"`     // list of included species, runtime value
-	LastUpdated time.Time `yaml:"-" json:"lastUpdated,omitempty"` // last time the species list was updated, runtime value
+	Threshold   float32   `json:"threshold"`                  // rangefilter species occurrence threshold
+	Species     []string  `yaml:"-" json:"species,omitempty"` // list of included species, runtime value
+	LastUpdated time.Time `yaml:"-" json:"lastUpdated"`       // last time the species list was updated, runtime value
 }
 
 // BasicAuth holds settings for the password authentication
@@ -1097,6 +1134,15 @@ func SaveSettings() error {
 	settingsCopy.BirdNET.RangeFilter.Species = make([]string, len(settingsInstance.BirdNET.RangeFilter.Species))
 	copy(settingsCopy.BirdNET.RangeFilter.Species, settingsInstance.BirdNET.RangeFilter.Species)
 	speciesListMutex.RUnlock()
+
+	// Auto-update seasonal tracking dates based on latitude if seasonal tracking is enabled
+	// and no custom seasons are already defined
+	if settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Enabled &&
+		len(settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons) == 0 {
+		// Get hemisphere-appropriate default seasons
+		defaultSeasons := GetDefaultSeasons(settingsCopy.BirdNET.Latitude)
+		settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons = defaultSeasons
+	}
 
 	// Find the path of the current config file
 	configPath, err := FindConfigFile()

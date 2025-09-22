@@ -308,20 +308,20 @@ func TestDateValidation(t *testing.T) {
 	}
 }
 
-// TestWinterAdjustmentConstant verifies the constant and shouldAdjustWinter behavior
-func TestWinterAdjustmentConstant(t *testing.T) {
+// TestSeasonYearAdjustmentConstant verifies the constant and shouldAdjustYearForSeason behavior
+func TestSeasonYearAdjustmentConstant(t *testing.T) {
 	t.Parallel()
 	tracker := createTestTracker(t)
 
 	// Verify the constant value makes sense
-	assert.Equal(t, time.June, winterAdjustmentCutoffMonth,
-		"Winter adjustment cutoff should be June")
+	assert.Equal(t, time.June, yearCrossingCutoffMonth,
+		"Year crossing cutoff should be June")
 
-	// Test the logic with the constant and shouldAdjustWinter function
+	// Test the logic with the constant and shouldAdjustYearForSeason function
 	testCases := []struct {
 		month           int
 		expectedCompare bool // Expected result of month < cutoff
-		expectedAdjust  bool // Expected result of shouldAdjustWinter for December season
+		expectedAdjust  bool // Expected result of shouldAdjustYearForSeason for December season (current detection)
 	}{
 		{1, true, true},    // January < June, should adjust winter
 		{5, true, true},    // May < June, should adjust winter
@@ -332,21 +332,21 @@ func TestWinterAdjustmentConstant(t *testing.T) {
 
 	for _, tc := range testCases {
 		// Test direct comparison
-		actualCompare := time.Month(tc.month) < winterAdjustmentCutoffMonth
+		actualCompare := time.Month(tc.month) < yearCrossingCutoffMonth
 		assert.Equal(t, tc.expectedCompare, actualCompare,
 			"Month %d comparison with cutoff should be %v", tc.month, tc.expectedCompare)
 
-		// Test shouldAdjustWinter with December season
+		// Test shouldAdjustYearForSeason with December season (current detection)
 		testTime := time.Date(2025, time.Month(tc.month), 15, 12, 0, 0, 0, time.UTC)
-		actualAdjust := tracker.shouldAdjustWinter(testTime, time.December)
+		actualAdjust := tracker.shouldAdjustYearForSeason(testTime, time.December, false)
 		assert.Equal(t, tc.expectedAdjust, actualAdjust,
-			"shouldAdjustWinter for month %d with December season should be %v", tc.month, tc.expectedAdjust)
+			"shouldAdjustYearForSeason for month %d with December season should be %v", tc.month, tc.expectedAdjust)
 
-		// Additional test: non-December seasons should never adjust
-		if tc.month != 12 {
-			nonWinterAdjust := tracker.shouldAdjustWinter(testTime, time.Month(tc.month))
-			assert.False(t, nonWinterAdjust,
-				"shouldAdjustWinter for month %d with non-December season should always be false", tc.month)
+		// Additional test: non-year-crossing seasons (before October) should never adjust
+		if tc.month < 10 {
+			nonCrossingAdjust := tracker.shouldAdjustYearForSeason(testTime, time.Month(tc.month), false)
+			assert.False(t, nonCrossingAdjust,
+				"shouldAdjustYearForSeason for month %d with non-year-crossing season should always be false", tc.month)
 		}
 	}
 }
@@ -380,4 +380,312 @@ func TestSeasonBoundariesFixed(t *testing.T) {
 				"Season boundary detection for %s", boundary.description)
 		})
 	}
+}
+
+// TestEquatorialSeasonTracking verifies that equatorial regions with wet/dry seasons work correctly
+func TestEquatorialSeasonTracking(t *testing.T) {
+	t.Parallel()
+
+	// Create tracker with equatorial seasons
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: 7,
+		SyncIntervalMinutes:  60,
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled:    true,
+			WindowDays: 7,
+			Seasons: map[string]conf.Season{
+				"wet1": {StartMonth: 3, StartDay: 1},  // March-May wet season
+				"dry1": {StartMonth: 6, StartDay: 1},  // June-August dry season
+				"wet2": {StartMonth: 9, StartDay: 1},  // September-November wet season
+				"dry2": {StartMonth: 12, StartDay: 1}, // December-February dry season
+			},
+		},
+	}
+	tracker := NewTrackerFromSettings(nil, settings)
+
+	testCases := []struct {
+		date           time.Time
+		expectedSeason string
+		description    string
+	}{
+		{
+			date:           time.Date(2024, 3, 15, 10, 0, 0, 0, time.UTC),
+			expectedSeason: "wet1",
+			description:    "March should be in first wet season",
+		},
+		{
+			date:           time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC),
+			expectedSeason: "dry1",
+			description:    "June should be in first dry season",
+		},
+		{
+			date:           time.Date(2024, 9, 15, 10, 0, 0, 0, time.UTC),
+			expectedSeason: "wet2",
+			description:    "September should be in second wet season",
+		},
+		{
+			date:           time.Date(2024, 12, 15, 10, 0, 0, 0, time.UTC),
+			expectedSeason: "dry2",
+			description:    "December should be in second dry season",
+		},
+		{
+			date:           time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC),
+			expectedSeason: "dry2",
+			description:    "January should be in second dry season (continuing from December)",
+		},
+		{
+			date:           time.Date(2024, 2, 28, 10, 0, 0, 0, time.UTC),
+			expectedSeason: "dry2",
+			description:    "February should be in second dry season",
+		},
+		{
+			date:           time.Date(2024, 4, 1, 10, 0, 0, 0, time.UTC),
+			expectedSeason: "wet1",
+			description:    "April should be in first wet season",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			tracker.mu.Lock()
+			season := tracker.computeCurrentSeason(tc.date)
+			tracker.mu.Unlock()
+
+			assert.Equal(t, tc.expectedSeason, season, tc.description)
+		})
+	}
+}
+
+// TestHemisphereDetection verifies latitude-based hemisphere detection
+func TestHemisphereDetection(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		latitude           float64
+		expectedHemisphere string
+		description        string
+	}{
+		{
+			latitude:           45.0,
+			expectedHemisphere: "northern",
+			description:        "45° latitude should be northern hemisphere",
+		},
+		{
+			latitude:           -45.0,
+			expectedHemisphere: "southern",
+			description:        "-45° latitude should be southern hemisphere",
+		},
+		{
+			latitude:           0.0,
+			expectedHemisphere: "equatorial",
+			description:        "0° latitude should be equatorial",
+		},
+		{
+			latitude:           5.0,
+			expectedHemisphere: "equatorial",
+			description:        "5° latitude should be equatorial",
+		},
+		{
+			latitude:           -5.0,
+			expectedHemisphere: "equatorial",
+			description:        "-5° latitude should be equatorial",
+		},
+		{
+			latitude:           10.0,
+			expectedHemisphere: "equatorial",
+			description:        "10° latitude should be equatorial (at threshold)",
+		},
+		{
+			latitude:           -10.0,
+			expectedHemisphere: "equatorial",
+			description:        "-10° latitude should be equatorial (at threshold)",
+		},
+		{
+			latitude:           10.1,
+			expectedHemisphere: "northern",
+			description:        "10.1° latitude should be northern hemisphere",
+		},
+		{
+			latitude:           -10.1,
+			expectedHemisphere: "southern",
+			description:        "-10.1° latitude should be southern hemisphere",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			hemisphere := conf.DetectHemisphere(tc.latitude)
+			assert.Equal(t, tc.expectedHemisphere, hemisphere, tc.description)
+		})
+	}
+}
+
+// TestGetDefaultSeasons verifies that default seasons are returned correctly based on hemisphere
+func TestGetDefaultSeasons(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		latitude        float64
+		expectedSeasons []string
+		description     string
+	}{
+		{
+			latitude:        45.0, // Northern
+			expectedSeasons: []string{"spring", "summer", "fall", "winter"},
+			description:     "Northern hemisphere should get traditional seasons",
+		},
+		{
+			latitude:        -45.0, // Southern
+			expectedSeasons: []string{"spring", "summer", "fall", "winter"},
+			description:     "Southern hemisphere should get traditional seasons",
+		},
+		{
+			latitude:        0.0, // Equatorial
+			expectedSeasons: []string{"wet1", "dry1", "wet2", "dry2"},
+			description:     "Equatorial region should get wet/dry seasons",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			seasons := conf.GetDefaultSeasons(tc.latitude)
+
+			// Check that all expected seasons are present
+			for _, expectedSeason := range tc.expectedSeasons {
+				_, exists := seasons[expectedSeason]
+				assert.True(t, exists, "Season %s should exist for %s", expectedSeason, tc.description)
+			}
+
+			// Check that we have exactly 4 seasons
+			assert.Len(t, seasons, 4, "Should have exactly 4 seasons")
+		})
+	}
+}
+
+// TestSouthernHemisphereSeasonAdjustment verifies that southern hemisphere gets inverted seasons
+func TestSouthernHemisphereSeasonAdjustment(t *testing.T) {
+	t.Parallel()
+
+	// Get default seasons for northern and southern hemispheres
+	northernSeasons := conf.GetDefaultSeasons(45.0)  // Northern hemisphere
+	southernSeasons := conf.GetDefaultSeasons(-45.0) // Southern hemisphere
+
+	// Test that southern hemisphere seasons are shifted by 6 months from northern
+	testCases := []struct {
+		seasonName       string
+		northernMonth    int
+		expectedSouthern int
+		description      string
+	}{
+		{
+			seasonName:       "spring",
+			northernMonth:    3,  // March in Northern
+			expectedSouthern: 9,  // September in Southern
+			description:      "Spring should be in September for southern hemisphere",
+		},
+		{
+			seasonName:       "summer",
+			northernMonth:    6,  // June in Northern
+			expectedSouthern: 12, // December in Southern
+			description:      "Summer should be in December for southern hemisphere",
+		},
+		{
+			seasonName:       "fall",
+			northernMonth:    9,  // September in Northern
+			expectedSouthern: 3,  // March in Southern
+			description:      "Fall should be in March for southern hemisphere",
+		},
+		{
+			seasonName:       "winter",
+			northernMonth:    12, // December in Northern
+			expectedSouthern: 6,  // June in Southern
+			description:      "Winter should be in June for southern hemisphere",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			northSeason := northernSeasons[tc.seasonName]
+			southSeason := southernSeasons[tc.seasonName]
+
+			assert.Equal(t, tc.northernMonth, northSeason.StartMonth, 
+				"Northern hemisphere %s should start in month %d", tc.seasonName, tc.northernMonth)
+			assert.Equal(t, tc.expectedSouthern, southSeason.StartMonth,
+				"Southern hemisphere %s should start in month %d", tc.seasonName, tc.expectedSouthern)
+		})
+	}
+}
+
+// TestHemisphereSeasonTracking verifies season tracking works correctly for each hemisphere
+func TestHemisphereSeasonTracking(t *testing.T) {
+	t.Parallel()
+
+	// Test northern hemisphere season tracking
+	t.Run("Northern Hemisphere", func(t *testing.T) {
+		settings := &conf.SpeciesTrackingSettings{
+			Enabled:              true,
+			NewSpeciesWindowDays: 7,
+			SyncIntervalMinutes:  60,
+			SeasonalTracking: conf.SeasonalTrackingSettings{
+				Enabled:    true,
+				WindowDays: 7,
+				Seasons:    conf.GetDefaultSeasons(45.0), // Northern hemisphere
+			},
+		}
+		tracker := NewTrackerFromSettings(nil, settings)
+
+		testCases := []struct {
+			date           time.Time
+			expectedSeason string
+		}{
+			{time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC), "winter"},  // January
+			{time.Date(2024, 4, 15, 10, 0, 0, 0, time.UTC), "spring"},  // April
+			{time.Date(2024, 7, 15, 10, 0, 0, 0, time.UTC), "summer"},  // July
+			{time.Date(2024, 10, 15, 10, 0, 0, 0, time.UTC), "fall"},   // October
+			{time.Date(2024, 12, 25, 10, 0, 0, 0, time.UTC), "winter"}, // December
+		}
+
+		for _, tc := range testCases {
+			tracker.mu.Lock()
+			season := tracker.computeCurrentSeason(tc.date)
+			tracker.mu.Unlock()
+			assert.Equal(t, tc.expectedSeason, season, 
+				"Northern hemisphere %s should be %s", tc.date.Month(), tc.expectedSeason)
+		}
+	})
+
+	// Test southern hemisphere season tracking
+	t.Run("Southern Hemisphere", func(t *testing.T) {
+		settings := &conf.SpeciesTrackingSettings{
+			Enabled:              true,
+			NewSpeciesWindowDays: 7,
+			SyncIntervalMinutes:  60,
+			SeasonalTracking: conf.SeasonalTrackingSettings{
+				Enabled:    true,
+				WindowDays: 7,
+				Seasons:    conf.GetDefaultSeasons(-45.0), // Southern hemisphere
+			},
+		}
+		tracker := NewTrackerFromSettings(nil, settings)
+
+		testCases := []struct {
+			date           time.Time
+			expectedSeason string
+		}{
+			{time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC), "summer"},  // January (summer in Southern)
+			{time.Date(2024, 4, 15, 10, 0, 0, 0, time.UTC), "fall"},    // April (fall in Southern)
+			{time.Date(2024, 7, 15, 10, 0, 0, 0, time.UTC), "winter"},  // July (winter in Southern)
+			{time.Date(2024, 10, 15, 10, 0, 0, 0, time.UTC), "spring"}, // October (spring in Southern)
+			{time.Date(2024, 12, 25, 10, 0, 0, 0, time.UTC), "summer"}, // December (summer in Southern)
+		}
+
+		for _, tc := range testCases {
+			tracker.mu.Lock()
+			season := tracker.computeCurrentSeason(tc.date)
+			tracker.mu.Unlock()
+			assert.Equal(t, tc.expectedSeason, season,
+				"Southern hemisphere %s should be %s", tc.date.Month(), tc.expectedSeason)
+		}
+	})
 }

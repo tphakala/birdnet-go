@@ -66,7 +66,7 @@ func TestWinterSeasonAdjustmentBug(t *testing.T) {
 
 		tracker.mu.Lock()
 		season := tracker.getCurrentSeason(januaryTime)
-		shouldAdjust := tracker.shouldAdjustWinter(januaryTime, time.December)
+		shouldAdjust := tracker.shouldAdjustYearForSeason(januaryTime, time.December, false)
 		tracker.mu.Unlock()
 
 		assert.Equal(t, "winter", season, "January should be in winter season")
@@ -102,7 +102,7 @@ func TestWinterSeasonAdjustmentBug(t *testing.T) {
 			t.Run(tc.description, func(t *testing.T) {
 				testTime := time.Date(2024, tc.month, 15, 10, 0, 0, 0, time.UTC)
 				tracker.mu.Lock()
-				result := tracker.shouldAdjustWinter(testTime, time.December)
+				result := tracker.shouldAdjustYearForSeason(testTime, time.December, false)
 				tracker.mu.Unlock()
 				assert.Equal(t, tc.shouldAdjust, result, tc.description)
 			})
@@ -410,7 +410,7 @@ func TestCacheCleanup(t *testing.T) {
 	currentTime := time.Now()
 
 	// Add many species to trigger cache growth
-	for i := 0; i < 1100; i++ {
+	for i := range 1100 {
 		species := fmt.Sprintf("Species%d", i)
 		tracker.UpdateSpecies(species, currentTime)
 		tracker.GetSpeciesStatus(species, currentTime)
@@ -801,11 +801,11 @@ func TestConcurrentNotificationOperations(t *testing.T) {
 	currentTime := time.Now()
 
 	// Run concurrent notification operations
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < 100; j++ {
+			for j := range 100 {
 				speciesName := species[j%len(species)]
 				switch id % 3 {
 				case 0:

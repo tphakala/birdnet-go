@@ -6,6 +6,7 @@ package species
 
 import (
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -27,12 +28,12 @@ const (
 
 	// Time calculations
 	hoursPerDay               = 24
-	seasonBufferDays          = 7 // Days buffer for season comparison
-	seasonBufferDuration      = seasonBufferDays * hoursPerDay * time.Hour
-	defaultSeasonDurationDays = 90 // Typical season duration
+	seasonBufferDays     = 7 // Days buffer for season comparison
+	seasonBufferDuration = seasonBufferDays * hoursPerDay * time.Hour
 
 	// Season calculations
-	winterAdjustmentCutoffMonth time.Month = time.June // June - first month where winter shouldn't adjust to previous year
+	// For any season starting in late year months (Oct, Nov, Dec), adjustment happens if current month is early in year
+	yearCrossingCutoffMonth time.Month = time.June // Cutoff for determining year-crossing season adjustment
 
 	// Notification suppression
 	defaultNotificationSuppressionWindow = 168 * time.Hour // Default suppression window (7 days)
@@ -160,6 +161,10 @@ type SpeciesTracker struct {
 	// Simply maps scientific name -> last notification time
 	notificationLastSent          map[string]time.Time
 	notificationSuppressionWindow time.Duration // Duration to suppress duplicate notifications (default: 7 days)
+
+	// Cached season order for performance optimization (built once at initialization)
+	// This avoids rebuilding the season order on every computeCurrentSeason() call
+	cachedSeasonOrder []string
 }
 
 // seasonDates represents the start date for a season
@@ -217,6 +222,15 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 	// Initialize seasons from configuration
 	if settings.SeasonalTracking.Enabled && len(settings.SeasonalTracking.Seasons) > 0 {
 		for name, season := range settings.SeasonalTracking.Seasons {
+			// Validate season date
+			if err := validateSeasonDate(season.StartMonth, season.StartDay); err != nil {
+				logger.Error("Invalid season date, skipping",
+					"season", name,
+					"month", season.StartMonth,
+					"day", season.StartDay,
+					"error", err)
+				continue
+			}
 			tracker.seasons[name] = seasonDates{
 				month: season.StartMonth,
 				day:   season.StartDay,
@@ -228,6 +242,11 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 		}
 	} else {
 		tracker.initializeDefaultSeasons()
+	}
+
+	// Build cached season order once at initialization
+	if tracker.seasonalEnabled {
+		tracker.initializeSeasonOrder()
 	}
 
 	tracker.currentSeason = tracker.getCurrentSeason(now)
@@ -256,32 +275,116 @@ func (t *SpeciesTracker) initializeDefaultSeasons() {
 	t.seasons["winter"] = seasonDates{month: 12, day: 21} // December 21
 }
 
-// shouldAdjustWinter adjusts the season start year only when the season month is December
-// and the current month is before winterAdjustmentCutoffMonth (Jan-May)
-func (t *SpeciesTracker) shouldAdjustWinter(now time.Time, seasonMonth time.Month) bool {
-	return seasonMonth == time.December && now.Month() < winterAdjustmentCutoffMonth
+// initializeSeasonOrder builds the cached season order based on configured seasons
+// This is called once at initialization to avoid rebuilding on every computeCurrentSeason() call
+func (t *SpeciesTracker) initializeSeasonOrder() {
+	// Check if we have traditional seasons
+	if _, hasWinter := t.seasons["winter"]; hasWinter {
+		// Traditional seasons: winter, spring, summer, fall (in chronological order within a year)
+		seasonOrder := []string{"winter", "spring", "summer", "fall"}
+		// Validate all required seasons exist
+		allPresent := true
+		for _, required := range seasonOrder {
+			if _, exists := t.seasons[required]; !exists {
+				logger.Warn("Missing traditional season in configuration",
+					"missing_season", required,
+					"available_seasons", t.seasons)
+				allPresent = false
+				break
+			}
+		}
+		if allPresent {
+			t.cachedSeasonOrder = seasonOrder
+			return
+		}
+	} else if _, hasWet1 := t.seasons["wet1"]; hasWet1 {
+		// Equatorial seasons: dry2, wet1, dry1, wet2 (in chronological order within a year)
+		seasonOrder := []string{"dry2", "wet1", "dry1", "wet2"}
+		// Validate all required seasons exist
+		allPresent := true
+		for _, required := range seasonOrder {
+			if _, exists := t.seasons[required]; !exists {
+				logger.Warn("Missing equatorial season in configuration",
+					"missing_season", required,
+					"available_seasons", t.seasons)
+				allPresent = false
+				break
+			}
+		}
+		if allPresent {
+			t.cachedSeasonOrder = seasonOrder
+			return
+		}
+	}
+
+	// Fall back to using all available seasons if non-standard configuration
+	t.cachedSeasonOrder = make([]string, 0, len(t.seasons))
+	for name := range t.seasons {
+		t.cachedSeasonOrder = append(t.cachedSeasonOrder, name)
+	}
+	
+	logger.Debug("Initialized season order cache",
+		"order", t.cachedSeasonOrder,
+		"count", len(t.cachedSeasonOrder))
 }
 
-// shouldAdjustSeasonToPreviousYear determines if a season should use the previous year
-// This handles cases where we're requesting a season range that occurred in the previous year
-// The main use case is requesting "fall" season when we're currently in winter months
-func (t *SpeciesTracker) shouldAdjustSeasonToPreviousYear(now time.Time, seasonMonth time.Month) bool {
-	// Winter season (December) - adjust if we're in early months of next year
-	// This is the original winter adjustment logic
-	if seasonMonth == time.December && now.Month() < winterAdjustmentCutoffMonth {
+// validateSeasonDate validates that a month/day combination is valid
+func validateSeasonDate(month, day int) error {
+	// Days in each month (non-leap year)
+	daysInMonth := []int{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+	
+	if month < 1 || month > 12 {
+		return errors.Newf("invalid month: %d (must be 1-12)", month).
+			Component("species-tracking").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+	
+	maxDays := daysInMonth[month-1]
+	// Special case for February - accept 29 for leap years
+	if month == 2 {
+		maxDays = 29 // Accept Feb 29 since seasons are year-agnostic
+	}
+	
+	if day < 1 || day > maxDays {
+		return errors.Newf("invalid day %d for month %d (must be 1-%d)", day, month, maxDays).
+			Component("species-tracking").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+	
+	return nil
+}
+
+// shouldAdjustYearForSeason determines if a season's year should be adjusted backward
+// based on the current time and the use case (detection vs range calculation).
+//
+// For year-crossing seasons (Oct-Dec), adjusts to previous year when in early months (Jan-May).
+// For range calculations, also handles fall season (Sep) when queried during winter months.
+//
+// Parameters:
+//   - now: The current time to base the adjustment on
+//   - seasonMonth: The month when the season starts
+//   - isRangeCalculation: true when calculating date ranges (e.g., getSeasonDateRange),
+//     false when detecting current season (e.g., computeCurrentSeason)
+func (t *SpeciesTracker) shouldAdjustYearForSeason(now time.Time, seasonMonth time.Month, isRangeCalculation bool) bool {
+	// Core logic: Year-crossing seasons (Oct-Dec) in early months of the year
+	// These seasons span year boundaries (e.g., Northern winter: Dec-Feb, Southern summer: Dec-Feb)
+	if seasonMonth >= time.October && now.Month() < yearCrossingCutoffMonth {
 		return true
 	}
 
-	// Fall season (September) - adjust if we're in winter months (Dec, Jan, Feb)
-	// When in winter, asking for fall should return the recently passed fall
-	if seasonMonth == time.September && (now.Month() == time.December || now.Month() == time.January || now.Month() == time.February) {
-		return true
+	// Additional logic for range calculations only:
+	// Handle fall season (September) when queried during winter months.
+	// When in winter and asking for "fall", return the recently passed fall, not the upcoming one.
+	if isRangeCalculation && seasonMonth == time.September {
+		winterMonths := []time.Month{time.December, time.January, time.February}
+		return slices.Contains(winterMonths, now.Month())
 	}
 
 	// For other seasons (spring, summer), don't adjust to previous year
 	// Spring in January should return upcoming spring, not previous spring
 	// Summer in January should return upcoming summer, not previous summer
-
 	return false
 }
 
@@ -364,7 +467,7 @@ func (t *SpeciesTracker) isSameSeasonPeriod(time1, time2 time.Time) bool {
 	}
 
 	// If times are within seasonBufferDays of each other, they're very likely in the same season
-	// (seasons typically last ~defaultSeasonDurationDays days, so seasonBufferDays is a safe buffer)
+	// (seasons typically last ~90 days, so seasonBufferDays is a safe buffer)
 	timeDiff := time1.Sub(time2)
 	if timeDiff < 0 {
 		timeDiff = -timeDiff
@@ -384,9 +487,16 @@ func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 		"current_day", currentDay,
 		"current_year", currentTime.Year())
 
-	// Check seasons in a deterministic order to handle boundaries correctly
-	// Order: winter, spring, summer, fall (in chronological order within a year)
-	seasonOrder := []string{"winter", "spring", "summer", "fall"}
+	// Use cached season order for efficiency (built once at initialization)
+	// This avoids rebuilding the order on every call
+	seasonOrder := t.cachedSeasonOrder
+	if len(seasonOrder) == 0 {
+		// Defensive check: rebuild if cache is empty (shouldn't happen in normal operation)
+		logger.Warn("Season order cache was empty, rebuilding",
+			"seasons", t.seasons)
+		t.initializeSeasonOrder()
+		seasonOrder = t.cachedSeasonOrder
+	}
 
 	// Find the most recent season start date
 	var currentSeason string
@@ -401,8 +511,8 @@ func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 		// Create a date for this year's season start
 		seasonDate := time.Date(currentTime.Year(), time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
 
-		// Handle winter season that might start in previous year
-		if t.shouldAdjustWinter(currentTime, time.Month(seasonStart.month)) {
+		// Handle seasons that might cross year boundaries
+		if t.shouldAdjustYearForSeason(currentTime, time.Month(seasonStart.month), false) {
 			seasonDate = time.Date(currentTime.Year()-1, time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
 			logger.Debug("Adjusting winter season to previous year",
 				"season", seasonName,
@@ -818,7 +928,7 @@ func (t *SpeciesTracker) getSeasonDateRange(seasonName string, now time.Time) (s
 	seasonStart := time.Date(currentYear, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
 
 	// Handle seasons that might need adjustment to previous year
-	if t.shouldAdjustSeasonToPreviousYear(now, time.Month(season.month)) {
+	if t.shouldAdjustYearForSeason(now, time.Month(season.month), true) {
 		seasonStart = time.Date(currentYear-1, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
 	}
 
@@ -985,10 +1095,7 @@ func (t *SpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, cur
 	if exists {
 		daysSince := int(currentTime.Sub(firstSeen).Hours() / hoursPerDay)
 		// Defensive check: prevent negative days due to concurrent operations or timing edge cases
-		if daysSince < 0 {
-			// Treat negative days as 0 (safest approach for concurrent scenarios)
-			daysSince = 0
-		}
+		daysSince = max(0, daysSince)
 		status.DaysSinceFirst = daysSince
 		status.IsNew = daysSince <= t.windowDays
 	} else {
@@ -1003,10 +1110,7 @@ func (t *SpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, cur
 		if firstThisYear != nil {
 			daysThisYear := int(currentTime.Sub(*firstThisYear).Hours() / hoursPerDay)
 			// Defensive check: prevent negative days due to concurrent operations or timing edge cases
-			if daysThisYear < 0 {
-				// Treat negative days as 0 (safest approach for concurrent scenarios)
-				daysThisYear = 0
-			}
+			daysThisYear = max(0, daysThisYear)
 			status.DaysThisYear = daysThisYear
 			status.IsNewThisYear = daysThisYear <= t.yearlyWindowDays
 		} else {
@@ -1021,10 +1125,7 @@ func (t *SpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, cur
 		if firstThisSeason != nil {
 			daysThisSeason := int(currentTime.Sub(*firstThisSeason).Hours() / hoursPerDay)
 			// Defensive check: prevent negative days due to concurrent operations or timing edge cases
-			if daysThisSeason < 0 {
-				// Treat negative days as 0 (safest approach for concurrent scenarios)
-				daysThisSeason = 0
-			}
+			daysThisSeason = max(0, daysThisSeason)
 			status.DaysThisSeason = daysThisSeason
 			status.IsNewThisSeason = daysThisSeason <= t.seasonalWindowDays
 		} else {
@@ -1187,10 +1288,7 @@ func (t *SpeciesTracker) buildSpeciesStatusLocked(scientificName string, current
 		if firstThisYear != nil {
 			daysThisYear := int(currentTime.Sub(*firstThisYear).Hours() / hoursPerDay)
 			// Defensive check: prevent negative days due to concurrent operations or timing edge cases
-			if daysThisYear < 0 {
-				// Treat negative days as 0 (safest approach for concurrent scenarios)
-				daysThisYear = 0
-			}
+			daysThisYear = max(0, daysThisYear)
 			status.DaysThisYear = daysThisYear
 			status.IsNewThisYear = daysThisYear <= t.yearlyWindowDays
 		} else {
@@ -1205,10 +1303,7 @@ func (t *SpeciesTracker) buildSpeciesStatusLocked(scientificName string, current
 		if firstThisSeason != nil {
 			daysThisSeason := int(currentTime.Sub(*firstThisSeason).Hours() / hoursPerDay)
 			// Defensive check: prevent negative days due to concurrent operations or timing edge cases
-			if daysThisSeason < 0 {
-				// Treat negative days as 0 (safest approach for concurrent scenarios)
-				daysThisSeason = 0
-			}
+			daysThisSeason = max(0, daysThisSeason)
 			status.DaysThisSeason = daysThisSeason
 			status.IsNewThisSeason = daysThisSeason <= t.seasonalWindowDays
 		} else {
