@@ -66,7 +66,7 @@ func TestWinterSeasonAdjustmentBug(t *testing.T) {
 
 		tracker.mu.Lock()
 		season := tracker.getCurrentSeason(januaryTime)
-		shouldAdjust := tracker.shouldAdjustSeasonYear(januaryTime, time.December)
+		shouldAdjust := tracker.shouldAdjustYearForSeason(januaryTime, time.December, false)
 		tracker.mu.Unlock()
 
 		assert.Equal(t, "winter", season, "January should be in winter season")
@@ -102,7 +102,7 @@ func TestWinterSeasonAdjustmentBug(t *testing.T) {
 			t.Run(tc.description, func(t *testing.T) {
 				testTime := time.Date(2024, tc.month, 15, 10, 0, 0, 0, time.UTC)
 				tracker.mu.Lock()
-				result := tracker.shouldAdjustSeasonYear(testTime, time.December)
+				result := tracker.shouldAdjustYearForSeason(testTime, time.December, false)
 				tracker.mu.Unlock()
 				assert.Equal(t, tc.shouldAdjust, result, tc.description)
 			})

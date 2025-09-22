@@ -257,37 +257,39 @@ func (t *SpeciesTracker) initializeDefaultSeasons() {
 	t.seasons["winter"] = seasonDates{month: 12, day: 21} // December 21
 }
 
-// shouldAdjustSeasonYear determines if a season's start year should be adjusted to the previous year.
-// This handles seasons that cross year boundaries (e.g., Northern winter: Dec-Feb, Southern summer: Dec-Feb).
-// Seasons starting in Oct, Nov, or Dec are considered year-crossing seasons.
-// For these seasons, if we're in the early months of the year (Jan-May), we adjust to the previous year.
-func (t *SpeciesTracker) shouldAdjustSeasonYear(now time.Time, seasonMonth time.Month) bool {
-	// Any season starting in the last quarter (Oct, Nov, Dec) might cross year boundary
-	isYearCrossingSeason := seasonMonth >= time.October
-	// If we're in early months (Jan-May) and the season starts late in year, adjust to previous year
-	return isYearCrossingSeason && now.Month() < yearCrossingCutoffMonth
-}
-
-// shouldAdjustSeasonToPreviousYear determines if a season should use the previous year
-// This handles cases where we're requesting a season range that occurred in the previous year
-// The main use case is requesting "fall" season when we're currently in winter months
-func (t *SpeciesTracker) shouldAdjustSeasonToPreviousYear(now time.Time, seasonMonth time.Month) bool {
-	// Any season starting in the last quarter (Oct, Nov, Dec) might cross year boundary
-	// If we're in early months (Jan-May) and the season starts late in year, adjust to previous year
+// shouldAdjustYearForSeason determines if a season's year should be adjusted backward
+// based on the current time and the use case (detection vs range calculation).
+//
+// For year-crossing seasons (Oct-Dec), adjusts to previous year when in early months (Jan-May).
+// For range calculations, also handles fall season (Sep) when queried during winter months.
+//
+// Parameters:
+//   - now: The current time to base the adjustment on
+//   - seasonMonth: The month when the season starts
+//   - isRangeCalculation: true when calculating date ranges (e.g., getSeasonDateRange),
+//     false when detecting current season (e.g., computeCurrentSeason)
+func (t *SpeciesTracker) shouldAdjustYearForSeason(now time.Time, seasonMonth time.Month, isRangeCalculation bool) bool {
+	// Core logic: Year-crossing seasons (Oct-Dec) in early months of the year
+	// These seasons span year boundaries (e.g., Northern winter: Dec-Feb, Southern summer: Dec-Feb)
 	if seasonMonth >= time.October && now.Month() < yearCrossingCutoffMonth {
 		return true
 	}
 
-	// Fall season (September) - adjust if we're in winter months (Dec, Jan, Feb)
-	// When in winter, asking for fall should return the recently passed fall
-	if seasonMonth == time.September && (now.Month() == time.December || now.Month() == time.January || now.Month() == time.February) {
-		return true
+	// Additional logic for range calculations only:
+	// Handle fall season (September) when queried during winter months.
+	// When in winter and asking for "fall", return the recently passed fall, not the upcoming one.
+	if isRangeCalculation && seasonMonth == time.September {
+		winterMonths := []time.Month{time.December, time.January, time.February}
+		for _, m := range winterMonths {
+			if now.Month() == m {
+				return true
+			}
+		}
 	}
 
 	// For other seasons (spring, summer), don't adjust to previous year
 	// Spring in January should return upcoming spring, not previous spring
 	// Summer in January should return upcoming summer, not previous summer
-
 	return false
 }
 
@@ -391,8 +393,22 @@ func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 		"current_year", currentTime.Year())
 
 	// Check seasons in a deterministic order to handle boundaries correctly
-	// Order: winter, spring, summer, fall (in chronological order within a year)
-	seasonOrder := []string{"winter", "spring", "summer", "fall"}
+	// Build season order based on what's actually configured
+	var seasonOrder []string
+	
+	// Check if we have traditional seasons
+	if _, hasWinter := t.seasons["winter"]; hasWinter {
+		// Traditional seasons: winter, spring, summer, fall (in chronological order within a year)
+		seasonOrder = []string{"winter", "spring", "summer", "fall"}
+	} else if _, hasWet1 := t.seasons["wet1"]; hasWet1 {
+		// Equatorial seasons: dry2, wet1, dry1, wet2 (in chronological order within a year)
+		seasonOrder = []string{"dry2", "wet1", "dry1", "wet2"}
+	} else {
+		// Use all available seasons if non-standard configuration
+		for name := range t.seasons {
+			seasonOrder = append(seasonOrder, name)
+		}
+	}
 
 	// Find the most recent season start date
 	var currentSeason string
@@ -408,7 +424,7 @@ func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 		seasonDate := time.Date(currentTime.Year(), time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
 
 		// Handle seasons that might cross year boundaries
-		if t.shouldAdjustSeasonYear(currentTime, time.Month(seasonStart.month)) {
+		if t.shouldAdjustYearForSeason(currentTime, time.Month(seasonStart.month), false) {
 			seasonDate = time.Date(currentTime.Year()-1, time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
 			logger.Debug("Adjusting winter season to previous year",
 				"season", seasonName,
@@ -824,7 +840,7 @@ func (t *SpeciesTracker) getSeasonDateRange(seasonName string, now time.Time) (s
 	seasonStart := time.Date(currentYear, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
 
 	// Handle seasons that might need adjustment to previous year
-	if t.shouldAdjustSeasonToPreviousYear(now, time.Month(season.month)) {
+	if t.shouldAdjustYearForSeason(now, time.Month(season.month), true) {
 		seasonStart = time.Date(currentYear-1, time.Month(season.month), season.day, 0, 0, 0, 0, now.Location())
 	}
 
