@@ -1098,6 +1098,15 @@ func SaveSettings() error {
 	copy(settingsCopy.BirdNET.RangeFilter.Species, settingsInstance.BirdNET.RangeFilter.Species)
 	speciesListMutex.RUnlock()
 
+	// Auto-update seasonal tracking dates based on latitude if seasonal tracking is enabled
+	// and no custom seasons are already defined
+	if settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Enabled &&
+		len(settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons) == 0 {
+		// Get hemisphere-appropriate default seasons
+		defaultSeasons := GetDefaultSeasons(settingsCopy.BirdNET.Latitude)
+		settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons = defaultSeasons
+	}
+
 	// Find the path of the current config file
 	configPath, err := FindConfigFile()
 	if err != nil {

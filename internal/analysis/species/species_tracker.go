@@ -32,7 +32,8 @@ const (
 	defaultSeasonDurationDays = 90 // Typical season duration
 
 	// Season calculations
-	winterAdjustmentCutoffMonth time.Month = time.June // June - first month where winter shouldn't adjust to previous year
+	// For any season starting in late year months (Oct, Nov, Dec), adjustment happens if current month is early in year
+	yearCrossingCutoffMonth time.Month = time.June // Cutoff for determining year-crossing season adjustment
 
 	// Notification suppression
 	defaultNotificationSuppressionWindow = 168 * time.Hour // Default suppression window (7 days)
@@ -256,19 +257,24 @@ func (t *SpeciesTracker) initializeDefaultSeasons() {
 	t.seasons["winter"] = seasonDates{month: 12, day: 21} // December 21
 }
 
-// shouldAdjustWinter adjusts the season start year only when the season month is December
-// and the current month is before winterAdjustmentCutoffMonth (Jan-May)
-func (t *SpeciesTracker) shouldAdjustWinter(now time.Time, seasonMonth time.Month) bool {
-	return seasonMonth == time.December && now.Month() < winterAdjustmentCutoffMonth
+// shouldAdjustSeasonYear determines if a season's start year should be adjusted to the previous year.
+// This handles seasons that cross year boundaries (e.g., Northern winter: Dec-Feb, Southern summer: Dec-Feb).
+// Seasons starting in Oct, Nov, or Dec are considered year-crossing seasons.
+// For these seasons, if we're in the early months of the year (Jan-May), we adjust to the previous year.
+func (t *SpeciesTracker) shouldAdjustSeasonYear(now time.Time, seasonMonth time.Month) bool {
+	// Any season starting in the last quarter (Oct, Nov, Dec) might cross year boundary
+	isYearCrossingSeason := seasonMonth >= time.October
+	// If we're in early months (Jan-May) and the season starts late in year, adjust to previous year
+	return isYearCrossingSeason && now.Month() < yearCrossingCutoffMonth
 }
 
 // shouldAdjustSeasonToPreviousYear determines if a season should use the previous year
 // This handles cases where we're requesting a season range that occurred in the previous year
 // The main use case is requesting "fall" season when we're currently in winter months
 func (t *SpeciesTracker) shouldAdjustSeasonToPreviousYear(now time.Time, seasonMonth time.Month) bool {
-	// Winter season (December) - adjust if we're in early months of next year
-	// This is the original winter adjustment logic
-	if seasonMonth == time.December && now.Month() < winterAdjustmentCutoffMonth {
+	// Any season starting in the last quarter (Oct, Nov, Dec) might cross year boundary
+	// If we're in early months (Jan-May) and the season starts late in year, adjust to previous year
+	if seasonMonth >= time.October && now.Month() < yearCrossingCutoffMonth {
 		return true
 	}
 
@@ -401,8 +407,8 @@ func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 		// Create a date for this year's season start
 		seasonDate := time.Date(currentTime.Year(), time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
 
-		// Handle winter season that might start in previous year
-		if t.shouldAdjustWinter(currentTime, time.Month(seasonStart.month)) {
+		// Handle seasons that might cross year boundaries
+		if t.shouldAdjustSeasonYear(currentTime, time.Month(seasonStart.month)) {
 			seasonDate = time.Date(currentTime.Year()-1, time.Month(seasonStart.month), seasonStart.day, 0, 0, 0, 0, currentTime.Location())
 			logger.Debug("Adjusting winter season to previous year",
 				"season", seasonName,

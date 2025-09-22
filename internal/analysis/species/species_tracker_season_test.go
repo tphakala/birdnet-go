@@ -308,20 +308,20 @@ func TestDateValidation(t *testing.T) {
 	}
 }
 
-// TestWinterAdjustmentConstant verifies the constant and shouldAdjustWinter behavior
-func TestWinterAdjustmentConstant(t *testing.T) {
+// TestSeasonYearAdjustmentConstant verifies the constant and shouldAdjustSeasonYear behavior
+func TestSeasonYearAdjustmentConstant(t *testing.T) {
 	t.Parallel()
 	tracker := createTestTracker(t)
 
 	// Verify the constant value makes sense
-	assert.Equal(t, time.June, winterAdjustmentCutoffMonth,
-		"Winter adjustment cutoff should be June")
+	assert.Equal(t, time.June, yearCrossingCutoffMonth,
+		"Year crossing cutoff should be June")
 
-	// Test the logic with the constant and shouldAdjustWinter function
+	// Test the logic with the constant and shouldAdjustSeasonYear function
 	testCases := []struct {
 		month           int
 		expectedCompare bool // Expected result of month < cutoff
-		expectedAdjust  bool // Expected result of shouldAdjustWinter for December season
+		expectedAdjust  bool // Expected result of shouldAdjustSeasonYear for December season
 	}{
 		{1, true, true},    // January < June, should adjust winter
 		{5, true, true},    // May < June, should adjust winter
@@ -332,21 +332,21 @@ func TestWinterAdjustmentConstant(t *testing.T) {
 
 	for _, tc := range testCases {
 		// Test direct comparison
-		actualCompare := time.Month(tc.month) < winterAdjustmentCutoffMonth
+		actualCompare := time.Month(tc.month) < yearCrossingCutoffMonth
 		assert.Equal(t, tc.expectedCompare, actualCompare,
 			"Month %d comparison with cutoff should be %v", tc.month, tc.expectedCompare)
 
-		// Test shouldAdjustWinter with December season
+		// Test shouldAdjustSeasonYear with December season
 		testTime := time.Date(2025, time.Month(tc.month), 15, 12, 0, 0, 0, time.UTC)
-		actualAdjust := tracker.shouldAdjustWinter(testTime, time.December)
+		actualAdjust := tracker.shouldAdjustSeasonYear(testTime, time.December)
 		assert.Equal(t, tc.expectedAdjust, actualAdjust,
-			"shouldAdjustWinter for month %d with December season should be %v", tc.month, tc.expectedAdjust)
+			"shouldAdjustSeasonYear for month %d with December season should be %v", tc.month, tc.expectedAdjust)
 
-		// Additional test: non-December seasons should never adjust
-		if tc.month != 12 {
-			nonWinterAdjust := tracker.shouldAdjustWinter(testTime, time.Month(tc.month))
-			assert.False(t, nonWinterAdjust,
-				"shouldAdjustWinter for month %d with non-December season should always be false", tc.month)
+		// Additional test: non-year-crossing seasons (before October) should never adjust
+		if tc.month < 10 {
+			nonCrossingAdjust := tracker.shouldAdjustSeasonYear(testTime, time.Month(tc.month))
+			assert.False(t, nonCrossingAdjust,
+				"shouldAdjustSeasonYear for month %d with non-year-crossing season should always be false", tc.month)
 		}
 	}
 }
