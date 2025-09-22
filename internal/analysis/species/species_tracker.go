@@ -161,6 +161,10 @@ type SpeciesTracker struct {
 	// Simply maps scientific name -> last notification time
 	notificationLastSent          map[string]time.Time
 	notificationSuppressionWindow time.Duration // Duration to suppress duplicate notifications (default: 7 days)
+
+	// Cached season order for performance optimization (built once at initialization)
+	// This avoids rebuilding the season order on every computeCurrentSeason() call
+	cachedSeasonOrder []string
 }
 
 // seasonDates represents the start date for a season
@@ -218,6 +222,15 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 	// Initialize seasons from configuration
 	if settings.SeasonalTracking.Enabled && len(settings.SeasonalTracking.Seasons) > 0 {
 		for name, season := range settings.SeasonalTracking.Seasons {
+			// Validate season date
+			if err := validateSeasonDate(season.StartMonth, season.StartDay); err != nil {
+				logger.Error("Invalid season date, skipping",
+					"season", name,
+					"month", season.StartMonth,
+					"day", season.StartDay,
+					"error", err)
+				continue
+			}
 			tracker.seasons[name] = seasonDates{
 				month: season.StartMonth,
 				day:   season.StartDay,
@@ -229,6 +242,11 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 		}
 	} else {
 		tracker.initializeDefaultSeasons()
+	}
+
+	// Build cached season order once at initialization
+	if tracker.seasonalEnabled {
+		tracker.initializeSeasonOrder()
 	}
 
 	tracker.currentSeason = tracker.getCurrentSeason(now)
@@ -255,6 +273,87 @@ func (t *SpeciesTracker) initializeDefaultSeasons() {
 	t.seasons["summer"] = seasonDates{month: 6, day: 21}  // June 21
 	t.seasons["fall"] = seasonDates{month: 9, day: 22}    // September 22
 	t.seasons["winter"] = seasonDates{month: 12, day: 21} // December 21
+}
+
+// initializeSeasonOrder builds the cached season order based on configured seasons
+// This is called once at initialization to avoid rebuilding on every computeCurrentSeason() call
+func (t *SpeciesTracker) initializeSeasonOrder() {
+	// Check if we have traditional seasons
+	if _, hasWinter := t.seasons["winter"]; hasWinter {
+		// Traditional seasons: winter, spring, summer, fall (in chronological order within a year)
+		seasonOrder := []string{"winter", "spring", "summer", "fall"}
+		// Validate all required seasons exist
+		allPresent := true
+		for _, required := range seasonOrder {
+			if _, exists := t.seasons[required]; !exists {
+				logger.Warn("Missing traditional season in configuration",
+					"missing_season", required,
+					"available_seasons", t.seasons)
+				allPresent = false
+				break
+			}
+		}
+		if allPresent {
+			t.cachedSeasonOrder = seasonOrder
+			return
+		}
+	} else if _, hasWet1 := t.seasons["wet1"]; hasWet1 {
+		// Equatorial seasons: dry2, wet1, dry1, wet2 (in chronological order within a year)
+		seasonOrder := []string{"dry2", "wet1", "dry1", "wet2"}
+		// Validate all required seasons exist
+		allPresent := true
+		for _, required := range seasonOrder {
+			if _, exists := t.seasons[required]; !exists {
+				logger.Warn("Missing equatorial season in configuration",
+					"missing_season", required,
+					"available_seasons", t.seasons)
+				allPresent = false
+				break
+			}
+		}
+		if allPresent {
+			t.cachedSeasonOrder = seasonOrder
+			return
+		}
+	}
+
+	// Fall back to using all available seasons if non-standard configuration
+	t.cachedSeasonOrder = make([]string, 0, len(t.seasons))
+	for name := range t.seasons {
+		t.cachedSeasonOrder = append(t.cachedSeasonOrder, name)
+	}
+	
+	logger.Debug("Initialized season order cache",
+		"order", t.cachedSeasonOrder,
+		"count", len(t.cachedSeasonOrder))
+}
+
+// validateSeasonDate validates that a month/day combination is valid
+func validateSeasonDate(month, day int) error {
+	// Days in each month (non-leap year)
+	daysInMonth := []int{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+	
+	if month < 1 || month > 12 {
+		return errors.Newf("invalid month: %d (must be 1-12)", month).
+			Component("species-tracking").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+	
+	maxDays := daysInMonth[month-1]
+	// Special case for February - accept 29 for leap years
+	if month == 2 {
+		maxDays = 29 // Accept Feb 29 since seasons are year-agnostic
+	}
+	
+	if day < 1 || day > maxDays {
+		return errors.Newf("invalid day %d for month %d (must be 1-%d)", day, month, maxDays).
+			Component("species-tracking").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+	
+	return nil
 }
 
 // shouldAdjustYearForSeason determines if a season's year should be adjusted backward
@@ -388,50 +487,15 @@ func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 		"current_day", currentDay,
 		"current_year", currentTime.Year())
 
-	// Check seasons in a deterministic order to handle boundaries correctly
-	// Build season order based on what's actually configured
-	var seasonOrder []string
-	
-	// Check if we have traditional seasons
-	if _, hasWinter := t.seasons["winter"]; hasWinter {
-		// Traditional seasons: winter, spring, summer, fall (in chronological order within a year)
-		seasonOrder = []string{"winter", "spring", "summer", "fall"}
-		// Validate all required seasons exist
-		for _, required := range seasonOrder {
-			if _, exists := t.seasons[required]; !exists {
-				logger.Warn("Missing traditional season in configuration",
-					"missing_season", required,
-					"available_seasons", t.seasons)
-				// Fall back to available seasons
-				seasonOrder = nil
-				for name := range t.seasons {
-					seasonOrder = append(seasonOrder, name)
-				}
-				break
-			}
-		}
-	} else if _, hasWet1 := t.seasons["wet1"]; hasWet1 {
-		// Equatorial seasons: dry2, wet1, dry1, wet2 (in chronological order within a year)
-		seasonOrder = []string{"dry2", "wet1", "dry1", "wet2"}
-		// Validate all required seasons exist
-		for _, required := range seasonOrder {
-			if _, exists := t.seasons[required]; !exists {
-				logger.Warn("Missing equatorial season in configuration",
-					"missing_season", required,
-					"available_seasons", t.seasons)
-				// Fall back to available seasons
-				seasonOrder = nil
-				for name := range t.seasons {
-					seasonOrder = append(seasonOrder, name)
-				}
-				break
-			}
-		}
-	} else {
-		// Use all available seasons if non-standard configuration
-		for name := range t.seasons {
-			seasonOrder = append(seasonOrder, name)
-		}
+	// Use cached season order for efficiency (built once at initialization)
+	// This avoids rebuilding the order on every call
+	seasonOrder := t.cachedSeasonOrder
+	if len(seasonOrder) == 0 {
+		// Defensive check: rebuild if cache is empty (shouldn't happen in normal operation)
+		logger.Warn("Season order cache was empty, rebuilding",
+			"seasons", t.seasons)
+		t.initializeSeasonOrder()
+		seasonOrder = t.cachedSeasonOrder
 	}
 
 	// Find the most recent season start date
