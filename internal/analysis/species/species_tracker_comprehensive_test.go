@@ -410,7 +410,7 @@ func TestCacheCleanup(t *testing.T) {
 	currentTime := time.Now()
 
 	// Add many species to trigger cache growth
-	for i := 0; i < 1100; i++ {
+	for i := range 1100 {
 		species := fmt.Sprintf("Species%d", i)
 		tracker.UpdateSpecies(species, currentTime)
 		tracker.GetSpeciesStatus(species, currentTime)
@@ -801,11 +801,11 @@ func TestConcurrentNotificationOperations(t *testing.T) {
 	currentTime := time.Now()
 
 	// Run concurrent notification operations
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < 100; j++ {
+			for j := range 100 {
 				speciesName := species[j%len(species)]
 				switch id % 3 {
 				case 0:

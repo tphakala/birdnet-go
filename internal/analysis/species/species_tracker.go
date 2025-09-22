@@ -6,6 +6,7 @@ package species
 
 import (
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -27,9 +28,8 @@ const (
 
 	// Time calculations
 	hoursPerDay               = 24
-	seasonBufferDays          = 7 // Days buffer for season comparison
-	seasonBufferDuration      = seasonBufferDays * hoursPerDay * time.Hour
-	defaultSeasonDurationDays = 90 // Typical season duration
+	seasonBufferDays     = 7 // Days buffer for season comparison
+	seasonBufferDuration = seasonBufferDays * hoursPerDay * time.Hour
 
 	// Season calculations
 	// For any season starting in late year months (Oct, Nov, Dec), adjustment happens if current month is early in year
@@ -280,11 +280,7 @@ func (t *SpeciesTracker) shouldAdjustYearForSeason(now time.Time, seasonMonth ti
 	// When in winter and asking for "fall", return the recently passed fall, not the upcoming one.
 	if isRangeCalculation && seasonMonth == time.September {
 		winterMonths := []time.Month{time.December, time.January, time.February}
-		for _, m := range winterMonths {
-			if now.Month() == m {
-				return true
-			}
-		}
+		return slices.Contains(winterMonths, now.Month())
 	}
 
 	// For other seasons (spring, summer), don't adjust to previous year
@@ -372,7 +368,7 @@ func (t *SpeciesTracker) isSameSeasonPeriod(time1, time2 time.Time) bool {
 	}
 
 	// If times are within seasonBufferDays of each other, they're very likely in the same season
-	// (seasons typically last ~defaultSeasonDurationDays days, so seasonBufferDays is a safe buffer)
+	// (seasons typically last ~90 days, so seasonBufferDays is a safe buffer)
 	timeDiff := time1.Sub(time2)
 	if timeDiff < 0 {
 		timeDiff = -timeDiff
@@ -400,9 +396,37 @@ func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 	if _, hasWinter := t.seasons["winter"]; hasWinter {
 		// Traditional seasons: winter, spring, summer, fall (in chronological order within a year)
 		seasonOrder = []string{"winter", "spring", "summer", "fall"}
+		// Validate all required seasons exist
+		for _, required := range seasonOrder {
+			if _, exists := t.seasons[required]; !exists {
+				logger.Warn("Missing traditional season in configuration",
+					"missing_season", required,
+					"available_seasons", t.seasons)
+				// Fall back to available seasons
+				seasonOrder = nil
+				for name := range t.seasons {
+					seasonOrder = append(seasonOrder, name)
+				}
+				break
+			}
+		}
 	} else if _, hasWet1 := t.seasons["wet1"]; hasWet1 {
 		// Equatorial seasons: dry2, wet1, dry1, wet2 (in chronological order within a year)
 		seasonOrder = []string{"dry2", "wet1", "dry1", "wet2"}
+		// Validate all required seasons exist
+		for _, required := range seasonOrder {
+			if _, exists := t.seasons[required]; !exists {
+				logger.Warn("Missing equatorial season in configuration",
+					"missing_season", required,
+					"available_seasons", t.seasons)
+				// Fall back to available seasons
+				seasonOrder = nil
+				for name := range t.seasons {
+					seasonOrder = append(seasonOrder, name)
+				}
+				break
+			}
+		}
 	} else {
 		// Use all available seasons if non-standard configuration
 		for name := range t.seasons {
@@ -1007,10 +1031,7 @@ func (t *SpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, cur
 	if exists {
 		daysSince := int(currentTime.Sub(firstSeen).Hours() / hoursPerDay)
 		// Defensive check: prevent negative days due to concurrent operations or timing edge cases
-		if daysSince < 0 {
-			// Treat negative days as 0 (safest approach for concurrent scenarios)
-			daysSince = 0
-		}
+		daysSince = max(0, daysSince)
 		status.DaysSinceFirst = daysSince
 		status.IsNew = daysSince <= t.windowDays
 	} else {
@@ -1025,10 +1046,7 @@ func (t *SpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, cur
 		if firstThisYear != nil {
 			daysThisYear := int(currentTime.Sub(*firstThisYear).Hours() / hoursPerDay)
 			// Defensive check: prevent negative days due to concurrent operations or timing edge cases
-			if daysThisYear < 0 {
-				// Treat negative days as 0 (safest approach for concurrent scenarios)
-				daysThisYear = 0
-			}
+			daysThisYear = max(0, daysThisYear)
 			status.DaysThisYear = daysThisYear
 			status.IsNewThisYear = daysThisYear <= t.yearlyWindowDays
 		} else {
@@ -1043,10 +1061,7 @@ func (t *SpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, cur
 		if firstThisSeason != nil {
 			daysThisSeason := int(currentTime.Sub(*firstThisSeason).Hours() / hoursPerDay)
 			// Defensive check: prevent negative days due to concurrent operations or timing edge cases
-			if daysThisSeason < 0 {
-				// Treat negative days as 0 (safest approach for concurrent scenarios)
-				daysThisSeason = 0
-			}
+			daysThisSeason = max(0, daysThisSeason)
 			status.DaysThisSeason = daysThisSeason
 			status.IsNewThisSeason = daysThisSeason <= t.seasonalWindowDays
 		} else {
@@ -1209,10 +1224,7 @@ func (t *SpeciesTracker) buildSpeciesStatusLocked(scientificName string, current
 		if firstThisYear != nil {
 			daysThisYear := int(currentTime.Sub(*firstThisYear).Hours() / hoursPerDay)
 			// Defensive check: prevent negative days due to concurrent operations or timing edge cases
-			if daysThisYear < 0 {
-				// Treat negative days as 0 (safest approach for concurrent scenarios)
-				daysThisYear = 0
-			}
+			daysThisYear = max(0, daysThisYear)
 			status.DaysThisYear = daysThisYear
 			status.IsNewThisYear = daysThisYear <= t.yearlyWindowDays
 		} else {
@@ -1227,10 +1239,7 @@ func (t *SpeciesTracker) buildSpeciesStatusLocked(scientificName string, current
 		if firstThisSeason != nil {
 			daysThisSeason := int(currentTime.Sub(*firstThisSeason).Hours() / hoursPerDay)
 			// Defensive check: prevent negative days due to concurrent operations or timing edge cases
-			if daysThisSeason < 0 {
-				// Treat negative days as 0 (safest approach for concurrent scenarios)
-				daysThisSeason = 0
-			}
+			daysThisSeason = max(0, daysThisSeason)
 			status.DaysThisSeason = daysThisSeason
 			status.IsNewThisSeason = daysThisSeason <= t.seasonalWindowDays
 		} else {
