@@ -54,7 +54,7 @@ Source: MIT
 
 ### github.com/eclipse/paho.mqtt.golang
 
-License: https://github.com/eclipse/paho.mqtt.golang/blob/v1.5.0/LICENSE
+License: https://github.com/eclipse/paho.mqtt.golang/blob/v1.5.1/LICENSE
 Source: EPL-2.0
 
 ### github.com/fatih/color
@@ -74,7 +74,7 @@ Source: BSD-3-Clause
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.35.2/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.35.3/LICENSE
 Source: MIT
 
 ### github.com/getsentry/sentry-go/echo
@@ -519,6 +519,6 @@ Source: MIT
 
 ### gorm.io/gorm
 
-License: https://github.com/go-gorm/gorm/blob/v1.30.3/LICENSE
+License: https://github.com/go-gorm/gorm/blob/v1.31.0/LICENSE
 Source: MIT
 
