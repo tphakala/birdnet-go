@@ -213,7 +213,7 @@ func TestGetDateTimeFormat(t *testing.T) {
 		ds := &DataStore{DB: nil} // No database initialized
 
 		format := ds.GetDateTimeFormat()
-		assert.Equal(t, "", format, "Should return empty string for nil dialector")
+		assert.Empty(t, format, "Should return empty string for nil dialector")
 	})
 
 	t.Run("unsupported database", func(t *testing.T) {
@@ -225,7 +225,7 @@ func TestGetDateTimeFormat(t *testing.T) {
 		// In practice, this would require mocking the dialector to return an unsupported type
 		format := ds.GetDateTimeFormat()
 		// With nil DB, should return empty string
-		assert.Equal(t, "", format, "Should return empty string for nil database")
+		assert.Empty(t, format, "Should return empty string for nil database")
 	})
 }
 
@@ -318,7 +318,7 @@ func TestGetDateFormat(t *testing.T) {
 		ds := &DataStore{DB: nil} // No database initialized
 
 		format := ds.GetDateFormat("time")
-		assert.Equal(t, "", format, "Should return empty string for nil dialector")
+		assert.Empty(t, format, "Should return empty string for nil dialector")
 	})
 }
 

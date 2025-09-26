@@ -714,11 +714,16 @@ func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
 	// Get database-specific date format
 	dateFormat := ds.GetDateFormat("time")
 	if dateFormat == "" {
+		// Safely get database type for error context
+		dialectName := "unknown"
+		if d := ds.Dialector(); d != nil {
+			dialectName = d.Name()
+		}
 		return nil, errors.Newf("unsupported database type for date formatting").
 			Component("datastore").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "get_hourly_weather").
-			Context("database_type", ds.Dialector().Name()).
+			Context("database_type", dialectName).
 			Build()
 	}
 

@@ -74,11 +74,16 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	// Get database-specific datetime formatting
 	dateTimeFormat := ds.GetDateTimeFormat()
 	if dateTimeFormat == "" {
+		// Safely get database type for error context
+		dialectName := "unknown"
+		if d := ds.Dialector(); d != nil {
+			dialectName = d.Name()
+		}
 		return nil, errors.Newf("unsupported database type for datetime formatting").
 			Component("datastore").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "get_species_summary_data").
-			Context("database_type", ds.Dialector().Name()).
+			Context("database_type", dialectName).
 			Build()
 	}
 
