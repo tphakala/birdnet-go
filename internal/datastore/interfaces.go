@@ -435,6 +435,20 @@ func (ds *DataStore) GetHourFormat() string {
 	}
 }
 
+// GetDateTimeFormat returns the database-specific SQL fragment for concatenating date and time columns into a datetime.
+func (ds *DataStore) GetDateTimeFormat() string {
+	// Handling for supported databases: SQLite and MySQL
+	switch strings.ToLower(ds.Dialector().Name()) {
+	case "sqlite":
+		return "datetime(date || ' ' || time)"
+	case "mysql":
+		return "STR_TO_DATE(CONCAT(date, ' ', time), '%Y-%m-%d %H:%i:%s')"
+	default:
+		// Log or handle unsupported database types
+		return ""
+	}
+}
+
 // GetHourlyOccurrences retrieves hourly occurrences of a specified bird species.
 func (ds *DataStore) GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
 	var hourlyCounts [24]int

@@ -71,19 +71,22 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 			"end_date", endDate)
 	}
 
+	// Get database-specific datetime formatting
+	dateTimeFormat := ds.GetDateTimeFormat()
+
 	// Start building query
-	queryStr := `
-		SELECT 
+	queryStr := fmt.Sprintf(`
+		SELECT
 			scientific_name,
 			MAX(common_name) as common_name,
 			MAX(species_code) as species_code,
 			COUNT(*) as count,
-			MIN(datetime(date || ' ' || time)) as first_seen,
-			MAX(datetime(date || ' ' || time)) as last_seen,
+			MIN(%s) as first_seen,
+			MAX(%s) as last_seen,
 			AVG(confidence) as avg_confidence,
 			MAX(confidence) as max_confidence
 		FROM notes
-	`
+	`, dateTimeFormat, dateTimeFormat)
 
 	// Add WHERE clause if date filters are provided
 	var whereClause string
