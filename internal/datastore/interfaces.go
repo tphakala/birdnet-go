@@ -441,6 +441,13 @@ func (ds *DataStore) GetHourFormat() string {
 }
 
 // GetDateTimeFormat returns the database-specific SQL fragment for concatenating date and time columns into a datetime.
+// Returns an empty string for unsupported database types, which should be handled by the caller.
+//
+// Supported formats:
+//   - SQLite: datetime(date || ' ' || time)
+//   - MySQL: STR_TO_DATE(CONCAT(date, ' ', time), '%Y-%m-%d %H:%i:%s')
+//
+// The returned fragment can be used directly in SQL SELECT statements for MIN/MAX datetime operations.
 func (ds *DataStore) GetDateTimeFormat() string {
 	dialector := ds.Dialector()
 	if dialector == nil {
@@ -453,6 +460,32 @@ func (ds *DataStore) GetDateTimeFormat() string {
 		return "datetime(date || ' ' || time)"
 	case "mysql":
 		return "STR_TO_DATE(CONCAT(date, ' ', time), '%Y-%m-%d %H:%i:%s')"
+	default:
+		// Log or handle unsupported database types
+		return ""
+	}
+}
+
+// GetDateFormat returns the database-specific SQL fragment for extracting date from a datetime column.
+// Returns an empty string for unsupported database types, which should be handled by the caller.
+//
+// Supported formats:
+//   - SQLite: date(column_name)
+//   - MySQL: DATE(column_name)
+//
+// The returned fragment can be used directly in SQL WHERE clauses for date comparisons.
+func (ds *DataStore) GetDateFormat(columnName string) string {
+	dialector := ds.Dialector()
+	if dialector == nil {
+		return ""
+	}
+
+	// Handling for supported databases: SQLite and MySQL
+	switch strings.ToLower(dialector.Name()) {
+	case "sqlite":
+		return fmt.Sprintf("date(%s)", columnName)
+	case "mysql":
+		return fmt.Sprintf("DATE(%s)", columnName)
 	default:
 		// Log or handle unsupported database types
 		return ""
@@ -678,7 +711,18 @@ func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
 func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
 	var hourlyWeather []HourlyWeather
 
-	err := ds.DB.Where("DATE(time) = ?", date).
+	// Get database-specific date format
+	dateFormat := ds.GetDateFormat("time")
+	if dateFormat == "" {
+		return nil, errors.Newf("unsupported database type for date formatting").
+			Component("datastore").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "get_hourly_weather").
+			Context("database_type", ds.Dialector().Name()).
+			Build()
+	}
+
+	err := ds.DB.Where(dateFormat+" = ?", date).
 		Order("time ASC").
 		Find(&hourlyWeather).Error
 
