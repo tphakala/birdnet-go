@@ -71,19 +71,36 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 			"end_date", endDate)
 	}
 
+	// Get database-specific datetime formatting
+	// TODO: Consider using GetDateTimeExpr("notes.date", "notes.time") for future JOIN support
+	dateTimeFormat := ds.GetDateTimeFormat()
+	if dateTimeFormat == "" {
+		// Safely get database type for error context
+		dialectName := "unknown"
+		if d := ds.Dialector(); d != nil {
+			dialectName = d.Name()
+		}
+		return nil, errors.Newf("unsupported database type for datetime formatting").
+			Component("datastore").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "get_species_summary_data").
+			Context("database_type", dialectName).
+			Build()
+	}
+
 	// Start building query
-	queryStr := `
-		SELECT 
+	queryStr := fmt.Sprintf(`
+		SELECT
 			scientific_name,
 			MAX(common_name) as common_name,
 			MAX(species_code) as species_code,
 			COUNT(*) as count,
-			MIN(datetime(date || ' ' || time)) as first_seen,
-			MAX(datetime(date || ' ' || time)) as last_seen,
+			MIN(%s) as first_seen,
+			MAX(%s) as last_seen,
 			AVG(confidence) as avg_confidence,
 			MAX(confidence) as max_confidence
 		FROM notes
-	`
+	`, dateTimeFormat, dateTimeFormat)
 
 	// Add WHERE clause if date filters are provided
 	var whereClause string
@@ -327,11 +344,16 @@ func (ds *DataStore) GetDetectionTrends(period string, limit int) ([]DailyAnalyt
 				Build()
 		}
 	default:
+		// Safely get database type for error context
+		dialectName := "unknown"
+		if d := ds.Dialector(); d != nil {
+			dialectName = d.Name()
+		}
 		return nil, errors.Newf("unsupported database dialect").
 			Component("datastore").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "get_detection_trends").
-			Context("dialect", ds.DB.Dialector.Name()).
+			Context("dialect", dialectName).
 			Build()
 	}
 

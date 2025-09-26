@@ -423,12 +423,83 @@ func (ds *DataStore) Dialector() gorm.Dialector {
 
 // GetHourFormat returns the database-specific SQL fragment for formatting a time column as hour.
 func (ds *DataStore) GetHourFormat() string {
+	dialector := ds.Dialector()
+	if dialector == nil {
+		return ""
+	}
+
 	// Handling for supported databases: SQLite and MySQL
-	switch strings.ToLower(ds.Dialector().Name()) {
+	switch strings.ToLower(dialector.Name()) {
 	case "sqlite":
 		return "strftime('%H', time)"
 	case "mysql":
 		return "TIME_FORMAT(time, '%H')"
+	default:
+		// Log or handle unsupported database types
+		return ""
+	}
+}
+
+// GetDateTimeExpr returns the database-specific SQL fragment for concatenating date and time columns into a datetime.
+// This generalized version accepts column names to prevent ambiguity in JOIN queries.
+// Returns an empty string for unsupported database types, which should be handled by the caller.
+//
+// Supported formats:
+//   - SQLite: datetime(dateCol || ' ' || timeCol)
+//   - MySQL: STR_TO_DATE(CONCAT(dateCol, ' ', timeCol), '%Y-%m-%d %H:%i:%s')
+//
+// The returned fragment can be used directly in SQL SELECT statements for MIN/MAX datetime operations.
+func (ds *DataStore) GetDateTimeExpr(dateCol, timeCol string) string {
+	dialector := ds.Dialector()
+	if dialector == nil {
+		return ""
+	}
+
+	// Handling for supported databases: SQLite and MySQL
+	switch strings.ToLower(dialector.Name()) {
+	case "sqlite":
+		return fmt.Sprintf("datetime(%s || ' ' || %s)", dateCol, timeCol)
+	case "mysql":
+		return fmt.Sprintf("STR_TO_DATE(CONCAT(%s, ' ', %s), '%%Y-%%m-%%d %%H:%%i:%%s')", dateCol, timeCol)
+	default:
+		// Log or handle unsupported database types
+		return ""
+	}
+}
+
+// GetDateTimeFormat returns the database-specific SQL fragment for concatenating date and time columns into a datetime.
+// This is a convenience wrapper that uses the default column names "date" and "time".
+// Returns an empty string for unsupported database types, which should be handled by the caller.
+//
+// Supported formats:
+//   - SQLite: datetime(date || ' ' || time)
+//   - MySQL: STR_TO_DATE(CONCAT(date, ' ', time), '%Y-%m-%d %H:%i:%s')
+//
+// The returned fragment can be used directly in SQL SELECT statements for MIN/MAX datetime operations.
+func (ds *DataStore) GetDateTimeFormat() string {
+	return ds.GetDateTimeExpr("date", "time")
+}
+
+// GetDateFormat returns the database-specific SQL fragment for extracting date from a datetime column.
+// Returns an empty string for unsupported database types, which should be handled by the caller.
+//
+// Supported formats:
+//   - SQLite: date(column_name)
+//   - MySQL: DATE(column_name)
+//
+// The returned fragment can be used directly in SQL WHERE clauses for date comparisons.
+func (ds *DataStore) GetDateFormat(columnName string) string {
+	dialector := ds.Dialector()
+	if dialector == nil {
+		return ""
+	}
+
+	// Handling for supported databases: SQLite and MySQL
+	switch strings.ToLower(dialector.Name()) {
+	case "sqlite":
+		return fmt.Sprintf("date(%s)", columnName)
+	case "mysql":
+		return fmt.Sprintf("DATE(%s)", columnName)
 	default:
 		// Log or handle unsupported database types
 		return ""
@@ -654,7 +725,23 @@ func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
 func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
 	var hourlyWeather []HourlyWeather
 
-	err := ds.DB.Where("DATE(time) = ?", date).
+	// Get database-specific date format
+	dateFormat := ds.GetDateFormat("time")
+	if dateFormat == "" {
+		// Safely get database type for error context
+		dialectName := "unknown"
+		if d := ds.Dialector(); d != nil {
+			dialectName = d.Name()
+		}
+		return nil, errors.Newf("unsupported database type for date formatting").
+			Component("datastore").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "get_hourly_weather").
+			Context("database_type", dialectName).
+			Build()
+	}
+
+	err := ds.DB.Where(dateFormat+" = ?", date).
 		Order("time ASC").
 		Find(&hourlyWeather).Error
 
