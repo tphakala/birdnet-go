@@ -35,6 +35,9 @@
   <a href="https://github.com/tphakala/birdnet-go/issues">
     <img src="https://img.shields.io/github/issues/tphakala/birdnet-go?style=flat-square&color=red">
   </a>
+  <a href="https://discord.gg/gcSCFGUtsd">
+    <img src="https://img.shields.io/discord/1298738918239100939?style=flat-square&logo=discord&color=5865F2&label=Discord">
+  </a>
 
   <a href="https://coderabbit.ai">
     <img src="https://img.shields.io/coderabbit/prs/github/tphakala/birdnet-go?utm_source=oss&utm_medium=github&utm_campaign=tphakala%2Fbirdnet-go&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews">
@@ -75,6 +78,10 @@ For detailed installation instructions, see the [installation documentation](doc
 
 
 There is more detailed usage documentation at [Wiki](doc/wiki/guide.md)
+
+## Community
+
+Join our [Discord server](https://discord.gg/gcSCFGUtsd) for support, discussions, and updates about BirdNET-Go!
 
 ## Related Projects
 
