@@ -423,8 +423,13 @@ func (ds *DataStore) Dialector() gorm.Dialector {
 
 // GetHourFormat returns the database-specific SQL fragment for formatting a time column as hour.
 func (ds *DataStore) GetHourFormat() string {
+	dialector := ds.Dialector()
+	if dialector == nil {
+		return ""
+	}
+
 	// Handling for supported databases: SQLite and MySQL
-	switch strings.ToLower(ds.Dialector().Name()) {
+	switch strings.ToLower(dialector.Name()) {
 	case "sqlite":
 		return "strftime('%H', time)"
 	case "mysql":
@@ -437,8 +442,13 @@ func (ds *DataStore) GetHourFormat() string {
 
 // GetDateTimeFormat returns the database-specific SQL fragment for concatenating date and time columns into a datetime.
 func (ds *DataStore) GetDateTimeFormat() string {
+	dialector := ds.Dialector()
+	if dialector == nil {
+		return ""
+	}
+
 	// Handling for supported databases: SQLite and MySQL
-	switch strings.ToLower(ds.Dialector().Name()) {
+	switch strings.ToLower(dialector.Name()) {
 	case "sqlite":
 		return "datetime(date || ' ' || time)"
 	case "mysql":
