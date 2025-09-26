@@ -206,6 +206,11 @@ func TestGetDateTimeFormat(t *testing.T) {
 		format := ds.GetDateTimeFormat()
 		expected := "datetime(date || ' ' || time)"
 		assert.Equal(t, expected, format, "Should return SQLite datetime format")
+
+		// Test the new GetDateTimeExpr with custom column names
+		customFormat := ds.GetDateTimeExpr("created_date", "created_time")
+		expectedCustom := "datetime(created_date || ' ' || created_time)"
+		assert.Equal(t, expectedCustom, customFormat, "Should return SQLite datetime format with custom columns")
 	})
 
 	t.Run("nil dialector", func(t *testing.T) {
@@ -214,18 +219,11 @@ func TestGetDateTimeFormat(t *testing.T) {
 
 		format := ds.GetDateTimeFormat()
 		assert.Empty(t, format, "Should return empty string for nil dialector")
-	})
 
-	t.Run("unsupported database", func(t *testing.T) {
-		t.Parallel()
-		// Create a mock DataStore with unsupported dialector
-		ds := &DataStore{}
-
-		// Note: This test is somewhat limited without proper mocking framework
-		// In practice, this would require mocking the dialector to return an unsupported type
-		format := ds.GetDateTimeFormat()
-		// With nil DB, should return empty string
-		assert.Empty(t, format, "Should return empty string for nil database")
+		// Also test with an empty DataStore struct
+		ds2 := &DataStore{}
+		format2 := ds2.GetDateTimeFormat()
+		assert.Empty(t, format2, "Should return empty string for uninitialized DataStore")
 	})
 }
 
@@ -252,7 +250,8 @@ func TestGetDateTimeFormatIntegration(t *testing.T) {
 	require.Len(t, summaries, 1, "Should return one species")
 
 	// Verify the datetime was parsed correctly
-	expectedTime, _ := time.ParseInLocation("2006-01-02 15:04:05", "2024-01-15 14:30:00", time.Local)
+	expectedTime, err := time.ParseInLocation("2006-01-02 15:04:05", "2024-01-15 14:30:00", time.Local)
+	require.NoError(t, err, "Time parsing should not fail")
 	assert.Equal(t, expectedTime, summaries[0].FirstSeen, "FirstSeen should be parsed correctly")
 	assert.Equal(t, expectedTime, summaries[0].LastSeen, "LastSeen should be parsed correctly")
 }
@@ -285,6 +284,7 @@ func TestGetSpeciesSummaryDataErrorHandling(t *testing.T) {
 	// Verify that GetDateTimeFormat returns a valid format
 	format := ds.GetDateTimeFormat()
 	assert.NotEmpty(t, format, "Should return non-empty format for supported database")
+	// Note: This assertion is SQLite-specific since setupTestDB creates an SQLite database
 	assert.Contains(t, format, "datetime", "SQLite format should contain 'datetime'")
 }
 

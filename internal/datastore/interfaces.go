@@ -440,15 +440,16 @@ func (ds *DataStore) GetHourFormat() string {
 	}
 }
 
-// GetDateTimeFormat returns the database-specific SQL fragment for concatenating date and time columns into a datetime.
+// GetDateTimeExpr returns the database-specific SQL fragment for concatenating date and time columns into a datetime.
+// This generalized version accepts column names to prevent ambiguity in JOIN queries.
 // Returns an empty string for unsupported database types, which should be handled by the caller.
 //
 // Supported formats:
-//   - SQLite: datetime(date || ' ' || time)
-//   - MySQL: STR_TO_DATE(CONCAT(date, ' ', time), '%Y-%m-%d %H:%i:%s')
+//   - SQLite: datetime(dateCol || ' ' || timeCol)
+//   - MySQL: STR_TO_DATE(CONCAT(dateCol, ' ', timeCol), '%Y-%m-%d %H:%i:%s')
 //
 // The returned fragment can be used directly in SQL SELECT statements for MIN/MAX datetime operations.
-func (ds *DataStore) GetDateTimeFormat() string {
+func (ds *DataStore) GetDateTimeExpr(dateCol, timeCol string) string {
 	dialector := ds.Dialector()
 	if dialector == nil {
 		return ""
@@ -457,13 +458,26 @@ func (ds *DataStore) GetDateTimeFormat() string {
 	// Handling for supported databases: SQLite and MySQL
 	switch strings.ToLower(dialector.Name()) {
 	case "sqlite":
-		return "datetime(date || ' ' || time)"
+		return fmt.Sprintf("datetime(%s || ' ' || %s)", dateCol, timeCol)
 	case "mysql":
-		return "STR_TO_DATE(CONCAT(date, ' ', time), '%Y-%m-%d %H:%i:%s')"
+		return fmt.Sprintf("STR_TO_DATE(CONCAT(%s, ' ', %s), '%%Y-%%m-%%d %%H:%%i:%%s')", dateCol, timeCol)
 	default:
 		// Log or handle unsupported database types
 		return ""
 	}
+}
+
+// GetDateTimeFormat returns the database-specific SQL fragment for concatenating date and time columns into a datetime.
+// This is a convenience wrapper that uses the default column names "date" and "time".
+// Returns an empty string for unsupported database types, which should be handled by the caller.
+//
+// Supported formats:
+//   - SQLite: datetime(date || ' ' || time)
+//   - MySQL: STR_TO_DATE(CONCAT(date, ' ', time), '%Y-%m-%d %H:%i:%s')
+//
+// The returned fragment can be used directly in SQL SELECT statements for MIN/MAX datetime operations.
+func (ds *DataStore) GetDateTimeFormat() string {
+	return ds.GetDateTimeExpr("date", "time")
 }
 
 // GetDateFormat returns the database-specific SQL fragment for extracting date from a datetime column.
