@@ -6,7 +6,7 @@ labels: ""
 assignees: ""
 ---
 
-1. Please check that you are running latest release avaialble at https://github.com/tphakala/birdnet-go/releases
+1. Please check that you are running latest release available at https://github.com/tphakala/birdnet-go/releases
 2. Please fill in this issue template in as detail as possible
 
 ## Issue Type

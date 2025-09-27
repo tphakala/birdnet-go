@@ -691,25 +691,25 @@ Perfect for:
 
    # Verify checksum
    wget https://github.com/tphakala/birdnet-go/releases/latest/download/birdnet-go-vm-amd64-VERSION.qcow2.zst.sha256
-   sha256sum -c birdnet-go-vm-amd64-VERSION.qcov2.zst.sha256
+   sha256sum -c birdnet-go-vm-amd64-VERSION.qcow2.zst.sha256
 
    # Decompress
-   zstd -d birdnet-go-vm-amd64-VERSION.qcov2.zst
+   zstd -d birdnet-go-vm-amd64-VERSION.qcow2.zst
    ```
 
 2. **Create Data Disk**:
 
    ```bash
    # Create separate disk for persistent data (adjust size as needed)
-   qemu-img create -f qcow2 birdnet-go-data.qcov2 50G
+   qemu-img create -f qcow2 birdnet-go-data.qcow2 50G
    ```
 
 3. **Launch VM** (example with QEMU/KVM):
 
    ```bash
    qemu-system-x86_64 \
-     -hda birdnet-go-vm-amd64-VERSION.qcov2 \
-     -hdb birdnet-go-data.qcov2 \
+     -hda birdnet-go-vm-amd64-VERSION.qcow2 \
+     -hdb birdnet-go-data.qcow2 \
      -m 4096 \
      -smp 2 \
      -netdev user,id=net0,hostfwd=tcp::8080-:8080,hostfwd=tcp::2222-:22 \
@@ -732,7 +732,7 @@ Perfect for:
 
 ### Proxmox VE
 
-1. Upload the qcov2 file to Proxmox storage
+1. Upload the qcow2 file to Proxmox storage
 2. Create new VM with uploaded disk
 3. Add second disk for data storage
 4. Configure network and start VM
@@ -745,8 +745,8 @@ virt-install \
   --name birdnet-go \
   --memory 4096 \
   --vcpus 2 \
-  --disk path=/path/to/birdnet-go-vm.qcov2,format=qcov2 \
-  --disk path=/path/to/birdnet-go-data.qcov2,format=qcov2 \
+  --disk path=/path/to/birdnet-go-vm.qcow2,format=qcow2 \
+  --disk path=/path/to/birdnet-go-data.qcow2,format=qcow2 \
   --network network=default \
   --import \
   --os-variant ubuntu24.04
@@ -754,9 +754,9 @@ virt-install \
 
 ### VMware
 
-1. Convert qcov2 to VMDK:
+1. Convert qcow2 to VMDK:
    ```bash
-   qemu-img convert -f qcov2 -O vmdk birdnet-go-vm.qcov2 birdnet-go-vm.vmdk
+   qemu-img convert -f qcow2 -O vmdk birdnet-go-vm.qcow2 birdnet-go-vm.vmdk
    ```
 2. Create new VM in VMware
 3. Use converted VMDK as disk
@@ -764,9 +764,9 @@ virt-install \
 
 ### VirtualBox
 
-1. Convert qcov2 to VDI:
+1. Convert qcow2 to VDI:
    ```bash
-   qemu-img convert -f qcov2 -O vdi birdnet-go-vm.qcov2 birdnet-go-vm.vdi
+   qemu-img convert -f qcow2 -O vdi birdnet-go-vm.qcow2 birdnet-go-vm.vdi
    ```
 2. Create new VM in VirtualBox
 3. Use converted VDI as disk
@@ -931,11 +931,11 @@ sudo ufw status
 
 ### Supported Platforms
 
-- **Proxmox VE**: Native qcov2 support
-- **libvirt/KVM**: Native qcov2 support
+- **Proxmox VE**: Native qcow2 support
+- **libvirt/KVM**: Native qcow2 support
 - **VMware**: Requires conversion to VMDK
 - **VirtualBox**: Requires conversion to VDI
-- **QEMU**: Native qcov2 support
+- **QEMU**: Native qcow2 support
 
 ### Architecture Support
 
