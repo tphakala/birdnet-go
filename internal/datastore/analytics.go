@@ -157,6 +157,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 		rowCount++
 		var summary SpeciesSummaryData
 		var firstSeenStr, lastSeenStr string
+		// Use sql.NullString to handle NULL values from external data imports (e.g., birdnet-pi)
 		var commonName, speciesCode sql.NullString
 
 		if err := rows.Scan(
