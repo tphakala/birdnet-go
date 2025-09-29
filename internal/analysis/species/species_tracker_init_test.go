@@ -32,19 +32,19 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 			"successful_full_initialization",
 			func(ds *MockSpeciesDatastore) {
 				// Lifetime data
-				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{
 						{ScientificName: "Lifetime_Species_1", FirstSeenDate: "2024-01-01"},
 						{ScientificName: "Lifetime_Species_2", FirstSeenDate: "2024-02-01"},
 					}, nil)
 				// Yearly data
-				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{
 						{ScientificName: "Yearly_Species_1", FirstSeenDate: "2024-03-01"},
 					}, nil).Once()
 				// Seasonal data (4 seasons)
 				for i := 0; i < 4; i++ {
-					ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 						Return([]datastore.NewSpeciesData{
 							{ScientificName: fmt.Sprintf("Seasonal_Species_%d", i), FirstSeenDate: "2024-04-01"},
 						}, nil).Once()
@@ -79,7 +79,7 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 		{
 			"lifetime_data_load_failure",
 			func(ds *MockSpeciesDatastore) {
-				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, fmt.Errorf("database connection lost"))
 			},
 			&conf.SpeciesTrackingSettings{
@@ -92,10 +92,10 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 			"yearly_data_load_failure",
 			func(ds *MockSpeciesDatastore) {
 				// Lifetime succeeds
-				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil)
 				// Yearly fails
-				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, fmt.Errorf("query timeout"))
 			},
 			&conf.SpeciesTrackingSettings{
@@ -111,10 +111,10 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 			"partial_seasonal_failure_continues",
 			func(ds *MockSpeciesDatastore) {
 				// Lifetime succeeds
-				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil)
 				// First season fails
-				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, fmt.Errorf("seasonal query failed")).Once()
 			},
 			&conf.SpeciesTrackingSettings{
@@ -129,9 +129,9 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 		{
 			"empty_database_initialization",
 			func(ds *MockSpeciesDatastore) {
-				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil)
-				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 			},
 			&conf.SpeciesTrackingSettings{

@@ -1,6 +1,7 @@
 package species
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -11,11 +12,11 @@ import (
 // mockSpeciesDatastore implements SpeciesDatastore interface for testing
 type mockSpeciesDatastore struct{}
 
-func (m *mockSpeciesDatastore) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+func (m *mockSpeciesDatastore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
 	return []datastore.NewSpeciesData{}, nil
 }
 
-func (m *mockSpeciesDatastore) GetSpeciesFirstDetectionInPeriod(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+func (m *mockSpeciesDatastore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
 	return []datastore.NewSpeciesData{}, nil
 }
 

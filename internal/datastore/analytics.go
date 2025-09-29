@@ -2,6 +2,7 @@
 package datastore
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -57,7 +58,7 @@ type NewSpeciesData struct {
 
 // GetSpeciesSummaryData retrieves overall statistics for all bird species
 // Optional date range filtering with startDate and endDate parameters in YYYY-MM-DD format
-func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]SpeciesSummaryData, error) {
+func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]SpeciesSummaryData, error) {
 	// Pre-allocate with reasonable capacity for typical species count
 	summaries := make([]SpeciesSummaryData, 0, 100)
 
@@ -130,7 +131,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 			"query", queryStr,
 			"args", args)
 	}
-	rows, err := ds.DB.Raw(queryStr, args...).Rows()
+	rows, err := ds.DB.WithContext(ctx).Raw(queryStr, args...).Rows()
 	if err != nil {
 		return nil, dbError(err, "get_species_summary_data", errors.PriorityMedium,
 			"start_date", startDate,
@@ -152,6 +153,9 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	}
 	rowCount := 0
 
+	// TODO(context-deadline): Add context deadline checks in row processing loop for early cancellation
+	// Example: select { case <-ctx.Done(): rows.Close(); return nil, ctx.Err(); default: }
+	// TODO(telemetry): Report context cancellations during row processing to internal/telemetry
 	for rows.Next() {
 		rowCount++
 		var summary SpeciesSummaryData
@@ -211,12 +215,12 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 }
 
 // GetHourlyAnalyticsData retrieves detection counts grouped by hour
-func (ds *DataStore) GetHourlyAnalyticsData(date, species string) ([]HourlyAnalyticsData, error) {
+func (ds *DataStore) GetHourlyAnalyticsData(ctx context.Context, date, species string) ([]HourlyAnalyticsData, error) {
 	var analytics []HourlyAnalyticsData
 	hourFormat := ds.GetHourFormat()
 
 	// Base query
-	query := ds.DB.Table("notes").
+	query := ds.DB.WithContext(ctx).Table("notes").
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourFormat)).
 		Group(hourFormat).
 		Order("hour")
@@ -245,11 +249,11 @@ func (ds *DataStore) GetHourlyAnalyticsData(date, species string) ([]HourlyAnaly
 }
 
 // GetDailyAnalyticsData retrieves detection counts grouped by day
-func (ds *DataStore) GetDailyAnalyticsData(startDate, endDate, species string) ([]DailyAnalyticsData, error) {
+func (ds *DataStore) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string) ([]DailyAnalyticsData, error) {
 	var analytics []DailyAnalyticsData
 
 	// Base query
-	query := ds.DB.Table("notes").
+	query := ds.DB.WithContext(ctx).Table("notes").
 		Select("date, COUNT(*) as count").
 		Group("date").
 		Order("date")
@@ -285,7 +289,7 @@ func (ds *DataStore) GetDailyAnalyticsData(startDate, endDate, species string) (
 }
 
 // GetDetectionTrends calculates the trend in detections over time
-func (ds *DataStore) GetDetectionTrends(period string, limit int) ([]DailyAnalyticsData, error) {
+func (ds *DataStore) GetDetectionTrends(ctx context.Context, period string, limit int) ([]DailyAnalyticsData, error) {
 	var trends []DailyAnalyticsData
 
 	var interval string
@@ -314,7 +318,7 @@ func (ds *DataStore) GetDetectionTrends(period string, limit int) ([]DailyAnalyt
 			LIMIT ?
 		`, startDate)
 
-		if err := ds.DB.Raw(query, limit).Scan(&trends).Error; err != nil {
+		if err := ds.DB.WithContext(ctx).Raw(query, limit).Scan(&trends).Error; err != nil {
 			return nil, errors.New(err).
 				Component("datastore").
 				Category(errors.CategoryDatabase).
@@ -334,7 +338,7 @@ func (ds *DataStore) GetDetectionTrends(period string, limit int) ([]DailyAnalyt
 			LIMIT ?
 		`, startDate)
 
-		if err := ds.DB.Raw(query, limit).Scan(&trends).Error; err != nil {
+		if err := ds.DB.WithContext(ctx).Raw(query, limit).Scan(&trends).Error; err != nil {
 			return nil, errors.New(err).
 				Component("datastore").
 				Category(errors.CategoryDatabase).
@@ -362,7 +366,7 @@ func (ds *DataStore) GetDetectionTrends(period string, limit int) ([]DailyAnalyt
 
 // GetHourlyDistribution retrieves hourly detection distribution across a date range
 // Groups detections by hour of day (0-23) regardless of the specific date
-func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) ([]HourlyDistributionData, error) {
+func (ds *DataStore) GetHourlyDistribution(ctx context.Context, startDate, endDate, species string) ([]HourlyDistributionData, error) {
 	var parsedStartDate, parsedEndDate time.Time
 	var err error
 
@@ -406,7 +410,7 @@ func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) (
 	}
 
 	// Prepare the SQL query
-	query := ds.DB.Table("notes")
+	query := ds.DB.WithContext(ctx).Table("notes")
 
 	// Extract hour from the time field using database-specific hour format
 	hourExpr := ds.GetHourFormat()
@@ -456,7 +460,7 @@ func (ds *DataStore) GetHourlyDistribution(startDate, endDate, species string) (
 // This is suitable for seasonal and yearly tracking where we need to know when each species
 // was first detected within that specific period, regardless of prior detections.
 // It returns all species detected in the period with their first detection date in that period.
-func (ds *DataStore) GetSpeciesFirstDetectionInPeriod(startDate, endDate string, limit, offset int) ([]NewSpeciesData, error) {
+func (ds *DataStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error) {
 	// Validate input
 	if startDate != "" && endDate != "" && startDate > endDate {
 		return nil, errors.Newf("start date cannot be after end date").
@@ -497,7 +501,7 @@ func (ds *DataStore) GetSpeciesFirstDetectionInPeriod(startDate, endDate string,
 	LIMIT ? OFFSET ?
 	`
 
-	if err := ds.DB.Raw(query, startDate, endDate, limit, offset).Scan(&results).Error; err != nil {
+	if err := ds.DB.WithContext(ctx).Raw(query, startDate, endDate, limit, offset).Scan(&results).Error; err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
@@ -525,7 +529,7 @@ func (ds *DataStore) GetSpeciesFirstDetectionInPeriod(startDate, endDate string,
 // This is suitable for lifetime tracking only - NOT for seasonal or yearly tracking.
 // It supports pagination with limit and offset parameters.
 // NOTE: For optimal performance with large datasets, add a composite index on (scientific_name, date)
-func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]NewSpeciesData, error) {
+func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error) {
 	// Temporary struct to scan raw results, ensuring date can be checked for null/empty
 	type RawNewSpeciesResult struct {
 		ScientificName     string
@@ -586,7 +590,7 @@ func (ds *DataStore) GetNewSpeciesDetections(startDate, endDate string, limit, o
 	`
 
 	// Execute the raw SQL query into the temporary struct
-	if err := ds.DB.Raw(query, startDate, endDate, startDate, endDate, limit, offset).Scan(&rawResults).Error; err != nil {
+	if err := ds.DB.WithContext(ctx).Raw(query, startDate, endDate, startDate, endDate, limit, offset).Scan(&rawResults).Error; err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).

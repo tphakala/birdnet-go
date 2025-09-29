@@ -672,8 +672,10 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	}
 
 	// Retrieve species summary data from the datastore with date filtering
+	// TODO(context-timeout): Add configurable timeout for complex analytics queries (e.g., 30s for summary data)
+	// TODO(telemetry): Report slow queries (>5s), timeouts, and cancellations to internal/telemetry for monitoring
 	dbStart := time.Now()
-	summaryData, err := c.DS.GetSpeciesSummaryData(startDate, endDate)
+	summaryData, err := c.DS.GetSpeciesSummaryData(ctx.Request().Context(), startDate, endDate)
 	dbDuration := time.Since(dbStart)
 
 	// log.Printf("GetSpeciesSummary: Database query completed in %v, got %d records", dbDuration, len(summaryData))
@@ -860,7 +862,10 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	}
 
 	// Get hourly analytics data from the datastore
-	hourlyData, err := c.DS.GetHourlyAnalyticsData(date, speciesParam)
+	// TODO(context-timeout): Add configurable timeout for analytics queries to prevent resource exhaustion
+	// Example: ctx, cancel := context.WithTimeout(ctx.Request().Context(), 30*time.Second); defer cancel()
+	// TODO(telemetry): Report query timeouts and context cancellations to Sentry via internal/telemetry
+	hourlyData, err := c.DS.GetHourlyAnalyticsData(ctx.Request().Context(), date, speciesParam)
 	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to get hourly analytics data",
@@ -1000,7 +1005,9 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	}
 
 	// Get daily analytics data from the datastore
-	dailyData, err := c.DS.GetDailyAnalyticsData(startDate, endDate, speciesParam)
+	// TODO(context-timeout): Add configurable timeout for analytics queries to prevent resource exhaustion
+	// TODO(telemetry): Report query timeouts and context cancellations to Sentry via internal/telemetry
+	dailyData, err := c.DS.GetDailyAnalyticsData(ctx.Request().Context(), startDate, endDate, speciesParam)
 	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to get daily analytics data",
@@ -1116,7 +1123,7 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 	}
 
 	// Get hourly distribution data from the datastore
-	hourlyData, err := c.DS.GetHourlyDistribution(startDate, endDate, speciesParam)
+	hourlyData, err := c.DS.GetHourlyDistribution(ctx.Request().Context(), startDate, endDate, speciesParam)
 	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to get hourly distribution data",
@@ -1289,7 +1296,7 @@ func (c *Controller) GetNewSpeciesDetections(ctx echo.Context) error {
 	}
 
 	// Fetch data from datastore with pagination
-	newSpeciesData, err := c.DS.GetNewSpeciesDetections(startDate, endDate, limit, offset)
+	newSpeciesData, err := c.DS.GetNewSpeciesDetections(ctx.Request().Context(), startDate, endDate, limit, offset)
 	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to get new species detections",
@@ -1557,7 +1564,7 @@ func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
 		seen[speciesItem] = true
 
 		// Get hourly data for this species
-		hourlyData, err := c.DS.GetHourlyAnalyticsData(date, speciesItem)
+		hourlyData, err := c.DS.GetHourlyAnalyticsData(ctx.Request().Context(), date, speciesItem)
 		if err != nil {
 			errorMsg := fmt.Sprintf("Failed to get hourly data for species %s: %v", speciesItem, err)
 			processingErrors = append(processingErrors, errorMsg)
@@ -1570,7 +1577,7 @@ func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
 
 		// Convert to HourlyDistribution format
 		hourlyDistribution := make([]HourlyDistribution, 24)
-		for hour := 0; hour < 24; hour++ {
+		for hour := range 24 {
 			hourlyDistribution[hour] = HourlyDistribution{Hour: hour, Count: 0}
 		}
 
@@ -1742,7 +1749,7 @@ func (c *Controller) GetBatchDailySpeciesData(ctx echo.Context) error {
 		// Species is already trimmed and validated in deduplication step
 
 		// Get daily data for this species
-		dailyData, err := c.DS.GetDailyAnalyticsData(startDate, endDate, speciesItem)
+		dailyData, err := c.DS.GetDailyAnalyticsData(ctx.Request().Context(), startDate, endDate, speciesItem)
 		if err != nil {
 			errorMsg := fmt.Sprintf("Failed to get daily data for species %s: %v", speciesItem, err)
 			processingErrors = append(processingErrors, errorMsg)

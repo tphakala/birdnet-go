@@ -64,7 +64,7 @@ func TestGetSpeciesSummary(t *testing.T) {
 
 	// Setup mock expectations
 	// Expect call with specific empty strings for no date filters
-	mockDS.On("GetSpeciesSummaryData", "", "").Return(mockSummaryData, nil)
+	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return(mockSummaryData, nil)
 
 	// Create a request
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary", http.NoBody) // Corrected path
@@ -116,7 +116,7 @@ func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
 
 	// Setup mock to return a database error (like the SQL aggregate error)
 	dbError := errors.New("Error 1140 (42000): In aggregated query without GROUP BY, expression #3 of SELECT list contains nonaggregated column 'datastore.notes.species_code'")
-	mockDS.On("GetSpeciesSummaryData", "", "").Return([]datastore.SpeciesSummaryData{}, dbError)
+	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return([]datastore.SpeciesSummaryData{}, dbError)
 
 	// Create a request
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary", http.NoBody)
@@ -176,7 +176,7 @@ func TestGetSpeciesSummaryWithDateFilters(t *testing.T) {
 	}
 
 	// Setup mock expectations with date filters
-	mockDS.On("GetSpeciesSummaryData", "2024-01-15", "2024-01-16").Return(mockSummaryData, nil)
+	mockDS.On("GetSpeciesSummaryData", mock.Anything, "2024-01-15", "2024-01-16").Return(mockSummaryData, nil)
 
 	// Create a request with date parameters
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary?start_date=2024-01-15&end_date=2024-01-16", http.NoBody)
@@ -236,7 +236,7 @@ func TestGetHourlyAnalytics(t *testing.T) {
 	}
 
 	// Setup mock expectations
-	mockDS.On("GetHourlyAnalyticsData", date, species).Return(mockHourlyData, nil)
+	mockDS.On("GetHourlyAnalyticsData", mock.Anything, date, species).Return(mockHourlyData, nil)
 
 	// Create a request
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/hourly?date=2023-01-01&species=Turdus+migratorius", http.NoBody)
@@ -305,7 +305,7 @@ func TestGetDailyAnalytics(t *testing.T) {
 	}
 
 	// Setup mock expectations
-	mockDS.On("GetDailyAnalyticsData", startDate, endDate, species).Return(mockDailyData, nil)
+	mockDS.On("GetDailyAnalyticsData", mock.Anything, startDate, endDate, species).Return(mockDailyData, nil)
 
 	// Create a request
 	req := httptest.NewRequest(http.MethodGet,
@@ -385,7 +385,7 @@ func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
 	}
 
 	// Setup mock expectations
-	mockDS.On("GetDailyAnalyticsData", startDate, endDate, "").Return(mockDailyData, nil)
+	mockDS.On("GetDailyAnalyticsData", mock.Anything, startDate, endDate, "").Return(mockDailyData, nil)
 
 	// Create a request
 	req := httptest.NewRequest(http.MethodGet,

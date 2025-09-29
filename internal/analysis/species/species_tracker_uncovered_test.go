@@ -151,7 +151,7 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 			},
 		}
 
-		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, 10000, 0).
+		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, 10000, 0).
 			Return(yearlyData, nil)
 
 		settings := &conf.SpeciesTrackingSettings{
@@ -178,7 +178,7 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 
 	t.Run("empty database preserves existing", func(t *testing.T) {
 		ds := &MockSpeciesDatastore{}
-		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, 10000, 0).
+		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, 10000, 0).
 			Return([]datastore.NewSpeciesData{}, nil)
 
 		settings := &conf.SpeciesTrackingSettings{
@@ -205,7 +205,7 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 
 	t.Run("database error", func(t *testing.T) {
 		ds := &MockSpeciesDatastore{}
-		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, 10000, 0).
+		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, 10000, 0).
 			Return(nil, assert.AnError)
 
 		settings := &conf.SpeciesTrackingSettings{
@@ -243,7 +243,7 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 			},
 		}
 
-		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, 10000, 0).
+		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, 10000, 0).
 			Return(seasonalData, nil)
 
 		settings := &conf.SpeciesTrackingSettings{
@@ -302,7 +302,7 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 
 	t.Run("empty database preserves existing", func(t *testing.T) {
 		ds := &MockSpeciesDatastore{}
-		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, 10000, 0).
+		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, 10000, 0).
 			Return([]datastore.NewSpeciesData{}, nil)
 
 		settings := &conf.SpeciesTrackingSettings{

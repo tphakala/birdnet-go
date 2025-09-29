@@ -277,29 +277,29 @@ func (m *MockDataStore) CountHourlyDetections(date, hour string, duration int) (
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *MockDataStore) GetSpeciesSummaryData(startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
-	args := m.Called(startDate, endDate)
+func (m *MockDataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
+	args := m.Called(ctx, startDate, endDate)
 	return safeSlice[datastore.SpeciesSummaryData](args, 0), args.Error(1)
 }
 
-func (m *MockDataStore) GetHourlyAnalyticsData(date, species string) ([]datastore.HourlyAnalyticsData, error) {
-	args := m.Called(date, species)
+func (m *MockDataStore) GetHourlyAnalyticsData(ctx context.Context, date, species string) ([]datastore.HourlyAnalyticsData, error) {
+	args := m.Called(ctx, date, species)
 	return safeSlice[datastore.HourlyAnalyticsData](args, 0), args.Error(1)
 }
 
-func (m *MockDataStore) GetDailyAnalyticsData(startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
-	args := m.Called(startDate, endDate, species)
+func (m *MockDataStore) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
+	args := m.Called(ctx, startDate, endDate, species)
 	return safeSlice[datastore.DailyAnalyticsData](args, 0), args.Error(1)
 }
 
-func (m *MockDataStore) GetDetectionTrends(period string, limit int) ([]datastore.DailyAnalyticsData, error) {
-	args := m.Called(period, limit)
+func (m *MockDataStore) GetDetectionTrends(ctx context.Context, period string, limit int) ([]datastore.DailyAnalyticsData, error) {
+	args := m.Called(ctx, period, limit)
 	return safeSlice[datastore.DailyAnalyticsData](args, 0), args.Error(1)
 }
 
 // GetHourlyDistribution implements the datastore.Interface GetHourlyDistribution method
-func (m *MockDataStore) GetHourlyDistribution(startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
-	args := m.Called(startDate, endDate, species)
+func (m *MockDataStore) GetHourlyDistribution(ctx context.Context, startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
+	args := m.Called(ctx, startDate, endDate, species)
 	return safeSlice[datastore.HourlyDistributionData](args, 0), args.Error(1)
 }
 
@@ -309,14 +309,14 @@ func (m *MockDataStore) SearchDetections(filters *datastore.SearchFilters) ([]da
 }
 
 // GetNewSpeciesDetections implements the datastore.Interface GetNewSpeciesDetections method
-func (m *MockDataStore) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	args := m.Called(startDate, endDate, limit, offset)
+func (m *MockDataStore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	args := m.Called(ctx, startDate, endDate, limit, offset)
 	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
 }
 
 // GetSpeciesFirstDetectionInPeriod implements the datastore.Interface GetSpeciesFirstDetectionInPeriod method
-func (m *MockDataStore) GetSpeciesFirstDetectionInPeriod(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	args := m.Called(startDate, endDate, limit, offset)
+func (m *MockDataStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	args := m.Called(ctx, startDate, endDate, limit, offset)
 	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
 }
 
@@ -393,8 +393,8 @@ func (m *MockDataStoreV2) GetHourlyOccurrences(date, commonName string, minConfi
 }
 
 // GetHourlyDistribution implements the datastore.Interface GetHourlyDistribution method
-func (m *MockDataStoreV2) GetHourlyDistribution(startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
-	args := m.Called(startDate, endDate, species)
+func (m *MockDataStoreV2) GetHourlyDistribution(ctx context.Context, startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
+	args := m.Called(ctx, startDate, endDate, species)
 	return safeSlice[datastore.HourlyDistributionData](args, 0), args.Error(1)
 }
 
@@ -580,34 +580,34 @@ func (m *MockDataStoreV2) CountHourlyDetections(date, hour string, duration int)
 	args := m.Called(date, hour, duration)
 	return args.Get(0).(int64), args.Error(1)
 }
-func (m *MockDataStoreV2) GetSpeciesSummaryData(startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
-	args := m.Called(startDate, endDate)
+func (m *MockDataStoreV2) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
+	args := m.Called(ctx, startDate, endDate)
 	return safeSlice[datastore.SpeciesSummaryData](args, 0), args.Error(1)
 }
-func (m *MockDataStoreV2) GetHourlyAnalyticsData(date, species string) ([]datastore.HourlyAnalyticsData, error) {
-	args := m.Called(date, species)
+func (m *MockDataStoreV2) GetHourlyAnalyticsData(ctx context.Context, date, species string) ([]datastore.HourlyAnalyticsData, error) {
+	args := m.Called(ctx, date, species)
 	return safeSlice[datastore.HourlyAnalyticsData](args, 0), args.Error(1)
 }
-func (m *MockDataStoreV2) GetDailyAnalyticsData(startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
-	args := m.Called(startDate, endDate, species)
+func (m *MockDataStoreV2) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
+	args := m.Called(ctx, startDate, endDate, species)
 	return safeSlice[datastore.DailyAnalyticsData](args, 0), args.Error(1)
 }
 
 // GetNewSpeciesDetections implements the datastore.Interface GetNewSpeciesDetections method
-func (m *MockDataStoreV2) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	args := m.Called(startDate, endDate, limit, offset)
+func (m *MockDataStoreV2) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	args := m.Called(ctx, startDate, endDate, limit, offset)
 	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
 }
 
 // GetSpeciesFirstDetectionInPeriod implements the datastore.Interface GetSpeciesFirstDetectionInPeriod method
-func (m *MockDataStoreV2) GetSpeciesFirstDetectionInPeriod(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	args := m.Called(startDate, endDate, limit, offset)
+func (m *MockDataStoreV2) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	args := m.Called(ctx, startDate, endDate, limit, offset)
 	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
 }
 
 // GetDetectionTrends implements the datastore.Interface GetDetectionTrends method
-func (m *MockDataStoreV2) GetDetectionTrends(period string, limit int) ([]datastore.DailyAnalyticsData, error) {
-	args := m.Called(period, limit)
+func (m *MockDataStoreV2) GetDetectionTrends(ctx context.Context, period string, limit int) ([]datastore.DailyAnalyticsData, error) {
+	args := m.Called(ctx, period, limit)
 	return safeSlice[datastore.DailyAnalyticsData](args, 0), args.Error(1)
 }
 
