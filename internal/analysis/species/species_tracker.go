@@ -702,6 +702,9 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 	endDate := now.Format("2006-01-02")
 	startDate := "1900-01-01" // Load from beginning of time to get all historical data
 
+	// TODO(graceful-shutdown): Accept context parameter to enable graceful cancellation during shutdown
+	// TODO(context-timeout): Add timeout context (e.g., 60s) for database initialization operations
+	// TODO(telemetry): Report initialization timeouts/failures to internal/telemetry for monitoring
 	newSpeciesData, err := t.ds.GetNewSpeciesDetections(context.Background(), startDate, endDate, 10000, 0)
 	if err != nil {
 		return errors.Newf("failed to load lifetime species data from database: %w", err).
@@ -747,6 +750,8 @@ func (t *SpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 	startDate, endDate := t.getYearDateRange(now)
 
 	// Use GetSpeciesFirstDetectionInPeriod for yearly tracking
+	// TODO(graceful-shutdown): Accept context parameter for graceful cancellation
+	// TODO(telemetry): Report database load failures to internal/telemetry
 	yearlyData, err := t.ds.GetSpeciesFirstDetectionInPeriod(context.Background(), startDate, endDate, 10000, 0)
 	if err != nil {
 		return errors.Newf("failed to load yearly species data from database: %w", err).
@@ -813,6 +818,8 @@ func (t *SpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 			"end_date", endDate)
 
 		// Get first detection of each species within this season period
+		// TODO(graceful-shutdown): Accept context parameter for cancellation during shutdown
+		// TODO(telemetry): Report seasonal data load failures to internal/telemetry
 		seasonalData, err := t.ds.GetSpeciesFirstDetectionInPeriod(context.Background(), startDate, endDate, 10000, 0)
 		if err != nil {
 			return errors.Newf("failed to load seasonal species data from database for %s: %w", seasonName, err).

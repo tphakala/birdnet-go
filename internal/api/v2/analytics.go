@@ -672,6 +672,8 @@ func (c *Controller) GetSpeciesSummary(ctx echo.Context) error {
 	}
 
 	// Retrieve species summary data from the datastore with date filtering
+	// TODO(context-timeout): Add configurable timeout for complex analytics queries (e.g., 30s for summary data)
+	// TODO(telemetry): Report slow queries (>5s), timeouts, and cancellations to internal/telemetry for monitoring
 	dbStart := time.Now()
 	summaryData, err := c.DS.GetSpeciesSummaryData(ctx.Request().Context(), startDate, endDate)
 	dbDuration := time.Since(dbStart)
@@ -860,6 +862,9 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	}
 
 	// Get hourly analytics data from the datastore
+	// TODO(context-timeout): Add configurable timeout for analytics queries to prevent resource exhaustion
+	// Example: ctx, cancel := context.WithTimeout(ctx.Request().Context(), 30*time.Second); defer cancel()
+	// TODO(telemetry): Report query timeouts and context cancellations to Sentry via internal/telemetry
 	hourlyData, err := c.DS.GetHourlyAnalyticsData(ctx.Request().Context(), date, speciesParam)
 	if err != nil {
 		if c.apiLogger != nil {
@@ -1000,6 +1005,8 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	}
 
 	// Get daily analytics data from the datastore
+	// TODO(context-timeout): Add configurable timeout for analytics queries to prevent resource exhaustion
+	// TODO(telemetry): Report query timeouts and context cancellations to Sentry via internal/telemetry
 	dailyData, err := c.DS.GetDailyAnalyticsData(ctx.Request().Context(), startDate, endDate, speciesParam)
 	if err != nil {
 		if c.apiLogger != nil {
@@ -1570,7 +1577,7 @@ func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
 
 		// Convert to HourlyDistribution format
 		hourlyDistribution := make([]HourlyDistribution, 24)
-		for hour := 0; hour < 24; hour++ {
+		for hour := range 24 {
 			hourlyDistribution[hour] = HourlyDistribution{Hour: hour, Count: 0}
 		}
 

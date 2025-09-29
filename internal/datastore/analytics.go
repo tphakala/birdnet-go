@@ -153,6 +153,9 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 	}
 	rowCount := 0
 
+	// TODO(context-deadline): Add context deadline checks in row processing loop for early cancellation
+	// Example: select { case <-ctx.Done(): rows.Close(); return nil, ctx.Err(); default: }
+	// TODO(telemetry): Report context cancellations during row processing to internal/telemetry
 	for rows.Next() {
 		rowCount++
 		var summary SpeciesSummaryData
