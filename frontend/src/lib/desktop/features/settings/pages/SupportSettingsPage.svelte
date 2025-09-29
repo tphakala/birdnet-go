@@ -448,7 +448,6 @@
                   class:input-error={supportDump.uploadToSentry && !supportDump.githubIssueNumber}
                   placeholder={t('settings.support.supportReport.githubIssue.placeholder')}
                   pattern="#?[0-9]+"
-                  required={supportDump.uploadToSentry}
                   disabled={generating}
                 />
                 <div class="label">
