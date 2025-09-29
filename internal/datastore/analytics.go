@@ -92,8 +92,8 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	queryStr := fmt.Sprintf(`
 		SELECT
 			scientific_name,
-			MAX(common_name) as common_name,
-			MAX(species_code) as species_code,
+			COALESCE(MAX(common_name), '') as common_name,
+			COALESCE(MAX(species_code), '') as species_code,
 			COUNT(*) as count,
 			MIN(%s) as first_seen,
 			MAX(%s) as last_seen,
@@ -104,7 +104,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 
 	// Add WHERE clause if date filters are provided
 	var whereClause string
-	var args []interface{}
+	var args []any
 
 	switch {
 	case startDate != "" && endDate != "":

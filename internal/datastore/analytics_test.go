@@ -234,6 +234,57 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		// MAX() should pick one of the species codes
 		assert.Contains(t, []string{"carchi", "carchi2", "carchi3"}, chickadee.SpeciesCode)
 	})
+
+	t.Run("NULL species_code handling", func(t *testing.T) {
+		t.Parallel()
+		ds := setupTestDB(t)
+
+		// Test that NULL species_code values (from birdnet-pi imports) don't break the query
+
+		// Insert a note with NULL species_code using raw SQL to bypass GORM's validation
+		result := ds.DB.Exec(`
+			INSERT INTO notes (date, time, scientific_name, common_name, species_code, confidence)
+			VALUES (?, ?, ?, ?, NULL, ?)
+		`, "2024-01-20", "10:00:00", "Nullus species", "Null Bird", 0.75)
+		require.NoError(t, result.Error)
+
+		// Also insert a normal note with species_code
+		err := ds.DB.Create(&Note{
+			Date:           "2024-01-20",
+			Time:           "11:00:00",
+			ScientificName: "Normal species",
+			CommonName:     "Normal Bird",
+			SpeciesCode:    "norbird",
+			Confidence:     0.85,
+		}).Error
+		require.NoError(t, err)
+
+		// Query should not fail even with NULL species_code
+		summaries, err := ds.GetSpeciesSummaryData("", "")
+		require.NoError(t, err, "Query should handle NULL species_code without error")
+		require.Len(t, summaries, 2)
+
+		// Find the species with NULL species_code
+		nullSpecies := findSpeciesByScientificName(summaries, "Nullus species")
+		require.NotNil(t, nullSpecies)
+		assert.Equal(t, "Null Bird", nullSpecies.CommonName)
+		assert.Empty(t, nullSpecies.SpeciesCode, "NULL species_code should be converted to empty string")
+		assert.Equal(t, 1, nullSpecies.Count)
+
+		// Also cover NULL common_name
+		result2 := ds.DB.Exec(`
+			INSERT INTO notes (date, time, scientific_name, common_name, species_code, confidence)
+			VALUES (?, ?, ?, NULL, ?, ?)
+		`, "2024-01-21", "10:00:00", "Nullus commonus", "nulcom", 0.66)
+		require.NoError(t, result2.Error)
+
+		summaries2, err := ds.GetSpeciesSummaryData("", "")
+		require.NoError(t, err)
+		nsCommon := findSpeciesByScientificName(summaries2, "Nullus commonus")
+		require.NotNil(t, nsCommon)
+		assert.Empty(t, nsCommon.CommonName, "NULL common_name should be converted to empty string")
+		assert.Equal(t, "nulcom", nsCommon.SpeciesCode)
+	})
 }
 
 // TestGetSpeciesSummaryDataTimeFormat tests that the time parsing works correctly
