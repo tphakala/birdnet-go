@@ -234,6 +234,50 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		// MAX() should pick one of the species codes
 		assert.Contains(t, []string{"carchi", "carchi2", "carchi3"}, chickadee.SpeciesCode)
 	})
+
+	t.Run("NULL species_code handling", func(t *testing.T) {
+		// Clear existing data
+		ds := setupTestDB(t)
+
+		// Test that NULL species_code values (from birdnet-pi imports) don't break the query
+
+		// Insert a note with NULL species_code using raw SQL to bypass GORM's validation
+		result := ds.DB.Exec(`
+			INSERT INTO notes (date, time, scientific_name, common_name, species_code, confidence)
+			VALUES (?, ?, ?, ?, NULL, ?)
+		`, "2024-01-20", "10:00:00", "Nullus species", "Null Bird", 0.75)
+		require.NoError(t, result.Error)
+
+		// Also insert a normal note with species_code
+		err := ds.DB.Create(&Note{
+			Date:           "2024-01-20",
+			Time:           "11:00:00",
+			ScientificName: "Normal species",
+			CommonName:     "Normal Bird",
+			SpeciesCode:    "norbird",
+			Confidence:     0.85,
+		}).Error
+		require.NoError(t, err)
+
+		// Query should not fail even with NULL species_code
+		summaries, err := ds.GetSpeciesSummaryData("", "")
+		require.NoError(t, err, "Query should handle NULL species_code without error")
+		require.Len(t, summaries, 2)
+
+		// Find the species with NULL species_code
+		var nullSpecies *SpeciesSummaryData
+		for i := range summaries {
+			if summaries[i].ScientificName == "Nullus species" {
+				nullSpecies = &summaries[i]
+				break
+			}
+		}
+
+		require.NotNil(t, nullSpecies)
+		assert.Equal(t, "Null Bird", nullSpecies.CommonName)
+		assert.Empty(t, nullSpecies.SpeciesCode, "NULL species_code should be converted to empty string")
+		assert.Equal(t, 1, nullSpecies.Count)
+	})
 }
 
 // TestGetSpeciesSummaryDataTimeFormat tests that the time parsing works correctly

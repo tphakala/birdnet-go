@@ -2,6 +2,7 @@
 package datastore
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -104,7 +105,7 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 
 	// Add WHERE clause if date filters are provided
 	var whereClause string
-	var args []interface{}
+	var args []any
 
 	switch {
 	case startDate != "" && endDate != "":
@@ -156,11 +157,12 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 		rowCount++
 		var summary SpeciesSummaryData
 		var firstSeenStr, lastSeenStr string
+		var commonName, speciesCode sql.NullString
 
 		if err := rows.Scan(
 			&summary.ScientificName,
-			&summary.CommonName,
-			&summary.SpeciesCode,
+			&commonName,
+			&speciesCode,
 			&summary.Count,
 			&firstSeenStr,
 			&lastSeenStr,
@@ -170,6 +172,10 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 			return nil, dbError(err, "scan_species_summary_data", errors.PriorityLow,
 				"action", "parse_analytics_query_results")
 		}
+
+		// Convert nullable strings to regular strings
+		summary.CommonName = commonName.String
+		summary.SpeciesCode = speciesCode.String
 
 		// Parse time strings to time.Time
 		// IMPORTANT: Database stores local time strings, parse as local time
