@@ -2,7 +2,6 @@
 package datastore
 
 import (
-	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -93,8 +92,8 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 	queryStr := fmt.Sprintf(`
 		SELECT
 			scientific_name,
-			MAX(common_name) as common_name,
-			MAX(species_code) as species_code,
+			COALESCE(MAX(common_name), '') as common_name,
+			COALESCE(MAX(species_code), '') as species_code,
 			COUNT(*) as count,
 			MIN(%s) as first_seen,
 			MAX(%s) as last_seen,
@@ -157,13 +156,11 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 		rowCount++
 		var summary SpeciesSummaryData
 		var firstSeenStr, lastSeenStr string
-		// Use sql.NullString to handle NULL values from external data imports (e.g., birdnet-pi)
-		var commonName, speciesCode sql.NullString
 
 		if err := rows.Scan(
 			&summary.ScientificName,
-			&commonName,
-			&speciesCode,
+			&summary.CommonName,
+			&summary.SpeciesCode,
 			&summary.Count,
 			&firstSeenStr,
 			&lastSeenStr,
@@ -173,10 +170,6 @@ func (ds *DataStore) GetSpeciesSummaryData(startDate, endDate string) ([]Species
 			return nil, dbError(err, "scan_species_summary_data", errors.PriorityLow,
 				"action", "parse_analytics_query_results")
 		}
-
-		// Convert nullable strings to regular strings
-		summary.CommonName = commonName.String
-		summary.SpeciesCode = speciesCode.String
 
 		// Parse time strings to time.Time
 		// IMPORTANT: Database stores local time strings, parse as local time

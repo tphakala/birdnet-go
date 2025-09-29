@@ -236,7 +236,7 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 	})
 
 	t.Run("NULL species_code handling", func(t *testing.T) {
-		// Clear existing data
+		t.Parallel()
 		ds := setupTestDB(t)
 
 		// Test that NULL species_code values (from birdnet-pi imports) don't break the query
@@ -265,18 +265,25 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		require.Len(t, summaries, 2)
 
 		// Find the species with NULL species_code
-		var nullSpecies *SpeciesSummaryData
-		for i := range summaries {
-			if summaries[i].ScientificName == "Nullus species" {
-				nullSpecies = &summaries[i]
-				break
-			}
-		}
-
+		nullSpecies := findSpeciesByScientificName(summaries, "Nullus species")
 		require.NotNil(t, nullSpecies)
 		assert.Equal(t, "Null Bird", nullSpecies.CommonName)
 		assert.Empty(t, nullSpecies.SpeciesCode, "NULL species_code should be converted to empty string")
 		assert.Equal(t, 1, nullSpecies.Count)
+
+		// Also cover NULL common_name
+		result2 := ds.DB.Exec(`
+			INSERT INTO notes (date, time, scientific_name, common_name, species_code, confidence)
+			VALUES (?, ?, ?, NULL, ?, ?)
+		`, "2024-01-21", "10:00:00", "Nullus commonus", "nulcom", 0.66)
+		require.NoError(t, result2.Error)
+
+		summaries2, err := ds.GetSpeciesSummaryData("", "")
+		require.NoError(t, err)
+		nsCommon := findSpeciesByScientificName(summaries2, "Nullus commonus")
+		require.NotNil(t, nsCommon)
+		assert.Empty(t, nsCommon.CommonName, "NULL common_name should be converted to empty string")
+		assert.Equal(t, "nulcom", nsCommon.SpeciesCode)
 	})
 }
 
