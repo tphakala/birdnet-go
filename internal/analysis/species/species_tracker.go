@@ -5,6 +5,7 @@
 package species
 
 import (
+	"context"
 	"log/slog"
 	"slices"
 	"sync"
@@ -86,8 +87,8 @@ func Close() error {
 
 // SpeciesDatastore defines the minimal interface needed by SpeciesTracker
 type SpeciesDatastore interface {
-	GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error)
-	GetSpeciesFirstDetectionInPeriod(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error)
+	GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error)
+	GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error)
 }
 
 // SpeciesStatus represents the tracking status of a species across multiple periods
@@ -701,7 +702,7 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 	endDate := now.Format("2006-01-02")
 	startDate := "1900-01-01" // Load from beginning of time to get all historical data
 
-	newSpeciesData, err := t.ds.GetNewSpeciesDetections(startDate, endDate, 10000, 0)
+	newSpeciesData, err := t.ds.GetNewSpeciesDetections(context.Background(), startDate, endDate, 10000, 0)
 	if err != nil {
 		return errors.Newf("failed to load lifetime species data from database: %w", err).
 			Component("new-species-tracker").
@@ -746,7 +747,7 @@ func (t *SpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 	startDate, endDate := t.getYearDateRange(now)
 
 	// Use GetSpeciesFirstDetectionInPeriod for yearly tracking
-	yearlyData, err := t.ds.GetSpeciesFirstDetectionInPeriod(startDate, endDate, 10000, 0)
+	yearlyData, err := t.ds.GetSpeciesFirstDetectionInPeriod(context.Background(), startDate, endDate, 10000, 0)
 	if err != nil {
 		return errors.Newf("failed to load yearly species data from database: %w", err).
 			Component("new-species-tracker").
@@ -812,7 +813,7 @@ func (t *SpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 			"end_date", endDate)
 
 		// Get first detection of each species within this season period
-		seasonalData, err := t.ds.GetSpeciesFirstDetectionInPeriod(startDate, endDate, 10000, 0)
+		seasonalData, err := t.ds.GetSpeciesFirstDetectionInPeriod(context.Background(), startDate, endDate, 10000, 0)
 		if err != nil {
 			return errors.Newf("failed to load seasonal species data from database for %s: %w", seasonName, err).
 				Component("new-species-tracker").

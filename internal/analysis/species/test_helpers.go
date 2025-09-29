@@ -1,6 +1,8 @@
 package species
 
 import (
+	"context"
+
 	"github.com/stretchr/testify/mock"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
@@ -11,14 +13,14 @@ type MockSpeciesDatastore struct {
 }
 
 // GetNewSpeciesDetections implements the SpeciesDatastore interface method using testify/mock
-func (m *MockSpeciesDatastore) GetNewSpeciesDetections(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	args := m.Called(startDate, endDate, limit, offset)
+func (m *MockSpeciesDatastore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	args := m.Called(ctx, startDate, endDate, limit, offset)
 	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
 }
 
 // GetSpeciesFirstDetectionInPeriod implements the SpeciesDatastore interface method using testify/mock
-func (m *MockSpeciesDatastore) GetSpeciesFirstDetectionInPeriod(startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	args := m.Called(startDate, endDate, limit, offset)
+func (m *MockSpeciesDatastore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
+	args := m.Called(ctx, startDate, endDate, limit, offset)
 	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
 }
 
