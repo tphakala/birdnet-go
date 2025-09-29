@@ -313,21 +313,18 @@
                     {{template "checkbox" dict
                         "id" "includeLogs"
                         "model" "supportDump.includeLogs"
-                        "name" "support.includeLogs"
                         "label" "Include recent logs"
                         "tooltip" "Include application logs from the last 24 hours to help diagnose issues"}}
 
                     {{template "checkbox" dict
                         "id" "includeConfig"
                         "model" "supportDump.includeConfig"
-                        "name" "support.includeConfig"
                         "label" "Include configuration (sensitive data removed)"
                         "tooltip" "Include your configuration file with all sensitive information automatically removed"}}
 
                     {{template "checkbox" dict
                         "id" "includeSystemInfo"
                         "model" "supportDump.includeSystemInfo"
-                        "name" "support.includeSystemInfo"
                         "label" "Include system information"
                         "tooltip" "Include basic system information like OS version, memory, and disk usage"}}
 
@@ -338,15 +335,14 @@
                             <span class="help-icon" @mouseenter="showTooltip = 'githubIssue'"
                                 @mouseleave="showTooltip = null">ⓘ</span>
                         </label>
-                        <input 
+                        <input
                             type="text"
                             id="githubIssueNumber"
-                            x-model="supportDump.githubIssueNumber" 
-                            class="input input-bordered input-sm text-base-content" 
+                            x-model="supportDump.githubIssueNumber"
+                            class="input input-bordered input-sm text-base-content"
                             :class="{'input-error': supportDump.uploadToSentry && !supportDump.githubIssueNumber}"
                             placeholder="e.g., 123 or #123"
-                            pattern="#?[0-9]+"
-                            :required="supportDump.uploadToSentry" />
+                            pattern="#?[0-9]+" />
                         
                         <!-- Tooltip -->
                         <div x-show="showTooltip === 'githubIssue'" x-cloak
@@ -395,7 +391,6 @@
                         {{template "checkbox" dict
                             "id" "uploadToSentry"
                             "model" "supportDump.uploadToSentry"
-                            "name" "support.uploadToSentry"
                             "label" "Upload to developers (recommended)"
                             "tooltip" "Upload the support report to developers for analysis via Sentry's secure cloud service. Requires a GitHub issue number."}}
                         <div class="pl-6 mt-2 space-y-2">
