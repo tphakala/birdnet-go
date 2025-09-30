@@ -752,9 +752,10 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 	}
 }
 
-// pendingDetectionsFlusher runs a goroutine that periodically checks the pending detections
-// and flushes them to the worker queue if their deadline has passed.
-func (p *Processor) pendingDetectionsFlusher() {
+// calculateMinDetections computes the minimum number of required detections based on
+// the current overlap setting and detection window duration. This scales the threshold
+// proportionally to maintain consistent detection quality regardless of clip length settings.
+func (p *Processor) calculateMinDetections() int {
 	// Calculate detection window to match processDetections calculation
 	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
 	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
@@ -772,10 +773,14 @@ func (p *Processor) pendingDetectionsFlusher() {
 	scaleFactor := detectionWindow.Seconds() / baselineWindow
 	minDetections := int(math.Max(1, math.Round(baseMinDetections*scaleFactor)))
 
+	return minDetections
+}
+
+// pendingDetectionsFlusher runs a goroutine that periodically checks the pending detections
+// and flushes them to the worker queue if their deadline has passed.
+func (p *Processor) pendingDetectionsFlusher() {
 	// Add structured logging for pending detections flusher startup
 	GetLogger().Info("Starting pending detections flusher",
-		"min_detections", minDetections,
-		"detection_window_seconds", detectionWindow.Seconds(),
 		"flush_interval_seconds", 1,
 		"operation", "pending_flusher_startup")
 
@@ -786,6 +791,9 @@ func (p *Processor) pendingDetectionsFlusher() {
 		for {
 			<-ticker.C
 			now := time.Now()
+
+			// Recalculate minDetections on each iteration to account for runtime config changes
+			minDetections := p.calculateMinDetections()
 
 			p.pendingMutex.Lock()
 			pendingCount := len(p.pendingDetections)
