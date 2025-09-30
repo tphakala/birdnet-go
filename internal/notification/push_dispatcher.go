@@ -145,8 +145,10 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 					defer cancel()
 				}
 
+				start := time.Now()
 				err := rp.prov.Send(attemptCtx, notif)
 				if err == nil {
+					d.log.Info("push sent", "provider", rp.prov.GetName(), "id", notif.ID, "type", string(notif.Type), "priority", string(notif.Priority), "attempt", attempts, "elapsed", time.Since(start))
 					return
 				}
 
