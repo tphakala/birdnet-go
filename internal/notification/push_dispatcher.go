@@ -2,34 +2,17 @@ package notification
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"log"
 	"log/slog"
-	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	shoutrrr "github.com/containrrr/shoutrrr"
-	router "github.com/containrrr/shoutrrr/pkg/router"
-	stypes "github.com/containrrr/shoutrrr/pkg/types"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/notification/pushproviders"
 )
-
-// PushProvider defines an external push delivery backend
-// Providers should be safe for concurrent use.
-type PushProvider interface {
-	GetName() string
-	ValidateConfig() error
-	Send(ctx context.Context, notification *Notification) error
-	SupportsType(notifType Type) bool
-	IsEnabled() bool
-}
 
 // pushDispatcher routes notifications to enabled providers based on filters
 // It subscribes to the notification service and forwards notifications asynchronously.
@@ -45,7 +28,7 @@ type pushDispatcher struct {
 }
 
 type registeredProvider struct {
-	prov   PushProvider
+	prov   pushproviders.Provider
 	filter conf.PushFilterConfig
 	name   string
 }
@@ -73,7 +56,7 @@ func InitializePushFromConfig(settings *conf.Settings) error {
 
 		// Build providers
 		for _, pc := range settings.Notification.Push.Providers {
-			prov := buildProvider(pc, pd)
+			prov := buildProvider(pc)
 			if prov == nil {
 				continue
 			}
@@ -142,7 +125,7 @@ func (d *pushDispatcher) start() error {
 func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 	for _, rp := range d.providers {
 		rp := rp // capture
-		if !rp.prov.IsEnabled() || !rp.prov.SupportsType(notif.Type) {
+		if !rp.prov.IsEnabled() || !rp.prov.SupportsType(string(notif.Type)) {
 			continue
 		}
 		// Apply filter
@@ -163,16 +146,30 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 					defer cancel()
 				}
 
-				err := rp.prov.Send(attemptCtx, notif)
+				payload := &pushproviders.Payload{
+					ID:        notif.ID,
+					Type:      string(notif.Type),
+					Priority:  string(notif.Priority),
+					Title:     notif.Title,
+					Message:   notif.Message,
+					Component: notif.Component,
+					Timestamp: notif.Timestamp,
+					Metadata:  notif.Metadata,
+				}
+
+				err := rp.prov.Send(attemptCtx, payload)
 				if err == nil {
 					return
 				}
 
 				// Classify error for retry based on sentinel prefix
+				// Providers can return any error; treat as retryable unless explicitly marked otherwise
 				var perr *providerError
 				retryable := false
 				if errors.As(err, &perr) {
 					retryable = perr.Retryable
+				} else {
+					retryable = true
 				}
 				if !retryable || attempts > d.maxRetries {
 					d.log.Error("push send failed", "provider", rp.prov.GetName(), "attempts", attempts, "error", err)
@@ -184,234 +181,35 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 	}
 }
 
-// providerError allows providers to mark errors as retryable/non-retryable
-type providerError struct {
-	Err       error
-	Retryable bool
-}
+// ----------------- Provider construction -----------------
 
-func (e *providerError) Error() string { return e.Err.Error() }
-func (e *providerError) Unwrap() error { return e.Err }
-
-// ----------------- Providers -----------------
-
-// shoutrrrProvider sends via containrrr/shoutrrr
-// Creates a single sender for multiple URLs.
-type shoutrrrProvider struct {
-	name    string
-	enabled bool
-	urls    []string
-	types   map[Type]bool
-	sender  *router.ServiceRouter
-	timeout time.Duration
-}
-
-func newShoutrrrProvider(pc conf.PushProviderConfig) PushProvider {
-	sp := &shoutrrrProvider{
-		name:    orDefault(pc.Name, "shoutrrr"),
-		enabled: pc.Enabled,
-		urls:    append([]string{}, pc.URLs...),
-		types:   map[Type]bool{},
-		timeout: pc.Timeout,
-	}
-	if len(pc.Filter.Types) == 0 {
-		sp.types[TypeError] = true
-		sp.types[TypeWarning] = true
-		sp.types[TypeInfo] = true
-		sp.types[TypeDetection] = true
-		sp.types[TypeSystem] = true
-	} else {
-		for _, t := range pc.Filter.Types {
-			sp.types[Type(t)] = true
-		}
-	}
-	return sp
-}
-
-func (s *shoutrrrProvider) GetName() string          { return s.name }
-func (s *shoutrrrProvider) IsEnabled() bool          { return s.enabled }
-func (s *shoutrrrProvider) SupportsType(t Type) bool { return s.types[t] }
-
-func (s *shoutrrrProvider) ValidateConfig() error {
-	if !s.enabled {
-		return nil
-	}
-	if len(s.urls) == 0 {
-		return fmt.Errorf("at least one URL is required")
-	}
-	// Build sender to validate URLs
-	sender, err := shoutrrr.CreateSender(s.urls...)
-	if err != nil {
-		return err
-	}
-	s.sender = sender
-	// Apply configured timeout and quiet logger
-	if s.timeout > 0 {
-		s.sender.Timeout = s.timeout
-	}
-	s.sender.SetLogger(log.New(io.Discard, "", 0))
-	return nil
-}
-
-func (s *shoutrrrProvider) Send(ctx context.Context, n *Notification) error {
-	if s.sender == nil {
-		return &providerError{Err: fmt.Errorf("shoutrrr sender not initialized"), Retryable: false}
-	}
-	_ = ctx // router handles its own timeouts
-
-	body := n.Message
-	p := stypes.Params{}
-	if n.Title != "" {
-		p.SetTitle(n.Title)
-	}
-	errs := s.sender.Send(body, &p)
-	if len(errs) > 0 {
-		for _, e := range errs {
-			if e != nil {
-				return &providerError{Err: e, Retryable: true}
-			}
-		}
-	}
-	return nil
-}
-
-// scriptProvider executes external scripts/binaries
-// It supports passing notification data via env vars and/or JSON to stdin.
-type scriptProvider struct {
-	name        string
-	enabled     bool
-	command     string
-	args        []string
-	env         map[string]string
-	inputFormat string // "json", "env", "both"
-	types       map[Type]bool
-}
-
-func buildProvider(pc conf.PushProviderConfig, d *pushDispatcher) PushProvider {
-	switch strings.ToLower(pc.Type) {
+func buildProvider(pc conf.PushProviderConfig) pushproviders.Provider {
+	ptype := strings.ToLower(pc.Type)
+	types := effectiveTypes(pc.Filter.Types)
+	switch ptype {
 	case "script":
-		return newScriptProvider(pc)
+		return pushproviders.NewScriptProvider(orDefault(pc.Name, "script"), pc.Enabled, pc.Command, pc.Args, pc.Environment, pc.InputFormat, types)
 	case "shoutrrr":
-		return newShoutrrrProvider(pc)
+		return pushproviders.NewShoutrrrProvider(orDefault(pc.Name, "shoutrrr"), pc.Enabled, pc.URLs, types, pc.Timeout)
 	default:
 		return nil
 	}
 }
 
-func newScriptProvider(pc conf.PushProviderConfig) PushProvider {
-	sp := &scriptProvider{
-		name:        orDefault(pc.Name, "script"),
-		enabled:     pc.Enabled,
-		command:     pc.Command,
-		args:        append([]string{}, pc.Args...),
-		env:         map[string]string{},
-		inputFormat: strings.ToLower(orDefault(pc.InputFormat, "env")),
-		types:       map[Type]bool{},
+func effectiveTypes(cfg []string) []string {
+	if len(cfg) == 0 {
+		return []string{"error", "warning", "info", "detection", "system"}
 	}
-	for k, v := range pc.Environment {
-		sp.env[k] = v
-	}
-	if len(pc.Filter.Types) == 0 {
-		// default: support all types
-		sp.types[TypeError] = true
-		sp.types[TypeWarning] = true
-		sp.types[TypeInfo] = true
-		sp.types[TypeDetection] = true
-		sp.types[TypeSystem] = true
-	} else {
-		for _, t := range pc.Filter.Types {
-			sp.types[Type(t)] = true
-		}
-	}
-	return sp
+	return append([]string{}, cfg...)
 }
 
-func (s *scriptProvider) GetName() string          { return s.name }
-func (s *scriptProvider) IsEnabled() bool          { return s.enabled }
-func (s *scriptProvider) SupportsType(t Type) bool { return s.types[t] }
-
-func (s *scriptProvider) ValidateConfig() error {
-	if !s.enabled {
-		return nil
-	}
-	if strings.TrimSpace(s.command) == "" {
-		return fmt.Errorf("script command is required")
-	}
-	return nil
-}
-
-func (s *scriptProvider) Send(ctx context.Context, n *Notification) error {
-	cmd := exec.CommandContext(ctx, s.command, s.args...)
-
-	// Environment variables
-	env := os.Environ()
-	env = append(env,
-		"NOTIFICATION_ID="+n.ID,
-		"NOTIFICATION_TYPE="+string(n.Type),
-		"NOTIFICATION_PRIORITY="+string(n.Priority),
-		"NOTIFICATION_TITLE="+n.Title,
-		"NOTIFICATION_MESSAGE="+n.Message,
-		"NOTIFICATION_COMPONENT="+n.Component,
-		"NOTIFICATION_TIMESTAMP="+n.Timestamp.UTC().Format(time.RFC3339),
-	)
-	if len(n.Metadata) > 0 {
-		b, _ := json.Marshal(n.Metadata)
-		env = append(env, "NOTIFICATION_METADATA_JSON="+string(b))
-	}
-	// Provider-specific env
-	for k, v := range s.env {
-		env = append(env, fmt.Sprintf("%s=%s", k, v))
-	}
-	cmd.Env = env
-
-	// Optional JSON on stdin
-	if s.inputFormat == "json" || s.inputFormat == "both" {
-		payload := map[string]any{
-			"id":        n.ID,
-			"type":      n.Type,
-			"priority":  n.Priority,
-			"title":     n.Title,
-			"message":   n.Message,
-			"component": n.Component,
-			"timestamp": n.Timestamp.UTC().Format(time.RFC3339),
-			"metadata":  n.Metadata,
-		}
-		b, _ := json.Marshal(payload)
-		cmd.Stdin = strings.NewReader(string(b))
-	}
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		// Determine retryability from exit code
-		var exitErr *exec.ExitError
-		retry := true
-		if errors.As(err, &exitErr) {
-			code := exitErr.ExitCode()
-			// 0 success already handled, 1 retryable, 2 permanent, >=3 treat as permanent
-			if code == 2 {
-				retry = false
-			}
-		}
-		perr := &providerError{Err: fmt.Errorf("script '%s' failed: %v, output: %s", s.name, err, truncate(string(out), 512)), Retryable: retry}
-		return perr
-	}
-	return nil
-}
-
-// -------------- helpers --------------
+// ----------------- helpers -----------------
 
 func orDefault[T ~string](v T, d T) T {
 	if strings.TrimSpace(string(v)) == "" {
 		return d
 	}
 	return v
-}
-
-func truncate(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max-3] + "..."
 }
 
 // matchesProviderFilter applies basic filtering based on type/priority/component and simple metadata rules.
@@ -506,16 +304,12 @@ func toFloat(v any) (float64, bool) {
 	return 0, false
 }
 
-// parseBool returns boolean value from interface{} supporting strings and numbers
-func parseBool(v any) (bool, bool) {
-	switch t := v.(type) {
-	case bool:
-		return t, true
-	case string:
-		b, err := strconv.ParseBool(t)
-		if err == nil {
-			return b, true
-		}
-	}
-	return false, false
+// providerError allows providers to mark errors as retryable/non-retryable
+// (kept for backward compatibility with dispatcher retry logic)
+type providerError struct {
+	Err       error
+	Retryable bool
 }
+
+func (e *providerError) Error() string { return e.Err.Error() }
+func (e *providerError) Unwrap() error { return e.Err }
