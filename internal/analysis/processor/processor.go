@@ -755,13 +755,27 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 // pendingDetectionsFlusher runs a goroutine that periodically checks the pending detections
 // and flushes them to the worker queue if their deadline has passed.
 func (p *Processor) pendingDetectionsFlusher() {
+	// Calculate detection window to match processDetections calculation
+	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
+	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
+	detectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
+
 	// Calculate minimum detections based on overlap setting
 	segmentLength := math.Max(0.1, 3.0-p.Settings.BirdNET.Overlap)
-	minDetections := int(math.Max(1, 3/segmentLength))
+
+	// Base calculation assumes 15-second detection window (original hardcoded value)
+	const baselineWindow = 15.0
+	baseMinDetections := 3.0 / segmentLength
+
+	// Scale minDetections proportionally when detection window differs from baseline
+	// This ensures proper detection thresholds regardless of clip length settings
+	scaleFactor := detectionWindow.Seconds() / baselineWindow
+	minDetections := int(math.Max(1, math.Round(baseMinDetections*scaleFactor)))
 
 	// Add structured logging for pending detections flusher startup
 	GetLogger().Info("Starting pending detections flusher",
 		"min_detections", minDetections,
+		"detection_window_seconds", detectionWindow.Seconds(),
 		"flush_interval_seconds", 1,
 		"operation", "pending_flusher_startup")
 
