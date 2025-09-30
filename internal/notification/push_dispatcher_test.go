@@ -33,7 +33,10 @@ func TestPushDispatcher_ForwardsNotification(t *testing.T) {
 	// Create isolated service for test
 	svc := NewService(DefaultServiceConfig())
 	if err := SetServiceForTesting(svc); err != nil {
-		// If already initialized in other tests, fallback to using existing
+		svc = GetService()
+		if svc == nil {
+			t.Fatalf("failed to attach to notification service: %v", err)
+		}
 	}
 
 	// Setup fake provider that accepts all types
