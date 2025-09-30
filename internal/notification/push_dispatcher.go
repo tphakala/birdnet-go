@@ -139,14 +139,16 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 				attempts++
 				// Set timeout per attempt
 				attemptCtx := ctx
+				var cancel context.CancelFunc
 				if deadline := d.defaultTimeout; deadline > 0 {
-					var cancel context.CancelFunc
 					attemptCtx, cancel = context.WithTimeout(ctx, deadline)
-					defer cancel()
 				}
 
 				start := time.Now()
 				err := rp.prov.Send(attemptCtx, notif)
+				if cancel != nil {
+					cancel() // release timer resources immediately per attempt
+				}
 				if err == nil {
 					d.log.Info("push sent", "provider", rp.prov.GetName(), "id", notif.ID, "type", string(notif.Type), "priority", string(notif.Priority), "attempt", attempts, "elapsed", time.Since(start))
 					return
