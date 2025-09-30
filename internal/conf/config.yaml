@@ -246,3 +246,21 @@ output:
 # Sentry telemetry configuration (opt-in, respects EU privacy laws)
 sentry:
   enabled: false          # false by default, must be explicitly enabled by user (opt-in)
+
+# Notification settings
+notification:
+  push:
+    enabled: false
+    default_timeout: 30s
+    max_retries: 3
+    retry_delay: 5s
+    providers:
+      - type: shoutrrr
+        enabled: true
+        name: "telegram-alerts"
+        urls:
+          - "telegram://BOT_TOKEN@telegram?chats=@YOUR_CHANNEL_OR_CHAT_ID"
+        timeout: 10s
+        filter:
+          types: [error, detection]
+          priorities: [critical, high]

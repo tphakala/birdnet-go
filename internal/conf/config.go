@@ -158,6 +158,46 @@ type WeatherSettings struct {
 	Wunderground WundergroundSettings `json:"wunderground"` // WeatherUnderground integration settings
 }
 
+// ---------------- Notification push configuration -----------------
+
+// NotificationConfig is the root for notification-specific settings.
+type NotificationConfig struct {
+	Push PushSettings `json:"push"`
+}
+
+// PushSettings controls global push delivery and provider list.
+type PushSettings struct {
+	Enabled        bool                 `json:"enabled"`
+	DefaultTimeout time.Duration        `json:"default_timeout"`
+	MaxRetries     int                  `json:"max_retries"`
+	RetryDelay     time.Duration        `json:"retry_delay"`
+	Providers      []PushProviderConfig `json:"providers"`
+}
+
+// PushProviderConfig configures a single push provider instance.
+type PushProviderConfig struct {
+	Type    string           `json:"type"`
+	Enabled bool             `json:"enabled"`
+	Name    string           `json:"name"`
+	Filter  PushFilterConfig `json:"filter"`
+	// Shoutrrr-specific
+	URLs    []string      `json:"urls"`
+	Timeout time.Duration `json:"timeout"`
+	// Script-specific
+	Command     string            `json:"command"`
+	Args        []string          `json:"args"`
+	Environment map[string]string `json:"environment"`
+	InputFormat string            `json:"input_format"`
+}
+
+// PushFilterConfig limits which notifications a provider receives.
+type PushFilterConfig struct {
+	Types           []string       `json:"types"`
+	Priorities      []string       `json:"priorities"`
+	Components      []string       `json:"components"`
+	MetadataFilters map[string]any `json:"metadata_filters" yaml:"metadata_filters"`
+}
+
 // WundergroundSettings contains settings for WeatherUnderground integration.
 type WundergroundSettings struct {
 	APIKey    string `json:"apiKey"`    // WeatherUnderground API key
@@ -499,10 +539,10 @@ func (s *SeasonalTrackingSettings) Validate() error {
 		// Check that we have a complete set of seasons (either traditional or equatorial)
 		traditionalSeasons := []string{"spring", "summer", "fall", "winter"}
 		equatorialSeasons := []string{"wet1", "dry1", "wet2", "dry2"}
-		
+
 		hasAllTraditional := true
 		hasAllEquatorial := true
-		
+
 		// Check for traditional seasons
 		for _, required := range traditionalSeasons {
 			if _, exists := s.Seasons[required]; !exists {
@@ -510,7 +550,7 @@ func (s *SeasonalTrackingSettings) Validate() error {
 				break
 			}
 		}
-		
+
 		// Check for equatorial seasons
 		for _, required := range equatorialSeasons {
 			if _, exists := s.Seasons[required]; !exists {
@@ -518,7 +558,7 @@ func (s *SeasonalTrackingSettings) Validate() error {
 				break
 			}
 		}
-		
+
 		// Must have either all traditional or all equatorial seasons
 		if !hasAllTraditional && !hasAllEquatorial {
 			// Check if we at least have minimum number of seasons
@@ -596,9 +636,9 @@ type BirdNETConfig struct {
 
 // RangeFilterSettings contains settings for the range filter
 type RangeFilterSettings struct {
-	Debug       bool      `json:"debug"`                          // true to enable debug mode
-	Model       string    `json:"model"`                          // range filter model version: "legacy" for v1, or empty/default for v2
-	ModelPath   string    `json:"modelPath"`                      // path to external meta model file (empty for embedded)
+	Debug       bool      `json:"debug"`                      // true to enable debug mode
+	Model       string    `json:"model"`                      // range filter model version: "legacy" for v1, or empty/default for v2
+	ModelPath   string    `json:"modelPath"`                  // path to external meta model file (empty for embedded)
 	Threshold   float32   `json:"threshold"`                  // rangefilter species occurrence threshold
 	Species     []string  `yaml:"-" json:"species,omitempty"` // list of included species, runtime value
 	LastUpdated time.Time `yaml:"-" json:"lastUpdated"`       // last time the species list was updated, runtime value
@@ -879,6 +919,8 @@ type Settings struct {
 	} `json:"output"`
 
 	Backup BackupConfig `json:"backup"` // Backup configuration
+
+	Notification NotificationConfig `json:"notification"` // Configuration for push notifications
 }
 
 // LogConfig defines the configuration for a log file

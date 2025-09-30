@@ -4,6 +4,7 @@ go 1.25.1
 
 require (
 	github.com/antonholmquist/jason v1.0.0
+	github.com/containrrr/shoutrrr v0.8.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/fatih/color v1.18.0
 	github.com/getsentry/sentry-go v0.35.3
