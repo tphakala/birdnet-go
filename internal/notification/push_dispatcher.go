@@ -254,16 +254,26 @@ func matchesProviderFilter(f *conf.PushFilterConfig, n *Notification) bool {
 		if key == "confidence" {
 			cond, ok := val.(string)
 			if !ok {
-				continue
+				return false // misconfigured filter
 			}
-			cv, _ := toFloat(n.Metadata["confidence"])
 			cond = strings.TrimSpace(cond)
 			if len(cond) == 0 {
-				continue
+				return false
 			}
 			op := cond[0]
 			valStr := strings.TrimSpace(cond[1:])
-			threshold, _ := strconv.ParseFloat(valStr, 64)
+			threshold, err := strconv.ParseFloat(valStr, 64)
+			if err != nil {
+				return false
+			}
+			raw, exists := n.Metadata["confidence"]
+			if !exists {
+				return false // require presence
+			}
+			cv, ok := toFloat(raw)
+			if !ok {
+				return false // require parse success
+			}
 			switch op {
 			case '>':
 				if !(cv > threshold) {
@@ -273,14 +283,18 @@ func matchesProviderFilter(f *conf.PushFilterConfig, n *Notification) bool {
 				if !(cv < threshold) {
 					return false
 				}
+			default:
+				return false // unknown operator
 			}
 			continue
 		}
-		// exact match
-		if mv, ok := n.Metadata[key]; ok {
-			if fmt.Sprint(mv) != fmt.Sprint(val) {
-				return false
-			}
+		// exact match requires key presence
+		mv, ok := n.Metadata[key]
+		if !ok {
+			return false
+		}
+		if fmt.Sprint(mv) != fmt.Sprint(val) {
+			return false
 		}
 	}
 	return true
