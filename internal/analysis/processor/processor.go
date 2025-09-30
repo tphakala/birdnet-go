@@ -755,21 +755,34 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 // calculateMinDetections computes the minimum number of required detections based on
 // the current overlap setting and detection window duration. This scales the threshold
 // proportionally to maintain consistent detection quality regardless of clip length settings.
+//
+// The detection window duration is calculated as captureLength - preCaptureLength to prevent
+// gaps in audio clip coverage when the same species is detected multiple times in succession.
+//
+// Edge cases handled:
+//   - If captureLength <= preCaptureLength: detection window is clamped to 0, resulting in minDetections = 1
+//   - If overlap is 0 (no overlap): minDetections = 1 regardless of detection window duration
+//   - Very short detection windows (< 1s): minDetections = 1 due to max(1, ...) safeguard
+//   - Very high overlap (>2.9): may require 20+ detections depending on detection window duration
 func (p *Processor) calculateMinDetections() int {
 	// Calculate detection window to match processDetections calculation
+	// Edge case: if captureLength <= preCaptureLength, max() clamps to 0
 	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
 	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
 	detectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
 
-	// Calculate minimum detections based on overlap setting
+	// Calculate segment length based on overlap setting
+	// Edge case: max(0.1, ...) prevents division by values too close to zero
 	segmentLength := math.Max(0.1, 3.0-p.Settings.BirdNET.Overlap)
 
 	// Base calculation assumes 15-second detection window (original hardcoded value)
+	// This was the value used before configurable clip lengths were introduced
 	const baselineWindow = 15.0
 	baseMinDetections := 3.0 / segmentLength
 
 	// Scale minDetections proportionally when detection window differs from baseline
 	// This ensures proper detection thresholds regardless of clip length settings
+	// Edge case: if detectionWindow = 0, scaleFactor = 0, but max(1, ...) ensures minDetections >= 1
 	scaleFactor := detectionWindow.Seconds() / baselineWindow
 	minDetections := int(math.Max(1, math.Round(baseMinDetections*scaleFactor)))
 
@@ -788,12 +801,24 @@ func (p *Processor) pendingDetectionsFlusher() {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 
+		// Track last minDetections value to log changes
+		lastMinDetections := -1
+
 		for {
 			<-ticker.C
 			now := time.Now()
 
 			// Recalculate minDetections on each iteration to account for runtime config changes
 			minDetections := p.calculateMinDetections()
+
+			// Log when minDetections changes due to config update
+			if lastMinDetections != -1 && minDetections != lastMinDetections {
+				GetLogger().Info("minDetections updated due to config change",
+					"old_value", lastMinDetections,
+					"new_value", minDetections,
+					"operation", "pending_flusher_config_update")
+			}
+			lastMinDetections = minDetections
 
 			p.pendingMutex.Lock()
 			pendingCount := len(p.pendingDetections)

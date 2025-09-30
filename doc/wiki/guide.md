@@ -964,46 +964,60 @@ realtime:
 
 ### Stage 3: Deep Detection Filter
 
-[Deep Detection](BirdNET‐Go-Guide#deep-detection) uses the `overlap` setting to require multiple detections of the same species within a 15-second window before accepting it, significantly reducing false positives.
+[Deep Detection](BirdNET‐Go-Guide#deep-detection) uses the `overlap` setting to require multiple detections of the same species within a configurable detection window before accepting it, significantly reducing false positives.
 
 #### How It Works:
 
-1. **Detection Holding**: All detections are held in a pending state for **exactly 15 seconds** from first detection
+1. **Detection Holding**: All detections are held in a pending state for `captureLength - preCaptureLength` seconds from first detection (defaults to 12 seconds with 15s clip length and 3s pre-capture buffer)
 2. **Counting Mechanism**: During this window, if the same species is detected again, a counter increments
-3. **Threshold Calculation**: The minimum required detections scales inversely with overlap:
+3. **Threshold Calculation**: The minimum required detections scales with both overlap and detection window duration:
 
 ```yaml
 birdnet:
   overlap: 2.7 # Enable deep detection (requires more CPU power)
+realtime:
+  audio:
+    export:
+      length: 15      # Audio clip length in seconds
+      preCapture: 3   # Pre-detection buffer in seconds
 ```
 
 **Exact Minimum Detections Calculation:**
 
 ```
+detectionWindow = captureLength - preCaptureLength
 segmentLength = max(0.1, 3.0 - overlap)
-minDetections = max(1, 3 / segmentLength)
+baseMinDetections = 3.0 / segmentLength
+scaleFactor = detectionWindow / 15.0
+minDetections = max(1, round(baseMinDetections * scaleFactor))
 
-Examples:
+Examples (with default 12-second detection window):
 - overlap: 0.0  → segmentLength: 3.0  → minDetections: 1  (standard mode)
 - overlap: 1.5  → segmentLength: 1.5  → minDetections: 2
-- overlap: 2.7  → segmentLength: 0.3  → minDetections: 10 (deep detection)
-- overlap: 2.9  → segmentLength: 0.1  → minDetections: 30 (very strict)
+- overlap: 2.4  → segmentLength: 0.6  → minDetections: 4  (recommended)
+- overlap: 2.7  → segmentLength: 0.3  → minDetections: 8  (deep detection)
+- overlap: 2.9  → segmentLength: 0.1  → minDetections: 24 (very strict)
+
+With longer detection window (30s clip, 0s pre-capture = 30s window):
+- overlap: 2.4  → minDetections: 10 (2x baseline)
+- overlap: 2.7  → minDetections: 20 (2x baseline)
 ```
 
 #### Processing Timeline:
 
-1. **0 seconds**: Species detected for first time, 15-second timer starts
-2. **0-15 seconds**: Additional detections increment the counter
-3. **15 seconds**: Decision point reached:
+1. **0 seconds**: Species detected for first time, detection window timer starts
+2. **0 to detectionWindow seconds**: Additional detections increment the counter
+3. **detectionWindow seconds**: Decision point reached:
    - **If count ≥ minDetections**: Detection approved and processed
    - **If count < minDetections**: Detection discarded as "false positive"
 
 #### Key Behavior Notes:
 
-- **Hard 15-second timeout**: Detections are **always** decided after exactly 15 seconds
-- **No early approval**: Even if minimum detections are met before 15 seconds, the system waits for the full window
+- **Configurable timeout**: Detection window duration is `captureLength - preCaptureLength` (prevents audio clip gaps)
+- **No early approval**: Even if minimum detections are met early, the system waits for the full window
 - **Quality improvement**: Higher confidence detections within the window replace lower ones
 - **Memory efficient**: Only one pending detection per species is held at a time
+- **Runtime adaptable**: Changes to overlap, clip length, or pre-capture settings take effect within 1 second
 
 ### Stage 4: Privacy and Behavioral Filters
 
