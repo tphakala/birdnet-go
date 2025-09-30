@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/notification/pushproviders"
 )
 
 // pushDispatcher routes notifications to enabled providers based on filters
@@ -28,7 +27,7 @@ type pushDispatcher struct {
 }
 
 type registeredProvider struct {
-	prov   pushproviders.Provider
+	prov   Provider
 	filter conf.PushFilterConfig
 	name   string
 }
@@ -125,7 +124,7 @@ func (d *pushDispatcher) start() error {
 func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 	for _, rp := range d.providers {
 		rp := rp // capture
-		if !rp.prov.IsEnabled() || !rp.prov.SupportsType(string(notif.Type)) {
+		if !rp.prov.IsEnabled() || !rp.prov.SupportsType(notif.Type) {
 			continue
 		}
 		// Apply filter
@@ -146,18 +145,7 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 					defer cancel()
 				}
 
-				payload := &pushproviders.Payload{
-					ID:        notif.ID,
-					Type:      string(notif.Type),
-					Priority:  string(notif.Priority),
-					Title:     notif.Title,
-					Message:   notif.Message,
-					Component: notif.Component,
-					Timestamp: notif.Timestamp,
-					Metadata:  notif.Metadata,
-				}
-
-				err := rp.prov.Send(attemptCtx, payload)
+				err := rp.prov.Send(attemptCtx, notif)
 				if err == nil {
 					return
 				}
@@ -183,14 +171,14 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 
 // ----------------- Provider construction -----------------
 
-func buildProvider(pc conf.PushProviderConfig) pushproviders.Provider {
+func buildProvider(pc conf.PushProviderConfig) Provider {
 	ptype := strings.ToLower(pc.Type)
 	types := effectiveTypes(pc.Filter.Types)
 	switch ptype {
 	case "script":
-		return pushproviders.NewScriptProvider(orDefault(pc.Name, "script"), pc.Enabled, pc.Command, pc.Args, pc.Environment, pc.InputFormat, types)
+		return NewScriptProvider(orDefault(pc.Name, "script"), pc.Enabled, pc.Command, pc.Args, pc.Environment, pc.InputFormat, types)
 	case "shoutrrr":
-		return pushproviders.NewShoutrrrProvider(orDefault(pc.Name, "shoutrrr"), pc.Enabled, pc.URLs, types, pc.Timeout)
+		return NewShoutrrrProvider(orDefault(pc.Name, "shoutrrr"), pc.Enabled, pc.URLs, types, pc.Timeout)
 	default:
 		return nil
 	}
@@ -266,14 +254,19 @@ func matchesProviderFilter(f *conf.PushFilterConfig, n *Notification) bool {
 			}
 			cv, _ := toFloat(n.Metadata["confidence"])
 			cond = strings.TrimSpace(cond)
-			if strings.HasPrefix(cond, ">") {
-				thr, _ := strconv.ParseFloat(strings.TrimSpace(strings.TrimPrefix(cond, ">")), 64)
-				if !(cv > thr) {
+			if len(cond) == 0 {
+				continue
+			}
+			op := cond[0]
+			valStr := strings.TrimSpace(cond[1:])
+			threshold, _ := strconv.ParseFloat(valStr, 64)
+			switch op {
+			case '>':
+				if !(cv > threshold) {
 					return false
 				}
-			} else if strings.HasPrefix(cond, "<") {
-				thr, _ := strconv.ParseFloat(strings.TrimSpace(strings.TrimPrefix(cond, "<")), 64)
-				if !(cv < thr) {
+			case '<':
+				if !(cv < threshold) {
 					return false
 				}
 			}

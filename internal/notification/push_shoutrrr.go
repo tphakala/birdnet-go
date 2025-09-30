@@ -1,4 +1,4 @@
-package pushproviders
+package notification
 
 import (
 	"context"
@@ -49,9 +49,9 @@ func NewShoutrrrProvider(name string, enabled bool, urls []string, supportedType
 	return sp
 }
 
-func (s *ShoutrrrProvider) GetName() string            { return s.name }
-func (s *ShoutrrrProvider) IsEnabled() bool            { return s.enabled }
-func (s *ShoutrrrProvider) SupportsType(t string) bool { return s.types[t] }
+func (s *ShoutrrrProvider) GetName() string          { return s.name }
+func (s *ShoutrrrProvider) IsEnabled() bool          { return s.enabled }
+func (s *ShoutrrrProvider) SupportsType(t Type) bool { return s.types[string(t)] }
 
 func (s *ShoutrrrProvider) ValidateConfig() error {
 	if !s.enabled {
@@ -74,16 +74,16 @@ func (s *ShoutrrrProvider) ValidateConfig() error {
 	return nil
 }
 
-func (s *ShoutrrrProvider) Send(ctx context.Context, p *Payload) error {
+func (s *ShoutrrrProvider) Send(ctx context.Context, n *Notification) error {
 	if s.sender == nil {
 		return fmt.Errorf("shoutrrr sender not initialized")
 	}
 	_ = ctx // router handles its own timeouts
 
-	body := p.Message
+	body := n.Message
 	params := stypes.Params{}
-	if p.Title != "" {
-		params.SetTitle(p.Title)
+	if n.Title != "" {
+		params.SetTitle(n.Title)
 	}
 	errs := s.sender.Send(body, &params)
 	if len(errs) > 0 {

@@ -1,4 +1,4 @@
-package pushproviders
+package notification
 
 import (
 	"context"
@@ -54,9 +54,9 @@ func NewScriptProvider(name string, enabled bool, command string, args []string,
 	return sp
 }
 
-func (s *ScriptProvider) GetName() string            { return s.name }
-func (s *ScriptProvider) IsEnabled() bool            { return s.enabled }
-func (s *ScriptProvider) SupportsType(t string) bool { return s.types[t] }
+func (s *ScriptProvider) GetName() string          { return s.name }
+func (s *ScriptProvider) IsEnabled() bool          { return s.enabled }
+func (s *ScriptProvider) SupportsType(t Type) bool { return s.types[string(t)] }
 func (s *ScriptProvider) ValidateConfig() error {
 	if !s.enabled {
 		return nil
@@ -67,22 +67,22 @@ func (s *ScriptProvider) ValidateConfig() error {
 	return nil
 }
 
-func (s *ScriptProvider) Send(ctx context.Context, p *Payload) error {
+func (s *ScriptProvider) Send(ctx context.Context, n *Notification) error {
 	cmd := exec.CommandContext(ctx, s.command, s.args...)
 
 	// Environment variables
 	env := os.Environ()
 	env = append(env,
-		"NOTIFICATION_ID="+p.ID,
-		"NOTIFICATION_TYPE="+p.Type,
-		"NOTIFICATION_PRIORITY="+p.Priority,
-		"NOTIFICATION_TITLE="+p.Title,
-		"NOTIFICATION_MESSAGE="+p.Message,
-		"NOTIFICATION_COMPONENT="+p.Component,
-		"NOTIFICATION_TIMESTAMP="+p.Timestamp.UTC().Format(time.RFC3339),
+		"NOTIFICATION_ID="+n.ID,
+		"NOTIFICATION_TYPE="+string(n.Type),
+		"NOTIFICATION_PRIORITY="+string(n.Priority),
+		"NOTIFICATION_TITLE="+n.Title,
+		"NOTIFICATION_MESSAGE="+n.Message,
+		"NOTIFICATION_COMPONENT="+n.Component,
+		"NOTIFICATION_TIMESTAMP="+n.Timestamp.UTC().Format(time.RFC3339),
 	)
-	if len(p.Metadata) > 0 {
-		b, _ := json.Marshal(p.Metadata)
+	if len(n.Metadata) > 0 {
+		b, _ := json.Marshal(n.Metadata)
 		env = append(env, "NOTIFICATION_METADATA_JSON="+string(b))
 	}
 	// Provider-specific env
@@ -94,14 +94,14 @@ func (s *ScriptProvider) Send(ctx context.Context, p *Payload) error {
 	// Optional JSON on stdin
 	if s.inputFormat == "json" || s.inputFormat == "both" {
 		payload := map[string]any{
-			"id":        p.ID,
-			"type":      p.Type,
-			"priority":  p.Priority,
-			"title":     p.Title,
-			"message":   p.Message,
-			"component": p.Component,
-			"timestamp": p.Timestamp.UTC().Format(time.RFC3339),
-			"metadata":  p.Metadata,
+			"id":        n.ID,
+			"type":      string(n.Type),
+			"priority":  string(n.Priority),
+			"title":     n.Title,
+			"message":   n.Message,
+			"component": n.Component,
+			"timestamp": n.Timestamp.UTC().Format(time.RFC3339),
+			"metadata":  n.Metadata,
 		}
 		b, _ := json.Marshal(payload)
 		cmd.Stdin = strings.NewReader(string(b))
