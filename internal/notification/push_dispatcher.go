@@ -99,6 +99,7 @@ func (d *pushDispatcher) start() error {
 	d.cancel = cancel
 
 	go func() {
+		defer service.Unsubscribe(ch)
 		for {
 			select {
 			case notif, ok := <-ch:
