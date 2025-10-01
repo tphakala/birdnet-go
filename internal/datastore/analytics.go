@@ -9,6 +9,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"gorm.io/gorm"
 )
 
 // isDebugLoggingEnabled returns true if debug logging is enabled and logger is available
@@ -139,111 +140,111 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 			"args", args)
 	}
 
-	// Start a transaction to ensure consistent snapshot
-	tx := ds.DB.WithContext(ctx).Begin()
-	if tx.Error != nil {
-		return nil, dbError(tx.Error, "begin_species_summary_transaction", errors.PriorityMedium,
-			"start_date", startDate,
-			"end_date", endDate,
-			"action", "begin_analytics_transaction")
-	}
+	// Track transaction duration for performance monitoring
+	txStart := time.Now()
 
-	// Ensure transaction is rolled back (no-op if already committed)
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-			panic(r)
+	// Use GORM's Transaction helper for automatic commit/rollback handling
+	err := ds.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Execute query within transaction
+		rows, err := tx.Raw(queryStr, args...).Rows()
+		if err != nil {
+			return dbError(err, "get_species_summary_data", errors.PriorityMedium,
+				"start_date", startDate,
+				"end_date", endDate,
+				"action", "generate_species_analytics_report")
 		}
-		tx.Rollback() // Safe to call even after commit
-	}()
+		defer func() {
+			if err := rows.Close(); err != nil {
+				getLogger().Error("Failed to close rows",
+					"error", err,
+					"operation", "get_species_summary_data")
+			}
+		}()
 
-	// Execute query within transaction
-	rows, err := tx.Raw(queryStr, args...).Rows()
+		queryExecutionTime := time.Since(queryStart)
+		if isDebugLoggingEnabled() {
+			getLogger().Debug("GetSpeciesSummaryData: Query executed, scanning rows",
+				"query_duration_ms", queryExecutionTime.Milliseconds())
+		}
+		rowCount := 0
+
+		// TODO(context-deadline): Add context deadline checks in row processing loop for early cancellation
+		// Example: select { case <-ctx.Done(): rows.Close(); return nil, ctx.Err(); default: }
+		// TODO(telemetry): Report context cancellations during row processing to internal/telemetry
+		for rows.Next() {
+			rowCount++
+			var summary SpeciesSummaryData
+			var firstSeenStr, lastSeenStr string
+
+			if err := rows.Scan(
+				&summary.ScientificName,
+				&summary.CommonName,
+				&summary.SpeciesCode,
+				&summary.Count,
+				&firstSeenStr,
+				&lastSeenStr,
+				&summary.AvgConfidence,
+				&summary.MaxConfidence,
+			); err != nil {
+				return dbError(err, "scan_species_summary_data", errors.PriorityLow,
+					"action", "parse_analytics_query_results")
+			}
+
+			// Parse time strings to time.Time
+			// IMPORTANT: Database stores local time strings, parse as local time
+			if firstSeenStr != "" {
+				firstSeen, err := time.ParseInLocation("2006-01-02 15:04:05", firstSeenStr, time.Local)
+				if err == nil {
+					summary.FirstSeen = firstSeen
+				} else if isDebugLoggingEnabled() {
+					datastoreLogger.Debug("Failed to parse firstSeen time",
+						"species", summary.ScientificName,
+						"firstSeenStr", firstSeenStr,
+						"error", err)
+				}
+			}
+
+			if lastSeenStr != "" {
+				lastSeen, err := time.ParseInLocation("2006-01-02 15:04:05", lastSeenStr, time.Local)
+				if err == nil {
+					summary.LastSeen = lastSeen
+				} else if isDebugLoggingEnabled() {
+					datastoreLogger.Debug("Failed to parse lastSeen time",
+						"species", summary.ScientificName,
+						"lastSeenStr", lastSeenStr,
+						"error", err)
+				}
+			}
+
+			summaries = append(summaries, summary)
+		}
+
+		// Check for errors from row iteration
+		if err := rows.Err(); err != nil {
+			return dbError(err, "iterate_species_summary_rows", errors.PriorityLow,
+				"action", "process_analytics_results")
+		}
+
+		// Log transaction metrics
+		txDuration := time.Since(txStart)
+		if isDebugLoggingEnabled() {
+			getLogger().Debug("GetSpeciesSummaryData: Transaction completed",
+				"tx_duration_ms", txDuration.Milliseconds(),
+				"rows_processed", rowCount)
+		}
+
+		return nil
+	})
+
 	if err != nil {
-		return nil, dbError(err, "get_species_summary_data", errors.PriorityMedium,
-			"start_date", startDate,
-			"end_date", endDate,
-			"action", "generate_species_analytics_report")
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			getLogger().Error("Failed to close rows",
-				"error", err,
-				"operation", "get_species_summary_data")
-		}
-	}()
-
-	queryExecutionTime := time.Since(queryStart)
-	if isDebugLoggingEnabled() {
-		getLogger().Debug("GetSpeciesSummaryData: Query executed, scanning rows",
-			"query_duration_ms", queryExecutionTime.Milliseconds())
-	}
-	rowCount := 0
-
-	// TODO(context-deadline): Add context deadline checks in row processing loop for early cancellation
-	// Example: select { case <-ctx.Done(): rows.Close(); return nil, ctx.Err(); default: }
-	// TODO(telemetry): Report context cancellations during row processing to internal/telemetry
-	for rows.Next() {
-		rowCount++
-		var summary SpeciesSummaryData
-		var firstSeenStr, lastSeenStr string
-
-		if err := rows.Scan(
-			&summary.ScientificName,
-			&summary.CommonName,
-			&summary.SpeciesCode,
-			&summary.Count,
-			&firstSeenStr,
-			&lastSeenStr,
-			&summary.AvgConfidence,
-			&summary.MaxConfidence,
-		); err != nil {
-			return nil, dbError(err, "scan_species_summary_data", errors.PriorityLow,
-				"action", "parse_analytics_query_results")
-		}
-
-		// Parse time strings to time.Time
-		// IMPORTANT: Database stores local time strings, parse as local time
-		if firstSeenStr != "" {
-			firstSeen, err := time.ParseInLocation("2006-01-02 15:04:05", firstSeenStr, time.Local)
-			if err == nil {
-				summary.FirstSeen = firstSeen
-			} else if isDebugLoggingEnabled() {
-				datastoreLogger.Debug("Failed to parse firstSeen time",
-					"species", summary.ScientificName,
-					"firstSeenStr", firstSeenStr,
-					"error", err)
-			}
-		}
-
-		if lastSeenStr != "" {
-			lastSeen, err := time.ParseInLocation("2006-01-02 15:04:05", lastSeenStr, time.Local)
-			if err == nil {
-				summary.LastSeen = lastSeen
-			} else if isDebugLoggingEnabled() {
-				datastoreLogger.Debug("Failed to parse lastSeen time",
-					"species", summary.ScientificName,
-					"lastSeenStr", lastSeenStr,
-					"error", err)
-			}
-		}
-
-		summaries = append(summaries, summary)
-	}
-
-	// Commit the read transaction
-	if err := tx.Commit().Error; err != nil {
-		return nil, dbError(err, "commit_species_summary_transaction", errors.PriorityLow,
-			"start_date", startDate,
-			"end_date", endDate,
-			"action", "commit_analytics_transaction")
+		return nil, err
 	}
 
 	totalDuration := time.Since(queryStart)
 	if isDebugLoggingEnabled() {
 		getLogger().Debug("GetSpeciesSummaryData: Completed",
 			"total_duration_ms", totalDuration.Milliseconds(),
-			"rows_processed", rowCount)
+			"rows_processed", len(summaries))
 	}
 
 	return summaries, nil
