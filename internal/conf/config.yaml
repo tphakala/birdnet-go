@@ -259,18 +259,17 @@ notification:
         enabled: false
         name: "telegram-alerts"
         urls:
-          - "telegram://BOT_TOKEN@telegram?chats=@YOUR_CHANNEL_OR_CHAT_ID"
+          - "telegram://<YOUR_BOT_TOKEN>@telegram?chats=<YOUR_CHAT_ID>"
         timeout: 10s
         filter:
-          types: [error, detection]
-          priorities: [critical, high]
+          types: ["error", "detection"]
+          priorities: ["critical", "high"]
       - type: script
         enabled: false
         name: test-script
-        command: your-push-script.sh
+        command: scripts/your-push-script.sh
         args: ["ok"] # use ["fail"] to test non-zero exit
         environment:
-          TEST_LOG_FILE: push-script.log
         input_format: both    # "json", "env", "both"
         filter:
           types: ["error", "warning", "info", "detection", "system"]
