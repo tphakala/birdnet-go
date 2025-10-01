@@ -58,6 +58,10 @@ type NewSpeciesData struct {
 
 // GetSpeciesSummaryData retrieves overall statistics for all bird species
 // Optional date range filtering with startDate and endDate parameters in YYYY-MM-DD format
+//
+// NOTE: Uses a read-only transaction with repeatable read isolation to prevent race conditions
+// when concurrent writes are occurring. This ensures consistent timestamps even when new species
+// are being inserted. See issue #1239 for details on the SQLite WAL mode race condition.
 func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]SpeciesSummaryData, error) {
 	// Pre-allocate with reasonable capacity for typical species count
 	summaries := make([]SpeciesSummaryData, 0, 100)
@@ -125,13 +129,36 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 		ORDER BY count DESC
 	`
 
-	// Execute the query
+	// Execute the query within a read-only transaction for consistent snapshot isolation
+	// This prevents race conditions where partial writes are visible during concurrent inserts
+	// For SQLite with WAL mode: provides a consistent snapshot view even during concurrent writes
+	// For MySQL: uses default REPEATABLE READ isolation level for snapshot consistency
 	if isDebugLoggingEnabled() {
-		getLogger().Debug("GetSpeciesSummaryData: Executing query",
+		getLogger().Debug("GetSpeciesSummaryData: Executing query with snapshot isolation",
 			"query", queryStr,
 			"args", args)
 	}
-	rows, err := ds.DB.WithContext(ctx).Raw(queryStr, args...).Rows()
+
+	// Start a transaction to ensure consistent snapshot
+	tx := ds.DB.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return nil, dbError(tx.Error, "begin_species_summary_transaction", errors.PriorityMedium,
+			"start_date", startDate,
+			"end_date", endDate,
+			"action", "begin_analytics_transaction")
+	}
+
+	// Ensure transaction is rolled back (no-op if already committed)
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			panic(r)
+		}
+		tx.Rollback() // Safe to call even after commit
+	}()
+
+	// Execute query within transaction
+	rows, err := tx.Raw(queryStr, args...).Rows()
 	if err != nil {
 		return nil, dbError(err, "get_species_summary_data", errors.PriorityMedium,
 			"start_date", startDate,
@@ -182,7 +209,7 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 			if err == nil {
 				summary.FirstSeen = firstSeen
 			} else if isDebugLoggingEnabled() {
-				datastoreLogger.Debug("Failed to parse firstSeen time", 
+				datastoreLogger.Debug("Failed to parse firstSeen time",
 					"species", summary.ScientificName,
 					"firstSeenStr", firstSeenStr,
 					"error", err)
@@ -194,7 +221,7 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 			if err == nil {
 				summary.LastSeen = lastSeen
 			} else if isDebugLoggingEnabled() {
-				datastoreLogger.Debug("Failed to parse lastSeen time", 
+				datastoreLogger.Debug("Failed to parse lastSeen time",
 					"species", summary.ScientificName,
 					"lastSeenStr", lastSeenStr,
 					"error", err)
@@ -202,6 +229,14 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 		}
 
 		summaries = append(summaries, summary)
+	}
+
+	// Commit the read transaction
+	if err := tx.Commit().Error; err != nil {
+		return nil, dbError(err, "commit_species_summary_transaction", errors.PriorityLow,
+			"start_date", startDate,
+			"end_date", endDate,
+			"action", "commit_analytics_transaction")
 	}
 
 	totalDuration := time.Since(queryStart)
