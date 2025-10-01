@@ -102,6 +102,11 @@ func ValidateSettings(settings *Settings) error {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 
+	// Validate Notification settings
+	if err := validateNotificationSettings(&settings.Notification); err != nil {
+		ve.Errors = append(ve.Errors, err.Error())
+	}
+
 	// If there are any errors, return the ValidationError
 	if len(ve.Errors) > 0 {
 		return ve
@@ -768,6 +773,51 @@ func validateSpeciesConfigSettings(settings *SpeciesSettings) error {
 				Context("validation_type", "species-config-threshold").
 				Context("species_name", speciesName).
 				Context("threshold", config.Threshold).
+				Build()
+		}
+	}
+	return nil
+}
+
+// validateNotificationSettings validates notification push configuration
+func validateNotificationSettings(n *NotificationConfig) error {
+	if !n.Push.Enabled {
+		return nil
+	}
+	// Basic sanity checks
+	if n.Push.MaxRetries < 0 {
+		return errors.New(fmt.Errorf("notification.push.max_retries must be >= 0")).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "notification-push-max-retries").
+			Build()
+	}
+	if n.Push.DefaultTimeout < 0 || n.Push.RetryDelay < 0 {
+		return errors.New(fmt.Errorf("notification push durations must be non-negative")).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "notification-push-durations").
+			Build()
+	}
+	for _, p := range n.Push.Providers {
+		ptype := strings.ToLower(p.Type)
+		switch ptype {
+		case "script":
+			if p.Enabled && strings.TrimSpace(p.Command) == "" {
+				return errors.New(fmt.Errorf("script provider requires command when enabled")).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "notification-push-script-command").
+					Build()
+			}
+		case "shoutrrr":
+			if p.Enabled && len(p.URLs) == 0 {
+				return errors.New(fmt.Errorf("shoutrrr provider requires at least one URL when enabled")).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "notification-push-shoutrrr-urls").
+					Build()
+			}
+		default:
+			return errors.New(fmt.Errorf("unknown push provider type: %s", p.Type)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "notification-push-provider-type").
 				Build()
 		}
 	}

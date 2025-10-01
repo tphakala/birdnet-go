@@ -314,4 +314,11 @@ func setDefaultConfig() {
 	viper.SetDefault("sentry.dsn", "")
 	viper.SetDefault("sentry.samplerate", 1.0)
 	viper.SetDefault("sentry.debug", false)
+
+	// Notification push configuration
+	viper.SetDefault("notification.push.enabled", false)
+	viper.SetDefault("notification.push.default_timeout", "30s")
+	viper.SetDefault("notification.push.max_retries", 3)
+	viper.SetDefault("notification.push.retry_delay", "5s")
+	viper.SetDefault("notification.push.providers", []map[string]any{})
 }

@@ -142,6 +142,13 @@ func (m *SystemInitManager) initializeNotification() error {
 		// Initialize with config
 		notification.Initialize(config)
 		
+		// Initialize push notifications from config (non-fatal on error)
+		if settings != nil {
+			if err := notification.InitializePushFromConfig(settings); err != nil {
+				m.logger.Error("push notification init failed", "error", err)
+			}
+		}
+
 		// Verify initialization
 		if !notification.IsInitialized() {
 			m.notificationErr = fmt.Errorf("notification service initialization failed")
