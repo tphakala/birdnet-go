@@ -39,6 +39,8 @@ var (
 
 // InitializePushFromConfig builds and starts the push dispatcher using app settings.
 func InitializePushFromConfig(settings *conf.Settings) error {
+	var initErr error
+	// Construct the dispatcher once
 	dispatcherOnce.Do(func() {
 		// Default to disabled if no settings
 		if settings == nil || !settings.Notification.Push.Enabled {
@@ -70,11 +72,16 @@ func InitializePushFromConfig(settings *conf.Settings) error {
 		}
 
 		globalPushDispatcher = pd
-		if err := pd.start(); err != nil {
-			pd.log.Error("failed to start push dispatcher", "error", err)
-		}
 	})
-	return nil
+
+	// Try to start each call; start is idempotent
+	if globalPushDispatcher != nil {
+		if err := globalPushDispatcher.start(); err != nil {
+			globalPushDispatcher.log.Error("failed to start push dispatcher", "error", err)
+			initErr = err
+		}
+	}
+	return initErr
 }
 
 // GetPushDispatcher returns the dispatcher if initialized
@@ -83,6 +90,9 @@ func GetPushDispatcher() *pushDispatcher { return globalPushDispatcher }
 func (d *pushDispatcher) start() error {
 	if !d.enabled {
 		return nil
+	}
+	if d.cancel != nil {
+		return nil // already started
 	}
 	if len(d.providers) == 0 {
 		d.log.Info("push notifications enabled but no providers configured")
