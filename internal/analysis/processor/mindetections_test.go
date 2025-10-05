@@ -7,124 +7,82 @@ import (
 )
 
 // TestCalculateMinDetections verifies that the minimum detection threshold
-// scales correctly based on detection window duration and overlap settings.
+// is calculated based only on overlap setting (not clip length) to filter
+// false positives through repeated detection confirmation.
 func TestCalculateMinDetections(t *testing.T) {
 	tests := []struct {
-		name             string
-		captureLength    int // seconds
-		preCaptureLength int // seconds
-		overlap          float64
-		expectedMin      int
-		description      string
+		name        string
+		overlap     float64
+		expectedMin int
+		description string
 	}{
 		{
-			name:             "default_12s_window_high_overlap",
-			captureLength:    15,
-			preCaptureLength: 3,
-			overlap:          2.4,
-			expectedMin:      4,
-			description:      "Default settings: 15s clip - 3s pre-capture = 12s window, overlap 2.4 should require 4 detections",
+			name:        "no_overlap",
+			overlap:     0.0,
+			expectedMin: 1,
+			description: "No overlap means no repeated confirmation possible, require only 1 detection",
 		},
 		{
-			name:             "default_15s_window_high_overlap",
-			captureLength:    15,
-			preCaptureLength: 0,
-			overlap:          2.4,
-			expectedMin:      5,
-			description:      "15s window with no pre-capture, overlap 2.4 should require 5 detections (baseline)",
+			name:        "low_overlap_1.5",
+			overlap:     1.5,
+			expectedMin: 1,
+			description: "Overlap 1.5: step=1.5s, max ~2 detections per 3s, require 1 (50% of 2)",
 		},
 		{
-			name:             "no_overlap_default_window",
-			captureLength:    15,
-			preCaptureLength: 3,
-			overlap:          0.0,
-			expectedMin:      1,
-			description:      "No overlap should accept first detection regardless of window size",
+			name:        "medium_overlap_2.0",
+			overlap:     2.0,
+			expectedMin: 2,
+			description: "Overlap 2.0: step=1.0s, max 3 detections per 3s, require 2 (50% of 3)",
 		},
 		{
-			name:             "no_overlap_15s_window",
-			captureLength:    15,
-			preCaptureLength: 0,
-			overlap:          0.0,
-			expectedMin:      1,
-			description:      "No overlap with 15s baseline window should require exactly 1 detection",
+			name:        "high_overlap_2.2",
+			overlap:     2.2,
+			expectedMin: 2,
+			description: "Overlap 2.2: step=0.8s, max ~4 detections per 3s, require 2 (50% of 4)",
 		},
 		{
-			name:             "long_clip_30s_window",
-			captureLength:    60,
-			preCaptureLength: 30,
-			overlap:          2.4,
-			expectedMin:      10,
-			description:      "Long clips: 60s - 30s = 30s window (2x baseline) should require 10 detections",
+			name:        "high_overlap_2.4",
+			overlap:     2.4,
+			expectedMin: 3,
+			description: "Overlap 2.4: step=0.6s, max 5 detections per 3s, require 3 (50% of 5)",
 		},
 		{
-			name:             "short_clip_3s_window",
-			captureLength:    6,
-			preCaptureLength: 3,
-			overlap:          2.4,
-			expectedMin:      1,
-			description:      "Short clips: 6s - 3s = 3s window should require at least 1 detection",
+			name:        "very_high_overlap_2.5",
+			overlap:     2.5,
+			expectedMin: 3,
+			description: "Overlap 2.5: step=0.5s, max 6 detections per 3s, require 3 (50% of 6)",
 		},
 		{
-			name:             "very_short_clip_near_zero_window",
-			captureLength:    4,
-			preCaptureLength: 3,
-			overlap:          2.4,
-			expectedMin:      1,
-			description:      "Very short window (1s) should still require minimum 1 detection",
+			name:        "extreme_overlap_2.7",
+			overlap:     2.7,
+			expectedMin: 6,
+			description: "Overlap 2.7: step=0.3s, max 10 detections per 3s, require 6 (ceil(50% of 10))",
 		},
 		{
-			name:             "edge_case_zero_window",
-			captureLength:    3,
-			preCaptureLength: 3,
-			overlap:          2.4,
-			expectedMin:      1,
-			description:      "Edge case: captureLength == preCaptureLength results in 0s window, should require minimum 1",
+			name:        "extreme_overlap_2.8",
+			overlap:     2.8,
+			expectedMin: 8,
+			description: "Overlap 2.8: step=0.2s, max 15 detections per 3s, require 8 (50% of 15)",
 		},
 		{
-			name:             "edge_case_negative_window_clamped",
-			captureLength:    2,
-			preCaptureLength: 3,
-			overlap:          2.4,
-			expectedMin:      1,
-			description:      "Edge case: captureLength < preCaptureLength gets clamped to 0, should require minimum 1",
-		},
-		{
-			name:             "high_overlap_2.7",
-			captureLength:    15,
-			preCaptureLength: 3,
-			overlap:          2.7,
-			expectedMin:      8,
-			description:      "Very high overlap (2.7) with 12s window should require 8 detections",
-		},
-		{
-			name:             "high_overlap_2.9",
-			captureLength:    15,
-			preCaptureLength: 3,
-			overlap:          2.9,
-			expectedMin:      24,
-			description:      "Extreme overlap (2.9) with 12s window should require 24 detections",
-		},
-		{
-			name:             "medium_overlap_1.5",
-			captureLength:    15,
-			preCaptureLength: 3,
-			overlap:          1.5,
-			expectedMin:      2,
-			description:      "Medium overlap (1.5) with 12s window should require 2 detections",
+			name:        "near_max_overlap_2.9",
+			overlap:     2.9,
+			expectedMin: 15,
+			description: "Overlap 2.9: step=0.1s, max 30 detections per 3s, require 15 (50% of 30)",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create processor with test settings
+			// Note: captureLength and preCapture should NOT affect the result
 			p := &Processor{
 				Settings: &conf.Settings{
 					Realtime: conf.RealtimeSettings{
 						Audio: conf.AudioSettings{
 							Export: conf.ExportSettings{
-								Length:     tt.captureLength,
-								PreCapture: tt.preCaptureLength,
+								Length:     15, // arbitrary value, should not affect result
+								PreCapture: 3,  // arbitrary value, should not affect result
 							},
 						},
 					},
@@ -137,102 +95,75 @@ func TestCalculateMinDetections(t *testing.T) {
 			result := p.calculateMinDetections()
 
 			if result != tt.expectedMin {
-				t.Errorf("%s\nGot minDetections = %d, want %d\nSettings: captureLength=%ds, preCaptureLength=%ds, overlap=%.1f",
-					tt.description, result, tt.expectedMin, tt.captureLength, tt.preCaptureLength, tt.overlap)
+				t.Errorf("%s\nGot minDetections = %d, want %d\nOverlap=%.1f",
+					tt.description, result, tt.expectedMin, tt.overlap)
 			}
 		})
 	}
 }
 
-// TestCalculateMinDetectionsScaling verifies that minDetections scales
-// proportionally with detection window duration.
-func TestCalculateMinDetectionsScaling(t *testing.T) {
+// TestCalculateMinDetectionsIndependentOfClipLength verifies that
+// audio clip length settings do NOT affect minDetections calculation.
+// This is the fix for issue #1314.
+func TestCalculateMinDetectionsIndependentOfClipLength(t *testing.T) {
 	tests := []struct {
-		name             string
-		baseCapture      int
-		basePreCapture   int
-		scaleCapture     int
-		scalePreCapture  int
-		overlap          float64
-		scaleFactor      float64 // Expected scale factor
-		description      string
+		name            string
+		overlap         float64
+		clipConfigs     []struct{ length, preCapture int }
+		expectedMinDet  int
+		description     string
 	}{
 		{
-			name:            "double_window_doubles_detections",
-			baseCapture:     15,
-			basePreCapture:  0,
-			scaleCapture:    30,
-			scalePreCapture: 0,
-			overlap:         2.4,
-			scaleFactor:     2.0,
-			description:     "30s window should require 2x the detections of 15s window",
+			name:    "overlap_2.2_various_clip_lengths",
+			overlap: 2.2,
+			clipConfigs: []struct{ length, preCapture int }{
+				{15, 3},   // default
+				{30, 5},   // medium
+				{60, 15},  // long (user's config from issue #1314)
+				{60, 30},  // very long pre-capture
+				{10, 0},   // short, no pre-capture
+			},
+			expectedMinDet: 2,
+			description:    "Overlap 2.2 should always require 2 detections regardless of clip length",
 		},
 		{
-			name:            "half_window_halves_detections",
-			baseCapture:     15,
-			basePreCapture:  0,
-			scaleCapture:    8,
-			scalePreCapture: 0,
-			overlap:         2.4,
-			scaleFactor:     8.0 / 15.0,
-			description:     "8s window should require proportionally fewer detections",
-		},
-		{
-			name:            "triple_window_triples_detections",
-			baseCapture:     15,
-			basePreCapture:  0,
-			scaleCapture:    45,
-			scalePreCapture: 0,
-			overlap:         2.7,
-			scaleFactor:     3.0,
-			description:     "45s window should require 3x the detections of 15s window",
+			name:    "overlap_2.4_various_clip_lengths",
+			overlap: 2.4,
+			clipConfigs: []struct{ length, preCapture int }{
+				{15, 3},
+				{45, 10},
+				{60, 20},
+			},
+			expectedMinDet: 3,
+			description:    "Overlap 2.4 should always require 3 detections regardless of clip length",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Calculate base minDetections
-			baseProcessor := &Processor{
-				Settings: &conf.Settings{
-					Realtime: conf.RealtimeSettings{
-						Audio: conf.AudioSettings{
-							Export: conf.ExportSettings{
-								Length:     tt.baseCapture,
-								PreCapture: tt.basePreCapture,
+			for i, config := range tt.clipConfigs {
+				p := &Processor{
+					Settings: &conf.Settings{
+						Realtime: conf.RealtimeSettings{
+							Audio: conf.AudioSettings{
+								Export: conf.ExportSettings{
+									Length:     config.length,
+									PreCapture: config.preCapture,
+								},
 							},
 						},
-					},
-					BirdNET: conf.BirdNETConfig{
-						Overlap: tt.overlap,
-					},
-				},
-			}
-			baseMin := baseProcessor.calculateMinDetections()
-
-			// Calculate scaled minDetections
-			scaledProcessor := &Processor{
-				Settings: &conf.Settings{
-					Realtime: conf.RealtimeSettings{
-						Audio: conf.AudioSettings{
-							Export: conf.ExportSettings{
-								Length:     tt.scaleCapture,
-								PreCapture: tt.scalePreCapture,
-							},
+						BirdNET: conf.BirdNETConfig{
+							Overlap: tt.overlap,
 						},
 					},
-					BirdNET: conf.BirdNETConfig{
-						Overlap: tt.overlap,
-					},
-				},
-			}
-			scaledMin := scaledProcessor.calculateMinDetections()
+				}
 
-			// Verify scaling is proportional
-			expectedScaled := int(float64(baseMin) * tt.scaleFactor)
-			// Allow for rounding differences (±1)
-			if scaledMin < expectedScaled-1 || scaledMin > expectedScaled+1 {
-				t.Errorf("%s\nBase: %d detections, Scaled: %d detections (expected ~%d)\nScale factor: %.2f",
-					tt.description, baseMin, scaledMin, expectedScaled, tt.scaleFactor)
+				result := p.calculateMinDetections()
+
+				if result != tt.expectedMinDet {
+					t.Errorf("%s\nConfig %d (length=%ds, preCapture=%ds): Got minDetections = %d, want %d\nClip length should NOT affect minDetections!",
+						tt.description, i+1, config.length, config.preCapture, result, tt.expectedMinDet)
+				}
 			}
 		})
 	}
@@ -264,5 +195,47 @@ func TestCalculateMinDetectionsConsistency(t *testing.T) {
 		if result != first {
 			t.Errorf("Inconsistent results: iteration %d returned %d, expected %d", i, result, first)
 		}
+	}
+}
+
+// TestCalculateMinDetectionsIssue1314 is a regression test for issue #1314
+// where users with overlap=2.2-2.4 and long clip lengths (45-60s) were getting
+// impossibly high minDetections requirements (14+) that rejected all bird calls.
+func TestCalculateMinDetectionsIssue1314(t *testing.T) {
+	// User's actual configuration from issue #1314
+	p := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				Audio: conf.AudioSettings{
+					Export: conf.ExportSettings{
+						Length:     60, // 60-second clips
+						PreCapture: 15, // 15-second pre-capture
+					},
+				},
+			},
+			BirdNET: conf.BirdNETConfig{
+				Overlap: 2.2, // or 2.35-2.36 based on logs
+			},
+		},
+	}
+
+	result := p.calculateMinDetections()
+
+	// With the bug, this was 14 (impossible to achieve)
+	// With the fix, this should be 2 (reasonable)
+	expectedMin := 2
+	if result != expectedMin {
+		t.Errorf("Issue #1314 regression: Got minDetections = %d, want %d\n"+
+			"Long clip lengths should NOT increase detection requirements!\n"+
+			"Settings: overlap=%.1f, captureLength=%ds, preCapture=%ds",
+			result, expectedMin, p.Settings.BirdNET.Overlap,
+			p.Settings.Realtime.Audio.Export.Length,
+			p.Settings.Realtime.Audio.Export.PreCapture)
+	}
+
+	// Verify it's reasonable by checking logs showed "matched 1/14 times"
+	// With our fix, this should now be "matched 1/2 times" (rejected) or "matched 2/2 times" (accepted)
+	if result >= 14 {
+		t.Errorf("minDetections = %d is too high! This was the bug in issue #1314", result)
 	}
 }
