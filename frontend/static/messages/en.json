@@ -684,6 +684,7 @@
       "integration": "Integrations",
       "security": "Security",
       "species": "Species",
+      "notifications": "Notifications",
       "support": "Support"
     },
     "notFound": {
@@ -1015,6 +1016,35 @@
           "error": "Error: {message}",
           "githubIssueRequired": "Please enter a GitHub issue number to upload support data"
         }
+      }
+    },
+    "notifications": {
+      "sections": {
+        "testing": {
+          "title": "Test Notifications",
+          "description": "Send test notifications to verify your notification system is working correctly"
+        },
+        "info": {
+          "title": "System Information",
+          "description": "Learn how to view and manage your notifications"
+        }
+      },
+      "testNotification": {
+        "title": "Send Test New Species Notification",
+        "description": "Generate a test notification for a new species detection to verify your notification system is working",
+        "whatHappens": "What happens when you click 'Send Test':",
+        "sendButton": "Send Test",
+        "sendingButton": "Sending..."
+      },
+      "statusMessages": {
+        "sending": "Sending test notification...",
+        "success": "Test notification sent successfully!",
+        "error": "Failed to send test notification: {message}",
+        "serviceUnavailable": "Notification service is not available. Please check your notification settings."
+      },
+      "systemInfo": {
+        "howToView": "How to view notifications:",
+        "technicalDetails": "Technical details about notifications in BirdNET-Go:"
       }
     },
     "filters": {

@@ -18,17 +18,17 @@ import (
 // SSE Connection configuration
 const (
 	// Connection timeouts
-	maxSSEConnectionDuration = 30 * time.Minute // Maximum connection duration to prevent resource leaks
-	rateLimitWindow          = 1 * time.Minute  // Rate limiter time window
-	heartbeatInterval        = 30 * time.Second // Heartbeat interval for keep-alive
+	maxSSEConnectionDuration = 30 * time.Minute       // Maximum connection duration to prevent resource leaks
+	rateLimitWindow          = 1 * time.Minute        // Rate limiter time window
+	heartbeatInterval        = 30 * time.Second       // Heartbeat interval for keep-alive
 	eventLoopCheckInterval   = 100 * time.Millisecond // Event loop check interval
-	
+
 	// Endpoints
 	sseEndpoint = "/api/v2/notifications/stream"
-	
+
 	// Buffer sizes
 	notificationChannelBuffer = 10 // Buffer size for notification channels
-	
+
 	// Rate limits
 	rateLimitRequestsPerWindow = 10 // Maximum requests per rate limit window for notifications (increased from 1 to match other SSE endpoints)
 	rateLimitBurst             = 15 // Rate limit burst allowance (increased to handle quick navigation)
@@ -42,11 +42,11 @@ type SSENotificationData struct {
 
 // UnifiedSSEEvent represents a unified event structure for notifications and toasts
 type UnifiedSSEEvent struct {
-	Type      string           `json:"type"`      // "notification" or "toast"
-	EventName string           `json:"eventName"` // Specific event name
-	Data      any              `json:"data"`      // The actual event data
-	Timestamp time.Time        `json:"timestamp"`
-	Metadata  map[string]any   `json:"metadata,omitempty"`
+	Type      string         `json:"type"`      // "notification" or "toast"
+	EventName string         `json:"eventName"` // Specific event name
+	Data      any            `json:"data"`      // The actual event data
+	Timestamp time.Time      `json:"timestamp"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
 // NotificationClient represents a connected notification SSE client
@@ -98,6 +98,9 @@ func (c *Controller) SetupNotificationRoutes() {
 	c.Group.PUT("/notifications/:id/acknowledge", c.MarkNotificationAcknowledged)
 	c.Group.DELETE("/notifications/:id", c.DeleteNotification)
 	c.Group.GET("/notifications/unread/count", c.GetUnreadCount)
+
+	// Test endpoints for notification system
+	c.Group.POST("/notifications/test/new-species", c.CreateTestNewSpeciesNotification, c.getEffectiveAuthMiddleware())
 }
 
 // StreamNotifications handles the SSE connection for real-time notification streaming
@@ -140,17 +143,17 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 	if err != nil {
 		return err
 	}
-	
+
 	// Ensure cleanup happens regardless of how we exit
 	defer func() {
 		service.Unsubscribe(client.SubscriberCh)
 		// Note: We don't close client.Done to avoid race conditions with senders
 		// The buffered channel will signal shutdown and be reclaimed by GC
 	}()
-	
+
 	// Setup disconnect handler with proper cleanup
 	c.setupNotificationDisconnectHandler(ctx, client)
-	
+
 	// Run the main event loop
 	return c.runNotificationEventLoop(ctx, client)
 }
@@ -186,7 +189,7 @@ func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*Notification
 		service.Unsubscribe(notificationCh)
 		return nil, nil, err
 	}
-	
+
 	if c.metrics != nil && c.metrics.HTTP != nil {
 		c.metrics.HTTP.RecordSSEMessageSent(sseEndpoint, "connected")
 	}
@@ -211,7 +214,7 @@ func (c *Controller) setupNotificationDisconnectHandler(ctx echo.Context, client
 	go func() {
 		// Wait for client disconnect or timeout
 		<-ctx.Request().Context().Done()
-		
+
 		// Client disconnected or timeout reached
 		select {
 		case client.Done <- struct{}{}:
@@ -240,7 +243,7 @@ func (c *Controller) runNotificationEventLoop(ctx echo.Context, client *Notifica
 				// Channel closed, service is shutting down
 				return nil
 			}
-			
+
 			if err := c.processNotificationEvent(ctx, client.ID, notif); err != nil {
 				return err
 			}
@@ -277,18 +280,18 @@ func (c *Controller) runNotificationEventLoop(ctx echo.Context, client *Notifica
 func (c *Controller) processNotificationEvent(ctx echo.Context, clientID string, notif *notification.Notification) error {
 	// Check if this is a toast notification
 	isToast, _ := notif.Metadata[notification.MetadataKeyIsToast].(bool)
-	
+
 	if isToast {
 		return c.sendToastEvent(ctx, clientID, notif)
 	}
-	
+
 	return c.sendNotificationEvent(ctx, clientID, notif)
 }
 
 // sendToastEvent sends a toast event via SSE
 func (c *Controller) sendToastEvent(ctx echo.Context, clientID string, notif *notification.Notification) error {
 	toastEvent := c.createToastEventData(notif)
-	
+
 	if err := c.sendSSEMessage(ctx, "toast", toastEvent); err != nil {
 		c.logNotificationError("failed to send toast SSE", err, clientID)
 		if c.metrics != nil && c.metrics.HTTP != nil {
@@ -296,7 +299,7 @@ func (c *Controller) sendToastEvent(ctx echo.Context, clientID string, notif *no
 		}
 		return err
 	}
-	
+
 	if c.metrics != nil && c.metrics.HTTP != nil {
 		c.metrics.HTTP.RecordSSEMessageSent(sseEndpoint, "toast")
 	}
@@ -318,7 +321,7 @@ func (c *Controller) sendNotificationEvent(ctx echo.Context, clientID string, no
 		}
 		return err
 	}
-	
+
 	if c.metrics != nil && c.metrics.HTTP != nil {
 		c.metrics.HTTP.RecordSSEMessageSent(sseEndpoint, "notification")
 	}
@@ -331,7 +334,7 @@ func (c *Controller) createToastEventData(notif *notification.Notification) map[
 	toastType, _ := notif.Metadata["toastType"].(string)
 	duration, _ := notif.Metadata["duration"].(int)
 	action, _ := notif.Metadata["action"].(*notification.ToastAction)
-	
+
 	toastEvent := map[string]any{
 		"id":        notif.Metadata["toastId"],
 		"message":   notif.Message,
@@ -339,14 +342,14 @@ func (c *Controller) createToastEventData(notif *notification.Notification) map[
 		"timestamp": notif.Timestamp,
 		"component": notif.Component,
 	}
-	
+
 	if duration > 0 {
 		toastEvent["duration"] = duration
 	}
 	if action != nil {
 		toastEvent["action"] = action
 	}
-	
+
 	return toastEvent
 }
 
@@ -362,12 +365,12 @@ func (c *Controller) logNotificationConnection(clientID, ip, userAgent string, c
 	if c.apiLogger == nil {
 		return
 	}
-	
+
 	action := "connected"
 	if !connected {
 		action = "disconnected"
 	}
-	
+
 	if c.Settings != nil && c.Settings.WebServer.Debug && connected {
 		c.apiLogger.Debug("notification SSE client "+action,
 			"clientId", clientID,
@@ -543,7 +546,7 @@ func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
 	}
 
 	service := notification.GetService()
-	
+
 	if err := service.MarkAsRead(id); err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("failed to mark notification as read", "error", err, "id", id)
@@ -552,7 +555,7 @@ func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
 			"error": "Failed to mark notification as read",
 		})
 	}
-	
+
 	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
 		c.apiLogger.Debug("notification marked as read", "id", id)
 	}
@@ -646,3 +649,45 @@ func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 	})
 }
 
+// CreateTestNewSpeciesNotification creates a test new species detection notification
+func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
+	if !notification.IsInitialized() {
+		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
+			"error": "Notification service not available",
+		})
+	}
+
+	service := notification.GetService()
+
+	// Create test notification matching detection_consumer.go patterns
+	title := "New Species Detected: Test Bird Species"
+	message := "First detection of Test Bird Species (Testus birdicus) at Fake Test Location"
+
+	testNotification := notification.NewNotification(notification.TypeDetection, notification.PriorityHigh, title, message).
+		WithComponent("detection").
+		WithMetadata("species", "Test Bird Species").
+		WithMetadata("scientific_name", "Testus birdicus").
+		WithMetadata("confidence", 0.99).
+		WithMetadata("location", "Fake Test Location").
+		WithMetadata("is_new_species", true).
+		WithMetadata("days_since_first_seen", 0).
+		WithExpiry(24 * time.Hour) // New species notifications expire after 24 hours
+
+	// Use CreateWithMetadata to persist and broadcast
+	if err := service.CreateWithMetadata(testNotification); err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("failed to create test notification", "error", err)
+		}
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to create test notification",
+		})
+	}
+
+	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+		c.apiLogger.Debug("test new species notification created",
+			"notification_id", testNotification.ID,
+			"species", "Test Bird Species")
+	}
+
+	return ctx.JSON(http.StatusOK, testNotification)
+}

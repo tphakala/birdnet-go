@@ -88,6 +88,7 @@
     '/integrations': 'Integrations',
     '/security': 'Security Settings',
     '/species': 'Species Settings',
+    '/notifications': 'Notifications Settings',
     '/support': 'Support',
   };
 

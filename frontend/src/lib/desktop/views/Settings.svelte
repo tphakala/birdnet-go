@@ -14,6 +14,7 @@
   import SecuritySettingsSection from '$lib/desktop/features/settings/pages/SecuritySettingsPage.svelte';
   import SupportSettingsSection from '$lib/desktop/features/settings/pages/SupportSettingsPage.svelte';
   import SpeciesSettingsSection from '$lib/desktop/features/settings/pages/SpeciesSettingsPage.svelte';
+  import NotificationsSettingsSection from '$lib/desktop/features/settings/pages/NotificationsSettingsPage.svelte';
   import SettingsActions from '$lib/desktop/features/settings/components/SettingsActions.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
@@ -35,6 +36,7 @@
       integrations: 'integration',
       security: 'security',
       species: 'species',
+      notifications: 'notifications',
       support: 'support',
     };
 
@@ -117,6 +119,8 @@
         <SecuritySettingsSection />
       {:else if currentSection === 'species'}
         <SpeciesSettingsSection />
+      {:else if currentSection === 'notifications'}
+        <NotificationsSettingsSection />
       {:else if currentSection === 'support'}
         <SupportSettingsSection />
       {:else}
