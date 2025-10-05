@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -229,40 +230,19 @@ func matchesProviderFilter(f *conf.PushFilterConfig, n *Notification) bool {
 	}
 	// Types
 	if len(f.Types) > 0 {
-		ok := false
-		for _, t := range f.Types {
-			if string(n.Type) == t {
-				ok = true
-				break
-			}
-		}
-		if !ok {
+		if !slices.Contains(f.Types, string(n.Type)) {
 			return false
 		}
 	}
 	// Priorities
 	if len(f.Priorities) > 0 {
-		ok := false
-		for _, p := range f.Priorities {
-			if string(n.Priority) == p {
-				ok = true
-				break
-			}
-		}
-		if !ok {
+		if !slices.Contains(f.Priorities, string(n.Priority)) {
 			return false
 		}
 	}
 	// Component
 	if len(f.Components) > 0 {
-		ok := false
-		for _, c := range f.Components {
-			if n.Component == c {
-				ok = true
-				break
-			}
-		}
-		if !ok {
+		if !slices.Contains(f.Components, n.Component) {
 			return false
 		}
 	}
@@ -278,8 +258,20 @@ func matchesProviderFilter(f *conf.PushFilterConfig, n *Notification) bool {
 			if len(cond) == 0 {
 				return false
 			}
-			op := cond[0]
-			valStr := strings.TrimSpace(cond[1:])
+
+			// Parse operator and value
+			var op string
+			var valStr string
+			if len(cond) >= 2 && (cond[:2] == ">=" || cond[:2] == "<=" || cond[:2] == "==") {
+				op = cond[:2]
+				valStr = strings.TrimSpace(cond[2:])
+			} else if len(cond) >= 1 && (cond[0] == '>' || cond[0] == '<' || cond[0] == '=') {
+				op = string(cond[0])
+				valStr = strings.TrimSpace(cond[1:])
+			} else {
+				return false // unknown operator format
+			}
+
 			threshold, err := strconv.ParseFloat(valStr, 64)
 			if err != nil {
 				return false
@@ -293,12 +285,24 @@ func matchesProviderFilter(f *conf.PushFilterConfig, n *Notification) bool {
 				return false // require parse success
 			}
 			switch op {
-			case '>':
+			case ">":
 				if !(cv > threshold) {
 					return false
 				}
-			case '<':
+			case "<":
 				if !(cv < threshold) {
+					return false
+				}
+			case ">=":
+				if !(cv >= threshold) {
+					return false
+				}
+			case "<=":
+				if !(cv <= threshold) {
+					return false
+				}
+			case "=", "==":
+				if !(cv == threshold) {
 					return false
 				}
 			default:
