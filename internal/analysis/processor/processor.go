@@ -766,6 +766,10 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 //   1. How many times a 3-second chunk is analyzed (based on overlap)
 //   2. Requires a percentage of those analyses to detect the same species (default 50%)
 //
+// Example with overlap 2.2, 60s capture, 15s pre-capture:
+//   OLD: minDetections = 14 (too strict, rejected real birds)
+//   NEW: minDetections = 2  (balanced, accepts birds with repeated confirmation)
+//
 // Note: Audio clip length (captureLength/preCapture) does NOT affect this calculation.
 // Those settings control saved audio length, not detection sensitivity.
 //
@@ -773,16 +777,20 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 //   - If overlap is 0 (no overlap): minDetections = 1 (no repeated confirmation possible)
 //   - Very high overlap (>2.9): may require many detections but cap ensures reasonability
 func (p *Processor) calculateMinDetections() int {
+	// BirdNET uses 3-second chunks for analysis
+	const chunkDurationSeconds = 3.0
+
 	// Calculate segment length (how often we analyze)
 	// Edge case: max(0.1, ...) prevents division by values too close to zero
-	segmentLength := math.Max(0.1, 3.0-p.Settings.BirdNET.Overlap)
+	segmentLength := math.Max(0.1, chunkDurationSeconds-p.Settings.BirdNET.Overlap)
 
 	// How many times is a 3-second audio chunk analyzed?
 	// This represents the maximum possible detections for a bird call
-	maxDetectionsPerChunk := 3.0 / segmentLength
+	maxDetectionsPerChunk := chunkDurationSeconds / segmentLength
 
-	// Require a percentage of those detections to confirm (default 50%)
+	// Require 50% of analyses to detect the same species to confirm it's real
 	// This balances false positive filtering with detection sensitivity
+	// Chosen empirically through testing with overlap settings 2.0-2.5
 	const confirmationThreshold = 0.5
 
 	// Calculate minimum required detections
