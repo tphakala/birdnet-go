@@ -1,7 +1,7 @@
 ARG TFLITE_LIB_DIR=/usr/lib
 ARG TENSORFLOW_VERSION=2.17.1
 
-FROM --platform=$BUILDPLATFORM golang:1.25.1-bookworm AS buildenv
+FROM --platform=$BUILDPLATFORM golang:1.25.1-trixie AS buildenv
 
 # Pass BUILD_VERSION through to the build stage
 ARG BUILD_VERSION
@@ -63,7 +63,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     BUILD_VERSION="${BUILD_VERSION}" DOCKER_LIB_DIR=/home/dev-user/lib task noembed_${TARGET}
 
 # Create final image using a multi-platform base image
-FROM --platform=$TARGETPLATFORM debian:bookworm-slim
+FROM --platform=$TARGETPLATFORM debian:trixie-slim
 
 # Copy model files to /models directory as separate cacheable layer
 # This layer will be reused if model files haven't changed between builds
