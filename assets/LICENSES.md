@@ -19,7 +19,7 @@ Source: Apache-2.0
 
 ### cloud.google.com/go/compute/metadata
 
-License: https://github.com/googleapis/google-cloud-go/blob/compute/metadata/v0.8.0/compute/metadata/LICENSE
+License: https://github.com/googleapis/google-cloud-go/blob/compute/metadata/v0.8.4/compute/metadata/LICENSE
 Source: Apache-2.0
 
 ### filippo.io/edwards25519
@@ -404,17 +404,17 @@ Source: Apache-2.0
 
 ### go.opentelemetry.io/otel
 
-License: https://github.com/open-telemetry/opentelemetry-go/blob/v1.36.0/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go/blob/v1.37.0/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/otel/metric
 
-License: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.36.0/metric/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.37.0/metric/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/otel/trace
 
-License: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.36.0/trace/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.37.0/trace/LICENSE
 Source: Apache-2.0
 
 ### go.uber.org/goleak
@@ -479,22 +479,22 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.248.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.250.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/3122310a409c/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/97024824d090/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
 
-License: https://github.com/grpc/grpc-go/blob/v1.74.2/LICENSE
+License: https://github.com/grpc/grpc-go/blob/v1.75.1/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/protobuf
 
-License: https://github.com/protocolbuffers/protobuf-go/blob/v1.36.8/LICENSE
+License: https://github.com/protocolbuffers/protobuf-go/blob/v1.36.9/LICENSE
 Source: BSD-3-Clause
 
 ### gopkg.in/natefinch/lumberjack.v2
