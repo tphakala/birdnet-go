@@ -40,9 +40,7 @@ var (
 // InitializePushFromConfig builds and starts the push dispatcher using app settings.
 func InitializePushFromConfig(settings *conf.Settings) error {
 	var initErr error
-	// Construct the dispatcher once
 	dispatcherOnce.Do(func() {
-		// Default to disabled if no settings
 		if settings == nil || !settings.Notification.Push.Enabled {
 			return
 		}
@@ -72,15 +70,16 @@ func InitializePushFromConfig(settings *conf.Settings) error {
 		}
 
 		globalPushDispatcher = pd
+
+		// Move start() inside Once to prevent race conditions
+		if pd.enabled && len(pd.providers) > 0 {
+			if err := pd.start(); err != nil {
+				pd.log.Error("failed to start push dispatcher", "error", err)
+				initErr = err
+			}
+		}
 	})
 
-	// Try to start each call; start is idempotent
-	if globalPushDispatcher != nil {
-		if err := globalPushDispatcher.start(); err != nil {
-			globalPushDispatcher.log.Error("failed to start push dispatcher", "error", err)
-			initErr = err
-		}
-	}
 	return initErr
 }
 
