@@ -291,3 +291,65 @@ unreadCount, _ := service.GetUnreadCount()
 3. **Monitor dropped events**: May indicate rate limiting
 4. **Use error context**: It becomes notification metadata
 5. **Handle initialization order**: Event bus must be initialized first
+
+## Customizable Notification Templates
+
+New species detection notifications support customizable templates configured in `config.yaml`.
+
+### Configuration
+
+```yaml
+notification:
+  templates:
+    newspecies:
+      title: "New Species: {{.CommonName}}"
+      message: "First detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}. View: {{.DetectionURL}}"
+```
+
+### Available Template Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `{{.CommonName}}` | Bird common name | "American Robin" |
+| `{{.ScientificName}}` | Scientific name | "Turdus migratorius" |
+| `{{.Confidence}}` | Confidence as float (0-1) | 0.92 |
+| `{{.ConfidencePercent}}` | Confidence as percentage | "92" |
+| `{{.DetectionTime}}` | Time of detection | "15:04:05" or "3:04:05 PM" |
+| `{{.DetectionDate}}` | Date of detection | "2025-10-05" |
+| `{{.Latitude}}` | GPS latitude | 45.123456 |
+| `{{.Longitude}}` | GPS longitude | -122.987654 |
+| `{{.Location}}` | Formatted coordinates | "45.123456, -122.987654" |
+| `{{.DetectionURL}}` | Link to detection details | "http://host:port/ui/detections/123" |
+| `{{.ImageURL}}` | Link to species image | "http://host:port/api/v2/media/species-image?..." |
+| `{{.DaysSinceFirstSeen}}` | Days since first detection | 0 for new species |
+
+### Template Examples
+
+```yaml
+# Simple notification
+notification:
+  templates:
+    newspecies:
+      title: "New: {{.CommonName}}"
+      message: "Detected {{.CommonName}} at {{.DetectionTime}}"
+
+# Detailed notification with GPS
+notification:
+  templates:
+    newspecies:
+      title: "🐦 New Species Alert"
+      message: "{{.CommonName}} ({{.ScientificName}}) detected with {{.ConfidencePercent}}% confidence at {{.Location}}. Time: {{.DetectionTime}}"
+
+# Notification with link
+notification:
+  templates:
+    newspecies:
+      title: "New Species: {{.CommonName}}"
+      message: "First detection! View details: {{.DetectionURL}}"
+```
+
+### Error Handling
+
+- If templates fail to render, notifications fall back to default messages
+- Invalid template syntax is logged but doesn't prevent notifications
+- Template variables are populated from detection event data (no database queries)

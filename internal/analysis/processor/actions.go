@@ -697,6 +697,13 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 		return
 	}
 
+	// Add location, time, and note ID to metadata for template rendering
+	metadata := detectionEvent.GetMetadata()
+	metadata["note_id"] = a.Note.ID
+	metadata["latitude"] = a.Note.Latitude
+	metadata["longitude"] = a.Note.Longitude
+	metadata["begin_time"] = a.Note.BeginTime
+
 	// Publish the detection event
 	if published := eventBus.TryPublishDetection(detectionEvent); published {
 		// Only record notification as sent if publishing succeeded

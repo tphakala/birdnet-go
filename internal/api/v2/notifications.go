@@ -659,18 +659,69 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 
 	service := notification.GetService()
 
-	// Create test notification matching detection_consumer.go patterns
-	title := "New Species Detected: Test Bird Species"
-	message := "First detection of Test Bird Species (Testus birdicus) at Fake Test Location"
+	// Build base URL for links
+	baseURL := notification.BuildBaseURL(c.Settings.Security.Host, c.Settings.WebServer.Port, c.Settings.Security.AutoTLS)
+
+	// Create test template data with realistic values
+	testTemplateData := &notification.TemplateData{
+		CommonName:         "Test Bird Species",
+		ScientificName:     "Testus birdicus",
+		Confidence:         0.99,
+		ConfidencePercent:  "99",
+		DetectionTime:      time.Now().Format("15:04:05"),
+		DetectionDate:      time.Now().Format("2006-01-02"),
+		Latitude:           42.3601,
+		Longitude:          -71.0589,
+		Location:           "Fake Test Location",
+		DetectionURL:       baseURL + "/ui/detections/test",
+		ImageURL:           baseURL + "/api/v2/media/species-image?scientific_name=Testus%20birdicus",
+		DaysSinceFirstSeen: 0,
+	}
+
+	// Get templates from settings
+	titleTemplate := c.Settings.Notification.Templates.NewSpecies.Title
+	messageTemplate := c.Settings.Notification.Templates.NewSpecies.Message
+
+	// Render notification using templates (same pattern as detection_consumer.go)
+	var title, message string
+	if titleTemplate != "" {
+		var err error
+		title, err = notification.RenderTemplate("title", titleTemplate, testTemplateData)
+		if err != nil {
+			if c.apiLogger != nil {
+				c.apiLogger.Error("failed to render title template, using default", "error", err)
+			}
+			title = ""
+		}
+	}
+
+	if messageTemplate != "" {
+		var err error
+		message, err = notification.RenderTemplate("message", messageTemplate, testTemplateData)
+		if err != nil {
+			if c.apiLogger != nil {
+				c.apiLogger.Error("failed to render message template, using default", "error", err)
+			}
+			message = ""
+		}
+	}
+
+	// Use defaults if template is empty or rendering failed
+	if title == "" {
+		title = "New Species Detected: Test Bird Species"
+	}
+	if message == "" {
+		message = "First detection of Test Bird Species (Testus birdicus) at Fake Test Location"
+	}
 
 	testNotification := notification.NewNotification(notification.TypeDetection, notification.PriorityHigh, title, message).
 		WithComponent("detection").
-		WithMetadata("species", "Test Bird Species").
-		WithMetadata("scientific_name", "Testus birdicus").
-		WithMetadata("confidence", 0.99).
-		WithMetadata("location", "Fake Test Location").
+		WithMetadata("species", testTemplateData.CommonName).
+		WithMetadata("scientific_name", testTemplateData.ScientificName).
+		WithMetadata("confidence", testTemplateData.Confidence).
+		WithMetadata("location", testTemplateData.Location).
 		WithMetadata("is_new_species", true).
-		WithMetadata("days_since_first_seen", 0).
+		WithMetadata("days_since_first_seen", testTemplateData.DaysSinceFirstSeen).
 		WithExpiry(24 * time.Hour) // New species notifications expire after 24 hours
 
 	// Use CreateWithMetadata to persist and broadcast
@@ -686,7 +737,9 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
 		c.apiLogger.Debug("test new species notification created",
 			"notification_id", testNotification.ID,
-			"species", "Test Bird Species")
+			"species", testTemplateData.CommonName,
+			"rendered_title", title,
+			"rendered_message", message)
 	}
 
 	return ctx.JSON(http.StatusOK, testNotification)

@@ -180,7 +180,19 @@ type WeatherSettings struct {
 
 // NotificationConfig is the root for notification-specific settings.
 type NotificationConfig struct {
-	Push PushSettings `json:"push"`
+	Push      PushSettings          `json:"push"`
+	Templates NotificationTemplates `json:"templates"`
+}
+
+// NotificationTemplates contains customizable notification message templates.
+type NotificationTemplates struct {
+	NewSpecies NewSpeciesTemplate `json:"newSpecies"`
+}
+
+// NewSpeciesTemplate contains templates for new species detection notifications.
+type NewSpeciesTemplate struct {
+	Title   string `json:"title"`
+	Message string `json:"message"`
 }
 
 // PushSettings controls global push delivery and provider list.

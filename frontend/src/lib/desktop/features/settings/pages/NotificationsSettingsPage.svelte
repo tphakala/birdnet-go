@@ -20,23 +20,158 @@
   @component
 -->
 <script lang="ts">
+  import { onMount } from 'svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
-  import { alertIconsSvg, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
 
-  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
   let csrfToken = $derived(
     (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
       ''
   );
 
-  // Test notification generation state
+  let templateConfig = $state<{
+    title: string;
+    message: string;
+  } | null>(null);
+  let loadingTemplate = $state(false);
+  let savingTemplate = $state(false);
+  let templateStatusMessage = $state('');
+  let templateStatusType = $state<'info' | 'success' | 'error'>('info');
+
+  let editedTitle = $state('');
+  let editedMessage = $state('');
+
+  let hasUnsavedChanges = $derived(
+    templateConfig !== null &&
+      (editedTitle !== templateConfig.title || editedMessage !== templateConfig.message)
+  );
+
   let generating = $state(false);
   let statusMessage = $state('');
   let statusType = $state<'info' | 'success' | 'error'>('info');
 
-  // Test new species notification
+  const templateFields = [
+    { name: 'CommonName', description: 'Bird common name (e.g., "Northern Cardinal")' },
+    { name: 'ScientificName', description: 'Scientific name (e.g., "Cardinalis cardinalis")' },
+    { name: 'Confidence', description: 'Confidence value (0.0 to 1.0)' },
+    { name: 'ConfidencePercent', description: 'Confidence as percentage (e.g., "99")' },
+    { name: 'DetectionTime', description: 'Time of detection (e.g., "14:30:45")' },
+    { name: 'DetectionDate', description: 'Date of detection (e.g., "2024-10-05")' },
+    { name: 'Latitude', description: 'GPS latitude coordinate' },
+    { name: 'Longitude', description: 'GPS longitude coordinate' },
+    { name: 'Location', description: 'Formatted coordinates (e.g., "42.360100, -71.058900")' },
+    { name: 'DetectionURL', description: 'Link to detection in UI' },
+    { name: 'ImageURL', description: 'Link to species image' },
+    { name: 'DaysSinceFirstSeen', description: 'Number of days since first detected' },
+  ];
+
+  const defaultTemplate = {
+    title: 'New Species: {{.CommonName}}',
+    message:
+      'First detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}.\n[View Detection]({{.DetectionURL}})',
+  };
+
+  async function loadTemplateConfig() {
+    loadingTemplate = true;
+    try {
+      const response = await fetch('/api/v2/settings/notification');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.templates?.newSpecies) {
+          templateConfig = {
+            title: data.templates.newSpecies.title || defaultTemplate.title,
+            message: data.templates.newSpecies.message || defaultTemplate.message,
+          };
+          editedTitle = templateConfig.title;
+          editedMessage = templateConfig.message;
+        } else {
+          templateConfig = { ...defaultTemplate };
+          editedTitle = templateConfig.title;
+          editedMessage = templateConfig.message;
+        }
+      }
+    } catch {
+      templateConfig = { ...defaultTemplate };
+      editedTitle = templateConfig.title;
+      editedMessage = templateConfig.message;
+    } finally {
+      loadingTemplate = false;
+    }
+  }
+
+  async function saveTemplateConfig() {
+    savingTemplate = true;
+    templateStatusMessage = '';
+
+    try {
+      const headers = new Headers({
+        'Content-Type': 'application/json',
+      });
+
+      if (csrfToken) {
+        headers.set('X-CSRF-Token', csrfToken);
+      }
+
+      const response = await fetch('/api/v2/settings/notification', {
+        method: 'PATCH',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          templates: {
+            newSpecies: {
+              title: editedTitle,
+              message: editedMessage,
+            },
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to save: ${response.status} ${response.statusText}`);
+      }
+
+      if (templateConfig) {
+        templateConfig.title = editedTitle;
+        templateConfig.message = editedMessage;
+      }
+
+      templateStatusMessage = 'Templates saved successfully!';
+      templateStatusType = 'success';
+
+      setTimeout(() => {
+        templateStatusMessage = '';
+      }, 3000);
+    } catch (error) {
+      templateStatusMessage = `Error: ${(error as Error).message}`;
+      templateStatusType = 'error';
+
+      setTimeout(() => {
+        templateStatusMessage = '';
+      }, 5000);
+    } finally {
+      savingTemplate = false;
+    }
+  }
+
+  function resetTemplates() {
+    if (templateConfig) {
+      editedTitle = templateConfig.title;
+      editedMessage = templateConfig.message;
+    }
+  }
+
   async function sendTestNewSpeciesNotification() {
+    // Check for unsaved changes
+    if (hasUnsavedChanges) {
+      const confirmTest = window.confirm(
+        'You have unsaved template changes. The test will use the currently saved templates, not your edits. Continue?'
+      );
+      if (!confirmTest) {
+        return;
+      }
+    }
+
     generating = true;
     statusMessage = '';
     statusType = 'info';
@@ -77,7 +212,6 @@
         'success'
       );
 
-      // Clear status after 5 seconds
       setTimeout(() => {
         statusMessage = '';
         statusType = 'info';
@@ -91,7 +225,6 @@
         'error'
       );
 
-      // Clear error after 10 seconds
       setTimeout(() => {
         statusMessage = '';
         statusType = 'info';
@@ -103,175 +236,159 @@
     statusMessage = message;
     statusType = type;
   }
+
+  onMount(() => {
+    loadTemplateConfig();
+  });
 </script>
 
 <div class="space-y-4 settings-page-content">
-  <!-- Notification Testing Section -->
   <SettingsSection
-    title={t('settings.notifications.sections.testing.title')}
-    description={t('settings.notifications.sections.testing.description')}
+    title="Notification Templates"
+    description="Customize notification messages for new species detections using template variables"
     defaultOpen={true}
   >
     <div class="space-y-4">
-      <!-- Test New Species Notification -->
-      <div class="card bg-base-200">
-        <div class="card-body">
-          <h3 class="card-title text-lg">{t('settings.notifications.testNotification.title')}</h3>
+      {#if loadingTemplate}
+        <div class="flex justify-center py-4">
+          <span class="loading loading-spinner loading-md"></span>
+        </div>
+      {:else if templateConfig}
+        <div class="card bg-base-200">
+          <div class="card-body">
+            <h3 class="card-title text-base">New Species Notification Template</h3>
 
-          <!-- Description -->
-          <div class="space-y-3 mb-4">
-            <p class="text-sm text-base-content/80">
-              {t('settings.notifications.testNotification.description')}
-            </p>
+            <div class="space-y-4">
+              <div class="form-control">
+                <label for="template-title" class="label">
+                  <span class="label-text font-semibold">Title Template</span>
+                </label>
+                <input
+                  id="template-title"
+                  type="text"
+                  bind:value={editedTitle}
+                  class="input input-bordered w-full font-mono text-sm"
+                  placeholder="e.g., New Species: &#123;&#123;.CommonName&#125;&#125;"
+                />
+              </div>
 
-            <div class="bg-base-100 rounded-lg p-3 border border-base-300">
-              <h4 class="font-semibold text-sm mb-2">
-                {t('settings.notifications.testNotification.whatHappens.title')}
-              </h4>
-              <ul class="text-xs space-y-1 text-base-content/70">
-                <li class="flex items-center gap-2">
-                  <div class="h-4 w-4 text-success flex-shrink-0">
-                    {@html alertIconsSvg.success}
-                  </div>
-                  <span
-                    >{t(
-                      'settings.notifications.testNotification.whatHappens.createsNotification'
-                    )}</span
-                  >
-                </li>
-                <li class="flex items-center gap-2">
-                  <div class="h-4 w-4 text-success flex-shrink-0">
-                    {@html alertIconsSvg.success}
-                  </div>
-                  <span
-                    >{t(
-                      'settings.notifications.testNotification.whatHappens.appearsInStream'
-                    )}</span
-                  >
-                </li>
-                <li class="flex items-center gap-2">
-                  <div class="h-4 w-4 text-success flex-shrink-0">
-                    {@html alertIconsSvg.success}
-                  </div>
-                  <span
-                    >{t(
-                      'settings.notifications.testNotification.whatHappens.matchesRealDetection'
-                    )}</span
-                  >
-                </li>
-                <li class="flex items-center gap-2">
-                  <div class="h-4 w-4 text-info flex-shrink-0">
-                    {@html systemIcons.infoCircle}
-                  </div>
-                  <span
-                    >{t('settings.notifications.testNotification.whatHappens.expires24Hours')}</span
-                  >
-                </li>
-              </ul>
-            </div>
-          </div>
+              <div class="form-control">
+                <label for="template-message" class="label">
+                  <span class="label-text font-semibold">Message Template</span>
+                </label>
+                <textarea
+                  id="template-message"
+                  bind:value={editedMessage}
+                  class="textarea textarea-bordered w-full font-mono text-sm"
+                  rows="3"
+                  placeholder="e.g., First detection of &#123;&#123;.CommonName&#125;&#125; (&#123;&#123;.ScientificName&#125;&#125;) with &#123;&#123;.ConfidencePercent&#125;&#125;% confidence"
+                ></textarea>
+              </div>
 
-          <!-- Status Message -->
-          {#if statusMessage}
-            <div class="mt-3 max-w-2xl">
-              <div
-                class="alert py-2 px-3 text-sm"
-                class:alert-info={statusType === 'info'}
-                class:alert-success={statusType === 'success'}
-                class:alert-error={statusType === 'error'}
-              >
-                <div class="h-4 w-4 flex-shrink-0">
-                  {#if statusType === 'info'}
-                    {@html alertIconsSvg.info}
-                  {:else if statusType === 'success'}
-                    {@html alertIconsSvg.success}
-                  {:else if statusType === 'error'}
-                    {@html alertIconsSvg.error}
-                  {/if}
+              {#if templateStatusMessage}
+                <div
+                  class="alert py-2 px-3 text-sm"
+                  class:alert-success={templateStatusType === 'success'}
+                  class:alert-error={templateStatusType === 'error'}
+                >
+                  <div class="h-4 w-4 flex-shrink-0">
+                    {#if templateStatusType === 'success'}
+                      {@html alertIconsSvg.success}
+                    {:else if templateStatusType === 'error'}
+                      {@html alertIconsSvg.error}
+                    {/if}
+                  </div>
+                  <span>{templateStatusMessage}</span>
                 </div>
-                <span class="min-w-0 text-sm">{statusMessage}</span>
+              {/if}
+
+              {#if statusMessage}
+                <div
+                  class="alert py-2 px-3 text-sm"
+                  class:alert-info={statusType === 'info'}
+                  class:alert-success={statusType === 'success'}
+                  class:alert-error={statusType === 'error'}
+                >
+                  <div class="h-4 w-4 flex-shrink-0">
+                    {#if statusType === 'info'}
+                      {@html alertIconsSvg.info}
+                    {:else if statusType === 'success'}
+                      {@html alertIconsSvg.success}
+                    {:else if statusType === 'error'}
+                      {@html alertIconsSvg.error}
+                    {/if}
+                  </div>
+                  <span>{statusMessage}</span>
+                </div>
+              {/if}
+
+              <div class="flex gap-2 justify-end">
+                <button
+                  onclick={resetTemplates}
+                  class="btn btn-ghost btn-sm"
+                  disabled={savingTemplate || generating || !hasUnsavedChanges}
+                >
+                  Reset
+                </button>
+                <button
+                  onclick={saveTemplateConfig}
+                  class="btn btn-sm"
+                  class:btn-primary={hasUnsavedChanges}
+                  class:btn-ghost={!hasUnsavedChanges}
+                  disabled={savingTemplate || generating || !hasUnsavedChanges}
+                >
+                  {#if savingTemplate}
+                    <span class="loading loading-spinner loading-xs"></span>
+                    <span>Saving...</span>
+                  {:else}
+                    <span>Save Templates{hasUnsavedChanges ? ' *' : ''}</span>
+                  {/if}
+                </button>
+                <button
+                  onclick={sendTestNewSpeciesNotification}
+                  disabled={generating || savingTemplate}
+                  class="btn btn-secondary btn-sm"
+                  title={hasUnsavedChanges
+                    ? 'Warning: You have unsaved changes. Test will use saved templates.'
+                    : 'Send a test notification'}
+                >
+                  {#if generating}
+                    <span class="loading loading-spinner loading-xs"></span>
+                    <span>Sending...</span>
+                  {:else}
+                    <span class="flex items-center gap-1">
+                      {@html systemIcons.bell}
+                      <span>Test</span>
+                    </span>
+                  {/if}
+                </button>
               </div>
             </div>
-          {/if}
-
-          <!-- Send Test Notification Button -->
-          <div class="card-actions justify-end mt-6">
-            <button
-              onclick={sendTestNewSpeciesNotification}
-              disabled={generating}
-              class="btn btn-primary"
-              class:btn-disabled={generating}
-            >
-              {#if !generating}
-                <span class="flex items-center gap-2">
-                  {@html systemIcons.bell}
-                  <span>{t('settings.notifications.testNotification.sendButton')}</span>
-                </span>
-              {:else}
-                <span class="loading loading-spinner loading-sm"></span>
-                <span>{t('settings.notifications.testNotification.sendingButton')}</span>
-              {/if}
-            </button>
           </div>
         </div>
-      </div>
-    </div>
-  </SettingsSection>
 
-  <!-- Notification System Info Section -->
-  <SettingsSection
-    title={t('settings.notifications.sections.info.title')}
-    description={t('settings.notifications.sections.info.description')}
-    defaultOpen={false}
-  >
-    <div class="space-y-4">
-      <div class="alert alert-info text-sm">
-        <div class="h-5 w-5 flex-shrink-0">{@html alertIconsSvg.info}</div>
-        <div class="min-w-0">
-          <div class="font-semibold mb-1">
-            {t('settings.notifications.systemInfo.howToView.title')}
-          </div>
-          <div class="space-y-1 text-xs">
-            <p>{t('settings.notifications.systemInfo.howToView.step1')}</p>
-            <p>{t('settings.notifications.systemInfo.howToView.step2')}</p>
-            <p>{t('settings.notifications.systemInfo.howToView.step3')}</p>
+        <div class="card bg-base-200">
+          <div class="card-body">
+            <h3 class="card-title text-base">Available Template Variables</h3>
+            <p class="text-sm text-base-content/80 mb-3">
+              Use these variables in your templates with the syntax <code
+                class="bg-base-300 px-1 rounded">&#123;&#123;.VariableName&#125;&#125;</code
+              >
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-xs">
+              {#each templateFields as field}
+                <div class="flex items-baseline gap-2">
+                  <code class="font-mono text-primary shrink-0"
+                    >&#123;&#123;.{field.name}&#125;&#125;</code
+                  >
+                  <span class="text-base-content/70">{field.description}</span>
+                </div>
+              {/each}
+            </div>
           </div>
         </div>
-      </div>
-
-      <div class="bg-base-200 rounded-lg p-4">
-        <h4 class="font-semibold text-sm mb-3">
-          {t('settings.notifications.systemInfo.technicalDetails.title')}
-        </h4>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          <div>
-            <div class="font-medium text-base-content/80 mb-1">
-              {t('settings.notifications.systemInfo.technicalDetails.endpoint')}
-            </div>
-            <code class="text-primary bg-base-100 px-2 py-1 rounded"
-              >POST /api/v2/notifications/test/new-species</code
-            >
-          </div>
-          <div>
-            <div class="font-medium text-base-content/80 mb-1">
-              {t('settings.notifications.systemInfo.technicalDetails.type')}
-            </div>
-            <span class="bg-base-100 px-2 py-1 rounded">TypeDetection</span>
-          </div>
-          <div>
-            <div class="font-medium text-base-content/80 mb-1">
-              {t('settings.notifications.systemInfo.technicalDetails.priority')}
-            </div>
-            <span class="bg-base-100 px-2 py-1 rounded">PriorityHigh</span>
-          </div>
-          <div>
-            <div class="font-medium text-base-content/80 mb-1">
-              {t('settings.notifications.systemInfo.technicalDetails.expiry')}
-            </div>
-            <span class="bg-base-100 px-2 py-1 rounded">24 hours</span>
-          </div>
-        </div>
-      </div>
+      {/if}
     </div>
   </SettingsSection>
 </div>

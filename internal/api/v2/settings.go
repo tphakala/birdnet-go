@@ -710,6 +710,8 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 		return &settings.Realtime.Telemetry, nil
 	case "sentry":
 		return &settings.Sentry, nil
+	case "notification":
+		return &settings.Notification, nil
 	default:
 		return nil, fmt.Errorf("unknown settings section: %s", section)
 	}
@@ -1093,13 +1095,13 @@ func validateSpeciesSection(data json.RawMessage) error {
 		if config.Interval < 0 {
 			return fmt.Errorf("species config for '%s': interval must be non-negative, got %d", speciesName, config.Interval)
 		}
-		
+
 		// Check if threshold is within valid range
 		if config.Threshold < 0 || config.Threshold > 1 {
 			return fmt.Errorf("species config for '%s': threshold must be between 0 and 1, got %f", speciesName, config.Threshold)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1116,13 +1118,13 @@ func validateRealtimeSection(data json.RawMessage) error {
 		if config.Interval < 0 {
 			return fmt.Errorf("species config for '%s': interval must be non-negative, got %d", speciesName, config.Interval)
 		}
-		
+
 		// Check if threshold is within valid range
 		if config.Threshold < 0 || config.Threshold > 1 {
 			return fmt.Errorf("species config for '%s': threshold must be between 0 and 1, got %f", speciesName, config.Threshold)
 		}
 	}
-	
+
 	return nil
 }
 
