@@ -192,10 +192,10 @@ type PushProviderConfig struct {
 
 // PushFilterConfig limits which notifications a provider receives.
 type PushFilterConfig struct {
-	Types           []string       `json:"types"`
-	Priorities      []string       `json:"priorities"`
-	Components      []string       `json:"components"`
-	MetadataFilters map[string]any `json:"metadata_filters" yaml:"metadata_filters"`
+	Types           []string       `json:"types" mapstructure:"types"`
+	Priorities      []string       `json:"priorities" mapstructure:"priorities"`
+	Components      []string       `json:"components" mapstructure:"components"`
+	MetadataFilters map[string]any `json:"metadata_filters" mapstructure:"metadata_filters"`
 }
 
 // WundergroundSettings contains settings for WeatherUnderground integration.
