@@ -76,6 +76,7 @@ RUN chmod a+x /models
 
 # Install ALSA library and SOX for audio processing, and other system utilities for debugging
 RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
+    adduser \
     ca-certificates \
     libasound2 \
     ffmpeg \
