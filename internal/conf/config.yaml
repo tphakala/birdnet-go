@@ -270,9 +270,17 @@ notification:
         command: scripts/your-push-script.sh
         args: ["ok"] # use ["fail"] to test non-zero exit
         environment:
-        input_format: both    # "json", "env", "both"
+        input_format: both    # Options: "json" (stdin only), "env" (env vars only), "both" (env + JSON stdin)
         filter:
           types: ["error", "warning", "info", "detection", "system"]
           priorities: []
           components: []
           metadata_filters: {}
+            # Filter by confidence threshold (supports > and < operators)
+            # Examples:
+            #   confidence: ">0.8"   # Only notifications with >80% confidence
+            #   confidence: "<0.3"   # Only low-confidence notifications
+            #
+            # Other metadata fields use exact string matching:
+            #   species: "Northern Cardinal"
+            #   location: "backyard"
