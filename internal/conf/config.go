@@ -168,9 +168,9 @@ type NotificationConfig struct {
 // PushSettings controls global push delivery and provider list.
 type PushSettings struct {
 	Enabled        bool                 `json:"enabled"`
-	DefaultTimeout time.Duration        `json:"default_timeout"`
-	MaxRetries     int                  `json:"max_retries"`
-	RetryDelay     time.Duration        `json:"retry_delay"`
+	DefaultTimeout time.Duration        `json:"default_timeout" mapstructure:"default_timeout"`
+	MaxRetries     int                  `json:"max_retries" mapstructure:"max_retries"`
+	RetryDelay     time.Duration        `json:"retry_delay" mapstructure:"retry_delay"`
 	Providers      []PushProviderConfig `json:"providers"`
 }
 
@@ -187,7 +187,7 @@ type PushProviderConfig struct {
 	Command     string            `json:"command"`
 	Args        []string          `json:"args"`
 	Environment map[string]string `json:"environment"`
-	InputFormat string            `json:"input_format"`
+	InputFormat string            `json:"input_format" mapstructure:"input_format"`
 }
 
 // PushFilterConfig limits which notifications a provider receives.
