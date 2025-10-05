@@ -753,38 +753,58 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 }
 
 // calculateMinDetections computes the minimum number of required detections based on
-// the current overlap setting and detection window duration. This scales the threshold
-// proportionally to maintain consistent detection quality regardless of clip length settings.
+// the overlap setting to filter false positives through repeated detection confirmation.
 //
-// The detection window duration is calculated as captureLength - preCaptureLength to prevent
-// gaps in audio clip coverage when the same species is detected multiple times in succession.
+// The overlap determines how frequently the same audio content is analyzed:
+//   - With overlap 2.0: step size = 1.0s, so a 3-second chunk is analyzed ~3 times
+//   - With overlap 2.5: step size = 0.5s, so a 3-second chunk is analyzed ~6 times
+//
+// A real bird call should be detected consistently across these overlapping analyses,
+// while false positives (noise, wind) are random and won't repeat reliably.
+//
+// The function calculates:
+//   1. How many times a 3-second chunk is analyzed (based on overlap)
+//   2. Requires a percentage of those analyses to detect the same species (default 50%)
+//
+// Example with overlap 2.2, 60s capture, 15s pre-capture:
+//   OLD: minDetections = 14 (too strict, rejected real birds)
+//   NEW: minDetections = 2  (balanced, accepts birds with repeated confirmation)
+//
+// Note: Audio clip length (captureLength/preCapture) does NOT affect this calculation.
+// Those settings control saved audio length, not detection sensitivity.
 //
 // Edge cases handled:
-//   - If captureLength <= preCaptureLength: detection window is clamped to 0, resulting in minDetections = 1
-//   - If overlap is 0 (no overlap): minDetections = 1 regardless of detection window duration
-//   - Very short detection windows (< 1s): minDetections = 1 due to max(1, ...) safeguard
-//   - Very high overlap (>2.9): may require 20+ detections depending on detection window duration
+//   - If overlap is 0 (no overlap): minDetections = 1 (no repeated confirmation possible)
+//   - Very high overlap (>2.9): may require many detections but cap ensures reasonability
+//   - Floating-point precision: epsilon subtraction prevents values like 5.0000003 from ceiling to 6
 func (p *Processor) calculateMinDetections() int {
-	// Calculate detection window to match processDetections calculation
-	// Edge case: if captureLength <= preCaptureLength, max() clamps to 0
-	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
-	detectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
+	// BirdNET uses 3-second chunks for analysis
+	const chunkDurationSeconds = 3.0
+	// Minimum segment length to prevent division by near-zero values
+	const minSegmentLength = 0.1
+	// Small epsilon to prevent floating-point rounding errors in ceil()
+	// Without this, values like 5.0000000003 would ceil to 6 instead of 5
+	const epsilon = 1e-9
 
-	// Calculate segment length based on overlap setting
-	// Edge case: max(0.1, ...) prevents division by values too close to zero
-	segmentLength := math.Max(0.1, 3.0-p.Settings.BirdNET.Overlap)
+	// Calculate segment length (how often we analyze)
+	segmentLength := math.Max(minSegmentLength, chunkDurationSeconds-p.Settings.BirdNET.Overlap)
 
-	// Base calculation assumes 15-second detection window (original hardcoded value)
-	// This was the value used before configurable clip lengths were introduced
-	const baselineWindow = 15.0
-	baseMinDetections := 3.0 / segmentLength
+	// How many times is a 3-second audio chunk analyzed?
+	// This represents the maximum possible detections for a bird call
+	maxDetectionsPerChunk := chunkDurationSeconds / segmentLength
 
-	// Scale minDetections proportionally when detection window differs from baseline
-	// This ensures proper detection thresholds regardless of clip length settings
-	// Edge case: if detectionWindow = 0, scaleFactor = 0, but max(1, ...) ensures minDetections >= 1
-	scaleFactor := detectionWindow.Seconds() / baselineWindow
-	minDetections := int(math.Max(1, math.Round(baseMinDetections*scaleFactor)))
+	// Require 50% of analyses to detect the same species to confirm it's real
+	// This balances false positive filtering with detection sensitivity
+	// Chosen empirically through testing with overlap settings 2.0-2.5
+	const confirmationThreshold = 0.5
+
+	// Calculate minimum required detections
+	// Use Ceil to ensure we require at least the threshold percentage
+	// Subtract epsilon before ceiling to handle floating-point precision issues
+	// (e.g., 5.0000000003 becomes 4.9999999993, which correctly ceils to 5)
+	// Always require at least 1 detection
+	threshold := maxDetectionsPerChunk*confirmationThreshold - epsilon
+	minDetections := int(math.Max(1, math.Ceil(threshold)))
 
 	return minDetections
 }
