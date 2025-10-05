@@ -55,14 +55,20 @@ func TestCalculateMinDetections(t *testing.T) {
 		{
 			name:        "extreme_overlap_2.7",
 			overlap:     2.7,
-			expectedMin: 6,
-			description: "Overlap 2.7: step=0.3s, max 10 detections per 3s, require 6 (ceil(50% of 10))",
+			expectedMin: 5,
+			description: "Overlap 2.7: step=0.3s, max 10 detections per 3s, require 5 (50% of 10)",
 		},
 		{
 			name:        "extreme_overlap_2.8",
 			overlap:     2.8,
 			expectedMin: 8,
-			description: "Overlap 2.8: step=0.2s, max 15 detections per 3s, require 8 (50% of 15)",
+			description: "Overlap 2.8: step=0.2s, max 15 detections per 3s, require 8 (ceil(50% of 15))",
+		},
+		{
+			name:        "extreme_overlap_2.85",
+			overlap:     2.85,
+			expectedMin: 10,
+			description: "Overlap 2.85: step=0.15s, max 20 detections per 3s, require 10 (50% of 20) - tests epsilon fix",
 		},
 		{
 			name:        "near_max_overlap_2.9",

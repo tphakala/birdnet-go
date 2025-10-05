@@ -776,13 +776,18 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 // Edge cases handled:
 //   - If overlap is 0 (no overlap): minDetections = 1 (no repeated confirmation possible)
 //   - Very high overlap (>2.9): may require many detections but cap ensures reasonability
+//   - Floating-point precision: epsilon subtraction prevents values like 5.0000003 from ceiling to 6
 func (p *Processor) calculateMinDetections() int {
 	// BirdNET uses 3-second chunks for analysis
 	const chunkDurationSeconds = 3.0
+	// Minimum segment length to prevent division by near-zero values
+	const minSegmentLength = 0.1
+	// Small epsilon to prevent floating-point rounding errors in ceil()
+	// Without this, values like 5.0000000003 would ceil to 6 instead of 5
+	const epsilon = 1e-9
 
 	// Calculate segment length (how often we analyze)
-	// Edge case: max(0.1, ...) prevents division by values too close to zero
-	segmentLength := math.Max(0.1, chunkDurationSeconds-p.Settings.BirdNET.Overlap)
+	segmentLength := math.Max(minSegmentLength, chunkDurationSeconds-p.Settings.BirdNET.Overlap)
 
 	// How many times is a 3-second audio chunk analyzed?
 	// This represents the maximum possible detections for a bird call
@@ -795,8 +800,11 @@ func (p *Processor) calculateMinDetections() int {
 
 	// Calculate minimum required detections
 	// Use Ceil to ensure we require at least the threshold percentage
+	// Subtract epsilon before ceiling to handle floating-point precision issues
+	// (e.g., 5.0000000003 becomes 4.9999999993, which correctly ceils to 5)
 	// Always require at least 1 detection
-	minDetections := int(math.Max(1, math.Ceil(maxDetectionsPerChunk*confirmationThreshold)))
+	threshold := maxDetectionsPerChunk*confirmationThreshold - epsilon
+	minDetections := int(math.Max(1, math.Ceil(threshold)))
 
 	return minDetections
 }
