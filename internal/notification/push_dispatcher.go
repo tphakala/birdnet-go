@@ -177,7 +177,15 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 					d.log.Error("push send failed", "provider", rp.prov.GetName(), "attempts", attempts, "error", err)
 					return
 				}
-				time.Sleep(d.retryDelay)
+
+				// Wait for retry delay with context cancellation check
+				select {
+				case <-ctx.Done():
+					d.log.Debug("retry cancelled due to context cancellation", "provider", rp.prov.GetName(), "attempts", attempts)
+					return
+				case <-time.After(d.retryDelay):
+					// Continue to next retry
+				}
 			}
 		}()
 	}
