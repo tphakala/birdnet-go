@@ -66,6 +66,9 @@ func InitializePushFromConfig(settings *conf.Settings) error {
 			}
 			if prov.IsEnabled() {
 				r := registeredProvider{prov: prov, filter: pc.Filter, name: prov.GetName()}
+				if pd.log != nil {
+					pd.log.Debug("registered push provider", "name", r.name, "types", r.filter.Types, "priorities", r.filter.Priorities, "metadata_filters", r.filter.MetadataFilters, "metadata_count", len(r.filter.MetadataFilters))
+				}
 				pd.providers = append(pd.providers, r)
 			}
 		}
@@ -139,7 +142,7 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 			continue
 		}
 		// Apply filter
-		if !matchesProviderFilter(&rp.filter, notif) {
+		if !MatchesProviderFilter(&rp.filter, notif, d.log, rp.name) {
 			continue
 		}
 
@@ -223,39 +226,65 @@ func orDefault[T ~string](v T, d T) T {
 	return v
 }
 
-// matchesProviderFilter applies basic filtering based on type/priority/component and simple metadata rules.
-func matchesProviderFilter(f *conf.PushFilterConfig, n *Notification) bool {
+// MatchesProviderFilter applies basic filtering based on type/priority/component and simple metadata rules.
+// This function is exported for testing purposes.
+func MatchesProviderFilter(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) bool {
 	if f == nil {
+		if log != nil {
+			log.Debug("no filter configured, allowing notification", "provider", providerName, "notification_id", n.ID)
+		}
 		return true
 	}
+
 	// Types
 	if len(f.Types) > 0 {
+		if log != nil {
+			log.Debug("checking type filter", "provider", providerName, "allowed_types", f.Types, "notification_type", string(n.Type), "notification_id", n.ID)
+		}
 		if !slices.Contains(f.Types, string(n.Type)) {
+			if log != nil {
+				log.Debug("filter failed: type mismatch", "provider", providerName, "allowed_types", f.Types, "notification_type", string(n.Type), "notification_id", n.ID)
+			}
 			return false
 		}
 	}
 	// Priorities
 	if len(f.Priorities) > 0 {
 		if !slices.Contains(f.Priorities, string(n.Priority)) {
+			if log != nil {
+				log.Debug("filter failed: priority mismatch", "provider", providerName, "allowed_priorities", f.Priorities, "notification_priority", string(n.Priority), "notification_id", n.ID)
+			}
 			return false
 		}
 	}
 	// Component
 	if len(f.Components) > 0 {
 		if !slices.Contains(f.Components, n.Component) {
+			if log != nil {
+				log.Debug("filter failed: component mismatch", "provider", providerName, "allowed_components", f.Components, "notification_component", n.Component, "notification_id", n.ID)
+			}
 			return false
 		}
 	}
-	// Minimal metadata filters: support confidence ">x" or "<x" and equality matches for bools/strings
+	// Metadata filters: support confidence > >= < <= = == and equality matches for bools/strings
 	for key, val := range f.MetadataFilters {
+		if log != nil {
+			log.Debug("processing metadata filter", "provider", providerName, "key", key, "filter_value", val, "notification_id", n.ID)
+		}
 		// confidence threshold
 		if key == "confidence" {
 			cond, ok := val.(string)
 			if !ok {
+				if log != nil {
+					log.Debug("filter failed: confidence filter misconfigured", "provider", providerName, "filter_value", val, "notification_id", n.ID)
+				}
 				return false // misconfigured filter
 			}
 			cond = strings.TrimSpace(cond)
 			if len(cond) == 0 {
+				if log != nil {
+					log.Debug("filter failed: empty confidence condition", "provider", providerName, "notification_id", n.ID)
+				}
 				return false
 			}
 
@@ -269,43 +298,73 @@ func matchesProviderFilter(f *conf.PushFilterConfig, n *Notification) bool {
 				op = string(cond[0])
 				valStr = strings.TrimSpace(cond[1:])
 			} else {
+				if log != nil {
+					log.Debug("filter failed: unknown confidence operator", "provider", providerName, "condition", cond, "notification_id", n.ID)
+				}
 				return false // unknown operator format
 			}
 
 			threshold, err := strconv.ParseFloat(valStr, 64)
 			if err != nil {
+				if log != nil {
+					log.Debug("filter failed: invalid confidence threshold", "provider", providerName, "threshold_str", valStr, "error", err, "notification_id", n.ID)
+				}
 				return false
 			}
 			raw, exists := n.Metadata["confidence"]
 			if !exists {
+				if log != nil {
+					log.Debug("filter failed: confidence metadata missing", "provider", providerName, "available_metadata", n.Metadata, "notification_id", n.ID)
+				}
 				return false // require presence
 			}
 			cv, ok := toFloat(raw)
 			if !ok {
+				if log != nil {
+					log.Debug("filter failed: confidence value not parseable", "provider", providerName, "confidence_value", raw, "notification_id", n.ID)
+				}
 				return false // require parse success
 			}
 			switch op {
 			case ">":
 				if !(cv > threshold) {
-					return false
-				}
-			case "<":
-				if !(cv < threshold) {
+					if log != nil {
+						log.Debug("filter failed: confidence too low", "provider", providerName, "condition", cond, "actual_confidence", cv, "required", fmt.Sprintf("> %v", threshold), "notification_id", n.ID)
+					}
 					return false
 				}
 			case ">=":
 				if !(cv >= threshold) {
+					if log != nil {
+						log.Debug("filter failed: confidence too low", "provider", providerName, "condition", cond, "actual_confidence", cv, "required", fmt.Sprintf(">= %v", threshold), "notification_id", n.ID)
+					}
+					return false
+				}
+			case "<":
+				if !(cv < threshold) {
+					if log != nil {
+						log.Debug("filter failed: confidence too high", "provider", providerName, "condition", cond, "actual_confidence", cv, "required", fmt.Sprintf("< %v", threshold), "notification_id", n.ID)
+					}
 					return false
 				}
 			case "<=":
 				if !(cv <= threshold) {
+					if log != nil {
+						log.Debug("filter failed: confidence too high", "provider", providerName, "condition", cond, "actual_confidence", cv, "required", fmt.Sprintf("<= %v", threshold), "notification_id", n.ID)
+					}
 					return false
 				}
 			case "=", "==":
 				if !(cv == threshold) {
+					if log != nil {
+						log.Debug("filter failed: confidence mismatch", "provider", providerName, "condition", cond, "actual_confidence", cv, "required", fmt.Sprintf("== %v", threshold), "notification_id", n.ID)
+					}
 					return false
 				}
 			default:
+				if log != nil {
+					log.Debug("filter failed: unknown confidence operator", "provider", providerName, "operator", op, "notification_id", n.ID)
+				}
 				return false // unknown operator
 			}
 			continue
@@ -313,9 +372,15 @@ func matchesProviderFilter(f *conf.PushFilterConfig, n *Notification) bool {
 		// exact match requires key presence
 		mv, ok := n.Metadata[key]
 		if !ok {
+			if log != nil {
+				log.Debug("filter failed: metadata key missing", "provider", providerName, "required_key", key, "available_metadata", n.Metadata, "notification_id", n.ID)
+			}
 			return false
 		}
 		if fmt.Sprint(mv) != fmt.Sprint(val) {
+			if log != nil {
+				log.Debug("filter failed: metadata value mismatch", "provider", providerName, "key", key, "expected", val, "actual", mv, "notification_id", n.ID)
+			}
 			return false
 		}
 	}

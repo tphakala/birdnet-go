@@ -136,7 +136,7 @@ func TestMatchesProviderFilter_ConfidenceOperators(t *testing.T) {
 				},
 			}
 
-			result := matchesProviderFilter(filter, notif)
+			result := MatchesProviderFilter(filter, notif, nil, "test-provider")
 			if result != tt.expected {
 				t.Errorf("condition %q with confidence %v: expected %v, got %v",
 					tt.condition, tt.confidence, tt.expected, result)
@@ -179,7 +179,7 @@ func TestMatchesProviderFilter_ConfidenceErrorCases(t *testing.T) {
 				Metadata: tt.metadata,
 			}
 
-			result := matchesProviderFilter(filter, notif)
+			result := MatchesProviderFilter(filter, notif, nil, "test-provider")
 			if result != tt.expected {
 				t.Errorf("expected %v, got %v", tt.expected, result)
 			}
@@ -215,7 +215,7 @@ func TestMatchesProviderFilter_ConfidenceTypes(t *testing.T) {
 				},
 			}
 
-			result := matchesProviderFilter(filter, notif)
+			result := MatchesProviderFilter(filter, notif, nil, "test-provider")
 			if result != tt.expected {
 				t.Errorf("confidence type %T with value %v: expected %v, got %v",
 					tt.confidence, tt.confidence, tt.expected, result)
