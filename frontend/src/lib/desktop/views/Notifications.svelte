@@ -236,6 +236,19 @@
     return date.toLocaleDateString();
   }
 
+  // Sanitize notification message for UI display by removing URLs
+  function sanitizeMessage(message) {
+    if (!message) return '';
+    return message
+      .split('\n')
+      .filter(line => {
+        const trimmed = line.trim();
+        return !trimmed.startsWith('http://') && !trimmed.startsWith('https://');
+      })
+      .join('\n')
+      .trim();
+  }
+
   onMount(() => {
     loadNotifications();
   });
@@ -357,7 +370,7 @@
                 <div class="flex items-start justify-between gap-4">
                   <div>
                     <h3 class="font-semibold text-lg">{notification.title}</h3>
-                    <p class="text-base-content/80 mt-1">{notification.message}</p>
+                    <p class="text-base-content/80 mt-1">{sanitizeMessage(notification.message)}</p>
 
                     <!-- Metadata -->
                     <div class="flex flex-wrap items-center gap-2 mt-3">
