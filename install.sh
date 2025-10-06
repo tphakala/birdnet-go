@@ -3679,12 +3679,21 @@ clean_installation() {
         # Show error list if there were problems
         if [ -n "$error_list" ]; then
             print_message "The following files could not be removed:" "$RED"
-            printf '%b' "$error_list" 
+            printf '%b' "$error_list"
             print_message "\n⚠️ Some cleanup operations failed" "$RED"
             print_message "You may need to manually remove remaining files" "$YELLOW"
             return 1
         else
             print_message "✅ Removed data directories" "$GREEN"
+
+            # Remove parent directory if empty
+            local parent_dir="$HOME/birdnet-go-app"
+            if [ -d "$parent_dir" ]; then
+                if [ -z "$(ls -A "$parent_dir" 2>/dev/null)" ]; then
+                    rm -rf "$parent_dir" 2>/dev/null || sudo rm -rf "$parent_dir"
+                    print_message "✅ Removed parent directory" "$GREEN"
+                fi
+            fi
         fi
     fi
     
@@ -4449,6 +4458,12 @@ handle_docker_install_menu() {
                     print_message "📁 Removing data directories..." "$YELLOW"
                     rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null || sudo rm -rf "$CONFIG_DIR" "$DATA_DIR"
                     print_message "✅ Removed data directories" "$GREEN"
+
+                    # Remove parent directory if empty
+                    local parent_dir="$HOME/birdnet-go-app"
+                    if [ -d "$parent_dir" ] && [ -z "$(ls -A "$parent_dir" 2>/dev/null)" ]; then
+                        rm -rf "$parent_dir" 2>/dev/null || sudo rm -rf "$parent_dir"
+                    fi
                 fi
                 FRESH_INSTALL="true"
             else
@@ -4543,6 +4558,12 @@ handle_preserved_data_menu() {
                     print_message "📁 Removing data directories..." "$YELLOW"
                     rm -rf "$CONFIG_DIR" "$DATA_DIR" 2>/dev/null || sudo rm -rf "$CONFIG_DIR" "$DATA_DIR"
                     print_message "✅ Removed existing data directories" "$GREEN"
+
+                    # Remove parent directory if empty
+                    local parent_dir="$HOME/birdnet-go-app"
+                    if [ -d "$parent_dir" ] && [ -z "$(ls -A "$parent_dir" 2>/dev/null)" ]; then
+                        rm -rf "$parent_dir" 2>/dev/null || sudo rm -rf "$parent_dir"
+                    fi
                 fi
                 FRESH_INSTALL="true"
             else
@@ -4563,6 +4584,12 @@ handle_preserved_data_menu() {
                         sudo rm -rf "$CONFIG_DIR" "$DATA_DIR"
                     fi
                     print_message "✅ All data has been successfully removed" "$GREEN"
+
+                    # Remove parent directory if empty
+                    local parent_dir="$HOME/birdnet-go-app"
+                    if [ -d "$parent_dir" ] && [ -z "$(ls -A "$parent_dir" 2>/dev/null)" ]; then
+                        rm -rf "$parent_dir" 2>/dev/null || sudo rm -rf "$parent_dir"
+                    fi
                 fi
                 exit 0
             else
@@ -4594,28 +4621,6 @@ handle_menu_selection() {
     fi
 }
 
-# Check if specific version was requested - if so, skip menu and install directly
-if [ "$BIRDNET_GO_VERSION" != "nightly" ] && ([ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]); then
-    print_message "🚀 Installing/updating to version: $BIRDNET_GO_VERSION" "$GREEN"
-    
-    if [ "$INSTALLATION_TYPE" = "full" ]; then
-        check_network
-        if handle_container_update; then
-            exit 0
-        else
-            print_message "❌ Installation/update failed" "$RED"
-            exit 1
-        fi
-    elif [ "$INSTALLATION_TYPE" = "docker" ]; then
-        check_network
-        handle_docker_install_menu "1"
-        exit 0
-    elif [ "$PRESERVED_DATA" = true ]; then
-        handle_preserved_data_menu "1"
-        exit 0
-    fi
-fi
-
 # Menu loop for existing installations
 if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
     while true; do
@@ -4632,10 +4637,17 @@ if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
             # Handle menu selection
             handle_menu_selection "$INSTALLATION_TYPE" "$response"
             menu_result=$?
-            
-            # If menu action succeeded (returned 0), break from loop and continue
+
+            # If menu action succeeded (returned 0), operation is complete
+            # Most menu actions exit directly, but if they return 0, we should also exit
             if [ $menu_result -eq 0 ]; then
-                break
+                # Check if this was a fresh install request (option 3 typically)
+                # In that case, break to continue with installation
+                if [ "$FRESH_INSTALL" = "true" ]; then
+                    break
+                fi
+                # Otherwise, the menu action completed successfully, exit
+                exit 0
             fi
             # If menu action failed/cancelled (returned 1), continue loop to show menu again
         else
