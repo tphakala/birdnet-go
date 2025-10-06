@@ -45,6 +45,7 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 	}
 
 	var title, message string
+	var titleSet, messageSet bool
 
 	settings := conf.GetSettings()
 	if settings != nil {
@@ -64,8 +65,12 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 					"error", err,
 					"template", titleTemplate,
 				)
-				title = ""
+			} else {
+				titleSet = true
 			}
+		} else {
+			// Empty template means user wants no title
+			titleSet = true
 		}
 
 		// Render message template
@@ -78,16 +83,20 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 					"error", err,
 					"template", messageTemplate,
 				)
-				message = ""
+			} else {
+				messageSet = true
 			}
+		} else {
+			// Empty template means user wants no message (unlikely but allowed)
+			messageSet = true
 		}
 	}
 
-	// Use defaults if settings not available or template rendering failed
-	if title == "" {
+	// Use defaults only if settings not available or template rendering failed
+	if !titleSet {
 		title = fmt.Sprintf("New Species Detected: %s", event.GetSpeciesName())
 	}
-	if message == "" {
+	if !messageSet {
 		message = fmt.Sprintf(
 			"First detection of %s (%s) at %s",
 			event.GetSpeciesName(),

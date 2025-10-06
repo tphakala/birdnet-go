@@ -704,6 +704,14 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 	metadata["longitude"] = a.Note.Longitude
 	metadata["begin_time"] = a.Note.BeginTime
 
+	// Get bird image URL from cache and add to metadata
+	if a.processor != nil && a.processor.BirdImageCache != nil {
+		birdImage, err := a.processor.BirdImageCache.Get(a.Note.ScientificName)
+		if err == nil && birdImage.URL != "" {
+			metadata["image_url"] = birdImage.URL
+		}
+	}
+
 	// Publish the detection event
 	if published := eventBus.TryPublishDetection(detectionEvent); published {
 		// Only record notification as sent if publishing succeeded

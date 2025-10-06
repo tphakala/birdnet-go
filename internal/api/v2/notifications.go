@@ -674,7 +674,7 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 		Longitude:          -71.0589,
 		Location:           "Fake Test Location",
 		DetectionURL:       baseURL + "/ui/detections/test",
-		ImageURL:           baseURL + "/api/v2/media/species-image?scientific_name=Testus%20birdicus",
+		ImageURL:           "https://static.avicommons.org/houfin-DzFZcHoKwyx9JOmg-320.jpg",
 		DaysSinceFirstSeen: 0,
 	}
 
@@ -684,6 +684,8 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 
 	// Render notification using templates (same pattern as detection_consumer.go)
 	var title, message string
+	var titleSet, messageSet bool
+
 	if titleTemplate != "" {
 		var err error
 		title, err = notification.RenderTemplate("title", titleTemplate, testTemplateData)
@@ -691,8 +693,12 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 			if c.apiLogger != nil {
 				c.apiLogger.Error("failed to render title template, using default", "error", err)
 			}
-			title = ""
+		} else {
+			titleSet = true
 		}
+	} else {
+		// Empty template means user wants no title
+		titleSet = true
 	}
 
 	if messageTemplate != "" {
@@ -702,15 +708,19 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 			if c.apiLogger != nil {
 				c.apiLogger.Error("failed to render message template, using default", "error", err)
 			}
-			message = ""
+		} else {
+			messageSet = true
 		}
+	} else {
+		// Empty template means user wants no message
+		messageSet = true
 	}
 
-	// Use defaults if template is empty or rendering failed
-	if title == "" {
+	// Use defaults only if template rendering failed
+	if !titleSet {
 		title = "New Species Detected: Test Bird Species"
 	}
-	if message == "" {
+	if !messageSet {
 		message = "First detection of Test Bird Species (Testus birdicus) at Fake Test Location"
 	}
 

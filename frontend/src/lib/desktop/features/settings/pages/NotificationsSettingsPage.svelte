@@ -80,8 +80,8 @@
         const data = await response.json();
         if (data.templates?.newSpecies) {
           templateConfig = {
-            title: data.templates.newSpecies.title || defaultTemplate.title,
-            message: data.templates.newSpecies.message || defaultTemplate.message,
+            title: data.templates.newSpecies.title ?? defaultTemplate.title,
+            message: data.templates.newSpecies.message ?? defaultTemplate.message,
           };
           editedTitle = templateConfig.title;
           editedMessage = templateConfig.message;
