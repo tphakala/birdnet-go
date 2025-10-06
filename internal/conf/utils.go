@@ -402,6 +402,146 @@ func IsFfprobeAvailable() bool {
 	return err == nil
 }
 
+// GetFfmpegVersion detects the installed ffmpeg version and returns the version string,
+// major version, and minor version. Returns empty string and 0,0 if detection fails.
+func GetFfmpegVersion() (version string, major, minor int) {
+	// Get the ffmpeg binary name
+	ffmpegBinary := GetFfmpegBinaryName()
+
+	// Look for ffmpeg in PATH
+	ffmpegPath, err := exec.LookPath(ffmpegBinary)
+	if err != nil {
+		return "", 0, 0
+	}
+
+	// Execute ffmpeg -version
+	cmd := exec.Command(ffmpegPath, "-version")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", 0, 0
+	}
+
+	// Parse the version from output
+	return ParseFfmpegVersion(string(output))
+}
+
+// ParseFfmpegVersion parses ffmpeg version output and extracts version string and numbers.
+// Expected format: "ffmpeg version 7.1.2-0+deb13u1 Copyright (c) 2000-2025..."
+// or: "ffmpeg version 5.1.7-0+deb12u1+rpt1 Copyright (c) 2000-2025..."
+// or: "ffmpeg version N-121000-g7321e4b950 Copyright (c) 2000-2025..." (git builds)
+// For git builds, it falls back to parsing library versions like "libavutil 59. 8.100"
+func ParseFfmpegVersion(output string) (version string, major, minor int) {
+	lines := strings.Split(output, "\n")
+	if len(lines) == 0 {
+		return "", 0, 0
+	}
+
+	// First line contains version info
+	line := lines[0]
+
+	// Extract version string (between "version " and " Copyright" or space)
+	if versionIdx := strings.Index(line, "version "); versionIdx != -1 {
+		versionStart := versionIdx + len("version ")
+		remaining := line[versionStart:]
+
+		// Find the end of version string (space or copyright notice)
+		versionEnd := strings.Index(remaining, " ")
+		if versionEnd == -1 {
+			versionEnd = len(remaining)
+		}
+
+		version = remaining[:versionEnd]
+
+		// Parse major.minor from version string (e.g., "7.1.2-0+deb13u1" -> 7, 1)
+		versionParts := strings.Split(version, ".")
+		if len(versionParts) >= 2 {
+			// Parse major version
+			if maj, err := strconv.Atoi(versionParts[0]); err == nil {
+				major = maj
+			}
+
+			// Parse minor version (may have additional characters like "1-0")
+			minorPart := versionParts[1]
+			// Extract just the numeric part before any dash or other character
+			for i, c := range minorPart {
+				if c < '0' || c > '9' {
+					minorPart = minorPart[:i]
+					break
+				}
+			}
+			if minorValue, err := strconv.Atoi(minorPart); err == nil {
+				minor = minorValue
+			}
+		}
+
+		// If we couldn't parse a numeric version (e.g., git builds like "N-121000-g7321e4b950"),
+		// try to extract version from library versions (more reliable for git builds)
+		if major == 0 && minor == 0 {
+			major, minor = parseLibavutilVersion(output)
+		}
+	}
+
+	return version, major, minor
+}
+
+// parseLibavutilVersion extracts ffmpeg version from libavutil version line.
+// libavutil versions map to ffmpeg versions:
+// libavutil 60.x = FFmpeg 7.x (FFmpeg 7.1+)
+// libavutil 59.x = FFmpeg 7.x (FFmpeg 7.0)
+// libavutil 58.x = FFmpeg 6.x
+// libavutil 57.x = FFmpeg 5.x
+// libavutil 56.x = FFmpeg 4.x
+func parseLibavutilVersion(output string) (major, minor int) {
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		// Look for libavutil version line like "libavutil      59.  8.100 / 59.  8.100"
+		// or "libavutil      60. 12.100 / 60. 12.100"
+		if strings.Contains(line, "libavutil") {
+			// Extract the version number after "libavutil"
+			parts := strings.Fields(line)
+			if len(parts) >= 3 {
+				// parts[0] = "libavutil"
+				// parts[1] = "60." or "59."
+				// parts[2] = "12.100" or "8.100"
+
+				// Parse libavutil major version (e.g., "60." -> 60)
+				libMajorStr := strings.TrimSuffix(parts[1], ".")
+				if libMajor, err := strconv.Atoi(libMajorStr); err == nil {
+					// Map libavutil major version to ffmpeg version
+					// This is a heuristic based on historical ffmpeg releases
+					switch {
+					case libMajor >= 60:
+						major = 7
+					case libMajor >= 59:
+						major = 7
+					case libMajor >= 58:
+						major = 6
+					case libMajor >= 57:
+						major = 5
+					case libMajor >= 56:
+						major = 4
+					default:
+						major = 3
+					}
+
+					// Try to parse libavutil minor version (e.g., "12.100" -> 12)
+					// This roughly corresponds to ffmpeg minor version
+					minorPart := parts[2]
+					// Split on dot and take first part
+					minorParts := strings.Split(minorPart, ".")
+					if len(minorParts) > 0 {
+						if minorNum, err := strconv.Atoi(minorParts[0]); err == nil {
+							minor = minorNum
+						}
+					}
+					break
+				}
+			}
+		}
+	}
+	return major, minor
+}
+
 // IsSoxAvailable checks if SoX is available in the system PATH and returns its supported audio formats.
 // It returns a boolean indicating if SoX is available and a slice of supported audio format strings.
 func IsSoxAvailable() (isAvailable bool, formats []string) {
