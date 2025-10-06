@@ -1714,7 +1714,7 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 
 	if useFFmpeg {
 		ffmpegArgs := []string{"-hide_banner", "-i", absAudioClipPath, "-f", "sox", "-"}
-		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(ctx, widthStr, heightStr, absSpectrogramPath, absAudioClipPath, raw)...)
+		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(ctx, widthStr, heightStr, absSpectrogramPath, absAudioClipPath, raw, settings)...)
 
 		if runtime.GOOS == "windows" {
 			// #nosec G204 - ffmpegBinary and soxBinary are validated by ValidateToolPath/exec.LookPath
@@ -1764,7 +1764,7 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 		}
 		runtime.Gosched()
 	} else {
-		soxArgs := append([]string{absAudioClipPath}, getSoxSpectrogramArgs(ctx, widthStr, heightStr, absSpectrogramPath, absAudioClipPath, raw)...)
+		soxArgs := append([]string{absAudioClipPath}, getSoxSpectrogramArgs(ctx, widthStr, heightStr, absSpectrogramPath, absAudioClipPath, raw, settings)...)
 
 		// Log the full command being executed
 		spectrogramLogger.Debug("Executing SoX command",
@@ -1801,28 +1801,89 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 }
 
 // getSoxSpectrogramArgs returns the common SoX arguments compatible with old HTMX API.
-func getSoxSpectrogramArgs(ctx context.Context, widthStr, heightStr, absSpectrogramPath, audioPath string, raw bool) []string {
+//
+// # FFmpeg Version Optimization
+//
+// This function implements an important optimization based on FFmpeg version:
+//
+// FFmpeg 5.x Bug: The sox protocol (-f sox) has a bug where duration information is not
+// correctly passed to SoX. This requires us to explicitly provide the -d (duration) parameter
+// to SoX, which necessitates an expensive ffprobe call to get the audio file duration.
+//
+// FFmpeg 7.x+ Fix: The sox protocol correctly passes duration metadata to SoX, allowing
+// SoX to auto-detect the duration from the input stream. This eliminates the need for:
+//   1. The expensive ffprobe subprocess call (saves ~50-200ms per spectrogram)
+//   2. The -d parameter to SoX (SoX reads duration from stream metadata)
+//   3. Cache management for duration lookups
+//
+// On systems with FFmpeg 7.x+ (like Debian 13), this optimization significantly reduces
+// CPU usage and spectrogram generation latency, especially under high load when multiple
+// spectrograms are being generated concurrently.
+//
+// FFmpeg 6.x: Behavior needs verification - currently treated conservatively like 5.x
+func getSoxSpectrogramArgs(ctx context.Context, widthStr, heightStr, absSpectrogramPath, audioPath string, raw bool, settings *conf.Settings) []string {
 	const dynamicRange = "100"
 
-	// Get actual audio duration - check cache first
-	duration := getCachedAudioDuration(ctx, audioPath)
-	if duration <= 0 {
-		// Fall back to capture length from settings if we can't get duration
-		captureLength := conf.Setting().Realtime.Audio.Export.Length
-		duration = float64(captureLength)
+	// Build base args without duration parameter
+	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr}
+
+	// Check if we need to explicitly provide duration based on FFmpeg version
+	// FFmpeg 7.x+ can pass duration via sox protocol, older versions cannot
+	needsExplicitDuration := true
+	if settings.Realtime.Audio.HasFfmpegVersion() {
+		if settings.Realtime.Audio.FfmpegMajor >= 7 {
+			// FFmpeg 7.x and later: sox protocol works correctly, skip expensive ffprobe call
+			needsExplicitDuration = false
+			spectrogramLogger.Debug("FFmpeg 7.x+ detected: skipping explicit duration parameter (sox protocol fix)",
+				"ffmpeg_version", settings.Realtime.Audio.FfmpegVersion,
+				"ffmpeg_major", settings.Realtime.Audio.FfmpegMajor,
+				"optimization", "enabled")
+		} else {
+			spectrogramLogger.Debug("FFmpeg <7.x detected: using explicit duration parameter (sox protocol bug workaround)",
+				"ffmpeg_version", settings.Realtime.Audio.FfmpegVersion,
+				"ffmpeg_major", settings.Realtime.Audio.FfmpegMajor,
+				"optimization", "disabled")
+		}
+	} else {
+		// Version unknown - use explicit duration with ffprobe for safety
+		// We cannot assume the sox protocol works correctly without version information
+		spectrogramLogger.Debug("FFmpeg version unknown: using explicit duration parameter with ffprobe (safety fallback)",
+			"optimization", "disabled",
+			"reason", "cannot_verify_sox_protocol_fix")
 	}
 
-	// Convert duration to string, rounding to nearest integer
-	captureLengthStr := strconv.Itoa(int(duration + 0.5))
+	// For FFmpeg <7.x, we must explicitly provide duration via -d parameter
+	if needsExplicitDuration {
+		// Get ACTUAL audio file duration via ffprobe (with caching to avoid repeated calls)
+		// This ensures spectrograms are generated with the correct duration, not a hard-coded value
+		duration := getCachedAudioDuration(ctx, audioPath)
+		if duration <= 0 {
+			// Safety fallback: Use configured capture length ONLY if ffprobe fails
+			// This should rarely happen - only when ffprobe is unavailable or file is corrupt
+			captureLength := settings.Realtime.Audio.Export.Length
+			duration = float64(captureLength)
+			spectrogramLogger.Warn("FFprobe failed to determine audio duration, using configured fallback",
+				"fallback_duration_seconds", duration,
+				"audio_path", audioPath,
+				"reason", "ffprobe_failed_or_returned_zero")
+		}
 
-	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-d", captureLengthStr, "-z", dynamicRange, "-o", absSpectrogramPath}
+		// Convert duration to string, rounding to nearest integer
+		captureLengthStr := strconv.Itoa(int(duration + 0.5))
+		args = append(args, "-d", captureLengthStr)
+	}
+	// For FFmpeg 7.x+: omit -d parameter, SoX will auto-detect from stream
 
-	// For compatibility with old HTMX API: add -r flag for raw spectrograms (which is now the default)
+	// Add remaining common parameters
+	args = append(args, "-z", dynamicRange, "-o", absSpectrogramPath)
+
+	// For compatibility with old HTMX API: add -r flag for raw spectrograms
 	if raw {
 		// Raw mode: no axes, labels, or legends for clean display (old API default behavior)
 		args = append(args, "-r")
 	}
 	// Note: Non-raw spectrograms (with legends) will have axes and legends visible
+
 	return args
 }
 
