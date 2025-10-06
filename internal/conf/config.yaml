@@ -270,6 +270,13 @@ notification:
       interval: 60s  # How often to check provider health
       timeout: 10s   # Timeout for each health check
 
+    # Rate limiting configuration
+    # Prevents overwhelming external APIs with too many requests
+    rate_limiting:
+      enabled: false  # Not integrated yet - will be enabled in future PR
+      requests_per_minute: 60  # Maximum average request rate
+      burst_size: 10           # Maximum burst capacity for spikes
+
     providers:
       - type: shoutrrr
         enabled: false

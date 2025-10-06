@@ -191,6 +191,7 @@ type PushSettings struct {
 	RetryDelay     time.Duration        `json:"retry_delay" mapstructure:"retry_delay"`
 	CircuitBreaker CircuitBreakerConfig `json:"circuit_breaker" mapstructure:"circuit_breaker"`
 	HealthCheck    HealthCheckConfig    `json:"health_check" mapstructure:"health_check"`
+	RateLimiting   RateLimitingConfig   `json:"rate_limiting" mapstructure:"rate_limiting"`
 	Providers      []PushProviderConfig `json:"providers"`
 }
 
@@ -207,6 +208,13 @@ type HealthCheckConfig struct {
 	Enabled  bool          `json:"enabled"`
 	Interval time.Duration `json:"interval"`
 	Timeout  time.Duration `json:"timeout"`
+}
+
+// RateLimitingConfig holds rate limiting configuration.
+type RateLimitingConfig struct {
+	Enabled            bool `json:"enabled"`
+	RequestsPerMinute  int  `json:"requests_per_minute" mapstructure:"requests_per_minute"`
+	BurstSize          int  `json:"burst_size" mapstructure:"burst_size"`
 }
 
 // PushProviderConfig configures a single push provider instance.

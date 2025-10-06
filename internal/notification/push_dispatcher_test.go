@@ -49,7 +49,7 @@ func TestPushDispatcher_ForwardsNotification(t *testing.T) {
 
 	// Build dispatcher with fake provider
 	d := &pushDispatcher{
-		providers:      []registeredProvider{{prov: fp, filter: conf.PushFilterConfig{}, name: fp.name}},
+		providers:      []enhancedProvider{{prov: fp, circuitBreaker: nil, filter: conf.PushFilterConfig{}, name: fp.name}},
 		log:            getFileLogger(false),
 		enabled:        true,
 		maxRetries:     0,

@@ -3,6 +3,8 @@ package notification
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -55,8 +57,16 @@ type CircuitBreakerConfig struct {
 // DefaultCircuitBreakerConfig returns default circuit breaker configuration.
 func DefaultCircuitBreakerConfig() CircuitBreakerConfig {
 	return CircuitBreakerConfig{
-		MaxFailures:         5,
-		Timeout:             30 * time.Second,
+		// MaxFailures: 5 provides quick failure detection without being overly sensitive
+		// to transient network issues. Most services recover within 5 attempts.
+		MaxFailures: 5,
+		// Timeout: 30s balances recovery testing with API protection:
+		// - Long enough for temporary network issues to resolve
+		// - Short enough to detect actual recovery promptly
+		// - Matches typical API timeout values (most APIs timeout at 20-60s)
+		Timeout: 30 * time.Second,
+		// HalfOpenMaxRequests: 1 ensures conservative recovery testing
+		// Only one request is allowed to test if the service has recovered
 		HalfOpenMaxRequests: 1,
 	}
 }
@@ -99,7 +109,9 @@ func NewPushCircuitBreaker(config CircuitBreakerConfig, notificationMetrics *met
 func (cb *PushCircuitBreaker) Call(ctx context.Context, fn func(context.Context) error) error {
 	// Check if we can proceed
 	if err := cb.beforeCall(); err != nil {
-		return err
+		// Add context about circuit breaker state to help debugging
+		return fmt.Errorf("circuit breaker rejected request (%s, %d consecutive failures): %w",
+			cb.state, cb.failures, err)
 	}
 
 	// Execute the function
@@ -208,12 +220,21 @@ func (cb *PushCircuitBreaker) setState(newState CircuitState) {
 		return
 	}
 
+	oldState := cb.state
 	cb.state = newState
 	cb.lastStateChange = time.Now()
 
 	if cb.metrics != nil {
 		cb.metrics.UpdateCircuitBreakerState(cb.providerName, int(newState))
 	}
+
+	// Log state transitions for operational visibility
+	slog.Info("Circuit breaker state transition",
+		"provider", cb.providerName,
+		"old_state", oldState.String(),
+		"new_state", newState.String(),
+		"consecutive_failures", cb.failures,
+		"last_failure", cb.lastFailureTime.Format(time.RFC3339))
 }
 
 // State returns the current state of the circuit breaker.

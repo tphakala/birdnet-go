@@ -332,5 +332,10 @@ func setDefaultConfig() {
 	viper.SetDefault("notification.push.health_check.interval", "60s")
 	viper.SetDefault("notification.push.health_check.timeout", "10s")
 
+	// Rate limiting configuration
+	viper.SetDefault("notification.push.rate_limiting.enabled", false)
+	viper.SetDefault("notification.push.rate_limiting.requests_per_minute", 60)
+	viper.SetDefault("notification.push.rate_limiting.burst_size", 10)
+
 	viper.SetDefault("notification.push.providers", []map[string]any{})
 }

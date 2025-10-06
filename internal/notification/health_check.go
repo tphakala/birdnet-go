@@ -192,7 +192,7 @@ func (hc *HealthChecker) checkProvider(entry *healthCheckEntry) {
 	}
 
 	// Update health status
-	if err == nil || err == ErrCircuitBreakerOpen {
+	if err == nil || errors.Is(err, ErrCircuitBreakerOpen) {
 		// Circuit breaker open is not a provider failure, it's a protective measure
 		if !errors.Is(err, ErrCircuitBreakerOpen) {
 			entry.health.Healthy = true
@@ -289,8 +289,8 @@ func (hc *HealthChecker) GetAllProviderHealth() []ProviderHealth {
 // IsHealthy returns true if all enabled providers are healthy.
 func (hc *HealthChecker) IsHealthy() bool {
 	health := hc.GetAllProviderHealth()
-	for _, h := range health {
-		if !h.Healthy && h.CircuitBreakerState != StateOpen {
+	for i := range health {
+		if !health[i].Healthy && health[i].CircuitBreakerState != StateOpen {
 			// Provider is unhealthy and not just circuit-broken
 			return false
 		}
@@ -306,11 +306,11 @@ func (hc *HealthChecker) GetHealthSummary() map[string]interface{} {
 	healthyProviders := 0
 	openCircuits := 0
 
-	for _, h := range health {
-		if h.Healthy {
+	for i := range health {
+		if health[i].Healthy {
 			healthyProviders++
 		}
-		if h.CircuitBreakerState == StateOpen {
+		if health[i].CircuitBreakerState == StateOpen {
 			openCircuits++
 		}
 	}

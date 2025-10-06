@@ -12,12 +12,13 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 // pushDispatcher routes notifications to enabled providers based on filters
 // It subscribes to the notification service and forwards notifications asynchronously.
 type pushDispatcher struct {
-	providers      []registeredProvider
+	providers      []enhancedProvider
 	log            *slog.Logger
 	enabled        bool
 	maxRetries     int
@@ -25,12 +26,15 @@ type pushDispatcher struct {
 	defaultTimeout time.Duration
 	cancel         context.CancelFunc
 	mu             sync.RWMutex
+	metrics        *metrics.NotificationMetrics
 }
 
-type registeredProvider struct {
-	prov   Provider
-	filter conf.PushFilterConfig
-	name   string
+// enhancedProvider wraps a provider with circuit breaker and metrics.
+type enhancedProvider struct {
+	prov           Provider
+	circuitBreaker *PushCircuitBreaker
+	filter         conf.PushFilterConfig
+	name           string
 }
 
 var (
@@ -39,7 +43,14 @@ var (
 )
 
 // InitializePushFromConfig builds and starts the push dispatcher using app settings.
+// The notificationMetrics parameter is optional and can be nil for backward compatibility.
 func InitializePushFromConfig(settings *conf.Settings) error {
+	return InitializePushFromConfigWithMetrics(settings, nil)
+}
+
+// InitializePushFromConfigWithMetrics builds and starts the push dispatcher using app settings.
+// It accepts an optional metrics instance to avoid import cycles.
+func InitializePushFromConfigWithMetrics(settings *conf.Settings, notificationMetrics *metrics.NotificationMetrics) error {
 	var initErr error
 	dispatcherOnce.Do(func() {
 		if settings == nil || !settings.Notification.Push.Enabled {
@@ -52,26 +63,11 @@ func InitializePushFromConfig(settings *conf.Settings) error {
 			maxRetries:     settings.Notification.Push.MaxRetries,
 			retryDelay:     settings.Notification.Push.RetryDelay,
 			defaultTimeout: settings.Notification.Push.DefaultTimeout,
+			metrics:        notificationMetrics,
 		}
 
-		// Build providers
-		for _, pc := range settings.Notification.Push.Providers {
-			prov := buildProvider(pc)
-			if prov == nil {
-				continue
-			}
-			if err := prov.ValidateConfig(); err != nil {
-				pd.log.Error("push provider config invalid", "name", pc.Name, "type", pc.Type, "error", err)
-				continue
-			}
-			if prov.IsEnabled() {
-				r := registeredProvider{prov: prov, filter: pc.Filter, name: prov.GetName()}
-				if pd.log != nil {
-					pd.log.Debug("registered push provider", "name", r.name, "types", r.filter.Types, "priorities", r.filter.Priorities, "metadata_filters", r.filter.MetadataFilters, "metadata_count", len(r.filter.MetadataFilters))
-				}
-				pd.providers = append(pd.providers, r)
-			}
-		}
+		// Build enhanced providers with circuit breakers
+		pd.providers = pd.initializeEnhancedProviders(settings, notificationMetrics)
 
 		globalPushDispatcher = pd
 
@@ -136,65 +132,168 @@ func (d *pushDispatcher) start() error {
 }
 
 func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
-	for _, rp := range d.providers {
-		if !rp.prov.IsEnabled() || !rp.prov.SupportsType(notif.Type) {
+	for i := range d.providers {
+		ep := &d.providers[i]
+		if !ep.prov.IsEnabled() || !ep.prov.SupportsType(notif.Type) {
 			continue
 		}
-		// Apply filter
-		if !MatchesProviderFilter(&rp.filter, notif, d.log, rp.name) {
+		// Apply filter with metrics tracking
+		if !d.matchesFilter(ep, notif) {
 			continue
 		}
 
 		// Run each provider in its own goroutine to avoid head-of-line blocking
-		go func() {
-			attempts := 0
-			for {
-				attempts++
-				// Set timeout per attempt
-				attemptCtx := ctx
-				var cancel context.CancelFunc
-				if deadline := d.defaultTimeout; deadline > 0 {
-					attemptCtx, cancel = context.WithTimeout(ctx, deadline)
-				}
+		go d.dispatchEnhanced(ctx, notif, ep)
+	}
+}
 
-				start := time.Now()
-				err := rp.prov.Send(attemptCtx, notif)
-				if cancel != nil {
-					cancel() // release timer resources immediately per attempt
-				}
-				if err == nil {
-					d.log.Info("push sent", "provider", rp.prov.GetName(), "id", notif.ID, "type", string(notif.Type), "priority", string(notif.Priority), "attempt", attempts, "elapsed", time.Since(start))
-					return
-				}
+// matchesFilter checks if notification matches provider filter and records metrics.
+func (d *pushDispatcher) matchesFilter(ep *enhancedProvider, notif *Notification) bool {
+	// Use legacy filter logic for backward compatibility
+	matches := MatchesProviderFilter(&ep.filter, notif, d.log, ep.name)
 
-				// Classify error for retry based on sentinel prefix
-				// Providers can return any error; treat as retryable unless explicitly marked otherwise
-				var perr *providerError
-				retryable := true
-				if errors.As(err, &perr) {
-					retryable = perr.Retryable
-				}
-				if !retryable || attempts > d.maxRetries {
-					d.log.Error("push send failed", "provider", rp.prov.GetName(), "attempts", attempts, "error", err)
-					return
-				}
+	// Record filter metrics
+	if d.metrics != nil {
+		if matches {
+			d.metrics.RecordFilterMatch(ep.name, "all")
+		} else {
+			d.metrics.RecordFilterRejection(ep.name, "filter_mismatch")
+		}
+	}
 
-				// Wait for retry delay with context cancellation check
-				select {
-				case <-ctx.Done():
-					d.log.Debug("retry cancelled due to context cancellation", "provider", rp.prov.GetName(), "attempts", attempts)
-					return
-				case <-time.After(d.retryDelay):
-					// Continue to next retry
+	return matches
+}
+
+// dispatchEnhanced dispatches notifications with metrics and circuit breaker support.
+func (d *pushDispatcher) dispatchEnhanced(ctx context.Context, notif *Notification, ep *enhancedProvider) {
+	// Increment dispatch total
+	if d.metrics != nil {
+		d.metrics.IncrementDispatchTotal()
+		d.metrics.SetDispatchActive(1)
+		defer d.metrics.SetDispatchActive(0)
+	}
+
+	attempts := 0
+	notifType := string(notif.Type)
+
+	for {
+		attempts++
+
+		// Set timeout per attempt
+		attemptCtx := ctx
+		var cancel context.CancelFunc
+		if deadline := d.defaultTimeout; deadline > 0 {
+			attemptCtx, cancel = context.WithTimeout(ctx, deadline)
+		}
+
+		// Start timer for metrics
+		timer := time.Now()
+
+		// Send through circuit breaker if enabled
+		var err error
+		if ep.circuitBreaker != nil {
+			err = ep.circuitBreaker.Call(attemptCtx, func(ctx context.Context) error {
+				return ep.prov.Send(ctx, notif)
+			})
+		} else {
+			err = ep.prov.Send(attemptCtx, notif)
+		}
+
+		duration := time.Since(timer)
+
+		// Release timeout context
+		if cancel != nil {
+			cancel()
+		}
+
+		// Record metrics
+		if d.metrics != nil {
+			switch {
+			case err == nil:
+				d.metrics.RecordDelivery(ep.name, notifType, "success", duration)
+				if attempts > 1 {
+					d.metrics.RecordRetrySuccess(ep.name)
 				}
+			case errors.Is(err, ErrCircuitBreakerOpen):
+				// Circuit breaker is open - don't count as delivery failure
+				d.metrics.RecordDelivery(ep.name, notifType, "circuit_open", duration)
+			case ctx.Err() == context.DeadlineExceeded:
+				d.metrics.RecordDelivery(ep.name, notifType, "timeout", duration)
+				d.metrics.RecordTimeout(ep.name)
+				d.metrics.RecordDeliveryError(ep.name, notifType, "timeout")
+			default:
+				d.metrics.RecordDelivery(ep.name, notifType, "error", duration)
+				errorCategory := categorizeError(err)
+				d.metrics.RecordDeliveryError(ep.name, notifType, errorCategory)
 			}
-		}()
+		}
+
+		// Success case
+		if err == nil {
+			if d.log != nil {
+				d.log.Info("push sent",
+					"provider", ep.name,
+					"id", notif.ID,
+					"type", notifType,
+					"priority", string(notif.Priority),
+					"attempt", attempts,
+					"elapsed", duration)
+			}
+			return
+		}
+
+		// Circuit breaker open - don't retry
+		if errors.Is(err, ErrCircuitBreakerOpen) {
+			if d.log != nil {
+				d.log.Warn("push blocked by circuit breaker",
+					"provider", ep.name,
+					"id", notif.ID)
+			}
+			return
+		}
+
+		// Classify error for retry
+		var perr *providerError
+		retryable := true
+		if errors.As(err, &perr) {
+			retryable = perr.Retryable
+		}
+
+		// Check if we should retry
+		if !retryable || attempts > d.maxRetries {
+			if d.log != nil {
+				d.log.Error("push send failed",
+					"provider", ep.name,
+					"attempts", attempts,
+					"error", err,
+					"retryable", retryable)
+			}
+			return
+		}
+
+		// Record retry attempt
+		if d.metrics != nil {
+			d.metrics.RecordRetryAttempt(ep.name)
+		}
+
+		// Wait for retry delay with context cancellation check
+		select {
+		case <-ctx.Done():
+			if d.log != nil {
+				d.log.Debug("retry cancelled due to context cancellation",
+					"provider", ep.name,
+					"attempts", attempts)
+			}
+			return
+		case <-time.After(d.retryDelay):
+			// Continue to next retry
+		}
 	}
 }
 
 // ----------------- Provider construction -----------------
 
-func buildProvider(pc conf.PushProviderConfig) Provider {
+func buildProvider(pc *conf.PushProviderConfig) Provider {
 	ptype := strings.ToLower(pc.Type)
 	types := effectiveTypes(pc.Filter.Types)
 	switch ptype {
@@ -216,7 +315,7 @@ func effectiveTypes(cfg []string) []string {
 
 // ----------------- helpers -----------------
 
-func orDefault[T ~string](v T, d T) T {
+func orDefault[T ~string](v, d T) T {
 	if strings.TrimSpace(string(v)) == "" {
 		return d
 	}
@@ -278,7 +377,7 @@ func MatchesProviderFilter(f *conf.PushFilterConfig, n *Notification, log *slog.
 				return false // misconfigured filter
 			}
 			cond = strings.TrimSpace(cond)
-			if len(cond) == 0 {
+			if cond == "" {
 				if log != nil {
 					log.Debug("filter failed: empty confidence condition", "provider", providerName, "notification_id", n.ID)
 				}
@@ -288,13 +387,14 @@ func MatchesProviderFilter(f *conf.PushFilterConfig, n *Notification, log *slog.
 			// Parse operator and value
 			var op string
 			var valStr string
-			if len(cond) >= 2 && (cond[:2] == ">=" || cond[:2] == "<=" || cond[:2] == "==") {
+			switch {
+			case len(cond) >= 2 && (cond[:2] == ">=" || cond[:2] == "<=" || cond[:2] == "=="):
 				op = cond[:2]
 				valStr = strings.TrimSpace(cond[2:])
-			} else if len(cond) >= 1 && (cond[0] == '>' || cond[0] == '<' || cond[0] == '=') {
+			case len(cond) >= 1 && (cond[0] == '>' || cond[0] == '<' || cond[0] == '='):
 				op = string(cond[0])
 				valStr = strings.TrimSpace(cond[1:])
-			} else {
+			default:
 				if log != nil {
 					log.Debug("filter failed: unknown confidence operator", "provider", providerName, "condition", cond, "notification_id", n.ID)
 				}
@@ -408,3 +508,110 @@ type providerError struct {
 
 func (e *providerError) Error() string { return e.Err.Error() }
 func (e *providerError) Unwrap() error { return e.Err }
+
+// ----------------- Enhanced Provider Initialization -----------------
+
+// initializeEnhancedProviders creates enhanced providers with circuit breakers and metrics.
+func (d *pushDispatcher) initializeEnhancedProviders(settings *conf.Settings, notificationMetrics *metrics.NotificationMetrics) []enhancedProvider {
+	var enhanced []enhancedProvider
+
+	// Get circuit breaker config from settings or use defaults
+	cbConfig := DefaultCircuitBreakerConfig()
+	if settings.Notification.Push.CircuitBreaker.Enabled {
+		cbConfig.MaxFailures = settings.Notification.Push.CircuitBreaker.MaxFailures
+		cbConfig.Timeout = settings.Notification.Push.CircuitBreaker.Timeout
+		cbConfig.HalfOpenMaxRequests = settings.Notification.Push.CircuitBreaker.HalfOpenMaxRequests
+	}
+
+	for i := range settings.Notification.Push.Providers {
+		pc := &settings.Notification.Push.Providers[i]
+		prov := buildProvider(pc)
+		if prov == nil {
+			continue
+		}
+
+		if err := prov.ValidateConfig(); err != nil {
+			if d.log != nil {
+				d.log.Error("push provider config invalid", "name", pc.Name, "type", pc.Type, "error", err)
+			}
+			continue
+		}
+
+		if prov.IsEnabled() {
+			name := prov.GetName()
+
+			// Create circuit breaker for this provider
+			var cb *PushCircuitBreaker
+			if settings.Notification.Push.CircuitBreaker.Enabled {
+				cb = NewPushCircuitBreaker(cbConfig, notificationMetrics, name)
+			}
+
+			ep := enhancedProvider{
+				prov:           prov,
+				circuitBreaker: cb,
+				filter:         pc.Filter,
+				name:           name,
+			}
+
+			enhanced = append(enhanced, ep)
+
+			if d.log != nil {
+				d.log.Debug("registered enhanced push provider",
+					"name", name,
+					"circuit_breaker", cb != nil,
+					"types", pc.Filter.Types,
+					"priorities", pc.Filter.Priorities)
+			}
+		}
+	}
+
+	return enhanced
+}
+
+// ----------------- Error Categorization -----------------
+
+// categorizeError categorizes errors for metrics.
+// IMPORTANT: This function MUST return a bounded set of error categories to prevent
+// Prometheus metric cardinality explosion. Never return dynamic error messages or
+// unbounded values as categories. The fixed set of categories is:
+// - "none", "timeout", "cancelled", "network", "validation", "permission",
+//   "not_found", "provider_error"
+func categorizeError(err error) string {
+	if err == nil {
+		return "none"
+	}
+
+	errStr := err.Error()
+
+	// Check for common error patterns
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "cancelled"
+	case containsAny(errStr, "network", "connection", "dial", "lookup"):
+		return "network"
+	case containsAny(errStr, "validation", "invalid", "malformed"):
+		return "validation"
+	case containsAny(errStr, "permission", "unauthorized", "forbidden"):
+		return "permission"
+	case containsAny(errStr, "not found", "404"):
+		return "not_found"
+	default:
+		return "provider_error"
+	}
+}
+
+// containsAny checks if a string contains any of the given substrings.
+func containsAny(s string, substrs ...string) bool {
+	for _, substr := range substrs {
+		if substr != "" && len(s) >= len(substr) {
+			for i := 0; i <= len(s)-len(substr); i++ {
+				if s[i:i+len(substr)] == substr {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
