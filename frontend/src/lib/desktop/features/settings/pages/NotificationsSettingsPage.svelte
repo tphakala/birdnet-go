@@ -69,7 +69,7 @@
   const defaultTemplate = {
     title: 'New Species: {{.CommonName}}',
     message:
-      'First detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}.\n[View Detection]({{.DetectionURL}})',
+      '{{.ImageURL}}\n\nFirst detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}.\n\n{{.DetectionURL}}',
   };
 
   async function loadTemplateConfig() {
@@ -155,10 +155,15 @@
   }
 
   function resetTemplates() {
-    if (templateConfig) {
-      editedTitle = templateConfig.title;
-      editedMessage = templateConfig.message;
+    const confirmReset = window.confirm(
+      'Reset templates to defaults? This will discard your current changes and restore the default template values.'
+    );
+    if (!confirmReset) {
+      return;
     }
+
+    editedTitle = defaultTemplate.title;
+    editedMessage = defaultTemplate.message;
   }
 
   async function sendTestNewSpeciesNotification() {
@@ -280,7 +285,7 @@
                   id="template-message"
                   bind:value={editedMessage}
                   class="textarea textarea-bordered w-full font-mono text-sm"
-                  rows="3"
+                  rows="5"
                   placeholder="e.g., First detection of &#123;&#123;.CommonName&#125;&#125; (&#123;&#123;.ScientificName&#125;&#125;) with &#123;&#123;.ConfidencePercent&#125;&#125;% confidence"
                 ></textarea>
               </div>
@@ -326,7 +331,7 @@
                 <button
                   onclick={resetTemplates}
                   class="btn btn-ghost btn-sm"
-                  disabled={savingTemplate || generating || !hasUnsavedChanges}
+                  disabled={savingTemplate || generating}
                 >
                   Reset
                 </button>
