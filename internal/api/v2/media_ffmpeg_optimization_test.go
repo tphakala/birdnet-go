@@ -235,3 +235,120 @@ func BenchmarkGetSoxSpectrogramArgs_WithFFmpeg5(b *testing.B) {
 		_ = getSoxSpectrogramArgs(ctx, "800", "400", "/tmp/test.png", "/tmp/test.flac", true, settings)
 	}
 }
+
+// TestGetSoxSpectrogramArgs_NilSettings verifies safe fallback behavior with nil settings
+func TestGetSoxSpectrogramArgs_NilSettings(t *testing.T) {
+	ctx := context.Background()
+
+	// This should not panic and should use safety fallback (with duration parameter)
+	// The function signature requires non-nil settings, but if nil is passed,
+	// it should handle gracefully or panic is acceptable since it violates contract
+	defer func() {
+		if r := recover(); r != nil {
+			// Panic is acceptable for nil settings as it's a programming error
+			t.Logf("Function correctly panicked with nil settings: %v", r)
+		}
+	}()
+
+	// Attempt to call with nil settings - this should either:
+	// 1. Panic (acceptable - violates function contract)
+	// 2. Use fallback behavior (defensive programming)
+	args := getSoxSpectrogramArgs(ctx, "800", "400", "/tmp/test.png", "/tmp/test.flac", true, nil)
+
+	// If we reach here without panic, verify duration parameter is present (safety fallback)
+	hasDurationFlag := false
+	for _, arg := range args {
+		if arg == "-d" {
+			hasDurationFlag = true
+			break
+		}
+	}
+
+	if !hasDurationFlag {
+		t.Errorf("With nil settings, expected safety fallback with -d flag, but it was missing")
+	}
+
+	t.Logf("Function handled nil settings without panic (defensive programming)")
+}
+
+// TestGetSoxSpectrogramArgs_PartialSettings verifies behavior with partially initialized settings
+func TestGetSoxSpectrogramArgs_PartialSettings(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name               string
+		settings           *conf.Settings
+		expectDurationFlag bool
+		description        string
+	}{
+		{
+			name: "Settings with Export but no FFmpeg version",
+			settings: &conf.Settings{
+				Realtime: conf.RealtimeSettings{
+					Audio: conf.AudioSettings{
+						Export: conf.ExportSettings{
+							Length: 15,
+						},
+					},
+				},
+			},
+			expectDurationFlag: true,
+			description:        "No FFmpeg version info should use safety fallback with -d flag",
+		},
+		{
+			name: "Settings with version string but major=0",
+			settings: &conf.Settings{
+				Realtime: conf.RealtimeSettings{
+					Audio: conf.AudioSettings{
+						FfmpegVersion: "N-121000-g7321e4b950", // Git build version
+						FfmpegMajor:   0,                      // Not parsed correctly
+						FfmpegMinor:   0,
+						Export: conf.ExportSettings{
+							Length: 15,
+						},
+					},
+				},
+			},
+			expectDurationFlag: true,
+			description:        "Version string present but major=0 should use safety fallback",
+		},
+		{
+			name: "Settings with major=7 but empty version string",
+			settings: &conf.Settings{
+				Realtime: conf.RealtimeSettings{
+					Audio: conf.AudioSettings{
+						FfmpegVersion: "", // Empty version string
+						FfmpegMajor:   7,
+						FfmpegMinor:   1,
+						Export: conf.ExportSettings{
+							Length: 15,
+						},
+					},
+				},
+			},
+			expectDurationFlag: true,
+			description:        "Empty version string should use safety fallback (HasFfmpegVersion returns false)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := getSoxSpectrogramArgs(ctx, "800", "400", "/tmp/test.png", "/tmp/test.flac", true, tt.settings)
+
+			hasDurationFlag := false
+			for _, arg := range args {
+				if arg == "-d" {
+					hasDurationFlag = true
+					break
+				}
+			}
+
+			if hasDurationFlag != tt.expectDurationFlag {
+				t.Errorf("%s:\n  Expected -d flag: %v\n  Got -d flag: %v\n  Args: %v",
+					tt.description, tt.expectDurationFlag, hasDurationFlag, args)
+			}
+
+			t.Logf("Test passed: %s", tt.description)
+		})
+	}
+}

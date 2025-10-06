@@ -1674,6 +1674,11 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 		"width", width,
 		"raw", raw)
 
+	// Validate settings parameter to prevent nil pointer dereference
+	if settings == nil {
+		return fmt.Errorf("settings cannot be nil")
+	}
+
 	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
 	soxBinary := settings.Realtime.Audio.SoxPath
 
