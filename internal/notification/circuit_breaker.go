@@ -71,6 +71,20 @@ func DefaultCircuitBreakerConfig() CircuitBreakerConfig {
 	}
 }
 
+// Validate checks if the circuit breaker configuration is valid.
+func (c CircuitBreakerConfig) Validate() error {
+	if c.MaxFailures < 1 {
+		return fmt.Errorf("max_failures must be at least 1, got %d", c.MaxFailures)
+	}
+	if c.Timeout < time.Second {
+		return fmt.Errorf("timeout must be at least 1 second, got %v", c.Timeout)
+	}
+	if c.HalfOpenMaxRequests < 1 {
+		return fmt.Errorf("half_open_max_requests must be at least 1, got %d", c.HalfOpenMaxRequests)
+	}
+	return nil
+}
+
 // CircuitBreaker implements the circuit breaker pattern for push notification providers.
 // It tracks failures and opens the circuit after a threshold is reached, preventing
 // requests to failing providers and allowing them time to recover.

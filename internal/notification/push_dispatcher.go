@@ -27,6 +27,8 @@ type pushDispatcher struct {
 	cancel         context.CancelFunc
 	mu             sync.RWMutex
 	metrics        *metrics.NotificationMetrics
+	healthChecker  *HealthChecker
+	rateLimiter    *PushRateLimiter
 }
 
 // enhancedProvider wraps a provider with circuit breaker and metrics.
@@ -66,8 +68,40 @@ func InitializePushFromConfigWithMetrics(settings *conf.Settings, notificationMe
 			metrics:        notificationMetrics,
 		}
 
+		// Initialize health checker if enabled
+		if settings.Notification.Push.HealthCheck.Enabled {
+			hcConfig := HealthCheckConfig{
+				Enabled:  settings.Notification.Push.HealthCheck.Enabled,
+				Interval: settings.Notification.Push.HealthCheck.Interval,
+				Timeout:  settings.Notification.Push.HealthCheck.Timeout,
+			}
+			pd.healthChecker = NewHealthChecker(hcConfig, pd.log, notificationMetrics)
+		}
+
+		// Initialize rate limiter if enabled
+		if settings.Notification.Push.RateLimiting.Enabled {
+			rlConfig := PushRateLimiterConfig{
+				RequestsPerMinute: settings.Notification.Push.RateLimiting.RequestsPerMinute,
+				BurstSize:         settings.Notification.Push.RateLimiting.BurstSize,
+			}
+			pd.rateLimiter = NewPushRateLimiter(rlConfig)
+			if pd.log != nil {
+				pd.log.Info("rate limiter enabled",
+					"requests_per_minute", rlConfig.RequestsPerMinute,
+					"burst_size", rlConfig.BurstSize)
+			}
+		}
+
 		// Build enhanced providers with circuit breakers
 		pd.providers = pd.initializeEnhancedProviders(settings, notificationMetrics)
+
+		// Register providers with health checker
+		if pd.healthChecker != nil {
+			for i := range pd.providers {
+				ep := &pd.providers[i]
+				pd.healthChecker.RegisterProvider(ep.prov, ep.circuitBreaker)
+			}
+		}
 
 		globalPushDispatcher = pd
 
@@ -127,7 +161,18 @@ func (d *pushDispatcher) start() error {
 		}
 	}()
 
-	d.log.Info("push dispatcher started", "providers", len(d.providers))
+	// Start health checker if enabled
+	if d.healthChecker != nil {
+		if err := d.healthChecker.Start(ctx); err != nil {
+			d.log.Error("failed to start health checker", "error", err)
+			// Non-fatal, continue with dispatcher
+		}
+	}
+
+	d.log.Info("push dispatcher started",
+		"providers", len(d.providers),
+		"health_checker", d.healthChecker != nil,
+		"rate_limiter", d.rateLimiter != nil)
 	return nil
 }
 
@@ -166,6 +211,11 @@ func (d *pushDispatcher) matchesFilter(ep *enhancedProvider, notif *Notification
 
 // dispatchEnhanced dispatches notifications with metrics and circuit breaker support.
 func (d *pushDispatcher) dispatchEnhanced(ctx context.Context, notif *Notification, ep *enhancedProvider) {
+	// Apply rate limiting if enabled
+	if !d.checkRateLimit(ep, notif) {
+		return
+	}
+
 	// Increment dispatch total
 	if d.metrics != nil {
 		d.metrics.IncrementDispatchTotal()
@@ -173,121 +223,169 @@ func (d *pushDispatcher) dispatchEnhanced(ctx context.Context, notif *Notificati
 		defer d.metrics.SetDispatchActive(0)
 	}
 
+	d.retryLoop(ctx, notif, ep)
+}
+
+// checkRateLimit checks if notification is rate limited.
+func (d *pushDispatcher) checkRateLimit(ep *enhancedProvider, notif *Notification) bool {
+	if d.rateLimiter != nil && !d.rateLimiter.Allow() {
+		if d.log != nil {
+			d.log.Warn("notification rate limited",
+				"provider", ep.name,
+				"notification_id", notif.ID)
+		}
+		if d.metrics != nil {
+			d.metrics.RecordFilterRejection(ep.name, "rate_limited")
+		}
+		return false
+	}
+	return true
+}
+
+// retryLoop handles the retry logic for sending notifications.
+func (d *pushDispatcher) retryLoop(ctx context.Context, notif *Notification, ep *enhancedProvider) {
 	attempts := 0
 	notifType := string(notif.Type)
 
 	for {
 		attempts++
+		duration, err := d.attemptSend(ctx, notif, ep)
 
-		// Set timeout per attempt
-		attemptCtx := ctx
-		var cancel context.CancelFunc
-		if deadline := d.defaultTimeout; deadline > 0 {
-			attemptCtx, cancel = context.WithTimeout(ctx, deadline)
+		// Record metrics
+		d.recordAttemptMetrics(ep.name, notifType, err, duration, attempts)
+
+		// Handle success
+		if err == nil {
+			d.logSuccess(ep.name, notif, notifType, attempts, duration)
+			return
 		}
 
-		// Start timer for metrics
-		timer := time.Now()
-
-		// Send through circuit breaker if enabled
-		var err error
-		if ep.circuitBreaker != nil {
-			err = ep.circuitBreaker.Call(attemptCtx, func(ctx context.Context) error {
-				return ep.prov.Send(ctx, notif)
-			})
-		} else {
-			err = ep.prov.Send(attemptCtx, notif)
+		// Handle circuit breaker open
+		if errors.Is(err, ErrCircuitBreakerOpen) {
+			d.logCircuitBreakerOpen(ep.name, notif.ID)
+			return
 		}
 
-		duration := time.Since(timer)
+		// Check if should retry
+		if !d.shouldRetry(err, attempts, ep.name) {
+			return
+		}
 
-		// Release timeout context
+		// Wait for retry delay
+		if !d.waitForRetry(ctx, ep.name, attempts) {
+			return
+		}
+	}
+}
+
+// attemptSend attempts to send a notification.
+func (d *pushDispatcher) attemptSend(ctx context.Context, notif *Notification, ep *enhancedProvider) (time.Duration, error) {
+	attemptCtx := ctx
+	var cancel context.CancelFunc
+	if deadline := d.defaultTimeout; deadline > 0 {
+		attemptCtx, cancel = context.WithTimeout(ctx, deadline)
+	}
+	defer func() {
 		if cancel != nil {
 			cancel()
 		}
+	}()
 
-		// Record metrics
-		if d.metrics != nil {
-			switch {
-			case err == nil:
-				d.metrics.RecordDelivery(ep.name, notifType, "success", duration)
-				if attempts > 1 {
-					d.metrics.RecordRetrySuccess(ep.name)
-				}
-			case errors.Is(err, ErrCircuitBreakerOpen):
-				// Circuit breaker is open - don't count as delivery failure
-				d.metrics.RecordDelivery(ep.name, notifType, "circuit_open", duration)
-			case ctx.Err() == context.DeadlineExceeded:
-				d.metrics.RecordDelivery(ep.name, notifType, "timeout", duration)
-				d.metrics.RecordTimeout(ep.name)
-				d.metrics.RecordDeliveryError(ep.name, notifType, "timeout")
-			default:
-				d.metrics.RecordDelivery(ep.name, notifType, "error", duration)
-				errorCategory := categorizeError(err)
-				d.metrics.RecordDeliveryError(ep.name, notifType, errorCategory)
-			}
-		}
+	timer := time.Now()
+	var err error
+	if ep.circuitBreaker != nil {
+		err = ep.circuitBreaker.Call(attemptCtx, func(ctx context.Context) error {
+			return ep.prov.Send(ctx, notif)
+		})
+	} else {
+		err = ep.prov.Send(attemptCtx, notif)
+	}
+	return time.Since(timer), err
+}
 
-		// Success case
-		if err == nil {
-			if d.log != nil {
-				d.log.Info("push sent",
-					"provider", ep.name,
-					"id", notif.ID,
-					"type", notifType,
-					"priority", string(notif.Priority),
-					"attempt", attempts,
-					"elapsed", duration)
-			}
-			return
-		}
+// recordAttemptMetrics records metrics for an attempt.
+func (d *pushDispatcher) recordAttemptMetrics(providerName, notifType string, err error, duration time.Duration, attempts int) {
+	if d.metrics == nil {
+		return
+	}
 
-		// Circuit breaker open - don't retry
-		if errors.Is(err, ErrCircuitBreakerOpen) {
-			if d.log != nil {
-				d.log.Warn("push blocked by circuit breaker",
-					"provider", ep.name,
-					"id", notif.ID)
-			}
-			return
+	switch {
+	case err == nil:
+		d.metrics.RecordDelivery(providerName, notifType, "success", duration)
+		if attempts > 1 {
+			d.metrics.RecordRetrySuccess(providerName)
 		}
+	case errors.Is(err, ErrCircuitBreakerOpen):
+		d.metrics.RecordDelivery(providerName, notifType, "circuit_open", duration)
+	case errors.Is(err, context.DeadlineExceeded):
+		d.metrics.RecordDelivery(providerName, notifType, "timeout", duration)
+		d.metrics.RecordTimeout(providerName)
+		d.metrics.RecordDeliveryError(providerName, notifType, "timeout")
+	default:
+		d.metrics.RecordDelivery(providerName, notifType, "error", duration)
+		d.metrics.RecordDeliveryError(providerName, notifType, categorizeError(err))
+	}
+}
 
-		// Classify error for retry
-		var perr *providerError
-		retryable := true
-		if errors.As(err, &perr) {
-			retryable = perr.Retryable
-		}
+// logSuccess logs a successful delivery.
+func (d *pushDispatcher) logSuccess(providerName string, notif *Notification, notifType string, attempts int, duration time.Duration) {
+	if d.log != nil {
+		d.log.Info("push sent",
+			"provider", providerName,
+			"id", notif.ID,
+			"type", notifType,
+			"priority", string(notif.Priority),
+			"attempt", attempts,
+			"elapsed", duration)
+	}
+}
 
-		// Check if we should retry
-		if !retryable || attempts > d.maxRetries {
-			if d.log != nil {
-				d.log.Error("push send failed",
-					"provider", ep.name,
-					"attempts", attempts,
-					"error", err,
-					"retryable", retryable)
-			}
-			return
-		}
+// logCircuitBreakerOpen logs when circuit breaker blocks a request.
+func (d *pushDispatcher) logCircuitBreakerOpen(providerName, notifID string) {
+	if d.log != nil {
+		d.log.Warn("push blocked by circuit breaker",
+			"provider", providerName,
+			"id", notifID)
+	}
+}
 
-		// Record retry attempt
-		if d.metrics != nil {
-			d.metrics.RecordRetryAttempt(ep.name)
-		}
+// shouldRetry determines if an attempt should be retried.
+func (d *pushDispatcher) shouldRetry(err error, attempts int, providerName string) bool {
+	var perr *providerError
+	retryable := true
+	if errors.As(err, &perr) {
+		retryable = perr.Retryable
+	}
 
-		// Wait for retry delay with context cancellation check
-		select {
-		case <-ctx.Done():
-			if d.log != nil {
-				d.log.Debug("retry cancelled due to context cancellation",
-					"provider", ep.name,
-					"attempts", attempts)
-			}
-			return
-		case <-time.After(d.retryDelay):
-			// Continue to next retry
+	if !retryable || attempts > d.maxRetries {
+		if d.log != nil {
+			d.log.Error("push send failed",
+				"provider", providerName,
+				"attempts", attempts,
+				"error", err,
+				"retryable", retryable)
 		}
+		return false
+	}
+
+	if d.metrics != nil {
+		d.metrics.RecordRetryAttempt(providerName)
+	}
+	return true
+}
+
+// waitForRetry waits for the retry delay or context cancellation.
+func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, attempts int) bool {
+	select {
+	case <-ctx.Done():
+		if d.log != nil {
+			d.log.Debug("retry cancelled due to context cancellation",
+				"provider", providerName,
+				"attempts", attempts)
+		}
+		return false
+	case <-time.After(d.retryDelay):
+		return true
 	}
 }
 
@@ -521,6 +619,15 @@ func (d *pushDispatcher) initializeEnhancedProviders(settings *conf.Settings, no
 		cbConfig.MaxFailures = settings.Notification.Push.CircuitBreaker.MaxFailures
 		cbConfig.Timeout = settings.Notification.Push.CircuitBreaker.Timeout
 		cbConfig.HalfOpenMaxRequests = settings.Notification.Push.CircuitBreaker.HalfOpenMaxRequests
+
+		// Validate circuit breaker configuration
+		if err := cbConfig.Validate(); err != nil {
+			if d.log != nil {
+				d.log.Error("invalid circuit breaker configuration, using defaults",
+					"error", err)
+			}
+			cbConfig = DefaultCircuitBreakerConfig()
+		}
 	}
 
 	for i := range settings.Notification.Push.Providers {
@@ -602,15 +709,12 @@ func categorizeError(err error) string {
 	}
 }
 
-// containsAny checks if a string contains any of the given substrings.
+// containsAny checks if a string contains any of the given substrings (case-insensitive).
 func containsAny(s string, substrs ...string) bool {
+	s = strings.ToLower(s)
 	for _, substr := range substrs {
-		if substr != "" && len(s) >= len(substr) {
-			for i := 0; i <= len(s)-len(substr); i++ {
-				if s[i:i+len(substr)] == substr {
-					return true
-				}
-			}
+		if substr != "" && strings.Contains(s, strings.ToLower(substr)) {
+			return true
 		}
 	}
 	return false
