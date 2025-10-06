@@ -32,7 +32,7 @@ func NewShoutrrrProvider(name string, enabled bool, urls []string, supportedType
 		types:   map[string]bool{},
 		timeout: timeout,
 	}
-	if len(sp.name) == 0 {
+	if sp.name == "" {
 		sp.name = "shoutrrr"
 	}
 	if len(supportedTypes) == 0 {

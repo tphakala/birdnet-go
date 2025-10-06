@@ -114,14 +114,14 @@ func (s *ScriptProvider) Send(ctx context.Context, n *Notification) error {
 		if errors.As(err, &exitErr) {
 			_ = exitErr // caller decides retry policy; we just return the error
 		}
-		return fmt.Errorf("script '%s' failed: %v, output: %s", s.name, err, truncate(string(out), 512))
+		return fmt.Errorf("script '%s' failed: %w, output: %s", s.name, err, truncate(string(out), 512))
 	}
 	return nil
 }
 
-func truncate(s string, max int) string {
-	if len(s) <= max {
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
 		return s
 	}
-	return s[:max-3] + "..."
+	return s[:maxLen-3] + "..."
 }

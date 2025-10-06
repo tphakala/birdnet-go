@@ -137,7 +137,6 @@ func (d *pushDispatcher) start() error {
 
 func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 	for _, rp := range d.providers {
-		rp := rp // capture
 		if !rp.prov.IsEnabled() || !rp.prov.SupportsType(notif.Type) {
 			continue
 		}
@@ -171,11 +170,9 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 				// Classify error for retry based on sentinel prefix
 				// Providers can return any error; treat as retryable unless explicitly marked otherwise
 				var perr *providerError
-				retryable := false
+				retryable := true
 				if errors.As(err, &perr) {
 					retryable = perr.Retryable
-				} else {
-					retryable = true
 				}
 				if !retryable || attempts > d.maxRetries {
 					d.log.Error("push send failed", "provider", rp.prov.GetName(), "attempts", attempts, "error", err)

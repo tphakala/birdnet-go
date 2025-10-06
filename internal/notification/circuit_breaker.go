@@ -1,0 +1,276 @@
+package notification
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"time"
+
+	"github.com/tphakala/birdnet-go/internal/observability/metrics"
+)
+
+// CircuitState represents the state of a circuit breaker.
+type CircuitState int
+
+const (
+	// StateClosed means the circuit is closed and requests are flowing normally.
+	StateClosed CircuitState = iota
+	// StateHalfOpen means the circuit is testing if the service has recovered.
+	StateHalfOpen
+	// StateOpen means the circuit is open and requests are being rejected.
+	StateOpen
+)
+
+// String returns the string representation of CircuitState.
+func (s CircuitState) String() string {
+	switch s {
+	case StateClosed:
+		return "closed"
+	case StateHalfOpen:
+		return "half-open"
+	case StateOpen:
+		return "open"
+	default:
+		return "unknown"
+	}
+}
+
+var (
+	// ErrCircuitBreakerOpen is returned when the circuit breaker is open.
+	ErrCircuitBreakerOpen = errors.New("circuit breaker is open")
+	// ErrTooManyRequests is returned when the circuit breaker is half-open and has already allowed a test request.
+	ErrTooManyRequests = errors.New("circuit breaker is half-open, too many requests")
+)
+
+// CircuitBreakerConfig holds configuration for a circuit breaker.
+type CircuitBreakerConfig struct {
+	// MaxFailures is the number of consecutive failures before opening the circuit.
+	MaxFailures int
+	// Timeout is how long to wait before transitioning from Open to Half-Open.
+	Timeout time.Duration
+	// HalfOpenMaxRequests is the maximum number of requests allowed in half-open state.
+	HalfOpenMaxRequests int
+}
+
+// DefaultCircuitBreakerConfig returns default circuit breaker configuration.
+func DefaultCircuitBreakerConfig() CircuitBreakerConfig {
+	return CircuitBreakerConfig{
+		MaxFailures:         5,
+		Timeout:             30 * time.Second,
+		HalfOpenMaxRequests: 1,
+	}
+}
+
+// CircuitBreaker implements the circuit breaker pattern for push notification providers.
+// It tracks failures and opens the circuit after a threshold is reached, preventing
+// requests to failing providers and allowing them time to recover.
+type PushCircuitBreaker struct {
+	config              CircuitBreakerConfig
+	state               CircuitState
+	failures            int
+	lastFailureTime     time.Time
+	lastStateChange     time.Time
+	halfOpenRequests    int
+	mu                  sync.RWMutex
+	metrics             *metrics.NotificationMetrics
+	providerName        string
+}
+
+// NewPushCircuitBreaker creates a new PushCircuitBreaker with the given configuration.
+func NewPushCircuitBreaker(config CircuitBreakerConfig, notificationMetrics *metrics.NotificationMetrics, providerName string) *PushCircuitBreaker {
+	cb := &PushCircuitBreaker{
+		config:          config,
+		state:           StateClosed,
+		lastStateChange: time.Now(),
+		metrics:         notificationMetrics,
+		providerName:    providerName,
+	}
+
+	if cb.metrics != nil {
+		cb.metrics.UpdateCircuitBreakerState(providerName, int(StateClosed))
+		cb.metrics.UpdateHealthStatus(providerName, true)
+	}
+
+	return cb
+}
+
+// Call executes the given function if the circuit breaker allows it.
+// It tracks success/failure and manages state transitions.
+func (cb *PushCircuitBreaker) Call(ctx context.Context, fn func(context.Context) error) error {
+	// Check if we can proceed
+	if err := cb.beforeCall(); err != nil {
+		return err
+	}
+
+	// Execute the function
+	err := fn(ctx)
+
+	// Record the result
+	cb.afterCall(err)
+
+	return err
+}
+
+// beforeCall checks if the circuit breaker allows the call.
+func (cb *PushCircuitBreaker) beforeCall() error {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	switch cb.state {
+	case StateClosed:
+		return nil
+
+	case StateOpen:
+		// Check if enough time has passed to try half-open
+		if time.Since(cb.lastStateChange) > cb.config.Timeout {
+			cb.setState(StateHalfOpen)
+			cb.halfOpenRequests = 0
+			return nil
+		}
+		return ErrCircuitBreakerOpen
+
+	case StateHalfOpen:
+		// Allow limited requests in half-open state
+		if cb.halfOpenRequests >= cb.config.HalfOpenMaxRequests {
+			return ErrTooManyRequests
+		}
+		cb.halfOpenRequests++
+		return nil
+
+	default:
+		return ErrCircuitBreakerOpen
+	}
+}
+
+// afterCall records the result of a call and updates state.
+func (cb *PushCircuitBreaker) afterCall(err error) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	if err == nil {
+		// Success - handle based on current state
+		cb.onSuccess()
+	} else {
+		// Failure - handle based on current state
+		cb.onFailure()
+	}
+}
+
+// onSuccess handles a successful call.
+func (cb *PushCircuitBreaker) onSuccess() {
+	cb.failures = 0
+	cb.lastFailureTime = time.Time{}
+
+	if cb.metrics != nil {
+		cb.metrics.UpdateHealthStatus(cb.providerName, true)
+	}
+
+	if cb.state == StateHalfOpen {
+		// Successful call in half-open state - close the circuit
+		cb.setState(StateClosed)
+	}
+}
+
+// onFailure handles a failed call.
+func (cb *PushCircuitBreaker) onFailure() {
+	cb.failures++
+	cb.lastFailureTime = time.Now()
+
+	if cb.metrics != nil {
+		cb.metrics.IncrementConsecutiveFailures(cb.providerName)
+	}
+
+	switch cb.state {
+	case StateClosed:
+		// Check if we've hit the failure threshold
+		if cb.failures >= cb.config.MaxFailures {
+			cb.setState(StateOpen)
+			if cb.metrics != nil {
+				cb.metrics.UpdateHealthStatus(cb.providerName, false)
+			}
+		}
+
+	case StateHalfOpen:
+		// Failure in half-open state - reopen the circuit
+		cb.setState(StateOpen)
+		if cb.metrics != nil {
+			cb.metrics.UpdateHealthStatus(cb.providerName, false)
+		}
+
+	case StateOpen:
+		// Already open, no action needed
+	}
+}
+
+// setState transitions the circuit breaker to a new state.
+func (cb *PushCircuitBreaker) setState(newState CircuitState) {
+	if cb.state == newState {
+		return
+	}
+
+	cb.state = newState
+	cb.lastStateChange = time.Now()
+
+	if cb.metrics != nil {
+		cb.metrics.UpdateCircuitBreakerState(cb.providerName, int(newState))
+	}
+}
+
+// State returns the current state of the circuit breaker.
+func (cb *PushCircuitBreaker) State() CircuitState {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+	return cb.state
+}
+
+// Failures returns the current number of consecutive failures.
+func (cb *PushCircuitBreaker) Failures() int {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+	return cb.failures
+}
+
+// Reset manually resets the circuit breaker to closed state.
+func (cb *PushCircuitBreaker) Reset() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	cb.failures = 0
+	cb.lastFailureTime = time.Time{}
+	cb.halfOpenRequests = 0
+	cb.setState(StateClosed)
+
+	if cb.metrics != nil {
+		cb.metrics.UpdateHealthStatus(cb.providerName, true)
+	}
+}
+
+// IsHealthy returns true if the circuit breaker is in a healthy state (closed).
+func (cb *PushCircuitBreaker) IsHealthy() bool {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+	return cb.state == StateClosed
+}
+
+// GetStats returns current statistics about the circuit breaker.
+func (cb *PushCircuitBreaker) GetStats() CircuitBreakerStats {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+
+	return CircuitBreakerStats{
+		State:              cb.state,
+		Failures:           cb.failures,
+		LastFailureTime:    cb.lastFailureTime,
+		LastStateChange:    cb.lastStateChange,
+		HalfOpenRequests:   cb.halfOpenRequests,
+	}
+}
+
+// CircuitBreakerStats contains statistics about a circuit breaker's state.
+type CircuitBreakerStats struct {
+	State              CircuitState
+	Failures           int
+	LastFailureTime    time.Time
+	LastStateChange    time.Time
+	HalfOpenRequests   int
+}
