@@ -60,6 +60,20 @@ func DefaultHealthCheckConfig() HealthCheckConfig {
 	}
 }
 
+// Validate checks if the health check configuration is valid.
+func (c HealthCheckConfig) Validate() error {
+	if c.Interval < time.Second {
+		return fmt.Errorf("interval must be at least 1 second, got %v", c.Interval)
+	}
+	if c.Timeout < time.Second {
+		return fmt.Errorf("timeout must be at least 1 second, got %v", c.Timeout)
+	}
+	if c.Timeout >= c.Interval {
+		return fmt.Errorf("timeout (%v) must be less than interval (%v)", c.Timeout, c.Interval)
+	}
+	return nil
+}
+
 // NewHealthChecker creates a new HealthChecker.
 func NewHealthChecker(config HealthCheckConfig, log *slog.Logger, notificationMetrics *metrics.NotificationMetrics) *HealthChecker {
 	return &HealthChecker{

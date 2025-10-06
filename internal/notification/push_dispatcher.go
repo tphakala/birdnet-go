@@ -677,12 +677,34 @@ func (d *pushDispatcher) initializeEnhancedProviders(settings *conf.Settings, no
 
 // ----------------- Error Categorization -----------------
 
-// categorizeError categorizes errors for metrics.
-// IMPORTANT: This function MUST return a bounded set of error categories to prevent
-// Prometheus metric cardinality explosion. Never return dynamic error messages or
-// unbounded values as categories. The fixed set of categories is:
-// - "none", "timeout", "cancelled", "network", "validation", "permission",
-//   "not_found", "provider_error"
+// categorizeError classifies errors into bounded categories for Prometheus metrics.
+//
+// Error Categories (BOUNDED - prevents metric cardinality explosion):
+//
+//   - "timeout"         - Context deadline exceeded (network timeouts, slow APIs)
+//   - "cancelled"       - Context cancelled (shutdown, user cancellation)
+//   - "network"         - Network/connection issues (DNS, dial, connection refused)
+//   - "validation"      - Configuration/input validation errors
+//   - "permission"      - Authorization failures (API key invalid, forbidden)
+//   - "not_found"       - Resource not found (404, invalid webhook URL)
+//   - "provider_error"  - All other provider-specific errors (catch-all)
+//
+// Guidelines for Adding New Categories:
+//
+//  1. Only add categories for common, actionable error types
+//  2. New categories should represent >5% of total errors in production
+//  3. Keep total categories under 10 to prevent metric explosion
+//  4. Provider-specific errors should use "provider_error" (e.g., Telegram rate limits)
+//  5. Use error pattern matching, not exact strings (case-insensitive)
+//
+// Examples:
+//   - Telegram "Too Many Requests" → "provider_error" (provider-specific)
+//   - Discord "Invalid Webhook" → "validation" (common, actionable)
+//   - Any connection timeout → "timeout" (common, network layer)
+//
+// Metric Cardinality Impact:
+//   - 7 categories × 5 notification types × N providers = 35N metric series
+//   - Adding 1 category = +5N series (acceptable if <10% increase)
 func categorizeError(err error) string {
 	if err == nil {
 		return "none"

@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -31,6 +32,20 @@ func DefaultPushRateLimiterConfig() PushRateLimiterConfig {
 		RequestsPerMinute: 60,  // 1 request per second average
 		BurstSize:         10,  // Allow bursts of up to 10 requests
 	}
+}
+
+// Validate checks if the rate limiter configuration is valid.
+func (c PushRateLimiterConfig) Validate() error {
+	if c.RequestsPerMinute < 1 {
+		return fmt.Errorf("requests_per_minute must be at least 1, got %d", c.RequestsPerMinute)
+	}
+	if c.BurstSize < 1 {
+		return fmt.Errorf("burst_size must be at least 1, got %d", c.BurstSize)
+	}
+	if c.BurstSize > c.RequestsPerMinute {
+		return fmt.Errorf("burst_size (%d) should not exceed requests_per_minute (%d)", c.BurstSize, c.RequestsPerMinute)
+	}
+	return nil
 }
 
 // NewPushRateLimiter creates a new token bucket rate limiter.

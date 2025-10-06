@@ -166,7 +166,7 @@ isHealthy := hc.IsHealthy()
 summary := hc.GetHealthSummary()
 ```
 
-### 4. Rate Limiter (✅ Complete)
+### 4. Rate Limiter (✅ Complete & Integrated)
 
 **File**: `internal/notification/rate_limiter.go`
 
@@ -179,16 +179,18 @@ Token bucket rate limiter for DoS protection:
 - Burst capacity allows temporary spikes
 - Automatic token refill based on elapsed time
 
-#### Configuration (to be added to config.yaml)
+#### Configuration
 
 ```yaml
 notification:
   push:
     rate_limiting:
-      enabled: true
+      enabled: false  # Disabled by default, enable for additional protection
       requests_per_minute: 60
       burst_size: 10
 ```
+
+**Integration Status**: Fully integrated in `push_dispatcher.go` via `checkRateLimit()` method. Disabled by default since circuit breakers provide primary DoS protection.
 
 #### API
 

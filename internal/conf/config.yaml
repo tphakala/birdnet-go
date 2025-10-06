@@ -272,8 +272,9 @@ notification:
 
     # Rate limiting configuration
     # Prevents overwhelming external APIs with too many requests
+    # Disabled by default - enable if you need additional DoS protection beyond circuit breakers
     rate_limiting:
-      enabled: false  # Not integrated yet - will be enabled in future PR
+      enabled: false           # Enable to activate rate limiting
       requests_per_minute: 60  # Maximum average request rate
       burst_size: 10           # Maximum burst capacity for spikes
 
