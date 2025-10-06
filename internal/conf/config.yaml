@@ -246,3 +246,41 @@ output:
 # Sentry telemetry configuration (opt-in, respects EU privacy laws)
 sentry:
   enabled: false          # false by default, must be explicitly enabled by user (opt-in)
+
+# Notification settings
+notification:
+  push:
+    enabled: false
+    default_timeout: 30s
+    max_retries: 3
+    retry_delay: 5s
+    providers:
+      - type: shoutrrr
+        enabled: false
+        name: "telegram-alerts"
+        urls:
+          - "telegram://<YOUR_BOT_TOKEN>@telegram?chats=<YOUR_CHAT_ID>"
+        timeout: 10s
+        filter:
+          types: ["error", "detection"]
+          priorities: ["critical", "high"]
+      - type: script
+        enabled: false
+        name: test-script
+        command: scripts/your-push-script.sh
+        args: ["ok"] # use ["fail"] to test non-zero exit
+        environment:
+        input_format: both    # Options: "json" (stdin only), "env" (env vars only), "both" (env + JSON stdin)
+        filter:
+          types: ["error", "warning", "info", "detection", "system"]
+          priorities: []
+          components: []
+          metadata_filters: {}
+            # Filter by confidence threshold (supports > and < operators)
+            # Examples:
+            #   confidence: ">0.8"   # Only notifications with >80% confidence
+            #   confidence: "<0.3"   # Only low-confidence notifications
+            #
+            # Other metadata fields use exact string matching:
+            #   species: "Northern Cardinal"
+            #   location: "backyard"
