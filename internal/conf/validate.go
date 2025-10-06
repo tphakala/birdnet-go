@@ -425,6 +425,18 @@ func validateAudioSettings(settings *AudioSettings) error {
 		settings.FfmpegPath = "" // Ensure path is empty if validation failed
 	} else {
 		settings.FfmpegPath = validatedFfmpegPath // Store the validated path (explicit or from PATH)
+
+		// Detect FFmpeg version for runtime decisions (e.g., FFmpeg 5.x bug workarounds)
+		version, major, minor := GetFfmpegVersion()
+		settings.FfmpegVersion = version
+		settings.FfmpegMajor = major
+		settings.FfmpegMinor = minor
+
+		if major > 0 {
+			log.Printf("Detected FFmpeg version: %s (major: %d, minor: %d)", version, major, minor)
+		} else {
+			log.Printf("Warning: Could not detect FFmpeg version from: %s", version)
+		}
 	}
 
 	// Validate and determine the effective SoX path
