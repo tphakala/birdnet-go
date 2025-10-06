@@ -42,6 +42,11 @@ Source: MIT
 License: https://github.com/cespare/xxhash/blob/v2.3.0/LICENSE.txt
 Source: MIT
 
+### github.com/containrrr/shoutrrr
+
+License: https://github.com/containrrr/shoutrrr/blob/v0.8.0/LICENSE
+Source: MIT
+
 ### github.com/davecgh/go-spew/spew
 
 License: https://github.com/davecgh/go-spew/blob/d8f796af33cc/LICENSE
