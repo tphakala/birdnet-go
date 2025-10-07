@@ -319,8 +319,8 @@ notification:
 | `{{.Latitude}}` | GPS latitude | 45.123456 |
 | `{{.Longitude}}` | GPS longitude | -122.987654 |
 | `{{.Location}}` | Formatted coordinates | "45.123456, -122.987654" |
-| `{{.DetectionURL}}` | Link to detection details | "http://host:port/ui/detections/123" |
-| `{{.ImageURL}}` | Link to species image | "http://host:port/api/v2/media/species-image?..." |
+| `{{.DetectionURL}}` | Link to detection details | `http://host:port/ui/detections/123` |
+| `{{.ImageURL}}` | Link to species image | `http://host:port/api/v2/media/species-image?...` |
 | `{{.DaysSinceFirstSeen}}` | Days since first detection | 0 for new species |
 
 ### Template Examples
@@ -347,6 +347,12 @@ notification:
       title: "New Species: {{.CommonName}}"
       message: "First detection! View details: {{.DetectionURL}}"
 ```
+
+### Display Behavior
+
+- **URL Stripping**: URLs in notification messages are automatically stripped for in-app display (bell icon, toast, notification list) to reduce visual clutter
+- **Template URLs**: While `{{.DetectionURL}}` and `{{.ImageURL}}` render URLs in templates, these are removed before displaying notifications in the UI
+- **Push Notifications**: External push notification providers may display URLs based on their own rendering logic
 
 ### Error Handling
 
