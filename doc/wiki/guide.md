@@ -1985,6 +1985,616 @@ Advanced users interested in extending the sound level monitoring capabilities s
 
 The implementation provides a solid foundation for environmental sound monitoring with robust signal processing and comprehensive error handling. While it cannot provide absolute SPL measurements, it excels at relative sound level monitoring and frequency analysis for research and environmental assessment purposes.
 
+### Push Notifications
+
+BirdNET-Go includes a comprehensive push notification system that can send real-time alerts about bird detections, system errors, and important events to your preferred notification services. This feature enables you to stay informed about what's happening at your monitoring station even when you're away from the web interface.
+
+#### Overview
+
+The push notification system supports multiple delivery methods (providers) and can be configured to send different types of notifications to different services based on priority, type, or custom filters. Each provider operates independently with built-in resilience features like automatic retries, circuit breakers, and rate limiting.
+
+#### Supported Providers
+
+BirdNET-Go supports three types of push notification providers:
+
+##### 1. Shoutrrr (Multi-Service)
+
+The [Shoutrrr](https://containrrr.dev/shoutrrr/) provider supports 20+ notification services through a unified URL format, including:
+
+- **Messaging Apps**: Telegram, Discord, Slack, Matrix, Mattermost, Zulip
+- **Push Services**: Pushover, Pushbullet, Ntfy
+- **Email**: SMTP, SendGrid, Mailgun
+- **Smart Home**: Home Assistant, Gotify
+- **Incident Management**: Opsgenie, PagerDuty
+- **Voice**: Bark (iOS)
+
+**Configuration Example:**
+
+```yaml
+notification:
+  push:
+    enabled: true
+    default_timeout: 30s
+    max_retries: 3
+    retry_delay: 5s
+
+    providers:
+      - type: shoutrrr
+        enabled: true
+        name: "telegram-alerts"
+        urls:
+          - "telegram://<YOUR_BOT_TOKEN>@telegram?chats=<YOUR_CHAT_ID>"
+        timeout: 10s
+        filter:
+          types: ["error", "detection"]
+          priorities: ["critical", "high"]
+```
+
+**Shoutrrr URL Format:**
+
+Each service has its own URL format. Common examples:
+
+- **Telegram**: `telegram://<bot_token>@telegram?chats=<chat_id>`
+- **Discord**: `discord://<webhook_token>@<webhook_id>`
+- **Slack**: `slack://token-a/token-b/token-c`
+- **Email**: `smtp://username:password@host:port/?from=sender@example.com&to=recipient@example.com`
+- **Pushover**: `pushover://shoutrrr:<api_token>@<user_key>`
+
+For complete URL format documentation, see the [Shoutrrr documentation](https://containrrr.dev/shoutrrr/v0.8/services/overview/).
+
+##### 2. Webhook (Custom HTTP)
+
+The webhook provider sends notifications as HTTP requests to custom endpoints, ideal for integrating with your own services, APIs, or automation platforms.
+
+**Features:**
+- Supports POST, PUT, and PATCH methods
+- Multiple authentication types (Bearer, Basic, Custom headers)
+- Custom JSON templates
+- Multiple endpoints with failover
+- Secure secret management (environment variables and files)
+
+**Configuration Example:**
+
+```yaml
+notification:
+  push:
+    providers:
+      - type: webhook
+        enabled: true
+        name: "api-service"
+        endpoints:
+          - url: "https://api.example.com/webhooks/birdnet"
+            method: POST
+            timeout: 10s
+            headers:
+              Content-Type: "application/json"
+            auth:
+              type: bearer
+              token: "${API_TOKEN}"  # Reads from environment variable
+        filter:
+          types: ["detection"]
+          metadata_filters:
+            confidence: ">0.8"
+```
+
+**Authentication Types:**
+
+1. **Bearer Token** (recommended for most APIs):
+```yaml
+auth:
+  type: bearer
+  token: "${API_TOKEN}"  # From environment variable
+  # OR
+  token_file: "/run/secrets/api_token"  # From file (Kubernetes/Docker Swarm)
+```
+
+2. **Basic Authentication**:
+```yaml
+auth:
+  type: basic
+  user: "${API_USER}"
+  pass: "${API_PASSWORD}"
+```
+
+3. **Custom Header**:
+```yaml
+auth:
+  type: custom
+  header: "X-API-Key"
+  value: "${API_KEY}"
+```
+
+**Custom JSON Template:**
+
+You can customize the JSON payload sent to your webhook:
+
+```yaml
+template: |
+  {
+    "event": "{{.Type}}",
+    "severity": "{{.Priority}}",
+    "bird": "{{.Title}}",
+    "details": "{{.Message}}",
+    "time": "{{.Timestamp}}",
+    "confidence": {{.Metadata.confidence}}
+  }
+```
+
+Available template fields:
+- `{{.ID}}` - Notification unique ID
+- `{{.Type}}` - Notification type (error, warning, info, detection, system)
+- `{{.Priority}}` - Priority level (critical, high, medium, low)
+- `{{.Title}}` - Notification title
+- `{{.Message}}` - Notification message
+- `{{.Component}}` - Component that generated the notification
+- `{{.Timestamp}}` - ISO 8601 timestamp
+- `{{.Metadata.key}}` - Any metadata field (e.g., confidence, species)
+
+##### 3. Script (Custom Scripts)
+
+The script provider executes custom shell scripts or programs, allowing complete control over notification handling. Perfect for custom integrations, logging, or triggering actions based on detections.
+
+**Configuration Example:**
+
+```yaml
+notification:
+  push:
+    providers:
+      - type: script
+        enabled: true
+        name: "custom-handler"
+        command: "/usr/local/bin/notify.sh"
+        args: ["--mode", "production"]
+        environment:
+          SLACK_WEBHOOK: "${SLACK_WEBHOOK_URL}"
+          LOG_PATH: "/var/log/birdnet"
+        input_format: both  # "json", "env", or "both"
+        filter:
+          types: ["detection"]
+          priorities: ["high", "critical"]
+```
+
+**Input Formats:**
+
+- **`env`**: Data passed only through environment variables
+- **`json`**: Data passed as JSON on stdin
+- **`both`**: Data passed via both environment variables and JSON stdin
+
+**Environment Variables Provided:**
+
+When your script runs, these variables are automatically set:
+
+- `NOTIFICATION_ID` - Unique identifier
+- `NOTIFICATION_TYPE` - error, warning, info, detection, or system
+- `NOTIFICATION_PRIORITY` - critical, high, medium, or low
+- `NOTIFICATION_TITLE` - Notification title
+- `NOTIFICATION_MESSAGE` - Notification message
+- `NOTIFICATION_COMPONENT` - Source component
+- `NOTIFICATION_TIMESTAMP` - ISO 8601 timestamp
+- `NOTIFICATION_METADATA_JSON` - JSON string of metadata
+
+**Example Script:**
+
+```bash
+#!/bin/bash
+# notify.sh - Example notification handler
+
+# Read environment variables
+TYPE="$NOTIFICATION_TYPE"
+TITLE="$NOTIFICATION_TITLE"
+MESSAGE="$NOTIFICATION_MESSAGE"
+
+# Read JSON from stdin if input_format is "json" or "both"
+if [ "$INPUT_FORMAT" != "env" ]; then
+    JSON=$(cat)
+    # Parse JSON with jq if available
+    CONFIDENCE=$(echo "$JSON" | jq -r '.metadata.confidence // "N/A"')
+fi
+
+# Custom logic based on notification type
+case "$TYPE" in
+    detection)
+        echo "[$(date)] Bird detected: $TITLE (confidence: $CONFIDENCE)" >> /var/log/birds.log
+        # Send to custom service
+        curl -X POST "$SLACK_WEBHOOK" -d "{\"text\":\"$TITLE detected!\"}"
+        ;;
+    error)
+        echo "[$(date)] ERROR: $MESSAGE" >> /var/log/errors.log
+        # Send alert
+        ;;
+esac
+
+exit 0
+```
+
+#### Notification Filters
+
+Filters control which notifications are sent to each provider. You can filter by type, priority, component, or custom metadata fields.
+
+##### Filter by Type
+
+Limit notifications to specific types:
+
+```yaml
+filter:
+  types: ["error", "detection"]  # Only errors and detections
+```
+
+Available types:
+- `error` - System errors and failures
+- `warning` - Warnings and potential issues
+- `info` - Informational messages
+- `detection` - Bird detection events
+- `system` - System status changes
+
+##### Filter by Priority
+
+Limit notifications to specific priority levels:
+
+```yaml
+filter:
+  priorities: ["critical", "high"]  # Only urgent notifications
+```
+
+Available priorities:
+- `critical` - Immediate action required
+- `high` - Important but not urgent
+- `medium` - Normal priority
+- `low` - Informational only
+
+##### Filter by Component
+
+Limit notifications from specific system components:
+
+```yaml
+filter:
+  components: ["birdnet", "audio"]  # Only BirdNET and audio components
+```
+
+##### Filter by Metadata
+
+Filter based on notification metadata, including confidence thresholds for bird detections:
+
+```yaml
+filter:
+  metadata_filters:
+    confidence: ">0.8"  # Only high-confidence detections
+    species: "Northern Cardinal"  # Only specific species
+```
+
+**Confidence Operators:**
+- `>` - Greater than (e.g., `">0.8"`)
+- `>=` - Greater than or equal to (e.g., `">=0.75"`)
+- `<` - Less than (e.g., `"<0.5"`)
+- `<=` - Less than or equal to (e.g., `"<=0.6"`)
+- `=` or `==` - Equal to (e.g., `"=0.9"`)
+
+**Example: High-Confidence Rare Species Alerts:**
+
+```yaml
+filter:
+  types: ["detection"]
+  priorities: ["high", "critical"]
+  metadata_filters:
+    confidence: ">=0.85"  # Only 85%+ confidence
+```
+
+#### Advanced Configuration
+
+##### Circuit Breaker
+
+The circuit breaker automatically disables failing providers temporarily to prevent cascading failures:
+
+```yaml
+notification:
+  push:
+    circuit_breaker:
+      enabled: true
+      max_failures: 5           # Failures before circuit opens
+      timeout: 30s              # Time before retry attempt
+      half_open_max_requests: 1 # Test requests in half-open state
+```
+
+**How it works:**
+1. **Closed** (normal): All requests pass through
+2. **Open** (after max_failures): All requests blocked
+3. **Half-Open** (after timeout): Limited test requests allowed
+4. **Returns to Closed**: If test requests succeed
+
+##### Health Checks
+
+Periodic health checks verify provider availability:
+
+```yaml
+notification:
+  push:
+    health_check:
+      enabled: true
+      interval: 60s  # Check every minute
+      timeout: 10s   # Health check timeout
+```
+
+##### Rate Limiting
+
+Prevents overwhelming external APIs with too many requests:
+
+```yaml
+notification:
+  push:
+    rate_limiting:
+      enabled: true
+      requests_per_minute: 60  # Average request rate
+      burst_size: 10           # Maximum burst capacity
+```
+
+> **Note**: Rate limiting is disabled by default. Circuit breakers usually provide sufficient protection.
+
+#### Complete Configuration Example
+
+Here's a complete example showing multiple providers with different filters:
+
+```yaml
+notification:
+  push:
+    enabled: true
+    default_timeout: 30s
+    max_retries: 3
+    retry_delay: 5s
+
+    # Protection features
+    circuit_breaker:
+      enabled: true
+      max_failures: 5
+      timeout: 30s
+      half_open_max_requests: 1
+
+    health_check:
+      enabled: true
+      interval: 60s
+      timeout: 10s
+
+    rate_limiting:
+      enabled: false  # Use circuit breakers instead
+
+    providers:
+      # Telegram: Critical errors and high-confidence detections
+      - type: shoutrrr
+        enabled: true
+        name: "telegram-critical"
+        urls:
+          - "telegram://${TELEGRAM_BOT_TOKEN}@telegram?chats=${TELEGRAM_CHAT_ID}"
+        timeout: 10s
+        filter:
+          types: ["error", "detection"]
+          priorities: ["critical", "high"]
+          metadata_filters:
+            confidence: ">0.9"
+
+      # Webhook: All detections for data analysis
+      - type: webhook
+        enabled: true
+        name: "analysis-api"
+        endpoints:
+          - url: "https://api.example.com/birds"
+            auth:
+              type: bearer
+              token: "${API_TOKEN}"
+        filter:
+          types: ["detection"]
+
+      # Script: Rare species alerts with custom handling
+      - type: script
+        enabled: true
+        name: "rare-bird-alert"
+        command: "/usr/local/bin/rare_bird_notify.sh"
+        input_format: both
+        filter:
+          types: ["detection"]
+          priorities: ["high", "critical"]
+          metadata_filters:
+            confidence: ">=0.85"
+
+      # Discord: System status updates
+      - type: shoutrrr
+        enabled: true
+        name: "discord-status"
+        urls:
+          - "discord://${DISCORD_WEBHOOK_TOKEN}@${DISCORD_WEBHOOK_ID}"
+        filter:
+          types: ["system", "warning"]
+```
+
+#### Security Best Practices
+
+**1. Never Commit Secrets**
+
+Always use environment variables or secret files for sensitive data:
+
+```yaml
+# ❌ NEVER do this (hardcoded secret)
+token: "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+
+# ✅ DO this (environment variable)
+token: "${TELEGRAM_BOT_TOKEN}"
+
+# ✅ OR this (secret file)
+token_file: "/run/secrets/telegram_token"
+```
+
+**2. Environment Variables**
+
+Set environment variables when running BirdNET-Go:
+
+```bash
+# Docker
+docker run -e TELEGRAM_BOT_TOKEN="your-token" birdnet-go
+
+# Docker Compose
+echo "TELEGRAM_BOT_TOKEN=your-token" > .env
+
+# Binary
+export TELEGRAM_BOT_TOKEN="your-token"
+./birdnet-go realtime
+```
+
+**3. Secret Files (Kubernetes/Docker Swarm)**
+
+For orchestrated deployments, mount secrets as files:
+
+```yaml
+# Kubernetes
+apiVersion: v1
+kind: Secret
+metadata:
+  name: birdnet-secrets
+stringData:
+  telegram-token: "your-token"
+
+# Then reference in config
+token_file: "/run/secrets/telegram-token"
+```
+
+**4. File Permissions**
+
+Ensure secret files have restrictive permissions:
+
+```bash
+chmod 0400 /path/to/secret  # Read-only for owner
+```
+
+#### Troubleshooting
+
+##### Common Issues
+
+**Notifications Not Sending:**
+
+1. Check provider is enabled: `enabled: true`
+2. Verify filter settings aren't too restrictive
+3. Check logs for error messages
+4. Test authentication credentials
+5. Verify network connectivity
+
+**Circuit Breaker Blocking Requests:**
+
+- Circuit breaker opens after repeated failures
+- Wait for timeout period (default 30s)
+- Check provider configuration and credentials
+- Review logs for underlying errors
+
+**Shoutrrr URL Errors:**
+
+- Verify URL format matches service documentation
+- Test URL with `shoutrrr send` CLI tool
+- Check special characters are properly encoded
+- Ensure bot tokens and IDs are correct
+
+**Script Provider Not Working:**
+
+1. Verify script has execute permissions: `chmod +x script.sh`
+2. Check script path is absolute
+3. Test script manually with environment variables
+4. Review script exit codes (0 = success)
+5. Check script logs/output
+
+**Webhook Authentication Failing:**
+
+- Verify environment variables are set correctly
+- Check secret file paths and permissions
+- Test webhook endpoint with curl:
+  ```bash
+  curl -H "Authorization: Bearer YOUR_TOKEN" \
+       -X POST https://api.example.com/webhook \
+       -d '{"test": true}'
+  ```
+- Review API provider documentation
+
+##### Debug Logging
+
+Enable debug logging to troubleshoot issues:
+
+```yaml
+debug: true  # Enable global debug logging
+
+notification:
+  push:
+    enabled: true
+    # ... rest of config
+```
+
+Debug logs will show:
+- Provider initialization
+- Filter evaluation decisions
+- Circuit breaker state changes
+- Retry attempts
+- Detailed error messages
+
+#### Use Case Examples
+
+##### 1. Rare Species Alerts to Phone
+
+Send immediate alerts for rare species with high confidence:
+
+```yaml
+- type: shoutrrr
+  enabled: true
+  name: "rare-bird-phone"
+  urls:
+    - "pushover://shoutrrr:${PUSHOVER_TOKEN}@${PUSHOVER_USER}"
+  filter:
+    types: ["detection"]
+    priorities: ["high", "critical"]
+    metadata_filters:
+      confidence: ">0.85"
+```
+
+##### 2. Error Monitoring to Team Chat
+
+Send system errors to team Slack channel:
+
+```yaml
+- type: shoutrrr
+  enabled: true
+  name: "team-slack"
+  urls:
+    - "slack://${SLACK_TOKEN_A}/${SLACK_TOKEN_B}/${SLACK_TOKEN_C}"
+  filter:
+    types: ["error", "warning"]
+    priorities: ["critical", "high"]
+```
+
+##### 3. Data Pipeline Integration
+
+Send all detections to data analysis API:
+
+```yaml
+- type: webhook
+  enabled: true
+  name: "data-pipeline"
+  endpoints:
+    - url: "https://data.example.com/ingest"
+      auth:
+        type: bearer
+        token: "${DATA_API_TOKEN}"
+  filter:
+    types: ["detection"]
+```
+
+##### 4. Custom Home Automation
+
+Trigger custom actions via script (turn on lights, play sounds, etc.):
+
+```yaml
+- type: script
+  enabled: true
+  name: "home-automation"
+  command: "/home/automation/bird_detected.sh"
+  input_format: env
+  filter:
+    types: ["detection"]
+    metadata_filters:
+      confidence: ">0.75"
+```
+
 ### Species Tracking System
 
 BirdNET-Go includes an intelligent species tracking system that helps you discover and monitor bird activity patterns at your location. This feature automatically tracks when new bird species appear and highlights them with special badges to make discoveries easy to spot.
