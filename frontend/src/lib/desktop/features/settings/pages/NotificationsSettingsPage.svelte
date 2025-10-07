@@ -285,7 +285,7 @@
                   id="template-message"
                   bind:value={editedMessage}
                   class="textarea textarea-bordered w-full font-mono text-sm"
-                  rows="5"
+                  rows="6"
                   placeholder="e.g., First detection of &#123;&#123;.CommonName&#125;&#125; (&#123;&#123;.ScientificName&#125;&#125;) with &#123;&#123;.ConfidencePercent&#125;&#125;% confidence"
                 ></textarea>
               </div>
