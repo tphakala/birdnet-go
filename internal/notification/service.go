@@ -30,6 +30,7 @@ type Service struct {
 	wg            sync.WaitGroup
 	logger        *slog.Logger
 	config        *ServiceConfig
+	telemetry     *NotificationTelemetry
 }
 
 // ServiceConfig holds the complete configuration for the notification service.
@@ -99,6 +100,19 @@ func NewService(config *ServiceConfig) *Service {
 		"interval", config.CleanupInterval)
 
 	return service
+}
+
+// SetTelemetry sets the telemetry integration for the service.
+// This must be called after service creation to enable telemetry reporting.
+func (s *Service) SetTelemetry(telemetry *NotificationTelemetry) {
+	s.telemetry = telemetry
+	s.logger.Info("telemetry integration enabled for notification service",
+		"enabled", telemetry != nil && telemetry.IsEnabled())
+}
+
+// GetTelemetry returns the telemetry integration, or nil if not set.
+func (s *Service) GetTelemetry() *NotificationTelemetry {
+	return s.telemetry
 }
 
 // Create adds a new notification to the system
