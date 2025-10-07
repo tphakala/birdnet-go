@@ -64,6 +64,7 @@ type WebhookProvider struct {
 	types     map[string]bool
 	client    *httpclient.Client
 	template  *template.Template // Optional custom JSON template
+	telemetry *NotificationTelemetry
 }
 
 // WebhookEndpoint represents a single webhook destination with its configuration.
@@ -450,10 +451,27 @@ func (w *WebhookProvider) sendToEndpoint(ctx context.Context, endpoint *WebhookE
 	resp, err := w.client.Do(ctx, req)
 	if err != nil {
 		// Check for specific error types for better categorization
-		if errors.Is(err, context.Canceled) {
+		isTimeout := errors.Is(err, context.DeadlineExceeded)
+		isCancelled := errors.Is(err, context.Canceled)
+
+		// Report telemetry for failed requests
+		if w.telemetry != nil {
+			w.telemetry.WebhookRequestError(
+				w.name,
+				err,
+				0, // No status code for network errors
+				endpoint.URL,
+				endpoint.Method,
+				endpoint.Auth.Type,
+				isTimeout,
+				isCancelled,
+			)
+		}
+
+		if isCancelled {
 			return fmt.Errorf("request cancelled: %w", err)
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
+		if isTimeout {
 			return fmt.Errorf("request timed out: %w", err)
 		}
 		return fmt.Errorf("request failed: %w", err)
@@ -468,7 +486,23 @@ func (w *WebhookProvider) sendToEndpoint(ctx context.Context, endpoint *WebhookE
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Read error response body for better diagnostics
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodySize))
-		return fmt.Errorf("webhook returned status %d: %s", resp.StatusCode, string(body))
+		httpErr := fmt.Errorf("webhook returned status %d: %s", resp.StatusCode, string(body))
+
+		// Report telemetry for HTTP errors
+		if w.telemetry != nil {
+			w.telemetry.WebhookRequestError(
+				w.name,
+				httpErr,
+				resp.StatusCode,
+				endpoint.URL,
+				endpoint.Method,
+				endpoint.Auth.Type,
+				false, // Not a timeout
+				false, // Not cancelled
+			)
+		}
+
+		return httpErr
 	}
 
 	return nil
@@ -492,6 +526,12 @@ func applyWebhookAuth(req *http.Request, auth *WebhookAuth) error {
 	}
 
 	return nil
+}
+
+// SetTelemetry sets the telemetry integration for the webhook provider.
+// This allows telemetry to be injected after provider creation.
+func (w *WebhookProvider) SetTelemetry(telemetry *NotificationTelemetry) {
+	w.telemetry = telemetry
 }
 
 // Close releases resources used by the webhook provider.

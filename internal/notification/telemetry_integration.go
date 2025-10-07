@@ -1,0 +1,352 @@
+// Package notification provides telemetry integration for notification operations
+package notification
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/tphakala/birdnet-go/internal/privacy"
+)
+
+// TelemetryReporter defines the interface for reporting telemetry events.
+// This interface is implemented by the telemetry package to avoid circular imports.
+// The notification package defines the interface, and the telemetry package provides
+// the concrete implementation via dependency injection.
+type TelemetryReporter interface {
+	// CaptureError reports an error with component context
+	CaptureError(err error, component string)
+
+	// CaptureEvent reports a custom event with tags and contexts
+	CaptureEvent(message, level string, tags map[string]string, contexts map[string]interface{})
+
+	// IsEnabled returns whether telemetry reporting is enabled
+	IsEnabled() bool
+}
+
+// TelemetryConfig holds configuration for notification telemetry
+type TelemetryConfig struct {
+	// Enabled controls all telemetry reporting
+	Enabled bool
+
+	// ReportCircuitBreaker enables circuit breaker event reporting
+	ReportCircuitBreaker bool
+
+	// ReportAPIErrors enables webhook/API error reporting
+	ReportAPIErrors bool
+
+	// ReportPanics enables panic/crash reporting
+	ReportPanics bool
+
+	// ReportRateLimit enables rate limiter event reporting
+	ReportRateLimit bool
+
+	// ReportResources enables resource exhaustion reporting
+	ReportResources bool
+
+	// IncludeMetadata includes sanitized notification metadata (opt-in)
+	// Default: false (privacy-first)
+	IncludeMetadata bool
+}
+
+// DefaultTelemetryConfig returns default telemetry configuration
+func DefaultTelemetryConfig() TelemetryConfig {
+	return TelemetryConfig{
+		Enabled:              true, // Controlled by global Sentry setting
+		ReportCircuitBreaker: true,
+		ReportAPIErrors:      true,
+		ReportPanics:         true,
+		ReportRateLimit:      true,
+		ReportResources:      true,
+		IncludeMetadata:      false, // Privacy-first default
+	}
+}
+
+// NotificationTelemetry handles telemetry reporting for notification operations
+type NotificationTelemetry struct {
+	config   *TelemetryConfig
+	reporter TelemetryReporter
+}
+
+// NewNotificationTelemetry creates a new notification telemetry instance.
+// The reporter is injected to avoid circular imports with the telemetry package.
+func NewNotificationTelemetry(config *TelemetryConfig, reporter TelemetryReporter) *NotificationTelemetry {
+	if config == nil {
+		defaultCfg := DefaultTelemetryConfig()
+		config = &defaultCfg
+	}
+
+	return &NotificationTelemetry{
+		config:   config,
+		reporter: reporter,
+	}
+}
+
+// IsEnabled returns whether telemetry is enabled
+func (nt *NotificationTelemetry) IsEnabled() bool {
+	if nt == nil || nt.config == nil || nt.reporter == nil {
+		return false
+	}
+	return nt.config.Enabled && nt.reporter.IsEnabled()
+}
+
+// CircuitBreakerStateTransition reports a circuit breaker state change event
+func (nt *NotificationTelemetry) CircuitBreakerStateTransition(
+	providerName string,
+	oldState CircuitState,
+	newState CircuitState,
+	consecutiveFailures int,
+	timeInPreviousState time.Duration,
+	config CircuitBreakerConfig,
+) {
+	// Check if enabled and configured to report
+	if !nt.IsEnabled() || !nt.config.ReportCircuitBreaker {
+		return
+	}
+
+	// Determine severity level based on new state
+	level := "info"
+	if newState == StateOpen {
+		level = "warning"
+	} else if newState == StateClosed && oldState == StateOpen {
+		level = "info" // Recovery event
+	}
+
+	// Build message
+	message := fmt.Sprintf("Circuit breaker state transition: %s → %s", oldState.String(), newState.String())
+
+	// Build tags
+	tags := map[string]string{
+		"component":            "notification",
+		"provider":             providerName,
+		"old_state":            oldState.String(),
+		"new_state":            newState.String(),
+		"consecutive_failures": fmt.Sprintf("%d", consecutiveFailures),
+	}
+
+	// Build contexts
+	contexts := map[string]interface{}{
+		"circuit_breaker": map[string]interface{}{
+			"failure_threshold":               config.MaxFailures,
+			"timeout_seconds":                 config.Timeout.Seconds(),
+			"half_open_max_requests":          config.HalfOpenMaxRequests,
+			"time_in_previous_state_seconds":  timeInPreviousState.Seconds(),
+		},
+	}
+
+	// Report event
+	nt.reporter.CaptureEvent(message, level, tags, contexts)
+}
+
+// NoopTelemetryReporter is a no-op implementation of TelemetryReporter for testing
+// or when telemetry is disabled
+type NoopTelemetryReporter struct{}
+
+// CaptureError is a no-op
+func (n *NoopTelemetryReporter) CaptureError(err error, component string) {}
+
+// CaptureEvent is a no-op
+func (n *NoopTelemetryReporter) CaptureEvent(message, level string, tags map[string]string, contexts map[string]interface{}) {}
+
+// IsEnabled always returns false
+func (n *NoopTelemetryReporter) IsEnabled() bool {
+	return false
+}
+
+// NewNoopTelemetryReporter creates a no-op telemetry reporter
+func NewNoopTelemetryReporter() TelemetryReporter {
+	return &NoopTelemetryReporter{}
+}
+
+// WebhookRequestError reports a webhook HTTP request failure with privacy-safe context
+func (nt *NotificationTelemetry) WebhookRequestError(
+	providerName string,
+	err error,
+	statusCode int,
+	endpoint string,
+	method string,
+	authType string,
+	isTimeout bool,
+	isCancelled bool,
+) {
+	// Check if enabled and configured to report
+	if !nt.IsEnabled() || !nt.config.ReportAPIErrors {
+		return
+	}
+
+	// Don't report cancellations as errors
+	if isCancelled {
+		return
+	}
+
+	// Determine severity based on error type
+	var level string
+	switch {
+	case isTimeout:
+		level = "critical" // Timeouts are critical as they indicate network/provider issues
+	case statusCode >= 400 && statusCode < 500:
+		level = "warning" // Client errors likely config issues
+	default:
+		level = "error"
+	}
+
+	// Anonymize URL for privacy
+	anonymizedURL := privacy.AnonymizeURL(endpoint)
+
+	// Build message
+	message := fmt.Sprintf("Webhook request failed: %s", err.Error())
+	if isTimeout {
+		message = "Webhook request timed out"
+	}
+
+	// Scrub error message for privacy
+	scrubbedMessage := privacy.ScrubMessage(message)
+
+	// Build tags
+	tags := map[string]string{
+		"component":     "notification",
+		"provider":      providerName,
+		"provider_type": "webhook",
+		"status_code":   fmt.Sprintf("%d", statusCode),
+		"method":        method,
+		"auth_type":     authType,
+		"endpoint_hash": anonymizedURL,
+		"is_timeout":    fmt.Sprintf("%t", isTimeout),
+	}
+
+	// Build contexts
+	contexts := map[string]interface{}{
+		"request": map[string]interface{}{
+			"method":        method,
+			"endpoint_hash": anonymizedURL,
+			"auth_type":     authType, // Type only, never token/credentials
+			"is_timeout":    isTimeout,
+			"is_cancelled":  isCancelled,
+		},
+	}
+
+	// Report error through interface
+	nt.reporter.CaptureEvent(scrubbedMessage, level, tags, contexts)
+}
+
+// ProviderInitializationError reports provider creation/validation failures
+func (nt *NotificationTelemetry) ProviderInitializationError(
+	providerName string,
+	providerType string,
+	errorType string,
+	err error,
+) {
+	// Don't report if disabled (initialization errors go to all categories)
+	if !nt.IsEnabled() {
+		return
+	}
+
+	// Scrub error message for privacy (remove paths, secrets)
+	scrubbedMessage := privacy.ScrubMessage(err.Error())
+
+	// Build message
+	message := fmt.Sprintf("Provider initialization failed: %s", scrubbedMessage)
+
+	// Build tags
+	tags := map[string]string{
+		"component":     "notification",
+		"provider":      providerName,
+		"provider_type": providerType,
+		"error_type":    errorType, // template_parse, validation, secret_resolution
+	}
+
+	// Build contexts
+	contexts := map[string]interface{}{
+		"initialization": map[string]interface{}{
+			"provider_type": providerType,
+			"error_type":    errorType,
+		},
+	}
+
+	// Report as error level (prevents provider from working)
+	nt.reporter.CaptureEvent(message, "error", tags, contexts)
+}
+
+// WorkerPanicRecovered reports a panic that was caught and recovered in a worker
+func (nt *NotificationTelemetry) WorkerPanicRecovered(
+	workerType string,
+	panicValue interface{},
+	stackTrace string,
+	eventsProcessed uint64,
+	eventsDropped uint64,
+) {
+	// Check if enabled and configured to report
+	if !nt.IsEnabled() || !nt.config.ReportPanics {
+		return
+	}
+
+	// Scrub stack trace for privacy (remove detection metadata)
+	scrubbedStack := privacy.ScrubMessage(stackTrace)
+
+	// Build message
+	message := fmt.Sprintf("Worker panic recovered: %v", panicValue)
+	scrubbedMessage := privacy.ScrubMessage(message)
+
+	// Build tags
+	tags := map[string]string{
+		"component":   "notification",
+		"worker_type": workerType,
+		"panic_type":  fmt.Sprintf("%T", panicValue),
+	}
+
+	// Build contexts
+	contexts := map[string]interface{}{
+		"worker_state": map[string]interface{}{
+			"events_processed": eventsProcessed,
+			"events_dropped":   eventsDropped,
+		},
+		"panic": map[string]interface{}{
+			"value":       scrubbedMessage,
+			"stack_trace": scrubbedStack,
+		},
+	}
+
+	// Report as critical level (worker crashed but recovered)
+	nt.reporter.CaptureEvent(scrubbedMessage, "critical", tags, contexts)
+}
+
+// RateLimitExceeded reports sustained high rate limiting (indicating config issues or spam)
+func (nt *NotificationTelemetry) RateLimitExceeded(
+	droppedCount int,
+	windowSeconds int,
+	maxEvents int,
+	dropRatePercent float64,
+) {
+	// Check if enabled and configured to report
+	if !nt.IsEnabled() || !nt.config.ReportRateLimit {
+		return
+	}
+
+	// Only report if sustained high drop rate (>50% for this report)
+	if dropRatePercent < 50.0 {
+		return
+	}
+
+	// Build message
+	message := fmt.Sprintf("Notification rate limit exceeded: %d events dropped (%.1f%% drop rate)", droppedCount, dropRatePercent)
+
+	// Build tags
+	tags := map[string]string{
+		"component":        "notification",
+		"subsystem":        "rate_limiter",
+		"drop_rate":        fmt.Sprintf("%.1f", dropRatePercent),
+		"severity":         "high_drop_rate",
+	}
+
+	// Build contexts
+	contexts := map[string]interface{}{
+		"rate_limiter": map[string]interface{}{
+			"window_seconds":    windowSeconds,
+			"max_events":        maxEvents,
+			"dropped_count":     droppedCount,
+			"drop_rate_percent": dropRatePercent,
+		},
+	}
+
+	// Report as warning level (indicates configuration or usage issue)
+	nt.reporter.CaptureEvent(message, "warning", tags, contexts)
+}

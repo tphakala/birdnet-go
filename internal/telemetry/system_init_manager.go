@@ -141,7 +141,27 @@ func (m *SystemInitManager) initializeNotification() error {
 		
 		// Initialize with config
 		notification.Initialize(config)
-		
+
+		// Set up telemetry integration for notification service
+		if settings != nil && settings.Sentry.Enabled {
+			m.logger.Debug("setting up notification telemetry integration")
+
+			// Create telemetry reporter
+			reporter := NewNotificationReporter(settings.Sentry.Enabled)
+
+			// Create telemetry config
+			telemetryConfig := notification.DefaultTelemetryConfig()
+			telemetryIntegration := notification.NewNotificationTelemetry(&telemetryConfig, reporter)
+
+			// Inject into service
+			if service := notification.GetService(); service != nil {
+				service.SetTelemetry(telemetryIntegration)
+				m.logger.Info("notification telemetry integration enabled")
+			} else {
+				m.logger.Warn("notification service not available for telemetry integration")
+			}
+		}
+
 		// Initialize push notifications from config (non-fatal on error)
 		if settings != nil {
 			if err := notification.InitializePushFromConfig(settings); err != nil {
@@ -154,7 +174,7 @@ func (m *SystemInitManager) initializeNotification() error {
 			m.notificationErr = fmt.Errorf("notification service initialization failed")
 			return
 		}
-		
+
 		m.logger.Info("notification service initialized successfully", "debug", debug)
 	})
 	

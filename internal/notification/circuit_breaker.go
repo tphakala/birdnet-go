@@ -104,6 +104,7 @@ type PushCircuitBreaker struct {
 	mu                  sync.RWMutex
 	metrics             *metrics.NotificationMetrics
 	providerName        string
+	telemetry           *NotificationTelemetry
 }
 
 // NewPushCircuitBreaker creates a new PushCircuitBreaker with the given configuration.
@@ -260,8 +261,11 @@ func (cb *PushCircuitBreaker) setState(newState CircuitState) {
 	}
 
 	oldState := cb.state
+	now := time.Now()
+	timeInPreviousState := now.Sub(cb.lastStateChange)
+
 	cb.state = newState
-	cb.lastStateChange = time.Now()
+	cb.lastStateChange = now
 
 	if cb.metrics != nil {
 		cb.metrics.UpdateCircuitBreakerState(cb.providerName, int(newState))
@@ -274,6 +278,18 @@ func (cb *PushCircuitBreaker) setState(newState CircuitState) {
 		"new_state", newState.String(),
 		"consecutive_failures", cb.failures,
 		"last_failure", cb.lastFailureTime.Format(time.RFC3339))
+
+	// Report telemetry for state transitions
+	if cb.telemetry != nil {
+		cb.telemetry.CircuitBreakerStateTransition(
+			cb.providerName,
+			oldState,
+			newState,
+			cb.failures,
+			timeInPreviousState,
+			cb.config,
+		)
+	}
 }
 
 // State returns the current state of the circuit breaker.
@@ -310,6 +326,14 @@ func (cb *PushCircuitBreaker) IsHealthy() bool {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
 	return cb.state == StateClosed
+}
+
+// SetTelemetry sets the telemetry integration for the circuit breaker.
+// This allows telemetry to be injected after circuit breaker creation.
+func (cb *PushCircuitBreaker) SetTelemetry(telemetry *NotificationTelemetry) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	cb.telemetry = telemetry
 }
 
 // GetStats returns current statistics about the circuit breaker.
