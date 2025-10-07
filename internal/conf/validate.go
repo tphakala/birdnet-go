@@ -809,7 +809,8 @@ func validateNotificationSettings(n *NotificationConfig) error {
 			Context("validation_type", "notification-push-durations").
 			Build()
 	}
-	for _, p := range n.Push.Providers {
+	for i := range n.Push.Providers {
+		p := &n.Push.Providers[i]
 		ptype := strings.ToLower(p.Type)
 		switch ptype {
 		case "script":

@@ -537,3 +537,783 @@ func TestMatchesProviderFilterWithReason(t *testing.T) {
 		})
 	}
 }
+
+// TestParseConfidenceOperator tests the confidence operator parsing logic
+//
+// Modern Go 1.25 Test Patterns:
+// - Uses t.Attr() to emit structured test metadata (new in Go 1.25)
+// - Runs tests in parallel with t.Parallel() for better performance
+// - Uses table-driven tests for comprehensive coverage
+// - Tests pure functions with no side effects (ideal for parallel execution)
+//
+// Best Practices for LLMs:
+// - Pure functions (no state, no side effects) are always safe to run in parallel
+// - Use t.Attr() to categorize tests ("unit", "integration", "e2e")
+// - Table-driven tests provide excellent documentation of expected behavior
+func TestParseConfidenceOperator(t *testing.T) {
+	t.Parallel() // Safe: pure function with no shared state
+	t.Attr("category", "unit")
+	t.Attr("function", "parseConfidenceOperator")
+
+	tests := []struct {
+		name        string
+		condition   string
+		expectedOp  string
+		expectedVal string
+	}{
+		// Two-character operators
+		{name: "gte_operator", condition: ">=0.8", expectedOp: ">=", expectedVal: "0.8"},
+		{name: "lte_operator", condition: "<=0.8", expectedOp: "<=", expectedVal: "0.8"},
+		{name: "eq_operator", condition: "==0.8", expectedOp: "==", expectedVal: "0.8"},
+
+		// Two-character operators with spaces
+		{name: "gte_with_spaces", condition: ">= 0.8", expectedOp: ">=", expectedVal: "0.8"},
+		{name: "lte_with_spaces", condition: "<= 0.8", expectedOp: "<=", expectedVal: "0.8"},
+		{name: "eq_with_spaces", condition: "== 0.8", expectedOp: "==", expectedVal: "0.8"},
+
+		// Single-character operators
+		{name: "gt_operator", condition: ">0.8", expectedOp: ">", expectedVal: "0.8"},
+		{name: "lt_operator", condition: "<0.8", expectedOp: "<", expectedVal: "0.8"},
+		{name: "eq_single", condition: "=0.8", expectedOp: "=", expectedVal: "0.8"},
+
+		// Single-character operators with spaces
+		{name: "gt_with_spaces", condition: "> 0.8", expectedOp: ">", expectedVal: "0.8"},
+		{name: "lt_with_spaces", condition: "< 0.8", expectedOp: "<", expectedVal: "0.8"},
+		{name: "eq_single_with_spaces", condition: "= 0.8", expectedOp: "=", expectedVal: "0.8"},
+
+		// Edge cases
+		// NOTE: parseConfidenceOperator expects pre-trimmed input (checkConfidenceFilter calls TrimSpace first)
+		{name: "multiple_spaces_after_op", condition: ">=    0.8", expectedOp: ">=", expectedVal: "0.8"},
+		{name: "tabs_after_op", condition: ">=\t0.8", expectedOp: ">=", expectedVal: "0.8"},
+
+		// Invalid cases
+		{name: "no_operator", condition: "0.8", expectedOp: "", expectedVal: ""},
+		{name: "invalid_operator", condition: "~0.8", expectedOp: "", expectedVal: ""},
+		{name: "empty_string", condition: "", expectedOp: "", expectedVal: ""},
+		{name: "only_operator", condition: ">=", expectedOp: ">=", expectedVal: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			op, val := parseConfidenceOperator(tt.condition)
+			if op != tt.expectedOp {
+				t.Errorf("operator: expected %q, got %q", tt.expectedOp, op)
+			}
+			if val != tt.expectedVal {
+				t.Errorf("value: expected %q, got %q", tt.expectedVal, val)
+			}
+		})
+	}
+}
+
+// TestCompareConfidence tests the confidence comparison logic
+//
+// Modern Go 1.25 Test Patterns:
+// - Parallel execution enabled for pure function testing
+// - Comprehensive edge case coverage (boundary values, invalid operators)
+// - Uses t.Attr() for test categorization
+//
+// Best Practices for LLMs:
+// - Test ALL operators: >, >=, <, <=, =, ==
+// - Test boundary conditions: 0.0, 1.0, negative, over 1.0
+// - Test invalid inputs: empty strings, unknown operators
+// - Pure functions are ideal candidates for parallel testing
+func TestCompareConfidence(t *testing.T) {
+	t.Parallel() // Safe: pure function with no side effects
+	t.Attr("category", "unit")
+	t.Attr("function", "compareConfidence")
+
+	tests := []struct {
+		name       string
+		confidence float64
+		op         string
+		threshold  float64
+		expected   bool
+	}{
+		// Greater than
+		{name: "gt_true", confidence: 0.9, op: ">", threshold: 0.8, expected: true},
+		{name: "gt_false", confidence: 0.7, op: ">", threshold: 0.8, expected: false},
+		{name: "gt_equal", confidence: 0.8, op: ">", threshold: 0.8, expected: false},
+
+		// Greater than or equal
+		{name: "gte_greater", confidence: 0.9, op: ">=", threshold: 0.8, expected: true},
+		{name: "gte_equal", confidence: 0.8, op: ">=", threshold: 0.8, expected: true},
+		{name: "gte_less", confidence: 0.7, op: ">=", threshold: 0.8, expected: false},
+
+		// Less than
+		{name: "lt_true", confidence: 0.7, op: "<", threshold: 0.8, expected: true},
+		{name: "lt_false", confidence: 0.9, op: "<", threshold: 0.8, expected: false},
+		{name: "lt_equal", confidence: 0.8, op: "<", threshold: 0.8, expected: false},
+
+		// Less than or equal
+		{name: "lte_less", confidence: 0.7, op: "<=", threshold: 0.8, expected: true},
+		{name: "lte_equal", confidence: 0.8, op: "<=", threshold: 0.8, expected: true},
+		{name: "lte_greater", confidence: 0.9, op: "<=", threshold: 0.8, expected: false},
+
+		// Equal (single)
+		{name: "eq_true", confidence: 0.8, op: "=", threshold: 0.8, expected: true},
+		{name: "eq_false_less", confidence: 0.7, op: "=", threshold: 0.8, expected: false},
+		{name: "eq_false_greater", confidence: 0.9, op: "=", threshold: 0.8, expected: false},
+
+		// Equal (double)
+		{name: "eq2_true", confidence: 0.8, op: "==", threshold: 0.8, expected: true},
+		{name: "eq2_false", confidence: 0.7, op: "==", threshold: 0.8, expected: false},
+
+		// Invalid operator
+		{name: "invalid_op", confidence: 0.8, op: "~", threshold: 0.8, expected: false},
+		{name: "empty_op", confidence: 0.8, op: "", threshold: 0.8, expected: false},
+
+		// Edge cases - boundary values
+		{name: "zero_confidence", confidence: 0.0, op: ">=", threshold: 0.0, expected: true},
+		{name: "one_confidence", confidence: 1.0, op: "<=", threshold: 1.0, expected: true},
+		{name: "negative_confidence", confidence: -0.1, op: "<", threshold: 0.0, expected: true},
+		{name: "over_one_confidence", confidence: 1.1, op: ">", threshold: 1.0, expected: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := compareConfidence(tt.confidence, tt.op, tt.threshold)
+			if result != tt.expected {
+				t.Errorf("compareConfidence(%v, %q, %v) = %v; want %v",
+					tt.confidence, tt.op, tt.threshold, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestLogDebug tests the logDebug helper function
+//
+// Modern Go 1.25 Test Patterns:
+// - Tests helper functions that wrap logging
+// - Validates nil-safety (defensive programming)
+// - Uses subtests for logical grouping
+//
+// Best Practices for LLMs:
+// - ALWAYS test nil cases for functions accepting pointers
+// - Logging helpers should never panic
+// - Cannot run in parallel due to logger initialization side effects
+func TestLogDebug(t *testing.T) {
+	// NOT parallel: logger may have shared state
+	t.Attr("category", "unit")
+	t.Attr("function", "logDebug")
+
+	t.Run("nil_logger_no_panic", func(t *testing.T) {
+		// IMPORTANT: nil-safety is critical for defensive programming
+		// logDebug should gracefully handle nil logger
+		logDebug(nil, "test message", "key", "value")
+	})
+
+	t.Run("with_logger", func(t *testing.T) {
+		// Verify normal operation with actual logger
+		log := getFileLogger(false)
+		logDebug(log, "test message", "key", "value")
+	})
+}
+
+// TestCheckTypeFilter tests the type filter validation
+//
+// Modern Go 1.25 Test Patterns:
+// - Tests refactored helper function extracted from complex function
+// - Parallel execution for independent test cases
+// - Returns named results (matches bool, reason string) - Go best practice
+//
+// Best Practices for LLMs:
+// - Test empty filter (should pass all)
+// - Test single and multiple values
+// - Test mismatches
+// - Named return values improve self-documentation
+func TestCheckTypeFilter(t *testing.T) {
+	t.Parallel() // Safe: no shared state, independent test cases
+	t.Attr("category", "unit")
+	t.Attr("function", "checkTypeFilter")
+
+	tests := []struct {
+		name           string
+		filterTypes    []string
+		notifType      Type
+		expectedMatch  bool
+		expectedReason string
+	}{
+		{
+			name:           "no_filter_passes",
+			filterTypes:    []string{},
+			notifType:      TypeInfo,
+			expectedMatch:  true,
+			expectedReason: "",
+		},
+		{
+			name:           "type_matches",
+			filterTypes:    []string{"info", "warning"},
+			notifType:      TypeInfo,
+			expectedMatch:  true,
+			expectedReason: "",
+		},
+		{
+			name:           "type_not_in_filter",
+			filterTypes:    []string{"error", "warning"},
+			notifType:      TypeInfo,
+			expectedMatch:  false,
+			expectedReason: filterReasonTypeMismatch,
+		},
+		{
+			name:           "single_type_match",
+			filterTypes:    []string{"detection"},
+			notifType:      TypeDetection,
+			expectedMatch:  true,
+			expectedReason: "",
+		},
+		{
+			name:           "case_sensitive_match",
+			filterTypes:    []string{"info"},
+			notifType:      TypeInfo,
+			expectedMatch:  true,
+			expectedReason: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filter := &conf.PushFilterConfig{Types: tt.filterTypes}
+			notif := &Notification{Type: tt.notifType}
+
+			matches, reason := checkTypeFilter(filter, notif, nil, "test-provider")
+
+			if matches != tt.expectedMatch {
+				t.Errorf("expected matches=%v, got matches=%v", tt.expectedMatch, matches)
+			}
+			if reason != tt.expectedReason {
+				t.Errorf("expected reason=%q, got reason=%q", tt.expectedReason, reason)
+			}
+		})
+	}
+}
+
+// TestCheckPriorityFilter tests the priority filter validation
+//
+// Modern Go 1.25 Test Patterns:
+// - Similar structure to checkTypeFilter (consistent API design)
+// - Parallel-safe testing
+// - Uses testify patterns seen in codebase
+//
+// Best Practices for LLMs:
+// - When refactoring, maintain consistency across similar functions
+// - Test all priority levels: low, medium, high, critical
+// - Verify empty filter behavior
+func TestCheckPriorityFilter(t *testing.T) {
+	t.Parallel() // Safe: no shared state
+	t.Attr("category", "unit")
+	t.Attr("function", "checkPriorityFilter")
+
+	tests := []struct {
+		name              string
+		filterPriorities  []string
+		notifPriority     Priority
+		expectedMatch     bool
+		expectedReason    string
+	}{
+		{
+			name:             "no_filter_passes",
+			filterPriorities: []string{},
+			notifPriority:    PriorityLow,
+			expectedMatch:    true,
+			expectedReason:   "",
+		},
+		{
+			name:             "priority_matches",
+			filterPriorities: []string{"low", "medium"},
+			notifPriority:    PriorityLow,
+			expectedMatch:    true,
+			expectedReason:   "",
+		},
+		{
+			name:             "priority_not_in_filter",
+			filterPriorities: []string{"high", "critical"},
+			notifPriority:    PriorityLow,
+			expectedMatch:    false,
+			expectedReason:   filterReasonPriorityMismatch,
+		},
+		{
+			name:             "single_priority_match",
+			filterPriorities: []string{"critical"},
+			notifPriority:    PriorityCritical,
+			expectedMatch:    true,
+			expectedReason:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filter := &conf.PushFilterConfig{Priorities: tt.filterPriorities}
+			notif := &Notification{Priority: tt.notifPriority}
+
+			matches, reason := checkPriorityFilter(filter, notif, nil, "test-provider")
+
+			if matches != tt.expectedMatch {
+				t.Errorf("expected matches=%v, got matches=%v", tt.expectedMatch, matches)
+			}
+			if reason != tt.expectedReason {
+				t.Errorf("expected reason=%q, got reason=%q", tt.expectedReason, reason)
+			}
+		})
+	}
+}
+
+// TestCheckComponentFilter tests the component filter validation
+//
+// Modern Go 1.25 Test Patterns:
+// - Third in the trilogy of simple filter functions
+// - Demonstrates refactoring pattern: extract similar logic into separate functions
+// - Parallel-safe, independent test execution
+//
+// Best Practices for LLMs:
+// - Component filtering uses string matching (exact match)
+// - Test empty strings as edge case
+// - Consistent with type/priority filter patterns
+func TestCheckComponentFilter(t *testing.T) {
+	t.Parallel() // Safe: no shared state
+	t.Attr("category", "unit")
+	t.Attr("function", "checkComponentFilter")
+
+	tests := []struct {
+		name             string
+		filterComponents []string
+		notifComponent   string
+		expectedMatch    bool
+		expectedReason   string
+	}{
+		{
+			name:             "no_filter_passes",
+			filterComponents: []string{},
+			notifComponent:   "backend",
+			expectedMatch:    true,
+			expectedReason:   "",
+		},
+		{
+			name:             "component_matches",
+			filterComponents: []string{"backend", "frontend"},
+			notifComponent:   "backend",
+			expectedMatch:    true,
+			expectedReason:   "",
+		},
+		{
+			name:             "component_not_in_filter",
+			filterComponents: []string{"api", "database"},
+			notifComponent:   "backend",
+			expectedMatch:    false,
+			expectedReason:   filterReasonComponentMismatch,
+		},
+		{
+			name:             "empty_component_no_match",
+			filterComponents: []string{"backend"},
+			notifComponent:   "",
+			expectedMatch:    false,
+			expectedReason:   filterReasonComponentMismatch,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filter := &conf.PushFilterConfig{Components: tt.filterComponents}
+			notif := &Notification{Component: tt.notifComponent}
+
+			matches, reason := checkComponentFilter(filter, notif, nil, "test-provider")
+
+			if matches != tt.expectedMatch {
+				t.Errorf("expected matches=%v, got matches=%v", tt.expectedMatch, matches)
+			}
+			if reason != tt.expectedReason {
+				t.Errorf("expected reason=%q, got reason=%q", tt.expectedReason, reason)
+			}
+		})
+	}
+}
+
+// TestCheckConfidenceFilter tests the confidence filter logic
+//
+// Modern Go 1.25 Test Patterns:
+// - Tests complex extracted function (original cognitive complexity was 94!)
+// - Comprehensive error path testing
+// - Parallel execution for all independent cases
+//
+// Best Practices for LLMs:
+// - When testing complex functions, categorize test cases:
+//   * Valid cases (happy path)
+//   * Invalid filter value
+//   * Invalid operators
+//   * Invalid thresholds
+//   * Missing/invalid metadata
+// - Use descriptive test names that explain the scenario
+// - Group related tests with comments
+func TestCheckConfidenceFilter(t *testing.T) {
+	t.Parallel() // Safe: no shared state
+	t.Attr("category", "unit")
+	t.Attr("function", "checkConfidenceFilter")
+
+	tests := []struct {
+		name           string
+		filterVal      any
+		metadata       map[string]any
+		expectedMatch  bool
+		expectedReason string
+	}{
+		// Valid cases
+		{
+			name:           "gt_pass",
+			filterVal:      ">0.8",
+			metadata:       map[string]any{"confidence": 0.9},
+			expectedMatch:  true,
+			expectedReason: "",
+		},
+		{
+			name:           "gt_fail",
+			filterVal:      ">0.8",
+			metadata:       map[string]any{"confidence": 0.7},
+			expectedMatch:  false,
+			expectedReason: filterReasonConfidenceThreshold,
+		},
+		{
+			name:           "gte_equal",
+			filterVal:      ">=0.8",
+			metadata:       map[string]any{"confidence": 0.8},
+			expectedMatch:  true,
+			expectedReason: "",
+		},
+
+		// Error cases - invalid filter value
+		{
+			name:           "non_string_filter",
+			filterVal:      123,
+			metadata:       map[string]any{"confidence": 0.8},
+			expectedMatch:  false,
+			expectedReason: filterReasonConfidenceThreshold,
+		},
+		{
+			name:           "empty_condition",
+			filterVal:      "",
+			metadata:       map[string]any{"confidence": 0.8},
+			expectedMatch:  false,
+			expectedReason: filterReasonConfidenceThreshold,
+		},
+		{
+			name:           "whitespace_only",
+			filterVal:      "   ",
+			metadata:       map[string]any{"confidence": 0.8},
+			expectedMatch:  false,
+			expectedReason: filterReasonConfidenceThreshold,
+		},
+
+		// Error cases - invalid operator
+		{
+			name:           "invalid_operator",
+			filterVal:      "~0.8",
+			metadata:       map[string]any{"confidence": 0.8},
+			expectedMatch:  false,
+			expectedReason: filterReasonConfidenceThreshold,
+		},
+		{
+			name:           "no_operator",
+			filterVal:      "0.8",
+			metadata:       map[string]any{"confidence": 0.8},
+			expectedMatch:  false,
+			expectedReason: filterReasonConfidenceThreshold,
+		},
+
+		// Error cases - invalid threshold
+		{
+			name:           "invalid_threshold",
+			filterVal:      ">abc",
+			metadata:       map[string]any{"confidence": 0.8},
+			expectedMatch:  false,
+			expectedReason: filterReasonConfidenceThreshold,
+		},
+
+		// Error cases - missing or invalid confidence
+		{
+			name:           "missing_confidence",
+			filterVal:      ">0.8",
+			metadata:       map[string]any{},
+			expectedMatch:  false,
+			expectedReason: filterReasonConfidenceThreshold,
+		},
+		{
+			name:           "invalid_confidence_type",
+			filterVal:      ">0.8",
+			metadata:       map[string]any{"confidence": "invalid"},
+			expectedMatch:  false,
+			expectedReason: filterReasonConfidenceThreshold,
+		},
+		{
+			name:           "nil_confidence",
+			filterVal:      ">0.8",
+			metadata:       map[string]any{"confidence": nil},
+			expectedMatch:  false,
+			expectedReason: filterReasonConfidenceThreshold,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			notif := &Notification{Metadata: tt.metadata}
+
+			matches, reason := checkConfidenceFilter(tt.filterVal, notif, nil, "test-provider")
+
+			if matches != tt.expectedMatch {
+				t.Errorf("expected matches=%v, got matches=%v", tt.expectedMatch, matches)
+			}
+			if reason != tt.expectedReason {
+				t.Errorf("expected reason=%q, got reason=%q", tt.expectedReason, reason)
+			}
+		})
+	}
+}
+
+// TestCheckExactMetadataMatch tests exact metadata key-value matching
+//
+// Modern Go 1.25 Test Patterns:
+// - Tests type-agnostic comparison using fmt.Sprint()
+// - Covers multiple data types: string, int, float, bool
+// - Parallel-safe pure function
+//
+// Best Practices for LLMs:
+// - When functions compare any types, test ALL common types:
+//   * strings, integers, floats, booleans
+// - Test type coercion (fmt.Sprint converts everything to string)
+// - Test missing keys and empty maps
+// - Document the comparison strategy in comments
+func TestCheckExactMetadataMatch(t *testing.T) {
+	t.Parallel() // Safe: pure function, no shared state
+	t.Attr("category", "unit")
+	t.Attr("function", "checkExactMetadataMatch")
+
+	tests := []struct {
+		name           string
+		key            string
+		expectedVal    any
+		metadata       map[string]any
+		expectedMatch  bool
+		expectedReason string
+	}{
+		// String matches
+		{
+			name:           "string_match",
+			key:            "source",
+			expectedVal:    "sensor1",
+			metadata:       map[string]any{"source": "sensor1"},
+			expectedMatch:  true,
+			expectedReason: "",
+		},
+		{
+			name:           "string_mismatch",
+			key:            "source",
+			expectedVal:    "sensor1",
+			metadata:       map[string]any{"source": "sensor2"},
+			expectedMatch:  false,
+			expectedReason: filterReasonMetadataMismatch,
+		},
+
+		// Numeric matches
+		{
+			name:           "int_match",
+			key:            "count",
+			expectedVal:    42,
+			metadata:       map[string]any{"count": 42},
+			expectedMatch:  true,
+			expectedReason: "",
+		},
+		{
+			name:           "float_match",
+			key:            "value",
+			expectedVal:    3.14,
+			metadata:       map[string]any{"value": 3.14},
+			expectedMatch:  true,
+			expectedReason: "",
+		},
+
+		// Boolean matches
+		{
+			name:           "bool_match_true",
+			key:            "verified",
+			expectedVal:    true,
+			metadata:       map[string]any{"verified": true},
+			expectedMatch:  true,
+			expectedReason: "",
+		},
+		{
+			name:           "bool_match_false",
+			key:            "verified",
+			expectedVal:    false,
+			metadata:       map[string]any{"verified": false},
+			expectedMatch:  true,
+			expectedReason: "",
+		},
+		{
+			name:           "bool_mismatch",
+			key:            "verified",
+			expectedVal:    true,
+			metadata:       map[string]any{"verified": false},
+			expectedMatch:  false,
+			expectedReason: filterReasonMetadataMismatch,
+		},
+
+		// Missing key
+		{
+			name:           "key_missing",
+			key:            "missing",
+			expectedVal:    "value",
+			metadata:       map[string]any{"other": "value"},
+			expectedMatch:  false,
+			expectedReason: filterReasonMetadataMismatch,
+		},
+		{
+			name:           "empty_metadata",
+			key:            "key",
+			expectedVal:    "value",
+			metadata:       map[string]any{},
+			expectedMatch:  false,
+			expectedReason: filterReasonMetadataMismatch,
+		},
+
+		// Type conversion via fmt.Sprint
+		{
+			name:           "int_to_string_comparison",
+			key:            "id",
+			expectedVal:    "123",
+			metadata:       map[string]any{"id": 123},
+			expectedMatch:  true,
+			expectedReason: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			notif := &Notification{Metadata: tt.metadata}
+
+			matches, reason := checkExactMetadataMatch(tt.key, tt.expectedVal, notif, nil, "test-provider")
+
+			if matches != tt.expectedMatch {
+				t.Errorf("expected matches=%v, got matches=%v", tt.expectedMatch, matches)
+			}
+			if reason != tt.expectedReason {
+				t.Errorf("expected reason=%q, got reason=%q", tt.expectedReason, reason)
+			}
+		})
+	}
+}
+
+// TestCheckMetadataFilters tests the metadata filter orchestration
+//
+// Modern Go 1.25 Test Patterns:
+// - Tests orchestration function that coordinates other filters
+// - Integration-style unit tests (calls checkConfidenceFilter + checkExactMetadataMatch)
+// - Parallel execution enabled
+//
+// Best Practices for LLMs:
+// - Orchestration functions should be tested for:
+//   * Empty inputs (no filters)
+//   * Single filter type (confidence OR exact)
+//   * Multiple filter types (confidence AND exact)
+//   * Partial success scenarios (one passes, one fails)
+// - Test early-return behavior (first failure stops processing)
+// - This demonstrates how refactored code enables easier testing
+func TestCheckMetadataFilters(t *testing.T) {
+	t.Parallel() // Safe: orchestration function with no shared state
+	t.Attr("category", "unit")
+	t.Attr("function", "checkMetadataFilters")
+
+	tests := []struct {
+		name           string
+		filterMetadata map[string]any
+		notifMetadata  map[string]any
+		expectedMatch  bool
+		expectedReason string
+	}{
+		{
+			name:           "no_filters_pass",
+			filterMetadata: map[string]any{},
+			notifMetadata:  map[string]any{"source": "sensor1"},
+			expectedMatch:  true,
+			expectedReason: "",
+		},
+		{
+			name: "confidence_and_exact_match",
+			filterMetadata: map[string]any{
+				"confidence": ">0.8",
+				"source":     "sensor1",
+			},
+			notifMetadata: map[string]any{
+				"confidence": 0.9,
+				"source":     "sensor1",
+			},
+			expectedMatch:  true,
+			expectedReason: "",
+		},
+		{
+			name: "confidence_pass_exact_fail",
+			filterMetadata: map[string]any{
+				"confidence": ">0.8",
+				"source":     "sensor1",
+			},
+			notifMetadata: map[string]any{
+				"confidence": 0.9,
+				"source":     "sensor2",
+			},
+			expectedMatch:  false,
+			expectedReason: filterReasonMetadataMismatch,
+		},
+		{
+			name: "confidence_fail",
+			filterMetadata: map[string]any{
+				"confidence": ">0.8",
+			},
+			notifMetadata: map[string]any{
+				"confidence": 0.5,
+			},
+			expectedMatch:  false,
+			expectedReason: filterReasonConfidenceThreshold,
+		},
+		{
+			name: "multiple_exact_matches",
+			filterMetadata: map[string]any{
+				"source":   "sensor1",
+				"verified": true,
+				"location": "backyard",
+			},
+			notifMetadata: map[string]any{
+				"source":   "sensor1",
+				"verified": true,
+				"location": "backyard",
+			},
+			expectedMatch:  true,
+			expectedReason: "",
+		},
+		{
+			name: "one_exact_match_fails",
+			filterMetadata: map[string]any{
+				"source":   "sensor1",
+				"verified": true,
+			},
+			notifMetadata: map[string]any{
+				"source":   "sensor1",
+				"verified": false,
+			},
+			expectedMatch:  false,
+			expectedReason: filterReasonMetadataMismatch,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filter := &conf.PushFilterConfig{MetadataFilters: tt.filterMetadata}
+			notif := &Notification{Metadata: tt.notifMetadata}
+
+			matches, reason := checkMetadataFilters(filter, notif, nil, "test-provider")
+
+			if matches != tt.expectedMatch {
+				t.Errorf("expected matches=%v, got matches=%v", tt.expectedMatch, matches)
+			}
+			if reason != tt.expectedReason {
+				t.Errorf("expected reason=%q, got reason=%q", tt.expectedReason, reason)
+			}
+		})
+	}
+}
