@@ -175,12 +175,13 @@ func (hc *HealthChecker) checkAll() {
 // This method is optimized to avoid holding the entry lock during provider calls,
 // which could block GetProviderHealth() calls for extended periods.
 func (hc *HealthChecker) checkProvider(entry *healthCheckEntry) {
-	// Step 1: Lock briefly to snapshot necessary data and update check time
+	// Step 1: Lock briefly to snapshot necessary data and pre-increment counters
 	entry.mu.Lock()
 	providerName := entry.provider.GetName()
 	provider := entry.provider
 	circuitBreaker := entry.circuitBreaker
-	entry.health.LastCheckTime = time.Now()
+	checkTime := time.Now()
+	entry.health.LastCheckTime = checkTime
 	entry.health.TotalAttempts++
 	entry.mu.Unlock()
 

@@ -19,22 +19,23 @@ import (
 
 const (
 	// Concurrency limits
-	defaultMaxConcurrentJobs = 100 // Default maximum concurrent notification dispatches
-	jobsPerProvider          = 20  // Concurrent dispatches allocated per provider
+	defaultMaxConcurrentJobs = 100                // Default maximum concurrent notification dispatches
+	jobsPerProvider          = 20                 // Concurrent dispatches allocated per provider
+	semaphoreAcquireTimeout  = 100 * time.Millisecond // Timeout for acquiring semaphore slot
 
 	// Exponential backoff constants
-	maxExponentialAttempts = 31               // Maximum attempts before overflow (2^31 would overflow time.Duration)
-	jitterPercentage       = 4                // Jitter is ±25% of delay (1/4 = 25%)
-	defaultRetryDelay      = 1 * time.Second  // Default base retry delay if not configured
-	defaultMaxRetryDelay   = 30 * time.Second // Default maximum retry delay cap
+	maxExponentialAttempts = 31                   // Maximum attempts before overflow (2^31 would overflow time.Duration)
+	jitterPercent          = 25                   // Jitter percentage: ±25% of delay
+	defaultRetryDelay      = 1 * time.Second      // Default base retry delay if not configured
+	defaultMaxRetryDelay   = 30 * time.Second     // Default maximum retry delay cap
 
 	// Filter rejection reasons - used for metrics and observability
-	filterReasonAll                = "all"                 // Notification matched all filters
-	filterReasonTypeMismatch       = "type_mismatch"       // Notification type not in allowed types
-	filterReasonPriorityMismatch   = "priority_mismatch"   // Notification priority not allowed
-	filterReasonComponentMismatch  = "component_mismatch"  // Notification component not allowed
+	filterReasonAll                 = "all"                  // Notification matched all filters
+	filterReasonTypeMismatch        = "type_mismatch"        // Notification type not in allowed types
+	filterReasonPriorityMismatch    = "priority_mismatch"    // Notification priority not allowed
+	filterReasonComponentMismatch   = "component_mismatch"   // Notification component not allowed
 	filterReasonConfidenceThreshold = "confidence_threshold" // Confidence metadata didn't meet threshold
-	filterReasonMetadataMismatch   = "metadata_mismatch"   // Other metadata filter failed
+	filterReasonMetadataMismatch    = "metadata_mismatch"    // Other metadata filter failed
 )
 
 // pushDispatcher routes notifications to enabled providers based on filters
@@ -213,16 +214,22 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 		}
 
 		// Acquire semaphore slot before spawning goroutine (prevents unbounded goroutine explosion)
-		// This blocks if we're at max concurrent dispatches, providing backpressure
+		// Use TryAcquire with timeout to prevent blocking the dispatch loop
 		// Skip semaphore if not initialized (e.g., in tests)
 		if d.concurrencySem != nil {
-			if err := d.concurrencySem.Acquire(ctx, 1); err != nil {
-				// Context cancelled before we could acquire - skip this dispatch
+			acquireCtx, cancel := context.WithTimeout(ctx, semaphoreAcquireTimeout)
+			err := d.concurrencySem.Acquire(acquireCtx, 1)
+			cancel()
+			if err != nil {
+				// Failed to acquire within timeout - queue is full
 				if d.log != nil {
-					d.log.Debug("failed to acquire dispatch semaphore, skipping",
+					d.log.Warn("dispatch queue full, dropping notification",
 						"provider", ep.name,
 						"notification_id", notif.ID,
 						"error", err)
+				}
+				if d.metrics != nil {
+					d.metrics.RecordFilterRejection(ep.name, "queue_full")
 				}
 				continue
 			}
@@ -465,18 +472,19 @@ func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, 
 
 	// Add jitter: ±25% of the delay to prevent thundering herd
 	// Use math/rand/v2 for thread-safe random generation (Go 1.22+)
-	jitterRange := exponential / jitterPercentage
+	jitterRange := exponential * jitterPercent / 100
 	jitterMax := int64(jitterRange * 2)
 	var jitter time.Duration
 	if jitterMax > 0 {
 		jitter = time.Duration(rand.Int64N(jitterMax)) - jitterRange
 	}
-	delay := exponential + jitter
 
-	// Ensure delay is positive and doesn't exceed max
+	// Apply jitter and ensure final delay stays within bounds
+	delay := exponential + jitter
 	if delay < baseDelay {
 		delay = baseDelay
-	} else if delay > maxDelay {
+	}
+	if delay > maxDelay {
 		delay = maxDelay
 	}
 
@@ -699,7 +707,23 @@ func MatchesProviderFilter(f *conf.PushFilterConfig, n *Notification, log *slog.
 }
 
 // toFloat converts various numeric types to float64 for confidence threshold comparisons.
-// Supports: float32, float64, int/uint variants, and numeric strings.
+//
+// Supported types:
+//   - Floating point: float32, float64
+//   - Signed integers: int, int8, int16, int32, int64
+//   - Unsigned integers: uint, uint8, uint16, uint32, uint64
+//   - Strings: numeric strings parseable by strconv.ParseFloat (e.g., "0.85", "42")
+//
+// Unsupported types return (0, false):
+//   - bool, nil, struct, slice, map, channel, function
+//   - Non-numeric strings (e.g., "abc", "")
+//
+// Examples:
+//   toFloat(0.85)      // (0.85, true)
+//   toFloat(int(42))   // (42.0, true)
+//   toFloat("3.14")    // (3.14, true)
+//   toFloat("invalid") // (0, false)
+//   toFloat(true)      // (0, false)
 func toFloat(v any) (float64, bool) {
 	switch t := v.(type) {
 	case float32:
