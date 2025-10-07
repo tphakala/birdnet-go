@@ -2,10 +2,9 @@ package notification
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"log/slog"
-	"math/big"
+	"math/rand/v2"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,6 +15,17 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"golang.org/x/sync/semaphore"
+)
+
+const (
+	// Concurrency limits
+	defaultMaxConcurrentJobs = 100 // Default maximum concurrent notification dispatches
+	jobsPerProvider          = 20  // Concurrent dispatches allocated per provider
+
+	// Exponential backoff constants
+	maxExponentialAttempts = 31            // Maximum attempts before overflow (2^31 would overflow time.Duration)
+	jitterPercentage       = 4             // Jitter is ±25% of delay (1/4 = 25%)
+	defaultRetryDelay      = 1 * time.Second // Default retry delay if not configured
 )
 
 // pushDispatcher routes notifications to enabled providers based on filters
@@ -32,7 +42,7 @@ type pushDispatcher struct {
 	metrics           *metrics.NotificationMetrics
 	healthChecker     *HealthChecker
 	concurrencySem    *semaphore.Weighted // Limits concurrent dispatch goroutines to prevent resource exhaustion
-	maxConcurrentJobs int64               // Maximum concurrent dispatches - dynamically calculated as max(100, providers*20)
+	maxConcurrentJobs int64               // Maximum concurrent dispatches - dynamically calculated as max(defaultMaxConcurrentJobs, providers*jobsPerProvider)
 	// rateLimiter removed - now per-provider in enhancedProvider
 }
 
@@ -67,10 +77,9 @@ func InitializePushFromConfigWithMetrics(settings *conf.Settings, notificationMe
 		}
 
 		// Calculate max concurrent jobs based on number of providers
-		// Default: 100 concurrent dispatches, or 20 per provider (whichever is higher)
-		maxConcurrentJobs := int64(100)
+		maxConcurrentJobs := int64(defaultMaxConcurrentJobs)
 		if providerCount := len(settings.Notification.Push.Providers); providerCount > 0 {
-			perProviderLimit := int64(providerCount * 20)
+			perProviderLimit := int64(providerCount * jobsPerProvider)
 			if perProviderLimit > maxConcurrentJobs {
 				maxConcurrentJobs = perProviderLimit
 			}
@@ -421,12 +430,12 @@ func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, 
 	// Calculate exponential backoff: baseDelay * 2^(attempt-1)
 	baseDelay := d.retryDelay
 	if baseDelay == 0 {
-		baseDelay = 1 * time.Second // Default if not configured
+		baseDelay = defaultRetryDelay
 	}
 
 	// Calculate exponential component using bit shift, with overflow protection
 	exponential := baseDelay
-	if attempts > 1 && attempts < 31 { // Prevent overflow (2^31 would overflow)
+	if attempts > 1 && attempts < maxExponentialAttempts {
 		exponential = baseDelay * (1 << (attempts - 1))
 	}
 	// Cap at max delay
@@ -435,15 +444,12 @@ func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, 
 	}
 
 	// Add jitter: ±25% of the delay to prevent thundering herd
-	// Use crypto/rand for thread-safe random generation
-	jitterRange := exponential / 4 // 25% of delay
+	// Use math/rand/v2 for thread-safe random generation (Go 1.22+)
+	jitterRange := exponential / jitterPercentage
 	jitterMax := int64(jitterRange * 2)
 	var jitter time.Duration
 	if jitterMax > 0 {
-		if jitterBig, err := rand.Int(rand.Reader, big.NewInt(jitterMax)); err == nil {
-			jitter = time.Duration(jitterBig.Int64()) - jitterRange
-		}
-		// If crypto/rand fails, proceed without jitter (safer than panic)
+		jitter = time.Duration(rand.Int64N(jitterMax)) - jitterRange
 	}
 	delay := exponential + jitter
 
