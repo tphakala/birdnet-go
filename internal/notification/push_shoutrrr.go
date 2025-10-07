@@ -24,7 +24,7 @@ type ShoutrrrProvider struct {
 	timeout time.Duration
 }
 
-func NewShoutrrrProvider(name string, enabled bool, urls []string, supportedTypes []string, timeout time.Duration) *ShoutrrrProvider {
+func NewShoutrrrProvider(name string, enabled bool, urls, supportedTypes []string, timeout time.Duration) *ShoutrrrProvider {
 	sp := &ShoutrrrProvider{
 		name:    strings.TrimSpace(name),
 		enabled: enabled,
@@ -32,7 +32,7 @@ func NewShoutrrrProvider(name string, enabled bool, urls []string, supportedType
 		types:   map[string]bool{},
 		timeout: timeout,
 	}
-	if len(sp.name) == 0 {
+	if sp.name == "" {
 		sp.name = "shoutrrr"
 	}
 	if len(supportedTypes) == 0 {

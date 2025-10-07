@@ -28,6 +28,7 @@ type Metrics struct {
 	MyAudio       *metrics.MyAudioMetrics
 	SoundLevel    *metrics.SoundLevelMetrics
 	HTTP          *metrics.HTTPMetrics
+	Notification  *metrics.NotificationMetrics
 }
 
 // NewMetrics creates a new instance of Metrics, initializing all metric collectors.
@@ -85,6 +86,11 @@ func NewMetrics() (*Metrics, error) {
 		return nil, fmt.Errorf("failed to create HTTP metrics: %w", err)
 	}
 
+	notificationMetrics, err := metrics.NewNotificationMetrics(registry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Notification metrics: %w", err)
+	}
+
 	m := &Metrics{
 		registry:      registry,
 		MQTT:          mqttMetrics,
@@ -97,6 +103,7 @@ func NewMetrics() (*Metrics, error) {
 		MyAudio:       myAudioMetrics,
 		SoundLevel:    soundLevelMetrics,
 		HTTP:          httpMetrics,
+		Notification:  notificationMetrics,
 	}
 
 	// Initialize tracing with metrics

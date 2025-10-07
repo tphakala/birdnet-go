@@ -320,5 +320,22 @@ func setDefaultConfig() {
 	viper.SetDefault("notification.push.default_timeout", "30s")
 	viper.SetDefault("notification.push.max_retries", 3)
 	viper.SetDefault("notification.push.retry_delay", "5s")
+
+	// Circuit breaker configuration
+	viper.SetDefault("notification.push.circuit_breaker.enabled", true)
+	viper.SetDefault("notification.push.circuit_breaker.max_failures", 5)
+	viper.SetDefault("notification.push.circuit_breaker.timeout", "30s")
+	viper.SetDefault("notification.push.circuit_breaker.half_open_max_requests", 1)
+
+	// Health check configuration
+	viper.SetDefault("notification.push.health_check.enabled", true)
+	viper.SetDefault("notification.push.health_check.interval", "60s")
+	viper.SetDefault("notification.push.health_check.timeout", "10s")
+
+	// Rate limiting configuration
+	viper.SetDefault("notification.push.rate_limiting.enabled", false)
+	viper.SetDefault("notification.push.rate_limiting.requests_per_minute", 60)
+	viper.SetDefault("notification.push.rate_limiting.burst_size", 10)
+
 	viper.SetDefault("notification.push.providers", []map[string]any{})
 }

@@ -254,6 +254,30 @@ notification:
     default_timeout: 30s
     max_retries: 3
     retry_delay: 5s
+
+    # Circuit breaker configuration
+    # Protects against cascading failures by temporarily blocking requests to failing providers
+    circuit_breaker:
+      enabled: true
+      max_failures: 5          # Number of consecutive failures before opening circuit
+      timeout: 30s             # Time to wait before attempting half-open state
+      half_open_max_requests: 1  # Number of test requests allowed in half-open state
+
+    # Health check configuration
+    # Periodically verifies provider availability and updates metrics
+    health_check:
+      enabled: true
+      interval: 60s  # How often to check provider health
+      timeout: 10s   # Timeout for each health check
+
+    # Rate limiting configuration
+    # Prevents overwhelming external APIs with too many requests
+    # Disabled by default - enable if you need additional DoS protection beyond circuit breakers
+    rate_limiting:
+      enabled: false           # Enable to activate rate limiting
+      requests_per_minute: 60  # Maximum average request rate
+      burst_size: 10           # Maximum burst capacity for spikes
+
     providers:
       - type: shoutrrr
         enabled: false
