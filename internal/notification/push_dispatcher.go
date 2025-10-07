@@ -23,9 +23,17 @@ const (
 	jobsPerProvider          = 20  // Concurrent dispatches allocated per provider
 
 	// Exponential backoff constants
-	maxExponentialAttempts = 31            // Maximum attempts before overflow (2^31 would overflow time.Duration)
-	jitterPercentage       = 4             // Jitter is ±25% of delay (1/4 = 25%)
-	defaultRetryDelay      = 1 * time.Second // Default retry delay if not configured
+	maxExponentialAttempts = 31               // Maximum attempts before overflow (2^31 would overflow time.Duration)
+	jitterPercentage       = 4                // Jitter is ±25% of delay (1/4 = 25%)
+	defaultRetryDelay      = 1 * time.Second  // Default retry delay if not configured
+
+	// Filter rejection reasons - used for metrics and observability
+	filterReasonAll                = "all"                 // Notification matched all filters
+	filterReasonTypeMismatch       = "type_mismatch"       // Notification type not in allowed types
+	filterReasonPriorityMismatch   = "priority_mismatch"   // Notification priority not allowed
+	filterReasonComponentMismatch  = "component_mismatch"  // Notification component not allowed
+	filterReasonConfidenceThreshold = "confidence_threshold" // Confidence metadata didn't meet threshold
+	filterReasonMetadataMismatch   = "metadata_mismatch"   // Other metadata filter failed
 )
 
 // pushDispatcher routes notifications to enabled providers based on filters
@@ -521,19 +529,13 @@ func orDefault[T ~string](v, d T) T {
 
 // MatchesProviderFilterWithReason applies filtering and returns both result and reason.
 // Reason indicates why the notification matched or was rejected for better observability.
-// Returns (matches, reason) where reason is one of:
-// - "all" - matched all filters or no filters configured
-// - "type_mismatch" - notification type not in allowed types
-// - "priority_mismatch" - notification priority not in allowed priorities
-// - "component_mismatch" - notification component not in allowed components
-// - "confidence_threshold" - confidence metadata didn't meet threshold
-// - "metadata_mismatch" - other metadata filter failed
+// Returns (matches, reason) where reason is one of the filterReason* constants.
 func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) (bool, string) {
 	if f == nil {
 		if log != nil {
 			log.Debug("no filter configured, allowing notification", "provider", providerName, "notification_id", n.ID)
 		}
-		return true, "all"
+		return true, filterReasonAll
 	}
 
 	// Types
@@ -545,7 +547,7 @@ func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, 
 			if log != nil {
 				log.Debug("filter failed: type mismatch", "provider", providerName, "allowed_types", f.Types, "notification_type", string(n.Type), "notification_id", n.ID)
 			}
-			return false, "type_mismatch"
+			return false, filterReasonTypeMismatch
 		}
 	}
 
@@ -555,7 +557,7 @@ func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, 
 			if log != nil {
 				log.Debug("filter failed: priority mismatch", "provider", providerName, "allowed_priorities", f.Priorities, "notification_priority", string(n.Priority), "notification_id", n.ID)
 			}
-			return false, "priority_mismatch"
+			return false, filterReasonPriorityMismatch
 		}
 	}
 
@@ -565,7 +567,7 @@ func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, 
 			if log != nil {
 				log.Debug("filter failed: component mismatch", "provider", providerName, "allowed_components", f.Components, "notification_component", n.Component, "notification_id", n.ID)
 			}
-			return false, "component_mismatch"
+			return false, filterReasonComponentMismatch
 		}
 	}
 
@@ -582,14 +584,14 @@ func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, 
 				if log != nil {
 					log.Debug("filter failed: confidence filter misconfigured", "provider", providerName, "filter_value", val, "notification_id", n.ID)
 				}
-				return false, "confidence_threshold"
+				return false, filterReasonConfidenceThreshold
 			}
 			cond = strings.TrimSpace(cond)
 			if cond == "" {
 				if log != nil {
 					log.Debug("filter failed: empty confidence condition", "provider", providerName, "notification_id", n.ID)
 				}
-				return false, "confidence_threshold"
+				return false, filterReasonConfidenceThreshold
 			}
 
 			// Parse operator and value
@@ -606,7 +608,7 @@ func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, 
 				if log != nil {
 					log.Debug("filter failed: unknown confidence operator", "provider", providerName, "condition", cond, "notification_id", n.ID)
 				}
-				return false, "confidence_threshold"
+				return false, filterReasonConfidenceThreshold
 			}
 
 			threshold, err := strconv.ParseFloat(valStr, 64)
@@ -614,7 +616,7 @@ func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, 
 				if log != nil {
 					log.Debug("filter failed: invalid confidence threshold", "provider", providerName, "threshold_str", valStr, "error", err, "notification_id", n.ID)
 				}
-				return false, "confidence_threshold"
+				return false, filterReasonConfidenceThreshold
 			}
 
 			raw, exists := n.Metadata["confidence"]
@@ -622,7 +624,7 @@ func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, 
 				if log != nil {
 					log.Debug("filter failed: confidence metadata missing", "provider", providerName, "available_metadata", n.Metadata, "notification_id", n.ID)
 				}
-				return false, "confidence_threshold"
+				return false, filterReasonConfidenceThreshold
 			}
 
 			cv, ok := toFloat(raw)
@@ -630,7 +632,7 @@ func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, 
 				if log != nil {
 					log.Debug("filter failed: confidence value not parseable", "provider", providerName, "confidence_value", raw, "notification_id", n.ID)
 				}
-				return false, "confidence_threshold"
+				return false, filterReasonConfidenceThreshold
 			}
 
 			// Check operator
@@ -652,7 +654,7 @@ func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, 
 				if log != nil {
 					log.Debug("filter failed: confidence threshold not met", "provider", providerName, "condition", cond, "actual_confidence", cv, "notification_id", n.ID)
 				}
-				return false, "confidence_threshold"
+				return false, filterReasonConfidenceThreshold
 			}
 			continue
 		}
@@ -663,17 +665,17 @@ func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, 
 			if log != nil {
 				log.Debug("filter failed: metadata key missing", "provider", providerName, "required_key", key, "available_metadata", n.Metadata, "notification_id", n.ID)
 			}
-			return false, "metadata_mismatch"
+			return false, filterReasonMetadataMismatch
 		}
 		if fmt.Sprint(mv) != fmt.Sprint(val) {
 			if log != nil {
 				log.Debug("filter failed: metadata value mismatch", "provider", providerName, "key", key, "expected", val, "actual", mv, "notification_id", n.ID)
 			}
-			return false, "metadata_mismatch"
+			return false, filterReasonMetadataMismatch
 		}
 	}
 
-	return true, "all"
+	return true, filterReasonAll
 }
 
 // MatchesProviderFilter applies basic filtering based on type/priority/component and simple metadata rules.
