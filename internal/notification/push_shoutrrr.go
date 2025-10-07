@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	shoutrrr "github.com/containrrr/shoutrrr"
-	router "github.com/containrrr/shoutrrr/pkg/router"
-	stypes "github.com/containrrr/shoutrrr/pkg/types"
+	shoutrrr "github.com/nicholas-fedor/shoutrrr"
+	router "github.com/nicholas-fedor/shoutrrr/pkg/router"
+	stypes "github.com/nicholas-fedor/shoutrrr/pkg/types"
 )
 
-// ShoutrrrProvider sends via containrrr/shoutrrr
+// ShoutrrrProvider sends via nicholas-fedor/shoutrrr
 // Creates a single sender for multiple URLs.
 type ShoutrrrProvider struct {
 	name    string

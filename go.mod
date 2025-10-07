@@ -4,7 +4,6 @@ go 1.25.1
 
 require (
 	github.com/antonholmquist/jason v1.0.0
-	github.com/containrrr/shoutrrr v0.8.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/fatih/color v1.18.0
 	github.com/getsentry/sentry-go v0.35.3
@@ -16,6 +15,7 @@ require (
 	github.com/k3a/html2text v1.2.1
 	github.com/klauspost/cpuid/v2 v2.3.0
 	github.com/labstack/echo/v4 v4.13.4
+	github.com/nicholas-fedor/shoutrrr v0.10.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/sftp v1.13.9
 	github.com/prometheus/client_golang v1.23.2
