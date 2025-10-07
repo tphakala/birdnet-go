@@ -25,7 +25,8 @@ const (
 	// Exponential backoff constants
 	maxExponentialAttempts = 31               // Maximum attempts before overflow (2^31 would overflow time.Duration)
 	jitterPercentage       = 4                // Jitter is ±25% of delay (1/4 = 25%)
-	defaultRetryDelay      = 1 * time.Second  // Default retry delay if not configured
+	defaultRetryDelay      = 1 * time.Second  // Default base retry delay if not configured
+	defaultMaxRetryDelay   = 30 * time.Second // Default maximum retry delay cap
 
 	// Filter rejection reasons - used for metrics and observability
 	filterReasonAll                = "all"                 // Notification matched all filters
@@ -435,10 +436,18 @@ func (d *pushDispatcher) shouldRetry(err error, attempts int, providerName strin
 // Uses capped exponential backoff: min(baseDelay * 2^(attempt-1), maxDelay) ± jitter
 // This prevents thundering herd problems while maintaining reasonable wait times.
 func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, attempts int) bool {
-	// Calculate exponential backoff: baseDelay * 2^(attempt-1)
+	// Determine base delay (starting point for exponential growth)
 	baseDelay := d.retryDelay
-	if baseDelay == 0 {
+	if baseDelay <= 0 {
 		baseDelay = defaultRetryDelay
+	}
+
+	// Determine max delay cap (upper bound for exponential growth)
+	// If retryDelay is configured and greater than base, use it as cap
+	// Otherwise use a sensible default max
+	maxDelay := d.retryDelay
+	if maxDelay <= 0 || maxDelay < baseDelay {
+		maxDelay = defaultMaxRetryDelay
 	}
 
 	// Calculate exponential component using bit shift, with overflow protection
@@ -446,9 +455,12 @@ func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, 
 	if attempts > 1 && attempts < maxExponentialAttempts {
 		exponential = baseDelay * (1 << (attempts - 1))
 	}
-	// Cap at max delay
-	if exponential > d.retryDelay || exponential < baseDelay {
-		exponential = d.retryDelay
+
+	// Cap at max delay (preserve exponential growth up to the cap)
+	if exponential < baseDelay {
+		exponential = baseDelay
+	} else if exponential > maxDelay {
+		exponential = maxDelay
 	}
 
 	// Add jitter: ±25% of the delay to prevent thundering herd
@@ -464,9 +476,8 @@ func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, 
 	// Ensure delay is positive and doesn't exceed max
 	if delay < baseDelay {
 		delay = baseDelay
-	}
-	if delay > d.retryDelay {
-		delay = d.retryDelay
+	} else if delay > maxDelay {
+		delay = maxDelay
 	}
 
 	if d.log != nil {
@@ -475,7 +486,7 @@ func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, 
 			"attempts", attempts,
 			"delay", delay,
 			"base_delay", baseDelay,
-			"max_delay", d.retryDelay)
+			"max_delay", maxDelay)
 	}
 
 	select {
