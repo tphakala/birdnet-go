@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,21 +14,45 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
+	"golang.org/x/sync/semaphore"
+)
+
+const (
+	// Concurrency limits
+	defaultMaxConcurrentJobs = 100                // Default maximum concurrent notification dispatches
+	jobsPerProvider          = 20                 // Concurrent dispatches allocated per provider
+	semaphoreAcquireTimeout  = 100 * time.Millisecond // Timeout for acquiring semaphore slot
+
+	// Exponential backoff constants
+	maxExponentialAttempts = 31                   // Maximum attempts before overflow (2^31 would overflow time.Duration)
+	jitterPercent          = 25                   // Jitter percentage: ±25% of delay
+	defaultRetryDelay      = 1 * time.Second      // Default base retry delay if not configured
+	defaultMaxRetryDelay   = 30 * time.Second     // Default maximum retry delay cap
+
+	// Filter rejection reasons - used for metrics and observability
+	filterReasonAll                 = "all"                  // Notification matched all filters
+	filterReasonTypeMismatch        = "type_mismatch"        // Notification type not in allowed types
+	filterReasonPriorityMismatch    = "priority_mismatch"    // Notification priority not allowed
+	filterReasonComponentMismatch   = "component_mismatch"   // Notification component not allowed
+	filterReasonConfidenceThreshold = "confidence_threshold" // Confidence metadata didn't meet threshold
+	filterReasonMetadataMismatch    = "metadata_mismatch"    // Other metadata filter failed
 )
 
 // pushDispatcher routes notifications to enabled providers based on filters
 // It subscribes to the notification service and forwards notifications asynchronously.
 type pushDispatcher struct {
-	providers      []enhancedProvider
-	log            *slog.Logger
-	enabled        bool
-	maxRetries     int
-	retryDelay     time.Duration
-	defaultTimeout time.Duration
-	cancel         context.CancelFunc
-	mu             sync.RWMutex
-	metrics        *metrics.NotificationMetrics
-	healthChecker  *HealthChecker
+	providers         []enhancedProvider
+	log               *slog.Logger
+	enabled           bool
+	maxRetries        int
+	retryDelay        time.Duration
+	defaultTimeout    time.Duration
+	cancel            context.CancelFunc
+	mu                sync.RWMutex
+	metrics           *metrics.NotificationMetrics
+	healthChecker     *HealthChecker
+	concurrencySem    *semaphore.Weighted // Limits concurrent dispatch goroutines to prevent resource exhaustion
+	maxConcurrentJobs int64               // Maximum concurrent dispatches - dynamically calculated as max(defaultMaxConcurrentJobs, providers*jobsPerProvider)
 	// rateLimiter removed - now per-provider in enhancedProvider
 }
 
@@ -61,13 +86,24 @@ func InitializePushFromConfigWithMetrics(settings *conf.Settings, notificationMe
 			return
 		}
 
+		// Calculate max concurrent jobs based on number of providers
+		maxConcurrentJobs := int64(defaultMaxConcurrentJobs)
+		if providerCount := len(settings.Notification.Push.Providers); providerCount > 0 {
+			perProviderLimit := int64(providerCount * jobsPerProvider)
+			if perProviderLimit > maxConcurrentJobs {
+				maxConcurrentJobs = perProviderLimit
+			}
+		}
+
 		pd := &pushDispatcher{
-			log:            getFileLogger(settings.Debug),
-			enabled:        settings.Notification.Push.Enabled,
-			maxRetries:     settings.Notification.Push.MaxRetries,
-			retryDelay:     settings.Notification.Push.RetryDelay,
-			defaultTimeout: settings.Notification.Push.DefaultTimeout,
-			metrics:        notificationMetrics,
+			log:               getFileLogger(settings.Debug),
+			enabled:           settings.Notification.Push.Enabled,
+			maxRetries:        settings.Notification.Push.MaxRetries,
+			retryDelay:        settings.Notification.Push.RetryDelay,
+			defaultTimeout:    settings.Notification.Push.DefaultTimeout,
+			metrics:           notificationMetrics,
+			concurrencySem:    semaphore.NewWeighted(maxConcurrentJobs),
+			maxConcurrentJobs: maxConcurrentJobs,
 		}
 
 		// Initialize health checker if enabled
@@ -161,7 +197,8 @@ func (d *pushDispatcher) start() error {
 
 	d.log.Info("push dispatcher started",
 		"providers", len(d.providers),
-		"health_checker", d.healthChecker != nil)
+		"health_checker", d.healthChecker != nil,
+		"max_concurrent_dispatches", d.maxConcurrentJobs)
 	return nil
 }
 
@@ -176,22 +213,60 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 			continue
 		}
 
+		// Acquire semaphore slot before spawning goroutine (prevents unbounded goroutine explosion)
+		// Use TryAcquire with timeout to prevent blocking the dispatch loop
+		// Skip semaphore if not initialized (e.g., in tests)
+		if d.concurrencySem != nil {
+			acquireCtx, cancel := context.WithTimeout(ctx, semaphoreAcquireTimeout)
+			err := d.concurrencySem.Acquire(acquireCtx, 1)
+			cancel()
+			if err != nil {
+				// Failed to acquire within timeout - queue is full
+				if d.log != nil {
+					d.log.Warn("dispatch queue full, dropping notification",
+						"provider", ep.name,
+						"notification_id", notif.ID,
+						"error", err)
+				}
+				if d.metrics != nil {
+					d.metrics.RecordFilterRejection(ep.name, "queue_full")
+				}
+				continue
+			}
+		}
+
 		// Run each provider in its own goroutine to avoid head-of-line blocking
-		go d.dispatchEnhanced(ctx, notif, ep)
+		go func(provider *enhancedProvider) {
+			// Always release semaphore and handle panics
+			defer func() {
+				if d.concurrencySem != nil {
+					d.concurrencySem.Release(1)
+				}
+				if r := recover(); r != nil {
+					if d.log != nil {
+						d.log.Error("panic in dispatch goroutine",
+							"provider", provider.name,
+							"notification_id", notif.ID,
+							"panic", r)
+					}
+				}
+			}()
+			d.dispatchEnhanced(ctx, notif, provider)
+		}(ep)
 	}
 }
 
-// matchesFilter checks if notification matches provider filter and records metrics.
+// matchesFilter checks if notification matches provider filter and records metrics with reason.
 func (d *pushDispatcher) matchesFilter(ep *enhancedProvider, notif *Notification) bool {
-	// Use legacy filter logic for backward compatibility
-	matches := MatchesProviderFilter(&ep.filter, notif, d.log, ep.name)
+	// Use enhanced filter logic that returns rejection reason
+	matches, reason := MatchesProviderFilterWithReason(&ep.filter, notif, d.log, ep.name)
 
-	// Record filter metrics
+	// Record filter metrics with specific reason
 	if d.metrics != nil {
 		if matches {
-			d.metrics.RecordFilterMatch(ep.name, "all")
+			d.metrics.RecordFilterMatch(ep.name, reason)
 		} else {
-			d.metrics.RecordFilterRejection(ep.name, "filter_mismatch")
+			d.metrics.RecordFilterRejection(ep.name, reason)
 		}
 	}
 
@@ -364,8 +439,64 @@ func (d *pushDispatcher) shouldRetry(err error, attempts int, providerName strin
 	return true
 }
 
-// waitForRetry waits for the retry delay or context cancellation.
+// waitForRetry waits for the retry delay with exponential backoff and jitter.
+// Uses capped exponential backoff: min(baseDelay * 2^(attempt-1), maxDelay) ± jitter
+// This prevents thundering herd problems while maintaining reasonable wait times.
 func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, attempts int) bool {
+	// Determine base delay (starting point for exponential growth)
+	baseDelay := d.retryDelay
+	if baseDelay <= 0 {
+		baseDelay = defaultRetryDelay
+	}
+
+	// Determine max delay cap (upper bound for exponential growth)
+	// If retryDelay is configured and greater than base, use it as cap
+	// Otherwise use a sensible default max
+	maxDelay := d.retryDelay
+	if maxDelay <= 0 || maxDelay < baseDelay {
+		maxDelay = defaultMaxRetryDelay
+	}
+
+	// Calculate exponential component using bit shift, with overflow protection
+	exponential := baseDelay
+	if attempts > 1 && attempts < maxExponentialAttempts {
+		exponential = baseDelay * (1 << (attempts - 1))
+	}
+
+	// Cap at max delay (preserve exponential growth up to the cap)
+	if exponential < baseDelay {
+		exponential = baseDelay
+	} else if exponential > maxDelay {
+		exponential = maxDelay
+	}
+
+	// Add jitter: ±25% of the delay to prevent thundering herd
+	// Use math/rand/v2 for thread-safe random generation (Go 1.22+)
+	jitterRange := exponential * jitterPercent / 100
+	jitterMax := int64(jitterRange * 2)
+	var jitter time.Duration
+	if jitterMax > 0 {
+		jitter = time.Duration(rand.Int64N(jitterMax)) - jitterRange
+	}
+
+	// Apply jitter and ensure final delay stays within bounds
+	delay := exponential + jitter
+	if delay < baseDelay {
+		delay = baseDelay
+	}
+	if delay > maxDelay {
+		delay = maxDelay
+	}
+
+	if d.log != nil {
+		d.log.Debug("waiting for retry with exponential backoff",
+			"provider", providerName,
+			"attempts", attempts,
+			"delay", delay,
+			"base_delay", baseDelay,
+			"max_delay", maxDelay)
+	}
+
 	select {
 	case <-ctx.Done():
 		if d.log != nil {
@@ -374,7 +505,7 @@ func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, 
 				"attempts", attempts)
 		}
 		return false
-	case <-time.After(d.retryDelay):
+	case <-time.After(delay):
 		return true
 	}
 }
@@ -415,14 +546,15 @@ func orDefault[T ~string](v, d T) T {
 	return v
 }
 
-// MatchesProviderFilter applies basic filtering based on type/priority/component and simple metadata rules.
-// This function is exported for testing purposes.
-func MatchesProviderFilter(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) bool {
+// MatchesProviderFilterWithReason applies filtering and returns both result and reason.
+// Reason indicates why the notification matched or was rejected for better observability.
+// Returns (matches, reason) where reason is one of the filterReason* constants.
+func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) (bool, string) {
 	if f == nil {
 		if log != nil {
 			log.Debug("no filter configured, allowing notification", "provider", providerName, "notification_id", n.ID)
 		}
-		return true
+		return true, filterReasonAll
 	}
 
 	// Types
@@ -434,47 +566,51 @@ func MatchesProviderFilter(f *conf.PushFilterConfig, n *Notification, log *slog.
 			if log != nil {
 				log.Debug("filter failed: type mismatch", "provider", providerName, "allowed_types", f.Types, "notification_type", string(n.Type), "notification_id", n.ID)
 			}
-			return false
+			return false, filterReasonTypeMismatch
 		}
 	}
+
 	// Priorities
 	if len(f.Priorities) > 0 {
 		if !slices.Contains(f.Priorities, string(n.Priority)) {
 			if log != nil {
 				log.Debug("filter failed: priority mismatch", "provider", providerName, "allowed_priorities", f.Priorities, "notification_priority", string(n.Priority), "notification_id", n.ID)
 			}
-			return false
+			return false, filterReasonPriorityMismatch
 		}
 	}
+
 	// Component
 	if len(f.Components) > 0 {
 		if !slices.Contains(f.Components, n.Component) {
 			if log != nil {
 				log.Debug("filter failed: component mismatch", "provider", providerName, "allowed_components", f.Components, "notification_component", n.Component, "notification_id", n.ID)
 			}
-			return false
+			return false, filterReasonComponentMismatch
 		}
 	}
+
 	// Metadata filters: support confidence > >= < <= = == and equality matches for bools/strings
 	for key, val := range f.MetadataFilters {
 		if log != nil {
 			log.Debug("processing metadata filter", "provider", providerName, "key", key, "filter_value", val, "notification_id", n.ID)
 		}
-		// confidence threshold
+
+		// Confidence threshold
 		if key == "confidence" {
 			cond, ok := val.(string)
 			if !ok {
 				if log != nil {
 					log.Debug("filter failed: confidence filter misconfigured", "provider", providerName, "filter_value", val, "notification_id", n.ID)
 				}
-				return false // misconfigured filter
+				return false, filterReasonConfidenceThreshold
 			}
 			cond = strings.TrimSpace(cond)
 			if cond == "" {
 				if log != nil {
 					log.Debug("filter failed: empty confidence condition", "provider", providerName, "notification_id", n.ID)
 				}
-				return false
+				return false, filterReasonConfidenceThreshold
 			}
 
 			// Parse operator and value
@@ -491,7 +627,7 @@ func MatchesProviderFilter(f *conf.PushFilterConfig, n *Notification, log *slog.
 				if log != nil {
 					log.Debug("filter failed: unknown confidence operator", "provider", providerName, "condition", cond, "notification_id", n.ID)
 				}
-				return false // unknown operator format
+				return false, filterReasonConfidenceThreshold
 			}
 
 			threshold, err := strconv.ParseFloat(valStr, 64)
@@ -499,90 +635,121 @@ func MatchesProviderFilter(f *conf.PushFilterConfig, n *Notification, log *slog.
 				if log != nil {
 					log.Debug("filter failed: invalid confidence threshold", "provider", providerName, "threshold_str", valStr, "error", err, "notification_id", n.ID)
 				}
-				return false
+				return false, filterReasonConfidenceThreshold
 			}
+
 			raw, exists := n.Metadata["confidence"]
 			if !exists {
 				if log != nil {
 					log.Debug("filter failed: confidence metadata missing", "provider", providerName, "available_metadata", n.Metadata, "notification_id", n.ID)
 				}
-				return false // require presence
+				return false, filterReasonConfidenceThreshold
 			}
+
 			cv, ok := toFloat(raw)
 			if !ok {
 				if log != nil {
 					log.Debug("filter failed: confidence value not parseable", "provider", providerName, "confidence_value", raw, "notification_id", n.ID)
 				}
-				return false // require parse success
+				return false, filterReasonConfidenceThreshold
 			}
+
+			// Check operator
+			matched := false
 			switch op {
 			case ">":
-				if !(cv > threshold) {
-					if log != nil {
-						log.Debug("filter failed: confidence too low", "provider", providerName, "condition", cond, "actual_confidence", cv, "required", fmt.Sprintf("> %v", threshold), "notification_id", n.ID)
-					}
-					return false
-				}
+				matched = cv > threshold
 			case ">=":
-				if !(cv >= threshold) {
-					if log != nil {
-						log.Debug("filter failed: confidence too low", "provider", providerName, "condition", cond, "actual_confidence", cv, "required", fmt.Sprintf(">= %v", threshold), "notification_id", n.ID)
-					}
-					return false
-				}
+				matched = cv >= threshold
 			case "<":
-				if !(cv < threshold) {
-					if log != nil {
-						log.Debug("filter failed: confidence too high", "provider", providerName, "condition", cond, "actual_confidence", cv, "required", fmt.Sprintf("< %v", threshold), "notification_id", n.ID)
-					}
-					return false
-				}
+				matched = cv < threshold
 			case "<=":
-				if !(cv <= threshold) {
-					if log != nil {
-						log.Debug("filter failed: confidence too high", "provider", providerName, "condition", cond, "actual_confidence", cv, "required", fmt.Sprintf("<= %v", threshold), "notification_id", n.ID)
-					}
-					return false
-				}
+				matched = cv <= threshold
 			case "=", "==":
-				if !(cv == threshold) {
-					if log != nil {
-						log.Debug("filter failed: confidence mismatch", "provider", providerName, "condition", cond, "actual_confidence", cv, "required", fmt.Sprintf("== %v", threshold), "notification_id", n.ID)
-					}
-					return false
-				}
-			default:
+				matched = cv == threshold
+			}
+
+			if !matched {
 				if log != nil {
-					log.Debug("filter failed: unknown confidence operator", "provider", providerName, "operator", op, "notification_id", n.ID)
+					log.Debug("filter failed: confidence threshold not met", "provider", providerName, "condition", cond, "actual_confidence", cv, "notification_id", n.ID)
 				}
-				return false // unknown operator
+				return false, filterReasonConfidenceThreshold
 			}
 			continue
 		}
-		// exact match requires key presence
+
+		// Exact match for other metadata keys
 		mv, ok := n.Metadata[key]
 		if !ok {
 			if log != nil {
 				log.Debug("filter failed: metadata key missing", "provider", providerName, "required_key", key, "available_metadata", n.Metadata, "notification_id", n.ID)
 			}
-			return false
+			return false, filterReasonMetadataMismatch
 		}
 		if fmt.Sprint(mv) != fmt.Sprint(val) {
 			if log != nil {
 				log.Debug("filter failed: metadata value mismatch", "provider", providerName, "key", key, "expected", val, "actual", mv, "notification_id", n.ID)
 			}
-			return false
+			return false, filterReasonMetadataMismatch
 		}
 	}
-	return true
+
+	return true, filterReasonAll
 }
 
+// MatchesProviderFilter applies basic filtering based on type/priority/component and simple metadata rules.
+// This function is exported for testing purposes and preserved for backward compatibility.
+// New code should use MatchesProviderFilterWithReason for better observability.
+func MatchesProviderFilter(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) bool {
+	// Delegate to the enhanced version and discard the reason
+	matches, _ := MatchesProviderFilterWithReason(f, n, log, providerName)
+	return matches
+}
+
+// toFloat converts various numeric types to float64 for confidence threshold comparisons.
+//
+// Supported types:
+//   - Floating point: float32, float64
+//   - Signed integers: int, int8, int16, int32, int64
+//   - Unsigned integers: uint, uint8, uint16, uint32, uint64
+//   - Strings: numeric strings parseable by strconv.ParseFloat (e.g., "0.85", "42")
+//
+// Unsupported types return (0, false):
+//   - bool, nil, struct, slice, map, channel, function
+//   - Non-numeric strings (e.g., "abc", "")
+//
+// Examples:
+//   toFloat(0.85)      // (0.85, true)
+//   toFloat(int(42))   // (42.0, true)
+//   toFloat("3.14")    // (3.14, true)
+//   toFloat("invalid") // (0, false)
+//   toFloat(true)      // (0, false)
 func toFloat(v any) (float64, bool) {
 	switch t := v.(type) {
 	case float32:
 		return float64(t), true
 	case float64:
 		return t, true
+	case int:
+		return float64(t), true
+	case int8:
+		return float64(t), true
+	case int16:
+		return float64(t), true
+	case int32:
+		return float64(t), true
+	case int64:
+		return float64(t), true
+	case uint:
+		return float64(t), true
+	case uint8:
+		return float64(t), true
+	case uint16:
+		return float64(t), true
+	case uint32:
+		return float64(t), true
+	case uint64:
+		return float64(t), true
 	case string:
 		f, err := strconv.ParseFloat(t, 64)
 		if err == nil {
