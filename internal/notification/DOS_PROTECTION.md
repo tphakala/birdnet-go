@@ -11,7 +11,7 @@ BirdNET-Go's push notification system is designed to be a **well-behaved interne
 **Purpose**: Immediately stop requests to failing services
 
 **How it works**:
-```
+```text
 Normal Operation → Failures Detected → Circuit Opens → Service Protected
      (Closed)         (Threshold: 5)      (Block All)     (Recovery Test)
 ```
@@ -32,7 +32,7 @@ circuit_breaker:
 - ✅ Rate limit response from API → Circuit opens, prevents further violations
 
 **Example**:
-```
+```text
 Telegram API returns 429 (Too Many Requests)
 → Circuit breaker opens after 5 failures
 → ALL subsequent notifications blocked for 30 seconds
@@ -75,7 +75,7 @@ push:
 ```
 
 **Behavior**:
-```
+```text
 Attempt 1: Immediate
 Attempt 2: Wait 5s
 Attempt 3: Wait 5s
@@ -108,7 +108,7 @@ push:
 - Each provider has its own health check
 
 **Example**:
-```
+```text
 Telegram circuit opens (API down)
 → Discord notifications continue working
 → Email notifications continue working
@@ -120,7 +120,7 @@ Telegram circuit opens (API down)
 ### Example 1: API Endpoint Goes Down
 
 **Without Protection**:
-```
+```text
 App generates 1000 detections/hour
 → Each tries to send to Telegram (down)
 → Each hangs for 30s timeout
@@ -129,7 +129,7 @@ App generates 1000 detections/hour
 ```
 
 **With BirdNET-Go Protection**:
-```
+```text
 App generates 1000 detections/hour
 → First 5 fail to Telegram
 → Circuit breaker opens
@@ -145,14 +145,14 @@ App generates 1000 detections/hour
 **Scenario**: Bug causes same detection to trigger 100 times/second
 
 **Without Protection**:
-```
+```text
 100 notifications/second × 60 seconds = 6000 requests
 → Telegram API rate limit: 30 requests/second
 → Instant ban or IP block
 ```
 
 **With BirdNET-Go Protection**:
-```
+```text
 Rate limiter allows 10 burst requests
 → Then limits to 1 request/second (60/minute)
 → After 5 failures, circuit breaker opens
@@ -165,7 +165,7 @@ Rate limiter allows 10 burst requests
 **Scenario**: Your internet connection drops every 5 minutes
 
 **Without Protection**:
-```
+```text
 Every notification fails during outage
 → Retries hammer the API
 → Wasted bandwidth and CPU
@@ -173,7 +173,7 @@ Every notification fails during outage
 ```
 
 **With BirdNET-Go Protection**:
-```
+```text
 First 5 failures during outage
 → Circuit breaker opens
 → No further requests attempted
@@ -235,7 +235,7 @@ notification_provider_health_status{provider="telegram"} 1
 
 ### Health Check Dashboard
 
-```
+```text
 Provider: Telegram
 Status: Healthy ✅
 Circuit Breaker: Closed

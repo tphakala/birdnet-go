@@ -2,12 +2,12 @@ package notification
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -39,9 +39,15 @@ func (s CircuitState) String() string {
 
 var (
 	// ErrCircuitBreakerOpen is returned when the circuit breaker is open.
-	ErrCircuitBreakerOpen = errors.New("circuit breaker is open")
+	ErrCircuitBreakerOpen = errors.Newf("circuit breaker is open").
+				Component("notification").
+				Category(errors.CategoryLimit).
+				Build()
 	// ErrTooManyRequests is returned when the circuit breaker is half-open and has already allowed a test request.
-	ErrTooManyRequests = errors.New("circuit breaker is half-open, too many requests")
+	ErrTooManyRequests = errors.Newf("circuit breaker is half-open, too many requests").
+				Component("notification").
+				Category(errors.CategoryLimit).
+				Build()
 )
 
 // CircuitBreakerConfig holds configuration for a circuit breaker.
@@ -123,9 +129,11 @@ func NewPushCircuitBreaker(config CircuitBreakerConfig, notificationMetrics *met
 func (cb *PushCircuitBreaker) Call(ctx context.Context, fn func(context.Context) error) error {
 	// Check if we can proceed
 	if err := cb.beforeCall(); err != nil {
+		// Capture state and failures under lock for thread-safe error message
+		state, failures := cb.State(), cb.Failures()
 		// Add context about circuit breaker state to help debugging
 		return fmt.Errorf("circuit breaker rejected request (%s, %d consecutive failures): %w",
-			cb.state, cb.failures, err)
+			state, failures, err)
 	}
 
 	// Execute the function
@@ -150,7 +158,7 @@ func (cb *PushCircuitBreaker) beforeCall() error {
 		// Check if enough time has passed to try half-open
 		if time.Since(cb.lastStateChange) > cb.config.Timeout {
 			cb.setState(StateHalfOpen)
-			cb.halfOpenRequests = 0
+			cb.halfOpenRequests = 1 // Count this transition call as the first request
 			return nil
 		}
 		return ErrCircuitBreakerOpen

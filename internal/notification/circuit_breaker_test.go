@@ -17,7 +17,7 @@ func TestCircuitBreaker_ClosedState(t *testing.T) {
 
 	// Verify initial state
 	if cb.State() != StateClosed {
-		t.Errorf("expected initial state to be Closed, got %s", cb.State())
+		t.Errorf("expected initial state to be Closed, got %v", cb.State())
 	}
 
 	// Successful calls should keep circuit closed
@@ -29,7 +29,7 @@ func TestCircuitBreaker_ClosedState(t *testing.T) {
 			t.Errorf("call %d failed: %v", i, err)
 		}
 		if cb.State() != StateClosed {
-			t.Errorf("expected state to be Closed after success, got %s", cb.State())
+			t.Errorf("expected state to be Closed after success, got %v", cb.State())
 		}
 	}
 }
@@ -53,7 +53,7 @@ func TestCircuitBreaker_TransitionToOpen(t *testing.T) {
 			t.Errorf("expected test error, got %v", err)
 		}
 		if cb.State() != StateClosed {
-			t.Errorf("expected state to be Closed at failure %d, got %s", i, cb.State())
+			t.Errorf("expected state to be Closed at failure %d, got %v", i, cb.State())
 		}
 	}
 
@@ -65,7 +65,7 @@ func TestCircuitBreaker_TransitionToOpen(t *testing.T) {
 		t.Errorf("expected test error, got %v", err)
 	}
 	if cb.State() != StateOpen {
-		t.Errorf("expected state to be Open after max failures, got %s", cb.State())
+		t.Errorf("expected state to be Open after max failures, got %v", cb.State())
 	}
 
 	// Subsequent calls should fail immediately with circuit breaker error
@@ -96,7 +96,7 @@ func TestCircuitBreaker_TransitionToHalfOpen(t *testing.T) {
 	}
 
 	if cb.State() != StateOpen {
-		t.Fatalf("expected circuit to be Open, got %s", cb.State())
+		t.Fatalf("expected circuit to be Open, got %v", cb.State())
 	}
 
 	// Wait for timeout
@@ -119,7 +119,7 @@ func TestCircuitBreaker_TransitionToHalfOpen(t *testing.T) {
 
 	// Should transition back to closed after successful call
 	if cb.State() != StateClosed {
-		t.Errorf("expected state to be Closed after successful half-open call, got %s", cb.State())
+		t.Errorf("expected state to be Closed after successful half-open call, got %v", cb.State())
 	}
 }
 
@@ -153,7 +153,7 @@ func TestCircuitBreaker_HalfOpenFailure(t *testing.T) {
 	}
 
 	if cb.State() != StateOpen {
-		t.Errorf("expected state to be Open after half-open failure, got %s", cb.State())
+		t.Errorf("expected state to be Open after half-open failure, got %v", cb.State())
 	}
 }
 
@@ -223,14 +223,14 @@ func TestCircuitBreaker_Reset(t *testing.T) {
 	}
 
 	if cb.State() != StateOpen {
-		t.Fatalf("expected circuit to be Open, got %s", cb.State())
+		t.Fatalf("expected circuit to be Open, got %v", cb.State())
 	}
 
 	// Reset should close circuit
 	cb.Reset()
 
 	if cb.State() != StateClosed {
-		t.Errorf("expected state to be Closed after reset, got %s", cb.State())
+		t.Errorf("expected state to be Closed after reset, got %v", cb.State())
 	}
 
 	if cb.Failures() != 0 {
@@ -346,7 +346,7 @@ func TestCircuitBreaker_ConcurrentCalls(t *testing.T) {
 	}
 
 	if cb.State() != StateClosed {
-		t.Errorf("expected state to be Closed after concurrent successes, got %s", cb.State())
+		t.Errorf("expected state to be Closed after concurrent successes, got %v", cb.State())
 	}
 }
 
