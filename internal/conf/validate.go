@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"text/template"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
@@ -856,6 +857,18 @@ func validateWebhookProvider(p *PushProviderConfig) error {
 			Build()
 	}
 
+	// Validate custom template if specified
+	if p.Template != "" {
+		if _, err := template.New("validation").Parse(p.Template); err != nil {
+			return errors.New(fmt.Errorf("webhook provider '%s': invalid template syntax: %w", p.Name, err)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "notification-push-webhook-template").
+				Context("provider_name", p.Name).
+				Context("error_detail", err.Error()).
+				Build()
+		}
+	}
+
 	// Validate each endpoint (use index to avoid copying 144-byte struct)
 	for i := range p.Endpoints {
 		endpoint := &p.Endpoints[i]
@@ -880,7 +893,7 @@ func validateWebhookProvider(p *PushProviderConfig) error {
 				Build()
 		}
 
-		// Validate HTTP method if specified
+		// Validate HTTP method if specified (empty method defaults to POST in webhook provider)
 		if endpoint.Method != "" {
 			method := strings.ToUpper(endpoint.Method)
 			if method != "POST" && method != "PUT" && method != "PATCH" {

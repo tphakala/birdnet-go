@@ -196,7 +196,11 @@ func NewWebhookProvider(name string, enabled bool, endpoints []WebhookEndpoint, 
 			Message:   "test message",
 			Component: "test-component",
 			Timestamp: time.Now(),
-			Metadata:  make(map[string]interface{}),
+			Metadata: map[string]interface{}{
+				"test_key":   "test_value",
+				"confidence": 0.95,
+				"species":    "Test Species",
+			},
 		}
 		if err := tmpl.Execute(io.Discard, testNotification); err != nil {
 			return nil, fmt.Errorf("template validation failed: %w", err)
