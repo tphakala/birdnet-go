@@ -662,14 +662,23 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 	// Build base URL for links
 	baseURL := notification.BuildBaseURL(c.Settings.Security.Host, c.Settings.WebServer.Port, c.Settings.Security.AutoTLS)
 
+	// Format detection time according to user's time format preference
+	now := time.Now()
+	detectionTime := now.Format("15:04:05")
+	if c.Settings.Main.TimeAs24h {
+		detectionTime = time.Now().Format("15:04:05")
+	} else {
+		detectionTime = time.Now().Format("3:04:05 PM")
+	}
+
 	// Create test template data with realistic values
 	testTemplateData := &notification.TemplateData{
 		CommonName:         "Test Bird Species",
 		ScientificName:     "Testus birdicus",
 		Confidence:         0.99,
 		ConfidencePercent:  "99",
-		DetectionTime:      time.Now().Format("15:04:05"),
-		DetectionDate:      time.Now().Format("2006-01-02"),
+		DetectionTime:      detectionTime,
+		DetectionDate:      now.Format("2006-01-02"),
 		Latitude:           42.3601,
 		Longitude:          -71.0589,
 		Location:           "Fake Test Location",
