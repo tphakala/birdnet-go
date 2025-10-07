@@ -114,11 +114,17 @@ Examples:
 				return fmt.Errorf("failed to create notification: %w", err)
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Notification sent: id=%s type=%s priority=%s", n.ID, n.Type, n.Priority)
-			if len(n.Metadata) > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), " metadata=%d_keys", len(n.Metadata))
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Notification sent: id=%s type=%s priority=%s", n.ID, n.Type, n.Priority); err != nil {
+				return fmt.Errorf("failed to write output: %w", err)
 			}
-			fmt.Fprintln(cmd.OutOrStdout())
+			if len(n.Metadata) > 0 {
+				if _, err := fmt.Fprintf(cmd.OutOrStdout(), " metadata=%d_keys", len(n.Metadata)); err != nil {
+					return fmt.Errorf("failed to write output: %w", err)
+				}
+			}
+			if _, err := fmt.Fprintln(cmd.OutOrStdout()); err != nil {
+				return fmt.Errorf("failed to write output: %w", err)
+			}
 			if wait > 0 {
 				time.Sleep(wait)
 			}

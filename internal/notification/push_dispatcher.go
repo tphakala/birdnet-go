@@ -549,152 +549,201 @@ func orDefault[T ~string](v, d T) T {
 // MatchesProviderFilterWithReason applies filtering and returns both result and reason.
 // Reason indicates why the notification matched or was rejected for better observability.
 // Returns (matches, reason) where reason is one of the filterReason* constants.
-func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) (bool, string) {
+func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) (matches bool, reason string) {
 	if f == nil {
-		if log != nil {
-			log.Debug("no filter configured, allowing notification", "provider", providerName, "notification_id", n.ID)
-		}
+		logDebug(log, "no filter configured, allowing notification", "provider", providerName, "notification_id", n.ID)
 		return true, filterReasonAll
 	}
 
-	// Types
-	if len(f.Types) > 0 {
-		if log != nil {
-			log.Debug("checking type filter", "provider", providerName, "allowed_types", f.Types, "notification_type", string(n.Type), "notification_id", n.ID)
-		}
-		if !slices.Contains(f.Types, string(n.Type)) {
-			if log != nil {
-				log.Debug("filter failed: type mismatch", "provider", providerName, "allowed_types", f.Types, "notification_type", string(n.Type), "notification_id", n.ID)
-			}
-			return false, filterReasonTypeMismatch
-		}
+	// Check type filter
+	if matches, reason := checkTypeFilter(f, n, log, providerName); !matches {
+		return false, reason
 	}
 
-	// Priorities
-	if len(f.Priorities) > 0 {
-		if !slices.Contains(f.Priorities, string(n.Priority)) {
-			if log != nil {
-				log.Debug("filter failed: priority mismatch", "provider", providerName, "allowed_priorities", f.Priorities, "notification_priority", string(n.Priority), "notification_id", n.ID)
-			}
-			return false, filterReasonPriorityMismatch
-		}
+	// Check priority filter
+	if matches, reason := checkPriorityFilter(f, n, log, providerName); !matches {
+		return false, reason
 	}
 
-	// Component
-	if len(f.Components) > 0 {
-		if !slices.Contains(f.Components, n.Component) {
-			if log != nil {
-				log.Debug("filter failed: component mismatch", "provider", providerName, "allowed_components", f.Components, "notification_component", n.Component, "notification_id", n.ID)
-			}
-			return false, filterReasonComponentMismatch
-		}
+	// Check component filter
+	if matches, reason := checkComponentFilter(f, n, log, providerName); !matches {
+		return false, reason
 	}
 
-	// Metadata filters: support confidence > >= < <= = == and equality matches for bools/strings
+	// Check metadata filters
+	if matches, reason := checkMetadataFilters(f, n, log, providerName); !matches {
+		return false, reason
+	}
+
+	return true, filterReasonAll
+}
+
+// logDebug is a helper to reduce repeated logging checks
+func logDebug(log *slog.Logger, msg string, args ...any) {
+	if log != nil {
+		log.Debug(msg, args...)
+	}
+}
+
+// checkTypeFilter validates the notification type against configured filter
+func checkTypeFilter(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) (matches bool, reason string) {
+	if len(f.Types) == 0 {
+		return true, ""
+	}
+
+	logDebug(log, "checking type filter", "provider", providerName, "allowed_types", f.Types, "notification_type", string(n.Type), "notification_id", n.ID)
+
+	if !slices.Contains(f.Types, string(n.Type)) {
+		logDebug(log, "filter failed: type mismatch", "provider", providerName, "allowed_types", f.Types, "notification_type", string(n.Type), "notification_id", n.ID)
+		return false, filterReasonTypeMismatch
+	}
+
+	return true, ""
+}
+
+// checkPriorityFilter validates the notification priority against configured filter
+func checkPriorityFilter(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) (matches bool, reason string) {
+	if len(f.Priorities) == 0 {
+		return true, ""
+	}
+
+	if !slices.Contains(f.Priorities, string(n.Priority)) {
+		logDebug(log, "filter failed: priority mismatch", "provider", providerName, "allowed_priorities", f.Priorities, "notification_priority", string(n.Priority), "notification_id", n.ID)
+		return false, filterReasonPriorityMismatch
+	}
+
+	return true, ""
+}
+
+// checkComponentFilter validates the notification component against configured filter
+func checkComponentFilter(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) (matches bool, reason string) {
+	if len(f.Components) == 0 {
+		return true, ""
+	}
+
+	if !slices.Contains(f.Components, n.Component) {
+		logDebug(log, "filter failed: component mismatch", "provider", providerName, "allowed_components", f.Components, "notification_component", n.Component, "notification_id", n.ID)
+		return false, filterReasonComponentMismatch
+	}
+
+	return true, ""
+}
+
+// checkMetadataFilters validates notification metadata against configured filters
+func checkMetadataFilters(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) (matches bool, reason string) {
 	for key, val := range f.MetadataFilters {
-		if log != nil {
-			log.Debug("processing metadata filter", "provider", providerName, "key", key, "filter_value", val, "notification_id", n.ID)
-		}
+		logDebug(log, "processing metadata filter", "provider", providerName, "key", key, "filter_value", val, "notification_id", n.ID)
 
-		// Confidence threshold
+		// Special handling for confidence threshold
 		if key == "confidence" {
-			cond, ok := val.(string)
-			if !ok {
-				if log != nil {
-					log.Debug("filter failed: confidence filter misconfigured", "provider", providerName, "filter_value", val, "notification_id", n.ID)
-				}
-				return false, filterReasonConfidenceThreshold
-			}
-			cond = strings.TrimSpace(cond)
-			if cond == "" {
-				if log != nil {
-					log.Debug("filter failed: empty confidence condition", "provider", providerName, "notification_id", n.ID)
-				}
-				return false, filterReasonConfidenceThreshold
-			}
-
-			// Parse operator and value
-			var op string
-			var valStr string
-			switch {
-			case len(cond) >= 2 && (cond[:2] == ">=" || cond[:2] == "<=" || cond[:2] == "=="):
-				op = cond[:2]
-				valStr = strings.TrimSpace(cond[2:])
-			case len(cond) >= 1 && (cond[0] == '>' || cond[0] == '<' || cond[0] == '='):
-				op = string(cond[0])
-				valStr = strings.TrimSpace(cond[1:])
-			default:
-				if log != nil {
-					log.Debug("filter failed: unknown confidence operator", "provider", providerName, "condition", cond, "notification_id", n.ID)
-				}
-				return false, filterReasonConfidenceThreshold
-			}
-
-			threshold, err := strconv.ParseFloat(valStr, 64)
-			if err != nil {
-				if log != nil {
-					log.Debug("filter failed: invalid confidence threshold", "provider", providerName, "threshold_str", valStr, "error", err, "notification_id", n.ID)
-				}
-				return false, filterReasonConfidenceThreshold
-			}
-
-			raw, exists := n.Metadata["confidence"]
-			if !exists {
-				if log != nil {
-					log.Debug("filter failed: confidence metadata missing", "provider", providerName, "available_metadata", n.Metadata, "notification_id", n.ID)
-				}
-				return false, filterReasonConfidenceThreshold
-			}
-
-			cv, ok := toFloat(raw)
-			if !ok {
-				if log != nil {
-					log.Debug("filter failed: confidence value not parseable", "provider", providerName, "confidence_value", raw, "notification_id", n.ID)
-				}
-				return false, filterReasonConfidenceThreshold
-			}
-
-			// Check operator
-			matched := false
-			switch op {
-			case ">":
-				matched = cv > threshold
-			case ">=":
-				matched = cv >= threshold
-			case "<":
-				matched = cv < threshold
-			case "<=":
-				matched = cv <= threshold
-			case "=", "==":
-				matched = cv == threshold
-			}
-
-			if !matched {
-				if log != nil {
-					log.Debug("filter failed: confidence threshold not met", "provider", providerName, "condition", cond, "actual_confidence", cv, "notification_id", n.ID)
-				}
-				return false, filterReasonConfidenceThreshold
+			if matches, reason := checkConfidenceFilter(val, n, log, providerName); !matches {
+				return false, reason
 			}
 			continue
 		}
 
 		// Exact match for other metadata keys
-		mv, ok := n.Metadata[key]
-		if !ok {
-			if log != nil {
-				log.Debug("filter failed: metadata key missing", "provider", providerName, "required_key", key, "available_metadata", n.Metadata, "notification_id", n.ID)
-			}
-			return false, filterReasonMetadataMismatch
-		}
-		if fmt.Sprint(mv) != fmt.Sprint(val) {
-			if log != nil {
-				log.Debug("filter failed: metadata value mismatch", "provider", providerName, "key", key, "expected", val, "actual", mv, "notification_id", n.ID)
-			}
-			return false, filterReasonMetadataMismatch
+		if matches, reason := checkExactMetadataMatch(key, val, n, log, providerName); !matches {
+			return false, reason
 		}
 	}
 
-	return true, filterReasonAll
+	return true, ""
+}
+
+// checkConfidenceFilter handles confidence threshold filtering with operators
+func checkConfidenceFilter(filterVal any, n *Notification, log *slog.Logger, providerName string) (matches bool, reason string) {
+	cond, ok := filterVal.(string)
+	if !ok {
+		logDebug(log, "filter failed: confidence filter misconfigured", "provider", providerName, "filter_value", filterVal, "notification_id", n.ID)
+		return false, filterReasonConfidenceThreshold
+	}
+
+	cond = strings.TrimSpace(cond)
+	if cond == "" {
+		logDebug(log, "filter failed: empty confidence condition", "provider", providerName, "notification_id", n.ID)
+		return false, filterReasonConfidenceThreshold
+	}
+
+	// Parse operator and value
+	op, valStr := parseConfidenceOperator(cond)
+	if op == "" {
+		logDebug(log, "filter failed: unknown confidence operator", "provider", providerName, "condition", cond, "notification_id", n.ID)
+		return false, filterReasonConfidenceThreshold
+	}
+
+	threshold, err := strconv.ParseFloat(valStr, 64)
+	if err != nil {
+		logDebug(log, "filter failed: invalid confidence threshold", "provider", providerName, "threshold_str", valStr, "error", err, "notification_id", n.ID)
+		return false, filterReasonConfidenceThreshold
+	}
+
+	// Get confidence value from notification metadata
+	raw, exists := n.Metadata["confidence"]
+	if !exists {
+		logDebug(log, "filter failed: confidence metadata missing", "provider", providerName, "available_metadata", n.Metadata, "notification_id", n.ID)
+		return false, filterReasonConfidenceThreshold
+	}
+
+	cv, ok := toFloat(raw)
+	if !ok {
+		logDebug(log, "filter failed: confidence value not parseable", "provider", providerName, "confidence_value", raw, "notification_id", n.ID)
+		return false, filterReasonConfidenceThreshold
+	}
+
+	// Check if confidence meets threshold
+	if !compareConfidence(cv, op, threshold) {
+		logDebug(log, "filter failed: confidence threshold not met", "provider", providerName, "condition", cond, "actual_confidence", cv, "notification_id", n.ID)
+		return false, filterReasonConfidenceThreshold
+	}
+
+	return true, ""
+}
+
+// parseConfidenceOperator extracts operator and value from confidence condition string
+func parseConfidenceOperator(cond string) (op, valStr string) {
+	switch {
+	case len(cond) >= 2 && (cond[:2] == ">=" || cond[:2] == "<=" || cond[:2] == "=="):
+		return cond[:2], strings.TrimSpace(cond[2:])
+	case len(cond) >= 1 && (cond[0] == '>' || cond[0] == '<' || cond[0] == '='):
+		return string(cond[0]), strings.TrimSpace(cond[1:])
+	default:
+		return "", ""
+	}
+}
+
+// compareConfidence performs the actual comparison based on operator
+func compareConfidence(confidence float64, op string, threshold float64) bool {
+	switch op {
+	case ">":
+		return confidence > threshold
+	case ">=":
+		return confidence >= threshold
+	case "<":
+		return confidence < threshold
+	case "<=":
+		return confidence <= threshold
+	case "=", "==":
+		return confidence == threshold
+	default:
+		return false
+	}
+}
+
+// checkExactMetadataMatch validates exact metadata key-value match
+func checkExactMetadataMatch(key string, expectedVal any, n *Notification, log *slog.Logger, providerName string) (matches bool, reason string) {
+	actualVal, ok := n.Metadata[key]
+	if !ok {
+		logDebug(log, "filter failed: metadata key missing", "provider", providerName, "required_key", key, "available_metadata", n.Metadata, "notification_id", n.ID)
+		return false, filterReasonMetadataMismatch
+	}
+
+	if fmt.Sprint(actualVal) != fmt.Sprint(expectedVal) {
+		logDebug(log, "filter failed: metadata value mismatch", "provider", providerName, "key", key, "expected", expectedVal, "actual", actualVal, "notification_id", n.ID)
+		return false, filterReasonMetadataMismatch
+	}
+
+	return true, ""
 }
 
 // MatchesProviderFilter applies basic filtering based on type/priority/component and simple metadata rules.
