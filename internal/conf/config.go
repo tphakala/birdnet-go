@@ -231,6 +231,28 @@ type PushProviderConfig struct {
 	Args        []string          `json:"args"`
 	Environment map[string]string `json:"environment"`
 	InputFormat string            `json:"input_format" mapstructure:"input_format"`
+	// Webhook-specific
+	Endpoints []WebhookEndpointConfig `json:"endpoints"`
+	Template  string                  `json:"template"` // Custom JSON template
+}
+
+// WebhookEndpointConfig configures a single webhook endpoint.
+type WebhookEndpointConfig struct {
+	URL     string                 `json:"url"`
+	Method  string                 `json:"method"`  // POST, PUT, PATCH (default: POST)
+	Headers map[string]string      `json:"headers"` // Custom HTTP headers
+	Timeout time.Duration          `json:"timeout"` // Per-endpoint timeout (default: use provider timeout)
+	Auth    WebhookAuthConfig      `json:"auth"`    // Authentication configuration
+}
+
+// WebhookAuthConfig configures authentication for webhook requests.
+type WebhookAuthConfig struct {
+	Type   string `json:"type"`   // "none", "bearer", "basic", "custom"
+	Token  string `json:"token"`  // For bearer authentication
+	User   string `json:"user"`   // For basic authentication
+	Pass   string `json:"pass"`   // For basic authentication
+	Header string `json:"header"` // For custom header authentication
+	Value  string `json:"value"`  // For custom header authentication
 }
 
 // PushFilterConfig limits which notifications a provider receives.

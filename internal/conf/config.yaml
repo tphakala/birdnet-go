@@ -308,3 +308,44 @@ notification:
             # Other metadata fields use exact string matching:
             #   species: "Northern Cardinal"
             #   location: "backyard"
+      - type: webhook
+        enabled: false
+        name: "custom-api"
+        # Custom JSON template (optional - defaults to standard format if omitted)
+        # Available fields: .ID, .Type, .Priority, .Title, .Message, .Component, .Timestamp, .Metadata
+        # template: |
+        #   {
+        #     "event": "{{.Type}}",
+        #     "severity": "{{.Priority}}",
+        #     "title": "{{.Title}}",
+        #     "message": "{{.Message}}",
+        #     "timestamp": "{{.Timestamp}}"
+        #   }
+        endpoints:
+          # Primary endpoint
+          - url: "https://api.example.com/webhooks/birdnet"
+            method: POST  # POST, PUT, or PATCH
+            timeout: 10s  # Per-endpoint timeout (optional)
+            headers:      # Custom HTTP headers (optional)
+              X-Custom-Header: "custom-value"
+            auth:
+              type: bearer  # Options: "none", "bearer", "basic", "custom"
+              token: "${WEBHOOK_API_TOKEN}"  # Use environment variables for secrets
+              # For basic auth:
+              # type: basic
+              # user: "${WEBHOOK_USER}"
+              # pass: "${WEBHOOK_PASS}"
+              # For custom header auth:
+              # type: custom
+              # header: "X-API-Key"
+              # value: "${API_KEY}"
+          # Backup endpoint (optional - called if primary fails)
+          # - url: "https://backup.example.com/webhook"
+          #   method: POST
+          #   timeout: 15s
+        filter:
+          types: ["error", "detection"]
+          priorities: ["high", "critical"]
+          # metadata_filters:
+          #   confidence: ">0.85"  # For bird detections
+          #   species_list: "interesting"
