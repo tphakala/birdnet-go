@@ -308,44 +308,82 @@ notification:
             # Other metadata fields use exact string matching:
             #   species: "Northern Cardinal"
             #   location: "backyard"
+      # Example 1: Webhook with Environment Variables (recommended for Docker/containers)
       - type: webhook
         enabled: false
-        name: "custom-api"
-        # Custom JSON template (optional - defaults to standard format if omitted)
-        # Available fields: .ID, .Type, .Priority, .Title, .Message, .Component, .Timestamp, .Metadata
-        # template: |
-        #   {
-        #     "event": "{{.Type}}",
-        #     "severity": "{{.Priority}}",
-        #     "title": "{{.Title}}",
-        #     "message": "{{.Message}}",
-        #     "timestamp": "{{.Timestamp}}"
-        #   }
+        name: "slack-webhook"
         endpoints:
-          # Primary endpoint
-          - url: "https://api.example.com/webhooks/birdnet"
-            method: POST  # POST, PUT, or PATCH
-            timeout: 10s  # Per-endpoint timeout (optional)
-            headers:      # Custom HTTP headers (optional)
-              X-Custom-Header: "custom-value"
+          - url: "https://hooks.slack.com/services/YOUR/WEBHOOK/PATH"
             auth:
-              type: bearer  # Options: "none", "bearer", "basic", "custom"
-              token: "${WEBHOOK_API_TOKEN}"  # Use environment variables for secrets
-              # For basic auth:
-              # type: basic
-              # user: "${WEBHOOK_USER}"
-              # pass: "${WEBHOOK_PASS}"
-              # For custom header auth:
-              # type: custom
-              # header: "X-API-Key"
-              # value: "${API_KEY}"
-          # Backup endpoint (optional - called if primary fails)
-          # - url: "https://backup.example.com/webhook"
-          #   method: POST
-          #   timeout: 15s
+              type: bearer
+              token: "${SLACK_WEBHOOK_TOKEN}"  # Expands from environment variable
         filter:
           types: ["error", "detection"]
-          priorities: ["high", "critical"]
-          # metadata_filters:
-          #   confidence: ">0.85"  # For bird detections
-          #   species_list: "interesting"
+
+      # Example 2: Webhook with File-based Secrets (recommended for Kubernetes/Docker Swarm)
+      # - type: webhook
+      #   enabled: false
+      #   name: "api-service"
+      #   endpoints:
+      #     - url: "https://api.example.com/webhooks/birdnet"
+      #       auth:
+      #         type: bearer
+      #         token_file: "/run/secrets/api_token"  # Read from mounted secret file
+
+      # Example 3: Multiple Endpoints with Failover
+      # - type: webhook
+      #   enabled: false
+      #   name: "multi-endpoint"
+      #   endpoints:
+      #     - url: "https://primary.example.com/webhook"
+      #       method: POST
+      #       timeout: 10s
+      #       auth:
+      #         type: bearer
+      #         token: "${PRIMARY_TOKEN}"
+      #     - url: "https://backup.example.com/webhook"
+      #       method: POST
+      #       timeout: 15s
+      #       auth:
+      #         type: basic
+      #         user: "${BACKUP_USER}"
+      #         pass_file: "/run/secrets/backup_pass"  # Mix env vars and files
+
+      # Example 4: Custom Authentication Headers
+      # - type: webhook
+      #   enabled: false
+      #   name: "custom-auth"
+      #   endpoints:
+      #     - url: "https://api.example.com/webhook"
+      #       headers:
+      #         X-Custom-Header: "value"
+      #       auth:
+      #         type: custom
+      #         header: "X-API-Key"
+      #         value: "${API_KEY}"  # Or use value_file for file-based secret
+
+      # Example 5: Custom JSON Template
+      # - type: webhook
+      #   enabled: false
+      #   name: "custom-format"
+      #   template: |
+      #     {
+      #       "event": "{{.Type}}",
+      #       "severity": "{{.Priority}}",
+      #       "title": "{{.Title}}",
+      #       "message": "{{.Message}}",
+      #       "timestamp": "{{.Timestamp}}"
+      #     }
+      #   endpoints:
+      #     - url: "https://api.example.com/events"
+      #       auth:
+      #         type: bearer
+      #         token: "${EVENT_API_TOKEN}"
+
+      # Security Best Practices:
+      # 1. NEVER commit secrets to git - use environment variables or file references
+      # 2. For Docker: docker run -e WEBHOOK_TOKEN=xyz birdnet-go
+      # 3. For Kubernetes: Mount secrets as files in /run/secrets/
+      # 4. For development: Create .env file (add to .gitignore!)
+      # 5. Use ${VAR:-default} syntax for optional env vars with defaults
+      # 6. Set file permissions to 0400 or 0600 for secret files

@@ -38,7 +38,9 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/httpclient"
+	"github.com/tphakala/birdnet-go/internal/secrets"
 )
 
 const (
@@ -71,14 +73,60 @@ type WebhookEndpoint struct {
 	Auth    WebhookAuth
 }
 
-// WebhookAuth configures authentication for webhook requests.
+// WebhookAuth holds resolved authentication credentials for webhook requests.
+// All secret values are resolved at provider initialization time.
 type WebhookAuth struct {
 	Type   string // "none", "bearer", "basic", "custom"
-	Token  string // For bearer tokens
-	User   string // For basic auth
-	Pass   string // For basic auth
-	Header string // For custom header name
-	Value  string // For custom header value
+	Token  string // Resolved bearer token
+	User   string // Resolved username
+	Pass   string // Resolved password
+	Header string // Custom header name
+	Value  string // Resolved custom header value
+}
+
+// resolveWebhookAuth converts conf.WebhookAuthConfig to WebhookAuth with resolved secrets.
+// This resolves environment variables and reads files at initialization time.
+func resolveWebhookAuth(cfg *conf.WebhookAuthConfig) (*WebhookAuth, error) {
+	auth := &WebhookAuth{
+		Type: strings.ToLower(cfg.Type),
+	}
+
+	// Empty or "none" type needs no resolution
+	if auth.Type == "" || auth.Type == "none" {
+		return auth, nil
+	}
+
+	var err error
+
+	switch auth.Type {
+	case "bearer":
+		auth.Token, err = secrets.MustResolve("bearer token", cfg.TokenFile, cfg.Token)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve bearer token: %w", err)
+		}
+
+	case "basic":
+		auth.User, err = secrets.MustResolve("basic auth user", cfg.UserFile, cfg.User)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve basic auth user: %w", err)
+		}
+		auth.Pass, err = secrets.MustResolve("basic auth pass", cfg.PassFile, cfg.Pass)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve basic auth pass: %w", err)
+		}
+
+	case "custom":
+		auth.Header = cfg.Header // Header name is not a secret
+		auth.Value, err = secrets.MustResolve("custom header value", cfg.ValueFile, cfg.Value)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve custom header value: %w", err)
+		}
+
+	default:
+		return nil, fmt.Errorf("unsupported auth type: %s", auth.Type)
+	}
+
+	return auth, nil
 }
 
 // WebhookPayload is the default JSON structure sent to webhooks.
@@ -214,8 +262,8 @@ func (w *WebhookProvider) ValidateConfig() error {
 			return fmt.Errorf("endpoint %d: URL must start with http:// or https://", i)
 		}
 
-		// Validate auth configuration
-		if err := validateWebhookAuth(&endpoint.Auth); err != nil {
+		// Validate auth configuration (secrets are already resolved at this point)
+		if err := validateResolvedWebhookAuth(&endpoint.Auth); err != nil {
 			return fmt.Errorf("endpoint %d: %w", i, err)
 		}
 	}
@@ -223,8 +271,9 @@ func (w *WebhookProvider) ValidateConfig() error {
 	return nil
 }
 
-// validateWebhookAuth validates webhook authentication configuration.
-func validateWebhookAuth(auth *WebhookAuth) error {
+// validateResolvedWebhookAuth validates webhook authentication after secrets are resolved.
+// At this point, all environment variables and file references have been resolved to actual values.
+func validateResolvedWebhookAuth(auth *WebhookAuth) error {
 	authType := strings.ToLower(auth.Type)
 	if authType == "" {
 		authType = "none"
@@ -236,15 +285,18 @@ func validateWebhookAuth(auth *WebhookAuth) error {
 		return nil
 	case "bearer":
 		if auth.Token == "" {
-			return fmt.Errorf("bearer auth requires token")
+			return fmt.Errorf("bearer auth requires token (secret resolution may have failed)")
 		}
 	case "basic":
 		if auth.User == "" || auth.Pass == "" {
-			return fmt.Errorf("basic auth requires user and pass")
+			return fmt.Errorf("basic auth requires user and pass (secret resolution may have failed)")
 		}
 	case "custom":
-		if auth.Header == "" || auth.Value == "" {
-			return fmt.Errorf("custom auth requires header and value")
+		if auth.Header == "" {
+			return fmt.Errorf("custom auth requires header name")
+		}
+		if auth.Value == "" {
+			return fmt.Errorf("custom auth requires value (secret resolution may have failed)")
 		}
 	default:
 		return fmt.Errorf("unsupported auth type: %s", authType)

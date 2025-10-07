@@ -145,6 +145,170 @@ providers:
         method: POST
 ```
 
+## Security Best Practices
+
+### Secret Management
+
+The webhook provider supports three methods for managing secrets, listed from most to least secure:
+
+#### 1. File-Based Secrets (Recommended for Production)
+
+Best for Kubernetes, Docker Swarm, and other orchestration platforms that support secret mounting.
+
+```yaml
+endpoints:
+  - url: "https://api.example.com/webhook"
+    auth:
+      type: bearer
+      token_file: "/run/secrets/api_token"  # Read from mounted secret file
+```
+
+**Docker Swarm Example:**
+```yaml
+services:
+  birdnet:
+    image: ghcr.io/tphakala/birdnet-go:latest
+    secrets:
+      - webhook_token
+secrets:
+  webhook_token:
+    file: ./secrets/webhook_token.txt
+```
+
+**Kubernetes Example:**
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: webhook-secrets
+type: Opaque
+data:
+  token: <base64-encoded-token>
+---
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: birdnet-go
+    volumeMounts:
+    - name: secrets
+      mountPath: "/run/secrets"
+      readOnly: true
+  volumes:
+  - name: secrets
+    secret:
+      secretName: webhook-secrets
+```
+
+**File Permissions:** Set restrictive permissions on secret files:
+```bash
+chmod 400 /run/secrets/webhook_token  # Read-only for owner
+```
+
+#### 2. Environment Variables (Recommended for Docker)
+
+Best for Docker containers and simple deployments.
+
+```yaml
+endpoints:
+  - url: "https://api.example.com/webhook"
+    auth:
+      type: bearer
+      token: "${WEBHOOK_TOKEN}"  # Expands from environment variable
+```
+
+**Docker Example:**
+```bash
+docker run -e WEBHOOK_TOKEN=your-secret-token ghcr.io/tphakala/birdnet-go:latest
+```
+
+**Docker Compose Example:**
+```yaml
+services:
+  birdnet:
+    image: ghcr.io/tphakala/birdnet-go:latest
+    environment:
+      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN}  # From host environment
+```
+
+**Systemd Service Example:**
+```ini
+[Service]
+Environment="WEBHOOK_TOKEN=your-secret-token"
+ExecStart=/usr/local/bin/birdnet-go
+```
+
+**Default Values:** Use `${VAR:-default}` syntax for optional variables:
+```yaml
+token: "${WEBHOOK_TOKEN:-fallback-token}"
+```
+
+#### 3. Direct Values (Development Only)
+
+**⚠️ WARNING:** Only use for local development. Never commit secrets to version control.
+
+```yaml
+endpoints:
+  - url: "http://localhost:8080/webhook"
+    auth:
+      type: bearer
+      token: "dev-token-123"  # Literal value - NOT for production!
+```
+
+### Security Checklist
+
+- [ ] **Never commit secrets to git**
+  - Add `config.yaml` to `.gitignore` if it contains secrets
+  - Use `.env` files for development (also add to `.gitignore`)
+  - Use secret management for production
+
+- [ ] **Use HTTPS in production**
+  - Webhook URLs should use `https://` not `http://`
+  - Validate SSL certificates (BirdNET-Go does this by default)
+
+- [ ] **Rotate secrets regularly**
+  - Change tokens/passwords periodically
+  - Revoke old tokens after rotation
+
+- [ ] **Limit token permissions**
+  - Use webhook-specific tokens, not admin/root tokens
+  - Grant minimum required permissions
+
+- [ ] **Monitor for leaks**
+  - Check logs don't contain tokens
+  - BirdNET-Go never logs secret values
+
+- [ ] **Secure your endpoints**
+  - Validate webhook signatures if your API supports them
+  - Implement rate limiting on receiving endpoints
+  - Use IP allowlists if possible
+
+### Mixing Secret Sources
+
+You can mix environment variables and file references in the same configuration:
+
+```yaml
+endpoints:
+  - url: "https://api.example.com/webhook"
+    auth:
+      type: basic
+      user: "${API_USER}"              # From environment
+      pass_file: "/run/secrets/api_pass"  # From file
+```
+
+**Precedence:** File references always take precedence over value fields when both are provided.
+
+### Multi-Platform Secret Management
+
+| Platform | Recommended Method | Example |
+|----------|-------------------|---------|
+| **Docker** | Environment variables | `-e TOKEN=xyz` |
+| **Docker Compose** | Environment + secrets | `secrets:` + `environment:` |
+| **Kubernetes** | Mounted secrets | `volumeMounts` from `Secret` |
+| **Systemd** | Environment in service | `Environment=` in `.service` file |
+| **Binary** | Environment or files | `export TOKEN=xyz` or config file |
+| **Development** | `.env` file | Load with `source .env` |
+
 ## Default Payload Structure
 
 When no custom template is specified, the webhook provider sends:

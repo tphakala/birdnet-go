@@ -246,13 +246,29 @@ type WebhookEndpointConfig struct {
 }
 
 // WebhookAuthConfig configures authentication for webhook requests.
+// Supports multiple secret sources for security and flexibility:
+//   - Direct values: token: "literal-value" (for development)
+//   - Environment variables: token: "${TOKEN}" (recommended for Docker)
+//   - File references: token_file: "/run/secrets/token" (for Kubernetes/Swarm)
+//
+// File fields take precedence over value fields when both are set.
 type WebhookAuthConfig struct {
 	Type   string `json:"type"`   // "none", "bearer", "basic", "custom"
-	Token  string `json:"token"`  // For bearer authentication
-	User   string `json:"user"`   // For basic authentication
-	Pass   string `json:"pass"`   // For basic authentication
-	Header string `json:"header"` // For custom header authentication
-	Value  string `json:"value"`  // For custom header authentication
+
+	// Bearer authentication
+	Token     string `json:"token"`      // Token value or ${ENV_VAR}
+	TokenFile string `json:"token_file"` // Path to file containing token
+
+	// Basic authentication
+	User     string `json:"user"`      // Username value or ${ENV_VAR}
+	UserFile string `json:"user_file"` // Path to file containing username
+	Pass     string `json:"pass"`      // Password value or ${ENV_VAR}
+	PassFile string `json:"pass_file"` // Path to file containing password
+
+	// Custom header authentication
+	Header     string `json:"header"`       // Header name
+	Value      string `json:"value"`        // Header value or ${ENV_VAR}
+	ValueFile  string `json:"value_file"`   // Path to file containing header value
 }
 
 // PushFilterConfig limits which notifications a provider receives.

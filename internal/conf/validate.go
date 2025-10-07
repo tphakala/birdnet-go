@@ -913,7 +913,9 @@ func validateWebhookProvider(p *PushProviderConfig) error {
 	return nil
 }
 
-// validateWebhookAuth validates webhook authentication configuration
+// validateWebhookAuth validates webhook authentication configuration.
+// Checks that required fields are provided but does NOT resolve secrets here.
+// Secret resolution happens at runtime in the webhook provider.
 func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointIndex int) error {
 	authType := strings.ToLower(auth.Type)
 
@@ -924,8 +926,9 @@ func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointI
 
 	switch authType {
 	case "bearer":
-		if strings.TrimSpace(auth.Token) == "" {
-			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: bearer auth requires token", providerName, endpointIndex)).
+		// At least one of token or token_file must be provided
+		if strings.TrimSpace(auth.Token) == "" && strings.TrimSpace(auth.TokenFile) == "" {
+			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: bearer auth requires token or token_file", providerName, endpointIndex)).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "notification-push-webhook-auth-bearer").
 				Context("provider_name", providerName).
@@ -933,8 +936,18 @@ func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointI
 				Build()
 		}
 	case "basic":
-		if strings.TrimSpace(auth.User) == "" || strings.TrimSpace(auth.Pass) == "" {
-			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: basic auth requires user and pass", providerName, endpointIndex)).
+		// Check user/user_file
+		if strings.TrimSpace(auth.User) == "" && strings.TrimSpace(auth.UserFile) == "" {
+			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: basic auth requires user or user_file", providerName, endpointIndex)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "notification-push-webhook-auth-basic").
+				Context("provider_name", providerName).
+				Context("endpoint_index", endpointIndex).
+				Build()
+		}
+		// Check pass/pass_file
+		if strings.TrimSpace(auth.Pass) == "" && strings.TrimSpace(auth.PassFile) == "" {
+			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: basic auth requires pass or pass_file", providerName, endpointIndex)).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "notification-push-webhook-auth-basic").
 				Context("provider_name", providerName).
@@ -942,8 +955,18 @@ func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointI
 				Build()
 		}
 	case "custom":
-		if strings.TrimSpace(auth.Header) == "" || strings.TrimSpace(auth.Value) == "" {
-			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: custom auth requires header and value", providerName, endpointIndex)).
+		// Header name is always required (no file variant)
+		if strings.TrimSpace(auth.Header) == "" {
+			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: custom auth requires header", providerName, endpointIndex)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "notification-push-webhook-auth-custom").
+				Context("provider_name", providerName).
+				Context("endpoint_index", endpointIndex).
+				Build()
+		}
+		// Check value/value_file
+		if strings.TrimSpace(auth.Value) == "" && strings.TrimSpace(auth.ValueFile) == "" {
+			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: custom auth requires value or value_file", providerName, endpointIndex)).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "notification-push-webhook-auth-custom").
 				Context("provider_name", providerName).

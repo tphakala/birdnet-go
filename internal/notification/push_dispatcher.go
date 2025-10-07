@@ -521,7 +521,15 @@ func buildProvider(pc *conf.PushProviderConfig, log *slog.Logger) Provider {
 	case "shoutrrr":
 		return NewShoutrrrProvider(orDefault(pc.Name, "shoutrrr"), pc.Enabled, pc.URLs, types, pc.Timeout)
 	case "webhook":
-		endpoints := convertWebhookEndpoints(pc.Endpoints)
+		endpoints, err := convertWebhookEndpoints(pc.Endpoints, log)
+		if err != nil {
+			if log != nil {
+				log.Error("failed to resolve webhook secrets",
+					"name", pc.Name,
+					"error", err)
+			}
+			return nil
+		}
 		provider, err := NewWebhookProvider(orDefault(pc.Name, "webhook"), pc.Enabled, endpoints, types, pc.Template)
 		if err != nil {
 			if log != nil {
@@ -982,24 +990,26 @@ func containsAny(s string, substrs ...string) bool {
 }
 
 // convertWebhookEndpoints converts configuration webhook endpoints to provider webhook endpoints.
-func convertWebhookEndpoints(cfgEndpoints []conf.WebhookEndpointConfig) []WebhookEndpoint {
+// Resolves all secrets (environment variables and files) during conversion.
+// Returns error if any secret resolution fails.
+func convertWebhookEndpoints(cfgEndpoints []conf.WebhookEndpointConfig, log *slog.Logger) ([]WebhookEndpoint, error) {
 	endpoints := make([]WebhookEndpoint, 0, len(cfgEndpoints))
 	for i := range cfgEndpoints {
 		cfg := &cfgEndpoints[i] // Use pointer to avoid copying
+
+		// Resolve authentication secrets
+		auth, err := resolveWebhookAuth(&cfg.Auth)
+		if err != nil {
+			return nil, fmt.Errorf("endpoint %d: %w", i, err)
+		}
+
 		endpoints = append(endpoints, WebhookEndpoint{
 			URL:     cfg.URL,
 			Method:  cfg.Method,
 			Headers: cfg.Headers,
 			Timeout: cfg.Timeout,
-			Auth: WebhookAuth{
-				Type:   cfg.Auth.Type,
-				Token:  cfg.Auth.Token,
-				User:   cfg.Auth.User,
-				Pass:   cfg.Auth.Pass,
-				Header: cfg.Auth.Header,
-				Value:  cfg.Auth.Value,
-			},
+			Auth:    *auth,
 		})
 	}
-	return endpoints
+	return endpoints, nil
 }

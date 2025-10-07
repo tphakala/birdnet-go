@@ -208,7 +208,7 @@ func TestWebhookProvider_ValidateAuth(t *testing.T) {
 			name:     "custom auth without header",
 			auth:     WebhookAuth{Type: "custom", Value: "secret"},
 			wantErr:  true,
-			errorMsg: "custom auth requires header and value",
+			errorMsg: "custom auth requires header name",
 		},
 		{
 			name:     "unsupported auth type",
@@ -220,7 +220,7 @@ func TestWebhookProvider_ValidateAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateWebhookAuth(&tt.auth)
+			err := validateResolvedWebhookAuth(&tt.auth)
 			if tt.wantErr && err == nil {
 				t.Error("expected error but got none")
 			}
