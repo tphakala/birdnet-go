@@ -31,7 +31,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -41,7 +40,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
-	ierrors "github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/secrets"
 )
@@ -145,7 +144,7 @@ type WebhookPayload struct {
 	Message   string                 `json:"message"`
 	Component string                 `json:"component,omitzero"`
 	Timestamp string                 `json:"timestamp"`
-	Metadata  map[string]interface{} `json:"metadata,omitzero"`
+	Metadata  map[string]any `json:"metadata,omitzero"`
 }
 
 // NewWebhookProvider creates a new webhook provider with the given configuration.
@@ -199,7 +198,7 @@ func NewWebhookProvider(name string, enabled bool, endpoints []WebhookEndpoint, 
 			Message:   "test message",
 			Component: "test-component",
 			Timestamp: time.Now(),
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"test_key":   "test_value",
 				"confidence": 0.95,
 				"species":    "Test Species",
@@ -272,6 +271,9 @@ func (w *WebhookProvider) ValidateConfig() error {
 		if u.Scheme != "http" && u.Scheme != "https" {
 			return fmt.Errorf("endpoint %d: URL scheme must be http or https, got %s", i, u.Scheme)
 		}
+		if u.Host == "" {
+			return fmt.Errorf("endpoint %d: URL host is required", i)
+		}
 
 		// Validate timeout
 		if endpoint.Timeout < 0 {
@@ -311,8 +313,14 @@ func validateResolvedWebhookAuth(auth *WebhookAuth) error {
 		if auth.Header == "" {
 			return fmt.Errorf("custom auth requires header name")
 		}
+		if strings.ContainsAny(auth.Header, "\r\n:") {
+			return fmt.Errorf("custom auth header contains invalid characters")
+		}
 		if auth.Value == "" {
 			return fmt.Errorf("custom auth requires value (secret resolution may have failed)")
+		}
+		if strings.ContainsAny(auth.Value, "\r\n") {
+			return fmt.Errorf("custom auth value contains invalid characters")
 		}
 	default:
 		return fmt.Errorf("unsupported auth type: %s", authType)
@@ -370,7 +378,7 @@ func (w *WebhookProvider) Send(ctx context.Context, n *Notification) error {
 		}
 	}
 
-	return fmt.Errorf("all webhook endpoints failed: %w", ierrors.Join(errs...))
+	return fmt.Errorf("all webhook endpoints failed: %w", errors.Join(errs...))
 }
 
 // buildPayload constructs the JSON payload to send to the webhook.

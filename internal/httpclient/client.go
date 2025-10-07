@@ -110,32 +110,39 @@ func DefaultConfig() Config {
 }
 
 // New creates a new HTTP client with the given configuration.
-// The cfg parameter is passed by pointer to avoid copying the large struct.
+// Accepts nil cfg (falls back to DefaultConfig) and does not mutate the caller's config.
 func New(cfg *Config) *Client {
-	// Apply defaults for zero values
-	if cfg.DefaultTimeout == 0 {
-		cfg.DefaultTimeout = DefaultTimeout
-	}
-	if cfg.UserAgent == "" {
-		cfg.UserAgent = defaultUserAgent
-	}
-	if cfg.MaxIdleConns == 0 {
-		cfg.MaxIdleConns = defaultMaxIdleConns
-	}
-	if cfg.MaxIdleConnsPerHost == 0 {
-		cfg.MaxIdleConnsPerHost = defaultMaxIdleConnsPerHost
-	}
-	if cfg.IdleConnTimeout == 0 {
-		cfg.IdleConnTimeout = defaultIdleConnTimeout
-	}
-	if cfg.TLSHandshakeTimeout == 0 {
-		cfg.TLSHandshakeTimeout = defaultTLSHandshakeTimeout
-	}
-	if cfg.ResponseHeaderTimeout == 0 {
-		cfg.ResponseHeaderTimeout = defaultResponseHeaderTimeout
-	}
-	if cfg.ExpectContinueTimeout == 0 {
-		cfg.ExpectContinueTimeout = defaultExpectContinueTimeout
+	// Accept nil cfg and avoid mutating caller by working on a copy
+	var c Config
+	if cfg == nil {
+		c = DefaultConfig()
+	} else {
+		c = *cfg
+		// Apply defaults for zero values
+		if c.DefaultTimeout == 0 {
+			c.DefaultTimeout = DefaultTimeout
+		}
+		if c.UserAgent == "" {
+			c.UserAgent = defaultUserAgent
+		}
+		if c.MaxIdleConns == 0 {
+			c.MaxIdleConns = defaultMaxIdleConns
+		}
+		if c.MaxIdleConnsPerHost == 0 {
+			c.MaxIdleConnsPerHost = defaultMaxIdleConnsPerHost
+		}
+		if c.IdleConnTimeout == 0 {
+			c.IdleConnTimeout = defaultIdleConnTimeout
+		}
+		if c.TLSHandshakeTimeout == 0 {
+			c.TLSHandshakeTimeout = defaultTLSHandshakeTimeout
+		}
+		if c.ResponseHeaderTimeout == 0 {
+			c.ResponseHeaderTimeout = defaultResponseHeaderTimeout
+		}
+		if c.ExpectContinueTimeout == 0 {
+			c.ExpectContinueTimeout = defaultExpectContinueTimeout
+		}
 	}
 
 	// Create transport with tuned settings
@@ -146,14 +153,14 @@ func New(cfg *Config) *Client {
 			KeepAlive: defaultDialKeepAlive,
 		}).DialContext,
 		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          cfg.MaxIdleConns,
-		MaxIdleConnsPerHost:   cfg.MaxIdleConnsPerHost,
-		IdleConnTimeout:       cfg.IdleConnTimeout,
-		TLSHandshakeTimeout:   cfg.TLSHandshakeTimeout,
-		ResponseHeaderTimeout: cfg.ResponseHeaderTimeout,
-		ExpectContinueTimeout: cfg.ExpectContinueTimeout,
-		DisableKeepAlives:     cfg.DisableKeepAlives,
-		DisableCompression:    cfg.DisableCompression,
+		MaxIdleConns:          c.MaxIdleConns,
+		MaxIdleConnsPerHost:   c.MaxIdleConnsPerHost,
+		IdleConnTimeout:       c.IdleConnTimeout,
+		TLSHandshakeTimeout:   c.TLSHandshakeTimeout,
+		ResponseHeaderTimeout: c.ResponseHeaderTimeout,
+		ExpectContinueTimeout: c.ExpectContinueTimeout,
+		DisableKeepAlives:     c.DisableKeepAlives,
+		DisableCompression:    c.DisableCompression,
 	}
 
 	return &Client{
@@ -161,8 +168,8 @@ func New(cfg *Config) *Client {
 			Transport: transport,
 			// No default timeout - we handle it per-request with context
 		},
-		defaultTimeout: cfg.DefaultTimeout,
-		userAgent:      cfg.UserAgent,
+		defaultTimeout: c.DefaultTimeout,
+		userAgent:      c.UserAgent,
 	}
 }
 
@@ -175,6 +182,14 @@ func New(cfg *Config) *Client {
 //
 // The response body must be closed by the caller if err is nil.
 func (c *Client) Do(ctx context.Context, req *http.Request) (*http.Response, error) {
+	// Defensive checks
+	if req == nil {
+		return nil, fmt.Errorf("nil request")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	// Ensure request uses the provided context
 	req = req.WithContext(ctx)
 
@@ -229,7 +244,7 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 //   - io.Reader: uses directly
 //   - []byte or string: wraps in appropriate reader
 //   - other: marshals to JSON
-func (c *Client) Post(ctx context.Context, url, contentType string, body interface{}) (*http.Response, error) {
+func (c *Client) Post(ctx context.Context, url, contentType string, body any) (*http.Response, error) {
 	var bodyReader io.Reader = http.NoBody
 	var shouldSetJSON bool
 

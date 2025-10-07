@@ -147,7 +147,7 @@ func TestReadFile(t *testing.T) {
 			wantErr:     false,
 		},
 		{
-			name: "secret with whitespace",
+			name: "secret with whitespace preserved",
 			setup: func() string {
 				path := filepath.Join(tmpDir, "secret_whitespace")
 				if err := os.WriteFile(path, []byte("  token  \n\n"), 0o400); err != nil {
@@ -155,7 +155,7 @@ func TestReadFile(t *testing.T) {
 				}
 				return path
 			},
-			wantContent: "token",
+			wantContent: "  token  ", // Leading/trailing spaces preserved, only newlines trimmed
 			wantErr:     false,
 		},
 		{

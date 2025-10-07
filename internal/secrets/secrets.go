@@ -127,8 +127,9 @@ func ReadFile(path string) (string, error) {
 		return "", fmt.Errorf("failed to read secret file %s: %w", cleanPath, err)
 	}
 
-	// Trim whitespace (Docker/Kubernetes secrets often have trailing newlines)
-	secret := strings.TrimSpace(string(data))
+	// Trim only trailing newlines (preserve intentional leading/trailing spaces)
+	secret := string(data)
+	secret = strings.TrimRight(secret, "\r\n")
 
 	if secret == "" {
 		return "", fmt.Errorf("secret file is empty: %s", cleanPath)
