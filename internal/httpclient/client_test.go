@@ -2,11 +2,11 @@ package httpclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -24,8 +24,8 @@ func TestNew(t *testing.T) {
 		if client.defaultTimeout != DefaultTimeout {
 			t.Errorf("expected timeout %v, got %v", DefaultTimeout, client.defaultTimeout)
 		}
-		if client.userAgent != "BirdNET-Go" {
-			t.Errorf("expected user agent 'BirdNET-Go', got %q", client.userAgent)
+		if client.userAgent != defaultUserAgent {
+			t.Errorf("expected user agent %q, got %q", defaultUserAgent, client.userAgent)
 		}
 	})
 
@@ -165,8 +165,8 @@ func TestDo_ContextCancellation(t *testing.T) {
 		t.Fatal("expected error from cancelled context")
 	}
 
-	if !strings.Contains(err.Error(), "context canceled") {
-		t.Errorf("expected 'context canceled' error, got: %v", err)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled error, got: %v", err)
 	}
 }
 
@@ -203,8 +203,8 @@ func TestDo_ContextTimeout(t *testing.T) {
 		t.Fatal("expected timeout error")
 	}
 
-	if !strings.Contains(err.Error(), "context deadline exceeded") {
-		t.Errorf("expected 'context deadline exceeded' error, got: %v", err)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected context.DeadlineExceeded error, got: %v", err)
 	}
 }
 
@@ -239,8 +239,8 @@ func TestDo_DefaultTimeout(t *testing.T) {
 		t.Fatal("expected timeout error")
 	}
 
-	if !strings.Contains(err.Error(), "context deadline exceeded") {
-		t.Errorf("expected timeout error, got: %v", err)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected context.DeadlineExceeded error, got: %v", err)
 	}
 }
 
@@ -298,7 +298,7 @@ func TestDo_ConcurrentRequests(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 
-	errors := make(chan error, concurrency)
+	errChan := make(chan error, concurrency)
 
 	for i := 0; i < concurrency; i++ {
 		go func() {
@@ -306,32 +306,32 @@ func TestDo_ConcurrentRequests(t *testing.T) {
 
 			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, http.NoBody)
 			if err != nil {
-				errors <- err
+				errChan <- err
 				return
 			}
 
 			resp, err := client.Do(context.Background(), req)
 			if err != nil {
-				errors <- err
+				errChan <- err
 				return
 			}
 			defer func() {
 				if cerr := resp.Body.Close(); cerr != nil {
-					errors <- fmt.Errorf("failed to close response body: %w", cerr)
+					errChan <- fmt.Errorf("failed to close response body: %w", cerr)
 				}
 			}()
 
 			if resp.StatusCode != http.StatusOK {
-				errors <- fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+				errChan <- fmt.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 		}()
 	}
 
 	wg.Wait()
-	close(errors)
+	close(errChan)
 
 	// Check for errors
-	for err := range errors {
+	for err := range errChan {
 		t.Errorf("concurrent request failed: %v", err)
 	}
 

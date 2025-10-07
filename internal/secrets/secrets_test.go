@@ -77,6 +77,13 @@ func TestExpandString(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "empty default fallback",
+			input:   "${OPTIONAL_TOKEN:-}",
+			envVars: map[string]string{},
+			want:    "",
+			wantErr: false,
+		},
+		{
 			name:    "partial expansion with missing var",
 			input:   "prefix-${MISSING}-suffix",
 			envVars: map[string]string{},

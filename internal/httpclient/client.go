@@ -6,10 +6,14 @@
 package httpclient
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -220,16 +224,46 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 }
 
 // Post performs a POST request with context.
-// Uses http.NoBody for proper HTTP semantics (Go 1.24+ best practice).
-// Body conversion handled by caller (use bytes.Buffer, strings.Reader, etc.)
+// Handles multiple body types:
+//   - nil: uses http.NoBody
+//   - io.Reader: uses directly
+//   - []byte or string: wraps in appropriate reader
+//   - other: marshals to JSON
 func (c *Client) Post(ctx context.Context, url, contentType string, body interface{}) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, http.NoBody)
+	var bodyReader io.Reader = http.NoBody
+	var shouldSetJSON bool
+
+	if body != nil {
+		switch v := body.(type) {
+		case io.Reader:
+			bodyReader = v
+		case []byte:
+			bodyReader = bytes.NewReader(v)
+		case string:
+			bodyReader = strings.NewReader(v)
+		default:
+			// Marshal to JSON
+			data, err := json.Marshal(v)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal body: %w", err)
+			}
+			bodyReader = bytes.NewReader(data)
+			shouldSetJSON = true
+		}
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create POST request: %w", err)
 	}
+
+	// Set content type
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
+	} else if shouldSetJSON {
+		req.Header.Set("Content-Type", "application/json")
 	}
+
 	return c.Do(ctx, req)
 }
 

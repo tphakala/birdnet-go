@@ -46,25 +46,26 @@ func ExpandString(s string) (string, error) {
 	var missingVars []string
 
 	expanded := os.Expand(s, func(key string) string {
-		// Support ${VAR:-default} syntax
+		// Support ${VAR:-default} syntax (fallback may be empty)
 		varName := key
 		defaultValue := ""
+		fallbackProvided := false
 
 		if idx := strings.Index(key, ":-"); idx != -1 {
 			varName = key[:idx]
 			defaultValue = key[idx+2:]
+			fallbackProvided = true
 		}
 
 		value := os.Getenv(varName)
-		if value == "" && defaultValue == "" {
-			missingVars = append(missingVars, varName)
-			return "" // Return empty to detect missing vars
-		}
-
 		if value == "" {
-			return defaultValue
+			if fallbackProvided {
+				// Use fallback even if it's an empty string
+				return defaultValue
+			}
+			missingVars = append(missingVars, varName)
+			return ""
 		}
-
 		return value
 	})
 
@@ -111,12 +112,13 @@ func ReadFile(path string) (string, error) {
 		return "", fmt.Errorf("secret file too large (max %d bytes): %s", maxSecretFileSize, cleanPath)
 	}
 
-	// Check file permissions (warn if too permissive, but don't fail)
-	// This is a security best practice but not enforced strictly
-	if info.Mode().Perm() > secureFileMode {
-		// Log warning but don't fail - some environments may have different security models
-		// The caller can decide whether to treat this as an error
-		fmt.Fprintf(os.Stderr, "WARNING: secret file has permissive permissions (%o): %s\n", info.Mode().Perm(), cleanPath)
+	// Check file permissions (warn if group/other have any permissions)
+	// Acceptable: owner-only (e.g., 0o400, 0o600). Warn otherwise.
+	perm := info.Mode().Perm()
+	if perm&0o077 != 0 {
+		// Warn about permissive permissions (group/other can read)
+		// Use stderr for now - project may want structured logging here
+		fmt.Fprintf(os.Stderr, "WARNING: secret file has group/other permissions (perms: %04o): %s\n", perm, cleanPath)
 	}
 
 	// Read the file contents

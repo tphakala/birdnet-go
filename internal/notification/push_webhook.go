@@ -31,14 +31,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"text/template"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	ierrors "github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpclient"
 	"github.com/tphakala/birdnet-go/internal/secrets"
 )
@@ -251,19 +254,28 @@ func (w *WebhookProvider) ValidateConfig() error {
 			return fmt.Errorf("endpoint %d: URL is required", i)
 		}
 
-		// Validate HTTP method
-		method := strings.ToUpper(endpoint.Method)
+		// Validate and normalize HTTP method
+		method := strings.ToUpper(strings.TrimSpace(endpoint.Method))
 		if method == "" {
 			method = http.MethodPost // Default to POST
-			endpoint.Method = method
 		}
+		endpoint.Method = method
 		if method != http.MethodPost && method != http.MethodPut && method != http.MethodPatch {
 			return fmt.Errorf("endpoint %d: method must be POST, PUT, or PATCH, got %s", i, method)
 		}
 
-		// Validate URL scheme
-		if !strings.HasPrefix(endpoint.URL, "http://") && !strings.HasPrefix(endpoint.URL, "https://") {
-			return fmt.Errorf("endpoint %d: URL must start with http:// or https://", i)
+		// Validate URL and scheme using url.Parse
+		u, err := url.Parse(endpoint.URL)
+		if err != nil {
+			return fmt.Errorf("endpoint %d: invalid URL: %w", i, err)
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return fmt.Errorf("endpoint %d: URL scheme must be http or https, got %s", i, u.Scheme)
+		}
+
+		// Validate timeout
+		if endpoint.Timeout < 0 {
+			return fmt.Errorf("endpoint %d: timeout must be >= 0", i)
 		}
 
 		// Validate auth configuration (secrets are already resolved at this point)
@@ -328,7 +340,7 @@ func (w *WebhookProvider) Send(ctx context.Context, n *Notification) error {
 	}
 
 	// Try each endpoint until one succeeds (use index to avoid copying)
-	var lastErr error
+	errs := make([]error, 0, len(w.endpoints))
 	for i := range w.endpoints {
 		endpoint := &w.endpoints[i] // Use pointer to avoid copying
 
@@ -350,7 +362,7 @@ func (w *WebhookProvider) Send(ctx context.Context, n *Notification) error {
 			return nil // Success!
 		}
 
-		lastErr = fmt.Errorf("endpoint %d (%s): %w", i, endpoint.URL, err)
+		errs = append(errs, fmt.Errorf("endpoint %d (%s): %w", i, endpoint.URL, err))
 
 		// Check if context was cancelled - if so, stop trying other endpoints
 		if ctx.Err() != nil {
@@ -358,7 +370,7 @@ func (w *WebhookProvider) Send(ctx context.Context, n *Notification) error {
 		}
 	}
 
-	return fmt.Errorf("all webhook endpoints failed: %w", lastErr)
+	return fmt.Errorf("all webhook endpoints failed: %w", ierrors.Join(errs...))
 }
 
 // buildPayload constructs the JSON payload to send to the webhook.
@@ -371,7 +383,11 @@ func (w *WebhookProvider) buildPayload(n *Notification) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("template execution failed: %w", err)
 		}
-		return buf.Bytes(), nil
+		b := buf.Bytes()
+		if !json.Valid(b) {
+			return nil, fmt.Errorf("template output is not valid JSON")
+		}
+		return b, nil
 	}
 
 	// Use default payload structure
@@ -426,10 +442,10 @@ func (w *WebhookProvider) sendToEndpoint(ctx context.Context, endpoint *WebhookE
 	resp, err := w.client.Do(ctx, req)
 	if err != nil {
 		// Check for specific error types for better categorization
-		if ctx.Err() == context.Canceled {
+		if errors.Is(err, context.Canceled) {
 			return fmt.Errorf("request cancelled: %w", err)
 		}
-		if ctx.Err() == context.DeadlineExceeded {
+		if errors.Is(err, context.DeadlineExceeded) {
 			return fmt.Errorf("request timed out: %w", err)
 		}
 		return fmt.Errorf("request failed: %w", err)
