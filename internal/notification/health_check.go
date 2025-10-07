@@ -205,9 +205,10 @@ func (hc *HealthChecker) checkProvider(entry *healthCheckEntry) {
 	defer entry.mu.Unlock()
 
 	// Update health status
-	if err == nil || errors.Is(err, ErrCircuitBreakerOpen) {
-		// Circuit breaker open is not a provider failure, it's a protective measure
-		if !errors.Is(err, ErrCircuitBreakerOpen) {
+	// Don't count circuit breaker gating (open/half-open too many requests) as provider failures
+	if err == nil || errors.Is(err, ErrCircuitBreakerOpen) || errors.Is(err, ErrTooManyRequests) {
+		// Only update health on actual success (not on circuit breaker gating)
+		if err == nil {
 			entry.health.Healthy = true
 			entry.health.LastSuccessTime = time.Now()
 			entry.health.TotalSuccesses++
@@ -218,6 +219,7 @@ func (hc *HealthChecker) checkProvider(entry *healthCheckEntry) {
 				hc.metrics.UpdateHealthStatus(providerName, true)
 			}
 		}
+		// Circuit breaker gating is neutral - don't count as failure or success
 	} else {
 		entry.health.Healthy = false
 		entry.health.LastFailureTime = time.Now()

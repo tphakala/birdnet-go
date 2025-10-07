@@ -687,12 +687,34 @@ func MatchesProviderFilter(f *conf.PushFilterConfig, n *Notification, log *slog.
 	return matches
 }
 
+// toFloat converts various numeric types to float64 for confidence threshold comparisons.
+// Supports: float32, float64, int/uint variants, and numeric strings.
 func toFloat(v any) (float64, bool) {
 	switch t := v.(type) {
 	case float32:
 		return float64(t), true
 	case float64:
 		return t, true
+	case int:
+		return float64(t), true
+	case int8:
+		return float64(t), true
+	case int16:
+		return float64(t), true
+	case int32:
+		return float64(t), true
+	case int64:
+		return float64(t), true
+	case uint:
+		return float64(t), true
+	case uint8:
+		return float64(t), true
+	case uint16:
+		return float64(t), true
+	case uint32:
+		return float64(t), true
+	case uint64:
+		return float64(t), true
 	case string:
 		f, err := strconv.ParseFloat(t, 64)
 		if err == nil {
