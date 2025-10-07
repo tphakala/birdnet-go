@@ -64,7 +64,7 @@ func (r *SentryNotificationReporter) CaptureError(err error, component string) {
 }
 
 // CaptureEvent reports a custom event with tags and contexts to Sentry
-func (r *SentryNotificationReporter) CaptureEvent(message, level string, tags map[string]string, contexts map[string]interface{}) {
+func (r *SentryNotificationReporter) CaptureEvent(message, level string, tags map[string]string, contexts map[string]any) {
 	if !r.enabled {
 		return
 	}
@@ -100,8 +100,8 @@ func (r *SentryNotificationReporter) CaptureEvent(message, level string, tags ma
 
 		// Set all provided contexts
 		for key, value := range contexts {
-			// Convert interface{} to map for Sentry context
-			if contextMap, ok := value.(map[string]interface{}); ok {
+			// Convert any to map for Sentry context
+			if contextMap, ok := value.(map[string]any); ok {
 				scope.SetContext(key, contextMap)
 			}
 		}

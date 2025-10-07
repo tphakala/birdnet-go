@@ -26,7 +26,7 @@ type TelemetryReporter interface {
 	CaptureError(err error, component string)
 
 	// CaptureEvent reports a custom event with tags and contexts
-	CaptureEvent(message, level string, tags map[string]string, contexts map[string]interface{})
+	CaptureEvent(message, level string, tags map[string]string, contexts map[string]any)
 
 	// IsEnabled returns whether telemetry reporting is enabled
 	IsEnabled() bool
@@ -35,26 +35,8 @@ type TelemetryReporter interface {
 // TelemetryConfig holds configuration for notification telemetry
 type TelemetryConfig struct {
 	// Enabled controls all telemetry reporting
+	// Controlled by global Sentry setting
 	Enabled bool
-
-	// ReportCircuitBreaker enables circuit breaker event reporting
-	ReportCircuitBreaker bool
-
-	// ReportAPIErrors enables webhook/API error reporting
-	ReportAPIErrors bool
-
-	// ReportPanics enables panic/crash reporting
-	ReportPanics bool
-
-	// ReportRateLimit enables rate limiter event reporting
-	ReportRateLimit bool
-
-	// ReportResources enables resource exhaustion reporting
-	ReportResources bool
-
-	// IncludeMetadata includes sanitized notification metadata (opt-in)
-	// Default: false (privacy-first)
-	IncludeMetadata bool
 
 	// RateLimitReportThreshold sets the minimum drop rate percentage to trigger telemetry.
 	// Only sustained high drop rates above this threshold are reported.
@@ -65,14 +47,8 @@ type TelemetryConfig struct {
 // DefaultTelemetryConfig returns default telemetry configuration
 func DefaultTelemetryConfig() TelemetryConfig {
 	return TelemetryConfig{
-		Enabled:                  true,   // Controlled by global Sentry setting
-		ReportCircuitBreaker:     true,
-		ReportAPIErrors:          true,
-		ReportPanics:             true,
-		ReportRateLimit:          true,
-		ReportResources:          true,
-		IncludeMetadata:          false,  // Privacy-first default
-		RateLimitReportThreshold: 50.0,   // Report when drop rate > 50%
+		Enabled:                  true, // Controlled by global Sentry setting
+		RateLimitReportThreshold: 50.0, // Report when drop rate > 50%
 	}
 }
 
@@ -113,8 +89,8 @@ func (nt *NotificationTelemetry) CircuitBreakerStateTransition(
 	timeInPreviousState time.Duration,
 	config CircuitBreakerConfig,
 ) {
-	// Check if enabled and configured to report
-	if !nt.IsEnabled() || !nt.config.ReportCircuitBreaker {
+	// Check if enabled
+	if !nt.IsEnabled() {
 		return
 	}
 
@@ -139,12 +115,12 @@ func (nt *NotificationTelemetry) CircuitBreakerStateTransition(
 	}
 
 	// Build contexts
-	contexts := map[string]interface{}{
-		"circuit_breaker": map[string]interface{}{
-			"failure_threshold":               config.MaxFailures,
-			"timeout_seconds":                 config.Timeout.Seconds(),
-			"half_open_max_requests":          config.HalfOpenMaxRequests,
-			"time_in_previous_state_seconds":  timeInPreviousState.Seconds(),
+	contexts := map[string]any{
+		"circuit_breaker": map[string]any{
+			"failure_threshold":              config.MaxFailures,
+			"timeout_seconds":                config.Timeout.Seconds(),
+			"half_open_max_requests":         config.HalfOpenMaxRequests,
+			"time_in_previous_state_seconds": timeInPreviousState.Seconds(),
 		},
 	}
 
@@ -160,7 +136,7 @@ type NoopTelemetryReporter struct{}
 func (n *NoopTelemetryReporter) CaptureError(err error, component string) {}
 
 // CaptureEvent is a no-op
-func (n *NoopTelemetryReporter) CaptureEvent(message, level string, tags map[string]string, contexts map[string]interface{}) {}
+func (n *NoopTelemetryReporter) CaptureEvent(message, level string, tags map[string]string, contexts map[string]any) {}
 
 // IsEnabled always returns false
 func (n *NoopTelemetryReporter) IsEnabled() bool {
@@ -183,8 +159,8 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 	isTimeout bool,
 	isCancelled bool,
 ) {
-	// Check if enabled and configured to report
-	if !nt.IsEnabled() || !nt.config.ReportAPIErrors {
+	// Check if enabled
+	if !nt.IsEnabled() {
 		return
 	}
 
@@ -234,8 +210,8 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 	}
 
 	// Build contexts
-	contexts := map[string]interface{}{
-		"request": map[string]interface{}{
+	contexts := map[string]any{
+		"request": map[string]any{
 			"method":        method,
 			"endpoint_hash": anonymizedURL,
 			"auth_type":     authType, // Type only, never token/credentials
@@ -255,13 +231,18 @@ func (nt *NotificationTelemetry) ProviderInitializationError(
 	errorType string,
 	err error,
 ) {
-	// Don't report if disabled (initialization errors go to all categories)
+	// Check if enabled
 	if !nt.IsEnabled() {
 		return
 	}
 
 	// Scrub error message for privacy (remove paths, secrets)
-	scrubbedMessage := privacy.ScrubMessage(err.Error())
+	var scrubbedMessage string
+	if err == nil {
+		scrubbedMessage = "unknown error"
+	} else {
+		scrubbedMessage = privacy.ScrubMessage(err.Error())
+	}
 
 	// Build message
 	message := fmt.Sprintf("Provider initialization failed: %s", scrubbedMessage)
@@ -275,8 +256,8 @@ func (nt *NotificationTelemetry) ProviderInitializationError(
 	}
 
 	// Build contexts
-	contexts := map[string]interface{}{
-		"initialization": map[string]interface{}{
+	contexts := map[string]any{
+		"initialization": map[string]any{
 			"provider_type": providerType,
 			"error_type":    errorType,
 		},
@@ -294,8 +275,8 @@ func (nt *NotificationTelemetry) WorkerPanicRecovered(
 	eventsProcessed uint64,
 	eventsDropped uint64,
 ) {
-	// Check if enabled and configured to report
-	if !nt.IsEnabled() || !nt.config.ReportPanics {
+	// Check if enabled
+	if !nt.IsEnabled() {
 		return
 	}
 
@@ -314,12 +295,12 @@ func (nt *NotificationTelemetry) WorkerPanicRecovered(
 	}
 
 	// Build contexts
-	contexts := map[string]interface{}{
-		"worker_state": map[string]interface{}{
+	contexts := map[string]any{
+		"worker_state": map[string]any{
 			"events_processed": eventsProcessed,
 			"events_dropped":   eventsDropped,
 		},
-		"panic": map[string]interface{}{
+		"panic": map[string]any{
 			"value":       scrubbedMessage,
 			"stack_trace": scrubbedStack,
 		},
@@ -336,8 +317,8 @@ func (nt *NotificationTelemetry) RateLimitExceeded(
 	maxEvents int,
 	dropRatePercent float64,
 ) {
-	// Check if enabled and configured to report
-	if !nt.IsEnabled() || !nt.config.ReportRateLimit {
+	// Check if enabled
+	if !nt.IsEnabled() {
 		return
 	}
 
@@ -362,8 +343,8 @@ func (nt *NotificationTelemetry) RateLimitExceeded(
 	}
 
 	// Build contexts
-	contexts := map[string]interface{}{
-		"rate_limiter": map[string]interface{}{
+	contexts := map[string]any{
+		"rate_limiter": map[string]any{
 			"window_seconds":    windowSeconds,
 			"max_events":        maxEvents,
 			"dropped_count":     droppedCount,

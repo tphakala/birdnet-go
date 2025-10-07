@@ -22,7 +22,7 @@ type mockEvent struct {
 	message  string
 	level    string
 	tags     map[string]string
-	contexts map[string]interface{}
+	contexts map[string]any
 }
 
 type mockError struct {
@@ -37,7 +37,7 @@ func (m *mockTelemetryReporter) CaptureError(err error, component string) {
 	})
 }
 
-func (m *mockTelemetryReporter) CaptureEvent(message, level string, tags map[string]string, contexts map[string]interface{}) {
+func (m *mockTelemetryReporter) CaptureEvent(message, level string, tags map[string]string, contexts map[string]any) {
 	m.capturedEvents = append(m.capturedEvents, mockEvent{
 		message:  message,
 		level:    level,
@@ -77,8 +77,7 @@ func TestNotificationTelemetry_IsEnabled(t *testing.T) {
 		{
 			name: "disabled in config",
 			config: &TelemetryConfig{
-				Enabled:              false,
-				ReportCircuitBreaker: true,
+				Enabled: false,
 			},
 			reporter:       &mockTelemetryReporter{enabled: true},
 			expectedResult: false,
@@ -86,8 +85,7 @@ func TestNotificationTelemetry_IsEnabled(t *testing.T) {
 		{
 			name: "disabled in reporter",
 			config: &TelemetryConfig{
-				Enabled:              true,
-				ReportCircuitBreaker: true,
+				Enabled: true,
 			},
 			reporter:       &mockTelemetryReporter{enabled: false},
 			expectedResult: false,
@@ -95,8 +93,7 @@ func TestNotificationTelemetry_IsEnabled(t *testing.T) {
 		{
 			name: "fully enabled",
 			config: &TelemetryConfig{
-				Enabled:              true,
-				ReportCircuitBreaker: true,
+				Enabled: true,
 			},
 			reporter:       &mockTelemetryReporter{enabled: true},
 			expectedResult: true,
@@ -120,9 +117,8 @@ func TestCircuitBreakerTelemetry(t *testing.T) {
 	// Create mock reporter
 	reporter := &mockTelemetryReporter{enabled: true}
 
-	// Create telemetry with circuit breaker reporting enabled
+	// Create telemetry
 	config := DefaultTelemetryConfig()
-	config.ReportCircuitBreaker = true
 	telemetry := NewNotificationTelemetry(&config, reporter)
 
 	// Create circuit breaker
@@ -158,7 +154,7 @@ func TestCircuitBreakerTelemetry(t *testing.T) {
 	assert.Equal(t, "5", event.tags["consecutive_failures"])
 
 	// Verify context data
-	cbContext, ok := event.contexts["circuit_breaker"].(map[string]interface{})
+	cbContext, ok := event.contexts["circuit_breaker"].(map[string]any)
 	require.True(t, ok, "Circuit breaker context should be present")
 	assert.Equal(t, 5, cbContext["failure_threshold"])
 	assert.InDelta(t, 30.0, cbContext["timeout_seconds"], 0.001)
@@ -169,9 +165,9 @@ func TestCircuitBreakerTelemetry_Disabled(t *testing.T) {
 	// Create mock reporter
 	reporter := &mockTelemetryReporter{enabled: true}
 
-	// Create telemetry with circuit breaker reporting DISABLED
+	// Create telemetry with telemetry DISABLED
 	config := DefaultTelemetryConfig()
-	config.ReportCircuitBreaker = false
+	config.Enabled = false
 	telemetry := NewNotificationTelemetry(&config, reporter)
 
 	// Create circuit breaker
@@ -194,7 +190,7 @@ func TestCircuitBreakerTelemetry_Disabled(t *testing.T) {
 	// Wait a bit
 	time.Sleep(50 * time.Millisecond)
 
-	// Verify NO telemetry events captured (circuit breaker reporting disabled)
+	// Verify NO telemetry events captured (telemetry disabled)
 	assert.Empty(t, reporter.capturedEvents, "No telemetry events should be captured when disabled")
 }
 
@@ -304,14 +300,9 @@ func TestServiceTelemetryIntegration(t *testing.T) {
 func TestDefaultTelemetryConfig(t *testing.T) {
 	config := DefaultTelemetryConfig()
 
-	// Verify privacy-first defaults
+	// Verify defaults
 	assert.True(t, config.Enabled)
-	assert.True(t, config.ReportCircuitBreaker)
-	assert.True(t, config.ReportAPIErrors)
-	assert.True(t, config.ReportPanics)
-	assert.True(t, config.ReportRateLimit)
-	assert.True(t, config.ReportResources)
-	assert.False(t, config.IncludeMetadata, "IncludeMetadata should be false by default (privacy-first)")
+	assert.Equal(t, 50.0, config.RateLimitReportThreshold)
 }
 
 func TestProviderInitializationError(t *testing.T) {
@@ -343,7 +334,7 @@ func TestProviderInitializationError(t *testing.T) {
 	assert.Equal(t, "template_parse", event.tags["error_type"])
 
 	// Verify contexts
-	initCtx, ok := event.contexts["initialization"].(map[string]interface{})
+	initCtx, ok := event.contexts["initialization"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "webhook", initCtx["provider_type"])
 	assert.Equal(t, "template_parse", initCtx["error_type"])
@@ -378,7 +369,7 @@ func TestWorkerPanicRecovered(t *testing.T) {
 	assert.Equal(t, "detection_consumer", event.tags["worker_type"])
 
 	// Verify worker state context
-	workerState, ok := event.contexts["worker_state"].(map[string]interface{})
+	workerState, ok := event.contexts["worker_state"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, uint64(1523), workerState["events_processed"])
 	assert.Equal(t, uint64(12), workerState["events_dropped"])
@@ -387,7 +378,7 @@ func TestWorkerPanicRecovered(t *testing.T) {
 func TestWorkerPanicRecovered_Disabled(t *testing.T) {
 	reporter := &mockTelemetryReporter{enabled: true}
 	config := DefaultTelemetryConfig()
-	config.ReportPanics = false
+	config.Enabled = false
 	telemetry := NewNotificationTelemetry(&config, reporter)
 
 	telemetry.WorkerPanicRecovered("test", "panic", "stack", 100, 5)
@@ -414,7 +405,7 @@ func TestRateLimitExceeded(t *testing.T) {
 	assert.Equal(t, "rate_limiter", event.tags["subsystem"])
 
 	// Verify rate limiter context
-	rlCtx, ok := event.contexts["rate_limiter"].(map[string]interface{})
+	rlCtx, ok := event.contexts["rate_limiter"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, 60, rlCtx["window_seconds"])
 	assert.Equal(t, 100, rlCtx["max_events"])
@@ -437,7 +428,7 @@ func TestRateLimitExceeded_LowDropRate(t *testing.T) {
 func TestRateLimitExceeded_Disabled(t *testing.T) {
 	reporter := &mockTelemetryReporter{enabled: true}
 	config := DefaultTelemetryConfig()
-	config.ReportRateLimit = false
+	config.Enabled = false
 	telemetry := NewNotificationTelemetry(&config, reporter)
 
 	telemetry.RateLimitExceeded(150, 60, 100, 60.0)
@@ -605,7 +596,7 @@ func TestWebhookRequestError_NetworkTimeout(t *testing.T) {
 	assert.NotContains(t, endpointHash, "T00")
 
 	// Verify contexts
-	reqContext, ok := event.contexts["request"].(map[string]interface{})
+	reqContext, ok := event.contexts["request"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "POST", reqContext["method"])
 	assert.Equal(t, "bearer", reqContext["auth_type"])
@@ -722,7 +713,7 @@ func TestWebhookRequestError_Cancelled(t *testing.T) {
 func TestWebhookRequestError_Disabled(t *testing.T) {
 	reporter := &mockTelemetryReporter{enabled: true}
 	config := DefaultTelemetryConfig()
-	config.ReportAPIErrors = false // Disable webhook error reporting
+	config.Enabled = false // Disable telemetry
 	telemetry := NewNotificationTelemetry(&config, reporter)
 
 	// Try to report error

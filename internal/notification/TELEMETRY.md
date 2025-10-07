@@ -44,31 +44,24 @@ All telemetry is scrubbed before reporting:
 
 ### TelemetryConfig
 
+Telemetry is controlled globally through the Sentry setting. There are no granular per-event-type controls.
+
 ```go
 type TelemetryConfig struct {
-    Enabled              bool  // Master switch
-    ReportCircuitBreaker bool  // Circuit breaker events
-    ReportAPIErrors      bool  // Webhook/API failures
-    ReportPanics         bool  // Worker crashes
-    ReportRateLimit      bool  // Rate limiter events
-    ReportResources      bool  // Resource exhaustion (future)
-    IncludeMetadata      bool  // Detection metadata (privacy: default false)
+    Enabled                  bool    // Master switch (controlled by global Sentry setting)
+    RateLimitReportThreshold float64 // Minimum drop rate % to trigger reporting (default: 50.0)
 }
 ```
 
 ### Default Configuration
 
-Privacy-first defaults - everything enabled except metadata:
-
 ```go
 config := notification.DefaultTelemetryConfig()
-// Enabled: true
-// ReportCircuitBreaker: true
-// ReportAPIErrors: true
-// ReportPanics: true
-// ReportRateLimit: true
-// IncludeMetadata: false (privacy-first)
+// Enabled: true (controlled by global Sentry setting)
+// RateLimitReportThreshold: 50.0 (report when drop rate > 50%)
 ```
+
+**Note:** When telemetry is enabled, all notification events are reported. There are no separate flags for circuit breakers, API errors, panics, or rate limiting. Detection metadata is never included to maintain privacy.
 
 ## Integration
 
@@ -308,18 +301,14 @@ assert.Equal(t, "warning", reporter.capturedEvents[0].level)
 
 ### Disabling Telemetry
 
+Telemetry is controlled globally through the Sentry configuration:
+
 ```go
 // Disable all telemetry
 config := notification.DefaultTelemetryConfig()
 config.Enabled = false
 
-// Disable specific features
-config.ReportCircuitBreaker = false
-config.ReportAPIErrors = false
-config.ReportPanics = false
-config.ReportRateLimit = false
-
-// Use noop reporter (does nothing)
+// Or use noop reporter (does nothing)
 reporter := notification.NewNoopTelemetryReporter()
 ```
 
@@ -330,7 +319,7 @@ reporter := notification.NewNoopTelemetryReporter()
 - ✅ **No credentials** - Auth tokens/passwords never logged
 - ✅ **Scrubbed messages** - File paths, secrets removed
 - ✅ **Filtered events** - Context cancellations not reported
-- ✅ **Opt-in metadata** - Detection details excluded by default
+- ✅ **No metadata** - Detection details never included
 - ✅ **Provider names only** - Never full endpoint URLs
 
 ## Performance Impact
