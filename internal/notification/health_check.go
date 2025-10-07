@@ -180,8 +180,7 @@ func (hc *HealthChecker) checkProvider(entry *healthCheckEntry) {
 	providerName := entry.provider.GetName()
 	provider := entry.provider
 	circuitBreaker := entry.circuitBreaker
-	checkTime := time.Now()
-	entry.health.LastCheckTime = checkTime
+	entry.health.LastCheckTime = time.Now()
 	entry.health.TotalAttempts++
 	entry.mu.Unlock()
 

@@ -2,9 +2,10 @@ package notification
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"log/slog"
-	"math/rand"
+	"math/big"
 	"slices"
 	"strconv"
 	"strings"
@@ -30,8 +31,8 @@ type pushDispatcher struct {
 	mu                sync.RWMutex
 	metrics           *metrics.NotificationMetrics
 	healthChecker     *HealthChecker
-	concurrencySem    *semaphore.Weighted // Limits concurrent dispatch goroutines
-	maxConcurrentJobs int64               // Maximum concurrent dispatches
+	concurrencySem    *semaphore.Weighted // Limits concurrent dispatch goroutines to prevent resource exhaustion
+	maxConcurrentJobs int64               // Maximum concurrent dispatches - dynamically calculated as max(100, providers*20)
 	// rateLimiter removed - now per-provider in enhancedProvider
 }
 
@@ -211,9 +212,20 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 
 		// Run each provider in its own goroutine to avoid head-of-line blocking
 		go func(provider *enhancedProvider) {
-			if d.concurrencySem != nil {
-				defer d.concurrencySem.Release(1) // Always release semaphore when done
-			}
+			// Always release semaphore and handle panics
+			defer func() {
+				if d.concurrencySem != nil {
+					d.concurrencySem.Release(1)
+				}
+				if r := recover(); r != nil {
+					if d.log != nil {
+						d.log.Error("panic in dispatch goroutine",
+							"provider", provider.name,
+							"notification_id", notif.ID,
+							"panic", r)
+					}
+				}
+			}()
 			d.dispatchEnhanced(ctx, notif, provider)
 		}(ep)
 	}
@@ -412,22 +424,31 @@ func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, 
 		baseDelay = 1 * time.Second // Default if not configured
 	}
 
-	// Calculate exponential component, capped at retryDelay (our max)
+	// Calculate exponential component using bit shift, with overflow protection
 	exponential := baseDelay
-	for i := 1; i < attempts && exponential < d.retryDelay; i++ {
-		exponential *= 2
+	if attempts > 1 && attempts < 31 { // Prevent overflow (2^31 would overflow)
+		exponential = baseDelay * (1 << (attempts - 1))
 	}
-	if exponential > d.retryDelay {
+	// Cap at max delay
+	if exponential > d.retryDelay || exponential < baseDelay {
 		exponential = d.retryDelay
 	}
 
 	// Add jitter: ±25% of the delay to prevent thundering herd
+	// Use crypto/rand for thread-safe random generation
 	jitterRange := exponential / 4 // 25% of delay
-	jitter := time.Duration(rand.Int63n(int64(jitterRange*2))) - jitterRange
+	jitterMax := int64(jitterRange * 2)
+	var jitter time.Duration
+	if jitterMax > 0 {
+		if jitterBig, err := rand.Int(rand.Reader, big.NewInt(jitterMax)); err == nil {
+			jitter = time.Duration(jitterBig.Int64()) - jitterRange
+		}
+		// If crypto/rand fails, proceed without jitter (safer than panic)
+	}
 	delay := exponential + jitter
 
 	// Ensure delay is positive and doesn't exceed max
-	if delay < 0 {
+	if delay < baseDelay {
 		delay = baseDelay
 	}
 	if delay > d.retryDelay {
@@ -653,163 +674,9 @@ func MatchesProviderFilterWithReason(f *conf.PushFilterConfig, n *Notification, 
 // This function is exported for testing purposes and preserved for backward compatibility.
 // New code should use MatchesProviderFilterWithReason for better observability.
 func MatchesProviderFilter(f *conf.PushFilterConfig, n *Notification, log *slog.Logger, providerName string) bool {
-	if f == nil {
-		if log != nil {
-			log.Debug("no filter configured, allowing notification", "provider", providerName, "notification_id", n.ID)
-		}
-		return true
-	}
-
-	// Types
-	if len(f.Types) > 0 {
-		if log != nil {
-			log.Debug("checking type filter", "provider", providerName, "allowed_types", f.Types, "notification_type", string(n.Type), "notification_id", n.ID)
-		}
-		if !slices.Contains(f.Types, string(n.Type)) {
-			if log != nil {
-				log.Debug("filter failed: type mismatch", "provider", providerName, "allowed_types", f.Types, "notification_type", string(n.Type), "notification_id", n.ID)
-			}
-			return false
-		}
-	}
-	// Priorities
-	if len(f.Priorities) > 0 {
-		if !slices.Contains(f.Priorities, string(n.Priority)) {
-			if log != nil {
-				log.Debug("filter failed: priority mismatch", "provider", providerName, "allowed_priorities", f.Priorities, "notification_priority", string(n.Priority), "notification_id", n.ID)
-			}
-			return false
-		}
-	}
-	// Component
-	if len(f.Components) > 0 {
-		if !slices.Contains(f.Components, n.Component) {
-			if log != nil {
-				log.Debug("filter failed: component mismatch", "provider", providerName, "allowed_components", f.Components, "notification_component", n.Component, "notification_id", n.ID)
-			}
-			return false
-		}
-	}
-	// Metadata filters: support confidence > >= < <= = == and equality matches for bools/strings
-	for key, val := range f.MetadataFilters {
-		if log != nil {
-			log.Debug("processing metadata filter", "provider", providerName, "key", key, "filter_value", val, "notification_id", n.ID)
-		}
-		// confidence threshold
-		if key == "confidence" {
-			cond, ok := val.(string)
-			if !ok {
-				if log != nil {
-					log.Debug("filter failed: confidence filter misconfigured", "provider", providerName, "filter_value", val, "notification_id", n.ID)
-				}
-				return false // misconfigured filter
-			}
-			cond = strings.TrimSpace(cond)
-			if cond == "" {
-				if log != nil {
-					log.Debug("filter failed: empty confidence condition", "provider", providerName, "notification_id", n.ID)
-				}
-				return false
-			}
-
-			// Parse operator and value
-			var op string
-			var valStr string
-			switch {
-			case len(cond) >= 2 && (cond[:2] == ">=" || cond[:2] == "<=" || cond[:2] == "=="):
-				op = cond[:2]
-				valStr = strings.TrimSpace(cond[2:])
-			case len(cond) >= 1 && (cond[0] == '>' || cond[0] == '<' || cond[0] == '='):
-				op = string(cond[0])
-				valStr = strings.TrimSpace(cond[1:])
-			default:
-				if log != nil {
-					log.Debug("filter failed: unknown confidence operator", "provider", providerName, "condition", cond, "notification_id", n.ID)
-				}
-				return false // unknown operator format
-			}
-
-			threshold, err := strconv.ParseFloat(valStr, 64)
-			if err != nil {
-				if log != nil {
-					log.Debug("filter failed: invalid confidence threshold", "provider", providerName, "threshold_str", valStr, "error", err, "notification_id", n.ID)
-				}
-				return false
-			}
-			raw, exists := n.Metadata["confidence"]
-			if !exists {
-				if log != nil {
-					log.Debug("filter failed: confidence metadata missing", "provider", providerName, "available_metadata", n.Metadata, "notification_id", n.ID)
-				}
-				return false // require presence
-			}
-			cv, ok := toFloat(raw)
-			if !ok {
-				if log != nil {
-					log.Debug("filter failed: confidence value not parseable", "provider", providerName, "confidence_value", raw, "notification_id", n.ID)
-				}
-				return false // require parse success
-			}
-			switch op {
-			case ">":
-				if !(cv > threshold) {
-					if log != nil {
-						log.Debug("filter failed: confidence too low", "provider", providerName, "condition", cond, "actual_confidence", cv, "required", fmt.Sprintf("> %v", threshold), "notification_id", n.ID)
-					}
-					return false
-				}
-			case ">=":
-				if !(cv >= threshold) {
-					if log != nil {
-						log.Debug("filter failed: confidence too low", "provider", providerName, "condition", cond, "actual_confidence", cv, "required", fmt.Sprintf(">= %v", threshold), "notification_id", n.ID)
-					}
-					return false
-				}
-			case "<":
-				if !(cv < threshold) {
-					if log != nil {
-						log.Debug("filter failed: confidence too high", "provider", providerName, "condition", cond, "actual_confidence", cv, "required", fmt.Sprintf("< %v", threshold), "notification_id", n.ID)
-					}
-					return false
-				}
-			case "<=":
-				if !(cv <= threshold) {
-					if log != nil {
-						log.Debug("filter failed: confidence too high", "provider", providerName, "condition", cond, "actual_confidence", cv, "required", fmt.Sprintf("<= %v", threshold), "notification_id", n.ID)
-					}
-					return false
-				}
-			case "=", "==":
-				if !(cv == threshold) {
-					if log != nil {
-						log.Debug("filter failed: confidence mismatch", "provider", providerName, "condition", cond, "actual_confidence", cv, "required", fmt.Sprintf("== %v", threshold), "notification_id", n.ID)
-					}
-					return false
-				}
-			default:
-				if log != nil {
-					log.Debug("filter failed: unknown confidence operator", "provider", providerName, "operator", op, "notification_id", n.ID)
-				}
-				return false // unknown operator
-			}
-			continue
-		}
-		// exact match requires key presence
-		mv, ok := n.Metadata[key]
-		if !ok {
-			if log != nil {
-				log.Debug("filter failed: metadata key missing", "provider", providerName, "required_key", key, "available_metadata", n.Metadata, "notification_id", n.ID)
-			}
-			return false
-		}
-		if fmt.Sprint(mv) != fmt.Sprint(val) {
-			if log != nil {
-				log.Debug("filter failed: metadata value mismatch", "provider", providerName, "key", key, "expected", val, "actual", mv, "notification_id", n.ID)
-			}
-			return false
-		}
-	}
-	return true
+	// Delegate to the enhanced version and discard the reason
+	matches, _ := MatchesProviderFilterWithReason(f, n, log, providerName)
+	return matches
 }
 
 func toFloat(v any) (float64, bool) {
