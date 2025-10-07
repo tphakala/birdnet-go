@@ -231,6 +231,9 @@ func (c *Client) Do(ctx context.Context, req *http.Request) (*http.Response, err
 // Get performs a GET request with context.
 // Uses http.NoBody for proper HTTP semantics (Go 1.24+ best practice).
 func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GET request: %w", err)
@@ -245,6 +248,10 @@ func (c *Client) Get(ctx context.Context, url string) (*http.Response, error) {
 //   - []byte or string: wraps in appropriate reader
 //   - other: marshals to JSON
 func (c *Client) Post(ctx context.Context, url, contentType string, body any) (*http.Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	var bodyReader io.Reader = http.NoBody
 	var shouldSetJSON bool
 
