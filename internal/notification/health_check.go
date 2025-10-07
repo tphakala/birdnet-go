@@ -172,40 +172,38 @@ func (hc *HealthChecker) checkAll() {
 }
 
 // checkProvider performs a health check on a single provider.
+// This method is optimized to avoid holding the entry lock during provider calls,
+// which could block GetProviderHealth() calls for extended periods.
 func (hc *HealthChecker) checkProvider(entry *healthCheckEntry) {
+	// Step 1: Lock briefly to snapshot necessary data and update check time
 	entry.mu.Lock()
-	defer entry.mu.Unlock()
-
 	providerName := entry.provider.GetName()
+	provider := entry.provider
+	circuitBreaker := entry.circuitBreaker
+	checkTime := time.Now()
+	entry.health.LastCheckTime = checkTime
+	entry.health.TotalAttempts++
+	entry.mu.Unlock()
+
+	// Step 2: Perform health check WITHOUT holding lock (allows concurrent reads)
 	ctx, cancel := context.WithTimeout(hc.baseCtx, hc.timeout)
 	defer cancel()
 
-	// Update check time
-	entry.health.LastCheckTime = time.Now()
-	entry.health.TotalAttempts++
-
-	// Create a minimal test notification
-	testNotif := &Notification{
-		Type:      TypeSystem,
-		Priority:  PriorityLow,
-		Title:     "Health Check",
-		Message:   "Provider health check test",
-		Component: "health_check",
-		Metadata:  map[string]any{"health_check": true},
-	}
-
-	// Attempt to send through circuit breaker
 	var err error
-	if entry.circuitBreaker != nil {
-		err = entry.circuitBreaker.Call(ctx, func(ctx context.Context) error {
+	if circuitBreaker != nil {
+		err = circuitBreaker.Call(ctx, func(ctx context.Context) error {
 			// For health checks, we don't actually send - we just validate the provider is responsive
 			// Providers can implement a lightweight health check method if available
-			return entry.provider.ValidateConfig()
+			return provider.ValidateConfig()
 		})
 	} else {
 		// Fallback if no circuit breaker
-		err = entry.provider.ValidateConfig()
+		err = provider.ValidateConfig()
 	}
+
+	// Step 3: Lock briefly to update health status based on check result
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
 
 	// Update health status
 	if err == nil || errors.Is(err, ErrCircuitBreakerOpen) {
@@ -241,8 +239,8 @@ func (hc *HealthChecker) checkProvider(entry *healthCheckEntry) {
 	}
 
 	// Update circuit breaker state
-	if entry.circuitBreaker != nil {
-		entry.health.CircuitBreakerState = entry.circuitBreaker.State()
+	if circuitBreaker != nil {
+		entry.health.CircuitBreakerState = circuitBreaker.State()
 	}
 
 	// Log successful checks at debug level
@@ -251,18 +249,6 @@ func (hc *HealthChecker) checkProvider(entry *healthCheckEntry) {
 			"provider", providerName,
 			"total_successes", entry.health.TotalSuccesses,
 			"total_failures", entry.health.TotalFailures)
-	}
-
-	// Attempt to send test notification for real connectivity test
-	// This is optional and only done if provider is enabled and healthy
-	if entry.health.Healthy && entry.provider.IsEnabled() {
-		testCtx, testCancel := context.WithTimeout(hc.baseCtx, hc.timeout)
-		defer testCancel()
-
-		// Only send test notification if provider supports it (not for all types)
-		// This is skipped for now to avoid spamming notification channels
-		_ = testCtx
-		_ = testNotif
 	}
 }
 

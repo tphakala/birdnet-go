@@ -142,7 +142,7 @@ func (cb *PushCircuitBreaker) Call(ctx context.Context, fn func(context.Context)
 		// Capture state and failures under lock for thread-safe error message
 		state, failures := cb.State(), cb.Failures()
 		// Add context about circuit breaker state to help debugging
-		return fmt.Errorf("circuit breaker rejected request (%s, %d consecutive failures): %w",
+		return fmt.Errorf("circuit breaker rejected request (%v, %d consecutive failures): %w",
 			state, failures, err)
 	}
 
