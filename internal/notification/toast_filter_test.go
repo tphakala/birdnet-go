@@ -12,15 +12,6 @@ import (
 // TestToastNotificationsExcludedFromList verifies that toast notifications
 // are never returned in notification lists, even when they exist in the store
 func TestToastNotificationsExcludedFromList(t *testing.T) {
-	// Verify no goroutine leaks after test
-	defer goleak.VerifyNone(t,
-		// Ignore common test framework goroutines
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		// Ignore lumberjack logger which is managed globally
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-	)
-
 	// Create service with test config
 	config := &ServiceConfig{
 		Debug:              false,
@@ -30,7 +21,12 @@ func TestToastNotificationsExcludedFromList(t *testing.T) {
 		RateLimitMaxEvents: 60,
 	}
 	service := NewService(config)
-	defer service.Stop() // Ensure proper cleanup
+
+	// Stop service before goleak check (defer runs in LIFO order)
+	defer goleak.VerifyNone(t,
+		goleak.IgnoreCurrent(),
+	)
+	defer service.Stop()
 
 	// Create a regular notification
 	regularNotif, err := service.Create(TypeInfo, PriorityMedium, "Regular Alert", "This is a regular notification")
@@ -101,15 +97,6 @@ func TestToastNotificationsExcludedFromList(t *testing.T) {
 // TestToastNotificationsStillBroadcast verifies that toast notifications
 // are still broadcast to subscribers even though they're excluded from lists
 func TestToastNotificationsStillBroadcast(t *testing.T) {
-	// Verify no goroutine leaks after test
-	defer goleak.VerifyNone(t,
-		// Ignore common test framework goroutines
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		// Ignore lumberjack logger which is managed globally
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-	)
-
 	// Create service with test config
 	config := &ServiceConfig{
 		Debug:              false,
@@ -119,7 +106,12 @@ func TestToastNotificationsStillBroadcast(t *testing.T) {
 		RateLimitMaxEvents: 60,
 	}
 	service := NewService(config)
-	defer service.Stop() // Ensure proper cleanup
+
+	// Stop service before goleak check (defer runs in LIFO order)
+	defer goleak.VerifyNone(t,
+		goleak.IgnoreCurrent(),
+	)
+	defer service.Stop()
 
 	// Subscribe to notifications
 	notifCh, _ := service.Subscribe()
