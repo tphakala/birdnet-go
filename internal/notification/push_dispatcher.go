@@ -28,13 +28,15 @@ type pushDispatcher struct {
 	mu             sync.RWMutex
 	metrics        *metrics.NotificationMetrics
 	healthChecker  *HealthChecker
-	rateLimiter    *PushRateLimiter
+	// rateLimiter removed - now per-provider in enhancedProvider
 }
 
-// enhancedProvider wraps a provider with circuit breaker and metrics.
+// enhancedProvider wraps a provider with circuit breaker, rate limiter, and metrics.
+// Each provider has its own circuit breaker and rate limiter for isolation.
 type enhancedProvider struct {
 	prov           Provider
 	circuitBreaker *PushCircuitBreaker
+	rateLimiter    *PushRateLimiter // Per-provider rate limiting
 	filter         conf.PushFilterConfig
 	name           string
 }
@@ -78,21 +80,9 @@ func InitializePushFromConfigWithMetrics(settings *conf.Settings, notificationMe
 			pd.healthChecker = NewHealthChecker(hcConfig, pd.log, notificationMetrics)
 		}
 
-		// Initialize rate limiter if enabled
-		if settings.Notification.Push.RateLimiting.Enabled {
-			rlConfig := PushRateLimiterConfig{
-				RequestsPerMinute: settings.Notification.Push.RateLimiting.RequestsPerMinute,
-				BurstSize:         settings.Notification.Push.RateLimiting.BurstSize,
-			}
-			pd.rateLimiter = NewPushRateLimiter(rlConfig)
-			if pd.log != nil {
-				pd.log.Info("rate limiter enabled",
-					"requests_per_minute", rlConfig.RequestsPerMinute,
-					"burst_size", rlConfig.BurstSize)
-			}
-		}
+		// Rate limiting is now per-provider (initialized in initializeEnhancedProviders)
 
-		// Build enhanced providers with circuit breakers
+		// Build enhanced providers with circuit breakers and rate limiters
 		pd.providers = pd.initializeEnhancedProviders(settings, notificationMetrics)
 
 		// Register providers with health checker
@@ -171,8 +161,7 @@ func (d *pushDispatcher) start() error {
 
 	d.log.Info("push dispatcher started",
 		"providers", len(d.providers),
-		"health_checker", d.healthChecker != nil,
-		"rate_limiter", d.rateLimiter != nil)
+		"health_checker", d.healthChecker != nil)
 	return nil
 }
 
@@ -228,7 +217,8 @@ func (d *pushDispatcher) dispatchEnhanced(ctx context.Context, notif *Notificati
 
 // checkRateLimit checks if notification is rate limited.
 func (d *pushDispatcher) checkRateLimit(ep *enhancedProvider, notif *Notification) bool {
-	if d.rateLimiter != nil && !d.rateLimiter.Allow() {
+	// Use per-provider rate limiter for isolation
+	if ep.rateLimiter != nil && !ep.rateLimiter.Allow() {
 		if d.log != nil {
 			d.log.Warn("notification rate limited",
 				"provider", ep.name,
@@ -658,9 +648,25 @@ func (d *pushDispatcher) initializeEnhancedProviders(settings *conf.Settings, no
 				cb = NewPushCircuitBreaker(cbConfig, notificationMetrics, name)
 			}
 
+			// Create per-provider rate limiter if enabled
+			var rl *PushRateLimiter
+			if settings.Notification.Push.RateLimiting.Enabled {
+				rl = NewPushRateLimiter(PushRateLimiterConfig{
+					RequestsPerMinute: settings.Notification.Push.RateLimiting.RequestsPerMinute,
+					BurstSize:         settings.Notification.Push.RateLimiting.BurstSize,
+				})
+				if d.log != nil {
+					d.log.Info("rate limiter enabled for provider",
+						"provider", name,
+						"requests_per_minute", settings.Notification.Push.RateLimiting.RequestsPerMinute,
+						"burst_size", settings.Notification.Push.RateLimiting.BurstSize)
+				}
+			}
+
 			ep := enhancedProvider{
 				prov:           prov,
 				circuitBreaker: cb,
+				rateLimiter:    rl,
 				filter:         pc.Filter,
 				name:           name,
 			}
