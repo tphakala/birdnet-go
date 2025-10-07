@@ -907,12 +907,23 @@ func (d *pushDispatcher) initializeEnhancedProviders(settings *conf.Settings, no
 				// Set telemetry on circuit breaker
 				if cb != nil {
 					cb.SetTelemetry(telemetry)
+					d.log.Debug("telemetry injected into circuit breaker",
+						"provider", name,
+						"telemetry_enabled", telemetry.IsEnabled())
 				}
 
 				// Set telemetry on webhook providers
 				if webhookProv, ok := prov.(*WebhookProvider); ok {
 					webhookProv.SetTelemetry(telemetry)
+					d.log.Debug("telemetry injected into webhook provider",
+						"provider", name,
+						"telemetry_enabled", telemetry.IsEnabled())
 				}
+			} else {
+				d.log.Debug("telemetry not available for provider injection",
+					"provider", name,
+					"service_exists", service != nil,
+					"telemetry_exists", service != nil && service.GetTelemetry() != nil)
 			}
 
 			ep := enhancedProvider{

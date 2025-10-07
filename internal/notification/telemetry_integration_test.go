@@ -443,3 +443,118 @@ func TestRateLimitExceeded_Disabled(t *testing.T) {
 	// Should not report when disabled
 	assert.Empty(t, reporter.capturedEvents)
 }
+
+// TestTelemetryIntegration_EndToEnd verifies full wiring from service to circuit breaker
+func TestTelemetryIntegration_EndToEnd(t *testing.T) {
+	// Setup: Create service with telemetry
+	reporter := &mockTelemetryReporter{enabled: true}
+	config := DefaultTelemetryConfig()
+	telemetry := NewNotificationTelemetry(&config, reporter)
+
+	serviceConfig := &ServiceConfig{
+		MaxNotifications:   100,
+		CleanupInterval:    5 * time.Minute,
+		RateLimitWindow:    1 * time.Minute,
+		RateLimitMaxEvents: 100,
+	}
+
+	service := NewService(serviceConfig)
+	service.SetTelemetry(telemetry)
+
+	// Verify telemetry is set
+	require.NotNil(t, service.GetTelemetry())
+	assert.True(t, service.GetTelemetry().IsEnabled())
+
+	// Create circuit breaker and inject telemetry
+	cbConfig := CircuitBreakerConfig{
+		MaxFailures:         3,
+		Timeout:             100 * time.Millisecond,
+		HalfOpenMaxRequests: 1,
+	}
+	cb := NewPushCircuitBreaker(cbConfig, nil, "test-provider")
+	cb.SetTelemetry(telemetry)
+
+	// Trigger state transition: closed → open
+	failingFunc := func(ctx context.Context) error {
+		return fmt.Errorf("simulated failure")
+	}
+
+	ctx := context.Background()
+	for i := 0; i < 3; i++ {
+		_ = cb.Call(ctx, failingFunc)
+	}
+
+	// Verify telemetry captured the transition
+	require.Len(t, reporter.capturedEvents, 1, "should capture closed → open transition")
+
+	event := reporter.capturedEvents[0]
+	assert.Contains(t, event.message, "closed → open")
+	assert.Equal(t, SeverityWarning, event.level)
+	assert.Equal(t, "test-provider", event.tags["provider"])
+	assert.Equal(t, "closed", event.tags["old_state"])
+	assert.Equal(t, "open", event.tags["new_state"])
+}
+
+// TestTelemetryIntegration_Debouncing verifies rapid transitions are debounced
+func TestTelemetryIntegration_Debouncing(t *testing.T) {
+	reporter := &mockTelemetryReporter{enabled: true}
+	config := DefaultTelemetryConfig()
+	telemetry := NewNotificationTelemetry(&config, reporter)
+
+	cbConfig := CircuitBreakerConfig{
+		MaxFailures:         2,
+		Timeout:             10 * time.Millisecond, // Very short for rapid transitions
+		HalfOpenMaxRequests: 1,
+	}
+	cb := NewPushCircuitBreaker(cbConfig, nil, "flapping-provider")
+	cb.SetTelemetry(telemetry)
+
+	ctx := context.Background()
+
+	// Simulate flapping: closed → open → half-open → open → half-open...
+	// 1. Fail twice to open circuit
+	for i := 0; i < 2; i++ {
+		_ = cb.Call(ctx, func(ctx context.Context) error {
+			return fmt.Errorf("failure")
+		})
+	}
+
+	initialEventCount := len(reporter.capturedEvents)
+	assert.GreaterOrEqual(t, initialEventCount, 1, "should capture initial open")
+
+	// 2. Wait for timeout to enter half-open
+	time.Sleep(15 * time.Millisecond)
+
+	// 3. Try a request in half-open (will fail and reopen)
+	_ = cb.Call(ctx, func(ctx context.Context) error {
+		return fmt.Errorf("still failing")
+	})
+
+	// 4. Immediately try to transition again (should be debounced)
+	time.Sleep(5 * time.Millisecond)
+	_ = cb.Call(ctx, func(ctx context.Context) error {
+		return fmt.Errorf("still failing")
+	})
+
+	// Verify: Should have reported closed→open, but subsequent transitions debounced
+	// (since they happen within MinTelemetryReportInterval)
+	assert.LessOrEqual(t, len(reporter.capturedEvents), initialEventCount+1,
+		"rapid transitions should be debounced")
+}
+
+// TestTelemetryIntegration_ConfigurableThreshold verifies rate limit threshold
+func TestTelemetryIntegration_ConfigurableThreshold(t *testing.T) {
+	reporter := &mockTelemetryReporter{enabled: true}
+	config := DefaultTelemetryConfig()
+	config.RateLimitReportThreshold = 75.0 // Custom threshold
+	telemetry := NewNotificationTelemetry(&config, reporter)
+
+	// Drop rate below threshold - should not report
+	telemetry.RateLimitExceeded(70, 60, 100, 70.0)
+	assert.Empty(t, reporter.capturedEvents)
+
+	// Drop rate above threshold - should report
+	telemetry.RateLimitExceeded(80, 60, 100, 80.0)
+	require.Len(t, reporter.capturedEvents, 1)
+	assert.Contains(t, reporter.capturedEvents[0].message, "80.0%")
+}

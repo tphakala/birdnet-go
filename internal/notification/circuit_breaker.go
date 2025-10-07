@@ -11,6 +11,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
+// Telemetry debouncing configuration
+const (
+	// MinTelemetryReportInterval prevents telemetry spam during rapid state changes.
+	// State transitions closer than this interval will be logged but not reported.
+	MinTelemetryReportInterval = 30 * time.Second
+)
+
 // CircuitState represents the state of a circuit breaker.
 type CircuitState int
 
@@ -100,6 +107,7 @@ type PushCircuitBreaker struct {
 	failures            int
 	lastFailureTime     time.Time
 	lastStateChange     time.Time
+	lastTelemetryReport time.Time // Prevents spam during rapid state changes
 	halfOpenRequests    int
 	mu                  sync.RWMutex
 	metrics             *metrics.NotificationMetrics
@@ -279,16 +287,39 @@ func (cb *PushCircuitBreaker) setState(newState CircuitState) {
 		"consecutive_failures", cb.failures,
 		"last_failure", cb.lastFailureTime.Format(time.RFC3339))
 
-	// Report telemetry for state transitions
+	// Report telemetry for state transitions (with debouncing to prevent spam)
 	if cb.telemetry != nil {
-		cb.telemetry.CircuitBreakerStateTransition(
-			cb.providerName,
-			oldState,
-			newState,
-			cb.failures,
-			timeInPreviousState,
-			cb.config,
-		)
+		timeSinceLastReport := now.Sub(cb.lastTelemetryReport)
+
+		// Always report critical transitions (closed → open, or any transition to closed)
+		// For other transitions, debounce to prevent spam during flapping
+		shouldReport := false
+		switch {
+		case newState == StateOpen && oldState == StateClosed:
+			shouldReport = true // Critical: provider just failed
+		case newState == StateClosed:
+			shouldReport = true // Always report recovery
+		case timeSinceLastReport >= MinTelemetryReportInterval:
+			shouldReport = true // Enough time passed since last report
+		}
+
+		if shouldReport {
+			cb.telemetry.CircuitBreakerStateTransition(
+				cb.providerName,
+				oldState,
+				newState,
+				cb.failures,
+				timeInPreviousState,
+				cb.config,
+			)
+			cb.lastTelemetryReport = now
+		} else {
+			slog.Debug("Telemetry report debounced (too soon since last report)",
+				"provider", cb.providerName,
+				"transition", fmt.Sprintf("%s → %s", oldState.String(), newState.String()),
+				"time_since_last_report", timeSinceLastReport,
+				"min_interval", MinTelemetryReportInterval)
+		}
 	}
 }
 

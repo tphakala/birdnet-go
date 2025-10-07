@@ -8,6 +8,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
+// Telemetry severity levels
+const (
+	SeverityDebug    = "debug"
+	SeverityInfo     = "info"
+	SeverityWarning  = "warning"
+	SeverityError    = "error"
+	SeverityCritical = "critical"
+)
+
 // TelemetryReporter defines the interface for reporting telemetry events.
 // This interface is implemented by the telemetry package to avoid circular imports.
 // The notification package defines the interface, and the telemetry package provides
@@ -46,18 +55,24 @@ type TelemetryConfig struct {
 	// IncludeMetadata includes sanitized notification metadata (opt-in)
 	// Default: false (privacy-first)
 	IncludeMetadata bool
+
+	// RateLimitReportThreshold sets the minimum drop rate percentage to trigger telemetry.
+	// Only sustained high drop rates above this threshold are reported.
+	// Default: 50.0 (50%)
+	RateLimitReportThreshold float64
 }
 
 // DefaultTelemetryConfig returns default telemetry configuration
 func DefaultTelemetryConfig() TelemetryConfig {
 	return TelemetryConfig{
-		Enabled:              true, // Controlled by global Sentry setting
-		ReportCircuitBreaker: true,
-		ReportAPIErrors:      true,
-		ReportPanics:         true,
-		ReportRateLimit:      true,
-		ReportResources:      true,
-		IncludeMetadata:      false, // Privacy-first default
+		Enabled:                  true,   // Controlled by global Sentry setting
+		ReportCircuitBreaker:     true,
+		ReportAPIErrors:          true,
+		ReportPanics:             true,
+		ReportRateLimit:          true,
+		ReportResources:          true,
+		IncludeMetadata:          false,  // Privacy-first default
+		RateLimitReportThreshold: 50.0,   // Report when drop rate > 50%
 	}
 }
 
@@ -104,11 +119,11 @@ func (nt *NotificationTelemetry) CircuitBreakerStateTransition(
 	}
 
 	// Determine severity level based on new state
-	level := "info"
+	level := SeverityInfo
 	if newState == StateOpen {
-		level = "warning"
+		level = SeverityWarning
 	} else if newState == StateClosed && oldState == StateOpen {
-		level = "info" // Recovery event
+		level = SeverityInfo // Recovery event
 	}
 
 	// Build message
@@ -182,11 +197,11 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 	var level string
 	switch {
 	case isTimeout:
-		level = "critical" // Timeouts are critical as they indicate network/provider issues
+		level = SeverityCritical // Timeouts are critical as they indicate network/provider issues
 	case statusCode >= 400 && statusCode < 500:
-		level = "warning" // Client errors likely config issues
+		level = SeverityWarning // Client errors likely config issues
 	default:
-		level = "error"
+		level = SeverityError
 	}
 
 	// Anonymize URL for privacy
@@ -263,7 +278,7 @@ func (nt *NotificationTelemetry) ProviderInitializationError(
 	}
 
 	// Report as error level (prevents provider from working)
-	nt.reporter.CaptureEvent(message, "error", tags, contexts)
+	nt.reporter.CaptureEvent(message, SeverityError, tags, contexts)
 }
 
 // WorkerPanicRecovered reports a panic that was caught and recovered in a worker
@@ -306,7 +321,7 @@ func (nt *NotificationTelemetry) WorkerPanicRecovered(
 	}
 
 	// Report as critical level (worker crashed but recovered)
-	nt.reporter.CaptureEvent(scrubbedMessage, "critical", tags, contexts)
+	nt.reporter.CaptureEvent(scrubbedMessage, SeverityCritical, tags, contexts)
 }
 
 // RateLimitExceeded reports sustained high rate limiting (indicating config issues or spam)
@@ -321,8 +336,12 @@ func (nt *NotificationTelemetry) RateLimitExceeded(
 		return
 	}
 
-	// Only report if sustained high drop rate (>50% for this report)
-	if dropRatePercent < 50.0 {
+	// Only report if drop rate exceeds configured threshold
+	threshold := nt.config.RateLimitReportThreshold
+	if threshold <= 0 {
+		threshold = 50.0 // Fallback to default if misconfigured
+	}
+	if dropRatePercent < threshold {
 		return
 	}
 
@@ -348,5 +367,5 @@ func (nt *NotificationTelemetry) RateLimitExceeded(
 	}
 
 	// Report as warning level (indicates configuration or usage issue)
-	nt.reporter.CaptureEvent(message, "warning", tags, contexts)
+	nt.reporter.CaptureEvent(message, SeverityWarning, tags, contexts)
 }
