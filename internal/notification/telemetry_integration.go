@@ -207,10 +207,15 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 	// Anonymize URL for privacy
 	anonymizedURL := privacy.AnonymizeURL(endpoint)
 
-	// Build message
-	message := fmt.Sprintf("Webhook request failed: %s", err.Error())
-	if isTimeout {
+	// Build message - check timeout first, then err != nil to avoid panic
+	var message string
+	switch {
+	case isTimeout:
 		message = "Webhook request timed out"
+	case err != nil:
+		message = fmt.Sprintf("Webhook request failed: %s", err.Error())
+	default:
+		message = "Webhook request failed"
 	}
 
 	// Scrub error message for privacy

@@ -34,6 +34,12 @@ All telemetry is scrubbed before reporting:
 - ✅ **Context filtered** - Cancellations not reported as errors
 - ✅ **Metadata opt-in** - Detection data excluded by default
 
+**Privacy Implementation:** The privacy package provides comprehensive scrubbing of sensitive data. See [../../privacy/README.md](../../privacy/README.md) for details on:
+- URL anonymization patterns and algorithms
+- Message scrubbing rules (file paths, credentials, tokens)
+- Testing privacy compliance
+- Adding new privacy rules
+
 ## Configuration
 
 ### TelemetryConfig
