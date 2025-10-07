@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"text/template"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
@@ -827,6 +828,10 @@ func validateNotificationSettings(n *NotificationConfig) error {
 					Context("validation_type", "notification-push-shoutrrr-urls").
 					Build()
 			}
+		case "webhook":
+			if err := validateWebhookProvider(p); err != nil {
+				return err
+			}
 		default:
 			return errors.New(fmt.Errorf("unknown push provider type: %s", p.Type)).
 				Category(errors.CategoryValidation).
@@ -834,5 +839,162 @@ func validateNotificationSettings(n *NotificationConfig) error {
 				Build()
 		}
 	}
+	return nil
+}
+
+// validateWebhookProvider validates webhook provider configuration
+func validateWebhookProvider(p *PushProviderConfig) error {
+	if !p.Enabled {
+		return nil
+	}
+
+	// Webhook requires at least one endpoint
+	if len(p.Endpoints) == 0 {
+		return errors.New(fmt.Errorf("webhook provider '%s' requires at least one endpoint when enabled", p.Name)).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "notification-push-webhook-endpoints").
+			Context("provider_name", p.Name).
+			Build()
+	}
+
+	// Validate custom template if specified
+	if p.Template != "" {
+		if _, err := template.New("validation").Parse(p.Template); err != nil {
+			return errors.New(fmt.Errorf("webhook provider '%s': invalid template syntax: %w", p.Name, err)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "notification-push-webhook-template").
+				Context("provider_name", p.Name).
+				Context("error_detail", err.Error()).
+				Build()
+		}
+	}
+
+	// Validate each endpoint (use index to avoid copying 144-byte struct)
+	for i := range p.Endpoints {
+		endpoint := &p.Endpoints[i]
+		// URL is required
+		if strings.TrimSpace(endpoint.URL) == "" {
+			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: URL is required", p.Name, i)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "notification-push-webhook-url").
+				Context("provider_name", p.Name).
+				Context("endpoint_index", i).
+				Build()
+		}
+
+		// URL must start with http:// or https://
+		if !strings.HasPrefix(endpoint.URL, "http://") && !strings.HasPrefix(endpoint.URL, "https://") {
+			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: URL must start with http:// or https://", p.Name, i)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "notification-push-webhook-url-scheme").
+				Context("provider_name", p.Name).
+				Context("endpoint_index", i).
+				Context("url", endpoint.URL).
+				Build()
+		}
+
+		// Validate HTTP method if specified (empty method defaults to POST in webhook provider)
+		if endpoint.Method != "" {
+			method := strings.ToUpper(endpoint.Method)
+			if method != "POST" && method != "PUT" && method != "PATCH" {
+				return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: method must be POST, PUT, or PATCH, got %s", p.Name, i, endpoint.Method)).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "notification-push-webhook-method").
+					Context("provider_name", p.Name).
+					Context("endpoint_index", i).
+					Context("method", endpoint.Method).
+					Build()
+			}
+		}
+
+		// Validate authentication configuration
+		if err := validateWebhookAuth(&endpoint.Auth, p.Name, i); err != nil {
+			return err
+		}
+
+		// Validate timeout if specified
+		if endpoint.Timeout < 0 {
+			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: timeout must be non-negative", p.Name, i)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "notification-push-webhook-timeout").
+				Context("provider_name", p.Name).
+				Context("endpoint_index", i).
+				Build()
+		}
+	}
+
+	return nil
+}
+
+// validateWebhookAuth validates webhook authentication configuration.
+// Checks that required fields are provided but does NOT resolve secrets here.
+// Secret resolution happens at runtime in the webhook provider.
+func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointIndex int) error {
+	authType := strings.ToLower(auth.Type)
+
+	// Empty auth type defaults to "none" - this is valid
+	if authType == "" || authType == "none" {
+		return nil
+	}
+
+	switch authType {
+	case "bearer":
+		// At least one of token or token_file must be provided
+		if strings.TrimSpace(auth.Token) == "" && strings.TrimSpace(auth.TokenFile) == "" {
+			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: bearer auth requires token or token_file", providerName, endpointIndex)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "notification-push-webhook-auth-bearer").
+				Context("provider_name", providerName).
+				Context("endpoint_index", endpointIndex).
+				Build()
+		}
+	case "basic":
+		// Check user/user_file
+		if strings.TrimSpace(auth.User) == "" && strings.TrimSpace(auth.UserFile) == "" {
+			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: basic auth requires user or user_file", providerName, endpointIndex)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "notification-push-webhook-auth-basic").
+				Context("provider_name", providerName).
+				Context("endpoint_index", endpointIndex).
+				Build()
+		}
+		// Check pass/pass_file
+		if strings.TrimSpace(auth.Pass) == "" && strings.TrimSpace(auth.PassFile) == "" {
+			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: basic auth requires pass or pass_file", providerName, endpointIndex)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "notification-push-webhook-auth-basic").
+				Context("provider_name", providerName).
+				Context("endpoint_index", endpointIndex).
+				Build()
+		}
+	case "custom":
+		// Header name is always required (no file variant)
+		if strings.TrimSpace(auth.Header) == "" {
+			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: custom auth requires header", providerName, endpointIndex)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "notification-push-webhook-auth-custom").
+				Context("provider_name", providerName).
+				Context("endpoint_index", endpointIndex).
+				Build()
+		}
+		// Check value/value_file
+		if strings.TrimSpace(auth.Value) == "" && strings.TrimSpace(auth.ValueFile) == "" {
+			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: custom auth requires value or value_file", providerName, endpointIndex)).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "notification-push-webhook-auth-custom").
+				Context("provider_name", providerName).
+				Context("endpoint_index", endpointIndex).
+				Build()
+		}
+	default:
+		return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: unsupported auth type: %s", providerName, endpointIndex, authType)).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "notification-push-webhook-auth-type").
+			Context("provider_name", providerName).
+			Context("endpoint_index", endpointIndex).
+			Context("auth_type", authType).
+			Build()
+	}
+
 	return nil
 }
