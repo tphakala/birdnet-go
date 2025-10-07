@@ -3,7 +3,7 @@
   import { actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons';
   import { t } from '$lib/i18n';
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
-  import { deduplicateNotifications } from '$lib/utils/notifications';
+  import { deduplicateNotifications, sanitizeNotificationMessage } from '$lib/utils/notifications';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -236,19 +236,6 @@
     return date.toLocaleDateString();
   }
 
-  // Sanitize notification message for UI display by removing URLs
-  function sanitizeMessage(message) {
-    if (!message) return '';
-    return message
-      .split('\n')
-      .filter(line => {
-        const trimmed = line.trim();
-        return !trimmed.startsWith('http://') && !trimmed.startsWith('https://');
-      })
-      .join('\n')
-      .trim();
-  }
-
   onMount(() => {
     loadNotifications();
   });
@@ -370,7 +357,9 @@
                 <div class="flex items-start justify-between gap-4">
                   <div>
                     <h3 class="font-semibold text-lg">{notification.title}</h3>
-                    <p class="text-base-content/80 mt-1">{sanitizeMessage(notification.message)}</p>
+                    <p class="text-base-content/80 mt-1">
+                      {sanitizeNotificationMessage(notification.message)}
+                    </p>
 
                     <!-- Metadata -->
                     <div class="flex flex-wrap items-center gap-2 mt-3">

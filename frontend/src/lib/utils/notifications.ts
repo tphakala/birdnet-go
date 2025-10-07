@@ -207,3 +207,22 @@ export function deduplicateNotifications(
 
   return deduped;
 }
+
+/**
+ * Sanitize notification message for UI display by removing URLs
+ * This removes image URLs and detection links that are meant for push notifications
+ * but should not be displayed in the UI's bell icon or toast notifications
+ * @param message - The message to sanitize
+ * @returns The sanitized message with URLs removed
+ */
+export function sanitizeNotificationMessage(message: string): string {
+  if (!message) return '';
+  return message
+    .split('\n')
+    .filter(line => {
+      const trimmed = line.trim();
+      return !trimmed.startsWith('http://') && !trimmed.startsWith('https://');
+    })
+    .join('\n')
+    .trim();
+}

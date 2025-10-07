@@ -11,6 +11,7 @@
     isValidNotification,
     isExistingNotification,
     shouldShowNotification,
+    sanitizeNotificationMessage,
   } from '$lib/utils/notifications';
 
   const logger = loggers.ui;
@@ -376,7 +377,7 @@
   function showBrowserNotification(notification: Notification) {
     if ('Notification' in globalThis.window && globalThis.Notification.permission === 'granted') {
       new globalThis.Notification(notification.title, {
-        body: notification.message,
+        body: sanitizeNotificationMessage(notification.message),
         icon: '/assets/images/favicon-32x32.png',
         tag: notification.id,
       });
@@ -586,7 +587,9 @@
                       {notification.timeAgo}
                     </time>
                   </div>
-                  <p class="text-sm text-base-content/80 mt-1">{notification.message}</p>
+                  <p class="text-sm text-base-content/80 mt-1">
+                    {sanitizeNotificationMessage(notification.message)}
+                  </p>
                   <div class="flex items-center gap-2 mt-2">
                     {#if notification.component}
                       <span class="badge badge-sm badge-ghost">{notification.component}</span>
