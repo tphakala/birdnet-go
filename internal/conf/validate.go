@@ -856,8 +856,9 @@ func validateWebhookProvider(p *PushProviderConfig) error {
 			Build()
 	}
 
-	// Validate each endpoint
-	for i, endpoint := range p.Endpoints {
+	// Validate each endpoint (use index to avoid copying 144-byte struct)
+	for i := range p.Endpoints {
+		endpoint := &p.Endpoints[i]
 		// URL is required
 		if strings.TrimSpace(endpoint.URL) == "" {
 			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: URL is required", p.Name, i)).

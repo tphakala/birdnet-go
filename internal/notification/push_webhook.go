@@ -41,6 +41,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/httpclient"
 )
 
+const (
+	// defaultWebhookTimeout is the default timeout for webhook HTTP requests
+	defaultWebhookTimeout = 30 * time.Second
+
+	// maxErrorBodySize limits error response body reading to prevent memory issues
+	maxErrorBodySize = 1024
+)
+
 // WebhookProvider sends notifications to HTTP/HTTPS webhooks with customizable templates,
 // authentication, and retry logic. Supports multiple endpoints for failover.
 //
@@ -129,13 +137,30 @@ func NewWebhookProvider(name string, enabled bool, endpoints []WebhookEndpoint, 
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse webhook template: %w", err)
 		}
+
+		// Validate template with dummy notification to catch errors early
+		// This prevents runtime failures when the template is actually used
+		testNotification := &Notification{
+			ID:        "test-id",
+			Type:      TypeInfo,
+			Priority:  PriorityLow,
+			Title:     "test",
+			Message:   "test message",
+			Component: "test-component",
+			Timestamp: time.Now(),
+			Metadata:  make(map[string]interface{}),
+		}
+		if err := tmpl.Execute(io.Discard, testNotification); err != nil {
+			return nil, fmt.Errorf("template validation failed: %w", err)
+		}
+
 		wp.template = tmpl
 	}
 
 	// Create HTTP client with production settings
 	cfg := httpclient.DefaultConfig()
 	cfg.UserAgent = "BirdNET-Go-Webhook/1.0"
-	cfg.DefaultTimeout = 30 * time.Second // Conservative default
+	cfg.DefaultTimeout = defaultWebhookTimeout
 	wp.client = httpclient.New(&cfg)
 
 	return wp, nil
@@ -362,7 +387,7 @@ func (w *WebhookProvider) sendToEndpoint(ctx context.Context, endpoint *WebhookE
 	// Check response status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Read error response body for better diagnostics
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024)) // Limit to prevent memory issues
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodySize))
 		return fmt.Errorf("webhook returned status %d: %s", resp.StatusCode, string(body))
 	}
 

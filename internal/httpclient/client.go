@@ -10,11 +10,29 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 )
 
-// DefaultTimeout is the default timeout for HTTP requests if not specified.
-const DefaultTimeout = 30 * time.Second
+const (
+	// DefaultTimeout is the default timeout for HTTP requests if not specified.
+	DefaultTimeout = 30 * time.Second
+
+	// Default connection pool settings
+	defaultMaxIdleConns        = 100
+	defaultMaxIdleConnsPerHost = 10
+	defaultIdleConnTimeout     = 90 * time.Second
+
+	// Default timeouts for various HTTP operations
+	defaultTLSHandshakeTimeout    = 10 * time.Second
+	defaultResponseHeaderTimeout  = 10 * time.Second
+	defaultExpectContinueTimeout  = 1 * time.Second
+	defaultDialTimeout            = 30 * time.Second
+	defaultDialKeepAlive          = 30 * time.Second
+
+	// Default User-Agent
+	defaultUserAgent = "BirdNET-Go"
+)
 
 // Client is a production-grade HTTP client with context management and timeouts.
 // It wraps the standard http.Client with additional features for reliability.
@@ -32,8 +50,10 @@ type Client struct {
 	defaultTimeout time.Duration
 	userAgent      string
 	// Hooks for observability (metrics, logging)
-	beforeRequest  func(*http.Request)
-	afterResponse  func(*http.Request, *http.Response, error)
+	// Protected by hookMu for concurrent access safety
+	hookMu        sync.RWMutex
+	beforeRequest func(*http.Request)
+	afterResponse func(*http.Request, *http.Response, error)
 }
 
 // Config holds configuration for creating an HTTP client.
@@ -73,13 +93,13 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		DefaultTimeout:          DefaultTimeout,
-		UserAgent:              "BirdNET-Go",
-		MaxIdleConns:           100,
-		MaxIdleConnsPerHost:    10,
-		IdleConnTimeout:        90 * time.Second,
-		TLSHandshakeTimeout:    10 * time.Second,
-		ResponseHeaderTimeout:  10 * time.Second,
-		ExpectContinueTimeout:  1 * time.Second,
+		UserAgent:              defaultUserAgent,
+		MaxIdleConns:           defaultMaxIdleConns,
+		MaxIdleConnsPerHost:    defaultMaxIdleConnsPerHost,
+		IdleConnTimeout:        defaultIdleConnTimeout,
+		TLSHandshakeTimeout:    defaultTLSHandshakeTimeout,
+		ResponseHeaderTimeout:  defaultResponseHeaderTimeout,
+		ExpectContinueTimeout:  defaultExpectContinueTimeout,
 		DisableKeepAlives:      false,
 		DisableCompression:     false,
 	}
@@ -93,33 +113,33 @@ func New(cfg *Config) *Client {
 		cfg.DefaultTimeout = DefaultTimeout
 	}
 	if cfg.UserAgent == "" {
-		cfg.UserAgent = "BirdNET-Go"
+		cfg.UserAgent = defaultUserAgent
 	}
 	if cfg.MaxIdleConns == 0 {
-		cfg.MaxIdleConns = 100
+		cfg.MaxIdleConns = defaultMaxIdleConns
 	}
 	if cfg.MaxIdleConnsPerHost == 0 {
-		cfg.MaxIdleConnsPerHost = 10
+		cfg.MaxIdleConnsPerHost = defaultMaxIdleConnsPerHost
 	}
 	if cfg.IdleConnTimeout == 0 {
-		cfg.IdleConnTimeout = 90 * time.Second
+		cfg.IdleConnTimeout = defaultIdleConnTimeout
 	}
 	if cfg.TLSHandshakeTimeout == 0 {
-		cfg.TLSHandshakeTimeout = 10 * time.Second
+		cfg.TLSHandshakeTimeout = defaultTLSHandshakeTimeout
 	}
 	if cfg.ResponseHeaderTimeout == 0 {
-		cfg.ResponseHeaderTimeout = 10 * time.Second
+		cfg.ResponseHeaderTimeout = defaultResponseHeaderTimeout
 	}
 	if cfg.ExpectContinueTimeout == 0 {
-		cfg.ExpectContinueTimeout = 1 * time.Second
+		cfg.ExpectContinueTimeout = defaultExpectContinueTimeout
 	}
 
 	// Create transport with tuned settings
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
+			Timeout:   defaultDialTimeout,
+			KeepAlive: defaultDialKeepAlive,
 		}).DialContext,
 		ForceAttemptHTTP2:     true,
 		MaxIdleConns:          cfg.MaxIdleConns,
@@ -167,17 +187,23 @@ func (c *Client) Do(ctx context.Context, req *http.Request) (*http.Response, err
 		req.Header.Set("User-Agent", c.userAgent)
 	}
 
-	// Call before hook if set
-	if c.beforeRequest != nil {
-		c.beforeRequest(req)
+	// Call before hook if set (read lock for concurrent safety)
+	c.hookMu.RLock()
+	beforeHook := c.beforeRequest
+	c.hookMu.RUnlock()
+	if beforeHook != nil {
+		beforeHook(req)
 	}
 
 	// Execute request
 	resp, err := c.client.Do(req)
 
-	// Call after hook if set
-	if c.afterResponse != nil {
-		c.afterResponse(req, resp, err)
+	// Call after hook if set (read lock for concurrent safety)
+	c.hookMu.RLock()
+	afterHook := c.afterResponse
+	c.hookMu.RUnlock()
+	if afterHook != nil {
+		afterHook(req, resp, err)
 	}
 
 	return resp, err
@@ -209,15 +235,19 @@ func (c *Client) Post(ctx context.Context, url, contentType string, body interfa
 
 // SetBeforeRequestHook sets a function to be called before each request.
 // Useful for logging, metrics, or request modification.
-// Not safe to call concurrently with Do().
+// Safe to call concurrently with Do() and other hook setters.
 func (c *Client) SetBeforeRequestHook(fn func(*http.Request)) {
+	c.hookMu.Lock()
+	defer c.hookMu.Unlock()
 	c.beforeRequest = fn
 }
 
 // SetAfterResponseHook sets a function to be called after each request.
 // Useful for logging, metrics, or response inspection.
-// Not safe to call concurrently with Do().
+// Safe to call concurrently with Do() and other hook setters.
 func (c *Client) SetAfterResponseHook(fn func(*http.Request, *http.Response, error)) {
+	c.hookMu.Lock()
+	defer c.hookMu.Unlock()
 	c.afterResponse = fn
 }
 
