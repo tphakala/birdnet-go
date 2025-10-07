@@ -302,7 +302,7 @@ func TestDefaultTelemetryConfig(t *testing.T) {
 
 	// Verify defaults
 	assert.True(t, config.Enabled)
-	assert.Equal(t, 50.0, config.RateLimitReportThreshold)
+	assert.InEpsilon(t, 50.0, config.RateLimitReportThreshold, 0.001)
 }
 
 func TestProviderInitializationError(t *testing.T) {
