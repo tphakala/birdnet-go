@@ -256,7 +256,7 @@ func (hc *HealthChecker) checkProvider(entry *healthCheckEntry) {
 	// Attempt to send test notification for real connectivity test
 	// This is optional and only done if provider is enabled and healthy
 	if entry.health.Healthy && entry.provider.IsEnabled() {
-		testCtx, testCancel := context.WithTimeout(context.Background(), hc.timeout)
+		testCtx, testCancel := context.WithTimeout(hc.baseCtx, hc.timeout)
 		defer testCancel()
 
 		// Only send test notification if provider supports it (not for all types)

@@ -220,14 +220,14 @@ func TestCircuitBreaker_HalfOpenMaxRequests(t *testing.T) {
 		}
 	}
 
-	// At least one should be rejected with ErrTooManyRequests
-	if tooManyCount == 0 {
-		t.Errorf("expected at least 1 ErrTooManyRequests when exceeding HalfOpenMaxRequests=%d, got 0", config.HalfOpenMaxRequests)
+	// Exactly one should be rejected (N+1 callers with N allowed)
+	if tooManyCount != 1 {
+		t.Errorf("expected exactly 1 ErrTooManyRequests when exceeding HalfOpenMaxRequests=%d, got %d", config.HalfOpenMaxRequests, tooManyCount)
 	}
 
-	// The others should get through and fail with testErr
-	if otherErrCount < config.HalfOpenMaxRequests {
-		t.Logf("Note: %d calls got through, expected ~%d", otherErrCount, config.HalfOpenMaxRequests)
+	// The others should get through and fail with testErr (blocked, then return testErr)
+	if otherErrCount != config.HalfOpenMaxRequests {
+		t.Errorf("expected %d half-open probes to execute, got %d", config.HalfOpenMaxRequests, otherErrCount)
 	}
 }
 
@@ -331,7 +331,7 @@ func TestCircuitBreaker_GetStats(t *testing.T) {
 	stats := cb.GetStats()
 
 	if stats.State != StateClosed {
-		t.Errorf("expected state Closed, got %s", stats.State)
+		t.Errorf("expected state Closed, got %v", stats.State)
 	}
 
 	if stats.Failures != 2 {
