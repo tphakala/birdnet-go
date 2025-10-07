@@ -35,6 +35,7 @@ type HealthChecker struct {
 	metrics           *metrics.NotificationMetrics
 	mu                sync.RWMutex
 	cancel            context.CancelFunc
+	baseCtx           context.Context // Parent context for deriving check contexts
 }
 
 type healthCheckEntry struct {
@@ -115,6 +116,7 @@ func (hc *HealthChecker) Start(ctx context.Context) error {
 
 	ctx, cancel := context.WithCancel(ctx)
 	hc.cancel = cancel
+	hc.baseCtx = ctx // Store parent context for deriving check contexts
 
 	// Perform initial health check
 	hc.checkAll()
@@ -175,7 +177,7 @@ func (hc *HealthChecker) checkProvider(entry *healthCheckEntry) {
 	defer entry.mu.Unlock()
 
 	providerName := entry.provider.GetName()
-	ctx, cancel := context.WithTimeout(context.Background(), hc.timeout)
+	ctx, cancel := context.WithTimeout(hc.baseCtx, hc.timeout)
 	defer cancel()
 
 	// Update check time

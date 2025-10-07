@@ -254,6 +254,16 @@ func (m *NotificationMetrics) SetDispatchActive(count int) {
 	m.NotificationDispatchActive.Set(float64(count))
 }
 
+// IncDispatchActive increments the active dispatch gauge by 1.
+func (m *NotificationMetrics) IncDispatchActive() {
+	m.NotificationDispatchActive.Inc()
+}
+
+// DecDispatchActive decrements the active dispatch gauge by 1.
+func (m *NotificationMetrics) DecDispatchActive() {
+	m.NotificationDispatchActive.Dec()
+}
+
 // SetQueueDepth sets the notification queue depth.
 func (m *NotificationMetrics) SetQueueDepth(depth int) {
 	m.NotificationQueueDepth.Set(float64(depth))

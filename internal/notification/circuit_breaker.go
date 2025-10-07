@@ -166,7 +166,7 @@ func (cb *PushCircuitBreaker) beforeCall() error {
 
 	case StateOpen:
 		// Check if enough time has passed to try half-open
-		if time.Since(cb.lastStateChange) > cb.config.Timeout {
+		if time.Since(cb.lastStateChange) >= cb.config.Timeout {
 			cb.setState(StateHalfOpen)
 			cb.halfOpenRequests = 1 // Count this transition call as the first request
 			return nil

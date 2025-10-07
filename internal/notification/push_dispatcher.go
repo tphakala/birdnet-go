@@ -205,11 +205,11 @@ func (d *pushDispatcher) dispatchEnhanced(ctx context.Context, notif *Notificati
 		return
 	}
 
-	// Increment dispatch total
+	// Increment dispatch total and track active dispatches
 	if d.metrics != nil {
 		d.metrics.IncrementDispatchTotal()
-		d.metrics.SetDispatchActive(1)
-		defer d.metrics.SetDispatchActive(0)
+		d.metrics.IncDispatchActive()
+		defer d.metrics.DecDispatchActive()
 	}
 
 	d.retryLoop(ctx, notif, ep)

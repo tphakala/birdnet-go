@@ -3,6 +3,7 @@ package notification
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 )
@@ -174,35 +175,60 @@ func TestCircuitBreaker_HalfOpenMaxRequests(t *testing.T) {
 		})
 	}
 
-	// Wait for timeout
+	if cb.State() != StateOpen {
+		t.Fatalf("expected circuit to be Open after failures, got %v", cb.State())
+	}
+
+	// Wait for timeout to allow transition to half-open
 	time.Sleep(config.Timeout + 10*time.Millisecond)
 
-	// Make calls that fail to keep circuit in half-open state
-	// (If they succeed, circuit closes and allows more requests)
-	callCount := 0
-	for i := 0; i < config.HalfOpenMaxRequests; i++ {
-		_ = cb.Call(context.Background(), func(ctx context.Context) error {
-			callCount++
-			// Return success on first call to keep it half-open momentarily,
-			// but we need to test the limit mechanism
-			// Actually, let's test with a blocker that doesn't complete
-			time.Sleep(1 * time.Millisecond)
-			return testErr // Fail to keep in half-open
-		})
-		if i == 0 && cb.State() == StateHalfOpen {
-			// First call attempted in half-open is good
-			continue
+	// Fire N+1 concurrent calls to test the half-open limit
+	var wg sync.WaitGroup
+	errChan := make(chan error, config.HalfOpenMaxRequests+1)
+	blocker := make(chan struct{})
+
+	// Launch HalfOpenMaxRequests + 1 concurrent calls
+	for i := 0; i < config.HalfOpenMaxRequests+1; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			err := cb.Call(context.Background(), func(ctx context.Context) error {
+				// Block to ensure concurrent execution
+				<-blocker
+				return testErr
+			})
+			errChan <- err
+		}(i)
+	}
+
+	// Give goroutines time to start and call beforeCall()
+	time.Sleep(10 * time.Millisecond)
+
+	// Unblock all calls
+	close(blocker)
+	wg.Wait()
+	close(errChan)
+
+	// Count how many got ErrTooManyRequests
+	tooManyCount := 0
+	otherErrCount := 0
+	for err := range errChan {
+		if errors.Is(err, ErrTooManyRequests) {
+			tooManyCount++
+		} else if err != nil {
+			otherErrCount++
 		}
 	}
 
-	// After failures in half-open, circuit should be open again
-	if cb.State() != StateOpen {
-		t.Logf("Note: Circuit state is %s after half-open failures", cb.State())
+	// At least one should be rejected with ErrTooManyRequests
+	if tooManyCount == 0 {
+		t.Errorf("expected at least 1 ErrTooManyRequests when exceeding HalfOpenMaxRequests=%d, got 0", config.HalfOpenMaxRequests)
 	}
 
-	// The test was checking max requests in half-open, but that's tricky
-	// because successful calls close the circuit. Let's verify we can't
-	// exceed the limit when properly testing concurrent access
+	// The others should get through and fail with testErr
+	if otherErrCount < config.HalfOpenMaxRequests {
+		t.Logf("Note: %d calls got through, expected ~%d", otherErrCount, config.HalfOpenMaxRequests)
+	}
 }
 
 func TestCircuitBreaker_Reset(t *testing.T) {
@@ -326,6 +352,7 @@ func TestCircuitBreaker_ConcurrentCalls(t *testing.T) {
 	cb := NewPushCircuitBreaker(config, nil, "test-provider")
 
 	// Run concurrent successful calls
+	errChan := make(chan error, 100)
 	done := make(chan bool, 100)
 	for i := 0; i < 100; i++ {
 		go func() {
@@ -334,7 +361,7 @@ func TestCircuitBreaker_ConcurrentCalls(t *testing.T) {
 				return nil
 			})
 			if err != nil {
-				t.Errorf("concurrent call failed: %v", err)
+				errChan <- err
 			}
 			done <- true
 		}()
@@ -343,6 +370,12 @@ func TestCircuitBreaker_ConcurrentCalls(t *testing.T) {
 	// Wait for all to complete
 	for i := 0; i < 100; i++ {
 		<-done
+	}
+	close(errChan)
+
+	// Check for errors from main goroutine
+	for err := range errChan {
+		t.Errorf("concurrent call failed: %v", err)
 	}
 
 	if cb.State() != StateClosed {
