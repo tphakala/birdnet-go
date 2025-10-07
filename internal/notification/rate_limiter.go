@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -99,16 +100,24 @@ func (rl *PushRateLimiter) Allow() bool {
 	return false
 }
 
-// WaitUntilAllowed blocks until a request is allowed.
-// Returns immediately if request is allowed, otherwise waits.
-func (rl *PushRateLimiter) WaitUntilAllowed() {
-	for !rl.Allow() {
+// WaitUntilAllowed blocks until a request is allowed or ctx is cancelled.
+// Returns nil if request is allowed, ctx.Err() if context is cancelled.
+func (rl *PushRateLimiter) WaitUntilAllowed(ctx context.Context) error {
+	for {
+		if rl.Allow() {
+			return nil
+		}
 		// Calculate wait time
 		rl.mu.Lock()
-		timeUntilNextToken := rl.interval / time.Duration(rl.rate)
+		wait := rl.interval / time.Duration(rl.rate)
 		rl.mu.Unlock()
 
-		time.Sleep(timeUntilNextToken)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(wait):
+			// Continue loop to check again
+		}
 	}
 }
 

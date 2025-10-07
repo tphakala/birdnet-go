@@ -1,13 +1,13 @@
 package notification
 
 import (
-	"errors"
 	"context"
 	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 

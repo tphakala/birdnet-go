@@ -107,7 +107,17 @@ type PushCircuitBreaker struct {
 }
 
 // NewPushCircuitBreaker creates a new PushCircuitBreaker with the given configuration.
+// If the configuration is invalid, it logs a warning but still uses the provided config
+// (to allow testing with short timeouts). Production configs should pass validation.
 func NewPushCircuitBreaker(config CircuitBreakerConfig, notificationMetrics *metrics.NotificationMetrics, providerName string) *PushCircuitBreaker {
+	// Validate configuration and warn if invalid (but don't override for test flexibility)
+	if err := config.Validate(); err != nil {
+		slog.Warn("Circuit breaker config validation failed",
+			"provider", providerName,
+			"error", err,
+			"action", "proceeding with provided config")
+	}
+
 	cb := &PushCircuitBreaker{
 		config:          config,
 		state:           StateClosed,
@@ -184,10 +194,17 @@ func (cb *PushCircuitBreaker) afterCall(err error) {
 	if err == nil {
 		// Success - handle based on current state
 		cb.onSuccess()
-	} else {
-		// Failure - handle based on current state
-		cb.onFailure()
+		return
 	}
+
+	// Don't count client-side cancellation as provider failure
+	// Circuit breaker should only open for actual provider issues
+	if errors.Is(err, context.Canceled) {
+		return
+	}
+
+	// Failure - handle based on current state
+	cb.onFailure()
 }
 
 // onSuccess handles a successful call.

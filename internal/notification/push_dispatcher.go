@@ -391,7 +391,7 @@ func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, 
 
 // ----------------- Provider construction -----------------
 
-func buildProvider(pc *conf.PushProviderConfig) Provider {
+func buildProvider(pc *conf.PushProviderConfig, log *slog.Logger) Provider {
 	ptype := strings.ToLower(pc.Type)
 	types := effectiveTypes(pc.Filter.Types)
 	switch ptype {
@@ -400,6 +400,11 @@ func buildProvider(pc *conf.PushProviderConfig) Provider {
 	case "shoutrrr":
 		return NewShoutrrrProvider(orDefault(pc.Name, "shoutrrr"), pc.Enabled, pc.URLs, types, pc.Timeout)
 	default:
+		if log != nil {
+			log.Warn("unknown push provider type; skipping",
+				"name", pc.Name,
+				"type", pc.Type)
+		}
 		return nil
 	}
 }
@@ -632,7 +637,7 @@ func (d *pushDispatcher) initializeEnhancedProviders(settings *conf.Settings, no
 
 	for i := range settings.Notification.Push.Providers {
 		pc := &settings.Notification.Push.Providers[i]
-		prov := buildProvider(pc)
+		prov := buildProvider(pc, d.log)
 		if prov == nil {
 			continue
 		}

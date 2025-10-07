@@ -374,8 +374,9 @@ func TestCircuitBreaker_ContextCancellation(t *testing.T) {
 		t.Errorf("expected context.Canceled error, got %v", err)
 	}
 
-	// Context cancellation should count as failure
-	if cb.Failures() != 1 {
-		t.Errorf("expected 1 failure from context cancellation, got %d", cb.Failures())
+	// Context cancellation should NOT count as provider failure (it's client-side)
+	// The circuit breaker should only open for actual provider issues
+	if cb.Failures() != 0 {
+		t.Errorf("expected 0 failures from context cancellation (client-side), got %d", cb.Failures())
 	}
 }
