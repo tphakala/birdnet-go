@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
@@ -76,6 +77,12 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	c := e.NewContext(req, rec)
 
 	controller := &Controller{}
+	controller.Settings = &conf.Settings{}
+	controller.Settings.Security.Host = "localhost"
+	controller.Settings.WebServer.Port = "8080"
+	controller.Settings.Main.TimeAs24h = true
+	controller.Settings.Notification.Templates.NewSpecies.Title = "New Species: {{.CommonName}}"
+	controller.Settings.Notification.Templates.NewSpecies.Message = "First detection of {{.CommonName}} ({{.ScientificName}}) at {{.Location}}"
 
 	err = controller.CreateTestNewSpeciesNotification(c)
 	require.NoError(t, err)
