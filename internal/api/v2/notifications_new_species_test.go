@@ -81,7 +81,9 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	controller.Settings.Security.Host = "localhost"
 	controller.Settings.WebServer.Port = "8080"
 	controller.Settings.Main.TimeAs24h = true
-	// Don't set templates - use defaults to match detection_consumer.go behavior
+	// Set default templates from config.yaml
+	controller.Settings.Notification.Templates.NewSpecies.Title = "New Species: {{.CommonName}}"
+	controller.Settings.Notification.Templates.NewSpecies.Message = "First detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}. View: {{.DetectionURL}}"
 
 	err = controller.CreateTestNewSpeciesNotification(c)
 	require.NoError(t, err)
@@ -98,9 +100,12 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	assert.Equal(t, notification.PriorityHigh, response.Priority)
 	assert.Equal(t, "detection", response.Component)
 	assert.Equal(t, notification.StatusUnread, response.Status)
-	// Verify default title and message formats (no templates set)
-	assert.Equal(t, "New Species Detected: Test Bird Species", response.Title)
-	assert.Equal(t, "First detection of Test Bird Species (Testus birdicus) at Fake Test Location", response.Message)
+	// Verify default title format matches config.yaml template
+	assert.Equal(t, "New Species: Test Bird Species", response.Title)
+	// Verify message matches default template: includes confidence and time, not location
+	assert.Contains(t, response.Message, "First detection of Test Bird Species")
+	assert.Contains(t, response.Message, "Testus birdicus")
+	assert.Contains(t, response.Message, "99% confidence")
 	assert.NotEmpty(t, response.ID)
 	assert.False(t, response.Timestamp.IsZero())
 
@@ -111,7 +116,7 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	assert.InDelta(t, 0.99, response.Metadata["confidence"], 0.001)
 	assert.Equal(t, "Fake Test Location", response.Metadata["location"])
 	assert.Equal(t, true, response.Metadata["is_new_species"])
-	assert.Equal(t, 0, response.Metadata["days_since_first_seen"])
+	assert.Equal(t, float64(0), response.Metadata["days_since_first_seen"])
 
 	// Verify 24-hour expiry
 	require.NotNil(t, response.ExpiresAt)
