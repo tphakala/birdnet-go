@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
 
@@ -16,12 +15,6 @@ import (
 
 // resetServiceForTesting safely resets the notification service instance for testing
 func resetServiceForTesting() {
-	// Access the internal state using reflection pattern from manager.go
-	// This is safe for testing as we control the test environment
-	mu := &sync.RWMutex{}
-	mu.Lock()
-	defer mu.Unlock()
-
 	// Reset the global instance by setting to nil
 	// Note: In real implementation we'd need to access the unexported vars
 	// For now, we'll test around the existing service if present
