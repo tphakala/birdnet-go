@@ -658,7 +658,7 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 	}
 
 	if c.Settings == nil {
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{
+		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
 			"error": "Settings not initialized",
 		})
 	}
@@ -759,7 +759,7 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 		})
 	}
 
-	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+	if c.apiLogger != nil && c.Settings.WebServer.Debug {
 		c.apiLogger.Debug("test new species notification created",
 			"notification_id", testNotification.ID,
 			"species", testTemplateData.CommonName,

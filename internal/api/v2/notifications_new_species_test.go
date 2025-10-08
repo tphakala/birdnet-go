@@ -14,13 +14,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
-// resetServiceForTesting safely resets the notification service instance for testing
-func resetServiceForTesting() {
-	// Reset the global instance by setting to nil
-	// Note: In real implementation we'd need to access the unexported vars
-	// For now, we'll test around the existing service if present
-}
-
 // parseJSONResponse unmarshals JSON response body into target struct
 func parseJSONResponse(body []byte, target interface{}) error {
 	return json.Unmarshal(body, target)
