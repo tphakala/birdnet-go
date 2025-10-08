@@ -733,7 +733,7 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 
 	// Use defaults only if template rendering failed
 	if !titleSet {
-		title = "New Species Detected: Test Bird Species"
+		title = "New Species: Test Bird Species"
 	}
 	if !messageSet {
 		message = "First detection of Test Bird Species (Testus birdicus) at Fake Test Location"
