@@ -116,7 +116,7 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	assert.InDelta(t, 0.99, response.Metadata["confidence"], 0.001)
 	assert.Equal(t, "Fake Test Location", response.Metadata["location"])
 	assert.Equal(t, true, response.Metadata["is_new_species"])
-	assert.Equal(t, float64(0), response.Metadata["days_since_first_seen"])
+	assert.InDelta(t, 0, response.Metadata["days_since_first_seen"], 0.001)
 
 	// Verify 24-hour expiry
 	require.NotNil(t, response.ExpiresAt)
