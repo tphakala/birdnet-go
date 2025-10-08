@@ -664,11 +664,11 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 
 	// Format detection time according to user's time format preference
 	now := time.Now()
-	detectionTime := now.Format("15:04:05")
+	var detectionTime string
 	if c.Settings.Main.TimeAs24h {
-		detectionTime = time.Now().Format("15:04:05")
+		detectionTime = now.Format("15:04:05")
 	} else {
-		detectionTime = time.Now().Format("3:04:05 PM")
+		detectionTime = now.Format("3:04:05 PM")
 	}
 
 	// Create test template data with realistic values
