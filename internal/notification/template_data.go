@@ -52,7 +52,9 @@ func NewTemplateData(event events.DetectionEvent, baseURL string, timeAs24h bool
 	if lon, ok := metadata["longitude"].(float64); ok {
 		longitude = lon
 	}
-	location := fmt.Sprintf("%.6f, %.6f", latitude, longitude)
+
+	// Use the event's location string (e.g., "backyard-camera", "RTSP URL", etc.)
+	location := event.GetLocation()
 
 	// Get note ID from metadata for detection URL
 	var noteID string
