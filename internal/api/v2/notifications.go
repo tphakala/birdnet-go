@@ -657,6 +657,12 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 		})
 	}
 
+	if c.Settings == nil {
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Settings not initialized",
+		})
+	}
+
 	service := notification.GetService()
 
 	// Build base URL for links
