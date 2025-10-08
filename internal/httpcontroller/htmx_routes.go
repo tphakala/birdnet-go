@@ -92,6 +92,7 @@ func (s *Server) initRoutes() {
 		"/ui/settings/audio":            {Path: "/ui/settings/audio", TemplateName: "svelte-standalone", Title: "Audio Settings", Authorized: true},
 		"/ui/settings/detectionfilters": {Path: "/ui/settings/detectionfilters", TemplateName: "svelte-standalone", Title: "Detection Filters", Authorized: true},
 		"/ui/settings/integrations":     {Path: "/ui/settings/integrations", TemplateName: "svelte-standalone", Title: "Integration Settings", Authorized: true},
+		"/ui/settings/notifications":    {Path: "/ui/settings/notifications", TemplateName: "svelte-standalone", Title: "Notifications Settings", Authorized: true},
 		"/ui/settings/security":         {Path: "/ui/settings/security", TemplateName: "svelte-standalone", Title: "Security Settings", Authorized: true},
 		"/ui/settings/species":          {Path: "/ui/settings/species", TemplateName: "svelte-standalone", Title: "Species Settings", Authorized: true},
 		"/ui/settings/support":          {Path: "/ui/settings/support", TemplateName: "svelte-standalone", Title: "Support", Authorized: true},

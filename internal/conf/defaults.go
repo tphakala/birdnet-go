@@ -338,4 +338,8 @@ func setDefaultConfig() {
 	viper.SetDefault("notification.push.rate_limiting.burst_size", 10)
 
 	viper.SetDefault("notification.push.providers", []map[string]any{})
+
+	// Notification templates
+	viper.SetDefault("notification.templates.newspecies.title", "New Species: {{.CommonName}}")
+	viper.SetDefault("notification.templates.newspecies.message", "{{.ImageURL}}\n\nFirst detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}. \n{{.DetectionURL}}")
 }

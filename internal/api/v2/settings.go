@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 	"unicode/utf8"
 
@@ -710,6 +711,8 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 		return &settings.Realtime.Telemetry, nil
 	case "sentry":
 		return &settings.Sentry, nil
+	case "notification":
+		return &settings.Notification, nil
 	default:
 		return nil, fmt.Errorf("unknown settings section: %s", section)
 	}
@@ -758,14 +761,15 @@ type sectionValidator func(data json.RawMessage) error
 // getSectionValidators returns validators for sections that need special validation
 func getSectionValidators() map[string]sectionValidator {
 	return map[string]sectionValidator{
-		"mqtt":      validateMQTTSection,
-		"rtsp":      validateRTSPSection,
-		"security":  validateSecuritySection,
-		"main":      validateMainSection,
-		"birdnet":   validateBirdNETSection,
-		"webserver": validateWebServerSection,
-		"species":   validateSpeciesSection,
-		"realtime":  validateRealtimeSection,
+		"mqtt":         validateMQTTSection,
+		"rtsp":         validateRTSPSection,
+		"security":     validateSecuritySection,
+		"main":         validateMainSection,
+		"birdnet":      validateBirdNETSection,
+		"webserver":    validateWebServerSection,
+		"species":      validateSpeciesSection,
+		"realtime":     validateRealtimeSection,
+		"notification": validateNotificationSection,
 	}
 }
 
@@ -1093,13 +1097,13 @@ func validateSpeciesSection(data json.RawMessage) error {
 		if config.Interval < 0 {
 			return fmt.Errorf("species config for '%s': interval must be non-negative, got %d", speciesName, config.Interval)
 		}
-		
+
 		// Check if threshold is within valid range
 		if config.Threshold < 0 || config.Threshold > 1 {
 			return fmt.Errorf("species config for '%s': threshold must be between 0 and 1, got %f", speciesName, config.Threshold)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1116,13 +1120,36 @@ func validateRealtimeSection(data json.RawMessage) error {
 		if config.Interval < 0 {
 			return fmt.Errorf("species config for '%s': interval must be non-negative, got %d", speciesName, config.Interval)
 		}
-		
+
 		// Check if threshold is within valid range
 		if config.Threshold < 0 || config.Threshold > 1 {
 			return fmt.Errorf("species config for '%s': threshold must be between 0 and 1, got %f", speciesName, config.Threshold)
 		}
 	}
-	
+
+	return nil
+}
+
+// validateNotificationSection validates notification settings including template syntax
+func validateNotificationSection(data json.RawMessage) error {
+	var notificationConfig conf.NotificationConfig
+	if err := json.Unmarshal(data, &notificationConfig); err != nil {
+		return err
+	}
+
+	// Validate new species notification templates if present
+	if notificationConfig.Templates.NewSpecies.Title != "" {
+		if _, err := template.New("title").Parse(notificationConfig.Templates.NewSpecies.Title); err != nil {
+			return fmt.Errorf("invalid template syntax in new species title: %w", err)
+		}
+	}
+
+	if notificationConfig.Templates.NewSpecies.Message != "" {
+		if _, err := template.New("message").Parse(notificationConfig.Templates.NewSpecies.Message); err != nil {
+			return fmt.Errorf("invalid template syntax in new species message: %w", err)
+		}
+	}
+
 	return nil
 }
 

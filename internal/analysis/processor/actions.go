@@ -697,6 +697,32 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 		return
 	}
 
+	// Add location, time, and note ID to metadata for template rendering
+	// Only add metadata if the map is non-nil to prevent panic
+	metadata := detectionEvent.GetMetadata()
+	if metadata != nil {
+		metadata["note_id"] = a.Note.ID
+		metadata["latitude"] = a.Note.Latitude
+		metadata["longitude"] = a.Note.Longitude
+		metadata["begin_time"] = a.Note.BeginTime
+
+		// Get bird image URL from cache and add to metadata
+		if a.processor != nil && a.processor.BirdImageCache != nil {
+			birdImage, err := a.processor.BirdImageCache.Get(a.Note.ScientificName)
+			if err == nil && birdImage.URL != "" {
+				metadata["image_url"] = birdImage.URL
+			}
+		}
+	} else {
+		// Log error if metadata is nil (shouldn't happen in normal operation)
+		GetLogger().Error("Detection event metadata is nil",
+			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
+			"species", a.Note.CommonName,
+			"scientific_name", a.Note.ScientificName,
+			"operation", "publish_detection_event")
+	}
+
 	// Publish the detection event
 	if published := eventBus.TryPublishDetection(detectionEvent); published {
 		// Only record notification as sent if publishing succeeded

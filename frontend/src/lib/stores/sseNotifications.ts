@@ -2,6 +2,7 @@ import ReconnectingEventSource from 'reconnecting-eventsource';
 import { toastActions } from './toast';
 import type { ToastType, ToastPosition } from './toast';
 import { loggers } from '$lib/utils/logger';
+import { sanitizeNotificationMessage } from '$lib/utils/notifications';
 
 const logger = loggers.sse;
 
@@ -125,7 +126,7 @@ class SSENotificationManager {
     // Show toast with appropriate duration
     const duration = notification.type === 'error' ? null : 5000; // Errors don't auto-dismiss
 
-    toastActions.show(notification.message, toastType, {
+    toastActions.show(sanitizeNotificationMessage(notification.message), toastType, {
       duration,
       showIcon: true,
     });
@@ -152,7 +153,7 @@ class SSENotificationManager {
         ]
       : undefined;
 
-    toastActions.show(toastData.message, toastData.type, {
+    toastActions.show(sanitizeNotificationMessage(toastData.message), toastData.type, {
       duration: toastData.duration ?? 5000,
       position: 'top-right' as ToastPosition,
       actions,

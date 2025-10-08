@@ -587,6 +587,7 @@
       "audio": "Configuración de audio",
       "filters": "Filtros de detección",
       "integration": "Integraciones",
+      "notifications": "Notificaciones",
       "security": "Seguridad",
       "species": "Especies",
       "support": "Soporte"
@@ -920,6 +921,65 @@
           "error": "Error: {message}",
           "githubIssueRequired": "Por favor ingresa un número de issue de GitHub para subir los datos de soporte"
         }
+      }
+    },
+    "notifications": {
+      "sections": {
+        "test": {
+          "title": "Notificaciones de prueba",
+          "description": "Envía notificaciones de prueba para verificar que tu sistema de notificaciones funciona correctamente"
+        },
+        "info": {
+          "title": "Información del sistema",
+          "description": "Aprende a ver y gestionar tus notificaciones"
+        }
+      },
+      "templates": {
+        "title": "Plantillas de notificación",
+        "description": "Personaliza los mensajes de notificación para detecciones de nuevas especies usando variables de plantilla",
+        "newSpeciesTitle": "Plantilla de notificación de nueva especie",
+        "titleLabel": "Plantilla de título",
+        "titlePlaceholder": "ej., Nueva especie: {{.CommonName}}",
+        "messageLabel": "Plantilla de mensaje",
+        "messagePlaceholder": "ej., Primera detección de {{.CommonName}} ({{.ScientificName}}) con {{.ConfidencePercent}}% de confianza",
+        "resetButton": "Restablecer",
+        "saveButton": "Guardar plantillas",
+        "saveButtonUnsaved": "Guardar plantillas *",
+        "testButton": "Probar",
+        "savingButton": "Guardando...",
+        "sendingButton": "Enviando...",
+        "resetConfirm": "¿Restablecer plantillas a valores predeterminados? Esto descartará tus cambios actuales y restaurará los valores de plantilla predeterminados.",
+        "unsavedChangesWarning": "Tienes cambios de plantilla sin guardar. La prueba usará las plantillas guardadas actualmente, no tus ediciones. ¿Continuar?",
+        "testWithUnsavedChanges": "Advertencia: Tienes cambios sin guardar. La prueba usará las plantillas guardadas.",
+        "testNormal": "Enviar una notificación de prueba",
+        "saveSuccess": "¡Plantillas guardadas exitosamente!",
+        "saveError": "Error: {message}",
+        "availableVariables": "Variables de plantilla disponibles",
+        "variablesDescription": "Usa estas variables en tus plantillas con la sintaxis",
+        "loading": "Cargando..."
+      },
+      "testNotification": {
+        "title": "Enviar notificación de prueba de nueva especie",
+        "description": "Genera una notificación de prueba para una detección de nueva especie para verificar que tu sistema de notificaciones funciona",
+        "whatHappens": "Qué sucede cuando haces clic en 'Enviar prueba':",
+        "sendButton": "Enviar prueba",
+        "sendingButton": "Enviando...",
+        "statusMessages": {
+          "sending": "Enviando notificación de prueba...",
+          "success": "¡Notificación de prueba enviada exitosamente! Revisa tu campana de notificaciones.",
+          "error": "Error al enviar notificación de prueba: {message}",
+          "serviceUnavailable": "El servicio de notificaciones no está disponible. Por favor verifica tu configuración de notificaciones."
+        }
+      },
+      "statusMessages": {
+        "sending": "Enviando notificación de prueba...",
+        "success": "¡Notificación de prueba enviada exitosamente!",
+        "error": "Error al enviar notificación de prueba: {message}",
+        "serviceUnavailable": "El servicio de notificaciones no está disponible. Por favor verifica tu configuración de notificaciones."
+      },
+      "systemInfo": {
+        "howToView": "Cómo ver las notificaciones:",
+        "technicalDetails": "Detalles técnicos sobre las notificaciones en BirdNET-Go:"
       }
     },
     "filters": {

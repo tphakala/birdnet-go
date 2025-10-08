@@ -87,6 +87,7 @@ Performance Optimizations:
       settingsIntegrations: currentRoute === '/ui/settings/integrations',
       settingsSecurity: currentRoute === '/ui/settings/security',
       settingsSpecies: currentRoute === '/ui/settings/species',
+      settingsNotifications: currentRoute === '/ui/settings/notifications',
       settingsSupport: currentRoute === '/ui/settings/support',
       settingsUserInterface: currentRoute === '/ui/settings/userinterface',
     };
@@ -116,6 +117,7 @@ Performance Optimizations:
     settingsIntegrations: onNavigate ? '/settings/integrations' : '/ui/settings/integrations',
     settingsSecurity: onNavigate ? '/settings/security' : '/ui/settings/security',
     settingsSpecies: onNavigate ? '/settings/species' : '/ui/settings/species',
+    settingsNotifications: onNavigate ? '/settings/notifications' : '/ui/settings/notifications',
     settingsSupport: onNavigate ? '/settings/support' : '/ui/settings/support',
     settingsUserInterface: onNavigate ? '/settings/userinterface' : '/ui/settings/userinterface',
   });
@@ -328,6 +330,15 @@ Performance Optimizations:
                     role="menuitem"
                   >
                     {t('settings.sections.species')}
+                  </button>
+                </li>
+                <li role="none">
+                  <button
+                    onclick={() => navigate(navigationUrls.settingsNotifications)}
+                    class={cn({ active: routeCache().settingsNotifications })}
+                    role="menuitem"
+                  >
+                    {t('settings.sections.notifications')}
                   </button>
                 </li>
                 <li role="none">

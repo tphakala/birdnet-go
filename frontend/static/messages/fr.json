@@ -625,6 +625,7 @@
       "audio": "Paramètres audio",
       "filters": "Filtres de détection",
       "integration": "Intégrations",
+      "notifications": "Notifications",
       "security": "Sécurité",
       "species": "Espèces",
       "support": "Support"
@@ -936,6 +937,65 @@
           "error": "Erreur : {message}",
           "githubIssueRequired": "Le numéro du problème GitHub est requis."
         }
+      }
+    },
+    "notifications": {
+      "sections": {
+        "test": {
+          "title": "Notifications de test",
+          "description": "Envoyez des notifications de test pour vérifier que votre système de notifications fonctionne correctement"
+        },
+        "info": {
+          "title": "Informations système",
+          "description": "Apprenez à voir et gérer vos notifications"
+        }
+      },
+      "templates": {
+        "title": "Modèles de notification",
+        "description": "Personnalisez les messages de notification pour les détections de nouvelles espèces en utilisant des variables de modèle",
+        "newSpeciesTitle": "Modèle de notification de nouvelle espèce",
+        "titleLabel": "Modèle de titre",
+        "titlePlaceholder": "ex. Nouvelle espèce : {{.CommonName}}",
+        "messageLabel": "Modèle de message",
+        "messagePlaceholder": "ex. Première détection de {{.CommonName}} ({{.ScientificName}}) avec {{.ConfidencePercent}}% de confiance",
+        "resetButton": "Réinitialiser",
+        "saveButton": "Enregistrer les modèles",
+        "saveButtonUnsaved": "Enregistrer les modèles *",
+        "testButton": "Tester",
+        "savingButton": "Enregistrement...",
+        "sendingButton": "Envoi...",
+        "resetConfirm": "Réinitialiser les modèles aux valeurs par défaut ? Cela annulera vos modifications actuelles et restaurera les valeurs de modèle par défaut.",
+        "unsavedChangesWarning": "Vous avez des modifications de modèle non enregistrées. Le test utilisera les modèles actuellement enregistrés, pas vos modifications. Continuer ?",
+        "testWithUnsavedChanges": "Avertissement : Vous avez des modifications non enregistrées. Le test utilisera les modèles enregistrés.",
+        "testNormal": "Envoyer une notification de test",
+        "saveSuccess": "Modèles enregistrés avec succès !",
+        "saveError": "Erreur : {message}",
+        "availableVariables": "Variables de modèle disponibles",
+        "variablesDescription": "Utilisez ces variables dans vos modèles avec la syntaxe",
+        "loading": "Chargement..."
+      },
+      "testNotification": {
+        "title": "Envoyer une notification de test de nouvelle espèce",
+        "description": "Générez une notification de test pour une détection de nouvelle espèce afin de vérifier que votre système de notifications fonctionne",
+        "whatHappens": "Que se passe-t-il lorsque vous cliquez sur 'Envoyer test' :",
+        "sendButton": "Envoyer test",
+        "sendingButton": "Envoi...",
+        "statusMessages": {
+          "sending": "Envoi de la notification de test...",
+          "success": "Notification de test envoyée avec succès ! Vérifiez votre cloche de notification.",
+          "error": "Échec de l'envoi de la notification de test : {message}",
+          "serviceUnavailable": "Le service de notifications n'est pas disponible. Veuillez vérifier vos paramètres de notification."
+        }
+      },
+      "statusMessages": {
+        "sending": "Envoi de la notification de test...",
+        "success": "Notification de test envoyée avec succès !",
+        "error": "Échec de l'envoi de la notification de test : {message}",
+        "serviceUnavailable": "Le service de notifications n'est pas disponible. Veuillez vérifier vos paramètres de notification."
+      },
+      "systemInfo": {
+        "howToView": "Comment voir les notifications :",
+        "technicalDetails": "Détails techniques sur les notifications dans BirdNET-Go :"
       }
     },
     "filters": {

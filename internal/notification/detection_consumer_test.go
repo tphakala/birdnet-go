@@ -74,12 +74,12 @@ func TestDetectionNotificationConsumer(t *testing.T) {
 	notif := notifications[0]
 	assert.Equal(t, TypeDetection, notif.Type)
 	assert.Equal(t, PriorityHigh, notif.Priority)
-	assert.Contains(t, notif.Title, "New Species Detected: American Robin")
+	// Default template: "New Species: {{.CommonName}}"
+	assert.Contains(t, notif.Title, "New Species: American Robin")
 	assert.Contains(t, notif.Message, "First detection of American Robin")
 	assert.Contains(t, notif.Message, "Turdus migratorius")
-	assert.Contains(t, notif.Message, "backyard-camera")
-	// Verify confidence percentage is not included to prevent regression
-	assert.NotContains(t, notif.Message, "%", "Message should not contain percentage symbol")
+	// Default template includes confidence percentage and detection time
+	assert.Contains(t, notif.Message, "92% confidence")
 	assert.Equal(t, "detection", notif.Component)
 
 	// Verify metadata
@@ -198,13 +198,15 @@ func TestDetectionNotificationConsumer_PreSanitizedLocations(t *testing.T) {
 			require.Len(t, notifications, 1)
 
 			notif := notifications[0]
-			
-			// Verify the location passes through unchanged
-			assert.Contains(t, notif.Message, tc.expectedLocation)
-			
+
+			// Default template includes confidence and detection time, not location in message
+			assert.Contains(t, notif.Message, "95% confidence")
+			assert.Contains(t, notif.Message, "First detection of Blue Jay")
+			assert.Contains(t, notif.Message, "Cyanocitta cristata")
+
 			// Verify the location in metadata passes through unchanged
 			assert.Equal(t, tc.expectedLocation, notif.Metadata["location"])
-			
+
 			// Verify that credentials never appear (they were removed at registry level)
 			assert.NotContains(t, notif.Message, "password")
 			assert.NotContains(t, notif.Message, "admin:")

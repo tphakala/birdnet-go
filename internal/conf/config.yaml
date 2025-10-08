@@ -249,6 +249,10 @@ sentry:
 
 # Notification settings
 notification:
+  templates:
+    newspecies:
+      title: "New Species: {{.CommonName}}"
+      message: "First detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence at {{.DetectionTime}}. View: {{.DetectionURL}}"
   push:
     enabled: false
     default_timeout: 30s
