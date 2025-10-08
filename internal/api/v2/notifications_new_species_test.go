@@ -20,9 +20,11 @@ func parseJSONResponse(body []byte, target interface{}) error {
 }
 
 func TestCreateTestNewSpeciesNotification_ServiceNotInitialized(t *testing.T) {
-	// Test when no service exists
-	// Since we can't easily reset the global service, we'll test the error path
-	// by ensuring IsInitialized returns false condition
+	// Skip this test if notification service is already initialized
+	// This test specifically validates the uninitialized service error path
+	if notification.IsInitialized() {
+		t.Skip("notification service already initialized; skipping service-not-initialized path")
+	}
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/notifications/test/new-species", http.NoBody)
@@ -31,18 +33,12 @@ func TestCreateTestNewSpeciesNotification_ServiceNotInitialized(t *testing.T) {
 
 	controller := &Controller{}
 
-	// If a service exists from other tests, this will pass
-	// If no service exists, this will return 503
 	err := controller.CreateTestNewSpeciesNotification(c)
 	require.NoError(t, err)
 
-	// Check for either success (if service exists) or service unavailable
-	if rec.Code == http.StatusServiceUnavailable {
-		assert.Contains(t, rec.Body.String(), "Notification service not available")
-	} else {
-		// Service exists, should be 200
-		assert.Equal(t, http.StatusOK, rec.Code)
-	}
+	// Verify we get the expected service unavailable error
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Contains(t, rec.Body.String(), "Notification service not available")
 }
 
 func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
