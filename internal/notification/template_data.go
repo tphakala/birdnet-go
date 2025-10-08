@@ -96,7 +96,7 @@ func NewTemplateData(event events.DetectionEvent, baseURL string, timeAs24h bool
 	}
 }
 
-func BuildBaseURL(host string, port string, autoTLS bool) string {
+func BuildBaseURL(host, port string, autoTLS bool) string {
 	scheme := "http"
 	if autoTLS {
 		scheme = "https"
