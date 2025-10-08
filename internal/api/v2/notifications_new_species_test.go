@@ -81,8 +81,7 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	controller.Settings.Security.Host = "localhost"
 	controller.Settings.WebServer.Port = "8080"
 	controller.Settings.Main.TimeAs24h = true
-	controller.Settings.Notification.Templates.NewSpecies.Title = "New Species: {{.CommonName}}"
-	controller.Settings.Notification.Templates.NewSpecies.Message = "First detection of {{.CommonName}} ({{.ScientificName}}) at {{.Location}}"
+	// Don't set templates - use defaults to match detection_consumer.go behavior
 
 	err = controller.CreateTestNewSpeciesNotification(c)
 	require.NoError(t, err)
@@ -99,6 +98,7 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	assert.Equal(t, notification.PriorityHigh, response.Priority)
 	assert.Equal(t, "detection", response.Component)
 	assert.Equal(t, notification.StatusUnread, response.Status)
+	// Verify default title and message formats (no templates set)
 	assert.Equal(t, "New Species Detected: Test Bird Species", response.Title)
 	assert.Equal(t, "First detection of Test Bird Species (Testus birdicus) at Fake Test Location", response.Message)
 	assert.NotEmpty(t, response.ID)
