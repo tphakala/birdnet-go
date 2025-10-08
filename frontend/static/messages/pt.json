@@ -587,6 +587,7 @@
       "audio": "Configurações de áudio",
       "filters": "Filtros de detecção",
       "integration": "Integrações",
+      "notifications": "Notificações",
       "security": "Segurança",
       "species": "Espécies",
       "support": "Suporte"
@@ -919,6 +920,65 @@
           "error": "Erro: {message}",
           "githubIssueRequired": "O número do issue do GitHub é obrigatório."
         }
+      }
+    },
+    "notifications": {
+      "sections": {
+        "test": {
+          "title": "Notificações de teste",
+          "description": "Envie notificações de teste para verificar se seu sistema de notificações está funcionando corretamente"
+        },
+        "info": {
+          "title": "Informações do sistema",
+          "description": "Aprenda a visualizar e gerenciar suas notificações"
+        }
+      },
+      "templates": {
+        "title": "Modelos de notificação",
+        "description": "Personalize mensagens de notificação para detecções de novas espécies usando variáveis de modelo",
+        "newSpeciesTitle": "Modelo de notificação de nova espécie",
+        "titleLabel": "Modelo de título",
+        "titlePlaceholder": "ex. Nova espécie: {{.CommonName}}",
+        "messageLabel": "Modelo de mensagem",
+        "messagePlaceholder": "ex. Primeira detecção de {{.CommonName}} ({{.ScientificName}}) com {{.ConfidencePercent}}% de confiança",
+        "resetButton": "Redefinir",
+        "saveButton": "Salvar modelos",
+        "saveButtonUnsaved": "Salvar modelos *",
+        "testButton": "Testar",
+        "savingButton": "Salvando...",
+        "sendingButton": "Enviando...",
+        "resetConfirm": "Redefinir modelos para os padrões? Isso descartará suas alterações atuais e restaurará os valores padrão do modelo.",
+        "unsavedChangesWarning": "Você tem alterações de modelo não salvas. O teste usará os modelos salvos atualmente, não suas edições. Continuar?",
+        "testWithUnsavedChanges": "Aviso: Você tem alterações não salvas. O teste usará os modelos salvos.",
+        "testNormal": "Enviar uma notificação de teste",
+        "saveSuccess": "Modelos salvos com sucesso!",
+        "saveError": "Erro: {message}",
+        "availableVariables": "Variáveis de modelo disponíveis",
+        "variablesDescription": "Use essas variáveis em seus modelos com a sintaxe",
+        "loading": "Carregando..."
+      },
+      "testNotification": {
+        "title": "Enviar notificação de teste de nova espécie",
+        "description": "Gere uma notificação de teste para uma detecção de nova espécie para verificar se seu sistema de notificações está funcionando",
+        "whatHappens": "O que acontece quando você clica em 'Enviar teste':",
+        "sendButton": "Enviar teste",
+        "sendingButton": "Enviando...",
+        "statusMessages": {
+          "sending": "Enviando notificação de teste...",
+          "success": "Notificação de teste enviada com sucesso! Verifique seu sino de notificação.",
+          "error": "Falha ao enviar notificação de teste: {message}",
+          "serviceUnavailable": "O serviço de notificações não está disponível. Por favor, verifique suas configurações de notificação."
+        }
+      },
+      "statusMessages": {
+        "sending": "Enviando notificação de teste...",
+        "success": "Notificação de teste enviada com sucesso!",
+        "error": "Falha ao enviar notificação de teste: {message}",
+        "serviceUnavailable": "O serviço de notificações não está disponível. Por favor, verifique suas configurações de notificação."
+      },
+      "systemInfo": {
+        "howToView": "Como visualizar notificações:",
+        "technicalDetails": "Detalhes técnicos sobre notificações no BirdNET-Go:"
       }
     },
     "filters": {

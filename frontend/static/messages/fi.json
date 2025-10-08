@@ -587,6 +587,7 @@
       "audio": "Ääniasetukset",
       "filters": "Tunnistussuodattimet",
       "integration": "Integraatiot",
+      "notifications": "Ilmoitukset",
       "security": "Turvallisuus",
       "species": "Lajit",
       "support": "Tuki"
@@ -920,6 +921,65 @@
           "error": "Virhe: {message}",
           "githubIssueRequired": "GitHub-ongelman numero on pakollinen."
         }
+      }
+    },
+    "notifications": {
+      "sections": {
+        "test": {
+          "title": "Testi-ilmoitukset",
+          "description": "Lähetä testi-ilmoituksia varmistaaksesi, että ilmoitusjärjestelmäsi toimii oikein"
+        },
+        "info": {
+          "title": "Järjestelmätiedot",
+          "description": "Opi tarkastelemaan ja hallitsemaan ilmoituksiasi"
+        }
+      },
+      "templates": {
+        "title": "Ilmoituspohjat",
+        "description": "Mukauta ilmoitusviestejä uusien lajien havaitsemiseen käyttämällä pohjamuuttujia",
+        "newSpeciesTitle": "Uuden lajin ilmoituspohja",
+        "titleLabel": "Otsikkopohja",
+        "titlePlaceholder": "esim. Uusi laji: {{.CommonName}}",
+        "messageLabel": "Viestipohja",
+        "messagePlaceholder": "esim. Ensimmäinen havainto lajista {{.CommonName}} ({{.ScientificName}}) {{.ConfidencePercent}}% varmuudella",
+        "resetButton": "Palauta",
+        "saveButton": "Tallenna pohjat",
+        "saveButtonUnsaved": "Tallenna pohjat *",
+        "testButton": "Testaa",
+        "savingButton": "Tallennetaan...",
+        "sendingButton": "Lähetetään...",
+        "resetConfirm": "Palauta pohjat oletusarvoihin? Tämä hylkää nykyiset muutoksesi ja palauttaa oletusarvot.",
+        "unsavedChangesWarning": "Sinulla on tallentamattomia muutoksia. Testi käyttää tallennettuja pohjia, ei muokkauksiasi. Jatketaanko?",
+        "testWithUnsavedChanges": "Varoitus: Sinulla on tallentamattomia muutoksia. Testi käyttää tallennettuja pohjia.",
+        "testNormal": "Lähetä testi-ilmoitus",
+        "saveSuccess": "Pohjat tallennettu onnistuneesti!",
+        "saveError": "Virhe: {message}",
+        "availableVariables": "Käytettävissä olevat pohjamuuttujat",
+        "variablesDescription": "Käytä näitä muuttujia pohjissasi syntaksilla",
+        "loading": "Ladataan..."
+      },
+      "testNotification": {
+        "title": "Lähetä uuden lajin testi-ilmoitus",
+        "description": "Luo testi-ilmoitus uuden lajin havaitsemisesta varmistaaksesi, että ilmoitusjärjestelmäsi toimii",
+        "whatHappens": "Mitä tapahtuu kun klikkaat 'Lähetä testi':",
+        "sendButton": "Lähetä testi",
+        "sendingButton": "Lähetetään...",
+        "statusMessages": {
+          "sending": "Lähetetään testi-ilmoitusta...",
+          "success": "Testi-ilmoitus lähetetty onnistuneesti! Tarkista ilmoituskellosi.",
+          "error": "Testi-ilmoituksen lähetys epäonnistui: {message}",
+          "serviceUnavailable": "Ilmoituspalvelu ei ole käytettävissä. Tarkista ilmoitusasetuksesi."
+        }
+      },
+      "statusMessages": {
+        "sending": "Lähetetään testi-ilmoitusta...",
+        "success": "Testi-ilmoitus lähetetty onnistuneesti!",
+        "error": "Testi-ilmoituksen lähetys epäonnistui: {message}",
+        "serviceUnavailable": "Ilmoituspalvelu ei ole käytettävissä. Tarkista ilmoitusasetuksesi."
+      },
+      "systemInfo": {
+        "howToView": "Kuinka tarkastella ilmoituksia:",
+        "technicalDetails": "Tekniset tiedot ilmoituksista BirdNET-Go:ssa:"
       }
     },
     "filters": {
