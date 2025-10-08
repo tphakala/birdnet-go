@@ -586,6 +586,7 @@
       "audio": "Audio-Einstellungen",
       "filters": "Erkennungsfilter",
       "integration": "Integrationen",
+      "notifications": "Benachrichtigungen",
       "security": "Sicherheit",
       "species": "Arten",
       "support": "Support"
@@ -919,6 +920,65 @@
           "error": "Fehler: {message}",
           "githubIssueRequired": "Bitte geben Sie eine GitHub-Issue-Nummer ein, um Support-Daten hochzuladen"
         }
+      }
+    },
+    "notifications": {
+      "sections": {
+        "test": {
+          "title": "Test-Benachrichtigungen",
+          "description": "Test-Benachrichtigungen senden, um zu überprüfen, ob Ihr Benachrichtigungssystem ordnungsgemäß funktioniert"
+        },
+        "info": {
+          "title": "Systeminformationen",
+          "description": "Erfahren Sie, wie Sie Ihre Benachrichtigungen anzeigen und verwalten"
+        }
+      },
+      "templates": {
+        "title": "Benachrichtigungsvorlagen",
+        "description": "Passen Sie Benachrichtigungsnachrichten für neue Artenerkennungen mithilfe von Vorlagenvariablen an",
+        "newSpeciesTitle": "Neue Arten-Benachrichtigungsvorlage",
+        "titleLabel": "Titelvorlage",
+        "titlePlaceholder": "z.B. Neue Art: {{.CommonName}}",
+        "messageLabel": "Nachrichtenvorlage",
+        "messagePlaceholder": "z.B. Erste Erkennung von {{.CommonName}} ({{.ScientificName}}) mit {{.ConfidencePercent}}% Konfidenz",
+        "resetButton": "Zurücksetzen",
+        "saveButton": "Vorlagen speichern",
+        "saveButtonUnsaved": "Vorlagen speichern *",
+        "testButton": "Testen",
+        "savingButton": "Speichern...",
+        "sendingButton": "Senden...",
+        "resetConfirm": "Vorlagen auf Standardwerte zurücksetzen? Dies verwirft Ihre aktuellen Änderungen und stellt die Standardvorlagenwerte wieder her.",
+        "unsavedChangesWarning": "Sie haben ungespeicherte Vorlagenänderungen. Der Test verwendet die aktuell gespeicherten Vorlagen, nicht Ihre Bearbeitungen. Fortfahren?",
+        "testWithUnsavedChanges": "Warnung: Sie haben ungespeicherte Änderungen. Der Test verwendet gespeicherte Vorlagen.",
+        "testNormal": "Test-Benachrichtigung senden",
+        "saveSuccess": "Vorlagen erfolgreich gespeichert!",
+        "saveError": "Fehler: {message}",
+        "availableVariables": "Verfügbare Vorlagenvariablen",
+        "variablesDescription": "Verwenden Sie diese Variablen in Ihren Vorlagen mit der Syntax",
+        "loading": "Laden..."
+      },
+      "testNotification": {
+        "title": "Test-Benachrichtigung für neue Arten senden",
+        "description": "Erzeugen Sie eine Test-Benachrichtigung für eine neue Artenerkennung, um zu überprüfen, ob Ihr Benachrichtigungssystem funktioniert",
+        "whatHappens": "Was passiert, wenn Sie auf 'Test senden' klicken:",
+        "sendButton": "Test senden",
+        "sendingButton": "Senden...",
+        "statusMessages": {
+          "sending": "Test-Benachrichtigung wird gesendet...",
+          "success": "Test-Benachrichtigung erfolgreich gesendet! Überprüfen Sie Ihre Benachrichtigungsglocke.",
+          "error": "Fehler beim Senden der Test-Benachrichtigung: {message}",
+          "serviceUnavailable": "Benachrichtigungsdienst ist nicht verfügbar. Bitte überprüfen Sie Ihre Benachrichtigungseinstellungen."
+        }
+      },
+      "statusMessages": {
+        "sending": "Test-Benachrichtigung wird gesendet...",
+        "success": "Test-Benachrichtigung erfolgreich gesendet!",
+        "error": "Fehler beim Senden der Test-Benachrichtigung: {message}",
+        "serviceUnavailable": "Benachrichtigungsdienst ist nicht verfügbar. Bitte überprüfen Sie Ihre Benachrichtigungseinstellungen."
+      },
+      "systemInfo": {
+        "howToView": "So zeigen Sie Benachrichtigungen an:",
+        "technicalDetails": "Technische Details zu Benachrichtigungen in BirdNET-Go:"
       }
     },
     "filters": {

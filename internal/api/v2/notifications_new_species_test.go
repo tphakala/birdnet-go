@@ -114,7 +114,7 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	assert.Equal(t, "Test Bird Species", response.Metadata["species"])
 	assert.Equal(t, "Testus birdicus", response.Metadata["scientific_name"])
 	assert.InDelta(t, 0.99, response.Metadata["confidence"], 0.001)
-	assert.Equal(t, "Fake Test Location", response.Metadata["location"])
+	assert.Equal(t, "Test Location (Sample Data)", response.Metadata["location"])
 	assert.Equal(t, true, response.Metadata["is_new_species"])
 	assert.InDelta(t, 0, response.Metadata["days_since_first_seen"], 0.001)
 

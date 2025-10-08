@@ -98,6 +98,10 @@ func NewTemplateData(event events.DetectionEvent, baseURL string, timeAs24h bool
 	}
 }
 
+// BuildBaseURL constructs the base URL for notification links based on host, port, and TLS settings.
+// It returns a fully qualified URL (e.g., "https://example.com:8080" or "http://localhost").
+// Default ports (80 for HTTP, 443 for HTTPS) are omitted from the URL for cleaner links.
+// If host is empty, defaults to "localhost".
 func BuildBaseURL(host, port string, autoTLS bool) string {
 	scheme := "http"
 	if autoTLS {

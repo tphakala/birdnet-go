@@ -1029,12 +1029,42 @@
           "description": "Learn how to view and manage your notifications"
         }
       },
+      "templates": {
+        "title": "Notification Templates",
+        "description": "Customize notification messages for new species detections using template variables",
+        "newSpeciesTitle": "New Species Notification Template",
+        "titleLabel": "Title Template",
+        "titlePlaceholder": "e.g., New Species: {{.CommonName}}",
+        "messageLabel": "Message Template",
+        "messagePlaceholder": "e.g., First detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence",
+        "resetButton": "Reset",
+        "saveButton": "Save Templates",
+        "saveButtonUnsaved": "Save Templates *",
+        "testButton": "Test",
+        "savingButton": "Saving...",
+        "sendingButton": "Sending...",
+        "resetConfirm": "Reset templates to defaults? This will discard your current changes and restore the default template values.",
+        "unsavedChangesWarning": "You have unsaved template changes. The test will use the currently saved templates, not your edits. Continue?",
+        "testWithUnsavedChanges": "Warning: You have unsaved changes. Test will use saved templates.",
+        "testNormal": "Send a test notification",
+        "saveSuccess": "Templates saved successfully!",
+        "saveError": "Error: {message}",
+        "availableVariables": "Available Template Variables",
+        "variablesDescription": "Use these variables in your templates with the syntax",
+        "loading": "Loading..."
+      },
       "testNotification": {
         "title": "Send Test New Species Notification",
         "description": "Generate a test notification for a new species detection to verify your notification system is working",
         "whatHappens": "What happens when you click 'Send Test':",
         "sendButton": "Send Test",
-        "sendingButton": "Sending..."
+        "sendingButton": "Sending...",
+        "statusMessages": {
+          "sending": "Sending test notification...",
+          "success": "Test notification sent successfully! Check your notification bell.",
+          "error": "Failed to send test notification: {message}",
+          "serviceUnavailable": "Notification service is not available. Please check your notification settings."
+        }
       },
       "statusMessages": {
         "sending": "Sending test notification...",

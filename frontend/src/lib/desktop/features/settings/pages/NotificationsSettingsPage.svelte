@@ -136,14 +136,16 @@
         templateConfig.message = editedMessage;
       }
 
-      templateStatusMessage = 'Templates saved successfully!';
+      templateStatusMessage = t('settings.notifications.templates.saveSuccess');
       templateStatusType = 'success';
 
       setTimeout(() => {
         templateStatusMessage = '';
       }, 3000);
     } catch (error) {
-      templateStatusMessage = `Error: ${(error as Error).message}`;
+      templateStatusMessage = t('settings.notifications.templates.saveError', {
+        message: (error as Error).message,
+      });
       templateStatusType = 'error';
 
       setTimeout(() => {
@@ -155,9 +157,7 @@
   }
 
   function resetTemplates() {
-    const confirmReset = window.confirm(
-      'Reset templates to defaults? This will discard your current changes and restore the default template values.'
-    );
+    const confirmReset = window.confirm(t('settings.notifications.templates.resetConfirm'));
     if (!confirmReset) {
       return;
     }
@@ -170,7 +170,7 @@
     // Check for unsaved changes
     if (hasUnsavedChanges) {
       const confirmTest = window.confirm(
-        'You have unsaved template changes. The test will use the currently saved templates, not your edits. Continue?'
+        t('settings.notifications.templates.unsavedChangesWarning')
       );
       if (!confirmTest) {
         return;
@@ -249,8 +249,8 @@
 
 <div class="space-y-4 settings-page-content">
   <SettingsSection
-    title="Notification Templates"
-    description="Customize notification messages for new species detections using template variables"
+    title={t('settings.notifications.templates.title')}
+    description={t('settings.notifications.templates.description')}
     defaultOpen={true}
   >
     <div class="space-y-4">
@@ -261,32 +261,38 @@
       {:else if templateConfig}
         <div class="card bg-base-200">
           <div class="card-body">
-            <h3 class="card-title text-base">New Species Notification Template</h3>
+            <h3 class="card-title text-base">
+              {t('settings.notifications.templates.newSpeciesTitle')}
+            </h3>
 
             <div class="space-y-4">
               <div class="form-control">
                 <label for="template-title" class="label">
-                  <span class="label-text font-semibold">Title Template</span>
+                  <span class="label-text font-semibold"
+                    >{t('settings.notifications.templates.titleLabel')}</span
+                  >
                 </label>
                 <input
                   id="template-title"
                   type="text"
                   bind:value={editedTitle}
                   class="input input-bordered w-full font-mono text-sm"
-                  placeholder="e.g., New Species: &#123;&#123;.CommonName&#125;&#125;"
+                  placeholder={t('settings.notifications.templates.titlePlaceholder')}
                 />
               </div>
 
               <div class="form-control">
                 <label for="template-message" class="label">
-                  <span class="label-text font-semibold">Message Template</span>
+                  <span class="label-text font-semibold"
+                    >{t('settings.notifications.templates.messageLabel')}</span
+                  >
                 </label>
                 <textarea
                   id="template-message"
                   bind:value={editedMessage}
                   class="textarea textarea-bordered w-full font-mono text-sm"
                   rows="6"
-                  placeholder="e.g., First detection of &#123;&#123;.CommonName&#125;&#125; (&#123;&#123;.ScientificName&#125;&#125;) with &#123;&#123;.ConfidencePercent&#125;&#125;% confidence"
+                  placeholder={t('settings.notifications.templates.messagePlaceholder')}
                 ></textarea>
               </div>
 
@@ -333,7 +339,7 @@
                   class="btn btn-ghost btn-sm"
                   disabled={savingTemplate || generating}
                 >
-                  Reset
+                  {t('settings.notifications.templates.resetButton')}
                 </button>
                 <button
                   onclick={saveTemplateConfig}
@@ -344,9 +350,13 @@
                 >
                   {#if savingTemplate}
                     <span class="loading loading-spinner loading-xs"></span>
-                    <span>Saving...</span>
+                    <span>{t('settings.notifications.templates.savingButton')}</span>
                   {:else}
-                    <span>Save Templates{hasUnsavedChanges ? ' *' : ''}</span>
+                    <span
+                      >{hasUnsavedChanges
+                        ? t('settings.notifications.templates.saveButtonUnsaved')
+                        : t('settings.notifications.templates.saveButton')}</span
+                    >
                   {/if}
                 </button>
                 <button
@@ -354,16 +364,16 @@
                   disabled={generating || savingTemplate}
                   class="btn btn-secondary btn-sm"
                   title={hasUnsavedChanges
-                    ? 'Warning: You have unsaved changes. Test will use saved templates.'
-                    : 'Send a test notification'}
+                    ? t('settings.notifications.templates.testWithUnsavedChanges')
+                    : t('settings.notifications.templates.testNormal')}
                 >
                   {#if generating}
                     <span class="loading loading-spinner loading-xs"></span>
-                    <span>Sending...</span>
+                    <span>{t('settings.notifications.templates.sendingButton')}</span>
                   {:else}
                     <span class="flex items-center gap-1">
                       {@html systemIcons.bell}
-                      <span>Test</span>
+                      <span>{t('settings.notifications.templates.testButton')}</span>
                     </span>
                   {/if}
                 </button>
@@ -374,11 +384,12 @@
 
         <div class="card bg-base-200">
           <div class="card-body">
-            <h3 class="card-title text-base">Available Template Variables</h3>
+            <h3 class="card-title text-base">
+              {t('settings.notifications.templates.availableVariables')}
+            </h3>
             <p class="text-sm text-base-content/80 mb-3">
-              Use these variables in your templates with the syntax <code
-                class="bg-base-300 px-1 rounded">&#123;&#123;.VariableName&#125;&#125;</code
-              >
+              {t('settings.notifications.templates.variablesDescription')}
+              <code class="bg-base-300 px-1 rounded">&#123;&#123;.VariableName&#125;&#125;</code>
             </p>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-xs">
