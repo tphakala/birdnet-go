@@ -31,7 +31,7 @@ func TestCreateTestNewSpeciesNotification_ServiceNotInitialized(t *testing.T) {
 	// by ensuring IsInitialized returns false condition
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/notifications/test/new-species", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/notifications/test/new-species", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -71,7 +71,7 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	}
 
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/notifications/test/new-species", nil)
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/notifications/test/new-species", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
