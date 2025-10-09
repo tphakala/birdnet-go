@@ -1248,3 +1248,40 @@ func TestIsValidFilename(t *testing.T) {
 		})
 	}
 }
+
+// TestGetSpectrogramLogger tests that the spectrogram logger is never nil
+func TestGetSpectrogramLogger(t *testing.T) {
+	// Test that getSpectrogramLogger always returns a non-nil logger
+	logger := getSpectrogramLogger()
+	require.NotNil(t, logger, "getSpectrogramLogger() must never return nil")
+
+	// Test that we can call logging methods without panic
+	assert.NotPanics(t, func() {
+		logger.Info("test message")
+		logger.Debug("test debug")
+		logger.Warn("test warning")
+		logger.Error("test error")
+	}, "Logger methods should not panic")
+}
+
+// TestGetSpectrogramLoggerWithNilPackageLogger tests fallback behavior
+func TestGetSpectrogramLoggerWithNilPackageLogger(t *testing.T) {
+	// Save original logger
+	originalLogger := spectrogramLogger
+	defer func() {
+		// Restore original logger
+		spectrogramLogger = originalLogger
+	}()
+
+	// Set package logger to nil to test fallback
+	spectrogramLogger = nil
+
+	// Get logger should still return a valid logger
+	logger := getSpectrogramLogger()
+	require.NotNil(t, logger, "getSpectrogramLogger() must return fallback when spectrogramLogger is nil")
+
+	// Test that we can call logging methods without panic
+	assert.NotPanics(t, func() {
+		logger.Info("fallback test")
+	}, "Fallback logger should work correctly")
+}

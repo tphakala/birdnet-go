@@ -794,7 +794,12 @@ func getSpectrogramLogger() *slog.Logger {
 		return spectrogramLogger
 	}
 	// Emergency fallback if logger is somehow nil
-	return slog.Default()
+	defaultLogger := slog.Default()
+	if defaultLogger != nil {
+		return defaultLogger
+	}
+	// Ultimate fallback: create emergency logger to stderr (should never happen)
+	return slog.New(slog.NewTextHandler(os.Stderr, nil))
 }
 
 func init() {
@@ -825,7 +830,7 @@ func init() {
 		}
 		closeSpectrogramLogger = func() error { return nil }
 		// Log the error so we know why the file logger failed
-		if err != nil && spectrogramLogger != nil {
+		if err != nil {
 			getSpectrogramLogger().Error("Failed to initialize spectrogram generation file logger", "error", err)
 		}
 	}
@@ -836,14 +841,10 @@ func UpdateSpectrogramLogLevel(debugEnabled bool) {
 	if spectrogramLevelVar != nil {
 		if debugEnabled {
 			spectrogramLevelVar.Set(slog.LevelDebug)
-			if spectrogramLogger != nil {
-				getSpectrogramLogger().Info("Spectrogram logger set to DEBUG level")
-			}
+			getSpectrogramLogger().Info("Spectrogram logger set to DEBUG level")
 		} else {
 			spectrogramLevelVar.Set(slog.LevelInfo)
-			if spectrogramLogger != nil {
-				getSpectrogramLogger().Info("Spectrogram logger set to INFO level")
-			}
+			getSpectrogramLogger().Info("Spectrogram logger set to INFO level")
 		}
 	}
 }
