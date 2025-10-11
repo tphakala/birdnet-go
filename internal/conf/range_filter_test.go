@@ -8,6 +8,8 @@ import (
 
 // TestShouldUpdateRangeFilterToday_SingleThread verifies basic functionality
 func TestShouldUpdateRangeFilterToday_SingleThread(t *testing.T) {
+	t.Parallel()
+
 	settings := &Settings{}
 	settings.BirdNET.RangeFilter.LastUpdated = time.Now().Add(-25 * time.Hour) // Yesterday
 
@@ -25,6 +27,8 @@ func TestShouldUpdateRangeFilterToday_SingleThread(t *testing.T) {
 // TestShouldUpdateRangeFilterToday_ConcurrentAccess tests for race conditions
 // This is the critical test that would fail with the old implementation
 func TestShouldUpdateRangeFilterToday_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
 	settings := &Settings{}
 	settings.BirdNET.RangeFilter.LastUpdated = time.Now().Add(-25 * time.Hour) // Yesterday
 
@@ -59,6 +63,8 @@ func TestShouldUpdateRangeFilterToday_ConcurrentAccess(t *testing.T) {
 // TestShouldUpdateRangeFilterToday_AlreadyUpdated verifies that when
 // LastUpdated is already today, no updates are triggered
 func TestShouldUpdateRangeFilterToday_AlreadyUpdated(t *testing.T) {
+	t.Parallel()
+
 	settings := &Settings{}
 	settings.BirdNET.RangeFilter.LastUpdated = time.Now() // Already updated today
 
@@ -69,6 +75,8 @@ func TestShouldUpdateRangeFilterToday_AlreadyUpdated(t *testing.T) {
 
 // TestGetLastRangeFilterUpdate verifies thread-safe reading of LastUpdated
 func TestGetLastRangeFilterUpdate(t *testing.T) {
+	t.Parallel()
+
 	settings := &Settings{}
 	expectedTime := time.Now().Add(-1 * time.Hour)
 	settings.BirdNET.RangeFilter.LastUpdated = expectedTime
@@ -76,6 +84,8 @@ func TestGetLastRangeFilterUpdate(t *testing.T) {
 	// Read from multiple goroutines concurrently
 	const numReaders = 50
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errors []string
 
 	for i := 0; i < numReaders; i++ {
 		wg.Add(1)
@@ -83,16 +93,24 @@ func TestGetLastRangeFilterUpdate(t *testing.T) {
 			defer wg.Done()
 			got := settings.GetLastRangeFilterUpdate()
 			if !got.Equal(expectedTime) {
-				t.Errorf("Expected %v, got %v", expectedTime, got)
+				mu.Lock()
+				errors = append(errors, "Expected time mismatch")
+				mu.Unlock()
 			}
 		}()
 	}
 
 	wg.Wait()
+
+	if len(errors) > 0 {
+		t.Errorf("Concurrent reads failed: found %d errors", len(errors))
+	}
 }
 
 // TestUpdateIncludedSpecies_ThreadSafety verifies concurrent updates are safe
 func TestUpdateIncludedSpecies_ThreadSafety(t *testing.T) {
+	t.Parallel()
+
 	settings := &Settings{}
 
 	const numGoroutines = 50
@@ -119,6 +137,8 @@ func TestUpdateIncludedSpecies_ThreadSafety(t *testing.T) {
 
 // TestIsSpeciesIncluded_ThreadSafety verifies concurrent reads during updates
 func TestIsSpeciesIncluded_ThreadSafety(t *testing.T) {
+	t.Parallel()
+
 	settings := &Settings{}
 	settings.UpdateIncludedSpecies([]string{
 		"Turdus merula_Eurasian Blackbird",
@@ -127,6 +147,8 @@ func TestIsSpeciesIncluded_ThreadSafety(t *testing.T) {
 
 	const numReaders = 100
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errors []string
 
 	// Start readers
 	for i := 0; i < numReaders; i++ {
@@ -135,7 +157,9 @@ func TestIsSpeciesIncluded_ThreadSafety(t *testing.T) {
 			defer wg.Done()
 			// These should consistently return true
 			if !settings.IsSpeciesIncluded("Turdus merula") {
-				t.Error("Expected species to be included")
+				mu.Lock()
+				errors = append(errors, "Expected species to be included")
+				mu.Unlock()
 			}
 		}()
 	}
@@ -151,11 +175,17 @@ func TestIsSpeciesIncluded_ThreadSafety(t *testing.T) {
 	}()
 
 	wg.Wait()
+
+	if len(errors) > 0 {
+		t.Errorf("Concurrent reads failed: found %d errors", len(errors))
+	}
 }
 
 // TestResetRangeFilterUpdateFlag verifies that ResetRangeFilterUpdateFlag
 // correctly resets the LastUpdated timestamp to allow retries
 func TestResetRangeFilterUpdateFlag(t *testing.T) {
+	t.Parallel()
+
 	settings := &Settings{}
 	settings.BirdNET.RangeFilter.LastUpdated = time.Now()
 
@@ -180,6 +210,8 @@ func TestResetRangeFilterUpdateFlag(t *testing.T) {
 
 // TestResetRangeFilterUpdateFlag_ThreadSafety verifies concurrent resets are safe
 func TestResetRangeFilterUpdateFlag_ThreadSafety(t *testing.T) {
+	t.Parallel()
+
 	settings := &Settings{}
 	settings.BirdNET.RangeFilter.LastUpdated = time.Now()
 
@@ -208,6 +240,8 @@ func TestResetRangeFilterUpdateFlag_ThreadSafety(t *testing.T) {
 // 2. Update fails (simulated by ResetRangeFilterUpdateFlag)
 // 3. Next detection should be able to retry (ShouldUpdateRangeFilterToday returns true again)
 func TestErrorRecoveryScenario(t *testing.T) {
+	t.Parallel()
+
 	settings := &Settings{}
 	settings.BirdNET.RangeFilter.LastUpdated = time.Now().Add(-25 * time.Hour) // Yesterday
 
@@ -238,6 +272,8 @@ func TestErrorRecoveryScenario(t *testing.T) {
 // This ensures that even with concurrent resets and checks, only one goroutine
 // will trigger the retry
 func TestErrorRecoveryScenario_Concurrent(t *testing.T) {
+	t.Parallel()
+
 	settings := &Settings{}
 	settings.BirdNET.RangeFilter.LastUpdated = time.Now() // Set to today
 
@@ -274,6 +310,8 @@ func TestErrorRecoveryScenario_Concurrent(t *testing.T) {
 // TestResetAndCheckInterleaved tests interleaved reset and check operations
 // to ensure they work correctly together under concurrent access
 func TestResetAndCheckInterleaved(t *testing.T) {
+	t.Parallel()
+
 	settings := &Settings{}
 	settings.BirdNET.RangeFilter.LastUpdated = time.Now()
 
