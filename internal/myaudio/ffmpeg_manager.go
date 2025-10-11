@@ -263,9 +263,100 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 	settings := conf.Setting()
 	configuredURLs := make(map[string]string) // url -> transport
 
-	// Build map of configured URLs
+	// Build map of configured URLs with their transport settings
 	for _, url := range settings.Realtime.RTSP.URLs {
 		configuredURLs[url] = settings.Realtime.RTSP.Transport
+	}
+
+	// Check for transport changes in existing streams
+	// This must be done before stopping unconfigured streams to detect the change
+	m.streamsMu.RLock()
+	var toRestart []struct {
+		url          string
+		oldTransport string
+		newTransport string
+	}
+	for url, stream := range m.streams {
+		if configTransport, configured := configuredURLs[url]; configured {
+			// Check if transport setting has changed for this stream
+			if stream.transport != configTransport {
+				toRestart = append(toRestart, struct {
+					url          string
+					oldTransport string
+					newTransport string
+				}{
+					url:          url,
+					oldTransport: stream.transport,
+					newTransport: configTransport,
+				})
+			}
+		}
+	}
+	m.streamsMu.RUnlock()
+
+	// Restart streams with changed transport settings
+	// This is done before stopping unconfigured streams to provide clear log ordering
+	for _, change := range toRestart {
+		managerLogger.Info("transport setting changed, restarting stream",
+			"url", privacy.SanitizeRTSPUrl(change.url),
+			"old_transport", change.oldTransport,
+			"new_transport", change.newTransport,
+			"component", "ffmpeg-manager",
+			"operation", "sync_transport_change")
+
+		log.Printf("🔄 Transport changed for %s: %s → %s (restarting stream)",
+			privacy.SanitizeRTSPUrl(change.url),
+			change.oldTransport,
+			change.newTransport)
+
+		// Stop stream with old transport
+		// StopStream() is synchronous and includes buffer cleanup delay
+		if err := m.StopStream(change.url); err != nil {
+			managerLogger.Error("failed to stop stream for transport change",
+				"url", privacy.SanitizeRTSPUrl(change.url),
+				"old_transport", change.oldTransport,
+				"new_transport", change.newTransport,
+				"error", err,
+				"component", "ffmpeg-manager",
+				"operation", "sync_transport_change_stop")
+			log.Printf("❌ Failed to stop %s for transport change: %v",
+				privacy.SanitizeRTSPUrl(change.url), err)
+			continue
+		}
+
+		// Verify stream was fully removed from manager
+		// StopStream() should have already removed it, but verify to be defensive
+		m.streamsMu.RLock()
+		if _, stillExists := m.streams[change.url]; stillExists {
+			m.streamsMu.RUnlock()
+			managerLogger.Error("stream still exists after StopStream",
+				"url", privacy.SanitizeRTSPUrl(change.url),
+				"old_transport", change.oldTransport,
+				"new_transport", change.newTransport,
+				"component", "ffmpeg-manager",
+				"operation", "sync_transport_change_verify")
+			log.Printf("❌ Failed to properly stop %s - stream still exists",
+				privacy.SanitizeRTSPUrl(change.url))
+			continue
+		}
+		m.streamsMu.RUnlock()
+
+		// Start stream with new transport
+		if err := m.StartStream(change.url, change.newTransport, audioChan); err != nil {
+			managerLogger.Error("failed to restart stream with new transport",
+				"url", privacy.SanitizeRTSPUrl(change.url),
+				"old_transport", change.oldTransport,
+				"new_transport", change.newTransport,
+				"error", err,
+				"component", "ffmpeg-manager",
+				"operation", "sync_transport_change_start")
+			log.Printf("❌ Failed to restart %s with transport %s: %v",
+				privacy.SanitizeRTSPUrl(change.url), change.newTransport, err)
+			continue
+		}
+
+		log.Printf("✅ Restarted %s with new transport: %s",
+			privacy.SanitizeRTSPUrl(change.url), change.newTransport)
 	}
 
 	// Stop streams that are no longer configured
@@ -283,6 +374,7 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 			managerLogger.Warn("failed to stop unconfigured stream",
 				"url", privacy.SanitizeRTSPUrl(url),
 				"error", err,
+				"component", "ffmpeg-manager",
 				"operation", "sync_with_config")
 			log.Printf("⚠️ Error stopping unconfigured stream %s: %v", url, err)
 		}
@@ -300,6 +392,7 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 					"url", privacy.SanitizeRTSPUrl(url),
 					"error", err,
 					"transport", transport,
+					"component", "ffmpeg-manager",
 					"operation", "sync_with_config")
 				log.Printf("⚠️ Error starting configured stream %s: %v", url, err)
 			}
