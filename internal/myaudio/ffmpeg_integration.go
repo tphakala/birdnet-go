@@ -19,6 +19,9 @@ var (
 	managerOnce   sync.Once
 	managerMutex  sync.RWMutex
 
+	// Monitoring is started separately when we have audioChan
+	monitoringOnce sync.Once
+
 	integrationLogger      *slog.Logger
 	integrationLevelVar    = new(slog.LevelVar)
 	closeIntegrationLogger func() error
@@ -119,7 +122,8 @@ func registerSoundLevelProcessorIfEnabled(source string, logger *slog.Logger) er
 	return nil
 }
 
-// getGlobalManager returns the global FFmpeg manager instance
+// getGlobalManager returns the global FFmpeg manager instance.
+// Note: Monitoring is started separately via startMonitoringOnce() when audioChan is available.
 func getGlobalManager() *FFmpegManager {
 	managerOnce.Do(func() {
 		managerMutex.Lock()
@@ -129,13 +133,7 @@ func getGlobalManager() *FFmpegManager {
 		UpdateFFmpegLogLevel()
 
 		globalManager = NewFFmpegManager()
-		// Start monitoring with configurable interval
-		settings := conf.Setting()
-		monitoringInterval := time.Duration(settings.Realtime.RTSP.Health.MonitoringInterval) * time.Second
-		if monitoringInterval == 0 {
-			monitoringInterval = 30 * time.Second // default fallback
-		}
-		globalManager.StartMonitoring(monitoringInterval)
+		// Monitoring will be started later when audioChan is available
 	})
 
 	managerMutex.RLock()
@@ -143,6 +141,34 @@ func getGlobalManager() *FFmpegManager {
 
 	// Return nil if manager was shut down
 	return globalManager
+}
+
+// startMonitoringOnce starts the monitoring goroutines (health check + watchdog) exactly once.
+// This is called when we have the audioChan available, which the watchdog needs for force-restarting stuck streams.
+func startMonitoringOnce(manager *FFmpegManager, audioChan chan UnifiedAudioData) {
+	monitoringOnce.Do(func() {
+		if manager == nil {
+			integrationLogger.Error("cannot start monitoring - manager is nil",
+				"operation", "start_monitoring_once")
+			return
+		}
+
+		settings := conf.Setting()
+		monitoringInterval := time.Duration(settings.Realtime.RTSP.Health.MonitoringInterval) * time.Second
+		if monitoringInterval == 0 {
+			monitoringInterval = 30 * time.Second // default fallback
+		}
+
+		integrationLogger.Info("starting FFmpeg stream monitoring",
+			"monitoring_interval_seconds", monitoringInterval.Seconds(),
+			"watchdog_interval_seconds", watchdogCheckInterval.Seconds(),
+			"operation", "start_monitoring_once")
+
+		log.Printf("🩺 Starting FFmpeg stream monitoring (health check: %v, watchdog: %v)",
+			monitoringInterval, watchdogCheckInterval)
+
+		manager.StartMonitoring(monitoringInterval, audioChan)
+	})
 }
 
 // CaptureAudioRTSP provides backward compatibility with the old API
@@ -172,6 +198,10 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 		log.Printf("❌ FFmpeg manager is not available for %s", url)
 		return
 	}
+
+	// Start monitoring (health check + watchdog) once we have the audioChan
+	// This is done once across all RTSP streams via sync.Once
+	startMonitoringOnce(manager, unifiedAudioChan)
 
 	// Start the stream
 	if err := manager.StartStream(url, transport, unifiedAudioChan); err != nil {

@@ -20,6 +20,11 @@ const (
 	// from restarting streams that are still establishing their connection or
 	// experiencing temporary startup issues.
 	minimumStreamRuntime = 2 * time.Minute
+
+	// Watchdog thresholds for detecting and recovering stuck streams
+	maxUnhealthyDuration  = 15 * time.Minute // Force reset after stream stuck unhealthy this long
+	watchdogCheckInterval = 5 * time.Minute  // How often watchdog checks for stuck streams
+	forceResetCooldown    = 30 * time.Second // Wait time between stop and start during force reset
 )
 
 // getTimeSinceDataSeconds returns the time in seconds since data was last received,
@@ -56,15 +61,25 @@ type FFmpegManager struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
+
+	// Watchdog state tracking
+	lastForceReset map[string]time.Time // Track when we last force-reset each stream
+	forceResetMu   sync.Mutex
+
+	// Audio channel reference for watchdog restarts
+	// Stored when StartMonitoring() is called so watchdog can restart stuck streams
+	audioChan   chan UnifiedAudioData
+	audioChanMu sync.RWMutex
 }
 
 // NewFFmpegManager creates a new FFmpeg manager
 func NewFFmpegManager() *FFmpegManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &FFmpegManager{
-		streams: make(map[string]*FFmpegStream),
-		ctx:     ctx,
-		cancel:  cancel,
+		streams:        make(map[string]*FFmpegStream),
+		ctx:            ctx,
+		cancel:         cancel,
+		lastForceReset: make(map[string]time.Time),
 	}
 }
 
@@ -402,20 +417,64 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 	return nil
 }
 
-// StartMonitoring starts periodic monitoring of streams
-func (m *FFmpegManager) StartMonitoring(interval time.Duration) {
-	m.wg.Add(1)
+// StartMonitoring starts periodic monitoring of streams with health checks and watchdog.
+// The audioChan parameter is stored for use by the watchdog when force-restarting stuck streams.
+func (m *FFmpegManager) StartMonitoring(interval time.Duration, audioChan chan UnifiedAudioData) {
+	// Store audioChan reference for watchdog use
+	m.audioChanMu.Lock()
+	m.audioChan = audioChan
+	m.audioChanMu.Unlock()
+
+	m.wg.Add(2) // Starting 2 goroutines: health check + watchdog
+
+	// Health check goroutine (existing functionality)
 	go func() {
 		defer m.wg.Done()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
+		managerLogger.Info("started health check monitoring",
+			"interval_seconds", interval.Seconds(),
+			"component", "ffmpeg-manager",
+			"operation", "start_monitoring")
+
 		for {
 			select {
 			case <-m.ctx.Done():
+				managerLogger.Info("stopping health check monitoring",
+					"component", "ffmpeg-manager",
+					"operation", "stop_monitoring")
 				return
 			case <-ticker.C:
 				m.checkStreamHealth()
+			}
+		}
+	}()
+
+	// Watchdog goroutine (new - detects and recovers stuck streams)
+	go func() {
+		defer m.wg.Done()
+		ticker := time.NewTicker(watchdogCheckInterval)
+		defer ticker.Stop()
+
+		managerLogger.Info("started watchdog monitoring for stuck streams",
+			"interval_seconds", watchdogCheckInterval.Seconds(),
+			"max_unhealthy_duration_seconds", maxUnhealthyDuration.Seconds(),
+			"component", "ffmpeg-manager",
+			"operation", "start_watchdog")
+
+		log.Printf("🐕 Started watchdog monitoring (checks every %v, resets streams stuck unhealthy > %v)",
+			watchdogCheckInterval, maxUnhealthyDuration)
+
+		for {
+			select {
+			case <-m.ctx.Done():
+				managerLogger.Info("stopping watchdog monitoring",
+					"component", "ffmpeg-manager",
+					"operation", "stop_watchdog")
+				return
+			case <-ticker.C:
+				m.checkForStuckStreams()
 			}
 		}
 	}()
@@ -540,6 +599,162 @@ func (m *FFmpegManager) checkStreamHealth() {
 				"last_data_ago_seconds", getTimeSinceDataSeconds(h.LastDataReceived),
 				"operation", "health_check_healthy")
 		}
+	}
+}
+
+// checkForStuckStreams detects streams stuck in unhealthy states and forces reset.
+// This is the watchdog that runs periodically to recover streams that the normal
+// health check and restart mechanisms couldn't fix.
+func (m *FFmpegManager) checkForStuckStreams() {
+	health := m.HealthCheck()
+	now := time.Now()
+
+	if conf.Setting().Debug {
+		managerLogger.Debug("watchdog checking for stuck streams",
+			"total_streams", len(health),
+			"operation", "watchdog_check")
+	}
+
+	for url, h := range health {
+		// Skip healthy streams
+		if h.IsHealthy {
+			continue
+		}
+
+		// Calculate how long stream has been unhealthy
+		var unhealthyDuration time.Duration
+		if h.LastDataReceived.IsZero() {
+			// Never received data - use stream creation time
+			m.streamsMu.RLock()
+			stream, exists := m.streams[url]
+			m.streamsMu.RUnlock()
+
+			if !exists {
+				continue
+			}
+
+			unhealthyDuration = time.Since(stream.streamCreatedAt)
+		} else {
+			unhealthyDuration = time.Since(h.LastDataReceived)
+		}
+
+		// Check if exceeded threshold
+		if unhealthyDuration < maxUnhealthyDuration {
+			if conf.Setting().Debug {
+				managerLogger.Debug("unhealthy stream not yet at watchdog threshold",
+					"url", privacy.SanitizeRTSPUrl(url),
+					"unhealthy_duration_seconds", unhealthyDuration.Seconds(),
+					"threshold_seconds", maxUnhealthyDuration.Seconds(),
+					"remaining_seconds", (maxUnhealthyDuration - unhealthyDuration).Seconds(),
+					"operation", "watchdog_check")
+			}
+			continue
+		}
+
+		// Check cooldown to prevent rapid force-resets
+		m.forceResetMu.Lock()
+		lastReset, exists := m.lastForceReset[url]
+		if exists && time.Since(lastReset) < maxUnhealthyDuration {
+			m.forceResetMu.Unlock()
+			if conf.Setting().Debug {
+				managerLogger.Debug("skipping force reset due to cooldown",
+					"url", privacy.SanitizeRTSPUrl(url),
+					"time_since_last_reset_seconds", time.Since(lastReset).Seconds(),
+					"cooldown_seconds", maxUnhealthyDuration.Seconds(),
+					"operation", "watchdog_cooldown")
+			}
+			continue
+		}
+		m.lastForceReset[url] = now
+		m.forceResetMu.Unlock()
+
+		// Get transport and audioChan before stopping
+		m.streamsMu.RLock()
+		stream, streamExists := m.streams[url]
+		transport := ""
+		if streamExists {
+			transport = stream.transport
+		}
+		m.streamsMu.RUnlock()
+
+		// Get audioChan reference
+		m.audioChanMu.RLock()
+		audioChan := m.audioChan
+		m.audioChanMu.RUnlock()
+
+		if !streamExists {
+			managerLogger.Warn("stream disappeared during watchdog check",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"operation", "watchdog_stream_missing")
+			continue
+		}
+
+		if audioChan == nil {
+			managerLogger.Error("cannot restart stuck stream - no audioChan available",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"operation", "watchdog_no_audiochan")
+			log.Printf("❌ Watchdog cannot restart %s - no audio channel configured", privacy.SanitizeRTSPUrl(url))
+			continue
+		}
+
+		// Force full reset
+		managerLogger.Error("stream stuck unhealthy, forcing full reset",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"unhealthy_duration_seconds", unhealthyDuration.Seconds(),
+			"threshold_seconds", maxUnhealthyDuration.Seconds(),
+			"last_data", formatTimeSinceData(h.LastDataReceived),
+			"restart_count", h.RestartCount,
+			"process_state", h.ProcessState.String(),
+			"component", "ffmpeg-manager",
+			"operation", "watchdog_force_reset")
+
+		log.Printf("🚨 Watchdog: Stream %s stuck unhealthy for %v, forcing full reset (threshold: %v)",
+			privacy.SanitizeRTSPUrl(url), unhealthyDuration.Round(time.Second), maxUnhealthyDuration)
+
+		// Stop stream completely
+		if err := m.StopStream(url); err != nil {
+			managerLogger.Error("failed to stop stuck stream",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"error", err,
+				"operation", "watchdog_stop")
+			log.Printf("❌ Watchdog failed to stop stuck stream %s: %v", privacy.SanitizeRTSPUrl(url), err)
+			continue
+		}
+
+		// Verify stream was removed
+		m.streamsMu.RLock()
+		if _, stillExists := m.streams[url]; stillExists {
+			m.streamsMu.RUnlock()
+			managerLogger.Error("stream still exists after watchdog stop",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"operation", "watchdog_stop_verification")
+			log.Printf("❌ Watchdog failed to properly stop %s - stream still exists", privacy.SanitizeRTSPUrl(url))
+			continue
+		}
+		m.streamsMu.RUnlock()
+
+		// Wait for cleanup to complete
+		time.Sleep(forceResetCooldown)
+
+		// Restart stream with fresh state
+		if err := m.StartStream(url, transport, audioChan); err != nil {
+			managerLogger.Error("failed to restart stuck stream after watchdog stop",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"transport", transport,
+				"error", err,
+				"operation", "watchdog_restart")
+			log.Printf("❌ Watchdog failed to restart %s: %v", privacy.SanitizeRTSPUrl(url), err)
+			continue
+		}
+
+		managerLogger.Info("watchdog successfully force-reset stuck stream",
+			"url", privacy.SanitizeRTSPUrl(url),
+			"transport", transport,
+			"unhealthy_duration_seconds", unhealthyDuration.Seconds(),
+			"operation", "watchdog_reset_complete")
+
+		log.Printf("✅ Watchdog successfully force-reset and restarted %s (was unhealthy for %v)",
+			privacy.SanitizeRTSPUrl(url), unhealthyDuration.Round(time.Second))
 	}
 }
 

@@ -166,7 +166,7 @@ func TestFFmpegStream_HealthCheckRestartLoop(t *testing.T) {
 		require.NoError(t, err)
 
 		// Start health monitoring - in synctest, this uses fake time
-		manager.StartMonitoring(5 * time.Second)
+		manager.StartMonitoring(5*time.Second, audioChan)
 
 		// Run monitoring loop with time.NewTicker (uses fake time in synctest)
 		done := make(chan struct{})

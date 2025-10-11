@@ -291,12 +291,13 @@ func TestFFmpegManager_MonitoringIntegration(t *testing.T) {
 		manager := NewFFmpegManager()
 		defer manager.Shutdown()
 
-		// Go 1.25: Monitoring interval uses fake time - runs instantly instead of real 50ms
-		// Background monitoring tickers advance fake time precisely in synctest bubble
-		manager.StartMonitoring(50 * time.Millisecond)
-
 		audioChan := make(chan UnifiedAudioData, 10)
 		defer close(audioChan)
+
+		// Go 1.25: Monitoring interval uses fake time - runs instantly instead of real 50ms
+		// Background monitoring tickers advance fake time precisely in synctest bubble
+		manager.StartMonitoring(50*time.Millisecond, audioChan)
+
 		url := "rtsp://test.example.com/stream"
 
 		// Start a stream
