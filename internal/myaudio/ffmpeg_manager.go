@@ -24,7 +24,7 @@ const (
 	// Watchdog thresholds for detecting and recovering stuck streams
 	maxUnhealthyDuration  = 15 * time.Minute // Force reset after stream stuck unhealthy this long
 	watchdogCheckInterval = 5 * time.Minute  // How often watchdog checks for stuck streams
-	forceResetCooldown    = 30 * time.Second // Wait time between stop and start during force reset
+	stopStartDelay        = 30 * time.Second // Wait time between stop and start during force reset
 )
 
 // getTimeSinceDataSeconds returns the time in seconds since data was last received,
@@ -420,6 +420,15 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 // StartMonitoring starts periodic monitoring of streams with health checks and watchdog.
 // The audioChan parameter is stored for use by the watchdog when force-restarting stuck streams.
 func (m *FFmpegManager) StartMonitoring(interval time.Duration, audioChan chan UnifiedAudioData) {
+	// Validate audioChan is provided - watchdog requires it for force-restarting streams
+	if audioChan == nil {
+		managerLogger.Error("cannot start monitoring - audioChan is nil",
+			"component", "ffmpeg-manager",
+			"operation", "start_monitoring")
+		log.Printf("❌ Cannot start FFmpeg monitoring - audio channel is nil")
+		return
+	}
+
 	// Store audioChan reference for watchdog use
 	m.audioChanMu.Lock()
 	m.audioChan = audioChan
@@ -652,6 +661,9 @@ func (m *FFmpegManager) checkForStuckStreams() {
 		}
 
 		// Check cooldown to prevent rapid force-resets
+		// We use maxUnhealthyDuration as the cooldown period to ensure we don't
+		// force-reset the same stream more than once per unhealthy period.
+		// This prevents watchdog thrashing when a stream is persistently broken.
 		m.forceResetMu.Lock()
 		lastReset, exists := m.lastForceReset[url]
 		if exists && time.Since(lastReset) < maxUnhealthyDuration {
@@ -721,20 +733,25 @@ func (m *FFmpegManager) checkForStuckStreams() {
 			continue
 		}
 
-		// Verify stream was removed
-		m.streamsMu.RLock()
+		// Verify stream was removed - if not, force-remove it to ensure clean state
+		m.streamsMu.Lock()
 		if _, stillExists := m.streams[url]; stillExists {
-			m.streamsMu.RUnlock()
-			managerLogger.Error("stream still exists after watchdog stop",
+			managerLogger.Warn("stream still exists after watchdog stop, force-removing entry",
 				"url", privacy.SanitizeRTSPUrl(url),
 				"operation", "watchdog_stop_verification")
-			log.Printf("❌ Watchdog failed to properly stop %s - stream still exists", privacy.SanitizeRTSPUrl(url))
-			continue
+			log.Printf("⚠️ Watchdog: Stream %s still exists after stop, force-removing", privacy.SanitizeRTSPUrl(url))
+
+			// Force-remove the stream entry to ensure clean state
+			delete(m.streams, url)
+
+			managerLogger.Info("force-removed stuck stream entry",
+				"url", privacy.SanitizeRTSPUrl(url),
+				"operation", "watchdog_force_cleanup")
 		}
-		m.streamsMu.RUnlock()
+		m.streamsMu.Unlock()
 
 		// Wait for cleanup to complete
-		time.Sleep(forceResetCooldown)
+		time.Sleep(stopStartDelay)
 
 		// Restart stream with fresh state
 		if err := m.StartStream(url, transport, audioChan); err != nil {
