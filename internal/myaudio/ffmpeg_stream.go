@@ -1217,15 +1217,18 @@ func (s *FFmpegStream) logDroppedData() {
 // logContextCause logs the context cancellation cause if available.
 // Extracted as a helper function to reduce cyclomatic complexity of cleanupProcess.
 func (s *FFmpegStream) logContextCause(pid int) {
-	// Read context once to prevent potential nil dereference in concurrent access
+	// Acquire read lock to safely access s.ctx (protected by cancelMu)
+	s.cancelMu.RLock()
 	ctx := s.ctx
+	s.cancelMu.RUnlock()
+
 	if ctx == nil {
 		return
 	}
 
 	cause := context.Cause(ctx)
 	// Log only if cause exists and is not the standard context.Canceled sentinel
-	if cause != nil && cause != context.Canceled {
+	if cause != nil && !errors.Is(cause, context.Canceled) {
 		streamLogger.Debug("cleanup triggered by context cancellation",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 			"pid", pid,
