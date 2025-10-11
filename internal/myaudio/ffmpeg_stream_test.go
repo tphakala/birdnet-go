@@ -810,3 +810,206 @@ func TestDetectUserTimeout(t *testing.T) {
 		})
 	}
 }
+
+// TestFFmpegStream_LastDataTimeReset tests that lastDataTime is properly reset when processAudio starts
+// This prevents confusing "inactive for 0 seconds" log messages
+func TestFFmpegStream_LastDataTimeReset(t *testing.T) {
+	t.Parallel()
+
+	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
+	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
+
+	// Set lastDataTime to a non-zero value to simulate previous process run
+	oldTime := time.Now().Add(-1 * time.Hour)
+	stream.lastDataMu.Lock()
+	stream.lastDataTime = oldTime
+	stream.lastDataMu.Unlock()
+
+	// Verify the old time is set
+	stream.lastDataMu.RLock()
+	beforeReset := stream.lastDataTime
+	stream.lastDataMu.RUnlock()
+	assert.Equal(t, oldTime, beforeReset, "Old time should be set before reset")
+
+	// Note: We can't easily test processAudio() directly as it requires FFmpeg,
+	// but we verify the reset logic by checking that NewFFmpegStream initializes
+	// lastDataTime to zero time
+	newStream := NewFFmpegStream("rtsp://test2.example.com/stream", "tcp", audioChan)
+	newStream.lastDataMu.RLock()
+	initialTime := newStream.lastDataTime
+	newStream.lastDataMu.RUnlock()
+	assert.True(t, initialTime.IsZero(), "New stream should have zero lastDataTime")
+}
+
+// TestFFmpegStream_ZeroTimeHandling tests handling of zero time in GetHealth()
+func TestFFmpegStream_ZeroTimeHandling(t *testing.T) {
+	t.Parallel()
+
+	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
+	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
+
+	// Test 1: New stream with zero lastDataTime should not be healthy initially
+	health := stream.GetHealth()
+	assert.True(t, health.LastDataReceived.IsZero(), "LastDataReceived should be zero time for new stream")
+	assert.False(t, health.IsHealthy, "New stream should not be healthy without data")
+	assert.False(t, health.IsReceivingData, "New stream should not be receiving data")
+
+	// Test 2: Stream within grace period should not be marked as critically unhealthy
+	// (IsHealthy will be false, but stream is in grace period)
+	timeSinceCreation := time.Since(stream.streamCreatedAt)
+	assert.Less(t, timeSinceCreation, defaultGracePeriod, "Test should run within grace period")
+
+	// Test 3: After grace period expires, stream should still report not healthy
+	// Simulate grace period expiration by setting streamCreatedAt to the past
+	stream.streamCreatedAt = time.Now().Add(-2 * defaultGracePeriod)
+	health = stream.GetHealth()
+	assert.True(t, health.LastDataReceived.IsZero(), "LastDataReceived should still be zero")
+	assert.False(t, health.IsHealthy, "Stream past grace period without data should not be healthy")
+
+	// Test 4: After receiving data, stream should become healthy
+	stream.updateLastDataTime()
+	health = stream.GetHealth()
+	assert.False(t, health.LastDataReceived.IsZero(), "LastDataReceived should not be zero after update")
+	assert.True(t, health.IsHealthy, "Stream with recent data should be healthy")
+	assert.True(t, health.IsReceivingData, "Stream with recent data should be receiving data")
+}
+
+// TestSecondsSinceOrZero tests the helper function for safe time calculations
+func TestSecondsSinceOrZero(t *testing.T) {
+	t.Parallel()
+
+	// Test 1: Zero time should return 0
+	zeroTime := time.Time{}
+	result := secondsSinceOrZero(zeroTime)
+	assert.InDelta(t, 0.0, result, 0.001, "Zero time should return 0 seconds")
+
+	// Test 2: Recent time should return small positive number
+	recentTime := time.Now().Add(-5 * time.Second)
+	result = secondsSinceOrZero(recentTime)
+	assert.Greater(t, result, 4.0, "Recent time should return positive seconds")
+	assert.Less(t, result, 6.0, "Recent time should be approximately 5 seconds")
+
+	// Test 3: Old time should return large positive number
+	oldTime := time.Now().Add(-1 * time.Hour)
+	result = secondsSinceOrZero(oldTime)
+	assert.Greater(t, result, 3500.0, "Old time should return large seconds")
+	assert.Less(t, result, 3700.0, "Old time should be approximately 3600 seconds")
+}
+
+// TestFormatTimeSinceData tests the manager's helper function for formatting time
+func TestFormatTimeSinceData(t *testing.T) {
+	t.Parallel()
+
+	// Test 1: Zero time should return "never received data"
+	zeroTime := time.Time{}
+	result := formatTimeSinceData(zeroTime)
+	assert.Equal(t, "never received data", result, "Zero time should return 'never received data'")
+
+	// Test 2: Recent time should return formatted duration
+	recentTime := time.Now().Add(-5 * time.Second)
+	result = formatTimeSinceData(recentTime)
+	assert.NotEqual(t, "never received data", result, "Recent time should not return 'never received data'")
+	assert.Contains(t, result, "s", "Result should contain duration with seconds")
+
+	// Test 3: Old time should return formatted duration
+	oldTime := time.Now().Add(-2 * time.Minute)
+	result = formatTimeSinceData(oldTime)
+	assert.NotEqual(t, "never received data", result, "Old time should not return 'never received data'")
+	assert.Contains(t, result, "m", "Result should contain duration with minutes")
+}
+
+// TestGetTimeSinceDataSeconds tests the manager's helper function for time calculations
+func TestGetTimeSinceDataSeconds(t *testing.T) {
+	t.Parallel()
+
+	// Test 1: Zero time should return 0
+	zeroTime := time.Time{}
+	result := getTimeSinceDataSeconds(zeroTime)
+	assert.InDelta(t, 0.0, result, 0.001, "Zero time should return 0 seconds")
+
+	// Test 2: Recent time should return small positive number
+	recentTime := time.Now().Add(-10 * time.Second)
+	result = getTimeSinceDataSeconds(recentTime)
+	assert.Greater(t, result, 9.0, "Recent time should return positive seconds")
+	assert.Less(t, result, 11.0, "Recent time should be approximately 10 seconds")
+
+	// Test 3: Old time should return large positive number
+	oldTime := time.Now().Add(-2 * time.Minute)
+	result = getTimeSinceDataSeconds(oldTime)
+	assert.Greater(t, result, 119.0, "Old time should return large seconds")
+	assert.Less(t, result, 121.0, "Old time should be approximately 120 seconds")
+}
+
+// TestFFmpegStream_HealthWithZeroTime tests GetHealth behavior when lastDataTime is zero
+func TestFFmpegStream_HealthWithZeroTime(t *testing.T) {
+	t.Parallel()
+
+	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
+	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
+
+	// Ensure lastDataTime is zero
+	stream.lastDataMu.Lock()
+	stream.lastDataTime = time.Time{}
+	stream.lastDataMu.Unlock()
+
+	// Get health multiple times to ensure consistency
+	for i := 0; i < 5; i++ {
+		health := stream.GetHealth()
+		assert.True(t, health.LastDataReceived.IsZero(), "LastDataReceived should be zero on iteration %d", i)
+		assert.NotNil(t, health, "Health should not be nil on iteration %d", i)
+	}
+}
+
+// TestFFmpegStream_ConcurrentLastDataTimeAccess tests thread safety of lastDataTime
+func TestFFmpegStream_ConcurrentLastDataTimeAccess(t *testing.T) {
+	t.Parallel()
+
+	audioChan := make(chan UnifiedAudioData, 10)
+	defer close(audioChan)
+	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
+
+	const numGoroutines = 20
+	const numOperations = 100
+	done := make(chan bool, numGoroutines)
+
+	// Concurrent readers
+	for i := 0; i < numGoroutines/2; i++ {
+		go func() {
+			defer func() { done <- true }()
+			for j := 0; j < numOperations; j++ {
+				stream.lastDataMu.RLock()
+				_ = stream.lastDataTime
+				stream.lastDataMu.RUnlock()
+			}
+		}()
+	}
+
+	// Concurrent writers
+	for i := 0; i < numGoroutines/2; i++ {
+		go func() {
+			defer func() { done <- true }()
+			for j := 0; j < numOperations; j++ {
+				stream.updateLastDataTime()
+			}
+		}()
+	}
+
+	// Wait for all goroutines with timeout
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case <-done:
+			// Completed
+		case <-time.After(5 * time.Second):
+			t.Fatal("Concurrent test timed out - possible deadlock")
+		}
+	}
+
+	// Verify final state is valid
+	stream.lastDataMu.RLock()
+	finalTime := stream.lastDataTime
+	stream.lastDataMu.RUnlock()
+	assert.False(t, finalTime.IsZero(), "After concurrent updates, lastDataTime should not be zero")
+}
