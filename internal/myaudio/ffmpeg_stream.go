@@ -200,6 +200,16 @@ func secondsSinceOrZero(t time.Time) float64 {
 	return time.Since(t).Seconds()
 }
 
+// formatLastDataDescription returns a human-readable description of when data was last received.
+// Returns "never received data" for zero time, or "X.Xs ago" for recent data.
+// This is used for user-facing log messages and error contexts.
+func formatLastDataDescription(t time.Time) string {
+	if t.IsZero() {
+		return "never received data"
+	}
+	return fmt.Sprintf("%.1fs ago", time.Since(t).Seconds())
+}
+
 // ProcessState represents the current lifecycle state of an FFmpeg process
 type ProcessState int
 
@@ -930,10 +940,8 @@ func (s *FFmpegStream) processAudio() error {
 		}
 	}()
 
-	// Reset data counters
-	s.bytesReceivedMu.Lock()
-	s.totalBytesReceived = 0
-	s.bytesReceivedMu.Unlock()
+	// Reset data tracking for new process
+	s.resetDataTracking()
 
 	for {
 		// Check if stream has been stopped before attempting to read
@@ -1058,14 +1066,19 @@ func (s *FFmpegStream) processAudio() error {
 			}()
 
 			if effectiveAge > 0 && effectiveAge > silenceTimeout {
+				// Format last data description for clearer logging
+				lastDataDesc := formatLastDataDescription(lastData)
+
 				streamLogger.Warn("no data received from RTSP source, triggering restart",
 					"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 					"timeout_seconds", silenceTimeout.Seconds(),
-					"last_data_ago_seconds", secondsSinceOrZero(lastData),
+					"last_data", lastDataDesc,
 					"effective_age_seconds", effectiveAge.Seconds(),
+					"process_runtime_seconds", time.Since(startTime).Seconds(),
 					"component", "ffmpeg-stream",
 					"operation", "silence_detected")
-				log.Printf("⚠️ No data from %s for %v, restarting stream", privacy.SanitizeRTSPUrl(s.source.SafeString), effectiveAge)
+				log.Printf("⚠️ No data from %s (last data: %s, timeout: %v), restarting stream",
+					privacy.SanitizeRTSPUrl(s.source.SafeString), lastDataDesc, effectiveAge)
 				s.cleanupProcess()
 				return errors.Newf("stream stopped producing data for %v seconds", silenceTimeout.Seconds()).
 					Category(errors.CategoryRTSP).
@@ -1074,7 +1087,7 @@ func (s *FFmpegStream) processAudio() error {
 					Context("operation", "silence_timeout").
 					Context("url", privacy.SanitizeRTSPUrl(s.source.SafeString)).
 					Context("timeout_seconds", silenceTimeout.Seconds()).
-					Context("last_data_seconds_ago", secondsSinceOrZero(lastData)).
+					Context("last_data", lastDataDesc).
 					Context("effective_age_seconds", effectiveAge.Seconds()).
 					Build()
 			}
@@ -1637,17 +1650,29 @@ func (s *FFmpegStream) GetHealth() StreamHealth {
 			isReceivingData = false
 
 			if conf.Setting().Debug {
-				streamLogger.Debug("stream in grace period",
+				streamLogger.Debug("stream in grace period, no data received yet",
 					"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 					"time_since_creation_seconds", timeSinceCreation.Seconds(),
 					"grace_period_seconds", gracePeriod.Seconds(),
 					"remaining_grace_seconds", (gracePeriod - timeSinceCreation).Seconds(),
-					"component", "ffmpeg-stream")
+					"last_data", "never",
+					"component", "ffmpeg-stream",
+					"operation", "get_health")
 			}
 		} else {
 			// Grace period expired and still no data - definitely not healthy
 			isHealthy = false
 			isReceivingData = false
+
+			if conf.Setting().Debug {
+				streamLogger.Debug("stream has never received data (grace period expired)",
+					"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+					"time_since_creation_seconds", timeSinceCreation.Seconds(),
+					"grace_period_seconds", gracePeriod.Seconds(),
+					"last_data", "never",
+					"component", "ffmpeg-stream",
+					"operation", "get_health")
+			}
 		}
 	} else {
 		// Consider unhealthy if no data for configured threshold
@@ -1702,6 +1727,19 @@ func (s *FFmpegStream) updateLastDataTime() {
 	s.lastDataMu.Lock()
 	s.lastDataTime = time.Now()
 	s.lastDataMu.Unlock()
+}
+
+// resetDataTracking resets all data tracking state for a new process.
+// This prevents confusing "inactive for 0 seconds" logs and ensures
+// clean state for each new FFmpeg process instance.
+func (s *FFmpegStream) resetDataTracking() {
+	s.lastDataMu.Lock()
+	s.lastDataTime = time.Time{} // Explicitly reset to zero time
+	s.lastDataMu.Unlock()
+
+	s.bytesReceivedMu.Lock()
+	s.totalBytesReceived = 0
+	s.bytesReceivedMu.Unlock()
 }
 
 // logStreamHealth logs the current stream health status
