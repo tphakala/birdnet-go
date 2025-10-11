@@ -59,7 +59,7 @@ type FFmpegManager struct {
 	streams   map[string]*FFmpegStream
 	streamsMu sync.RWMutex
 	ctx       context.Context
-	cancel    context.CancelFunc
+	cancel    context.CancelCauseFunc // Changed to CancelCauseFunc for better diagnostics
 	wg        sync.WaitGroup
 
 	// Watchdog state tracking
@@ -74,7 +74,8 @@ type FFmpegManager struct {
 
 // NewFFmpegManager creates a new FFmpeg manager
 func NewFFmpegManager() *FFmpegManager {
-	ctx, cancel := context.WithCancel(context.Background())
+	// Use WithCancelCause for better cancellation diagnostics
+	ctx, cancel := context.WithCancelCause(context.Background())
 	return &FFmpegManager{
 		streams:        make(map[string]*FFmpegStream),
 		ctx:            ctx,
@@ -810,8 +811,8 @@ func (m *FFmpegManager) Shutdown() {
 
 	log.Printf("🛑 Shutting down FFmpeg manager...")
 
-	// Cancel context to signal shutdown
-	m.cancel()
+	// Cancel context to signal shutdown with reason
+	m.cancel(fmt.Errorf("FFmpegManager: shutdown initiated"))
 
 	// Stop all streams
 	m.streamsMu.Lock()
