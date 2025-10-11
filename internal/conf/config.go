@@ -767,9 +767,12 @@ type AllowSubnetBypass struct {
 type Security struct {
 	Debug bool `json:"debug"` // true to enable debug mode
 
-	// Host is the primary hostname used for TLS certificates
-	// and OAuth redirect URLs. Required when using AutoTLS or
-	// authentication providers. Used to form the redirect URIs.
+	// Host is the primary hostname used for TLS certificates,
+	// OAuth redirect URLs, and notification link generation.
+	// Required when using AutoTLS or authentication providers.
+	// Also used to generate URLs in push notifications - set this
+	// to your public hostname when using a reverse proxy.
+	// Can be overridden with BIRDNET_HOST environment variable.
 	Host string `json:"host"`
 
 	// AutoTLS enables automatic TLS certificate management using

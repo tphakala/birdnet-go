@@ -187,9 +187,16 @@ webserver:
     rotationday: 0        # day of the week for weekly rotation, 0 = Sunday
 
 security:
-  # host is required for AutoTLS and OAuth providers
-  # Must be a fully qualified domain name (e.g., "birdnet.example.com")
-  # The domain must point to this server's public IP address
+  # host is used for:
+  # - AutoTLS certificate generation (when autotls: true)
+  # - OAuth redirect URLs (when using social authentication)
+  # - Notification URLs in push notifications
+  #
+  # Set this to your public hostname when using a reverse proxy
+  # (e.g., "birdnet.home.arpa", "birdnet.example.com")
+  #
+  # Can also be set via BIRDNET_HOST environment variable
+  # Falls back to "localhost" if not configured (works for direct access only)
   host: ""
   
   # AutoTLS enables automatic TLS certificate management via Let's Encrypt

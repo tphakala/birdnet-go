@@ -2,7 +2,10 @@ package notification
 
 import (
 	"fmt"
+	"log/slog"
 	"net/url"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/events"
@@ -101,17 +104,37 @@ func NewTemplateData(event events.DetectionEvent, baseURL string, timeAs24h bool
 // BuildBaseURL constructs the base URL for notification links based on host, port, and TLS settings.
 // It returns a fully qualified URL (e.g., "https://example.com:8080" or "http://localhost").
 // Default ports (80 for HTTP, 443 for HTTPS) are omitted from the URL for cleaner links.
-// If host is empty, defaults to "localhost".
+//
+// Host resolution priority (highest to lowest):
+//  1. host parameter (from security.host config)
+//  2. BIRDNET_HOST environment variable
+//  3. "localhost" fallback (with warning log)
+//
+// The BIRDNET_HOST environment variable should be set to just the hostname/IP without
+// scheme or port (e.g., "birdnet.home.arpa" or "192.168.1.100"). The scheme and port
+// are determined by the autoTLS and port parameters.
 func BuildBaseURL(host, port string, autoTLS bool) string {
 	scheme := "http"
 	if autoTLS {
 		scheme = "https"
 	}
 
+	// Priority 1: Use provided host from config (security.host)
 	if host == "" {
-		host = "localhost"
+		// Priority 2: Try BIRDNET_HOST environment variable
+		if envHost := os.Getenv("BIRDNET_HOST"); envHost != "" {
+			host = strings.TrimSpace(envHost)
+			slog.Debug("Using BIRDNET_HOST environment variable for notification URLs", "host", host)
+		}
 	}
 
+	// Priority 3: Fallback to localhost with warning
+	if host == "" {
+		host = "localhost"
+		slog.Warn("Using localhost for notification URLs. Set security.host in config or BIRDNET_HOST environment variable for proper URL generation when using reverse proxy or remote access")
+	}
+
+	// Omit default ports for cleaner URLs
 	if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
 		return fmt.Sprintf("%s://%s", scheme, host)
 	}
