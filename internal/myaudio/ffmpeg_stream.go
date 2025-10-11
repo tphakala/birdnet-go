@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"math/big"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -486,6 +487,26 @@ func (s *FFmpegStream) transitionState(to ProcessState, reason string) {
 		return
 	}
 
+	// Terminal state safeguard: never allow leaving StateStopped
+	// This ensures Stop() remains truly terminal and prevents inconsistent state
+	if from == StateStopped && to != StateStopped {
+		s.processStateMu.Unlock()
+		streamLogger.Warn("blocked transition out of terminal state",
+			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+			"source_id", s.source.ID,
+			"from", from.String(),
+			"to", to.String(),
+			"reason", reason,
+			"component", "ffmpeg-stream",
+			"operation", "state_transition_blocked")
+		if conf.Setting().Debug {
+			log.Printf("🚫 Blocked transition out of terminal state for %s: %s → %s (reason: %s)",
+				privacy.SanitizeRTSPUrl(s.source.SafeString),
+				from.String(), to.String(), reason)
+		}
+		return
+	}
+
 	// Validate transition (lenient: warn in debug mode but still apply)
 	if !isValidTransition(from, to) {
 		// Only log in debug mode to avoid noise in production
@@ -557,9 +578,7 @@ func (s *FFmpegStream) GetStateHistory() []StateTransition {
 	defer s.transitionsMu.Unlock()
 
 	// Return a copy to avoid race conditions
-	history := make([]StateTransition, len(s.stateTransitions))
-	copy(history, s.stateTransitions)
-	return history
+	return slices.Clone(s.stateTransitions)
 }
 
 // Run starts and manages the FFmpeg process lifecycle.
@@ -934,7 +953,7 @@ func (s *FFmpegStream) processAudio() error {
 			return nil
 		}
 
-		// Set read deadline for timeout handling
+		// Read from FFmpeg stdout (exec pipes do not support read deadlines)
 		n, err := stdout.Read(buf)
 		if err != nil {
 			// Check if process exited too quickly

@@ -1,14 +1,20 @@
 package myaudio
 
 import (
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
-// createTestStream creates a test FFmpegStream instance
-func createTestStream(url, transport string) *FFmpegStream {
+// createTestStream creates a minimal test FFmpegStream instance for unit testing.
+// It initializes only state-related fields required for state machine testing.
+// Omits circuit breaker, manager, and other components not needed for state transitions.
+// Safe for unit tests that don't start actual FFmpeg processes.
+func createTestStream(tb testing.TB, url, transport string) *FFmpegStream {
+	tb.Helper() // Mark as test helper for better error reporting
+
 	// Create a minimal test source
 	source := &AudioSource{
 		ID:               "test-stream",
@@ -149,7 +155,7 @@ func TestIsValidTransition(t *testing.T) {
 
 // TestStateTransitionRecording tests that state transitions are recorded correctly
 func TestStateTransitionRecording(t *testing.T) {
-	stream := createTestStream("rtsp://test.local/stream", "tcp")
+	stream := createTestStream(t, "rtsp://test.local/stream", "tcp")
 
 	// Initial state should be Idle
 	if got := stream.GetProcessState(); got != StateIdle {
@@ -187,7 +193,7 @@ func TestStateTransitionRecording(t *testing.T) {
 
 // TestStateTransitionHistoryBounded tests that state history is bounded to 100 entries
 func TestStateTransitionHistoryBounded(t *testing.T) {
-	stream := createTestStream("rtsp://test.local/stream", "tcp")
+	stream := createTestStream(t, "rtsp://test.local/stream", "tcp")
 
 	// Create more than 100 transitions
 	for i := 0; i < 150; i++ {
@@ -208,7 +214,7 @@ func TestStateTransitionHistoryBounded(t *testing.T) {
 
 // TestGetStateHistoryConcurrency tests that GetStateHistory returns a copy
 func TestGetStateHistoryConcurrency(t *testing.T) {
-	stream := createTestStream("rtsp://test.local/stream", "tcp")
+	stream := createTestStream(t, "rtsp://test.local/stream", "tcp")
 
 	// Add some transitions
 	stream.transitionState(StateStarting, "first")
@@ -235,7 +241,7 @@ func TestGetStateHistoryConcurrency(t *testing.T) {
 // TestInvalidTransitionLenient tests that invalid transitions are applied in lenient mode
 // This implements Issue #1 fix: lenient approach for robustness
 func TestInvalidTransitionLenient(t *testing.T) {
-	stream := createTestStream("rtsp://test.local/stream", "tcp")
+	stream := createTestStream(t, "rtsp://test.local/stream", "tcp")
 
 	// Set initial state to Running
 	stream.processState = StateRunning
@@ -267,7 +273,7 @@ func TestInvalidTransitionLenient(t *testing.T) {
 // TestIdempotentTransitionIgnored tests that idempotent transitions are ignored
 // This implements Issue #4 fix: skip idempotent transitions to reduce log noise
 func TestIdempotentTransitionIgnored(t *testing.T) {
-	stream := createTestStream("rtsp://test.local/stream", "tcp")
+	stream := createTestStream(t, "rtsp://test.local/stream", "tcp")
 
 	// Set initial state to Running
 	stream.transitionState(StateStarting, "first transition")
@@ -294,7 +300,7 @@ func TestIdempotentTransitionIgnored(t *testing.T) {
 
 // TestStreamHealthIncludesState tests that StreamHealth includes process state
 func TestStreamHealthIncludesState(t *testing.T) {
-	stream := createTestStream("rtsp://test.local/stream", "tcp")
+	stream := createTestStream(t, "rtsp://test.local/stream", "tcp")
 
 	// Set state to Running
 	stream.transitionState(StateStarting, "starting")
@@ -332,7 +338,7 @@ func TestIsRestartingStates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			stream := createTestStream("rtsp://test.local/stream", "tcp")
+			stream := createTestStream(t, "rtsp://test.local/stream", "tcp")
 			stream.processState = tt.state
 
 			if got := stream.IsRestarting(); got != tt.want {
@@ -345,26 +351,27 @@ func TestIsRestartingStates(t *testing.T) {
 
 // TestStateTransitionConcurrency tests concurrent state transitions
 func TestStateTransitionConcurrency(t *testing.T) {
-	stream := createTestStream("rtsp://test.local/stream", "tcp")
+	t.Parallel() // Run concurrently with other tests
+
+	stream := createTestStream(t, "rtsp://test.local/stream", "tcp")
 
 	// Set initial state
 	stream.processState = StateRunning
 
 	// Perform concurrent transitions using valid state transitions
-	done := make(chan bool)
+	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			// Valid transitions: Running → Restarting → Starting
 			stream.transitionState(StateRestarting, "concurrent test")
 			stream.transitionState(StateStarting, "concurrent test")
-			done <- true
 		}()
 	}
 
-	// Wait for all goroutines
-	for i := 0; i < 10; i++ {
-		<-done
-	}
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	// Verify we have transitions recorded
 	// Note: Due to concurrent execution, some transitions might be skipped if the state
@@ -381,5 +388,73 @@ func TestStateTransitionConcurrency(t *testing.T) {
 	currentState := stream.GetProcessState()
 	if currentState < StateIdle || currentState > StateStopped {
 		t.Errorf("Invalid final state after concurrency: %v", currentState)
+	}
+}
+
+// TestStoppedIsTerminal tests that StateStopped is truly terminal
+// This ensures Stop() remains immutable and prevents inconsistent state
+func TestStoppedIsTerminal(t *testing.T) {
+	stream := createTestStream(t, "rtsp://test.local/stream", "tcp")
+
+	// Transition to Stopped state
+	stream.transitionState(StateStopped, "stop requested")
+
+	// Verify state is Stopped
+	if got := stream.GetProcessState(); got != StateStopped {
+		t.Fatalf("Initial state after stop = %v, want %v", got, StateStopped)
+	}
+
+	// Get initial history length
+	historyBeforeAttempt := stream.GetStateHistory()
+	initialHistoryLen := len(historyBeforeAttempt)
+
+	// Attempt to leave terminal state (should be blocked)
+	stream.transitionState(StateStarting, "should be blocked")
+
+	// State should still be Stopped (transition blocked)
+	if got := stream.GetProcessState(); got != StateStopped {
+		t.Errorf("State after attempted transition from Stopped = %v, want %v (transition should be blocked)", got, StateStopped)
+	}
+
+	// History should not record a Stopped->Starting transition
+	historyAfterAttempt := stream.GetStateHistory()
+	if len(historyAfterAttempt) != initialHistoryLen {
+		t.Errorf("History length changed from %d to %d (blocked transition should not be recorded)",
+			initialHistoryLen, len(historyAfterAttempt))
+	}
+
+	// Verify no invalid transitions in history
+	for _, tr := range historyAfterAttempt {
+		if tr.From == StateStopped && tr.To != StateStopped {
+			t.Fatalf("Terminal transition recorded in history: %s → %s (this should never happen)",
+				tr.From.String(), tr.To.String())
+		}
+	}
+
+	// Try multiple different target states - all should be blocked
+	attemptedStates := []ProcessState{StateIdle, StateStarting, StateRunning, StateRestarting, StateBackoff, StateCircuitOpen}
+	for _, targetState := range attemptedStates {
+		stream.transitionState(targetState, "attempt to leave stopped state")
+
+		// State should still be Stopped
+		if got := stream.GetProcessState(); got != StateStopped {
+			t.Errorf("State after attempting transition to %s = %v, want %v (should remain stopped)",
+				targetState.String(), got, StateStopped)
+		}
+	}
+
+	// Only idempotent transition (Stopped -> Stopped) should be allowed
+	stream.transitionState(StateStopped, "idempotent transition")
+
+	// State should still be Stopped (idempotent)
+	if got := stream.GetProcessState(); got != StateStopped {
+		t.Errorf("State after idempotent transition = %v, want %v", got, StateStopped)
+	}
+
+	// History should not change for idempotent transition (they're ignored)
+	finalHistory := stream.GetStateHistory()
+	if len(finalHistory) != initialHistoryLen {
+		t.Errorf("History length after idempotent transition = %d, want %d (idempotent should be ignored)",
+			len(finalHistory), initialHistoryLen)
 	}
 }
