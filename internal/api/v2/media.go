@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"log"
 	"log/slog"
 	"math"
 	"net/http"
@@ -1685,6 +1684,76 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 
 // --- Spectrogram Generation Helpers ---
 
+// waitWithTimeout waits for a command to finish with a timeout to prevent zombie processes.
+// This function ensures proper process cleanup even on resource-constrained devices.
+// It uses a goroutine with timeout to prevent indefinite blocking on Wait().
+func waitWithTimeout(cmd *exec.Cmd, timeout time.Duration, logger *slog.Logger) {
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil && logger != nil {
+			logger.Debug("Process wait completed with error",
+				"pid", cmd.Process.Pid,
+				"error", err.Error())
+		}
+	case <-time.After(timeout):
+		if logger != nil {
+			logger.Warn("Process wait timed out, process may become zombie",
+				"pid", cmd.Process.Pid,
+				"timeout_seconds", timeout.Seconds())
+		}
+		// Even after timeout, try one more time with Kill to clean up
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+			// Try to reap the zombie with a short timeout
+			select {
+			case <-done:
+			case <-time.After(1 * time.Second):
+				if logger != nil {
+					logger.Error("Failed to reap process after kill, zombie process likely",
+						"pid", cmd.Process.Pid)
+				}
+			}
+		}
+	}
+}
+
+// waitWithTimeoutErr is like waitWithTimeout but returns an error.
+// This allows the caller to handle the error appropriately.
+func waitWithTimeoutErr(cmd *exec.Cmd, timeout time.Duration, logger *slog.Logger) error {
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(timeout):
+		if logger != nil {
+			logger.Warn("Process wait timed out",
+				"pid", cmd.Process.Pid,
+				"timeout_seconds", timeout.Seconds())
+		}
+		// Try to kill the process
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+			// Give it one more chance to exit
+			select {
+			case err := <-done:
+				return fmt.Errorf("process wait timed out after %v (killed, exit error: %w)", timeout, err)
+			case <-time.After(1 * time.Second):
+				return fmt.Errorf("process wait timed out after %v and failed to kill", timeout)
+			}
+		}
+		return fmt.Errorf("process wait timed out after %v", timeout)
+	}
+}
+
 // createSpectrogramWithSoX generates a spectrogram using ffmpeg and SoX.
 // Accepts a context for timeout and cancellation.
 // Requires absolute paths for external commands.
@@ -1771,21 +1840,37 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 			return fmt.Errorf("error starting SoX command: %w", err)
 		}
 
+		// Ensure SoX process is cleaned up properly to prevent zombies
+		// This deferred cleanup runs even if FFmpeg fails
+		soxStarted := true
+		defer func() {
+			if soxStarted && soxCmd.Process != nil {
+				// Wait for SoX to complete with timeout to prevent zombie processes
+				// Use a separate goroutine with timeout to prevent indefinite blocking
+				waitWithTimeout(soxCmd, 5*time.Second, getSpectrogramLogger())
+			}
+		}()
+
 		if err := cmd.Run(); err != nil {
-			if killErr := soxCmd.Process.Kill(); killErr != nil {
-				log.Printf("Failed to kill SoX process: %v", killErr)
+			// FFmpeg failed - kill SoX and wait for it to exit
+			if soxCmd.Process != nil {
+				if killErr := soxCmd.Process.Kill(); killErr != nil {
+					getSpectrogramLogger().Debug("Failed to kill SoX process after FFmpeg failure",
+						"error", killErr.Error(),
+						"sox_pid", soxCmd.Process.Pid)
+				}
 			}
-			waitErr := soxCmd.Wait()
+			// The defer will handle Wait() with timeout
 			var additionalInfo string
-			if waitErr != nil && !os.IsNotExist(waitErr) {
-				additionalInfo = fmt.Sprintf("sox wait error: %v", waitErr)
-			}
 			return fmt.Errorf("ffmpeg command failed: %w\nffmpeg output: %s\nsox output: %s\n%s",
 				err, ffmpegOutput.String(), soxOutput.String(), additionalInfo)
 		}
 
 		runtime.Gosched()
-		if err := soxCmd.Wait(); err != nil {
+		// Wait for SoX to finish normally (timeout handled by defer)
+		// Clear the flag so defer doesn't wait again
+		soxStarted = false
+		if err := waitWithTimeoutErr(soxCmd, 5*time.Second, getSpectrogramLogger()); err != nil {
 			return fmt.Errorf("SoX command failed: %w\nffmpeg output: %s\nsox output: %s",
 				err, ffmpegOutput.String(), soxOutput.String())
 		}
