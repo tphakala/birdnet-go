@@ -286,11 +286,8 @@ func ShutdownFFmpegManager() {
 	if globalManager != nil {
 		globalManager.Shutdown()
 		globalManager = nil
-		// Don't reset managerOnce to avoid race conditions
-		// The manager can only be initialized once per process
+		// Don't reset managerOnce or monitoringOnce to maintain consistent lifecycle semantics
+		// Both the manager and its monitoring can only be initialized once per process
+		// After shutdown, the manager cannot be recreated (getGlobalManager returns nil)
 	}
-
-	// Reset monitoringOnce so a fresh manager can initialize monitoring
-	// This allows monitoring to start if the manager is recreated after shutdown
-	monitoringOnce = sync.Once{}
 }
