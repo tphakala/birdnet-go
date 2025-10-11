@@ -1415,18 +1415,6 @@ func (s *FFmpegStream) handleRestartBackoff() {
 	}
 	s.restartCountMu.Unlock()
 
-	// STATE TRANSITION: * → backoff (entering backoff period before restart)
-	s.transitionState(StateBackoff, fmt.Sprintf("restart #%d: waiting %v (backoff: %v)", currentRestartCount, backoff, backoff))
-
-	if conf.Setting().Debug {
-		streamLogger.Debug("applying restart backoff",
-			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
-			"backoff_ms", backoff.Milliseconds(),
-			"jitter_percent_max", restartJitterPercentMax,
-			"restart_count", currentRestartCount,
-			"operation", "restart_backoff")
-	}
-
 	// Add jitter to avoid synchronized restarts across many streams (thundering herd)
 	wait := backoff
 	if backoff > 0 {
@@ -1438,6 +1426,19 @@ func (s *FFmpegStream) handleRestartBackoff() {
 				wait = backoff + time.Duration(n.Int64())
 			}
 		}
+	}
+
+	// STATE TRANSITION: * → backoff (entering backoff period before restart)
+	s.transitionState(StateBackoff, fmt.Sprintf("restart #%d: waiting %v (base backoff: %v)", currentRestartCount, wait, backoff))
+
+	if conf.Setting().Debug {
+		streamLogger.Debug("applying restart backoff",
+			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+			"backoff_ms", backoff.Milliseconds(),
+			"wait_ms", wait.Milliseconds(),
+			"jitter_percent_max", restartJitterPercentMax,
+			"restart_count", currentRestartCount,
+			"operation", "restart_backoff")
 	}
 
 	// Log with both formats for compatibility and support dumps
