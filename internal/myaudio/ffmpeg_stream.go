@@ -1894,25 +1894,26 @@ func (s *FFmpegStream) recordFailure(runtime time.Duration) {
 	}
 
 	if shouldOpenCircuit {
+		currentFailures := s.consecutiveFailures
 		s.circuitOpenTime = time.Now()
 		// Unlock circuit mutex before calling transitionState to avoid nested lock acquisition
 		s.circuitMu.Unlock()
 
 		// STATE TRANSITION: * → circuit_open (circuit breaker opened due to failures)
-		s.transitionState(StateCircuitOpen, fmt.Sprintf("circuit breaker opened: %s (failures: %d, runtime: %v)", reason, s.consecutiveFailures, runtime.Round(time.Millisecond)))
+		s.transitionState(StateCircuitOpen, fmt.Sprintf("circuit breaker opened: %s (failures: %d, runtime: %v)", reason, currentFailures, runtime.Round(time.Millisecond)))
 
 		// Re-lock for remaining operations
 		s.circuitMu.Lock()
 
 		streamLogger.Error("circuit breaker opened",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
-			"consecutive_failures", s.consecutiveFailures,
+			"consecutive_failures", currentFailures,
 			"runtime", runtime.Round(time.Millisecond).String(),
 			"reason", reason,
 			"cooldown_period", circuitBreakerCooldown.String(),
 			"component", "ffmpeg-stream")
 		log.Printf("🔒 Circuit breaker opened for %s after %d consecutive failures (%s, runtime: %s, cooldown: %s)",
-			privacy.SanitizeRTSPUrl(s.source.SafeString), s.consecutiveFailures, reason, runtime.Round(time.Millisecond), circuitBreakerCooldown)
+			privacy.SanitizeRTSPUrl(s.source.SafeString), currentFailures, reason, runtime.Round(time.Millisecond), circuitBreakerCooldown)
 
 		// Report to Sentry with enhanced context
 		errorWithContext := errors.Newf("RTSP stream circuit breaker opened: %s (runtime: %v)", reason, runtime).
@@ -1921,7 +1922,7 @@ func (s *FFmpegStream) recordFailure(runtime time.Duration) {
 			Context("operation", "circuit_breaker_open").
 			Context("url", privacy.SanitizeRTSPUrl(s.source.SafeString)).
 			Context("transport", s.transport).
-			Context("consecutive_failures", s.consecutiveFailures).
+			Context("consecutive_failures", currentFailures).
 			Context("runtime_seconds", runtime.Seconds()).
 			Context("reason", reason).
 			Context("cooldown_seconds", circuitBreakerCooldown.Seconds()).
