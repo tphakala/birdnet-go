@@ -200,6 +200,16 @@ func secondsSinceOrZero(t time.Time) float64 {
 	return time.Since(t).Seconds()
 }
 
+// formatLastDataDescription returns a human-readable description of when data was last received.
+// Returns "never received data" for zero time, or "X.Xs ago" for recent data.
+// This is used for user-facing log messages and error contexts.
+func formatLastDataDescription(t time.Time) string {
+	if t.IsZero() {
+		return "never received data"
+	}
+	return fmt.Sprintf("%.1fs ago", time.Since(t).Seconds())
+}
+
 // ProcessState represents the current lifecycle state of an FFmpeg process
 type ProcessState int
 
@@ -931,15 +941,7 @@ func (s *FFmpegStream) processAudio() error {
 	}()
 
 	// Reset data tracking for new process
-	// This prevents confusing "inactive for 0 seconds" logs and ensures
-	// clean state for each new FFmpeg process instance
-	s.lastDataMu.Lock()
-	s.lastDataTime = time.Time{} // Explicitly reset to zero time
-	s.lastDataMu.Unlock()
-
-	s.bytesReceivedMu.Lock()
-	s.totalBytesReceived = 0
-	s.bytesReceivedMu.Unlock()
+	s.resetDataTracking()
 
 	for {
 		// Check if stream has been stopped before attempting to read
@@ -1065,10 +1067,7 @@ func (s *FFmpegStream) processAudio() error {
 
 			if effectiveAge > 0 && effectiveAge > silenceTimeout {
 				// Format last data description for clearer logging
-				lastDataDesc := "never received data"
-				if !lastData.IsZero() {
-					lastDataDesc = fmt.Sprintf("%.1fs ago", time.Since(lastData).Seconds())
-				}
+				lastDataDesc := formatLastDataDescription(lastData)
 
 				streamLogger.Warn("no data received from RTSP source, triggering restart",
 					"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
@@ -1728,6 +1727,19 @@ func (s *FFmpegStream) updateLastDataTime() {
 	s.lastDataMu.Lock()
 	s.lastDataTime = time.Now()
 	s.lastDataMu.Unlock()
+}
+
+// resetDataTracking resets all data tracking state for a new process.
+// This prevents confusing "inactive for 0 seconds" logs and ensures
+// clean state for each new FFmpeg process instance.
+func (s *FFmpegStream) resetDataTracking() {
+	s.lastDataMu.Lock()
+	s.lastDataTime = time.Time{} // Explicitly reset to zero time
+	s.lastDataMu.Unlock()
+
+	s.bytesReceivedMu.Lock()
+	s.totalBytesReceived = 0
+	s.bytesReceivedMu.Unlock()
 }
 
 // logStreamHealth logs the current stream health status

@@ -898,6 +898,33 @@ func TestSecondsSinceOrZero(t *testing.T) {
 	assert.Less(t, result, 3700.0, "Old time should be approximately 3600 seconds")
 }
 
+// TestFormatLastDataDescription tests the stream's helper function for formatting last data time
+func TestFormatLastDataDescription(t *testing.T) {
+	t.Parallel()
+
+	// Test 1: Zero time should return "never received data"
+	zeroTime := time.Time{}
+	result := formatLastDataDescription(zeroTime)
+	assert.Equal(t, "never received data", result, "Zero time should return 'never received data'")
+
+	// Test 2: Recent time should return "X.Xs ago" format
+	recentTime := time.Now().Add(-5 * time.Second)
+	result = formatLastDataDescription(recentTime)
+	assert.NotEqual(t, "never received data", result, "Recent time should not return 'never received data'")
+	assert.Contains(t, result, "ago", "Result should contain 'ago'")
+	assert.Contains(t, result, "s ago", "Result should contain seconds with 'ago'")
+	// Verify format is approximately "5.0s ago"
+	assert.Regexp(t, `^\d+\.\ds ago$`, result, "Result should match pattern 'X.Xs ago'")
+
+	// Test 3: Old time should also return "X.Xs ago" format with larger number
+	oldTime := time.Now().Add(-2 * time.Minute)
+	result = formatLastDataDescription(oldTime)
+	assert.NotEqual(t, "never received data", result, "Old time should not return 'never received data'")
+	assert.Contains(t, result, "ago", "Result should contain 'ago'")
+	// Verify the seconds value is approximately 120
+	assert.Regexp(t, `^1\d{2}\.\ds ago$`, result, "Result should be approximately '120.0s ago'")
+}
+
 // TestFormatTimeSinceData tests the manager's helper function for formatting time
 func TestFormatTimeSinceData(t *testing.T) {
 	t.Parallel()
