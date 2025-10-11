@@ -249,6 +249,39 @@ type StateTransition struct {
 	Reason    string
 }
 
+// validStateTransitions defines the allowed state transitions for validation.
+// This prevents invalid state transitions and makes the state machine behavior explicit.
+var validStateTransitions = map[ProcessState][]ProcessState{
+	StateIdle:        {StateStarting, StateStopped},                                    // Can start or be stopped
+	StateStarting:    {StateRunning, StateBackoff, StateCircuitOpen, StateStopped},     // Can succeed, fail, or be stopped
+	StateRunning:     {StateRestarting, StateBackoff, StateCircuitOpen, StateStopped},  // Can restart, fail, or be stopped
+	StateRestarting:  {StateStarting, StateBackoff, StateCircuitOpen, StateStopped},    // Can attempt start or enter waiting state
+	StateBackoff:     {StateStarting, StateCircuitOpen, StateStopped},                  // Can retry, open circuit, or be stopped
+	StateCircuitOpen: {StateStarting, StateStopped},                                    // Can retry after cooldown or be stopped
+	StateStopped:     {},                                                               // Terminal state - no transitions allowed
+}
+
+// isValidTransition checks if a state transition is allowed
+func isValidTransition(from, to ProcessState) bool {
+	// Always allow transitions to the same state (idempotent)
+	if from == to {
+		return true
+	}
+
+	allowedTransitions, exists := validStateTransitions[from]
+	if !exists {
+		return false
+	}
+
+	for _, allowed := range allowedTransitions {
+		if allowed == to {
+			return true
+		}
+	}
+
+	return false
+}
+
 // StreamHealth represents the health status of an FFmpeg stream.
 // It provides metrics about data reception, restart attempts, and overall stream health.
 type StreamHealth struct {
@@ -427,9 +460,29 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 // transitionState safely transitions the process state and logs the change.
 // It records the transition in history for debugging and emits structured logs.
 // This method is thread-safe and can be called from any goroutine.
+// Invalid transitions are logged but still applied to avoid blocking operations.
 func (s *FFmpegStream) transitionState(to ProcessState, reason string) {
 	s.processStateMu.Lock()
 	from := s.processState
+
+	// Validate transition
+	if !isValidTransition(from, to) {
+		streamLogger.Warn("invalid state transition attempted",
+			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+			"source_id", s.source.ID,
+			"from", from.String(),
+			"to", to.String(),
+			"reason", reason,
+			"component", "ffmpeg-stream",
+			"operation", "state_transition_invalid")
+
+		if conf.Setting().Debug {
+			log.Printf("⚠️ Invalid state transition for %s: %s → %s (reason: %s)",
+				privacy.SanitizeRTSPUrl(s.source.SafeString),
+				from.String(), to.String(), reason)
+		}
+	}
+
 	s.processState = to
 	s.processStateMu.Unlock()
 
