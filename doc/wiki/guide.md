@@ -359,7 +359,10 @@ webserver:
 # Security settings
 security:
   debug: false # Enable debug mode for security features
-  host: "" # Primary hostname used for TLS certificates and OAuth redirect URLs
+  host: "" # Primary hostname used for TLS certificates, OAuth redirect URLs, and notification links
+           # Set this to your public hostname when using a reverse proxy (e.g., "birdnet.home.arpa")
+           # Can also be set via BIRDNET_HOST environment variable
+           # Falls back to "localhost" if not configured (works for direct access only)
   autotls: false # Enable automatic TLS certificate management using Let's Encrypt
   redirecttohttps: true # Redirect HTTP to HTTPS
   allowsubnetbypass:
@@ -1992,6 +1995,44 @@ BirdNET-Go includes a comprehensive push notification system that can send real-
 #### Overview
 
 The push notification system supports multiple delivery methods (providers) and can be configured to send different types of notifications to different services based on priority, type, or custom filters. Each provider operates independently with built-in resilience features like automatic retries, circuit breakers, and rate limiting.
+
+#### Configuring Notification URLs
+
+Push notifications for new bird detections include clickable links to view the detection details in the web interface. To ensure these URLs work correctly when accessing BirdNET-Go through a reverse proxy or from remote locations, you need to configure the hostname:
+
+**Configuration Methods (in priority order):**
+
+1. **Config file** - Set `security.host` in your `config.yaml`:
+   ```yaml
+   security:
+     host: "birdnet.home.arpa"  # Your public hostname
+   ```
+
+2. **Environment variable** - Set `BIRDNET_HOST` (useful for Docker):
+   ```bash
+   export BIRDNET_HOST=birdnet.home.arpa
+   # or with Docker:
+   docker run -e BIRDNET_HOST=birdnet.home.arpa tphakala/birdnet-go
+   ```
+
+3. **Localhost fallback** - If neither is set, URLs will use `localhost` (works only for direct local access)
+
+**Docker Compose Example:**
+```yaml
+services:
+  birdnet-go:
+    image: tphakala/birdnet-go:nightly
+    environment:
+      - BIRDNET_HOST=birdnet.home.arpa  # Set your hostname here
+      - TZ=US/Eastern
+    # ... rest of configuration
+```
+
+**Why This Matters:**
+
+Without proper hostname configuration, notification URLs will show as `http://localhost:8080/ui/detections/12345`, which won't work when clicked from a phone or remote device. With the hostname configured, URLs will correctly show as `http://birdnet.home.arpa/ui/detections/12345`.
+
+> **Note**: A warning will be logged if BirdNET-Go falls back to using localhost for notification URLs. Configure the hostname using either method above to resolve this warning.
 
 #### Supported Providers
 
