@@ -1093,26 +1093,46 @@ func (a *MqttAction) Execute(data interface{}) error {
 }
 
 // Execute updates the range filter species list, this is run every day
+// Note: The ShouldUpdateRangeFilterToday() check in processor.go ensures this action
+// is only created once per day, preventing duplicate concurrent updates (GitHub issue #1357)
 func (a *UpdateRangeFilterAction) Execute(data interface{}) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	// Get current date for the range filter calculation
 	today := time.Now().Truncate(24 * time.Hour)
-	if today.After(a.Settings.BirdNET.RangeFilter.LastUpdated) {
-		// Update location based species list
-		speciesScores, err := a.Bn.GetProbableSpecies(today, 0.0)
-		if err != nil {
-			return err
-		}
 
-		// Convert the speciesScores slice to a slice of species labels
-		var includedSpecies []string
-		for _, speciesScore := range speciesScores {
-			includedSpecies = append(includedSpecies, speciesScore.Label)
-		}
+	// Update location based species list
+	speciesScores, err := a.Bn.GetProbableSpecies(today, 0.0)
+	if err != nil {
+		// Reset the update flag to allow retry on next detection
+		// This prevents the issue where a failed update would block retries until tomorrow
+		a.Settings.ResetRangeFilterUpdateFlag()
 
-		a.Settings.UpdateIncludedSpecies(includedSpecies)
+		GetLogger().Error("Failed to get probable species for range filter",
+			"error", err,
+			"date", today.Format("2006-01-02"),
+			"operation", "update_range_filter")
+		return err
 	}
+
+	// Convert the speciesScores slice to a slice of species labels
+	includedSpecies := make([]string, 0, len(speciesScores))
+	for _, speciesScore := range speciesScores {
+		includedSpecies = append(includedSpecies, speciesScore.Label)
+	}
+
+	// Update the species list (this also updates LastUpdated timestamp atomically)
+	a.Settings.UpdateIncludedSpecies(includedSpecies)
+
+	if a.Settings.Debug {
+		GetLogger().Info("Range filter updated successfully",
+			"species_count", len(includedSpecies),
+			"date", today.Format("2006-01-02"),
+			"operation", "update_range_filter_success")
+		log.Printf("✅ Range filter updated with %d species for %s", len(includedSpecies), today.Format("2006-01-02"))
+	}
+
 	return nil
 }
 
