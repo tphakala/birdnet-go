@@ -15,11 +15,11 @@ import (
 func TestFFmpegManager_TransportFieldAccessible(t *testing.T) {
 	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 
-	manager := NewFFmpegManager()
-	defer manager.Shutdown()
-
 	audioChan := make(chan UnifiedAudioData, 100)
 	defer close(audioChan)
+
+	manager := NewFFmpegManager()
+	defer manager.Shutdown()
 
 	testURL := "rtsp://test.local/stream_transport"
 
@@ -52,11 +52,11 @@ func TestFFmpegManager_TransportFieldAccessible(t *testing.T) {
 func TestFFmpegManager_TransportPersistsThroughRestart(t *testing.T) {
 	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 
-	manager := NewFFmpegManager()
-	defer manager.Shutdown()
-
 	audioChan := make(chan UnifiedAudioData, 100)
 	defer close(audioChan)
+
+	manager := NewFFmpegManager()
+	defer manager.Shutdown()
 
 	testURL := "rtsp://test.local/stream_restart"
 
@@ -87,11 +87,11 @@ func TestFFmpegManager_TransportPersistsThroughRestart(t *testing.T) {
 func TestFFmpegManager_DifferentTransportsForDifferentStreams(t *testing.T) {
 	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 
-	manager := NewFFmpegManager()
-	defer manager.Shutdown()
-
 	audioChan := make(chan UnifiedAudioData, 100)
 	defer close(audioChan)
+
+	manager := NewFFmpegManager()
+	defer manager.Shutdown()
 
 	tcpURL := "rtsp://test.local/stream_tcp"
 	udpURL := "rtsp://test.local/stream_udp"
@@ -125,11 +125,11 @@ func TestFFmpegManager_DifferentTransportsForDifferentStreams(t *testing.T) {
 func TestFFmpegManager_TransportChangeViaStopStart(t *testing.T) {
 	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 
-	manager := NewFFmpegManager()
-	defer manager.Shutdown()
-
 	audioChan := make(chan UnifiedAudioData, 100)
 	defer close(audioChan)
+
+	manager := NewFFmpegManager()
+	defer manager.Shutdown()
 
 	testURL := "rtsp://test.local/stream_change_transport"
 
@@ -174,9 +174,10 @@ func TestFFmpegManager_TransportChangeViaStopStart(t *testing.T) {
 
 	// Step 6: Verify the new stream's state is correct
 	state := newStream.GetProcessState()
-	// State can be StateIdle, StateStarting, or StateRunning depending on timing
-	assert.Contains(t, []ProcessState{StateIdle, StateStarting, StateRunning}, state,
-		"new stream should be in valid startup state")
+	// State can be StateIdle, StateStarting, StateRunning, or StateBackoff
+	// StateBackoff can occur when FFmpeg becomes unavailable after many tests have run
+	assert.Contains(t, []ProcessState{StateIdle, StateStarting, StateRunning, StateBackoff}, state,
+		"new stream should be in valid state (startup or backoff if FFmpeg unavailable)")
 }
 
 // TestFFmpegManager_StopStreamRemovesFromMap verifies that StopStream properly
@@ -185,11 +186,11 @@ func TestFFmpegManager_TransportChangeViaStopStart(t *testing.T) {
 func TestFFmpegManager_StopStreamRemovesFromMap(t *testing.T) {
 	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 
-	manager := NewFFmpegManager()
-	defer manager.Shutdown()
-
 	audioChan := make(chan UnifiedAudioData, 100)
 	defer close(audioChan)
+
+	manager := NewFFmpegManager()
+	defer manager.Shutdown()
 
 	testURL := "rtsp://test.local/stream_removal_test"
 
