@@ -84,3 +84,15 @@ func (s *Settings) GetLastRangeFilterUpdate() time.Time {
 	defer speciesListMutex.RUnlock()
 	return s.BirdNET.RangeFilter.LastUpdated
 }
+
+// ResetRangeFilterUpdateFlag resets the LastUpdated timestamp to allow retry of failed updates.
+// This should be called when range filter update fails (e.g., network error, API failure)
+// to allow the update to be retried on the next detection instead of waiting until tomorrow.
+//
+// This is thread-safe and uses the same mutex as other range filter operations.
+func (s *Settings) ResetRangeFilterUpdateFlag() {
+	speciesListMutex.Lock()
+	defer speciesListMutex.Unlock()
+	// Set to zero time to indicate update is needed
+	s.BirdNET.RangeFilter.LastUpdated = time.Time{}
+}

@@ -1105,6 +1105,10 @@ func (a *UpdateRangeFilterAction) Execute(data interface{}) error {
 	// Update location based species list
 	speciesScores, err := a.Bn.GetProbableSpecies(today, 0.0)
 	if err != nil {
+		// Reset the update flag to allow retry on next detection
+		// This prevents the issue where a failed update would block retries until tomorrow
+		a.Settings.ResetRangeFilterUpdateFlag()
+
 		GetLogger().Error("Failed to get probable species for range filter",
 			"error", err,
 			"date", today.Format("2006-01-02"),
