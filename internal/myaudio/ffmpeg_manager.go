@@ -812,7 +812,7 @@ func (m *FFmpegManager) Shutdown() {
 	log.Printf("🛑 Shutting down FFmpeg manager...")
 
 	// Cancel context to signal shutdown with reason
-	m.cancel(fmt.Errorf("FFmpegManager shutdown initiated"))
+	m.cancel(fmt.Errorf("FFmpegManager: shutdown initiated"))
 
 	// Stop all streams
 	m.streamsMu.Lock()

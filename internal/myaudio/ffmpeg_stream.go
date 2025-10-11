@@ -613,7 +613,7 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 		s.cancelMu.Lock()
 		defer s.cancelMu.Unlock()
 		if s.cancel != nil {
-			s.cancel(fmt.Errorf("stream Run() loop exiting for %s", privacy.SanitizeRTSPUrl(s.source.SafeString)))
+			s.cancel(fmt.Errorf("FFmpegStream: Run() loop exiting for %s", privacy.SanitizeRTSPUrl(s.source.SafeString)))
 		}
 	}()
 
@@ -1217,12 +1217,15 @@ func (s *FFmpegStream) logDroppedData() {
 // logContextCause logs the context cancellation cause if available.
 // Extracted as a helper function to reduce cyclomatic complexity of cleanupProcess.
 func (s *FFmpegStream) logContextCause(pid int) {
-	if s.ctx == nil {
+	// Read context once to prevent potential nil dereference in concurrent access
+	ctx := s.ctx
+	if ctx == nil {
 		return
 	}
 
-	cause := context.Cause(s.ctx)
-	if cause != nil && !errors.Is(cause, context.Canceled) {
+	cause := context.Cause(ctx)
+	// Log only if cause exists and is not the standard context.Canceled sentinel
+	if cause != nil && cause != context.Canceled {
 		streamLogger.Debug("cleanup triggered by context cancellation",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 			"pid", pid,
@@ -1518,7 +1521,7 @@ func (s *FFmpegStream) Stop() {
 		s.cancelMu.RUnlock()
 
 		if cancel != nil {
-			cancel(fmt.Errorf("Stop() called for %s", privacy.SanitizeRTSPUrl(s.source.SafeString)))
+			cancel(fmt.Errorf("FFmpegStream: Stop() called for %s", privacy.SanitizeRTSPUrl(s.source.SafeString)))
 		}
 
 		// Cleanup process

@@ -3,11 +3,15 @@ package myaudio
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
 
-// TestFFmpegManager_ContextCauseShutdown tests that manager shutdown provides a meaningful cause
+// TestFFmpegManager_ContextCauseShutdown verifies that:
+// 1. Manager shutdown cancels the context with a specific cause
+// 2. The cause message includes "FFmpegManager: shutdown initiated"
+// 3. The cause is accessible via context.Cause()
 func TestFFmpegManager_ContextCauseShutdown(t *testing.T) {
 	manager := NewFFmpegManager()
 
@@ -26,13 +30,16 @@ func TestFFmpegManager_ContextCauseShutdown(t *testing.T) {
 	}
 
 	// Verify the cause message indicates shutdown
-	expectedSubstring := "FFmpegManager shutdown"
-	if !contains(cause.Error(), expectedSubstring) {
+	expectedSubstring := "FFmpegManager: shutdown initiated"
+	if !strings.Contains(cause.Error(), expectedSubstring) {
 		t.Errorf("expected cause to contain %q, got: %s", expectedSubstring, cause.Error())
 	}
 }
 
-// TestFFmpegStream_ContextCauseStop tests that stream Stop() provides a meaningful cause
+// TestFFmpegStream_ContextCauseStop verifies that:
+// 1. Stop() cancels the stream context with a specific cause
+// 2. The cause message includes "FFmpegStream: Stop() called"
+// 3. The cause includes the sanitized source URL
 func TestFFmpegStream_ContextCauseStop(t *testing.T) {
 	// Create a test stream
 	audioChan := make(chan UnifiedAudioData, 100)
@@ -42,16 +49,42 @@ func TestFFmpegStream_ContextCauseStop(t *testing.T) {
 
 	// Start the stream in a goroutine
 	ctx := context.Background()
-	go stream.Run(ctx)
+	runDone := make(chan struct{})
+	go func() {
+		stream.Run(ctx)
+		close(runDone)
+	}()
 
-	// Give it time to initialize context
-	time.Sleep(100 * time.Millisecond)
+	// Wait for context to be initialized (with timeout)
+	timeout := time.After(2 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			t.Fatal("timeout waiting for stream context initialization")
+		case <-ticker.C:
+			stream.cancelMu.RLock()
+			ctxInitialized := stream.ctx != nil
+			stream.cancelMu.RUnlock()
+			if ctxInitialized {
+				goto ContextReady
+			}
+		}
+	}
+ContextReady:
 
 	// Stop the stream
 	stream.Stop()
 
-	// Wait for cleanup
-	time.Sleep(200 * time.Millisecond)
+	// Wait for Run() to complete
+	select {
+	case <-runDone:
+		// Run() completed
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for Run() to complete after Stop()")
+	}
 
 	// Verify context was cancelled
 	if stream.ctx == nil {
@@ -69,13 +102,16 @@ func TestFFmpegStream_ContextCauseStop(t *testing.T) {
 	}
 
 	// Verify the cause message indicates Stop() was called
-	expectedSubstring := "Stop() called"
-	if !contains(cause.Error(), expectedSubstring) {
+	expectedSubstring := "FFmpegStream: Stop() called"
+	if !strings.Contains(cause.Error(), expectedSubstring) {
 		t.Errorf("expected cause to contain %q, got: %s", expectedSubstring, cause.Error())
 	}
 }
 
-// TestFFmpegStream_ContextCauseRunExit tests that Run() exit provides a meaningful cause
+// TestFFmpegStream_ContextCauseRunExit verifies that:
+// 1. When Run() exits naturally (parent context cancelled), it sets a cause
+// 2. The cause message includes "FFmpegStream: Run() loop exiting"
+// 3. The cause includes the sanitized source URL
 func TestFFmpegStream_ContextCauseRunExit(t *testing.T) {
 	// Create a test stream
 	audioChan := make(chan UnifiedAudioData, 100)
@@ -93,8 +129,25 @@ func TestFFmpegStream_ContextCauseRunExit(t *testing.T) {
 		close(done)
 	}()
 
-	// Give it time to initialize context
-	time.Sleep(100 * time.Millisecond)
+	// Wait for context to be initialized (with timeout)
+	timeout := time.After(2 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			t.Fatal("timeout waiting for stream context initialization")
+		case <-ticker.C:
+			stream.cancelMu.RLock()
+			ctxInitialized := stream.ctx != nil
+			stream.cancelMu.RUnlock()
+			if ctxInitialized {
+				goto ContextReady
+			}
+		}
+	}
+ContextReady:
 
 	// Cancel parent context to make Run() exit
 	parentCancel()
@@ -117,8 +170,8 @@ func TestFFmpegStream_ContextCauseRunExit(t *testing.T) {
 	cause := context.Cause(stream.ctx)
 	if cause != nil {
 		// If there's a cause, verify it mentions the stream
-		expectedSubstring := "stream Run() loop exiting"
-		if !contains(cause.Error(), expectedSubstring) {
+		expectedSubstring := "FFmpegStream: Run() loop exiting"
+		if !strings.Contains(cause.Error(), expectedSubstring) {
 			t.Logf("got unexpected cause (this is informational): %s", cause.Error())
 		}
 	}
@@ -204,18 +257,4 @@ func TestContextCause_WithCancelCauseFunctionality(t *testing.T) {
 			t.Fatal("expected child context.Cause to return a cause")
 		}
 	})
-}
-
-// contains checks if a string contains a substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
