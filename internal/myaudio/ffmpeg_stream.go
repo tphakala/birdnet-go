@@ -460,24 +460,46 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 // transitionState safely transitions the process state and logs the change.
 // It records the transition in history for debugging and emits structured logs.
 // This method is thread-safe and can be called from any goroutine.
-// Invalid transitions are logged but still applied to avoid blocking operations.
+//
+// Lenient mode: Invalid transitions are logged in debug mode but still applied
+// to ensure operations don't get blocked. This makes the system more robust
+// and user-friendly by allowing recovery from unexpected states.
+//
+// Idempotent transitions (same state to same state) are silently ignored to
+// reduce log noise and avoid unnecessary history entries.
 func (s *FFmpegStream) transitionState(to ProcessState, reason string) {
 	s.processStateMu.Lock()
 	from := s.processState
 
-	// Validate transition
-	if !isValidTransition(from, to) {
-		streamLogger.Warn("invalid state transition attempted",
-			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
-			"source_id", s.source.ID,
-			"from", from.String(),
-			"to", to.String(),
-			"reason", reason,
-			"component", "ffmpeg-stream",
-			"operation", "state_transition_invalid")
-
+	// Skip idempotent transitions (no-op) to reduce log noise
+	if from == to {
+		s.processStateMu.Unlock()
 		if conf.Setting().Debug {
-			log.Printf("⚠️ Invalid state transition for %s: %s → %s (reason: %s)",
+			streamLogger.Debug("idempotent state transition ignored",
+				"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+				"source_id", s.source.ID,
+				"state", from.String(),
+				"reason", reason,
+				"component", "ffmpeg-stream",
+				"operation", "state_transition_noop")
+		}
+		return
+	}
+
+	// Validate transition (lenient: warn in debug mode but still apply)
+	if !isValidTransition(from, to) {
+		// Only log in debug mode to avoid noise in production
+		if conf.Setting().Debug {
+			streamLogger.Warn("invalid state transition detected (applying anyway for robustness)",
+				"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+				"source_id", s.source.ID,
+				"from", from.String(),
+				"to", to.String(),
+				"reason", reason,
+				"component", "ffmpeg-stream",
+				"operation", "state_transition_invalid")
+
+			log.Printf("⚠️ Invalid state transition for %s: %s → %s (reason: %s) - applying anyway",
 				privacy.SanitizeRTSPUrl(s.source.SafeString),
 				from.String(), to.String(), reason)
 		}
@@ -895,8 +917,25 @@ func (s *FFmpegStream) processAudio() error {
 	s.bytesReceivedMu.Unlock()
 
 	for {
+		// Check if stream has been stopped before attempting to read
+		// This prevents nil pointer dereference when Stop() is called during startup
+		if s.GetProcessState() == StateStopped {
+			return nil
+		}
+
+		// Safely get stdout reference to prevent nil pointer dereference
+		// when Stop() calls cleanupProcess() during concurrent operation
+		s.cmdMu.Lock()
+		stdout := s.stdout
+		s.cmdMu.Unlock()
+
+		// If stdout is nil, the process was cleaned up (likely by Stop())
+		if stdout == nil {
+			return nil
+		}
+
 		// Set read deadline for timeout handling
-		n, err := s.stdout.Read(buf)
+		n, err := stdout.Read(buf)
 		if err != nil {
 			// Check if process exited too quickly
 			if time.Since(startTime) < processQuickExitTime {
@@ -1836,6 +1875,15 @@ func (s *FFmpegStream) recordFailure(runtime time.Duration) {
 
 	if shouldOpenCircuit {
 		s.circuitOpenTime = time.Now()
+		// Unlock circuit mutex before calling transitionState to avoid nested lock acquisition
+		s.circuitMu.Unlock()
+
+		// STATE TRANSITION: * → circuit_open (circuit breaker opened due to failures)
+		s.transitionState(StateCircuitOpen, fmt.Sprintf("circuit breaker opened: %s (failures: %d, runtime: %v)", reason, s.consecutiveFailures, runtime.Round(time.Millisecond)))
+
+		// Re-lock for remaining operations
+		s.circuitMu.Lock()
+
 		streamLogger.Error("circuit breaker opened",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 			"consecutive_failures", s.consecutiveFailures,

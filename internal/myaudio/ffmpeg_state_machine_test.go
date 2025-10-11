@@ -232,25 +232,63 @@ func TestGetStateHistoryConcurrency(t *testing.T) {
 	}
 }
 
-// TestInvalidTransitionLogged tests that invalid transitions are logged but still applied
-func TestInvalidTransitionLogged(t *testing.T) {
+// TestInvalidTransitionLenient tests that invalid transitions are applied in lenient mode
+// This implements Issue #1 fix: lenient approach for robustness
+func TestInvalidTransitionLenient(t *testing.T) {
 	stream := createTestStream("rtsp://test.local/stream", "tcp")
 
 	// Set initial state to Running
 	stream.processState = StateRunning
 
-	// Try invalid transition: Running -> Idle (should be logged but applied)
-	stream.transitionState(StateIdle, "invalid transition test")
+	// Try invalid transition: Running -> Idle
+	// In lenient mode, this should be applied for robustness (logged in debug mode only)
+	stream.transitionState(StateIdle, "invalid transition test - lenient recovery")
 
-	// State should still change despite being invalid
+	// State should change despite being invalid (lenient behavior for user-friendliness)
 	if got := stream.GetProcessState(); got != StateIdle {
-		t.Errorf("State after invalid transition = %v, want %v", got, StateIdle)
+		t.Errorf("State after invalid transition = %v, want %v (lenient mode should apply transition)", got, StateIdle)
 	}
 
-	// Transition should still be recorded
+	// Transition should be recorded in history
 	history := stream.GetStateHistory()
-	if len(history) == 0 {
-		t.Fatal("Expected transition to be recorded even if invalid")
+	if len(history) != 1 {
+		t.Fatalf("Expected 1 transition in history (invalid transitions are still recorded), got %d", len(history))
+	}
+
+	// Verify the transition details
+	if history[0].From != StateRunning {
+		t.Errorf("Transition.From = %v, want %v", history[0].From, StateRunning)
+	}
+	if history[0].To != StateIdle {
+		t.Errorf("Transition.To = %v, want %v", history[0].To, StateIdle)
+	}
+}
+
+// TestIdempotentTransitionIgnored tests that idempotent transitions are ignored
+// This implements Issue #4 fix: skip idempotent transitions to reduce log noise
+func TestIdempotentTransitionIgnored(t *testing.T) {
+	stream := createTestStream("rtsp://test.local/stream", "tcp")
+
+	// Set initial state to Running
+	stream.transitionState(StateStarting, "first transition")
+	stream.transitionState(StateRunning, "second transition")
+
+	// Get initial history count
+	initialHistoryLen := len(stream.GetStateHistory())
+
+	// Try idempotent transition: Running -> Running (should be ignored)
+	stream.transitionState(StateRunning, "idempotent transition - should be ignored")
+
+	// State should remain the same (obviously)
+	if got := stream.GetProcessState(); got != StateRunning {
+		t.Errorf("State after idempotent transition = %v, want %v", got, StateRunning)
+	}
+
+	// Idempotent transition should NOT be recorded in history (reduces noise)
+	history := stream.GetStateHistory()
+	if len(history) != initialHistoryLen {
+		t.Errorf("History length after idempotent transition = %d, want %d (idempotent transitions should be ignored)",
+			len(history), initialHistoryLen)
 	}
 }
 
@@ -312,10 +350,11 @@ func TestStateTransitionConcurrency(t *testing.T) {
 	// Set initial state
 	stream.processState = StateRunning
 
-	// Perform concurrent transitions
+	// Perform concurrent transitions using valid state transitions
 	done := make(chan bool)
 	for i := 0; i < 10; i++ {
 		go func() {
+			// Valid transitions: Running → Restarting → Starting
 			stream.transitionState(StateRestarting, "concurrent test")
 			stream.transitionState(StateStarting, "concurrent test")
 			done <- true
@@ -327,9 +366,20 @@ func TestStateTransitionConcurrency(t *testing.T) {
 		<-done
 	}
 
-	// Verify we have transitions recorded (should be 20 total)
+	// Verify we have transitions recorded
+	// Note: Due to concurrent execution, some transitions might be skipped if the state
+	// is already at the target (idempotent), or due to race conditions in goroutine scheduling
 	history := stream.GetStateHistory()
-	if len(history) != 20 {
-		t.Errorf("History length = %d, want 20", len(history))
+	if len(history) < 5 {
+		t.Errorf("History length = %d, want at least 5 (got too few transitions)", len(history))
+	}
+	if len(history) > 20 {
+		t.Errorf("History length = %d, should not exceed 20", len(history))
+	}
+
+	// Verify thread safety: no panics, state machine still consistent
+	currentState := stream.GetProcessState()
+	if currentState < StateIdle || currentState > StateStopped {
+		t.Errorf("Invalid final state after concurrency: %v", currentState)
 	}
 }
