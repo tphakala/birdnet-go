@@ -325,8 +325,8 @@ type FFmpegStream struct {
 
 	// State management
 	ctx         context.Context
-	cancel      context.CancelFunc
-	cancelMu    sync.RWMutex // Protect cancel function access
+	cancel      context.CancelCauseFunc // Changed to CancelCauseFunc for better diagnostics
+	cancelMu    sync.RWMutex            // Protect cancel function access
 	restartChan chan struct{}
 	stopChan    chan struct{}
 	stopOnce    sync.Once // Ensure Stop() is idempotent
@@ -602,17 +602,18 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 	}
 
 	// Set context and cancel function with proper locking
+	// Use WithCancelCause for better cancellation diagnostics
 	func() {
 		s.cancelMu.Lock()
 		defer s.cancelMu.Unlock()
-		s.ctx, s.cancel = context.WithCancel(parentCtx)
+		s.ctx, s.cancel = context.WithCancelCause(parentCtx)
 	}()
 
 	defer func() {
 		s.cancelMu.Lock()
 		defer s.cancelMu.Unlock()
 		if s.cancel != nil {
-			s.cancel()
+			s.cancel(fmt.Errorf("stream Run() loop exiting for %s", privacy.SanitizeRTSPUrl(s.source.SafeString)))
 		}
 	}()
 
@@ -1213,6 +1214,24 @@ func (s *FFmpegStream) logDroppedData() {
 	}
 }
 
+// logContextCause logs the context cancellation cause if available.
+// Extracted as a helper function to reduce cyclomatic complexity of cleanupProcess.
+func (s *FFmpegStream) logContextCause(pid int) {
+	if s.ctx == nil {
+		return
+	}
+
+	cause := context.Cause(s.ctx)
+	if cause != nil && !errors.Is(cause, context.Canceled) {
+		streamLogger.Debug("cleanup triggered by context cancellation",
+			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+			"pid", pid,
+			"cause", cause.Error(),
+			"component", "ffmpeg-stream",
+			"operation", "cleanup_process_cause")
+	}
+}
+
 // cleanupProcess cleans up the FFmpeg process
 func (s *FFmpegStream) cleanupProcess() {
 	// Narrow critical section: grab and clear references under lock, then operate on locals
@@ -1245,6 +1264,9 @@ func (s *FFmpegStream) cleanupProcess() {
 			"pid", pid,
 			"operation", "cleanup_process_start")
 	}
+
+	// Log context cancellation cause for diagnostics
+	s.logContextCause(pid)
 
 	// Close stdout
 	if stdout != nil {
@@ -1490,13 +1512,13 @@ func (s *FFmpegStream) Stop() {
 		// Signal stop
 		close(s.stopChan)
 
-		// Cancel context with proper locking
+		// Cancel context with reason using proper locking
 		s.cancelMu.RLock()
 		cancel := s.cancel
 		s.cancelMu.RUnlock()
 
 		if cancel != nil {
-			cancel()
+			cancel(fmt.Errorf("Stop() called for %s", privacy.SanitizeRTSPUrl(s.source.SafeString)))
 		}
 
 		// Cleanup process
