@@ -146,6 +146,15 @@ func getGlobalManager() *FFmpegManager {
 // startMonitoringOnce starts the monitoring goroutines (health check + watchdog) exactly once.
 // This is called when we have the audioChan available, which the watchdog needs for force-restarting stuck streams.
 func startMonitoringOnce(manager *FFmpegManager, audioChan chan UnifiedAudioData) {
+	// Check for nil audioChan BEFORE consuming the sync.Once guard
+	// This ensures the Do block is only executed when a valid audioChan is available
+	if audioChan == nil {
+		integrationLogger.Error("cannot start monitoring - audioChan is nil",
+			"operation", "start_monitoring_once")
+		log.Printf("❌ Cannot start FFmpeg monitoring - audio channel is nil")
+		return
+	}
+
 	monitoringOnce.Do(func() {
 		if manager == nil {
 			integrationLogger.Error("cannot start monitoring - manager is nil",
@@ -280,4 +289,8 @@ func ShutdownFFmpegManager() {
 		// Don't reset managerOnce to avoid race conditions
 		// The manager can only be initialized once per process
 	}
+
+	// Reset monitoringOnce so a fresh manager can initialize monitoring
+	// This allows monitoring to start if the manager is recreated after shutdown
+	monitoringOnce = sync.Once{}
 }
