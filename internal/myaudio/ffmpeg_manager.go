@@ -175,6 +175,11 @@ func (m *FFmpegManager) StopStream(url string) error {
 		"url", privacy.SanitizeRTSPUrl(url),
 		"operation", "stop_stream")
 
+	// Clean up watchdog tracking for this stream to prevent memory leak
+	m.forceResetMu.Lock()
+	delete(m.lastForceReset, url)
+	m.forceResetMu.Unlock()
+
 	// CRITICAL: Release mutex before time.Sleep to prevent deadlock in synctest
 	// Go 1.25 Knowledge: In testing/synctest, holding a mutex during time.Sleep causes deadlock
 	// because goroutines waiting on the mutex are not durably blocked, preventing time advancement
@@ -630,18 +635,30 @@ func (m *FFmpegManager) checkForStuckStreams() {
 			continue
 		}
 
+		// Check if stream is already restarting (health check may be handling it)
+		// This prevents watchdog from interfering with ongoing health check restarts
+		m.streamsMu.RLock()
+		stream, exists := m.streams[url]
+		m.streamsMu.RUnlock()
+
+		if !exists {
+			continue
+		}
+
+		if stream.IsRestarting() {
+			if conf.Setting().Debug {
+				managerLogger.Debug("skipping watchdog check - stream already restarting",
+					"url", privacy.SanitizeRTSPUrl(url),
+					"operation", "watchdog_check_skip_restarting")
+			}
+			continue
+		}
+
 		// Calculate how long stream has been unhealthy
+		// We already have the stream from the IsRestarting() check above
 		var unhealthyDuration time.Duration
 		if h.LastDataReceived.IsZero() {
 			// Never received data - use stream creation time
-			m.streamsMu.RLock()
-			stream, exists := m.streams[url]
-			m.streamsMu.RUnlock()
-
-			if !exists {
-				continue
-			}
-
 			unhealthyDuration = time.Since(stream.streamCreatedAt)
 		} else {
 			unhealthyDuration = time.Since(h.LastDataReceived)
@@ -664,6 +681,8 @@ func (m *FFmpegManager) checkForStuckStreams() {
 		// We use maxUnhealthyDuration as the cooldown period to ensure we don't
 		// force-reset the same stream more than once per unhealthy period.
 		// This prevents watchdog thrashing when a stream is persistently broken.
+		// IMPORTANT: We claim the reset slot immediately to prevent race conditions
+		// where multiple checks could pass the cooldown test simultaneously.
 		m.forceResetMu.Lock()
 		lastReset, exists := m.lastForceReset[url]
 		if exists && time.Since(lastReset) < maxUnhealthyDuration {
@@ -677,6 +696,7 @@ func (m *FFmpegManager) checkForStuckStreams() {
 			}
 			continue
 		}
+		// Claim the reset slot immediately to prevent concurrent resets
 		m.lastForceReset[url] = now
 		m.forceResetMu.Unlock()
 
