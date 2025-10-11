@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -40,4 +41,46 @@ func (s *Settings) IsSpeciesIncluded(result string) bool {
 		}
 	}
 	return false
+}
+
+// ShouldUpdateRangeFilterToday atomically checks if the range filter should be updated today.
+// This function ensures that only ONE goroutine will trigger the update on any given day,
+// preventing race conditions where multiple concurrent detections could trigger multiple
+// range filter rebuilds simultaneously.
+//
+// Returns true only for the FIRST caller on a given day (midnight to midnight).
+// Subsequent callers on the same day will return false.
+//
+// This solves GitHub issue #1357 where species appeared in detections that weren't in the
+// range filter due to concurrent range filter updates creating inconsistent states.
+func (s *Settings) ShouldUpdateRangeFilterToday() bool {
+	speciesListMutex.Lock()
+	defer speciesListMutex.Unlock()
+
+	today := time.Now().Truncate(24 * time.Hour)
+
+	// Check if we need to update (last update was before today)
+	if s.BirdNET.RangeFilter.LastUpdated.Before(today) {
+		// Atomically mark as updated to prevent other goroutines from also updating
+		s.BirdNET.RangeFilter.LastUpdated = today
+
+		// Log the update decision for debugging
+		if s.Debug {
+			log.Printf("[range_filter] Scheduled range filter update for %s (last updated: %s)",
+				today.Format("2006-01-02"),
+				s.BirdNET.RangeFilter.LastUpdated.Format("2006-01-02 15:04:05"))
+		}
+
+		return true
+	}
+
+	return false
+}
+
+// GetLastRangeFilterUpdate returns the last time the range filter was updated.
+// This is thread-safe and uses the same mutex as other range filter operations.
+func (s *Settings) GetLastRangeFilterUpdate() time.Time {
+	speciesListMutex.RLock()
+	defer speciesListMutex.RUnlock()
+	return s.BirdNET.RangeFilter.LastUpdated
 }

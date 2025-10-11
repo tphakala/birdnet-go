@@ -1094,12 +1094,13 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 	}
 
 	// Check if UpdateRangeFilterAction needs to be executed for the day
-	today := time.Now().Truncate(24 * time.Hour) // Current date with time set to midnight
-	if p.Settings.BirdNET.RangeFilter.LastUpdated.Before(today) {
+	// Use atomic check-and-set to prevent race conditions (see GitHub issue #1357)
+	// This ensures only ONE goroutine will trigger the daily range filter update,
+	// preventing concurrent updates that could cause species list inconsistencies
+	if p.Settings.ShouldUpdateRangeFilterToday() {
 		// Add structured logging
-		GetLogger().Info("Updating species range filter",
-			"last_updated", p.Settings.BirdNET.RangeFilter.LastUpdated,
-			"today", today,
+		GetLogger().Info("Scheduling daily range filter update",
+			"last_updated", p.Settings.GetLastRangeFilterUpdate(),
 			"operation", "update_range_filter")
 		fmt.Println("Updating species range filter")
 		// Add UpdateRangeFilterAction if it hasn't been executed today
