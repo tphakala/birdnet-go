@@ -310,6 +310,7 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 			change.newTransport)
 
 		// Stop stream with old transport
+		// StopStream() is synchronous and includes buffer cleanup delay
 		if err := m.StopStream(change.url); err != nil {
 			managerLogger.Error("failed to stop stream for transport change",
 				"url", privacy.SanitizeRTSPUrl(change.url),
@@ -323,9 +324,22 @@ func (m *FFmpegManager) SyncWithConfig(audioChan chan UnifiedAudioData) error {
 			continue
 		}
 
-		// Brief delay to ensure cleanup completes before restart
-		// This prevents race conditions with resource cleanup
-		time.Sleep(100 * time.Millisecond)
+		// Verify stream was fully removed from manager
+		// StopStream() should have already removed it, but verify to be defensive
+		m.streamsMu.RLock()
+		if _, stillExists := m.streams[change.url]; stillExists {
+			m.streamsMu.RUnlock()
+			managerLogger.Error("stream still exists after StopStream",
+				"url", privacy.SanitizeRTSPUrl(change.url),
+				"old_transport", change.oldTransport,
+				"new_transport", change.newTransport,
+				"component", "ffmpeg-manager",
+				"operation", "sync_transport_change_verify")
+			log.Printf("❌ Failed to properly stop %s - stream still exists",
+				privacy.SanitizeRTSPUrl(change.url))
+			continue
+		}
+		m.streamsMu.RUnlock()
 
 		// Start stream with new transport
 		if err := m.StartStream(change.url, change.newTransport, audioChan); err != nil {
