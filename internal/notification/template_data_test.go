@@ -24,7 +24,7 @@ func unsetEnv(t *testing.T, key string) {
 }
 
 func TestBuildBaseURL(t *testing.T) {
-	t.Parallel()
+	// Note: No t.Parallel() here because subtests mutate the global BIRDNET_HOST environment variable
 
 	tests := []struct {
 		name     string
