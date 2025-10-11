@@ -1862,6 +1862,12 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 			return fmt.Errorf("error starting SoX command: %w", err)
 		}
 
+		// Store SoX PID early to prevent potential nil pointer panic in logging
+		soxPid := -1
+		if soxCmd.Process != nil {
+			soxPid = soxCmd.Process.Pid
+		}
+
 		// Track SoX process completion status to ensure proper cleanup
 		// We use a pointer to allow the defer to see updates made in the main flow
 		var soxWaitErr error
@@ -1884,7 +1890,7 @@ func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrog
 				if killErr := soxCmd.Process.Kill(); killErr != nil {
 					getSpectrogramLogger().Debug("Failed to kill SoX process after FFmpeg failure",
 						"error", killErr.Error(),
-						"sox_pid", soxCmd.Process.Pid)
+						"sox_pid", soxPid)
 				}
 			}
 			// Defer will handle Wait() to reap the process
