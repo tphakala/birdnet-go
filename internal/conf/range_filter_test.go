@@ -164,12 +164,14 @@ func TestIsSpeciesIncluded_ThreadSafety(t *testing.T) {
 		}()
 	}
 
-	// While reading, also update the list
+	// While reading, also update the list (keeping the original species)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		time.Sleep(1 * time.Millisecond) // Let some readers start
 		settings.UpdateIncludedSpecies([]string{
+			"Turdus merula_Eurasian Blackbird",
+			"Parus major_Great Tit",
 			"Corvus cornix_Hooded Crow",
 		})
 	}()
