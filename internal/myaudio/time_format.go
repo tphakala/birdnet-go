@@ -32,7 +32,12 @@ func FormatDuration(d time.Duration) string {
 
 	// Less than 1 minute: show seconds only (rounded, no decimals)
 	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Round(time.Second).Seconds()))
+		rounded := int(d.Round(time.Second).Seconds())
+		// Handle edge case where rounding brings us to exactly 60 seconds
+		if rounded >= 60 {
+			return "1m 0s"
+		}
+		return fmt.Sprintf("%ds", rounded)
 	}
 
 	// Less than 1 hour: show minutes and seconds (rounded to nearest second)

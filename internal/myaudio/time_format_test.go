@@ -136,9 +136,9 @@ func TestFormatDurationRounding(t *testing.T) {
 			want:     "12s",
 		},
 		{
-			name:     "59.5 seconds (rounds to 60s)",
+			name:     "59.5 seconds (rounds to 1m 0s)",
 			duration: 59*time.Second + 500*time.Millisecond,
-			want:     "60s",
+			want:     "1m 0s",
 		},
 		{
 			name:     "1m 29.4s (rounds to 1m 29s)",

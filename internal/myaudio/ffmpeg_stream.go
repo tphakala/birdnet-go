@@ -1846,8 +1846,8 @@ func (s *FFmpegStream) isCircuitOpen() bool {
 		streamLogger.Warn("circuit breaker is open",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 			"consecutive_failures", s.consecutiveFailures,
-			"cooldown_remaining", remaining.Round(time.Second).String(),
-			"cooldown_total", circuitBreakerCooldown.String(),
+			"cooldown_remaining", FormatDuration(remaining),
+			"cooldown_total", FormatDuration(circuitBreakerCooldown),
 			"component", "ffmpeg-stream")
 		return true
 	}
@@ -1863,8 +1863,8 @@ func (s *FFmpegStream) isCircuitOpen() bool {
 		streamLogger.Info("circuit breaker closed after cooldown",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 			"previous_failures", previousFailures,
-			"open_duration", openDuration.Round(time.Second).String(),
-			"cooldown_period", circuitBreakerCooldown.String(),
+			"open_duration", FormatDuration(openDuration),
+			"cooldown_period", FormatDuration(circuitBreakerCooldown),
 			"component", "ffmpeg-stream")
 
 		// Report circuit breaker closure to telemetry
@@ -1884,8 +1884,8 @@ func (s *FFmpegStream) isCircuitOpen() bool {
 			streamLogger.Debug("circuit breaker closed after cooldown",
 				"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 				"previous_failures", previousFailures,
-				"open_duration", openDuration.Round(time.Second).String(),
-				"cooldown_period", circuitBreakerCooldown.String())
+				"open_duration", FormatDuration(openDuration),
+				"cooldown_period", FormatDuration(circuitBreakerCooldown))
 		}
 		_ = errorWithContext // Keep for telemetry reporting when enabled
 	}
@@ -1974,9 +1974,9 @@ func (s *FFmpegStream) recordFailure(runtime time.Duration) {
 		streamLogger.Error("circuit breaker opened",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 			"consecutive_failures", currentFailures,
-			"runtime", runtime.Round(time.Millisecond).String(),
+			"runtime", FormatDuration(runtime),
 			"reason", reason,
-			"cooldown_period", circuitBreakerCooldown.String(),
+			"cooldown_period", FormatDuration(circuitBreakerCooldown),
 			"component", "ffmpeg-stream")
 		log.Printf("🔒 Circuit breaker opened for %s after %d consecutive failures (%s, runtime: %s, cooldown: %s)",
 			privacy.SanitizeRTSPUrl(s.source.SafeString), currentFailures, reason, FormatDuration(runtime), FormatDuration(circuitBreakerCooldown))
