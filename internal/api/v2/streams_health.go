@@ -404,53 +404,14 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 			// Poll for stream health changes
 			healthData := myaudio.GetRTSPStreamHealth()
 
-			// Check for changes and send updates
-			for rawURL := range healthData {
-				health := healthData[rawURL]
-				currentSnapshot := createHealthSnapshot(&health)
-
-				// Check if this is a new stream or if something changed
-				previousSnapshot, exists := previousState[rawURL]
-				if !exists {
-					// New stream detected
-					if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, "stream_added"); err != nil {
-						return err
-					}
-				} else if hasHealthChanged(previousSnapshot, currentSnapshot) {
-					// Stream health changed
-					eventType := determineEventType(previousSnapshot, currentSnapshot)
-					if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, eventType); err != nil {
-						return err
-					}
-				}
-
-				// Update previous state
-				previousState[rawURL] = currentSnapshot
+			// Process stream updates
+			if err := c.processStreamHealthUpdates(ctx, clientID, healthData, previousState); err != nil {
+				return err
 			}
 
 			// Check for removed streams
-			for prevURL := range previousState {
-				if _, exists := healthData[prevURL]; exists {
-					continue
-				}
-				// Stream was removed
-				sanitizedURL := privacy.SanitizeRTSPUrl(prevURL)
-				emptyHealth := myaudio.StreamHealth{}
-				response := convertStreamHealthToResponse(prevURL, &emptyHealth)
-				event := SSEStreamHealthData{
-					StreamHealthResponse: response,
-					EventType:            "stream_removed",
-				}
-				if err := c.sendSSEMessage(ctx, "stream_health", event); err != nil {
-					return err
-				}
-				delete(previousState, prevURL)
-
-				if c.apiLogger != nil {
-					c.apiLogger.Info("Stream removed",
-						"url", sanitizedURL,
-						"client_id", clientID)
-				}
+			if err := c.processRemovedStreams(ctx, clientID, healthData, previousState); err != nil {
+				return err
 			}
 
 		case <-ctx.Request().Context().Done():
@@ -521,6 +482,81 @@ func determineEventType(prev, current streamHealthSnapshot) string {
 		return "data_flow_stopped"
 	}
 	return "status_update"
+}
+
+// processStreamHealthUpdates processes health updates for all active streams
+func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID string, healthData map[string]myaudio.StreamHealth, previousState map[string]streamHealthSnapshot) error {
+	for rawURL := range healthData {
+		health := healthData[rawURL]
+		currentSnapshot := createHealthSnapshot(&health)
+
+		// Check if this is a new stream or if something changed
+		previousSnapshot, exists := previousState[rawURL]
+		if !exists {
+			// New stream detected
+			if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, "stream_added"); err != nil {
+				if c.apiLogger != nil {
+					c.apiLogger.Debug("Failed to send stream_added event, client disconnected",
+						"url", privacy.SanitizeRTSPUrl(rawURL),
+						"client_id", clientID,
+						"error", err.Error())
+				}
+				return err
+			}
+		} else if hasHealthChanged(previousSnapshot, currentSnapshot) {
+			// Stream health changed
+			eventType := determineEventType(previousSnapshot, currentSnapshot)
+			if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, eventType); err != nil {
+				if c.apiLogger != nil {
+					c.apiLogger.Debug("Failed to send health update, client disconnected",
+						"url", privacy.SanitizeRTSPUrl(rawURL),
+						"event_type", eventType,
+						"client_id", clientID,
+						"previous_state", previousSnapshot.ProcessState,
+						"current_state", currentSnapshot.ProcessState,
+						"error", err.Error())
+				}
+				return err
+			}
+		}
+
+		// Update previous state
+		previousState[rawURL] = currentSnapshot
+	}
+
+	return nil
+}
+
+// processRemovedStreams checks for and processes streams that have been removed
+func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, healthData map[string]myaudio.StreamHealth, previousState map[string]streamHealthSnapshot) error {
+	for prevURL := range previousState {
+		if _, exists := healthData[prevURL]; exists {
+			continue
+		}
+
+		// Stream was removed
+		sanitizedURL := privacy.SanitizeRTSPUrl(prevURL)
+		emptyHealth := myaudio.StreamHealth{}
+		response := convertStreamHealthToResponse(prevURL, &emptyHealth)
+		event := SSEStreamHealthData{
+			StreamHealthResponse: response,
+			EventType:            "stream_removed",
+		}
+
+		if err := c.sendSSEMessage(ctx, "stream_health", event); err != nil {
+			return err
+		}
+
+		delete(previousState, prevURL)
+
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Stream removed",
+				"url", sanitizedURL,
+				"client_id", clientID)
+		}
+	}
+
+	return nil
 }
 
 // sendStreamHealthUpdate sends a stream health update via SSE
