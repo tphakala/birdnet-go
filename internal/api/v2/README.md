@@ -200,11 +200,12 @@ routeInitializers := []struct {
 
 ### Stream Health Monitoring (`streams_health.go`)
 
-| Method | Route                  | Handler                     | Auth | Description                                              |
-| ------ | ---------------------- | --------------------------- | ---- | -------------------------------------------------------- |
-| GET    | `/streams/health`      | `GetAllStreamsHealth`       | ❌   | Get detailed health status of all RTSP streams           |
-| GET    | `/streams/health/:url` | `GetStreamHealth`           | ❌   | Get detailed health status of a specific RTSP stream     |
-| GET    | `/streams/status`      | `GetStreamsStatusSummary`   | ❌   | Get high-level summary of all stream statuses with counts|
+| Method | Route                     | Handler                     | Auth | Description                                               |
+| ------ | ------------------------- | --------------------------- | ---- | --------------------------------------------------------- |
+| GET    | `/streams/health`         | `GetAllStreamsHealth`       | ✅   | Get detailed health status of all RTSP streams            |
+| GET    | `/streams/health/:url`    | `GetStreamHealth`           | ✅   | Get detailed health status of a specific RTSP stream      |
+| GET    | `/streams/status`         | `GetStreamsStatusSummary`   | ✅   | Get high-level summary of all stream statuses with counts |
+| GET    | `/streams/health/stream`  | `StreamHealthUpdates`       | ✅⚡ | Real-time stream health updates via SSE                   |
 
 ### Support (`support.go`)
 
@@ -362,6 +363,7 @@ SSE endpoints are rate limited to prevent abuse:
 
 - Detection streams: 10 requests/minute per IP
 - Sound level streams: 10 requests/minute per IP
+- Stream health streams: 5 requests/minute per IP (authenticated)
 - Notification streams: 1 request/second, burst of 5 (authenticated)
 
 ## Server-Sent Events (SSE)
@@ -553,14 +555,113 @@ The API reports these error types (from PR #1380):
 | `eof` | No | Unexpected end of file |
 | `protocol_error` | Yes | Protocol not supported |
 
+### Real-Time Stream Health Updates (SSE)
+
+#### GET /api/v2/streams/health/stream
+
+**Authentication:** Required
+**Rate Limit:** 5 connections per minute per IP
+**Connection Duration:** Maximum 30 minutes
+
+Establishes a Server-Sent Events (SSE) connection that pushes real-time updates when stream health changes. This is more efficient than polling for monitoring dashboards that need immediate notification of stream issues.
+
+**Event Types:**
+
+- `stream_added` - New stream detected
+- `stream_removed` - Stream configuration removed
+- `state_change` - Process state changed (e.g., running → circuit_open)
+- `health_recovered` - Stream returned to healthy state
+- `health_degraded` - Stream became unhealthy
+- `error_detected` - New error occurred
+- `stream_restarted` - Restart count increased
+- `data_flow_resumed` - Data started flowing again
+- `data_flow_stopped` - Data flow stopped
+- `status_update` - General status update
+- `heartbeat` - Keep-alive message (sent every 30 seconds)
+- `connected` - Initial connection established
+
+**Event Format:**
+
+```json
+event: stream_health
+data: {
+  "url": "rtsp://camera1.local:554/stream",
+  "is_healthy": false,
+  "process_state": "circuit_open",
+  "last_data_received": null,
+  "restart_count": 3,
+  "error": "RTSP stream not found (404)",
+  "total_bytes_received": 0,
+  "bytes_per_second": 0,
+  "is_receiving_data": false,
+  "last_error_context": {
+    "error_type": "rtsp_404",
+    "primary_message": "method DESCRIBE failed: 404 Not Found",
+    "user_facing_msg": "📹 RTSP stream not found (404)\n   The RTSP server responded with 404 Not Found during DESCRIBE method.",
+    "troubleshooting_steps": [
+      "Check if the stream name is correct (case-sensitive)",
+      "Verify the stream path in your RTSP URL"
+    ],
+    "timestamp": "2025-10-12T14:28:10Z",
+    "should_open_circuit": true,
+    "should_restart": false
+  },
+  "event_type": "error_detected"
+}
+```
+
+**Connection Example (JavaScript/Browser):**
+
+```javascript
+const eventSource = new EventSource('/api/v2/streams/health/stream', {
+  withCredentials: true  // Include authentication cookies
+});
+
+eventSource.addEventListener('stream_health', (event) => {
+  const data = JSON.parse(event.data);
+  console.log('Stream update:', data.event_type, data.url, data.process_state);
+
+  // Update UI based on event type
+  if (data.event_type === 'error_detected') {
+    showAlert(`Stream error: ${data.last_error_context.user_facing_msg}`);
+  }
+});
+
+eventSource.addEventListener('heartbeat', (event) => {
+  const data = JSON.parse(event.data);
+  console.log('Heartbeat:', data.timestamp, 'clients:', data.clients);
+});
+
+eventSource.onerror = (error) => {
+  console.error('SSE connection error:', error);
+  eventSource.close();
+};
+```
+
+**Change Detection:**
+
+The SSE endpoint monitors for these changes:
+- Health status changes (healthy ↔ unhealthy)
+- Process state transitions
+- New errors detected
+- Restart count increases
+- Data flow status changes
+
+Updates are sent only when changes are detected, reducing bandwidth compared to polling.
+
 ### Integration Tips
 
-1. **Polling Interval**: Poll `/streams/status` every 5-10 seconds for dashboard updates
-2. **Detailed Diagnostics**: Use `/streams/health` when investigating specific issues
-3. **URL Encoding**: Always URL-encode the stream URL parameter for `/streams/health/:url`
-4. **Credential Safety**: All URLs in responses are automatically sanitized
-5. **Error History**: Use the `error_history` array to detect recurring issues
-6. **Circuit Breaker**: When `process_state` is `circuit_open`, check `last_error_context.should_open_circuit` to understand why
+1. **Choose the Right Endpoint**:
+   - Use SSE (`/streams/health/stream`) for real-time monitoring dashboards
+   - Use REST polling (`/streams/status`) for periodic background checks
+   - Use REST (`/streams/health/:url`) for on-demand detailed diagnostics
+
+2. **Polling Interval (if not using SSE)**: Poll `/streams/status` every 5-10 seconds for dashboard updates
+3. **Detailed Diagnostics**: Use `/streams/health` when investigating specific issues
+4. **URL Encoding**: Always URL-encode the stream URL parameter for `/streams/health/:url`
+5. **Credential Safety**: All URLs in responses are automatically sanitized
+6. **Error History**: Use the `error_history` array to detect recurring issues
+7. **Circuit Breaker**: When `process_state` is `circuit_open`, check `last_error_context.should_open_circuit` to understand why
 
 ### Frontend Integration Example
 

@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -9,9 +10,26 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
+
+// Constants for stream health monitoring
+const (
+	// Stream health polling interval - how often to check for changes
+	streamHealthPollInterval = 1 * time.Second
+
+	// Rate limiting for stream health SSE endpoint
+	streamHealthRateLimitRequests = 5                // Requests per window
+	streamHealthRateLimitWindow   = 1 * time.Minute // Rate limit window
+)
+
+// SSEStreamHealthData represents stream health data sent via SSE
+type SSEStreamHealthData struct {
+	StreamHealthResponse
+	EventType string `json:"event_type"` // e.g., "status_update", "state_change", "error_detected"
+}
 
 // StreamHealthResponse represents the API response for a single stream's health
 type StreamHealthResponse struct {
@@ -79,12 +97,38 @@ type StreamSummaryResponse struct {
 
 // initStreamHealthRoutes registers all stream health monitoring endpoints
 func (c *Controller) initStreamHealthRoutes() {
-	// All health endpoints are public (no auth) for ease of monitoring integration
-	// If you need authentication, add c.getEffectiveAuthMiddleware() as the third parameter
+	// All health endpoints require authentication as they may contain sensitive data
+	authMiddleware := c.getEffectiveAuthMiddleware()
 
-	c.Group.GET("/streams/health", c.GetAllStreamsHealth)
-	c.Group.GET("/streams/health/:url", c.GetStreamHealth)
-	c.Group.GET("/streams/status", c.GetStreamsStatusSummary)
+	// REST endpoints
+	c.Group.GET("/streams/health", c.GetAllStreamsHealth, authMiddleware)
+	c.Group.GET("/streams/health/:url", c.GetStreamHealth, authMiddleware)
+	c.Group.GET("/streams/status", c.GetStreamsStatusSummary, authMiddleware)
+
+	// SSE endpoint for real-time stream health updates with rate limiting
+	rateLimiterConfig := middleware.RateLimiterConfig{
+		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
+			middleware.RateLimiterMemoryStoreConfig{
+				Rate:      streamHealthRateLimitRequests,
+				ExpiresIn: streamHealthRateLimitWindow,
+			},
+		),
+		IdentifierExtractor: middleware.DefaultRateLimiterConfig.IdentifierExtractor,
+		ErrorHandler: func(context echo.Context, err error) error {
+			return context.JSON(http.StatusTooManyRequests, map[string]string{
+				"error": "Rate limit exceeded for stream health SSE connections",
+			})
+		},
+		DenyHandler: func(context echo.Context, identifier string, err error) error {
+			return context.JSON(http.StatusTooManyRequests, map[string]string{
+				"error": "Too many stream health SSE connection attempts, please wait before trying again",
+			})
+		},
+	}
+
+	c.Group.GET("/streams/health/stream", c.StreamHealthUpdates,
+		authMiddleware,
+		middleware.RateLimiterWithConfig(rateLimiterConfig))
 }
 
 // GetAllStreamsHealth returns health information for all configured RTSP streams
@@ -101,10 +145,11 @@ func (c *Controller) GetAllStreamsHealth(ctx echo.Context) error {
 
 	// Convert to API response format
 	response := make(map[string]StreamHealthResponse)
-	for rawURL, health := range healthData {
+	for rawURL := range healthData {
+		health := healthData[rawURL]
 		// Sanitize the URL for the response
 		sanitizedURL := privacy.SanitizeRTSPUrl(rawURL)
-		response[sanitizedURL] = convertStreamHealthToResponse(rawURL, health)
+		response[sanitizedURL] = convertStreamHealthToResponse(rawURL, &health)
 	}
 
 	return ctx.JSON(http.StatusOK, response)
@@ -138,18 +183,8 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 	healthData := myaudio.GetRTSPStreamHealth()
 
 	// Find the matching stream (case-sensitive exact match)
-	var foundHealth *myaudio.StreamHealth
-	var foundURL string
-	for rawURL, health := range healthData {
-		if rawURL == decodedURL {
-			h := health // Create a copy to avoid pointer issues
-			foundHealth = &h
-			foundURL = rawURL
-			break
-		}
-	}
-
-	if foundHealth == nil {
+	health, exists := healthData[decodedURL]
+	if !exists {
 		c.logAPIRequest(ctx, slog.LevelWarn, "Stream not found",
 			"requested_url", privacy.SanitizeRTSPUrl(decodedURL),
 			"active_streams", len(healthData))
@@ -157,7 +192,7 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 	}
 
 	// Convert to API response format
-	response := convertStreamHealthToResponse(foundURL, *foundHealth)
+	response := convertStreamHealthToResponse(decodedURL, &health)
 
 	return ctx.JSON(http.StatusOK, response)
 }
@@ -183,7 +218,8 @@ func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
 		Timestamp:       time.Now(),
 	}
 
-	for rawURL, health := range healthData {
+	for rawURL := range healthData {
+		health := healthData[rawURL]
 		// Count healthy/unhealthy
 		if health.IsHealthy {
 			summary.HealthyStreams++
@@ -216,7 +252,7 @@ func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
 }
 
 // convertStreamHealthToResponse converts internal StreamHealth to API response format
-func convertStreamHealthToResponse(rawURL string, health myaudio.StreamHealth) StreamHealthResponse {
+func convertStreamHealthToResponse(rawURL string, health *myaudio.StreamHealth) StreamHealthResponse {
 	response := StreamHealthResponse{
 		URL:                privacy.SanitizeRTSPUrl(rawURL),
 		IsHealthy:          health.IsHealthy,
@@ -305,4 +341,207 @@ func convertErrorContextToResponse(errCtx *myaudio.ErrorContext) *ErrorContextRe
 	}
 
 	return response
+}
+
+// StreamHealthUpdates streams real-time RTSP stream health updates via SSE
+// @Summary Stream real-time RTSP stream health updates
+// @Description Establishes an SSE connection to receive real-time updates when stream health changes
+// @Tags streams
+// @Produce text/event-stream
+// @Success 200 {object} SSEStreamHealthData "Stream health update events"
+// @Failure 401 {object} ErrorResponse "Unauthorized"
+// @Failure 429 {object} ErrorResponse "Too many requests"
+// @Router /api/v2/streams/health/stream [get]
+func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
+	// Create a context with timeout for maximum connection duration
+	timeoutCtx, cancel := context.WithTimeout(ctx.Request().Context(), maxSSEStreamDuration)
+	defer cancel()
+
+	// Override the request context with timeout context
+	originalReq := ctx.Request()
+	ctx.SetRequest(originalReq.WithContext(timeoutCtx))
+
+	// Set SSE headers
+	setSSEHeaders(ctx)
+
+	// Generate client ID for logging
+	clientID := generateCorrelationID()
+
+	// Log the connection
+	c.logSSEConnection(clientID, ctx.RealIP(), ctx.Request().UserAgent(), "stream-health", true)
+	defer c.logSSEConnection(clientID, ctx.RealIP(), "", "stream-health", false)
+
+	// Send initial connection message
+	if err := c.sendConnectionMessage(ctx, clientID, "Connected to stream health updates", "stream_health"); err != nil {
+		return err
+	}
+
+	// Keep track of previous state to detect changes
+	previousState := make(map[string]streamHealthSnapshot)
+
+	// Setup ticker for polling health data
+	ticker := time.NewTicker(streamHealthPollInterval)
+	defer ticker.Stop()
+
+	// Setup heartbeat ticker
+	heartbeatTicker := time.NewTicker(sseHeartbeatInterval)
+	defer heartbeatTicker.Stop()
+
+	for {
+		select {
+		case <-heartbeatTicker.C:
+			// Send heartbeat to keep connection alive
+			if err := c.sendSSEHeartbeat(ctx, clientID, "stream_health"); err != nil {
+				if c.apiLogger != nil {
+					c.apiLogger.Debug("Stream health SSE heartbeat failed, client likely disconnected",
+						"client_id", clientID,
+						"error", err.Error())
+				}
+				return err
+			}
+
+		case <-ticker.C:
+			// Poll for stream health changes
+			healthData := myaudio.GetRTSPStreamHealth()
+
+			// Check for changes and send updates
+			for rawURL := range healthData {
+				health := healthData[rawURL]
+				currentSnapshot := createHealthSnapshot(&health)
+
+				// Check if this is a new stream or if something changed
+				previousSnapshot, exists := previousState[rawURL]
+				if !exists {
+					// New stream detected
+					if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, "stream_added"); err != nil {
+						return err
+					}
+				} else if hasHealthChanged(previousSnapshot, currentSnapshot) {
+					// Stream health changed
+					eventType := determineEventType(previousSnapshot, currentSnapshot)
+					if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, eventType); err != nil {
+						return err
+					}
+				}
+
+				// Update previous state
+				previousState[rawURL] = currentSnapshot
+			}
+
+			// Check for removed streams
+			for prevURL := range previousState {
+				if _, exists := healthData[prevURL]; exists {
+					continue
+				}
+				// Stream was removed
+				sanitizedURL := privacy.SanitizeRTSPUrl(prevURL)
+				emptyHealth := myaudio.StreamHealth{}
+				response := convertStreamHealthToResponse(prevURL, &emptyHealth)
+				event := SSEStreamHealthData{
+					StreamHealthResponse: response,
+					EventType:            "stream_removed",
+				}
+				if err := c.sendSSEMessage(ctx, "stream_health", event); err != nil {
+					return err
+				}
+				delete(previousState, prevURL)
+
+				if c.apiLogger != nil {
+					c.apiLogger.Info("Stream removed",
+						"url", sanitizedURL,
+						"client_id", clientID)
+				}
+			}
+
+		case <-ctx.Request().Context().Done():
+			// Client disconnected or timeout reached
+			return nil
+		}
+	}
+}
+
+// streamHealthSnapshot captures key health metrics for change detection
+type streamHealthSnapshot struct {
+	IsHealthy        bool
+	ProcessState     string
+	LastErrorType    string
+	RestartCount     int
+	IsReceivingData  bool
+	TotalBytesReceived int64
+}
+
+// createHealthSnapshot creates a snapshot of stream health for comparison
+func createHealthSnapshot(health *myaudio.StreamHealth) streamHealthSnapshot {
+	snapshot := streamHealthSnapshot{
+		IsHealthy:        health.IsHealthy,
+		ProcessState:     health.ProcessState.String(),
+		RestartCount:     health.RestartCount,
+		IsReceivingData:  health.IsReceivingData,
+		TotalBytesReceived: health.TotalBytesReceived,
+	}
+
+	if health.LastErrorContext != nil {
+		snapshot.LastErrorType = health.LastErrorContext.ErrorType
+	}
+
+	return snapshot
+}
+
+// hasHealthChanged checks if stream health has changed significantly
+func hasHealthChanged(prev, current streamHealthSnapshot) bool {
+	return prev.IsHealthy != current.IsHealthy ||
+		prev.ProcessState != current.ProcessState ||
+		prev.LastErrorType != current.LastErrorType ||
+		prev.RestartCount != current.RestartCount ||
+		prev.IsReceivingData != current.IsReceivingData
+}
+
+// determineEventType determines the appropriate event type based on what changed
+func determineEventType(prev, current streamHealthSnapshot) string {
+	// Prioritize event types by importance
+	if prev.ProcessState != current.ProcessState {
+		return "state_change"
+	}
+	if prev.IsHealthy != current.IsHealthy {
+		if current.IsHealthy {
+			return "health_recovered"
+		}
+		return "health_degraded"
+	}
+	if prev.LastErrorType != current.LastErrorType && current.LastErrorType != "" {
+		return "error_detected"
+	}
+	if prev.RestartCount != current.RestartCount {
+		return "stream_restarted"
+	}
+	if prev.IsReceivingData != current.IsReceivingData {
+		if current.IsReceivingData {
+			return "data_flow_resumed"
+		}
+		return "data_flow_stopped"
+	}
+	return "status_update"
+}
+
+// sendStreamHealthUpdate sends a stream health update via SSE
+func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, health *myaudio.StreamHealth, eventType string) error {
+	response := convertStreamHealthToResponse(rawURL, health)
+	event := SSEStreamHealthData{
+		StreamHealthResponse: response,
+		EventType:            eventType,
+	}
+
+	if err := c.sendSSEMessage(ctx, "stream_health", event); err != nil {
+		return err
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Debug("Stream health update sent",
+			"url", privacy.SanitizeRTSPUrl(rawURL),
+			"event_type", eventType,
+			"is_healthy", health.IsHealthy,
+			"state", health.ProcessState.String())
+	}
+
+	return nil
 }
