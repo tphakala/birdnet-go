@@ -15,72 +15,128 @@ import (
 
 // MockDatastore implements datastore.Interface for testing
 type MockDatastore struct {
-	thresholds              map[string]*datastore.DynamicThreshold
-	getAllError             error
-	saveError               error
-	batchSaveError          error
-	deleteError             error
-	deleteExpiredError      error
-	updateExpiryError       error
-	deletedCount            int64
-	batchSaveCalled         bool
-	deleteExpiredCalled     bool
-	getAllCalled            bool
+	thresholds          map[string]*datastore.DynamicThreshold
+	getAllError         error
+	saveError           error
+	batchSaveError      error
+	deleteError         error
+	deleteExpiredError  error
+	updateExpiryError   error
+	deletedCount        int64
+	batchSaveCalled     bool
+	deleteExpiredCalled bool
+	getAllCalled        bool
 }
 
 // Implement all required methods from datastore.Interface
 
-func (m *MockDatastore) Open() error { return nil }
-func (m *MockDatastore) Close() error { return nil }
+func (m *MockDatastore) Open() error                                     { return nil }
+func (m *MockDatastore) Close() error                                    { return nil }
 func (m *MockDatastore) Save(*datastore.Note, []datastore.Results) error { return nil }
-func (m *MockDatastore) Delete(string) error { return nil }
-func (m *MockDatastore) Get(string) (datastore.Note, error) { return datastore.Note{}, nil }
-func (m *MockDatastore) SetMetrics(*datastore.Metrics) {}
-func (m *MockDatastore) SetSunCalcMetrics(any) {}
-func (m *MockDatastore) Optimize(context.Context) error { return nil }
-func (m *MockDatastore) GetAllNotes() ([]datastore.Note, error) { return make([]datastore.Note, 0), nil }
-func (m *MockDatastore) GetTopBirdsData(string, float64) ([]datastore.Note, error) { return make([]datastore.Note, 0), nil }
-func (m *MockDatastore) GetHourlyOccurrences(string, string, float64) ([24]int, error) { return [24]int{}, nil }
-func (m *MockDatastore) SpeciesDetections(string, string, string, int, bool, int, int) ([]datastore.Note, error) { return make([]datastore.Note, 0), nil }
-func (m *MockDatastore) GetLastDetections(int) ([]datastore.Note, error) { return make([]datastore.Note, 0), nil }
-func (m *MockDatastore) GetAllDetectedSpecies() ([]datastore.Note, error) { return make([]datastore.Note, 0), nil }
-func (m *MockDatastore) SearchNotes(string, bool, int, int) ([]datastore.Note, error) { return make([]datastore.Note, 0), nil }
-func (m *MockDatastore) SearchNotesAdvanced(*datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) { return make([]datastore.Note, 0), 0, nil }
-func (m *MockDatastore) GetNoteClipPath(string) (string, error) { return "", datastore.ErrNoteReviewNotFound }
+func (m *MockDatastore) Delete(string) error                             { return nil }
+func (m *MockDatastore) Get(string) (datastore.Note, error)              { return datastore.Note{}, nil }
+func (m *MockDatastore) SetMetrics(*datastore.Metrics)                   {}
+func (m *MockDatastore) SetSunCalcMetrics(any)                           {}
+func (m *MockDatastore) Optimize(context.Context) error                  { return nil }
+func (m *MockDatastore) GetAllNotes() ([]datastore.Note, error) {
+	return make([]datastore.Note, 0), nil
+}
+func (m *MockDatastore) GetTopBirdsData(string, float64) ([]datastore.Note, error) {
+	return make([]datastore.Note, 0), nil
+}
+func (m *MockDatastore) GetHourlyOccurrences(string, string, float64) ([24]int, error) {
+	return [24]int{}, nil
+}
+func (m *MockDatastore) SpeciesDetections(string, string, string, int, bool, int, int) ([]datastore.Note, error) {
+	return make([]datastore.Note, 0), nil
+}
+func (m *MockDatastore) GetLastDetections(int) ([]datastore.Note, error) {
+	return make([]datastore.Note, 0), nil
+}
+func (m *MockDatastore) GetAllDetectedSpecies() ([]datastore.Note, error) {
+	return make([]datastore.Note, 0), nil
+}
+func (m *MockDatastore) SearchNotes(string, bool, int, int) ([]datastore.Note, error) {
+	return make([]datastore.Note, 0), nil
+}
+func (m *MockDatastore) SearchNotesAdvanced(*datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
+	return make([]datastore.Note, 0), 0, nil
+}
+func (m *MockDatastore) GetNoteClipPath(string) (string, error) {
+	return "", datastore.ErrNoteReviewNotFound
+}
 func (m *MockDatastore) DeleteNoteClipPath(string) error { return nil }
-func (m *MockDatastore) GetNoteReview(string) (*datastore.NoteReview, error) { return nil, datastore.ErrNoteReviewNotFound }
+func (m *MockDatastore) GetNoteReview(string) (*datastore.NoteReview, error) {
+	return nil, datastore.ErrNoteReviewNotFound
+}
 func (m *MockDatastore) SaveNoteReview(*datastore.NoteReview) error { return nil }
-func (m *MockDatastore) GetNoteComments(string) ([]datastore.NoteComment, error) { return make([]datastore.NoteComment, 0), nil }
+func (m *MockDatastore) GetNoteComments(string) ([]datastore.NoteComment, error) {
+	return make([]datastore.NoteComment, 0), nil
+}
 func (m *MockDatastore) SaveNoteComment(*datastore.NoteComment) error { return nil }
-func (m *MockDatastore) UpdateNoteComment(string, string) error { return nil }
-func (m *MockDatastore) DeleteNoteComment(string) error { return nil }
+func (m *MockDatastore) UpdateNoteComment(string, string) error       { return nil }
+func (m *MockDatastore) DeleteNoteComment(string) error               { return nil }
 func (m *MockDatastore) SaveDailyEvents(*datastore.DailyEvents) error { return nil }
-func (m *MockDatastore) GetDailyEvents(string) (datastore.DailyEvents, error) { return datastore.DailyEvents{}, nil }
+func (m *MockDatastore) GetDailyEvents(string) (datastore.DailyEvents, error) {
+	return datastore.DailyEvents{}, nil
+}
 func (m *MockDatastore) SaveHourlyWeather(*datastore.HourlyWeather) error { return nil }
-func (m *MockDatastore) GetHourlyWeather(string) ([]datastore.HourlyWeather, error) { return make([]datastore.HourlyWeather, 0), nil }
-func (m *MockDatastore) LatestHourlyWeather() (*datastore.HourlyWeather, error) { return nil, datastore.ErrNoteReviewNotFound }
-func (m *MockDatastore) GetHourlyDetections(string, string, int, int, int) ([]datastore.Note, error) { return make([]datastore.Note, 0), nil }
-func (m *MockDatastore) CountSpeciesDetections(string, string, string, int) (int64, error) { return 0, nil }
+func (m *MockDatastore) GetHourlyWeather(string) ([]datastore.HourlyWeather, error) {
+	return make([]datastore.HourlyWeather, 0), nil
+}
+func (m *MockDatastore) LatestHourlyWeather() (*datastore.HourlyWeather, error) {
+	return nil, datastore.ErrNoteReviewNotFound
+}
+func (m *MockDatastore) GetHourlyDetections(string, string, int, int, int) ([]datastore.Note, error) {
+	return make([]datastore.Note, 0), nil
+}
+func (m *MockDatastore) CountSpeciesDetections(string, string, string, int) (int64, error) {
+	return 0, nil
+}
 func (m *MockDatastore) CountSearchResults(string) (int64, error) { return 0, nil }
-func (m *MockDatastore) Transaction(func(*gorm.DB) error) error { return nil }
-func (m *MockDatastore) LockNote(string) error { return nil }
-func (m *MockDatastore) UnlockNote(string) error { return nil }
-func (m *MockDatastore) GetNoteLock(string) (*datastore.NoteLock, error) { return nil, datastore.ErrNoteLockNotFound }
+func (m *MockDatastore) Transaction(func(*gorm.DB) error) error   { return nil }
+func (m *MockDatastore) LockNote(string) error                    { return nil }
+func (m *MockDatastore) UnlockNote(string) error                  { return nil }
+func (m *MockDatastore) GetNoteLock(string) (*datastore.NoteLock, error) {
+	return nil, datastore.ErrNoteLockNotFound
+}
 func (m *MockDatastore) IsNoteLocked(string) (bool, error) { return false, nil }
-func (m *MockDatastore) GetImageCache(datastore.ImageCacheQuery) (*datastore.ImageCache, error) { return nil, datastore.ErrImageCacheNotFound }
-func (m *MockDatastore) GetImageCacheBatch(string, []string) (map[string]*datastore.ImageCache, error) { return make(map[string]*datastore.ImageCache), nil }
+func (m *MockDatastore) GetImageCache(datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
+	return nil, datastore.ErrImageCacheNotFound
+}
+func (m *MockDatastore) GetImageCacheBatch(string, []string) (map[string]*datastore.ImageCache, error) {
+	return make(map[string]*datastore.ImageCache), nil
+}
 func (m *MockDatastore) SaveImageCache(*datastore.ImageCache) error { return nil }
-func (m *MockDatastore) GetAllImageCaches(string) ([]datastore.ImageCache, error) { return make([]datastore.ImageCache, 0), nil }
-func (m *MockDatastore) GetLockedNotesClipPaths() ([]string, error) { return make([]string, 0), nil }
+func (m *MockDatastore) GetAllImageCaches(string) ([]datastore.ImageCache, error) {
+	return make([]datastore.ImageCache, 0), nil
+}
+func (m *MockDatastore) GetLockedNotesClipPaths() ([]string, error)               { return make([]string, 0), nil }
 func (m *MockDatastore) CountHourlyDetections(string, string, int) (int64, error) { return 0, nil }
-func (m *MockDatastore) GetSpeciesSummaryData(context.Context, string, string) ([]datastore.SpeciesSummaryData, error) { return make([]datastore.SpeciesSummaryData, 0), nil }
-func (m *MockDatastore) GetHourlyAnalyticsData(context.Context, string, string) ([]datastore.HourlyAnalyticsData, error) { return make([]datastore.HourlyAnalyticsData, 0), nil }
-func (m *MockDatastore) GetDailyAnalyticsData(context.Context, string, string, string) ([]datastore.DailyAnalyticsData, error) { return make([]datastore.DailyAnalyticsData, 0), nil }
-func (m *MockDatastore) GetDetectionTrends(context.Context, string, int) ([]datastore.DailyAnalyticsData, error) { return make([]datastore.DailyAnalyticsData, 0), nil }
-func (m *MockDatastore) GetHourlyDistribution(context.Context, string, string, string) ([]datastore.HourlyDistributionData, error) { return make([]datastore.HourlyDistributionData, 0), nil }
-func (m *MockDatastore) GetNewSpeciesDetections(context.Context, string, string, int, int) ([]datastore.NewSpeciesData, error) { return make([]datastore.NewSpeciesData, 0), nil }
-func (m *MockDatastore) GetSpeciesFirstDetectionInPeriod(context.Context, string, string, int, int) ([]datastore.NewSpeciesData, error) { return make([]datastore.NewSpeciesData, 0), nil }
-func (m *MockDatastore) SearchDetections(*datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) { return make([]datastore.DetectionRecord, 0), 0, nil }
+func (m *MockDatastore) GetSpeciesSummaryData(context.Context, string, string) ([]datastore.SpeciesSummaryData, error) {
+	return make([]datastore.SpeciesSummaryData, 0), nil
+}
+func (m *MockDatastore) GetHourlyAnalyticsData(context.Context, string, string) ([]datastore.HourlyAnalyticsData, error) {
+	return make([]datastore.HourlyAnalyticsData, 0), nil
+}
+func (m *MockDatastore) GetDailyAnalyticsData(context.Context, string, string, string) ([]datastore.DailyAnalyticsData, error) {
+	return make([]datastore.DailyAnalyticsData, 0), nil
+}
+func (m *MockDatastore) GetDetectionTrends(context.Context, string, int) ([]datastore.DailyAnalyticsData, error) {
+	return make([]datastore.DailyAnalyticsData, 0), nil
+}
+func (m *MockDatastore) GetHourlyDistribution(context.Context, string, string, string) ([]datastore.HourlyDistributionData, error) {
+	return make([]datastore.HourlyDistributionData, 0), nil
+}
+func (m *MockDatastore) GetNewSpeciesDetections(context.Context, string, string, int, int) ([]datastore.NewSpeciesData, error) {
+	return make([]datastore.NewSpeciesData, 0), nil
+}
+func (m *MockDatastore) GetSpeciesFirstDetectionInPeriod(context.Context, string, string, int, int) ([]datastore.NewSpeciesData, error) {
+	return make([]datastore.NewSpeciesData, 0), nil
+}
+func (m *MockDatastore) SearchDetections(*datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
+	return make([]datastore.DetectionRecord, 0), 0, nil
+}
 
 // Dynamic threshold methods
 func (m *MockDatastore) SaveDynamicThreshold(threshold *datastore.DynamicThreshold) error {
@@ -203,7 +259,7 @@ func TestLoadDynamicThresholdsFromDB(t *testing.T) {
 
 		err := p.loadDynamicThresholdsFromDB()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, p.DynamicThresholds)
 		assert.True(t, mockDs.getAllCalled)
 	})
@@ -241,14 +297,14 @@ func TestLoadDynamicThresholdsFromDB(t *testing.T) {
 
 		err := p.loadDynamicThresholdsFromDB()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, p.DynamicThresholds, 2)
 
 		// Verify american crow threshold
 		crowThreshold := p.DynamicThresholds["american crow"]
 		require.NotNil(t, crowThreshold)
 		assert.Equal(t, 1, crowThreshold.Level)
-		assert.Equal(t, 0.75, crowThreshold.CurrentValue)
+		assert.InDelta(t, 0.75, crowThreshold.CurrentValue, 0.001)
 		assert.Equal(t, 5, crowThreshold.HighConfCount)
 		assert.Equal(t, 48, crowThreshold.ValidHours)
 
@@ -256,7 +312,7 @@ func TestLoadDynamicThresholdsFromDB(t *testing.T) {
 		jayThreshold := p.DynamicThresholds["blue jay"]
 		require.NotNil(t, jayThreshold)
 		assert.Equal(t, 2, jayThreshold.Level)
-		assert.Equal(t, 0.8, jayThreshold.CurrentValue)
+		assert.InDelta(t, 0.8, jayThreshold.CurrentValue, 0.001)
 		assert.Equal(t, 10, jayThreshold.HighConfCount)
 	})
 
@@ -267,22 +323,22 @@ func TestLoadDynamicThresholdsFromDB(t *testing.T) {
 		now := time.Now()
 		mockDs.thresholds = map[string]*datastore.DynamicThreshold{
 			"american crow": {
-				SpeciesName:   "american crow",
-				Level:         1,
-				CurrentValue:  0.75,
-				ExpiresAt:     now.Add(24 * time.Hour), // Valid
+				SpeciesName:  "american crow",
+				Level:        1,
+				CurrentValue: 0.75,
+				ExpiresAt:    now.Add(24 * time.Hour), // Valid
 			},
 			"blue jay": {
-				SpeciesName:   "blue jay",
-				Level:         2,
-				CurrentValue:  0.8,
-				ExpiresAt:     now.Add(-1 * time.Hour), // Expired
+				SpeciesName:  "blue jay",
+				Level:        2,
+				CurrentValue: 0.8,
+				ExpiresAt:    now.Add(-1 * time.Hour), // Expired
 			},
 		}
 
 		err := p.loadDynamicThresholdsFromDB()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, p.DynamicThresholds, 1, "Should only load non-expired threshold")
 		assert.Contains(t, p.DynamicThresholds, "american crow")
 		assert.NotContains(t, p.DynamicThresholds, "blue jay")
@@ -314,7 +370,7 @@ func TestPersistDynamicThresholds(t *testing.T) {
 
 		err := p.persistDynamicThresholds()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, mockDs.batchSaveCalled)
 		assert.Len(t, mockDs.thresholds, 2)
 
@@ -322,7 +378,7 @@ func TestPersistDynamicThresholds(t *testing.T) {
 		savedCrow := mockDs.thresholds["american crow"]
 		require.NotNil(t, savedCrow)
 		assert.Equal(t, 1, savedCrow.Level)
-		assert.Equal(t, 0.75, savedCrow.CurrentValue)
+		assert.InDelta(t, 0.75, savedCrow.CurrentValue, 0.001)
 		assert.Equal(t, 5, savedCrow.HighConfCount)
 	})
 
@@ -332,7 +388,7 @@ func TestPersistDynamicThresholds(t *testing.T) {
 
 		err := p.persistDynamicThresholds()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, mockDs.batchSaveCalled, "Should not call batch save with no thresholds")
 	})
 
@@ -354,7 +410,7 @@ func TestPersistDynamicThresholds(t *testing.T) {
 
 		err := p.persistDynamicThresholds()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, p.DynamicThresholds, 1, "Expired threshold should be removed from memory")
 		assert.Contains(t, p.DynamicThresholds, "american crow")
 		assert.NotContains(t, p.DynamicThresholds, "blue jay")
@@ -380,7 +436,7 @@ func TestFlushDynamicThresholds(t *testing.T) {
 
 		err := p.FlushDynamicThresholds()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, mockDs.batchSaveCalled)
 	})
 }
@@ -436,7 +492,7 @@ func TestLoadWithDatabaseErrors(t *testing.T) {
 		err := p.loadDynamicThresholdsFromDB()
 
 		// Should not return error for "no such table" (normal on first run)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, p.DynamicThresholds)
 	})
 }
@@ -472,11 +528,11 @@ func TestBatchSaveWithBaseThreshold(t *testing.T) {
 
 		err := p.persistDynamicThresholds()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Verify base threshold was calculated and saved
 		savedThreshold := mockDs.thresholds["american crow"]
 		require.NotNil(t, savedThreshold)
-		assert.Equal(t, 0.65, savedThreshold.BaseThreshold, "Base threshold should match custom config")
+		assert.InDelta(t, 0.65, savedThreshold.BaseThreshold, 0.001, "Base threshold should match custom config")
 	})
 }
