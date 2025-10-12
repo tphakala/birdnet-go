@@ -14,6 +14,7 @@ import (
 // setupDynamicThresholdTestDB creates an in-memory SQLite database for testing
 func setupDynamicThresholdTestDB(t *testing.T) *DataStore {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	t.Helper()
 	require.NoError(t, err, "Failed to create test database")
 
 	// Auto-migrate the schema
