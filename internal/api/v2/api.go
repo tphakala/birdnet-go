@@ -434,6 +434,7 @@ func (c *Controller) initRoutes() {
 		{"settings routes", c.initSettingsRoutes},
 		{"filesystem routes", c.initFileSystemRoutes},
 		{"stream routes", c.initStreamRoutes},
+		{"stream health routes", c.initStreamHealthRoutes},
 		{"integration routes", c.initIntegrationsRoutes},
 		{"control routes", c.initControlRoutes},
 		{"auth routes", c.initAuthRoutes},

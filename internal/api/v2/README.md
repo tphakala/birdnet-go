@@ -198,6 +198,14 @@ routeInitializers := []struct {
 | GET    | `/streams/audio-level`   | `HandleAudioLevelStream`    | ✅   | Audio level stream  |
 | GET    | `/streams/notifications` | `HandleNotificationsStream` | ✅   | Notification stream |
 
+### Stream Health Monitoring (`streams_health.go`)
+
+| Method | Route                  | Handler                     | Auth | Description                                              |
+| ------ | ---------------------- | --------------------------- | ---- | -------------------------------------------------------- |
+| GET    | `/streams/health`      | `GetAllStreamsHealth`       | ❌   | Get detailed health status of all RTSP streams           |
+| GET    | `/streams/health/:url` | `GetStreamHealth`           | ❌   | Get detailed health status of a specific RTSP stream     |
+| GET    | `/streams/status`      | `GetStreamsStatusSummary`   | ❌   | Get high-level summary of all stream statuses with counts|
+
 ### Support (`support.go`)
 
 | Method | Route                   | Handler               | Auth | Description                      |
@@ -388,3 +396,225 @@ The `/notifications/stream` endpoint provides both notifications and toast messa
   }
 }
 ```
+
+## Stream Health Monitoring API
+
+The Stream Health API provides comprehensive real-time monitoring of RTSP stream status, leveraging the FFmpeg error detection system from PR #1380. These endpoints are designed to be safe for use in monitoring dashboards and provide actionable diagnostics for troubleshooting stream issues.
+
+### Key Features
+
+- **Real-time Health Status**: Monitor connection state, data flow, and process health
+- **Detailed Error Diagnostics**: Get user-friendly error messages with troubleshooting steps
+- **Error History**: Track last 10 errors per stream for pattern analysis
+- **State Transitions**: See recent state changes (idle → starting → running → circuit_open, etc.)
+- **Circuit Breaker Status**: Understand why streams are not attempting to reconnect
+- **Credential Safety**: All URLs are sanitized before being returned in responses
+
+### Example Responses
+
+#### GET /api/v2/streams/health
+
+Returns health information for all configured RTSP streams:
+
+```json
+{
+  "rtsp://camera1.local:554/stream": {
+    "url": "rtsp://camera1.local:554/stream",
+    "is_healthy": true,
+    "process_state": "running",
+    "last_data_received": "2025-10-12T14:30:45Z",
+    "time_since_data_seconds": 2.5,
+    "restart_count": 0,
+    "total_bytes_received": 1048576,
+    "bytes_per_second": 128000.5,
+    "is_receiving_data": true
+  },
+  "rtsp://camera2.local:554/stream": {
+    "url": "rtsp://camera2.local:554/stream",
+    "is_healthy": false,
+    "process_state": "circuit_open",
+    "last_data_received": null,
+    "restart_count": 5,
+    "error": "RTSP stream not found (404)",
+    "total_bytes_received": 0,
+    "bytes_per_second": 0,
+    "is_receiving_data": false,
+    "last_error_context": {
+      "error_type": "rtsp_404",
+      "primary_message": "method DESCRIBE failed: 404 Not Found",
+      "user_facing_msg": "📹 RTSP stream not found (404)\n   The RTSP server responded with 404 Not Found during DESCRIBE method.",
+      "troubleshooting_steps": [
+        "Check if the stream name is correct (case-sensitive)",
+        "Verify the stream path in your RTSP URL",
+        "List available streams on the RTSP server",
+        "Confirm the stream is published and active"
+      ],
+      "timestamp": "2025-10-12T14:28:10Z",
+      "target_host": "camera2.local",
+      "target_port": 554,
+      "http_status": 404,
+      "rtsp_method": "DESCRIBE",
+      "should_open_circuit": true,
+      "should_restart": false
+    },
+    "error_history": [
+      {
+        "error_type": "rtsp_404",
+        "primary_message": "method DESCRIBE failed: 404 Not Found",
+        "timestamp": "2025-10-12T14:28:10Z"
+      }
+    ],
+    "state_history": [
+      {
+        "from_state": "starting",
+        "to_state": "circuit_open",
+        "timestamp": "2025-10-12T14:28:10Z",
+        "reason": "permanent failure detected"
+      }
+    ]
+  }
+}
+```
+
+#### GET /api/v2/streams/health/:url
+
+Get health for a specific stream (URL must be URL-encoded):
+
+```bash
+# Example: Get health for rtsp://camera1.local:554/stream
+curl "http://localhost:8080/api/v2/streams/health/rtsp%3A%2F%2Fcamera1.local%3A554%2Fstream"
+```
+
+Returns the same structure as a single stream from the `/streams/health` endpoint.
+
+#### GET /api/v2/streams/status
+
+Returns a high-level summary for dashboard displays:
+
+```json
+{
+  "total_streams": 3,
+  "healthy_streams": 2,
+  "unhealthy_streams": 1,
+  "streams_summary": [
+    {
+      "url": "rtsp://camera1.local:554/stream",
+      "is_healthy": true,
+      "process_state": "running",
+      "time_since_data_seconds": 2.5
+    },
+    {
+      "url": "rtsp://camera2.local:554/stream",
+      "is_healthy": false,
+      "process_state": "circuit_open",
+      "last_error_type": "rtsp_404"
+    },
+    {
+      "url": "rtsp://camera3.local:554/stream",
+      "is_healthy": true,
+      "process_state": "running",
+      "time_since_data_seconds": 1.2
+    }
+  ],
+  "timestamp": "2025-10-12T14:30:00Z"
+}
+```
+
+### Process States
+
+The `process_state` field can have these values:
+
+- `idle`: Stream created but not yet started
+- `starting`: FFmpeg process is being launched
+- `running`: Stream is active and processing audio
+- `restarting`: Restart has been requested
+- `backoff`: Waiting before restart (exponential backoff)
+- `circuit_open`: Circuit breaker is open (permanent failure detected, waiting for cooldown)
+- `stopped`: Stream has been permanently stopped
+
+### Error Types
+
+The API reports these error types (from PR #1380):
+
+| Error Type | Permanent | Description |
+|------------|-----------|-------------|
+| `connection_timeout` | No | Connection timed out (will retry) |
+| `rtsp_404` | Yes | Stream not found (404) |
+| `connection_refused` | Yes | Connection refused by server |
+| `auth_failed` | Yes | Authentication required (401) |
+| `auth_forbidden` | Yes | Access forbidden (403) |
+| `no_route` | Yes | No route to host |
+| `dns_resolution_failed` | Yes | DNS lookup failed |
+| `network_unreachable` | No | Network unreachable (transient) |
+| `operation_not_permitted` | Yes | Operation not permitted |
+| `ssl_error` | Yes | SSL/TLS error |
+| `rtsp_503` | No | Service unavailable (503) |
+| `invalid_data` | No | Invalid/corrupted data |
+| `eof` | No | Unexpected end of file |
+| `protocol_error` | Yes | Protocol not supported |
+
+### Integration Tips
+
+1. **Polling Interval**: Poll `/streams/status` every 5-10 seconds for dashboard updates
+2. **Detailed Diagnostics**: Use `/streams/health` when investigating specific issues
+3. **URL Encoding**: Always URL-encode the stream URL parameter for `/streams/health/:url`
+4. **Credential Safety**: All URLs in responses are automatically sanitized
+5. **Error History**: Use the `error_history` array to detect recurring issues
+6. **Circuit Breaker**: When `process_state` is `circuit_open`, check `last_error_context.should_open_circuit` to understand why
+
+### Frontend Integration Example
+
+```typescript
+// Svelte store for stream health monitoring
+import { writable } from 'svelte/store';
+
+interface StreamStatus {
+  total_streams: number;
+  healthy_streams: number;
+  unhealthy_streams: number;
+  streams_summary: StreamSummary[];
+  timestamp: string;
+}
+
+export const streamStatus = writable<StreamStatus | null>(null);
+
+// Poll stream status every 5 seconds
+export function startStreamMonitoring() {
+  const pollInterval = 5000; // 5 seconds
+  
+  async function fetchStreamStatus() {
+    try {
+      const response = await fetch('/api/v2/streams/status');
+      if (response.ok) {
+        const data = await response.json();
+        streamStatus.set(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch stream status:', error);
+    }
+  }
+  
+  // Initial fetch
+  fetchStreamStatus();
+  
+  // Poll periodically
+  const intervalId = setInterval(fetchStreamStatus, pollInterval);
+  
+  // Return cleanup function
+  return () => clearInterval(intervalId);
+}
+```
+
+### Troubleshooting Common Issues
+
+**Q: Stream shows `circuit_open` state and won't reconnect**
+A: Check `last_error_context` for the permanent failure reason. Fix the underlying issue (e.g., correct URL, fix authentication) and either restart BirdNET-Go or wait for the circuit breaker cooldown period (30 seconds).
+
+**Q: `time_since_data_seconds` is increasing but stream shows healthy**
+A: This indicates the stream may be stalled. The health check will automatically trigger a restart when it exceeds the configured threshold (default: 60 seconds).
+
+**Q: Getting 404 when accessing `/streams/health/:url`**
+A: Ensure the URL is properly URL-encoded. Use `encodeURIComponent()` in JavaScript or equivalent in your language.
+
+**Q: Error history is empty even though stream has errors**
+A: Error history only stores errors that occurred after the FFmpeg error detection system was initialized (PR #1380). Older errors before this feature are not tracked.
