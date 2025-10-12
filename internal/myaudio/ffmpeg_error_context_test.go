@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExtractErrorContext_ConnectionTimeout(t *testing.T) {
@@ -15,42 +18,15 @@ Error opening input files: Connection timed out`
 
 	ctx := ExtractErrorContext(stderrOutput)
 
-	if ctx == nil {
-		t.Fatal("Expected error context, got nil")
-	}
-
-	if ctx.ErrorType != "connection_timeout" {
-		t.Errorf("Expected error type 'connection_timeout', got %s", ctx.ErrorType)
-	}
-
-	if ctx.TargetHost != "192.168.44.3" {
-		t.Errorf("Expected target host '192.168.44.3', got %s", ctx.TargetHost)
-	}
-
-	if ctx.TargetPort != 8554 {
-		t.Errorf("Expected target port 8554, got %d", ctx.TargetPort)
-	}
-
-	expectedTimeout := 15 * time.Second
-	if ctx.TimeoutDuration != expectedTimeout {
-		t.Errorf("Expected timeout %v, got %v", expectedTimeout, ctx.TimeoutDuration)
-	}
-
-	if !ctx.ShouldRestart() {
-		t.Error("Connection timeout should trigger restart")
-	}
-
-	if ctx.ShouldOpenCircuit() {
-		t.Error("Connection timeout should not open circuit breaker")
-	}
-
-	if !strings.Contains(ctx.UserFacingMsg, "Connection to 192.168.44.3:8554 timed out") {
-		t.Errorf("User-facing message missing expected content: %s", ctx.UserFacingMsg)
-	}
-
-	if len(ctx.TroubleShooting) == 0 {
-		t.Error("Expected troubleshooting steps, got none")
-	}
+	require.NotNil(t, ctx, "Expected error context, got nil")
+	assert.Equal(t, "connection_timeout", ctx.ErrorType)
+	assert.Equal(t, "192.168.44.3", ctx.TargetHost)
+	assert.Equal(t, 8554, ctx.TargetPort)
+	assert.Equal(t, 15*time.Second, ctx.TimeoutDuration)
+	assert.True(t, ctx.ShouldRestart(), "Connection timeout should trigger restart")
+	assert.False(t, ctx.ShouldOpenCircuit(), "Connection timeout should not open circuit breaker")
+	assert.Contains(t, ctx.UserFacingMsg, "Connection to 192.168.44.3:8554 timed out")
+	assert.NotEmpty(t, ctx.TroubleShooting, "Expected troubleshooting steps")
 }
 
 func TestExtractErrorContext_RTSP404(t *testing.T) {
@@ -61,33 +37,13 @@ Error opening input files: Server returned 404 Not Found`
 
 	ctx := ExtractErrorContext(stderrOutput)
 
-	if ctx == nil {
-		t.Fatal("Expected error context, got nil")
-	}
-
-	if ctx.ErrorType != "rtsp_404" {
-		t.Errorf("Expected error type 'rtsp_404', got %s", ctx.ErrorType)
-	}
-
-	if ctx.HTTPStatus != 404 {
-		t.Errorf("Expected HTTP status 404, got %d", ctx.HTTPStatus)
-	}
-
-	if ctx.RTSPMethod != "DESCRIBE" {
-		t.Errorf("Expected RTSP method 'DESCRIBE', got %s", ctx.RTSPMethod)
-	}
-
-	if !ctx.ShouldOpenCircuit() {
-		t.Error("RTSP 404 should open circuit breaker")
-	}
-
-	if ctx.ShouldRestart() {
-		t.Error("RTSP 404 should not trigger restart (permanent failure)")
-	}
-
-	if !strings.Contains(ctx.UserFacingMsg, "RTSP stream not found (404)") {
-		t.Errorf("User-facing message missing expected content: %s", ctx.UserFacingMsg)
-	}
+	require.NotNil(t, ctx, "Expected error context, got nil")
+	assert.Equal(t, "rtsp_404", ctx.ErrorType)
+	assert.Equal(t, 404, ctx.HTTPStatus)
+	assert.Equal(t, "DESCRIBE", ctx.RTSPMethod)
+	assert.True(t, ctx.ShouldOpenCircuit(), "RTSP 404 should open circuit breaker")
+	assert.False(t, ctx.ShouldRestart(), "RTSP 404 should not trigger restart (permanent failure)")
+	assert.Contains(t, ctx.UserFacingMsg, "RTSP stream not found (404)")
 }
 
 func TestExtractErrorContext_ConnectionRefused(t *testing.T) {
@@ -97,29 +53,12 @@ Error opening input file rtsp://localhost:8553/stream.`
 
 	ctx := ExtractErrorContext(stderrOutput)
 
-	if ctx == nil {
-		t.Fatal("Expected error context, got nil")
-	}
-
-	if ctx.ErrorType != "connection_refused" {
-		t.Errorf("Expected error type 'connection_refused', got %s", ctx.ErrorType)
-	}
-
-	if ctx.TargetHost != "localhost" {
-		t.Errorf("Expected target host 'localhost', got %s", ctx.TargetHost)
-	}
-
-	if ctx.TargetPort != 8553 {
-		t.Errorf("Expected target port 8553, got %d", ctx.TargetPort)
-	}
-
-	if !ctx.ShouldOpenCircuit() {
-		t.Error("Connection refused should open circuit breaker")
-	}
-
-	if ctx.ShouldRestart() {
-		t.Error("Connection refused should not trigger restart (permanent failure)")
-	}
+	require.NotNil(t, ctx, "Expected error context, got nil")
+	assert.Equal(t, "connection_refused", ctx.ErrorType)
+	assert.Equal(t, "localhost", ctx.TargetHost)
+	assert.Equal(t, 8553, ctx.TargetPort)
+	assert.True(t, ctx.ShouldOpenCircuit(), "Connection refused should open circuit breaker")
+	assert.False(t, ctx.ShouldRestart(), "Connection refused should not trigger restart (permanent failure)")
 }
 
 func TestExtractErrorContext_AuthFailure(t *testing.T) {
@@ -129,25 +68,11 @@ Error opening input file rtsp://camera.example.com/stream.`
 
 	ctx := ExtractErrorContext(stderrOutput)
 
-	if ctx == nil {
-		t.Fatal("Expected error context, got nil")
-	}
-
-	if ctx.ErrorType != "auth_failed" {
-		t.Errorf("Expected error type 'auth_failed', got %s", ctx.ErrorType)
-	}
-
-	if ctx.HTTPStatus != 401 {
-		t.Errorf("Expected HTTP status 401, got %d", ctx.HTTPStatus)
-	}
-
-	if !ctx.ShouldOpenCircuit() {
-		t.Error("Auth failure should open circuit breaker")
-	}
-
-	if !strings.Contains(ctx.UserFacingMsg, "Authentication required") {
-		t.Errorf("User-facing message missing expected content: %s", ctx.UserFacingMsg)
-	}
+	require.NotNil(t, ctx, "Expected error context, got nil")
+	assert.Equal(t, "auth_failed", ctx.ErrorType)
+	assert.Equal(t, 401, ctx.HTTPStatus)
+	assert.True(t, ctx.ShouldOpenCircuit(), "Auth failure should open circuit breaker")
+	assert.Contains(t, ctx.UserFacingMsg, "Authentication required")
 }
 
 func TestExtractErrorContext_NoError(t *testing.T) {
@@ -161,17 +86,13 @@ Output #0, s16le, to 'pipe:':
 
 	ctx := ExtractErrorContext(stderrOutput)
 
-	if ctx != nil {
-		t.Errorf("Expected no error context for normal output, got error type: %s", ctx.ErrorType)
-	}
+	assert.Nil(t, ctx, "Expected no error context for normal output")
 }
 
 func TestExtractErrorContext_EmptyString(t *testing.T) {
 	ctx := ExtractErrorContext("")
 
-	if ctx != nil {
-		t.Error("Expected nil for empty string")
-	}
+	assert.Nil(t, ctx, "Expected nil for empty string")
 }
 
 func TestFormatForConsole(t *testing.T) {
@@ -191,51 +112,39 @@ func TestFormatForConsole(t *testing.T) {
 	output := ctx.FormatForConsole()
 
 	// Test 1: User message is present
-	if !strings.Contains(output, "Test error message") {
-		t.Error("Console output missing user message")
-	}
+	assert.Contains(t, output, "Test error message", "Console output missing user message")
 
 	// Test 2: All troubleshooting steps are present
-	if !strings.Contains(output, "Step 1") || !strings.Contains(output, "Step 2") || !strings.Contains(output, "Step 3") {
-		t.Error("Console output missing one or more troubleshooting steps")
-	}
+	assert.Contains(t, output, "Step 1", "Console output missing Step 1")
+	assert.Contains(t, output, "Step 2", "Console output missing Step 2")
+	assert.Contains(t, output, "Step 3", "Console output missing Step 3")
 
 	// Test 3: Bullet points are used for formatting
 	bulletCount := strings.Count(output, "•")
-	if bulletCount != len(ctx.TroubleShooting) {
-		t.Errorf("Expected %d bullet points, got %d", len(ctx.TroubleShooting), bulletCount)
-	}
+	assert.Equal(t, len(ctx.TroubleShooting), bulletCount, "Bullet point count mismatch")
 
 	// Test 4: Troubleshooting section header is present
-	if !strings.Contains(output, "Troubleshooting steps:") {
-		t.Error("Console output missing 'Troubleshooting steps:' header")
-	}
+	assert.Contains(t, output, "Troubleshooting steps:", "Console output missing 'Troubleshooting steps:' header")
 
 	// Test 5: Output structure - message comes before troubleshooting
 	msgIndex := strings.Index(output, "Test error message")
 	troubleshootingIndex := strings.Index(output, "Troubleshooting steps:")
-	if msgIndex == -1 || troubleshootingIndex == -1 || msgIndex >= troubleshootingIndex {
-		t.Error("Console output structure incorrect: user message should come before troubleshooting")
-	}
+	assert.NotEqual(t, -1, msgIndex, "User message not found in output")
+	assert.NotEqual(t, -1, troubleshootingIndex, "Troubleshooting header not found in output")
+	assert.Less(t, msgIndex, troubleshootingIndex, "User message should come before troubleshooting")
 
 	// Test 6: Each troubleshooting step is on its own line with proper indentation
 	for _, step := range ctx.TroubleShooting {
 		expectedLine := fmt.Sprintf("   • %s", step)
-		if !strings.Contains(output, expectedLine) {
-			t.Errorf("Console output missing properly formatted step: %q", expectedLine)
-		}
+		assert.Contains(t, output, expectedLine, "Console output missing properly formatted step")
 	}
 
 	// Test 7: Emoji support (optional but nice to verify)
-	if !strings.Contains(output, "🔌") {
-		t.Error("Console output missing emoji from user message")
-	}
+	assert.Contains(t, output, "🔌", "Console output missing emoji from user message")
 
 	// Test 8: Newline formatting is preserved
 	lines := strings.Split(output, "\n")
-	if len(lines) < 4 { // At least: message, blank line, header, steps
-		t.Errorf("Expected at least 4 lines in output, got %d", len(lines))
-	}
+	assert.GreaterOrEqual(t, len(lines), 4, "Expected at least 4 lines in output")
 }
 
 // TestFormatForConsole_NoTroubleshooting tests formatting when no troubleshooting steps are provided
@@ -250,19 +159,13 @@ func TestFormatForConsole_NoTroubleshooting(t *testing.T) {
 	output := ctx.FormatForConsole()
 
 	// Should still contain the user message
-	if !strings.Contains(output, "An unknown error occurred") {
-		t.Error("Console output missing user message")
-	}
+	assert.Contains(t, output, "An unknown error occurred", "Console output missing user message")
 
 	// Should not contain troubleshooting header when there are no steps
-	if strings.Contains(output, "Troubleshooting steps:") {
-		t.Error("Console output should not have troubleshooting header when no steps provided")
-	}
+	assert.NotContains(t, output, "Troubleshooting steps:", "Console output should not have troubleshooting header when no steps provided")
 
 	// Should not contain bullet points
-	if strings.Contains(output, "•") {
-		t.Error("Console output should not have bullet points when no steps provided")
-	}
+	assert.NotContains(t, output, "•", "Console output should not have bullet points when no steps provided")
 }
 
 func TestErrorContext_ShouldOpenCircuit(t *testing.T) {
@@ -291,10 +194,7 @@ func TestErrorContext_ShouldOpenCircuit(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
 			ctx := &ErrorContext{ErrorType: tt.errorType}
-			if ctx.ShouldOpenCircuit() != tt.shouldOpen {
-				t.Errorf("%s: expected ShouldOpenCircuit() = %v, got %v",
-					tt.description, tt.shouldOpen, ctx.ShouldOpenCircuit())
-			}
+			assert.Equal(t, tt.shouldOpen, ctx.ShouldOpenCircuit(), tt.description)
 		})
 	}
 }
@@ -322,10 +222,7 @@ func TestErrorContext_ShouldRestart(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
 			ctx := &ErrorContext{ErrorType: tt.errorType}
-			if ctx.ShouldRestart() != tt.shouldRestart {
-				t.Errorf("%s: expected ShouldRestart() = %v, got %v",
-					tt.description, tt.shouldRestart, ctx.ShouldRestart())
-			}
+			assert.Equal(t, tt.shouldRestart, ctx.ShouldRestart(), tt.description)
 		})
 	}
 }
@@ -339,33 +236,13 @@ Error opening input files: Input/output error`
 
 	ctx := ExtractErrorContext(stderrOutput)
 
-	if ctx == nil {
-		t.Fatal("Expected error context, got nil")
-	}
-
-	if ctx.ErrorType != "dns_resolution_failed" {
-		t.Errorf("Expected error type 'dns_resolution_failed', got %s", ctx.ErrorType)
-	}
-
-	if ctx.TargetHost != "sfsdfds" {
-		t.Errorf("Expected target host 'sfsdfds', got %s", ctx.TargetHost)
-	}
-
-	if !ctx.ShouldOpenCircuit() {
-		t.Error("DNS resolution failure should open circuit breaker")
-	}
-
-	if ctx.ShouldRestart() {
-		t.Error("DNS resolution failure should not trigger restart (permanent failure)")
-	}
-
-	if !strings.Contains(ctx.UserFacingMsg, "DNS resolution failed") {
-		t.Errorf("User-facing message missing expected content: %s", ctx.UserFacingMsg)
-	}
-
-	if !strings.Contains(ctx.UserFacingMsg, "sfsdfds") {
-		t.Errorf("User-facing message should contain hostname 'sfsdfds': %s", ctx.UserFacingMsg)
-	}
+	require.NotNil(t, ctx, "Expected error context, got nil")
+	assert.Equal(t, "dns_resolution_failed", ctx.ErrorType)
+	assert.Equal(t, "sfsdfds", ctx.TargetHost)
+	assert.True(t, ctx.ShouldOpenCircuit(), "DNS resolution failure should open circuit breaker")
+	assert.False(t, ctx.ShouldRestart(), "DNS resolution failure should not trigger restart (permanent failure)")
+	assert.Contains(t, ctx.UserFacingMsg, "DNS resolution failed")
+	assert.Contains(t, ctx.UserFacingMsg, "sfsdfds", "User-facing message should contain hostname")
 }
 
 func TestExtractErrorContext_NetworkUnreachable(t *testing.T) {
@@ -375,29 +252,12 @@ Error opening input file rtsp://192.168.1.100:8554/stream.`
 
 	ctx := ExtractErrorContext(stderrOutput)
 
-	if ctx == nil {
-		t.Fatal("Expected error context, got nil")
-	}
-
-	if ctx.ErrorType != "network_unreachable" {
-		t.Errorf("Expected error type 'network_unreachable', got %s", ctx.ErrorType)
-	}
-
-	if ctx.TargetHost != "192.168.1.100" {
-		t.Errorf("Expected target host '192.168.1.100', got %s", ctx.TargetHost)
-	}
-
-	if ctx.ShouldOpenCircuit() {
-		t.Error("Network unreachable should not open circuit breaker (transient)")
-	}
-
-	if !ctx.ShouldRestart() {
-		t.Error("Network unreachable should trigger restart (transient failure)")
-	}
-
-	if !strings.Contains(ctx.UserFacingMsg, "Network unreachable") {
-		t.Errorf("User-facing message missing expected content: %s", ctx.UserFacingMsg)
-	}
+	require.NotNil(t, ctx, "Expected error context, got nil")
+	assert.Equal(t, "network_unreachable", ctx.ErrorType)
+	assert.Equal(t, "192.168.1.100", ctx.TargetHost)
+	assert.False(t, ctx.ShouldOpenCircuit(), "Network unreachable should not open circuit breaker (transient)")
+	assert.True(t, ctx.ShouldRestart(), "Network unreachable should trigger restart (transient failure)")
+	assert.Contains(t, ctx.UserFacingMsg, "Network unreachable")
 }
 
 func TestExtractErrorContext_OperationNotPermitted(t *testing.T) {
@@ -407,25 +267,11 @@ Error opening input file rtsp://camera.local:554/stream.`
 
 	ctx := ExtractErrorContext(stderrOutput)
 
-	if ctx == nil {
-		t.Fatal("Expected error context, got nil")
-	}
-
-	if ctx.ErrorType != "operation_not_permitted" {
-		t.Errorf("Expected error type 'operation_not_permitted', got %s", ctx.ErrorType)
-	}
-
-	if !ctx.ShouldOpenCircuit() {
-		t.Error("Operation not permitted should open circuit breaker")
-	}
-
-	if ctx.ShouldRestart() {
-		t.Error("Operation not permitted should not trigger restart (permanent failure)")
-	}
-
-	if !strings.Contains(ctx.UserFacingMsg, "Operation not permitted") {
-		t.Errorf("User-facing message missing expected content: %s", ctx.UserFacingMsg)
-	}
+	require.NotNil(t, ctx, "Expected error context, got nil")
+	assert.Equal(t, "operation_not_permitted", ctx.ErrorType)
+	assert.True(t, ctx.ShouldOpenCircuit(), "Operation not permitted should open circuit breaker")
+	assert.False(t, ctx.ShouldRestart(), "Operation not permitted should not trigger restart (permanent failure)")
+	assert.Contains(t, ctx.UserFacingMsg, "Operation not permitted")
 }
 
 func TestExtractErrorContext_SSLError(t *testing.T) {
@@ -436,25 +282,11 @@ Error opening input files: SSL error`
 
 	ctx := ExtractErrorContext(stderrOutput)
 
-	if ctx == nil {
-		t.Fatal("Expected error context, got nil")
-	}
-
-	if ctx.ErrorType != "ssl_error" {
-		t.Errorf("Expected error type 'ssl_error', got %s", ctx.ErrorType)
-	}
-
-	if !ctx.ShouldOpenCircuit() {
-		t.Error("SSL error should open circuit breaker")
-	}
-
-	if ctx.ShouldRestart() {
-		t.Error("SSL error should not trigger restart (permanent failure)")
-	}
-
-	if !strings.Contains(ctx.UserFacingMsg, "SSL/TLS") {
-		t.Errorf("User-facing message missing expected content: %s", ctx.UserFacingMsg)
-	}
+	require.NotNil(t, ctx, "Expected error context, got nil")
+	assert.Equal(t, "ssl_error", ctx.ErrorType)
+	assert.True(t, ctx.ShouldOpenCircuit(), "SSL error should open circuit breaker")
+	assert.False(t, ctx.ShouldRestart(), "SSL error should not trigger restart (permanent failure)")
+	assert.Contains(t, ctx.UserFacingMsg, "SSL/TLS")
 }
 
 func TestExtractErrorContext_RTSP503(t *testing.T) {
@@ -465,29 +297,12 @@ Error opening input files: Server returned 503 Service Unavailable`
 
 	ctx := ExtractErrorContext(stderrOutput)
 
-	if ctx == nil {
-		t.Fatal("Expected error context, got nil")
-	}
-
-	if ctx.ErrorType != "rtsp_503" {
-		t.Errorf("Expected error type 'rtsp_503', got %s", ctx.ErrorType)
-	}
-
-	if ctx.HTTPStatus != 503 {
-		t.Errorf("Expected HTTP status 503, got %d", ctx.HTTPStatus)
-	}
-
-	if ctx.ShouldOpenCircuit() {
-		t.Error("RTSP 503 should not open circuit breaker (transient)")
-	}
-
-	if !ctx.ShouldRestart() {
-		t.Error("RTSP 503 should trigger restart (transient failure)")
-	}
-
-	if !strings.Contains(ctx.UserFacingMsg, "service unavailable") {
-		t.Errorf("User-facing message missing expected content: %s", ctx.UserFacingMsg)
-	}
+	require.NotNil(t, ctx, "Expected error context, got nil")
+	assert.Equal(t, "rtsp_503", ctx.ErrorType)
+	assert.Equal(t, 503, ctx.HTTPStatus)
+	assert.False(t, ctx.ShouldOpenCircuit(), "RTSP 503 should not open circuit breaker (transient)")
+	assert.True(t, ctx.ShouldRestart(), "RTSP 503 should trigger restart (transient failure)")
+	assert.Contains(t, ctx.UserFacingMsg, "service unavailable")
 }
 
 // TestExtractErrorContext_OverlappingPatterns tests error precedence when multiple patterns match
@@ -568,14 +383,9 @@ Error opening input files: Input/output error`,
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := ExtractErrorContext(tt.stderrOutput)
 
-			if ctx == nil {
-				t.Fatal("Expected error context, got nil")
-			}
-
-			if ctx.ErrorType != tt.expectedType {
-				t.Errorf("Expected error type '%s', got '%s'\nExplanation: %s\nStderr: %s",
-					tt.expectedType, ctx.ErrorType, tt.explanation, tt.stderrOutput)
-			}
+			require.NotNil(t, ctx, "Expected error context, got nil")
+			assert.Equal(t, tt.expectedType, ctx.ErrorType,
+				"Explanation: %s\nStderr: %s", tt.explanation, tt.stderrOutput)
 		})
 	}
 }
@@ -590,17 +400,11 @@ Error opening input files: No route to host`
 
 	ctx := ExtractErrorContext(stderrOutput)
 
-	if ctx == nil {
-		t.Fatal("Expected error context, got nil")
-	}
-
-	if ctx.ErrorType != "no_route" {
-		t.Errorf("Expected 'no_route' for overlapping network errors, got %s\n"+
-			"Rationale: EHOSTUNREACH (no route) indicates a specific routing table problem,\n"+
-			"while ENETUNREACH (network unreachable) is a broader network configuration issue.\n"+
-			"The more specific error provides better diagnostic value.",
-			ctx.ErrorType)
-	}
+	require.NotNil(t, ctx, "Expected error context, got nil")
+	assert.Equal(t, "no_route", ctx.ErrorType,
+		"Rationale: EHOSTUNREACH (no route) indicates a specific routing table problem, "+
+			"while ENETUNREACH (network unreachable) is a broader network configuration issue. "+
+			"The more specific error provides better diagnostic value.")
 }
 
 func TestExtractErrorContext_ZeroTimeout(t *testing.T) {
@@ -612,23 +416,10 @@ Error opening input files: Connection timed out`
 
 	ctx := ExtractErrorContext(stderrOutput)
 
-	if ctx == nil {
-		t.Fatal("Expected error context, got nil")
-	}
-
-	if ctx.ErrorType != "connection_timeout" {
-		t.Errorf("Expected error type 'connection_timeout', got %s", ctx.ErrorType)
-	}
-
-	// Zero timeout should be explicitly handled
-	if ctx.TimeoutDuration != 0 {
-		t.Errorf("Expected timeout duration 0, got %v", ctx.TimeoutDuration)
-	}
-
-	// User message should mention TCP stack timeout
-	if !strings.Contains(ctx.UserFacingMsg, "TCP stack timeout") {
-		t.Errorf("Expected message to mention TCP stack timeout for zero timeout, got: %s", ctx.UserFacingMsg)
-	}
+	require.NotNil(t, ctx, "Expected error context, got nil")
+	assert.Equal(t, "connection_timeout", ctx.ErrorType)
+	assert.Equal(t, time.Duration(0), ctx.TimeoutDuration, "Zero timeout should be explicitly handled")
+	assert.Contains(t, ctx.UserFacingMsg, "TCP stack timeout", "User message should mention TCP stack timeout for zero timeout")
 }
 
 // TestExtractErrorContext_CredentialSanitization tests that credentials are properly stripped
@@ -687,20 +478,13 @@ Error opening input file rtsp://user:p@ssw0rd!@host.local:8554/live`,
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := ExtractErrorContext(tt.stderrOutput)
 
-			if ctx == nil {
-				t.Fatal("Expected error context, got nil")
-			}
-
-			if ctx.ErrorType != tt.expectedType {
-				t.Errorf("Expected error type '%s', got '%s'", tt.expectedType, ctx.ErrorType)
-			}
+			require.NotNil(t, ctx, "Expected error context, got nil")
+			assert.Equal(t, tt.expectedType, ctx.ErrorType)
 
 			// Check that RawFFmpegOutput is sanitized
-			if strings.Contains(ctx.RawFFmpegOutput, "password") ||
-				strings.Contains(ctx.RawFFmpegOutput, "secret") ||
-				strings.Contains(ctx.RawFFmpegOutput, "p@ssw0rd") {
-				t.Errorf("RawFFmpegOutput contains unsanitized credentials: %s", ctx.RawFFmpegOutput)
-			}
+			assert.NotContains(t, ctx.RawFFmpegOutput, "password", "RawFFmpegOutput contains unsanitized 'password'")
+			assert.NotContains(t, ctx.RawFFmpegOutput, "secret", "RawFFmpegOutput contains unsanitized 'secret'")
+			assert.NotContains(t, ctx.RawFFmpegOutput, "p@ssw0rd", "RawFFmpegOutput contains unsanitized 'p@ssw0rd'")
 
 			// Check that credentials should be replaced with ***
 			if !strings.Contains(ctx.RawFFmpegOutput, "***") {
@@ -709,17 +493,11 @@ Error opening input file rtsp://user:p@ssw0rd!@host.local:8554/live`,
 
 			// Check TargetHost is clean
 			if tt.checkHost {
-				if strings.Contains(ctx.TargetHost, tt.hostShouldNot) {
-					t.Errorf("TargetHost contains credentials: got '%s', should not contain '%s'\n"+
-						"Explanation: %s",
-						ctx.TargetHost, tt.hostShouldNot, tt.explanation)
-				}
+				assert.NotContains(t, ctx.TargetHost, tt.hostShouldNot,
+					"TargetHost contains credentials. Explanation: %s", tt.explanation)
+				assert.NotContains(t, ctx.TargetHost, "@", "TargetHost contains @ symbol (likely has userinfo)")
 
-				if strings.Contains(ctx.TargetHost, "@") {
-					t.Errorf("TargetHost contains @ symbol (likely has userinfo): %s", ctx.TargetHost)
-				}
-
-				if strings.Contains(ctx.TargetHost, ":") && tt.checkHost {
+				if strings.Contains(ctx.TargetHost, ":") {
 					// TargetHost should only be the hostname, not host:port
 					t.Logf("Warning: TargetHost may contain port: %s (TargetPort should be %d)",
 						ctx.TargetHost, ctx.TargetPort)
@@ -750,16 +528,14 @@ func TestExtractHostWithoutCredentials(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			result := extractHostWithoutCredentials(tt.input)
-			if result != tt.expected {
-				t.Errorf("extractHostWithoutCredentials(%q) = %q, want %q",
-					tt.input, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result,
+				"extractHostWithoutCredentials(%q) returned unexpected value", tt.input)
 
 			// Ensure no credentials leaked
-			if strings.Contains(result, "admin") || strings.Contains(result, "pass") ||
-				strings.Contains(result, "secret") || strings.Contains(result, "@") {
-				t.Errorf("Result contains credentials or @ symbol: %q", result)
-			}
+			assert.NotContains(t, result, "admin", "Result contains 'admin'")
+			assert.NotContains(t, result, "pass", "Result contains 'pass'")
+			assert.NotContains(t, result, "secret", "Result contains 'secret'")
+			assert.NotContains(t, result, "@", "Result contains @ symbol")
 		})
 	}
 }
@@ -838,27 +614,19 @@ func TestExtractHostAndPortFromConnectionURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			host, port, ok := extractHostAndPortFromConnectionURL(tt.connectionURL)
 
-			if ok != tt.shouldSucceed {
-				t.Errorf("Expected success=%v, got %v", tt.shouldSucceed, ok)
-				return
-			}
+			assert.Equal(t, tt.shouldSucceed, ok, "Success flag mismatch")
 
 			if !tt.shouldSucceed {
 				return // Expected to fail, and it did
 			}
 
-			if host != tt.expectedHost {
-				t.Errorf("Expected host %q, got %q", tt.expectedHost, host)
-			}
-
-			if port != tt.expectedPort {
-				t.Errorf("Expected port %d, got %d", tt.expectedPort, port)
-			}
+			assert.Equal(t, tt.expectedHost, host, "Host mismatch")
+			assert.Equal(t, tt.expectedPort, port, "Port mismatch")
 
 			// Security check: ensure no credentials leaked
-			if strings.Contains(host, "user") || strings.Contains(host, "pass") || strings.Contains(host, "@") {
-				t.Errorf("Host contains credentials or @ symbol: %q", host)
-			}
+			assert.NotContains(t, host, "user", "Host contains 'user'")
+			assert.NotContains(t, host, "pass", "Host contains 'pass'")
+			assert.NotContains(t, host, "@", "Host contains @ symbol")
 		})
 	}
 }
@@ -870,22 +638,10 @@ Error opening input files: Connection refused`
 
 	ctx := ExtractErrorContext(stderrOutput)
 
-	if ctx == nil {
-		t.Fatal("Expected error context, got nil")
-	}
-
-	if ctx.ErrorType != "connection_refused" {
-		t.Errorf("Expected error type 'connection_refused', got %s", ctx.ErrorType)
-	}
-
-	// Should extract IPv6 address without brackets
-	if ctx.TargetHost != "2001:db8::1" {
-		t.Errorf("Expected host '2001:db8::1', got '%s'", ctx.TargetHost)
-	}
-
-	if ctx.TargetPort != 8554 {
-		t.Errorf("Expected port 8554, got %d", ctx.TargetPort)
-	}
+	require.NotNil(t, ctx, "Expected error context, got nil")
+	assert.Equal(t, "connection_refused", ctx.ErrorType)
+	assert.Equal(t, "2001:db8::1", ctx.TargetHost, "Should extract IPv6 address without brackets")
+	assert.Equal(t, 8554, ctx.TargetPort)
 }
 
 // TestConnectionErrors_WithCredentials tests that credentials don't leak in connection errors
@@ -925,27 +681,18 @@ Error opening input files: Operation not permitted`,
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := ExtractErrorContext(tt.stderrOutput)
 
-			if ctx == nil {
-				t.Fatal("Expected error context, got nil")
-			}
-
-			if ctx.ErrorType != tt.errorType {
-				t.Errorf("Expected error type '%s', got '%s'", tt.errorType, ctx.ErrorType)
-			}
+			require.NotNil(t, ctx, "Expected error context, got nil")
+			assert.Equal(t, tt.errorType, ctx.ErrorType)
 
 			// Verify no credentials in TargetHost
-			if strings.Contains(ctx.TargetHost, "admin") ||
-				strings.Contains(ctx.TargetHost, "user") ||
-				strings.Contains(ctx.TargetHost, "pass") ||
-				strings.Contains(ctx.TargetHost, "secret") ||
-				strings.Contains(ctx.TargetHost, "@") {
-				t.Errorf("TargetHost contains credentials: %s", ctx.TargetHost)
-			}
+			assert.NotContains(t, ctx.TargetHost, "admin", "TargetHost contains 'admin'")
+			assert.NotContains(t, ctx.TargetHost, "user", "TargetHost contains 'user'")
+			assert.NotContains(t, ctx.TargetHost, "pass", "TargetHost contains 'pass'")
+			assert.NotContains(t, ctx.TargetHost, "secret", "TargetHost contains 'secret'")
+			assert.NotContains(t, ctx.TargetHost, "@", "TargetHost contains @ symbol")
 
 			// Verify port was extracted
-			if ctx.TargetPort == 0 {
-				t.Error("TargetPort should be extracted and non-zero")
-			}
+			assert.NotZero(t, ctx.TargetPort, "TargetPort should be extracted and non-zero")
 		})
 	}
 }
@@ -959,29 +706,18 @@ Error opening input files: Input/output error`
 
 	ctx := ExtractErrorContext(stderrOutput)
 
-	if ctx == nil {
-		t.Fatal("Expected error context, got nil")
-	}
-
-	if ctx.ErrorType != "dns_resolution_failed" {
-		t.Errorf("Expected error type 'dns_resolution_failed', got %s", ctx.ErrorType)
-	}
+	require.NotNil(t, ctx, "Expected error context, got nil")
+	assert.Equal(t, "dns_resolution_failed", ctx.ErrorType)
 
 	// CRITICAL: TargetHost must NOT contain credentials
-	if strings.Contains(ctx.TargetHost, "user") ||
-		strings.Contains(ctx.TargetHost, "pass") ||
-		strings.Contains(ctx.TargetHost, "@") ||
-		strings.Contains(ctx.TargetHost, "tcp://") {
-		t.Errorf("SECURITY ISSUE: TargetHost contains credentials or URL scheme: '%s'", ctx.TargetHost)
-	}
+	assert.NotContains(t, ctx.TargetHost, "user", "SECURITY ISSUE: TargetHost contains 'user'")
+	assert.NotContains(t, ctx.TargetHost, "pass", "SECURITY ISSUE: TargetHost contains 'pass'")
+	assert.NotContains(t, ctx.TargetHost, "@", "SECURITY ISSUE: TargetHost contains @ symbol")
+	assert.NotContains(t, ctx.TargetHost, "tcp://", "SECURITY ISSUE: TargetHost contains URL scheme")
 
 	// Should extract just the hostname
-	if ctx.TargetHost != "bad.hostname.local" {
-		t.Errorf("Expected TargetHost 'bad.hostname.local', got '%s'", ctx.TargetHost)
-	}
+	assert.Equal(t, "bad.hostname.local", ctx.TargetHost)
 
 	// Should also extract the port
-	if ctx.TargetPort != 8554 {
-		t.Errorf("Expected TargetPort 8554, got %d", ctx.TargetPort)
-	}
+	assert.Equal(t, 8554, ctx.TargetPort)
 }
