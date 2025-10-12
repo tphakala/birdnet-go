@@ -763,3 +763,189 @@ func TestExtractHostWithoutCredentials(t *testing.T) {
 		})
 	}
 }
+
+// TestExtractHostAndPortFromConnectionURL tests the new URL-based extraction
+func TestExtractHostAndPortFromConnectionURL(t *testing.T) {
+	tests := []struct {
+		name         string
+		connectionURL string
+		expectedHost string
+		expectedPort int
+		shouldSucceed bool
+	}{
+		{
+			name:          "Simple IPv4",
+			connectionURL: "tcp://192.168.1.1:8554",
+			expectedHost:  "192.168.1.1",
+			expectedPort:  8554,
+			shouldSucceed: true,
+		},
+		{
+			name:          "IPv6 with brackets",
+			connectionURL: "tcp://[2001:db8::1]:8554",
+			expectedHost:  "2001:db8::1",
+			expectedPort:  8554,
+			shouldSucceed: true,
+		},
+		{
+			name:          "IPv6 localhost",
+			connectionURL: "tcp://[::1]:554",
+			expectedHost:  "::1",
+			expectedPort:  554,
+			shouldSucceed: true,
+		},
+		{
+			name:          "With query parameters",
+			connectionURL: "tcp://camera.local:8554?timeout=10000000",
+			expectedHost:  "camera.local",
+			expectedPort:  8554,
+			shouldSucceed: true,
+		},
+		{
+			name:          "With credentials (should strip)",
+			connectionURL: "tcp://user:pass@camera.local:8554",
+			expectedHost:  "camera.local",
+			expectedPort:  8554,
+			shouldSucceed: true,
+		},
+		{
+			name:          "IPv6 with credentials",
+			connectionURL: "tcp://user:pass@[2001:db8::1]:8554?timeout=0",
+			expectedHost:  "2001:db8::1",
+			expectedPort:  8554,
+			shouldSucceed: true,
+		},
+		{
+			name:          "Hostname",
+			connectionURL: "tcp://camera.example.com:554",
+			expectedHost:  "camera.example.com",
+			expectedPort:  554,
+			shouldSucceed: true,
+		},
+		{
+			name:          "Invalid - no port",
+			connectionURL: "tcp://camera.local",
+			shouldSucceed: false,
+		},
+		{
+			name:          "Invalid - malformed",
+			connectionURL: "not a url",
+			shouldSucceed: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			host, port, ok := extractHostAndPortFromConnectionURL(tt.connectionURL)
+
+			if ok != tt.shouldSucceed {
+				t.Errorf("Expected success=%v, got %v", tt.shouldSucceed, ok)
+				return
+			}
+
+			if !tt.shouldSucceed {
+				return // Expected to fail, and it did
+			}
+
+			if host != tt.expectedHost {
+				t.Errorf("Expected host %q, got %q", tt.expectedHost, host)
+			}
+
+			if port != tt.expectedPort {
+				t.Errorf("Expected port %d, got %d", tt.expectedPort, port)
+			}
+
+			// Security check: ensure no credentials leaked
+			if strings.Contains(host, "user") || strings.Contains(host, "pass") || strings.Contains(host, "@") {
+				t.Errorf("Host contains credentials or @ symbol: %q", host)
+			}
+		})
+	}
+}
+
+// TestConnectionRefused_IPv6 tests that IPv6 addresses are handled correctly
+func TestConnectionRefused_IPv6(t *testing.T) {
+	stderrOutput := `[tcp @ 0x...] Connection to tcp://[2001:db8::1]:8554?timeout=0 failed: Connection refused
+Error opening input files: Connection refused`
+
+	ctx := ExtractErrorContext(stderrOutput)
+
+	if ctx == nil {
+		t.Fatal("Expected error context, got nil")
+	}
+
+	if ctx.ErrorType != "connection_refused" {
+		t.Errorf("Expected error type 'connection_refused', got %s", ctx.ErrorType)
+	}
+
+	// Should extract IPv6 address without brackets
+	if ctx.TargetHost != "2001:db8::1" {
+		t.Errorf("Expected host '2001:db8::1', got '%s'", ctx.TargetHost)
+	}
+
+	if ctx.TargetPort != 8554 {
+		t.Errorf("Expected port 8554, got %d", ctx.TargetPort)
+	}
+}
+
+// TestConnectionErrors_WithCredentials tests that credentials don't leak in connection errors
+func TestConnectionErrors_WithCredentials(t *testing.T) {
+	tests := []struct {
+		name         string
+		stderrOutput string
+		errorType    string
+	}{
+		{
+			name: "Connection refused with credentials",
+			stderrOutput: `[tcp @ 0x...] Connection to tcp://admin:secret@camera.local:8554 failed: Connection refused
+Error opening input files: Connection refused`,
+			errorType: "connection_refused",
+		},
+		{
+			name: "No route with credentials",
+			stderrOutput: `[tcp @ 0x...] Connection to tcp://user:pass@192.168.1.1:554 failed: No route to host
+Error opening input files: No route to host`,
+			errorType: "no_route",
+		},
+		{
+			name: "Network unreachable with credentials",
+			stderrOutput: `[tcp @ 0x...] Connection to tcp://admin:p@ssw0rd@host.local:8554 failed: Network unreachable
+Error opening input files: Network unreachable`,
+			errorType: "network_unreachable",
+		},
+		{
+			name: "Operation not permitted with credentials",
+			stderrOutput: `[tcp @ 0x...] Connection to tcp://user:pass@[::1]:554 failed: Operation not permitted
+Error opening input files: Operation not permitted`,
+			errorType: "operation_not_permitted",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := ExtractErrorContext(tt.stderrOutput)
+
+			if ctx == nil {
+				t.Fatal("Expected error context, got nil")
+			}
+
+			if ctx.ErrorType != tt.errorType {
+				t.Errorf("Expected error type '%s', got '%s'", tt.errorType, ctx.ErrorType)
+			}
+
+			// Verify no credentials in TargetHost
+			if strings.Contains(ctx.TargetHost, "admin") ||
+				strings.Contains(ctx.TargetHost, "user") ||
+				strings.Contains(ctx.TargetHost, "pass") ||
+				strings.Contains(ctx.TargetHost, "secret") ||
+				strings.Contains(ctx.TargetHost, "@") {
+				t.Errorf("TargetHost contains credentials: %s", ctx.TargetHost)
+			}
+
+			// Verify port was extracted
+			if ctx.TargetPort == 0 {
+				t.Error("TargetPort should be extracted and non-zero")
+			}
+		})
+	}
+}

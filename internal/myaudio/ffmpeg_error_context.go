@@ -20,7 +20,9 @@ var (
 	reRTSPMethod404      = regexp.MustCompile(`method (\w+) failed: 404`)
 	reRTSPMethod401      = regexp.MustCompile(`method (\w+) failed: 401`)
 	reErrorOpeningInput  = regexp.MustCompile(`Error opening input file (rtsps?://\S+)`)
-	reConnectionToTCP    = regexp.MustCompile(`Connection to tcp://([^:?]+):(\d+)`)
+	// Capture full TCP URL including credentials, IPv6, query params
+	// Pattern: "Connection to tcp://..." - captures everything after "Connection to "
+	reConnectionToTCP    = regexp.MustCompile(`Connection to (tcp://\S+)`)
 	reRTSPStatus         = regexp.MustCompile(`Server returned (\d+)`)
 	reSSLError           = regexp.MustCompile(`SSL.*error|TLS.*error|certificate.*error`)
 )
@@ -72,6 +74,38 @@ func extractHostWithoutCredentials(rawURL string) string {
 
 	// Use url.Hostname() which automatically strips port and userinfo
 	return parsed.Hostname()
+}
+
+// extractHostAndPortFromConnectionURL extracts sanitized host and port from a connection URL.
+// This handles URLs like "tcp://host:port?timeout=..." properly using URL parsing.
+//
+// SECURITY: Uses url.Parse() to correctly handle IPv6, credentials, and query parameters.
+// The old regex `tcp://([^:?]+):(\d+)` would fail on:
+//   - IPv6: tcp://[::1]:8554 (stops at first colon)
+//   - Credentials: tcp://user:pass@host:8554 (extracts "user" as host)
+//
+// Returns: (hostname, port, success)
+func extractHostAndPortFromConnectionURL(connectionURL string) (hostname string, port int, ok bool) {
+	parsed, err := url.Parse(connectionURL)
+	if err != nil {
+		return "", 0, false
+	}
+
+	// Extract hostname (strips userinfo and port automatically)
+	hostname = parsed.Hostname()
+
+	// Extract port
+	portStr := parsed.Port()
+	if portStr == "" {
+		return hostname, 0, false
+	}
+
+	port, err = strconv.Atoi(portStr)
+	if err != nil {
+		return hostname, 0, false
+	}
+
+	return hostname, port, true
 }
 
 // ExtractErrorContext analyzes FFmpeg stderr and extracts context.
@@ -327,9 +361,10 @@ func (ctx *ErrorContext) buildRTSP404Message() {
 // extractConnectionRefused parses connection refused details
 func (ctx *ErrorContext) extractConnectionRefused(output string) {
 	// Pattern: "Connection to tcp://localhost:8553?timeout=0 failed"
-	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 3 {
-		ctx.TargetHost = matches[1]
-		if port, err := strconv.Atoi(matches[2]); err == nil {
+	// Use URL parsing to handle IPv6, credentials, and query parameters correctly
+	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 2 {
+		if host, port, ok := extractHostAndPortFromConnectionURL(matches[1]); ok {
+			ctx.TargetHost = host
 			ctx.TargetPort = port
 		}
 	}
@@ -400,10 +435,10 @@ func (ctx *ErrorContext) buildAuthForbiddenMessage() {
 
 // extractNoRoute parses no route to host details
 func (ctx *ErrorContext) extractNoRoute(output string) {
-	// Similar pattern to connection refused
-	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 3 {
-		ctx.TargetHost = matches[1]
-		if port, err := strconv.Atoi(matches[2]); err == nil {
+	// Use URL parsing to handle IPv6, credentials, and query parameters correctly
+	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 2 {
+		if host, port, ok := extractHostAndPortFromConnectionURL(matches[1]); ok {
+			ctx.TargetHost = host
 			ctx.TargetPort = port
 		}
 	}
@@ -430,10 +465,10 @@ func (ctx *ErrorContext) buildNoRouteMessage() {
 
 // extractNetworkUnreachable parses network unreachable details
 func (ctx *ErrorContext) extractNetworkUnreachable(output string) {
-	// Similar pattern to connection refused
-	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 3 {
-		ctx.TargetHost = matches[1]
-		if port, err := strconv.Atoi(matches[2]); err == nil {
+	// Use URL parsing to handle IPv6, credentials, and query parameters correctly
+	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 2 {
+		if host, port, ok := extractHostAndPortFromConnectionURL(matches[1]); ok {
+			ctx.TargetHost = host
 			ctx.TargetPort = port
 		}
 	}
@@ -461,10 +496,10 @@ func (ctx *ErrorContext) buildNetworkUnreachableMessage() {
 
 // extractOperationNotPermitted parses operation not permitted details
 func (ctx *ErrorContext) extractOperationNotPermitted(output string) {
-	// Try to extract target info
-	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 3 {
-		ctx.TargetHost = matches[1]
-		if port, err := strconv.Atoi(matches[2]); err == nil {
+	// Use URL parsing to handle IPv6, credentials, and query parameters correctly
+	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 2 {
+		if host, port, ok := extractHostAndPortFromConnectionURL(matches[1]); ok {
+			ctx.TargetHost = host
 			ctx.TargetPort = port
 		}
 	}
