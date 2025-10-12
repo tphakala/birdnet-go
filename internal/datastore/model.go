@@ -158,3 +158,21 @@ type DetectionRecord struct {
 	Source         string    `json:"source,omitempty"`
 	TimeOfDay      string    `json:"timeOfDay,omitempty"`
 }
+
+// DynamicThreshold represents a persisted dynamic threshold for a species
+// This allows thresholds to survive application restarts, preventing the issue where
+// users experience a sudden drop in detections after restart when learned thresholds are lost.
+type DynamicThreshold struct {
+	ID            uint      `gorm:"primaryKey"`
+	SpeciesName   string    `gorm:"uniqueIndex;not null;size:200"` // Common name (lowercase)
+	Level         int       `gorm:"not null;default:0"`            // Adjustment level (0-3)
+	CurrentValue  float64   `gorm:"not null"`                      // Current threshold value
+	BaseThreshold float64   `gorm:"not null"`                      // Original base threshold for reference
+	HighConfCount int       `gorm:"not null;default:0"`            // Count of high-confidence detections
+	ValidHours    int       `gorm:"not null"`                      // Hours until expiry
+	ExpiresAt     time.Time `gorm:"index;not null"`                // When this threshold expires
+	LastTriggered time.Time `gorm:"index;not null"`                // Last time threshold was triggered
+	FirstCreated  time.Time `gorm:"not null"`                      // When first created
+	UpdatedAt     time.Time `gorm:"not null"`                      // Last update time
+	TriggerCount  int       `gorm:"not null;default:0"`            // Total number of times triggered (for statistics)
+}

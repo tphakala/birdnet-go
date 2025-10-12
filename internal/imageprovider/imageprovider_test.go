@@ -234,6 +234,25 @@ func (m *mockStore) SearchDetections(filters *datastore.SearchFilters) ([]datast
 	return nil, 0, nil
 }
 
+// Dynamic threshold methods
+func (m *mockStore) SaveDynamicThreshold(threshold *datastore.DynamicThreshold) error { return nil }
+func (m *mockStore) GetDynamicThreshold(speciesName string) (*datastore.DynamicThreshold, error) {
+	return nil, fmt.Errorf("not found")
+}
+func (m *mockStore) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicThreshold, error) {
+	return []datastore.DynamicThreshold{}, nil
+}
+func (m *mockStore) DeleteDynamicThreshold(speciesName string) error { return nil }
+func (m *mockStore) DeleteExpiredDynamicThresholds(before time.Time) (int64, error) {
+	return 0, nil
+}
+func (m *mockStore) UpdateDynamicThresholdExpiry(speciesName string, expiresAt time.Time) error {
+	return nil
+}
+func (m *mockStore) BatchSaveDynamicThresholds(thresholds []datastore.DynamicThreshold) error {
+	return nil
+}
+
 // GetHourlyDistribution implements the datastore.Interface GetHourlyDistribution method
 func (m *mockStore) GetHourlyDistribution(ctx context.Context, startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
 	// Default implementation returns empty array for this mock

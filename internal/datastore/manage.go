@@ -461,6 +461,7 @@ func migrateTables(db *gorm.DB, dbType string, lgr *slog.Logger) (int, error) {
 		{&HourlyWeather{}, "hourly_weather"},
 		{&NoteLock{}, "note_locks"},
 		{&ImageCache{}, "image_caches"},
+		{&DynamicThreshold{}, "dynamic_thresholds"},
 	}
 	
 	lgr.Info("Starting table migrations",

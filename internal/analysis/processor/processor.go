@@ -62,6 +62,8 @@ type Processor struct {
 	controlChan         chan string
 	JobQueue            *jobqueue.JobQueue // Queue for managing job retries
 	workerCancel        context.CancelFunc // Function to cancel worker goroutines
+	thresholdsCtx       context.Context    // Context for threshold persistence/cleanup goroutines
+	thresholdsCancel    context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
@@ -232,6 +234,23 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 
 	// Start the job queue
 	p.JobQueue.Start()
+
+	// Load persisted dynamic thresholds from database if enabled
+	if settings.Realtime.DynamicThreshold.Enabled {
+		if err := p.loadDynamicThresholdsFromDB(); err != nil {
+			GetLogger().Debug("Starting with fresh dynamic thresholds",
+				"reason", err.Error(),
+				"operation", "load_dynamic_thresholds")
+			// This is normal on first run or if table doesn't exist yet
+			// System will start with fixed thresholds and learn from detections
+		}
+
+		// Start periodic persistence goroutine
+		p.startThresholdPersistence()
+
+		// Start periodic cleanup goroutine
+		p.startThresholdCleanup()
+	}
 
 	return p
 }
@@ -1251,6 +1270,36 @@ func (p *Processor) getDisplayNameForSource(sourceID string) string {
 
 // Shutdown gracefully stops all processor components
 func (p *Processor) Shutdown() error {
+	// Stop threshold persistence and cleanup goroutines first
+	if p.thresholdsCancel != nil {
+		p.thresholdsCancel()
+	}
+
+	// Flush dynamic thresholds to database before shutting down with timeout
+	if p.Settings.Realtime.DynamicThreshold.Enabled {
+		// Use context-based timeout for cleaner cancellation handling
+		ctx, cancel := context.WithTimeout(context.Background(), DefaultFlushTimeout)
+		defer cancel()
+
+		done := make(chan error, 1)
+		go func() {
+			done <- p.FlushDynamicThresholds()
+		}()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				GetLogger().Warn("Failed to flush dynamic thresholds during shutdown",
+					"error", err,
+					"operation", "shutdown_flush_thresholds")
+			}
+		case <-ctx.Done():
+			GetLogger().Warn("Timeout flushing dynamic thresholds during shutdown",
+				"timeout_seconds", int(DefaultFlushTimeout.Seconds()),
+				"operation", "shutdown_flush_thresholds")
+		}
+	}
+
 	// Cancel all worker goroutines
 	if p.workerCancel != nil {
 		p.workerCancel()

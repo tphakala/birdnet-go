@@ -92,6 +92,14 @@ type Interface interface {
 	GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]NewSpeciesData, error)
 	// Search functionality
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
+	// Dynamic Threshold methods
+	SaveDynamicThreshold(threshold *DynamicThreshold) error
+	GetDynamicThreshold(speciesName string) (*DynamicThreshold, error)
+	GetAllDynamicThresholds(limit ...int) ([]DynamicThreshold, error) // Optional limit parameter
+	DeleteDynamicThreshold(speciesName string) error
+	DeleteExpiredDynamicThresholds(before time.Time) (int64, error) // Returns count deleted
+	UpdateDynamicThresholdExpiry(speciesName string, expiresAt time.Time) error
+	BatchSaveDynamicThresholds(thresholds []DynamicThreshold) error
 }
 
 // DataStore implements StoreInterface using a GORM database.

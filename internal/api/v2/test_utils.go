@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/mock"
@@ -306,6 +307,42 @@ func (m *MockDataStore) GetHourlyDistribution(ctx context.Context, startDate, en
 func (m *MockDataStore) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	args := m.Called(filters)
 	return safeSlice[datastore.DetectionRecord](args, 0), args.Int(1), args.Error(2)
+}
+
+// Dynamic threshold methods
+func (m *MockDataStore) SaveDynamicThreshold(threshold *datastore.DynamicThreshold) error {
+	args := m.Called(threshold)
+	return args.Error(0)
+}
+func (m *MockDataStore) GetDynamicThreshold(speciesName string) (*datastore.DynamicThreshold, error) {
+	args := m.Called(speciesName)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*datastore.DynamicThreshold), args.Error(1)
+}
+func (m *MockDataStore) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicThreshold, error) {
+	args := m.Called(limit)
+	return safeSlice[datastore.DynamicThreshold](args, 0), args.Error(1)
+}
+func (m *MockDataStore) DeleteDynamicThreshold(speciesName string) error {
+	args := m.Called(speciesName)
+	return args.Error(0)
+}
+func (m *MockDataStore) DeleteExpiredDynamicThresholds(before time.Time) (int64, error) {
+	args := m.Called(before)
+	if args.Get(0) == nil {
+		return 0, args.Error(1)
+	}
+	return args.Get(0).(int64), args.Error(1)
+}
+func (m *MockDataStore) UpdateDynamicThresholdExpiry(speciesName string, expiresAt time.Time) error {
+	args := m.Called(speciesName, expiresAt)
+	return args.Error(0)
+}
+func (m *MockDataStore) BatchSaveDynamicThresholds(thresholds []datastore.DynamicThreshold) error {
+	args := m.Called(thresholds)
+	return args.Error(0)
 }
 
 // GetNewSpeciesDetections implements the datastore.Interface GetNewSpeciesDetections method
@@ -615,6 +652,42 @@ func (m *MockDataStoreV2) GetDetectionTrends(ctx context.Context, period string,
 func (m *MockDataStoreV2) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
 	args := m.Called(filters)
 	return safeSlice[datastore.DetectionRecord](args, 0), args.Int(1), args.Error(2)
+}
+
+// Dynamic threshold methods for MockDataStoreV2
+func (m *MockDataStoreV2) SaveDynamicThreshold(threshold *datastore.DynamicThreshold) error {
+	args := m.Called(threshold)
+	return args.Error(0)
+}
+func (m *MockDataStoreV2) GetDynamicThreshold(speciesName string) (*datastore.DynamicThreshold, error) {
+	args := m.Called(speciesName)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*datastore.DynamicThreshold), args.Error(1)
+}
+func (m *MockDataStoreV2) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicThreshold, error) {
+	args := m.Called(limit)
+	return safeSlice[datastore.DynamicThreshold](args, 0), args.Error(1)
+}
+func (m *MockDataStoreV2) DeleteDynamicThreshold(speciesName string) error {
+	args := m.Called(speciesName)
+	return args.Error(0)
+}
+func (m *MockDataStoreV2) DeleteExpiredDynamicThresholds(before time.Time) (int64, error) {
+	args := m.Called(before)
+	if args.Get(0) == nil {
+		return 0, args.Error(1)
+	}
+	return args.Get(0).(int64), args.Error(1)
+}
+func (m *MockDataStoreV2) UpdateDynamicThresholdExpiry(speciesName string, expiresAt time.Time) error {
+	args := m.Called(speciesName, expiresAt)
+	return args.Error(0)
+}
+func (m *MockDataStoreV2) BatchSaveDynamicThresholds(thresholds []datastore.DynamicThreshold) error {
+	args := m.Called(thresholds)
+	return args.Error(0)
 }
 
 // MockImageProvider is a mock implementation of imageprovider.ImageProvider interface
