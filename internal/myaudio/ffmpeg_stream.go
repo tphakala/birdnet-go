@@ -628,7 +628,7 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 			// Check circuit breaker and wait only for remaining cooldown
 			if remaining, open := s.circuitCooldownRemaining(); open {
 				// Transition to circuit breaker state before waiting
-				s.transitionState(StateCircuitOpen, fmt.Sprintf("circuit breaker cooldown: %v remaining", remaining))
+				s.transitionState(StateCircuitOpen, fmt.Sprintf("circuit breaker cooldown: %s remaining", FormatDuration(remaining)))
 				// Wait only the remaining cooldown before next attempt
 				select {
 				case <-time.After(remaining):
@@ -695,7 +695,7 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 					"runtime_seconds", runtime.Seconds(),
 					"component", "ffmpeg-stream",
 					"operation", "process_ended")
-				log.Printf("⚠️ FFmpeg process ended for %s after %v: %v", privacy.SanitizeRTSPUrl(s.source.SafeString), runtime, sanitizedError)
+				log.Printf("⚠️ FFmpeg process ended for %s after %s: %v", privacy.SanitizeRTSPUrl(s.source.SafeString), FormatDuration(runtime), sanitizedError)
 
 				// Reset restart count for silence timeouts as they're expected
 				if isSilenceTimeout {
@@ -720,7 +720,7 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 					"runtime_seconds", runtime.Seconds(),
 					"component", "ffmpeg-stream",
 					"operation", "process_ended")
-				log.Printf("✅ FFmpeg process ended normally for %s after %v", privacy.SanitizeRTSPUrl(s.source.SafeString), runtime)
+				log.Printf("✅ FFmpeg process ended normally for %s after %s", privacy.SanitizeRTSPUrl(s.source.SafeString), FormatDuration(runtime))
 				// Reset failure count on successful run
 				s.resetFailures()
 			}
@@ -1078,8 +1078,8 @@ func (s *FFmpegStream) processAudio() error {
 					"process_runtime_seconds", time.Since(startTime).Seconds(),
 					"component", "ffmpeg-stream",
 					"operation", "silence_detected")
-				log.Printf("⚠️ No data from %s (last data: %s, timeout: %v), restarting stream",
-					privacy.SanitizeRTSPUrl(s.source.SafeString), lastDataDesc, effectiveAge)
+				log.Printf("⚠️ No data from %s (last data: %s, timeout: %s), restarting stream",
+					privacy.SanitizeRTSPUrl(s.source.SafeString), lastDataDesc, FormatDuration(effectiveAge))
 				s.cleanupProcess()
 				return errors.Newf("stream stopped producing data for %v seconds", silenceTimeout.Seconds()).
 					Category(errors.CategoryRTSP).
@@ -1470,7 +1470,7 @@ func (s *FFmpegStream) handleRestartBackoff() {
 	}
 
 	// STATE TRANSITION: * → backoff (entering backoff period before restart)
-	s.transitionState(StateBackoff, fmt.Sprintf("restart #%d: waiting %v (base backoff: %v)", currentRestartCount, wait, backoff))
+	s.transitionState(StateBackoff, fmt.Sprintf("restart #%d: waiting %s (base backoff: %s)", currentRestartCount, FormatDuration(wait), FormatDuration(backoff)))
 
 	if conf.Setting().Debug {
 		streamLogger.Debug("applying restart backoff",
@@ -1491,7 +1491,7 @@ func (s *FFmpegStream) handleRestartBackoff() {
 		"restart_count", currentRestartCount,
 		"component", "ffmpeg-stream",
 		"operation", "restart_wait")
-	log.Printf("⏳ Waiting %v before restart attempt #%d for %s", wait, currentRestartCount, privacy.SanitizeRTSPUrl(s.source.SafeString))
+	log.Printf("⏳ Waiting %s before restart attempt #%d for %s", FormatDuration(wait), currentRestartCount, privacy.SanitizeRTSPUrl(s.source.SafeString))
 
 	select {
 	case <-time.After(wait):
@@ -1846,8 +1846,8 @@ func (s *FFmpegStream) isCircuitOpen() bool {
 		streamLogger.Warn("circuit breaker is open",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 			"consecutive_failures", s.consecutiveFailures,
-			"cooldown_remaining", remaining.Round(time.Second).String(),
-			"cooldown_total", circuitBreakerCooldown.String(),
+			"cooldown_remaining", FormatDuration(remaining),
+			"cooldown_total", FormatDuration(circuitBreakerCooldown),
 			"component", "ffmpeg-stream")
 		return true
 	}
@@ -1863,8 +1863,8 @@ func (s *FFmpegStream) isCircuitOpen() bool {
 		streamLogger.Info("circuit breaker closed after cooldown",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 			"previous_failures", previousFailures,
-			"open_duration", openDuration.Round(time.Second).String(),
-			"cooldown_period", circuitBreakerCooldown.String(),
+			"open_duration", FormatDuration(openDuration),
+			"cooldown_period", FormatDuration(circuitBreakerCooldown),
 			"component", "ffmpeg-stream")
 
 		// Report circuit breaker closure to telemetry
@@ -1884,8 +1884,8 @@ func (s *FFmpegStream) isCircuitOpen() bool {
 			streamLogger.Debug("circuit breaker closed after cooldown",
 				"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 				"previous_failures", previousFailures,
-				"open_duration", openDuration.Round(time.Second).String(),
-				"cooldown_period", circuitBreakerCooldown.String())
+				"open_duration", FormatDuration(openDuration),
+				"cooldown_period", FormatDuration(circuitBreakerCooldown))
 		}
 		_ = errorWithContext // Keep for telemetry reporting when enabled
 	}
@@ -1966,7 +1966,7 @@ func (s *FFmpegStream) recordFailure(runtime time.Duration) {
 		s.circuitMu.Unlock()
 
 		// STATE TRANSITION: * → circuit_open (circuit breaker opened due to failures)
-		s.transitionState(StateCircuitOpen, fmt.Sprintf("circuit breaker opened: %s (failures: %d, runtime: %v)", reason, currentFailures, runtime.Round(time.Millisecond)))
+		s.transitionState(StateCircuitOpen, fmt.Sprintf("circuit breaker opened: %s (failures: %d, runtime: %s)", reason, currentFailures, FormatDuration(runtime)))
 
 		// Re-lock for remaining operations
 		s.circuitMu.Lock()
@@ -1974,12 +1974,12 @@ func (s *FFmpegStream) recordFailure(runtime time.Duration) {
 		streamLogger.Error("circuit breaker opened",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 			"consecutive_failures", currentFailures,
-			"runtime", runtime.Round(time.Millisecond).String(),
+			"runtime", FormatDuration(runtime),
 			"reason", reason,
-			"cooldown_period", circuitBreakerCooldown.String(),
+			"cooldown_period", FormatDuration(circuitBreakerCooldown),
 			"component", "ffmpeg-stream")
 		log.Printf("🔒 Circuit breaker opened for %s after %d consecutive failures (%s, runtime: %s, cooldown: %s)",
-			privacy.SanitizeRTSPUrl(s.source.SafeString), currentFailures, reason, runtime.Round(time.Millisecond), circuitBreakerCooldown)
+			privacy.SanitizeRTSPUrl(s.source.SafeString), currentFailures, reason, FormatDuration(runtime), FormatDuration(circuitBreakerCooldown))
 
 		// Report to Sentry with enhanced context
 		errorWithContext := errors.Newf("RTSP stream circuit breaker opened: %s (runtime: %v)", reason, runtime).
