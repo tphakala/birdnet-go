@@ -321,8 +321,8 @@ func (m *MockDataStore) GetDynamicThreshold(speciesName string) (*datastore.Dyna
 	}
 	return args.Get(0).(*datastore.DynamicThreshold), args.Error(1)
 }
-func (m *MockDataStore) GetAllDynamicThresholds() ([]datastore.DynamicThreshold, error) {
-	args := m.Called()
+func (m *MockDataStore) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicThreshold, error) {
+	args := m.Called(limit)
 	return safeSlice[datastore.DynamicThreshold](args, 0), args.Error(1)
 }
 func (m *MockDataStore) DeleteDynamicThreshold(speciesName string) error {
@@ -663,8 +663,8 @@ func (m *MockDataStoreV2) GetDynamicThreshold(speciesName string) (*datastore.Dy
 	}
 	return args.Get(0).(*datastore.DynamicThreshold), args.Error(1)
 }
-func (m *MockDataStoreV2) GetAllDynamicThresholds() ([]datastore.DynamicThreshold, error) {
-	args := m.Called()
+func (m *MockDataStoreV2) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicThreshold, error) {
+	args := m.Called(limit)
 	return safeSlice[datastore.DynamicThreshold](args, 0), args.Error(1)
 }
 func (m *MockDataStoreV2) DeleteDynamicThreshold(speciesName string) error {

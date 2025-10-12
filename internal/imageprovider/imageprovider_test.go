@@ -239,7 +239,7 @@ func (m *mockStore) SaveDynamicThreshold(threshold *datastore.DynamicThreshold) 
 func (m *mockStore) GetDynamicThreshold(speciesName string) (*datastore.DynamicThreshold, error) {
 	return nil, fmt.Errorf("not found")
 }
-func (m *mockStore) GetAllDynamicThresholds() ([]datastore.DynamicThreshold, error) {
+func (m *mockStore) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicThreshold, error) {
 	return []datastore.DynamicThreshold{}, nil
 }
 func (m *mockStore) DeleteDynamicThreshold(speciesName string) error { return nil }

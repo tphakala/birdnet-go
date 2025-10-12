@@ -95,7 +95,7 @@ type Interface interface {
 	// Dynamic Threshold methods
 	SaveDynamicThreshold(threshold *DynamicThreshold) error
 	GetDynamicThreshold(speciesName string) (*DynamicThreshold, error)
-	GetAllDynamicThresholds() ([]DynamicThreshold, error)
+	GetAllDynamicThresholds(limit ...int) ([]DynamicThreshold, error) // Optional limit parameter
 	DeleteDynamicThreshold(speciesName string) error
 	DeleteExpiredDynamicThresholds(before time.Time) (int64, error) // Returns count deleted
 	UpdateDynamicThresholdExpiry(speciesName string, expiresAt time.Time) error

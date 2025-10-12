@@ -2,10 +2,20 @@
 package processor
 
 import (
-	"log"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+)
+
+const (
+	// DefaultPersistInterval is the default interval for persisting dynamic thresholds to database
+	DefaultPersistInterval = 30 * time.Second
+
+	// DefaultCleanupInterval is the default interval for cleaning up expired dynamic thresholds
+	DefaultCleanupInterval = 24 * time.Hour
+
+	// DefaultFlushTimeout is the default timeout for flushing dynamic thresholds during shutdown
+	DefaultFlushTimeout = 5 * time.Second
 )
 
 // loadDynamicThresholdsFromDB loads persisted dynamic thresholds from the database
@@ -69,8 +79,6 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 		"total_retrieved", len(thresholds),
 		"operation", "load_dynamic_thresholds")
 
-	log.Printf("Loaded %d dynamic thresholds from database (%d expired)", loadedCount, expiredCount)
-
 	return nil
 }
 
@@ -88,14 +96,16 @@ func (p *Processor) persistDynamicThresholds() error {
 
 	// Create a slice to hold database representations
 	dbThresholds := make([]datastore.DynamicThreshold, 0, thresholdsCount)
+	expiredSpecies := make([]string, 0) // Track expired species for cleanup
 	now := time.Now()
 
 	// Convert in-memory thresholds to database models
 	for speciesName, threshold := range p.DynamicThresholds {
-		// Skip expired thresholds
+		// Track expired thresholds for cleanup
 		if now.After(threshold.Timer) {
+			expiredSpecies = append(expiredSpecies, speciesName)
 			if p.Settings.Realtime.DynamicThreshold.Debug {
-				GetLogger().Debug("Skipping expired threshold during persistence",
+				GetLogger().Debug("Found expired threshold during persistence",
 					"species", speciesName,
 					"expires_at", threshold.Timer,
 					"operation", "persist_dynamic_thresholds")
@@ -122,6 +132,19 @@ func (p *Processor) persistDynamicThresholds() error {
 	}
 	p.thresholdsMutex.RUnlock()
 
+	// Clean up expired thresholds from memory
+	if len(expiredSpecies) > 0 {
+		p.thresholdsMutex.Lock()
+		for _, speciesName := range expiredSpecies {
+			delete(p.DynamicThresholds, speciesName)
+		}
+		p.thresholdsMutex.Unlock()
+
+		GetLogger().Info("Cleaned expired thresholds from memory",
+			"count", len(expiredSpecies),
+			"operation", "persist_dynamic_thresholds")
+	}
+
 	// Nothing to persist after filtering expired thresholds
 	if len(dbThresholds) == 0 {
 		return nil
@@ -147,62 +170,68 @@ func (p *Processor) persistDynamicThresholds() error {
 
 // startThresholdPersistence starts a goroutine that periodically persists dynamic thresholds
 // This ensures that learned thresholds are saved to the database and survive application restarts
+// The goroutine respects the processor's worker context and stops gracefully on shutdown
 func (p *Processor) startThresholdPersistence() {
-	// Default persistence interval: 30 seconds
-	persistInterval := 30 * time.Second
-
 	// Start periodic persistence
 	go func() {
-		ticker := time.NewTicker(persistInterval)
+		ticker := time.NewTicker(DefaultPersistInterval)
 		defer ticker.Stop()
 
 		GetLogger().Info("Starting dynamic threshold persistence",
-			"persist_interval_seconds", int(persistInterval.Seconds()),
+			"persist_interval_seconds", int(DefaultPersistInterval.Seconds()),
 			"operation", "threshold_persistence_startup")
 
-		for range ticker.C {
-			if err := p.persistDynamicThresholds(); err != nil {
-				GetLogger().Error("Failed to persist dynamic thresholds",
-					"error", err,
-					"operation", "persist_dynamic_thresholds")
+		for {
+			select {
+			case <-ticker.C:
+				if err := p.persistDynamicThresholds(); err != nil {
+					GetLogger().Error("Failed to persist dynamic thresholds",
+						"error", err,
+						"operation", "persist_dynamic_thresholds")
+				}
+			case <-p.controlChan:
+				// Check if it's a shutdown signal
+				// controlChan is used by processor for shutdown coordination
+				GetLogger().Info("Dynamic threshold persistence stopped via control channel",
+					"operation", "threshold_persistence_shutdown")
+				return
 			}
 		}
-
-		GetLogger().Info("Dynamic threshold persistence stopped",
-			"operation", "threshold_persistence_shutdown")
 	}()
 }
 
 // startThresholdCleanup starts a goroutine that periodically cleans up expired thresholds
 // This prevents the database from accumulating stale threshold data
+// The goroutine respects the processor's worker context and stops gracefully on shutdown
 func (p *Processor) startThresholdCleanup() {
-	// Default cleanup interval: 24 hours
-	cleanupInterval := 24 * time.Hour
-
 	go func() {
-		ticker := time.NewTicker(cleanupInterval)
+		ticker := time.NewTicker(DefaultCleanupInterval)
 		defer ticker.Stop()
 
 		GetLogger().Info("Starting dynamic threshold cleanup",
-			"cleanup_interval_hours", int(cleanupInterval.Hours()),
+			"cleanup_interval_hours", int(DefaultCleanupInterval.Hours()),
 			"operation", "threshold_cleanup_startup")
 
-		for range ticker.C {
-			deleted, err := p.Ds.DeleteExpiredDynamicThresholds(time.Now())
-			if err != nil {
-				GetLogger().Error("Failed to clean expired thresholds",
-					"error", err,
-					"operation", "cleanup_dynamic_thresholds")
-			} else if deleted > 0 {
-				GetLogger().Info("Cleaned expired dynamic thresholds",
-					"count", deleted,
-					"operation", "cleanup_dynamic_thresholds")
-				log.Printf("Cleaned %d expired dynamic thresholds from database", deleted)
+		for {
+			select {
+			case <-ticker.C:
+				deleted, err := p.Ds.DeleteExpiredDynamicThresholds(time.Now())
+				if err != nil {
+					GetLogger().Error("Failed to clean expired thresholds",
+						"error", err,
+						"operation", "cleanup_dynamic_thresholds")
+				} else if deleted > 0 {
+					GetLogger().Info("Cleaned expired dynamic thresholds",
+						"count", deleted,
+						"operation", "cleanup_dynamic_thresholds")
+				}
+			case <-p.controlChan:
+				// Check if it's a shutdown signal
+				GetLogger().Info("Dynamic threshold cleanup stopped via control channel",
+					"operation", "threshold_cleanup_shutdown")
+				return
 			}
 		}
-
-		GetLogger().Info("Dynamic threshold cleanup stopped",
-			"operation", "threshold_cleanup_shutdown")
 	}()
 }
 

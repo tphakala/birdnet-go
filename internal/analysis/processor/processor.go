@@ -1268,13 +1268,25 @@ func (p *Processor) getDisplayNameForSource(sourceID string) string {
 
 // Shutdown gracefully stops all processor components
 func (p *Processor) Shutdown() error {
-	// Flush dynamic thresholds to database before shutting down
+	// Flush dynamic thresholds to database before shutting down with timeout
 	if p.Settings.Realtime.DynamicThreshold.Enabled {
-		if err := p.FlushDynamicThresholds(); err != nil {
-			GetLogger().Warn("Failed to flush dynamic thresholds during shutdown",
-				"error", err,
-				"operation", "shutdown_flush_thresholds")
-			log.Printf("Warning: failed to flush dynamic thresholds: %v", err)
+		// Use a timeout to prevent hanging on slow database operations
+		done := make(chan error, 1)
+		go func() {
+			done <- p.FlushDynamicThresholds()
+		}()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				GetLogger().Warn("Failed to flush dynamic thresholds during shutdown",
+					"error", err,
+					"operation", "shutdown_flush_thresholds")
+			}
+		case <-time.After(DefaultFlushTimeout):
+			GetLogger().Warn("Timeout flushing dynamic thresholds during shutdown",
+					"timeout_seconds", int(DefaultFlushTimeout.Seconds()),
+					"operation", "shutdown_flush_thresholds")
 		}
 	}
 

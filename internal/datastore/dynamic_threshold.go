@@ -64,9 +64,17 @@ func (ds *DataStore) GetDynamicThreshold(speciesName string) (*DynamicThreshold,
 
 // GetAllDynamicThresholds retrieves all dynamic thresholds from the database
 // This is typically called at application startup to restore learned thresholds
-func (ds *DataStore) GetAllDynamicThresholds() ([]DynamicThreshold, error) {
+// Optional limit parameter prevents memory issues with large datasets (0 = no limit)
+func (ds *DataStore) GetAllDynamicThresholds(limit ...int) ([]DynamicThreshold, error) {
 	var thresholds []DynamicThreshold
-	err := ds.DB.Order("species_name ASC").Find(&thresholds).Error
+	query := ds.DB.Order("species_name ASC")
+
+	// Apply limit if provided and greater than 0
+	if len(limit) > 0 && limit[0] > 0 {
+		query = query.Limit(limit[0])
+	}
+
+	err := query.Find(&thresholds).Error
 	if err != nil {
 		return nil, dbError(err, "get_all_dynamic_thresholds", errors.PriorityMedium,
 			"table", "dynamic_thresholds",
@@ -199,19 +207,42 @@ func (ds *DataStore) BatchSaveDynamicThresholds(thresholds []DynamicThreshold) e
 		return nil // Nothing to save
 	}
 
-	return ds.DB.Transaction(func(tx *gorm.DB) error {
-		for i := range thresholds {
-			// Set UpdatedAt timestamp
-			thresholds[i].UpdatedAt = time.Now()
+	// Validate all entries before starting transaction
+	for i := range thresholds {
+		if thresholds[i].SpeciesName == "" {
+			return validationError("species name cannot be empty", "index", i)
+		}
+	}
 
-			// Use upsert operation
-			result := tx.Where("species_name = ?", thresholds[i].SpeciesName).
-				Assign(thresholds[i]).
-				FirstOrCreate(&thresholds[i])
+	return ds.DB.Transaction(func(tx *gorm.DB) error {
+		now := time.Now()
+
+		for i := range thresholds {
+			// Prepare the threshold data
+			threshold := &thresholds[i]
+
+			// Use Attrs for fields that should only be set on creation (FirstCreated)
+			// Use Assign for fields that should always be updated
+			result := tx.Where("species_name = ?", threshold.SpeciesName).
+				Attrs(DynamicThreshold{
+					FirstCreated: now, // Only set on INSERT
+				}).
+				Assign(map[string]interface{}{
+					"level":          threshold.Level,
+					"current_value":  threshold.CurrentValue,
+					"base_threshold": threshold.BaseThreshold,
+					"high_conf_count": threshold.HighConfCount,
+					"valid_hours":    threshold.ValidHours,
+					"expires_at":     threshold.ExpiresAt,
+					"last_triggered": threshold.LastTriggered,
+					"updated_at":     now,
+					"trigger_count":  threshold.TriggerCount,
+				}).
+				FirstOrCreate(threshold)
 
 			if result.Error != nil {
 				return dbError(result.Error, "batch_save_dynamic_threshold", errors.PriorityMedium,
-					"species", thresholds[i].SpeciesName,
+					"species", threshold.SpeciesName,
 					"batch_index", fmt.Sprintf("%d", i),
 					"action", "batch_persist_thresholds")
 			}
