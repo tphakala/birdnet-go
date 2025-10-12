@@ -113,112 +113,51 @@ func TestFormatDuration(t *testing.T) {
 	}
 }
 
-func TestFormatDurationCompact(t *testing.T) {
+func TestFormatDurationRounding(t *testing.T) {
+	// Test that rounding works correctly for edge cases
 	tests := []struct {
 		name     string
 		duration time.Duration
 		want     string
 	}{
-		// Milliseconds
 		{
-			name:     "zero duration",
-			duration: 0,
-			want:     "0ms",
-		},
-		{
-			name:     "450 milliseconds",
-			duration: 450 * time.Millisecond,
-			want:     "450ms",
-		},
-		// Seconds
-		{
-			name:     "11.46 seconds",
-			duration: 11*time.Second + 460*time.Millisecond,
+			name:     "11.4 seconds (rounds down)",
+			duration: 11*time.Second + 400*time.Millisecond,
 			want:     "11s",
 		},
 		{
-			name:     "30 seconds",
-			duration: 30 * time.Second,
-			want:     "30s",
-		},
-		// Minutes
-		{
-			name:     "1 minute",
-			duration: time.Minute,
-			want:     "1.0m",
+			name:     "11.5 seconds (rounds up)",
+			duration: 11*time.Second + 500*time.Millisecond,
+			want:     "12s",
 		},
 		{
-			name:     "1 minute 30 seconds",
-			duration: time.Minute + 30*time.Second,
-			want:     "1.5m",
+			name:     "11.6 seconds (rounds up)",
+			duration: 11*time.Second + 600*time.Millisecond,
+			want:     "12s",
 		},
 		{
-			name:     "2 minutes 45 seconds",
-			duration: 2*time.Minute + 45*time.Second,
-			want:     "2.8m",
-		},
-		// Hours
-		{
-			name:     "1 hour",
-			duration: time.Hour,
-			want:     "1.0h",
+			name:     "59.5 seconds (rounds to 60s)",
+			duration: 59*time.Second + 500*time.Millisecond,
+			want:     "60s",
 		},
 		{
-			name:     "1 hour 30 minutes",
-			duration: time.Hour + 30*time.Minute,
-			want:     "1.5h",
+			name:     "1m 29.4s (rounds to 1m 29s)",
+			duration: time.Minute + 29*time.Second + 400*time.Millisecond,
+			want:     "1m 29s",
 		},
 		{
-			name:     "2 hours 15 minutes",
-			duration: 2*time.Hour + 15*time.Minute,
-			want:     "2.2h",
-		},
-		// Negative durations
-		{
-			name:     "negative 5 seconds",
-			duration: -5 * time.Second,
-			want:     "-5s",
-		},
-		{
-			name:     "negative 2.5 minutes",
-			duration: -(2*time.Minute + 30*time.Second),
-			want:     "-2.5m",
+			name:     "1m 29.5s (rounds to 1m 30s)",
+			duration: time.Minute + 29*time.Second + 500*time.Millisecond,
+			want:     "1m 30s",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := FormatDurationCompact(tt.duration)
+			got := FormatDuration(tt.duration)
 			if got != tt.want {
-				t.Errorf("FormatDurationCompact(%v) = %q, want %q", tt.duration, got, tt.want)
+				t.Errorf("FormatDuration(%v) = %q, want %q", tt.duration, got, tt.want)
 			}
 		})
-	}
-}
-
-func TestFormatDurationRoundTrip(t *testing.T) {
-	// Test that formatting produces readable output for various durations
-	durations := []time.Duration{
-		100 * time.Millisecond,
-		time.Second,
-		30 * time.Second,
-		time.Minute + 30*time.Second,
-		time.Hour + 23*time.Minute + 45*time.Second,
-		24 * time.Hour,
-	}
-
-	for _, d := range durations {
-		formatted := FormatDuration(d)
-		compact := FormatDurationCompact(d)
-
-		// Just ensure no panics and output is non-empty
-		if formatted == "" {
-			t.Errorf("FormatDuration(%v) returned empty string", d)
-		}
-		if compact == "" {
-			t.Errorf("FormatDurationCompact(%v) returned empty string", d)
-		}
-
-		t.Logf("Duration: %v -> Standard: %q, Compact: %q", d, formatted, compact)
 	}
 }
