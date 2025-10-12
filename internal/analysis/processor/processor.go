@@ -236,11 +236,11 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	// Load persisted dynamic thresholds from database if enabled
 	if settings.Realtime.DynamicThreshold.Enabled {
 		if err := p.loadDynamicThresholdsFromDB(); err != nil {
-			GetLogger().Warn("Failed to load dynamic thresholds from database, using in-memory only",
-				"error", err,
+			GetLogger().Debug("Starting with fresh dynamic thresholds",
+				"reason", err.Error(),
 				"operation", "load_dynamic_thresholds")
-			log.Printf("Warning: Failed to load dynamic thresholds from database: %v", err)
-			// Continue without persisted thresholds - they will be learned again
+			// This is normal on first run or if table doesn't exist yet
+			// System will start with fixed thresholds and learn from detections
 		}
 
 		// Start periodic persistence goroutine
