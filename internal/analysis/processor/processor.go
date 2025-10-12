@@ -62,6 +62,8 @@ type Processor struct {
 	controlChan         chan string
 	JobQueue            *jobqueue.JobQueue // Queue for managing job retries
 	workerCancel        context.CancelFunc // Function to cancel worker goroutines
+	thresholdsCtx       context.Context    // Context for threshold persistence/cleanup goroutines
+	thresholdsCancel    context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
@@ -1268,6 +1270,11 @@ func (p *Processor) getDisplayNameForSource(sourceID string) string {
 
 // Shutdown gracefully stops all processor components
 func (p *Processor) Shutdown() error {
+	// Stop threshold persistence and cleanup goroutines first
+	if p.thresholdsCancel != nil {
+		p.thresholdsCancel()
+	}
+
 	// Flush dynamic thresholds to database before shutting down with timeout
 	if p.Settings.Realtime.DynamicThreshold.Enabled {
 		// Use context-based timeout for cleaner cancellation handling

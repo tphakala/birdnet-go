@@ -19,11 +19,15 @@ func (ds *DataStore) SaveDynamicThreshold(threshold *DynamicThreshold) error {
 		return validationError("species name cannot be empty", "species_name", "")
 	}
 
-	// Set UpdatedAt timestamp
-	threshold.UpdatedAt = time.Now()
+	// Timestamps
+	now := time.Now()
+	threshold.UpdatedAt = now
 
-	// Use upsert operation to either create or update the threshold
+	// Upsert: set FirstCreated only on INSERT; always update other fields
 	result := ds.DB.Where("species_name = ?", threshold.SpeciesName).
+		Attrs(DynamicThreshold{
+			FirstCreated: now, // Only set on INSERT
+		}).
 		Assign(*threshold).
 		FirstOrCreate(threshold)
 

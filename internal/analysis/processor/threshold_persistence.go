@@ -2,6 +2,7 @@
 package processor
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -31,15 +32,15 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 	thresholds, err := p.Ds.GetAllDynamicThresholds()
 	if err != nil {
 		// Check if error is "not found" (table doesn't exist, no records, etc)
-		// This is normal on first run
+		// This is normal on first run - return nil to indicate success with no data
 		errStr := err.Error()
 		if errStr == "record not found" ||
 			strings.Contains(errStr, "no such table") ||
 			strings.Contains(errStr, "doesn't exist") {
-			GetLogger().Debug("No existing dynamic thresholds found",
+			GetLogger().Debug("No existing dynamic thresholds found (first run)",
 				"reason", errStr,
 				"operation", "load_dynamic_thresholds")
-			return err
+			return nil // Normal condition, not an error
 		}
 
 		// Actual database error - log as warning
@@ -187,8 +188,12 @@ func (p *Processor) persistDynamicThresholds() error {
 
 // startThresholdPersistence starts a goroutine that periodically persists dynamic thresholds
 // This ensures that learned thresholds are saved to the database and survive application restarts
-// The goroutine respects the processor's worker context and stops gracefully on shutdown
+// The goroutine uses a dedicated context for clean cancellation on shutdown
 func (p *Processor) startThresholdPersistence() {
+	// Create dedicated context for threshold goroutines
+	// Both persistence and cleanup will share this context
+	p.thresholdsCtx, p.thresholdsCancel = context.WithCancel(context.Background())
+
 	// Start periodic persistence
 	go func() {
 		ticker := time.NewTicker(DefaultPersistInterval)
@@ -206,8 +211,8 @@ func (p *Processor) startThresholdPersistence() {
 						"error", err,
 						"operation", "persist_dynamic_thresholds")
 				}
-			case <-p.controlChan:
-				// Shutdown signal received via control channel
+			case <-p.thresholdsCtx.Done():
+				// Shutdown signal received via context cancellation
 				GetLogger().Info("Dynamic threshold persistence stopped",
 					"operation", "threshold_persistence_shutdown")
 				return
@@ -218,8 +223,10 @@ func (p *Processor) startThresholdPersistence() {
 
 // startThresholdCleanup starts a goroutine that periodically cleans up expired thresholds
 // This prevents the database from accumulating stale threshold data
-// The goroutine respects the processor's worker context and stops gracefully on shutdown
+// The goroutine uses the same context as persistence for clean cancellation on shutdown
 func (p *Processor) startThresholdCleanup() {
+	// Use the same context created in startThresholdPersistence
+	// This ensures both goroutines stop together when thresholdsCancel() is called
 	go func() {
 		ticker := time.NewTicker(DefaultCleanupInterval)
 		defer ticker.Stop()
@@ -241,8 +248,8 @@ func (p *Processor) startThresholdCleanup() {
 						"count", deleted,
 						"operation", "cleanup_dynamic_thresholds")
 				}
-			case <-p.controlChan:
-				// Shutdown signal received via control channel
+			case <-p.thresholdsCtx.Done():
+				// Shutdown signal received via context cancellation
 				GetLogger().Info("Dynamic threshold cleanup stopped",
 					"operation", "threshold_cleanup_shutdown")
 				return
