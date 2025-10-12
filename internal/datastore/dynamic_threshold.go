@@ -64,7 +64,10 @@ func (ds *DataStore) GetDynamicThreshold(speciesName string) (*DynamicThreshold,
 
 // GetAllDynamicThresholds retrieves all dynamic thresholds from the database
 // This is typically called at application startup to restore learned thresholds
-// Optional limit parameter prevents memory issues with large datasets (0 = no limit)
+//
+// Memory usage: Expected max ~300 species (BirdNET dataset size), resulting in ~65KB of memory
+// for the returned slice. The optional limit parameter is provided for API flexibility but is
+// not necessary for typical usage given the small dataset size. Use limit=0 or omit for no limit.
 func (ds *DataStore) GetAllDynamicThresholds(limit ...int) ([]DynamicThreshold, error) {
 	var thresholds []DynamicThreshold
 	query := ds.DB.Order("species_name ASC")
