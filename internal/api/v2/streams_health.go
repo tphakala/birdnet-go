@@ -108,11 +108,12 @@ func (c *Controller) initStreamHealthRoutes() {
 
 	// SSE endpoint for real-time stream health updates with rate limiting
 	// Configure for 5 connections per minute (5/60 = 0.0833 requests per second)
+	// Burst set to match rate limit to allow reconnections during page refreshes
 	rateLimiterConfig := middleware.RateLimiterConfig{
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
 			middleware.RateLimiterMemoryStoreConfig{
 				Rate:      rate.Limit(float64(streamHealthRateLimitRequests) / 60.0), // 5 per 60 seconds
-				Burst:     1,                                                          // Allow 1 immediate connection
+				Burst:     streamHealthRateLimitRequests,                              // Allow 5 immediate connections
 				ExpiresIn: streamHealthRateLimitWindow,
 			},
 		),
@@ -379,8 +380,12 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 		return err
 	}
 
+	// Get initial health data to pre-allocate map capacity
+	initialHealthData := myaudio.GetRTSPStreamHealth()
+
 	// Keep track of previous state to detect changes
-	previousState := make(map[string]streamHealthSnapshot)
+	// Pre-allocate capacity based on initial stream count for better performance
+	previousState := make(map[string]streamHealthSnapshot, len(initialHealthData))
 
 	// Setup ticker for polling health data
 	ticker := time.NewTicker(streamHealthPollInterval)
