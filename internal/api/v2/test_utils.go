@@ -331,6 +331,9 @@ func (m *MockDataStore) DeleteDynamicThreshold(speciesName string) error {
 }
 func (m *MockDataStore) DeleteExpiredDynamicThresholds(before time.Time) (int64, error) {
 	args := m.Called(before)
+	if args.Get(0) == nil {
+		return 0, args.Error(1)
+	}
 	return args.Get(0).(int64), args.Error(1)
 }
 func (m *MockDataStore) UpdateDynamicThresholdExpiry(speciesName string, expiresAt time.Time) error {
@@ -673,6 +676,9 @@ func (m *MockDataStoreV2) DeleteDynamicThreshold(speciesName string) error {
 }
 func (m *MockDataStoreV2) DeleteExpiredDynamicThresholds(before time.Time) (int64, error) {
 	args := m.Called(before)
+	if args.Get(0) == nil {
+		return 0, args.Error(1)
+	}
 	return args.Get(0).(int64), args.Error(1)
 }
 func (m *MockDataStoreV2) UpdateDynamicThresholdExpiry(speciesName string, expiresAt time.Time) error {

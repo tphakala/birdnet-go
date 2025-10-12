@@ -2,6 +2,7 @@
 package processor
 
 import (
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -15,7 +16,10 @@ const (
 	DefaultCleanupInterval = 24 * time.Hour
 
 	// DefaultFlushTimeout is the default timeout for flushing dynamic thresholds during shutdown
-	DefaultFlushTimeout = 5 * time.Second
+	// Increased to 15s to provide comfortable margin for slow storage (SD cards, network drives)
+	// while still being responsive. With max ~300 species, batch insert completes quickly on
+	// normal hardware, but this accounts for resource-constrained systems.
+	DefaultFlushTimeout = 15 * time.Second
 )
 
 // loadDynamicThresholdsFromDB loads persisted dynamic thresholds from the database
@@ -26,7 +30,20 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 
 	thresholds, err := p.Ds.GetAllDynamicThresholds()
 	if err != nil {
-		GetLogger().Error("Failed to load dynamic thresholds from database",
+		// Check if error is "not found" (table doesn't exist, no records, etc)
+		// This is normal on first run
+		errStr := err.Error()
+		if errStr == "record not found" ||
+			strings.Contains(errStr, "no such table") ||
+			strings.Contains(errStr, "doesn't exist") {
+			GetLogger().Debug("No existing dynamic thresholds found",
+				"reason", errStr,
+				"operation", "load_dynamic_thresholds")
+			return err
+		}
+
+		// Actual database error - log as warning
+		GetLogger().Warn("Database error loading dynamic thresholds",
 			"error", err,
 			"operation", "load_dynamic_thresholds")
 		return err
@@ -190,9 +207,8 @@ func (p *Processor) startThresholdPersistence() {
 						"operation", "persist_dynamic_thresholds")
 				}
 			case <-p.controlChan:
-				// Check if it's a shutdown signal
-				// controlChan is used by processor for shutdown coordination
-				GetLogger().Info("Dynamic threshold persistence stopped via control channel",
+				// Shutdown signal received via control channel
+				GetLogger().Info("Dynamic threshold persistence stopped",
 					"operation", "threshold_persistence_shutdown")
 				return
 			}
@@ -226,8 +242,8 @@ func (p *Processor) startThresholdCleanup() {
 						"operation", "cleanup_dynamic_thresholds")
 				}
 			case <-p.controlChan:
-				// Check if it's a shutdown signal
-				GetLogger().Info("Dynamic threshold cleanup stopped via control channel",
+				// Shutdown signal received via control channel
+				GetLogger().Info("Dynamic threshold cleanup stopped",
 					"operation", "threshold_cleanup_shutdown")
 				return
 			}
