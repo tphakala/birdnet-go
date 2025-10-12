@@ -8,6 +8,20 @@ import (
 	"time"
 )
 
+// Pre-compiled regular expressions for FFmpeg error parsing
+// Compiling these at package initialization improves performance during error detection
+var (
+	reConnectionAttempt  = regexp.MustCompile(`Connection attempt to (\S+) port (\d+) failed`)
+	reTimeoutDuration    = regexp.MustCompile(`timeout=(\d+)`)
+	reRTSPMethod         = regexp.MustCompile(`method (\w+) failed: (\d+)`)
+	reRTSPMethod404      = regexp.MustCompile(`method (\w+) failed: 404`)
+	reRTSPMethod401      = regexp.MustCompile(`method (\w+) failed: 401`)
+	reErrorOpeningInput  = regexp.MustCompile(`Error opening input file (rtsps?://\S+)`)
+	reConnectionToTCP    = regexp.MustCompile(`Connection to tcp://([^:?]+):(\d+)`)
+	reRTSPStatus         = regexp.MustCompile(`Server returned (\d+)`)
+	reSSLError           = regexp.MustCompile(`SSL.*error|TLS.*error|certificate.*error`)
+)
+
 // ErrorContext contains rich information extracted from FFmpeg output.
 // It provides detailed diagnostics for user-facing error messages and troubleshooting.
 type ErrorContext struct {
@@ -87,6 +101,49 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 		return ctx
 	}
 
+	// Network unreachable - different from no route
+	if strings.Contains(stderrOutput, "Network unreachable") {
+		ctx.ErrorType = "network_unreachable"
+		ctx.extractNetworkUnreachable(stderrOutput)
+		ctx.buildNetworkUnreachableMessage()
+		return ctx
+	}
+
+	// Operation not permitted - firewall/SELinux
+	if strings.Contains(stderrOutput, "Operation not permitted") {
+		ctx.ErrorType = "operation_not_permitted"
+		ctx.extractOperationNotPermitted(stderrOutput)
+		ctx.buildOperationNotPermittedMessage()
+		return ctx
+	}
+
+	// SSL/TLS errors for rtsps://
+	if reSSLError.MatchString(stderrOutput) {
+		ctx.ErrorType = "ssl_error"
+		ctx.extractSSLError(stderrOutput)
+		ctx.buildSSLErrorMessage()
+		return ctx
+	}
+
+	// RTSP 503 Service Unavailable - server overload
+	if strings.Contains(stderrOutput, "503 Service Unavailable") {
+		ctx.ErrorType = "rtsp_503"
+		ctx.extractRTSP503(stderrOutput)
+		ctx.buildRTSP503Message()
+		return ctx
+	}
+
+	// DNS resolution failures - common with typos in hostnames
+	if strings.Contains(stderrOutput, "Name or service not known") ||
+		strings.Contains(stderrOutput, "nodename nor servname provided") ||
+		strings.Contains(stderrOutput, "Temporary failure in name resolution") ||
+		strings.Contains(stderrOutput, "Could not resolve hostname") {
+		ctx.ErrorType = "dns_resolution_failed"
+		ctx.extractDNSError(stderrOutput)
+		ctx.buildDNSErrorMessage()
+		return ctx
+	}
+
 	// Invalid data - stream corruption
 	if strings.Contains(stderrOutput, "Invalid data found") {
 		ctx.ErrorType = "invalid_data"
@@ -119,8 +176,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 func (ctx *ErrorContext) extractConnectionTimeout(output string) {
 	// Extract target host and port
 	// Pattern: "Connection attempt to 192.168.44.3 port 8554 failed"
-	re := regexp.MustCompile(`Connection attempt to (\S+) port (\d+) failed`)
-	if matches := re.FindStringSubmatch(output); len(matches) == 3 {
+	if matches := reConnectionAttempt.FindStringSubmatch(output); len(matches) == 3 {
 		ctx.TargetHost = matches[1]
 		if port, err := strconv.Atoi(matches[2]); err == nil {
 			ctx.TargetPort = port
@@ -129,8 +185,7 @@ func (ctx *ErrorContext) extractConnectionTimeout(output string) {
 
 	// Extract timeout duration from URL
 	// Pattern: "tcp://192.168.44.3:8554?timeout=15000000"
-	re = regexp.MustCompile(`timeout=(\d+)`)
-	if matches := re.FindStringSubmatch(output); len(matches) == 2 {
+	if matches := reTimeoutDuration.FindStringSubmatch(output); len(matches) == 2 {
 		if micros, err := strconv.ParseInt(matches[1], 10, 64); err == nil {
 			ctx.TimeoutDuration = time.Duration(micros) * time.Microsecond
 		}
@@ -166,14 +221,12 @@ func (ctx *ErrorContext) extractRTSP404(output string) {
 
 	// Extract RTSP method
 	// Pattern: "method DESCRIBE failed: 404 Not Found"
-	re := regexp.MustCompile(`method (\w+) failed: 404`)
-	if matches := re.FindStringSubmatch(output); len(matches) == 2 {
+	if matches := reRTSPMethod404.FindStringSubmatch(output); len(matches) == 2 {
 		ctx.RTSPMethod = matches[1]
 	}
 
 	// Extract URL from "Error opening input file rtsp://..."
-	re = regexp.MustCompile(`Error opening input file (rtsp://\S+)`)
-	if matches := re.FindStringSubmatch(output); len(matches) == 2 {
+	if matches := reErrorOpeningInput.FindStringSubmatch(output); len(matches) == 2 {
 		// Extract just the host from the URL
 		urlParts := strings.Split(matches[1], "/")
 		if len(urlParts) > 2 {
@@ -210,8 +263,7 @@ func (ctx *ErrorContext) buildRTSP404Message() {
 // extractConnectionRefused parses connection refused details
 func (ctx *ErrorContext) extractConnectionRefused(output string) {
 	// Pattern: "Connection to tcp://localhost:8553?timeout=0 failed"
-	re := regexp.MustCompile(`Connection to tcp://([^:?]+):(\d+)`)
-	if matches := re.FindStringSubmatch(output); len(matches) == 3 {
+	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 3 {
 		ctx.TargetHost = matches[1]
 		if port, err := strconv.Atoi(matches[2]); err == nil {
 			ctx.TargetPort = port
@@ -244,8 +296,7 @@ func (ctx *ErrorContext) extractAuthFailure(output string) {
 	ctx.PrimaryMessage = "Authentication required"
 
 	// Extract RTSP method
-	re := regexp.MustCompile(`method (\w+) failed: 401`)
-	if matches := re.FindStringSubmatch(output); len(matches) == 2 {
+	if matches := reRTSPMethod401.FindStringSubmatch(output); len(matches) == 2 {
 		ctx.RTSPMethod = matches[1]
 	}
 }
@@ -286,8 +337,7 @@ func (ctx *ErrorContext) buildAuthForbiddenMessage() {
 // extractNoRoute parses no route to host details
 func (ctx *ErrorContext) extractNoRoute(output string) {
 	// Similar pattern to connection refused
-	re := regexp.MustCompile(`Connection to tcp://([^:?]+):(\d+)`)
-	if matches := re.FindStringSubmatch(output); len(matches) == 3 {
+	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 3 {
 		ctx.TargetHost = matches[1]
 		if port, err := strconv.Atoi(matches[2]); err == nil {
 			ctx.TargetPort = port
@@ -312,6 +362,191 @@ func (ctx *ErrorContext) buildNoRouteMessage() {
 		"Verify network interfaces are up",
 		"Check if VPN or network changes affected routing",
 	}
+}
+
+// extractNetworkUnreachable parses network unreachable details
+func (ctx *ErrorContext) extractNetworkUnreachable(output string) {
+	// Similar pattern to connection refused
+	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 3 {
+		ctx.TargetHost = matches[1]
+		if port, err := strconv.Atoi(matches[2]); err == nil {
+			ctx.TargetPort = port
+		}
+	}
+
+	ctx.PrimaryMessage = "Network unreachable"
+}
+
+func (ctx *ErrorContext) buildNetworkUnreachableMessage() {
+	ctx.UserFacingMsg = fmt.Sprintf(
+		"🌐 Network unreachable: %s\n"+
+			"   The network is unreachable from this host.\n"+
+			"   This typically indicates a network configuration or connectivity issue.",
+		ctx.TargetHost,
+	)
+
+	ctx.TroubleShooting = []string{
+		fmt.Sprintf("Check if %s is reachable: ping %s", ctx.TargetHost, ctx.TargetHost),
+		"Verify your network connection is active",
+		"Check if the correct network interface is being used",
+		"Verify network gateway configuration",
+		"Check if you're connected to the correct network (WiFi/Ethernet)",
+		"Verify DNS resolution is working",
+	}
+}
+
+// extractOperationNotPermitted parses operation not permitted details
+func (ctx *ErrorContext) extractOperationNotPermitted(output string) {
+	// Try to extract target info
+	if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) == 3 {
+		ctx.TargetHost = matches[1]
+		if port, err := strconv.Atoi(matches[2]); err == nil {
+			ctx.TargetPort = port
+		}
+	}
+
+	ctx.PrimaryMessage = "Operation not permitted"
+}
+
+func (ctx *ErrorContext) buildOperationNotPermittedMessage() {
+	ctx.UserFacingMsg = "🔒 Operation not permitted\n" +
+		"   The system denied the network operation.\n" +
+		"   This is typically caused by firewall rules or security policies (SELinux/AppArmor)."
+
+	ctx.TroubleShooting = []string{
+		"Check firewall rules: sudo iptables -L",
+		"Verify SELinux is not blocking the connection: sestatus",
+		"Check AppArmor status: sudo aa-status",
+		"Review system security policies",
+		"Try running with appropriate permissions",
+		"Check if the application needs specific capabilities (CAP_NET_RAW, etc.)",
+	}
+}
+
+// extractSSLError parses SSL/TLS error details
+func (ctx *ErrorContext) extractSSLError(output string) {
+	// Try to extract URL to get host info
+	if matches := reErrorOpeningInput.FindStringSubmatch(output); len(matches) == 2 {
+		urlParts := strings.Split(matches[1], "/")
+		if len(urlParts) > 2 {
+			hostPort := strings.TrimPrefix(urlParts[2], "@")
+			ctx.TargetHost = hostPort
+		}
+	}
+
+	ctx.PrimaryMessage = "SSL/TLS error"
+}
+
+func (ctx *ErrorContext) buildSSLErrorMessage() {
+	ctx.UserFacingMsg = "🔐 SSL/TLS connection error\n" +
+		"   Failed to establish a secure connection to the RTSP server.\n" +
+		"   This could be due to certificate issues or TLS configuration problems."
+
+	ctx.TroubleShooting = []string{
+		"Verify the server certificate is valid and not expired",
+		"Check if the server uses a self-signed certificate (may need to trust it)",
+		"Ensure the system's CA certificates are up to date",
+		"Try using rtsp:// instead of rtsps:// if encryption is not required",
+		"Check if the server supports the TLS version FFmpeg is using",
+		"Review server SSL/TLS configuration",
+	}
+}
+
+// extractRTSP503 parses RTSP 503 error details
+func (ctx *ErrorContext) extractRTSP503(output string) {
+	ctx.HTTPStatus = 503
+
+	// Extract RTSP method if available
+	if matches := reRTSPMethod.FindStringSubmatch(output); len(matches) == 3 {
+		ctx.RTSPMethod = matches[1]
+	}
+
+	// Extract URL
+	if matches := reErrorOpeningInput.FindStringSubmatch(output); len(matches) == 2 {
+		urlParts := strings.Split(matches[1], "/")
+		if len(urlParts) > 2 {
+			hostPort := strings.TrimPrefix(urlParts[2], "@")
+			ctx.TargetHost = hostPort
+		}
+	}
+
+	ctx.PrimaryMessage = "RTSP service unavailable"
+}
+
+func (ctx *ErrorContext) buildRTSP503Message() {
+	ctx.UserFacingMsg = "⏳ RTSP service unavailable (503)\n" +
+		"   The RTSP server is temporarily unable to handle the request.\n" +
+		"   This typically indicates server overload or maintenance."
+
+	ctx.TroubleShooting = []string{
+		"Wait a few moments and try again",
+		"Check if the server is under heavy load",
+		"Verify the server has sufficient resources (CPU, memory, bandwidth)",
+		"Check if there are connection limits on the server",
+		"Review RTSP server logs for errors",
+		"Contact server administrator if the issue persists",
+	}
+}
+
+// extractDNSError parses DNS resolution error details
+func (ctx *ErrorContext) extractDNSError(output string) {
+	// Try to extract hostname from URL
+	if matches := reErrorOpeningInput.FindStringSubmatch(output); len(matches) == 2 {
+		urlParts := strings.Split(matches[1], "/")
+		if len(urlParts) > 2 {
+			hostPort := strings.TrimPrefix(urlParts[2], "@")
+			// Extract just the hostname (remove port if present)
+			if colonIdx := strings.Index(hostPort, ":"); colonIdx != -1 {
+				ctx.TargetHost = hostPort[:colonIdx]
+			} else {
+				ctx.TargetHost = hostPort
+			}
+		}
+	}
+
+	// Also try to extract from tcp:// pattern
+	if ctx.TargetHost == "" {
+		if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) >= 2 {
+			ctx.TargetHost = matches[1]
+		}
+	}
+
+	ctx.PrimaryMessage = "DNS resolution failed"
+}
+
+func (ctx *ErrorContext) buildDNSErrorMessage() {
+	hostInfo := "the hostname"
+	if ctx.TargetHost != "" {
+		hostInfo = fmt.Sprintf("'%s'", ctx.TargetHost)
+	}
+
+	ctx.UserFacingMsg = fmt.Sprintf(
+		"🌐 DNS resolution failed for %s\n"+
+			"   The hostname could not be resolved to an IP address.\n"+
+			"   This often indicates a typo in the hostname or DNS configuration issues.",
+		hostInfo,
+	)
+
+	troubleshooting := []string{
+		"Double-check the hostname for typos (common with FQDNs)",
+		"Verify the hostname is correct and exists",
+	}
+
+	if ctx.TargetHost != "" {
+		troubleshooting = append(troubleshooting,
+			fmt.Sprintf("Test DNS resolution: nslookup %s", ctx.TargetHost),
+			fmt.Sprintf("Try ping: ping %s", ctx.TargetHost),
+		)
+	}
+
+	troubleshooting = append(troubleshooting,
+		"Check your DNS server configuration (/etc/resolv.conf)",
+		"Verify network connectivity is working",
+		"Try using IP address instead of hostname as a workaround",
+		"Check if the domain name is registered and active",
+	)
+
+	ctx.TroubleShooting = troubleshooting
 }
 
 // extractInvalidData parses invalid data details
@@ -380,13 +615,14 @@ func (ctx *ErrorContext) FormatForConsole() string {
 }
 
 // ShouldOpenCircuit determines if this error should immediately open the circuit breaker.
-// Returns true for permanent failures (404, auth, connection refused, etc.)
+// Returns true for permanent failures (404, auth, connection refused, DNS errors, etc.)
 func (ctx *ErrorContext) ShouldOpenCircuit() bool {
 	switch ctx.ErrorType {
 	case "rtsp_404", "auth_failed", "auth_forbidden", "connection_refused",
-		"no_route", "protocol_error":
-		return true // Permanent failures
-	case "connection_timeout", "invalid_data", "eof":
+		"no_route", "protocol_error", "dns_resolution_failed",
+		"operation_not_permitted", "ssl_error":
+		return true // Permanent failures - require configuration fix
+	case "connection_timeout", "invalid_data", "eof", "network_unreachable", "rtsp_503":
 		return false // Transient failures - allow retry
 	default:
 		return false
@@ -397,8 +633,8 @@ func (ctx *ErrorContext) ShouldOpenCircuit() bool {
 // Returns true for transient failures that might recover on retry.
 func (ctx *ErrorContext) ShouldRestart() bool {
 	switch ctx.ErrorType {
-	case "connection_timeout", "invalid_data", "eof":
-		return true // Transient failures
+	case "connection_timeout", "invalid_data", "eof", "network_unreachable", "rtsp_503":
+		return true // Transient failures - might recover
 	default:
 		return false
 	}

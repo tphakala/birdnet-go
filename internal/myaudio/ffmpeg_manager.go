@@ -505,7 +505,8 @@ func (m *FFmpegManager) checkStreamHealth() {
 			"operation", "check_stream_health")
 	}
 
-	for url, h := range health {
+	for url := range health {
+		h := health[url]
 		if !h.IsHealthy {
 			// Get the stream to check if it's already restarting
 			m.streamsMu.RLock()
@@ -630,7 +631,8 @@ func (m *FFmpegManager) checkForStuckStreams() {
 			"operation", "watchdog_check")
 	}
 
-	for url, h := range health {
+	for url := range health {
+		h := health[url]
 		// Skip healthy streams
 		if h.IsHealthy {
 			continue
