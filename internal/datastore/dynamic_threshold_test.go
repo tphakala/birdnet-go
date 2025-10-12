@@ -13,8 +13,8 @@ import (
 
 // setupDynamicThresholdTestDB creates an in-memory SQLite database for testing
 func setupDynamicThresholdTestDB(t *testing.T) *DataStore {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	t.Helper()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err, "Failed to create test database")
 
 	// Auto-migrate the schema
@@ -42,7 +42,7 @@ func TestSaveDynamicThreshold(t *testing.T) {
 
 		err := ds.SaveDynamicThreshold(threshold)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotZero(t, threshold.ID, "ID should be assigned after save")
 		assert.NotZero(t, threshold.FirstCreated, "FirstCreated should be set")
 		assert.NotZero(t, threshold.UpdatedAt, "UpdatedAt should be set")
@@ -75,11 +75,11 @@ func TestSaveDynamicThreshold(t *testing.T) {
 
 		err = ds.SaveDynamicThreshold(threshold)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, originalID, threshold.ID, "ID should remain the same")
 		assert.Equal(t, originalFirstCreated, threshold.FirstCreated, "FirstCreated should not change")
 		assert.Equal(t, 2, threshold.Level)
-		assert.Equal(t, 0.8, threshold.CurrentValue)
+		assert.InDelta(t, 0.8, threshold.CurrentValue, 0.001)
 		assert.Equal(t, 10, threshold.HighConfCount)
 	})
 
@@ -88,7 +88,7 @@ func TestSaveDynamicThreshold(t *testing.T) {
 
 		err := ds.SaveDynamicThreshold(nil)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "threshold cannot be nil")
 	})
 
@@ -102,7 +102,7 @@ func TestSaveDynamicThreshold(t *testing.T) {
 
 		err := ds.SaveDynamicThreshold(threshold)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "species name cannot be empty")
 	})
 }
@@ -128,11 +128,11 @@ func TestGetDynamicThreshold(t *testing.T) {
 		// Retrieve it
 		retrieved, err := ds.GetDynamicThreshold("cardinal")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		require.NotNil(t, retrieved)
 		assert.Equal(t, "cardinal", retrieved.SpeciesName)
 		assert.Equal(t, 2, retrieved.Level)
-		assert.Equal(t, 0.8, retrieved.CurrentValue)
+		assert.InDelta(t, 0.8, retrieved.CurrentValue, 0.001)
 		assert.Equal(t, 8, retrieved.HighConfCount)
 	})
 
@@ -141,7 +141,7 @@ func TestGetDynamicThreshold(t *testing.T) {
 
 		threshold, err := ds.GetDynamicThreshold("nonexistent")
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, threshold)
 		// Error should either be gorm.ErrRecordNotFound or wrapped in our error type
 		assert.Contains(t, err.Error(), "not found")
@@ -152,7 +152,7 @@ func TestGetDynamicThreshold(t *testing.T) {
 
 		threshold, err := ds.GetDynamicThreshold("")
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, threshold)
 		assert.Contains(t, err.Error(), "species name cannot be empty")
 	})
@@ -182,7 +182,7 @@ func TestGetAllDynamicThresholds(t *testing.T) {
 		// Retrieve all
 		thresholds, err := ds.GetAllDynamicThresholds()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, thresholds, 4)
 
 		// Verify ordering (should be alphabetical by species name)
@@ -211,7 +211,7 @@ func TestGetAllDynamicThresholds(t *testing.T) {
 		// Retrieve with limit
 		thresholds, err := ds.GetAllDynamicThresholds(3)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, thresholds, 3)
 	})
 
@@ -220,7 +220,7 @@ func TestGetAllDynamicThresholds(t *testing.T) {
 
 		thresholds, err := ds.GetAllDynamicThresholds()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, thresholds)
 	})
 }
@@ -244,11 +244,11 @@ func TestDeleteDynamicThreshold(t *testing.T) {
 		// Delete it
 		err = ds.DeleteDynamicThreshold("sparrow")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Verify deletion
 		retrieved, err := ds.GetDynamicThreshold("sparrow")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, retrieved)
 	})
 
@@ -258,7 +258,7 @@ func TestDeleteDynamicThreshold(t *testing.T) {
 		// Should not error even if doesn't exist
 		err := ds.DeleteDynamicThreshold("nonexistent")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("RejectEmptySpeciesName", func(t *testing.T) {
@@ -266,7 +266,7 @@ func TestDeleteDynamicThreshold(t *testing.T) {
 
 		err := ds.DeleteDynamicThreshold("")
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "species name cannot be empty")
 	})
 }
@@ -281,28 +281,28 @@ func TestDeleteExpiredDynamicThresholds(t *testing.T) {
 		// Save mix of expired and valid thresholds
 		thresholds := []*DynamicThreshold{
 			{
-				SpeciesName:   "expired1",
-				Level:         1,
-				CurrentValue:  0.75,
-				ExpiresAt:     now.Add(-2 * time.Hour), // Expired
+				SpeciesName:  "expired1",
+				Level:        1,
+				CurrentValue: 0.75,
+				ExpiresAt:    now.Add(-2 * time.Hour), // Expired
 			},
 			{
-				SpeciesName:   "expired2",
-				Level:         1,
-				CurrentValue:  0.75,
-				ExpiresAt:     now.Add(-1 * time.Hour), // Expired
+				SpeciesName:  "expired2",
+				Level:        1,
+				CurrentValue: 0.75,
+				ExpiresAt:    now.Add(-1 * time.Hour), // Expired
 			},
 			{
-				SpeciesName:   "valid1",
-				Level:         1,
-				CurrentValue:  0.75,
-				ExpiresAt:     now.Add(24 * time.Hour), // Valid
+				SpeciesName:  "valid1",
+				Level:        1,
+				CurrentValue: 0.75,
+				ExpiresAt:    now.Add(24 * time.Hour), // Valid
 			},
 			{
-				SpeciesName:   "valid2",
-				Level:         1,
-				CurrentValue:  0.75,
-				ExpiresAt:     now.Add(48 * time.Hour), // Valid
+				SpeciesName:  "valid2",
+				Level:        1,
+				CurrentValue: 0.75,
+				ExpiresAt:    now.Add(48 * time.Hour), // Valid
 			},
 		}
 
@@ -316,12 +316,12 @@ func TestDeleteExpiredDynamicThresholds(t *testing.T) {
 		// Delete expired
 		deletedCount, err := ds.DeleteExpiredDynamicThresholds(now)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, int64(2), deletedCount)
 
 		// Verify only valid ones remain
 		remaining, err := ds.GetAllDynamicThresholds()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, remaining, 2)
 		assert.Equal(t, "valid1", remaining[0].SpeciesName)
 		assert.Equal(t, "valid2", remaining[1].SpeciesName)
@@ -346,12 +346,12 @@ func TestDeleteExpiredDynamicThresholds(t *testing.T) {
 		// Try to delete expired
 		deletedCount, err := ds.DeleteExpiredDynamicThresholds(now)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, int64(0), deletedCount)
 
 		// Verify threshold still exists
 		remaining, err := ds.GetAllDynamicThresholds()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, remaining, 1)
 	})
 }
@@ -379,11 +379,11 @@ func TestUpdateDynamicThresholdExpiry(t *testing.T) {
 		newExpiry := now.Add(48 * time.Hour)
 		err = ds.UpdateDynamicThresholdExpiry("chickadee", newExpiry)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Verify update
 		retrieved, err := ds.GetDynamicThreshold("chickadee")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, retrieved.ExpiresAt.After(originalExpiry))
 		assert.WithinDuration(t, newExpiry, retrieved.ExpiresAt, time.Second)
 	})
@@ -393,7 +393,7 @@ func TestUpdateDynamicThresholdExpiry(t *testing.T) {
 
 		err := ds.UpdateDynamicThresholdExpiry("nonexistent", time.Now().Add(24*time.Hour))
 
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("RejectEmptySpeciesName", func(t *testing.T) {
@@ -401,7 +401,7 @@ func TestUpdateDynamicThresholdExpiry(t *testing.T) {
 
 		err := ds.UpdateDynamicThresholdExpiry("", time.Now())
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "species name cannot be empty")
 	})
 }
@@ -447,11 +447,11 @@ func TestBatchSaveDynamicThresholds(t *testing.T) {
 
 		err := ds.BatchSaveDynamicThresholds(thresholds)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Verify all were saved
 		saved, err := ds.GetAllDynamicThresholds()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, saved, 3)
 	})
 
@@ -485,13 +485,13 @@ func TestBatchSaveDynamicThresholds(t *testing.T) {
 		}
 		err = ds.BatchSaveDynamicThresholds(updated)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Verify update
 		retrieved, err := ds.GetDynamicThreshold("robin")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, retrieved.Level)
-		assert.Equal(t, 0.8, retrieved.CurrentValue)
+		assert.InDelta(t, 0.8, retrieved.CurrentValue, 0.001)
 	})
 
 	t.Run("EmptyBatch", func(t *testing.T) {
@@ -499,7 +499,7 @@ func TestBatchSaveDynamicThresholds(t *testing.T) {
 
 		err := ds.BatchSaveDynamicThresholds([]DynamicThreshold{})
 
-		assert.NoError(t, err, "Empty batch should not error")
+		require.NoError(t, err, "Empty batch should not error")
 	})
 
 	t.Run("RejectInvalidEntry", func(t *testing.T) {
@@ -520,7 +520,7 @@ func TestBatchSaveDynamicThresholds(t *testing.T) {
 
 		err := ds.BatchSaveDynamicThresholds(thresholds)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "species name cannot be empty")
 	})
 }
@@ -550,7 +550,7 @@ func TestGetDynamicThresholdStats(t *testing.T) {
 		// Get stats
 		stats, err := ds.GetDynamicThresholdStats()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		require.NotNil(t, stats)
 
 		// Verify counts
@@ -569,7 +569,7 @@ func TestGetDynamicThresholdStats(t *testing.T) {
 
 		stats, err := ds.GetDynamicThresholdStats()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		require.NotNil(t, stats)
 		assert.Equal(t, int64(0), stats["total_count"])
 		assert.Equal(t, int64(0), stats["expired_count"])
@@ -601,11 +601,11 @@ func TestDynamicThresholdIndexes(t *testing.T) {
 			ExpiresAt:     time.Now().Add(48 * time.Hour),
 		}
 		err = ds.SaveDynamicThreshold(threshold2)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// Verify only one record exists with updated values
 		all, err := ds.GetAllDynamicThresholds()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Len(t, all, 1)
 		assert.Equal(t, 2, all[0].Level)
 	})
@@ -628,7 +628,7 @@ func TestTimestampFields(t *testing.T) {
 		err := ds.SaveDynamicThreshold(threshold)
 		after := time.Now()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, threshold.FirstCreated.IsZero())
 		assert.False(t, threshold.UpdatedAt.IsZero())
 		assert.True(t, threshold.FirstCreated.After(before.Add(-time.Second)))
