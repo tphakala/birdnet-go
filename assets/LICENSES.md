@@ -19,7 +19,7 @@ Source: Apache-2.0
 
 ### cloud.google.com/go/compute/metadata
 
-License: https://github.com/googleapis/google-cloud-go/blob/compute/metadata/v0.8.4/compute/metadata/LICENSE
+License: https://github.com/googleapis/google-cloud-go/blob/compute/metadata/v0.9.0/compute/metadata/LICENSE
 Source: Apache-2.0
 
 ### filippo.io/edwards25519
@@ -40,11 +40,6 @@ Source: MIT
 ### github.com/cespare/xxhash/v2
 
 License: https://github.com/cespare/xxhash/blob/v2.3.0/LICENSE.txt
-Source: MIT
-
-### github.com/containrrr/shoutrrr
-
-License: https://github.com/containrrr/shoutrrr/blob/v0.8.0/LICENSE
 Source: MIT
 
 ### github.com/davecgh/go-spew/spew
@@ -246,6 +241,11 @@ Source: MIT
 
 License: https://github.com/munnerz/goautoneg/blob/a7dc8b61c822/LICENSE
 Source: BSD-3-Clause
+
+### github.com/nicholas-fedor/shoutrrr
+
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.10.0/LICENSE.md
+Source: MIT
 
 ### github.com/patrickmn/go-cache
 
@@ -484,12 +484,12 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.250.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.251.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/97024824d090/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/57b25ae835d4/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
