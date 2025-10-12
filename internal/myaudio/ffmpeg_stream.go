@@ -80,6 +80,11 @@ const (
 	// Timeout settings for FFmpeg RTSP streams
 	defaultTimeoutMicroseconds = 10000000 // 10 seconds in microseconds
 	minTimeoutMicroseconds     = 1000000  // 1 second in microseconds
+
+	// FFmpeg error tracking settings
+	maxErrorHistorySize       = 100            // Maximum number of error contexts to store internally per stream
+	maxErrorHistoryExposed    = 10             // Number of most recent errors exposed via StreamHealth API
+	earlyErrorDetectionWindow = 5 * time.Second // Check stderr in first 5 seconds for early detection
 )
 
 // Use shared logger from integration file
@@ -307,6 +312,10 @@ type StreamHealth struct {
 	// Process state information
 	ProcessState ProcessState      // Current process state
 	StateHistory []StateTransition // Recent state transitions (last 10 for health checks)
+	// FFmpeg error diagnostics
+	// Note: Internally stores up to 100 errors for analysis, but only exposes the 10 most recent
+	LastErrorContext *ErrorContext   // Most recent error detected
+	ErrorHistory     []*ErrorContext // Recent error history (last 10 for diagnostics)
 }
 
 // FFmpegStream manages a single FFmpeg process for audio streaming.
@@ -381,6 +390,11 @@ type FFmpegStream struct {
 	processStateMu   sync.RWMutex
 	stateTransitions []StateTransition
 	transitionsMu    sync.Mutex
+
+	// FFmpeg error tracking for diagnostics
+	errorContexts   []*ErrorContext // Ring buffer of last N errors
+	errorContextsMu sync.RWMutex
+	maxErrorHistory int // Maximum number of error contexts to store
 }
 
 // threadSafeWriter wraps a bytes.Buffer with mutex protection for concurrent access
@@ -465,6 +479,8 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 		streamCreatedAt:                time.Now(),                       // Track when stream was created
 		processState:                   StateIdle,                        // Initial state is idle
 		stateTransitions:               make([]StateTransition, 0, 100),  // Pre-allocate for 100 transitions
+		errorContexts:                  make([]*ErrorContext, 0, maxErrorHistorySize), // Pre-allocate error history
+		maxErrorHistory:                maxErrorHistorySize,
 	}
 }
 
@@ -937,6 +953,173 @@ func (s *FFmpegStream) startProcess() error {
 	return nil
 }
 
+// handleSilenceTimeout checks if stream has stopped producing data and triggers restart
+// Returns an error if silence timeout is exceeded, nil otherwise
+func (s *FFmpegStream) handleSilenceTimeout(startTime time.Time) error {
+	s.lastDataMu.RLock()
+	lastData := s.lastDataTime
+	s.lastDataMu.RUnlock()
+
+	// Determine effective "no-data" age: if never received any data, use process runtime
+	effectiveAge := func() time.Duration {
+		if lastData.IsZero() {
+			s.cmdMu.Lock()
+			ps := s.processStartTime
+			s.cmdMu.Unlock()
+			if ps.IsZero() {
+				return 0 // no running process; skip
+			}
+			return time.Since(ps)
+		}
+		return time.Since(lastData)
+	}()
+
+	if effectiveAge > 0 && effectiveAge > silenceTimeout {
+		// Format last data description for clearer logging
+		lastDataDesc := formatLastDataDescription(lastData)
+
+		streamLogger.Warn("no data received from RTSP source, triggering restart",
+			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+			"timeout_seconds", silenceTimeout.Seconds(),
+			"last_data", lastDataDesc,
+			"effective_age_seconds", effectiveAge.Seconds(),
+			"process_runtime_seconds", time.Since(startTime).Seconds(),
+			"component", "ffmpeg-stream",
+			"operation", "silence_detected")
+		log.Printf("⚠️ No data from %s (last data: %s, timeout: %s), restarting stream",
+			privacy.SanitizeRTSPUrl(s.source.SafeString), lastDataDesc, FormatDuration(effectiveAge))
+		s.cleanupProcess()
+		return errors.Newf("stream stopped producing data for %v seconds", silenceTimeout.Seconds()).
+			Category(errors.CategoryRTSP).
+			Component("ffmpeg-stream").
+			Priority(errors.PriorityMedium).
+			Context("operation", "silence_timeout").
+			Context("url", privacy.SanitizeRTSPUrl(s.source.SafeString)).
+			Context("timeout_seconds", silenceTimeout.Seconds()).
+			Context("last_data", lastDataDesc).
+			Build()
+	}
+
+	return nil
+}
+
+// handleEarlyErrorDetection checks stderr for early errors and takes appropriate action
+// Returns an error if a permanent failure is detected, nil if no action needed
+func (s *FFmpegStream) handleEarlyErrorDetection() error {
+	errCtx := s.checkEarlyErrors()
+	if errCtx == nil {
+		return nil
+	}
+
+	// Record error context
+	s.recordErrorContext(errCtx)
+
+	// Log user-friendly message to console
+	log.Printf("⚠️ %s", errCtx.FormatForConsole())
+
+	// Take action based on error type
+	if errCtx.ShouldOpenCircuit() {
+		// Open circuit breaker immediately for permanent failures
+		streamLogger.Error("early error triggers circuit breaker",
+			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+			"error_type", errCtx.ErrorType,
+			"component", "ffmpeg-stream",
+			"operation", "early_error_circuit_break")
+
+		s.circuitMu.Lock()
+		s.consecutiveFailures = circuitBreakerThreshold
+		s.circuitOpenTime = time.Now()
+		s.circuitMu.Unlock()
+
+		s.transitionState(StateCircuitOpen, fmt.Sprintf("early FFmpeg error: %s", errCtx.ErrorType))
+		s.cleanupProcess()
+		return errors.Newf("early FFmpeg error: %s", errCtx.PrimaryMessage).
+			Category(errors.CategoryRTSP).
+			Component("ffmpeg-stream").
+			Priority(errors.PriorityMedium).
+			Context("operation", "early_error_detection").
+			Context("url", privacy.SanitizeRTSPUrl(s.source.SafeString)).
+			Context("error_type", errCtx.ErrorType).
+			Build()
+	}
+
+	if errCtx.ShouldRestart() {
+		// Transient error - trigger restart
+		streamLogger.Warn("early error triggers restart",
+			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+			"error_type", errCtx.ErrorType,
+			"component", "ffmpeg-stream",
+			"operation", "early_error_restart")
+
+		s.cleanupProcess()
+		return errors.Newf("early FFmpeg error (transient): %s", errCtx.PrimaryMessage).
+			Category(errors.CategoryRTSP).
+			Component("ffmpeg-stream").
+			Priority(errors.PriorityMedium).
+			Context("operation", "early_error_detection").
+			Context("url", privacy.SanitizeRTSPUrl(s.source.SafeString)).
+			Context("error_type", errCtx.ErrorType).
+			Build()
+	}
+
+	return nil
+}
+
+// handleQuickExitError processes quick exit scenarios (process exits within processQuickExitTime)
+// and returns an appropriate error with error context extraction
+func (s *FFmpegStream) handleQuickExitError(startTime time.Time) error {
+	// Get stderr output safely
+	s.stderrMu.RLock()
+	stderrOutput := s.stderr.String()
+	s.stderrMu.RUnlock()
+
+	// Try to extract structured error context
+	errCtx := ExtractErrorContext(stderrOutput)
+	if errCtx != nil {
+		// Record error context for diagnostics
+		s.recordErrorContext(errCtx)
+
+		// Log user-friendly message
+		log.Printf("⚠️ %s", errCtx.FormatForConsole())
+
+		// If this is a permanent failure, open circuit breaker
+		if errCtx.ShouldOpenCircuit() {
+			s.circuitMu.Lock()
+			s.consecutiveFailures = circuitBreakerThreshold
+			s.circuitOpenTime = time.Now()
+			s.circuitMu.Unlock()
+
+			s.transitionState(StateCircuitOpen, fmt.Sprintf("early exit with error: %s", errCtx.ErrorType))
+		}
+
+		// Return structured error
+		return errors.Newf("FFmpeg process failed to start properly: %s", errCtx.PrimaryMessage).
+			Category(errors.CategoryRTSP).
+			Component("ffmpeg-stream").
+			Priority(errors.PriorityMedium).
+			Context("operation", "process_audio_quick_exit").
+			Context("url", privacy.SanitizeRTSPUrl(s.source.SafeString)).
+			Context("transport", s.transport).
+			Context("exit_time_seconds", time.Since(startTime).Seconds()).
+			Context("error_type", errCtx.ErrorType).
+			Build()
+	}
+
+	// No structured error context - fall back to generic error
+	// Sanitize stderr output to remove sensitive data and memory addresses
+	sanitizedOutput := privacy.SanitizeFFmpegError(stderrOutput)
+	return errors.Newf("FFmpeg process failed to start properly: %s", sanitizedOutput).
+		Category(errors.CategoryRTSP).
+		Component("ffmpeg-stream").
+		Priority(errors.PriorityMedium).
+		Context("operation", "process_audio").
+		Context("url", privacy.SanitizeRTSPUrl(s.source.SafeString)).
+		Context("transport", s.transport).
+		Context("exit_time_seconds", time.Since(startTime).Seconds()).
+		Context("error_detail", sanitizedOutput).
+		Build()
+}
+
 // processAudio reads and processes audio data from FFmpeg
 func (s *FFmpegStream) processAudio() error {
 	buf := make([]byte, ffmpegBufferSize)
@@ -955,6 +1138,22 @@ func (s *FFmpegStream) processAudio() error {
 			// Drain the channel if timer already fired
 			select {
 			case <-healthCheckTimer.C:
+			default:
+			}
+		}
+	}()
+
+	// Create a ticker for early error detection (first 5 seconds)
+	// Check stderr every 500ms during early window to catch errors quickly
+	earlyErrorCheckTicker := time.NewTicker(500 * time.Millisecond)
+	defer earlyErrorCheckTicker.Stop()
+
+	earlyErrorCheckEnabled := true
+	earlyErrorCheckTimer := time.NewTimer(earlyErrorDetectionWindow)
+	defer func() {
+		if !earlyErrorCheckTimer.Stop() {
+			select {
+			case <-earlyErrorCheckTimer.C:
 			default:
 			}
 		}
@@ -986,22 +1185,7 @@ func (s *FFmpegStream) processAudio() error {
 		if err != nil {
 			// Check if process exited too quickly
 			if time.Since(startTime) < processQuickExitTime {
-				// Get stderr output safely
-				s.stderrMu.RLock()
-				stderrOutput := s.stderr.String()
-				s.stderrMu.RUnlock()
-				// Sanitize stderr output to remove sensitive data and memory addresses
-				sanitizedOutput := privacy.SanitizeFFmpegError(stderrOutput)
-				return errors.Newf("FFmpeg process failed to start properly: %s", sanitizedOutput).
-					Category(errors.CategoryRTSP).
-					Component("ffmpeg-stream").
-					Priority(errors.PriorityMedium).
-					Context("operation", "process_audio").
-					Context("url", privacy.SanitizeRTSPUrl(s.source.SafeString)).
-					Context("transport", s.transport).
-					Context("exit_time_seconds", time.Since(startTime).Seconds()).
-					Context("error_detail", sanitizedOutput).
-					Build()
+				return s.handleQuickExitError(startTime)
 			}
 
 			if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
@@ -1065,51 +1249,32 @@ func (s *FFmpegStream) processAudio() error {
 				healthCheckDone = true
 				s.logStreamHealth()
 			}
+		case <-earlyErrorCheckTimer.C:
+			// Disable early error checking after the window expires
+			earlyErrorCheckEnabled = false
+			earlyErrorCheckTicker.Stop()
+			// Drain ticker channel to prevent goroutine leak
+			select {
+			case <-earlyErrorCheckTicker.C:
+			default:
+			}
+			if conf.Setting().Debug {
+				streamLogger.Debug("early error detection window closed",
+					"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+					"duration_seconds", earlyErrorDetectionWindow.Seconds(),
+					"operation", "early_error_window_close")
+			}
+		case <-earlyErrorCheckTicker.C:
+			// Check for early errors only if window is still open
+			if earlyErrorCheckEnabled {
+				if err := s.handleEarlyErrorDetection(); err != nil {
+					return err
+				}
+			}
 		case <-silenceCheckTicker.C:
 			// Check for silence timeout
-			s.lastDataMu.RLock()
-			lastData := s.lastDataTime
-			s.lastDataMu.RUnlock()
-
-			// Determine effective "no-data" age: if never received any data, use process runtime
-			effectiveAge := func() time.Duration {
-				if lastData.IsZero() {
-					s.cmdMu.Lock()
-					ps := s.processStartTime
-					s.cmdMu.Unlock()
-					if ps.IsZero() {
-						return 0 // no running process; skip
-					}
-					return time.Since(ps)
-				}
-				return time.Since(lastData)
-			}()
-
-			if effectiveAge > 0 && effectiveAge > silenceTimeout {
-				// Format last data description for clearer logging
-				lastDataDesc := formatLastDataDescription(lastData)
-
-				streamLogger.Warn("no data received from RTSP source, triggering restart",
-					"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
-					"timeout_seconds", silenceTimeout.Seconds(),
-					"last_data", lastDataDesc,
-					"effective_age_seconds", effectiveAge.Seconds(),
-					"process_runtime_seconds", time.Since(startTime).Seconds(),
-					"component", "ffmpeg-stream",
-					"operation", "silence_detected")
-				log.Printf("⚠️ No data from %s (last data: %s, timeout: %s), restarting stream",
-					privacy.SanitizeRTSPUrl(s.source.SafeString), lastDataDesc, FormatDuration(effectiveAge))
-				s.cleanupProcess()
-				return errors.Newf("stream stopped producing data for %v seconds", silenceTimeout.Seconds()).
-					Category(errors.CategoryRTSP).
-					Component("ffmpeg-stream").
-					Priority(errors.PriorityMedium).
-					Context("operation", "silence_timeout").
-					Context("url", privacy.SanitizeRTSPUrl(s.source.SafeString)).
-					Context("timeout_seconds", silenceTimeout.Seconds()).
-					Context("last_data", lastDataDesc).
-					Context("effective_age_seconds", effectiveAge.Seconds()).
-					Build()
+			if err := s.handleSilenceTimeout(startTime); err != nil {
+				return err
 			}
 		default:
 			// Continue processing
@@ -1740,6 +1905,21 @@ func (s *FFmpegStream) GetHealth() StreamHealth {
 		recentHistory = allHistory
 	}
 
+	// Get error history (last 10 errors for diagnostics)
+	// Note: We store up to maxErrorHistorySize (100) internally for comprehensive analysis,
+	// but only expose the most recent maxErrorHistoryExposed (10) via the health API
+	// to keep API responses manageable while maintaining full history for debugging
+	allErrors := s.getErrorContexts()
+	var recentErrors []*ErrorContext
+	if len(allErrors) > maxErrorHistoryExposed {
+		recentErrors = allErrors[len(allErrors)-maxErrorHistoryExposed:]
+	} else {
+		recentErrors = allErrors
+	}
+
+	// Get last error context
+	lastError := s.getLastErrorContext()
+
 	// Debug log health check details
 	if conf.Setting().Debug {
 		streamLogger.Debug("health check performed",
@@ -1754,6 +1934,13 @@ func (s *FFmpegStream) GetHealth() StreamHealth {
 			"restart_count", restarts,
 			"has_process", currentPID > 0,
 			"process_state", state.String(),
+			"error_count", len(allErrors),
+			"last_error_type", func() string {
+				if lastError != nil {
+					return lastError.ErrorType
+				}
+				return "none"
+			}(),
 			"operation", "get_health")
 	}
 
@@ -1766,6 +1953,8 @@ func (s *FFmpegStream) GetHealth() StreamHealth {
 		IsReceivingData:    isReceivingData,
 		ProcessState:       state,
 		StateHistory:       recentHistory,
+		LastErrorContext:   lastError,
+		ErrorHistory:       recentErrors,
 	}
 }
 
@@ -2067,6 +2256,84 @@ func (s *FFmpegStream) validateUserTimeout(timeoutStr string) error {
 	}
 
 	return nil
+}
+
+// recordErrorContext stores an error context in the history buffer.
+// It maintains a ring buffer of the last N errors for diagnostics.
+func (s *FFmpegStream) recordErrorContext(ctx *ErrorContext) {
+	if ctx == nil {
+		return
+	}
+
+	s.errorContextsMu.Lock()
+	defer s.errorContextsMu.Unlock()
+
+	// Add to history
+	s.errorContexts = append(s.errorContexts, ctx)
+
+	// Maintain ring buffer size
+	if len(s.errorContexts) > s.maxErrorHistory {
+		// Remove oldest entry
+		s.errorContexts = s.errorContexts[1:]
+	}
+
+	// Log the error context for visibility
+	// SECURITY: Defensive sanitization - strip any @ prefix from target_host
+	// in case extraction logic failed to properly sanitize credentials
+	targetHost := ctx.TargetHost
+	if strings.Contains(targetHost, "@") {
+		// If @ is present, take everything after the last @
+		if idx := strings.LastIndex(targetHost, "@"); idx != -1 {
+			targetHost = targetHost[idx+1:]
+		}
+	}
+
+	streamLogger.Error("FFmpeg error detected",
+		"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+		"error_type", ctx.ErrorType,
+		"primary_message", ctx.PrimaryMessage,
+		"target_host", targetHost, // Use defensively sanitized host
+		"target_port", ctx.TargetPort,
+		"should_open_circuit", ctx.ShouldOpenCircuit(),
+		"should_restart", ctx.ShouldRestart(),
+		"component", "ffmpeg-stream",
+		"operation", "error_detection")
+}
+
+// getErrorContexts returns a copy of the error history for diagnostics.
+// This is thread-safe and can be called from any goroutine.
+func (s *FFmpegStream) getErrorContexts() []*ErrorContext {
+	s.errorContextsMu.RLock()
+	defer s.errorContextsMu.RUnlock()
+
+	// Return a copy to avoid race conditions
+	result := make([]*ErrorContext, len(s.errorContexts))
+	copy(result, s.errorContexts)
+	return result
+}
+
+// getLastErrorContext returns the most recent error context, or nil if no errors.
+func (s *FFmpegStream) getLastErrorContext() *ErrorContext {
+	s.errorContextsMu.RLock()
+	defer s.errorContextsMu.RUnlock()
+
+	if len(s.errorContexts) == 0 {
+		return nil
+	}
+	return s.errorContexts[len(s.errorContexts)-1]
+}
+
+// checkEarlyErrors checks FFmpeg stderr for errors during the early detection window.
+// This is called periodically during the first 5 seconds after process start.
+// Returns the error context if an error is detected, nil otherwise.
+func (s *FFmpegStream) checkEarlyErrors() *ErrorContext {
+	// Read stderr output safely
+	s.stderrMu.RLock()
+	stderrOutput := s.stderr.String()
+	s.stderrMu.RUnlock()
+
+	// Extract error context if present
+	return ExtractErrorContext(stderrOutput)
 }
 
 // conditionalFailureReset resets failures only after the process has proven
