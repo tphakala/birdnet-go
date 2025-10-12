@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	"golang.org/x/time/rate"
 )
 
 // Constants for stream health monitoring
@@ -106,10 +107,12 @@ func (c *Controller) initStreamHealthRoutes() {
 	c.Group.GET("/streams/status", c.GetStreamsStatusSummary, authMiddleware)
 
 	// SSE endpoint for real-time stream health updates with rate limiting
+	// Configure for 5 connections per minute (5/60 = 0.0833 requests per second)
 	rateLimiterConfig := middleware.RateLimiterConfig{
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
 			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      streamHealthRateLimitRequests,
+				Rate:      rate.Limit(float64(streamHealthRateLimitRequests) / 60.0), // 5 per 60 seconds
+				Burst:     1,                                                          // Allow 1 immediate connection
 				ExpiresIn: streamHealthRateLimitWindow,
 			},
 		),
@@ -136,7 +139,7 @@ func (c *Controller) initStreamHealthRoutes() {
 // @Description Returns detailed health information for all configured RTSP streams including error diagnostics
 // @Tags streams
 // @Produce json
-// @Success 200 {object} map[string]StreamHealthResponse "Map of URL to stream health"
+// @Success 200 {array} StreamHealthResponse "Array of stream health information"
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /api/v2/streams/health [get]
 func (c *Controller) GetAllStreamsHealth(ctx echo.Context) error {
@@ -144,12 +147,12 @@ func (c *Controller) GetAllStreamsHealth(ctx echo.Context) error {
 	healthData := myaudio.GetRTSPStreamHealth()
 
 	// Convert to API response format
-	response := make(map[string]StreamHealthResponse)
+	// Use a slice instead of map to avoid collisions when multiple URLs
+	// have the same sanitized form (differ only by credentials)
+	response := make([]StreamHealthResponse, 0, len(healthData))
 	for rawURL := range healthData {
 		health := healthData[rawURL]
-		// Sanitize the URL for the response
-		sanitizedURL := privacy.SanitizeRTSPUrl(rawURL)
-		response[sanitizedURL] = convertStreamHealthToResponse(rawURL, &health)
+		response = append(response, convertStreamHealthToResponse(rawURL, &health))
 	}
 
 	return ctx.JSON(http.StatusOK, response)

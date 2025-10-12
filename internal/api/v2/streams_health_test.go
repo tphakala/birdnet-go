@@ -521,6 +521,40 @@ func TestConvertStreamHealthToResponse(t *testing.T) {
 		assert.NotContains(t, response.URL, "admin")
 		assert.NotContains(t, response.URL, "secret123")
 	})
+
+	t.Run("multiple URLs with different credentials sanitize to different entries", func(t *testing.T) {
+		// This test verifies that URLs differing only by credentials are preserved
+		// as separate entries when using array response format (not map)
+		health1 := &myaudio.StreamHealth{
+			IsHealthy:          true,
+			ProcessState:       myaudio.StateRunning,
+			RestartCount:       0,
+			TotalBytesReceived: 1024,
+			BytesPerSecond:     128,
+			IsReceivingData:    true,
+		}
+
+		health2 := &myaudio.StreamHealth{
+			IsHealthy:          true,
+			ProcessState:       myaudio.StateRunning,
+			RestartCount:       0,
+			TotalBytesReceived: 2048,
+			BytesPerSecond:     256,
+			IsReceivingData:    true,
+		}
+
+		// Two URLs with different credentials but same host/path
+		response1 := convertStreamHealthToResponse("rtsp://admin:pass1@192.168.1.100:554/live", health1)
+		response2 := convertStreamHealthToResponse("rtsp://user:pass2@192.168.1.100:554/live", health2)
+
+		// Both sanitize to the same URL
+		assert.Equal(t, "rtsp://192.168.1.100:554/live", response1.URL)
+		assert.Equal(t, "rtsp://192.168.1.100:554/live", response2.URL)
+
+		// But they have different data (proving they're separate entries)
+		assert.Equal(t, int64(1024), response1.TotalBytesReceived)
+		assert.Equal(t, int64(2048), response2.TotalBytesReceived)
+	})
 }
 
 // TestConvertErrorContextToResponse tests the convertErrorContextToResponse function

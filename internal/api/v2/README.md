@@ -416,11 +416,11 @@ The Stream Health API provides comprehensive real-time monitoring of RTSP stream
 
 #### GET /api/v2/streams/health
 
-Returns health information for all configured RTSP streams:
+Returns health information for all configured RTSP streams as an array:
 
 ```json
-{
-  "rtsp://camera1.local:554/stream": {
+[
+  {
     "url": "rtsp://camera1.local:554/stream",
     "is_healthy": true,
     "process_state": "running",
@@ -431,7 +431,7 @@ Returns health information for all configured RTSP streams:
     "bytes_per_second": 128000.5,
     "is_receiving_data": true
   },
-  "rtsp://camera2.local:554/stream": {
+  {
     "url": "rtsp://camera2.local:554/stream",
     "is_healthy": false,
     "process_state": "circuit_open",
@@ -475,7 +475,9 @@ Returns health information for all configured RTSP streams:
       }
     ]
   }
-}
+]
+
+**Note:** Returns an array to handle cases where multiple streams with different credentials point to the same RTSP URL (which would have identical sanitized URLs).
 ```
 
 #### GET /api/v2/streams/health/:url
