@@ -233,6 +233,23 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	// Start the job queue
 	p.JobQueue.Start()
 
+	// Load persisted dynamic thresholds from database if enabled
+	if settings.Realtime.DynamicThreshold.Enabled {
+		if err := p.loadDynamicThresholdsFromDB(); err != nil {
+			GetLogger().Warn("Failed to load dynamic thresholds from database, using in-memory only",
+				"error", err,
+				"operation", "load_dynamic_thresholds")
+			log.Printf("Warning: Failed to load dynamic thresholds from database: %v", err)
+			// Continue without persisted thresholds - they will be learned again
+		}
+
+		// Start periodic persistence goroutine
+		p.startThresholdPersistence()
+
+		// Start periodic cleanup goroutine
+		p.startThresholdCleanup()
+	}
+
 	return p
 }
 
@@ -1251,6 +1268,16 @@ func (p *Processor) getDisplayNameForSource(sourceID string) string {
 
 // Shutdown gracefully stops all processor components
 func (p *Processor) Shutdown() error {
+	// Flush dynamic thresholds to database before shutting down
+	if p.Settings.Realtime.DynamicThreshold.Enabled {
+		if err := p.FlushDynamicThresholds(); err != nil {
+			GetLogger().Warn("Failed to flush dynamic thresholds during shutdown",
+				"error", err,
+				"operation", "shutdown_flush_thresholds")
+			log.Printf("Warning: failed to flush dynamic thresholds: %v", err)
+		}
+	}
+
 	// Cancel all worker goroutines
 	if p.workerCancel != nil {
 		p.workerCancel()
