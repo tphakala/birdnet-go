@@ -949,3 +949,39 @@ Error opening input files: Operation not permitted`,
 		})
 	}
 }
+
+// TestDNSError_TCPFallback_Credentials tests the tcp:// fallback doesn't leak credentials
+func TestDNSError_TCPFallback_Credentials(t *testing.T) {
+	// This tests the specific case CodeRabbit found: tcp:// fallback in DNS errors
+	stderrOutput := `[tcp @ 0x...] Connection to tcp://user:pass@bad.hostname.local:8554?timeout=0 failed
+Name or service not known
+Error opening input files: Input/output error`
+
+	ctx := ExtractErrorContext(stderrOutput)
+
+	if ctx == nil {
+		t.Fatal("Expected error context, got nil")
+	}
+
+	if ctx.ErrorType != "dns_resolution_failed" {
+		t.Errorf("Expected error type 'dns_resolution_failed', got %s", ctx.ErrorType)
+	}
+
+	// CRITICAL: TargetHost must NOT contain credentials
+	if strings.Contains(ctx.TargetHost, "user") ||
+		strings.Contains(ctx.TargetHost, "pass") ||
+		strings.Contains(ctx.TargetHost, "@") ||
+		strings.Contains(ctx.TargetHost, "tcp://") {
+		t.Errorf("SECURITY ISSUE: TargetHost contains credentials or URL scheme: '%s'", ctx.TargetHost)
+	}
+
+	// Should extract just the hostname
+	if ctx.TargetHost != "bad.hostname.local" {
+		t.Errorf("Expected TargetHost 'bad.hostname.local', got '%s'", ctx.TargetHost)
+	}
+
+	// Should also extract the port
+	if ctx.TargetPort != 8554 {
+		t.Errorf("Expected TargetPort 8554, got %d", ctx.TargetPort)
+	}
+}

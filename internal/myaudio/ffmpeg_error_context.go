@@ -589,10 +589,19 @@ func (ctx *ErrorContext) extractDNSError(output string) {
 		ctx.TargetHost = extractHostWithoutCredentials(matches[1])
 	}
 
-	// Also try to extract from tcp:// pattern (these don't typically have credentials)
+	// Also try to extract from tcp:// pattern as fallback
+	// SECURITY: Use URL parsing to prevent credential leakage, even though
+	// DNS errors don't typically have credentials in tcp:// URLs
 	if ctx.TargetHost == "" {
 		if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) >= 2 {
-			ctx.TargetHost = matches[1]
+			// Try to extract host and port from the connection URL
+			if host, port, ok := extractHostAndPortFromConnectionURL(matches[1]); ok {
+				ctx.TargetHost = host
+				ctx.TargetPort = port
+			} else {
+				// Fallback: just extract hostname without port
+				ctx.TargetHost = extractHostWithoutCredentials(matches[1])
+			}
 		}
 	}
 
