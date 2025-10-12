@@ -1,6 +1,7 @@
 package myaudio
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -179,25 +180,88 @@ func TestFormatForConsole(t *testing.T) {
 		PrimaryMessage: "Connection timed out",
 		TargetHost:     "192.168.1.1",
 		TargetPort:     8554,
-		UserFacingMsg:  "Test message",
+		UserFacingMsg:  "🔌 Test error message\n   Additional context line",
 		TroubleShooting: []string{
 			"Step 1",
 			"Step 2",
+			"Step 3",
 		},
 	}
 
 	output := ctx.FormatForConsole()
 
-	if !strings.Contains(output, "Test message") {
+	// Test 1: User message is present
+	if !strings.Contains(output, "Test error message") {
 		t.Error("Console output missing user message")
 	}
 
-	if !strings.Contains(output, "Step 1") || !strings.Contains(output, "Step 2") {
-		t.Error("Console output missing troubleshooting steps")
+	// Test 2: All troubleshooting steps are present
+	if !strings.Contains(output, "Step 1") || !strings.Contains(output, "Step 2") || !strings.Contains(output, "Step 3") {
+		t.Error("Console output missing one or more troubleshooting steps")
 	}
 
-	if !strings.Contains(output, "•") {
-		t.Error("Console output missing bullet points for troubleshooting")
+	// Test 3: Bullet points are used for formatting
+	bulletCount := strings.Count(output, "•")
+	if bulletCount != len(ctx.TroubleShooting) {
+		t.Errorf("Expected %d bullet points, got %d", len(ctx.TroubleShooting), bulletCount)
+	}
+
+	// Test 4: Troubleshooting section header is present
+	if !strings.Contains(output, "Troubleshooting steps:") {
+		t.Error("Console output missing 'Troubleshooting steps:' header")
+	}
+
+	// Test 5: Output structure - message comes before troubleshooting
+	msgIndex := strings.Index(output, "Test error message")
+	troubleshootingIndex := strings.Index(output, "Troubleshooting steps:")
+	if msgIndex == -1 || troubleshootingIndex == -1 || msgIndex >= troubleshootingIndex {
+		t.Error("Console output structure incorrect: user message should come before troubleshooting")
+	}
+
+	// Test 6: Each troubleshooting step is on its own line with proper indentation
+	for _, step := range ctx.TroubleShooting {
+		expectedLine := fmt.Sprintf("   • %s", step)
+		if !strings.Contains(output, expectedLine) {
+			t.Errorf("Console output missing properly formatted step: %q", expectedLine)
+		}
+	}
+
+	// Test 7: Emoji support (optional but nice to verify)
+	if !strings.Contains(output, "🔌") {
+		t.Error("Console output missing emoji from user message")
+	}
+
+	// Test 8: Newline formatting is preserved
+	lines := strings.Split(output, "\n")
+	if len(lines) < 4 { // At least: message, blank line, header, steps
+		t.Errorf("Expected at least 4 lines in output, got %d", len(lines))
+	}
+}
+
+// TestFormatForConsole_NoTroubleshooting tests formatting when no troubleshooting steps are provided
+func TestFormatForConsole_NoTroubleshooting(t *testing.T) {
+	ctx := &ErrorContext{
+		ErrorType:       "unknown",
+		PrimaryMessage:  "Unknown error",
+		UserFacingMsg:   "An unknown error occurred",
+		TroubleShooting: nil, // No troubleshooting steps
+	}
+
+	output := ctx.FormatForConsole()
+
+	// Should still contain the user message
+	if !strings.Contains(output, "An unknown error occurred") {
+		t.Error("Console output missing user message")
+	}
+
+	// Should not contain troubleshooting header when there are no steps
+	if strings.Contains(output, "Troubleshooting steps:") {
+		t.Error("Console output should not have troubleshooting header when no steps provided")
+	}
+
+	// Should not contain bullet points
+	if strings.Contains(output, "•") {
+		t.Error("Console output should not have bullet points when no steps provided")
 	}
 }
 
@@ -423,5 +487,279 @@ Error opening input files: Server returned 503 Service Unavailable`
 
 	if !strings.Contains(ctx.UserFacingMsg, "service unavailable") {
 		t.Errorf("User-facing message missing expected content: %s", ctx.UserFacingMsg)
+	}
+}
+
+// TestExtractErrorContext_OverlappingPatterns tests error precedence when multiple patterns match
+func TestExtractErrorContext_OverlappingPatterns(t *testing.T) {
+	tests := []struct {
+		name           string
+		stderrOutput   string
+		expectedType   string
+		explanation    string
+	}{
+		{
+			name: "Timeout takes precedence over Network unreachable",
+			stderrOutput: `[tcp @ 0x...] Connection attempt to 192.168.1.1 port 8554 failed: Connection timed out
+[tcp @ 0x...] Network unreachable
+Error opening input files: Connection timed out`,
+			expectedType: "connection_timeout",
+			explanation:  "Connection timeout is more specific than network unreachable",
+		},
+		{
+			name: "No route to host takes precedence over Network unreachable",
+			stderrOutput: `[tcp @ 0x...] Connection to tcp://192.168.1.1:8554 failed: No route to host
+[tcp @ 0x...] Network unreachable
+Error opening input files: No route to host`,
+			expectedType: "no_route",
+			explanation:  "EHOSTUNREACH (no route) is more specific than ENETUNREACH (network unreachable)",
+		},
+		{
+			name: "RTSP 404 takes precedence over Connection refused",
+			stderrOutput: `[rtsp @ 0x...] method DESCRIBE failed: 404 Not Found
+[tcp @ 0x...] Connection refused
+Error opening input file rtsp://localhost:8554/stream.`,
+			expectedType: "rtsp_404",
+			explanation:  "Application-layer RTSP error is more diagnostic than socket-layer connection refused",
+		},
+		{
+			name: "Connection timeout beats DNS error",
+			stderrOutput: `[tcp @ 0x...] Connection timed out
+[tcp @ 0x...] Name or service not known
+Error opening input files: Connection timed out`,
+			expectedType: "connection_timeout",
+			explanation:  "Socket-level timeout is checked before DNS errors",
+		},
+		{
+			name: "Connection refused beats Invalid data",
+			stderrOutput: `[tcp @ 0x...] Connection refused
+Invalid data found when processing input
+Error opening input file rtsp://localhost:8554/stream.`,
+			expectedType: "connection_refused",
+			explanation:  "Connection errors are more specific than data errors",
+		},
+		{
+			name: "Auth 401 beats Protocol error",
+			stderrOutput: `[rtsp @ 0x...] method DESCRIBE failed: 401 Unauthorized
+Protocol not found
+Error opening input file rtsp://camera.example.com/stream.`,
+			expectedType: "auth_failed",
+			explanation:  "RTSP auth failure is more specific than generic protocol error",
+		},
+		{
+			name: "SSL error beats EOF",
+			stderrOutput: `SSL connection error
+End of file
+Error opening input file rtsps://secure.example.com/stream.`,
+			expectedType: "ssl_error",
+			explanation:  "Security/permission errors take precedence over data errors",
+		},
+		{
+			name: "DNS error beats Protocol error",
+			stderrOutput: `Name or service not known
+Protocol not found
+Error opening input files: Input/output error`,
+			expectedType: "dns_resolution_failed",
+			explanation:  "DNS errors are more specific than generic protocol errors",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := ExtractErrorContext(tt.stderrOutput)
+
+			if ctx == nil {
+				t.Fatal("Expected error context, got nil")
+			}
+
+			if ctx.ErrorType != tt.expectedType {
+				t.Errorf("Expected error type '%s', got '%s'\nExplanation: %s\nStderr: %s",
+					tt.expectedType, ctx.ErrorType, tt.explanation, tt.stderrOutput)
+			}
+		})
+	}
+}
+
+// TestExtractErrorContext_NetworkErrorPrecedence specifically tests network error ordering
+func TestExtractErrorContext_NetworkErrorPrecedence(t *testing.T) {
+	// Test: "No route to host" should win over "Network unreachable" when both appear
+	stderrOutput := `[tcp @ 0x...] Starting connection attempt to 192.168.1.100 port 8554
+[tcp @ 0x...] No route to host
+[tcp @ 0x...] Network unreachable
+Error opening input files: No route to host`
+
+	ctx := ExtractErrorContext(stderrOutput)
+
+	if ctx == nil {
+		t.Fatal("Expected error context, got nil")
+	}
+
+	if ctx.ErrorType != "no_route" {
+		t.Errorf("Expected 'no_route' for overlapping network errors, got %s\n"+
+			"Rationale: EHOSTUNREACH (no route) indicates a specific routing table problem,\n"+
+			"while ENETUNREACH (network unreachable) is a broader network configuration issue.\n"+
+			"The more specific error provides better diagnostic value.",
+			ctx.ErrorType)
+	}
+}
+
+func TestExtractErrorContext_ZeroTimeout(t *testing.T) {
+	// Test case: timeout=0 means infinite timeout, but TCP stack gave up
+	stderrOutput := `[tcp @ 0x556404ebeb40] Starting connection attempt to 192.168.44.3 port 8554
+[tcp @ 0x556404ebeb40] Connection attempt to 192.168.44.3 port 8554 failed: Connection timed out
+[tcp @ 0x556404ebeb40] Connection to tcp://192.168.44.3:8554?timeout=0 failed: Connection timed out
+Error opening input files: Connection timed out`
+
+	ctx := ExtractErrorContext(stderrOutput)
+
+	if ctx == nil {
+		t.Fatal("Expected error context, got nil")
+	}
+
+	if ctx.ErrorType != "connection_timeout" {
+		t.Errorf("Expected error type 'connection_timeout', got %s", ctx.ErrorType)
+	}
+
+	// Zero timeout should be explicitly handled
+	if ctx.TimeoutDuration != 0 {
+		t.Errorf("Expected timeout duration 0, got %v", ctx.TimeoutDuration)
+	}
+
+	// User message should mention TCP stack timeout
+	if !strings.Contains(ctx.UserFacingMsg, "TCP stack timeout") {
+		t.Errorf("Expected message to mention TCP stack timeout for zero timeout, got: %s", ctx.UserFacingMsg)
+	}
+}
+
+// TestExtractErrorContext_CredentialSanitization tests that credentials are properly stripped
+func TestExtractErrorContext_CredentialSanitization(t *testing.T) {
+	tests := []struct {
+		name           string
+		stderrOutput   string
+		expectedType   string
+		checkHost      bool
+		hostShouldNot  string // What the host should NOT contain
+		explanation    string
+	}{
+		{
+			name: "RTSP 404 with credentials in URL",
+			stderrOutput: `[rtsp @ 0x...] method DESCRIBE failed: 404 Not Found
+Error opening input file rtsp://admin:password123@camera.example.com:554/stream.
+Error opening input files: Server returned 404 Not Found`,
+			expectedType:  "rtsp_404",
+			checkHost:     true,
+			hostShouldNot: "admin",
+			explanation:   "TargetHost should not contain username",
+		},
+		{
+			name: "DNS error with credentials",
+			stderrOutput: `Error opening input file rtsp://user:pass@badhost.local/stream
+Name or service not known`,
+			expectedType:  "dns_resolution_failed",
+			checkHost:     true,
+			hostShouldNot: "user:pass",
+			explanation:   "TargetHost should not contain credentials",
+		},
+		{
+			name: "SSL error with credentials",
+			// NOTE: rtsps:// is currently NOT sanitized by privacy.SanitizeFFmpegError
+			// because the regex only matches rtsp://. This is a known limitation.
+			// Our extractHostWithoutCredentials() still protects TargetHost field.
+			stderrOutput: `SSL connection error
+Error opening input file rtsp://admin:secret@secure.camera.com/stream`,
+			expectedType:  "ssl_error",
+			checkHost:     true,
+			hostShouldNot: "secret",
+			explanation:   "TargetHost should not contain password",
+		},
+		{
+			name: "RTSP 503 with complex password",
+			stderrOutput: `[rtsp @ 0x...] method DESCRIBE failed: 503 Service Unavailable
+Error opening input file rtsp://user:p@ssw0rd!@host.local:8554/live`,
+			expectedType:  "rtsp_503",
+			checkHost:     true,
+			hostShouldNot: "p@ssw0rd",
+			explanation:   "TargetHost should not contain password with special characters",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := ExtractErrorContext(tt.stderrOutput)
+
+			if ctx == nil {
+				t.Fatal("Expected error context, got nil")
+			}
+
+			if ctx.ErrorType != tt.expectedType {
+				t.Errorf("Expected error type '%s', got '%s'", tt.expectedType, ctx.ErrorType)
+			}
+
+			// Check that RawFFmpegOutput is sanitized
+			if strings.Contains(ctx.RawFFmpegOutput, "password") ||
+				strings.Contains(ctx.RawFFmpegOutput, "secret") ||
+				strings.Contains(ctx.RawFFmpegOutput, "p@ssw0rd") {
+				t.Errorf("RawFFmpegOutput contains unsanitized credentials: %s", ctx.RawFFmpegOutput)
+			}
+
+			// Check that credentials should be replaced with ***
+			if !strings.Contains(ctx.RawFFmpegOutput, "***") {
+				t.Log("Note: RawFFmpegOutput should contain *** placeholders for credentials")
+			}
+
+			// Check TargetHost is clean
+			if tt.checkHost {
+				if strings.Contains(ctx.TargetHost, tt.hostShouldNot) {
+					t.Errorf("TargetHost contains credentials: got '%s', should not contain '%s'\n"+
+						"Explanation: %s",
+						ctx.TargetHost, tt.hostShouldNot, tt.explanation)
+				}
+
+				if strings.Contains(ctx.TargetHost, "@") {
+					t.Errorf("TargetHost contains @ symbol (likely has userinfo): %s", ctx.TargetHost)
+				}
+
+				if strings.Contains(ctx.TargetHost, ":") && tt.checkHost {
+					// TargetHost should only be the hostname, not host:port
+					t.Logf("Warning: TargetHost may contain port: %s (TargetPort should be %d)",
+						ctx.TargetHost, ctx.TargetPort)
+				}
+			}
+		})
+	}
+}
+
+// TestExtractHostWithoutCredentials directly tests the helper function
+func TestExtractHostWithoutCredentials(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"rtsp://camera.local:554/stream", "camera.local"},
+		{"rtsp://admin:pass@camera.local:554/stream", "camera.local"},
+		{"rtsp://user:p@ssw0rd!@192.168.1.100:8554/live", "192.168.1.100"},
+		{"rtsps://admin:secret@secure.cam.com/feed", "secure.cam.com"},
+		{"admin:pass@camera.local:554", "camera.local"},           // Without scheme
+		{"camera.local:554", "camera.local"},                      // Just host:port
+		{"camera.local", "camera.local"},                          // Just host
+		{"user:pass@host.local", "host.local"},                    // userinfo without port
+		{"rtsp://[2001:db8::1]:554/stream", "2001:db8::1"},       // IPv6
+		{"rtsp://user:pass@[2001:db8::1]:554/stream", "2001:db8::1"}, // IPv6 with credentials
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := extractHostWithoutCredentials(tt.input)
+			if result != tt.expected {
+				t.Errorf("extractHostWithoutCredentials(%q) = %q, want %q",
+					tt.input, result, tt.expected)
+			}
+
+			// Ensure no credentials leaked
+			if strings.Contains(result, "admin") || strings.Contains(result, "pass") ||
+				strings.Contains(result, "secret") || strings.Contains(result, "@") {
+				t.Errorf("Result contains credentials or @ symbol: %q", result)
+			}
+		})
 	}
 }

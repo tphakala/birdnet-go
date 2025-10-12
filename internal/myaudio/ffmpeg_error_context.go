@@ -2,10 +2,13 @@ package myaudio
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Pre-compiled regular expressions for FFmpeg error parsing
@@ -27,15 +30,48 @@ var (
 type ErrorContext struct {
 	ErrorType       string        // "connection_timeout", "rtsp_404", "auth_failed", etc.
 	PrimaryMessage  string        // Main error message
-	TargetHost      string        // Extracted host/IP
+	TargetHost      string        // Extracted host/IP (sanitized - no credentials)
 	TargetPort      int           // Extracted port
 	TimeoutDuration time.Duration // Extracted timeout (if applicable)
 	HTTPStatus      int           // HTTP/RTSP status code (if applicable)
 	RTSPMethod      string        // RTSP method that failed (if applicable)
-	RawFFmpegOutput string        // Full FFmpeg output for debugging (sanitized)
-	UserFacingMsg   string        // Friendly message for user
-	TroubleShooting []string      // List of troubleshooting steps
-	Timestamp       time.Time     // When this error was detected
+	// RawFFmpegOutput stores the sanitized FFmpeg stderr output for debugging.
+	// SECURITY: This field is sanitized using privacy.SanitizeFFmpegError() to remove
+	// credentials from RTSP URLs (e.g., rtsp://user:pass@host → rtsp://***:***@host).
+	// The json:"-" tag prevents accidental credential leakage via JSON marshaling.
+	RawFFmpegOutput string `json:"-"` // Full FFmpeg output for debugging (sanitized)
+	UserFacingMsg   string            // Friendly message for user
+	TroubleShooting []string          // List of troubleshooting steps
+	Timestamp       time.Time         // When this error was detected
+}
+
+// extractHostWithoutCredentials safely extracts hostname from a URL string,
+// stripping any userinfo (username:password) to prevent credential leakage.
+// Returns empty string if parsing fails.
+//
+// SECURITY: This prevents credentials from leaking into TargetHost field and logs.
+// Example: "user:pass@camera.local:554" → "camera.local"
+func extractHostWithoutCredentials(rawURL string) string {
+	// Handle URLs that may not have a scheme
+	if !strings.Contains(rawURL, "://") {
+		rawURL = "rtsp://" + rawURL
+	}
+
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		// If parsing fails, try manual extraction but strip everything before @
+		if atIdx := strings.LastIndex(rawURL, "@"); atIdx != -1 {
+			rawURL = rawURL[atIdx+1:]
+		}
+		// Remove port if present for safety
+		if colonIdx := strings.Index(rawURL, ":"); colonIdx != -1 {
+			return rawURL[:colonIdx]
+		}
+		return rawURL
+	}
+
+	// Use url.Hostname() which automatically strips port and userinfo
+	return parsed.Hostname()
 }
 
 // ExtractErrorContext analyzes FFmpeg stderr and extracts context.
@@ -45,13 +81,36 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 		return nil
 	}
 
+	// SECURITY: Sanitize FFmpeg output to remove credentials from RTSP URLs
+	// before storing. This prevents credential leakage via logs, health APIs, etc.
+	sanitizedOutput := privacy.SanitizeFFmpegError(stderrOutput)
+
 	ctx := &ErrorContext{
-		RawFFmpegOutput: stderrOutput,
+		RawFFmpegOutput: sanitizedOutput,
 		Timestamp:       time.Now(),
 	}
 
-	// Check error patterns in order of specificity
-	// More specific patterns should be checked first
+	// Check error patterns in order of specificity and diagnostic value.
+	//
+	// Precedence rules (most specific → most general):
+	// 1. Socket-level errors (connection refused, timeout) - Most specific about network failure
+	// 2. RTSP protocol errors (404, 401, 403, 503) - Application-layer specific issues
+	// 3. Network-layer errors (no route, network unreachable) - Broader network configuration
+	// 4. DNS errors - Name resolution layer
+	// 5. Security/permission errors (SSL, operation not permitted) - System policy layer
+	// 6. Data errors (invalid data, EOF) - Stream content issues
+	// 7. Generic errors (protocol not found) - Catch-all patterns
+	//
+	// Why this order matters:
+	// - "Connection timed out" is checked before "Network unreachable" because a timeout
+	//   provides more specific diagnostic value (server is unreachable vs network routing issue)
+	// - "No route to host" is checked before "Network unreachable" because EHOSTUNREACH
+	//   indicates a specific routing table problem, while ENETUNREACH is broader
+	// - RTSP 4xx/5xx status codes are checked early to provide application-layer context
+	// - DNS errors are checked after connection errors to avoid masking connectivity issues
+	//
+	// Note: FFmpeg error messages can contain multiple patterns. The first match wins,
+	// so order determines which error type is reported when patterns overlap.
 
 	// Connection timeout - very common with unreachable hosts
 	if strings.Contains(stderrOutput, "Connection timed out") {
@@ -195,9 +254,18 @@ func (ctx *ErrorContext) extractConnectionTimeout(output string) {
 }
 
 func (ctx *ErrorContext) buildConnectionTimeoutMessage() {
+	// Handle timeout duration display
+	// - Positive duration: Show explicit timeout value (e.g., "10s")
+	// - Zero duration: Indicates infinite timeout (no timeout was set, but connection still failed)
+	//   This is unusual but can occur with timeout=0 in FFmpeg URLs
+	// - Not extracted: Fall back to generic "configured timeout"
 	timeout := "configured timeout"
 	if ctx.TimeoutDuration > 0 {
 		timeout = fmt.Sprintf("%.0fs", ctx.TimeoutDuration.Seconds())
+	} else if ctx.TimeoutDuration == 0 {
+		// Zero timeout means infinite wait was configured, but connection still timed out
+		// This suggests the TCP stack itself gave up (typically after ~75 seconds on Linux)
+		timeout = "TCP stack timeout (no application timeout was set)"
 	}
 
 	ctx.UserFacingMsg = fmt.Sprintf(
@@ -226,13 +294,9 @@ func (ctx *ErrorContext) extractRTSP404(output string) {
 	}
 
 	// Extract URL from "Error opening input file rtsp://..."
+	// SECURITY: Use safe extraction to prevent credential leakage
 	if matches := reErrorOpeningInput.FindStringSubmatch(output); len(matches) == 2 {
-		// Extract just the host from the URL
-		urlParts := strings.Split(matches[1], "/")
-		if len(urlParts) > 2 {
-			hostPort := strings.TrimPrefix(urlParts[2], "@") // Remove auth prefix if present
-			ctx.TargetHost = hostPort
-		}
+		ctx.TargetHost = extractHostWithoutCredentials(matches[1])
 	}
 
 	ctx.PrimaryMessage = "RTSP stream not found"
@@ -426,12 +490,9 @@ func (ctx *ErrorContext) buildOperationNotPermittedMessage() {
 // extractSSLError parses SSL/TLS error details
 func (ctx *ErrorContext) extractSSLError(output string) {
 	// Try to extract URL to get host info
+	// SECURITY: Use safe extraction to prevent credential leakage
 	if matches := reErrorOpeningInput.FindStringSubmatch(output); len(matches) == 2 {
-		urlParts := strings.Split(matches[1], "/")
-		if len(urlParts) > 2 {
-			hostPort := strings.TrimPrefix(urlParts[2], "@")
-			ctx.TargetHost = hostPort
-		}
+		ctx.TargetHost = extractHostWithoutCredentials(matches[1])
 	}
 
 	ctx.PrimaryMessage = "SSL/TLS error"
@@ -462,12 +523,9 @@ func (ctx *ErrorContext) extractRTSP503(output string) {
 	}
 
 	// Extract URL
+	// SECURITY: Use safe extraction to prevent credential leakage
 	if matches := reErrorOpeningInput.FindStringSubmatch(output); len(matches) == 2 {
-		urlParts := strings.Split(matches[1], "/")
-		if len(urlParts) > 2 {
-			hostPort := strings.TrimPrefix(urlParts[2], "@")
-			ctx.TargetHost = hostPort
-		}
+		ctx.TargetHost = extractHostWithoutCredentials(matches[1])
 	}
 
 	ctx.PrimaryMessage = "RTSP service unavailable"
@@ -491,20 +549,12 @@ func (ctx *ErrorContext) buildRTSP503Message() {
 // extractDNSError parses DNS resolution error details
 func (ctx *ErrorContext) extractDNSError(output string) {
 	// Try to extract hostname from URL
+	// SECURITY: Use safe extraction to prevent credential leakage
 	if matches := reErrorOpeningInput.FindStringSubmatch(output); len(matches) == 2 {
-		urlParts := strings.Split(matches[1], "/")
-		if len(urlParts) > 2 {
-			hostPort := strings.TrimPrefix(urlParts[2], "@")
-			// Extract just the hostname (remove port if present)
-			if colonIdx := strings.Index(hostPort, ":"); colonIdx != -1 {
-				ctx.TargetHost = hostPort[:colonIdx]
-			} else {
-				ctx.TargetHost = hostPort
-			}
-		}
+		ctx.TargetHost = extractHostWithoutCredentials(matches[1])
 	}
 
-	// Also try to extract from tcp:// pattern
+	// Also try to extract from tcp:// pattern (these don't typically have credentials)
 	if ctx.TargetHost == "" {
 		if matches := reConnectionToTCP.FindStringSubmatch(output); len(matches) >= 2 {
 			ctx.TargetHost = matches[1]
@@ -616,6 +666,14 @@ func (ctx *ErrorContext) FormatForConsole() string {
 
 // ShouldOpenCircuit determines if this error should immediately open the circuit breaker.
 // Returns true for permanent failures (404, auth, connection refused, DNS errors, etc.)
+//
+// Network unreachable handling:
+// ENETUNREACH is treated as transient because it often occurs during network transitions
+// (interface coming up, gateway being configured, switching networks). Unlike EHOSTUNREACH
+// (no_route), which indicates a specific routing table problem, ENETUNREACH suggests
+// the entire network is currently unavailable but may recover. We allow retry with
+// exponential backoff via the existing circuit breaker graduated failure thresholds,
+// which will eventually open the circuit if the network remains unreachable.
 func (ctx *ErrorContext) ShouldOpenCircuit() bool {
 	switch ctx.ErrorType {
 	case "rtsp_404", "auth_failed", "auth_forbidden", "connection_refused",
@@ -623,7 +681,7 @@ func (ctx *ErrorContext) ShouldOpenCircuit() bool {
 		"operation_not_permitted", "ssl_error":
 		return true // Permanent failures - require configuration fix
 	case "connection_timeout", "invalid_data", "eof", "network_unreachable", "rtsp_503":
-		return false // Transient failures - allow retry
+		return false // Transient failures - allow retry with backoff
 	default:
 		return false
 	}
@@ -631,10 +689,16 @@ func (ctx *ErrorContext) ShouldOpenCircuit() bool {
 
 // ShouldRestart determines if this error should trigger an automatic restart.
 // Returns true for transient failures that might recover on retry.
+//
+// Network unreachable is treated as transient with bounded retry:
+// - Allows restart (returns true) to handle network transitions
+// - Circuit breaker's graduated failure thresholds provide bounded retry
+// - After circuitBreakerRapidThreshold (5) failures in < 5 seconds, circuit opens
+// - This prevents infinite restarts while allowing recovery from brief network issues
 func (ctx *ErrorContext) ShouldRestart() bool {
 	switch ctx.ErrorType {
 	case "connection_timeout", "invalid_data", "eof", "network_unreachable", "rtsp_503":
-		return true // Transient failures - might recover
+		return true // Transient failures - might recover with bounded retry
 	default:
 		return false
 	}

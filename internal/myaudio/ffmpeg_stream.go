@@ -2278,11 +2278,21 @@ func (s *FFmpegStream) recordErrorContext(ctx *ErrorContext) {
 	}
 
 	// Log the error context for visibility
+	// SECURITY: Defensive sanitization - strip any @ prefix from target_host
+	// in case extraction logic failed to properly sanitize credentials
+	targetHost := ctx.TargetHost
+	if strings.Contains(targetHost, "@") {
+		// If @ is present, take everything after the last @
+		if idx := strings.LastIndex(targetHost, "@"); idx != -1 {
+			targetHost = targetHost[idx+1:]
+		}
+	}
+
 	streamLogger.Error("FFmpeg error detected",
 		"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
 		"error_type", ctx.ErrorType,
 		"primary_message", ctx.PrimaryMessage,
-		"target_host", ctx.TargetHost,
+		"target_host", targetHost, // Use defensively sanitized host
 		"target_port", ctx.TargetPort,
 		"should_open_circuit", ctx.ShouldOpenCircuit(),
 		"should_restart", ctx.ShouldRestart(),
