@@ -652,7 +652,17 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 				log.Printf("❌ Failed to start FFmpeg for %s: %v", privacy.SanitizeRTSPUrl(s.source.SafeString), err)
 				s.recordFailure(0) // No runtime for startup failure
 				// STATE TRANSITION: starting → backoff (start failed, entering backoff)
-				s.handleRestartBackoff() // This will transition to StateBackoff internally
+				// Apply backoff UNLESS circuit breaker was opened
+				// If circuit breaker is open, let the Run() loop handle the cooldown wait at line 629-641
+				currentState := s.GetProcessState()
+				if currentState != StateCircuitOpen {
+					s.handleRestartBackoff() // This will transition to StateBackoff internally
+				} else if conf.Setting().Debug {
+					streamLogger.Debug("skipping backoff transition - circuit breaker is open (startup failure)",
+						"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+						"state", currentState.String(),
+						"operation", "skip_backoff_circuit_open_startup")
+				}
 				continue
 			}
 
@@ -736,8 +746,17 @@ func (s *FFmpegStream) Run(parentCtx context.Context) {
 			s.cleanupProcess()
 
 			// STATE TRANSITION: running → backoff (process ended, entering backoff before restart)
-			// Apply backoff before restart
-			s.handleRestartBackoff() // This will transition to StateBackoff internally
+			// Apply backoff before restart UNLESS circuit breaker was opened
+			// If circuit breaker is open, let the Run() loop handle the cooldown wait at line 629-641
+			currentState := s.GetProcessState()
+			if currentState != StateCircuitOpen {
+				s.handleRestartBackoff() // This will transition to StateBackoff internally
+			} else if conf.Setting().Debug {
+				streamLogger.Debug("skipping backoff transition - circuit breaker is open",
+					"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
+					"state", currentState.String(),
+					"operation", "skip_backoff_circuit_open")
+			}
 		}
 	}
 }
