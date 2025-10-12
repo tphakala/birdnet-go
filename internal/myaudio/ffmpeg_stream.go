@@ -82,7 +82,8 @@ const (
 	minTimeoutMicroseconds     = 1000000  // 1 second in microseconds
 
 	// FFmpeg error tracking settings
-	maxErrorHistorySize      = 100           // Maximum number of error contexts to store per stream
+	maxErrorHistorySize       = 100            // Maximum number of error contexts to store internally per stream
+	maxErrorHistoryExposed    = 10             // Number of most recent errors exposed via StreamHealth API
 	earlyErrorDetectionWindow = 5 * time.Second // Check stderr in first 5 seconds for early detection
 )
 
@@ -312,6 +313,7 @@ type StreamHealth struct {
 	ProcessState ProcessState      // Current process state
 	StateHistory []StateTransition // Recent state transitions (last 10 for health checks)
 	// FFmpeg error diagnostics
+	// Note: Internally stores up to 100 errors for analysis, but only exposes the 10 most recent
 	LastErrorContext *ErrorContext   // Most recent error detected
 	ErrorHistory     []*ErrorContext // Recent error history (last 10 for diagnostics)
 }
@@ -1904,10 +1906,13 @@ func (s *FFmpegStream) GetHealth() StreamHealth {
 	}
 
 	// Get error history (last 10 errors for diagnostics)
+	// Note: We store up to maxErrorHistorySize (100) internally for comprehensive analysis,
+	// but only expose the most recent maxErrorHistoryExposed (10) via the health API
+	// to keep API responses manageable while maintaining full history for debugging
 	allErrors := s.getErrorContexts()
 	var recentErrors []*ErrorContext
-	if len(allErrors) > 10 {
-		recentErrors = allErrors[len(allErrors)-10:]
+	if len(allErrors) > maxErrorHistoryExposed {
+		recentErrors = allErrors[len(allErrors)-maxErrorHistoryExposed:]
 	} else {
 		recentErrors = allErrors
 	}
