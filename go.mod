@@ -15,7 +15,7 @@ require (
 	github.com/k3a/html2text v1.2.1
 	github.com/klauspost/cpuid/v2 v2.3.0
 	github.com/labstack/echo/v4 v4.13.4
-	github.com/nicholas-fedor/shoutrrr v0.10.0
+	github.com/nicholas-fedor/shoutrrr v0.10.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/sftp v1.13.9
 	github.com/prometheus/client_golang v1.23.2
@@ -102,9 +102,8 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
-	github.com/sagikazarmark/locafero v0.11.0 // indirect
+	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
-	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
@@ -118,5 +117,5 @@ require (
 	golang.org/x/sync v0.17.0
 	golang.org/x/sys v0.37.0
 	golang.org/x/time v0.13.0
-	google.golang.org/protobuf v1.36.9 // indirect
+	google.golang.org/protobuf v1.36.10 // indirect
 )
