@@ -31,10 +31,10 @@ require (
 	github.com/tphakala/malgo v0.11.22
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.6.0
-	golang.org/x/crypto v0.42.0
-	golang.org/x/net v0.44.0
-	golang.org/x/term v0.35.0
-	golang.org/x/text v0.29.0
+	golang.org/x/crypto v0.43.0
+	golang.org/x/net v0.45.0
+	golang.org/x/term v0.36.0
+	golang.org/x/text v0.30.0
 	google.golang.org/api v0.251.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
