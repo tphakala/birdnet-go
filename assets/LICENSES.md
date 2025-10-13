@@ -244,7 +244,7 @@ Source: BSD-3-Clause
 
 ### github.com/nicholas-fedor/shoutrrr
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.10.0/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.10.1/LICENSE.md
 Source: MIT
 
 ### github.com/patrickmn/go-cache
@@ -289,7 +289,7 @@ Source: Apache-2.0
 
 ### github.com/sagikazarmark/locafero
 
-License: https://github.com/sagikazarmark/locafero/blob/v0.11.0/LICENSE
+License: https://github.com/sagikazarmark/locafero/blob/v0.12.0/LICENSE
 Source: MIT
 
 ### github.com/shirou/gopsutil/v3
@@ -305,11 +305,6 @@ Source: Apache-2.0
 ### github.com/smallnest/ringbuffer
 
 License: https://github.com/smallnest/ringbuffer/blob/0da97b586904/LICENSE
-Source: MIT
-
-### github.com/sourcegraph/conc
-
-License: https://github.com/sourcegraph/conc/blob/5f936abd7ae8/LICENSE
 Source: MIT
 
 ### github.com/spf13/afero
@@ -444,12 +439,12 @@ Source: MIT
 
 ### golang.org/x/crypto
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.42.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.43.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.44.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.46.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -464,17 +459,17 @@ Source: BSD-3-Clause
 
 ### golang.org/x/sys
 
-License: https://cs.opensource.google/go/x/sys/+/v0.36.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.37.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term
 
-License: https://cs.opensource.google/go/x/term/+/v0.35.0:LICENSE
+License: https://cs.opensource.google/go/x/term/+/v0.36.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.29.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.30.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
@@ -499,7 +494,7 @@ Source: Apache-2.0
 
 ### google.golang.org/protobuf
 
-License: https://github.com/protocolbuffers/protobuf-go/blob/v1.36.9/LICENSE
+License: https://github.com/protocolbuffers/protobuf-go/blob/v1.36.10/LICENSE
 Source: BSD-3-Clause
 
 ### gopkg.in/natefinch/lumberjack.v2
