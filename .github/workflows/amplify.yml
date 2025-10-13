@@ -1,0 +1,25 @@
+# .github/workflows/amplify.yml
+---
+name: Amplify Security
+on:
+  pull_request: {}
+  workflow_dispatch: {}
+  push:
+    branches: ["main", "develop"]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  amplify-security-scan:
+    name: Amplify Security Scan
+    runs-on: ubuntu-latest
+    if: (github.event_name != 'pull_request' ||
+      github.repository_id == github.event.pull_request.head.repo.id) &&
+      github.actor != 'dependabot[bot]'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Amplify Runner
+        uses: amplify-security/runner-action@main
