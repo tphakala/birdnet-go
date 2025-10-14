@@ -18,6 +18,9 @@ import (
 // MinSoundLevelInterval is the minimum sound level interval in seconds to prevent excessive CPU usage
 const MinSoundLevelInterval = 5
 
+// DefaultCleanupCheckInterval is the default disk cleanup check interval in minutes
+const DefaultCleanupCheckInterval = 15
+
 // Audio gain limits in dB
 const (
 	MinAudioGain = -40.0 // Minimum allowed audio gain in dB

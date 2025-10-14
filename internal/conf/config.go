@@ -74,6 +74,7 @@ type RetentionSettings struct {
 	MaxUsage         string `json:"maxUsage"`         // maximum disk usage percentage before cleanup
 	MinClips         int    `json:"minClips"`         // minimum number of clips per species to keep
 	KeepSpectrograms bool   `json:"keepSpectrograms"` // true to keep spectrograms
+	CheckInterval    int    `json:"checkInterval"`    // cleanup check interval in minutes (default: 15)
 }
 
 // AudioSettings contains settings for audio processing and export.

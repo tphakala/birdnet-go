@@ -468,6 +468,43 @@ func prepareInitialCleanup(db Interface) (files []FileInfo, baseDir string, rete
 		"policy", retention.Policy,
 		"debug", debug)
 
+	// OPTIMIZATION: For usage-based policy, check disk usage BEFORE scanning all files
+	// This avoids wasting CPU/IO scanning thousands of files when cleanup isn't needed
+	if retention.Policy == "usage" {
+		usageThresholdFloat, parseErr := conf.ParsePercentage(retention.MaxUsage)
+		if parseErr == nil {
+			currentUsage, usageErr := GetDiskUsage(baseDir)
+			utilization := int(currentUsage)
+
+			if usageErr == nil {
+				updateDiskUsageMetrics(DiskSpaceInfo{
+					UsedBytes:  uint64(currentUsage),
+					TotalBytes: 100, // Placeholder for percentage-based update
+				})
+
+				if currentUsage < usageThresholdFloat {
+					serviceLogger.Info("Disk usage below threshold, skipping file scan",
+						"policy", "usage",
+						"current_usage", utilization,
+						"threshold", int(usageThresholdFloat),
+						"base_dir", baseDir)
+
+					if debug {
+						log.Printf("Disk usage (%.1f%%) below threshold (%.1f%%), skipping cleanup", currentUsage, usageThresholdFloat)
+					}
+
+					result = CleanupResult{Err: nil, ClipsRemoved: 0, DiskUtilization: utilization}
+					return nil, baseDir, retention, false, result
+				}
+			} else {
+				serviceLogger.Warn("Failed to check disk usage for early exit",
+					"policy", "usage",
+					"error", usageErr,
+					"continuing_with_scan", true)
+			}
+		}
+	}
+
 	files, err := GetAudioFiles(baseDir, allowedFileTypes, db, debug)
 	if err != nil {
 		// Try to get current disk usage for the result even if file listing failed
