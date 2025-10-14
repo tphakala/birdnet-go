@@ -169,10 +169,12 @@ func (p *Processor) persistDynamicThresholds() error {
 	}
 
 	// Use batch save for efficiency with retry logic for transient lock errors
-	// Retry up to 3 times with exponential backoff to handle concurrent database access
+	// Keep at 3 retries with fast backoff - we have 30s busy_timeout doing heavy lifting
 	maxRetries := 3
+	baseDelay := 100 * time.Millisecond
+
 	var err error
-	for attempt := 0; attempt <= maxRetries; attempt++ {
+	for attempt := 0; attempt < maxRetries; attempt++ {
 		err = p.Ds.BatchSaveDynamicThresholds(dbThresholds)
 		if err == nil {
 			break // Success
@@ -183,25 +185,34 @@ func (p *Processor) persistDynamicThresholds() error {
 		isLockError := strings.Contains(errStr, "database is locked") ||
 			strings.Contains(errStr, "SQLITE_BUSY")
 
-		if !isLockError || attempt == maxRetries {
+		if !isLockError || attempt == maxRetries-1 {
 			// Not a lock error or exhausted retries
 			GetLogger().Error("Failed to persist dynamic thresholds",
 				"error", err,
 				"threshold_count", len(dbThresholds),
 				"attempt", attempt+1,
-				"max_retries", maxRetries+1,
+				"max_retries", maxRetries,
 				"operation", "persist_dynamic_thresholds")
 			return err
 		}
 
 		// Exponential backoff: 100ms, 200ms, 400ms
-		backoffDuration := time.Duration(100*(1<<uint(attempt))) * time.Millisecond
+		backoffDuration := baseDelay * time.Duration(1<<uint(attempt))
 		GetLogger().Warn("Database locked, retrying after backoff",
 			"attempt", attempt+1,
-			"max_retries", maxRetries+1,
+			"max_retries", maxRetries,
 			"backoff_ms", backoffDuration.Milliseconds(),
 			"operation", "persist_dynamic_thresholds")
-		time.Sleep(backoffDuration)
+
+		// Context-aware sleep - allows early exit on shutdown
+		select {
+		case <-time.After(backoffDuration):
+			// Continue to retry
+		case <-p.thresholdsCtx.Done():
+			GetLogger().Info("Retry aborted due to shutdown",
+				"operation", "persist_dynamic_thresholds")
+			return p.thresholdsCtx.Err()
+		}
 	}
 
 	if p.Settings.Realtime.DynamicThreshold.Debug {
