@@ -7,6 +7,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // SaveDynamicThreshold saves or updates a dynamic threshold in the database
@@ -209,6 +210,7 @@ func (ds *DataStore) GetDynamicThresholdStats() (map[string]interface{}, error) 
 
 // BatchSaveDynamicThresholds saves multiple dynamic thresholds in a single transaction
 // This is more efficient than saving them one by one
+// Optimized to use single INSERT...ON CONFLICT statement to minimize lock contention
 func (ds *DataStore) BatchSaveDynamicThresholds(thresholds []DynamicThreshold) error {
 	if len(thresholds) == 0 {
 		return nil // Nothing to save
@@ -224,36 +226,37 @@ func (ds *DataStore) BatchSaveDynamicThresholds(thresholds []DynamicThreshold) e
 	return ds.DB.Transaction(func(tx *gorm.DB) error {
 		now := time.Now()
 
+		// Prepare batch data - set FirstCreated for all entries
+		// (will only be used on INSERT, not UPDATE due to ON CONFLICT clause)
 		for i := range thresholds {
-			// Prepare the threshold data
-			threshold := &thresholds[i]
-
-			// Use Attrs for fields that should only be set on creation (FirstCreated)
-			// Use Assign for fields that should always be updated
-			result := tx.Where("species_name = ?", threshold.SpeciesName).
-				Attrs(DynamicThreshold{
-					FirstCreated: now, // Only set on INSERT
-				}).
-				Assign(map[string]interface{}{
-					"level":          threshold.Level,
-					"current_value":  threshold.CurrentValue,
-					"base_threshold": threshold.BaseThreshold,
-					"high_conf_count": threshold.HighConfCount,
-					"valid_hours":    threshold.ValidHours,
-					"expires_at":     threshold.ExpiresAt,
-					"last_triggered": threshold.LastTriggered,
-					"updated_at":     now,
-					"trigger_count":  threshold.TriggerCount,
-				}).
-				FirstOrCreate(threshold)
-
-			if result.Error != nil {
-				return dbError(result.Error, "batch_save_dynamic_threshold", errors.PriorityMedium,
-					"species", threshold.SpeciesName,
-					"batch_index", fmt.Sprintf("%d", i),
-					"action", "batch_persist_thresholds")
-			}
+			thresholds[i].FirstCreated = now
+			thresholds[i].UpdatedAt = now
 		}
+
+		// Use single INSERT...ON CONFLICT to minimize lock time
+		// This is much more efficient than multiple FirstOrCreate calls
+		// GORM's OnConflict clause handles SQLite's INSERT...ON CONFLICT DO UPDATE
+		result := tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "species_name"}},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"level",
+				"current_value",
+				"base_threshold",
+				"high_conf_count",
+				"valid_hours",
+				"expires_at",
+				"last_triggered",
+				"updated_at",
+				"trigger_count",
+			}),
+		}).Create(&thresholds)
+
+		if result.Error != nil {
+			return dbError(result.Error, "batch_save_dynamic_thresholds", errors.PriorityMedium,
+				"threshold_count", fmt.Sprintf("%d", len(thresholds)),
+				"action", "batch_persist_thresholds")
+		}
+
 		return nil
 	})
 }

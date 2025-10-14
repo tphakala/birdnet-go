@@ -245,6 +245,7 @@ func (s *SQLiteStore) Open() error {
 		"PRAGMA synchronous=NORMAL", // faster writes
 		"PRAGMA cache_size=-4000",   // increase cache size
 		"PRAGMA temp_store=MEMORY",  // faster writes
+		"PRAGMA busy_timeout=30000", // wait up to 30s for locks (critical for concurrent access)
 	}
 
 	for _, pragma := range pragmas {

@@ -168,13 +168,40 @@ func (p *Processor) persistDynamicThresholds() error {
 		return nil
 	}
 
-	// Use batch save for efficiency
-	if err := p.Ds.BatchSaveDynamicThresholds(dbThresholds); err != nil {
-		GetLogger().Error("Failed to persist dynamic thresholds",
-			"error", err,
-			"threshold_count", len(dbThresholds),
+	// Use batch save for efficiency with retry logic for transient lock errors
+	// Retry up to 3 times with exponential backoff to handle concurrent database access
+	maxRetries := 3
+	var err error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		err = p.Ds.BatchSaveDynamicThresholds(dbThresholds)
+		if err == nil {
+			break // Success
+		}
+
+		// Check if error is a database locked error (transient)
+		errStr := err.Error()
+		isLockError := strings.Contains(errStr, "database is locked") ||
+			strings.Contains(errStr, "SQLITE_BUSY")
+
+		if !isLockError || attempt == maxRetries {
+			// Not a lock error or exhausted retries
+			GetLogger().Error("Failed to persist dynamic thresholds",
+				"error", err,
+				"threshold_count", len(dbThresholds),
+				"attempt", attempt+1,
+				"max_retries", maxRetries+1,
+				"operation", "persist_dynamic_thresholds")
+			return err
+		}
+
+		// Exponential backoff: 100ms, 200ms, 400ms
+		backoffDuration := time.Duration(100*(1<<uint(attempt))) * time.Millisecond
+		GetLogger().Warn("Database locked, retrying after backoff",
+			"attempt", attempt+1,
+			"max_retries", maxRetries+1,
+			"backoff_ms", backoffDuration.Milliseconds(),
 			"operation", "persist_dynamic_thresholds")
-		return err
+		time.Sleep(backoffDuration)
 	}
 
 	if p.Settings.Realtime.DynamicThreshold.Debug {
