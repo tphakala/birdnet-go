@@ -803,36 +803,26 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 
 			// priority based cleanup method
 			if conf.Setting().Realtime.Audio.Export.Retention.Policy == "usage" {
-				// OPTIMIZATION: Check disk usage BEFORE calling UsageBasedCleanup to avoid unnecessary work
-				// This prevents expensive file scanning when disk usage is below threshold
 				retention := conf.Setting().Realtime.Audio.Export.Retention
-				usageThresholdFloat, parseErr := conf.ParsePercentage(retention.MaxUsage)
+				baseDir := conf.Setting().Realtime.Audio.Export.Path
 
-				// Only proceed with cleanup if we can parse threshold and check disk usage
-				shouldSkipCleanup := false
-				if parseErr == nil {
-					baseDir := conf.Setting().Realtime.Audio.Export.Path
-					currentUsage, usageErr := diskmanager.GetDiskUsage(baseDir)
+				// Check if we can skip cleanup
+				skip, utilization, err := diskmanager.ShouldSkipUsageBasedCleanup(&retention, baseDir, retention.Debug)
 
-					if usageErr == nil && currentUsage < usageThresholdFloat {
-						utilization := int(currentUsage)
-						diskManagerLogger.Info("Disk usage below threshold via timer, skipping cleanup",
-							"current_usage", utilization,
-							"threshold", int(usageThresholdFloat),
-							"base_dir", baseDir,
-							"timestamp", time.Now().Format(time.RFC3339))
-
-						if retention.Debug {
-							log.Printf("🧹 Disk usage (%.1f%%) below threshold (%.1f%%), skipping cleanup", currentUsage, usageThresholdFloat)
-						}
-						shouldSkipCleanup = true
-					}
+				if err != nil {
+					diskManagerLogger.Warn("Failed to check disk usage for early exit via timer",
+						"error", err,
+						"continuing_with_cleanup", true)
+				} else if skip {
+					diskManagerLogger.Info("Disk usage below threshold via timer, skipping cleanup",
+						"current_usage", utilization,
+						"timestamp", time.Now().Format(time.RFC3339))
+					continue // Skip to next timer tick
 				}
 
-				// Only proceed with expensive cleanup if needed
-				if !shouldSkipCleanup {
-					diskManagerLogger.Debug("Starting usage-based cleanup via timer")
-					result := diskmanager.UsageBasedCleanup(quitChan, dataStore)
+				// Proceed with cleanup
+				diskManagerLogger.Debug("Starting usage-based cleanup via timer")
+				result := diskmanager.UsageBasedCleanup(quitChan, dataStore)
 				if result.Err != nil {
 					// Add structured logging
 					GetLogger().Error("Usage-based cleanup failed",
@@ -842,18 +832,17 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 					diskManagerLogger.Error("Usage-based cleanup failed",
 						"error", result.Err,
 						"timestamp", time.Now().Format(time.RFC3339))
-					} else {
-						// Add structured logging
-						GetLogger().Info("Usage-based cleanup completed successfully",
-							"clips_removed", result.ClipsRemoved,
-							"disk_utilization_percent", result.DiskUtilization,
-							"operation", "usage_based_cleanup")
-						log.Printf("🧹 Usage-based cleanup completed successfully, clips removed: %d, current disk utilization: %d%%", result.ClipsRemoved, result.DiskUtilization)
-						diskManagerLogger.Info("Usage-based cleanup completed via timer",
-							"clips_removed", result.ClipsRemoved,
-							"disk_utilization", result.DiskUtilization,
-							"timestamp", time.Now().Format(time.RFC3339))
-					}
+				} else {
+					// Add structured logging
+					GetLogger().Info("Usage-based cleanup completed successfully",
+						"clips_removed", result.ClipsRemoved,
+						"disk_utilization_percent", result.DiskUtilization,
+						"operation", "usage_based_cleanup")
+					log.Printf("🧹 Usage-based cleanup completed successfully, clips removed: %d, current disk utilization: %d%%", result.ClipsRemoved, result.DiskUtilization)
+					diskManagerLogger.Info("Usage-based cleanup completed via timer",
+						"clips_removed", result.ClipsRemoved,
+						"disk_utilization", result.DiskUtilization,
+						"timestamp", time.Now().Format(time.RFC3339))
 				}
 			}
 		}

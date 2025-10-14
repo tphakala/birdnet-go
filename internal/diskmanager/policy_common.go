@@ -454,6 +454,53 @@ func categorizeFilePath(path string) string {
 	return "relative-path"
 }
 
+// ShouldSkipUsageBasedCleanup checks if cleanup can be skipped based on current disk usage.
+// Returns:
+//   - skip: true if cleanup should be skipped (usage below threshold)
+//   - utilization: current disk usage as integer percentage
+//   - err: error if check failed (nil on success)
+func ShouldSkipUsageBasedCleanup(retention *conf.RetentionSettings, baseDir string, debug bool) (skip bool, utilization int, err error) {
+	// Parse the threshold percentage
+	usageThresholdFloat, parseErr := conf.ParsePercentage(retention.MaxUsage)
+	if parseErr != nil {
+		return false, 0, parseErr
+	}
+
+	// Get current disk usage percentage
+	currentUsage, usageErr := GetDiskUsage(baseDir)
+	if usageErr != nil {
+		return false, 0, usageErr
+	}
+
+	utilization = int(currentUsage)
+
+	// Update metrics with actual disk space info (not placeholder)
+	spaceInfo, err := GetDetailedDiskUsage(baseDir)
+	if err == nil {
+		updateDiskUsageMetrics(spaceInfo)
+	} else {
+		serviceLogger.Warn("Failed to get detailed disk usage for metrics",
+			"base_dir", baseDir,
+			"error", err)
+	}
+
+	// Check if below threshold
+	if currentUsage < usageThresholdFloat {
+		serviceLogger.Info("Disk usage below threshold, skipping cleanup",
+			"current_usage", utilization,
+			"threshold", int(usageThresholdFloat),
+			"base_dir", baseDir)
+
+		if debug {
+			log.Printf("Disk usage (%.1f%%) below threshold (%.1f%%), skipping cleanup",
+				currentUsage, usageThresholdFloat)
+		}
+		return true, utilization, nil
+	}
+
+	return false, utilization, nil
+}
+
 // prepareInitialCleanup fetches settings, audio files, and performs initial checks.
 // It returns the files, base directory, retention settings, and a boolean indicating if cleanup should proceed.
 // If proceed is false, it also returns a completed CleanupResult.
@@ -471,37 +518,15 @@ func prepareInitialCleanup(db Interface) (files []FileInfo, baseDir string, rete
 	// OPTIMIZATION: For usage-based policy, check disk usage BEFORE scanning all files
 	// This avoids wasting CPU/IO scanning thousands of files when cleanup isn't needed
 	if retention.Policy == "usage" {
-		usageThresholdFloat, parseErr := conf.ParsePercentage(retention.MaxUsage)
-		if parseErr == nil {
-			currentUsage, usageErr := GetDiskUsage(baseDir)
-			utilization := int(currentUsage)
-
-			if usageErr == nil {
-				updateDiskUsageMetrics(DiskSpaceInfo{
-					UsedBytes:  uint64(currentUsage),
-					TotalBytes: 100, // Placeholder for percentage-based update
-				})
-
-				if currentUsage < usageThresholdFloat {
-					serviceLogger.Info("Disk usage below threshold, skipping file scan",
-						"policy", "usage",
-						"current_usage", utilization,
-						"threshold", int(usageThresholdFloat),
-						"base_dir", baseDir)
-
-					if debug {
-						log.Printf("Disk usage (%.1f%%) below threshold (%.1f%%), skipping cleanup", currentUsage, usageThresholdFloat)
-					}
-
-					result = CleanupResult{Err: nil, ClipsRemoved: 0, DiskUtilization: utilization}
-					return nil, baseDir, retention, false, result
-				}
-			} else {
-				serviceLogger.Warn("Failed to check disk usage for early exit",
-					"policy", "usage",
-					"error", usageErr,
-					"continuing_with_scan", true)
-			}
+		skip, utilization, err := ShouldSkipUsageBasedCleanup(&retention, baseDir, debug)
+		if err != nil {
+			serviceLogger.Warn("Failed to check disk usage for early exit",
+				"policy", "usage",
+				"error", err,
+				"continuing_with_scan", true)
+		} else if skip {
+			result = CleanupResult{Err: nil, ClipsRemoved: 0, DiskUtilization: utilization}
+			return nil, baseDir, retention, false, result
 		}
 	}
 
