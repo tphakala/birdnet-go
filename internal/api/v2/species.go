@@ -313,6 +313,7 @@ func (c *Controller) getDetailedTaxonomy(ctx context.Context, scientificName, lo
 	if c.EBirdClient == nil {
 		return nil, errors.Newf("eBird integration not available").
 			Category(errors.CategoryConfiguration).
+			Priority(errors.PriorityLow).
 			Component("api-species").
 			Build()
 	}
