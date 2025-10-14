@@ -58,9 +58,10 @@ realtime:
       retention:
         policy: usage     # retention policy: none, age or usage
         maxage: 30d       # age policy: maximum age of clips to keep before starting evictions
-        maxusage: 80%     # usage policy: percentage of disk usage to trigger eviction        
+        maxusage: 80%     # usage policy: percentage of disk usage to trigger eviction
         minclips: 10      # minumum number of clips per species to keep before starting evictions
         keepspectrograms: true # true to keep spectrograms even when clips are deleted
+        checkInterval: 15 # cleanup check interval in minutes (default: 15)
 
 
   dashboard:

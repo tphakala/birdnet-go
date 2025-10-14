@@ -204,6 +204,7 @@ realtime:
         maxage: 30d # Maximum age of audio clips to keep
         maxusage: 85% # Maximum disk usage percentage before cleanup
         minclips: 5 # Minimum number of clips per species to keep
+        checkInterval: 15 # Cleanup check interval in minutes (default: 15)
     equalizer:
       enabled: false # Enable equalizer filters
       filters:
@@ -1321,7 +1322,7 @@ BirdNET-Go offers advanced audio processing capabilities:
 
 If you enable audio clip exporting (`realtime.audio.export.enabled: true`), BirdNET-Go can automatically manage disk space by deleting older recordings based on configured retention policies. This prevents your disk from filling up over time.
 
-The cleanup task runs periodically (every few minutes) to check if clips need to be deleted based on the selected policy.
+The cleanup task runs periodically to check if clips need to be deleted based on the selected policy. The check interval is configurable to balance between timely cleanup and system resource usage.
 
 Configure these options under `realtime.audio.export.retention` in your `config.yaml`:
 
@@ -1332,6 +1333,7 @@ Configure these options under `realtime.audio.export.retention` in your `config.
 - **`maxage`**: (Used with `policy: age`) Maximum age for clips (e.g., `30d` for 30 days, `7d` for 7 days, `24h` for 24 hours). Clips older than this will be deleted.
 - **`maxusage`**: (Used with `policy: usage`) The target maximum disk usage percentage (e.g., `85%`). Cleanup triggers when usage exceeds this threshold.
 - **`minclips`**: (Used with `policy: usage`) The minimum number of clips to keep for each species, even when cleaning up based on disk usage. This ensures you retain at least some recent examples per species.
+- **`checkInterval`**: How often to check if cleanup is needed, in minutes (default: 15). Higher values reduce CPU/IO overhead but may delay cleanup. For usage-based policy, disk usage is checked first before scanning files, so setting this too low won't waste resources when disk usage is below threshold.
 
 ### Security Features
 
