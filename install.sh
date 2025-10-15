@@ -1886,8 +1886,10 @@ check_birdnet_installation() {
 
 # Function to check if we have preserved data from previous installation
 check_preserved_data() {
-    if [ -f "$CONFIG_FILE" ] || [ -d "$DATA_DIR" ]; then
-        return 0  # Preserved data exists
+    # Only consider data preserved if the config file actually exists
+    # Empty directories don't count as preserved data (they might be from incomplete install)
+    if [ -f "$CONFIG_FILE" ]; then
+        return 0  # Preserved data exists (actual config file)
     fi
     return 1  # No preserved data
 }
@@ -2191,9 +2193,10 @@ configure_sound_card() {
     log_message "INFO" "Starting sound card configuration"
     while true; do
         print_message "\n🎤 Detected audio devices:" "$GREEN"
-        
+
         # Create arrays to store device information
-        declare -a devices
+        # Reset the array to empty on each iteration to prevent accumulation
+        devices=()
         local default_selection=0
         
         # Capture arecord output to a variable first, forcing English locale 
