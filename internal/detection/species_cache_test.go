@@ -168,7 +168,7 @@ func TestSpeciesCache_GetByID(t *testing.T) {
 	species := &Species{
 		ID:             42,
 		SpeciesCode:    "norcar",
-		ScientificName: "Cardinalis cardinalis",
+		ScientificName: "Cardinalis cardinalis", //nolint:misspell // Latin species name
 		CommonName:     "Northern Cardinal",
 	}
 	repo.AddSpecies(species)
@@ -425,11 +425,11 @@ func TestSpeciesCache_ErrorHandling(t *testing.T) {
 
 	// Should propagate errors
 	_, err := cache.GetByScientificName(ctx, "Nonexistent")
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	_, err = cache.GetByID(ctx, 999)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	_, err = cache.GetByEbirdCode(ctx, "xxx")
-	assert.Error(t, err)
+	require.Error(t, err)
 }

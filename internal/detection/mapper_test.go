@@ -50,11 +50,11 @@ func TestMapper_ToDatastore(t *testing.T) {
 	assert.Equal(t, detection.SpeciesCode, note.SpeciesCode)
 	assert.Equal(t, detection.ScientificName, note.ScientificName)
 	assert.Equal(t, detection.CommonName, note.CommonName)
-	assert.Equal(t, detection.Confidence, note.Confidence)
-	assert.Equal(t, detection.Threshold, note.Threshold)
-	assert.Equal(t, detection.Sensitivity, note.Sensitivity)
-	assert.Equal(t, detection.Latitude, note.Latitude)
-	assert.Equal(t, detection.Longitude, note.Longitude)
+	assert.InDelta(t, detection.Confidence, note.Confidence, 0.001)
+	assert.InDelta(t, detection.Threshold, note.Threshold, 0.001)
+	assert.InDelta(t, detection.Sensitivity, note.Sensitivity, 0.001)
+	assert.InDelta(t, detection.Latitude, note.Latitude, 0.001)
+	assert.InDelta(t, detection.Longitude, note.Longitude, 0.001)
 	assert.Equal(t, detection.ClipName, note.ClipName)
 	assert.Equal(t, detection.ProcessingTime, note.ProcessingTime)
 
@@ -74,7 +74,7 @@ func TestMapper_FromDatastore(t *testing.T) {
 		BeginTime:      now,
 		EndTime:        now.Add(3 * time.Second),
 		SpeciesCode:    "norcar",
-		ScientificName: "Cardinalis cardinalis",
+		ScientificName: "Cardinalis cardinalis", //nolint:misspell // Latin species name
 		CommonName:     "Northern Cardinal",
 		Confidence:     0.88,
 		Threshold:      0.15,
@@ -106,14 +106,14 @@ func TestMapper_FromDatastore(t *testing.T) {
 	assert.Equal(t, note.SpeciesCode, detection.SpeciesCode)
 	assert.Equal(t, note.ScientificName, detection.ScientificName)
 	assert.Equal(t, note.CommonName, detection.CommonName)
-	assert.Equal(t, note.Confidence, detection.Confidence)
-	assert.Equal(t, note.Threshold, detection.Threshold)
-	assert.Equal(t, note.Sensitivity, detection.Sensitivity)
-	assert.Equal(t, note.Latitude, detection.Latitude)
-	assert.Equal(t, note.Longitude, detection.Longitude)
+	assert.InDelta(t, note.Confidence, detection.Confidence, 0.001)
+	assert.InDelta(t, note.Threshold, detection.Threshold, 0.001)
+	assert.InDelta(t, note.Sensitivity, detection.Sensitivity, 0.001)
+	assert.InDelta(t, note.Latitude, detection.Latitude, 0.001)
+	assert.InDelta(t, note.Longitude, detection.Longitude, 0.001)
 	assert.Equal(t, note.ClipName, detection.ClipName)
 	assert.Equal(t, note.ProcessingTime, detection.ProcessingTime)
-	assert.Equal(t, note.Occurrence, detection.Occurrence)
+	assert.InDelta(t, note.Occurrence, detection.Occurrence, 0.001)
 	assert.Equal(t, note.Verified, detection.Verified)
 	assert.Equal(t, note.Locked, detection.Locked)
 
@@ -165,7 +165,7 @@ func TestMapper_RoundTrip(t *testing.T) {
 	assert.Equal(t, original.Time, converted.Time)
 	assert.Equal(t, original.ScientificName, converted.ScientificName)
 	assert.Equal(t, original.CommonName, converted.CommonName)
-	assert.Equal(t, original.Confidence, converted.Confidence)
+	assert.InDelta(t, original.Confidence, converted.Confidence, 0.001)
 	assert.Equal(t, original.ClipName, converted.ClipName)
 
 	// Verify AudioSource is preserved
@@ -208,13 +208,13 @@ func TestMapper_ToPredictionEntities(t *testing.T) {
 	assert.Contains(t, results[0].Species, "Corvus brachyrhynchos")
 	assert.Contains(t, results[0].Species, "American Crow")
 	assert.Contains(t, results[0].Species, "amecro")
-	assert.Equal(t, float32(0.95), results[0].Confidence)
+	assert.InDelta(t, 0.95, float64(results[0].Confidence), 0.001)
 
 	// Verify second result
 	assert.Equal(t, uint(123), results[1].NoteID)
 	assert.Contains(t, results[1].Species, "Corvus corax")
 	assert.Contains(t, results[1].Species, "Common Raven")
-	assert.Equal(t, float32(0.85), results[1].Confidence)
+	assert.InDelta(t, 0.85, float64(results[1].Confidence), 0.001)
 }
 
 func TestMapper_FromPredictionEntities(t *testing.T) {

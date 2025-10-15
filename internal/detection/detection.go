@@ -10,6 +10,7 @@
 package detection
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -128,7 +129,8 @@ type Lock struct {
 	LockedAt    time.Time // When detection was locked
 }
 
-// NewDetection creates a new detection with the provided parameters.
+// NewDetection creates a new detection with the provided parameters and validates input.
+// Returns an error if required fields are missing or values are out of acceptable ranges.
 // This is a convenience constructor for creating detections in the processing pipeline.
 func NewDetection(
 	sourceNode string,
@@ -141,7 +143,26 @@ func NewDetection(
 	clipName string,
 	processingTime time.Duration,
 	occurrence float64,
-) *Detection {
+) (*Detection, error) {
+	// Validate required fields
+	if sourceNode == "" {
+		return nil, fmt.Errorf("sourceNode cannot be empty")
+	}
+	if scientificName == "" && commonName == "" {
+		return nil, fmt.Errorf("either scientificName or commonName must be provided")
+	}
+
+	// Validate ranges
+	if confidence < 0.0 || confidence > 1.0 {
+		return nil, fmt.Errorf("confidence must be between 0.0 and 1.0, got %f", confidence)
+	}
+	if occurrence < 0.0 || occurrence > 1.0 {
+		return nil, fmt.Errorf("occurrence must be between 0.0 and 1.0, got %f", occurrence)
+	}
+	if !endTime.IsZero() && !beginTime.IsZero() && endTime.Before(beginTime) {
+		return nil, fmt.Errorf("endTime cannot be before beginTime")
+	}
+
 	return &Detection{
 		SourceNode:     sourceNode,
 		Date:           date,
@@ -160,5 +181,5 @@ func NewDetection(
 		ClipName:       clipName,
 		ProcessingTime: processingTime,
 		Occurrence:     occurrence,
-	}
+	}, nil
 }

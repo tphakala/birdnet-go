@@ -1,8 +1,6 @@
 package detection
 
 import (
-	"strings"
-
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/observation"
 )
@@ -145,44 +143,3 @@ func (m *Mapper) ToDatastoreBatch(detections []*Detection) []datastore.Note {
 	return notes
 }
 
-// parseSpeciesString parses a species string in various formats.
-// Formats supported:
-//   - "ScientificName_CommonName_SpeciesCode"
-//   - "ScientificName_CommonName"
-//   - "CommonName" (fallback)
-//
-// This is a helper function that wraps observation.ParseSpeciesString
-// but is kept here for potential future enhancements.
-func parseSpeciesString(species string) *Species {
-	scientificName, commonName, speciesCode := observation.ParseSpeciesString(species)
-
-	// Handle edge cases
-	if scientificName == "" && commonName == "" {
-		// Fallback: treat entire string as common name
-		commonName = species
-	}
-
-	return &Species{
-		SpeciesCode:    speciesCode,
-		ScientificName: scientificName,
-		CommonName:     commonName,
-	}
-}
-
-// normalizeSpeciesString ensures species string is in canonical format.
-// This helps with caching and comparison.
-func normalizeSpeciesString(scientific, common, code string) string {
-	parts := []string{}
-
-	if scientific != "" {
-		parts = append(parts, scientific)
-	}
-	if common != "" {
-		parts = append(parts, common)
-	}
-	if code != "" {
-		parts = append(parts, code)
-	}
-
-	return strings.Join(parts, "_")
-}
