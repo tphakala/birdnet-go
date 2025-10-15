@@ -3970,12 +3970,12 @@ optimize_settings() {
     case $rpi_model in
         5)
             # RPi 5 settings
-            sed -i 's/overlap: 1.5/overlap: 2.7/' "$CONFIG_FILE"
+            sed -i 's/overlap: 1.5/overlap: 2.0/' "$CONFIG_FILE"
             print_message "✅ Applied optimized settings for Raspberry Pi 5" "$GREEN"
             ;;
         4)
             # RPi 4 settings
-            sed -i 's/overlap: 1.5/overlap: 2.6/' "$CONFIG_FILE"
+            sed -i 's/overlap: 1.5/overlap: 2.0/' "$CONFIG_FILE"
             print_message "✅ Applied optimized settings for Raspberry Pi 4" "$GREEN"
             ;;
         3)
