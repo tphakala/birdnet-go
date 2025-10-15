@@ -153,6 +153,40 @@ func TestSpeciesCache_GetOrCreate(t *testing.T) {
 	assert.Equal(t, 1, repo.CallCount("GetOrCreate"))
 }
 
+func TestSpeciesCache_GetOrCreate_ByCodeOnly(t *testing.T) {
+	repo := NewMockSpeciesRepository()
+	cache := NewSpeciesCache(repo, time.Hour)
+
+	ctx := context.Background()
+
+	// Create species with only eBird code (empty scientific name)
+	newSpecies := &Species{
+		SpeciesCode: "easblu",
+		CommonName:  "Eastern Bluebird",
+		// ScientificName intentionally empty
+	}
+
+	// GetOrCreate should fail because mock requires scientificName
+	_, err := cache.GetOrCreate(ctx, newSpecies)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "scientificName is required")
+
+	// Now test with proper eBird code lookup after adding to repo
+	properSpecies := &Species{
+		ID:             50,
+		SpeciesCode:    "rebwoo",
+		ScientificName: "Melanerpes carolinus",
+		CommonName:     "Red-bellied Woodpecker",
+	}
+	repo.AddSpecies(properSpecies)
+
+	// Subsequent lookup by code should find it via cache
+	got, err := cache.GetByEbirdCode(ctx, "rebwoo")
+	require.NoError(t, err)
+	assert.Equal(t, properSpecies.ID, got.ID)
+	assert.Equal(t, "Melanerpes carolinus", got.ScientificName)
+}
+
 func TestSpeciesCache_Invalidate(t *testing.T) {
 	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)

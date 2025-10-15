@@ -28,6 +28,7 @@ func BenchmarkSpeciesCache_Lookup(b *testing.B) {
 	// Prime the cache
 	_, _ = cache.GetByScientificName(ctx, "Corvus brachyrhynchos")
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = cache.GetByScientificName(ctx, "Corvus brachyrhynchos")
@@ -53,6 +54,7 @@ func BenchmarkSpeciesCache_LookupByID(b *testing.B) {
 	// Prime the cache
 	_, _ = cache.GetByID(ctx, 42)
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = cache.GetByID(ctx, 42)
@@ -78,6 +80,7 @@ func BenchmarkSpeciesCache_LookupByEbirdCode(b *testing.B) {
 	// Prime the cache
 	_, _ = cache.GetByEbirdCode(ctx, "rebwoo")
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = cache.GetByEbirdCode(ctx, "rebwoo")
@@ -101,6 +104,7 @@ func BenchmarkSpeciesCache_Miss(b *testing.B) {
 
 	ctx := context.Background()
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// Always miss (species not in mock repo)
@@ -127,6 +131,7 @@ func BenchmarkSpeciesCache_ConcurrentReads(b *testing.B) {
 	// Prime the cache
 	_, _ = cache.GetByScientificName(ctx, "Corvus brachyrhynchos")
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -166,6 +171,7 @@ func BenchmarkMapper_ToDatastore(b *testing.B) {
 		Occurrence: 0.85,
 	}
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = mapper.ToDatastore(detection)
@@ -206,6 +212,7 @@ func BenchmarkMapper_FromDatastore(b *testing.B) {
 		DisplayName: "Back Yard Mic",
 	}
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = mapper.FromDatastore(note, source)
@@ -242,6 +249,7 @@ func BenchmarkMapper_RoundTrip(b *testing.B) {
 		Occurrence: 0.75,
 	}
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		note := mapper.ToDatastore(original)
@@ -259,6 +267,7 @@ func BenchmarkNewDetection(b *testing.B) {
 		DisplayName: "Test Source",
 	}
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = NewDetection(
