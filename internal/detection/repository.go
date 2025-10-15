@@ -13,12 +13,12 @@ import (
 type Repository interface {
 	// Core CRUD operations
 	Save(ctx context.Context, detection *Detection, predictions []Prediction) error
-	Get(ctx context.Context, id string) (*Detection, error)
-	Delete(ctx context.Context, id string) error
+	Get(ctx context.Context, id uint) (*Detection, error)
+	Delete(ctx context.Context, id uint) error
 
 	// Batch operations
 	SaveBatch(ctx context.Context, detections []*Detection) error
-	GetByIDs(ctx context.Context, ids []string) ([]*Detection, error)
+	GetByIDs(ctx context.Context, ids []uint) ([]*Detection, error)
 
 	// Query operations
 	Search(ctx context.Context, filters SearchFilters) ([]*Detection, int, error)
@@ -30,13 +30,13 @@ type Repository interface {
 	CountSpeciesDetections(ctx context.Context, species, date, hour string, duration int) (int64, error)
 
 	// Review operations
-	SaveReview(ctx context.Context, detectionID string, verified string) error
-	LockDetection(ctx context.Context, detectionID string) error
-	UnlockDetection(ctx context.Context, detectionID string) error
+	SaveReview(ctx context.Context, detectionID uint, verified string) error
+	LockDetection(ctx context.Context, detectionID uint) error
+	UnlockDetection(ctx context.Context, detectionID uint) error
 
 	// Clip path operations
-	GetClipPath(ctx context.Context, detectionID string) (string, error)
-	DeleteClipPath(ctx context.Context, detectionID string) error
+	GetClipPath(ctx context.Context, detectionID uint) (string, error)
+	DeleteClipPath(ctx context.Context, detectionID uint) error
 }
 
 // SpeciesRepository manages species lookup and persistence.

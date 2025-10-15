@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+// maxSpeciesBatchSize is the maximum number of species to load in a single batch.
+// This limit accommodates the global bird taxonomy (approximately 10,000 known species)
+// with ample headroom for future growth and regional subspecies variations.
+const maxSpeciesBatchSize = 100000
+
 // SpeciesCache provides fast in-memory lookup for species data.
 // Species information rarely changes, making caching highly effective.
 // The cache supports multiple lookup indexes for different access patterns.
@@ -202,8 +207,7 @@ func (c *SpeciesCache) Refresh(ctx context.Context) error {
 	defer c.mu.Unlock()
 
 	// Load all species from repository
-	// Using a large limit to get all species (typical: <10,000)
-	species, err := c.repo.List(ctx, 100000, 0)
+	species, err := c.repo.List(ctx, maxSpeciesBatchSize, 0)
 	if err != nil {
 		return fmt.Errorf("failed to refresh species cache: %w", err)
 	}
