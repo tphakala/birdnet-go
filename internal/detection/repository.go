@@ -56,6 +56,16 @@ type SpeciesRepository interface {
 	InvalidateCache() error
 }
 
+// SortBy constants to avoid stringly-typed errors.
+const (
+	SortByDateAsc        = "date_asc"
+	SortByDateDesc       = "date_desc"
+	SortBySpeciesAsc     = "species_asc"
+	SortBySpeciesDesc    = "species_desc"
+	SortByConfidenceAsc  = "confidence_asc"
+	SortByConfidenceDesc = "confidence_desc"
+)
+
 // SearchFilters defines parameters for filtering detections.
 type SearchFilters struct {
 	Species        string  // Scientific or common name (partial match)
@@ -71,7 +81,7 @@ type SearchFilters struct {
 	TimeOfDay      string  // "any", "day", "night", "sunrise", "sunset"
 	Page           int     // Page number (1-indexed)
 	PerPage        int     // Results per page
-	SortBy         string  // Sort order: "date_asc", "species_asc", "confidence_desc"
+	SortBy         string  // Use SortBy* constants (e.g., SortByDateAsc, SortByConfidenceDesc)
 }
 
 // QueryParams defines common query parameters.

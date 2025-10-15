@@ -10,7 +10,7 @@ import (
 )
 
 func TestMapper_ToDatastore(t *testing.T) {
-	mapper := NewMapper(nil)
+	mapper := NewMapper()
 
 	now := time.Now()
 	detection := &Detection{
@@ -63,7 +63,7 @@ func TestMapper_ToDatastore(t *testing.T) {
 }
 
 func TestMapper_FromDatastore(t *testing.T) {
-	mapper := NewMapper(nil)
+	mapper := NewMapper()
 
 	now := time.Now()
 	note := datastore.Note{
@@ -128,7 +128,7 @@ func TestMapper_FromDatastore(t *testing.T) {
 }
 
 func TestMapper_RoundTrip(t *testing.T) {
-	mapper := NewMapper(nil)
+	mapper := NewMapper()
 
 	now := time.Now()
 	original := &Detection{
@@ -176,7 +176,7 @@ func TestMapper_RoundTrip(t *testing.T) {
 }
 
 func TestMapper_ToPredictionEntities(t *testing.T) {
-	mapper := NewMapper(nil)
+	mapper := NewMapper()
 
 	predictions := []Prediction{
 		{
@@ -218,7 +218,7 @@ func TestMapper_ToPredictionEntities(t *testing.T) {
 }
 
 func TestMapper_FromPredictionEntities(t *testing.T) {
-	mapper := NewMapper(nil)
+	mapper := NewMapper()
 
 	results := []datastore.Results{
 		{
@@ -253,7 +253,7 @@ func TestMapper_FromPredictionEntities(t *testing.T) {
 }
 
 func TestMapper_PredictionRoundTrip(t *testing.T) {
-	mapper := NewMapper(nil)
+	mapper := NewMapper()
 
 	originalPredictions := []Prediction{
 		{
@@ -294,7 +294,7 @@ func TestMapper_PredictionRoundTrip(t *testing.T) {
 }
 
 func TestMapper_FromDatastoreBatch(t *testing.T) {
-	mapper := NewMapper(nil)
+	mapper := NewMapper()
 
 	now := time.Now()
 	notes := []datastore.Note{
@@ -328,7 +328,7 @@ func TestMapper_FromDatastoreBatch(t *testing.T) {
 }
 
 func TestMapper_ToDatastoreBatch(t *testing.T) {
-	mapper := NewMapper(nil)
+	mapper := NewMapper()
 
 	now := time.Now()
 	detections := []*Detection{
@@ -356,7 +356,7 @@ func TestMapper_ToDatastoreBatch(t *testing.T) {
 }
 
 func TestMapper_EmptySpecies(t *testing.T) {
-	mapper := NewMapper(nil)
+	mapper := NewMapper()
 
 	note := datastore.Note{
 		ID:             1,

@@ -96,6 +96,11 @@ func (m *MockSpeciesRepository) GetOrCreate(ctx context.Context, species *Specie
 		return nil, errors.New("mock error")
 	}
 
+	// Validate input
+	if species == nil || species.ScientificName == "" {
+		return nil, errors.New("scientificName is required")
+	}
+
 	// Check if exists
 	if sp, ok := m.species[species.ScientificName]; ok {
 		return sp, nil
@@ -123,7 +128,24 @@ func (m *MockSpeciesRepository) List(ctx context.Context, limit, offset int) ([]
 		return nil, errors.New("mock error")
 	}
 
-	return m.listSpecies, nil
+	total := len(m.listSpecies)
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 {
+		limit = total
+	}
+	if offset > total {
+		return []*Species{}, nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+
+	page := make([]*Species, end-offset)
+	copy(page, m.listSpecies[offset:end])
+	return page, nil
 }
 
 // InvalidateCache is a no-op for the mock.
@@ -132,10 +154,16 @@ func (m *MockSpeciesRepository) InvalidateCache() error {
 }
 
 // AddSpecies adds a species to the mock repository.
-// This is a test helper method.
+// This is a test helper method. If sp.ID is 0, an ID is auto-assigned.
 func (m *MockSpeciesRepository) AddSpecies(sp *Species) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// Auto-assign ID if not set
+	if sp.ID == 0 {
+		sp.ID = uint(len(m.byID) + 1)
+	}
+
 	m.species[sp.ScientificName] = sp
 	m.byID[sp.ID] = sp
 	if sp.SpeciesCode != "" {

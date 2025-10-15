@@ -138,7 +138,7 @@ func BenchmarkSpeciesCache_ConcurrentReads(b *testing.B) {
 // BenchmarkMapper_ToDatastore benchmarks domain to database conversion.
 // Target: <1µs per conversion (zero allocations ideal).
 func BenchmarkMapper_ToDatastore(b *testing.B) {
-	mapper := NewMapper(nil)
+	mapper := NewMapper()
 
 	now := time.Now()
 	detection := &Detection{
@@ -175,7 +175,7 @@ func BenchmarkMapper_ToDatastore(b *testing.B) {
 // BenchmarkMapper_FromDatastore benchmarks database to domain conversion.
 // Target: <500ns per conversion (minimal allocations).
 func BenchmarkMapper_FromDatastore(b *testing.B) {
-	mapper := NewMapper(nil)
+	mapper := NewMapper()
 
 	now := time.Now()
 	note := &datastore.Note{
@@ -215,7 +215,7 @@ func BenchmarkMapper_FromDatastore(b *testing.B) {
 // BenchmarkMapper_RoundTrip benchmarks full conversion cycle.
 // Target: <500ns for full round-trip (includes both conversions).
 func BenchmarkMapper_RoundTrip(b *testing.B) {
-	mapper := NewMapper(nil)
+	mapper := NewMapper()
 
 	now := time.Now()
 	original := &Detection{

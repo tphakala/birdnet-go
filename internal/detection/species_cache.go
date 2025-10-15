@@ -26,7 +26,9 @@ type SpeciesCache struct {
 }
 
 // NewSpeciesCache creates a new species cache with the given repository and TTL.
-// The cache will automatically refresh after the TTL expires.
+// The cache stores species with a time-to-live duration. Entries are considered
+// stale/expired after the TTL, which can be checked via IsExpired(). No automatic
+// background refresh is performed; callers must explicitly call Refresh() to reload data.
 func NewSpeciesCache(repo SpeciesRepository, ttl time.Duration) *SpeciesCache {
 	return &SpeciesCache{
 		byID:         make(map[uint]*Species),
@@ -39,6 +41,7 @@ func NewSpeciesCache(repo SpeciesRepository, ttl time.Duration) *SpeciesCache {
 
 // GetByID retrieves species by database ID.
 // Uses cache with fallback to database.
+// Note: returned *Species is owned by the cache; treat it as read-only to prevent index drift.
 func (c *SpeciesCache) GetByID(ctx context.Context, id uint) (*Species, error) {
 	// Check cache with read lock
 	c.mu.RLock()
@@ -71,6 +74,7 @@ func (c *SpeciesCache) GetByID(ctx context.Context, id uint) (*Species, error) {
 
 // GetByScientificName retrieves species by scientific name.
 // Uses cache with fallback to database.
+// Note: returned *Species is owned by the cache; treat it as read-only to prevent index drift.
 func (c *SpeciesCache) GetByScientificName(ctx context.Context, name string) (*Species, error) {
 	// Check cache with read lock
 	c.mu.RLock()
@@ -103,6 +107,7 @@ func (c *SpeciesCache) GetByScientificName(ctx context.Context, name string) (*S
 
 // GetByEbirdCode retrieves species by eBird taxonomy code.
 // Uses cache with fallback to database.
+// Note: returned *Species is owned by the cache; treat it as read-only to prevent index drift.
 func (c *SpeciesCache) GetByEbirdCode(ctx context.Context, code string) (*Species, error) {
 	// Check cache with read lock
 	c.mu.RLock()
@@ -135,24 +140,47 @@ func (c *SpeciesCache) GetByEbirdCode(ctx context.Context, code string) (*Specie
 
 // GetOrCreate retrieves species from cache or creates it if not found.
 // This is useful during detection processing where species may not exist yet.
+// Checks all available indexes (ID, scientific name, eBird code) to avoid duplicates.
 func (c *SpeciesCache) GetOrCreate(ctx context.Context, species *Species) (*Species, error) {
-	// Try cache lookup first by scientific name
+	// Try cache lookup first by all available keys (fast path)
+	c.mu.RLock()
+	if species.ID != 0 {
+		if cached, ok := c.byID[species.ID]; ok {
+			c.mu.RUnlock()
+			return cached, nil
+		}
+	}
 	if species.ScientificName != "" {
-		c.mu.RLock()
 		if cached, ok := c.byScientific[species.ScientificName]; ok {
 			c.mu.RUnlock()
 			return cached, nil
 		}
-		c.mu.RUnlock()
 	}
+	if species.SpeciesCode != "" {
+		if cached, ok := c.byEbird[species.SpeciesCode]; ok {
+			c.mu.RUnlock()
+			return cached, nil
+		}
+	}
+	c.mu.RUnlock()
 
 	// Not in cache, delegate to repository
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// Double-check after acquiring write lock
+	if species.ID != 0 {
+		if cached, ok := c.byID[species.ID]; ok {
+			return cached, nil
+		}
+	}
 	if species.ScientificName != "" {
 		if cached, ok := c.byScientific[species.ScientificName]; ok {
+			return cached, nil
+		}
+	}
+	if species.SpeciesCode != "" {
+		if cached, ok := c.byEbird[species.SpeciesCode]; ok {
 			return cached, nil
 		}
 	}
@@ -212,10 +240,10 @@ func (c *SpeciesCache) Refresh(ctx context.Context) error {
 		return fmt.Errorf("failed to refresh species cache: %w", err)
 	}
 
-	// Clear existing cache
-	c.byID = make(map[uint]*Species)
-	c.byScientific = make(map[string]*Species)
-	c.byEbird = make(map[string]*Species)
+	// Clear existing cache with preallocation to avoid rehash churn
+	c.byID = make(map[uint]*Species, len(species))
+	c.byScientific = make(map[string]*Species, len(species))
+	c.byEbird = make(map[string]*Species, len(species))
 
 	// Repopulate cache
 	for _, s := range species {

@@ -113,7 +113,7 @@ fmt.Printf("Created detection: %s at %s\n", detection.CommonName, detection.Time
 ### Using the Mapper
 
 ```go
-mapper := detection.NewMapper(speciesCache)
+mapper := detection.NewMapper()
 
 // Domain → Database
 note := mapper.ToDatastore(detection)
