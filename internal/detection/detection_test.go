@@ -262,3 +262,46 @@ func TestNewDetection_ZeroTimes(t *testing.T) {
 	assert.True(t, detection.BeginTime.IsZero())
 	assert.True(t, detection.EndTime.IsZero())
 }
+
+func TestNewDetection_OneZeroTime(t *testing.T) {
+	now := time.Now()
+	source := AudioSource{ID: "test"}
+
+	// Zero end time with non-zero begin time should be allowed
+	detection, err := NewDetection(
+		"test-node",
+		"2025-01-15", "14:30:00",
+		now,
+		time.Time{}, // Zero end time
+		source,
+		"amecro", "Corvus brachyrhynchos", "American Crow",
+		0.95, 0.1, 1.2,
+		47.6062, -122.3321,
+		"/clips/test.wav",
+		50*time.Millisecond,
+		0.85,
+	)
+
+	require.NoError(t, err)
+	assert.False(t, detection.BeginTime.IsZero())
+	assert.True(t, detection.EndTime.IsZero())
+
+	// Zero begin time with non-zero end time should also be allowed
+	detection2, err := NewDetection(
+		"test-node",
+		"2025-01-15", "14:30:00",
+		time.Time{}, // Zero begin time
+		now,
+		source,
+		"amecro", "Corvus brachyrhynchos", "American Crow",
+		0.95, 0.1, 1.2,
+		47.6062, -122.3321,
+		"/clips/test.wav",
+		50*time.Millisecond,
+		0.85,
+	)
+
+	require.NoError(t, err)
+	assert.True(t, detection2.BeginTime.IsZero())
+	assert.False(t, detection2.EndTime.IsZero())
+}
