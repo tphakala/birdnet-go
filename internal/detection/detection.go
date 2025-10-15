@@ -112,11 +112,17 @@ type Comment struct {
 	UpdatedAt   time.Time // When comment was last updated
 }
 
+// Verified status constants to avoid magic strings.
+const (
+	VerifiedCorrect       = "correct"
+	VerifiedFalsePositive = "false_positive"
+)
+
 // Review represents the review/verification status of a detection.
 type Review struct {
 	ID          uint      // Database ID
 	DetectionID uint      // Foreign key to Detection
-	Verified    string    // "correct" or "false_positive"
+	Verified    string    // Use VerifiedCorrect or VerifiedFalsePositive constants
 	CreatedAt   time.Time // When review was created
 	UpdatedAt   time.Time // When review was last updated
 }

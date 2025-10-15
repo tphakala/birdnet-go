@@ -8,14 +8,12 @@ import (
 // Mapper converts between domain models (Detection) and database entities (datastore.Note).
 // This separation allows the database schema to evolve independently from the runtime model.
 type Mapper struct {
-	speciesCache *SpeciesCache
+	// Note: Species cache integration will be added in Phase 2
 }
 
-// NewMapper creates a new mapper with optional species cache.
-func NewMapper(cache *SpeciesCache) *Mapper {
-	return &Mapper{
-		speciesCache: cache,
-	}
+// NewMapper creates a new mapper.
+func NewMapper() *Mapper {
+	return &Mapper{}
 }
 
 // ToDatastore converts a Detection domain model to a datastore.Note entity for persistence.
@@ -86,20 +84,26 @@ func (m *Mapper) FromDatastore(note *datastore.Note, source AudioSource) *Detect
 
 // ToPredictionEntities converts domain Prediction objects to datastore.Results entities.
 // The detectionID must be provided as it's the foreign key.
+// Predictions with nil Species are skipped to avoid panics.
 func (m *Mapper) ToPredictionEntities(detectionID uint, predictions []Prediction) []datastore.Results {
-	results := make([]datastore.Results, len(predictions))
-	for i, p := range predictions {
+	results := make([]datastore.Results, 0, len(predictions))
+	for _, p := range predictions {
+		// Skip predictions with nil Species
+		if p.Species == nil {
+			continue
+		}
+
 		// Format species as "ScientificName_CommonName" to match current format
 		speciesStr := p.Species.ScientificName + "_" + p.Species.CommonName
 		if p.Species.SpeciesCode != "" {
 			speciesStr += "_" + p.Species.SpeciesCode
 		}
 
-		results[i] = datastore.Results{
+		results = append(results, datastore.Results{
 			NoteID:     detectionID,
 			Species:    speciesStr,
 			Confidence: float32(p.Confidence),
-		}
+		})
 	}
 	return results
 }
