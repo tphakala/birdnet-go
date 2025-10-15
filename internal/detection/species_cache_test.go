@@ -2,7 +2,6 @@ package detection
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -11,131 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockSpeciesRepository is a mock implementation for testing
-type mockSpeciesRepository struct {
-	species      map[string]*Species
-	byID         map[uint]*Species
-	byEbird      map[string]*Species
-	callCounts   map[string]int
-	mu           sync.Mutex
-	shouldFail   bool
-	listSpecies  []*Species
-}
-
-func newMockSpeciesRepo() *mockSpeciesRepository {
-	return &mockSpeciesRepository{
-		species:    make(map[string]*Species),
-		byID:       make(map[uint]*Species),
-		byEbird:    make(map[string]*Species),
-		callCounts: make(map[string]int),
-	}
-}
-
-func (m *mockSpeciesRepository) GetByID(ctx context.Context, id uint) (*Species, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.callCounts["GetByID"]++
-
-	if m.shouldFail {
-		return nil, errors.New("mock error")
-	}
-
-	if sp, ok := m.byID[id]; ok {
-		return sp, nil
-	}
-	return nil, errors.New("not found")
-}
-
-func (m *mockSpeciesRepository) GetByScientificName(ctx context.Context, name string) (*Species, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.callCounts["GetByScientificName"]++
-
-	if m.shouldFail {
-		return nil, errors.New("mock error")
-	}
-
-	if sp, ok := m.species[name]; ok {
-		return sp, nil
-	}
-	return nil, errors.New("not found")
-}
-
-func (m *mockSpeciesRepository) GetByEbirdCode(ctx context.Context, code string) (*Species, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.callCounts["GetByEbirdCode"]++
-
-	if m.shouldFail {
-		return nil, errors.New("mock error")
-	}
-
-	if sp, ok := m.byEbird[code]; ok {
-		return sp, nil
-	}
-	return nil, errors.New("not found")
-}
-
-func (m *mockSpeciesRepository) GetOrCreate(ctx context.Context, species *Species) (*Species, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.callCounts["GetOrCreate"]++
-
-	if m.shouldFail {
-		return nil, errors.New("mock error")
-	}
-
-	// Check if exists
-	if sp, ok := m.species[species.ScientificName]; ok {
-		return sp, nil
-	}
-
-	// Create new
-	species.ID = uint(len(m.species) + 1)
-	m.species[species.ScientificName] = species
-	m.byID[species.ID] = species
-	if species.SpeciesCode != "" {
-		m.byEbird[species.SpeciesCode] = species
-	}
-
-	return species, nil
-}
-
-func (m *mockSpeciesRepository) List(ctx context.Context, limit, offset int) ([]*Species, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.callCounts["List"]++
-
-	if m.shouldFail {
-		return nil, errors.New("mock error")
-	}
-
-	return m.listSpecies, nil
-}
-
-func (m *mockSpeciesRepository) InvalidateCache() error {
-	return nil
-}
-
-func (m *mockSpeciesRepository) CallCount(method string) int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.callCounts[method]
-}
-
-func (m *mockSpeciesRepository) AddSpecies(sp *Species) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.species[sp.ScientificName] = sp
-	m.byID[sp.ID] = sp
-	if sp.SpeciesCode != "" {
-		m.byEbird[sp.SpeciesCode] = sp
-	}
-	m.listSpecies = append(m.listSpecies, sp)
-}
+// Note: MockSpeciesRepository has been moved to testing.go and is now exported
+// for reuse in Phase 2 integration testing.
 
 func TestSpeciesCache_GetByScientificName(t *testing.T) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)
 
 	species := &Species{
@@ -162,7 +41,7 @@ func TestSpeciesCache_GetByScientificName(t *testing.T) {
 }
 
 func TestSpeciesCache_GetByID(t *testing.T) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)
 
 	species := &Species{
@@ -189,7 +68,7 @@ func TestSpeciesCache_GetByID(t *testing.T) {
 }
 
 func TestSpeciesCache_GetByEbirdCode(t *testing.T) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)
 
 	species := &Species{
@@ -216,7 +95,7 @@ func TestSpeciesCache_GetByEbirdCode(t *testing.T) {
 }
 
 func TestSpeciesCache_ConcurrentAccess(t *testing.T) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)
 
 	species := &Species{
@@ -248,7 +127,7 @@ func TestSpeciesCache_ConcurrentAccess(t *testing.T) {
 }
 
 func TestSpeciesCache_GetOrCreate(t *testing.T) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)
 
 	ctx := context.Background()
@@ -275,7 +154,7 @@ func TestSpeciesCache_GetOrCreate(t *testing.T) {
 }
 
 func TestSpeciesCache_Invalidate(t *testing.T) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)
 
 	species := &Species{
@@ -302,7 +181,7 @@ func TestSpeciesCache_Invalidate(t *testing.T) {
 }
 
 func TestSpeciesCache_Refresh(t *testing.T) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)
 
 	// Add some species to repo
@@ -333,7 +212,7 @@ func TestSpeciesCache_Refresh(t *testing.T) {
 }
 
 func TestSpeciesCache_Stats(t *testing.T) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)
 
 	// Initially empty
@@ -357,7 +236,7 @@ func TestSpeciesCache_Stats(t *testing.T) {
 }
 
 func TestSpeciesCache_IsExpired(t *testing.T) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 
 	// Create cache with very short TTL
 	cache := NewSpeciesCache(repo, 10*time.Millisecond)
@@ -382,7 +261,7 @@ func TestSpeciesCache_IsExpired(t *testing.T) {
 }
 
 func TestSpeciesCache_MultipleIndexes(t *testing.T) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)
 
 	species := &Species{
@@ -415,13 +294,13 @@ func TestSpeciesCache_MultipleIndexes(t *testing.T) {
 }
 
 func TestSpeciesCache_ErrorHandling(t *testing.T) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)
 
 	ctx := context.Background()
 
 	// Enable error mode
-	repo.shouldFail = true
+	repo.SetShouldFail(true)
 
 	// Should propagate errors
 	_, err := cache.GetByScientificName(ctx, "Nonexistent")

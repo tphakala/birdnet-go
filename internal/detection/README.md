@@ -82,7 +82,7 @@ Thread-safe with read/write locks for concurrent access.
 ### Creating a Detection
 
 ```go
-detection := detection.NewDetection(
+detection, err := detection.NewDetection(
     "node1",                    // sourceNode
     "2025-01-15", "14:30:00",  // date, time
     beginTime, endTime,         // time.Time
@@ -96,7 +96,19 @@ detection := detection.NewDetection(
     50 * time.Millisecond,      // processing time
     0.85,                       // occurrence probability
 )
+if err != nil {
+    return fmt.Errorf("invalid detection: %w", err)
+}
+
+// Detection is now validated and ready to use
+fmt.Printf("Created detection: %s at %s\n", detection.CommonName, detection.Time)
 ```
+
+**Note**: `NewDetection()` validates inputs and returns an error if:
+- `sourceNode` is empty
+- Both `scientificName` and `commonName` are empty
+- `confidence` or `occurrence` is not in range [0.0, 1.0]
+- `endTime` is before `beginTime` (when both are non-zero)
 
 ### Using the Mapper
 

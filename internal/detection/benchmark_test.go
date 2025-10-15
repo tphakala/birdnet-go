@@ -11,7 +11,7 @@ import (
 // BenchmarkSpeciesCache_Lookup benchmarks cache lookup performance.
 // Target: <5ms per lookup (currently ~50ms without cache).
 func BenchmarkSpeciesCache_Lookup(b *testing.B) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)
 
 	// Pre-populate cache with test data
@@ -35,8 +35,9 @@ func BenchmarkSpeciesCache_Lookup(b *testing.B) {
 }
 
 // BenchmarkSpeciesCache_LookupByID benchmarks ID-based lookups.
+// Target: <5ms per lookup (similar to scientific name lookup).
 func BenchmarkSpeciesCache_LookupByID(b *testing.B) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)
 
 	species := &Species{
@@ -59,8 +60,9 @@ func BenchmarkSpeciesCache_LookupByID(b *testing.B) {
 }
 
 // BenchmarkSpeciesCache_LookupByEbirdCode benchmarks eBird code lookups.
+// Target: <5ms per lookup (similar to scientific name lookup).
 func BenchmarkSpeciesCache_LookupByEbirdCode(b *testing.B) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)
 
 	species := &Species{
@@ -83,8 +85,9 @@ func BenchmarkSpeciesCache_LookupByEbirdCode(b *testing.B) {
 }
 
 // BenchmarkSpeciesCache_Miss benchmarks cache miss performance.
+// Target: <1ms per lookup (database query expected for miss).
 func BenchmarkSpeciesCache_Miss(b *testing.B) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)
 
 	// Add many species to simulate realistic scenario
@@ -106,8 +109,9 @@ func BenchmarkSpeciesCache_Miss(b *testing.B) {
 }
 
 // BenchmarkSpeciesCache_ConcurrentReads benchmarks concurrent read performance.
+// Target: <50ns per operation under high concurrency (read lock contention).
 func BenchmarkSpeciesCache_ConcurrentReads(b *testing.B) {
-	repo := newMockSpeciesRepo()
+	repo := NewMockSpeciesRepository()
 	cache := NewSpeciesCache(repo, time.Hour)
 
 	species := &Species{
@@ -132,6 +136,7 @@ func BenchmarkSpeciesCache_ConcurrentReads(b *testing.B) {
 }
 
 // BenchmarkMapper_ToDatastore benchmarks domain to database conversion.
+// Target: <1µs per conversion (zero allocations ideal).
 func BenchmarkMapper_ToDatastore(b *testing.B) {
 	mapper := NewMapper(nil)
 
@@ -168,6 +173,7 @@ func BenchmarkMapper_ToDatastore(b *testing.B) {
 }
 
 // BenchmarkMapper_FromDatastore benchmarks database to domain conversion.
+// Target: <500ns per conversion (minimal allocations).
 func BenchmarkMapper_FromDatastore(b *testing.B) {
 	mapper := NewMapper(nil)
 
@@ -207,6 +213,7 @@ func BenchmarkMapper_FromDatastore(b *testing.B) {
 }
 
 // BenchmarkMapper_RoundTrip benchmarks full conversion cycle.
+// Target: <500ns for full round-trip (includes both conversions).
 func BenchmarkMapper_RoundTrip(b *testing.B) {
 	mapper := NewMapper(nil)
 
@@ -243,6 +250,7 @@ func BenchmarkMapper_RoundTrip(b *testing.B) {
 }
 
 // BenchmarkNewDetection benchmarks detection construction with validation.
+// Target: <300ns per construction (validates all inputs).
 func BenchmarkNewDetection(b *testing.B) {
 	now := time.Now()
 	source := AudioSource{
