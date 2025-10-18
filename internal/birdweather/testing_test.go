@@ -224,11 +224,6 @@ func TestIsDNSError(t *testing.T) {
 			errorMsg:  "i/o timeout",
 			expectDNS: false,
 		},
-		{
-			name:      "DNS keyword",
-			errorMsg:  "DNS server not responding",
-			expectDNS: true,
-		},
 	}
 
 	for _, tc := range testCases {

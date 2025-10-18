@@ -108,12 +108,14 @@ func resolveDNSWithFallback(ctx context.Context, hostname string) ([]net.IP, err
 			PreferGo: true,
 			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
 				d := net.Dialer{Timeout: dnsResolverTimeout}
-				return d.DialContext(ctx, "udp", resolver)
+				// Honor the requested network (udp/tcp; including v4/v6 variants)
+				return d.DialContext(ctx, network, resolver)
 			},
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), dnsLookupTimeout)
-		fallbackIPs, err := r.LookupIPAddr(ctx, hostname)
+		// Create a child context with timeout, preserving parent cancellation
+		childCtx, cancel := context.WithTimeout(ctx, dnsLookupTimeout)
+		fallbackIPs, err := r.LookupIPAddr(childCtx, hostname)
 		cancel()
 
 		if err == nil && len(fallbackIPs) > 0 {
@@ -392,14 +394,16 @@ func isDNSError(err error) bool {
 		return true
 	}
 
-	// Fallback to string matching for wrapped errors
-	// Note: "dial tcp" removed to avoid false positives from non-DNS network errors
-	errStr := err.Error()
-	return strings.Contains(errStr, "no such host") ||
-		strings.Contains(errStr, "lookup ") ||
-		strings.Contains(errStr, "DNS") ||
-		strings.Contains(errStr, "dns") ||
-		strings.Contains(errStr, "cannot resolve")
+	// Check for URL errors with lookup operation
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && strings.HasPrefix(urlErr.Op, "lookup") {
+		return true
+	}
+
+	// Minimal fallback to string matching only for clear DNS-specific patterns
+	// Avoid broad matches like "network" or "dial tcp" that can match non-DNS errors
+	s := err.Error()
+	return strings.Contains(s, "no such host") || strings.Contains(s, "lookup ")
 }
 
 // isDNSTimeout checks if a DNS error was caused by a timeout
