@@ -41,6 +41,11 @@ CONFIG_BACKUP_PREFIX="config-backup-"
 # Set secure umask for file creation
 umask 077
 
+# Telemetry diagnostic truncation limits
+MAX_ERROR_LENGTH=500
+MAX_LOG_LENGTH=1000
+MAX_FLAGS_LENGTH=300
+
 # Cleanup trap for temporary files
 cleanup_temp_files() {
     rm -f /tmp/version_history_*.tmp 2>/dev/null
@@ -1250,15 +1255,15 @@ check_prerequisites() {
                 log_message "WARN" "CPU does not have AVX2 support, user will be prompted"
 
                 # Collect CPU details for diagnostics
-                local cpu_model=$(grep -m1 "model name" /proc/cpuinfo | cut -d: -f2 | xargs || echo "unknown")
-                local cpu_flags=$(grep -m1 "^flags" /proc/cpuinfo | cut -d: -f2 | xargs || echo "unknown")
+                local cpu_model=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs || echo "unknown")
+                local cpu_flags=$(grep -m1 "^flags" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs | head -c "$MAX_FLAGS_LENGTH" || echo "unknown")
 
                 local diagnostic_json=$(cat <<EOF
 {
     "architecture": "x86_64",
     "cpu_model": "$(echo "$cpu_model" | sed 's/"/\\"/g')",
     "required_feature": "avx2",
-    "cpu_flags": "$(echo "$cpu_flags" | sed 's/"/\\"/g')",
+    "cpu_flags": "$(echo "$cpu_flags" | sed 's/"/\\"/g')...",
     "minimum_recommended": "Intel Haswell (2013) or AMD Excavator (2015)",
     "user_choice": "prompted"
 }
@@ -1278,7 +1283,7 @@ EOF
                 print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "$YELLOW"
 
                 print_message "\n❓ Do you want to proceed with installation anyway? (y/n): " "$YELLOW" "nonewline"
-                read -r response
+                read -r -t 60 response || response="n"
 
                 if [[ "$response" =~ ^[Yy]$ ]]; then
                     log_message "INFO" "User chose to proceed despite missing AVX2 support"
@@ -1759,6 +1764,47 @@ collect_system_info() {
     echo "{\"os_name\":\"$os_name\",\"os_version\":\"$os_version\",\"cpu_arch\":\"$cpu_arch\",\"docker_version\":\"$docker_version\",\"pi_model\":\"$pi_model\",\"install_id\":\"$TELEMETRY_INSTALL_ID\"}"
 }
 
+# Helper function to collect CPU diagnostics
+collect_cpu_diagnostics() {
+    local cpu_model=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs || echo "unknown")
+    local cpu_flags=$(grep -m1 "^flags" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs | head -c "$MAX_FLAGS_LENGTH" || echo "unknown")
+
+    cat <<EOF
+{
+    "cpu_model": "$(echo "$cpu_model" | sed 's/"/\\"/g')",
+    "cpu_flags": "$(echo "$cpu_flags" | sed 's/"/\\"/g')..."
+}
+EOF
+}
+
+# Helper function to safely truncate text for diagnostics
+safe_truncate() {
+    local text="$1"
+    local max_length="${2:-$MAX_ERROR_LENGTH}"
+    echo "$text" | head -c "$max_length"
+}
+
+# Helper function to validate JSON before sending
+validate_diagnostic_json() {
+    local json="$1"
+
+    # Check if jq is available
+    if command -v jq >/dev/null 2>&1; then
+        if echo "$json" | jq empty 2>/dev/null; then
+            echo "$json"
+            return 0
+        else
+            log_message "WARN" "Invalid diagnostic JSON detected, using fallback"
+            echo '{"error": "diagnostic_collection_failed", "reason": "invalid_json"}'
+            return 1
+        fi
+    else
+        # jq not available, just return the JSON
+        echo "$json"
+        return 0
+    fi
+}
+
 # Function to send telemetry event
 send_telemetry_event() {
     # Check if telemetry is enabled
@@ -1771,6 +1817,9 @@ send_telemetry_event() {
     local level="${3:-info}"
     local context="${4:-}"
     local diagnostic_json="${5:-{}}"  # Optional structured diagnostic data
+
+    # Validate diagnostic JSON before using
+    diagnostic_json=$(validate_diagnostic_json "$diagnostic_json")
 
     # Collect system info before background process
     local system_info
@@ -1785,13 +1834,14 @@ send_telemetry_event() {
 {
     "timestamp": "$timestamp",
     "level": "$level",
-    "message": "$message",
+    "message": "[install.sh] $message",
     "platform": "other",
     "environment": "production",
     "release": "install-script@1.0.0",
     "tags": {
         "event_type": "$event_type",
-        "script_version": "1.0.0"
+        "script_version": "1.0.0",
+        "source": "install.sh"
     },
     "contexts": {
         "os": {
@@ -1870,13 +1920,19 @@ pull_docker_image() {
         log_message "INFO" "Image not found locally, will be fresh pull"
     fi
 
-    if docker pull "${BIRDNET_GO_IMAGE}"; then
+    # Capture pull output and status
+    local pull_output
+    local pull_status
+    pull_output=$(docker pull "${BIRDNET_GO_IMAGE}" 2>&1)
+    pull_status=$?
+
+    if [ $pull_status -eq 0 ]; then
         log_message "INFO" "Docker image pulled successfully: $BIRDNET_GO_IMAGE"
-        
+
         # Get image hash after pull and compare
         local post_pull_hash=""
         post_pull_hash=$(docker inspect --format='{{.Id}}' "${BIRDNET_GO_IMAGE}" 2>/dev/null || echo "")
-        
+
         if [ -n "$pre_pull_hash" ] && [ "$pre_pull_hash" = "$post_pull_hash" ]; then
             log_message "INFO" "No image update detected, same hash: ${pre_pull_hash:0:20}..."
             print_message "✅ Docker image is already up to date" "$GREEN"
@@ -1914,8 +1970,8 @@ pull_docker_image() {
             dns_resolution="failed"
         fi
 
-        # Capture actual docker pull error
-        local pull_error=$(docker pull "${BIRDNET_GO_IMAGE}" 2>&1 | tail -5 | tr '\n' ' ' | sed 's/"/\\"/g')
+        # Use captured pull error (truncate safely)
+        local pull_error=$(echo "$pull_output" | tail -5 | tr '\n' ' ' | sed 's/"/\\"/g' | head -c "$MAX_ERROR_LENGTH")
 
         local diagnostic_json=$(cat <<EOF
 {
@@ -1924,7 +1980,7 @@ pull_docker_image() {
     "available_disk_space": "$disk_space",
     "registry_reachable": "$registry_reachable",
     "dns_resolution": "$dns_resolution",
-    "pull_error": "$(echo "$pull_error" | head -c 500)",
+    "pull_error": "$pull_error",
     "user": "$USER",
     "docker_socket": "$(ls -la /var/run/docker.sock 2>&1 | sed 's/"/\\"/g')"
 }
@@ -4599,19 +4655,25 @@ handle_docker_install_menu() {
             
             log_message "INFO" "Starting Docker image pull: $BIRDNET_GO_IMAGE"
             print_message "\n🔄 Installing BirdNET-Go Docker image: $BIRDNET_GO_VERSION..." "$YELLOW"
-            
-            if docker pull "${BIRDNET_GO_IMAGE}"; then
+
+            # Capture pull output and status
+            local pull_output
+            local pull_status
+            pull_output=$(docker pull "${BIRDNET_GO_IMAGE}" 2>&1)
+            pull_status=$?
+
+            if [ $pull_status -eq 0 ]; then
                 log_message "INFO" "Docker image pull completed successfully"
-                
+
                 # Capture new image hash after update
                 local post_update_image_hash
                 post_update_image_hash=$(capture_current_image_hash "docker-post-update")
-                
+
                 # Log post-update state
                 log_message "INFO" "=== Post-Update System State ==="
                 log_docker_state "docker-update-post"
                 log_system_resources "docker-update-post"
-                
+
                 # Check if the image actually changed
                 if [ "$pre_update_image_hash" = "$post_update_image_hash" ]; then
                     log_message "INFO" "Image hash unchanged - already on latest version"
@@ -4620,29 +4682,29 @@ handle_docker_install_menu() {
                     log_message "INFO" "Image updated from ${pre_update_image_hash:0:12} to ${post_update_image_hash:0:12}"
                     print_message "✅ Successfully updated to latest image" "$GREEN"
                 fi
-                
+
                 print_message "⚠️ Note: You will need to restart your container to use the updated image" "$YELLOW"
                 log_message "INFO" "Docker image update process completed successfully"
-                
+
                 # Send telemetry
                 send_telemetry_event "info" "Docker image update completed" "info" "step=docker_update,updated=$([[ "$pre_update_image_hash" != "$post_update_image_hash" ]] && echo "true" || echo "false")"
-                
+
                 exit 0
             else
                 log_message "ERROR" "Failed to pull Docker image: $BIRDNET_GO_IMAGE"
                 log_command_result "docker pull ${BIRDNET_GO_IMAGE}" 1 "docker image pull"
                 print_message "❌ Failed to update Docker image" "$RED"
 
-                # Collect diagnostics for update failure
-                local pull_error=$(docker pull "${BIRDNET_GO_IMAGE}" 2>&1 | tail -10 | sed 's/"/\\"/g' | tr '\n' ';')
-                local current_images=$(docker images --format "{{.Repository}}:{{.Tag}} {{.ID}}" | grep birdnet-go | sed 's/"/\\"/g' | tr '\n' ';')
+                # Collect diagnostics for update failure (use captured error)
+                local pull_error=$(echo "$pull_output" | tail -10 | sed 's/"/\\"/g' | tr '\n' ';' | head -c "$MAX_LOG_LENGTH")
+                local current_images=$(docker images --format "{{.Repository}}:{{.Tag}} {{.ID}}" 2>/dev/null | grep birdnet-go | sed 's/"/\\"/g' | tr '\n' ';' | head -c "$MAX_FLAGS_LENGTH" || echo "unavailable")
                 local disk_space=$(df -h /var/lib/docker 2>/dev/null | awk 'NR==2 {print $4}' || echo "unknown")
 
                 local diagnostic_json=$(cat <<EOF
 {
     "image": "${BIRDNET_GO_IMAGE}",
-    "pull_error": "$(echo "$pull_error" | head -c 800)",
-    "current_images": "$(echo "$current_images" | head -c 300)",
+    "pull_error": "$pull_error",
+    "current_images": "$current_images",
     "available_disk": "$disk_space",
     "pre_update_hash": "${pre_update_image_hash:0:20}",
     "operation": "update"
