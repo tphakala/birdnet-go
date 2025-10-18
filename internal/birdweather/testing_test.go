@@ -51,8 +51,9 @@ func TestResolveDNSWithFallback(t *testing.T) {
 			}
 
 			// Verify that resolution completes within reasonable time
-			// Even with fallback DNS, should not take more than 20 seconds total
-			maxDuration := 20 * time.Second
+			// System DNS (10s) + fallback DNS (3 servers × 3s = 9s) = 19s max theoretical
+			// Use 18s to catch performance regressions while allowing for some variance
+			maxDuration := 18 * time.Second
 			if duration > maxDuration {
 				t.Errorf("DNS resolution took too long: %v (max: %v)", duration, maxDuration)
 			}
@@ -71,7 +72,9 @@ func TestAPIConnectivityTimeout(t *testing.T) {
 	}
 
 	// Create a context with a very short timeout to test timeout behavior
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	// Use 10ms instead of 1ms to reduce flakiness while still being fast enough
+	// to trigger a timeout before any real network operation completes
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
 	result := client.testAPIConnectivity(ctx)
@@ -113,8 +116,34 @@ func TestTimeoutConstants(t *testing.T) {
 		t.Errorf("dnsLookupTimeout (%v) should be at least 2s", dnsLookupTimeout)
 	}
 
-	t.Logf("Timeout constants: api=%v, auth=%v, upload=%v, post=%v, dnsResolver=%v, dnsLookup=%v",
-		apiTimeout, authTimeout, uploadTimeout, postTimeout, dnsResolverTimeout, dnsLookupTimeout)
+	if systemDNSTimeout < 5*time.Second {
+		t.Errorf("systemDNSTimeout (%v) should be at least 5s to allow for multiple DNS servers", systemDNSTimeout)
+	}
+
+	// Verify timeout hierarchy makes sense
+	if uploadTimeout <= apiTimeout {
+		t.Errorf("uploadTimeout (%v) should be longer than apiTimeout (%v) to account for encoding",
+			uploadTimeout, apiTimeout)
+	}
+
+	// Verify fallback DNS timeout math is reasonable
+	expectedFallbackDuration := dnsLookupTimeout * time.Duration(len(fallbackDNSResolvers))
+	maxDNSDuration := systemDNSTimeout + expectedFallbackDuration
+	if maxDNSDuration > apiTimeout {
+		t.Logf("Warning: Maximum DNS resolution time (%v) may exceed API timeout (%v)",
+			maxDNSDuration, apiTimeout)
+		t.Logf("  System DNS timeout: %v", systemDNSTimeout)
+		t.Logf("  Fallback DNS attempts: %d servers × %v = %v",
+			len(fallbackDNSResolvers), dnsLookupTimeout, expectedFallbackDuration)
+	}
+
+	// Ensure individual DNS timeouts aren't longer than the stage timeouts they're used in
+	if dnsLookupTimeout > apiTimeout {
+		t.Errorf("dnsLookupTimeout (%v) should not exceed apiTimeout (%v)", dnsLookupTimeout, apiTimeout)
+	}
+
+	t.Logf("Timeout constants: api=%v, auth=%v, upload=%v, post=%v, systemDNS=%v, dnsResolver=%v, dnsLookup=%v",
+		apiTimeout, authTimeout, uploadTimeout, postTimeout, systemDNSTimeout, dnsResolverTimeout, dnsLookupTimeout)
 }
 
 // TestFallbackDNSResolvers verifies that fallback DNS resolvers are configured

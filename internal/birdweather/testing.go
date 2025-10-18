@@ -85,14 +85,17 @@ func resolveDNSWithFallback(hostname string) ([]net.IP, error) {
 	}
 	resultChan := make(chan lookupResult, 1)
 
+	// Note: The goroutine will complete once the OS-level DNS timeout occurs
+	// (typically 30s on Linux, 2s on macOS). The buffered channel prevents blocking.
+	// This is acceptable as DNS lookups are not cancellable and will eventually complete.
 	go func() {
 		ips, err := net.LookupIP(hostname)
 		resultChan <- lookupResult{ips, err}
 	}()
 
 	// Wait for system DNS with timeout (system may try multiple DNS servers)
-	systemDNSTimeout := time.NewTimer(10 * time.Second)
-	defer systemDNSTimeout.Stop()
+	systemDNSTimer := time.NewTimer(systemDNSTimeout)
+	defer systemDNSTimer.Stop()
 
 	select {
 	case result := <-resultChan:
@@ -101,8 +104,8 @@ func resolveDNSWithFallback(hostname string) ([]net.IP, error) {
 		}
 		// If standard resolver fails, log the error
 		log.Printf("Standard DNS resolution for %s failed: %v", hostname, result.err)
-	case <-systemDNSTimeout.C:
-		log.Printf("Standard DNS resolution for %s timed out after 10s (likely multiple unreachable DNS servers)", hostname)
+	case <-systemDNSTimer.C:
+		log.Printf("Standard DNS resolution for %s timed out after %v (likely multiple unreachable DNS servers)", hostname, systemDNSTimeout)
 	}
 
 	log.Printf("Attempting to resolve %s using fallback DNS servers...", hostname)
@@ -233,8 +236,9 @@ const (
 	postTimeout   = 15 * time.Second // Increased to handle multiple DNS server timeouts
 
 	// DNS-specific timeouts
-	dnsResolverTimeout = 3 * time.Second // Timeout per DNS server attempt
-	dnsLookupTimeout   = 3 * time.Second // Timeout per fallback DNS lookup
+	systemDNSTimeout   = 10 * time.Second // Maximum wait for system DNS (allows for multiple DNS servers)
+	dnsResolverTimeout = 3 * time.Second  // Timeout per DNS server attempt
+	dnsLookupTimeout   = 3 * time.Second  // Timeout per fallback DNS lookup
 )
 
 // networkTest represents a generic network test function
