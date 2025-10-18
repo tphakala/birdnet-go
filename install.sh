@@ -1157,7 +1157,35 @@ check_network() {
 
     # First do a basic ping test to check general connectivity
     if ! ping -c 1 8.8.8.8 >/dev/null 2>&1; then
-        send_telemetry_event "error" "Network connectivity failed" "error" "step=network_check,error=ping_failed"
+        # Collect detailed network diagnostics
+        local dns_resolv=$(cat /etc/resolv.conf 2>/dev/null | grep -E "^nameserver" | head -3 | tr '\n' ';' || echo "unavailable")
+        local default_route=$(ip route show default 2>/dev/null | head -1 || echo "unavailable")
+        local network_interfaces=$(ip -br addr show 2>/dev/null | grep -v "lo" | tr '\n' ';' || echo "unavailable")
+        local ping_error=$(ping -c 1 -W 2 8.8.8.8 2>&1 || echo "timeout")
+
+        # Try alternative DNS servers to diagnose DNS vs routing issues
+        local cloudflare_ping="failed"
+        local quad9_ping="failed"
+        ping -c 1 -W 2 1.1.1.1 >/dev/null 2>&1 && cloudflare_ping="success"
+        ping -c 1 -W 2 9.9.9.9 >/dev/null 2>&1 && quad9_ping="success"
+
+        local diagnostic_json=$(cat <<EOF
+{
+    "test": "ping",
+    "target": "8.8.8.8",
+    "error": "$(echo "$ping_error" | head -1 | sed 's/"/\\"/g')",
+    "dns_servers": "$dns_resolv",
+    "default_route": "$(echo "$default_route" | sed 's/"/\\"/g')",
+    "network_interfaces": "$network_interfaces",
+    "alternative_dns_tests": {
+        "cloudflare_1.1.1.1": "$cloudflare_ping",
+        "quad9_9.9.9.9": "$quad9_ping"
+    }
+}
+EOF
+)
+
+        send_telemetry_event "error" "Network connectivity failed: ping test unsuccessful" "error" "step=network_check,error=ping_failed" "$diagnostic_json"
         print_message "❌ No network connectivity (ping test failed)" "$RED"
         print_message "Please check your internet connection and try again" "$YELLOW"
         exit 1
@@ -1219,10 +1247,52 @@ check_prerequisites() {
             log_message "INFO" "Detected x86_64 architecture, checking for AVX2 support"
             # Check CPU flags for AVX2 (Haswell and newer)
             if ! grep -q "avx2" /proc/cpuinfo; then
-                log_message "ERROR" "CPU requirements not met: AVX2 support required for x86_64"
-                send_telemetry_event "error" "CPU requirements not met" "error" "step=check_prerequisites,error=no_avx2"
-                print_message "❌ Your Intel CPU is too old. BirdNET-Go requires Intel Haswell (2013) or newer CPU with AVX2 support" "$RED"
-                exit 1
+                log_message "WARN" "CPU does not have AVX2 support, user will be prompted"
+
+                # Collect CPU details for diagnostics
+                local cpu_model=$(grep -m1 "model name" /proc/cpuinfo | cut -d: -f2 | xargs || echo "unknown")
+                local cpu_flags=$(grep -m1 "^flags" /proc/cpuinfo | cut -d: -f2 | xargs || echo "unknown")
+
+                local diagnostic_json=$(cat <<EOF
+{
+    "architecture": "x86_64",
+    "cpu_model": "$(echo "$cpu_model" | sed 's/"/\\"/g')",
+    "required_feature": "avx2",
+    "cpu_flags": "$(echo "$cpu_flags" | sed 's/"/\\"/g')",
+    "minimum_recommended": "Intel Haswell (2013) or AMD Excavator (2015)",
+    "user_choice": "prompted"
+}
+EOF
+)
+
+                print_message "⚠️  CPU Compatibility Warning" "$YELLOW"
+                print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "$YELLOW"
+                print_message "Your CPU: $cpu_model" "$NC"
+                print_message "\nYour CPU does not support AVX2 instructions." "$YELLOW"
+                print_message "BirdNET-Go is optimized for Intel Haswell (2013) or newer CPUs." "$YELLOW"
+                print_message "\n⚠️  What this means:" "$YELLOW"
+                print_message "  • The application may not start on systems without AVX2 support" "$YELLOW"
+                print_message "  • TensorFlow Lite cannot load the model without necessary hardware support" "$YELLOW"
+                print_message "  • However, some users have reported success on certain non-AVX2 systems" "$YELLOW"
+                print_message "\n💡 You can try installing anyway, but the application may fail to start." "$NC"
+                print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "$YELLOW"
+
+                print_message "\n❓ Do you want to proceed with installation anyway? (y/n): " "$YELLOW" "nonewline"
+                read -r response
+
+                if [[ "$response" =~ ^[Yy]$ ]]; then
+                    log_message "INFO" "User chose to proceed despite missing AVX2 support"
+                    diagnostic_json=$(echo "$diagnostic_json" | sed 's/"user_choice": "prompted"/"user_choice": "proceed_anyway"/')
+                    send_telemetry_event "warning" "Installation proceeding without AVX2 support (user override)" "warning" "step=check_prerequisites,error=no_avx2,user_override=yes" "$diagnostic_json"
+                    print_message "⚠️  Proceeding with installation (unsupported CPU configuration)" "$YELLOW"
+                else
+                    log_message "INFO" "User chose not to proceed without AVX2 support"
+                    diagnostic_json=$(echo "$diagnostic_json" | sed 's/"user_choice": "prompted"/"user_choice": "declined"/')
+                    send_telemetry_event "info" "Installation cancelled: CPU lacks AVX2 support" "info" "step=check_prerequisites,error=no_avx2,user_override=no" "$diagnostic_json"
+                    print_message "❌ Installation cancelled" "$RED"
+                    print_message "\n💡 Consider upgrading to a newer CPU with AVX2 support for best results." "$YELLOW"
+                    exit 1
+                fi
             else
                 log_message "INFO" "CPU architecture check passed: x86_64 with AVX2 support"
                 print_message "✅ Intel CPU architecture and generation check passed" "$GREEN"
@@ -1234,13 +1304,41 @@ check_prerequisites() {
             ;;
         "armv7l"|"armv6l"|"arm")
             log_message "ERROR" "Unsupported architecture: 32-bit ARM detected"
-            send_telemetry_event "error" "Architecture requirements not met" "error" "step=check_prerequisites,error=32bit_arm"
+
+            local cpu_model=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs || echo "unknown")
+            local cpu_hardware=$(grep -m1 "^Hardware" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs || echo "unknown")
+
+            local diagnostic_json=$(cat <<EOF
+{
+    "architecture": "$(uname -m)",
+    "cpu_model": "$(echo "$cpu_model" | sed 's/"/\\"/g')",
+    "cpu_hardware": "$(echo "$cpu_hardware" | sed 's/"/\\"/g')",
+    "issue": "32-bit ARM not supported",
+    "required": "64-bit ARM (aarch64/arm64)"
+}
+EOF
+)
+
+            send_telemetry_event "error" "Architecture requirements not met: 32-bit ARM detected" "error" "step=check_prerequisites,error=32bit_arm" "$diagnostic_json"
             print_message "❌ 32-bit ARM architecture detected. BirdNET-Go requires 64-bit ARM processor and OS" "$RED"
             exit 1
             ;;
         *)
             log_message "ERROR" "Unsupported CPU architecture: $(uname -m)"
-            send_telemetry_event "error" "Unsupported CPU architecture" "error" "step=check_prerequisites,error=unsupported_arch,arch=$(uname -m)"
+
+            local cpu_info=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs || echo "unknown")
+
+            local diagnostic_json=$(cat <<EOF
+{
+    "architecture": "$(uname -m)",
+    "cpu_info": "$(echo "$cpu_info" | sed 's/"/\\"/g')",
+    "supported_architectures": ["x86_64 (with AVX2)", "aarch64", "arm64"],
+    "issue": "unsupported_architecture"
+}
+EOF
+)
+
+            send_telemetry_event "error" "Unsupported CPU architecture: $(uname -m)" "error" "step=check_prerequisites,error=unsupported_arch" "$diagnostic_json"
             print_message "❌ Unsupported CPU architecture: $(uname -m)" "$RED"
             exit 1
             ;;
@@ -1475,8 +1573,32 @@ check_prerequisites() {
         print_message "  • HTTP web interface access" "$YELLOW"
         print_message "  • HTTPS web interface (if SSL is configured)" "$YELLOW"
         print_message "  • Proper web interface functionality" "$YELLOW"
-        
-        send_telemetry_event "error" "Port availability check failed" "error" "step=check_prerequisites,failed_ports=${failed_ports[*]}"
+
+        # Build detailed diagnostic information about port conflicts
+        local ports_json="["
+        for i in "${!failed_ports[@]}"; do
+            if [ $i -gt 0 ]; then
+                ports_json+=","
+            fi
+            ports_json+="{\"port\":${failed_ports[$i]},\"process\":\"$(echo "${port_processes[$i]}" | sed 's/"/\\"/g')\"}"
+        done
+        ports_json+="]"
+
+        local diagnostic_json=$(cat <<EOF
+{
+    "failed_ports": ${ports_json},
+    "requested_ports": {
+        "web_port": "${WEB_PORT:-8080}",
+        "http": 80,
+        "https": 443,
+        "metrics": 8090
+    },
+    "total_conflicts": ${#failed_ports[@]}
+}
+EOF
+)
+
+        send_telemetry_event "error" "Port availability check failed: ${#failed_ports[@]} port(s) in use" "error" "step=check_prerequisites" "$diagnostic_json"
         exit 1
     fi
     
@@ -1643,20 +1765,21 @@ send_telemetry_event() {
     if [ "$TELEMETRY_ENABLED" != "true" ]; then
         return 0
     fi
-    
+
     local event_type="$1"
     local message="$2"
     local level="${3:-info}"
     local context="${4:-}"
-    
+    local diagnostic_json="${5:-{}}"  # Optional structured diagnostic data
+
     # Collect system info before background process
     local system_info
     system_info=$(collect_system_info)
-    
+
     # Run in background to not block installation
     {
-        
-        # Build JSON payload
+
+        # Build JSON payload with enhanced diagnostic information
         local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
         local payload=$(cat <<EOF
 {
@@ -1683,7 +1806,8 @@ send_telemetry_event() {
     "extra": {
         "docker_version": "$(echo "$system_info" | jq -r .docker_version)",
         "install_id": "$(echo "$system_info" | jq -r .install_id)",
-        "context": "$context"
+        "context": "$context",
+        "diagnostics": $diagnostic_json
     }
 }
 EOF
@@ -1769,7 +1893,45 @@ pull_docker_image() {
         fi
     else
         log_message "ERROR" "Docker image pull failed: $BIRDNET_GO_IMAGE"
-        send_telemetry_event "error" "Docker image pull failed" "error" "step=pull_docker_image,image=${BIRDNET_GO_IMAGE}"
+
+        # Collect detailed diagnostics about the pull failure
+        local docker_version=$(docker version --format '{{.Server.Version}}' 2>/dev/null || echo "unknown")
+        local disk_space=$(df -h /var/lib/docker 2>/dev/null | awk 'NR==2 {print $4}' || echo "unknown")
+        local registry_reachable="unknown"
+        local dns_resolution="unknown"
+
+        # Test registry connectivity
+        if curl -s --max-time 5 "https://ghcr.io/v2/" >/dev/null 2>&1; then
+            registry_reachable="yes"
+        else
+            registry_reachable="no"
+        fi
+
+        # Test DNS resolution for ghcr.io
+        if nslookup ghcr.io >/dev/null 2>&1 || host ghcr.io >/dev/null 2>&1; then
+            dns_resolution="success"
+        else
+            dns_resolution="failed"
+        fi
+
+        # Capture actual docker pull error
+        local pull_error=$(docker pull "${BIRDNET_GO_IMAGE}" 2>&1 | tail -5 | tr '\n' ' ' | sed 's/"/\\"/g')
+
+        local diagnostic_json=$(cat <<EOF
+{
+    "image": "${BIRDNET_GO_IMAGE}",
+    "docker_version": "$docker_version",
+    "available_disk_space": "$disk_space",
+    "registry_reachable": "$registry_reachable",
+    "dns_resolution": "$dns_resolution",
+    "pull_error": "$(echo "$pull_error" | head -c 500)",
+    "user": "$USER",
+    "docker_socket": "$(ls -la /var/run/docker.sock 2>&1 | sed 's/"/\\"/g')"
+}
+EOF
+)
+
+        send_telemetry_event "error" "Docker image pull failed" "error" "step=pull_docker_image" "$diagnostic_json"
         print_message "❌ Failed to pull Docker image" "$RED"
         print_message "This could be due to:" "$YELLOW"
         print_message "- No internet connection" "$YELLOW"
@@ -2032,7 +2194,37 @@ download_base_config() {
     # Download new config to temporary file first
     local temp_config="/tmp/config.yaml.new"
     if ! curl -s --fail https://raw.githubusercontent.com/tphakala/birdnet-go/main/internal/conf/config.yaml > "$temp_config"; then
-        send_telemetry_event "error" "Configuration download failed" "error" "step=download_base_config"
+        # Collect diagnostic information about the download failure
+        local curl_error=$(curl -v --fail https://raw.githubusercontent.com/tphakala/birdnet-go/main/internal/conf/config.yaml 2>&1 | tail -5 | tr '\n' ' ' | sed 's/"/\\"/g')
+        local dns_test="unknown"
+        local http_test="unknown"
+
+        # Test DNS resolution
+        if nslookup raw.githubusercontent.com >/dev/null 2>&1 || host raw.githubusercontent.com >/dev/null 2>&1; then
+            dns_test="success"
+        else
+            dns_test="failed"
+        fi
+
+        # Test HTTP connectivity
+        if curl -s --max-time 5 -I https://raw.githubusercontent.com >/dev/null 2>&1; then
+            http_test="success"
+        else
+            http_test="failed"
+        fi
+
+        local diagnostic_json=$(cat <<EOF
+{
+    "url": "https://raw.githubusercontent.com/tphakala/birdnet-go/main/internal/conf/config.yaml",
+    "curl_error": "$(echo "$curl_error" | head -c 500)",
+    "dns_resolution": "$dns_test",
+    "http_connectivity": "$http_test",
+    "temp_file": "$temp_config"
+}
+EOF
+)
+
+        send_telemetry_event "error" "Configuration download failed" "error" "step=download_base_config" "$diagnostic_json"
         print_message "❌ Failed to download configuration template" "$RED"
         print_message "This could be due to:" "$YELLOW"
         print_message "- No internet connection or DNS resolution failed" "$YELLOW"
@@ -2174,7 +2366,31 @@ validate_audio_device() {
 
     # Test audio device access - using LC_ALL=C to force English output
     if ! LC_ALL=C arecord -c 1 -f S16_LE -r 48000 -d 1 -D "$device" /dev/null 2>/dev/null; then
-        send_telemetry_event "error" "Audio device validation failed" "error" "step=validate_audio_device,device=$device"
+        # Collect detailed audio device diagnostics
+        local arecord_error=$(LC_ALL=C arecord -c 1 -f S16_LE -r 48000 -d 1 -D "$device" /dev/null 2>&1 | sed 's/"/\\"/g')
+        local device_list=$(arecord -l 2>&1 | sed 's/"/\\"/g' | tr '\n' ';')
+        local alsa_devices=$(ls -la /dev/snd/ 2>&1 | sed 's/"/\\"/g' | tr '\n' ';')
+        local user_groups=$(groups 2>&1 || echo "unknown")
+
+        local diagnostic_json=$(cat <<EOF
+{
+    "device": "$device",
+    "arecord_error": "$(echo "$arecord_error" | head -c 500)",
+    "available_devices": "$(echo "$device_list" | head -c 500)",
+    "alsa_device_permissions": "$(echo "$alsa_devices" | head -c 500)",
+    "user": "$USER",
+    "user_groups": "$user_groups",
+    "test_parameters": {
+        "channels": 1,
+        "format": "S16_LE",
+        "rate": 48000,
+        "duration": 1
+    }
+}
+EOF
+)
+
+        send_telemetry_event "error" "Audio device validation failed" "error" "step=validate_audio_device" "$diagnostic_json"
         print_message "❌ Failed to access audio device" "$RED"
         print_message "This could be due to:" "$YELLOW"
         print_message "  • Device is busy" "$YELLOW"
@@ -3736,21 +3952,43 @@ start_birdnet_go() {
     # Check if service started
     if ! sudo systemctl is-active --quiet birdnet-go.service; then
         log_message "ERROR" "BirdNET-Go service failed to start"
-        send_telemetry_event "error" "Service startup failed" "error" "step=start_birdnet_go"
+
+        # Collect comprehensive service diagnostics
+        local service_status=$(systemctl status birdnet-go.service 2>&1 | sed 's/"/\\"/g' | tr '\n' ';')
+        local service_logs=$(journalctl -u birdnet-go.service -n 20 --no-pager 2>&1 | sed 's/"/\\"/g' | tr '\n' ';')
+        local service_enabled=$(systemctl is-enabled birdnet-go.service 2>&1 || echo "unknown")
+        local docker_running=$(docker ps --format "{{.Names}}: {{.Status}}" 2>&1 | sed 's/"/\\"/g' | tr '\n' ';')
+        local docker_errors=$(docker ps -a --filter "status=exited" --format "{{.Names}}: {{.Status}}" 2>&1 | sed 's/"/\\"/g' | tr '\n' ';')
+
+        local diagnostic_json=$(cat <<EOF
+{
+    "service_status": "$(echo "$service_status" | head -c 500)",
+    "service_enabled": "$service_enabled",
+    "recent_logs": "$(echo "$service_logs" | head -c 1000)",
+    "docker_running_containers": "$(echo "$docker_running" | head -c 300)",
+    "docker_exited_containers": "$(echo "$docker_errors" | head -c 300)",
+    "action_attempted": "$action",
+    "image": "${BIRDNET_GO_IMAGE}",
+    "web_port": "${WEB_PORT:-8080}"
+}
+EOF
+)
+
+        send_telemetry_event "error" "Service startup failed after $action attempt" "error" "step=start_birdnet_go" "$diagnostic_json"
         print_message "❌ Failed to start BirdNET-Go service" "$RED"
-        
+
         # Get and display journald logs for troubleshooting
         log_message "INFO" "Retrieving service logs for troubleshooting"
         print_message "\n📋 Service logs (last 20 entries):" "$YELLOW"
         journalctl -u birdnet-go.service -n 20 --no-pager
-        
+
         print_message "\n❗ If you need help with this issue:" "$RED"
         print_message "1. Check port availability and permissions" "$YELLOW"
         print_message "2. Verify your audio device is properly connected and accessible" "$YELLOW"
         print_message "3. If the issue persists, please open a ticket at:" "$YELLOW"
         print_message "   https://github.com/tphakala/birdnet-go/issues" "$GREEN"
         print_message "   Include the logs above in your issue report for faster troubleshooting" "$YELLOW"
-        
+
         exit 1
     fi
     log_message "INFO" "BirdNET-Go service started successfully"
@@ -4394,10 +4632,27 @@ handle_docker_install_menu() {
                 log_message "ERROR" "Failed to pull Docker image: $BIRDNET_GO_IMAGE"
                 log_command_result "docker pull ${BIRDNET_GO_IMAGE}" 1 "docker image pull"
                 print_message "❌ Failed to update Docker image" "$RED"
-                
+
+                # Collect diagnostics for update failure
+                local pull_error=$(docker pull "${BIRDNET_GO_IMAGE}" 2>&1 | tail -10 | sed 's/"/\\"/g' | tr '\n' ';')
+                local current_images=$(docker images --format "{{.Repository}}:{{.Tag}} {{.ID}}" | grep birdnet-go | sed 's/"/\\"/g' | tr '\n' ';')
+                local disk_space=$(df -h /var/lib/docker 2>/dev/null | awk 'NR==2 {print $4}' || echo "unknown")
+
+                local diagnostic_json=$(cat <<EOF
+{
+    "image": "${BIRDNET_GO_IMAGE}",
+    "pull_error": "$(echo "$pull_error" | head -c 800)",
+    "current_images": "$(echo "$current_images" | head -c 300)",
+    "available_disk": "$disk_space",
+    "pre_update_hash": "${pre_update_image_hash:0:20}",
+    "operation": "update"
+}
+EOF
+)
+
                 # Send telemetry for failure
-                send_telemetry_event "error" "Docker image update failed" "error" "step=docker_update"
-                
+                send_telemetry_event "error" "Docker image update failed during pull" "error" "step=docker_update" "$diagnostic_json"
+
                 exit 1
             fi
             ;;
