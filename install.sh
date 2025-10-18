@@ -1765,9 +1765,14 @@ collect_system_info() {
 }
 
 # Helper function to collect CPU diagnostics
+# Returns: JSON object with cpu_model and truncated cpu_flags
+# Note: CPU flags are truncated to MAX_FLAGS_LENGTH to prevent oversized payloads
 collect_cpu_diagnostics() {
-    local cpu_model=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs || echo "unknown")
-    local cpu_flags=$(grep -m1 "^flags" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs | head -c "$MAX_FLAGS_LENGTH" || echo "unknown")
+    local cpu_model
+    local cpu_flags
+
+    cpu_model=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs || echo "unknown")
+    cpu_flags=$(grep -m1 "^flags" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs | head -c "$MAX_FLAGS_LENGTH" || echo "unknown")
 
     cat <<EOF
 {
@@ -1778,13 +1783,23 @@ EOF
 }
 
 # Helper function to safely truncate text for diagnostics
+# Args:
+#   $1 - text to truncate
+#   $2 - max length (optional, defaults to MAX_ERROR_LENGTH)
+# Returns: Truncated text
 safe_truncate() {
     local text="$1"
     local max_length="${2:-$MAX_ERROR_LENGTH}"
     echo "$text" | head -c "$max_length"
 }
 
-# Helper function to validate JSON before sending
+# Helper function to validate JSON before sending to telemetry
+# Args:
+#   $1 - JSON string to validate
+# Returns: Valid JSON or fallback error object
+# Exit codes:
+#   0 - JSON is valid or jq not available (pass-through)
+#   1 - JSON is invalid, fallback returned
 validate_diagnostic_json() {
     local json="$1"
 
@@ -1803,6 +1818,57 @@ validate_diagnostic_json() {
         echo "$json"
         return 0
     fi
+}
+
+# Helper function to collect Docker pull failure diagnostics
+# Args:
+#   $1 - pull_output (captured stderr/stdout from failed pull)
+#   $2 - operation type (optional, e.g., "install", "update")
+# Returns: JSON object with comprehensive Docker pull diagnostics
+# Note: Performs network tests (registry, DNS) which may take a few seconds
+collect_docker_pull_diagnostics() {
+    local pull_output="$1"
+    local operation="${2:-pull}"
+    local docker_version
+    local disk_space
+    local registry_reachable="unknown"
+    local dns_resolution="unknown"
+    local pull_error
+
+    # Collect Docker and disk info (avoid SC2155)
+    docker_version=$(docker version --format '{{.Server.Version}}' 2>/dev/null || echo "unknown")
+    disk_space=$(df -h /var/lib/docker 2>/dev/null | awk 'NR==2 {print $4}' || echo "unknown")
+
+    # Test registry connectivity
+    if curl -s --max-time 5 "https://ghcr.io/v2/" >/dev/null 2>&1; then
+        registry_reachable="yes"
+    else
+        registry_reachable="no"
+    fi
+
+    # Test DNS resolution for ghcr.io
+    if nslookup ghcr.io >/dev/null 2>&1 || host ghcr.io >/dev/null 2>&1; then
+        dns_resolution="success"
+    else
+        dns_resolution="failed"
+    fi
+
+    # Truncate pull error safely
+    pull_error=$(echo "$pull_output" | tail -5 | tr '\n' ' ' | sed 's/"/\\"/g' | head -c "$MAX_ERROR_LENGTH")
+
+    cat <<EOF
+{
+    "image": "${BIRDNET_GO_IMAGE}",
+    "docker_version": "$docker_version",
+    "available_disk_space": "$disk_space",
+    "registry_reachable": "$registry_reachable",
+    "dns_resolution": "$dns_resolution",
+    "pull_error": "$pull_error",
+    "user": "$USER",
+    "docker_socket": "$(ls -la /var/run/docker.sock 2>&1 | sed 's/"/\\"/g')",
+    "operation": "$operation"
+}
+EOF
 }
 
 # Function to send telemetry event
@@ -1950,42 +2016,9 @@ pull_docker_image() {
     else
         log_message "ERROR" "Docker image pull failed: $BIRDNET_GO_IMAGE"
 
-        # Collect detailed diagnostics about the pull failure
-        local docker_version=$(docker version --format '{{.Server.Version}}' 2>/dev/null || echo "unknown")
-        local disk_space=$(df -h /var/lib/docker 2>/dev/null | awk 'NR==2 {print $4}' || echo "unknown")
-        local registry_reachable="unknown"
-        local dns_resolution="unknown"
-
-        # Test registry connectivity
-        if curl -s --max-time 5 "https://ghcr.io/v2/" >/dev/null 2>&1; then
-            registry_reachable="yes"
-        else
-            registry_reachable="no"
-        fi
-
-        # Test DNS resolution for ghcr.io
-        if nslookup ghcr.io >/dev/null 2>&1 || host ghcr.io >/dev/null 2>&1; then
-            dns_resolution="success"
-        else
-            dns_resolution="failed"
-        fi
-
-        # Use captured pull error (truncate safely)
-        local pull_error=$(echo "$pull_output" | tail -5 | tr '\n' ' ' | sed 's/"/\\"/g' | head -c "$MAX_ERROR_LENGTH")
-
-        local diagnostic_json=$(cat <<EOF
-{
-    "image": "${BIRDNET_GO_IMAGE}",
-    "docker_version": "$docker_version",
-    "available_disk_space": "$disk_space",
-    "registry_reachable": "$registry_reachable",
-    "dns_resolution": "$dns_resolution",
-    "pull_error": "$pull_error",
-    "user": "$USER",
-    "docker_socket": "$(ls -la /var/run/docker.sock 2>&1 | sed 's/"/\\"/g')"
-}
-EOF
-)
+        # Collect detailed diagnostics using helper function
+        local diagnostic_json
+        diagnostic_json=$(collect_docker_pull_diagnostics "$pull_output" "install")
 
         send_telemetry_event "error" "Docker image pull failed" "error" "step=pull_docker_image" "$diagnostic_json"
         print_message "❌ Failed to pull Docker image" "$RED"
@@ -4695,22 +4728,15 @@ handle_docker_install_menu() {
                 log_command_result "docker pull ${BIRDNET_GO_IMAGE}" 1 "docker image pull"
                 print_message "❌ Failed to update Docker image" "$RED"
 
-                # Collect diagnostics for update failure (use captured error)
-                local pull_error=$(echo "$pull_output" | tail -10 | sed 's/"/\\"/g' | tr '\n' ';' | head -c "$MAX_LOG_LENGTH")
-                local current_images=$(docker images --format "{{.Repository}}:{{.Tag}} {{.ID}}" 2>/dev/null | grep birdnet-go | sed 's/"/\\"/g' | tr '\n' ';' | head -c "$MAX_FLAGS_LENGTH" || echo "unavailable")
-                local disk_space=$(df -h /var/lib/docker 2>/dev/null | awk 'NR==2 {print $4}' || echo "unknown")
+                # Collect diagnostics using helper function, then add update-specific data
+                local diagnostic_json
+                local current_images
+                diagnostic_json=$(collect_docker_pull_diagnostics "$pull_output" "update")
+                current_images=$(docker images --format "{{.Repository}}:{{.Tag}} {{.ID}}" 2>/dev/null | grep birdnet-go | sed 's/"/\\"/g' | tr '\n' ';' | head -c "$MAX_FLAGS_LENGTH" || echo "unavailable")
 
-                local diagnostic_json=$(cat <<EOF
-{
-    "image": "${BIRDNET_GO_IMAGE}",
-    "pull_error": "$pull_error",
-    "current_images": "$current_images",
-    "available_disk": "$disk_space",
-    "pre_update_hash": "${pre_update_image_hash:0:20}",
-    "operation": "update"
-}
-EOF
-)
+                # Merge with update-specific fields
+                diagnostic_json=$(echo "$diagnostic_json" | jq --arg images "$current_images" --arg hash "${pre_update_image_hash:0:20}" \
+                    '. + {current_images: $images, pre_update_hash: $hash}' 2>/dev/null || echo "$diagnostic_json")
 
                 # Send telemetry for failure
                 send_telemetry_event "error" "Docker image update failed during pull" "error" "step=docker_update" "$diagnostic_json"
