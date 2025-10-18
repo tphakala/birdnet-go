@@ -226,9 +226,14 @@ const (
 	postTimeout   = 15 * time.Second // Increased to handle multiple DNS server timeouts
 
 	// DNS-specific timeouts
-	systemDNSTimeout   = 10 * time.Second // Maximum wait for system DNS (allows for multiple DNS servers)
-	dnsResolverTimeout = 3 * time.Second  // Timeout per DNS server attempt
-	dnsLookupTimeout   = 3 * time.Second  // Timeout per fallback DNS lookup
+	// Linux default DNS timeout is 5s per server. With multiple DNS servers configured,
+	// total time can be 5s × N servers. We allow time for 2 server attempts (10s).
+	systemDNSTimeout   = 10 * time.Second // Maximum wait for system DNS (allows 2 × 5s server attempts)
+
+	// Per-server timeouts for fallback DNS resolution
+	// Set to 5s to match Linux default and allow each DNS server a full timeout attempt
+	dnsResolverTimeout = 5 * time.Second  // Per-server connection timeout: matches Linux DNS default
+	dnsLookupTimeout   = 5 * time.Second  // Per-lookup timeout: allows one full DNS server attempt
 )
 
 // networkTest represents a generic network test function

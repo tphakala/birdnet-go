@@ -2,6 +2,7 @@ package birdweather
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"testing"
@@ -53,9 +54,9 @@ func TestResolveDNSWithFallback(t *testing.T) {
 			}
 
 			// Verify that resolution completes within reasonable time
-			// System DNS (10s) + fallback DNS (3 servers × 3s = 9s) = 19s max theoretical
-			// Use 18s to catch performance regressions while allowing for some variance
-			maxDuration := 18 * time.Second
+			// System DNS (10s) + fallback DNS (3 servers × 5s = 15s) = 25s max theoretical
+			// Use 27s to allow for some processing overhead while catching regressions
+			maxDuration := 27 * time.Second
 			if duration > maxDuration {
 				t.Errorf("DNS resolution took too long: %v (max: %v)", duration, maxDuration)
 			}
@@ -110,16 +111,17 @@ func TestTimeoutConstants(t *testing.T) {
 	}
 
 	// Verify DNS-specific timeouts are reasonable
-	if dnsResolverTimeout < 2*time.Second {
-		t.Errorf("dnsResolverTimeout (%v) should be at least 2s", dnsResolverTimeout)
+	// Linux default DNS timeout is 5s per server, so our timeouts should accommodate this
+	if dnsResolverTimeout < 5*time.Second {
+		t.Errorf("dnsResolverTimeout (%v) should be at least 5s to match Linux DNS default", dnsResolverTimeout)
 	}
 
-	if dnsLookupTimeout < 2*time.Second {
-		t.Errorf("dnsLookupTimeout (%v) should be at least 2s", dnsLookupTimeout)
+	if dnsLookupTimeout < 5*time.Second {
+		t.Errorf("dnsLookupTimeout (%v) should be at least 5s to match Linux DNS default", dnsLookupTimeout)
 	}
 
-	if systemDNSTimeout < 5*time.Second {
-		t.Errorf("systemDNSTimeout (%v) should be at least 5s to allow for multiple DNS servers", systemDNSTimeout)
+	if systemDNSTimeout < 10*time.Second {
+		t.Errorf("systemDNSTimeout (%v) should be at least 10s to allow for 2 DNS servers at 5s each", systemDNSTimeout)
 	}
 
 	// Verify timeout hierarchy makes sense
@@ -224,6 +226,25 @@ func (e *testError) Error() string {
 	return e.msg
 }
 
+// TestDNSLookupCancellation verifies that context cancellation properly stops DNS lookups
+func TestDNSLookupCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel immediately to test cancellation behavior
+	cancel()
+
+	_, err := net.DefaultResolver.LookupIP(ctx, "ip", "app.birdweather.com")
+
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Expected context.Canceled, got: %v", err)
+	}
+
+	// Also verify it's recognized as a DNS error
+	if !isDNSError(err) {
+		t.Error("Cancelled DNS lookup should be classified as DNS error")
+	}
+}
+
 // TestIsDNSTimeout tests the DNS timeout detection function
 // This leverages Go 1.23+ feature where DNSError wraps context.DeadlineExceeded
 func TestIsDNSTimeout(t *testing.T) {
@@ -231,21 +252,25 @@ func TestIsDNSTimeout(t *testing.T) {
 		name          string
 		err           error
 		expectTimeout bool
+		expectDNSErr  bool // Whether this should also be a DNS error
 	}{
 		{
 			name:          "Nil error",
 			err:           nil,
 			expectTimeout: false,
+			expectDNSErr:  false,
 		},
 		{
-			name:          "Context deadline exceeded",
+			name:          "Context deadline exceeded (bare)",
 			err:           context.DeadlineExceeded,
 			expectTimeout: true,
+			expectDNSErr:  false, // Bare context error is not DNS-specific
 		},
 		{
-			name: "Wrapped context deadline",
-			err: fmt.Errorf("lookup failed: %w", context.DeadlineExceeded),
+			name:          "Wrapped context deadline with 'lookup'",
+			err:           fmt.Errorf("lookup failed: %w", context.DeadlineExceeded),
 			expectTimeout: true,
+			expectDNSErr:  true, // Contains "lookup " so matches DNS error pattern
 		},
 		{
 			name: "DNS error with timeout",
@@ -254,6 +279,7 @@ func TestIsDNSTimeout(t *testing.T) {
 				IsTimeout: true,
 			},
 			expectTimeout: true,
+			expectDNSErr:  true, // This is both a timeout AND a DNS error
 		},
 		{
 			name: "DNS error without timeout",
@@ -262,11 +288,13 @@ func TestIsDNSTimeout(t *testing.T) {
 				IsTimeout: false,
 			},
 			expectTimeout: false,
+			expectDNSErr:  true, // This is a DNS error but not a timeout
 		},
 		{
 			name:          "Generic error",
 			err:           fmt.Errorf("some other error"),
 			expectTimeout: false,
+			expectDNSErr:  false,
 		},
 	}
 
@@ -275,6 +303,17 @@ func TestIsDNSTimeout(t *testing.T) {
 			result := isDNSTimeout(tc.err)
 			if result != tc.expectTimeout {
 				t.Errorf("isDNSTimeout() = %v, want %v for error: %v", result, tc.expectTimeout, tc.err)
+			}
+
+			// Validate DNS error classification
+			isDNSErr := isDNSError(tc.err)
+			if isDNSErr != tc.expectDNSErr {
+				t.Errorf("isDNSError() = %v, want %v for error: %v", isDNSErr, tc.expectDNSErr, tc.err)
+			}
+
+			// DNS-specific timeouts should be classified as both timeout and DNS error
+			if tc.expectTimeout && tc.expectDNSErr && !isDNSErr {
+				t.Errorf("DNS timeout should be classified as DNS error: %v", tc.err)
 			}
 		})
 	}
