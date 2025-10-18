@@ -1579,29 +1579,36 @@ EOF
         print_message "  • HTTPS web interface (if SSL is configured)" "$YELLOW"
         print_message "  • Proper web interface functionality" "$YELLOW"
 
-        # Build detailed diagnostic information about port conflicts
-        local ports_json="["
+        # Build detailed diagnostic information about port conflicts using jq for safe JSON construction
+        local ports_json
+        ports_json="[]"
         for i in "${!failed_ports[@]}"; do
-            if [ $i -gt 0 ]; then
-                ports_json+=","
-            fi
-            ports_json+="{\"port\":${failed_ports[$i]},\"process\":\"$(echo "${port_processes[$i]}" | sed 's/"/\\"/g')\"}"
+            # Use jq to safely construct each port object (handles newlines, quotes, special chars)
+            local port_obj
+            port_obj=$(jq -n \
+                --arg port "${failed_ports[$i]}" \
+                --arg proc "${port_processes[$i]}" \
+                '{port: ($port | tonumber), process: $proc}')
+            # Append to array
+            ports_json=$(echo "$ports_json" | jq --argjson obj "$port_obj" '. += [$obj]')
         done
-        ports_json+="]"
 
-        local diagnostic_json=$(cat <<EOF
-{
-    "failed_ports": ${ports_json},
-    "requested_ports": {
-        "web_port": "${WEB_PORT:-8080}",
-        "http": 80,
-        "https": 443,
-        "metrics": 8090
-    },
-    "total_conflicts": ${#failed_ports[@]}
-}
-EOF
-)
+        # Build complete diagnostic JSON safely with jq
+        local diagnostic_json
+        diagnostic_json=$(jq -n \
+            --argjson ports "$ports_json" \
+            --arg web_port "${WEB_PORT:-8080}" \
+            --argjson total "${#failed_ports[@]}" \
+            '{
+                failed_ports: $ports,
+                requested_ports: {
+                    web_port: $web_port,
+                    http: 80,
+                    https: 443,
+                    metrics: 8090
+                },
+                total_conflicts: $total
+            }')
 
         send_telemetry_event "error" "Port availability check failed: ${#failed_ports[@]} port(s) in use" "error" "step=check_prerequisites" "$diagnostic_json"
         exit 1
@@ -2455,29 +2462,40 @@ validate_audio_device() {
 
     # Test audio device access - using LC_ALL=C to force English output
     if ! LC_ALL=C arecord -c 1 -f S16_LE -r 48000 -d 1 -D "$device" /dev/null 2>/dev/null; then
-        # Collect detailed audio device diagnostics
-        local arecord_error=$(LC_ALL=C arecord -c 1 -f S16_LE -r 48000 -d 1 -D "$device" /dev/null 2>&1 | sed 's/"/\\"/g')
-        local device_list=$(arecord -l 2>&1 | sed 's/"/\\"/g' | tr '\n' ';')
-        local alsa_devices=$(ls -la /dev/snd/ 2>&1 | sed 's/"/\\"/g' | tr '\n' ';')
-        local user_groups=$(groups 2>&1 || echo "unknown")
+        # Collect detailed audio device diagnostics (raw output, will be safely encoded)
+        local arecord_error
+        local device_list
+        local alsa_devices
+        local user_groups
 
-        local diagnostic_json=$(cat <<EOF
-{
-    "device": "$device",
-    "arecord_error": "$(echo "$arecord_error" | head -c 500)",
-    "available_devices": "$(echo "$device_list" | head -c 500)",
-    "alsa_device_permissions": "$(echo "$alsa_devices" | head -c 500)",
-    "user": "$USER",
-    "user_groups": "$user_groups",
-    "test_parameters": {
-        "channels": 1,
-        "format": "S16_LE",
-        "rate": 48000,
-        "duration": 1
-    }
-}
-EOF
-)
+        arecord_error=$(LC_ALL=C arecord -c 1 -f S16_LE -r 48000 -d 1 -D "$device" /dev/null 2>&1 | head -c "$MAX_ERROR_LENGTH")
+        device_list=$(arecord -l 2>&1 | head -c "$MAX_ERROR_LENGTH")
+        alsa_devices=$(ls -la /dev/snd/ 2>&1 | head -c "$MAX_ERROR_LENGTH")
+        user_groups=$(groups 2>&1 || echo "unknown")
+
+        # Use jq to safely construct JSON (handles newlines, quotes, special characters)
+        local diagnostic_json
+        diagnostic_json=$(jq -n \
+            --arg device "$device" \
+            --arg error "$arecord_error" \
+            --arg devices "$device_list" \
+            --arg perms "$alsa_devices" \
+            --arg user "$USER" \
+            --arg groups "$user_groups" \
+            '{
+                device: $device,
+                arecord_error: $error,
+                available_devices: $devices,
+                alsa_device_permissions: $perms,
+                user: $user,
+                user_groups: $groups,
+                test_parameters: {
+                    channels: 1,
+                    format: "S16_LE",
+                    rate: 48000,
+                    duration: 1
+                }
+            }')
 
         send_telemetry_event "error" "Audio device validation failed" "error" "step=validate_audio_device" "$diagnostic_json"
         print_message "❌ Failed to access audio device" "$RED"
