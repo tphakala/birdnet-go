@@ -40,9 +40,13 @@ func TestResolveDNSWithFallback(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel() // Safe - each subtest has independent hostname
 
-			// Set a reasonable timeout for the test
+			// Set a reasonable timeout for the test to prevent hangs on slow/flaky DNS
+			// 12s allows: system DNS (10s) + at least one fallback attempt (5s) with overhead
+			ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+			defer cancel()
+
 			start := time.Now()
-			ips, err := resolveDNSWithFallback(context.Background(), tc.hostname)
+			ips, err := resolveDNSWithFallback(ctx, tc.hostname)
 			duration := time.Since(start)
 
 			if tc.expectError {

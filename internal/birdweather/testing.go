@@ -103,6 +103,7 @@ func resolveDNSWithFallback(ctx context.Context, hostname string) ([]net.IP, err
 	log.Printf("Attempting to resolve %s using fallback DNS servers...", hostname)
 
 	// Try each fallback resolver with shorter, independent timeouts
+	var lastErr error
 	for _, resolver := range fallbackDNSResolvers {
 		r := &net.Resolver{
 			PreferGo: true,
@@ -113,10 +114,30 @@ func resolveDNSWithFallback(ctx context.Context, hostname string) ([]net.IP, err
 			},
 		}
 
+		// Cap per-attempt timeout to remaining context budget to prevent overshooting stage deadline
+		attemptTimeout := dnsLookupTimeout
+		if deadline, ok := ctx.Deadline(); ok {
+			remaining := time.Until(deadline)
+			if remaining <= 0 {
+				// Context already expired
+				if lastErr != nil {
+					return nil, fmt.Errorf("failed to resolve %s: context deadline exceeded after trying %d fallback servers: %w", hostname, len(fallbackDNSResolvers), lastErr)
+				}
+				return nil, ctx.Err()
+			}
+			if remaining < attemptTimeout {
+				attemptTimeout = remaining
+			}
+		}
+
 		// Create a child context with timeout, preserving parent cancellation
-		childCtx, cancel := context.WithTimeout(ctx, dnsLookupTimeout)
+		childCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
 		fallbackIPs, err := r.LookupIPAddr(childCtx, hostname)
 		cancel()
+
+		if err != nil {
+			lastErr = err
+		}
 
 		if err == nil && len(fallbackIPs) > 0 {
 			// Convert IPAddr to IP
@@ -127,9 +148,19 @@ func resolveDNSWithFallback(ctx context.Context, hostname string) ([]net.IP, err
 			log.Printf("Successfully resolved %s using fallback DNS %s: %v", hostname, resolver, result)
 			return result, nil
 		}
-		log.Printf("Fallback DNS %s failed to resolve %s: %v", resolver, hostname, err)
+
+		// Log the failure reason
+		if err == nil {
+			log.Printf("Fallback DNS %s returned no records for %s", resolver, hostname)
+		} else {
+			log.Printf("Fallback DNS %s failed to resolve %s: %v", resolver, hostname, err)
+		}
 	}
 
+	// Return with root cause if available for better diagnostics
+	if lastErr != nil {
+		return nil, fmt.Errorf("failed to resolve %s with all DNS resolvers (system + %d fallback servers): %w", hostname, len(fallbackDNSResolvers), lastErr)
+	}
 	return nil, fmt.Errorf("failed to resolve %s with all DNS resolvers (system + %d fallback servers)", hostname, len(fallbackDNSResolvers))
 }
 
