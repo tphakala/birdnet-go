@@ -77,14 +77,15 @@ func checkRateLimit() error {
 
 // resolveDNSWithFallback attempts to resolve a hostname using fallback DNS servers if the OS resolver fails
 // It uses shorter timeouts per DNS server to avoid long waits when multiple servers are unreachable
-func resolveDNSWithFallback(hostname string) ([]net.IP, error) {
+// The provided context allows callers to control overall timeout and cancellation
+func resolveDNSWithFallback(ctx context.Context, hostname string) ([]net.IP, error) {
 	// First try the standard resolver with context-based timeout
-	// This allows proper cancellation of the DNS lookup
-	ctx, cancel := context.WithTimeout(context.Background(), systemDNSTimeout)
+	// Create a child context with systemDNSTimeout, but respect parent cancellation
+	dnsCtx, cancel := context.WithTimeout(ctx, systemDNSTimeout)
 	defer cancel()
 
 	// Use net.DefaultResolver.LookupIP which supports context cancellation
-	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", hostname)
+	ips, err := net.DefaultResolver.LookupIP(dnsCtx, "ip", hostname)
 	if err == nil && len(ips) > 0 {
 		return ips, nil
 	}
@@ -339,7 +340,7 @@ func (b *BwClient) testAPIConnectivity(ctx context.Context) TestResult {
 				log.Printf("DNS resolution failed: %v, attempting fallback...", err)
 
 				// Attempt DNS resolution with fallback resolvers
-				ips, resolveErr := resolveDNSWithFallback(hostname)
+				ips, resolveErr := resolveDNSWithFallback(ctx, hostname)
 				if resolveErr != nil {
 					return fmt.Errorf("failed to connect to BirdWeather API: %w - could not resolve the BirdWeather API hostname", err)
 				}
@@ -392,10 +393,10 @@ func isDNSError(err error) bool {
 	}
 
 	// Fallback to string matching for wrapped errors
+	// Note: "dial tcp" removed to avoid false positives from non-DNS network errors
 	errStr := err.Error()
 	return strings.Contains(errStr, "no such host") ||
 		strings.Contains(errStr, "lookup ") ||
-		strings.Contains(errStr, "dial tcp") ||
 		strings.Contains(errStr, "DNS") ||
 		strings.Contains(errStr, "dns") ||
 		strings.Contains(errStr, "cannot resolve")
@@ -523,7 +524,7 @@ func (b *BwClient) testAuthentication(ctx context.Context) TestResult {
 				}
 
 				hostname := parsedURL.Hostname()
-				ips, resolveErr := resolveDNSWithFallback(hostname)
+				ips, resolveErr := resolveDNSWithFallback(ctx, hostname)
 				if resolveErr != nil {
 					return fmt.Errorf("all DNS resolution attempts failed during authentication: %w", resolveErr)
 				}

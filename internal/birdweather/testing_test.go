@@ -12,7 +12,9 @@ import (
 
 // TestResolveDNSWithFallback tests the DNS fallback resolution mechanism
 func TestResolveDNSWithFallback(t *testing.T) {
-	testCases := []struct {
+	t.Parallel() // Safe to parallelize - no shared state
+
+	testCases := []struct{
 		name        string
 		hostname    string
 		expectError bool
@@ -36,9 +38,11 @@ func TestResolveDNSWithFallback(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel() // Safe - each subtest has independent hostname
+
 			// Set a reasonable timeout for the test
 			start := time.Now()
-			ips, err := resolveDNSWithFallback(tc.hostname)
+			ips, err := resolveDNSWithFallback(context.Background(), tc.hostname)
 			duration := time.Since(start)
 
 			if tc.expectError {
@@ -69,6 +73,8 @@ func TestResolveDNSWithFallback(t *testing.T) {
 
 // TestAPIConnectivityTimeout tests that API connectivity tests properly timeout
 func TestAPIConnectivityTimeout(t *testing.T) {
+	t.Parallel() // Safe - creates independent client
+
 	settings := MockSettings()
 	client, err := New(settings)
 	if err != nil {
@@ -98,6 +104,8 @@ func TestAPIConnectivityTimeout(t *testing.T) {
 
 // TestTimeoutConstants verifies that timeout constants are properly configured
 func TestTimeoutConstants(t *testing.T) {
+	t.Parallel() // Safe - only reads constants
+
 	// Verify that timeouts are long enough to handle DNS delays
 	if apiTimeout < 10*time.Second {
 		t.Errorf("apiTimeout (%v) should be at least 10s to handle DNS resolution delays", apiTimeout)
@@ -153,18 +161,34 @@ func TestTimeoutConstants(t *testing.T) {
 
 // TestFallbackDNSResolvers verifies that fallback DNS resolvers are configured
 func TestFallbackDNSResolvers(t *testing.T) {
+	t.Parallel() // Safe - only reads global slice
+
 	if len(fallbackDNSResolvers) == 0 {
 		t.Error("No fallback DNS resolvers configured")
 	}
 
-	// Verify that each resolver is properly formatted
+	// Verify that each resolver is properly formatted using net.SplitHostPort
 	for _, resolver := range fallbackDNSResolvers {
 		if resolver == "" {
 			t.Error("Empty fallback DNS resolver found")
+			continue
 		}
-		// Should be in format "IP:PORT"
-		if len(resolver) < 7 { // Minimum: "1.1.1.1:53" = 10 chars, but allow shorter for tests
-			t.Errorf("Fallback DNS resolver '%s' appears to be incorrectly formatted", resolver)
+
+		// Parse and validate the host:port format
+		host, port, err := net.SplitHostPort(resolver)
+		if err != nil {
+			t.Errorf("Fallback DNS resolver '%s' is not a valid host:port format: %v", resolver, err)
+			continue
+		}
+
+		// Verify host is a valid IP address
+		if net.ParseIP(host) == nil {
+			t.Errorf("Fallback DNS resolver '%s' has invalid IP address: %s", resolver, host)
+		}
+
+		// Verify port is not empty
+		if port == "" {
+			t.Errorf("Fallback DNS resolver '%s' has empty port", resolver)
 		}
 	}
 
@@ -173,6 +197,8 @@ func TestFallbackDNSResolvers(t *testing.T) {
 
 // TestIsDNSError tests the DNS error detection function
 func TestIsDNSError(t *testing.T) {
+	t.Parallel() // Safe - no shared state
+
 	testCases := []struct {
 		name        string
 		errorMsg    string
@@ -184,17 +210,17 @@ func TestIsDNSError(t *testing.T) {
 			expectDNS: true,
 		},
 		{
-			name:      "DNS resolution error",
-			errorMsg:  "dial tcp: lookup app.birdweather.com on 192.168.1.1:53: no such host",
+			name:      "DNS resolution error with lookup keyword",
+			errorMsg:  "lookup app.birdweather.com on 192.168.1.1:53: no such host",
 			expectDNS: true,
 		},
 		{
-			name:      "Connection refused",
-			errorMsg:  "connection refused",
+			name:      "Connection refused (not DNS-specific)",
+			errorMsg:  "dial tcp: connection refused",
 			expectDNS: false,
 		},
 		{
-			name:      "Timeout",
+			name:      "Generic timeout (not DNS-specific)",
 			errorMsg:  "i/o timeout",
 			expectDNS: false,
 		},
@@ -207,6 +233,8 @@ func TestIsDNSError(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel() // Safe - independent test cases
+
 			// Create a simple error with the message
 			err := &testError{msg: tc.errorMsg}
 			result := isDNSError(err)
@@ -229,6 +257,8 @@ func (e *testError) Error() string {
 
 // TestDNSLookupCancellation verifies that context cancellation properly stops DNS lookups
 func TestDNSLookupCancellation(t *testing.T) {
+	t.Parallel() // Safe - independent context
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Cancel immediately to test cancellation behavior
@@ -249,6 +279,8 @@ func TestDNSLookupCancellation(t *testing.T) {
 // TestIsDNSTimeout tests the DNS timeout detection function
 // This leverages Go 1.23+ feature where DNSError wraps context.DeadlineExceeded
 func TestIsDNSTimeout(t *testing.T) {
+	t.Parallel() // Safe - no shared state
+
 	testCases := []struct {
 		name          string
 		err           error
@@ -301,6 +333,8 @@ func TestIsDNSTimeout(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel() // Safe - independent test cases
+
 			result := isDNSTimeout(tc.err)
 			if result != tc.expectTimeout {
 				t.Errorf("isDNSTimeout() = %v, want %v for error: %v", result, tc.expectTimeout, tc.err)
