@@ -2,11 +2,12 @@ package birdweather
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TestResolveDNSWithFallback tests the DNS fallback resolution mechanism

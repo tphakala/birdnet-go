@@ -4,7 +4,6 @@ package birdweather
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"log"
 	"math/rand/v2"
@@ -14,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Rate limiting constants
