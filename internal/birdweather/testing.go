@@ -4,7 +4,6 @@ package birdweather
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"log"
 	"math/rand/v2"
@@ -14,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Rate limiting constants
@@ -75,30 +76,68 @@ func checkRateLimit() error {
 }
 
 // resolveDNSWithFallback attempts to resolve a hostname using fallback DNS servers if the OS resolver fails
-func resolveDNSWithFallback(hostname string) ([]net.IP, error) {
-	// First try the standard resolver
-	ips, err := net.LookupIP(hostname)
+// It uses shorter timeouts per DNS server to avoid long waits when multiple servers are unreachable
+// The provided context allows callers to control overall timeout and cancellation
+func resolveDNSWithFallback(ctx context.Context, hostname string) ([]net.IP, error) {
+	// First try the standard resolver with context-based timeout
+	// Create a child context with systemDNSTimeout, but respect parent cancellation
+	dnsCtx, cancel := context.WithTimeout(ctx, systemDNSTimeout)
+	defer cancel()
+
+	// Use net.DefaultResolver.LookupIP which supports context cancellation
+	ips, err := net.DefaultResolver.LookupIP(dnsCtx, "ip", hostname)
 	if err == nil && len(ips) > 0 {
 		return ips, nil
 	}
 
-	// If standard resolver fails, log the error
-	log.Printf("Standard DNS resolution for %s failed: %v", hostname, err)
+	// Log the error with appropriate context
+	// Go 1.23+: Better timeout detection via errors.Is(err, context.DeadlineExceeded)
+	if err != nil {
+		if isDNSTimeout(err) {
+			log.Printf("Standard DNS resolution for %s timed out after %v (likely multiple unreachable DNS servers)", hostname, systemDNSTimeout)
+		} else {
+			log.Printf("Standard DNS resolution for %s failed: %v", hostname, err)
+		}
+	}
+
 	log.Printf("Attempting to resolve %s using fallback DNS servers...", hostname)
 
-	// Try each fallback resolver
+	// Try each fallback resolver with shorter, independent timeouts
+	var lastErr error
 	for _, resolver := range fallbackDNSResolvers {
 		r := &net.Resolver{
 			PreferGo: true,
 			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-				d := net.Dialer{Timeout: 5 * time.Second}
-				return d.DialContext(ctx, "udp", resolver)
+				d := net.Dialer{Timeout: dnsResolverTimeout}
+				// Honor the requested network (udp/tcp; including v4/v6 variants)
+				return d.DialContext(ctx, network, resolver)
 			},
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		fallbackIPs, err := r.LookupIPAddr(ctx, hostname)
+		// Cap per-attempt timeout to remaining context budget to prevent overshooting stage deadline
+		attemptTimeout := dnsLookupTimeout
+		if deadline, ok := ctx.Deadline(); ok {
+			remaining := time.Until(deadline)
+			if remaining <= 0 {
+				// Context already expired
+				if lastErr != nil {
+					return nil, fmt.Errorf("failed to resolve %s: context deadline exceeded after trying %d fallback servers: %w", hostname, len(fallbackDNSResolvers), lastErr)
+				}
+				return nil, ctx.Err()
+			}
+			if remaining < attemptTimeout {
+				attemptTimeout = remaining
+			}
+		}
+
+		// Create a child context with timeout, preserving parent cancellation
+		childCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
+		fallbackIPs, err := r.LookupIPAddr(childCtx, hostname)
 		cancel()
+
+		if err != nil {
+			lastErr = err
+		}
 
 		if err == nil && len(fallbackIPs) > 0 {
 			// Convert IPAddr to IP
@@ -109,9 +148,20 @@ func resolveDNSWithFallback(hostname string) ([]net.IP, error) {
 			log.Printf("Successfully resolved %s using fallback DNS %s: %v", hostname, resolver, result)
 			return result, nil
 		}
+
+		// Log the failure reason
+		if err == nil {
+			log.Printf("Fallback DNS %s returned no records for %s", resolver, hostname)
+		} else {
+			log.Printf("Fallback DNS %s failed to resolve %s: %v", resolver, hostname, err)
+		}
 	}
 
-	return nil, fmt.Errorf("failed to resolve %s with all DNS resolvers", hostname)
+	// Return with root cause if available for better diagnostics
+	if lastErr != nil {
+		return nil, fmt.Errorf("failed to resolve %s with all DNS resolvers (system + %d fallback servers): %w", hostname, len(fallbackDNSResolvers), lastErr)
+	}
+	return nil, fmt.Errorf("failed to resolve %s with all DNS resolvers (system + %d fallback servers)", hostname, len(fallbackDNSResolvers))
 }
 
 // TestConfig encapsulates test configuration for artificial delays and failures
@@ -201,11 +251,24 @@ func (s TestStage) String() string {
 }
 
 // Timeout constants for various test stages
+// These timeouts account for potential DNS resolution delays in Docker/containerized environments
+// where multiple DNS servers may be configured and the first server(s) might be unreachable,
+// causing sequential timeout attempts (typically 5 seconds per DNS server).
 const (
-	apiTimeout    = 5 * time.Second
-	authTimeout   = 5 * time.Second
-	uploadTimeout = 10 * time.Second
-	postTimeout   = 5 * time.Second
+	apiTimeout    = 15 * time.Second // Increased to handle multiple DNS server timeouts
+	authTimeout   = 15 * time.Second // Increased to handle multiple DNS server timeouts
+	uploadTimeout = 30 * time.Second // Increased for encoding + DNS resolution
+	postTimeout   = 15 * time.Second // Increased to handle multiple DNS server timeouts
+
+	// DNS-specific timeouts
+	// Linux default DNS timeout is 5s per server. With multiple DNS servers configured,
+	// total time can be 5s × N servers. We allow time for 2 server attempts (10s).
+	systemDNSTimeout   = 10 * time.Second // Maximum wait for system DNS (allows 2 × 5s server attempts)
+
+	// Per-server timeouts for fallback DNS resolution
+	// Set to 5s to match Linux default and allow each DNS server a full timeout attempt
+	dnsResolverTimeout = 5 * time.Second  // Per-server connection timeout: matches Linux DNS default
+	dnsLookupTimeout   = 5 * time.Second  // Per-lookup timeout: allows one full DNS server attempt
 )
 
 // networkTest represents a generic network test function
@@ -240,11 +303,13 @@ func runTest(ctx context.Context, stage TestStage, test birdweatherTest) TestRes
 	// Wait for either test completion or context cancellation
 	select {
 	case <-ctx.Done():
+		// Provide more helpful timeout error message
+		timeoutMsg := fmt.Sprintf("%s operation timed out. If using Docker, this may be caused by DNS resolution delays from unreachable DNS servers in /etc/resolv.conf", stage)
 		return TestResult{
 			Success: false,
 			Stage:   stage.String(),
 			Error:   "operation timeout",
-			Message: fmt.Sprintf("%s operation timed out", stage),
+			Message: timeoutMsg,
 		}
 	case err := <-resultChan:
 		if err != nil {
@@ -308,7 +373,7 @@ func (b *BwClient) testAPIConnectivity(ctx context.Context) TestResult {
 				log.Printf("DNS resolution failed: %v, attempting fallback...", err)
 
 				// Attempt DNS resolution with fallback resolvers
-				ips, resolveErr := resolveDNSWithFallback(hostname)
+				ips, resolveErr := resolveDNSWithFallback(ctx, hostname)
 				if resolveErr != nil {
 					return fmt.Errorf("failed to connect to BirdWeather API: %w - could not resolve the BirdWeather API hostname", err)
 				}
@@ -335,7 +400,7 @@ func (b *BwClient) testAPIConnectivity(ctx context.Context) TestResult {
 				}
 
 				// Both attempts failed
-				return fmt.Errorf("failed to connect to BirdWeather API: %w - failed to perform API Connectivity connection with system DNS. Fallback DNS resolved the hostname, indicating issue with your systems DNS resolver configuration. Please check your network settings", err)
+				return fmt.Errorf("failed to connect to BirdWeather API: %w - System DNS failed but fallback DNS resolved the hostname. This indicates your system DNS resolver is misconfigured or has unreachable DNS servers. If using Docker, check /etc/resolv.conf for unreachable nameservers. Consider removing unreachable DNS servers or increasing timeout values", err)
 			}
 
 			// Not a DNS error, return the original error
@@ -347,18 +412,50 @@ func (b *BwClient) testAPIConnectivity(ctx context.Context) TestResult {
 }
 
 // Helper function to check if an error is DNS-related
+// Go 1.23+ improvement: DNSError now wraps timeout and cancellation errors,
+// so we can use errors.Is for more reliable detection
 func isDNSError(err error) bool {
 	if err == nil {
 		return false
 	}
 
-	errStr := err.Error()
-	return strings.Contains(errStr, "no such host") ||
-		strings.Contains(errStr, "lookup ") ||
-		strings.Contains(errStr, "dial tcp") ||
-		strings.Contains(errStr, "DNS") ||
-		strings.Contains(errStr, "dns") ||
-		strings.Contains(errStr, "cannot resolve")
+	// Check if it's a DNSError type
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+
+	// Check for URL errors with lookup operation
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && strings.HasPrefix(urlErr.Op, "lookup") {
+		return true
+	}
+
+	// Minimal fallback to string matching only for clear DNS-specific patterns
+	// Avoid broad matches like "network" or "dial tcp" that can match non-DNS errors
+	s := err.Error()
+	return strings.Contains(s, "no such host") || strings.Contains(s, "lookup ")
+}
+
+// isDNSTimeout checks if a DNS error was caused by a timeout
+// Go 1.23+ feature: DNSError now wraps context.DeadlineExceeded
+func isDNSTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Go 1.23+: DNSError wraps timeout errors
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+
+	// Also check for net.Error timeout
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+
+	return false
 }
 
 // Helper function to replace hostname with IP in URL
@@ -462,7 +559,7 @@ func (b *BwClient) testAuthentication(ctx context.Context) TestResult {
 				}
 
 				hostname := parsedURL.Hostname()
-				ips, resolveErr := resolveDNSWithFallback(hostname)
+				ips, resolveErr := resolveDNSWithFallback(ctx, hostname)
 				if resolveErr != nil {
 					return fmt.Errorf("all DNS resolution attempts failed during authentication: %w", resolveErr)
 				}
