@@ -77,35 +77,25 @@ func checkRateLimit() error {
 // resolveDNSWithFallback attempts to resolve a hostname using fallback DNS servers if the OS resolver fails
 // It uses shorter timeouts per DNS server to avoid long waits when multiple servers are unreachable
 func resolveDNSWithFallback(hostname string) ([]net.IP, error) {
-	// First try the standard resolver with a reasonable timeout
-	// Note: We don't control system DNS timeout behavior, but we can limit our wait
-	type lookupResult struct {
-		ips []net.IP
-		err error
+	// First try the standard resolver with context-based timeout
+	// This allows proper cancellation of the DNS lookup
+	ctx, cancel := context.WithTimeout(context.Background(), systemDNSTimeout)
+	defer cancel()
+
+	// Use net.DefaultResolver.LookupIP which supports context cancellation
+	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", hostname)
+	if err == nil && len(ips) > 0 {
+		return ips, nil
 	}
-	resultChan := make(chan lookupResult, 1)
 
-	// Note: The goroutine will complete once the OS-level DNS timeout occurs
-	// (typically 30s on Linux, 2s on macOS). The buffered channel prevents blocking.
-	// This is acceptable as DNS lookups are not cancellable and will eventually complete.
-	go func() {
-		ips, err := net.LookupIP(hostname)
-		resultChan <- lookupResult{ips, err}
-	}()
-
-	// Wait for system DNS with timeout (system may try multiple DNS servers)
-	systemDNSTimer := time.NewTimer(systemDNSTimeout)
-	defer systemDNSTimer.Stop()
-
-	select {
-	case result := <-resultChan:
-		if result.err == nil && len(result.ips) > 0 {
-			return result.ips, nil
+	// Log the error with appropriate context
+	// Go 1.23+: Better timeout detection via errors.Is(err, context.DeadlineExceeded)
+	if err != nil {
+		if isDNSTimeout(err) {
+			log.Printf("Standard DNS resolution for %s timed out after %v (likely multiple unreachable DNS servers)", hostname, systemDNSTimeout)
+		} else {
+			log.Printf("Standard DNS resolution for %s failed: %v", hostname, err)
 		}
-		// If standard resolver fails, log the error
-		log.Printf("Standard DNS resolution for %s failed: %v", hostname, result.err)
-	case <-systemDNSTimer.C:
-		log.Printf("Standard DNS resolution for %s timed out after %v (likely multiple unreachable DNS servers)", hostname, systemDNSTimeout)
 	}
 
 	log.Printf("Attempting to resolve %s using fallback DNS servers...", hostname)
@@ -382,11 +372,20 @@ func (b *BwClient) testAPIConnectivity(ctx context.Context) TestResult {
 }
 
 // Helper function to check if an error is DNS-related
+// Go 1.23+ improvement: DNSError now wraps timeout and cancellation errors,
+// so we can use errors.Is for more reliable detection
 func isDNSError(err error) bool {
 	if err == nil {
 		return false
 	}
 
+	// Check if it's a DNSError type
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+
+	// Fallback to string matching for wrapped errors
 	errStr := err.Error()
 	return strings.Contains(errStr, "no such host") ||
 		strings.Contains(errStr, "lookup ") ||
@@ -394,6 +393,27 @@ func isDNSError(err error) bool {
 		strings.Contains(errStr, "DNS") ||
 		strings.Contains(errStr, "dns") ||
 		strings.Contains(errStr, "cannot resolve")
+}
+
+// isDNSTimeout checks if a DNS error was caused by a timeout
+// Go 1.23+ feature: DNSError now wraps context.DeadlineExceeded
+func isDNSTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Go 1.23+: DNSError wraps timeout errors
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+
+	// Also check for net.Error timeout
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+
+	return false
 }
 
 // Helper function to replace hostname with IP in URL

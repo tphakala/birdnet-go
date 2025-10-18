@@ -2,6 +2,8 @@ package birdweather
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"testing"
 	"time"
 )
@@ -220,4 +222,60 @@ type testError struct {
 
 func (e *testError) Error() string {
 	return e.msg
+}
+
+// TestIsDNSTimeout tests the DNS timeout detection function
+// This leverages Go 1.23+ feature where DNSError wraps context.DeadlineExceeded
+func TestIsDNSTimeout(t *testing.T) {
+	testCases := []struct {
+		name          string
+		err           error
+		expectTimeout bool
+	}{
+		{
+			name:          "Nil error",
+			err:           nil,
+			expectTimeout: false,
+		},
+		{
+			name:          "Context deadline exceeded",
+			err:           context.DeadlineExceeded,
+			expectTimeout: true,
+		},
+		{
+			name: "Wrapped context deadline",
+			err: fmt.Errorf("lookup failed: %w", context.DeadlineExceeded),
+			expectTimeout: true,
+		},
+		{
+			name: "DNS error with timeout",
+			err: &net.DNSError{
+				Err:       "i/o timeout",
+				IsTimeout: true,
+			},
+			expectTimeout: true,
+		},
+		{
+			name: "DNS error without timeout",
+			err: &net.DNSError{
+				Err:       "no such host",
+				IsTimeout: false,
+			},
+			expectTimeout: false,
+		},
+		{
+			name:          "Generic error",
+			err:           fmt.Errorf("some other error"),
+			expectTimeout: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := isDNSTimeout(tc.err)
+			if result != tc.expectTimeout {
+				t.Errorf("isDNSTimeout() = %v, want %v for error: %v", result, tc.expectTimeout, tc.err)
+			}
+		})
+	}
 }
