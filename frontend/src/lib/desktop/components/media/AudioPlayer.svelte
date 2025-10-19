@@ -482,23 +482,19 @@
     // Check if this is user-requested mode (only on first error)
     if (spectrogramRetryCount === 0 && spectrogramUrl) {
       try {
-        const response = await fetch(spectrogramUrl, { method: 'HEAD' });
+        const response = await fetch(spectrogramUrl);
         if (response.status === 404) {
-          // Try to get JSON error details
-          const getResponse = await fetch(spectrogramUrl);
-          if (getResponse.status === 404) {
-            const data = await getResponse.json();
-            if (data.mode === 'user-requested') {
-              // User-requested mode - show generate button instead of error
-              logger.debug('Spectrogram not generated in user-requested mode', {
-                detectionId,
-              });
-              spectrogramNeedsGeneration = true;
-              spectrogramLoader.setLoading(false);
-              clearSpectrogramRetryTimer();
-              clearStatusPollTimer();
-              return;
-            }
+          const data = await response.json();
+          if (data.mode === 'user-requested') {
+            // User-requested mode - show generate button instead of error
+            logger.debug('Spectrogram not generated in user-requested mode', {
+              detectionId,
+            });
+            spectrogramNeedsGeneration = true;
+            spectrogramLoader.setLoading(false);
+            clearSpectrogramRetryTimer();
+            clearStatusPollTimer();
+            return;
           }
         }
       } catch (err) {
