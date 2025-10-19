@@ -164,31 +164,25 @@ func TestFloat32PoolIntegration(t *testing.T) {
 	
 	// Perform multiple conversions
 	const iterations = 10
-	for i := range iterations {
+	for range iterations {
 		result := convert16BitToFloat32(testData)
 		assert.Len(t, result, Float32BufferSize)
-		
+
 		// Verify some values
 		assert.InDelta(t, 0.5, result[0], 0.01)
-		
+
 		// Return to pool
 		ReturnFloat32Buffer(result)
-		
-		// For first iteration, should be a miss
-		// For subsequent iterations, should be hits
-		stats := float32Pool.GetStats()
-		if i == 0 {
-			assert.Equal(t, initialStats.Misses+1, stats.Misses)
-		} else {
-			assert.Greater(t, stats.Hits, initialStats.Hits)
-		}
 	}
-	
+
 	// Final stats should show pool is working
 	finalStats := float32Pool.GetStats()
 	// sync.Pool behavior is non-deterministic and depends on GC pressure
 	// Just verify that the pool was used (had both hits and/or misses)
 	assert.Positive(t, finalStats.Hits+finalStats.Misses)
+
+	// Verify we had at least some operations
+	assert.GreaterOrEqual(t, finalStats.Misses, initialStats.Misses+1, "should have at least one miss")
 }
 
 // TestConvert16BitToFloat32_NonStandardSize tests conversion with non-standard buffer sizes
