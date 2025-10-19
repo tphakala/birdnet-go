@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,14 +40,6 @@ const (
 	// Timeout for graceful shutdown
 	shutdownTimeout = 10 * time.Second
 )
-
-// validSizes maps size strings to pixel widths (single source of truth)
-var validSizes = map[string]int{
-	"sm": 400,  // Small - 400px (default, matches frontend RecentDetectionsCard)
-	"md": 800,  // Medium - 800px
-	"lg": 1000, // Large - 1000px
-	"xl": 1200, // Extra Large - 1200px
-}
 
 // PreRenderer manages background spectrogram pre-rendering.
 // It uses a worker pool to process jobs without blocking the detection pipeline.
@@ -190,7 +181,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	// - If created by on-demand generation: processJob() will skip it (redundant work avoided)
 	// - If created by another pre-render worker: processJob() will skip it (idempotent)
 	// - Impact: Job logged as "skipped" instead of caught here (no functional issue)
-	spectrogramPath, err := pr.buildSpectrogramPath(job.ClipPath)
+	spectrogramPath, err := BuildSpectrogramPath(job.ClipPath)
 	if err != nil {
 		pr.logger.Error("Invalid clip path, rejecting job",
 			"note_id", job.NoteID,
@@ -379,7 +370,7 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 		"pcm_bytes", len(job.PCMData))
 
 	// Build spectrogram path from clip path
-	spectrogramPath, err := pr.buildSpectrogramPath(job.ClipPath)
+	spectrogramPath, err := BuildSpectrogramPath(job.ClipPath)
 	if err != nil {
 		pr.logger.Error("Failed to build spectrogram path",
 			"worker_id", workerID,
@@ -410,7 +401,7 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	}
 
 	// Convert size string to pixels
-	width, err := pr.sizeToPixels(pr.settings.Realtime.Dashboard.Spectrogram.Size)
+	width, err := SizeToPixels(pr.settings.Realtime.Dashboard.Spectrogram.Size)
 	if err != nil {
 		pr.logger.Error("Invalid spectrogram size",
 			"worker_id", workerID,
@@ -540,53 +531,6 @@ func (pr *PreRenderer) generateWithSox(ctx context.Context, pcmData []byte, outp
 	}
 
 	return nil
-}
-
-// buildSpectrogramPath constructs the spectrogram file path from the audio clip path.
-// Example: "clips/2024-01-15/Accipiter_striatus/Accipiter_striatus.2024-01-15T10:00:00.wav"
-//       -> "clips/2024-01-15/Accipiter_striatus/Accipiter_striatus.2024-01-15T10:00:00.png"
-func (pr *PreRenderer) buildSpectrogramPath(clipPath string) (string, error) {
-	// Replace audio extension with .png
-	ext := filepath.Ext(clipPath)
-	if ext == "" {
-		return "", errors.Newf("clip path has no extension").
-			Component("spectrogram").
-			Category(errors.CategoryValidation).
-			Context("operation", "build_spectrogram_path").
-			Context("clip_path", clipPath).
-			Build()
-	}
-
-	spectrogramPath := clipPath[:len(clipPath)-len(ext)] + ".png"
-	return spectrogramPath, nil
-}
-
-// sizeToPixels converts a size string to pixel width.
-// Uses validSizes map as single source of truth for size validation.
-func (pr *PreRenderer) sizeToPixels(size string) (int, error) {
-	width, ok := validSizes[size]
-	if !ok {
-		return 0, errors.Newf("invalid size (valid sizes: sm, md, lg, xl)").
-			Component("spectrogram").
-			Category(errors.CategoryValidation).
-			Context("operation", "size_to_pixels").
-			Context("size", size).
-			Build()
-	}
-	return width, nil
-}
-
-// GetValidSizes returns a sorted list of valid size strings.
-// Useful for runtime validation in web UI.
-// Returns sizes in deterministic order for consistent UI/testing.
-func GetValidSizes() []string {
-	sizes := make([]string, 0, len(validSizes))
-	for size := range validSizes {
-		sizes = append(sizes, size)
-	}
-	// Sort for deterministic output
-	sort.Strings(sizes)
-	return sizes
 }
 
 // GetStats returns a copy of the current statistics.

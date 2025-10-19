@@ -13,87 +13,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
-// TestPreRenderer_SizeToPixels tests the size string to pixel width conversion
-func TestPreRenderer_SizeToPixels(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		size      string
-		wantWidth int
-		wantErr   bool
-	}{
-		{"small", "sm", 400, false},
-		{"medium", "md", 800, false},
-		{"large", "lg", 1000, false},
-		{"extra large", "xl", 1200, false},
-		{"invalid", "invalid", 0, true},
-		{"empty", "", 0, true},
-	}
-
-	pr := &PreRenderer{}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			gotWidth, err := pr.sizeToPixels(tt.size)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("sizeToPixels() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if gotWidth != tt.wantWidth {
-				t.Errorf("sizeToPixels() = %v, want %v", gotWidth, tt.wantWidth)
-			}
-		})
-	}
-}
-
-// TestPreRenderer_BuildSpectrogramPath tests spectrogram path building
-func TestPreRenderer_BuildSpectrogramPath(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		clipPath  string
-		wantPath  string
-		wantErr   bool
-	}{
-		{
-			name:     "wav file",
-			clipPath: "clips/2024-01-15/test.wav",
-			wantPath: "clips/2024-01-15/test.png",
-			wantErr:  false,
-		},
-		{
-			name:     "mp3 file",
-			clipPath: "clips/bird.mp3",
-			wantPath: "clips/bird.png",
-			wantErr:  false,
-		},
-		{
-			name:     "no extension",
-			clipPath: "clips/noext",
-			wantPath: "",
-			wantErr:  true,
-		},
-	}
-
-	pr := &PreRenderer{}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			gotPath, err := pr.buildSpectrogramPath(tt.clipPath)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("buildSpectrogramPath() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if gotPath != tt.wantPath {
-				t.Errorf("buildSpectrogramPath() = %v, want %v", gotPath, tt.wantPath)
-			}
-		})
-	}
-}
+// Note: TestPreRenderer_SizeToPixels and TestPreRenderer_BuildSpectrogramPath
+// have been moved to utils_test.go as they now test shared package-level functions.
 
 // TestPreRenderer_Submit_FileAlreadyExists tests early file existence check
 func TestPreRenderer_Submit_FileAlreadyExists(t *testing.T) {
