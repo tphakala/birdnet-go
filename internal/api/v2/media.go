@@ -1438,8 +1438,6 @@ func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectr
 	return spectrogramStatusGenerated, nil
 }
 
-// ensureOutputDirectory creates the output directory if it doesn't exist.
-//
 
 // generateWithFallback attempts to generate a spectrogram with SoX, falling back to FFmpeg on failure
 func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, absSpectrogramPath, spectrogramKey string, width int, raw bool) error {
