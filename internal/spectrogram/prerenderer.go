@@ -211,14 +211,52 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	}
 
 	// Path-traversal guard: ensure spectrogram path is within export directory
+	// Use absolute paths to prevent filepath.Rel misclassification on relative inputs
 	exportPath := pr.settings.Realtime.Audio.Export.Path
-	relPath, err := filepath.Rel(exportPath, spectrogramPath)
-	if err != nil || strings.HasPrefix(relPath, "..") || relPath == ".." {
+	absRoot, err := filepath.Abs(exportPath)
+	if err != nil {
+		pr.logger.Error("Failed to resolve export path to absolute",
+			"note_id", job.NoteID,
+			"export_path", exportPath,
+			"error", err)
+		pr.mu.Lock()
+		pr.stats.Failed++
+		pr.mu.Unlock()
+		return errors.New(err).
+			Component("spectrogram").
+			Category(errors.CategoryFileIO).
+			Context("operation", "resolve_export_path").
+			Context("note_id", job.NoteID).
+			Context("export_path", exportPath).
+			Build()
+	}
+
+	absOut, err := filepath.Abs(spectrogramPath)
+	if err != nil {
+		pr.logger.Error("Failed to resolve spectrogram path to absolute",
+			"note_id", job.NoteID,
+			"spectrogram_path", spectrogramPath,
+			"error", err)
+		pr.mu.Lock()
+		pr.stats.Failed++
+		pr.mu.Unlock()
+		return errors.New(err).
+			Component("spectrogram").
+			Category(errors.CategoryFileIO).
+			Context("operation", "resolve_spectrogram_path").
+			Context("note_id", job.NoteID).
+			Context("spectrogram_path", spectrogramPath).
+			Build()
+	}
+
+	relPath, err := filepath.Rel(absRoot, absOut)
+	if err != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) {
 		pr.logger.Error("Path traversal attempt detected, rejecting job",
 			"note_id", job.NoteID,
 			"clip_path", job.ClipPath,
-			"spectrogram_path", spectrogramPath,
-			"export_path", exportPath)
+			"spectrogram_path", absOut,
+			"export_path", absRoot,
+			"relative_path", relPath)
 		pr.mu.Lock()
 		pr.stats.Failed++
 		pr.mu.Unlock()
@@ -228,8 +266,9 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 			Context("operation", "path_validation").
 			Context("note_id", job.NoteID).
 			Context("clip_path", job.ClipPath).
-			Context("spectrogram_path", spectrogramPath).
-			Context("export_path", exportPath).
+			Context("spectrogram_path", absOut).
+			Context("export_path", absRoot).
+			Context("relative_path", relPath).
 			Build()
 	}
 
@@ -512,6 +551,9 @@ func (pr *PreRenderer) buildSpectrogramPath(clipPath string) (string, error) {
 	ext := filepath.Ext(clipPath)
 	if ext == "" {
 		return "", errors.Newf("clip path has no extension").
+			Component("spectrogram").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_spectrogram_path").
 			Context("clip_path", clipPath).
 			Build()
 	}
@@ -526,6 +568,9 @@ func (pr *PreRenderer) sizeToPixels(size string) (int, error) {
 	width, ok := validSizes[size]
 	if !ok {
 		return 0, errors.Newf("invalid size (valid sizes: sm, md, lg, xl)").
+			Component("spectrogram").
+			Category(errors.CategoryValidation).
+			Context("operation", "size_to_pixels").
 			Context("size", size).
 			Build()
 	}

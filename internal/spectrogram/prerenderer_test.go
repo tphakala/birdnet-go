@@ -164,8 +164,12 @@ func TestPreRenderer_Submit_Success(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	tempDir := t.TempDir()
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Export.Path = tempDir
+
 	pr := &PreRenderer{
-		settings: &conf.Settings{},
+		settings: settings,
 		logger:   slog.Default(),
 		ctx:      ctx,
 		cancel:   cancel,
@@ -174,7 +178,7 @@ func TestPreRenderer_Submit_Success(t *testing.T) {
 
 	job := &Job{
 		PCMData:   []byte{0, 1, 2, 3},
-		ClipPath:  "nonexistent.wav",
+		ClipPath:  filepath.Join(tempDir, "nonexistent.wav"),
 		NoteID:    1,
 		Timestamp: time.Now(),
 	}
@@ -206,9 +210,13 @@ func TestPreRenderer_Submit_QueueFull(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	tempDir := t.TempDir()
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Export.Path = tempDir
+
 	// Create PreRenderer with very small queue
 	pr := &PreRenderer{
-		settings: &conf.Settings{},
+		settings: settings,
 		logger:   slog.Default(),
 		ctx:      ctx,
 		cancel:   cancel,
@@ -218,7 +226,7 @@ func TestPreRenderer_Submit_QueueFull(t *testing.T) {
 	// Fill the queue
 	job1 := &Job{
 		PCMData:   []byte{0},
-		ClipPath:  "test1.wav",
+		ClipPath:  filepath.Join(tempDir, "test1.wav"),
 		NoteID:    1,
 		Timestamp: time.Now(),
 	}
@@ -227,7 +235,7 @@ func TestPreRenderer_Submit_QueueFull(t *testing.T) {
 	// Try to submit when full
 	job2 := &Job{
 		PCMData:   []byte{1},
-		ClipPath:  "test2.wav",
+		ClipPath:  filepath.Join(tempDir, "test2.wav"),
 		NoteID:    2,
 		Timestamp: time.Now(),
 	}
@@ -259,10 +267,7 @@ func TestPreRenderer_GracefulShutdown(t *testing.T) {
 	pr := NewPreRenderer(ctx, settings, sfs, slog.Default())
 	pr.Start()
 
-	// Give workers time to start
-	time.Sleep(50 * time.Millisecond)
-
-	// Stop and verify graceful shutdown
+	// Stop and verify graceful shutdown (Start launches workers, Stop cancels and waits)
 	pr.Stop()
 
 	// After stop, verify stats are accessible (no panics)
@@ -274,8 +279,12 @@ func TestPreRenderer_Stats(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	tempDir := t.TempDir()
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Export.Path = tempDir
+
 	pr := &PreRenderer{
-		settings: &conf.Settings{},
+		settings: settings,
 		logger:   slog.Default(),
 		ctx:      ctx,
 		cancel:   cancel,
@@ -291,7 +300,7 @@ func TestPreRenderer_Stats(t *testing.T) {
 	// Queue a job
 	job := &Job{
 		PCMData:   []byte{0},
-		ClipPath:  "test.wav",
+		ClipPath:  filepath.Join(tempDir, "test.wav"),
 		NoteID:    1,
 		Timestamp: time.Now(),
 	}
