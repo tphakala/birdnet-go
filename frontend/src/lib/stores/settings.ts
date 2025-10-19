@@ -60,8 +60,8 @@ export interface MainSettings {
 }
 
 export interface BirdNetSettings {
-  modelPath: string;
-  labelPath: string;
+  modelPath: string | null;
+  labelPath: string | null;
   sensitivity: number; // 0.0-1.5
   threshold: number; // 0.0-1.0
   overlap: number; // 0.0-2.9
@@ -807,6 +807,16 @@ export const settingsActions = {
             data as Record<string, unknown>
           );
         }
+      }
+
+      // Convert empty strings to null for modelPath and labelPath to signal "revert to default"
+      // This ensures the config file is properly cleaned when users clear these fields
+      // Trim whitespace to handle cases like "   " which should also be treated as empty
+      if (coercedFormData.birdnet.modelPath?.trim() === '') {
+        coercedFormData.birdnet.modelPath = null;
+      }
+      if (coercedFormData.birdnet.labelPath?.trim() === '') {
+        coercedFormData.birdnet.labelPath = null;
       }
 
       await settingsAPI.save(coercedFormData);

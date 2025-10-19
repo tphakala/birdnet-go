@@ -1223,7 +1223,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
           <TextInput
             id="model-path"
-            value={settings.birdnet.modelPath}
+            value={settings.birdnet.modelPath ?? ''}
             label={t('settings.main.sections.customClassifier.modelPath.label')}
             placeholder={t('settings.main.sections.customClassifier.modelPath.placeholder')}
             helpText={t('settings.main.sections.customClassifier.modelPath.helpText')}
@@ -1233,7 +1233,7 @@
 
           <TextInput
             id="label-path"
-            value={settings.birdnet.labelPath}
+            value={settings.birdnet.labelPath ?? ''}
             label={t('settings.main.sections.customClassifier.labelPath.label')}
             placeholder={t('settings.main.sections.customClassifier.labelPath.placeholder')}
             helpText={t('settings.main.sections.customClassifier.labelPath.helpText')}
