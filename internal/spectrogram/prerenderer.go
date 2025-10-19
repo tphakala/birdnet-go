@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,7 +24,7 @@ import (
 
 // Sentinel errors for stable error checking
 var (
-	ErrQueueFull = fmt.Errorf("pre-render queue full")
+	ErrQueueFull = errors.Newf("pre-render queue full").Build()
 )
 
 const (
@@ -206,6 +207,29 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 			Context("operation", "build_spectrogram_path").
 			Context("note_id", job.NoteID).
 			Context("clip_path", job.ClipPath).
+			Build()
+	}
+
+	// Path-traversal guard: ensure spectrogram path is within export directory
+	exportPath := pr.settings.Realtime.Audio.Export.Path
+	relPath, err := filepath.Rel(exportPath, spectrogramPath)
+	if err != nil || strings.HasPrefix(relPath, "..") || relPath == ".." {
+		pr.logger.Error("Path traversal attempt detected, rejecting job",
+			"note_id", job.NoteID,
+			"clip_path", job.ClipPath,
+			"spectrogram_path", spectrogramPath,
+			"export_path", exportPath)
+		pr.mu.Lock()
+		pr.stats.Failed++
+		pr.mu.Unlock()
+		return errors.Newf("path traversal detected: spectrogram path outside export directory").
+			Component("spectrogram").
+			Category(errors.CategoryValidation).
+			Context("operation", "path_validation").
+			Context("note_id", job.NoteID).
+			Context("clip_path", job.ClipPath).
+			Context("spectrogram_path", spectrogramPath).
+			Context("export_path", exportPath).
 			Build()
 	}
 

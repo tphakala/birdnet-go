@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -1542,7 +1542,7 @@ func (p *Processor) initPreRenderer() {
 				"operation", "prerenderer_init")
 			return
 		}
-		if _, err := os.Stat(p.Settings.Realtime.Audio.SoxPath); err != nil {
+		if _, err := exec.LookPath(p.Settings.Realtime.Audio.SoxPath); err != nil {
 			GetLogger().Error("Sox binary not found, disabling pre-rendering",
 				"path", p.Settings.Realtime.Audio.SoxPath,
 				"error", err,

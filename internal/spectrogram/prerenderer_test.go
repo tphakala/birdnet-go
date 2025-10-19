@@ -2,6 +2,7 @@ package spectrogram
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -216,8 +217,8 @@ func TestPreRenderer_Submit_QueueFull(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 	err := pr.Submit(job2)
-	if err == nil {
-		t.Error("Submit() expected error for full queue, got nil")
+	if err == nil || !errors.Is(err, ErrQueueFull) {
+		t.Errorf("Submit() expected ErrQueueFull, got %v", err)
 	}
 }
 
@@ -280,5 +281,38 @@ func TestPreRenderer_Stats(t *testing.T) {
 	stats = pr.GetStats()
 	if stats.Queued != 1 {
 		t.Errorf("Stats queued = %d, want 1", stats.Queued)
+	}
+}
+
+// TestPreRenderer_Submit_AfterStop tests submit after stop (panic guard)
+func TestPreRenderer_Submit_AfterStop(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	tempDir := t.TempDir()
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Export.Path = tempDir
+	settings.Realtime.Dashboard.Spectrogram.Size = "sm"
+
+	sfs, err := securefs.New(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to create SecureFS: %v", err)
+	}
+
+	pr := NewPreRenderer(ctx, settings, sfs, slog.Default())
+	pr.Start()
+	pr.Stop() // Closes channel
+
+	job := &Job{
+		PCMData:   []byte{0},
+		ClipPath:  filepath.Join(tempDir, "test.wav"),
+		NoteID:    1,
+		Timestamp: time.Now(),
+	}
+
+	// Submit after Stop should return error (not panic)
+	err = pr.Submit(job)
+	if err == nil {
+		t.Fatal("Expected error after Stop(), got nil")
 	}
 }
