@@ -24,8 +24,10 @@ const (
 	// Worker pool size - conservative for background processing
 	defaultWorkers = 2
 
-	// Job queue size - buffer to handle burst detections
-	defaultQueueSize = 100
+	// Job queue size - minimal buffer for memory efficiency
+	// Size of 3 = 2 workers busy + 1 waiting (~4 MB worst case for 15s clips)
+	// On queue full: drop job (spectrogram generated on-demand when accessed)
+	defaultQueueSize = 3
 
 	// Timeout for individual spectrogram generation
 	generationTimeout = 60 * time.Second

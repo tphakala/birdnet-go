@@ -333,7 +333,7 @@ func TestPreRenderer_QueueOverflow(t *testing.T) {
 		t.Fatalf("Failed to create SecureFS: %v", err)
 	}
 
-	// Create PreRenderer (queue size is 100)
+	// Create PreRenderer (queue size is 3)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -353,8 +353,8 @@ func TestPreRenderer_QueueOverflow(t *testing.T) {
 	}
 
 	// Submit more jobs than queue size to trigger overflow
-	// Queue size is 100, submit 150 jobs
-	numJobs := 150
+	// Queue size is 3 (2 workers + 1 waiting), submit 20 jobs rapidly
+	numJobs := 20
 	queueFull := 0
 	submitted := 0
 
