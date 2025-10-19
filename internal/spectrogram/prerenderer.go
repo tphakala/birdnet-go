@@ -147,6 +147,27 @@ func (pr *PreRenderer) Submit(jobInterface any) error {
 		return fmt.Errorf("invalid job type: expected *spectrogram.Job, got %T", jobInterface)
 	}
 
+	// Early check: skip if spectrogram already exists (avoid queueing duplicate jobs)
+	spectrogramPath, err := pr.buildSpectrogramPath(job.ClipPath)
+	if err != nil {
+		pr.logger.Error("Invalid clip path, rejecting job",
+			"note_id", job.NoteID,
+			"clip_path", job.ClipPath,
+			"error", err)
+		return fmt.Errorf("invalid clip path: %w", err)
+	}
+
+	if _, err := os.Stat(spectrogramPath); err == nil {
+		// File already exists, skip queueing
+		pr.mu.Lock()
+		pr.stats.Skipped++
+		pr.mu.Unlock()
+		pr.logger.Debug("Spectrogram already exists, skipping queue",
+			"note_id", job.NoteID,
+			"spectrogram_path", spectrogramPath)
+		return nil
+	}
+
 	select {
 	case pr.jobs <- job:
 		pr.mu.Lock()

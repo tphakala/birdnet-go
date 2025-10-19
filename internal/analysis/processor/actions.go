@@ -27,6 +27,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observation"
+	"github.com/tphakala/birdnet-go/internal/spectrogram"
 )
 
 // Timeout and interval constants
@@ -812,8 +813,8 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 
 	// Submit for pre-rendering if enabled
 	if a.Settings.Realtime.Dashboard.Spectrogram.Enabled && a.PreRenderer != nil {
-		// Import the job struct inline to avoid package dependency
-		job := &spectrogramJob{
+		// Create spectrogram job using the actual type from spectrogram package
+		job := &spectrogram.Job{
 			PCMData:   a.pcmData,
 			ClipPath:  a.ClipName,
 			NoteID:    a.NoteID,
@@ -833,14 +834,6 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 	}
 
 	return nil
-}
-
-// spectrogramJob represents a pre-render job (matches internal/spectrogram.Job structure)
-type spectrogramJob struct {
-	PCMData   []byte
-	ClipPath  string
-	NoteID    uint
-	Timestamp time.Time
 }
 
 // Execute sends the note to the BirdWeather API

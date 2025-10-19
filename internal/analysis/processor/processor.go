@@ -1515,6 +1515,33 @@ func generateRandomHex(length int) string {
 // This is called during processor initialization if spectrogram pre-rendering is enabled in settings.
 func (p *Processor) initPreRenderer() {
 	p.preRendererOnce.Do(func() {
+		// Validate spectrogram size configuration early
+		validSizes := []string{"sm", "md", "lg", "xl"}
+		size := p.Settings.Realtime.Dashboard.Spectrogram.Size
+		isValid := false
+		for _, s := range validSizes {
+			if s == size {
+				isValid = true
+				break
+			}
+		}
+		if !isValid {
+			GetLogger().Error("Invalid spectrogram size, disabling pre-rendering",
+				"size", size,
+				"valid_sizes", validSizes,
+				"operation", "prerenderer_init")
+			log.Printf("❌ Invalid spectrogram size '%s', pre-rendering disabled. Valid sizes: %v", size, validSizes)
+			return
+		}
+
+		// Validate Sox binary is available
+		if p.Settings.Realtime.Audio.SoxPath == "" {
+			GetLogger().Error("Sox binary not configured, disabling pre-rendering",
+				"operation", "prerenderer_init")
+			log.Printf("❌ Sox binary not found, pre-rendering disabled")
+			return
+		}
+
 		// Create SecureFS for path validation
 		sfs, err := securefs.New(p.Settings.Realtime.Audio.Export.Path)
 		if err != nil {
@@ -1538,5 +1565,6 @@ func (p *Processor) initPreRenderer() {
 			"size", p.Settings.Realtime.Dashboard.Spectrogram.Size,
 			"raw", p.Settings.Realtime.Dashboard.Spectrogram.Raw,
 			"operation", "prerenderer_init")
+		log.Printf("✅ Spectrogram pre-renderer enabled (size=%s, raw=%v)", size, p.Settings.Realtime.Dashboard.Spectrogram.Raw)
 	})
 }
