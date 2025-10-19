@@ -132,8 +132,10 @@
   let statusPollAbortController: AbortController | undefined;
 
   // User-requested spectrogram generation state
+  // eslint-disable-next-line no-unused-vars
   let spectrogramNeedsGeneration = $state(false);
   let isGeneratingSpectrogram = $state(false);
+  // eslint-disable-next-line no-unused-vars
   let generationError = $state<string | null>(null);
 
   // Audio processing state
@@ -574,6 +576,7 @@
   };
 
   // Handle user-requested spectrogram generation
+  // eslint-disable-next-line no-unused-vars
   const handleGenerateSpectrogram = async () => {
     if (isGeneratingSpectrogram) return; // Prevent double-click
 
