@@ -592,6 +592,10 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 				"ip", ctx.RealIP())
 		}
 
+		// Return JSON response with mode information.
+		// Flow: <img> element's onerror handler triggers -> frontend makes fetch() call to same URL
+		// -> this JSON response is parsed by frontend -> mode field triggers UI to show "Generate" button
+		// Note: The <img> element doesn't parse this JSON; the error handler's fetch() call does.
 		return ctx.JSON(http.StatusNotFound, map[string]any{
 			"error":   "Spectrogram not generated",
 			"message": "Spectrogram has not been generated yet. Click 'Generate Spectrogram' to create it.",
