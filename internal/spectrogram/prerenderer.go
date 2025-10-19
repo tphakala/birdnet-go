@@ -263,7 +263,9 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 		}
 	}()
 
-	// Use select with context check to avoid panic from closed channel
+	// Check context first to avoid select race with closed channel
+	// When Stop() is called, context is cancelled before channel is closed,
+	// so checking this first ensures we don't race with channel closure
 	select {
 	case <-pr.ctx.Done():
 		// Context cancelled, don't attempt to send
@@ -278,6 +280,12 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 			Context("operation", "submit_job").
 			Context("note_id", job.NoteID).
 			Build()
+	default:
+		// Context not cancelled, proceed to queue
+	}
+
+	// Try to send job to queue (non-blocking)
+	select {
 	case pr.jobs <- job:
 		pr.mu.Lock()
 		pr.stats.Queued++

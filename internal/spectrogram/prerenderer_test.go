@@ -321,7 +321,7 @@ func TestPreRenderer_Submit_AfterStop(t *testing.T) {
 
 	pr := NewPreRenderer(ctx, settings, sfs, slog.Default())
 	pr.Start()
-	pr.Stop() // Closes channel
+	pr.Stop() // Closes channel and cancels context
 
 	job := &Job{
 		PCMData:   []byte{0},
@@ -330,7 +330,7 @@ func TestPreRenderer_Submit_AfterStop(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	// Submit after Stop should return error (not panic)
+	// Submit after Stop should return error due to cancelled context
 	err = pr.Submit(job)
 	if err == nil {
 		t.Fatal("Expected error after Stop(), got nil")
