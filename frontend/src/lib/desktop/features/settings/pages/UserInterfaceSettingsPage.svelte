@@ -21,7 +21,13 @@
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
-  import { settingsStore, settingsActions, dashboardSettings } from '$lib/stores/settings';
+  import {
+    settingsStore,
+    settingsActions,
+    dashboardSettings,
+    DEFAULT_SPECTROGRAM_SETTINGS,
+  } from '$lib/stores/settings';
+  import type { SpectrogramPreRender } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import { api, ApiError } from '$lib/utils/api';
@@ -32,7 +38,7 @@
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived({
     dashboard: {
-      ...($dashboardSettings || {
+      ...($dashboardSettings ?? {
         thumbnails: {
           summary: true,
           recent: true,
@@ -41,19 +47,11 @@
         },
         summaryLimit: 100,
         newUI: false,
-        spectrogram: {
-          enabled: false,
-          size: 'sm',
-          raw: true,
-        },
+        spectrogram: DEFAULT_SPECTROGRAM_SETTINGS,
       }),
-      locale: $dashboardSettings?.locale || (getLocale() as string),
-      newUI: $dashboardSettings?.newUI || false,
-      spectrogram: $dashboardSettings?.spectrogram || {
-        enabled: false,
-        size: 'sm',
-        raw: true,
-      },
+      locale: $dashboardSettings?.locale ?? (getLocale() as string),
+      newUI: $dashboardSettings?.newUI ?? false,
+      spectrogram: $dashboardSettings?.spectrogram ?? DEFAULT_SPECTROGRAM_SETTINGS,
     },
   });
 
@@ -166,7 +164,7 @@
     });
   }
 
-  function updateSpectrogramSetting(key: string, value: any) {
+  function updateSpectrogramSetting(key: keyof SpectrogramPreRender, value: boolean | string) {
     settingsActions.updateSection('realtime', {
       dashboard: {
         ...settings.dashboard,
