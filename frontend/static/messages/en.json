@@ -893,6 +893,13 @@
                   "none": "Use only selected provider"
                 }
               }
+            },
+            "spectrogram": {
+              "title": "Spectrogram Pre-Rendering",
+              "enabled": {
+                "label": "Enable Spectrogram Pre-Rendering",
+                "helpText": "Generate spectrograms in the background when detections are saved to eliminate UI lag. Note: This will increase disk usage as PNG files are stored alongside audio clips."
+              }
             }
           }
         }

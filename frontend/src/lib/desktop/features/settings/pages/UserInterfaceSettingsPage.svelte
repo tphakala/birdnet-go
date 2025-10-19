@@ -21,7 +21,13 @@
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
-  import { settingsStore, settingsActions, dashboardSettings } from '$lib/stores/settings';
+  import {
+    settingsStore,
+    settingsActions,
+    dashboardSettings,
+    DEFAULT_SPECTROGRAM_SETTINGS,
+  } from '$lib/stores/settings';
+  import type { SpectrogramPreRender } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import { api, ApiError } from '$lib/utils/api';
@@ -32,7 +38,7 @@
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived({
     dashboard: {
-      ...($dashboardSettings || {
+      ...($dashboardSettings ?? {
         thumbnails: {
           summary: true,
           recent: true,
@@ -42,8 +48,9 @@
         summaryLimit: 100,
         newUI: false,
       }),
-      locale: $dashboardSettings?.locale || (getLocale() as string),
-      newUI: $dashboardSettings?.newUI || false,
+      locale: $dashboardSettings?.locale ?? (getLocale() as string),
+      newUI: $dashboardSettings?.newUI ?? false,
+      spectrogram: $dashboardSettings?.spectrogram ?? DEFAULT_SPECTROGRAM_SETTINGS,
     },
   });
 
@@ -152,6 +159,15 @@
       dashboard: {
         ...settings.dashboard,
         thumbnails: { ...settings.dashboard.thumbnails, [key]: value },
+      },
+    });
+  }
+
+  function updateSpectrogramSetting(key: keyof SpectrogramPreRender, value: boolean | string) {
+    settingsActions.updateSection('realtime', {
+      dashboard: {
+        ...settings.dashboard,
+        spectrogram: { ...settings.dashboard.spectrogram, [key]: value },
       },
     });
   }
@@ -293,6 +309,25 @@
               />
             {/if}
           </div>
+        </div>
+      </div>
+
+      <!-- Spectrogram Pre-Rendering Settings -->
+      <div>
+        <h4 class="text-lg font-medium pb-2 mt-6">
+          {t('settings.main.sections.userInterface.dashboard.spectrogram.title')}
+        </h4>
+
+        <div class="space-y-4">
+          <Checkbox
+            checked={settings.dashboard.spectrogram?.enabled ?? false}
+            label={t('settings.main.sections.userInterface.dashboard.spectrogram.enabled.label')}
+            helpText={t(
+              'settings.main.sections.userInterface.dashboard.spectrogram.enabled.helpText'
+            )}
+            disabled={store.isLoading || store.isSaving}
+            onchange={value => updateSpectrogramSetting('enabled', value)}
+          />
         </div>
       </div>
     </div>
