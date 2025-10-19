@@ -1440,42 +1440,6 @@ func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectr
 
 // ensureOutputDirectory creates the output directory if it doesn't exist.
 //
-// NOTE: This function is deprecated in favor of using the shared spectrogram generator,
-// which handles directory creation internally via SecureFS.MkdirAll. This function remains
-// for now to handle the directory creation before calling the generator, but will be
-// removed once the generator is fully integrated.
-//
-// SECURITY NOTE: This function uses os.MkdirAll directly instead of c.SFS.MkdirAll
-// for the following reasons:
-//
-//  1. PATH VALIDATION: The relSpectrogramPath has already been validated by SecureFS
-//     earlier in the call chain (in generateSpectrogram via normalizeAndValidatePath).
-//
-//  2. SECUREFS LIMITATION: c.SFS.MkdirAll expects absolute paths or converts relative
-//     paths using the current working directory.
-//
-//  3. SAFETY GUARANTEE: We construct absDir by joining c.SFS.BaseDir() with relDir
-//     (derived from an already-validated path).
-func (c *Controller) ensureOutputDirectory(relSpectrogramPath string) error {
-	relDir := filepath.Dir(relSpectrogramPath)
-
-	// Construct absolute path within the SecureFS base directory
-	// This is safe because relSpectrogramPath has already been validated
-	absDir := filepath.Join(c.SFS.BaseDir(), relDir)
-
-	// Use os.MkdirAll directly for the reasons documented above
-	if err := os.MkdirAll(absDir, 0o755); err != nil {
-		getSpectrogramLogger().Error("Failed to create output directory for spectrogram",
-			"rel_dir", relDir,
-			"abs_dir", absDir,
-			"error", err.Error())
-		return fmt.Errorf("failed to create output directory %s: %w", relDir, err)
-	}
-	getSpectrogramLogger().Debug("Ensured output directory exists",
-		"rel_dir", relDir,
-		"abs_dir", absDir)
-	return nil
-}
 
 // generateWithFallback attempts to generate a spectrogram with SoX, falling back to FFmpeg on failure
 func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, absSpectrogramPath, spectrogramKey string, width int, raw bool) error {

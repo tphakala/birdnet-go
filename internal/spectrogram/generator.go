@@ -8,11 +8,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -26,7 +28,26 @@ const (
 
 	// dynamicRange for sox spectrogram generation (-z parameter)
 	dynamicRange = "100"
+
+	// durationCacheTTL is how long duration cache entries remain valid
+	durationCacheTTL = 10 * time.Minute
 )
+
+// durationCacheEntry stores cached audio duration with file validation info
+type durationCacheEntry struct {
+	duration  float64
+	timestamp time.Time
+	fileSize  int64
+	modTime   time.Time
+}
+
+// audioDurationCache stores audio duration lookups to avoid repeated ffprobe calls
+var audioDurationCache = struct {
+	sync.RWMutex
+	entries map[string]*durationCacheEntry
+}{
+	entries: make(map[string]*durationCacheEntry),
+}
 
 // SoxInputType specifies the source of audio data for Sox
 type SoxInputType int
@@ -61,6 +82,14 @@ func NewGenerator(settings *conf.Settings, sfs *securefs.SecureFS, logger *slog.
 //
 // The audioPath and outputPath must be absolute paths.
 // Width is in pixels, raw controls whether to show axes/legends.
+//
+// Context Timeout Behavior:
+// This function enforces a 60-second timeout for spectrogram generation regardless
+// of any parent context timeout. If the parent context has a shorter deadline, that
+// will take precedence (Go's context behavior). This ensures:
+//   - Long-running generations are bounded to prevent resource exhaustion
+//   - Callers can still impose stricter timeouts if needed
+//   - HTTP request cancellations are still respected via parent context
 func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath string, width int, raw bool) error {
 	start := time.Now()
 	g.logger.Debug("Starting spectrogram generation from file",
@@ -74,7 +103,7 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 		return err
 	}
 
-	// Create context with timeout
+	// Create context with timeout (see function documentation for timeout layering behavior)
 	ctx, cancel := context.WithTimeout(ctx, defaultGenerationTimeout)
 	defer cancel()
 
@@ -104,6 +133,12 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 // GenerateFromPCM creates a spectrogram from in-memory PCM data.
 // Used by pre-renderer (background mode).
 // PCM format: s16le, 48kHz, mono
+//
+// Context Timeout Behavior:
+// This function enforces a 60-second timeout for spectrogram generation.
+// The pre-renderer also sets its own timeout (see prerenderer.go:416), so the
+// effective timeout will be whichever is shorter. This layered approach ensures
+// both the pre-renderer and generator have safety limits.
 func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputPath string, width int, raw bool) error {
 	start := time.Now()
 	g.logger.Debug("Starting spectrogram generation from PCM",
@@ -117,7 +152,7 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 		return err
 	}
 
-	// Create context with timeout
+	// Create context with timeout (see function documentation for timeout layering behavior)
 	ctx, cancel := context.WithTimeout(ctx, defaultGenerationTimeout)
 	defer cancel()
 
@@ -208,6 +243,8 @@ func (g *Generator) generateWithSoxDirect(ctx context.Context, audioPath, output
 			Context("operation", "generate_with_sox_direct").
 			Context("audio_path", audioPath).
 			Context("output_path", outputPath).
+			Context("width", width).
+			Context("raw", raw).
 			Context("sox_output", output.String()).
 			Build()
 	}
@@ -261,6 +298,8 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 			Category(errors.CategorySystem).
 			Context("operation", "create_pipe").
 			Context("audio_path", audioPath).
+			Context("width", width).
+			Context("raw", raw).
 			Build()
 	}
 
@@ -277,6 +316,8 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 			Category(errors.CategorySystem).
 			Context("operation", "start_sox").
 			Context("audio_path", audioPath).
+			Context("width", width).
+			Context("raw", raw).
 			Build()
 	}
 
@@ -310,6 +351,8 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 			Category(errors.CategorySystem).
 			Context("operation", "run_ffmpeg").
 			Context("audio_path", audioPath).
+			Context("width", width).
+			Context("raw", raw).
 			Context("ffmpeg_output", ffmpegOutput.String()).
 			Context("sox_output", soxOutput.String()).
 			Build()
@@ -327,6 +370,8 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 			Category(errors.CategorySystem).
 			Context("operation", "wait_sox").
 			Context("audio_path", audioPath).
+			Context("width", width).
+			Context("raw", raw).
 			Context("ffmpeg_output", ffmpegOutput.String()).
 			Context("sox_output", soxOutput.String()).
 			Build()
@@ -455,6 +500,8 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPat
 			Context("operation", "generate_with_ffmpeg").
 			Context("audio_path", audioPath).
 			Context("output_path", outputPath).
+			Context("width", width).
+			Context("raw", raw).
 			Context("ffmpeg_output", output.String()).
 			Build()
 	}
@@ -614,17 +661,80 @@ func (g *Generator) waitWithTimeoutErr(cmd *exec.Cmd, timeout time.Duration) err
 	}
 }
 
-// getCachedAudioDuration is a placeholder for the audio duration caching logic.
-// This will be implemented separately or imported from the API package.
-// For now, it returns 0 to indicate duration should be determined from config.
+// getCachedAudioDuration retrieves audio duration from cache or fetches it using ffprobe.
+// The cache is invalidated if the file has been modified (size or modTime changed).
+// Returns 0 if duration cannot be determined (caller should use configured fallback).
 func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
-	// TODO: Implement audio duration caching
-	// This is currently implemented in internal/api/v2/media.go
-	// We'll need to either:
-	// 1. Move it to a shared package
-	// 2. Pass it as a dependency to Generator
-	// 3. Accept that Generator doesn't need it for PCM input
-	return 0
+	// Get file info for cache validation
+	fileInfo, err := os.Stat(audioPath)
+	if err != nil {
+		return 0
+	}
+
+	cacheKey := audioPath
+	currentSize := fileInfo.Size()
+	currentModTime := fileInfo.ModTime()
+
+	// Check cache with read lock
+	audioDurationCache.RLock()
+	entry, exists := audioDurationCache.entries[cacheKey]
+	audioDurationCache.RUnlock()
+
+	if exists {
+		// Validate cache entry
+		age := time.Since(entry.timestamp)
+		if age < durationCacheTTL &&
+			entry.fileSize == currentSize &&
+			entry.modTime.Equal(currentModTime) {
+			return entry.duration
+		}
+	}
+
+	// Cache miss or invalid - need to call ffprobe
+	// Use the existing myaudio package for duration lookup
+	// Import note: myaudio is already available in the generator context
+	duration, err := getAudioDurationViaFFprobe(ctx, audioPath)
+	if err != nil {
+		return 0 // Caller will use configured fallback
+	}
+
+	// Store in cache with write lock
+	audioDurationCache.Lock()
+	audioDurationCache.entries[cacheKey] = &durationCacheEntry{
+		duration:  duration,
+		timestamp: time.Now(),
+		fileSize:  currentSize,
+		modTime:   currentModTime,
+	}
+	audioDurationCache.Unlock()
+
+	return duration
+}
+
+// getAudioDurationViaFFprobe calls ffprobe to get audio duration.
+// This is a simple wrapper to avoid circular dependency with myaudio package.
+func getAudioDurationViaFFprobe(ctx context.Context, audioPath string) (float64, error) {
+	// For now, we'll use ffprobe directly
+	// TODO: Consider using myaudio.GetAudioDuration if we can import it without circular deps
+	ffprobePath := "ffprobe" // Could be made configurable
+
+	cmd := exec.CommandContext(ctx, ffprobePath,
+		"-v", "error",
+		"-show_entries", "format=duration",
+		"-of", "default=noprint_wrappers=1:nokey=1",
+		audioPath)
+
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("ffprobe failed: %w", err)
+	}
+
+	var duration float64
+	if _, err := fmt.Sscanf(string(output), "%f", &duration); err != nil {
+		return 0, fmt.Errorf("failed to parse duration: %w", err)
+	}
+
+	return duration, nil
 }
 
 // GetSoxSpectrogramArgsForTest exposes getSoxSpectrogramArgs for testing.
