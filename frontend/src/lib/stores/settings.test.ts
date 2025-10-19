@@ -2,12 +2,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions } from './settings';
 import type { BirdNetSettings, RealtimeSettings, SettingsFormData, Dashboard } from './settings';
+import { settingsAPI } from '$lib/utils/settingsApi.js';
 
 // Mock the settings API
 vi.mock('$lib/utils/settingsApi.js', () => ({
   settingsAPI: {
     load: vi.fn(),
-    save: vi.fn(),
+    save: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -17,6 +18,13 @@ vi.mock('./toast.js', () => ({
     success: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+// Mock the i18n module
+vi.mock('$lib/i18n/index.js', () => ({
+  getLocale: vi.fn().mockReturnValue('en'),
+  setLocale: vi.fn(),
+  isValidLocale: vi.fn().mockReturnValue(true),
 }));
 
 describe('Settings Store - Dynamic Threshold and Range Filter', () => {
@@ -329,5 +337,220 @@ describe('Dashboard Settings - New UI Field', () => {
     expect(updatedDashboard?.thumbnails.recent).toBe(true);
     expect(updatedDashboard?.thumbnails.imageProvider).toBe('wikimedia');
     expect(updatedDashboard?.thumbnails.fallbackPolicy).toBe('all');
+  });
+});
+
+describe('Settings Store - Model/Label Path Null Conversion', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Reset store to initial state
+    settingsStore.set({
+      formData: {
+        main: { name: 'TestNode' },
+        birdnet: {
+          modelPath: '',
+          labelPath: '',
+          sensitivity: 1.0,
+          threshold: 0.8,
+          overlap: 0.0,
+          locale: 'en',
+          threads: 4,
+          latitude: 40.7128,
+          longitude: -74.006,
+          rangeFilter: {
+            threshold: 0.03,
+            speciesCount: null,
+            species: [],
+          },
+        },
+      },
+      originalData: {
+        main: { name: 'TestNode' },
+        birdnet: {
+          modelPath: '',
+          labelPath: '',
+          sensitivity: 1.0,
+          threshold: 0.8,
+          overlap: 0.0,
+          locale: 'en',
+          threads: 4,
+          latitude: 40.7128,
+          longitude: -74.006,
+          rangeFilter: {
+            threshold: 0.03,
+            speciesCount: null,
+            species: [],
+          },
+        },
+      } as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+    });
+  });
+
+  it('should convert empty modelPath to null when saving', async () => {
+    // Set empty string for modelPath
+    settingsActions.updateSection('birdnet', {
+      modelPath: '',
+    });
+
+    // Save settings
+    await settingsActions.saveSettings();
+
+    // Verify settingsAPI.save was called with null instead of empty string
+    expect(settingsAPI.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        birdnet: expect.objectContaining({
+          modelPath: null,
+        }),
+      })
+    );
+  });
+
+  it('should convert empty labelPath to null when saving', async () => {
+    // Set empty string for labelPath
+    settingsActions.updateSection('birdnet', {
+      labelPath: '',
+    });
+
+    // Save settings
+    await settingsActions.saveSettings();
+
+    // Verify settingsAPI.save was called with null instead of empty string
+    expect(settingsAPI.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        birdnet: expect.objectContaining({
+          labelPath: null,
+        }),
+      })
+    );
+  });
+
+  it('should convert whitespace-only modelPath to null when saving', async () => {
+    // Set whitespace-only string for modelPath
+    settingsActions.updateSection('birdnet', {
+      modelPath: '   ',
+    });
+
+    // Save settings
+    await settingsActions.saveSettings();
+
+    // Verify settingsAPI.save was called with null
+    expect(settingsAPI.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        birdnet: expect.objectContaining({
+          modelPath: null,
+        }),
+      })
+    );
+  });
+
+  it('should convert whitespace-only labelPath to null when saving', async () => {
+    // Set whitespace-only string for labelPath
+    settingsActions.updateSection('birdnet', {
+      labelPath: '  \t  ',
+    });
+
+    // Save settings
+    await settingsActions.saveSettings();
+
+    // Verify settingsAPI.save was called with null
+    expect(settingsAPI.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        birdnet: expect.objectContaining({
+          labelPath: null,
+        }),
+      })
+    );
+  });
+
+  it('should preserve non-empty modelPath when saving', async () => {
+    // Set valid path for modelPath
+    const validPath = '/path/to/model.tflite';
+    settingsActions.updateSection('birdnet', {
+      modelPath: validPath,
+    });
+
+    // Save settings
+    await settingsActions.saveSettings();
+
+    // Verify settingsAPI.save was called with the actual path
+    expect(settingsAPI.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        birdnet: expect.objectContaining({
+          modelPath: validPath,
+        }),
+      })
+    );
+  });
+
+  it('should preserve non-empty labelPath when saving', async () => {
+    // Set valid path for labelPath
+    const validPath = '/path/to/labels.txt';
+    settingsActions.updateSection('birdnet', {
+      labelPath: validPath,
+    });
+
+    // Save settings
+    await settingsActions.saveSettings();
+
+    // Verify settingsAPI.save was called with the actual path
+    expect(settingsAPI.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        birdnet: expect.objectContaining({
+          labelPath: validPath,
+        }),
+      })
+    );
+  });
+
+  it('should handle both paths being cleared simultaneously', async () => {
+    // First set valid paths
+    settingsActions.updateSection('birdnet', {
+      modelPath: '/path/to/model.tflite',
+      labelPath: '/path/to/labels.txt',
+    });
+
+    // Then clear both
+    settingsActions.updateSection('birdnet', {
+      modelPath: '',
+      labelPath: '',
+    });
+
+    // Save settings
+    await settingsActions.saveSettings();
+
+    // Verify both are converted to null
+    expect(settingsAPI.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        birdnet: expect.objectContaining({
+          modelPath: null,
+          labelPath: null,
+        }),
+      })
+    );
+  });
+
+  it('should handle mixed empty and non-empty paths', async () => {
+    // Set one path empty, one valid
+    settingsActions.updateSection('birdnet', {
+      modelPath: '/path/to/model.tflite',
+      labelPath: '',
+    });
+
+    // Save settings
+    await settingsActions.saveSettings();
+
+    // Verify correct conversion
+    expect(settingsAPI.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        birdnet: expect.objectContaining({
+          modelPath: '/path/to/model.tflite',
+          labelPath: null,
+        }),
+      })
+    );
   });
 });
