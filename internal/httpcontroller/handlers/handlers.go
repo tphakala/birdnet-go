@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"runtime/debug"
@@ -18,8 +19,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
+	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/serviceapi"
+	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -39,10 +42,11 @@ type Handlers struct {
 	controlChan       chan string
 	notificationChan  chan Notification
 	debug             bool
-	Server            serviceapi.ServerFacade // Server facade providing security and processor access
-	Telemetry         *TelemetryMiddleware    // Telemetry middleware for metrics and enhanced error handling
-	Metrics           *observability.Metrics  // Shared metrics instance
-	rtspAnonymMap     map[string]string       // Maps source IDs to anonymized names for O(1) lookups
+	Server               serviceapi.ServerFacade      // Server facade providing security and processor access
+	Telemetry            *TelemetryMiddleware         // Telemetry middleware for metrics and enhanced error handling
+	Metrics              *observability.Metrics       // Shared metrics instance
+	rtspAnonymMap        map[string]string            // Maps source IDs to anonymized names for O(1) lookups
+	spectrogramGenerator *spectrogram.Generator       // Shared spectrogram generator
 }
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.
@@ -93,26 +97,39 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 	// Build RTSP anonymization map for O(1) lookups
 	rtspAnonymMap := buildRTSPAnonymizationMap(settings)
 
+	// Initialize SecureFS for spectrogram generation
+	exportPath := settings.Realtime.Audio.Export.Path
+	sfs, err := securefs.New(exportPath)
+	if err != nil {
+		// SecureFS is essential for secure path validation - fail fast
+		logger.Fatalf("Failed to initialize SecureFS for spectrograms: %v. Export path: %s", err, exportPath)
+	}
+
+	// Initialize spectrogram generator with shared generation logic
+	spectrogramLogger := slog.Default().With("service", "htmx_spectrogram_generator")
+	spectrogramGen := spectrogram.NewGenerator(settings, sfs, spectrogramLogger)
+
 	return &Handlers{
 		baseHandler: baseHandler{
 			errorHandler: defaultErrorHandler,
 			logger:       logger,
 		},
-		DS:                ds,
-		Settings:          settings,
-		DashboardSettings: dashboardSettings,
-		BirdImageCache:    birdImageCache,
-		SSE:               NewSSEHandler(),
-		SunCalc:           sunCalc,
-		AudioLevelChan:    audioLevelChan,
-		OAuth2Server:      oauth2Server,
-		controlChan:       controlChan,
-		notificationChan:  notificationChan,
-		debug:             settings.Debug,
-		Server:            server,
-		Telemetry:         NewTelemetryMiddleware(httpMetrics),
-		Metrics:           metricsInstance,
-		rtspAnonymMap:     rtspAnonymMap,
+		DS:                   ds,
+		Settings:             settings,
+		DashboardSettings:    dashboardSettings,
+		BirdImageCache:       birdImageCache,
+		SSE:                  NewSSEHandler(),
+		SunCalc:              sunCalc,
+		AudioLevelChan:       audioLevelChan,
+		OAuth2Server:         oauth2Server,
+		controlChan:          controlChan,
+		notificationChan:     notificationChan,
+		debug:                settings.Debug,
+		Server:               server,
+		Telemetry:            NewTelemetryMiddleware(httpMetrics),
+		Metrics:              metricsInstance,
+		rtspAnonymMap:        rtspAnonymMap,
+		spectrogramGenerator: spectrogramGen,
 	}
 }
 

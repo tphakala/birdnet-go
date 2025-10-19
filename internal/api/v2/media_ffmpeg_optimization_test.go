@@ -2,11 +2,38 @@ package api
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/securefs"
+	"github.com/tphakala/birdnet-go/internal/spectrogram"
 )
+
+// Helper function to call generator's getSoxSpectrogramArgs (via exported test method)
+func getSoxSpectrogramArgsHelper(t *testing.T, ctx context.Context, audioPath, outputPath string, width int, raw bool, settings *conf.Settings) []string {
+	t.Helper()
+	tempDir := t.TempDir()
+	sfs, err := securefs.New(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to create SecureFS: %v", err)
+	}
+	gen := spectrogram.NewGenerator(settings, sfs, slog.Default())
+	return gen.GetSoxSpectrogramArgsForTest(ctx, audioPath, outputPath, width, raw)
+}
+
+// Helper function for benchmarks
+func getSoxSpectrogramArgsBenchHelper(b *testing.B, ctx context.Context, audioPath, outputPath string, width int, raw bool, settings *conf.Settings) []string {
+	b.Helper()
+	tempDir := b.TempDir()
+	sfs, err := securefs.New(tempDir)
+	if err != nil {
+		b.Fatalf("Failed to create SecureFS: %v", err)
+	}
+	gen := spectrogram.NewGenerator(settings, sfs, slog.Default())
+	return gen.GetSoxSpectrogramArgsForTest(ctx, audioPath, outputPath, width, raw)
+}
 
 // TestGetSoxSpectrogramArgs_FFmpegVersionOptimization verifies the FFmpeg 7.x optimization
 // that skips the expensive ffprobe call by omitting the -d (duration) parameter.
@@ -14,8 +41,6 @@ import (
 //nolint:gocognit // Comprehensive test with multiple validation steps per test case
 func TestGetSoxSpectrogramArgs_FFmpegVersionOptimization(t *testing.T) {
 	ctx := context.Background()
-	widthStr := "800"
-	heightStr := "400"
 	absSpectrogramPath := "/tmp/test.png"
 	audioPath := "/tmp/test.flac"
 	raw := true
@@ -86,8 +111,9 @@ func TestGetSoxSpectrogramArgs_FFmpegVersionOptimization(t *testing.T) {
 				},
 			}
 
-			// Get the SoX arguments
-			args := getSoxSpectrogramArgs(ctx, widthStr, heightStr, absSpectrogramPath, audioPath, raw, settings)
+			// Get the SoX arguments using helper
+			width := 800
+			args := getSoxSpectrogramArgsHelper(t, ctx, audioPath, absSpectrogramPath, width, raw, settings)
 
 			// Convert args to string for easier inspection
 			argsStr := strings.Join(args, " ")
@@ -173,7 +199,7 @@ func TestGetSoxSpectrogramArgs_ArgumentOrder(t *testing.T) {
 		},
 	}
 
-	args := getSoxSpectrogramArgs(ctx, "800", "400", "/tmp/test.png", "/tmp/test.flac", true, settings)
+	args := getSoxSpectrogramArgsHelper(t, ctx, "/tmp/test.flac", "/tmp/test.png", 800, true, settings)
 
 	// Verify the base arguments are in correct order
 	expectedStart := []string{"-n", "rate", "24k", "spectrogram", "-x", "800", "-y", "400"}
@@ -207,7 +233,7 @@ func BenchmarkGetSoxSpectrogramArgs_WithFFmpeg7(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = getSoxSpectrogramArgs(ctx, "800", "400", "/tmp/test.png", "/tmp/test.flac", true, settings)
+		_ = getSoxSpectrogramArgsBenchHelper(b, ctx, "/tmp/test.flac", "/tmp/test.png", 800, true, settings)
 	}
 }
 
@@ -232,7 +258,7 @@ func BenchmarkGetSoxSpectrogramArgs_WithFFmpeg5(b *testing.B) {
 	// In production, the cache would help reduce this overhead for repeated calls
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = getSoxSpectrogramArgs(ctx, "800", "400", "/tmp/test.png", "/tmp/test.flac", true, settings)
+		_ = getSoxSpectrogramArgsBenchHelper(b, ctx, "/tmp/test.flac", "/tmp/test.png", 800, true, settings)
 	}
 }
 
@@ -253,7 +279,7 @@ func TestGetSoxSpectrogramArgs_NilSettings(t *testing.T) {
 	// Attempt to call with nil settings - this should either:
 	// 1. Panic (acceptable - violates function contract)
 	// 2. Use fallback behavior (defensive programming)
-	args := getSoxSpectrogramArgs(ctx, "800", "400", "/tmp/test.png", "/tmp/test.flac", true, nil)
+	args := getSoxSpectrogramArgsHelper(t, ctx, "/tmp/test.flac", "/tmp/test.png", 800, true, nil)
 
 	// If we reach here without panic, verify duration parameter is present (safety fallback)
 	hasDurationFlag := false
@@ -333,7 +359,7 @@ func TestGetSoxSpectrogramArgs_PartialSettings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			args := getSoxSpectrogramArgs(ctx, "800", "400", "/tmp/test.png", "/tmp/test.flac", true, tt.settings)
+			args := getSoxSpectrogramArgsHelper(t, ctx, "/tmp/test.flac", "/tmp/test.png", 800, true, tt.settings)
 
 			hasDurationFlag := false
 			for _, arg := range args {

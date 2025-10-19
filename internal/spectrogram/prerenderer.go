@@ -3,15 +3,10 @@
 package spectrogram
 
 import (
-	"bytes"
 	"context"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,20 +37,13 @@ const (
 	shutdownTimeout = 10 * time.Second
 )
 
-// validSizes maps size strings to pixel widths (single source of truth)
-var validSizes = map[string]int{
-	"sm": 400,  // Small - 400px (default, matches frontend RecentDetectionsCard)
-	"md": 800,  // Medium - 800px
-	"lg": 1000, // Large - 1000px
-	"xl": 1200, // Extra Large - 1200px
-}
-
 // PreRenderer manages background spectrogram pre-rendering.
 // It uses a worker pool to process jobs without blocking the detection pipeline.
 type PreRenderer struct {
-	settings *conf.Settings
-	sfs      *securefs.SecureFS
-	logger   *slog.Logger
+	settings  *conf.Settings
+	sfs       *securefs.SecureFS
+	logger    *slog.Logger
+	generator *Generator // Shared generator for actual generation
 
 	// Lifecycle management
 	ctx    context.Context
@@ -99,13 +87,14 @@ func NewPreRenderer(parentCtx context.Context, settings *conf.Settings, sfs *sec
 	ctx, cancel := context.WithCancel(parentCtx)
 
 	return &PreRenderer{
-		settings: settings,
-		sfs:      sfs,
-		logger:   logger,
-		ctx:      ctx,
-		cancel:   cancel,
-		jobs:     make(chan *Job, defaultQueueSize),
-		workers:  defaultWorkers,
+		settings:  settings,
+		sfs:       sfs,
+		logger:    logger,
+		generator: NewGenerator(settings, sfs, logger), // Initialize shared generator
+		ctx:       ctx,
+		cancel:    cancel,
+		jobs:      make(chan *Job, defaultQueueSize),
+		workers:   defaultWorkers,
 	}
 }
 
@@ -190,7 +179,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	// - If created by on-demand generation: processJob() will skip it (redundant work avoided)
 	// - If created by another pre-render worker: processJob() will skip it (idempotent)
 	// - Impact: Job logged as "skipped" instead of caught here (no functional issue)
-	spectrogramPath, err := pr.buildSpectrogramPath(job.ClipPath)
+	spectrogramPath, err := BuildSpectrogramPath(job.ClipPath)
 	if err != nil {
 		pr.logger.Error("Invalid clip path, rejecting job",
 			"note_id", job.NoteID,
@@ -379,7 +368,7 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 		"pcm_bytes", len(job.PCMData))
 
 	// Build spectrogram path from clip path
-	spectrogramPath, err := pr.buildSpectrogramPath(job.ClipPath)
+	spectrogramPath, err := BuildSpectrogramPath(job.ClipPath)
 	if err != nil {
 		pr.logger.Error("Failed to build spectrogram path",
 			"worker_id", workerID,
@@ -410,7 +399,7 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	}
 
 	// Convert size string to pixels
-	width, err := pr.sizeToPixels(pr.settings.Realtime.Dashboard.Spectrogram.Size)
+	width, err := SizeToPixels(pr.settings.Realtime.Dashboard.Spectrogram.Size)
 	if err != nil {
 		pr.logger.Error("Invalid spectrogram size",
 			"worker_id", workerID,
@@ -427,8 +416,8 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	ctx, cancel := context.WithTimeout(pr.ctx, generationTimeout)
 	defer cancel()
 
-	// Generate spectrogram
-	if err := pr.generateWithSox(ctx, job.PCMData, spectrogramPath, width, pr.settings.Realtime.Dashboard.Spectrogram.Raw); err != nil {
+	// Generate spectrogram using shared generator
+	if err := pr.generator.GenerateFromPCM(ctx, job.PCMData, spectrogramPath, width, pr.settings.Realtime.Dashboard.Spectrogram.Raw); err != nil {
 		pr.logger.Error("Failed to generate spectrogram",
 			"worker_id", workerID,
 			"note_id", job.NoteID,
@@ -454,139 +443,6 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	pr.mu.Lock()
 	pr.stats.Completed++
 	pr.mu.Unlock()
-}
-
-// generateWithSox generates a spectrogram by feeding PCM data directly to Sox stdin.
-// This bypasses FFmpeg entirely, reducing CPU overhead and memory usage.
-func (pr *PreRenderer) generateWithSox(ctx context.Context, pcmData []byte, outputPath string, width int, raw bool) error {
-	soxBinary := pr.settings.Realtime.Audio.SoxPath
-	if soxBinary == "" {
-		return errors.Newf("sox binary not configured").
-			Component("spectrogram").
-			Category(errors.CategoryConfiguration).
-			Context("operation", "generate_with_sox").
-			Build()
-	}
-
-	// Ensure output directory exists using SecureFS (validates path automatically)
-	outputDir := filepath.Dir(outputPath)
-	if err := pr.sfs.MkdirAll(outputDir, 0o755); err != nil {
-		return errors.New(err).
-			Component("spectrogram").
-			Category(errors.CategoryFileIO).
-			Context("operation", "create_output_directory").
-			Context("output_dir", outputDir).
-			Context("output_path", outputPath).
-			Build()
-	}
-
-	// Calculate height (half of width for consistent aspect ratio)
-	height := width / 2
-	heightStr := strconv.Itoa(height)
-	widthStr := strconv.Itoa(width)
-
-	// Build Sox arguments for direct PCM input
-	// Format: sox -t raw -r 48000 -e signed -b 16 -c 1 - -n spectrogram -x WIDTH -y HEIGHT -o OUTPUT [-r]
-	args := []string{
-		"-t", "raw",              // Input type: raw/headerless PCM
-		"-r", "48000",            // Sample rate: 48kHz (conf.SampleRate)
-		"-e", "signed",           // Encoding: signed integer
-		"-b", "16",               // Bit depth: 16-bit (conf.BitDepth)
-		"-c", "1",                // Channels: mono
-		"-",                      // Read from stdin
-		"-n",                     // No audio output (null output)
-		"rate", "24k",            // Resample to 24kHz for spectrogram (matches existing behavior)
-		"spectrogram",            // Effect: spectrogram
-		"-x", widthStr,           // Width in pixels
-		"-y", heightStr,          // Height in pixels
-		"-o", outputPath,         // Output PNG file
-	}
-
-	// Add raw flag if requested (no axes/legend)
-	if raw {
-		args = append(args, "-r")
-	}
-
-	// Build command with low priority (nice -n 19 on Linux/macOS)
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
-		cmd = exec.CommandContext(ctx, soxBinary, args...)
-	} else {
-		// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
-		cmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", soxBinary}, args...)...)
-	}
-
-	// Prepare to feed PCM data to stdin
-	cmd.Stdin = bytes.NewReader(pcmData)
-
-	// Capture stderr for debugging
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	// Run command
-	if err := cmd.Run(); err != nil {
-		return errors.New(err).
-			Component("spectrogram").
-			Category(errors.CategorySystem).
-			Context("operation", "generate_with_sox").
-			Context("output_path", outputPath).
-			Context("width", width).
-			Context("height", height).
-			Context("raw", raw).
-			Context("sox_stderr", stderr.String()).
-			Context("pcm_bytes", len(pcmData)).
-			Build()
-	}
-
-	return nil
-}
-
-// buildSpectrogramPath constructs the spectrogram file path from the audio clip path.
-// Example: "clips/2024-01-15/Accipiter_striatus/Accipiter_striatus.2024-01-15T10:00:00.wav"
-//       -> "clips/2024-01-15/Accipiter_striatus/Accipiter_striatus.2024-01-15T10:00:00.png"
-func (pr *PreRenderer) buildSpectrogramPath(clipPath string) (string, error) {
-	// Replace audio extension with .png
-	ext := filepath.Ext(clipPath)
-	if ext == "" {
-		return "", errors.Newf("clip path has no extension").
-			Component("spectrogram").
-			Category(errors.CategoryValidation).
-			Context("operation", "build_spectrogram_path").
-			Context("clip_path", clipPath).
-			Build()
-	}
-
-	spectrogramPath := clipPath[:len(clipPath)-len(ext)] + ".png"
-	return spectrogramPath, nil
-}
-
-// sizeToPixels converts a size string to pixel width.
-// Uses validSizes map as single source of truth for size validation.
-func (pr *PreRenderer) sizeToPixels(size string) (int, error) {
-	width, ok := validSizes[size]
-	if !ok {
-		return 0, errors.Newf("invalid size (valid sizes: sm, md, lg, xl)").
-			Component("spectrogram").
-			Category(errors.CategoryValidation).
-			Context("operation", "size_to_pixels").
-			Context("size", size).
-			Build()
-	}
-	return width, nil
-}
-
-// GetValidSizes returns a sorted list of valid size strings.
-// Useful for runtime validation in web UI.
-// Returns sizes in deterministic order for consistent UI/testing.
-func GetValidSizes() []string {
-	sizes := make([]string, 0, len(validSizes))
-	for size := range validSizes {
-		sizes = append(sizes, size)
-	}
-	// Sort for deterministic output
-	sort.Strings(sizes)
-	return sizes
 }
 
 // GetStats returns a copy of the current statistics.

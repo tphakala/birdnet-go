@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"bytes"
-	"context"
 	_ "embed"
 	"errors"
 	"fmt"
@@ -13,11 +12,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
@@ -25,7 +22,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logging"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
 // MaxClipNameLength is the maximum allowed length for a clip name
@@ -474,9 +470,10 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 			h.Debug("ServeSpectrogram: released semaphore slot")
 		}()
 
-		// Try to create the spectrogram
+		// Try to create the spectrogram using shared generator
 		generationStartTime := time.Now()
-		if err := createSpectrogramWithSoX(fullPath, spectrogramPath, spectrogramWidth); err != nil {
+		ctx := c.Request().Context()
+		if err := h.spectrogramGenerator.GenerateFromFile(ctx, fullPath, spectrogramPath, spectrogramWidth, false); err != nil {
 			generationDuration := time.Since(generationStartTime)
 			logger.Debug("Spectrogram generation failed, serving placeholder",
 				slog.String("audio_path", fullPath),
@@ -666,390 +663,8 @@ func fileExists(filename string) (bool, error) {
 	return !info.IsDir(), nil
 }
 
-// createSpectrogramWithSoX generates a spectrogram for an audio file using ffmpeg and SoX.
-// It supports various audio formats by using ffmpeg to pipe the audio to SoX when necessary.
-func createSpectrogramWithSoX(audioClipPath, spectrogramPath string, width int) error {
-	startTime := time.Now()
-
-	// Create structured logger for this operation
-	logger := logging.ForService("htmx_media_handler")
-	if logger == nil {
-		logger = slog.Default().With("service", "htmx_media_handler")
-	}
-
-	logger.Debug("Starting spectrogram generation with SoX",
-		slog.String("audio_path", audioClipPath),
-		slog.String("output_path", spectrogramPath),
-		slog.Int("width", width),
-	)
-
-	// Get ffmpeg and sox paths from settings
-	ffmpegBinary := conf.Setting().Realtime.Audio.FfmpegPath
-	soxBinary := conf.Setting().Realtime.Audio.SoxPath
-
-	logger.Debug("Retrieved binary paths from configuration",
-		slog.String("ffmpeg_path", ffmpegBinary),
-		slog.String("sox_path", soxBinary),
-	)
-
-	// Verify ffmpeg and SoX paths
-	if ffmpegBinary == "" {
-		logger.Debug("FFmpeg path not configured",
-			slog.Duration("setup_duration", time.Since(startTime)),
-		)
-		return fmt.Errorf("ffmpeg path not set in settings")
-	}
-	if soxBinary == "" {
-		logger.Debug("SoX path not configured",
-			slog.Duration("setup_duration", time.Since(startTime)),
-		)
-		return fmt.Errorf("SoX path not set in settings")
-	}
-
-	logger.Debug("Binary paths verified successfully")
-
-	// Set height based on width
-	heightStr := strconv.Itoa(width / 2)
-	widthStr := strconv.Itoa(width)
-	height := width / 2
-
-	logger.Debug("Calculated spectrogram dimensions",
-		slog.Int("width", width),
-		slog.Int("height", height),
-	)
-
-	// Determine if we need to use ffmpeg based on file extension
-	ext := strings.ToLower(filepath.Ext(audioClipPath))
-	// remove prefix dot
-	ext = strings.TrimPrefix(ext, ".")
-	useFFmpeg := true
-	supportedSoxTypes := conf.Setting().Realtime.Audio.SoxAudioTypes
-	for _, soxType := range supportedSoxTypes {
-		if strings.EqualFold(ext, soxType) {
-			useFFmpeg = false
-			break
-		}
-	}
-
-	logger.Debug("Determined audio format processing method",
-		slog.String("file_extension", ext),
-		slog.Bool("use_ffmpeg", useFFmpeg),
-		slog.Any("supported_sox_types", supportedSoxTypes),
-	)
-
-	var cmd *exec.Cmd
-	var soxCmd *exec.Cmd
-
-	commandSetupStart := time.Now()
-
-	// Decode audio using ffmpeg and pipe to sox for spectrogram creation
-	if useFFmpeg {
-		logger.Debug("Preparing FFmpeg + SoX pipeline for audio processing")
-
-		// Build ffmpeg command arguments
-		ffmpegArgs := []string{"-hide_banner", "-i", audioClipPath, "-f", "sox", "-"}
-
-		// Build SoX command arguments
-		ctx := context.Background()
-		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(ctx, widthStr, heightStr, spectrogramPath, audioClipPath)...)
-
-		logger.Debug("Built command arguments for FFmpeg + SoX pipeline",
-			slog.Any("ffmpeg_args", ffmpegArgs),
-			slog.Any("sox_args", soxArgs),
-		)
-
-		// Set up commands
-		if runtime.GOOS == "windows" {
-			cmd = exec.Command(ffmpegBinary, ffmpegArgs...) // #nosec G204 -- ffmpegBinary validated via ValidateToolPath
-			soxCmd = exec.Command(soxBinary, soxArgs...)    // #nosec G204 -- soxBinary validated via ValidateToolPath
-		} else {
-			cmd = exec.Command("nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...) // #nosec G204 -- ffmpegBinary validated via ValidateToolPath
-			soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)    // #nosec G204 -- soxBinary validated via ValidateToolPath
-		}
-
-		logger.Debug("Commands created for FFmpeg + SoX pipeline",
-			slog.String("ffmpeg_command", cmd.String()),
-			slog.String("sox_command", soxCmd.String()),
-			slog.String("os", runtime.GOOS),
-		)
-
-		// Set up pipe between ffmpeg and sox
-		var err error
-		soxCmd.Stdin, err = cmd.StdoutPipe()
-		if err != nil {
-			logger.Debug("Failed to create pipe between FFmpeg and SoX",
-				slog.String("error", err.Error()),
-				slog.Duration("setup_duration", time.Since(startTime)),
-			)
-			return fmt.Errorf("error creating pipe: %w", err)
-		}
-
-		// Capture combined output
-		var ffmpegOutput, soxOutput bytes.Buffer
-		cmd.Stderr = &ffmpegOutput
-		soxCmd.Stderr = &soxOutput
-
-		commandSetupDuration := time.Since(commandSetupStart)
-		logger.Debug("Pipeline setup completed",
-			slog.Duration("command_setup_duration", commandSetupDuration),
-		)
-
-		// Allow other goroutines to run before starting SoX
-		runtime.Gosched()
-
-		// Start sox command
-		soxStartTime := time.Now()
-		if err := soxCmd.Start(); err != nil {
-			logger.Debug("Failed to start SoX command",
-				slog.String("sox_command", soxCmd.String()),
-				slog.String("error", err.Error()),
-				slog.Duration("total_duration", time.Since(startTime)),
-			)
-			log.Printf("SoX cmd: %s", soxCmd.String())
-			return fmt.Errorf("error starting SoX command: %w", err)
-		}
-
-		logger.Debug("SoX command started successfully",
-			slog.Duration("sox_start_duration", time.Since(soxStartTime)),
-		)
-
-		// Define error message template
-		const errFFmpegSoxFailed = "ffmpeg command failed: %v\nffmpeg output: %s\nsox output: %s\n%s"
-
-		// Run ffmpeg command
-		ffmpegStartTime := time.Now()
-		logger.Debug("Starting FFmpeg execution")
-		if err := cmd.Run(); err != nil {
-			ffmpegDuration := time.Since(ffmpegStartTime)
-
-			// Stop the SoX command to clean up resources
-			if killErr := soxCmd.Process.Kill(); killErr != nil {
-				log.Printf("Failed to kill SoX process: %v", killErr)
-			}
-
-			// Wait for SoX to finish and collect its error, if any
-			waitErr := soxCmd.Wait()
-
-			// Prepare additional error information
-			var additionalInfo string
-			if waitErr != nil && !errors.Is(waitErr, os.ErrProcessDone) {
-				additionalInfo = fmt.Sprintf("sox wait error: %v", waitErr)
-			}
-
-			logger.Debug("FFmpeg command failed",
-				slog.String("ffmpeg_command", cmd.String()),
-				slog.String("error", err.Error()),
-				slog.Duration("ffmpeg_duration", ffmpegDuration),
-				slog.Duration("total_duration", time.Since(startTime)),
-				slog.String("ffmpeg_output", ffmpegOutput.String()),
-				slog.String("sox_output", soxOutput.String()),
-			)
-
-			// Use fmt.Errorf with the constant format string
-			return fmt.Errorf(errFFmpegSoxFailed, err, ffmpegOutput.String(), soxOutput.String(), additionalInfo)
-		}
-
-		ffmpegDuration := time.Since(ffmpegStartTime)
-		logger.Debug("FFmpeg execution completed successfully",
-			slog.Duration("ffmpeg_duration", ffmpegDuration),
-		)
-
-		// Allow other goroutines to run before waiting for SoX to finish
-		runtime.Gosched()
-
-		// Wait for sox command to finish
-		soxWaitStartTime := time.Now()
-		logger.Debug("Waiting for SoX command to complete")
-		if err := soxCmd.Wait(); err != nil {
-			soxWaitDuration := time.Since(soxWaitStartTime)
-			logger.Debug("SoX command failed",
-				slog.String("sox_command", soxCmd.String()),
-				slog.String("error", err.Error()),
-				slog.Duration("sox_wait_duration", soxWaitDuration),
-				slog.Duration("ffmpeg_duration", ffmpegDuration),
-				slog.Duration("total_duration", time.Since(startTime)),
-				slog.String("ffmpeg_output", ffmpegOutput.String()),
-				slog.String("sox_output", soxOutput.String()),
-			)
-			return fmt.Errorf("SoX command failed: %w\nffmpeg output: %s\nsox output: %s", err, ffmpegOutput.String(), soxOutput.String())
-		}
-
-		soxWaitDuration := time.Since(soxWaitStartTime)
-		totalDuration := time.Since(startTime)
-
-		logger.Debug("FFmpeg + SoX pipeline completed successfully",
-			slog.Duration("ffmpeg_duration", ffmpegDuration),
-			slog.Duration("sox_wait_duration", soxWaitDuration),
-			slog.Duration("total_duration", totalDuration),
-			slog.String("output_file", spectrogramPath),
-		)
-
-		// Allow other goroutines to run after SoX finishes
-		runtime.Gosched()
-	} else {
-		// Use SoX directly for supported formats
-		logger.Debug("Using SoX directly for supported audio format")
-
-		ctx := context.Background()
-		soxArgs := append([]string{audioClipPath}, getSoxSpectrogramArgs(ctx, widthStr, heightStr, spectrogramPath, audioClipPath)...)
-
-		logger.Debug("Built SoX-only command arguments",
-			slog.Any("sox_args", soxArgs),
-		)
-
-		if runtime.GOOS == "windows" {
-			soxCmd = exec.Command(soxBinary, soxArgs...) // #nosec G204 -- soxBinary validated via ValidateToolPath
-		} else {
-			soxCmd = exec.Command("nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...) // #nosec G204 -- soxBinary validated via ValidateToolPath
-		}
-
-		commandSetupDuration := time.Since(commandSetupStart)
-		logger.Debug("SoX-only command created",
-			slog.String("sox_command", soxCmd.String()),
-			slog.String("os", runtime.GOOS),
-			slog.Duration("command_setup_duration", commandSetupDuration),
-		)
-
-		// Capture output
-		var soxOutput bytes.Buffer
-		soxCmd.Stderr = &soxOutput
-		soxCmd.Stdout = &soxOutput
-
-		// Allow other goroutines to run before running SoX
-		runtime.Gosched()
-
-		// Run SoX command
-		soxExecutionStartTime := time.Now()
-		logger.Debug("Starting SoX-only execution")
-		if err := soxCmd.Run(); err != nil {
-			soxExecutionDuration := time.Since(soxExecutionStartTime)
-			totalDuration := time.Since(startTime)
-
-			logger.Debug("SoX-only command failed",
-				slog.String("sox_command", soxCmd.String()),
-				slog.String("error", err.Error()),
-				slog.Duration("sox_execution_duration", soxExecutionDuration),
-				slog.Duration("total_duration", totalDuration),
-				slog.String("sox_output", soxOutput.String()),
-			)
-			return fmt.Errorf("SoX command failed: %w\nOutput: %s", err, soxOutput.String())
-		}
-
-		soxExecutionDuration := time.Since(soxExecutionStartTime)
-		totalDuration := time.Since(startTime)
-
-		logger.Debug("SoX-only execution completed successfully",
-			slog.Duration("sox_execution_duration", soxExecutionDuration),
-			slog.Duration("total_duration", totalDuration),
-			slog.String("output_file", spectrogramPath),
-		)
-
-		// Allow other goroutines to run after SoX finishes
-		runtime.Gosched()
-	}
-
-	// Add final completion log with file size if possible
-	var fileSize int64
-	if fileInfo, err := os.Stat(spectrogramPath); err == nil {
-		fileSize = fileInfo.Size()
-	}
-
-	totalDuration := time.Since(startTime)
-	logger.Debug("Spectrogram generation completed successfully",
-		slog.String("input_path", audioClipPath),
-		slog.String("output_path", spectrogramPath),
-		slog.Int("width", width),
-		slog.Int("height", height),
-		slog.Int64("output_file_size_bytes", fileSize),
-		slog.Duration("total_generation_duration", totalDuration),
-		slog.Bool("used_ffmpeg", useFFmpeg),
-		slog.String("api_handler", "htmx_spectrogram_generation"),
-	)
-
-	return nil
-}
-
-// getSoxSpectrogramArgs returns the common SoX arguments for generating a spectrogram
-func getSoxSpectrogramArgs(ctx context.Context, widthStr, heightStr, spectrogramPath, audioPath string) []string {
-	const dynamicRange = "100"
-
-	// Get actual audio duration instead of using hardcoded capture length
-	// Use a timeout context to prevent hanging
-	durationCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-
-	duration, err := myaudio.GetAudioDuration(durationCtx, audioPath)
-	if err != nil {
-		// Fall back to capture length from settings if ffprobe fails
-		logging.ForService("htmx_media_handler").Warn("Failed to get audio duration with ffprobe, falling back to capture length",
-			slog.String("error", err.Error()),
-			slog.String("audio_path", audioPath))
-		captureLength := conf.Setting().Realtime.Audio.Export.Length
-		duration = float64(captureLength)
-	}
-
-	// Convert duration to string, rounding to nearest integer
-	captureLengthStr := strconv.Itoa(int(duration + 0.5))
-
-	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr, "-d", captureLengthStr, "-z", dynamicRange, "-o", spectrogramPath}
-	width, _ := strconv.Atoi(widthStr)
-	if width < 800 {
-		args = append(args, "-r")
-	}
-	return args
-}
-
-// createSpectrogramWithFFmpeg generates a spectrogram for an audio file using only ffmpeg.
-// It supports various audio formats and applies the same practices as createSpectrogramWithSoX.
-func createSpectrogramWithFFmpeg(audioClipPath, spectrogramPath string, width int) error {
-	// Get ffmpeg path from settings
-	ffmpegBinary := conf.Setting().Realtime.Audio.FfmpegPath
-
-	// Verify ffmpeg path
-	if ffmpegBinary == "" {
-		return fmt.Errorf("ffmpeg path not set in settings")
-	}
-
-	// Set height based on width
-	height := width / 2
-	heightStr := strconv.Itoa(height)
-	widthStr := strconv.Itoa(width)
-
-	// Build ffmpeg command arguments
-	ffmpegArgs := []string{
-		"-hide_banner",
-		"-y", // answer yes to overwriting the output file if it already exists
-		"-i", audioClipPath,
-		"-lavfi", fmt.Sprintf("showspectrumpic=s=%sx%s:legend=0:gain=3:drange=100", widthStr, heightStr),
-		"-frames:v", "1", // Generate only one frame instead of animation
-		spectrogramPath,
-	}
-
-	// Determine the command based on the OS
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		// Directly use ffmpeg command on Windows
-		cmd = exec.Command(ffmpegBinary, ffmpegArgs...)
-	} else {
-		// Prepend 'nice' to the command on Unix-like systems
-		cmd = exec.Command("nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...) // #nosec G204 -- ffmpegBinary validated via ValidateToolPath
-	}
-
-	log.Printf("ffmpeg command: %s", cmd.String())
-
-	// Capture combined output
-	var output bytes.Buffer
-	cmd.Stderr = &output
-	cmd.Stdout = &output
-
-	// Run ffmpeg command
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ffmpeg command failed: %w\nOutput: %s", err, output.String())
-	}
-
-	return nil
-}
-
+// Note: Spectrogram generation logic has been moved to internal/spectrogram/generator.go
+// This eliminates code duplication with API v2 and pre-renderer implementations.
 // sanitizeContentDispositionFilename sanitizes a filename for use in Content-Disposition header
 func sanitizeContentDispositionFilename(filename string) string {
 	// Remove any characters that could cause issues in headers

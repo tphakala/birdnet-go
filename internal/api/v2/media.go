@@ -2,7 +2,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io/fs"
@@ -11,20 +10,18 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/securefs"
+	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -54,14 +51,6 @@ const (
 	MimeTypeM4A  = "audio/mp4"
 	MimeTypeOGG  = "audio/ogg"
 )
-
-// spectrogramSizes maps size names to pixel widths
-var spectrogramSizes = map[string]int{
-	"sm": SpectrogramSizeSm,
-	"md": SpectrogramSizeMd,
-	"lg": SpectrogramSizeLg,
-	"xl": SpectrogramSizeXl,
-}
 
 // isValidFilename checks if a filename is valid for use in Content-Disposition header
 func isValidFilename(filename string) bool {
@@ -529,7 +518,7 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	width := SpectrogramSizeMd // Default width (md)
 	sizeStr := ctx.QueryParam("size")
 	if sizeStr != "" {
-		if validWidth, ok := spectrogramSizes[sizeStr]; ok {
+		if validWidth, err := spectrogram.SizeToPixels(sizeStr); err == nil {
 			width = validWidth
 		}
 		// Invalid size parameter falls back to width parameter or default
@@ -650,7 +639,7 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	width := SpectrogramSizeMd // Default width (md)
 	sizeStr := ctx.QueryParam("size")
 	if sizeStr != "" {
-		if validWidth, ok := spectrogramSizes[sizeStr]; ok {
+		if validWidth, err := spectrogram.SizeToPixels(sizeStr); err == nil {
 			width = validWidth
 		}
 		// Invalid size parameter falls back to width parameter or default
@@ -706,7 +695,7 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	width := SpectrogramSizeMd // Default
 	sizeStr := ctx.QueryParam("size")
 	if sizeStr != "" {
-		if validWidth, ok := spectrogramSizes[sizeStr]; ok {
+		if validWidth, err := spectrogram.SizeToPixels(sizeStr); err == nil {
 			width = validWidth
 		}
 	}
@@ -1367,14 +1356,9 @@ func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectr
 		"abs_spectrogram_path", absSpectrogramPath,
 		"width", width,
 		"raw", raw,
-		"generator", "sox_with_ffmpeg_fallback")
+		"generator", "shared_generator_with_sox_ffmpeg_fallback")
 
-	// Ensure the output directory exists
-	// Note: We pass the relative path here. ensureOutputDirectory will construct
-	// the absolute path safely within the SecureFS base directory.
-	if err := c.ensureOutputDirectory(relSpectrogramPath); err != nil {
-		return nil, err
-	}
+	// Note: Directory creation is handled by the shared generator
 
 	// Log when we're about to start actual generation
 	getSpectrogramLogger().Info("Starting SoX/FFmpeg generation",
@@ -1453,120 +1437,32 @@ func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectr
 	return spectrogramStatusGenerated, nil
 }
 
-// ensureOutputDirectory creates the output directory if it doesn't exist.
-//
-// SECURITY NOTE: This function uses os.MkdirAll directly instead of c.SFS.MkdirAll
-// for the following reasons:
-//
-//  1. PATH VALIDATION: The relSpectrogramPath has already been validated by SecureFS
-//     earlier in the call chain (in generateSpectrogram via normalizeAndValidatePath).
-//     This ensures the path is within the allowed clips directory.
-//
-//  2. SECUREFS LIMITATION: c.SFS.MkdirAll expects either an absolute path or converts
-//     relative paths using the current working directory. Since our working directory
-//     is not within the clips directory, passing a relative path like "2025/09" would
-//     fail validation when MkdirAll tries to convert it to an absolute path.
-//
-//  3. SAFETY GUARANTEE: We construct absDir by joining c.SFS.BaseDir() (the validated
-//     clips directory) with relDir (derived from an already-validated path). This ensures
-//     we only create directories within the SecureFS sandbox.
-//
-//  4. CONSISTENCY: The actual spectrogram generation (SoX/FFmpeg) uses absolute paths
-//     constructed the same way, so this maintains consistency with the rest of the pipeline.
-//
-// This approach is safe because:
-// - The input path has been pre-validated through SecureFS
-// - We only create directories, never read or write files
-// - The absolute path is constructed within the SecureFS base directory
-// - No user input is directly used without validation
-func (c *Controller) ensureOutputDirectory(relSpectrogramPath string) error {
-	relDir := filepath.Dir(relSpectrogramPath)
-
-	// Construct absolute path within the SecureFS base directory
-	// This is safe because relSpectrogramPath has already been validated
-	absDir := filepath.Join(c.SFS.BaseDir(), relDir)
-
-	// Use os.MkdirAll directly for the reasons documented above
-	if err := os.MkdirAll(absDir, 0o755); err != nil {
-		getSpectrogramLogger().Error("Failed to create output directory for spectrogram",
-			"rel_dir", relDir,
-			"abs_dir", absDir,
-			"error", err.Error())
-		return fmt.Errorf("failed to create output directory %s: %w", relDir, err)
-	}
-	getSpectrogramLogger().Debug("Ensured output directory exists",
-		"rel_dir", relDir,
-		"abs_dir", absDir)
-	return nil
-}
 
 // generateWithFallback attempts to generate a spectrogram with SoX, falling back to FFmpeg on failure
 func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, absSpectrogramPath, spectrogramKey string, width int, raw bool) error {
 	generationStart := time.Now()
 
-	getSpectrogramLogger().Debug("Attempting SoX spectrogram generation",
+	getSpectrogramLogger().Debug("Starting spectrogram generation via shared generator",
 		"spectrogram_key", spectrogramKey,
-		"abs_audio_path", absAudioPath)
+		"abs_audio_path", absAudioPath,
+		"width", width,
+		"raw", raw)
 
-	if err := createSpectrogramWithSoX(ctx, absAudioPath, absSpectrogramPath, width, raw, c.Settings); err != nil {
-		getSpectrogramLogger().Debug("SoX generation failed, will try FFmpeg fallback",
+	// Use shared generator which handles Sox→FFmpeg fallback internally
+	if err := c.spectrogramGenerator.GenerateFromFile(ctx, absAudioPath, absSpectrogramPath, width, raw); err != nil {
+		getSpectrogramLogger().Error("Spectrogram generation failed",
 			"spectrogram_key", spectrogramKey,
-			"sox_error", err.Error(),
-			"sox_duration_ms", time.Since(generationStart).Milliseconds(),
-			"abs_audio_path", absAudioPath)
-
-		return c.fallbackToFFmpeg(ctx, absAudioPath, absSpectrogramPath, spectrogramKey, width, raw, err, generationStart)
+			"error", err.Error(),
+			"duration_ms", time.Since(generationStart).Milliseconds(),
+			"abs_audio_path", absAudioPath,
+			"abs_spectrogram_path", absSpectrogramPath)
+		return err
 	}
 
-	getSpectrogramLogger().Debug("Spectrogram generation successful using SoX",
+	getSpectrogramLogger().Debug("Spectrogram generation completed via shared generator",
 		"spectrogram_key", spectrogramKey,
 		"abs_audio_path", absAudioPath,
 		"generation_duration_ms", time.Since(generationStart).Milliseconds())
-	return nil
-}
-
-// fallbackToFFmpeg attempts FFmpeg generation when SoX fails
-func (c *Controller) fallbackToFFmpeg(ctx context.Context, absAudioPath, absSpectrogramPath, spectrogramKey string, width int, raw bool, soxErr error, generationStart time.Time) error {
-	fallbackStart := time.Now()
-	getSpectrogramLogger().Debug("Attempting FFmpeg fallback for spectrogram generation",
-		"spectrogram_key", spectrogramKey,
-		"abs_audio_path", absAudioPath)
-
-	if err := createSpectrogramWithFFmpeg(ctx, absAudioPath, absSpectrogramPath, width, raw, c.Settings); err != nil {
-		getSpectrogramLogger().Error("Both SoX and FFmpeg generation failed",
-			"spectrogram_key", spectrogramKey,
-			"sox_error", soxErr.Error(),
-			"ffmpeg_error", err.Error(),
-			"sox_duration_ms", fallbackStart.Sub(generationStart).Milliseconds(),
-			"ffmpeg_duration_ms", time.Since(fallbackStart).Milliseconds(),
-			"total_generation_duration_ms", time.Since(generationStart).Milliseconds(),
-			"abs_audio_path", absAudioPath,
-			"abs_spectrogram_path", absSpectrogramPath)
-
-		// Check for context errors specifically (propagate them up)
-		if errors.Is(soxErr, context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
-			if errors.Is(soxErr, context.DeadlineExceeded) {
-				return soxErr
-			}
-			return err
-		}
-		if errors.Is(soxErr, context.Canceled) || errors.Is(err, context.Canceled) {
-			if errors.Is(soxErr, context.Canceled) {
-				return soxErr
-			}
-			return err
-		}
-		// Return a combined error for general failures
-		return fmt.Errorf("%w: SoX error: %w, FFmpeg error: %w",
-			ErrSpectrogramGeneration, soxErr, err)
-	}
-
-	getSpectrogramLogger().Debug("Spectrogram generation successful using FFmpeg fallback",
-		"spectrogram_key", spectrogramKey,
-		"abs_audio_path", absAudioPath,
-		"sox_duration_ms", fallbackStart.Sub(generationStart).Milliseconds(),
-		"ffmpeg_duration_ms", time.Since(fallbackStart).Milliseconds(),
-		"total_generation_duration_ms", time.Since(generationStart).Milliseconds())
 	return nil
 }
 
@@ -1682,430 +1578,10 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	return relSpectrogramPath, nil
 }
 
-// --- Spectrogram Generation Helpers ---
-
-// waitWithTimeout waits for a command to finish with a timeout to prevent zombie processes.
-// This function ensures proper process cleanup even on resource-constrained devices.
-// It uses a goroutine with timeout to prevent indefinite blocking on Wait().
-//
-// Channel buffer size of 1 is critical: it ensures the goroutine can exit even if the
-// timeout fires, preventing goroutine leaks. Without the buffer, if timeout occurs before
-// Wait() completes, the goroutine would block forever on the channel send.
-func waitWithTimeout(cmd *exec.Cmd, timeout time.Duration, logger *slog.Logger) {
-	// Store PID early to prevent potential nil pointer panic in logging
-	pid := -1
-	if cmd.Process != nil {
-		pid = cmd.Process.Pid
-	}
-
-	// Buffer size 1 ensures goroutine can exit even if timeout fires (prevents leak)
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil && logger != nil {
-			logger.Debug("Process wait completed with error",
-				"pid", pid,
-				"error", err.Error())
-		}
-	case <-time.After(timeout):
-		if logger != nil {
-			logger.Warn("Process wait timed out, process may become zombie",
-				"pid", pid,
-				"timeout_seconds", timeout.Seconds())
-		}
-		// Even after timeout, try one more time with Kill to clean up
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-			// Try to reap the zombie with a short timeout
-			select {
-			case <-done:
-			case <-time.After(1 * time.Second):
-				if logger != nil {
-					logger.Error("Failed to reap process after kill, zombie process likely",
-						"pid", pid)
-				}
-			}
-		}
-	}
-}
-
-// waitWithTimeoutErr is like waitWithTimeout but returns an error.
-// This allows the caller to handle the error appropriately.
-//
-// Channel buffer size of 1 is critical: it ensures the goroutine can exit even if the
-// timeout fires, preventing goroutine leaks. Without the buffer, if timeout occurs before
-// Wait() completes, the goroutine would block forever on the channel send.
-func waitWithTimeoutErr(cmd *exec.Cmd, timeout time.Duration, logger *slog.Logger) error {
-	// Store PID early to prevent potential nil pointer panic in logging
-	pid := -1
-	if cmd.Process != nil {
-		pid = cmd.Process.Pid
-	}
-
-	// Buffer size 1 ensures goroutine can exit even if timeout fires (prevents leak)
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
-
-	select {
-	case err := <-done:
-		return err
-	case <-time.After(timeout):
-		if logger != nil {
-			logger.Warn("Process wait timed out",
-				"pid", pid,
-				"timeout_seconds", timeout.Seconds())
-		}
-		// Try to kill the process
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-			// Give it one more chance to exit
-			select {
-			case err := <-done:
-				return fmt.Errorf("process wait timed out after %v (killed, exit error: %w)", timeout, err)
-			case <-time.After(1 * time.Second):
-				return fmt.Errorf("process wait timed out after %v and failed to kill", timeout)
-			}
-		}
-		return fmt.Errorf("process wait timed out after %v", timeout)
-	}
-}
-
-// createSpectrogramWithSoX generates a spectrogram using ffmpeg and SoX.
-// Accepts a context for timeout and cancellation.
-// Requires absolute paths for external commands.
-func createSpectrogramWithSoX(ctx context.Context, absAudioClipPath, absSpectrogramPath string, width int, raw bool, settings *conf.Settings) error {
-	start := time.Now()
-	getSpectrogramLogger().Debug("Starting SoX spectrogram generation",
-		"abs_audio_path", absAudioClipPath,
-		"abs_spectrogram_path", absSpectrogramPath,
-		"width", width,
-		"raw", raw)
-
-	// Validate settings parameter to prevent nil pointer dereference
-	if settings == nil {
-		return fmt.Errorf("settings cannot be nil")
-	}
-
-	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
-	soxBinary := settings.Realtime.Audio.SoxPath
-
-	// Check if the file extension is supported directly by SoX without needing FFmpeg
-	ext := strings.ToLower(filepath.Ext(absAudioClipPath))
-	ext = strings.TrimPrefix(ext, ".")
-	useFFmpeg := true
-	for _, soxType := range settings.Realtime.Audio.SoxAudioTypes {
-		soxType = strings.TrimPrefix(strings.ToLower(soxType), ".")
-		if ext == soxType {
-			useFFmpeg = false
-			break
-		}
-	}
-
-	// Only check for FFmpeg if we need to use it
-	if useFFmpeg && ffmpegBinary == "" {
-		return ErrFFmpegNotConfigured
-	}
-
-	// SoX is always required
-	if soxBinary == "" {
-		return ErrSoxNotConfigured
-	}
-
-	// Create context with timeout (use the passed-in context as parent)
-	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	// NOTE: Semaphore is now acquired in generateSpectrogram() to fix double bottleneck
-	// No longer acquiring semaphore here
-
-	heightStr := strconv.Itoa(width / 2)
-	widthStr := strconv.Itoa(width)
-
-	var cmd *exec.Cmd
-	var soxCmd *exec.Cmd
-
-	if useFFmpeg {
-		ffmpegArgs := []string{"-hide_banner", "-i", absAudioClipPath, "-f", "sox", "-"}
-		soxArgs := append([]string{"-t", "sox", "-"}, getSoxSpectrogramArgs(ctx, widthStr, heightStr, absSpectrogramPath, absAudioClipPath, raw, settings)...)
-
-		if runtime.GOOS == "windows" {
-			// #nosec G204 - ffmpegBinary and soxBinary are validated by ValidateToolPath/exec.LookPath
-			cmd = exec.CommandContext(ctx, ffmpegBinary, ffmpegArgs...)
-			// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
-			soxCmd = exec.CommandContext(ctx, soxBinary, soxArgs...)
-		} else {
-			// #nosec G204 - ffmpegBinary is validated by ValidateToolPath/exec.LookPath
-			cmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
-			// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
-			soxCmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
-		}
-
-		var err error
-		soxCmd.Stdin, err = cmd.StdoutPipe()
-		if err != nil {
-			return fmt.Errorf("error creating pipe: %w", err)
-		}
-
-		var ffmpegOutput, soxOutput bytes.Buffer
-		cmd.Stderr = &ffmpegOutput
-		soxCmd.Stderr = &soxOutput
-
-		runtime.Gosched()
-
-		if err := soxCmd.Start(); err != nil {
-			return fmt.Errorf("error starting SoX command: %w", err)
-		}
-
-		// Store SoX PID early to prevent potential nil pointer panic in logging
-		soxPid := -1
-		if soxCmd.Process != nil {
-			soxPid = soxCmd.Process.Pid
-		}
-
-		// Track SoX process completion status to ensure proper cleanup
-		// We use a pointer to allow the defer to see updates made in the main flow
-		var soxWaitErr error
-		soxWaitDone := false
-
-		// Ensure SoX process is cleaned up properly to prevent zombies
-		// This deferred cleanup guarantees Wait() is called exactly once, even on error paths
-		defer func() {
-			// Only wait if we haven't already waited in the success path
-			if !soxWaitDone && soxCmd.Process != nil {
-				// SoX may have been killed due to FFmpeg failure, wait with timeout
-				waitWithTimeout(soxCmd, 5*time.Second, getSpectrogramLogger())
-			}
-		}()
-
-		// Run FFmpeg (feeds data to SoX via pipe)
-		if err := cmd.Run(); err != nil {
-			// FFmpeg failed - kill SoX since it won't receive valid input
-			if soxCmd.Process != nil {
-				if killErr := soxCmd.Process.Kill(); killErr != nil {
-					getSpectrogramLogger().Debug("Failed to kill SoX process after FFmpeg failure",
-						"error", killErr.Error(),
-						"sox_pid", soxPid)
-				}
-			}
-			// Defer will handle Wait() to reap the process
-			return fmt.Errorf("ffmpeg command failed: %w\nffmpeg output: %s\nsox output: %s",
-				err, ffmpegOutput.String(), soxOutput.String())
-		}
-
-		runtime.Gosched()
-
-		// FFmpeg succeeded - wait for SoX to finish processing the complete input
-		soxWaitErr = waitWithTimeoutErr(soxCmd, 5*time.Second, getSpectrogramLogger())
-		soxWaitDone = true // Prevent defer from waiting again
-
-		if soxWaitErr != nil {
-			return fmt.Errorf("SoX command failed: %w\nffmpeg output: %s\nsox output: %s",
-				soxWaitErr, ffmpegOutput.String(), soxOutput.String())
-		}
-		runtime.Gosched()
-	} else {
-		soxArgs := append([]string{absAudioClipPath}, getSoxSpectrogramArgs(ctx, widthStr, heightStr, absSpectrogramPath, absAudioClipPath, raw, settings)...)
-
-		// Log the full command being executed
-		getSpectrogramLogger().Debug("Executing SoX command",
-			"sox_binary", soxBinary,
-			"sox_args", soxArgs,
-			"abs_spectrogram_path", absSpectrogramPath)
-
-		if runtime.GOOS == "windows" {
-			// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
-			soxCmd = exec.CommandContext(ctx, soxBinary, soxArgs...)
-		} else {
-			// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
-			soxCmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
-		}
-
-		var soxOutput bytes.Buffer
-		soxCmd.Stderr = &soxOutput
-		soxCmd.Stdout = &soxOutput
-
-		runtime.Gosched()
-		if err := soxCmd.Run(); err != nil {
-			return fmt.Errorf("SoX command failed: %w\nOutput: %s", err, soxOutput.String())
-		}
-		runtime.Gosched()
-	}
-
-	getSpectrogramLogger().Debug("SoX spectrogram generation completed successfully",
-		"abs_audio_path", absAudioClipPath,
-		"duration_ms", time.Since(start).Milliseconds(),
-		"use_ffmpeg", useFFmpeg)
-
-	// Verification is now done in performSpectrogramGeneration using SecureFS
-	return nil
-}
-
-// getSoxSpectrogramArgs returns the common SoX arguments compatible with old HTMX API.
-//
-// # FFmpeg Version Optimization
-//
-// This function implements an important optimization based on FFmpeg version:
-//
-// FFmpeg 5.x Bug: The sox protocol (-f sox) has a bug where duration information is not
-// correctly passed to SoX. This requires us to explicitly provide the -d (duration) parameter
-// to SoX, which necessitates an expensive ffprobe call to get the audio file duration.
-//
-// FFmpeg 7.x+ Fix: The sox protocol correctly passes duration metadata to SoX, allowing
-// SoX to auto-detect the duration from the input stream. This eliminates the need for:
-//   1. The expensive ffprobe subprocess call (saves ~50-200ms per spectrogram)
-//   2. The -d parameter to SoX (SoX reads duration from stream metadata)
-//   3. Cache management for duration lookups
-//
-// On systems with FFmpeg 7.x+ (like Debian 13), this optimization significantly reduces
-// CPU usage and spectrogram generation latency, especially under high load when multiple
-// spectrograms are being generated concurrently.
-//
-// FFmpeg 6.x: Behavior needs verification - currently treated conservatively like 5.x
-func getSoxSpectrogramArgs(ctx context.Context, widthStr, heightStr, absSpectrogramPath, audioPath string, raw bool, settings *conf.Settings) []string {
-	const dynamicRange = "100"
-
-	// Build base args without duration parameter
-	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr}
-
-	// Check if we need to explicitly provide duration based on FFmpeg version
-	// FFmpeg 7.x+ can pass duration via sox protocol, older versions cannot
-	needsExplicitDuration := true
-	if settings.Realtime.Audio.HasFfmpegVersion() {
-		if settings.Realtime.Audio.FfmpegMajor >= 7 {
-			// FFmpeg 7.x and later: sox protocol works correctly, skip expensive ffprobe call
-			needsExplicitDuration = false
-			getSpectrogramLogger().Debug("FFmpeg 7.x+ detected: skipping explicit duration parameter (sox protocol fix)",
-				"ffmpeg_version", settings.Realtime.Audio.FfmpegVersion,
-				"ffmpeg_major", settings.Realtime.Audio.FfmpegMajor,
-				"optimization", "enabled")
-		} else {
-			getSpectrogramLogger().Debug("FFmpeg <7.x detected: using explicit duration parameter (sox protocol bug workaround)",
-				"ffmpeg_version", settings.Realtime.Audio.FfmpegVersion,
-				"ffmpeg_major", settings.Realtime.Audio.FfmpegMajor,
-				"optimization", "disabled")
-		}
-	} else {
-		// Version unknown - use explicit duration with ffprobe for safety
-		// We cannot assume the sox protocol works correctly without version information
-		getSpectrogramLogger().Debug("FFmpeg version unknown: using explicit duration parameter with ffprobe (safety fallback)",
-			"optimization", "disabled",
-			"reason", "cannot_verify_sox_protocol_fix")
-	}
-
-	// For FFmpeg <7.x, we must explicitly provide duration via -d parameter
-	if needsExplicitDuration {
-		// Get ACTUAL audio file duration via ffprobe (with caching to avoid repeated calls)
-		// This ensures spectrograms are generated with the correct duration, not a hard-coded value
-		duration := getCachedAudioDuration(ctx, audioPath)
-		if duration <= 0 {
-			// Safety fallback: Use configured capture length ONLY if ffprobe fails
-			// This should rarely happen - only when ffprobe is unavailable or file is corrupt
-			captureLength := settings.Realtime.Audio.Export.Length
-			duration = float64(captureLength)
-			getSpectrogramLogger().Warn("FFprobe failed to determine audio duration, using configured fallback",
-				"fallback_duration_seconds", duration,
-				"audio_path", audioPath,
-				"reason", "ffprobe_failed_or_returned_zero")
-		}
-
-		// Convert duration to string, rounding to nearest integer
-		captureLengthStr := strconv.Itoa(int(duration + 0.5))
-		args = append(args, "-d", captureLengthStr)
-	}
-	// For FFmpeg 7.x+: omit -d parameter, SoX will auto-detect from stream
-
-	// Add remaining common parameters
-	args = append(args, "-z", dynamicRange, "-o", absSpectrogramPath)
-
-	// For compatibility with old HTMX API: add -r flag for raw spectrograms
-	if raw {
-		// Raw mode: no axes, labels, or legends for clean display (old API default behavior)
-		args = append(args, "-r")
-	}
-	// Note: Non-raw spectrograms (with legends) will have axes and legends visible
-
-	return args
-}
-
-// createSpectrogramWithFFmpeg generates a spectrogram using only ffmpeg.
-// Accepts a context for timeout and cancellation.
-func createSpectrogramWithFFmpeg(ctx context.Context, absAudioClipPath, absSpectrogramPath string, width int, raw bool, settings *conf.Settings) error {
-	start := time.Now()
-	getSpectrogramLogger().Debug("Starting FFmpeg spectrogram generation",
-		"abs_audio_path", absAudioClipPath,
-		"abs_spectrogram_path", absSpectrogramPath,
-		"width", width,
-		"raw", raw)
-
-	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
-	if ffmpegBinary == "" {
-		return ErrFFmpegNotConfigured
-	}
-
-	// Create context with timeout (use the passed-in context as parent)
-	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	// NOTE: Semaphore is now acquired in generateSpectrogram() to fix double bottleneck
-	// No longer acquiring semaphore here
-
-	height := width / 2
-	heightStr := strconv.Itoa(height)
-	widthStr := strconv.Itoa(width)
-
-	var filterStr string
-	if raw {
-		// Raw spectrogram without frequency/time axes and legends for clean display (old API default)
-		filterStr = fmt.Sprintf("showspectrumpic=s=%sx%s:legend=0:gain=3:drange=100", widthStr, heightStr)
-	} else {
-		// Standard spectrogram with frequency/time axes and legends for detailed analysis
-		filterStr = fmt.Sprintf("showspectrumpic=s=%sx%s:legend=1:gain=3:drange=100", widthStr, heightStr)
-	}
-
-	ffmpegArgs := []string{
-		"-hide_banner",
-		"-y",
-		"-i", absAudioClipPath,
-		"-lavfi", filterStr,
-		"-frames:v", "1",
-		absSpectrogramPath,
-	}
-
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		// #nosec G204 - ffmpegBinary is validated by ValidateToolPath/exec.LookPath
-		cmd = exec.CommandContext(ctx, ffmpegBinary, ffmpegArgs...)
-	} else {
-		// #nosec G204 - ffmpegBinary is validated by ValidateToolPath/exec.LookPath
-		cmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
-	}
-
-	var output bytes.Buffer
-	cmd.Stderr = &output
-	cmd.Stdout = &output
-
-	if err := cmd.Run(); err != nil {
-		getSpectrogramLogger().Debug("FFmpeg spectrogram generation failed",
-			"abs_audio_path", absAudioClipPath,
-			"duration_ms", time.Since(start).Milliseconds(),
-			"error", err.Error(),
-			"output", output.String())
-		return fmt.Errorf("%w: %w (output: %s)", ErrSpectrogramGeneration, err, output.String())
-	}
-
-	getSpectrogramLogger().Debug("FFmpeg spectrogram generation completed successfully",
-		"abs_audio_path", absAudioClipPath,
-		"duration_ms", time.Since(start).Milliseconds())
-
-	// Verification is now done in performSpectrogramGeneration using SecureFS
-	return nil
-}
+// Note: createSpectrogramWithSoX, getSoxSpectrogramArgs, createSpectrogramWithFFmpeg,
+// waitWithTimeout, and waitWithTimeoutErr have been removed. All spectrogram generation
+// now uses the shared generator from internal/spectrogram/generator.go via
+// c.spectrogramGenerator.GenerateFromFile().
 
 // GetSpeciesImage serves an image for a bird species by scientific name
 func (c *Controller) GetSpeciesImage(ctx echo.Context) error {

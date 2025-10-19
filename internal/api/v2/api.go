@@ -32,6 +32,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/security"
+	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -56,11 +57,12 @@ type Controller struct {
 	settingsMutex       sync.RWMutex // Mutex for settings operations
 	detectionCache      *cache.Cache // Cache for detection queries
 	startTime           *time.Time
-	SFS                 *securefs.SecureFS     // Add SecureFS instance
-	apiLogger           *slog.Logger           // Structured logger for API operations
-	apiLevelVar         *slog.LevelVar         // Dynamic level control (type declaration)
-	apiLoggerClose      func() error           // Function to close the log file
-	metrics             *observability.Metrics // Shared metrics instance
+	SFS                    *securefs.SecureFS     // Add SecureFS instance
+	apiLogger              *slog.Logger           // Structured logger for API operations
+	apiLevelVar            *slog.LevelVar         // Dynamic level control (type declaration)
+	apiLoggerClose         func() error           // Function to close the log file
+	metrics                *observability.Metrics // Shared metrics instance
+	spectrogramGenerator   *spectrogram.Generator // Shared spectrogram generator (initialized after SFS)
 
 	// Auth related fields
 	// AuthService stores the shared authentication service instance.
@@ -248,18 +250,19 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c := &Controller{
-		Echo:           e,
-		DS:             ds,
-		Settings:       settings,
-		BirdImageCache: birdImageCache,
-		SunCalc:        sunCalc,
-		controlChan:    controlChan,
-		logger:         logger,
-		detectionCache: cache.New(5*time.Minute, 10*time.Minute),
-		SFS:            sfs, // Assign SecureFS instance
-		metrics:        metrics,
-		ctx:            ctx,
-		cancel:         cancel,
+		Echo:                 e,
+		DS:                   ds,
+		Settings:             settings,
+		BirdImageCache:       birdImageCache,
+		SunCalc:              sunCalc,
+		controlChan:          controlChan,
+		logger:               logger,
+		detectionCache:       cache.New(5*time.Minute, 10*time.Minute),
+		SFS:                  sfs, // Assign SecureFS instance
+		metrics:              metrics,
+		ctx:                  ctx,
+		cancel:               cancel,
+		spectrogramGenerator: spectrogram.NewGenerator(settings, sfs, getSpectrogramLogger()), // Initialize shared generator
 	}
 
 	// Update spectrogram logger level based on debug setting
