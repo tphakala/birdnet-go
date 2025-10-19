@@ -137,9 +137,19 @@ type Dashboard struct {
 // Pre-rendering spectrograms during audio save eliminates UI lag when users access detections.
 type SpectrogramPreRender struct {
 	Enabled bool   `json:"enabled"` // Enable background pre-rendering (default: false, opt-in)
-	Size    string `json:"size"`    // Size to pre-render: "sm" (400px), "md" (800px), "lg" (1000px), "xl" (1200px)
+	Size    string `json:"size"`    // Size to pre-render (see recommendations below)
 	Raw     bool   `json:"raw"`     // Generate raw spectrogram without axes/legend (default: true)
 }
+
+// Size recommendations for SpectrogramPreRender.Size:
+//
+//	"sm" (400px)  - Recommended. Used by recent detections card and detections list view
+//	"md" (800px)  - Not currently used by web UI
+//	"lg" (1000px) - Used by detailed detection view in web UI
+//	"xl" (1200px) - Not currently used by web UI
+//
+// Choose "sm" for optimal performance - it covers the most common UI views and minimizes
+// storage and processing overhead. Only use "lg" if detailed view performance is critical.
 
 // DynamicThresholdSettings contains settings for dynamic threshold adjustment.
 type DynamicThresholdSettings struct {

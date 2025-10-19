@@ -184,6 +184,10 @@ func (pr *PreRenderer) Submit(jobInterface any) error {
 			"note_id", job.NoteID,
 			"clip_path", job.ClipPath,
 			"error", err)
+		// Increment Failed stat for validation errors
+		pr.mu.Lock()
+		pr.stats.Failed++
+		pr.mu.Unlock()
 		return errors.New(err).
 			Component("spectrogram").
 			Category(errors.CategoryValidation).

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,6 +15,22 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/securefs"
+)
+
+const (
+	// Test audio parameters
+	testSampleRate = 48000        // 48kHz PCM
+	testDuration   = 1            // 1 second clips
+	testFrequency  = 440.0        // 440Hz (A4 note)
+	testAmplitude  = int16(10000) // Moderate volume
+
+	// Test timeouts
+	testShortTimeout  = 5 * time.Second
+	testMediumTimeout = 15 * time.Second
+	testLongTimeout   = 30 * time.Second
+
+	// Test polling interval
+	testPollInterval = 100 * time.Millisecond
 )
 
 // TestPreRenderer_RealSoxExecution tests actual spectrogram generation with Sox
@@ -49,19 +66,14 @@ func TestPreRenderer_RealSoxExecution(t *testing.T) {
 	pr.Start()
 	defer pr.Stop()
 
-	// Generate synthetic PCM data (1 second of silence at 48kHz, 16-bit, mono)
+	// Generate synthetic PCM data (1 second at 48kHz, 16-bit, mono)
 	// PCM format: s16le (signed 16-bit little-endian)
-	sampleRate := 48000
-	duration := 1 // seconds
-	pcmData := make([]byte, sampleRate*duration*2) // 2 bytes per sample (16-bit)
+	pcmData := make([]byte, testSampleRate*testDuration*2) // 2 bytes per sample (16-bit)
 
-	// Add some synthetic sine wave to make it more realistic
-	// This creates a 440Hz tone (A4 note)
-	frequency := 440.0
-	amplitude := int16(10000) // Moderate volume
-	for i := 0; i < sampleRate*duration; i++ {
-		// Calculate sine wave sample
-		sample := int16(float64(amplitude) * (1.0 - float64(i)/float64(sampleRate*duration)))
+	// Generate 440Hz sine wave (A4 note) for realistic audio data
+	for i := 0; i < testSampleRate*testDuration; i++ {
+		// Calculate sine wave sample value
+		sample := int16(float64(testAmplitude) * math.Sin(2*math.Pi*testFrequency*float64(i)/float64(testSampleRate)))
 		// Convert to little-endian bytes
 		pcmData[i*2] = byte(sample & 0xFF)
 		pcmData[i*2+1] = byte((sample >> 8) & 0xFF)
@@ -87,8 +99,8 @@ func TestPreRenderer_RealSoxExecution(t *testing.T) {
 	}
 
 	// Wait for processing with timeout
-	timeout := time.After(5 * time.Second)
-	ticker := time.NewTicker(100 * time.Millisecond)
+	timeout := time.After(testShortTimeout)
+	ticker := time.NewTicker(testPollInterval)
 	defer ticker.Stop()
 
 	spectrogramPath := filepath.Join(audioDir, "test.png")
@@ -169,15 +181,11 @@ func TestPreRenderer_ConcurrentProcessing(t *testing.T) {
 	defer pr.Stop()
 
 	// Generate synthetic PCM data
-	sampleRate := 48000
-	duration := 1
-	pcmData := make([]byte, sampleRate*duration*2)
+	pcmData := make([]byte, testSampleRate*testDuration*2)
 
-	// Add sine wave
-	frequency := 440.0
-	amplitude := int16(10000)
-	for i := 0; i < sampleRate*duration; i++ {
-		sample := int16(float64(amplitude) * (1.0 - float64(i)/float64(sampleRate*duration)))
+	// Generate 440Hz sine wave
+	for i := 0; i < testSampleRate*testDuration; i++ {
+		sample := int16(float64(testAmplitude) * math.Sin(2*math.Pi*testFrequency*float64(i)/float64(testSampleRate)))
 		pcmData[i*2] = byte(sample & 0xFF)
 		pcmData[i*2+1] = byte((sample >> 8) & 0xFF)
 	}
@@ -191,7 +199,7 @@ func TestPreRenderer_ConcurrentProcessing(t *testing.T) {
 	// Submit multiple jobs concurrently
 	numJobs := 5
 	for i := 0; i < numJobs; i++ {
-		clipPath := filepath.Join(audioDir, "test-"+string(rune('0'+i))+".wav")
+		clipPath := filepath.Join(audioDir, fmt.Sprintf("test-%d.wav", i))
 		job := &Job{
 			PCMData:   pcmData,
 			ClipPath:  clipPath,
@@ -205,8 +213,8 @@ func TestPreRenderer_ConcurrentProcessing(t *testing.T) {
 	}
 
 	// Wait for all jobs to complete
-	timeout := time.After(15 * time.Second)
-	ticker := time.NewTicker(200 * time.Millisecond)
+	timeout := time.After(testMediumTimeout)
+	ticker := time.NewTicker(testPollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -224,7 +232,7 @@ func TestPreRenderer_ConcurrentProcessing(t *testing.T) {
 
 				// Verify all spectrograms exist
 				for i := 0; i < numJobs; i++ {
-					spectrogramPath := filepath.Join(audioDir, "test-"+string(rune('0'+i))+".png")
+					spectrogramPath := filepath.Join(audioDir, fmt.Sprintf("test-%d.png", i))
 					if _, err := os.Stat(spectrogramPath); err != nil {
 						t.Errorf("Spectrogram %d not found: %v", i, err)
 					}
@@ -268,10 +276,8 @@ func TestPreRenderer_GracefulShutdownUnderLoad(t *testing.T) {
 	pr := NewPreRenderer(ctx, settings, sfs, slog.Default())
 	pr.Start()
 
-	// Generate synthetic PCM data
-	sampleRate := 48000
-	duration := 1
-	pcmData := make([]byte, sampleRate*duration*2)
+	// Generate synthetic PCM data (no sine wave needed for shutdown test)
+	pcmData := make([]byte, testSampleRate*testDuration*2)
 
 	// Create output directory
 	audioDir := filepath.Join(tempDir, "shutdown")
@@ -282,7 +288,7 @@ func TestPreRenderer_GracefulShutdownUnderLoad(t *testing.T) {
 	// Submit several jobs
 	numJobs := 10
 	for i := 0; i < numJobs; i++ {
-		clipPath := filepath.Join(audioDir, "test-"+string(rune('0'+i))+".wav")
+		clipPath := filepath.Join(audioDir, fmt.Sprintf("test-%d.wav", i))
 		job := &Job{
 			PCMData:   pcmData,
 			ClipPath:  clipPath,
@@ -342,9 +348,7 @@ func TestPreRenderer_QueueOverflow(t *testing.T) {
 	defer pr.Stop()
 
 	// Generate synthetic PCM data (minimal size for fast processing)
-	sampleRate := 48000
-	duration := 1
-	pcmData := make([]byte, sampleRate*duration*2)
+	pcmData := make([]byte, testSampleRate*testDuration*2)
 
 	// Create output directory
 	audioDir := filepath.Join(tempDir, "overflow")
@@ -386,8 +390,8 @@ func TestPreRenderer_QueueOverflow(t *testing.T) {
 	t.Logf("Submitted %d jobs, %d rejected due to queue overflow", submitted, queueFull)
 
 	// Wait for workers to drain the queue
-	timeout := time.After(30 * time.Second)
-	ticker := time.NewTicker(500 * time.Millisecond)
+	timeout := time.After(testLongTimeout)
+	ticker := time.NewTicker(testPollInterval)
 	defer ticker.Stop()
 
 	for {
