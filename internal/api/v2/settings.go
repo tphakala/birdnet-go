@@ -814,8 +814,12 @@ var securitySectionAllowedFields = map[string]bool{
 
 // validateSecuritySection validates security settings
 func validateSecuritySection(data json.RawMessage) error {
-	// Security settings cannot be updated via API for security reasons
-	return fmt.Errorf("security settings cannot be updated via API")
+	var updateMap map[string]any
+	if err := json.Unmarshal(data, &updateMap); err != nil {
+		return err
+	}
+
+	return validateSecuritySectionValues(updateMap)
 }
 
 // validateSecuritySectionValues validates the values of security section fields
@@ -997,8 +1001,12 @@ var mainSectionAllowedFields = map[string]bool{
 
 // validateMainSection validates main settings
 func validateMainSection(data json.RawMessage) error {
-	// Main settings cannot be updated via API for security reasons
-	return fmt.Errorf("main settings cannot be updated via API")
+	var updateMap map[string]any
+	if err := json.Unmarshal(data, &updateMap); err != nil {
+		return err
+	}
+
+	return validateMainSectionValues(updateMap)
 }
 
 // validateMainSectionValues validates the values of main section fields
