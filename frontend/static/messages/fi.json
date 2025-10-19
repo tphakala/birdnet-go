@@ -798,6 +798,28 @@
                   "none": "Käytä vain valittua palvelua"
                 }
               }
+            },
+            "spectrogram": {
+              "title": "Spektrogrammin Generointi",
+              "mode": {
+                "label": "Generointitila",
+                "auto": {
+                  "label": "Automaattinen (Suositeltu)",
+                  "helpText": "Generoi spektrogrammit tarpeen mukaan kun API:n kautta pyydetään. Sopii useimmille järjestelmille - tasapainottaa suorituskyvyn ja mukavuuden."
+                },
+                "prerender": {
+                  "label": "Esirenderöi Taustalla",
+                  "helpText": "Generoi spektrogrammit automaattisesti äänileikkeiden tallennuksen yhteydessä. Paras tehokkaimmille järjestelmille - poistaa käyttöliittymän viiveet mutta käyttää jatkuvasti prosessoria ja lisää levytilan käyttöä."
+                },
+                "userRequested": {
+                  "label": "Vain Käyttäjän Pyynnöstä",
+                  "helpText": "Generoi spektrogrammit vain kun napsautat generoi-painiketta. Täydellinen resurssirajoitteisille järjestelmille (Raspberry Pi 3/Zero) - ei automaattista kuormaa, sinä päätät milloin prosessoria käytetään."
+                }
+              },
+              "enabled": {
+                "label": "Ota Spektrogrammin Esirenderöinti Käyttöön",
+                "helpText": "VANHENTUNUT: Käytä sen sijaan Generointitilaa. Generoi spektrogrammeja taustalla kun havaintoja tallennetaan käyttöliittymän viiveiden poistamiseksi."
+              }
             }
           }
         }

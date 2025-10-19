@@ -798,6 +798,28 @@
                   "none": "Usar solo el proveedor seleccionado"
                 }
               }
+            },
+            "spectrogram": {
+              "title": "Generación de Espectrograma",
+              "mode": {
+                "label": "Modo de Generación",
+                "auto": {
+                  "label": "Automático (Recomendado)",
+                  "helpText": "Generar espectrogramas bajo demanda cuando se accede vía API. Adecuado para la mayoría de sistemas - proporciona equilibrio entre rendimiento y conveniencia."
+                },
+                "prerender": {
+                  "label": "Pre-renderizar en Segundo Plano",
+                  "helpText": "Generar espectrogramas automáticamente al guardar clips de audio. Mejor para sistemas potentes - elimina retrasos de UI pero usa CPU continua y aumenta uso de disco."
+                },
+                "userRequested": {
+                  "label": "Solo a Petición del Usuario",
+                  "helpText": "Generar espectrogramas solo cuando haga clic en el botón generar. Perfecto para sistemas con recursos limitados (Raspberry Pi 3/Zero) - cero sobrecarga automática, usted controla cuándo se usa la CPU."
+                }
+              },
+              "enabled": {
+                "label": "Habilitar Pre-renderizado de Espectrograma",
+                "helpText": "OBSOLETO: Use el Modo de Generación en su lugar. Generar espectrogramas en segundo plano cuando se guardan detecciones para eliminar retrasos de UI."
+              }
             }
           }
         }

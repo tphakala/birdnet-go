@@ -797,6 +797,28 @@
                   "none": "Nur ausgewählten Anbieter verwenden"
                 }
               }
+            },
+            "spectrogram": {
+              "title": "Spektrogramm-Generierung",
+              "mode": {
+                "label": "Generierungsmodus",
+                "auto": {
+                  "label": "Automatisch (Empfohlen)",
+                  "helpText": "Spektrogramme bei Bedarf generieren, wenn über API zugegriffen wird. Geeignet für die meisten Systeme - bietet Balance zwischen Leistung und Komfort."
+                },
+                "prerender": {
+                  "label": "Im Hintergrund vorab rendern",
+                  "helpText": "Spektrogramme automatisch beim Speichern von Audioclips generieren. Am besten für leistungsstarke Systeme - eliminiert UI-Verzögerungen, nutzt aber kontinuierliche CPU und erhöht Speicherplatznutzung."
+                },
+                "userRequested": {
+                  "label": "Nur auf Benutzeranfrage",
+                  "helpText": "Spektrogramme nur generieren, wenn Sie auf die Schaltfläche klicken. Perfekt für ressourcenbeschränkte Systeme (Raspberry Pi 3/Zero) - keine automatische Belastung, Sie kontrollieren, wann CPU verwendet wird."
+                }
+              },
+              "enabled": {
+                "label": "Spektrogramm-Vorrendering aktivieren",
+                "helpText": "VERALTET: Verwenden Sie stattdessen den Generierungsmodus. Spektrogramme im Hintergrund generieren, wenn Erkennungen gespeichert werden, um UI-Verzögerungen zu eliminieren."
+              }
             }
           }
         }

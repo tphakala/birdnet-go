@@ -895,10 +895,25 @@
               }
             },
             "spectrogram": {
-              "title": "Spectrogram Pre-Rendering",
+              "title": "Spectrogram Generation",
+              "mode": {
+                "label": "Generation Mode",
+                "auto": {
+                  "label": "Auto (Recommended)",
+                  "helpText": "Generate spectrograms on-demand when accessed via API. Suitable for most systems - provides balance between performance and convenience."
+                },
+                "prerender": {
+                  "label": "Pre-render in Background",
+                  "helpText": "Generate spectrograms automatically during audio clip save. Best for powerful systems - eliminates UI lag but uses continuous CPU and increases disk usage."
+                },
+                "userRequested": {
+                  "label": "User-Requested Only",
+                  "helpText": "Generate spectrograms only when you click the generate button. Perfect for resource-constrained systems (Raspberry Pi 3/Zero) - zero automatic overhead, you control when CPU is used."
+                }
+              },
               "enabled": {
                 "label": "Enable Spectrogram Pre-Rendering",
-                "helpText": "Generate spectrograms in the background when detections are saved to eliminate UI lag. Note: This will increase disk usage as PNG files are stored alongside audio clips."
+                "helpText": "DEPRECATED: Use Generation Mode instead. Generate spectrograms in the background when detections are saved to eliminate UI lag."
               }
             }
           }

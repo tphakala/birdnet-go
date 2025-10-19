@@ -814,6 +814,28 @@
                   "none": "Utiliser uniquement le fournisseur sélectionné"
                 }
               }
+            },
+            "spectrogram": {
+              "title": "Génération de Spectrogramme",
+              "mode": {
+                "label": "Mode de Génération",
+                "auto": {
+                  "label": "Automatique (Recommandé)",
+                  "helpText": "Générer les spectrogrammes à la demande lors de l'accès via l'API. Convient à la plupart des systèmes - offre un équilibre entre performance et commodité."
+                },
+                "prerender": {
+                  "label": "Pré-rendre en Arrière-plan",
+                  "helpText": "Générer automatiquement les spectrogrammes lors de l'enregistrement des clips audio. Meilleur pour les systèmes puissants - élimine les retards d'interface mais utilise le CPU en continu et augmente l'utilisation du disque."
+                },
+                "userRequested": {
+                  "label": "Uniquement à la Demande de l'Utilisateur",
+                  "helpText": "Générer les spectrogrammes uniquement lorsque vous cliquez sur le bouton générer. Parfait pour les systèmes aux ressources limitées (Raspberry Pi 3/Zero) - zéro surcharge automatique, vous contrôlez quand le CPU est utilisé."
+                }
+              },
+              "enabled": {
+                "label": "Activer le Pré-rendu de Spectrogramme",
+                "helpText": "OBSOLÈTE : Utilisez le Mode de Génération à la place. Générer les spectrogrammes en arrière-plan lors de l'enregistrement des détections pour éliminer les retards d'interface."
+              }
             }
           }
         }
