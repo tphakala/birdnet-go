@@ -5,7 +5,6 @@ package spectrogram
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -338,7 +337,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 		pr.mu.Lock()
 		pr.stats.Failed++
 		pr.mu.Unlock()
-		return errors.New(fmt.Errorf("%w (size: %d)", ErrQueueFull, defaultQueueSize)).
+		return errors.New(ErrQueueFull).
 			Component("spectrogram").
 			Category(errors.CategorySystem).
 			Context("operation", "submit_job").
