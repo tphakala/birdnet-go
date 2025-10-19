@@ -312,22 +312,95 @@
         </div>
       </div>
 
-      <!-- Spectrogram Pre-Rendering Settings -->
+      <!-- Spectrogram Generation Settings -->
       <div>
         <h4 class="text-lg font-medium pb-2 mt-6">
           {t('settings.main.sections.userInterface.dashboard.spectrogram.title')}
         </h4>
 
         <div class="space-y-4">
-          <Checkbox
-            checked={settings.dashboard.spectrogram?.enabled ?? false}
-            label={t('settings.main.sections.userInterface.dashboard.spectrogram.enabled.label')}
-            helpText={t(
-              'settings.main.sections.userInterface.dashboard.spectrogram.enabled.helpText'
-            )}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateSpectrogramSetting('enabled', value)}
-          />
+          <!-- Mode Selection -->
+          <div class="space-y-3">
+            <label class="block text-sm font-medium text-gray-300">
+              {t('settings.main.sections.userInterface.dashboard.spectrogram.mode.label')}
+            </label>
+            <div class="space-y-2">
+              <!-- Auto Mode (Default) -->
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="radio"
+                  name="spectrogramMode"
+                  value="auto"
+                  checked={(settings.dashboard.spectrogram?.mode ?? 'auto') === 'auto'}
+                  disabled={store.isLoading || store.isSaving}
+                  onchange={() => updateSpectrogramSetting('mode', 'auto')}
+                  class="mt-1"
+                />
+                <div>
+                  <div class="font-medium text-gray-200">
+                    {t(
+                      'settings.main.sections.userInterface.dashboard.spectrogram.mode.auto.label'
+                    )}
+                  </div>
+                  <div class="text-sm text-gray-400">
+                    {t(
+                      'settings.main.sections.userInterface.dashboard.spectrogram.mode.auto.helpText'
+                    )}
+                  </div>
+                </div>
+              </label>
+
+              <!-- Prerender Mode -->
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="radio"
+                  name="spectrogramMode"
+                  value="prerender"
+                  checked={(settings.dashboard.spectrogram?.mode ?? 'auto') === 'prerender'}
+                  disabled={store.isLoading || store.isSaving}
+                  onchange={() => updateSpectrogramSetting('mode', 'prerender')}
+                  class="mt-1"
+                />
+                <div>
+                  <div class="font-medium text-gray-200">
+                    {t(
+                      'settings.main.sections.userInterface.dashboard.spectrogram.mode.prerender.label'
+                    )}
+                  </div>
+                  <div class="text-sm text-gray-400">
+                    {t(
+                      'settings.main.sections.userInterface.dashboard.spectrogram.mode.prerender.helpText'
+                    )}
+                  </div>
+                </div>
+              </label>
+
+              <!-- User-Requested Mode -->
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="radio"
+                  name="spectrogramMode"
+                  value="user-requested"
+                  checked={(settings.dashboard.spectrogram?.mode ?? 'auto') === 'user-requested'}
+                  disabled={store.isLoading || store.isSaving}
+                  onchange={() => updateSpectrogramSetting('mode', 'user-requested')}
+                  class="mt-1"
+                />
+                <div>
+                  <div class="font-medium text-gray-200">
+                    {t(
+                      'settings.main.sections.userInterface.dashboard.spectrogram.mode.userRequested.label'
+                    )}
+                  </div>
+                  <div class="text-sm text-gray-400">
+                    {t(
+                      'settings.main.sections.userInterface.dashboard.spectrogram.mode.userRequested.helpText'
+                    )}
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -262,8 +262,8 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		p.startThresholdCleanup()
 	}
 
-	// Initialize spectrogram pre-renderer if enabled
-	if settings.Realtime.Dashboard.Spectrogram.Enabled {
+	// Initialize spectrogram pre-renderer if mode is "prerender"
+	if settings.Realtime.Dashboard.Spectrogram.IsPreRenderEnabled() {
 		p.initPreRenderer()
 	}
 

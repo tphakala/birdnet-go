@@ -382,17 +382,24 @@ export interface Thumbnails {
 // Spectrogram size options
 export type SpectrogramSize = 'sm' | 'md' | 'lg' | 'xl';
 
-// SpectrogramPreRender contains settings for background spectrogram pre-rendering.
-// Pre-rendering spectrograms during audio save eliminates UI lag when users access detections.
+// Spectrogram generation mode options
+export type SpectrogramMode = 'auto' | 'prerender' | 'user-requested';
+
+// SpectrogramPreRender contains settings for spectrogram generation modes.
+// Three modes control when and how spectrograms are generated:
+//   - "auto": Generate on-demand when API is called (default, suitable for most systems)
+//   - "prerender": Background worker generates during audio clip save (continuous CPU usage)
+//   - "user-requested": Only generate when user clicks button in UI (zero automatic overhead)
 export interface SpectrogramPreRender {
-  enabled: boolean; // Enable background pre-rendering (default: false, opt-in)
-  size: SpectrogramSize; // Size to pre-render (sm=400px, md=800px, lg=1000px, xl=1200px)
+  mode?: SpectrogramMode; // Generation mode (default: 'auto')
+  enabled?: boolean; // DEPRECATED: Use mode instead (kept for backward compatibility)
+  size: SpectrogramSize; // Default size for all modes (sm=400px, md=800px, lg=1000px, xl=1200px)
   raw: boolean; // Generate raw spectrogram without axes/legend (default: true)
 }
 
 // Default spectrogram settings
-// Note: size and raw are reserved for future UI enhancements
 export const DEFAULT_SPECTROGRAM_SETTINGS: SpectrogramPreRender = {
+  mode: 'auto',
   enabled: false,
   size: 'sm',
   raw: true,
