@@ -65,9 +65,65 @@ jobs:
           echo "CGO_CFLAGS=-I $HOME/src/tensorflow" >> $GITHUB_ENV
 
       - name: golangci-lint
+        id: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
           # Require: The version of golangci-lint to use.
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
-          version: v2.4.0
+          version: v2.5.0
+          # Show only new issues by default
+          only-new-issues: false
+          # Additional args for better output
+          args: --out-format=colored-line-number,checkstyle:golangci-lint-report.xml
+
+      - name: Generate lint summary
+        if: always()
+        run: |
+          if [ -f golangci-lint-report.xml ]; then
+            # Count issues by severity
+            ERROR_COUNT=$(grep -c 'severity="error"' golangci-lint-report.xml || echo "0")
+            WARNING_COUNT=$(grep -c 'severity="warning"' golangci-lint-report.xml || echo "0")
+            TOTAL=$((ERROR_COUNT + WARNING_COUNT))
+
+            if [ $TOTAL -gt 0 ]; then
+              echo "## :warning: Linting Issues Found" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "- **Errors:** $ERROR_COUNT" >> $GITHUB_STEP_SUMMARY
+              echo "- **Warnings:** $WARNING_COUNT" >> $GITHUB_STEP_SUMMARY
+              echo "- **Total:** $TOTAL" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+
+              # Extract unique linters that reported issues
+              echo "### Issues by Linter" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              grep -oP 'source="\K[^"]+' golangci-lint-report.xml | sort | uniq -c | sort -rn >> $GITHUB_STEP_SUMMARY || echo "Unable to parse linters" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+
+              # Show sample of issues (first 10 errors)
+              echo "### Sample Issues (First 10 Errors)" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              grep 'severity="error"' golangci-lint-report.xml | head -10 | \
+                sed -E 's/.*file="([^"]+)".*line="([^"]+)".*message="([^"]+)".*source="([^"]+)".*/\1:\2 [\4] \3/' >> $GITHUB_STEP_SUMMARY || echo "No errors to display" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "📋 **Check the annotations above for the complete list**" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "## :white_check_mark: No Linting Issues" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "All checks passed!" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "## :white_check_mark: Linting Completed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No issues found or linter did not generate report." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload lint report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: golangci-lint-report
+          path: golangci-lint-report.xml
+          if-no-files-found: ignore

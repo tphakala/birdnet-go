@@ -115,7 +115,34 @@ jobs:
           MQTT_TEST_BROKER: tcp://localhost:1883
         run: |
           set -euo pipefail
+
+          # Run tests with JSON output
           go test -json -v -short -timeout 120s ./... 2>&1 | tee /tmp/gotest.log | gotestfmt -ci github
+
+          # Check if tests passed
+          TEST_EXIT_CODE=${PIPESTATUS[0]}
+
+          if [ $TEST_EXIT_CODE -ne 0 ]; then
+            echo "::error title=Test Failure::Unit tests failed - see job summary for details"
+
+            # Create initial summary
+            echo "## :x: Test Run Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Exit code: $TEST_EXIT_CODE" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            # Quick preview of failures
+            echo "### Quick Preview of Failures" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            grep -E "^--- FAIL:|^FAIL\s" /tmp/gotest.log | head -20 >> $GITHUB_STEP_SUMMARY || echo "No failure patterns found" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "👇 See 'Generate test failure report' step below for detailed analysis" >> $GITHUB_STEP_SUMMARY
+
+            exit $TEST_EXIT_CODE
+          fi
+
+          echo "## :white_check_mark: All Tests Passed" >> $GITHUB_STEP_SUMMARY
         timeout-minutes: 5
 
       - name: Cleanup any remaining processes
@@ -125,6 +152,32 @@ jobs:
           pkill -f "test://" || true
           pkill -f "sleep.*test" || true
           pkill -f "sh.*-c.*sleep" || true
+
+      - name: Generate test failure report
+        if: failure()
+        run: |
+          echo "# Test Failure Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Count failures
+          FAIL_COUNT=$(grep -c "^--- FAIL:" /tmp/gotest.log || echo "0")
+          echo "**Total Failed Tests: $FAIL_COUNT**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Extract failed test names with package info
+          echo "## Failed Test Details" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -A 5 "^--- FAIL:" /tmp/gotest.log | head -100 >> $GITHUB_STEP_SUMMARY || echo "Unable to extract test details" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Extract unique failing packages
+          echo "## Affected Packages" >> $GITHUB_STEP_SUMMARY
+          grep "^FAIL\s" /tmp/gotest.log | awk '{print $2}' | sort -u >> $GITHUB_STEP_SUMMARY || echo "No packages identified" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "📥 Download the full test log artifact for complete details" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload test log
         uses: actions/upload-artifact@v4
