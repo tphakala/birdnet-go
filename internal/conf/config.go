@@ -133,6 +133,13 @@ type Dashboard struct {
 	Spectrogram  SpectrogramPreRender `json:"spectrogram"`      // Spectrogram pre-rendering settings
 }
 
+// Spectrogram generation mode constants
+const (
+	SpectrogramModeAuto          = "auto"
+	SpectrogramModePreRender     = "prerender"
+	SpectrogramModeUserRequested = "user-requested"
+)
+
 // SpectrogramPreRender contains settings for spectrogram generation modes.
 // Three modes control when and how spectrograms are generated:
 //   - "auto": Generate on-demand when API is called (default, suitable for most systems)
@@ -150,17 +157,17 @@ type SpectrogramPreRender struct {
 // Enabled field: true = "prerender", false = "auto".
 func (s *SpectrogramPreRender) GetMode() string {
 	// If Mode is explicitly set to a valid value, use it
-	if s.Mode == "auto" || s.Mode == "prerender" || s.Mode == "user-requested" {
+	if s.Mode == SpectrogramModeAuto || s.Mode == SpectrogramModePreRender || s.Mode == SpectrogramModeUserRequested {
 		return s.Mode
 	}
 
 	// Backward compatibility: derive from Enabled field
 	if s.Enabled {
-		return "prerender"
+		return SpectrogramModePreRender
 	}
 
 	// Default to "auto" mode
-	return "auto"
+	return SpectrogramModeAuto
 }
 
 // IsPreRenderEnabled returns true if spectrograms should be pre-rendered in background.

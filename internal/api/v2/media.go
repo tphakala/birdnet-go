@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -553,7 +554,7 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	spectrogramMode := c.Settings.Realtime.Dashboard.Spectrogram.GetMode()
 
 	// In user-requested mode, check if spectrogram exists before attempting generation
-	if spectrogramMode == "user-requested" {
+	if spectrogramMode == conf.SpectrogramModeUserRequested {
 		// Normalize and validate the audio path
 		clipsPrefix := c.Settings.Realtime.Audio.Export.Path
 		normalizedPath := NormalizeClipPath(clipPath, clipsPrefix)
@@ -594,7 +595,7 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 		return ctx.JSON(http.StatusNotFound, map[string]any{
 			"error":   "Spectrogram not generated",
 			"message": "Spectrogram has not been generated yet. Click 'Generate Spectrogram' to create it.",
-			"mode":    "user-requested",
+			"mode":    conf.SpectrogramModeUserRequested,
 		})
 	}
 
