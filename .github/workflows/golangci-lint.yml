@@ -75,7 +75,7 @@ jobs:
           # Show only new issues by default
           only-new-issues: false
           # Additional args for better output
-          args: --out-format=colored-line-number,checkstyle:golangci-lint-report.xml
+          args: --out-format=colored-line-number --out-formats=checkstyle:golangci-lint-report.xml
 
       - name: Generate lint summary
         if: always()
