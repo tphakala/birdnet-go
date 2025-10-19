@@ -900,11 +900,11 @@
                 "label": "Generation Mode",
                 "auto": {
                   "label": "Auto (Recommended)",
-                  "helpText": "Generate spectrograms on-demand when accessed via API. Suitable for most systems - provides balance between performance and convenience."
+                  "helpText": "Spectrograms are generated automatically when detection is viewed on user interface. For long list of detections spectrogram generation may take a long time on systems with limited CPU resources."
                 },
                 "prerender": {
                   "label": "Pre-render in Background",
-                  "helpText": "Generate spectrograms automatically during audio clip save. Best for powerful systems - eliminates UI lag but uses continuous CPU and increases disk usage."
+                  "helpText": "Generate spectrograms automatically during audio clip save. On resource constrained systems like Raspberry Pi Zero or 3 this provides more responsive user interface due to spectrograms being rendered in background, however this mode will consume more disk space as spectrograms are created for every detection."
                 },
                 "userRequested": {
                   "label": "User-Requested Only",

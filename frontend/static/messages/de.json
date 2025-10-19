@@ -804,11 +804,11 @@
                 "label": "Generierungsmodus",
                 "auto": {
                   "label": "Automatisch (Empfohlen)",
-                  "helpText": "Spektrogramme bei Bedarf generieren, wenn über API zugegriffen wird. Geeignet für die meisten Systeme - bietet Balance zwischen Leistung und Komfort."
+                  "helpText": "Spectrograms are generated automatically when detection is viewed on user interface. For long list of detections spectrogram generation may take a long time on systems with limited CPU resources."
                 },
                 "prerender": {
                   "label": "Im Hintergrund vorab rendern",
-                  "helpText": "Spektrogramme automatisch beim Speichern von Audioclips generieren. Am besten für leistungsstarke Systeme - eliminiert UI-Verzögerungen, nutzt aber kontinuierliche CPU und erhöht Speicherplatznutzung."
+                  "helpText": "Generate spectrograms automatically during audio clip save. On resource constrained systems like Raspberry Pi Zero or 3 this provides more responsive user interface due to spectrograms being rendered in background, however this mode will consume more disk space as spectrograms are created for every detection."
                 },
                 "userRequested": {
                   "label": "Nur auf Benutzeranfrage",
