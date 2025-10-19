@@ -176,7 +176,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	GetClipPath() string
 	GetNoteID() uint
 	GetTimestamp() time.Time
-}) error {
+}) (err error) {
 	// Convert DTO to internal Job type
 	job := &Job{
 		PCMData:   jobDTO.GetPCMData(),
@@ -253,51 +253,31 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 			pr.mu.Lock()
 			pr.stats.Failed++
 			pr.mu.Unlock()
+			// Set named return value to report the panic as an error
+			err = errors.Newf("panic during job submission: %v", r).
+				Component("spectrogram").
+				Category(errors.CategorySystem).
+				Context("operation", "submit_job").
+				Context("note_id", job.NoteID).
+				Build()
 		}
 	}()
 
 	// Use select with context check to avoid panic from closed channel
-	// Check if context is available and done before attempting send
-	if pr.ctx != nil {
-		select {
-		case <-pr.ctx.Done():
-			// Context cancelled, don't attempt to send
-			pr.logger.Debug("Pre-renderer context cancelled, rejecting job",
-				"note_id", job.NoteID)
-			pr.mu.Lock()
-			pr.stats.Failed++
-			pr.mu.Unlock()
-			return errors.New(pr.ctx.Err()).
-				Component("spectrogram").
-				Category(errors.CategorySystem).
-				Context("operation", "submit_job").
-				Context("note_id", job.NoteID).
-				Build()
-		case pr.jobs <- job:
-			pr.mu.Lock()
-			pr.stats.Queued++
-			pr.mu.Unlock()
-			return nil
-		default:
-			pr.logger.Warn("Pre-render queue full, dropping job",
-				"note_id", job.NoteID,
-				"clip_path", job.ClipPath,
-				"queue_size", defaultQueueSize)
-			pr.mu.Lock()
-			pr.stats.Failed++
-			pr.mu.Unlock()
-			return errors.New(fmt.Errorf("%w (size: %d)", ErrQueueFull, defaultQueueSize)).
-				Component("spectrogram").
-				Category(errors.CategorySystem).
-				Context("operation", "submit_job").
-				Context("note_id", job.NoteID).
-				Context("queue_size", defaultQueueSize).
-				Build()
-		}
-	}
-
-	// No context available (e.g., in tests), use simple select
 	select {
+	case <-pr.ctx.Done():
+		// Context cancelled, don't attempt to send
+		pr.logger.Debug("Pre-renderer context cancelled, rejecting job",
+			"note_id", job.NoteID)
+		pr.mu.Lock()
+		pr.stats.Failed++
+		pr.mu.Unlock()
+		return errors.New(pr.ctx.Err()).
+			Component("spectrogram").
+			Category(errors.CategorySystem).
+			Context("operation", "submit_job").
+			Context("note_id", job.NoteID).
+			Build()
 	case pr.jobs <- job:
 		pr.mu.Lock()
 		pr.stats.Queued++
@@ -435,13 +415,23 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 func (pr *PreRenderer) generateWithSox(ctx context.Context, pcmData []byte, outputPath string, width int, raw bool) error {
 	soxBinary := pr.settings.Realtime.Audio.SoxPath
 	if soxBinary == "" {
-		return fmt.Errorf("sox binary not configured")
+		return errors.Newf("sox binary not configured").
+			Component("spectrogram").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "generate_with_sox").
+			Build()
 	}
 
-	// Ensure output directory exists
+	// Ensure output directory exists using SecureFS (validates path automatically)
 	outputDir := filepath.Dir(outputPath)
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+	if err := pr.sfs.MkdirAll(outputDir, 0o755); err != nil {
+		return errors.New(err).
+			Component("spectrogram").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_output_directory").
+			Context("output_dir", outputDir).
+			Context("output_path", outputPath).
+			Build()
 	}
 
 	// Calculate height (half of width for consistent aspect ratio)
@@ -513,7 +503,9 @@ func (pr *PreRenderer) buildSpectrogramPath(clipPath string) (string, error) {
 	// Replace audio extension with .png
 	ext := filepath.Ext(clipPath)
 	if ext == "" {
-		return "", fmt.Errorf("clip path has no extension: %s", clipPath)
+		return "", errors.Newf("clip path has no extension").
+			Context("clip_path", clipPath).
+			Build()
 	}
 
 	spectrogramPath := clipPath[:len(clipPath)-len(ext)] + ".png"
@@ -525,7 +517,9 @@ func (pr *PreRenderer) buildSpectrogramPath(clipPath string) (string, error) {
 func (pr *PreRenderer) sizeToPixels(size string) (int, error) {
 	width, ok := validSizes[size]
 	if !ok {
-		return 0, fmt.Errorf("invalid size: %s (valid sizes: sm, md, lg, xl)", size)
+		return 0, errors.Newf("invalid size (valid sizes: sm, md, lg, xl)").
+			Context("size", size).
+			Build()
 	}
 	return width, nil
 }

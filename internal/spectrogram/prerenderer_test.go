@@ -118,10 +118,15 @@ func TestPreRenderer_Submit_FileAlreadyExists(t *testing.T) {
 		t.Fatalf("Failed to create SecureFS: %v", err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	pr := &PreRenderer{
 		settings: settings,
 		sfs:      sfs,
 		logger:   slog.Default(),
+		ctx:      ctx,
+		cancel:   cancel,
 		jobs:     make(chan *Job, 10),
 	}
 
@@ -156,9 +161,14 @@ func TestPreRenderer_Submit_FileAlreadyExists(t *testing.T) {
 
 // TestPreRenderer_Submit_Success tests successful job submission
 func TestPreRenderer_Submit_Success(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	pr := &PreRenderer{
 		settings: &conf.Settings{},
 		logger:   slog.Default(),
+		ctx:      ctx,
+		cancel:   cancel,
 		jobs:     make(chan *Job, 10),
 	}
 
@@ -193,10 +203,15 @@ func TestPreRenderer_Submit_Success(t *testing.T) {
 
 // TestPreRenderer_Submit_QueueFull tests queue overflow behavior
 func TestPreRenderer_Submit_QueueFull(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Create PreRenderer with very small queue
 	pr := &PreRenderer{
 		settings: &conf.Settings{},
 		logger:   slog.Default(),
+		ctx:      ctx,
+		cancel:   cancel,
 		jobs:     make(chan *Job, 1), // Only 1 slot
 	}
 
@@ -256,9 +271,14 @@ func TestPreRenderer_GracefulShutdown(t *testing.T) {
 
 // TestPreRenderer_Stats tests statistics tracking
 func TestPreRenderer_Stats(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	pr := &PreRenderer{
 		settings: &conf.Settings{},
 		logger:   slog.Default(),
+		ctx:      ctx,
+		cancel:   cancel,
 		jobs:     make(chan *Job, 10),
 	}
 

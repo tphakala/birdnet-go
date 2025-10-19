@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -29,6 +30,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
 )
+
+// Compile-time assertion to ensure *spectrogram.PreRenderer implements PreRendererSubmit
+var _ PreRendererSubmit = (*spectrogram.PreRenderer)(nil)
 
 // Species identification constants for filtering
 const (
@@ -1510,9 +1514,6 @@ func generateRandomHex(length int) string {
 	return hex
 }
 
-// Compile-time assertion to ensure *spectrogram.PreRenderer implements PreRendererSubmit
-var _ PreRendererSubmit = (*spectrogram.PreRenderer)(nil)
-
 // initPreRenderer initializes the spectrogram pre-renderer if enabled.
 // This is called during processor initialization if spectrogram pre-rendering is enabled in settings.
 func (p *Processor) initPreRenderer() {
@@ -1520,6 +1521,15 @@ func (p *Processor) initPreRenderer() {
 		// Validate export path
 		if p.Settings.Realtime.Audio.Export.Path == "" {
 			GetLogger().Error("Export path not configured, disabling pre-rendering",
+				"operation", "prerenderer_init")
+			return
+		}
+
+		// Verify export path exists and is writable
+		if err := os.MkdirAll(p.Settings.Realtime.Audio.Export.Path, 0o755); err != nil {
+			GetLogger().Error("Export path not writable, disabling pre-rendering",
+				"path", p.Settings.Realtime.Audio.Export.Path,
+				"error", err,
 				"operation", "prerenderer_init")
 			return
 		}
