@@ -1317,10 +1317,7 @@ func (p *Processor) Shutdown() error {
 
 	// Stop the spectrogram pre-renderer
 	if p.preRenderer != nil {
-		// Type assert to access Stop method (interface doesn't include it)
-		if pr, ok := p.preRenderer.(*spectrogram.PreRenderer); ok {
-			pr.Stop()
-		}
+		p.preRenderer.Stop()
 	}
 
 	// Stop the job queue with a timeout

@@ -5,6 +5,7 @@ package spectrogram
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -305,5 +306,109 @@ func TestPreRenderer_GracefulShutdownUnderLoad(t *testing.T) {
 	// Some jobs may not have completed due to shutdown, but that's expected
 	if stats.Queued > 0 && stats.Completed+stats.Failed+stats.Skipped == 0 {
 		t.Error("No jobs were processed before shutdown")
+	}
+}
+
+// TestPreRenderer_QueueOverflow tests behavior when submitting more jobs than queue size
+func TestPreRenderer_QueueOverflow(t *testing.T) {
+	// Check if Sox is available
+	soxPath := "/usr/bin/sox"
+	if _, err := os.Stat(soxPath); os.IsNotExist(err) {
+		t.Skip("Sox binary not found at /usr/bin/sox, skipping integration test")
+	}
+
+	// Create temp directory
+	tempDir := t.TempDir()
+
+	// Create settings
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.SoxPath = soxPath
+	settings.Realtime.Audio.Export.Path = tempDir
+	settings.Realtime.Dashboard.Spectrogram.Enabled = true
+	settings.Realtime.Dashboard.Spectrogram.Size = "sm"
+	settings.Realtime.Dashboard.Spectrogram.Raw = true
+
+	sfs, err := securefs.New(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to create SecureFS: %v", err)
+	}
+
+	// Create PreRenderer (queue size is 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pr := NewPreRenderer(ctx, settings, sfs, slog.Default())
+	pr.Start()
+	defer pr.Stop()
+
+	// Generate synthetic PCM data (minimal size for fast processing)
+	sampleRate := 48000
+	duration := 1
+	pcmData := make([]byte, sampleRate*duration*2)
+
+	// Create output directory
+	audioDir := filepath.Join(tempDir, "overflow")
+	if err := os.MkdirAll(audioDir, 0o755); err != nil {
+		t.Fatalf("Failed to create audio directory: %v", err)
+	}
+
+	// Submit more jobs than queue size to trigger overflow
+	// Queue size is 100, submit 150 jobs
+	numJobs := 150
+	queueFull := 0
+	submitted := 0
+
+	for i := 0; i < numJobs; i++ {
+		clipPath := filepath.Join(audioDir, fmt.Sprintf("test-%03d.wav", i))
+		job := &Job{
+			PCMData:   pcmData,
+			ClipPath:  clipPath,
+			NoteID:    uint(i + 1),
+			Timestamp: time.Now(),
+		}
+
+		if err := pr.Submit(job); err != nil {
+			if err.Error() == "pre-render queue full" {
+				queueFull++
+			} else {
+				t.Errorf("Unexpected error submitting job %d: %v", i, err)
+			}
+		} else {
+			submitted++
+		}
+	}
+
+	// Verify that some jobs were rejected due to queue overflow
+	if queueFull == 0 {
+		t.Error("Expected some jobs to be rejected due to queue overflow, but none were")
+	}
+
+	t.Logf("Submitted %d jobs, %d rejected due to queue overflow", submitted, queueFull)
+
+	// Wait for workers to drain the queue
+	timeout := time.After(30 * time.Second)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			stats := pr.GetStats()
+			t.Fatalf("Timeout waiting for queue to drain. Stats: %+v", stats)
+		case <-ticker.C:
+			stats := pr.GetStats()
+			// Queue is drained when all submitted jobs are processed
+			if stats.Completed+stats.Failed+stats.Skipped >= int64(submitted) {
+				t.Logf("Queue drained. Final stats: queued=%d, completed=%d, failed=%d, skipped=%d",
+					stats.Queued, stats.Completed, stats.Failed, stats.Skipped)
+
+				// Verify stats consistency
+				if stats.Queued != int64(submitted) {
+					t.Errorf("Expected queued count to be %d, got %d", submitted, stats.Queued)
+				}
+
+				return // Test passed
+			}
+		}
 	}
 }

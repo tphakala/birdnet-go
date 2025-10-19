@@ -114,6 +114,7 @@ type SaveAudioAction struct {
 // This avoids direct dependency on the spectrogram package.
 type PreRendererSubmit interface {
 	Submit(job any) error
+	Stop() // Graceful shutdown
 }
 
 type BirdWeatherAction struct {

@@ -111,6 +111,15 @@ func (pr *PreRenderer) Start() {
 
 // Stop gracefully shuts down the pre-renderer.
 // It waits for in-flight jobs to complete (up to shutdownTimeout).
+//
+// Shutdown behavior:
+//   - Cancels context to signal workers to stop accepting new jobs
+//   - Closes job channel to prevent new submissions
+//   - Waits up to shutdownTimeout (10s) for workers to finish current jobs
+//   - On timeout: logs warning and continues (workers exit when context cancels)
+//   - Workers are not force-killed; they complete current job or exit on context cancellation
+//
+// This graceful degradation prevents losing in-progress work while ensuring timely shutdown.
 func (pr *PreRenderer) Stop() {
 	pr.logger.Info("Stopping spectrogram pre-renderer")
 
@@ -259,7 +268,12 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 		return
 	}
 
-	// Check if spectrogram already exists (race condition with on-demand generation)
+	// Check if spectrogram already exists
+	// Race conditions are acceptable here (idempotent operation):
+	// 1. On-demand generation might create file between Submit() check and now
+	// 2. Another worker might process duplicate job (edge case with rapid submissions)
+	// 3. File might be created externally (manual intervention)
+	// Impact: Job skipped instead of caught in Submit() - no functional difference
 	if _, err := os.Stat(spectrogramPath); err == nil {
 		pr.logger.Debug("Spectrogram already exists, skipping",
 			"worker_id", workerID,
