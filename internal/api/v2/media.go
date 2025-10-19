@@ -22,6 +22,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/securefs"
+	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -51,14 +52,6 @@ const (
 	MimeTypeM4A  = "audio/mp4"
 	MimeTypeOGG  = "audio/ogg"
 )
-
-// spectrogramSizes maps size names to pixel widths
-var spectrogramSizes = map[string]int{
-	"sm": SpectrogramSizeSm,
-	"md": SpectrogramSizeMd,
-	"lg": SpectrogramSizeLg,
-	"xl": SpectrogramSizeXl,
-}
 
 // isValidFilename checks if a filename is valid for use in Content-Disposition header
 func isValidFilename(filename string) bool {
@@ -526,7 +519,7 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	width := SpectrogramSizeMd // Default width (md)
 	sizeStr := ctx.QueryParam("size")
 	if sizeStr != "" {
-		if validWidth, ok := spectrogramSizes[sizeStr]; ok {
+		if validWidth, err := spectrogram.SizeToPixels(sizeStr); err == nil {
 			width = validWidth
 		}
 		// Invalid size parameter falls back to width parameter or default
@@ -647,7 +640,7 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	width := SpectrogramSizeMd // Default width (md)
 	sizeStr := ctx.QueryParam("size")
 	if sizeStr != "" {
-		if validWidth, ok := spectrogramSizes[sizeStr]; ok {
+		if validWidth, err := spectrogram.SizeToPixels(sizeStr); err == nil {
 			width = validWidth
 		}
 		// Invalid size parameter falls back to width parameter or default
@@ -703,7 +696,7 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	width := SpectrogramSizeMd // Default
 	sizeStr := ctx.QueryParam("size")
 	if sizeStr != "" {
-		if validWidth, ok := spectrogramSizes[sizeStr]; ok {
+		if validWidth, err := spectrogram.SizeToPixels(sizeStr); err == nil {
 			width = validWidth
 		}
 	}
