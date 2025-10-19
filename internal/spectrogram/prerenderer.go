@@ -3,14 +3,10 @@
 package spectrogram
 
 import (
-	"bytes"
 	"context"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -44,9 +40,10 @@ const (
 // PreRenderer manages background spectrogram pre-rendering.
 // It uses a worker pool to process jobs without blocking the detection pipeline.
 type PreRenderer struct {
-	settings *conf.Settings
-	sfs      *securefs.SecureFS
-	logger   *slog.Logger
+	settings  *conf.Settings
+	sfs       *securefs.SecureFS
+	logger    *slog.Logger
+	generator *Generator // Shared generator for actual generation
 
 	// Lifecycle management
 	ctx    context.Context
@@ -90,13 +87,14 @@ func NewPreRenderer(parentCtx context.Context, settings *conf.Settings, sfs *sec
 	ctx, cancel := context.WithCancel(parentCtx)
 
 	return &PreRenderer{
-		settings: settings,
-		sfs:      sfs,
-		logger:   logger,
-		ctx:      ctx,
-		cancel:   cancel,
-		jobs:     make(chan *Job, defaultQueueSize),
-		workers:  defaultWorkers,
+		settings:  settings,
+		sfs:       sfs,
+		logger:    logger,
+		generator: NewGenerator(settings, sfs, logger), // Initialize shared generator
+		ctx:       ctx,
+		cancel:    cancel,
+		jobs:      make(chan *Job, defaultQueueSize),
+		workers:   defaultWorkers,
 	}
 }
 
@@ -418,8 +416,8 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	ctx, cancel := context.WithTimeout(pr.ctx, generationTimeout)
 	defer cancel()
 
-	// Generate spectrogram
-	if err := pr.generateWithSox(ctx, job.PCMData, spectrogramPath, width, pr.settings.Realtime.Dashboard.Spectrogram.Raw); err != nil {
+	// Generate spectrogram using shared generator
+	if err := pr.generator.GenerateFromPCM(ctx, job.PCMData, spectrogramPath, width, pr.settings.Realtime.Dashboard.Spectrogram.Raw); err != nil {
 		pr.logger.Error("Failed to generate spectrogram",
 			"worker_id", workerID,
 			"note_id", job.NoteID,
@@ -445,92 +443,6 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	pr.mu.Lock()
 	pr.stats.Completed++
 	pr.mu.Unlock()
-}
-
-// generateWithSox generates a spectrogram by feeding PCM data directly to Sox stdin.
-// This bypasses FFmpeg entirely, reducing CPU overhead and memory usage.
-func (pr *PreRenderer) generateWithSox(ctx context.Context, pcmData []byte, outputPath string, width int, raw bool) error {
-	soxBinary := pr.settings.Realtime.Audio.SoxPath
-	if soxBinary == "" {
-		return errors.Newf("sox binary not configured").
-			Component("spectrogram").
-			Category(errors.CategoryConfiguration).
-			Context("operation", "generate_with_sox").
-			Build()
-	}
-
-	// Ensure output directory exists using SecureFS (validates path automatically)
-	outputDir := filepath.Dir(outputPath)
-	if err := pr.sfs.MkdirAll(outputDir, 0o755); err != nil {
-		return errors.New(err).
-			Component("spectrogram").
-			Category(errors.CategoryFileIO).
-			Context("operation", "create_output_directory").
-			Context("output_dir", outputDir).
-			Context("output_path", outputPath).
-			Build()
-	}
-
-	// Calculate height (half of width for consistent aspect ratio)
-	height := width / 2
-	heightStr := strconv.Itoa(height)
-	widthStr := strconv.Itoa(width)
-
-	// Build Sox arguments for direct PCM input
-	// Format: sox -t raw -r 48000 -e signed -b 16 -c 1 - -n spectrogram -x WIDTH -y HEIGHT -o OUTPUT [-r]
-	args := []string{
-		"-t", "raw",              // Input type: raw/headerless PCM
-		"-r", "48000",            // Sample rate: 48kHz (conf.SampleRate)
-		"-e", "signed",           // Encoding: signed integer
-		"-b", "16",               // Bit depth: 16-bit (conf.BitDepth)
-		"-c", "1",                // Channels: mono
-		"-",                      // Read from stdin
-		"-n",                     // No audio output (null output)
-		"rate", "24k",            // Resample to 24kHz for spectrogram (matches existing behavior)
-		"spectrogram",            // Effect: spectrogram
-		"-x", widthStr,           // Width in pixels
-		"-y", heightStr,          // Height in pixels
-		"-o", outputPath,         // Output PNG file
-	}
-
-	// Add raw flag if requested (no axes/legend)
-	if raw {
-		args = append(args, "-r")
-	}
-
-	// Build command with low priority (nice -n 19 on Linux/macOS)
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
-		cmd = exec.CommandContext(ctx, soxBinary, args...)
-	} else {
-		// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
-		cmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", soxBinary}, args...)...)
-	}
-
-	// Prepare to feed PCM data to stdin
-	cmd.Stdin = bytes.NewReader(pcmData)
-
-	// Capture stderr for debugging
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	// Run command
-	if err := cmd.Run(); err != nil {
-		return errors.New(err).
-			Component("spectrogram").
-			Category(errors.CategorySystem).
-			Context("operation", "generate_with_sox").
-			Context("output_path", outputPath).
-			Context("width", width).
-			Context("height", height).
-			Context("raw", raw).
-			Context("sox_stderr", stderr.String()).
-			Context("pcm_bytes", len(pcmData)).
-			Build()
-	}
-
-	return nil
 }
 
 // GetStats returns a copy of the current statistics.
