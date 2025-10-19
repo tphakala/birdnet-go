@@ -1554,6 +1554,14 @@
       "filterControl": "Controle de filtro",
       "highPassFilter": "Controle de filtro passa-alta: {freq} Hz",
       "seekProgress": "Progresso de busca de áudio: {current} / {total} segundos"
+    },
+    "spectrogram": {
+      "notGenerated": "Espectrograma ainda não gerado",
+      "generate": "Gerar espectrograma",
+      "generateButton": "Gerar",
+      "generating": "Gerando...",
+      "generationFailed": "Falha ao gerar espectrograma",
+      "generationSuccess": "Espectrograma gerado com sucesso"
     }
   },
   "components": {

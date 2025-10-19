@@ -1546,6 +1546,14 @@
       "filterControl": "Suodattimen hallinta",
       "highPassFilter": "Ylipäästösuodattimen hallinta: {freq} Hz",
       "seekProgress": "Äänen eteneminen: {current} / {total} sekuntia"
+    },
+    "spectrogram": {
+      "notGenerated": "Spektrogrammia ei ole vielä generoitu",
+      "generate": "Generoi spektrogrammi",
+      "generateButton": "Generoi",
+      "generating": "Generoidaan...",
+      "generationFailed": "Spektrogrammin generointi epäonnistui",
+      "generationSuccess": "Spektrogrammi generoitu onnistuneesti"
     }
   },
   "components": {

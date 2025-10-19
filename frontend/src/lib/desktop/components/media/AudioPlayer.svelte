@@ -131,6 +131,11 @@
   let statusPollStartTime: number | undefined;
   let statusPollAbortController: AbortController | undefined;
 
+  // User-requested spectrogram generation state
+  let spectrogramNeedsGeneration = $state(false);
+  let isGeneratingSpectrogram = $state(false);
+  let generationError = $state<string | null>(null);
+
   // Audio processing state
   let audioContext: AudioContext | null = null;
   let audioNodes: {
@@ -469,8 +474,39 @@
     clearStatusPollTimer(); // Also clear status polling
   };
 
-  const handleSpectrogramError = (event: Event) => {
+  const handleSpectrogramError = async (event: Event) => {
     const img = event.currentTarget as HTMLImageElement;
+
+    // Check if this is user-requested mode (only on first error)
+    if (spectrogramRetryCount === 0 && spectrogramUrl) {
+      try {
+        const response = await fetch(spectrogramUrl, { method: 'HEAD' });
+        if (response.status === 404) {
+          // Try to get JSON error details
+          const getResponse = await fetch(spectrogramUrl);
+          if (getResponse.status === 404) {
+            const data = await getResponse.json();
+            if (data.mode === 'user-requested') {
+              // User-requested mode - show generate button instead of error
+              logger.debug('Spectrogram not generated in user-requested mode', {
+                detectionId,
+              });
+              spectrogramNeedsGeneration = true;
+              spectrogramLoader.setLoading(false);
+              clearSpectrogramRetryTimer();
+              clearStatusPollTimer();
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        // If fetch fails, fall through to normal retry logic
+        logger.debug('Failed to check spectrogram mode, using retry logic', {
+          detectionId,
+          error: err,
+        });
+      }
+    }
 
     // Start polling for generation status on first error
     if (spectrogramRetryCount === 0) {
@@ -534,6 +570,60 @@
     if (spectrogramRetryTimer) {
       clearTimeout(spectrogramRetryTimer);
       spectrogramRetryTimer = undefined;
+    }
+  };
+
+  // Handle user-requested spectrogram generation
+  const handleGenerateSpectrogram = async () => {
+    if (isGeneratingSpectrogram) return; // Prevent double-click
+
+    isGeneratingSpectrogram = true;
+    generationError = null;
+
+    logger.info('User requested spectrogram generation', { detectionId });
+
+    try {
+      const generateUrl = `/api/v2/spectrogram/${detectionId}/generate?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`;
+      const response = await fetch(generateUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        throw new Error(errorData.message || `Generation failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      logger.info('Spectrogram generated successfully', {
+        detectionId,
+        path: data.path,
+      });
+
+      // Reset state and reload the spectrogram
+      spectrogramNeedsGeneration = false;
+      spectrogramRetryCount = 0;
+      spectrogramLoader.setLoading(true);
+
+      // Reload the image with cache-busting parameter
+      const img = document.querySelector(`#spectrogram-${detectionId}`) as HTMLImageElement;
+      if (img && spectrogramUrl) {
+        const url = new URL(spectrogramUrl, window.location.origin);
+        url.searchParams.set('t', Date.now().toString());
+        img.src = url.toString();
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate spectrogram';
+      generationError = errorMessage;
+      logger.error('Spectrogram generation failed', {
+        detectionId,
+        error: err,
+      });
+      spectrogramLoader.setError();
+    } finally {
+      isGeneratingSpectrogram = false;
     }
   };
 
