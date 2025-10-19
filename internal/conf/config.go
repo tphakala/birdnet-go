@@ -136,9 +136,9 @@ type Dashboard struct {
 // SpectrogramPreRender contains settings for background spectrogram pre-rendering.
 // Pre-rendering spectrograms during audio save eliminates UI lag when users access detections.
 type SpectrogramPreRender struct {
-	Enabled bool   `json:"enabled"` // Enable background pre-rendering (default: false, opt-in)
-	Size    string `json:"size"`    // Size to pre-render (see recommendations below)
-	Raw     bool   `json:"raw"`     // Generate raw spectrogram without axes/legend (default: true)
+	Enabled bool   `json:"enabled" mapstructure:"enabled"` // Enable background pre-rendering (default: false, opt-in)
+	Size    string `json:"size"    mapstructure:"size"`    // Size to pre-render (see recommendations below)
+	Raw     bool   `json:"raw"     mapstructure:"raw"`     // Generate raw spectrogram without axes/legend (default: true)
 }
 
 // Size recommendations for SpectrogramPreRender.Size:

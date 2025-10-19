@@ -27,7 +27,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observation"
-	"github.com/tphakala/birdnet-go/internal/spectrogram"
 )
 
 // Timeout and interval constants
@@ -110,10 +109,31 @@ type SaveAudioAction struct {
 	mu            sync.Mutex // Protect concurrent access to pcmData
 }
 
+// PreRenderJob represents a spectrogram pre-rendering task.
+// This is a local DTO to avoid direct coupling to spectrogram package types.
+type PreRenderJob struct {
+	PCMData   []byte    // Raw PCM data from memory (s16le, 48kHz, mono)
+	ClipPath  string    // Full absolute path to audio clip file
+	NoteID    uint      // For logging correlation
+	Timestamp time.Time // Job submission time
+}
+
+// Methods to expose fields (allows prerenderer to access without importing processor)
+func (j PreRenderJob) GetPCMData() []byte      { return j.PCMData }
+func (j PreRenderJob) GetClipPath() string     { return j.ClipPath }
+func (j PreRenderJob) GetNoteID() uint         { return j.NoteID }
+func (j PreRenderJob) GetTimestamp() time.Time { return j.Timestamp }
+
 // PreRendererSubmit is an interface for submitting pre-render jobs.
-// This avoids direct dependency on the spectrogram package.
+// Callers create PreRenderJob instances, and the implementation adapts them
+// to spectrogram-specific types at the boundary.
 type PreRendererSubmit interface {
-	Submit(job any) error
+	Submit(job interface {
+		GetPCMData() []byte
+		GetClipPath() string
+		GetNoteID() uint
+		GetTimestamp() time.Time
+	}) error
 	Stop() // Graceful shutdown
 }
 
@@ -814,10 +834,10 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 
 	// Submit for pre-rendering if enabled
 	if a.Settings.Realtime.Dashboard.Spectrogram.Enabled && a.PreRenderer != nil {
-		// Create spectrogram job using the actual type from spectrogram package
-		job := &spectrogram.Job{
+		// Create pre-render job using local DTO (avoids direct spectrogram dependency)
+		job := PreRenderJob{
 			PCMData:   a.pcmData,
-			ClipPath:  a.ClipName,
+			ClipPath:  outputPath, // Use full path to audio file
 			NoteID:    a.NoteID,
 			Timestamp: time.Now(),
 		}
@@ -828,7 +848,7 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 				"component", "analysis.processor.actions",
 				"detection_id", a.CorrelationID,
 				"note_id", a.NoteID,
-				"clip_name", a.ClipName,
+				"clip_path", outputPath,
 				"error", err,
 				"operation", "prerender_submit")
 		}

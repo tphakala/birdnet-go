@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -68,10 +69,16 @@ type PreRenderer struct {
 // Job represents a single spectrogram generation task.
 type Job struct {
 	PCMData   []byte    // Raw PCM data from memory (s16le, 48kHz, mono)
-	ClipPath  string    // Relative path to audio clip (for spectrogram naming)
+	ClipPath  string    // Full absolute path to audio clip; PNG path is derived by swapping extension
 	NoteID    uint      // For logging correlation
 	Timestamp time.Time // Job submission time
 }
+
+// Methods to match the interface (allows Job to be submitted directly in tests)
+func (j *Job) GetPCMData() []byte      { return j.PCMData }
+func (j *Job) GetClipPath() string     { return j.ClipPath }
+func (j *Job) GetNoteID() uint         { return j.NoteID }
+func (j *Job) GetTimestamp() time.Time { return j.Timestamp }
 
 // Stats tracks pre-rendering statistics.
 type Stats struct {
@@ -157,19 +164,19 @@ func (pr *PreRenderer) Stop() {
 
 // Submit queues a job for background processing.
 // Returns an error if the queue is full (non-blocking).
-// Accepts any to match the PreRendererSubmit interface in processor package.
-func (pr *PreRenderer) Submit(jobInterface any) error {
-	// Type assert to *Job
-	job, ok := jobInterface.(*Job)
-	if !ok {
-		pr.logger.Error("Invalid job type submitted to pre-renderer",
-			"type", fmt.Sprintf("%T", jobInterface))
-		return errors.Newf("invalid job type: expected *spectrogram.Job, got %T", jobInterface).
-			Component("spectrogram").
-			Category(errors.CategoryValidation).
-			Context("operation", "submit_job").
-			Context("received_type", fmt.Sprintf("%T", jobInterface)).
-			Build()
+// Accepts PreRenderJob from processor package to avoid circular dependency.
+func (pr *PreRenderer) Submit(jobDTO interface {
+	GetPCMData() []byte
+	GetClipPath() string
+	GetNoteID() uint
+	GetTimestamp() time.Time
+}) error {
+	// Convert DTO to internal Job type
+	job := &Job{
+		PCMData:   jobDTO.GetPCMData(),
+		ClipPath:  jobDTO.GetClipPath(),
+		NoteID:    jobDTO.GetNoteID(),
+		Timestamp: jobDTO.GetTimestamp(),
 	}
 
 	// Early check: skip if spectrogram already exists (avoid queueing duplicate jobs)
@@ -208,6 +215,59 @@ func (pr *PreRenderer) Submit(jobInterface any) error {
 		return nil
 	}
 
+	// Panic protection for concurrent channel close
+	defer func() {
+		if r := recover(); r != nil {
+			pr.logger.Error("Panic during job submission (channel likely closed)",
+				"note_id", job.NoteID,
+				"panic", r)
+			pr.mu.Lock()
+			pr.stats.Failed++
+			pr.mu.Unlock()
+		}
+	}()
+
+	// Use select with context check to avoid panic from closed channel
+	// Check if context is available and done before attempting send
+	if pr.ctx != nil {
+		select {
+		case <-pr.ctx.Done():
+			// Context cancelled, don't attempt to send
+			pr.logger.Debug("Pre-renderer context cancelled, rejecting job",
+				"note_id", job.NoteID)
+			pr.mu.Lock()
+			pr.stats.Failed++
+			pr.mu.Unlock()
+			return errors.New(pr.ctx.Err()).
+				Component("spectrogram").
+				Category(errors.CategorySystem).
+				Context("operation", "submit_job").
+				Context("note_id", job.NoteID).
+				Build()
+		case pr.jobs <- job:
+			pr.mu.Lock()
+			pr.stats.Queued++
+			pr.mu.Unlock()
+			return nil
+		default:
+			pr.logger.Warn("Pre-render queue full, dropping job",
+				"note_id", job.NoteID,
+				"clip_path", job.ClipPath,
+				"queue_size", defaultQueueSize)
+			pr.mu.Lock()
+			pr.stats.Failed++
+			pr.mu.Unlock()
+			return errors.Newf("pre-render queue full (size: %d)", defaultQueueSize).
+				Component("spectrogram").
+				Category(errors.CategorySystem).
+				Context("operation", "submit_job").
+				Context("note_id", job.NoteID).
+				Context("queue_size", defaultQueueSize).
+				Build()
+		}
+	}
+
+	// No context available (e.g., in tests), use simple select
 	select {
 	case pr.jobs <- job:
 		pr.mu.Lock()
@@ -219,6 +279,9 @@ func (pr *PreRenderer) Submit(jobInterface any) error {
 			"note_id", job.NoteID,
 			"clip_path", job.ClipPath,
 			"queue_size", defaultQueueSize)
+		pr.mu.Lock()
+		pr.stats.Failed++
+		pr.mu.Unlock()
 		return errors.Newf("pre-render queue full (size: %d)", defaultQueueSize).
 			Component("spectrogram").
 			Category(errors.CategorySystem).
@@ -330,6 +393,9 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 		"spectrogram_path", spectrogramPath,
 		"duration", time.Since(start))
 
+	// Allow GC to reclaim PCM buffer promptly
+	job.PCMData = nil
+
 	pr.mu.Lock()
 	pr.stats.Completed++
 	pr.mu.Unlock()
@@ -435,13 +501,16 @@ func (pr *PreRenderer) sizeToPixels(size string) (int, error) {
 	return width, nil
 }
 
-// GetValidSizes returns a list of valid size strings.
+// GetValidSizes returns a sorted list of valid size strings.
 // Useful for runtime validation in web UI.
+// Returns sizes in deterministic order for consistent UI/testing.
 func GetValidSizes() []string {
 	sizes := make([]string, 0, len(validSizes))
 	for size := range validSizes {
 		sizes = append(sizes, size)
 	}
+	// Sort for deterministic output
+	sort.Strings(sizes)
 	return sizes
 }
 

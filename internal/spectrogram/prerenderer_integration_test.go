@@ -6,9 +6,11 @@ package spectrogram
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -37,9 +39,9 @@ const (
 // Run with: go test -v -tags=integration ./internal/spectrogram/...
 func TestPreRenderer_RealSoxExecution(t *testing.T) {
 	// Check if Sox is available
-	soxPath := "/usr/bin/sox"
-	if _, err := os.Stat(soxPath); os.IsNotExist(err) {
-		t.Skip("Sox binary not found at /usr/bin/sox, skipping integration test")
+	soxPath, err := exec.LookPath("sox")
+	if err != nil {
+		t.Skip("Sox binary not found in PATH; skipping integration test")
 	}
 
 	// Create temp directory
@@ -113,20 +115,22 @@ func TestPreRenderer_RealSoxExecution(t *testing.T) {
 		case <-ticker.C:
 			if _, err := os.Stat(spectrogramPath); err == nil {
 				// File exists, verify it's a valid PNG
-				data, err := os.ReadFile(spectrogramPath)
+				f, err := os.Open(spectrogramPath)
 				if err != nil {
-					t.Fatalf("Failed to read spectrogram: %v", err)
+					t.Fatalf("Failed to open spectrogram: %v", err)
 				}
+				defer f.Close()
 
 				// Check PNG magic number (first 8 bytes: 89 50 4E 47 0D 0A 1A 0A)
-				if len(data) < 8 {
-					t.Fatalf("Spectrogram file too small: %d bytes", len(data))
+				hdr := make([]byte, 8)
+				if _, err := io.ReadFull(f, hdr); err != nil {
+					t.Fatalf("Failed to read PNG header: %v", err)
 				}
 
 				pngMagic := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
 				for i, b := range pngMagic {
-					if data[i] != b {
-						t.Fatalf("Invalid PNG magic number at byte %d: got 0x%02X, want 0x%02X", i, data[i], b)
+					if hdr[i] != b {
+						t.Fatalf("Invalid PNG magic number at byte %d: got 0x%02X, want 0x%02X", i, hdr[i], b)
 					}
 				}
 
@@ -151,9 +155,9 @@ func TestPreRenderer_RealSoxExecution(t *testing.T) {
 // Run with: go test -v -race -tags=integration ./internal/spectrogram/...
 func TestPreRenderer_ConcurrentProcessing(t *testing.T) {
 	// Check if Sox is available
-	soxPath := "/usr/bin/sox"
-	if _, err := os.Stat(soxPath); os.IsNotExist(err) {
-		t.Skip("Sox binary not found at /usr/bin/sox, skipping integration test")
+	soxPath, err := exec.LookPath("sox")
+	if err != nil {
+		t.Skip("Sox binary not found in PATH; skipping integration test")
 	}
 
 	// Create temp directory
@@ -248,9 +252,9 @@ func TestPreRenderer_ConcurrentProcessing(t *testing.T) {
 // TestPreRenderer_GracefulShutdownUnderLoad tests shutdown with active jobs
 func TestPreRenderer_GracefulShutdownUnderLoad(t *testing.T) {
 	// Check if Sox is available
-	soxPath := "/usr/bin/sox"
-	if _, err := os.Stat(soxPath); os.IsNotExist(err) {
-		t.Skip("Sox binary not found at /usr/bin/sox, skipping integration test")
+	soxPath, err := exec.LookPath("sox")
+	if err != nil {
+		t.Skip("Sox binary not found in PATH; skipping integration test")
 	}
 
 	// Create temp directory
@@ -318,9 +322,9 @@ func TestPreRenderer_GracefulShutdownUnderLoad(t *testing.T) {
 // TestPreRenderer_QueueOverflow tests behavior when submitting more jobs than queue size
 func TestPreRenderer_QueueOverflow(t *testing.T) {
 	// Check if Sox is available
-	soxPath := "/usr/bin/sox"
-	if _, err := os.Stat(soxPath); os.IsNotExist(err) {
-		t.Skip("Sox binary not found at /usr/bin/sox, skipping integration test")
+	soxPath, err := exec.LookPath("sox")
+	if err != nil {
+		t.Skip("Sox binary not found in PATH; skipping integration test")
 	}
 
 	// Create temp directory

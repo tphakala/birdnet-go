@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -1531,11 +1532,17 @@ func (p *Processor) initPreRenderer() {
 			return
 		}
 
-		// Validate Sox binary is available
+		// Validate Sox binary is configured and exists
 		if p.Settings.Realtime.Audio.SoxPath == "" {
 			GetLogger().Error("Sox binary not configured, disabling pre-rendering",
 				"operation", "prerenderer_init")
-			log.Printf("❌ Sox binary not found, pre-rendering disabled")
+			return
+		}
+		if _, err := os.Stat(p.Settings.Realtime.Audio.SoxPath); err != nil {
+			GetLogger().Error("Sox binary not found, disabling pre-rendering",
+				"path", p.Settings.Realtime.Audio.SoxPath,
+				"error", err,
+				"operation", "prerenderer_init")
 			return
 		}
 
@@ -1562,6 +1569,5 @@ func (p *Processor) initPreRenderer() {
 			"size", p.Settings.Realtime.Dashboard.Spectrogram.Size,
 			"raw", p.Settings.Realtime.Dashboard.Spectrogram.Raw,
 			"operation", "prerenderer_init")
-		log.Printf("✅ Spectrogram pre-renderer enabled (size=%s, raw=%v)", size, p.Settings.Realtime.Dashboard.Spectrogram.Raw)
 	})
 }

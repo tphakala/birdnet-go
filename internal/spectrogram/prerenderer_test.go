@@ -88,21 +88,6 @@ func TestPreRenderer_BuildSpectrogramPath(t *testing.T) {
 	}
 }
 
-// TestPreRenderer_Submit_InvalidJobType tests type assertion in Submit
-func TestPreRenderer_Submit_InvalidJobType(t *testing.T) {
-	// Create minimal PreRenderer
-	pr := &PreRenderer{
-		logger: slog.Default(),
-		jobs:   make(chan *Job, 10),
-	}
-
-	// Submit invalid type
-	err := pr.Submit("not a job")
-	if err == nil {
-		t.Error("Submit() expected error for invalid type, got nil")
-	}
-}
-
 // TestPreRenderer_Submit_FileAlreadyExists tests early file existence check
 func TestPreRenderer_Submit_FileAlreadyExists(t *testing.T) {
 	// Create temp directory
