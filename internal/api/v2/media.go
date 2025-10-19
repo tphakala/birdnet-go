@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1443,7 +1442,7 @@ func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectr
 func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, absSpectrogramPath, spectrogramKey string, width int, raw bool) error {
 	generationStart := time.Now()
 
-	getSpectrogramLogger().Debug("Starting spectrogram generation using shared generator",
+	getSpectrogramLogger().Debug("Starting spectrogram generation via shared generator",
 		"spectrogram_key", spectrogramKey,
 		"abs_audio_path", absAudioPath,
 		"width", width,
@@ -1460,7 +1459,7 @@ func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, abs
 		return err
 	}
 
-	getSpectrogramLogger().Debug("Spectrogram generation successful",
+	getSpectrogramLogger().Debug("Spectrogram generation completed via shared generator",
 		"spectrogram_key", spectrogramKey,
 		"abs_audio_path", absAudioPath,
 		"generation_duration_ms", time.Since(generationStart).Milliseconds())
@@ -1579,103 +1578,10 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	return relSpectrogramPath, nil
 }
 
-// --- Spectrogram Generation Helpers ---
-
-// waitWithTimeout waits for a command to finish with a timeout to prevent zombie processes.
-// This function ensures proper process cleanup even on resource-constrained devices.
-// It uses a goroutine with timeout to prevent indefinite blocking on Wait().
-//
-// Channel buffer size of 1 is critical: it ensures the goroutine can exit even if the
-// timeout fires, preventing goroutine leaks. Without the buffer, if timeout occurs before
-// Wait() completes, the goroutine would block forever on the channel send.
-func waitWithTimeout(cmd *exec.Cmd, timeout time.Duration, logger *slog.Logger) {
-	// Store PID early to prevent potential nil pointer panic in logging
-	pid := -1
-	if cmd.Process != nil {
-		pid = cmd.Process.Pid
-	}
-
-	// Buffer size 1 ensures goroutine can exit even if timeout fires (prevents leak)
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil && logger != nil {
-			logger.Debug("Process wait completed with error",
-				"pid", pid,
-				"error", err.Error())
-		}
-	case <-time.After(timeout):
-		if logger != nil {
-			logger.Warn("Process wait timed out, process may become zombie",
-				"pid", pid,
-				"timeout_seconds", timeout.Seconds())
-		}
-		// Even after timeout, try one more time with Kill to clean up
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-			// Try to reap the zombie with a short timeout
-			select {
-			case <-done:
-			case <-time.After(1 * time.Second):
-				if logger != nil {
-					logger.Error("Failed to reap process after kill, zombie process likely",
-						"pid", pid)
-				}
-			}
-		}
-	}
-}
-
-// waitWithTimeoutErr is like waitWithTimeout but returns an error.
-// This allows the caller to handle the error appropriately.
-//
-// Channel buffer size of 1 is critical: it ensures the goroutine can exit even if the
-// timeout fires, preventing goroutine leaks. Without the buffer, if timeout occurs before
-// Wait() completes, the goroutine would block forever on the channel send.
-func waitWithTimeoutErr(cmd *exec.Cmd, timeout time.Duration, logger *slog.Logger) error {
-	// Store PID early to prevent potential nil pointer panic in logging
-	pid := -1
-	if cmd.Process != nil {
-		pid = cmd.Process.Pid
-	}
-
-	// Buffer size 1 ensures goroutine can exit even if timeout fires (prevents leak)
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
-
-	select {
-	case err := <-done:
-		return err
-	case <-time.After(timeout):
-		if logger != nil {
-			logger.Warn("Process wait timed out",
-				"pid", pid,
-				"timeout_seconds", timeout.Seconds())
-		}
-		// Try to kill the process
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-			// Give it one more chance to exit
-			select {
-			case err := <-done:
-				return fmt.Errorf("process wait timed out after %v (killed, exit error: %w)", timeout, err)
-			case <-time.After(1 * time.Second):
-				return fmt.Errorf("process wait timed out after %v and failed to kill", timeout)
-			}
-		}
-		return fmt.Errorf("process wait timed out after %v", timeout)
-	}
-}
-
-// Note: createSpectrogramWithSoX, getSoxSpectrogramArgs, and createSpectrogramWithFFmpeg
-// have been removed. All spectrogram generation now uses the shared generator from
-// internal/spectrogram/generator.go via c.spectrogramGenerator.GenerateFromFile().
+// Note: createSpectrogramWithSoX, getSoxSpectrogramArgs, createSpectrogramWithFFmpeg,
+// waitWithTimeout, and waitWithTimeoutErr have been removed. All spectrogram generation
+// now uses the shared generator from internal/spectrogram/generator.go via
+// c.spectrogramGenerator.GenerateFromFile().
 
 // GetSpeciesImage serves an image for a bird species by scientific name
 func (c *Controller) GetSpeciesImage(ctx echo.Context) error {

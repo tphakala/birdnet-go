@@ -101,9 +101,8 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 	exportPath := settings.Realtime.Audio.Export.Path
 	sfs, err := securefs.New(exportPath)
 	if err != nil {
-		logger.Printf("Warning: Failed to initialize SecureFS for spectrograms: %v", err)
-		// Continue without SecureFS - generation will still work but without path validation
-		sfs = nil
+		// SecureFS is essential for secure path validation - fail fast
+		logger.Fatalf("Failed to initialize SecureFS for spectrograms: %v. Export path: %s", err, exportPath)
 	}
 
 	// Initialize spectrogram generator with shared generation logic

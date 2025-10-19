@@ -208,7 +208,7 @@ func TestGenerator_GetSoxArgs(t *testing.T) {
 	audioPath := filepath.Join(tempDir, "test.wav")
 	outputPath := filepath.Join(tempDir, "test.png")
 
-	args := gen.getSoxArgs(audioPath, outputPath, 800, false, SoxInputFile)
+	args := gen.getSoxArgs(context.Background(), audioPath, outputPath, 800, false, SoxInputFile)
 
 	// First argument should be the audio file path
 	if len(args) == 0 || args[0] != audioPath {

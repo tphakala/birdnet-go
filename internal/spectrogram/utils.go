@@ -88,7 +88,7 @@ func BuildSpectrogramPath(clipPath string) (string, error) {
 			Build()
 	}
 
-	spectrogramPath := clipPath[:len(clipPath)-len(ext)] + ".png"
+	spectrogramPath := strings.TrimSuffix(clipPath, ext) + ".png"
 	return spectrogramPath, nil
 }
 
@@ -110,6 +110,14 @@ func BuildSpectrogramPathWithParams(audioPath string, width int, raw bool) (stri
 
 	// Build filename with parameters
 	ext := filepath.Ext(audioPath)
+	if ext == "" {
+		return "", errors.Newf("audio path has no extension").
+			Component("spectrogram").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_spectrogram_path_with_params").
+			Context("audio_path", audioPath).
+			Build()
+	}
 	baseName := strings.TrimSuffix(audioPath, ext)
 
 	suffix := fmt.Sprintf(".%s", sizeStr)

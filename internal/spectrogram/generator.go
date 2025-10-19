@@ -31,6 +31,12 @@ const (
 
 	// durationCacheTTL is how long duration cache entries remain valid
 	durationCacheTTL = 10 * time.Minute
+
+	// ffmpegGain controls the gain parameter for FFmpeg showspectrumpic filter
+	ffmpegGain = "3"
+
+	// ffmpegDrange controls the dynamic range parameter for FFmpeg showspectrumpic filter
+	ffmpegDrange = "100"
 )
 
 // durationCacheEntry stores cached audio duration with file validation info
@@ -69,6 +75,9 @@ type Generator struct {
 
 // NewGenerator creates a new generator instance.
 func NewGenerator(settings *conf.Settings, sfs *securefs.SecureFS, logger *slog.Logger) *Generator {
+	if logger != nil {
+		logger = logger.With("component", "spectrogram")
+	}
 	return &Generator{
 		settings: settings,
 		sfs:      sfs,
@@ -97,6 +106,31 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 		"output_path", outputPath,
 		"width", width,
 		"raw", raw)
+
+	// Validate inputs before filesystem operations
+	if outputPath == "" {
+		return errors.Newf("output path is empty").
+			Component("spectrogram").
+			Category(errors.CategoryValidation).
+			Context("operation", "generate_from_file").
+			Build()
+	}
+	if !filepath.IsAbs(outputPath) {
+		return errors.Newf("output path must be absolute").
+			Component("spectrogram").
+			Category(errors.CategoryValidation).
+			Context("operation", "generate_from_file").
+			Context("output_path", outputPath).
+			Build()
+	}
+	if width <= 0 {
+		return errors.Newf("width must be positive").
+			Component("spectrogram").
+			Category(errors.CategoryValidation).
+			Context("operation", "generate_from_file").
+			Context("width", width).
+			Build()
+	}
 
 	// Ensure output directory exists using SecureFS (validates path automatically)
 	if err := g.ensureOutputDirectory(outputPath); err != nil {
@@ -146,6 +180,38 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 		"pcm_bytes", len(pcmData),
 		"width", width,
 		"raw", raw)
+
+	// Validate inputs before filesystem operations
+	if outputPath == "" {
+		return errors.Newf("output path is empty").
+			Component("spectrogram").
+			Category(errors.CategoryValidation).
+			Context("operation", "generate_from_pcm").
+			Build()
+	}
+	if !filepath.IsAbs(outputPath) {
+		return errors.Newf("output path must be absolute").
+			Component("spectrogram").
+			Category(errors.CategoryValidation).
+			Context("operation", "generate_from_pcm").
+			Context("output_path", outputPath).
+			Build()
+	}
+	if width <= 0 {
+		return errors.Newf("width must be positive").
+			Component("spectrogram").
+			Category(errors.CategoryValidation).
+			Context("operation", "generate_from_pcm").
+			Context("width", width).
+			Build()
+	}
+	if len(pcmData) == 0 {
+		return errors.Newf("PCM data is empty").
+			Component("spectrogram").
+			Category(errors.CategoryValidation).
+			Context("operation", "generate_from_pcm").
+			Build()
+	}
 
 	// Ensure output directory exists using SecureFS (validates path automatically)
 	if err := g.ensureOutputDirectory(outputPath); err != nil {
@@ -215,7 +281,7 @@ func (g *Generator) generateWithSoxDirect(ctx context.Context, audioPath, output
 	}
 
 	// Build Sox arguments for file input
-	soxArgs := g.getSoxArgs(audioPath, outputPath, width, raw, SoxInputFile)
+	soxArgs := g.getSoxArgs(ctx, audioPath, outputPath, width, raw, SoxInputFile)
 
 	g.logger.Debug("Executing SoX command directly",
 		"sox_binary", soxBinary,
@@ -332,7 +398,9 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 	defer func() {
 		// Ensure Sox process is cleaned up to prevent zombies
 		if !soxWaitDone && soxCmd.Process != nil {
-			g.waitWithTimeout(soxCmd, 5*time.Second)
+			// Use remaining context time or 30s fallback instead of hard 5s
+			timeout := computeRemainingTimeout(ctx, 30*time.Second)
+			g.waitWithTimeout(soxCmd, timeout)
 		}
 	}()
 
@@ -361,7 +429,9 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 	runtime.Gosched()
 
 	// FFmpeg succeeded - wait for Sox to finish processing
-	soxWaitErr := g.waitWithTimeoutErr(soxCmd, 5*time.Second)
+	// Use remaining context time or 30s fallback instead of hard 5s
+	timeout := computeRemainingTimeout(ctx, 30*time.Second)
+	soxWaitErr := g.waitWithTimeoutErr(soxCmd, timeout)
 	soxWaitDone = true
 
 	if soxWaitErr != nil {
@@ -465,10 +535,10 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPat
 	var filterStr string
 	if raw {
 		// Raw spectrogram without frequency/time axes and legends
-		filterStr = fmt.Sprintf("showspectrumpic=s=%dx%d:legend=0:gain=3:drange=100", width, height)
+		filterStr = fmt.Sprintf("showspectrumpic=s=%dx%d:legend=0:gain=%s:drange=%s", width, height, ffmpegGain, ffmpegDrange)
 	} else {
 		// Standard spectrogram with frequency/time axes and legends
-		filterStr = fmt.Sprintf("showspectrumpic=s=%dx%d:legend=1:gain=3:drange=100", width, height)
+		filterStr = fmt.Sprintf("showspectrumpic=s=%dx%d:legend=1:gain=%s:drange=%s", width, height, ffmpegGain, ffmpegDrange)
 	}
 
 	ffmpegArgs := []string{
@@ -511,13 +581,13 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPat
 
 // getSoxArgs builds Sox arguments for file input.
 // Used when Sox can directly read the audio file.
-func (g *Generator) getSoxArgs(audioPath, outputPath string, width int, raw bool, inputType SoxInputType) []string {
+func (g *Generator) getSoxArgs(ctx context.Context, audioPath, outputPath string, width int, raw bool, inputType SoxInputType) []string {
 	var args []string
 	if inputType == SoxInputFile {
 		args = []string{audioPath}
 	}
 
-	args = append(args, g.getSoxSpectrogramArgs(context.Background(), audioPath, outputPath, width, raw)...)
+	args = append(args, g.getSoxSpectrogramArgs(ctx, audioPath, outputPath, width, raw)...)
 	return args
 }
 
@@ -591,6 +661,19 @@ func (g *Generator) ensureOutputDirectory(outputPath string) error {
 			Build()
 	}
 	return nil
+}
+
+// computeRemainingTimeout computes the remaining time until context deadline.
+// If ctx has no deadline or remaining time is <= 0, returns the fallback duration.
+// This ensures cleanup operations respect the caller's timeout constraints.
+func computeRemainingTimeout(ctx context.Context, fallback time.Duration) time.Duration {
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline)
+		if remaining > 0 {
+			return remaining
+		}
+	}
+	return fallback
 }
 
 // waitWithTimeout waits for a command to finish with a timeout.
