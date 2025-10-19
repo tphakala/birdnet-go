@@ -5,6 +5,7 @@ package spectrogram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -143,7 +144,12 @@ func TestPreRenderer_RealSoxExecution(t *testing.T) {
 					t.Errorf("Expected 0 failed jobs, got %d", stats.Failed)
 				}
 
-				t.Logf("Successfully generated spectrogram: %s (%d bytes)", spectrogramPath, len(data))
+				// Log file size
+				if fi, err := f.Stat(); err == nil {
+					t.Logf("Successfully generated spectrogram: %s (%d bytes)", spectrogramPath, fi.Size())
+				} else {
+					t.Logf("Successfully generated spectrogram: %s", spectrogramPath)
+				}
 				return // Test passed
 			}
 			// File doesn't exist yet, continue waiting
@@ -376,7 +382,7 @@ func TestPreRenderer_QueueOverflow(t *testing.T) {
 		}
 
 		if err := pr.Submit(job); err != nil {
-			if err.Error() == "pre-render queue full" {
+			if errors.Is(err, ErrQueueFull) {
 				queueFull++
 			} else {
 				t.Errorf("Unexpected error submitting job %d: %v", i, err)

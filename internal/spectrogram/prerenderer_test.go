@@ -14,6 +14,8 @@ import (
 
 // TestPreRenderer_SizeToPixels tests the size string to pixel width conversion
 func TestPreRenderer_SizeToPixels(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		size      string
@@ -32,6 +34,7 @@ func TestPreRenderer_SizeToPixels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			gotWidth, err := pr.sizeToPixels(tt.size)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("sizeToPixels() error = %v, wantErr %v", err, tt.wantErr)
@@ -46,6 +49,8 @@ func TestPreRenderer_SizeToPixels(t *testing.T) {
 
 // TestPreRenderer_BuildSpectrogramPath tests spectrogram path building
 func TestPreRenderer_BuildSpectrogramPath(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		clipPath  string
@@ -76,6 +81,7 @@ func TestPreRenderer_BuildSpectrogramPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			gotPath, err := pr.buildSpectrogramPath(tt.clipPath)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("buildSpectrogramPath() error = %v, wantErr %v", err, tt.wantErr)

@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1509,21 +1510,24 @@ func generateRandomHex(length int) string {
 	return hex
 }
 
+// Compile-time assertion to ensure *spectrogram.PreRenderer implements PreRendererSubmit
+var _ PreRendererSubmit = (*spectrogram.PreRenderer)(nil)
+
 // initPreRenderer initializes the spectrogram pre-renderer if enabled.
 // This is called during processor initialization if spectrogram pre-rendering is enabled in settings.
 func (p *Processor) initPreRenderer() {
 	p.preRendererOnce.Do(func() {
+		// Validate export path
+		if p.Settings.Realtime.Audio.Export.Path == "" {
+			GetLogger().Error("Export path not configured, disabling pre-rendering",
+				"operation", "prerenderer_init")
+			return
+		}
+
 		// Validate spectrogram size configuration early using shared validation
 		size := p.Settings.Realtime.Dashboard.Spectrogram.Size
 		validSizesList := spectrogram.GetValidSizes()
-		isValid := false
-		for _, s := range validSizesList {
-			if s == size {
-				isValid = true
-				break
-			}
-		}
-		if !isValid {
+		if !slices.Contains(validSizesList, size) {
 			GetLogger().Error("Invalid spectrogram size, disabling pre-rendering",
 				"size", size,
 				"valid_sizes", validSizesList,

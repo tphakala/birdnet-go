@@ -21,6 +21,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
+// Sentinel errors for stable error checking
+var (
+	ErrQueueFull = fmt.Errorf("pre-render queue full")
+)
+
 const (
 	// Worker pool size - conservative for background processing
 	defaultWorkers = 2
@@ -257,7 +262,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 			pr.mu.Lock()
 			pr.stats.Failed++
 			pr.mu.Unlock()
-			return errors.Newf("pre-render queue full (size: %d)", defaultQueueSize).
+			return errors.New(fmt.Errorf("%w (size: %d)", ErrQueueFull, defaultQueueSize)).
 				Component("spectrogram").
 				Category(errors.CategorySystem).
 				Context("operation", "submit_job").
@@ -282,7 +287,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 		pr.mu.Lock()
 		pr.stats.Failed++
 		pr.mu.Unlock()
-		return errors.Newf("pre-render queue full (size: %d)", defaultQueueSize).
+		return errors.New(fmt.Errorf("%w (size: %d)", ErrQueueFull, defaultQueueSize)).
 			Component("spectrogram").
 			Category(errors.CategorySystem).
 			Context("operation", "submit_job").
