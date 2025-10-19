@@ -47,7 +47,6 @@
         },
         summaryLimit: 100,
         newUI: false,
-        spectrogram: DEFAULT_SPECTROGRAM_SETTINGS,
       }),
       locale: $dashboardSettings?.locale ?? (getLocale() as string),
       newUI: $dashboardSettings?.newUI ?? false,
