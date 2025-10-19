@@ -94,6 +94,11 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dashboard.locale", "en") // Default UI locale
 	viper.SetDefault("realtime.dashboard.newui", false) // Enable redirect from old HTMX UI to new Svelte UI
 
+	// Spectrogram pre-rendering configuration
+	viper.SetDefault("realtime.dashboard.spectrogram.enabled", false) // Opt-in for safety
+	viper.SetDefault("realtime.dashboard.spectrogram.size", "sm")     // 400px, matches frontend RecentDetectionsCard
+	viper.SetDefault("realtime.dashboard.spectrogram.raw", true)      // Raw spectrogram (no axes/legend)
+
 	// Retention policy configuration
 	viper.SetDefault("realtime.audio.export.retention.enabled", true)
 	viper.SetDefault("realtime.audio.export.retention.debug", false)

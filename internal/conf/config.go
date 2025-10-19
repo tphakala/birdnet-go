@@ -126,11 +126,30 @@ type Thumbnails struct {
 
 // Dashboard contains settings for the web dashboard.
 type Dashboard struct {
-	Thumbnails   Thumbnails `json:"thumbnails"`       // thumbnails settings
-	SummaryLimit int        `json:"summaryLimit"`     // limit for the number of species shown in the summary table
-	Locale       string     `json:"locale,omitempty"` // UI locale setting
-	NewUI        bool       `json:"newUI"`            // Enable redirect from old HTMX UI to new Svelte UI
+	Thumbnails   Thumbnails           `json:"thumbnails"`       // thumbnails settings
+	SummaryLimit int                  `json:"summaryLimit"`     // limit for the number of species shown in the summary table
+	Locale       string               `json:"locale,omitempty"` // UI locale setting
+	NewUI        bool                 `json:"newUI"`            // Enable redirect from old HTMX UI to new Svelte UI
+	Spectrogram  SpectrogramPreRender `json:"spectrogram"`      // Spectrogram pre-rendering settings
 }
+
+// SpectrogramPreRender contains settings for background spectrogram pre-rendering.
+// Pre-rendering spectrograms during audio save eliminates UI lag when users access detections.
+type SpectrogramPreRender struct {
+	Enabled bool   `json:"enabled" mapstructure:"enabled"` // Enable background pre-rendering (default: false, opt-in)
+	Size    string `json:"size"    mapstructure:"size"`    // Size to pre-render (see recommendations below)
+	Raw     bool   `json:"raw"     mapstructure:"raw"`     // Generate raw spectrogram without axes/legend (default: true)
+}
+
+// Size recommendations for SpectrogramPreRender.Size:
+//
+//	"sm" (400px)  - Recommended. Used by recent detections card and detections list view
+//	"md" (800px)  - Not currently used by web UI
+//	"lg" (1000px) - Used by detailed detection view in web UI
+//	"xl" (1200px) - Not currently used by web UI
+//
+// Choose "sm" for optimal performance - it covers the most common UI views and minimizes
+// storage and processing overhead. Only use "lg" if detailed view performance is critical.
 
 // DynamicThresholdSettings contains settings for dynamic threshold adjustment.
 type DynamicThresholdSettings struct {

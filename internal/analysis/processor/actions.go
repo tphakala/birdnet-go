@@ -91,6 +91,7 @@ type DatabaseAction struct {
 	EventTracker      *EventTracker
 	NewSpeciesTracker *species.SpeciesTracker // Add reference to new species tracker
 	processor         *Processor              // Add reference to processor for source name resolution
+	PreRenderer       PreRendererSubmit       // Spectrogram pre-renderer
 	Description       string
 	CorrelationID     string     // Detection correlation ID for log tracking
 	mu                sync.Mutex // Protect concurrent access to Note and Results
@@ -100,10 +101,40 @@ type SaveAudioAction struct {
 	Settings      *conf.Settings
 	ClipName      string
 	pcmData       []byte
+	NoteID        uint               // Note ID for correlation logging with pre-renderer
+	PreRenderer   PreRendererSubmit  // Injected from processor
 	EventTracker  *EventTracker
 	Description   string
 	CorrelationID string     // Detection correlation ID for log tracking
 	mu            sync.Mutex // Protect concurrent access to pcmData
+}
+
+// PreRenderJob represents a spectrogram pre-rendering task.
+// This is a local DTO to avoid direct coupling to spectrogram package types.
+type PreRenderJob struct {
+	PCMData   []byte    // Raw PCM data from memory (s16le, 48kHz, mono)
+	ClipPath  string    // Full absolute path to audio clip file
+	NoteID    uint      // For logging correlation
+	Timestamp time.Time // Job submission time
+}
+
+// Methods to expose fields (allows prerenderer to access without importing processor)
+func (j PreRenderJob) GetPCMData() []byte      { return j.PCMData }
+func (j PreRenderJob) GetClipPath() string     { return j.ClipPath }
+func (j PreRenderJob) GetNoteID() uint         { return j.NoteID }
+func (j PreRenderJob) GetTimestamp() time.Time { return j.Timestamp }
+
+// PreRendererSubmit is an interface for submitting pre-render jobs.
+// Callers create PreRenderJob instances, and the implementation adapts them
+// to spectrogram-specific types at the boundary.
+type PreRendererSubmit interface {
+	Submit(job interface {
+		GetPCMData() []byte
+		GetClipPath() string
+		GetNoteID() uint
+		GetTimestamp() time.Time
+	}) error
+	Stop() // Graceful shutdown
 }
 
 type BirdWeatherAction struct {
@@ -586,9 +617,12 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 
 		// Create a SaveAudioAction and execute it
 		saveAudioAction := &SaveAudioAction{
-			Settings: a.Settings,
-			ClipName: a.Note.ClipName,
-			pcmData:  pcmData,
+			Settings:      a.Settings,
+			ClipName:      a.Note.ClipName,
+			pcmData:       pcmData,
+			NoteID:        a.Note.ID,
+			PreRenderer:   a.PreRenderer,
+			CorrelationID: a.CorrelationID,
 		}
 
 		if err := saveAudioAction.Execute(nil); err != nil {
@@ -795,6 +829,28 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 				"operation", "ffmpeg_export")
 			log.Printf("❌ Error exporting audio clip with FFmpeg")
 			return err
+		}
+	}
+
+	// Submit for pre-rendering if enabled
+	if a.Settings.Realtime.Dashboard.Spectrogram.Enabled && a.PreRenderer != nil {
+		// Create pre-render job using local DTO (avoids direct spectrogram dependency)
+		job := PreRenderJob{
+			PCMData:   a.pcmData,
+			ClipPath:  outputPath, // Use full path to audio file
+			NoteID:    a.NoteID,
+			Timestamp: time.Now(),
+		}
+
+		// Non-blocking submission - errors logged but don't fail action
+		if err := a.PreRenderer.Submit(job); err != nil {
+			GetLogger().Warn("Failed to submit spectrogram pre-render job",
+				"component", "analysis.processor.actions",
+				"detection_id", a.CorrelationID,
+				"note_id", a.NoteID,
+				"clip_path", outputPath,
+				"error", err,
+				"operation", "prerender_submit")
 		}
 	}
 
