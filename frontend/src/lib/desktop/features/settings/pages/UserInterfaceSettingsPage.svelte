@@ -41,9 +41,19 @@
         },
         summaryLimit: 100,
         newUI: false,
+        spectrogram: {
+          enabled: false,
+          size: 'sm',
+          raw: true,
+        },
       }),
       locale: $dashboardSettings?.locale || (getLocale() as string),
       newUI: $dashboardSettings?.newUI || false,
+      spectrogram: $dashboardSettings?.spectrogram || {
+        enabled: false,
+        size: 'sm',
+        raw: true,
+      },
     },
   });
 
@@ -152,6 +162,15 @@
       dashboard: {
         ...settings.dashboard,
         thumbnails: { ...settings.dashboard.thumbnails, [key]: value },
+      },
+    });
+  }
+
+  function updateSpectrogramSetting(key: string, value: any) {
+    settingsActions.updateSection('realtime', {
+      dashboard: {
+        ...settings.dashboard,
+        spectrogram: { ...settings.dashboard.spectrogram, [key]: value },
       },
     });
   }
@@ -293,6 +312,25 @@
               />
             {/if}
           </div>
+        </div>
+      </div>
+
+      <!-- Spectrogram Pre-Rendering Settings -->
+      <div>
+        <h4 class="text-lg font-medium pb-2 mt-6">
+          {t('settings.main.sections.userInterface.dashboard.spectrogram.title')}
+        </h4>
+
+        <div class="space-y-4">
+          <Checkbox
+            checked={settings.dashboard.spectrogram?.enabled ?? false}
+            label={t('settings.main.sections.userInterface.dashboard.spectrogram.enabled.label')}
+            helpText={t(
+              'settings.main.sections.userInterface.dashboard.spectrogram.enabled.helpText'
+            )}
+            disabled={store.isLoading || store.isSaving}
+            onchange={value => updateSpectrogramSetting('enabled', value)}
+          />
         </div>
       </div>
     </div>

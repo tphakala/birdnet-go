@@ -368,6 +368,7 @@ export interface Dashboard {
   summaryLimit: number;
   locale?: string; // UI locale setting
   newUI?: boolean; // Enable redirect from old HTMX UI to new Svelte UI
+  spectrogram?: SpectrogramPreRender; // Spectrogram pre-rendering settings
 }
 
 export interface Thumbnails {
@@ -376,6 +377,14 @@ export interface Thumbnails {
   recent: boolean;
   imageProvider: string;
   fallbackPolicy: string;
+}
+
+// SpectrogramPreRender contains settings for background spectrogram pre-rendering.
+// Pre-rendering spectrograms during audio save eliminates UI lag when users access detections.
+export interface SpectrogramPreRender {
+  enabled: boolean; // Enable background pre-rendering (default: false, opt-in)
+  size: string; // Size to pre-render (sm=400px, md=800px, lg=1000px, xl=1200px)
+  raw: boolean; // Generate raw spectrogram without axes/legend (default: true)
 }
 
 // Log config
@@ -588,6 +597,11 @@ function createEmptySettings(): SettingsFormData {
         },
         summaryLimit: 100,
         newUI: false,
+        spectrogram: {
+          enabled: false,
+          size: 'sm',
+          raw: true,
+        },
       },
     },
     webServer: {},
