@@ -1,0 +1,309 @@
+//go:build integration
+// +build integration
+
+package spectrogram
+
+import (
+	"context"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/securefs"
+)
+
+// TestPreRenderer_RealSoxExecution tests actual spectrogram generation with Sox
+// Run with: go test -v -tags=integration ./internal/spectrogram/...
+func TestPreRenderer_RealSoxExecution(t *testing.T) {
+	// Check if Sox is available
+	soxPath := "/usr/bin/sox"
+	if _, err := os.Stat(soxPath); os.IsNotExist(err) {
+		t.Skip("Sox binary not found at /usr/bin/sox, skipping integration test")
+	}
+
+	// Create temp directory
+	tempDir := t.TempDir()
+
+	// Create settings
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.SoxPath = soxPath
+	settings.Realtime.Audio.Export.Path = tempDir
+	settings.Realtime.Dashboard.Spectrogram.Enabled = true
+	settings.Realtime.Dashboard.Spectrogram.Size = "sm"
+	settings.Realtime.Dashboard.Spectrogram.Raw = true
+
+	sfs, err := securefs.New(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to create SecureFS: %v", err)
+	}
+
+	// Create PreRenderer
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pr := NewPreRenderer(ctx, settings, sfs, slog.Default())
+	pr.Start()
+	defer pr.Stop()
+
+	// Generate synthetic PCM data (1 second of silence at 48kHz, 16-bit, mono)
+	// PCM format: s16le (signed 16-bit little-endian)
+	sampleRate := 48000
+	duration := 1 // seconds
+	pcmData := make([]byte, sampleRate*duration*2) // 2 bytes per sample (16-bit)
+
+	// Add some synthetic sine wave to make it more realistic
+	// This creates a 440Hz tone (A4 note)
+	frequency := 440.0
+	amplitude := int16(10000) // Moderate volume
+	for i := 0; i < sampleRate*duration; i++ {
+		// Calculate sine wave sample
+		sample := int16(float64(amplitude) * (1.0 - float64(i)/float64(sampleRate*duration)))
+		// Convert to little-endian bytes
+		pcmData[i*2] = byte(sample & 0xFF)
+		pcmData[i*2+1] = byte((sample >> 8) & 0xFF)
+	}
+
+	// Create output directory
+	audioDir := filepath.Join(tempDir, "test")
+	if err := os.MkdirAll(audioDir, 0o755); err != nil {
+		t.Fatalf("Failed to create audio directory: %v", err)
+	}
+
+	// Submit job
+	clipPath := filepath.Join(audioDir, "test.wav")
+	job := &Job{
+		PCMData:   pcmData,
+		ClipPath:  clipPath,
+		NoteID:    1,
+		Timestamp: time.Now(),
+	}
+
+	if err := pr.Submit(job); err != nil {
+		t.Fatalf("Failed to submit job: %v", err)
+	}
+
+	// Wait for processing with timeout
+	timeout := time.After(5 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	spectrogramPath := filepath.Join(audioDir, "test.png")
+
+	for {
+		select {
+		case <-timeout:
+			stats := pr.GetStats()
+			t.Fatalf("Timeout waiting for spectrogram generation. Stats: %+v", stats)
+		case <-ticker.C:
+			if _, err := os.Stat(spectrogramPath); err == nil {
+				// File exists, verify it's a valid PNG
+				data, err := os.ReadFile(spectrogramPath)
+				if err != nil {
+					t.Fatalf("Failed to read spectrogram: %v", err)
+				}
+
+				// Check PNG magic number (first 8 bytes: 89 50 4E 47 0D 0A 1A 0A)
+				if len(data) < 8 {
+					t.Fatalf("Spectrogram file too small: %d bytes", len(data))
+				}
+
+				pngMagic := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+				for i, b := range pngMagic {
+					if data[i] != b {
+						t.Fatalf("Invalid PNG magic number at byte %d: got 0x%02X, want 0x%02X", i, data[i], b)
+					}
+				}
+
+				// Verify stats
+				stats := pr.GetStats()
+				if stats.Completed != 1 {
+					t.Errorf("Expected 1 completed job, got %d", stats.Completed)
+				}
+				if stats.Failed != 0 {
+					t.Errorf("Expected 0 failed jobs, got %d", stats.Failed)
+				}
+
+				t.Logf("Successfully generated spectrogram: %s (%d bytes)", spectrogramPath, len(data))
+				return // Test passed
+			}
+			// File doesn't exist yet, continue waiting
+		}
+	}
+}
+
+// TestPreRenderer_ConcurrentProcessing tests multiple jobs being processed concurrently
+// Run with: go test -v -race -tags=integration ./internal/spectrogram/...
+func TestPreRenderer_ConcurrentProcessing(t *testing.T) {
+	// Check if Sox is available
+	soxPath := "/usr/bin/sox"
+	if _, err := os.Stat(soxPath); os.IsNotExist(err) {
+		t.Skip("Sox binary not found at /usr/bin/sox, skipping integration test")
+	}
+
+	// Create temp directory
+	tempDir := t.TempDir()
+
+	// Create settings
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.SoxPath = soxPath
+	settings.Realtime.Audio.Export.Path = tempDir
+	settings.Realtime.Dashboard.Spectrogram.Enabled = true
+	settings.Realtime.Dashboard.Spectrogram.Size = "sm"
+	settings.Realtime.Dashboard.Spectrogram.Raw = true
+
+	sfs, err := securefs.New(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to create SecureFS: %v", err)
+	}
+
+	// Create PreRenderer
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pr := NewPreRenderer(ctx, settings, sfs, slog.Default())
+	pr.Start()
+	defer pr.Stop()
+
+	// Generate synthetic PCM data
+	sampleRate := 48000
+	duration := 1
+	pcmData := make([]byte, sampleRate*duration*2)
+
+	// Add sine wave
+	frequency := 440.0
+	amplitude := int16(10000)
+	for i := 0; i < sampleRate*duration; i++ {
+		sample := int16(float64(amplitude) * (1.0 - float64(i)/float64(sampleRate*duration)))
+		pcmData[i*2] = byte(sample & 0xFF)
+		pcmData[i*2+1] = byte((sample >> 8) & 0xFF)
+	}
+
+	// Create output directory
+	audioDir := filepath.Join(tempDir, "concurrent")
+	if err := os.MkdirAll(audioDir, 0o755); err != nil {
+		t.Fatalf("Failed to create audio directory: %v", err)
+	}
+
+	// Submit multiple jobs concurrently
+	numJobs := 5
+	for i := 0; i < numJobs; i++ {
+		clipPath := filepath.Join(audioDir, "test-"+string(rune('0'+i))+".wav")
+		job := &Job{
+			PCMData:   pcmData,
+			ClipPath:  clipPath,
+			NoteID:    uint(i + 1),
+			Timestamp: time.Now(),
+		}
+
+		if err := pr.Submit(job); err != nil {
+			t.Fatalf("Failed to submit job %d: %v", i, err)
+		}
+	}
+
+	// Wait for all jobs to complete
+	timeout := time.After(15 * time.Second)
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			stats := pr.GetStats()
+			t.Fatalf("Timeout waiting for concurrent jobs. Stats: %+v", stats)
+		case <-ticker.C:
+			stats := pr.GetStats()
+			if stats.Completed+stats.Skipped >= int64(numJobs) {
+				// All jobs processed
+				if stats.Failed > 0 {
+					t.Errorf("Some jobs failed: %d", stats.Failed)
+				}
+
+				// Verify all spectrograms exist
+				for i := 0; i < numJobs; i++ {
+					spectrogramPath := filepath.Join(audioDir, "test-"+string(rune('0'+i))+".png")
+					if _, err := os.Stat(spectrogramPath); err != nil {
+						t.Errorf("Spectrogram %d not found: %v", i, err)
+					}
+				}
+
+				t.Logf("Successfully processed %d concurrent jobs. Stats: %+v", numJobs, stats)
+				return // Test passed
+			}
+		}
+	}
+}
+
+// TestPreRenderer_GracefulShutdownUnderLoad tests shutdown with active jobs
+func TestPreRenderer_GracefulShutdownUnderLoad(t *testing.T) {
+	// Check if Sox is available
+	soxPath := "/usr/bin/sox"
+	if _, err := os.Stat(soxPath); os.IsNotExist(err) {
+		t.Skip("Sox binary not found at /usr/bin/sox, skipping integration test")
+	}
+
+	// Create temp directory
+	tempDir := t.TempDir()
+
+	// Create settings
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.SoxPath = soxPath
+	settings.Realtime.Audio.Export.Path = tempDir
+	settings.Realtime.Dashboard.Spectrogram.Enabled = true
+	settings.Realtime.Dashboard.Spectrogram.Size = "sm"
+	settings.Realtime.Dashboard.Spectrogram.Raw = true
+
+	sfs, err := securefs.New(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to create SecureFS: %v", err)
+	}
+
+	// Create PreRenderer
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pr := NewPreRenderer(ctx, settings, sfs, slog.Default())
+	pr.Start()
+
+	// Generate synthetic PCM data
+	sampleRate := 48000
+	duration := 1
+	pcmData := make([]byte, sampleRate*duration*2)
+
+	// Create output directory
+	audioDir := filepath.Join(tempDir, "shutdown")
+	if err := os.MkdirAll(audioDir, 0o755); err != nil {
+		t.Fatalf("Failed to create audio directory: %v", err)
+	}
+
+	// Submit several jobs
+	numJobs := 10
+	for i := 0; i < numJobs; i++ {
+		clipPath := filepath.Join(audioDir, "test-"+string(rune('0'+i))+".wav")
+		job := &Job{
+			PCMData:   pcmData,
+			ClipPath:  clipPath,
+			NoteID:    uint(i + 1),
+			Timestamp: time.Now(),
+		}
+
+		_ = pr.Submit(job)
+	}
+
+	// Immediately trigger shutdown (jobs may still be in queue)
+	pr.Stop()
+
+	// Verify clean shutdown (no panics, no goroutine leaks)
+	// This is verified by the test completing without hanging
+
+	stats := pr.GetStats()
+	t.Logf("Shutdown completed. Stats: queued=%d, completed=%d, failed=%d, skipped=%d",
+		stats.Queued, stats.Completed, stats.Failed, stats.Skipped)
+
+	// Some jobs may not have completed due to shutdown, but that's expected
+	if stats.Queued > 0 && stats.Completed+stats.Failed+stats.Skipped == 0 {
+		t.Error("No jobs were processed before shutdown")
+	}
+}

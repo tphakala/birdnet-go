@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
@@ -32,6 +33,14 @@ const (
 	// Timeout for graceful shutdown
 	shutdownTimeout = 10 * time.Second
 )
+
+// validSizes maps size strings to pixel widths (single source of truth)
+var validSizes = map[string]int{
+	"sm": 400,  // Small - 400px (default, matches frontend RecentDetectionsCard)
+	"md": 800,  // Medium - 800px
+	"lg": 1000, // Large - 1000px
+	"xl": 1200, // Extra Large - 1200px
+}
 
 // PreRenderer manages background spectrogram pre-rendering.
 // It uses a worker pool to process jobs without blocking the detection pipeline.
@@ -144,17 +153,33 @@ func (pr *PreRenderer) Submit(jobInterface any) error {
 	if !ok {
 		pr.logger.Error("Invalid job type submitted to pre-renderer",
 			"type", fmt.Sprintf("%T", jobInterface))
-		return fmt.Errorf("invalid job type: expected *spectrogram.Job, got %T", jobInterface)
+		return errors.Newf("invalid job type: expected *spectrogram.Job, got %T", jobInterface).
+			Component("spectrogram").
+			Category(errors.CategoryValidation).
+			Context("operation", "submit_job").
+			Context("received_type", fmt.Sprintf("%T", jobInterface)).
+			Build()
 	}
 
 	// Early check: skip if spectrogram already exists (avoid queueing duplicate jobs)
+	// Note: TOCTOU (time-of-check-time-of-use) race condition is intentional here.
+	// The file might be created between this check and processJob(), which is fine:
+	// - If created by on-demand generation: processJob() will skip it (redundant work avoided)
+	// - If created by another pre-render worker: processJob() will skip it (idempotent)
+	// - Impact: Job logged as "skipped" instead of caught here (no functional issue)
 	spectrogramPath, err := pr.buildSpectrogramPath(job.ClipPath)
 	if err != nil {
 		pr.logger.Error("Invalid clip path, rejecting job",
 			"note_id", job.NoteID,
 			"clip_path", job.ClipPath,
 			"error", err)
-		return fmt.Errorf("invalid clip path: %w", err)
+		return errors.New(err).
+			Component("spectrogram").
+			Category(errors.CategoryValidation).
+			Context("operation", "build_spectrogram_path").
+			Context("note_id", job.NoteID).
+			Context("clip_path", job.ClipPath).
+			Build()
 	}
 
 	if _, err := os.Stat(spectrogramPath); err == nil {
@@ -179,7 +204,13 @@ func (pr *PreRenderer) Submit(jobInterface any) error {
 			"note_id", job.NoteID,
 			"clip_path", job.ClipPath,
 			"queue_size", defaultQueueSize)
-		return fmt.Errorf("pre-render queue full")
+		return errors.Newf("pre-render queue full (size: %d)", defaultQueueSize).
+			Component("spectrogram").
+			Category(errors.CategorySystem).
+			Context("operation", "submit_job").
+			Context("note_id", job.NoteID).
+			Context("queue_size", defaultQueueSize).
+			Build()
 	}
 }
 
@@ -344,7 +375,17 @@ func (pr *PreRenderer) generateWithSox(ctx context.Context, pcmData []byte, outp
 
 	// Run command
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("sox command failed: %w (stderr: %s)", err, stderr.String())
+		return errors.New(err).
+			Component("spectrogram").
+			Category(errors.CategorySystem).
+			Context("operation", "generate_with_sox").
+			Context("output_path", outputPath).
+			Context("width", width).
+			Context("height", height).
+			Context("raw", raw).
+			Context("sox_stderr", stderr.String()).
+			Context("pcm_bytes", len(pcmData)).
+			Build()
 	}
 
 	return nil
@@ -365,19 +406,23 @@ func (pr *PreRenderer) buildSpectrogramPath(clipPath string) (string, error) {
 }
 
 // sizeToPixels converts a size string to pixel width.
+// Uses validSizes map as single source of truth for size validation.
 func (pr *PreRenderer) sizeToPixels(size string) (int, error) {
-	switch size {
-	case "sm":
-		return 400, nil
-	case "md":
-		return 800, nil
-	case "lg":
-		return 1000, nil
-	case "xl":
-		return 1200, nil
-	default:
-		return 0, fmt.Errorf("invalid size: %s (must be sm, md, lg, or xl)", size)
+	width, ok := validSizes[size]
+	if !ok {
+		return 0, fmt.Errorf("invalid size: %s (valid sizes: sm, md, lg, xl)", size)
 	}
+	return width, nil
+}
+
+// GetValidSizes returns a list of valid size strings.
+// Useful for runtime validation in web UI.
+func GetValidSizes() []string {
+	sizes := make([]string, 0, len(validSizes))
+	for size := range validSizes {
+		sizes = append(sizes, size)
+	}
+	return sizes
 }
 
 // GetStats returns a copy of the current statistics.

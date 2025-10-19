@@ -1515,11 +1515,11 @@ func generateRandomHex(length int) string {
 // This is called during processor initialization if spectrogram pre-rendering is enabled in settings.
 func (p *Processor) initPreRenderer() {
 	p.preRendererOnce.Do(func() {
-		// Validate spectrogram size configuration early
-		validSizes := []string{"sm", "md", "lg", "xl"}
+		// Validate spectrogram size configuration early using shared validation
 		size := p.Settings.Realtime.Dashboard.Spectrogram.Size
+		validSizesList := spectrogram.GetValidSizes()
 		isValid := false
-		for _, s := range validSizes {
+		for _, s := range validSizesList {
 			if s == size {
 				isValid = true
 				break
@@ -1528,9 +1528,9 @@ func (p *Processor) initPreRenderer() {
 		if !isValid {
 			GetLogger().Error("Invalid spectrogram size, disabling pre-rendering",
 				"size", size,
-				"valid_sizes", validSizes,
+				"valid_sizes", validSizesList,
 				"operation", "prerenderer_init")
-			log.Printf("❌ Invalid spectrogram size '%s', pre-rendering disabled. Valid sizes: %v", size, validSizes)
+			log.Printf("❌ Invalid spectrogram size '%s', pre-rendering disabled. Valid sizes: %v", size, validSizesList)
 			return
 		}
 
