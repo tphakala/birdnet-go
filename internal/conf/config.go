@@ -126,10 +126,19 @@ type Thumbnails struct {
 
 // Dashboard contains settings for the web dashboard.
 type Dashboard struct {
-	Thumbnails   Thumbnails `json:"thumbnails"`       // thumbnails settings
-	SummaryLimit int        `json:"summaryLimit"`     // limit for the number of species shown in the summary table
-	Locale       string     `json:"locale,omitempty"` // UI locale setting
-	NewUI        bool       `json:"newUI"`            // Enable redirect from old HTMX UI to new Svelte UI
+	Thumbnails   Thumbnails           `json:"thumbnails"`       // thumbnails settings
+	SummaryLimit int                  `json:"summaryLimit"`     // limit for the number of species shown in the summary table
+	Locale       string               `json:"locale,omitempty"` // UI locale setting
+	NewUI        bool                 `json:"newUI"`            // Enable redirect from old HTMX UI to new Svelte UI
+	Spectrogram  SpectrogramPreRender `json:"spectrogram"`      // Spectrogram pre-rendering settings
+}
+
+// SpectrogramPreRender contains settings for background spectrogram pre-rendering.
+// Pre-rendering spectrograms during audio save eliminates UI lag when users access detections.
+type SpectrogramPreRender struct {
+	Enabled bool   `json:"enabled"` // Enable background pre-rendering (default: false, opt-in)
+	Size    string `json:"size"`    // Size to pre-render: "sm" (400px), "md" (800px), "lg" (1000px), "xl" (1200px)
+	Raw     bool   `json:"raw"`     // Generate raw spectrogram without axes/legend (default: true)
 }
 
 // DynamicThresholdSettings contains settings for dynamic threshold adjustment.

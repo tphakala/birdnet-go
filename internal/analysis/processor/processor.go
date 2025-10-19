@@ -24,6 +24,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/securefs"
+	"github.com/tphakala/birdnet-go/internal/spectrogram"
 )
 
 // Species identification constants for filtering
@@ -64,6 +66,8 @@ type Processor struct {
 	workerCancel        context.CancelFunc // Function to cancel worker goroutines
 	thresholdsCtx       context.Context    // Context for threshold persistence/cleanup goroutines
 	thresholdsCancel    context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
+	preRenderer         PreRendererSubmit  // Spectrogram pre-renderer for background generation
+	preRendererOnce     sync.Once          // Ensures pre-renderer is initialized only once
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
@@ -250,6 +254,11 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 
 		// Start periodic cleanup goroutine
 		p.startThresholdCleanup()
+	}
+
+	// Initialize spectrogram pre-renderer if enabled
+	if settings.Realtime.Dashboard.Spectrogram.Enabled {
+		p.initPreRenderer()
 	}
 
 	return p
@@ -1000,6 +1009,7 @@ func (p *Processor) getDefaultActions(detection *Detections) []Action {
 			EventTracker:      p.GetEventTracker(),
 			NewSpeciesTracker: tracker,
 			processor:         p, // Add processor reference for source name resolution
+			PreRenderer:       p.preRenderer,
 			Note:              detection.Note,
 			Results:           detection.Results,
 			Ds:                p.Ds,
@@ -1305,6 +1315,14 @@ func (p *Processor) Shutdown() error {
 		p.workerCancel()
 	}
 
+	// Stop the spectrogram pre-renderer
+	if p.preRenderer != nil {
+		// Type assert to access Stop method (interface doesn't include it)
+		if pr, ok := p.preRenderer.(*spectrogram.PreRenderer); ok {
+			pr.Stop()
+		}
+	}
+
 	// Stop the job queue with a timeout
 	if err := p.JobQueue.StopWithTimeout(30 * time.Second); err != nil {
 		// Add structured logging
@@ -1491,4 +1509,34 @@ func generateRandomHex(length int) string {
 		hex = hex[:length]
 	}
 	return hex
+}
+
+// initPreRenderer initializes the spectrogram pre-renderer if enabled.
+// This is called during processor initialization if spectrogram pre-rendering is enabled in settings.
+func (p *Processor) initPreRenderer() {
+	p.preRendererOnce.Do(func() {
+		// Create SecureFS for path validation
+		sfs, err := securefs.New(p.Settings.Realtime.Audio.Export.Path)
+		if err != nil {
+			GetLogger().Error("Failed to create SecureFS for pre-renderer",
+				"error", err,
+				"export_path", p.Settings.Realtime.Audio.Export.Path,
+				"operation", "prerenderer_init")
+			return
+		}
+
+		// Create context for pre-renderer lifecycle (derived from processor's context if available)
+		ctx := context.Background()
+
+		// Create and start pre-renderer
+		pr := spectrogram.NewPreRenderer(ctx, p.Settings, sfs, GetLogger())
+		pr.Start()
+
+		p.preRenderer = pr
+
+		GetLogger().Info("Spectrogram pre-renderer initialized",
+			"size", p.Settings.Realtime.Dashboard.Spectrogram.Size,
+			"raw", p.Settings.Realtime.Dashboard.Spectrogram.Raw,
+			"operation", "prerenderer_init")
+	})
 }

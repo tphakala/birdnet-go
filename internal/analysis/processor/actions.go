@@ -91,6 +91,7 @@ type DatabaseAction struct {
 	EventTracker      *EventTracker
 	NewSpeciesTracker *species.SpeciesTracker // Add reference to new species tracker
 	processor         *Processor              // Add reference to processor for source name resolution
+	PreRenderer       PreRendererSubmit       // Spectrogram pre-renderer
 	Description       string
 	CorrelationID     string     // Detection correlation ID for log tracking
 	mu                sync.Mutex // Protect concurrent access to Note and Results
@@ -100,10 +101,18 @@ type SaveAudioAction struct {
 	Settings      *conf.Settings
 	ClipName      string
 	pcmData       []byte
+	NoteID        uint               // Note ID for correlation logging with pre-renderer
+	PreRenderer   PreRendererSubmit  // Injected from processor
 	EventTracker  *EventTracker
 	Description   string
 	CorrelationID string     // Detection correlation ID for log tracking
 	mu            sync.Mutex // Protect concurrent access to pcmData
+}
+
+// PreRendererSubmit is an interface for submitting pre-render jobs.
+// This avoids direct dependency on the spectrogram package.
+type PreRendererSubmit interface {
+	Submit(job any) error
 }
 
 type BirdWeatherAction struct {
@@ -586,9 +595,12 @@ func (a *DatabaseAction) Execute(data interface{}) error {
 
 		// Create a SaveAudioAction and execute it
 		saveAudioAction := &SaveAudioAction{
-			Settings: a.Settings,
-			ClipName: a.Note.ClipName,
-			pcmData:  pcmData,
+			Settings:      a.Settings,
+			ClipName:      a.Note.ClipName,
+			pcmData:       pcmData,
+			NoteID:        a.Note.ID,
+			PreRenderer:   a.PreRenderer,
+			CorrelationID: a.CorrelationID,
 		}
 
 		if err := saveAudioAction.Execute(nil); err != nil {
@@ -798,7 +810,37 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 		}
 	}
 
+	// Submit for pre-rendering if enabled
+	if a.Settings.Realtime.Dashboard.Spectrogram.Enabled && a.PreRenderer != nil {
+		// Import the job struct inline to avoid package dependency
+		job := &spectrogramJob{
+			PCMData:   a.pcmData,
+			ClipPath:  a.ClipName,
+			NoteID:    a.NoteID,
+			Timestamp: time.Now(),
+		}
+
+		// Non-blocking submission - errors logged but don't fail action
+		if err := a.PreRenderer.Submit(job); err != nil {
+			GetLogger().Warn("Failed to submit spectrogram pre-render job",
+				"component", "analysis.processor.actions",
+				"detection_id", a.CorrelationID,
+				"note_id", a.NoteID,
+				"clip_name", a.ClipName,
+				"error", err,
+				"operation", "prerender_submit")
+		}
+	}
+
 	return nil
+}
+
+// spectrogramJob represents a pre-render job (matches internal/spectrogram.Job structure)
+type spectrogramJob struct {
+	PCMData   []byte
+	ClipPath  string
+	NoteID    uint
+	Timestamp time.Time
 }
 
 // Execute sends the note to the BirdWeather API
