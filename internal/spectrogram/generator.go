@@ -626,3 +626,10 @@ func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
 	// 3. Accept that Generator doesn't need it for PCM input
 	return 0
 }
+
+// GetSoxSpectrogramArgsForTest exposes getSoxSpectrogramArgs for testing.
+// This method is exported to allow tests in other packages to verify the
+// FFmpeg version optimization logic.
+func (g *Generator) GetSoxSpectrogramArgsForTest(ctx context.Context, audioPath, outputPath string, width int, raw bool) []string {
+	return g.getSoxSpectrogramArgs(ctx, audioPath, outputPath, width, raw)
+}
