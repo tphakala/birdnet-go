@@ -121,19 +121,13 @@ jobs:
           path: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
 
       # Optional: Create a GitHub release for tagged builds
-      - name: Create Release
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          DATE=$(date +'%Y%m%d')
-          echo "RELEASE_DATE=$DATE" >> $GITHUB_ENV
-        
       - name: Create GitHub Release
         if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v1
         with:
           files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
-          tag_name: nightly-${{ env.RELEASE_DATE }}
-          name: "Nightly Build ${{ env.RELEASE_DATE }}"
+          tag_name: ${{ steps.get_build_version.outputs.build_version }}
+          name: "Nightly Build ${{ steps.get_build_version.outputs.build_version }}"
           prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -160,9 +154,13 @@ jobs:
       - name: Get version
         id: get_version
         run: |
+          # Use same version format as binary builds for consistency
           VERSION=$(git describe --tags --always)
-          echo "VERSION=${VERSION}" >> ${GITHUB_ENV}
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          DATE=$(date +'%Y%m%d')
+          BUILD_VERSION="nightly-${DATE}-${COMMIT_COUNT}-g${VERSION##*-g}"
+          echo "VERSION=${BUILD_VERSION}" >> ${GITHUB_ENV}
+          echo "version=${BUILD_VERSION}" >> $GITHUB_OUTPUT
 
   docker:
     needs: get-version
