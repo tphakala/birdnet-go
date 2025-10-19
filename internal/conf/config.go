@@ -741,8 +741,8 @@ type BirdNETConfig struct {
 	Threads     int                 `json:"threads"`     // number of CPU threads to use for analysis
 	Locale      string              `json:"locale"`      // language to use for labels
 	RangeFilter RangeFilterSettings `json:"rangeFilter"` // range filter settings
-	ModelPath   string              `json:"modelPath"`   // path to external model file (empty for embedded)
-	LabelPath   string              `json:"labelPath"`   // path to external label file (empty for embedded)
+	ModelPath   string              `json:"modelPath,omitempty" yaml:"modelPath,omitempty"`   // path to external model file (empty for embedded)
+	LabelPath   string              `json:"labelPath,omitempty" yaml:"labelPath,omitempty"`   // path to external label file (empty for embedded)
 	Labels      []string            `yaml:"-" json:"-"`  // list of available species labels, runtime value
 	UseXNNPACK  bool                `json:"useXnnpack"`  // true to use XNNPACK delegate for inference acceleration
 }

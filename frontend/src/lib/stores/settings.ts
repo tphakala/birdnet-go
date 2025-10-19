@@ -809,6 +809,15 @@ export const settingsActions = {
         }
       }
 
+      // Convert empty strings to null for modelPath and labelPath to signal "revert to default"
+      // This ensures the config file is properly cleaned when users clear these fields
+      if (coercedFormData.birdnet.modelPath === '') {
+        coercedFormData.birdnet.modelPath = null as unknown as string;
+      }
+      if (coercedFormData.birdnet.labelPath === '') {
+        coercedFormData.birdnet.labelPath = null as unknown as string;
+      }
+
       await settingsAPI.save(coercedFormData);
 
       // Check if UI locale changed and apply it
