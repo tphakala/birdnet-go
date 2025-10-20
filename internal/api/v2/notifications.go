@@ -747,6 +747,7 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 		WithMetadata("location", testTemplateData.Location).
 		WithMetadata("is_new_species", true).
 		WithMetadata("days_since_first_seen", testTemplateData.DaysSinceFirstSeen).
+		WithMetadata("note_id", 1).
 		WithExpiry(24 * time.Hour) // New species notifications expire after 24 hours
 
 	// Use CreateWithMetadata to persist and broadcast
