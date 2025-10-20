@@ -805,11 +805,11 @@
                 "label": "Modo de Generación",
                 "auto": {
                   "label": "Automático (Recomendado)",
-                  "helpText": "Spectrograms are generated automatically when detection is viewed on user interface. For long list of detections spectrogram generation may take a long time on systems with limited CPU resources."
+                  "helpText": "Los espectrogramas se generan automáticamente cuando se visualiza una detección en la interfaz de usuario. Para listas largas de detecciones, la generación de espectrogramas puede tardar mucho tiempo en sistemas con recursos limitados de CPU."
                 },
                 "prerender": {
                   "label": "Pre-renderizar en Segundo Plano",
-                  "helpText": "Generate spectrograms automatically during audio clip save. On resource constrained systems like Raspberry Pi Zero or 3 this provides more responsive user interface due to spectrograms being rendered in background, however this mode will consume more disk space as spectrograms are created for every detection."
+                  "helpText": "Genera espectrogramas automáticamente durante el guardado del clip de audio. En sistemas con recursos limitados como Raspberry Pi Zero o 3, esto proporciona una interfaz de usuario más receptiva debido a que los espectrogramas se renderizan en segundo plano. Sin embargo, este modo consumirá más espacio en disco ya que se crean espectrogramas para cada detección."
                 },
                 "userRequested": {
                   "label": "Solo a Petición del Usuario",
