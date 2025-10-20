@@ -875,12 +875,9 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	spectrogramKey := fmt.Sprintf("%s_%d_%t", audioPath, params.width, params.raw)
 
 	// Check queue status first (more volatile state)
-	spectrogramQueueMutex.RLock()
-	status, existsInQueue := spectrogramQueue[spectrogramKey]
-	spectrogramQueueMutex.RUnlock()
-
-	// If it's actively being processed, return that status immediately
-	if existsInQueue {
+	// Check if it's actively being processed using sync.Map (lock-free)
+	if statusValue, existsInQueue := spectrogramQueue.Load(spectrogramKey); existsInQueue {
+		status := statusValue.(*SpectrogramQueueStatus)
 		return ctx.JSON(http.StatusOK, map[string]any{
 			"data":    status,
 			"error":   "",
@@ -974,66 +971,74 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 			"ip", ctx.RealIP())
 	}
 
-	// Trigger spectrogram generation
-	generationStart := time.Now()
-	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, params.width, params.raw)
-	generationDuration := time.Since(generationStart)
+	// Check if spectrogram already exists (fast path)
+	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
+	normalizedPath := NormalizeClipPath(clipPath, clipsPrefix)
+	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
+	if err == nil {
+		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
+		if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
+			// Already exists, return immediately with generated status
+			queryParams := url.Values{}
+			sizeParam := params.sizeStr
+			if sizeParam == "" {
+				switch params.width {
+				case SpectrogramSizeSm:
+					sizeParam = "sm"
+				case SpectrogramSizeMd:
+					sizeParam = "md"
+				case SpectrogramSizeLg:
+					sizeParam = "lg"
+				case SpectrogramSizeXl:
+					sizeParam = "xl"
+				default:
+					sizeParam = "md"
+				}
+			}
+			queryParams.Set("size", sizeParam)
+			queryParams.Set("raw", strconv.FormatBool(params.raw))
+			spectrogramURL := fmt.Sprintf("/api/v2/spectrogram/%s?%s", url.PathEscape(noteID), queryParams.Encode())
 
-	if err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Spectrogram generation failed",
-				"note_id", noteID,
-				"clip_path", clipPath,
-				"error", err.Error(),
-				"duration_ms", generationDuration.Milliseconds(),
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP())
+			return ctx.JSON(http.StatusOK, map[string]any{
+				"data": map[string]any{
+					"status": "exists",
+					"path":   spectrogramURL,
+				},
+				"error":   "",
+				"message": "Spectrogram already exists",
+			})
 		}
-		return c.spectrogramHTTPError(ctx, err)
 	}
 
-	// Build the URL path for accessing the spectrogram with proper encoding
-	queryParams := url.Values{}
+	// Start async generation in background
+	go func() {
+		// Use background context to avoid request cancellation affecting generation
+		bgCtx := context.Background()
+		spectrogramPath, err := c.generateSpectrogram(bgCtx, clipPath, params.width, params.raw)
 
-	// Always include size parameter to match what was actually generated
-	sizeParam := params.sizeStr
-	if sizeParam == "" {
-		// Map default width back to size string for URL consistency
-		switch params.width {
-		case SpectrogramSizeSm:
-			sizeParam = "sm"
-		case SpectrogramSizeMd:
-			sizeParam = "md"
-		case SpectrogramSizeLg:
-			sizeParam = "lg"
-		case SpectrogramSizeXl:
-			sizeParam = "xl"
-		default:
-			sizeParam = "md" // fallback to default
+		if err != nil {
+			if c.apiLogger != nil {
+				c.apiLogger.Error("Async spectrogram generation failed",
+					"note_id", noteID,
+					"clip_path", clipPath,
+					"error", err.Error())
+			}
+		} else {
+			if c.apiLogger != nil {
+				c.apiLogger.Info("Async spectrogram generated successfully",
+					"note_id", noteID,
+					"spectrogram_path", spectrogramPath)
+			}
 		}
-	}
-	queryParams.Set("size", sizeParam)
-	queryParams.Set("raw", strconv.FormatBool(params.raw))
-	spectrogramURL := fmt.Sprintf("/api/v2/spectrogram/%s?%s", url.PathEscape(noteID), queryParams.Encode())
+	}()
 
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Spectrogram generated successfully",
-			"note_id", noteID,
-			"spectrogram_path", spectrogramPath,
-			"spectrogram_url", spectrogramURL,
-			"duration_ms", generationDuration.Milliseconds(),
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP())
-	}
-
-	// Return success response with API v2 envelope format
-	return ctx.JSON(http.StatusOK, map[string]any{
+	// Return 202 Accepted immediately - client should poll status endpoint
+	return ctx.JSON(http.StatusAccepted, map[string]any{
 		"data": map[string]any{
-			"status": "generated",
-			"path":   spectrogramURL,
+			"status": "queued",
 		},
 		"error":   "",
-		"message": "Spectrogram generated successfully",
+		"message": "Generation request accepted. Poll /api/v2/spectrogram/:id/status for progress.",
 	})
 }
 
@@ -1052,8 +1057,8 @@ var (
 	spectrogramGroup     singleflight.Group // Prevents duplicate generations
 
 	// Track spectrogram generation queue status
-	spectrogramQueueMutex sync.RWMutex
-	spectrogramQueue      = make(map[string]*SpectrogramQueueStatus)
+	// Using sync.Map for lock-free concurrent access (fixes race condition with multiple browsers)
+	spectrogramQueue sync.Map // map[string]*SpectrogramQueueStatus
 )
 
 // SpectrogramQueueStatus tracks the status of a spectrogram generation request
@@ -1501,10 +1506,9 @@ func (c *Controller) checkSpectrogramExists(relSpectrogramPath, spectrogramKey s
 
 // updateQueueStatus updates the spectrogram generation queue status
 func (c *Controller) updateQueueStatus(spectrogramKey, status string, queuePos int, message string) {
-	spectrogramQueueMutex.Lock()
-	defer spectrogramQueueMutex.Unlock()
-
-	if queueStatus, exists := spectrogramQueue[spectrogramKey]; exists {
+	// Using sync.Map for lock-free updates
+	if statusValue, exists := spectrogramQueue.Load(spectrogramKey); exists {
+		queueStatus := statusValue.(*SpectrogramQueueStatus)
 		queueStatus.Status = status
 		queueStatus.QueuePosition = queuePos
 		queueStatus.Message = message
@@ -1537,12 +1541,9 @@ func (c *Controller) checkAudioFileExists(relAudioPath string) error {
 }
 
 // initializeQueueStatus initializes the queue tracking for a spectrogram request
+// Optimized to minimize lock hold time - calculation done outside lock, only write is locked
 func (c *Controller) initializeQueueStatus(spectrogramKey string) {
-	spectrogramQueueMutex.Lock()
-	defer spectrogramQueueMutex.Unlock()
-
-	// Calculate queue position - 0 if slot immediately available, otherwise position in queue
-	var queuePosition int
+	// Step 1: Calculate queue position OUTSIDE the lock to minimize contention
 	currentSlotsInUse := len(spectrogramSemaphore)
 
 	// Log current semaphore state for debugging
@@ -1552,37 +1553,41 @@ func (c *Controller) initializeQueueStatus(spectrogramKey string) {
 		"max_concurrent", maxConcurrentSpectrograms,
 		"semaphore_full", currentSlotsInUse >= maxConcurrentSpectrograms)
 
+	var queuePosition int
 	if currentSlotsInUse >= maxConcurrentSpectrograms {
-		// All slots are taken, this will be queued
-		// Count how many are already waiting in queue
+		// All slots are taken, need to count waiting requests
+		// Use sync.Map.Range for lock-free iteration
 		waitingCount := 0
-		for _, status := range spectrogramQueue {
+		spectrogramQueue.Range(func(key, value any) bool {
+			status := value.(*SpectrogramQueueStatus)
 			if status.Status == spectrogramStatusQueued {
 				waitingCount++
 			}
-		}
+			return true // continue iteration
+		})
 		queuePosition = waitingCount + 1
 	} else {
 		// Slot is available, will run immediately
 		queuePosition = 0
 	}
 
-	spectrogramQueue[spectrogramKey] = &SpectrogramQueueStatus{
+	// Step 2: Store in sync.Map (lock-free operation)
+	spectrogramQueue.Store(spectrogramKey, &SpectrogramQueueStatus{
 		Status:        spectrogramStatusQueued,
 		QueuePosition: queuePosition,
 		StartedAt:     time.Now(),
 		Message:       "Waiting for generation slot",
-	}
+	})
 }
 
 // cleanupQueueStatus removes the queue entry for a spectrogram request
 func (c *Controller) cleanupQueueStatus(spectrogramKey string) {
-	spectrogramQueueMutex.Lock()
-	defer spectrogramQueueMutex.Unlock()
-	delete(spectrogramQueue, spectrogramKey)
+	// Using sync.Map for lock-free deletion
+	spectrogramQueue.Delete(spectrogramKey)
 }
 
 // acquireSemaphoreSlot acquires a semaphore slot for spectrogram generation
+// With timeout handling to prevent indefinite blocking
 func (c *Controller) acquireSemaphoreSlot(ctx context.Context, spectrogramKey string) error {
 	slotsInUseBeforeAcquire := len(spectrogramSemaphore)
 	availableSlots := maxConcurrentSpectrograms - slotsInUseBeforeAcquire
@@ -1592,6 +1597,10 @@ func (c *Controller) acquireSemaphoreSlot(ctx context.Context, spectrogramKey st
 		"slots_in_use", slotsInUseBeforeAcquire,
 		"slots_available", availableSlots,
 		"max_concurrent", maxConcurrentSpectrograms)
+
+	// Add explicit timeout for semaphore acquisition (30 seconds max wait)
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 
 	select {
 	case spectrogramSemaphore <- struct{}{}:
@@ -1608,13 +1617,23 @@ func (c *Controller) acquireSemaphoreSlot(ctx context.Context, spectrogramKey st
 		c.updateQueueStatus(spectrogramKey, spectrogramStatusGenerating, 0, "Generating spectrogram")
 		return nil
 
-	case <-ctx.Done():
+	case <-timeoutCtx.Done():
+		err := timeoutCtx.Err()
+		if err == context.DeadlineExceeded {
+			getSpectrogramLogger().Warn("Timeout waiting for semaphore slot",
+				"spectrogram_key", spectrogramKey,
+				"timeout_seconds", 30,
+				"slots_in_use", len(spectrogramSemaphore))
+			c.updateQueueStatus(spectrogramKey, spectrogramStatusFailed, 0, "Request timeout - server busy, please retry")
+			return fmt.Errorf("timeout waiting for generation slot: %w", err)
+		}
+
 		getSpectrogramLogger().Debug("Context canceled while waiting for semaphore",
 			"spectrogram_key", spectrogramKey,
-			"error", ctx.Err())
+			"error", err)
 
 		c.updateQueueStatus(spectrogramKey, spectrogramStatusFailed, 0, "Generation canceled")
-		return ctx.Err()
+		return err
 	}
 }
 
