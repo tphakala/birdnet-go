@@ -877,9 +877,20 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	// Check queue status first (more volatile state)
 	// Check if it's actively being processed using sync.Map (lock-free)
 	if statusValue, existsInQueue := spectrogramQueue.Load(spectrogramKey); existsInQueue {
-		status := statusValue.(*SpectrogramQueueStatus)
+		// Type-safe cast with check
+		status, ok := statusValue.(*SpectrogramQueueStatus)
+		if !ok {
+			getSpectrogramLogger().Error("Invalid queue status type",
+				"key", spectrogramKey,
+				"type", fmt.Sprintf("%T", statusValue))
+			return ctx.JSON(http.StatusInternalServerError, map[string]any{
+				"data":    nil,
+				"error":   "Internal error retrieving status",
+				"message": "Invalid status data type",
+			})
+		}
 		return ctx.JSON(http.StatusOK, map[string]any{
-			"data":    status,
+			"data":    status.Get(), // Thread-safe snapshot
 			"error":   "",
 			"message": "Spectrogram generation status retrieved",
 		})
@@ -896,10 +907,10 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 		// Check if file exists
 		if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
 			return ctx.JSON(http.StatusOK, map[string]any{
-				"data": SpectrogramQueueStatus{
-					Status:        spectrogramStatusExists,
-					QueuePosition: 0,
-					Message:       "Spectrogram already exists",
+				"data": map[string]any{
+					"status":        spectrogramStatusExists,
+					"queuePosition": 0,
+					"message":       "Spectrogram already exists",
 				},
 				"error":   "",
 				"message": "Spectrogram exists on disk",
@@ -909,10 +920,10 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 
 	// Not in queue and doesn't exist on disk
 	return ctx.JSON(http.StatusOK, map[string]any{
-		"data": SpectrogramQueueStatus{
-			Status:        spectrogramStatusNotStarted,
-			QueuePosition: 0,
-			Message:       "Spectrogram generation not started",
+		"data": map[string]any{
+			"status":        spectrogramStatusNotStarted,
+			"queuePosition": 0,
+			"message":       "Spectrogram generation not started",
 		},
 		"error":   "",
 		"message": "Spectrogram not yet generated",
@@ -1010,10 +1021,24 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 		}
 	}
 
-	// Start async generation in background
+	// Start async generation in background with proper cleanup and panic recovery
 	go func() {
-		// Use background context to avoid request cancellation affecting generation
-		bgCtx := context.Background()
+		// Ensure cleanup even if panic occurs (prevents memory leaks)
+		defer func() {
+			if r := recover(); r != nil {
+				if c.apiLogger != nil {
+					c.apiLogger.Error("Panic in async spectrogram generation",
+						"note_id", noteID,
+						"panic", r)
+				}
+			}
+		}()
+
+		// Create background context with timeout (5 minutes max for generation)
+		// This preserves request context values (trace IDs, etc.) but not cancellation
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
 		spectrogramPath, err := c.generateSpectrogram(bgCtx, clipPath, params.width, params.raw)
 
 		if err != nil {
@@ -1062,11 +1087,42 @@ var (
 )
 
 // SpectrogramQueueStatus tracks the status of a spectrogram generation request
+// Thread-safe: uses internal mutex to prevent race conditions during concurrent updates
 type SpectrogramQueueStatus struct {
-	Status        string    `json:"status"`        // "queued", "generating", "generated", "failed", "exists", "not_started"
-	QueuePosition int       `json:"queuePosition"` // Position in queue (0 if generating/generated)
-	StartedAt     time.Time `json:"startedAt"`     // When generation started
-	Message       string    `json:"message"`       // Additional status message
+	mu            sync.RWMutex
+	status        string    // "queued", "generating", "generated", "failed", "exists", "not_started"
+	queuePosition int       // Position in queue (0 if generating/generated)
+	startedAt     time.Time // When generation started
+	message       string    // Additional status message
+}
+
+// Update atomically updates all fields
+func (s *SpectrogramQueueStatus) Update(status string, queuePos int, message string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.status = status
+	s.queuePosition = queuePos
+	s.message = message
+	s.startedAt = time.Now()
+}
+
+// Get returns a snapshot of the current status (safe for JSON marshaling)
+func (s *SpectrogramQueueStatus) Get() map[string]any {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return map[string]any{
+		"status":        s.status,
+		"queuePosition": s.queuePosition,
+		"startedAt":     s.startedAt,
+		"message":       s.message,
+	}
+}
+
+// GetStatus returns just the status string (thread-safe)
+func (s *SpectrogramQueueStatus) GetStatus() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.status
 }
 
 // Package-level logger for spectrogram generation
@@ -1504,14 +1560,17 @@ func (c *Controller) checkSpectrogramExists(relSpectrogramPath, spectrogramKey s
 	return false, nil
 }
 
-// updateQueueStatus updates the spectrogram generation queue status
+// updateQueueStatus updates the spectrogram generation queue status (thread-safe)
 func (c *Controller) updateQueueStatus(spectrogramKey, status string, queuePos int, message string) {
-	// Using sync.Map for lock-free updates
+	// Using sync.Map for lock-free lookups + struct mutex for safe updates
 	if statusValue, exists := spectrogramQueue.Load(spectrogramKey); exists {
-		queueStatus := statusValue.(*SpectrogramQueueStatus)
-		queueStatus.Status = status
-		queueStatus.QueuePosition = queuePos
-		queueStatus.Message = message
+		if queueStatus, ok := statusValue.(*SpectrogramQueueStatus); ok {
+			queueStatus.Update(status, queuePos, message) // Thread-safe update
+		} else {
+			getSpectrogramLogger().Error("Invalid queue status type in update",
+				"key", spectrogramKey,
+				"type", fmt.Sprintf("%T", statusValue))
+		}
 	}
 }
 
@@ -1559,9 +1618,10 @@ func (c *Controller) initializeQueueStatus(spectrogramKey string) {
 		// Use sync.Map.Range for lock-free iteration
 		waitingCount := 0
 		spectrogramQueue.Range(func(key, value any) bool {
-			status := value.(*SpectrogramQueueStatus)
-			if status.Status == spectrogramStatusQueued {
-				waitingCount++
+			if status, ok := value.(*SpectrogramQueueStatus); ok {
+				if status.GetStatus() == spectrogramStatusQueued {
+					waitingCount++
+				}
 			}
 			return true // continue iteration
 		})
@@ -1571,13 +1631,10 @@ func (c *Controller) initializeQueueStatus(spectrogramKey string) {
 		queuePosition = 0
 	}
 
-	// Step 2: Store in sync.Map (lock-free operation)
-	spectrogramQueue.Store(spectrogramKey, &SpectrogramQueueStatus{
-		Status:        spectrogramStatusQueued,
-		QueuePosition: queuePosition,
-		StartedAt:     time.Now(),
-		Message:       "Waiting for generation slot",
-	})
+	// Step 2: Create and store status in sync.Map (lock-free operation)
+	status := &SpectrogramQueueStatus{}
+	status.Update(spectrogramStatusQueued, queuePosition, "Waiting for generation slot")
+	spectrogramQueue.Store(spectrogramKey, status)
 }
 
 // cleanupQueueStatus removes the queue entry for a spectrogram request

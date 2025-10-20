@@ -636,7 +636,41 @@
         },
       });
 
-      if (!response.ok) {
+      // Handle both 200 (immediate generation) and 202 (async generation)
+      if (response.status === 202) {
+        // Async generation - API returns 202 Accepted
+        logger.info('Spectrogram generation queued', { detectionId });
+
+        // Reset state and start polling
+        spectrogramNeedsGeneration = false;
+        spectrogramRetryCount = 0;
+        spectrogramLoader.setLoading(true);
+        statusPollStartTime = Date.now();
+
+        // Start polling for status
+        pollSpectrogramStatus();
+      } else if (response.ok) {
+        // Immediate generation (backward compatibility for old API)
+        const responseData = await response.json();
+        const data = responseData.data ?? responseData;
+        logger.info('Spectrogram generated successfully', {
+          detectionId,
+          path: data.path,
+        });
+
+        // Reset state and reload the spectrogram
+        spectrogramNeedsGeneration = false;
+        spectrogramRetryCount = 0;
+        spectrogramLoader.setLoading(true);
+
+        // Reload the image with cache-busting parameter
+        if (spectrogramImage && spectrogramUrl) {
+          const url = new URL(spectrogramUrl, window.location.origin);
+          url.searchParams.set('t', Date.now().toString());
+          spectrogramImage.src = url.toString();
+        }
+      } else {
+        // Error response
         let errorMessage = `Generation failed with status ${response.status}`;
         try {
           const errorData = await response.json();
@@ -645,26 +679,6 @@
           logger.warn('Failed to parse error response', { parseErr });
         }
         throw new Error(errorMessage);
-      }
-
-      const responseData = await response.json();
-      // Extract data from v2 envelope format
-      const data = responseData.data ?? responseData;
-      logger.info('Spectrogram generated successfully', {
-        detectionId,
-        path: data.path,
-      });
-
-      // Reset state and reload the spectrogram
-      spectrogramNeedsGeneration = false;
-      spectrogramRetryCount = 0;
-      spectrogramLoader.setLoading(true);
-
-      // Reload the image with cache-busting parameter using Svelte binding
-      if (spectrogramImage && spectrogramUrl) {
-        const url = new URL(spectrogramUrl, window.location.origin);
-        url.searchParams.set('t', Date.now().toString());
-        spectrogramImage.src = url.toString();
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate spectrogram';
