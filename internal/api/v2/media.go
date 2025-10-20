@@ -870,9 +870,28 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	// Parse query parameters using shared helper
 	params := parseSpectrogramParameters(ctx)
 
-	// Build spectrogram key for status lookup
+	// Build spectrogram path and key for status lookup
+	// Must compute relSpectrogramPath BEFORE checking queue to ensure consistent key format
 	audioPath := detection.ClipName
-	spectrogramKey := fmt.Sprintf("%s_%d_%t", audioPath, params.width, params.raw)
+	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
+	normalizedPath := NormalizeClipPath(audioPath, clipsPrefix)
+	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
+	if err != nil {
+		// Path validation failed - return not_started status
+		return ctx.JSON(http.StatusOK, map[string]any{
+			"data": map[string]any{
+				"status":        spectrogramStatusNotStarted,
+				"queuePosition": 0,
+				"message":       "Invalid audio path",
+			},
+			"error":   "",
+			"message": "Spectrogram generation not started",
+		})
+	}
+
+	// Build spectrogram path and key
+	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
+	spectrogramKey := buildSpectrogramKey(relSpectrogramPath, params.width, params.raw)
 
 	// Check queue status first (more volatile state)
 	// Check if it's actively being processed using sync.Map (lock-free)
@@ -894,25 +913,17 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	}
 
 	// Not in queue, check if spectrogram already exists on disk
-	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
-	normalizedPath := NormalizeClipPath(audioPath, clipsPrefix)
-	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
-	if err == nil {
-		// Build spectrogram path
-		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
-
-		// Check if file exists
-		if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
-			return ctx.JSON(http.StatusOK, map[string]any{
-				"data": map[string]any{
-					"status":        spectrogramStatusExists,
-					"queuePosition": 0,
-					"message":       "Spectrogram already exists",
-				},
-				"error":   "",
-				"message": "Spectrogram exists on disk",
-			})
-		}
+	// Check if file exists
+	if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
+		return ctx.JSON(http.StatusOK, map[string]any{
+			"data": map[string]any{
+				"status":        spectrogramStatusExists,
+				"queuePosition": 0,
+				"message":       "Spectrogram already exists",
+			},
+			"error":   "",
+			"message": "Spectrogram exists on disk",
+		})
 	}
 
 	// Not in queue and doesn't exist on disk
@@ -984,63 +995,71 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
 	normalizedPath := NormalizeClipPath(clipPath, clipsPrefix)
 	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
-	var spectrogramKey string
-	var relSpectrogramPath string
-
-	if err == nil {
-		_, _, _, relSpectrogramPath = buildSpectrogramPaths(relAudioPath, params.width, params.raw)
-		spectrogramKey = fmt.Sprintf("%s:%d:%t", relSpectrogramPath, params.width, params.raw)
-
-		// Check if file already exists on disk
-		if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
-			// Already exists, return immediately with generated status
-			queryParams := url.Values{}
-			sizeParam := params.sizeStr
-			if sizeParam == "" {
-				switch params.width {
-				case SpectrogramSizeSm:
-					sizeParam = "sm"
-				case SpectrogramSizeMd:
-					sizeParam = "md"
-				case SpectrogramSizeLg:
-					sizeParam = "lg"
-				case SpectrogramSizeXl:
-					sizeParam = "xl"
-				default:
-					sizeParam = "md"
-				}
-			}
-			queryParams.Set("size", sizeParam)
-			queryParams.Set("raw", strconv.FormatBool(params.raw))
-			spectrogramURL := fmt.Sprintf("/api/v2/spectrogram/%s?%s", url.PathEscape(noteID), queryParams.Encode())
-
-			return ctx.JSON(http.StatusOK, map[string]any{
-				"data": map[string]any{
-					"status": spectrogramStatusExists,
-					"path":   spectrogramURL,
-				},
-				"error":   "",
-				"message": "Spectrogram already exists",
-			})
+	if err != nil {
+		// Path validation failed - return error immediately before spawning goroutine
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Invalid audio path for spectrogram generation",
+				"note_id", noteID,
+				"clip_path", clipPath,
+				"normalized_path", normalizedPath,
+				"error", err.Error())
 		}
-
-		// Check if generation is already in progress (prevents spawning duplicate goroutines)
-		if statusValue, exists := spectrogramQueue.Load(spectrogramKey); exists {
-			if status, ok := statusValue.(*SpectrogramQueueStatus); ok {
-				currentStatus := status.GetStatus()
-				if currentStatus == spectrogramStatusQueued || currentStatus == spectrogramStatusGenerating {
-					return ctx.JSON(http.StatusAccepted, map[string]any{
-						"data":    status.Get(),
-						"error":   "",
-						"message": "Generation already in progress",
-					})
-				}
-			}
-		}
-
-		// Initialize queue status BEFORE spawning goroutine (prevents "not_started" flicker)
-		c.initializeQueueStatus(spectrogramKey)
+		return c.HandleError(ctx, err, "Invalid audio path", http.StatusBadRequest)
 	}
+
+	// Build spectrogram paths and key (path is validated at this point)
+	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
+	spectrogramKey := buildSpectrogramKey(relSpectrogramPath, params.width, params.raw)
+
+	// Check if file already exists on disk
+	if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
+		// Already exists, return immediately with generated status
+		queryParams := url.Values{}
+		sizeParam := params.sizeStr
+		if sizeParam == "" {
+			switch params.width {
+			case SpectrogramSizeSm:
+				sizeParam = "sm"
+			case SpectrogramSizeMd:
+				sizeParam = "md"
+			case SpectrogramSizeLg:
+				sizeParam = "lg"
+			case SpectrogramSizeXl:
+				sizeParam = "xl"
+			default:
+				sizeParam = "md"
+			}
+		}
+		queryParams.Set("size", sizeParam)
+		queryParams.Set("raw", strconv.FormatBool(params.raw))
+		spectrogramURL := fmt.Sprintf("/api/v2/spectrogram/%s?%s", url.PathEscape(noteID), queryParams.Encode())
+
+		return ctx.JSON(http.StatusOK, map[string]any{
+			"data": map[string]any{
+				"status": spectrogramStatusExists,
+				"path":   spectrogramURL,
+			},
+			"error":   "",
+			"message": "Spectrogram already exists",
+		})
+	}
+
+	// Check if generation is already in progress (prevents spawning duplicate goroutines)
+	if statusValue, exists := spectrogramQueue.Load(spectrogramKey); exists {
+		if status, ok := statusValue.(*SpectrogramQueueStatus); ok {
+			currentStatus := status.GetStatus()
+			if currentStatus == spectrogramStatusQueued || currentStatus == spectrogramStatusGenerating {
+				return ctx.JSON(http.StatusAccepted, map[string]any{
+					"data":    status.Get(),
+					"error":   "",
+					"message": "Generation already in progress",
+				})
+			}
+		}
+	}
+
+	// Initialize queue status BEFORE spawning goroutine (prevents "not_started" flicker)
+	c.initializeQueueStatus(spectrogramKey)
 
 	// Start async generation in background with proper cleanup and panic recovery
 	// Track goroutine lifecycle for graceful shutdown
@@ -1277,6 +1296,13 @@ func buildSpectrogramPaths(relAudioPath string, width int, raw bool) (relBaseFil
 	relSpectrogramPath = filepath.Join(relAudioDir, spectrogramFilename)
 
 	return relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath
+}
+
+// buildSpectrogramKey generates a consistent unique key for spectrogram queue management.
+// This key is used to track generation status across POST /generate and GET /status endpoints.
+// Format: "path:width:raw" (e.g., "clips/2025/01/audio_123.wav:400:true")
+func buildSpectrogramKey(relSpectrogramPath string, width int, raw bool) string {
+	return fmt.Sprintf("%s:%d:%t", relSpectrogramPath, width, raw)
 }
 
 // ffprobeCache provides a unified cache for all FFprobe operations (validation and duration)
@@ -1939,7 +1965,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		"raw", raw)
 
 	// Generate a unique key for this spectrogram generation request
-	spectrogramKey := fmt.Sprintf("%s:%d:%t", relSpectrogramPath, width, raw)
+	spectrogramKey := buildSpectrogramKey(relSpectrogramPath, width, raw)
 
 	// Step 3: Fast path - Check if spectrogram already exists
 	exists, err := c.checkSpectrogramExists(relSpectrogramPath, spectrogramKey, start)
