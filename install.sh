@@ -2895,15 +2895,65 @@ configure_timezone() {
     read -r use_detected
     
     if [[ $use_detected != "y" ]]; then
-        print_message "\n📋 Common timezone examples:" "$YELLOW"
-        print_message "  • US/Eastern, US/Central, US/Mountain, US/Pacific" "$YELLOW"
-        print_message "  • Europe/London, Europe/Berlin, Europe/Paris" "$YELLOW"
-        print_message "  • Asia/Tokyo, Asia/Singapore, Asia/Dubai" "$YELLOW"
-        print_message "  • Australia/Sydney, Australia/Melbourne" "$YELLOW"
-        print_message "  • UTC (Coordinated Universal Time)" "$YELLOW"
-        
+        print_message "\n📋 Common timezone examples (canonical IANA format):" "$YELLOW"
+        print_message "  Americas:" "$YELLOW"
+        print_message "    • America/New_York (US Eastern)" "$NC"
+        print_message "    • America/Chicago (US Central)" "$NC"
+        print_message "    • America/Denver (US Mountain)" "$NC"
+        print_message "    • America/Los_Angeles (US Pacific)" "$NC"
+        print_message "  Europe:" "$YELLOW"
+        print_message "    • Europe/London, Europe/Berlin, Europe/Paris" "$NC"
+        print_message "  Asia:" "$YELLOW"
+        print_message "    • Asia/Tokyo, Asia/Singapore, Asia/Dubai" "$NC"
+        print_message "  Other:" "$YELLOW"
+        print_message "    • Australia/Sydney, Pacific/Auckland, UTC" "$NC"
+        print_message "" "$NC"
+        print_message "⚠️  Note: Legacy formats like US/Mountain are deprecated" "$YELLOW"
+        print_message "   Use canonical formats (e.g., America/Denver) for best compatibility" "$YELLOW"
+
+        # Helper function to check and offer canonical timezone alternatives
+        check_and_offer_canonical_tz() {
+            local tz="$1"
+            local tz_var_name="$2"  # Variable name to update
+
+            if [[ "$tz" =~ ^US/ ]] || [[ "$tz" =~ ^Etc/ ]]; then
+                print_message "" "$NC"
+                print_message "⚠️  WARNING: '$tz' uses legacy timezone format" "$YELLOW"
+                print_message "   This format was moved to tzdata-legacy in Debian 13 (Trixie)" "$YELLOW"
+
+                # Suggest canonical alternative
+                local canonical_alternative=""
+                case "$tz" in
+                    "US/Eastern") canonical_alternative="America/New_York" ;;
+                    "US/Central") canonical_alternative="America/Chicago" ;;
+                    "US/Mountain") canonical_alternative="America/Denver" ;;
+                    "US/Pacific") canonical_alternative="America/Los_Angeles" ;;
+                    "US/Alaska") canonical_alternative="America/Anchorage" ;;
+                    "US/Hawaii") canonical_alternative="Pacific/Honolulu" ;;
+                esac
+
+                if [ -n "$canonical_alternative" ]; then
+                    print_message "   💡 Recommended canonical format: $canonical_alternative" "$GREEN"
+                    print_message "" "$NC"
+                    print_message "❓ Would you like to use $canonical_alternative instead? (y/n): " "$YELLOW" "nonewline"
+                    read -r use_canonical
+
+                    if [[ $use_canonical == "y" ]]; then
+                        eval "$tz_var_name=\"$canonical_alternative\""
+                        detected_tz="$canonical_alternative"
+                        print_message "✅ Using canonical timezone: $canonical_alternative" "$GREEN"
+                    else
+                        print_message "⚠️  Continuing with legacy format (requires tzdata-legacy package)" "$YELLOW"
+                    fi
+                else
+                    print_message "   💡 Consider using the canonical IANA timezone format" "$YELLOW"
+                    print_message "   See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones" "$NC"
+                fi
+            fi
+        }
+
         while true; do
-            print_message "\n❓ Enter your timezone (e.g., US/Eastern, Europe/London): " "$YELLOW" "nonewline"
+            print_message "\n❓ Enter your timezone (e.g., America/New_York, Europe/London): " "$YELLOW" "nonewline"
             read -r user_tz
             
             # Convert lowercase input to proper case format
@@ -2920,7 +2970,10 @@ configure_timezone() {
             if [ -f "/usr/share/zoneinfo/$user_tz" ]; then
                 detected_tz="$user_tz"
                 print_message "✅ Timezone '$user_tz' is valid" "$GREEN"
-                
+
+                # Check if timezone uses legacy format and offer canonical alternative
+                check_and_offer_canonical_tz "$user_tz" "user_tz"
+
                 # Show what time it would be in that timezone
                 local tz_time=$(TZ="$user_tz" date +"%Y-%m-%d %H:%M:%S %Z")
                 print_message "🕐 Time in $user_tz: $tz_time" "$YELLOW"
@@ -2936,7 +2989,10 @@ configure_timezone() {
             elif [ -f "/usr/share/zoneinfo/$normalized_tz" ]; then
                 detected_tz="$normalized_tz"
                 print_message "✅ Timezone '$normalized_tz' is valid" "$GREEN"
-                
+
+                # Check if timezone uses legacy format and offer canonical alternative
+                check_and_offer_canonical_tz "$normalized_tz" "normalized_tz"
+
                 # Show what time it would be in that timezone
                 local tz_time=$(TZ="$normalized_tz" date +"%Y-%m-%d %H:%M:%S %Z")
                 print_message "🕐 Time in $normalized_tz: $tz_time" "$YELLOW"
@@ -2950,12 +3006,24 @@ configure_timezone() {
                     print_message "Let's try again with a different timezone" "$YELLOW"
                 fi
             else
-                print_message "❌ Invalid timezone '$user_tz'" "$RED"
+                print_message "❌ Timezone '$user_tz' not found" "$RED"
                 if [ "$user_tz" != "$normalized_tz" ]; then
                     print_message "   Also tried: '$normalized_tz'" "$RED"
                 fi
-                print_message "💡 Tip: You can list all available timezones with: timedatectl list-timezones" "$YELLOW"
-                print_message "   Or check /usr/share/zoneinfo/ directory" "$YELLOW"
+
+                # Check if this is a known legacy name that requires tzdata-legacy
+                if [[ "$user_tz" =~ ^US/ ]] || [[ "$user_tz" =~ ^Etc/ ]]; then
+                    print_message "" "$NC"
+                    print_message "⚠️  This appears to be a legacy timezone name" "$YELLOW"
+                    print_message "   On Debian 13 (Trixie), legacy timezones require the tzdata-legacy package" "$YELLOW"
+                    print_message "" "$NC"
+                    print_message "💡 You have two options:" "$YELLOW"
+                    print_message "   1. Use a canonical timezone format instead (recommended)" "$GREEN"
+                    print_message "   2. Install tzdata-legacy package: sudo apt install tzdata-legacy" "$YELLOW"
+                else
+                    print_message "💡 Tip: You can list all available timezones with: timedatectl list-timezones" "$YELLOW"
+                    print_message "   Or check /usr/share/zoneinfo/ directory" "$YELLOW"
+                fi
             fi
         done
     fi

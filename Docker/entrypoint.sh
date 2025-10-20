@@ -78,6 +78,35 @@ if [ ! -L "$USER_HOME/.config/birdnet-go" ]; then
     gosu "$USER_NAME" ln -sf /config "$USER_HOME/.config/birdnet-go"
 fi
 
+# Configure timezone if TZ environment variable is set
+if [ -n "$TZ" ]; then
+    echo "Timezone configuration: TZ=$TZ"
+
+    # Warn about legacy timezone formats
+    if [[ "$TZ" == US/* ]] || [[ "$TZ" == Etc/* ]]; then
+        echo "⚠️  WARNING: Using legacy timezone format '$TZ'"
+        echo "    Consider canonical format (e.g., 'America/Denver' instead of 'US/Mountain')"
+        echo "    Legacy names may be removed in future Debian releases"
+    fi
+
+    # Validate timezone exists in tzdata
+    if [ -f "/usr/share/zoneinfo/$TZ" ]; then
+        ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime
+        echo "$TZ" > /etc/timezone
+        echo "✓ Timezone configured: $TZ"
+    else
+        echo "❌ ERROR: Timezone '$TZ' not found"
+        echo "   Available timezones: ls /usr/share/zoneinfo/"
+        echo "   Install tzdata-legacy if using US/*, Etc/*, or other legacy names"
+        echo "   Falling back to UTC"
+        # Actually configure UTC as fallback
+        ln -snf "/usr/share/zoneinfo/UTC" /etc/localtime
+        echo "UTC" > /etc/timezone
+    fi
+else
+    echo "No TZ environment variable set, using container default (UTC)"
+fi
+
 # If audio device present, ensure permissions are correct
 if [ -d "/dev/snd" ]; then
     # Add user to audio group
