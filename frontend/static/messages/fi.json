@@ -798,6 +798,28 @@
                   "none": "Käytä vain valittua palvelua"
                 }
               }
+            },
+            "spectrogram": {
+              "title": "Spektrogrammin Generointi",
+              "mode": {
+                "label": "Generointitila",
+                "auto": {
+                  "label": "Automaattinen (Suositeltu)",
+                  "helpText": "Spektrogrammit luodaan automaattisesti, kun havaitseminen avataan käyttöliittymässä. Pitkän havaitsemislistan käsittely voi kestää kauan laitteissa, joissa on rajatut CPU-resurssit."
+                },
+                "prerender": {
+                  "label": "Esirenderöi Taustalla",
+                  "helpText": "Luo spektrogrammit automaattisesti tallennuksen yhteydessä. Resurssirajoitetuissa laitteissa (esim. Raspberry Pi Zero/3) tämä tekee käyttöliittymästä responsiivisemman, mutta käyttää enemmän levytilaa, koska spektrogrammeja luodaan joka havainnolle."
+                },
+                "userRequested": {
+                  "label": "Vain Käyttäjän Pyynnöstä",
+                  "helpText": "Generoi spektrogrammit vain kun napsautat generoi-painiketta. Täydellinen resurssirajoitteisille järjestelmille (Raspberry Pi 3/Zero) - ei automaattista kuormaa, sinä päätät milloin prosessoria käytetään."
+                }
+              },
+              "enabled": {
+                "label": "Ota Spektrogrammin Esirenderöinti Käyttöön",
+                "helpText": "VANHENTUNUT: Käytä sen sijaan Generointitilaa. Generoi spektrogrammeja taustalla kun havaintoja tallennetaan käyttöliittymän viiveiden poistamiseksi."
+              }
             }
           }
         }
@@ -1524,6 +1546,14 @@
       "filterControl": "Suodattimen hallinta",
       "highPassFilter": "Ylipäästösuodattimen hallinta: {freq} Hz",
       "seekProgress": "Äänen eteneminen: {current} / {total} sekuntia"
+    },
+    "spectrogram": {
+      "notGenerated": "Spektrogrammia ei ole vielä generoitu",
+      "generate": "Generoi spektrogrammi",
+      "generateButton": "Generoi",
+      "generating": "Generoidaan...",
+      "generationFailed": "Spektrogrammin generointi epäonnistui",
+      "generationSuccess": "Spektrogrammi generoitu onnistuneesti"
     }
   },
   "components": {

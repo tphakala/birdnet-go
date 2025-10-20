@@ -814,6 +814,28 @@
                   "none": "Utiliser uniquement le fournisseur sélectionné"
                 }
               }
+            },
+            "spectrogram": {
+              "title": "Génération de Spectrogramme",
+              "mode": {
+                "label": "Mode de Génération",
+                "auto": {
+                  "label": "Automatique (Recommandé)",
+                  "helpText": "Les spectrogrammes sont générés automatiquement lorsqu'une détection est affichée sur l'interface utilisateur. Pour une longue liste de détections, la génération de spectrogrammes peut prendre beaucoup de temps sur les systèmes avec des ressources CPU limitées."
+                },
+                "prerender": {
+                  "label": "Pré-rendre en Arrière-plan",
+                  "helpText": "Génère les spectrogrammes automatiquement lors de l'enregistrement du clip audio. Sur les systèmes aux ressources limitées comme Raspberry Pi Zero ou 3, cela offre une interface utilisateur plus réactive car les spectrogrammes sont rendus en arrière-plan. Cependant, ce mode consommera plus d'espace disque car les spectrogrammes sont créés pour chaque détection."
+                },
+                "userRequested": {
+                  "label": "Uniquement à la Demande de l'Utilisateur",
+                  "helpText": "Générer les spectrogrammes uniquement lorsque vous cliquez sur le bouton générer. Parfait pour les systèmes aux ressources limitées (Raspberry Pi 3/Zero) - zéro surcharge automatique, vous contrôlez quand le CPU est utilisé."
+                }
+              },
+              "enabled": {
+                "label": "Activer le Pré-rendu de Spectrogramme",
+                "helpText": "OBSOLÈTE : Utilisez le Mode de Génération à la place. Générer les spectrogrammes en arrière-plan lors de l'enregistrement des détections pour éliminer les retards d'interface."
+              }
             }
           }
         }
@@ -1546,6 +1568,14 @@
       "filterControl": "Contrôle du filtre",
       "highPassFilter": "Contrôle du filtre passe-haut : {freq} Hz",
       "seekProgress": "Progression de la lecture audio : {current} / {total} secondes"
+    },
+    "spectrogram": {
+      "notGenerated": "Spectrogramme pas encore généré",
+      "generate": "Générer le spectrogramme",
+      "generateButton": "Générer",
+      "generating": "Génération en cours...",
+      "generationFailed": "Échec de la génération du spectrogramme",
+      "generationSuccess": "Spectrogramme généré avec succès"
     }
   },
   "components": {

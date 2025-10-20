@@ -895,10 +895,25 @@
               }
             },
             "spectrogram": {
-              "title": "Spectrogram Pre-Rendering",
+              "title": "Spectrogram Generation",
+              "mode": {
+                "label": "Generation Mode",
+                "auto": {
+                  "label": "Auto (Recommended)",
+                  "helpText": "Spectrograms are generated automatically when detection is viewed on user interface. For long list of detections spectrogram generation may take a long time on systems with limited CPU resources."
+                },
+                "prerender": {
+                  "label": "Pre-render in Background",
+                  "helpText": "Generate spectrograms automatically during audio clip save. On resource constrained systems like Raspberry Pi Zero or 3 this provides more responsive user interface due to spectrograms being rendered in background, however this mode will consume more disk space as spectrograms are created for every detection."
+                },
+                "userRequested": {
+                  "label": "User-Requested Only",
+                  "helpText": "Generate spectrograms only when you click the generate button. Perfect for resource-constrained systems (Raspberry Pi 3/Zero) - zero automatic overhead, you control when CPU is used."
+                }
+              },
               "enabled": {
                 "label": "Enable Spectrogram Pre-Rendering",
-                "helpText": "Generate spectrograms in the background when detections are saved to eliminate UI lag. Note: This will increase disk usage as PNG files are stored alongside audio clips."
+                "helpText": "DEPRECATED: Use Generation Mode instead. Generate spectrograms in the background when detections are saved to eliminate UI lag."
               }
             }
           }
@@ -1684,6 +1699,14 @@
       "filterControl": "Filter control",
       "highPassFilter": "High-pass filter control: {freq} Hz",
       "seekProgress": "Seek audio progress: {current} / {total} seconds"
+    },
+    "spectrogram": {
+      "notGenerated": "Spectrogram not yet generated",
+      "generate": "Generate spectrogram",
+      "generateButton": "Generate",
+      "generating": "Generating...",
+      "generationFailed": "Failed to generate spectrogram",
+      "generationSuccess": "Spectrogram generated successfully"
     }
   },
   "components": {

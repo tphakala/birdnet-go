@@ -797,6 +797,28 @@
                   "none": "Nur ausgewählten Anbieter verwenden"
                 }
               }
+            },
+            "spectrogram": {
+              "title": "Spektrogramm-Generierung",
+              "mode": {
+                "label": "Generierungsmodus",
+                "auto": {
+                  "label": "Automatisch (Empfohlen)",
+                  "helpText": "Spektrogramme werden automatisch generiert, wenn eine Erkennung in der Benutzeroberfläche angezeigt wird. Für lange Listen von Erkennungen kann die Spektrogramm-Generierung auf Systemen mit begrenzten CPU-Ressourcen lange dauern."
+                },
+                "prerender": {
+                  "label": "Im Hintergrund vorab rendern",
+                  "helpText": "Spektrogramme werden automatisch während der Audioaufnahme-Speicherung generiert. Auf ressourcenbeschränkten Systemen wie Raspberry Pi Zero oder 3 sorgt dies für eine reaktionsschnellere Benutzeroberfläche, da Spektrogramme im Hintergrund gerendert werden. Allerdings verbraucht dieser Modus mehr Speicherplatz, da Spektrogramme für jede Erkennung erstellt werden."
+                },
+                "userRequested": {
+                  "label": "Nur auf Benutzeranfrage",
+                  "helpText": "Spektrogramme nur generieren, wenn Sie auf die Schaltfläche klicken. Perfekt für ressourcenbeschränkte Systeme (Raspberry Pi 3/Zero) - keine automatische Belastung, Sie kontrollieren, wann CPU verwendet wird."
+                }
+              },
+              "enabled": {
+                "label": "Spektrogramm-Vorrendering aktivieren",
+                "helpText": "VERALTET: Verwenden Sie stattdessen den Generierungsmodus. Spektrogramme im Hintergrund generieren, wenn Erkennungen gespeichert werden, um UI-Verzögerungen zu eliminieren."
+              }
             }
           }
         }
@@ -1541,6 +1563,14 @@
       "filterControl": "Filtersteuerung",
       "highPassFilter": "Hochpassfilter-Steuerung: {freq} Hz",
       "seekProgress": "Audio-Fortschritt: {current} / {total} Sekunden"
+    },
+    "spectrogram": {
+      "notGenerated": "Spektrogramm noch nicht generiert",
+      "generate": "Spektrogramm generieren",
+      "generateButton": "Generieren",
+      "generating": "Wird generiert...",
+      "generationFailed": "Spektrogramm-Generierung fehlgeschlagen",
+      "generationSuccess": "Spektrogramm erfolgreich generiert"
     }
   },
   "components": {

@@ -83,6 +83,8 @@
   let playPauseButton!: HTMLButtonElement; // Template-only binding
   let progressBar: HTMLDivElement;
   // svelte-ignore non_reactive_update
+  let spectrogramImage: HTMLImageElement; // Template-only binding
+  // svelte-ignore non_reactive_update
   let volumeControl!: HTMLDivElement; // Template-only binding
   // svelte-ignore non_reactive_update
   let filterControl!: HTMLDivElement; // Template-only binding
@@ -130,6 +132,15 @@
   let statusPollTimer: ReturnType<typeof setTimeout> | undefined;
   let statusPollStartTime: number | undefined;
   let statusPollAbortController: AbortController | undefined;
+
+  // User-requested spectrogram generation state
+  // TODO: Wire up UI components for generate button when spectrogramNeedsGeneration is true
+  // eslint-disable-next-line no-unused-vars
+  let spectrogramNeedsGeneration = $state(false);
+  let isGeneratingSpectrogram = $state(false);
+  // eslint-disable-next-line no-unused-vars
+  let generationError = $state<string | null>(null);
+  let spectrogramMode = $state<string | null>(null);
 
   // Audio processing state
   let audioContext: AudioContext | null = null;
@@ -385,6 +396,49 @@
     updateFilter(newFreq);
   };
 
+  // Check spectrogram mode on mount/URL change to avoid double-request pattern
+  // NOTE: Current implementation requires an initial network request to detect mode.
+  //
+  // Future optimization options:
+  // 1. Read from global settings store (if spectrogram mode is exposed frontend-wide)
+  // 2. Call dedicated /api/v2/spectrogram/:id/info endpoint for lightweight metadata
+  // 3. Use format query parameter (e.g., ?format=json) for explicit JSON responses
+  //
+  // The current approach is acceptable as it eliminates the previous double-request
+  // pattern where BOTH the <img> load AND a subsequent fetch() would fail before
+  // showing the generate button.
+  const checkSpectrogramMode = async () => {
+    if (!spectrogramUrl) {
+      spectrogramMode = null;
+      return;
+    }
+
+    try {
+      const response = await fetch(spectrogramUrl);
+      if (response.status === 404) {
+        const contentType = response.headers.get('Content-Type');
+        if (contentType?.includes('application/json')) {
+          const responseData = await response.json();
+          // Extract mode from data field in API v2 envelope
+          spectrogramMode = responseData.data?.mode ?? null;
+
+          if (spectrogramMode === 'user-requested') {
+            logger.debug('Spectrogram in user-requested mode', { detectionId });
+            spectrogramNeedsGeneration = true;
+            spectrogramLoader.setLoading(false);
+          }
+        }
+      } else if (response.ok) {
+        // Spectrogram exists
+        spectrogramMode = null;
+        spectrogramNeedsGeneration = false;
+      }
+    } catch (err) {
+      logger.debug('Failed to check spectrogram mode', { detectionId, error: err });
+      spectrogramMode = null;
+    }
+  };
+
   // Poll spectrogram generation status
   const pollSpectrogramStatus = async () => {
     if (!showSpectrogram || !detectionId) return;
@@ -410,7 +464,9 @@
       );
 
       if (response.ok) {
-        const status = await response.json();
+        const responseData = await response.json();
+        // Extract status from v2 envelope format
+        const status = responseData.data ?? responseData;
         spectrogramStatus = status;
 
         // Check status and decide what to do
@@ -422,12 +478,11 @@
           // Spectrogram is ready, stop polling and try to load it
           clearStatusPollTimer();
           spectrogramStatus = null;
-          // Force reload the image
-          const img = document.querySelector(`#spectrogram-${detectionId}`) as HTMLImageElement;
-          if (img && spectrogramUrl) {
+          // Force reload the image using Svelte binding
+          if (spectrogramImage && spectrogramUrl) {
             const url = new URL(spectrogramUrl, window.location.origin);
             url.searchParams.set('t', Date.now().toString());
-            img.src = url.toString();
+            spectrogramImage.src = url.toString();
           }
         } else if (status.status === 'queued' || status.status === 'generating') {
           // Still processing, continue polling
@@ -469,8 +524,21 @@
     clearStatusPollTimer(); // Also clear status polling
   };
 
-  const handleSpectrogramError = (event: Event) => {
+  const handleSpectrogramError = async (event: Event) => {
     const img = event.currentTarget as HTMLImageElement;
+
+    // Check if this is user-requested mode (using cached mode)
+    if (spectrogramRetryCount === 0 && spectrogramMode === 'user-requested') {
+      // User-requested mode - show generate button instead of error
+      logger.debug('Spectrogram not generated in user-requested mode', {
+        detectionId,
+      });
+      spectrogramNeedsGeneration = true;
+      spectrogramLoader.setLoading(false);
+      clearSpectrogramRetryTimer();
+      clearStatusPollTimer();
+      return;
+    }
 
     // Start polling for generation status on first error
     if (spectrogramRetryCount === 0) {
@@ -537,6 +605,80 @@
     }
   };
 
+  // Handle user-requested spectrogram generation
+  // TODO: Wire up to generate button in UI when spectrogramNeedsGeneration is true
+  // eslint-disable-next-line no-unused-vars
+  const handleGenerateSpectrogram = async () => {
+    if (isGeneratingSpectrogram) return; // Prevent double-click
+
+    isGeneratingSpectrogram = true;
+    generationError = null;
+
+    logger.info('User requested spectrogram generation', { detectionId });
+
+    try {
+      // Build POST URL using URL and URLSearchParams
+      const generateUrl = new URL(
+        `/api/v2/spectrogram/${detectionId}/generate`,
+        window.location.origin
+      );
+      const params = new URLSearchParams();
+      params.set('size', spectrogramSize);
+      if (spectrogramRaw) {
+        params.set('raw', 'true');
+      }
+      generateUrl.search = params.toString();
+
+      const response = await fetch(generateUrl.toString(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        let errorMessage = `Generation failed with status ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message ?? errorMessage;
+        } catch (parseErr) {
+          logger.warn('Failed to parse error response', { parseErr });
+        }
+        throw new Error(errorMessage);
+      }
+
+      const responseData = await response.json();
+      // Extract data from v2 envelope format
+      const data = responseData.data ?? responseData;
+      logger.info('Spectrogram generated successfully', {
+        detectionId,
+        path: data.path,
+      });
+
+      // Reset state and reload the spectrogram
+      spectrogramNeedsGeneration = false;
+      spectrogramRetryCount = 0;
+      spectrogramLoader.setLoading(true);
+
+      // Reload the image with cache-busting parameter using Svelte binding
+      if (spectrogramImage && spectrogramUrl) {
+        const url = new URL(spectrogramUrl, window.location.origin);
+        url.searchParams.set('t', Date.now().toString());
+        spectrogramImage.src = url.toString();
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate spectrogram';
+      generationError = errorMessage;
+      logger.error('Spectrogram generation failed', {
+        detectionId,
+        error: err,
+      });
+      spectrogramLoader.setError();
+    } finally {
+      isGeneratingSpectrogram = false;
+    }
+  };
+
   // Track previous URL to avoid unnecessary resets
   let previousSpectrogramUrl = $state<string | null>(null);
 
@@ -545,6 +687,8 @@
     // Only reset loading state if URL actually changed
     if (spectrogramUrl && spectrogramUrl !== previousSpectrogramUrl && !spectrogramLoader.error) {
       previousSpectrogramUrl = spectrogramUrl;
+      // Check mode first to avoid double-request pattern
+      checkSpectrogramMode();
       // Start loading when URL changes
       spectrogramLoader.setLoading(true);
       // Reset retry count and clear any pending retry timer for new spectrogram
@@ -761,6 +905,7 @@
       </div>
     {:else}
       <img
+        bind:this={spectrogramImage}
         id={`spectrogram-${detectionId}`}
         src={spectrogramUrl}
         alt="Audio spectrogram"

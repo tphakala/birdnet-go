@@ -133,12 +133,56 @@ type Dashboard struct {
 	Spectrogram  SpectrogramPreRender `json:"spectrogram"`      // Spectrogram pre-rendering settings
 }
 
-// SpectrogramPreRender contains settings for background spectrogram pre-rendering.
-// Pre-rendering spectrograms during audio save eliminates UI lag when users access detections.
+// Spectrogram generation mode constants
+const (
+	SpectrogramModeAuto          = "auto"
+	SpectrogramModePreRender     = "prerender"
+	SpectrogramModeUserRequested = "user-requested"
+)
+
+// SpectrogramPreRender contains settings for spectrogram generation modes.
+// Three modes control when and how spectrograms are generated:
+//   - "auto": Generate on-demand when API is called (default, suitable for most systems)
+//   - "prerender": Background worker generates during audio clip save (continuous CPU usage)
+//   - "user-requested": Only generate when user clicks button in UI (zero automatic overhead)
 type SpectrogramPreRender struct {
-	Enabled bool   `json:"enabled" mapstructure:"enabled"` // Enable background pre-rendering (default: false, opt-in)
-	Size    string `json:"size"    mapstructure:"size"`    // Size to pre-render (see recommendations below)
+	Mode    string `json:"mode"    mapstructure:"mode"`    // Generation mode: "auto" (default), "prerender", "user-requested"
+	Enabled bool   `json:"enabled" mapstructure:"enabled"` // DEPRECATED: Use Mode instead. Kept for backward compatibility (true = "prerender", false = "auto")
+	Size    string `json:"size"    mapstructure:"size"`    // Default size for all modes (see recommendations below)
 	Raw     bool   `json:"raw"     mapstructure:"raw"`     // Generate raw spectrogram without axes/legend (default: true)
+}
+
+// GetMode returns the effective spectrogram generation mode, handling backward compatibility.
+// If Mode is explicitly set, it is used. Otherwise, it derives the mode from the deprecated
+// Enabled field: true = "prerender", false = "auto".
+func (s *SpectrogramPreRender) GetMode() string {
+	// If Mode is explicitly set to a valid value, use it
+	if s.Mode == SpectrogramModeAuto || s.Mode == SpectrogramModePreRender || s.Mode == SpectrogramModeUserRequested {
+		return s.Mode
+	}
+
+	// Backward compatibility: derive from Enabled field
+	if s.Enabled {
+		return SpectrogramModePreRender
+	}
+
+	// Default to "auto" mode
+	return SpectrogramModeAuto
+}
+
+// IsPreRenderEnabled returns true if spectrograms should be pre-rendered in background.
+func (s *SpectrogramPreRender) IsPreRenderEnabled() bool {
+	return s.GetMode() == "prerender"
+}
+
+// IsAutoMode returns true if spectrograms should be generated on-demand via API.
+func (s *SpectrogramPreRender) IsAutoMode() bool {
+	return s.GetMode() == "auto"
+}
+
+// IsUserRequestedMode returns true if spectrograms should only be generated on explicit user request.
+func (s *SpectrogramPreRender) IsUserRequestedMode() bool {
+	return s.GetMode() == "user-requested"
 }
 
 // Size recommendations for SpectrogramPreRender.Size:

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -133,6 +134,7 @@ func (c *Controller) initMediaRoutes() {
 	c.Echo.GET("/api/v2/audio/:id", c.ServeAudioByID)
 	c.Echo.GET("/api/v2/spectrogram/:id", c.ServeSpectrogramByID)
 	c.Echo.GET("/api/v2/spectrogram/:id/status", c.GetSpectrogramStatus)
+	c.Echo.POST("/api/v2/spectrogram/:id/generate", c.GenerateSpectrogramByID)
 
 	// Convenient combined endpoint (redirects to ID-based internally)
 	c.Group.GET("/media/audio", c.ServeAudioByQueryID)
@@ -361,7 +363,7 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 	if err != nil {
 		// Check if error is due to record not found
 		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") { // Adapt based on datastore error type
-			return c.HandleError(ctx, err, "Clip path not found for note ID", http.StatusNotFound)
+			return c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
 		}
 		return c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusInternalServerError)
 	}
@@ -456,40 +458,62 @@ func (c *Controller) spectrogramHTTPError(ctx echo.Context, err error) error {
 	}
 }
 
-// ServeSpectrogramByID serves a spectrogram image based on note ID using SecureFS
+// spectrogramParameters holds parsed query parameters for spectrogram requests.
+// This struct is reusable across multiple endpoints.
+type spectrogramParameters struct {
+	width   int    // Pixel width for spectrogram
+	sizeStr string // Size parameter value (for URL generation)
+	raw     bool   // Whether to generate raw spectrogram without axes
+}
+
+// parseSpectrogramParameters extracts and validates spectrogram parameters from the request.
+// This is a reusable helper used by multiple endpoints.
 //
-// Route: GET /api/v2/spectrogram/:id
-//
-// Query Parameters:
+// Parameters:
 //   - size: Spectrogram size - "sm" (400px), "md" (800px), "lg" (1000px), "xl" (1200px)
-//     Default: "md"
 //   - width: Legacy parameter for custom width (1-2000px). Ignored if 'size' is present.
 //   - raw: Whether to generate raw spectrogram without axes/legends
-//     Default: true (for backward compatibility with cached spectrograms)
-//     Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
-//
-// The raw parameter defaults to true to maintain compatibility with existing cached
-// spectrograms from the old HTMX API which generated raw spectrograms by default.
-func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
-	noteID := ctx.Param("id")
+func parseSpectrogramParameters(ctx echo.Context) spectrogramParameters {
+	params := spectrogramParameters{
+		width:   SpectrogramSizeMd, // Default width (md)
+		sizeStr: ctx.QueryParam("size"),
+		raw:     parseRawParameter(ctx.QueryParam("raw")),
+	}
+
+	// Parse size parameter
+	if params.sizeStr != "" {
+		if validWidth, err := spectrogram.SizeToPixels(params.sizeStr); err == nil {
+			params.width = validWidth
+		}
+		// Invalid size parameter falls back to width parameter or default
+	}
+
+	// Legacy width parameter support (only if size not specified)
+	widthStr := ctx.QueryParam("width")
+	if widthStr != "" && params.sizeStr == "" {
+		if parsedWidth, err := strconv.Atoi(widthStr); err == nil && parsedWidth > 0 && parsedWidth <= 2000 {
+			params.width = parsedWidth
+		}
+	}
+
+	return params
+}
+
+// validateNoteIDAndGetClipPath validates the note ID parameter and retrieves the clip path.
+// Returns the noteID and clipPath, or an error if validation fails.
+func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, clipPath string, err error) {
+	noteID = ctx.Param("id")
 	if noteID == "" {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Missing note ID for spectrogram request",
 				"path", ctx.Request().URL.Path,
 				"ip", ctx.RealIP())
 		}
-		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
+		err = c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
+		return
 	}
 
-	if c.apiLogger != nil {
-		c.apiLogger.Debug("Spectrogram requested by ID",
-			"note_id", noteID,
-			"query_params", ctx.QueryString(),
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP())
-	}
-
-	clipPath, err := c.DS.GetNoteClipPath(noteID)
+	clipPath, err = c.DS.GetNoteClipPath(noteID)
 	if err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to get clip path from database",
@@ -499,9 +523,11 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 				"ip", ctx.RealIP())
 		}
 		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
-			return c.HandleError(ctx, err, "Clip path not found for note ID", http.StatusNotFound)
+			err = c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
+			return
 		}
-		return c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusInternalServerError)
+		err = c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusInternalServerError)
+		return
 	}
 
 	if clipPath == "" {
@@ -511,46 +537,96 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 				"path", ctx.Request().URL.Path,
 				"ip", ctx.RealIP())
 		}
-		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available for this note", http.StatusNotFound)
+		err = c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available for this note", http.StatusNotFound)
+		return
 	}
 
-	// Parse size parameter
-	width := SpectrogramSizeMd // Default width (md)
-	sizeStr := ctx.QueryParam("size")
-	if sizeStr != "" {
-		if validWidth, err := spectrogram.SizeToPixels(sizeStr); err == nil {
-			width = validWidth
+	return
+}
+
+// handleUserRequestedMode handles spectrogram serving in user-requested mode.
+// Returns true if the request was handled (either success or error response sent).
+func (c *Controller) handleUserRequestedMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters) (bool, error) {
+	// Normalize and validate the audio path
+	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
+	normalizedPath := NormalizeClipPath(clipPath, clipsPrefix)
+	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
+
+	if err == nil {
+		// Build spectrogram path
+		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
+
+		// Check if spectrogram already exists
+		if _, statErr := c.SFS.StatRel(relSpectrogramPath); statErr == nil {
+			// Spectrogram exists, serve it
+			if c.apiLogger != nil {
+				c.apiLogger.Debug("Serving existing spectrogram in user-requested mode",
+					"note_id", noteID,
+					"spectrogram_path", relSpectrogramPath,
+					"path", ctx.Request().URL.Path,
+					"ip", ctx.RealIP())
+			}
+
+			err = c.SFS.ServeRelativeFile(ctx, relSpectrogramPath)
+			if err != nil {
+				return true, c.translateSecureFSError(ctx, err, "Failed to serve spectrogram image")
+			}
+			return true, nil
 		}
-		// Invalid size parameter falls back to width parameter or default
 	}
 
-	// Legacy width parameter support
-	widthStr := ctx.QueryParam("width")
-	if widthStr != "" && sizeStr == "" {
-		parsedWidth, err := strconv.Atoi(widthStr)
-		if err == nil && parsedWidth > 0 && parsedWidth <= 2000 {
-			width = parsedWidth
-		}
-	}
-
-	// Parse raw spectrogram parameter
-	raw := parseRawParameter(ctx.QueryParam("raw"))
-
+	// Spectrogram doesn't exist in user-requested mode - return 404 with helpful message
 	if c.apiLogger != nil {
-		c.apiLogger.Debug("Spectrogram parameters parsed",
+		c.apiLogger.Debug("Spectrogram not found in user-requested mode",
 			"note_id", noteID,
-			"clip_path", clipPath,
-			"width", width,
-			"raw", raw,
-			"size_param", sizeStr,
-			"width_param", widthStr,
+			"mode", conf.SpectrogramModeUserRequested,
 			"path", ctx.Request().URL.Path,
 			"ip", ctx.RealIP())
 	}
 
-	// Pass the request context for cancellation/timeout
+	return c.returnSpectrogramNotGeneratedError(ctx)
+}
+
+// returnSpectrogramNotGeneratedError returns a standardized 404 response for user-requested mode
+// when a spectrogram hasn't been generated yet.
+func (c *Controller) returnSpectrogramNotGeneratedError(ctx echo.Context) (bool, error) {
+	// Return JSON response with mode information using standard v2 error envelope.
+	// Flow: <img> element's onerror handler triggers -> frontend makes fetch() call to same URL
+	// -> this JSON response is parsed by frontend -> mode field triggers UI to show "Generate" button
+	// Note: The <img> element doesn't parse this JSON; the error handler's fetch() call does.
+	errorResp := NewErrorResponse(
+		fmt.Errorf("spectrogram not generated"),
+		"Spectrogram has not been generated yet. Click 'Generate Spectrogram' to create it.",
+		http.StatusNotFound,
+	)
+
+	// Log the error with structured logging
+	if c.apiLogger != nil {
+		c.apiLogger.Error("Spectrogram not generated",
+			"correlation_id", errorResp.CorrelationID,
+			"mode", conf.SpectrogramModeUserRequested,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP())
+	}
+
+	// Return standard error response with mode in data field (API v2 envelope)
+	// Mode is placed in data object to maintain envelope consistency
+	return true, ctx.JSON(http.StatusNotFound, map[string]any{
+		"error":          errorResp.Error,
+		"message":        errorResp.Message,
+		"code":           errorResp.Code,
+		"correlation_id": errorResp.CorrelationID,
+		"data": map[string]any{
+			"mode": conf.SpectrogramModeUserRequested,
+		},
+	})
+}
+
+// handleAutoPreRenderMode handles spectrogram generation and serving in auto/prerender modes.
+func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters) error {
+	// Auto or prerender mode - generate on-demand if needed
 	generationStart := time.Now()
-	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, width, raw)
+	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, params.width, params.raw)
 	generationDuration := time.Since(generationStart)
 
 	if err != nil {
@@ -603,6 +679,90 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 			"ip", ctx.RealIP())
 	}
 	return nil
+}
+
+// ServeSpectrogramByID serves a spectrogram image based on note ID using SecureFS
+//
+// Route: GET /api/v2/spectrogram/:id
+//
+// Query Parameters:
+//   - size: Spectrogram size - "sm" (400px), "md" (800px), "lg" (1000px), "xl" (1200px)
+//     Default: "md"
+//   - width: Legacy parameter for custom width (1-2000px). Ignored if 'size' is present.
+//   - raw: Whether to generate raw spectrogram without axes/legends
+//     Default: true (for backward compatibility with cached spectrograms)
+//     Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
+//
+// Response Format:
+// The response format varies based on the spectrogram generation mode setting and availability.
+// Clients MUST check Content-Type header to handle the response correctly.
+//
+// 1. Success - Spectrogram exists (Auto/Prerender Mode or already generated):
+//   - Content-Type: image/png
+//   - Body: Binary PNG image data
+//   - Status: 200 OK
+//
+// 2. Error - User-Requested Mode (spectrogram not generated):
+//   - Content-Type: application/json
+//   - Status: 404 Not Found
+//   - Body (API v2 envelope):
+//     {
+//       "error": "spectrogram not generated",
+//       "message": "Spectrogram has not been generated yet. Click 'Generate Spectrogram' to create it.",
+//       "code": 404,
+//       "correlation_id": "abc12345",
+//       "data": {
+//         "mode": "user-requested"
+//       }
+//     }
+//
+// IMPORTANT: Clients must check Content-Type header to determine response format:
+//   - image/png: Binary image data (display image)
+//   - application/json: Error response (handle error, show generate button if data.mode=user-requested)
+//
+// TODO: Consider adding a dedicated endpoint or format query parameter for cleaner API design:
+//   Option A: GET /api/v2/spectrogram/:id/info - Returns JSON metadata including mode and status
+//   Option B: GET /api/v2/spectrogram/:id?format=json - Explicit format parameter
+// This would eliminate Content-Type-based response type detection and provide a cleaner separation
+// between image serving and metadata/status queries.
+//
+// The raw parameter defaults to true to maintain compatibility with existing cached
+// spectrograms from the old HTMX API which generated raw spectrograms by default.
+func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
+	// Validate note ID and get clip path
+	noteID, clipPath, err := c.validateNoteIDAndGetClipPath(ctx)
+	if err != nil {
+		return err // Error already handled and logged
+	}
+
+	// Parse query parameters
+	params := parseSpectrogramParameters(ctx)
+
+	// Log request details
+	if c.apiLogger != nil {
+		c.apiLogger.Debug("Spectrogram requested by ID",
+			"note_id", noteID,
+			"clip_path", clipPath,
+			"width", params.width,
+			"raw", params.raw,
+			"size_param", params.sizeStr,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP())
+	}
+
+	// Check spectrogram generation mode
+	spectrogramMode := c.Settings.Realtime.Dashboard.Spectrogram.GetMode()
+
+	// Handle user-requested mode
+	if spectrogramMode == conf.SpectrogramModeUserRequested {
+		handled, err := c.handleUserRequestedMode(ctx, noteID, clipPath, params)
+		if handled {
+			return err
+		}
+	}
+
+	// Handle auto or prerender mode
+	return c.handleAutoPreRenderMode(ctx, noteID, clipPath, params)
 }
 
 // ServeAudioByQueryID serves an audio clip using query parameter for ID
@@ -675,10 +835,26 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 //
 // Route: GET /api/v2/spectrogram/:id/status
 //
-// Returns:
-//   - status: "not_started", "queued", "generating", "generated", "failed", or "exists"
-//   - queuePosition: Position in generation queue (0 if not queued)
-//   - message: Additional status information
+// Response Format (API v2 envelope):
+//
+//	{
+//	  "data": {
+//	    "status": "not_started|queued|generating|generated|failed|exists",
+//	    "queuePosition": 0,  // Position in queue (0 if not queued)
+//	    "startedAt": "2025-10-20T...",  // When generation started (if in progress)
+//	    "message": "Additional status information"
+//	  },
+//	  "error": "",
+//	  "message": "Status retrieved successfully"
+//	}
+//
+// Status Values:
+//   - "not_started": Spectrogram generation has not been requested
+//   - "queued": Waiting in queue for generation slot
+//   - "generating": Currently being generated
+//   - "generated": Successfully generated (in queue cache)
+//   - "failed": Generation failed
+//   - "exists": Already exists on disk
 func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	noteID := ctx.Param("id")
 	if noteID == "" {
@@ -691,20 +867,12 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
 	}
 
-	// Calculate spectrogram parameters from query
-	width := SpectrogramSizeMd // Default
-	sizeStr := ctx.QueryParam("size")
-	if sizeStr != "" {
-		if validWidth, err := spectrogram.SizeToPixels(sizeStr); err == nil {
-			width = validWidth
-		}
-	}
-
-	raw := parseRawParameter(ctx.QueryParam("raw"))
+	// Parse query parameters using shared helper
+	params := parseSpectrogramParameters(ctx)
 
 	// Build spectrogram key for status lookup
 	audioPath := detection.ClipName
-	spectrogramKey := fmt.Sprintf("%s_%d_%t", audioPath, width, raw)
+	spectrogramKey := fmt.Sprintf("%s_%d_%t", audioPath, params.width, params.raw)
 
 	// Check queue status first (more volatile state)
 	spectrogramQueueMutex.RLock()
@@ -713,7 +881,11 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 
 	// If it's actively being processed, return that status immediately
 	if existsInQueue {
-		return ctx.JSON(http.StatusOK, status)
+		return ctx.JSON(http.StatusOK, map[string]any{
+			"data":    status,
+			"error":   "",
+			"message": "Spectrogram generation status retrieved",
+		})
 	}
 
 	// Not in queue, check if spectrogram already exists on disk
@@ -722,23 +894,146 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
 	if err == nil {
 		// Build spectrogram path
-		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, width, raw)
+		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
 
 		// Check if file exists
 		if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
-			return ctx.JSON(http.StatusOK, SpectrogramQueueStatus{
-				Status:        spectrogramStatusExists,
-				QueuePosition: 0,
-				Message:       "Spectrogram already exists",
+			return ctx.JSON(http.StatusOK, map[string]any{
+				"data": SpectrogramQueueStatus{
+					Status:        spectrogramStatusExists,
+					QueuePosition: 0,
+					Message:       "Spectrogram already exists",
+				},
+				"error":   "",
+				"message": "Spectrogram exists on disk",
 			})
 		}
 	}
 
 	// Not in queue and doesn't exist on disk
-	return ctx.JSON(http.StatusOK, SpectrogramQueueStatus{
-		Status:        spectrogramStatusNotStarted,
-		QueuePosition: 0,
-		Message:       "Spectrogram generation not started",
+	return ctx.JSON(http.StatusOK, map[string]any{
+		"data": SpectrogramQueueStatus{
+			Status:        spectrogramStatusNotStarted,
+			QueuePosition: 0,
+			Message:       "Spectrogram generation not started",
+		},
+		"error":   "",
+		"message": "Spectrogram not yet generated",
+	})
+}
+
+// GenerateSpectrogramByID triggers spectrogram generation for a specific detection
+//
+// Route: POST /api/v2/spectrogram/:id/generate
+//
+// This endpoint is designed for "user-requested" mode where spectrograms are only
+// generated when explicitly requested by the user clicking a button in the UI.
+//
+// Query Parameters:
+//   - size: Spectrogram size - "sm" (400px), "md" (800px), "lg" (1000px), "xl" (1200px)
+//     Default: "md"
+//   - raw: Whether to generate raw spectrogram without axes/legends
+//     Default: true (for backward compatibility)
+//
+// Response Format (API v2 envelope):
+//
+//	{
+//	  "data": {
+//	    "status": "generated",
+//	    "path": "/api/v2/spectrogram/:id?raw=true"
+//	  },
+//	  "error": "",
+//	  "message": "Spectrogram generated successfully"
+//	}
+//
+// HTTP Status Codes:
+//   - 200 OK: Spectrogram generated successfully
+//   - 503 Service Unavailable: Audio file not ready (includes Retry-After header)
+//   - 404 Not Found: Audio file not found
+//   - 408 Request Timeout: Generation timed out
+//   - 500 Internal Server Error: Generation failed
+func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
+	// Validate note ID and get clip path using shared helper
+	noteID, clipPath, err := c.validateNoteIDAndGetClipPath(ctx)
+	if err != nil {
+		return err // Error already handled and logged
+	}
+
+	// Parse query parameters using shared helper
+	params := parseSpectrogramParameters(ctx)
+
+	// Log request details
+	if c.apiLogger != nil {
+		c.apiLogger.Debug("Spectrogram generation requested by user",
+			"note_id", noteID,
+			"clip_path", clipPath,
+			"width", params.width,
+			"raw", params.raw,
+			"size_param", params.sizeStr,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP())
+	}
+
+	// Trigger spectrogram generation
+	generationStart := time.Now()
+	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, params.width, params.raw)
+	generationDuration := time.Since(generationStart)
+
+	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Spectrogram generation failed",
+				"note_id", noteID,
+				"clip_path", clipPath,
+				"error", err.Error(),
+				"duration_ms", generationDuration.Milliseconds(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP())
+		}
+		return c.spectrogramHTTPError(ctx, err)
+	}
+
+	// Build the URL path for accessing the spectrogram with proper encoding
+	queryParams := url.Values{}
+
+	// Always include size parameter to match what was actually generated
+	sizeParam := params.sizeStr
+	if sizeParam == "" {
+		// Map default width back to size string for URL consistency
+		switch params.width {
+		case SpectrogramSizeSm:
+			sizeParam = "sm"
+		case SpectrogramSizeMd:
+			sizeParam = "md"
+		case SpectrogramSizeLg:
+			sizeParam = "lg"
+		case SpectrogramSizeXl:
+			sizeParam = "xl"
+		default:
+			sizeParam = "md" // fallback to default
+		}
+	}
+	queryParams.Set("size", sizeParam)
+	queryParams.Set("raw", strconv.FormatBool(params.raw))
+	spectrogramURL := fmt.Sprintf("/api/v2/spectrogram/%s?%s", url.PathEscape(noteID), queryParams.Encode())
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Spectrogram generated successfully",
+			"note_id", noteID,
+			"spectrogram_path", spectrogramPath,
+			"spectrogram_url", spectrogramURL,
+			"duration_ms", generationDuration.Milliseconds(),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP())
+	}
+
+	// Return success response with API v2 envelope format
+	return ctx.JSON(http.StatusOK, map[string]any{
+		"data": map[string]any{
+			"status": "generated",
+			"path":   spectrogramURL,
+		},
+		"error":   "",
+		"message": "Spectrogram generated successfully",
 	})
 }
 

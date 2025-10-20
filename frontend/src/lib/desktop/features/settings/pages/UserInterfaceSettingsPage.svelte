@@ -30,6 +30,7 @@
   import type { SpectrogramPreRender } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
   import { t, getLocale } from '$lib/i18n';
@@ -312,22 +313,67 @@
         </div>
       </div>
 
-      <!-- Spectrogram Pre-Rendering Settings -->
+      <!-- Spectrogram Generation Settings -->
       <div>
         <h4 class="text-lg font-medium pb-2 mt-6">
           {t('settings.main.sections.userInterface.dashboard.spectrogram.title')}
         </h4>
 
         <div class="space-y-4">
-          <Checkbox
-            checked={settings.dashboard.spectrogram?.enabled ?? false}
-            label={t('settings.main.sections.userInterface.dashboard.spectrogram.enabled.label')}
-            helpText={t(
-              'settings.main.sections.userInterface.dashboard.spectrogram.enabled.helpText'
-            )}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateSpectrogramSetting('enabled', value)}
-          />
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            <SelectField
+              id="spectrogram-mode"
+              value={settings.dashboard.spectrogram?.mode ?? 'auto'}
+              label={t('settings.main.sections.userInterface.dashboard.spectrogram.mode.label')}
+              options={[
+                {
+                  value: 'auto',
+                  label: t(
+                    'settings.main.sections.userInterface.dashboard.spectrogram.mode.auto.label'
+                  ),
+                },
+                {
+                  value: 'prerender',
+                  label: t(
+                    'settings.main.sections.userInterface.dashboard.spectrogram.mode.prerender.label'
+                  ),
+                },
+                {
+                  value: 'user-requested',
+                  label: t(
+                    'settings.main.sections.userInterface.dashboard.spectrogram.mode.userRequested.label'
+                  ),
+                },
+              ]}
+              disabled={store.isLoading || store.isSaving}
+              onchange={value => updateSpectrogramSetting('mode', value)}
+            />
+          </div>
+
+          <!-- Mode-specific notes -->
+          {#if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'auto'}
+            <SettingsNote>
+              <span>
+                {t('settings.main.sections.userInterface.dashboard.spectrogram.mode.auto.helpText')}
+              </span>
+            </SettingsNote>
+          {:else if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'prerender'}
+            <SettingsNote>
+              <span>
+                {t(
+                  'settings.main.sections.userInterface.dashboard.spectrogram.mode.prerender.helpText'
+                )}
+              </span>
+            </SettingsNote>
+          {:else if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'user-requested'}
+            <SettingsNote>
+              <span>
+                {t(
+                  'settings.main.sections.userInterface.dashboard.spectrogram.mode.userRequested.helpText'
+                )}
+              </span>
+            </SettingsNote>
+          {/if}
         </div>
       </div>
     </div>

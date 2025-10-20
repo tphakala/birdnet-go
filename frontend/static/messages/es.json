@@ -798,6 +798,28 @@
                   "none": "Usar solo el proveedor seleccionado"
                 }
               }
+            },
+            "spectrogram": {
+              "title": "Generación de Espectrograma",
+              "mode": {
+                "label": "Modo de Generación",
+                "auto": {
+                  "label": "Automático (Recomendado)",
+                  "helpText": "Los espectrogramas se generan automáticamente cuando se visualiza una detección en la interfaz de usuario. Para listas largas de detecciones, la generación de espectrogramas puede tardar mucho tiempo en sistemas con recursos limitados de CPU."
+                },
+                "prerender": {
+                  "label": "Pre-renderizar en Segundo Plano",
+                  "helpText": "Genera espectrogramas automáticamente durante el guardado del clip de audio. En sistemas con recursos limitados como Raspberry Pi Zero o 3, esto proporciona una interfaz de usuario más receptiva debido a que los espectrogramas se renderizan en segundo plano. Sin embargo, este modo consumirá más espacio en disco ya que se crean espectrogramas para cada detección."
+                },
+                "userRequested": {
+                  "label": "Solo a Petición del Usuario",
+                  "helpText": "Generar espectrogramas solo cuando haga clic en el botón generar. Perfecto para sistemas con recursos limitados (Raspberry Pi 3/Zero) - cero sobrecarga automática, usted controla cuándo se usa la CPU."
+                }
+              },
+              "enabled": {
+                "label": "Habilitar Pre-renderizado de Espectrograma",
+                "helpText": "OBSOLETO: Use el Modo de Generación en su lugar. Generar espectrogramas en segundo plano cuando se guardan detecciones para eliminar retrasos de UI."
+              }
             }
           }
         }
@@ -1519,6 +1541,14 @@
       "filterControl": "Control de filtro",
       "highPassFilter": "Control de filtro paso alto: {freq} Hz",
       "seekProgress": "Progreso de búsqueda de audio: {current} / {total} segundos"
+    },
+    "spectrogram": {
+      "notGenerated": "Espectrograma aún no generado",
+      "generate": "Generar espectrograma",
+      "generateButton": "Generar",
+      "generating": "Generando...",
+      "generationFailed": "Error al generar el espectrograma",
+      "generationSuccess": "Espectrograma generado exitosamente"
     }
   },
   "components": {
