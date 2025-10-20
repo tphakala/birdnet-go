@@ -883,11 +883,8 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 			getSpectrogramLogger().Error("Invalid queue status type",
 				"key", spectrogramKey,
 				"type", fmt.Sprintf("%T", statusValue))
-			return ctx.JSON(http.StatusInternalServerError, map[string]any{
-				"data":    nil,
-				"error":   "Internal error retrieving status",
-				"message": "Invalid status data type",
-			})
+			return c.HandleError(ctx, fmt.Errorf("invalid queue status type for key %s", spectrogramKey),
+				"Invalid status data type", http.StatusInternalServerError)
 		}
 		return ctx.JSON(http.StatusOK, map[string]any{
 			"data":    status.Get(), // Thread-safe snapshot
@@ -1012,7 +1009,7 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 
 			return ctx.JSON(http.StatusOK, map[string]any{
 				"data": map[string]any{
-					"status": "exists",
+					"status": spectrogramStatusExists,
 					"path":   spectrogramURL,
 				},
 				"error":   "",
@@ -1022,7 +1019,8 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Start async generation in background with proper cleanup and panic recovery
-	go func() {
+	// Track goroutine lifecycle for graceful shutdown
+	c.wg.Go(func() {
 		// Ensure cleanup even if panic occurs (prevents memory leaks)
 		defer func() {
 			if r := recover(); r != nil {
@@ -1035,8 +1033,9 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 		}()
 
 		// Create background context with timeout (5 minutes max for generation)
-		// This preserves request context values (trace IDs, etc.) but not cancellation
-		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		// Preserves request context values (trace IDs) while detaching from request cancellation
+		base := context.WithoutCancel(c.ctx)
+		bgCtx, cancel := context.WithTimeout(base, 5*time.Minute)
 		defer cancel()
 
 		spectrogramPath, err := c.generateSpectrogram(bgCtx, clipPath, params.width, params.raw)
@@ -1055,12 +1054,14 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 					"spectrogram_path", spectrogramPath)
 			}
 		}
-	}()
+	})
 
 	// Return 202 Accepted immediately - client should poll status endpoint
 	return ctx.JSON(http.StatusAccepted, map[string]any{
 		"data": map[string]any{
-			"status": "queued",
+			"status":        spectrogramStatusQueued,
+			"queuePosition": 0,
+			"message":       "Generation queued",
 		},
 		"error":   "",
 		"message": "Generation request accepted. Poll /api/v2/spectrogram/:id/status for progress.",
@@ -1072,6 +1073,9 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 // deployment platform for BirdNET-Go. This prevents severe CPU contention and ensures
 // responsive performance on resource-constrained devices.
 const maxConcurrentSpectrograms = 4
+
+// semaphoreAcquireTimeout is the maximum time to wait for a semaphore slot before timing out
+const semaphoreAcquireTimeout = 30 * time.Second
 
 // spectrogramRetryAfterSeconds is the suggested retry delay in seconds for 503 responses
 // when audio files are not yet ready for processing
@@ -1655,8 +1659,8 @@ func (c *Controller) acquireSemaphoreSlot(ctx context.Context, spectrogramKey st
 		"slots_available", availableSlots,
 		"max_concurrent", maxConcurrentSpectrograms)
 
-	// Add explicit timeout for semaphore acquisition (30 seconds max wait)
-	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// Add explicit timeout for semaphore acquisition
+	timeoutCtx, cancel := context.WithTimeout(ctx, semaphoreAcquireTimeout)
 	defer cancel()
 
 	select {
@@ -1679,7 +1683,7 @@ func (c *Controller) acquireSemaphoreSlot(ctx context.Context, spectrogramKey st
 		if err == context.DeadlineExceeded {
 			getSpectrogramLogger().Warn("Timeout waiting for semaphore slot",
 				"spectrogram_key", spectrogramKey,
-				"timeout_seconds", 30,
+				"timeout_seconds", int(semaphoreAcquireTimeout.Seconds()),
 				"slots_in_use", len(spectrogramSemaphore))
 			c.updateQueueStatus(spectrogramKey, spectrogramStatusFailed, 0, "Request timeout - server busy, please retry")
 			return fmt.Errorf("timeout waiting for generation slot: %w", err)
