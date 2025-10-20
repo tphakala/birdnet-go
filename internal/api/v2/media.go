@@ -363,7 +363,7 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 	if err != nil {
 		// Check if error is due to record not found
 		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") { // Adapt based on datastore error type
-			return c.HandleError(ctx, err, "Clip path not found for note ID", http.StatusNotFound)
+			return c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
 		}
 		return c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusInternalServerError)
 	}
@@ -523,7 +523,7 @@ func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, cli
 				"ip", ctx.RealIP())
 		}
 		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
-			err = c.HandleError(ctx, err, "Clip path not found for note ID", http.StatusNotFound)
+			err = c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
 			return
 		}
 		err = c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusInternalServerError)
@@ -690,6 +690,30 @@ func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath 
 //     Default: true (for backward compatibility with cached spectrograms)
 //     Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
 //
+// Response Format:
+// The response format varies based on the spectrogram generation mode setting and availability:
+//
+// 1. Auto/Prerender Mode (or if spectrogram exists):
+//   - Content-Type: image/png
+//   - Body: Binary PNG image data
+//   - Status: 200 OK
+//
+// 2. User-Requested Mode (spectrogram not generated):
+//   - Content-Type: application/json
+//   - Status: 404 Not Found
+//   - Body:
+//     {
+//       "error": "spectrogram not generated",
+//       "message": "Spectrogram has not been generated yet. Click 'Generate Spectrogram' to create it.",
+//       "code": 404,
+//       "correlation_id": "abc12345",
+//       "mode": "user-requested"
+//     }
+//
+// IMPORTANT: Clients must check Content-Type header to determine response format:
+//   - image/png: Binary image data (display image)
+//   - application/json: Error response (handle error, show generate button if mode=user-requested)
+//
 // The raw parameter defaults to true to maintain compatibility with existing cached
 // spectrograms from the old HTMX API which generated raw spectrograms by default.
 func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
@@ -799,10 +823,26 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 //
 // Route: GET /api/v2/spectrogram/:id/status
 //
-// Returns:
-//   - status: "not_started", "queued", "generating", "generated", "failed", or "exists"
-//   - queuePosition: Position in generation queue (0 if not queued)
-//   - message: Additional status information
+// Response Format (API v2 envelope):
+//
+//	{
+//	  "data": {
+//	    "status": "not_started|queued|generating|generated|failed|exists",
+//	    "queuePosition": 0,  // Position in queue (0 if not queued)
+//	    "startedAt": "2025-10-20T...",  // When generation started (if in progress)
+//	    "message": "Additional status information"
+//	  },
+//	  "error": "",
+//	  "message": "Status retrieved successfully"
+//	}
+//
+// Status Values:
+//   - "not_started": Spectrogram generation has not been requested
+//   - "queued": Waiting in queue for generation slot
+//   - "generating": Currently being generated
+//   - "generated": Successfully generated (in queue cache)
+//   - "failed": Generation failed
+//   - "exists": Already exists on disk
 func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	noteID := ctx.Param("id")
 	if noteID == "" {
@@ -829,7 +869,11 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 
 	// If it's actively being processed, return that status immediately
 	if existsInQueue {
-		return ctx.JSON(http.StatusOK, status)
+		return ctx.JSON(http.StatusOK, map[string]any{
+			"data":    status,
+			"error":   "",
+			"message": "Spectrogram generation status retrieved",
+		})
 	}
 
 	// Not in queue, check if spectrogram already exists on disk
@@ -842,19 +886,27 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 
 		// Check if file exists
 		if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
-			return ctx.JSON(http.StatusOK, SpectrogramQueueStatus{
-				Status:        spectrogramStatusExists,
-				QueuePosition: 0,
-				Message:       "Spectrogram already exists",
+			return ctx.JSON(http.StatusOK, map[string]any{
+				"data": SpectrogramQueueStatus{
+					Status:        spectrogramStatusExists,
+					QueuePosition: 0,
+					Message:       "Spectrogram already exists",
+				},
+				"error":   "",
+				"message": "Spectrogram exists on disk",
 			})
 		}
 	}
 
 	// Not in queue and doesn't exist on disk
-	return ctx.JSON(http.StatusOK, SpectrogramQueueStatus{
-		Status:        spectrogramStatusNotStarted,
-		QueuePosition: 0,
-		Message:       "Spectrogram generation not started",
+	return ctx.JSON(http.StatusOK, map[string]any{
+		"data": SpectrogramQueueStatus{
+			Status:        spectrogramStatusNotStarted,
+			QueuePosition: 0,
+			Message:       "Spectrogram generation not started",
+		},
+		"error":   "",
+		"message": "Spectrogram not yet generated",
 	})
 }
 
@@ -871,11 +923,23 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 //   - raw: Whether to generate raw spectrogram without axes/legends
 //     Default: true (for backward compatibility)
 //
-// Returns:
-//   - 200 OK with JSON: { "status": "generated", "path": "/api/v2/spectrogram/:id?size=..." }
-//   - 202 Accepted: Spectrogram generation queued
-//   - 409 Conflict: Spectrogram already exists
-//   - 503 Service Unavailable: Audio file not ready
+// Response Format (API v2 envelope):
+//
+//	{
+//	  "data": {
+//	    "status": "generated",
+//	    "path": "/api/v2/spectrogram/:id?raw=true"
+//	  },
+//	  "error": "",
+//	  "message": "Spectrogram generated successfully"
+//	}
+//
+// HTTP Status Codes:
+//   - 200 OK: Spectrogram generated successfully
+//   - 503 Service Unavailable: Audio file not ready (includes Retry-After header)
+//   - 404 Not Found: Audio file not found
+//   - 408 Request Timeout: Generation timed out
+//   - 500 Internal Server Error: Generation failed
 func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	// Validate note ID and get clip path using shared helper
 	noteID, clipPath, err := c.validateNoteIDAndGetClipPath(ctx)
@@ -916,8 +980,13 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 		return c.spectrogramHTTPError(ctx, err)
 	}
 
-	// Build the URL path for accessing the spectrogram
-	spectrogramURL := fmt.Sprintf("/api/v2/spectrogram/%s?size=%s&raw=%t", noteID, params.sizeStr, params.raw)
+	// Build the URL path for accessing the spectrogram with proper encoding
+	queryParams := url.Values{}
+	if params.sizeStr != "" {
+		queryParams.Set("size", params.sizeStr)
+	}
+	queryParams.Set("raw", strconv.FormatBool(params.raw))
+	spectrogramURL := fmt.Sprintf("/api/v2/spectrogram/%s?%s", url.PathEscape(noteID), queryParams.Encode())
 
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Spectrogram generated successfully",

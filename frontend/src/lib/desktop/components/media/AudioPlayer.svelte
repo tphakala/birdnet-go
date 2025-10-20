@@ -417,7 +417,9 @@
       );
 
       if (response.ok) {
-        const status = await response.json();
+        const responseData = await response.json();
+        // Extract status from v2 envelope format
+        const status = responseData.data || responseData;
         spectrogramStatus = status;
 
         // Check status and decide what to do
@@ -595,7 +597,9 @@
         throw new Error(errorData.message || `Generation failed with status ${response.status}`);
       }
 
-      const data = await response.json();
+      const responseData = await response.json();
+      // Extract data from v2 envelope format
+      const data = responseData.data || responseData;
       logger.info('Spectrogram generated successfully', {
         detectionId,
         path: data.path,
