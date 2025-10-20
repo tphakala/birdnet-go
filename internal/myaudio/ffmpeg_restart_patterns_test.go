@@ -30,7 +30,7 @@ func TestFFmpegStream_RealWorldRestartPattern(t *testing.T) {
 	}
 
 	// Go 1.25 synctest: All time operations within this bubble use fake time
-	synctest.Test(t, func(t *testing.T) { //nolint:thelper // Test body, not a helper
+	synctest.Test(t, func(t *testing.T) {
 
 		audioChan := make(chan UnifiedAudioData, 10)
 		defer close(audioChan)
@@ -148,7 +148,7 @@ func TestFFmpegStream_HealthCheckRestartLoop(t *testing.T) {
 	// Go 1.25 synctest: Creates a "bubble" where time is controlled deterministically.
 	// All time.Sleep(), time.Ticker, time.After() operations use fake time that
 	// advances instantly when all goroutines are durably blocked.
-	synctest.Test(t, func(t *testing.T) { //nolint:thelper // Test body, not a helper
+	synctest.Test(t, func(t *testing.T) {
 
 		manager := NewFFmpegManager()
 		defer manager.Shutdown()

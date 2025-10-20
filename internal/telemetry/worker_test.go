@@ -123,7 +123,6 @@ func TestTelemetryWorker_RateLimiting(t *testing.T) {
 	t.Parallel()
 
 	// Use synctest for deterministic time-based testing
-	//nolint:thelper // synctest.Test inner function is not a helper
 	synctest.Test(t, func(t *testing.T) {
 		// Initialize logging
 		logging.Init()
@@ -208,7 +207,6 @@ func TestTelemetryWorker_CircuitBreaker(t *testing.T) {
 	t.Parallel()
 
 	// Use synctest for deterministic time-based testing
-	//nolint:thelper // synctest.Test inner function is not a helper
 	synctest.Test(t, func(t *testing.T) {
 		// Initialize logging
 		logging.Init()

@@ -131,7 +131,7 @@ func TestFFmpegManager_HealthCheck(t *testing.T) {
 	t.Attr("test-type", "health-monitoring")
 
 	// Go 1.25 synctest: Creates controlled time environment for deterministic timeout testing
-	synctest.Test(t, func(t *testing.T) { //nolint:thelper // Test body, not a helper
+	synctest.Test(t, func(t *testing.T) {
 
 		manager := NewFFmpegManager()
 		defer manager.Shutdown()
@@ -286,7 +286,7 @@ func TestFFmpegManager_MonitoringIntegration(t *testing.T) {
 	t.Attr("test-type", "monitoring-integration")
 
 	// Go 1.25 synctest: Creates controlled time environment for deterministic monitoring tests
-	synctest.Test(t, func(t *testing.T) { //nolint:thelper // Test body, not a helper
+	synctest.Test(t, func(t *testing.T) {
 
 		manager := NewFFmpegManager()
 		defer manager.Shutdown()

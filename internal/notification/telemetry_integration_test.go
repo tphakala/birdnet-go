@@ -196,7 +196,6 @@ func TestCircuitBreakerTelemetry_Disabled(t *testing.T) {
 
 func TestCircuitBreakerTelemetry_Recovery(t *testing.T) {
 	// Use synctest for deterministic time-based testing (Go 1.25+)
-	//nolint:thelper // This is a test closure, not a helper function
 	synctest.Test(t, func(t *testing.T) {
 		// Create mock reporter
 		reporter := &mockTelemetryReporter{enabled: true}
@@ -491,7 +490,6 @@ func TestTelemetryIntegration_EndToEnd(t *testing.T) {
 // TestTelemetryIntegration_Debouncing verifies rapid transitions are debounced
 func TestTelemetryIntegration_Debouncing(t *testing.T) {
 	// Use synctest for deterministic time-based testing (Go 1.25+)
-	//nolint:thelper // This is a test closure, not a helper function
 	synctest.Test(t, func(t *testing.T) {
 		reporter := &mockTelemetryReporter{enabled: true}
 		config := DefaultTelemetryConfig()
