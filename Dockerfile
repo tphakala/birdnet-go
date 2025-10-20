@@ -90,6 +90,7 @@ RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     vim \
     less \
     tzdata \
+    tzdata-legacy \
     jq \
     strace \
     lsof \
