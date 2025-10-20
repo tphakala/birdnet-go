@@ -982,9 +982,25 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 
 	// Build the URL path for accessing the spectrogram with proper encoding
 	queryParams := url.Values{}
-	if params.sizeStr != "" {
-		queryParams.Set("size", params.sizeStr)
+
+	// Always include size parameter to match what was actually generated
+	sizeParam := params.sizeStr
+	if sizeParam == "" {
+		// Map default width back to size string for URL consistency
+		switch params.width {
+		case SpectrogramSizeSm:
+			sizeParam = "sm"
+		case SpectrogramSizeMd:
+			sizeParam = "md"
+		case SpectrogramSizeLg:
+			sizeParam = "lg"
+		case SpectrogramSizeXl:
+			sizeParam = "xl"
+		default:
+			sizeParam = "md" // fallback to default
+		}
 	}
+	queryParams.Set("size", sizeParam)
 	queryParams.Set("raw", strconv.FormatBool(params.raw))
 	spectrogramURL := fmt.Sprintf("/api/v2/spectrogram/%s?%s", url.PathEscape(noteID), queryParams.Encode())
 
