@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -23,23 +24,32 @@ const (
 	// Connection timeouts
 	maxSSEStreamDuration     = 30 * time.Minute   // Maximum stream duration to prevent resource leaks
 	sseHeartbeatInterval     = 30 * time.Second   // Heartbeat interval for keep-alive
-	sseBroadcastTimeout      = 3 * time.Second    // Timeout for broadcasting to slow clients
 	sseEventLoopSleep        = 10 * time.Millisecond // Sleep duration when no events
 	sseWriteDeadline         = 10 * time.Second   // Write deadline for SSE messages
-	
+
 	// Endpoints
 	detectionStreamEndpoint  = "/api/v2/detections/stream"
 	soundLevelStreamEndpoint = "/api/v2/soundlevels/stream"
-	
+
 	// Buffer sizes
 	sseDetectionBufferSize   = 100 // Buffer size for detection channels (high volume)
 	sseSoundLevelBufferSize  = 100 // Buffer size for sound level channels
 	sseMinimalBufferSize     = 1   // Minimal buffer for unused channels
 	sseDoneChannelBuffer     = 1   // Buffer for Done channels to prevent blocking
-	
+
 	// Rate limits
 	sseRateLimitRequests     = 10              // SSE rate limit requests per window
 	sseRateLimitWindow       = 1 * time.Minute // SSE rate limit time window
+
+	// Client health monitoring
+	maxConsecutiveDrops      = 3 // Auto-disconnect clients after this many consecutive dropped messages
+
+	// Stream types - used to identify what data a client wants to receive
+	// Note: StreamType="all" shares a single consecutiveDrops counter across both streams,
+	// meaning drops on one stream affect health tracking for both
+	streamTypeDetections  = "detections"
+	streamTypeSoundLevels = "soundlevels"
+	streamTypeAll         = "all"
 )
 
 // WriteDeadlineSetter interface for response writers that support write deadlines
@@ -79,7 +89,11 @@ type SSEClient struct {
 	Request        *http.Request
 	Response       http.ResponseWriter
 	Done           chan struct{} // Signal-only buffered channel to prevent blocking
-	StreamType     string // "detections", "soundlevels", or "all"
+	StreamType     string        // streamTypeDetections, streamTypeSoundLevels, or streamTypeAll
+
+	// Health tracking for auto-disconnect of slow/blocked clients
+	// Uses atomic operations for thread-safe access during concurrent broadcasts
+	consecutiveDrops atomic.Int32 // Count of consecutive failed message sends
 }
 
 // SSEManager manages SSE connections and broadcasts
@@ -125,6 +139,8 @@ func (m *SSEManager) RemoveClient(clientID string) {
 }
 
 // BroadcastDetection sends detection data to all connected clients
+// Uses non-blocking send to prevent slow clients from blocking fast clients.
+// Clients are automatically disconnected after maxConsecutiveDrops failed sends.
 func (m *SSEManager) BroadcastDetection(detection *SSEDetectionData) {
 	m.mutex.RLock()
 
@@ -139,26 +155,36 @@ func (m *SSEManager) BroadcastDetection(detection *SSEDetectionData) {
 	for clientID, client := range m.clients {
 		select {
 		case client.Channel <- *detection:
-			// Successfully sent to client
-		case <-time.After(sseBroadcastTimeout): // Timeout for slow connections
-			// Client channel is blocked, collect ID for removal
-			if m.logger != nil {
-				m.logger.Printf("SSE client %s appears blocked, will remove", clientID)
+			// Successfully sent to client - reset health counter atomically
+			client.consecutiveDrops.Store(0)
+
+		default:
+			// Channel full - drop this update, increment counter atomically
+			drops := client.consecutiveDrops.Add(1)
+
+			// Only log when reaching disconnect threshold to avoid log spam
+			if drops >= maxConsecutiveDrops {
+				if m.logger != nil {
+					m.logger.Printf("SSE client %s disconnected after %d consecutive drops", clientID, drops)
+				}
+				blockedClients = append(blockedClients, clientID)
 			}
-			blockedClients = append(blockedClients, clientID)
 		}
 	}
 
 	// Release the read lock before removing clients
 	m.mutex.RUnlock()
 
-	// Remove blocked clients without holding the lock to avoid deadlock
+	// Remove blocked clients synchronously (we're outside the lock and RemoveClient is fast)
+	// Note: Low probability race if client reconnects with same ID between unlock and removal
 	for _, clientID := range blockedClients {
-		go m.RemoveClient(clientID)
+		m.RemoveClient(clientID)
 	}
 }
 
 // BroadcastSoundLevel sends sound level data to all connected clients
+// Uses non-blocking send to prevent slow clients from blocking fast clients.
+// Clients are automatically disconnected after maxConsecutiveDrops failed sends.
 func (m *SSEManager) BroadcastSoundLevel(soundLevel *SSESoundLevelData) {
 	m.mutex.RLock()
 
@@ -172,17 +198,24 @@ func (m *SSEManager) BroadcastSoundLevel(soundLevel *SSESoundLevelData) {
 
 	for clientID, client := range m.clients {
 		// Only send to clients that want sound level data
-		if client.StreamType == "soundlevels" || client.StreamType == "all" {
+		if client.StreamType == streamTypeSoundLevels || client.StreamType == streamTypeAll {
 			if client.SoundLevelChan != nil {
 				select {
 				case client.SoundLevelChan <- *soundLevel:
-					// Successfully sent to client
-				case <-time.After(sseBroadcastTimeout): // Timeout for slow connections
-					// Client channel is blocked, collect ID for removal
-					if m.logger != nil {
-						m.logger.Printf("SSE client %s appears blocked on sound level channel, will remove", clientID)
+					// Successfully sent to client - reset health counter atomically
+					client.consecutiveDrops.Store(0)
+
+				default:
+					// Channel full - drop this update, increment counter atomically
+					drops := client.consecutiveDrops.Add(1)
+
+					// Only log when reaching disconnect threshold to avoid log spam
+					if drops >= maxConsecutiveDrops {
+						if m.logger != nil {
+							m.logger.Printf("SSE client %s disconnected after %d consecutive drops", clientID, drops)
+						}
+						blockedClients = append(blockedClients, clientID)
 					}
-					blockedClients = append(blockedClients, clientID)
 				}
 			}
 		}
@@ -191,9 +224,10 @@ func (m *SSEManager) BroadcastSoundLevel(soundLevel *SSESoundLevelData) {
 	// Release the read lock before removing clients
 	m.mutex.RUnlock()
 
-	// Remove blocked clients without holding the lock to avoid deadlock
+	// Remove blocked clients synchronously (we're outside the lock and RemoveClient is fast)
+	// Note: Low probability race if client reconnects with same ID between unlock and removal
 	for _, clientID := range blockedClients {
-		go m.RemoveClient(clientID)
+		m.RemoveClient(clientID)
 	}
 }
 
@@ -324,9 +358,9 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 	// Track metrics if available
 	endpoint := ""
 	switch streamType {
-	case "detections":
+	case streamTypeDetections:
 		endpoint = detectionStreamEndpoint
-	case "soundlevels":
+	case streamTypeSoundLevels:
 		endpoint = soundLevelStreamEndpoint
 	}
 	
@@ -388,12 +422,12 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 
 // StreamDetections handles the SSE connection for real-time detection streaming
 func (c *Controller) StreamDetections(ctx echo.Context) error {
-	return c.handleSSEStream(ctx, "detections", "Connected to detection stream", "detection",
+	return c.handleSSEStream(ctx, streamTypeDetections, "Connected to detection stream", "detection",
 		func(client *SSEClient) {
 			client.Channel = make(chan SSEDetectionData, sseDetectionBufferSize) // Buffer for high detection periods
 		},
 		func(ctx echo.Context, client *SSEClient, clientID string) error {
-			return c.runSSEEventLoop(ctx, client, clientID, detectionStreamEndpoint, 
+			return c.runSSEEventLoop(ctx, client, clientID, detectionStreamEndpoint,
 				func() (any, bool) {
 					select {
 					case detection, ok := <-client.Channel:
@@ -413,7 +447,7 @@ func (c *Controller) StreamDetections(ctx echo.Context) error {
 
 // StreamSoundLevels handles the SSE connection for real-time sound level streaming
 func (c *Controller) StreamSoundLevels(ctx echo.Context) error {
-	return c.handleSSEStream(ctx, "soundlevels", "Connected to sound level stream", "sound level",
+	return c.handleSSEStream(ctx, streamTypeSoundLevels, "Connected to sound level stream", "sound level",
 		func(client *SSEClient) {
 			client.Channel = make(chan SSEDetectionData, sseMinimalBufferSize)    // Minimal buffer, not used for sound levels
 			client.SoundLevelChan = make(chan SSESoundLevelData, sseSoundLevelBufferSize) // Buffer for sound level data
@@ -432,7 +466,7 @@ func (c *Controller) StreamSoundLevels(ctx echo.Context) error {
 					}
 				},
 				"soundlevel",
-				"soundlevels",
+				streamTypeSoundLevels,
 			)
 		})
 }
