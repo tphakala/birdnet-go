@@ -1101,13 +1101,25 @@ type SpectrogramQueueStatus struct {
 }
 
 // Update atomically updates all fields
+// Only sets startedAt when transitioning to "generating" state to preserve accurate timing
 func (s *SpectrogramQueueStatus) Update(status string, queuePos int, message string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Capture previous status to detect state transitions
+	previousStatus := s.status
+
+	// Update fields
 	s.status = status
 	s.queuePosition = queuePos
 	s.message = message
-	s.startedAt = time.Now()
+
+	// Only set startedAt when transitioning into "generating" state
+	// This preserves accurate generation start time across multiple updates
+	if status == spectrogramStatusGenerating &&
+		(previousStatus != spectrogramStatusGenerating || s.startedAt.IsZero()) {
+		s.startedAt = time.Now()
+	}
 }
 
 // Get returns a snapshot of the current status (safe for JSON marshaling)
@@ -1642,8 +1654,25 @@ func (c *Controller) initializeQueueStatus(spectrogramKey string) {
 }
 
 // cleanupQueueStatus removes the queue entry for a spectrogram request
+// Failed statuses are retained briefly (30s) so polling clients can see the error
 func (c *Controller) cleanupQueueStatus(spectrogramKey string) {
-	// Using sync.Map for lock-free deletion
+	// Check if this is a failed status that should be retained temporarily
+	if statusValue, ok := spectrogramQueue.Load(spectrogramKey); ok {
+		if status, ok := statusValue.(*SpectrogramQueueStatus); ok {
+			if status.GetStatus() == spectrogramStatusFailed {
+				// Keep failed status for 30 seconds so clients can poll and see the error
+				// After that, clean it up automatically
+				time.AfterFunc(30*time.Second, func() {
+					spectrogramQueue.Delete(spectrogramKey)
+					getSpectrogramLogger().Debug("Cleaned up failed spectrogram status after TTL",
+						"spectrogram_key", spectrogramKey)
+				})
+				return
+			}
+		}
+	}
+
+	// For non-failed statuses (success, exists, etc.), delete immediately
 	spectrogramQueue.Delete(spectrogramKey)
 }
 
