@@ -82,7 +82,8 @@
   let playerContainer: HTMLDivElement;
   let playPauseButton!: HTMLButtonElement; // Template-only binding
   let progressBar: HTMLDivElement;
-  let spectrogramImage: HTMLImageElement;
+  // svelte-ignore non_reactive_update
+  let spectrogramImage: HTMLImageElement; // Template-only binding
   // svelte-ignore non_reactive_update
   let volumeControl!: HTMLDivElement; // Template-only binding
   // svelte-ignore non_reactive_update
@@ -396,6 +397,16 @@
   };
 
   // Check spectrogram mode on mount/URL change to avoid double-request pattern
+  // NOTE: Current implementation requires an initial network request to detect mode.
+  //
+  // Future optimization options:
+  // 1. Read from global settings store (if spectrogram mode is exposed frontend-wide)
+  // 2. Call dedicated /api/v2/spectrogram/:id/info endpoint for lightweight metadata
+  // 3. Use format query parameter (e.g., ?format=json) for explicit JSON responses
+  //
+  // The current approach is acceptable as it eliminates the previous double-request
+  // pattern where BOTH the <img> load AND a subsequent fetch() would fail before
+  // showing the generate button.
   const checkSpectrogramMode = async () => {
     if (!spectrogramUrl) {
       spectrogramMode = null;
@@ -407,8 +418,9 @@
       if (response.status === 404) {
         const contentType = response.headers.get('Content-Type');
         if (contentType?.includes('application/json')) {
-          const data = await response.json();
-          spectrogramMode = data.mode ?? null;
+          const responseData = await response.json();
+          // Extract mode from data field in API v2 envelope
+          spectrogramMode = responseData.data?.mode ?? null;
 
           if (spectrogramMode === 'user-requested') {
             logger.debug('Spectrogram in user-requested mode', { detectionId });

@@ -609,13 +609,16 @@ func (c *Controller) returnSpectrogramNotGeneratedError(ctx echo.Context) (bool,
 			"ip", ctx.RealIP())
 	}
 
-	// Return standard error response with additional mode field
+	// Return standard error response with mode in data field (API v2 envelope)
+	// Mode is placed in data object to maintain envelope consistency
 	return true, ctx.JSON(http.StatusNotFound, map[string]any{
 		"error":          errorResp.Error,
 		"message":        errorResp.Message,
 		"code":           errorResp.Code,
 		"correlation_id": errorResp.CorrelationID,
-		"mode":           conf.SpectrogramModeUserRequested,
+		"data": map[string]any{
+			"mode": conf.SpectrogramModeUserRequested,
+		},
 	})
 }
 
@@ -691,28 +694,37 @@ func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath 
 //     Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
 //
 // Response Format:
-// The response format varies based on the spectrogram generation mode setting and availability:
+// The response format varies based on the spectrogram generation mode setting and availability.
+// Clients MUST check Content-Type header to handle the response correctly.
 //
-// 1. Auto/Prerender Mode (or if spectrogram exists):
+// 1. Success - Spectrogram exists (Auto/Prerender Mode or already generated):
 //   - Content-Type: image/png
 //   - Body: Binary PNG image data
 //   - Status: 200 OK
 //
-// 2. User-Requested Mode (spectrogram not generated):
+// 2. Error - User-Requested Mode (spectrogram not generated):
 //   - Content-Type: application/json
 //   - Status: 404 Not Found
-//   - Body:
+//   - Body (API v2 envelope):
 //     {
 //       "error": "spectrogram not generated",
 //       "message": "Spectrogram has not been generated yet. Click 'Generate Spectrogram' to create it.",
 //       "code": 404,
 //       "correlation_id": "abc12345",
-//       "mode": "user-requested"
+//       "data": {
+//         "mode": "user-requested"
+//       }
 //     }
 //
 // IMPORTANT: Clients must check Content-Type header to determine response format:
 //   - image/png: Binary image data (display image)
-//   - application/json: Error response (handle error, show generate button if mode=user-requested)
+//   - application/json: Error response (handle error, show generate button if data.mode=user-requested)
+//
+// TODO: Consider adding a dedicated endpoint or format query parameter for cleaner API design:
+//   Option A: GET /api/v2/spectrogram/:id/info - Returns JSON metadata including mode and status
+//   Option B: GET /api/v2/spectrogram/:id?format=json - Explicit format parameter
+// This would eliminate Content-Type-based response type detection and provide a cleaner separation
+// between image serving and metadata/status queries.
 //
 // The raw parameter defaults to true to maintain compatibility with existing cached
 // spectrograms from the old HTMX API which generated raw spectrograms by default.
