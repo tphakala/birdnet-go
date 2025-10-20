@@ -980,11 +980,18 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Check if spectrogram already exists (fast path)
+	// Also compute spectrogramKey for queue management
 	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
 	normalizedPath := NormalizeClipPath(clipPath, clipsPrefix)
 	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
+	var spectrogramKey string
+	var relSpectrogramPath string
+
 	if err == nil {
-		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
+		_, _, _, relSpectrogramPath = buildSpectrogramPaths(relAudioPath, params.width, params.raw)
+		spectrogramKey = fmt.Sprintf("%s:%d:%t", relSpectrogramPath, params.width, params.raw)
+
+		// Check if file already exists on disk
 		if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
 			// Already exists, return immediately with generated status
 			queryParams := url.Values{}
@@ -1016,6 +1023,23 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 				"message": "Spectrogram already exists",
 			})
 		}
+
+		// Check if generation is already in progress (prevents spawning duplicate goroutines)
+		if statusValue, exists := spectrogramQueue.Load(spectrogramKey); exists {
+			if status, ok := statusValue.(*SpectrogramQueueStatus); ok {
+				currentStatus := status.GetStatus()
+				if currentStatus == spectrogramStatusQueued || currentStatus == spectrogramStatusGenerating {
+					return ctx.JSON(http.StatusAccepted, map[string]any{
+						"data":    status.Get(),
+						"error":   "",
+						"message": "Generation already in progress",
+					})
+				}
+			}
+		}
+
+		// Initialize queue status BEFORE spawning goroutine (prevents "not_started" flicker)
+		c.initializeQueueStatus(spectrogramKey)
 	}
 
 	// Start async generation in background with proper cleanup and panic recovery
@@ -1040,12 +1064,8 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 
 		if err != nil {
 			// Update queue status so polling clients see the failure
-			// Compute spectrogramKey to match what generateSpectrogram uses internally
-			clipsPrefix := c.Settings.Realtime.Audio.Export.Path
-			normalizedPath := NormalizeClipPath(clipPath, clipsPrefix)
-			if relAudioPath, pathErr := c.SFS.ValidateRelativePath(normalizedPath); pathErr == nil {
-				_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
-				spectrogramKey := fmt.Sprintf("%s:%d:%t", relSpectrogramPath, params.width, params.raw)
+			// Use spectrogramKey computed earlier (if available)
+			if spectrogramKey != "" {
 				c.updateQueueStatus(spectrogramKey, spectrogramStatusFailed, 0, "Generation failed: "+err.Error())
 			}
 
@@ -1063,12 +1083,23 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	})
 
 	// Return 202 Accepted immediately - client should poll status endpoint
+	// If we initialized queue status, return it; otherwise return generic queued response
+	responseData := map[string]any{
+		"status":        spectrogramStatusQueued,
+		"queuePosition": 0,
+		"message":       "Generation queued",
+	}
+
+	if spectrogramKey != "" {
+		if statusValue, exists := spectrogramQueue.Load(spectrogramKey); exists {
+			if status, ok := statusValue.(*SpectrogramQueueStatus); ok {
+				responseData = status.Get()
+			}
+		}
+	}
+
 	return ctx.JSON(http.StatusAccepted, map[string]any{
-		"data": map[string]any{
-			"status":        spectrogramStatusQueued,
-			"queuePosition": 0,
-			"message":       "Generation queued",
-		},
+		"data":    responseData,
 		"error":   "",
 		"message": "Generation request accepted. Poll /api/v2/spectrogram/:id/status for progress.",
 	})
