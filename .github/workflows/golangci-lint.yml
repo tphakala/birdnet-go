@@ -82,8 +82,8 @@ jobs:
         run: |
           if [ -f golangci-lint-report.xml ]; then
             # Count issues by severity
-            ERROR_COUNT=$(grep -c 'severity="error"' golangci-lint-report.xml || echo "0")
-            WARNING_COUNT=$(grep -c 'severity="warning"' golangci-lint-report.xml || echo "0")
+            ERROR_COUNT=$(grep -o 'severity="error"' golangci-lint-report.xml | wc -l)
+            WARNING_COUNT=$(grep -o 'severity="warning"' golangci-lint-report.xml | wc -l)
             TOTAL=$((ERROR_COUNT + WARNING_COUNT))
 
             if [ $TOTAL -gt 0 ]; then
