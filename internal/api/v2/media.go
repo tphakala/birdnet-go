@@ -1032,27 +1032,33 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 			}
 		}()
 
-		// Create background context with timeout (5 minutes max for generation)
-		// Preserves request context values (trace IDs) while detaching from request cancellation
-		base := context.WithoutCancel(c.ctx)
-		bgCtx, cancel := context.WithTimeout(base, 5*time.Minute)
+		// Use controller context (respects shutdown signals) with timeout
+		bgCtx, cancel := context.WithTimeout(c.ctx, 5*time.Minute)
 		defer cancel()
 
 		spectrogramPath, err := c.generateSpectrogram(bgCtx, clipPath, params.width, params.raw)
 
 		if err != nil {
+			// Update queue status so polling clients see the failure
+			// Compute spectrogramKey to match what generateSpectrogram uses internally
+			clipsPrefix := c.Settings.Realtime.Audio.Export.Path
+			normalizedPath := NormalizeClipPath(clipPath, clipsPrefix)
+			if relAudioPath, pathErr := c.SFS.ValidateRelativePath(normalizedPath); pathErr == nil {
+				_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
+				spectrogramKey := fmt.Sprintf("%s:%d:%t", relSpectrogramPath, params.width, params.raw)
+				c.updateQueueStatus(spectrogramKey, spectrogramStatusFailed, 0, "Generation failed: "+err.Error())
+			}
+
 			if c.apiLogger != nil {
 				c.apiLogger.Error("Async spectrogram generation failed",
 					"note_id", noteID,
 					"clip_path", clipPath,
 					"error", err.Error())
 			}
-		} else {
-			if c.apiLogger != nil {
-				c.apiLogger.Info("Async spectrogram generated successfully",
-					"note_id", noteID,
-					"spectrogram_path", spectrogramPath)
-			}
+		} else if c.apiLogger != nil {
+			c.apiLogger.Info("Async spectrogram generated successfully",
+				"note_id", noteID,
+				"spectrogram_path", spectrogramPath)
 		}
 	})
 
