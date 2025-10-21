@@ -345,6 +345,7 @@
                     className="w-full"
                     onPlayStart={onFreezeStart}
                     onPlayEnd={onFreezeEnd}
+                    debug={false}
                   />
                 </div>
               </div>
