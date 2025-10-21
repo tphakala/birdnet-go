@@ -320,6 +320,25 @@ tasks:
           echo "✅ Playwright browsers installed"
         fi
 
+        # Return to root directory to initialize Husky
+        cd ..
+
+        # Initialize Husky for git hooks (pre-commit checks)
+        echo "🪝 Setting up git hooks with Husky..."
+        if [ -d ".git" ]; then
+          cd frontend
+          if ! npm run prepare; then
+            echo "⚠️  Failed to initialize Husky"
+            echo "   Git hooks won't be active, but you can initialize later with: cd frontend && npm run prepare"
+          else
+            echo "✅ Git hooks initialized"
+            echo "   Pre-commit hook will run golangci-lint and frontend linting automatically"
+          fi
+          cd ..
+        else
+          echo "⚠️  Not a git repository, skipping Husky setup"
+        fi
+
         echo "✅ Frontend setup complete"
 
   verify-dev-setup:
@@ -400,6 +419,14 @@ tasks:
         else
           echo "❌ Frontend dependencies: not installed"
           exit 1
+        fi
+
+        # Check git hooks (Husky pre-commit)
+        if [ -f ".git/hooks/pre-commit" ]; then
+          echo "✅ Git hooks: configured (pre-commit checks active)"
+        else
+          echo "⚠️  Git hooks: not initialized"
+          echo "   Run: cd frontend && npm run prepare"
         fi
 
         echo ""

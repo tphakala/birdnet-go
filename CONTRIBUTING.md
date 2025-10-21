@@ -103,7 +103,18 @@ The `setup-dev` task will automatically:
 - ✅ Install mockgen (testing tool)
 - ✅ Install frontend dependencies (npm packages)
 - ✅ Install Playwright browsers for E2E testing
+- ✅ Initialize git hooks (Husky pre-commit checks)
 - ✅ Verify all installations
+
+**Git Hooks (Pre-commit Checks):**
+
+The setup automatically configures git pre-commit hooks using [Husky](https://typicode.github.io/husky/) that will:
+
+- **Go files:** Auto-format with `gofmt` and lint with `golangci-lint`
+- **Frontend files:** Auto-format with Prettier, lint with ESLint and Stylelint
+- **TypeScript:** Run type checking on staged files
+
+These hooks **prevent commits with linting or type errors**, ensuring code quality. The hooks run automatically before each commit.
 
 **Note:** If Go is installed for the first time, you may need to run:
 
@@ -312,6 +323,52 @@ npm run check:fix            # Format + lint auto-fix
 ```
 
 **Pre-commit requirement:** All frontend code must pass `npm run check:all` with zero errors.
+
+### Git Hooks (Pre-commit Automation)
+
+Git hooks are automatically configured during `task setup-dev` using [Husky](https://typicode.github.io/husky/). The pre-commit hook (`.husky/pre-commit`) runs before every commit to ensure code quality.
+
+**What the pre-commit hook does:**
+
+1. **Go files:**
+   - Auto-formats with `gofmt` and re-stages formatted files
+   - Runs `golangci-lint run -v` on all staged Go files
+   - Blocks commit if linting fails
+2. **Frontend files:**
+   - Runs `lint-staged` (Prettier + ESLint + Stylelint) on staged files
+   - Runs TypeScript type checking on staged `.ts` and `.svelte` files
+   - Blocks commit if any checks fail
+
+**Manual initialization (if needed):**
+
+```bash
+# Initialize Husky git hooks
+cd frontend
+npm run prepare
+
+# Verify hook is installed
+ls -la ../.git/hooks/pre-commit
+```
+
+**Bypassing hooks (not recommended):**
+
+```bash
+# Skip pre-commit checks (strongly discouraged)
+git commit --no-verify -m "message"
+```
+
+⚠️ **Note:** The `--no-verify` flag is **strongly discouraged** and bypassed commits may be rejected during code review. Fix linting issues instead of bypassing checks.
+
+**Troubleshooting:**
+
+```bash
+# If hooks aren't running, reinitialize
+cd frontend && npm run prepare
+
+# If golangci-lint not found in hook
+which golangci-lint  # Ensure it's in PATH
+echo $PATH           # Check if $HOME/go/bin is in PATH
+```
 
 ### AST-Grep Code Analysis
 
