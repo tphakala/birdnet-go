@@ -5,6 +5,7 @@ Thank you for your interest in contributing to BirdNET-Go! This document provide
 ## Table of Contents
 
 - [Code of Conduct](#code-of-conduct)
+- [License and Legal](#license-and-legal)
 - [Getting Started](#getting-started)
 - [Development Environment Setup](#development-environment-setup)
   - [Option 1: Automated Setup with Taskfile (Recommended)](#option-1-automated-setup-with-taskfile-recommended)
@@ -23,13 +24,80 @@ Thank you for your interest in contributing to BirdNET-Go! This document provide
 
 This project is committed to providing a welcoming and inclusive environment for all contributors. Please be respectful and constructive in all interactions.
 
+## License and Legal
+
+### Project License
+
+**IMPORTANT:** By contributing to BirdNET-Go, you agree that your contributions will be licensed under the same license as the project.
+
+BirdNET-Go is licensed under the **[Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)](LICENSE)**.
+
+**Key License Terms:**
+
+- ✅ **Attribution** - You must give appropriate credit and indicate if changes were made
+- ✅ **ShareAlike** - If you remix, transform, or build upon the material, you must distribute your contributions under the same license
+- ❌ **NonCommercial** - You may not use the material for commercial purposes without explicit permission
+- ✅ **No Additional Restrictions** - You may not apply legal terms that legally restrict others from doing anything the license permits
+
+**What This Means for Contributors:**
+
+1. **Your Contributions**: All code, documentation, and other contributions you submit become part of the project under CC BY-NC-SA 4.0
+2. **Attribution**: You will be credited as a contributor (via git history and contributor lists)
+3. **No Warranty**: Contributions are provided "as is" without warranty of any kind
+4. **Commercial Use**: Contact project maintainers if you wish to use BirdNET-Go commercially
+
+**📄 Full License:** See [LICENSE](LICENSE) file in the repository root.
+
+### Privacy Policy
+
+**IMPORTANT:** Contributors must read and understand the project's privacy practices.
+
+BirdNET-Go is a **privacy-first, open-source project** that:
+
+- 🔒 **Collects ZERO data by default** - All telemetry is completely opt-in
+- 🏠 **Operates locally** - No external connections except weather/images (read-only)
+- 👤 **Respects user privacy** - Privacy-by-design principles throughout
+- 📋 **Full transparency** - Complete disclosure of data practices
+
+**Key Privacy Principles:**
+
+1. **Explicit Consent** - All telemetry requires user opt-in
+2. **Data Minimization** - Only essential technical data for debugging
+3. **Anonymization** - URLs, credentials, and paths are automatically anonymized
+4. **User Control** - Users can enable/disable telemetry anytime
+
+**For Contributors:**
+
+- Follow privacy-by-design when developing features
+- Never add telemetry or external connections without explicit user opt-in
+- Ensure sensitive data (URLs, credentials, paths) is anonymized in logs/errors
+- Document any external services or data transmission in privacy policy
+
+**📄 Full Privacy Policy:** Read [PRIVACY.md](PRIVACY.md) for complete details on data handling.
+
+**⚠️ Volunteer Project Notice:** BirdNET-Go is maintained by volunteers in their spare time. While we implement strong privacy protections by design, response times for privacy requests may vary based on volunteer availability.
+
+### Contributor License Agreement
+
+By submitting a pull request, you certify that:
+
+1. ✅ You have the right to submit the contribution under the project's license
+2. ✅ Your contribution is your original work or you have permission to submit it
+3. ✅ You agree to license your contribution under CC BY-NC-SA 4.0
+4. ✅ You have read and understand the project's [privacy policy](PRIVACY.md)
+5. ✅ Your contribution follows privacy-by-design principles
+
+**No separate CLA required** - Your submission of a pull request constitutes your agreement to these terms.
+
 ## Getting Started
 
 Before contributing, please:
 
-1. Check [existing issues](https://github.com/tphakala/birdnet-go/issues) to avoid duplicates
-2. Join our [Discord server](https://discord.gg/gcSCFGUtsd) for discussions and support
-3. Read the relevant CLAUDE.md files for development guidelines:
+1. **Read the [License](#project-license)** - Understand the CC BY-NC-SA 4.0 license terms
+2. **Review the [Privacy Policy](PRIVACY.md)** - Understand privacy-by-design requirements
+3. Check [existing issues](https://github.com/tphakala/birdnet-go/issues) to avoid duplicates
+4. Join our [Discord server](https://discord.gg/gcSCFGUtsd) for discussions and support
+5. Read the relevant CLAUDE.md files for development guidelines:
    - [`CLAUDE.md`](CLAUDE.md) - Project overview and universal rules
    - [`internal/CLAUDE.md`](internal/CLAUDE.md) - Go backend guidelines
    - [`frontend/CLAUDE.md`](frontend/CLAUDE.md) - Svelte 5 frontend guidelines
