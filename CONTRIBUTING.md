@@ -13,15 +13,24 @@ Thank you for your interest in contributing to BirdNET-Go! This document provide
 ```bash
 # Clone and setup everything
 git clone https://github.com/tphakala/birdnet-go.git && cd birdnet-go
-sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin  # Install Task
-task setup-dev  # One command to rule them all (Go 1.25, Node.js, tools, git hooks)
+
+# Install Task (modern replacement for make)
+sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+# Setup development tools (Go, Node.js, tools, git hooks)
+task setup-dev
+
 source ~/.profile  # If Go was just installed
 
 # Develop with hot reload
 air realtime  # or 'task dev_server'
 
 # Before commit (auto-runs via git hooks anyway)
-golangci-lint run -v && cd frontend && npm run check:all
+# Lint Go code
+golangci-lint run
+
+# Lint frontend code
+task frontend-quality
 
 # Commit (pre-commit hook auto-formats & lints)
 git checkout -b feature/my-feature
@@ -145,7 +154,7 @@ Before contributing, please:
 
 BirdNET-Go requires:
 
-- **Go** 1.25.3 or later
+- **Go** 1.25 or later
 - **Node.js** 22.x or later (LTS)
 - **Build tools** (gcc, git, wget, etc.)
 - **TensorFlow Lite** C library (auto-downloaded on first build, or installed by dev container)
@@ -302,10 +311,7 @@ BirdNET-Go uses [air](https://github.com/air-verse/air) for hot reloading during
 #### Using Air
 
 ```bash
-# Standard development mode
-air
-
-# Realtime analysis mode
+# Run BirdNET-Go in realtime analysis mode with Air
 air realtime
 ```
 
@@ -375,7 +381,7 @@ task darwin_arm64
 task windows_amd64
 
 # Build without embedded models (smaller binary)
-task noembed
+task noembed (used with Docker builds)
 
 # Clean build artifacts
 task clean
