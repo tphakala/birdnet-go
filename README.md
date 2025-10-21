@@ -82,7 +82,7 @@ cd birdnet-go
 
 # Install Task runner (if not already installed)
 # Linux: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
-# macOS: brew install go-task (assumes Homebrew being installed)
+# macOS: brew install go-task (assumes Homebrew is installed)
 
 # Setup development environment (Linux apt-based or macOS with homebrew)
 task setup-dev
