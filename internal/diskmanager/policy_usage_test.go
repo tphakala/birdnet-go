@@ -316,7 +316,7 @@ func (h *UsageBasedTestHelper) Execute(t *testing.T) {
 
 	// Create mock DB
 	mockDB := &mock_diskmanager.MockInterface{}
-	mockDB.On("GetLockedNotesClipPaths").Return(h.lockedFilePaths, nil)
+	mockDB.On("GetLockedNotesClipPaths").Return(h.lockedFilePaths, nil).Maybe()
 
 	// Create test disk cleanup with our helper
 	diskCleaner := UsageBasedCleanupForTests{
@@ -751,7 +751,7 @@ func TestUsageBasedCleanupReturnValues(t *testing.T) {
 
 	// Create a mock DB
 	mockDB := &mock_diskmanager.MockInterface{}
-	mockDB.On("GetLockedNotesClipPaths").Return([]string{}, nil)
+	mockDB.On("GetLockedNotesClipPaths").Return([]string{}, nil).Maybe()
 
 	// Create test files
 	testFiles := []struct {
@@ -923,7 +923,7 @@ func TestUsageBasedCleanupBelowThreshold(t *testing.T) {
 
 	// Create a mock DB
 	mockDB := &mock_diskmanager.MockInterface{}
-	mockDB.On("GetLockedNotesClipPaths").Return([]string{}, nil)
+	mockDB.On("GetLockedNotesClipPaths").Return([]string{}, nil).Maybe()
 
 	// Create test files
 	testFiles := []struct {
@@ -992,7 +992,7 @@ func TestUsageBasedCleanupLockedFiles(t *testing.T) {
 
 	// Create a mock DB
 	mockDB := &mock_diskmanager.MockInterface{}
-	mockDB.On("GetLockedNotesClipPaths").Return([]string{lockedFilePath}, nil)
+	mockDB.On("GetLockedNotesClipPaths").Return([]string{lockedFilePath}, nil).Once()
 
 	// Create test files
 	testFiles := []struct {
@@ -1041,6 +1041,9 @@ func TestUsageBasedCleanupLockedFiles(t *testing.T) {
 
 	// Calculate expected disk utilization after deleting 2 files
 	expectedDiskUtilization := int(initialDiskUsage - (2 * diskUsageReductionPerFile))
+
+	// Assert that mock expectations were met
+	mockDB.AssertExpectations(t)
 
 	// Verify the return values
 	require.NoError(t, result.Err, "UsageBasedCleanup should not return an error")
