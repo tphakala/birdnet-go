@@ -144,9 +144,10 @@ Before contributing, please:
 
 1. **Read the [License](#project-license)** - Understand the CC BY-NC-SA 4.0 license terms
 2. **Review the [Privacy Policy](PRIVACY.md)** - Understand privacy-by-design requirements
-3. Check [existing issues](https://github.com/tphakala/birdnet-go/issues) to avoid duplicates
-4. Join our [Discord server](https://discord.gg/gcSCFGUtsd) for discussions and support
-5. Read the relevant CLAUDE.md files for development guidelines:
+3. **Review the [Architecture](ARCHITECTURE.md)** - Understand the tech stack and system design
+4. Check [existing issues](https://github.com/tphakala/birdnet-go/issues) to avoid duplicates
+5. Join our [Discord server](https://discord.gg/gcSCFGUtsd) for discussions and support
+6. Read the relevant CLAUDE.md files for development guidelines:
    - [`CLAUDE.md`](CLAUDE.md) - Project overview and universal rules
    - [`internal/CLAUDE.md`](internal/CLAUDE.md) - Go backend guidelines
    - [`frontend/CLAUDE.md`](frontend/CLAUDE.md) - Svelte 5 frontend guidelines
@@ -646,6 +647,10 @@ If you want to use Claude Code for contributing to BirdNET-Go:
 Join our [Discord server](https://discord.gg/gcSCFGUtsd) to discuss AI-assisted development practices and share experiences with other contributors.
 
 ## Project Structure
+
+**For detailed tech stack and architecture information, see [ARCHITECTURE.md](ARCHITECTURE.md).**
+
+This section provides a quick overview of the project structure:
 
 ```text
 birdnet-go/
