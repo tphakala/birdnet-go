@@ -103,6 +103,26 @@ tasks:
   setup-dev:
     desc: Setup development environment on Linux (apt) or macOS (homebrew)
     cmds:
+      - |
+        echo "🚀 BirdNET-Go Development Environment Setup"
+        echo ""
+        echo "⚠️  This setup requires administrator privileges:"
+        echo "    - Linux: sudo access for system packages (you may be prompted for password)"
+        echo "    - macOS: Homebrew must be installed first"
+        echo ""
+        echo "This will install:"
+        echo "  • Go 1.25.3"
+        echo "  • Node.js LTS"
+        echo "  • Build tools (gcc, git, wget, etc.)"
+        echo "  • Go dev tools (golangci-lint, air, mockgen)"
+        echo "  • Frontend dependencies and Playwright browsers"
+        echo ""
+        read -p "Continue with setup? (y/N) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+          echo "Setup cancelled."
+          exit 1
+        fi
       - task: detect-and-install-deps
       - task: install-go-tools
       - task: setup-frontend-dev
@@ -112,10 +132,12 @@ tasks:
         echo ""
         echo "✅ Development environment setup complete!"
         echo ""
+        echo "⚠️  If Go was just installed, run: source ~/.profile"
+        echo ""
         echo "Next steps:"
         echo "  1. Run 'task' to build the project"
         echo "  2. Run 'task dev_server' for development with hot reload"
-        echo "  3. Run 'task frontend-dev' to start frontend dev server"
+        echo "  3. Run 'air realtime' for hot reload with realtime analysis"
         echo ""
 
   detect-and-install-deps:
@@ -236,15 +258,21 @@ tasks:
         # Install golangci-lint
         if ! command -v golangci-lint >/dev/null 2>&1; then
           echo "📥 Installing golangci-lint..."
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+          if ! curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin; then
+            echo "❌ Failed to install golangci-lint"
+            exit 1
+          fi
         else
           echo "✅ golangci-lint already installed"
         fi
 
-        # Install air for hot reload (optional)
+        # Install air for hot reload (required for dev workflow)
         if ! command -v air >/dev/null 2>&1; then
           echo "📥 Installing air (hot reload)..."
-          go install github.com/air-verse/air@latest
+          if ! go install github.com/air-verse/air@latest; then
+            echo "❌ Failed to install air"
+            exit 1
+          fi
         else
           echo "✅ air already installed"
         fi
@@ -252,7 +280,10 @@ tasks:
         # Install mockgen for testing
         if ! command -v mockgen >/dev/null 2>&1; then
           echo "📥 Installing mockgen..."
-          go install go.uber.org/mock/mockgen@latest
+          if ! go install go.uber.org/mock/mockgen@latest; then
+            echo "❌ Failed to install mockgen"
+            exit 1
+          fi
         else
           echo "✅ mockgen already installed"
         fi
@@ -270,14 +301,24 @@ tasks:
         # Install frontend dependencies
         if [ ! -d "node_modules" ]; then
           echo "📥 Installing frontend dependencies..."
-          npm install
+          if ! npm install; then
+            echo "❌ Failed to install frontend dependencies"
+            echo "   Check your network connection and try again"
+            exit 1
+          fi
         else
           echo "✅ Frontend dependencies already installed"
         fi
 
         # Install Playwright browsers for E2E testing
         echo "📥 Installing Playwright browsers..."
-        npx playwright install --with-deps chromium
+        if ! npx playwright install --with-deps chromium; then
+          echo "❌ Failed to install Playwright browsers"
+          echo "   You can install them later with: cd frontend && npx playwright install --with-deps chromium"
+          echo "⚠️  Continuing setup without Playwright browsers"
+        else
+          echo "✅ Playwright browsers installed"
+        fi
 
         echo "✅ Frontend setup complete"
 
@@ -314,18 +355,27 @@ tasks:
           exit 1
         fi
 
-        # Check golangci-lint
+        # Check golangci-lint (required for pre-commit linting)
         if command -v golangci-lint >/dev/null 2>&1; then
           echo "✅ golangci-lint: $(golangci-lint --version | head -n1)"
         else
-          echo "⚠️  golangci-lint: not found (optional)"
+          echo "❌ golangci-lint: not found (required for development)"
+          exit 1
         fi
 
-        # Check air
+        # Check air (required for hot reload development)
         if command -v air >/dev/null 2>&1; then
           echo "✅ air: installed"
         else
-          echo "⚠️  air: not found (optional)"
+          echo "❌ air: not found (required for 'task dev_server' and 'air' commands)"
+          exit 1
+        fi
+
+        # Check mockgen (required for testing)
+        if command -v mockgen >/dev/null 2>&1; then
+          echo "✅ mockgen: installed"
+        else
+          echo "⚠️  mockgen: not found (needed for generating test mocks)"
         fi
 
         # Check task

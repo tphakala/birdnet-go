@@ -42,7 +42,7 @@ BirdNET-Go requires:
 - **Go** 1.25.3 or later
 - **Node.js** 22.x or later (LTS)
 - **Build tools** (gcc, git, wget, etc.)
-- **TensorFlow Lite** C library (for audio analysis)
+- **TensorFlow Lite** C library (auto-downloaded on first build, or installed by dev container)
 
 ### Option 1: Automated Setup with Taskfile (Recommended)
 
@@ -50,9 +50,16 @@ This is the fastest way to get started on **Linux (apt-based)** or **macOS (with
 
 #### Step 1: Install Task Runner
 
+⚠️ **Security Note:** The installation scripts below download and execute code from the internet. Review the scripts before running if security is a concern:
+
+- Task install script: https://taskfile.dev/install.sh
+- Homebrew install script: https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh
+
 **Linux:**
 
 ```bash
+# Install Task (required for automated setup)
+# Note: The setup-dev task will also install Task if not present, but you need Task to run it
 sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 ```
 
@@ -64,6 +71,13 @@ sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/b
 
 # Install Task
 brew install go-task
+```
+
+**Alternative:** If you already have Go installed, you can install Task via Go:
+
+```bash
+go install github.com/go-task/task/v3/cmd/task@latest
+# Add $HOME/go/bin to your PATH if not already done
 ```
 
 #### Step 2: Clone and Setup
