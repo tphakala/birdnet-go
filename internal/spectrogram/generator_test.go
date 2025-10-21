@@ -34,8 +34,10 @@ func TestNewGenerator(t *testing.T) {
 	if gen.sfs != sfs {
 		t.Error("NewGenerator() did not set sfs correctly")
 	}
-	if gen.logger != logger {
-		t.Error("NewGenerator() did not set logger correctly")
+	// Logger is intentionally wrapped with component context, so we can't check for equality
+	// Just verify it's not nil
+	if gen.logger == nil {
+		t.Error("NewGenerator() did not set logger (logger is nil)")
 	}
 }
 
