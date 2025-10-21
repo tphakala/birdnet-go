@@ -121,13 +121,13 @@ routeInitializers := []struct {
 
 ### Media (`media.go`)
 
-| Method | Route                           | Handler                | Auth | Description                        |
-| ------ | ------------------------------- | ---------------------- | ---- | ---------------------------------- |
-| GET    | `/media/audio/:filename`        | `ServeAudioClip`       | ❌   | Serve audio file                   |
-| GET    | `/media/spectrogram/:filename`  | `ServeSpectrogram`     | ❌   | Serve spectrogram image            |
-| GET    | `/media/audio`                  | `ServeAudioByQueryID`  | ❌   | Serve audio by detection ID        |
-| GET    | `/media/species-image`          | `GetSpeciesImage`      | ❌   | Get species thumbnail image        |
-| GET    | `/spectrogram/:id/status`       | `GetSpectrogramStatus` | ❌   | Get spectrogram generation status  |
+| Method | Route                          | Handler                | Auth | Description                       |
+| ------ | ------------------------------ | ---------------------- | ---- | --------------------------------- |
+| GET    | `/media/audio/:filename`       | `ServeAudioClip`       | ❌   | Serve audio file                  |
+| GET    | `/media/spectrogram/:filename` | `ServeSpectrogram`     | ❌   | Serve spectrogram image           |
+| GET    | `/media/audio`                 | `ServeAudioByQueryID`  | ❌   | Serve audio by detection ID       |
+| GET    | `/media/species-image`         | `GetSpeciesImage`      | ❌   | Get species thumbnail image       |
+| GET    | `/spectrogram/:id/status`      | `GetSpectrogramStatus` | ❌   | Get spectrogram generation status |
 
 ### Notifications (`notifications.go`)
 
@@ -143,8 +143,8 @@ routeInitializers := []struct {
 
 ### Range Filter (`range.go`)
 
-| Method | Route                  | Handler                      | Auth | Description                          |
-| ------ | ---------------------- | ---------------------------- | ---- | ------------------------------------ |
+| Method | Route                  | Handler                      | Auth | Description                         |
+| ------ | ---------------------- | ---------------------------- | ---- | ----------------------------------- |
 | GET    | `/range/species/count` | `GetRangeFilterSpeciesCount` | ❌   | Species count with range filter     |
 | GET    | `/range/species/list`  | `GetRangeFilterSpeciesList`  | ❌   | Species list with range filter      |
 | GET    | `/range/species/csv`   | `GetRangeFilterSpeciesCSV`   | ❌   | Export species list as CSV download |
@@ -200,12 +200,12 @@ routeInitializers := []struct {
 
 ### Stream Health Monitoring (`streams_health.go`)
 
-| Method | Route                     | Handler                     | Auth | Description                                               |
-| ------ | ------------------------- | --------------------------- | ---- | --------------------------------------------------------- |
-| GET    | `/streams/health`         | `GetAllStreamsHealth`       | ✅   | Get detailed health status of all RTSP streams            |
-| GET    | `/streams/health/:url`    | `GetStreamHealth`           | ✅   | Get detailed health status of a specific RTSP stream      |
-| GET    | `/streams/status`         | `GetStreamsStatusSummary`   | ✅   | Get high-level summary of all stream statuses with counts |
-| GET    | `/streams/health/stream`  | `StreamHealthUpdates`       | ✅⚡ | Real-time stream health updates via SSE                   |
+| Method | Route                    | Handler                   | Auth | Description                                               |
+| ------ | ------------------------ | ------------------------- | ---- | --------------------------------------------------------- |
+| GET    | `/streams/health`        | `GetAllStreamsHealth`     | ✅   | Get detailed health status of all RTSP streams            |
+| GET    | `/streams/health/:url`   | `GetStreamHealth`         | ✅   | Get detailed health status of a specific RTSP stream      |
+| GET    | `/streams/status`        | `GetStreamsStatusSummary` | ✅   | Get high-level summary of all stream statuses with counts |
+| GET    | `/streams/health/stream` | `StreamHealthUpdates`     | ✅⚡ | Real-time stream health updates via SSE                   |
 
 ### Support (`support.go`)
 
@@ -540,22 +540,22 @@ The `process_state` field can have these values:
 
 The API reports these error types (from PR #1380):
 
-| Error Type | Permanent | Description |
-|------------|-----------|-------------|
-| `connection_timeout` | No | Connection timed out (will retry) |
-| `rtsp_404` | Yes | Stream not found (404) |
-| `connection_refused` | Yes | Connection refused by server |
-| `auth_failed` | Yes | Authentication required (401) |
-| `auth_forbidden` | Yes | Access forbidden (403) |
-| `no_route` | Yes | No route to host |
-| `dns_resolution_failed` | Yes | DNS lookup failed |
-| `network_unreachable` | No | Network unreachable (transient) |
-| `operation_not_permitted` | Yes | Operation not permitted |
-| `ssl_error` | Yes | SSL/TLS error |
-| `rtsp_503` | No | Service unavailable (503) |
-| `invalid_data` | No | Invalid/corrupted data |
-| `eof` | No | Unexpected end of file |
-| `protocol_error` | Yes | Protocol not supported |
+| Error Type                | Permanent | Description                       |
+| ------------------------- | --------- | --------------------------------- |
+| `connection_timeout`      | No        | Connection timed out (will retry) |
+| `rtsp_404`                | Yes       | Stream not found (404)            |
+| `connection_refused`      | Yes       | Connection refused by server      |
+| `auth_failed`             | Yes       | Authentication required (401)     |
+| `auth_forbidden`          | Yes       | Access forbidden (403)            |
+| `no_route`                | Yes       | No route to host                  |
+| `dns_resolution_failed`   | Yes       | DNS lookup failed                 |
+| `network_unreachable`     | No        | Network unreachable (transient)   |
+| `operation_not_permitted` | Yes       | Operation not permitted           |
+| `ssl_error`               | Yes       | SSL/TLS error                     |
+| `rtsp_503`                | No        | Service unavailable (503)         |
+| `invalid_data`            | No        | Invalid/corrupted data            |
+| `eof`                     | No        | Unexpected end of file            |
+| `protocol_error`          | Yes       | Protocol not supported            |
 
 ### Real-Time Stream Health Updates (SSE)
 
@@ -615,27 +615,27 @@ data: {
 **Connection Example (JavaScript/Browser):**
 
 ```javascript
-const eventSource = new EventSource('/api/v2/streams/health/stream', {
-  withCredentials: true  // Include authentication cookies
+const eventSource = new EventSource("/api/v2/streams/health/stream", {
+  withCredentials: true, // Include authentication cookies
 });
 
-eventSource.addEventListener('stream_health', (event) => {
+eventSource.addEventListener("stream_health", (event) => {
   const data = JSON.parse(event.data);
-  console.log('Stream update:', data.event_type, data.url, data.process_state);
+  console.log("Stream update:", data.event_type, data.url, data.process_state);
 
   // Update UI based on event type
-  if (data.event_type === 'error_detected') {
+  if (data.event_type === "error_detected") {
     showAlert(`Stream error: ${data.last_error_context.user_facing_msg}`);
   }
 });
 
-eventSource.addEventListener('heartbeat', (event) => {
+eventSource.addEventListener("heartbeat", (event) => {
   const data = JSON.parse(event.data);
-  console.log('Heartbeat:', data.timestamp, 'clients:', data.clients);
+  console.log("Heartbeat:", data.timestamp, "clients:", data.clients);
 });
 
 eventSource.onerror = (error) => {
-  console.error('SSE connection error:', error);
+  console.error("SSE connection error:", error);
   eventSource.close();
 };
 ```
@@ -643,6 +643,7 @@ eventSource.onerror = (error) => {
 **Change Detection:**
 
 The SSE endpoint monitors for these changes:
+
 - Health status changes (healthy ↔ unhealthy)
 - Process state transitions
 - New errors detected
@@ -669,7 +670,7 @@ Updates are sent only when changes are detected, reducing bandwidth compared to 
 
 ```typescript
 // Svelte store for stream health monitoring
-import { writable } from 'svelte/store';
+import { writable } from "svelte/store";
 
 interface StreamStatus {
   total_streams: number;
@@ -684,25 +685,25 @@ export const streamStatus = writable<StreamStatus | null>(null);
 // Poll stream status every 5 seconds
 export function startStreamMonitoring() {
   const pollInterval = 5000; // 5 seconds
-  
+
   async function fetchStreamStatus() {
     try {
-      const response = await fetch('/api/v2/streams/status');
+      const response = await fetch("/api/v2/streams/status");
       if (response.ok) {
         const data = await response.json();
         streamStatus.set(data);
       }
     } catch (error) {
-      console.error('Failed to fetch stream status:', error);
+      console.error("Failed to fetch stream status:", error);
     }
   }
-  
+
   // Initial fetch
   fetchStreamStatus();
-  
+
   // Poll periodically
   const intervalId = setInterval(fetchStreamStatus, pollInterval);
-  
+
   // Return cleanup function
   return () => clearInterval(intervalId);
 }

@@ -13,39 +13,47 @@ This document describes the comprehensive observability, reliability, and safety
 Comprehensive metrics tracking for all push notification operations:
 
 #### Provider Delivery Metrics
+
 - `notification_provider_deliveries_total` - Total delivery attempts by provider, type, and status
 - `notification_provider_delivery_duration_seconds` - Latency histogram by provider and type
 - `notification_provider_delivery_errors_total` - Errors by provider, type, and error category
 
 #### Provider Health Metrics
+
 - `notification_provider_health_status` - Current health (1=healthy, 0=unhealthy)
 - `notification_provider_circuit_breaker_state` - Circuit state (0=closed, 1=half-open, 2=open)
 - `notification_provider_consecutive_failures` - Consecutive failure count
 - `notification_provider_last_success_timestamp_seconds` - Last successful delivery time
 
 #### Retry Metrics
+
 - `notification_provider_retry_attempts_total` - Total retry attempts
 - `notification_provider_retry_successes_total` - Successful retries
 
 #### Filter Metrics
+
 - `notification_filter_matches_total` - Notifications matched by filter type
 - `notification_filter_rejections_total` - Notifications rejected with reason
 
 #### Dispatcher Metrics
+
 - `notification_dispatch_total` - Total notifications dispatched
 - `notification_dispatch_active` - Currently active dispatches
 - `notification_queue_depth` - Notification queue depth
 
 #### Timeout Metrics
+
 - `notification_provider_timeouts_total` - Timeout occurrences by provider
 
 **Integration**:
+
 ```go
 // Automatically registered in observability.NewMetrics()
 m.Notification = notificationMetrics
 ```
 
 **Access**:
+
 ```
 GET http://localhost:8080/metrics
 ```
@@ -59,16 +67,19 @@ Implements industry-standard circuit breaker pattern with three states:
 #### States
 
 **Closed** (Normal Operation):
+
 - All requests proceed normally
 - Tracks consecutive failures
 - Opens after `max_failures` threshold
 
 **Open** (Service Protection):
+
 - ALL requests blocked immediately
 - Returns `ErrCircuitBreakerOpen`
 - Waits for `timeout` before testing recovery
 
 **Half-Open** (Recovery Testing):
+
 - Allows limited test requests (`half_open_max_requests`)
 - Success → Closes circuit
 - Failure → Reopens circuit
@@ -80,9 +91,9 @@ notification:
   push:
     circuit_breaker:
       enabled: true
-      max_failures: 5          # Failures before opening
-      timeout: 30s             # Recovery wait time
-      half_open_max_requests: 1  # Test requests in half-open
+      max_failures: 5 # Failures before opening
+      timeout: 30s # Recovery wait time
+      half_open_max_requests: 1 # Test requests in half-open
 ```
 
 #### API
@@ -104,6 +115,7 @@ cb.GetStats()   // Get full statistics
 ```
 
 #### Thread Safety
+
 - All operations are thread-safe
 - Uses RWMutex for optimal read performance
 - Safe for concurrent use by multiple goroutines
@@ -130,8 +142,8 @@ notification:
   push:
     health_check:
       enabled: true
-      interval: 60s  # How often to check
-      timeout: 10s   # Timeout per check
+      interval: 60s # How often to check
+      timeout: 10s # Timeout per check
 ```
 
 #### Health Status
@@ -185,7 +197,7 @@ Token bucket rate limiter for DoS protection:
 notification:
   push:
     rate_limiting:
-      enabled: false  # Disabled by default, enable for additional protection
+      enabled: false # Disabled by default, enable for additional protection
       requests_per_minute: 60
       burst_size: 10
 ```
@@ -226,6 +238,7 @@ Enhanced provider wrapper with integrated metrics and circuit breakers:
 #### Error Categories
 
 Automatically categorized for metrics:
+
 - `timeout` - Context deadline exceeded
 - `cancelled` - Context cancelled
 - `network` - Network/connection errors
@@ -247,6 +260,7 @@ Multi-layer protection strategy:
 5. **Per-Provider Isolation** - Failures don't cascade
 
 **Safety Guarantees**:
+
 - Maximum 5 failure attempts per circuit cycle
 - Maximum 3 retries per notification
 - Rate limited to 60 requests/minute (default)
@@ -335,6 +349,7 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 ### Grafana Dashboard Queries
 
 **Success Rate**:
+
 ```promql
 sum(rate(notification_provider_deliveries_total{status="success"}[5m])) by (provider)
 /
@@ -343,6 +358,7 @@ sum(rate(notification_provider_deliveries_total[5m])) by (provider)
 ```
 
 **Average Latency**:
+
 ```promql
 histogram_quantile(0.95,
   sum(rate(notification_provider_delivery_duration_seconds_bucket[5m])) by (provider, le)
@@ -350,11 +366,13 @@ histogram_quantile(0.95,
 ```
 
 **Circuit Breaker State**:
+
 ```promql
 notification_provider_circuit_breaker_state{provider="telegram"}
 ```
 
 **Health Status**:
+
 ```promql
 notification_provider_health_status == 1
 ```
@@ -366,6 +384,7 @@ notification_provider_health_status == 1
 **File**: `circuit_breaker_test.go`
 
 Comprehensive test coverage:
+
 - ✅ Closed state behavior
 - ✅ Transition to open after failures
 - ✅ Transition to half-open after timeout
@@ -378,6 +397,7 @@ Comprehensive test coverage:
 - ✅ Context cancellation
 
 **Run tests**:
+
 ```bash
 go test -v ./internal/notification/... -run TestCircuitBreaker
 ```
@@ -385,6 +405,7 @@ go test -v ./internal/notification/... -run TestCircuitBreaker
 ### Manual Testing
 
 **Test Circuit Breaker**:
+
 ```bash
 # Send notifications until circuit opens
 for i in {1..10}; do
@@ -397,6 +418,7 @@ curl http://localhost:8080/metrics | grep circuit_breaker_state
 ```
 
 **Test Health Checks**:
+
 ```bash
 # Watch health status
 watch -n 5 'curl -s http://localhost:8080/metrics | grep health_status'

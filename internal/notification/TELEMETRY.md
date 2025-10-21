@@ -35,6 +35,7 @@ All telemetry is scrubbed before reporting:
 - ✅ **Metadata opt-in** - Detection data excluded by default
 
 **Privacy Implementation:** The privacy package provides comprehensive scrubbing of sensitive data. See [../../privacy/README.md](../../privacy/README.md) for details on:
+
 - URL anonymization patterns and algorithms
 - Message scrubbing rules (file paths, credentials, tokens)
 - Testing privacy compliance
@@ -103,6 +104,7 @@ webhookProvider.SetTelemetry(service.GetTelemetry())
 **When:** Circuit breaker changes state (closed → open, open → half-open, etc.)
 
 **Data Reported:**
+
 - Provider name
 - Old and new state
 - Consecutive failure count
@@ -110,10 +112,12 @@ webhookProvider.SetTelemetry(service.GetTelemetry())
 - Configuration (thresholds, timeouts)
 
 **Severity:**
+
 - `warning` - Circuit opens (provider failing)
 - `info` - Circuit closes (recovery)
 
 **Example:**
+
 ```json
 {
   "message": "Circuit breaker state transition: closed → open",
@@ -140,6 +144,7 @@ webhookProvider.SetTelemetry(service.GetTelemetry())
 **When:** HTTP request fails (network error, timeout, 4xx/5xx status)
 
 **Data Reported:**
+
 - Provider name and type
 - HTTP status code (if applicable)
 - Endpoint hash (URL anonymized)
@@ -148,17 +153,20 @@ webhookProvider.SetTelemetry(service.GetTelemetry())
 - Error classification (timeout, cancellation)
 
 **Severity:**
+
 - `critical` - Timeouts (network/provider issues)
 - `error` - 5xx server errors
 - `warning` - 4xx client errors (config issues)
 - `info` - Context cancellation (filtered out, not reported)
 
 **Privacy:**
+
 - ✅ URL: `https://hooks.slack.com/services/T00/B00/xyz` → `webhook_a1b2c3d4`
 - ✅ Auth: Only type logged, never tokens
 - ✅ Response body: Truncated and scrubbed
 
 **Example:**
+
 ```json
 {
   "message": "Webhook request timed out",
@@ -181,6 +189,7 @@ webhookProvider.SetTelemetry(service.GetTelemetry())
 **When:** Provider creation fails (template parsing, validation, secret resolution)
 
 **Data Reported:**
+
 - Provider name and type
 - Error type (template_parse, validation, secret_resolution)
 - Scrubbed error message
@@ -188,11 +197,13 @@ webhookProvider.SetTelemetry(service.GetTelemetry())
 **Severity:** `error` (prevents provider from working)
 
 **Privacy:**
+
 - ✅ Error messages scrubbed (paths, secrets removed)
 - ✅ Template content not included
 - ✅ Secret paths/values not included
 
 **Example:**
+
 ```json
 {
   "message": "Provider initialization failed: template parse error",
@@ -211,6 +222,7 @@ webhookProvider.SetTelemetry(service.GetTelemetry())
 **When:** Worker goroutine panics and is recovered
 
 **Data Reported:**
+
 - Worker type (detection_consumer, resource_consumer)
 - Panic value (scrubbed)
 - Stack trace (scrubbed for privacy)
@@ -219,10 +231,12 @@ webhookProvider.SetTelemetry(service.GetTelemetry())
 **Severity:** `critical` (worker crashed but recovered)
 
 **Privacy:**
+
 - ✅ Stack traces scrubbed (detection metadata removed)
 - ✅ Panic values scrubbed
 
 **Example:**
+
 ```json
 {
   "message": "Worker panic recovered: runtime error",
@@ -246,6 +260,7 @@ webhookProvider.SetTelemetry(service.GetTelemetry())
 **When:** Sustained high drop rate detected (>50%)
 
 **Data Reported:**
+
 - Dropped event count
 - Drop rate percentage
 - Rate limiter configuration
@@ -254,6 +269,7 @@ webhookProvider.SetTelemetry(service.GetTelemetry())
 **Severity:** `warning` (indicates config issue or spam)
 
 **Example:**
+
 ```json
 {
   "message": "Notification rate limit exceeded: 150 events dropped (60.0% drop rate)",
@@ -334,6 +350,7 @@ reporter := notification.NewNoopTelemetryReporter()
 ### Telemetry Not Reporting
 
 1. Check if telemetry is enabled:
+
    ```go
    if telemetry.IsEnabled() {
        // Should return true
@@ -341,6 +358,7 @@ reporter := notification.NewNoopTelemetryReporter()
    ```
 
 2. Verify reporter is set:
+
    ```go
    if service.GetTelemetry() == nil {
        // Telemetry not injected
@@ -363,6 +381,7 @@ Telemetry is designed to be quiet during normal operation:
 - Panics: Should be rare in production
 
 If seeing too many events, check for:
+
 - Misconfigured providers (causing repeated failures)
 - Network issues (causing timeouts)
 - Rate limits too low (causing drops)

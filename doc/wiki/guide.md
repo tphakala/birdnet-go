@@ -360,10 +360,11 @@ webserver:
 # Security settings
 security:
   debug: false # Enable debug mode for security features
-  host: "" # Primary hostname used for TLS certificates, OAuth redirect URLs, and notification links
-           # Set this to your public hostname when using a reverse proxy (e.g., "birdnet.home.arpa")
-           # Can also be set via BIRDNET_HOST environment variable
-           # Falls back to "localhost" if not configured (works for direct access only)
+  host:
+    "" # Primary hostname used for TLS certificates, OAuth redirect URLs, and notification links
+    # Set this to your public hostname when using a reverse proxy (e.g., "birdnet.home.arpa")
+    # Can also be set via BIRDNET_HOST environment variable
+    # Falls back to "localhost" if not configured (works for direct access only)
   autotls: false # Enable automatic TLS certificate management using Let's Encrypt
   redirecttohttps: true # Redirect HTTP to HTTPS
   allowsubnetbypass:
@@ -982,8 +983,8 @@ birdnet:
 realtime:
   audio:
     export:
-      length: 15      # Audio clip length in seconds
-      preCapture: 3   # Pre-detection buffer in seconds
+      length: 15 # Audio clip length in seconds
+      preCapture: 3 # Pre-detection buffer in seconds
 ```
 
 **Exact Minimum Detections Calculation:**
@@ -1380,7 +1381,7 @@ BirdNET-Go supports OAuth2 authentication with Google and GitHub for secure acce
    - In your BirdNET-Go web interface, go to Settings → Security
    - Enable Google OAuth and enter:
      - **Client ID**: Your Google OAuth Client ID
-     - **Client Secret**: Your Google OAuth Client Secret  
+     - **Client Secret**: Your Google OAuth Client Secret
      - **User ID** (optional): Restrict access to specific Google account by entering the user's email address
 
 ##### GitHub OAuth Setup
@@ -1413,20 +1414,20 @@ BirdNET-Go supports OAuth2 authentication with Google and GitHub for secure acce
 
 ```yaml
 security:
-  host: "yourdomain.com"  # Your domain for HTTPS
-  autotls: true          # Enable automatic HTTPS certificates
-  
+  host: "yourdomain.com" # Your domain for HTTPS
+  autotls: true # Enable automatic HTTPS certificates
+
   googleauth:
     enabled: true
     clientid: "123456789-abcdefghijklmnop.apps.googleusercontent.com"
     clientsecret: "GOCSPX-your-secret-key-here"
-    userid: "user@gmail.com"  # Optional: restrict to specific user
-  
+    userid: "user@gmail.com" # Optional: restrict to specific user
+
   githubauth:
     enabled: true
     clientid: "Ov23liABCDEFGHIJ1234"
     clientsecret: "your-github-secret-key-here"
-    userid: "yourusername"    # Optional: restrict to specific user
+    userid: "yourusername" # Optional: restrict to specific user
 ```
 
 **Environment variables** (Docker):
@@ -1454,15 +1455,18 @@ BIRDNET_SECURITY_GITHUBAUTH_USERID=yourusername
 ##### Troubleshooting OAuth
 
 **"Invalid redirect URI" errors**:
+
 - Ensure your callback URL in the OAuth app configuration exactly matches the format shown in BirdNET-Go settings
 - Check that the protocol (http/https) and port number are correct
 - The callback URL should end with `/auth/google/callback` or `/auth/github/callback`
 
 **"Access blocked" errors**:
+
 - For Google OAuth: Ensure your app is verified or add your email to test users
 - For GitHub OAuth: Verify the OAuth app is active and the callback URL is correct
 
 **Login button not appearing**:
+
 - Check that OAuth is enabled in BirdNET-Go settings
 - Verify your client ID and client secret are correctly configured
 - Check the browser console for JavaScript errors
@@ -2005,12 +2009,14 @@ Push notifications for new bird detections include clickable links to view the d
 **Configuration Methods (in priority order):**
 
 1. **Config file** - Set `security.host` in your `config.yaml`:
+
    ```yaml
    security:
-     host: "birdnet.home.arpa"  # Your public hostname
+     host: "birdnet.home.arpa" # Your public hostname
    ```
 
 2. **Environment variable** - Set `BIRDNET_HOST` (useful for Docker):
+
    ```bash
    export BIRDNET_HOST=birdnet.home.arpa
    # or with Docker:
@@ -2020,12 +2026,13 @@ Push notifications for new bird detections include clickable links to view the d
 3. **Localhost fallback** - If neither is set, URLs will use `localhost` (works only for direct local access)
 
 **Docker Compose Example:**
+
 ```yaml
 services:
   birdnet-go:
     image: tphakala/birdnet-go:nightly
     environment:
-      - BIRDNET_HOST=birdnet.home.arpa  # Set your hostname here
+      - BIRDNET_HOST=birdnet.home.arpa # Set your hostname here
       - TZ=US/Eastern
     # ... rest of configuration
 ```
@@ -2090,6 +2097,7 @@ For complete URL format documentation, see the [Shoutrrr documentation](https://
 The webhook provider sends notifications as HTTP requests to custom endpoints, ideal for integrating with your own services, APIs, or automation platforms.
 
 **Features:**
+
 - Supports POST, PUT, and PATCH methods
 - Multiple authentication types (Bearer, Basic, Custom headers)
 - Custom JSON templates
@@ -2113,7 +2121,7 @@ notification:
               Content-Type: "application/json"
             auth:
               type: bearer
-              token: "${API_TOKEN}"  # Reads from environment variable
+              token: "${API_TOKEN}" # Reads from environment variable
         filter:
           types: ["detection"]
           metadata_filters:
@@ -2123,15 +2131,17 @@ notification:
 **Authentication Types:**
 
 1. **Bearer Token** (recommended for most APIs):
+
 ```yaml
 auth:
   type: bearer
-  token: "${API_TOKEN}"  # From environment variable
+  token: "${API_TOKEN}" # From environment variable
   # OR
-  token_file: "/run/secrets/api_token"  # From file (Kubernetes/Docker Swarm)
+  token_file: "/run/secrets/api_token" # From file (Kubernetes/Docker Swarm)
 ```
 
 2. **Basic Authentication**:
+
 ```yaml
 auth:
   type: basic
@@ -2140,6 +2150,7 @@ auth:
 ```
 
 3. **Custom Header**:
+
 ```yaml
 auth:
   type: custom
@@ -2164,6 +2175,7 @@ template: |
 ```
 
 Available template fields:
+
 - `{{.ID}}` - Notification unique ID
 - `{{.Type}}` - Notification type (error, warning, info, detection, system)
 - `{{.Priority}}` - Priority level (critical, high, medium, low)
@@ -2191,7 +2203,7 @@ notification:
         environment:
           SLACK_WEBHOOK: "${SLACK_WEBHOOK_URL}"
           LOG_PATH: "/var/log/birdnet"
-        input_format: both  # "json", "env", or "both"
+        input_format: both # "json", "env", or "both"
         filter:
           types: ["detection"]
           priorities: ["high", "critical"]
@@ -2260,10 +2272,11 @@ Limit notifications to specific types:
 
 ```yaml
 filter:
-  types: ["error", "detection"]  # Only errors and detections
+  types: ["error", "detection"] # Only errors and detections
 ```
 
 Available types:
+
 - `error` - System errors and failures
 - `warning` - Warnings and potential issues
 - `info` - Informational messages
@@ -2276,10 +2289,11 @@ Limit notifications to specific priority levels:
 
 ```yaml
 filter:
-  priorities: ["critical", "high"]  # Only urgent notifications
+  priorities: ["critical", "high"] # Only urgent notifications
 ```
 
 Available priorities:
+
 - `critical` - Immediate action required
 - `high` - Important but not urgent
 - `medium` - Normal priority
@@ -2291,7 +2305,7 @@ Limit notifications from specific system components:
 
 ```yaml
 filter:
-  components: ["birdnet", "audio"]  # Only BirdNET and audio components
+  components: ["birdnet", "audio"] # Only BirdNET and audio components
 ```
 
 ##### Filter by Metadata
@@ -2301,11 +2315,12 @@ Filter based on notification metadata, including confidence thresholds for bird 
 ```yaml
 filter:
   metadata_filters:
-    confidence: ">0.8"  # Only high-confidence detections
-    species: "Northern Cardinal"  # Only specific species
+    confidence: ">0.8" # Only high-confidence detections
+    species: "Northern Cardinal" # Only specific species
 ```
 
 **Confidence Operators:**
+
 - `>` - Greater than (e.g., `">0.8"`)
 - `>=` - Greater than or equal to (e.g., `">=0.75"`)
 - `<` - Less than (e.g., `"<0.5"`)
@@ -2319,7 +2334,7 @@ filter:
   types: ["detection"]
   priorities: ["high", "critical"]
   metadata_filters:
-    confidence: ">=0.85"  # Only 85%+ confidence
+    confidence: ">=0.85" # Only 85%+ confidence
 ```
 
 #### Advanced Configuration
@@ -2333,12 +2348,13 @@ notification:
   push:
     circuit_breaker:
       enabled: true
-      max_failures: 5           # Failures before circuit opens
-      timeout: 30s              # Time before retry attempt
+      max_failures: 5 # Failures before circuit opens
+      timeout: 30s # Time before retry attempt
       half_open_max_requests: 1 # Test requests in half-open state
 ```
 
 **How it works:**
+
 1. **Closed** (normal): All requests pass through
 2. **Open** (after max_failures): All requests blocked
 3. **Half-Open** (after timeout): Limited test requests allowed
@@ -2353,8 +2369,8 @@ notification:
   push:
     health_check:
       enabled: true
-      interval: 60s  # Check every minute
-      timeout: 10s   # Health check timeout
+      interval: 60s # Check every minute
+      timeout: 10s # Health check timeout
 ```
 
 ##### Rate Limiting
@@ -2366,8 +2382,8 @@ notification:
   push:
     rate_limiting:
       enabled: true
-      requests_per_minute: 60  # Average request rate
-      burst_size: 10           # Maximum burst capacity
+      requests_per_minute: 60 # Average request rate
+      burst_size: 10 # Maximum burst capacity
 ```
 
 > **Note**: Rate limiting is disabled by default. Circuit breakers usually provide sufficient protection.
@@ -2397,7 +2413,7 @@ notification:
       timeout: 10s
 
     rate_limiting:
-      enabled: false  # Use circuit breakers instead
+      enabled: false # Use circuit breakers instead
 
     providers:
       # Telegram: Critical errors and high-confidence detections
@@ -2556,7 +2572,7 @@ chmod 0400 /path/to/secret  # Read-only for owner
 Enable debug logging to troubleshoot issues:
 
 ```yaml
-debug: true  # Enable global debug logging
+debug: true # Enable global debug logging
 
 notification:
   push:
@@ -2565,6 +2581,7 @@ notification:
 ```
 
 Debug logs will show:
+
 - Provider initialization
 - Filter evaluation decisions
 - Circuit breaker state changes

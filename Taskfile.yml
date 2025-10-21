@@ -100,6 +100,472 @@ tasks:
             *) echo "unsupported";;
           esac
 
+  setup-dev:
+    desc: Setup development environment on Linux (apt) or macOS (homebrew)
+    cmds:
+      - |
+        echo "🚀 BirdNET-Go Development Environment Setup"
+        echo ""
+        echo "⚠️  This setup requires administrator privileges:"
+        echo "    - Linux: sudo access for system packages (you may be prompted for password)"
+        echo "    - macOS: Homebrew must be installed first"
+        echo ""
+        echo "This will install:"
+        echo "  • Go 1.25.3"
+        echo "  • Node.js LTS"
+        echo "  • Build tools (gcc, git, wget, etc.)"
+        echo "  • Go dev tools (golangci-lint, air, mockgen)"
+        echo "  • Frontend dependencies and Playwright browsers"
+        echo ""
+        read -p "Continue with setup? (y/N) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+          echo "Setup cancelled."
+          exit 1
+        fi
+      - task: detect-and-install-deps
+      - task: install-go-tools
+      - task: setup-frontend-dev
+      - task: check-tensorflow
+      - task: verify-dev-setup
+      - |
+        echo ""
+        echo "✅ Development environment setup complete!"
+        echo ""
+        echo "⚠️  If Go was just installed, run: source ~/.profile"
+        echo ""
+        echo "Next steps:"
+        echo "  1. Run 'task' to build the project"
+        echo "  2. Run 'task dev_server' for development with hot reload"
+        echo "  3. Run 'air realtime' for hot reload with realtime analysis"
+        echo ""
+
+  detect-and-install-deps:
+    desc: Detect OS and install system dependencies
+    internal: true
+    cmds:
+      - |
+        echo "🔍 Detecting operating system..."
+
+        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+          echo "📦 Installing dependencies for Linux (apt-based)..."
+
+          # Check if running as root or with sudo
+          if [ "$EUID" -ne 0 ]; then
+            SUDO="sudo"
+          else
+            SUDO=""
+          fi
+
+          # Update package list
+          $SUDO apt-get update
+
+          # Install base development tools
+          $SUDO apt-get install -y \
+            build-essential \
+            git \
+            wget \
+            curl \
+            unzip \
+            ca-certificates
+
+          # Install Go if not present or version is too old
+          REQUIRED_GO_VERSION="1.25"
+          GO_VERSION="1.25.3"
+          INSTALL_GO=false
+
+          if ! command -v go >/dev/null 2>&1; then
+            echo "📥 Go not found, installing Go ${GO_VERSION}..."
+            INSTALL_GO=true
+          else
+            CURRENT_GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
+            CURRENT_GO_MINOR=$(echo "$CURRENT_GO_VERSION" | cut -d. -f1,2)
+
+            if [[ "$CURRENT_GO_MINOR" != "$REQUIRED_GO_VERSION"* ]]; then
+              echo "⚠️  Go ${CURRENT_GO_VERSION} found, but Go ${REQUIRED_GO_VERSION}.x required"
+              echo "   Current: ${CURRENT_GO_VERSION}"
+              echo "   Required: ${REQUIRED_GO_VERSION}.x"
+              echo ""
+              read -p "   Upgrade to Go ${GO_VERSION}? (y/N) " -n 1 -r
+              echo
+              if [[ $REPLY =~ ^[Yy]$ ]]; then
+                INSTALL_GO=true
+              else
+                echo "⚠️  Continuing with Go ${CURRENT_GO_VERSION} - you may encounter compatibility issues"
+              fi
+            else
+              echo "✅ Go ${CURRENT_GO_VERSION} is already installed (meets requirement)"
+            fi
+          fi
+
+          if [ "$INSTALL_GO" = true ]; then
+            echo "📥 Installing Go ${GO_VERSION}..."
+            if ! wget "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"; then
+              echo "❌ Failed to download Go ${GO_VERSION}"
+              echo "   Check your internet connection and try again"
+              exit 1
+            fi
+
+            $SUDO rm -rf /usr/local/go
+            if ! $SUDO tar -C /usr/local -xzf "go${GO_VERSION}.linux-amd64.tar.gz"; then
+              echo "❌ Failed to extract Go ${GO_VERSION}"
+              rm -f "go${GO_VERSION}.linux-amd64.tar.gz"
+              exit 1
+            fi
+            rm -f "go${GO_VERSION}.linux-amd64.tar.gz"
+
+            # Add Go to PATH if not already there
+            if ! grep -q "/usr/local/go/bin" ~/.profile 2>/dev/null; then
+              echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.profile
+              echo 'export PATH=$PATH:$HOME/go/bin' >> ~/.profile
+              echo "⚠️  Please run 'source ~/.profile' or restart your shell"
+            fi
+            export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
+            echo "✅ Go ${GO_VERSION} installed successfully"
+          fi
+
+          # Install Node.js (LTS) if not present
+          if ! command -v node >/dev/null 2>&1; then
+            echo "📥 Installing Node.js LTS..."
+            # Install latest LTS (currently 22.x, but will update automatically)
+            # Add timeout for script download and execution
+            if ! timeout 120 bash -c "curl -fsSL https://deb.nodesource.com/setup_lts.x | $SUDO -E bash -"; then
+              echo "❌ Failed to setup NodeSource repository"
+              echo "   Check your internet connection and try again"
+              exit 1
+            fi
+            if ! $SUDO apt-get install -y nodejs; then
+              echo "❌ Failed to install Node.js"
+              exit 1
+            fi
+            INSTALLED_NODE=$(node --version)
+            echo "✅ Node.js ${INSTALLED_NODE} installed"
+          else
+            echo "✅ Node.js $(node --version) is already installed"
+          fi
+
+          # Install cross-compilation toolchains (optional)
+          if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
+            echo ""
+            echo "🔧 ARM64 cross-compilation tools (optional):"
+            echo "   Allows building for ARM64/aarch64 from x86_64"
+            echo "   Useful for building for Raspberry Pi, etc."
+            echo ""
+            read -p "   Install ARM64 cross-compilation tools? (y/N) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+              echo "📥 Installing ARM64 cross-compilation tools..."
+              $SUDO apt-get install -y gcc-aarch64-linux-gnu
+              echo "✅ ARM64 cross-compilation tools installed"
+            else
+              echo "⏭️  Skipping ARM64 cross-compilation tools"
+            fi
+          else
+            echo "✅ ARM64 cross-compilation tools already installed"
+          fi
+
+          # Install task if not present
+          if ! command -v task >/dev/null 2>&1; then
+            echo "📥 Installing Task (go-task)..."
+            sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+          fi
+
+        elif [[ "$OSTYPE" == "darwin"* ]]; then
+          echo "📦 Installing dependencies for macOS (homebrew)..."
+
+          # Check if homebrew is installed
+          if ! command -v brew >/dev/null 2>&1; then
+            echo "❌ Homebrew not found. Please install it first:"
+            echo "   /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+            exit 1
+          fi
+
+          # Update homebrew
+          brew update
+
+          # Install base tools
+          brew install git wget curl
+
+          # Install Go with version checking
+          REQUIRED_GO_VERSION="1.25"
+          INSTALL_GO=false
+
+          if ! command -v go >/dev/null 2>&1; then
+            echo "📥 Go not found, installing..."
+            INSTALL_GO=true
+          else
+            CURRENT_GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
+            CURRENT_GO_MINOR=$(echo "$CURRENT_GO_VERSION" | cut -d. -f1,2)
+
+            if [[ "$CURRENT_GO_MINOR" != "$REQUIRED_GO_VERSION"* ]]; then
+              echo "⚠️  Go ${CURRENT_GO_VERSION} found, but Go ${REQUIRED_GO_VERSION}.x required"
+              echo "   Current: ${CURRENT_GO_VERSION}"
+              echo "   Required: ${REQUIRED_GO_VERSION}.x"
+              echo ""
+              read -p "   Upgrade to Go ${REQUIRED_GO_VERSION}? (y/N) " -n 1 -r
+              echo
+              if [[ $REPLY =~ ^[Yy]$ ]]; then
+                INSTALL_GO=true
+              else
+                echo "⚠️  Continuing with Go ${CURRENT_GO_VERSION} - you may encounter compatibility issues"
+              fi
+            else
+              echo "✅ Go ${CURRENT_GO_VERSION} is already installed (meets requirement)"
+            fi
+          fi
+
+          if [ "$INSTALL_GO" = true ]; then
+            echo "📥 Installing Go ${REQUIRED_GO_VERSION}..."
+            # Try versioned formula first, fallback to latest
+            if brew install go@1.25 2>/dev/null; then
+              echo "✅ Go 1.25.x installed via go@1.25"
+              # Link the versioned formula
+              brew link go@1.25 || true
+            else
+              echo "⚠️  go@1.25 formula not available, installing latest Go"
+              brew install go
+              INSTALLED_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
+              echo "✅ Go ${INSTALLED_VERSION} installed"
+              if [[ "$INSTALLED_VERSION" != "$REQUIRED_GO_VERSION"* ]]; then
+                echo "⚠️  Installed version may not match project requirements"
+              fi
+            fi
+          fi
+
+          # Install Node.js LTS (current LTS, not locked to specific version)
+          if ! command -v node >/dev/null 2>&1; then
+            echo "📥 Installing Node.js LTS..."
+            # Install latest LTS instead of locking to Node 22
+            brew install node
+            INSTALLED_NODE=$(node --version)
+            echo "✅ Node.js ${INSTALLED_NODE} installed"
+          else
+            echo "✅ Node.js $(node --version) is already installed"
+          fi
+
+          # Install task
+          if ! command -v task >/dev/null 2>&1; then
+            echo "📥 Installing Task (go-task)..."
+            brew install go-task
+          fi
+
+        else
+          echo "❌ Unsupported operating system: $OSTYPE"
+          echo "This script supports Linux (apt-based) and macOS (homebrew)"
+          exit 1
+        fi
+
+        echo "✅ System dependencies installed"
+
+  install-go-tools:
+    desc: Install Go development tools
+    internal: true
+    cmds:
+      - |
+        echo "🔧 Installing Go development tools..."
+
+        # Install golangci-lint
+        if ! command -v golangci-lint >/dev/null 2>&1; then
+          echo "📥 Installing golangci-lint..."
+          # Add timeout for install script download and execution
+          if ! timeout 120 bash -c "curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$(go env GOPATH)/bin"; then
+            echo "❌ Failed to install golangci-lint"
+            echo "   Check your internet connection and try again"
+            exit 1
+          fi
+        else
+          echo "✅ golangci-lint already installed"
+        fi
+
+        # Install air for hot reload (required for dev workflow)
+        if ! command -v air >/dev/null 2>&1; then
+          echo "📥 Installing air (hot reload)..."
+          if ! go install github.com/air-verse/air@latest; then
+            echo "❌ Failed to install air"
+            exit 1
+          fi
+        else
+          echo "✅ air already installed"
+        fi
+
+        # Install mockgen for testing
+        if ! command -v mockgen >/dev/null 2>&1; then
+          echo "📥 Installing mockgen..."
+          if ! go install go.uber.org/mock/mockgen@latest; then
+            echo "❌ Failed to install mockgen"
+            exit 1
+          fi
+        else
+          echo "✅ mockgen already installed"
+        fi
+
+        echo "✅ Go tools installed"
+
+  setup-frontend-dev:
+    desc: Setup frontend development environment
+    internal: true
+    dir: frontend
+    cmds:
+      - |
+        echo "🎨 Setting up frontend development environment..."
+
+        # Install frontend dependencies
+        if [ ! -d "node_modules" ]; then
+          echo "📥 Installing frontend dependencies..."
+          if ! npm install; then
+            echo "❌ Failed to install frontend dependencies"
+            echo "   Check your network connection and try again"
+            exit 1
+          fi
+        else
+          echo "✅ Frontend dependencies already installed"
+        fi
+
+        # Install Playwright browsers for E2E testing
+        echo "📥 Installing Playwright browsers..."
+        if ! npx playwright install --with-deps chromium; then
+          echo "❌ Failed to install Playwright browsers"
+          echo "   You can install them later with: cd frontend && npx playwright install --with-deps chromium"
+          echo "⚠️  Continuing setup without Playwright browsers"
+        else
+          echo "✅ Playwright browsers installed"
+        fi
+
+        # Return to root directory to initialize Husky
+        cd ..
+
+        # Initialize Husky for git hooks (pre-commit checks)
+        echo "🪝 Setting up git hooks with Husky..."
+        if [ -d ".git" ]; then
+          cd frontend
+          if ! npm run prepare; then
+            echo "⚠️  Failed to initialize Husky"
+            echo "   Git hooks won't be active, but you can initialize later with: cd frontend && npm run prepare"
+          else
+            echo "✅ Git hooks initialized"
+            echo "   Pre-commit hook will run golangci-lint and frontend linting automatically"
+          fi
+          cd ..
+        else
+          echo "⚠️  Not a git repository, skipping Husky setup"
+        fi
+
+        echo "✅ Frontend setup complete"
+
+  verify-dev-setup:
+    desc: Verify development environment setup
+    internal: true
+    cmds:
+      - |
+        echo ""
+        echo "🔍 Verifying development environment..."
+        echo ""
+
+        # Check Go with version validation
+        REQUIRED_GO_VERSION="1.25"
+        if command -v go >/dev/null 2>&1; then
+          CURRENT_GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
+          CURRENT_GO_MINOR=$(echo "$CURRENT_GO_VERSION" | cut -d. -f1,2)
+
+          if [[ "$CURRENT_GO_MINOR" == "$REQUIRED_GO_VERSION"* ]]; then
+            echo "✅ Go: ${CURRENT_GO_VERSION} (meets ${REQUIRED_GO_VERSION}.x requirement)"
+          else
+            echo "❌ Go: ${CURRENT_GO_VERSION} found, but ${REQUIRED_GO_VERSION}.x required"
+            echo "   Current version does not match project requirements"
+            echo "   Run 'task setup-dev' to install the correct version"
+            exit 1
+          fi
+        else
+          echo "❌ Go: not found"
+          echo "   Run 'task setup-dev' to install Go"
+          exit 1
+        fi
+
+        # Check Node.js
+        if command -v node >/dev/null 2>&1; then
+          echo "✅ Node.js: $(node --version)"
+        else
+          echo "❌ Node.js: not found"
+          exit 1
+        fi
+
+        # Check npm
+        if command -v npm >/dev/null 2>&1; then
+          echo "✅ npm: $(npm --version)"
+        else
+          echo "❌ npm: not found"
+          exit 1
+        fi
+
+        # Check golangci-lint (required for pre-commit linting)
+        if command -v golangci-lint >/dev/null 2>&1; then
+          echo "✅ golangci-lint: $(golangci-lint --version | head -n1)"
+        else
+          echo "❌ golangci-lint: not found (required for development)"
+          exit 1
+        fi
+
+        # Check air (required for hot reload development)
+        if command -v air >/dev/null 2>&1; then
+          echo "✅ air: installed"
+        else
+          echo "❌ air: not found (required for 'task dev_server' and 'air' commands)"
+          exit 1
+        fi
+
+        # Check mockgen (required for testing)
+        if command -v mockgen >/dev/null 2>&1; then
+          echo "✅ mockgen: installed"
+        else
+          echo "⚠️  mockgen: not found (needed for generating test mocks)"
+        fi
+
+        # Check task
+        if command -v task >/dev/null 2>&1; then
+          echo "✅ task: $(task --version)"
+        else
+          echo "❌ task: not found"
+          exit 1
+        fi
+
+        # Check git
+        if command -v git >/dev/null 2>&1; then
+          echo "✅ git: $(git --version)"
+        else
+          echo "❌ git: not found"
+          exit 1
+        fi
+
+        # Check frontend dependencies
+        if [ -d "frontend/node_modules" ]; then
+          echo "✅ Frontend dependencies: installed"
+        else
+          echo "❌ Frontend dependencies: not installed"
+          exit 1
+        fi
+
+        # Check git hooks (Husky pre-commit)
+        if [ -f ".git/hooks/pre-commit" ]; then
+          echo "✅ Git hooks: configured (pre-commit checks active)"
+        else
+          echo "⚠️  Git hooks: not initialized"
+          echo "   Run: cd frontend && npm run prepare"
+        fi
+
+        # Check Playwright (optional for E2E tests)
+        cd frontend
+        if npx playwright --version >/dev/null 2>&1; then
+          PLAYWRIGHT_VERSION=$(npx playwright --version)
+          echo "✅ Playwright: ${PLAYWRIGHT_VERSION}"
+        else
+          echo "⚠️  Playwright: not installed (optional for E2E tests)"
+          echo "   Install with: cd frontend && npx playwright install --with-deps chromium"
+        fi
+        cd ..
+
+        echo ""
+        echo "✅ All required tools are installed"
+
   check-tools:
     cmds:
       - |

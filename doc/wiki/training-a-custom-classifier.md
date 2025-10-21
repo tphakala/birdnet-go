@@ -12,6 +12,7 @@ This guide explains how to train a custom BirdNET classifier for detecting speci
 ## Overview
 
 Training a custom BirdNET classifier requires two types of audio data:
+
 - **Positive matches**: Audio segments containing the target sound you want to detect
 - **Negative matches**: Audio segments that do not contain the target sound
 
@@ -28,6 +29,7 @@ BirdNET requires a specific folder structure for training data. Each folder repr
 **The most important folder for a well-performing classifier is the `Background` (or `Noise`) folder.** This special folder contains ambient audio samples that should NOT be matched to any specific class. It teaches the model what constitutes "nothing of interest" in your environment.
 
 The Background folder should contain:
+
 - Background hiss and static
 - Wind sounds
 - Rain and weather sounds
@@ -44,6 +46,7 @@ Here's an example of a complete training data folder structure with multiple cla
 ![Complete folder structure for BirdNET training](https://raw.githubusercontent.com/tphakala/birdnet-go/main/doc/wiki/images/2025-08-30_19-25-36_folder_structure.PNG)
 
 The structure includes:
+
 - **Background**: Ambient sounds that should not trigger any detection
 - **Target classes**: Each folder named as `ScientificName_CommonName`
   - `Dog_Dog` - Dog bark sounds
@@ -65,12 +68,13 @@ Note: You can also create specific negative match folders using the minus prefix
 ### File Organization Guidelines
 
 For each class folder:
+
 - Save audio clips containing the target sound in the appropriately named folder
 - **Critical**: Populate the Background folder with diverse ambient sounds from your recording environment
 - BirdNET Analyzer supports a wide range of audio formats - you can mix formats like AAC, MP3, WAV, FLAC, etc. within and across folders
 - Ensure each folder has sufficient samples (minimum 10-20 clips recommended)
 
-*Personal preference note: I use uncompressed FLAC files as they provide the best flexibility for audio post-processing (noise suppression, filtering, etc.) if needed later. However, compressed formats like MP3 and AAC work perfectly fine for training.*
+_Personal preference note: I use uncompressed FLAC files as they provide the best flexibility for audio post-processing (noise suppression, filtering, etc.) if needed later. However, compressed formats like MP3 and AAC work perfectly fine for training._
 
 ## Step 1: Prepare Your Audio Data
 
@@ -85,6 +89,7 @@ However, for this task, you should use **spectrogram view** instead. The spectro
 ![Audio editor in spectrogram view (correct for this task)](https://raw.githubusercontent.com/tphakala/birdnet-go/main/doc/wiki/images/2025-08-30_18-58-08_spectrogram.PNG)
 
 In the spectrogram view, different sounds appear as distinct patterns:
+
 - Dog barks appear as vertical bands with specific frequency characteristics
 - Background noise has different visual patterns
 - This visual distinction helps in accurately separating positive and negative samples
@@ -131,17 +136,17 @@ Launch BirdNET Analyzer 1.5.1 GUI and navigate to the **Train** tab:
 
 Configure the following settings:
 
-| Parameter | Value | Description |
-|-----------|-------|-------------|
-| **Input folder** | Select your training data folder | Contains both positive and negative sample folders |
-| **Output folder** | Choose destination for classifier | Where the trained model will be saved |
-| **Classifier name** | e.g., "my_custom_classifier" | Name for your custom classifier file |
-| **Upsampling ratio** | 0.4 | Balances class distribution |
-| **Hidden units** | 2048 | Network complexity parameter |
-| **Use mixup** | Enabled | Data augmentation technique |
-| **Crop mode** | Segments | Allows training with continuous audio |
-| **Overlap** | 1.0 | Increases training data through overlapping |
-| **Model save** | Append | Adds to existing model |
+| Parameter            | Value                             | Description                                        |
+| -------------------- | --------------------------------- | -------------------------------------------------- |
+| **Input folder**     | Select your training data folder  | Contains both positive and negative sample folders |
+| **Output folder**    | Choose destination for classifier | Where the trained model will be saved              |
+| **Classifier name**  | e.g., "my_custom_classifier"      | Name for your custom classifier file               |
+| **Upsampling ratio** | 0.4                               | Balances class distribution                        |
+| **Hidden units**     | 2048                              | Network complexity parameter                       |
+| **Use mixup**        | Enabled                           | Data augmentation technique                        |
+| **Crop mode**        | Segments                          | Allows training with continuous audio              |
+| **Overlap**          | 1.0                               | Increases training data through overlapping        |
+| **Model save**       | Append                            | Adds to existing model                             |
 
 ![Training configuration settings](https://raw.githubusercontent.com/tphakala/birdnet-go/main/doc/wiki/images/2025-08-30_19-09-58_birdnet_analyzer_gui_values.PNG)
 
@@ -155,7 +160,7 @@ Configure the following settings:
 
 **Important Note about Append Mode**: When using append mode, your custom classes (like `Dog_Dog`) are added as new labels to the existing BirdNET model. If a label already exists in the base model, BirdNET-Go will intelligently handle matching labels as a single species, preventing duplicate detections.
 
-*Note: These values were determined through trial and error and I have found that they work well for classifiers used with BirdNET-Go in non-scientific setting*
+_Note: These values were determined through trial and error and I have found that they work well for classifiers used with BirdNET-Go in non-scientific setting_
 
 ## Step 3: Train the Classifier
 
@@ -166,6 +171,7 @@ Once all settings are configured:
 3. Wait for training to complete
 
 The training process will:
+
 - Load and preprocess your audio data
 - Segment the audio into 3-second chunks
 - Train the neural network on these segments

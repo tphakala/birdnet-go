@@ -11,6 +11,7 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 - **API v2**: See `internal/api/v2/CLAUDE.md` for endpoints
 
 **IMPORTANT**: Always read the relevant CLAUDE.md file before working on code:
+
 - Working on Go code? Read `internal/CLAUDE.md` first
 - Working on frontend? Read `frontend/CLAUDE.md` first
 - Working on API v2? Read `internal/api/v2/CLAUDE.md` first

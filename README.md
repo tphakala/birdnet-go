@@ -68,14 +68,50 @@ curl -fsSL https://github.com/tphakala/birdnet-go/raw/main/install.sh -o install
 bash ./install.sh
 ```
 
+## Development Setup
+
+For developers who want to contribute or build from source:
+
+> ⚠️ **Security Note:** The setup commands download and execute scripts from the internet.
+> Review [CONTRIBUTING.md](CONTRIBUTING.md#step-1-install-task-runner) for security details.
+
+```bash
+# Clone the repository
+git clone https://github.com/tphakala/birdnet-go.git
+cd birdnet-go
+
+# Install Task runner (if not already installed)
+# Linux: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+# macOS: brew install go-task
+
+# Setup development environment (Linux apt-based or macOS with homebrew)
+task setup-dev
+
+# Build the project
+task
+
+# Start development server with hot reload
+task dev_server
+
+# Start frontend development server
+task frontend-dev
+```
+
+The `setup-dev` task will automatically install:
+
+- Go 1.25.3
+- Node.js LTS
+- Build tools (gcc, git, wget, etc.)
+- golangci-lint (Go linter)
+- air (hot reload for Go)
+- mockgen (testing tool)
+- Frontend dependencies and Playwright browsers
+
 ## Web Dashboard
 
 <img src="doc/BirdNET-Go-dashboard.webp" />
 
 For detailed installation instructions, see the [installation documentation](doc/wiki/installation.md). For securing your BirdNET-Go installation, see the [security documentation](doc/wiki/security.md). See [recommended hardware](doc/wiki/hardware.md) for optimal performance.
-
-
-
 
 There is more detailed usage documentation at [Wiki](doc/wiki/guide.md)
 
@@ -86,16 +122,20 @@ Join our [Discord server](https://discord.gg/gcSCFGUtsd) for support, discussion
 ## Related Projects
 
 ### Core & Extensions
+
 - [BirdNET-Analyzer](https://github.com/birdnet-team/BirdNET-Analyzer) - Upstream project providing the BirdNET AI model for bird sound identification
 - [BirdNET-Go Classifiers](https://github.com/tphakala/birdnet-go-classifiers) - Enhanced BirdNET classifiers including additional species
 
 ### System Integration
+
 - [Cockpit BirdNET-Go](https://github.com/tphakala/cockpit-birdnet-go) - Web-based system management plugin for BirdNET-Go using Cockpit framework
 
 ### Migration Tools
+
 - [BirdNET-Pi2Go](https://github.com/tphakala/birdnet-pi2go) - Database conversion tool for migrating from BirdNET-Pi to BirdNET-Go
 
 ### Hardware Solutions
+
 - [BirdNET-Go ESP32 RTSP Microphone](https://github.com/Sukecz/birdnetgo-esp32-rtsp-mic) - ESP32-based RTSP streaming microphone for remote audio capture
 - [ESP32 Audio Streamer](https://github.com/jpmurray/esp32-audio-streamer) - Alternative ESP32 RTSP streaming solution for BirdNET-Go audio input
 
