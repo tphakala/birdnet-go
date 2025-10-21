@@ -117,10 +117,9 @@ jobs:
           set -euo pipefail
 
           # Run tests with JSON output
-          go test -json -v -short -timeout 120s ./... 2>&1 | tee /tmp/gotest.log | gotestfmt -ci github
-
-          # Check if tests passed
-          TEST_EXIT_CODE=${PIPESTATUS[0]}
+          # Note: We must capture PIPESTATUS immediately after the pipeline
+          # gotestfmt may return non-zero even when tests pass, so we only check go test's exit code
+          go test -json -v -short -timeout 120s ./... 2>&1 | tee /tmp/gotest.log | gotestfmt -ci github; TEST_EXIT_CODE=${PIPESTATUS[0]}
 
           if [ $TEST_EXIT_CODE -ne 0 ]; then
             echo "::error title=Test Failure::Unit tests failed - see job summary for details"
