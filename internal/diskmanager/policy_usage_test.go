@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	mock_diskmanager "github.com/tphakala/birdnet-go/internal/diskmanager/mocks"
-	gomock "go.uber.org/mock/gomock"
 )
 
 // Original function signature references for testing
@@ -314,12 +313,9 @@ type UsageBasedTestHelper struct {
 // Execute runs the test with the given configuration
 func (h *UsageBasedTestHelper) Execute(t *testing.T) {
 	t.Helper()
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 
-	// Create mock DB
-	mockDB := mock_diskmanager.NewMockInterface(ctrl)
-	mockDB.EXPECT().GetLockedNotesClipPaths().Return(h.lockedFilePaths, nil).AnyTimes()
+	// Create mock DB (not used by UsageBasedCleanupForTests - it uses h.lockedFilePaths directly)
+	mockDB := &mock_diskmanager.MockInterface{}
 
 	// Create test disk cleanup with our helper
 	diskCleaner := UsageBasedCleanupForTests{
@@ -749,15 +745,11 @@ func TestUsageBasedCleanupWithYearMonthFolders(t *testing.T) {
 
 // TestUsageBasedCleanupReturnValues tests that UsageBasedCleanup returns the expected values
 func TestUsageBasedCleanupReturnValues(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	// Create a temporary directory
 	tempDir := t.TempDir()
 
-	// Create a mock DB
-	mockDB := mock_diskmanager.NewMockInterface(ctrl)
-	mockDB.EXPECT().GetLockedNotesClipPaths().Return([]string{}, nil).AnyTimes()
+	// Create a mock DB (not used in this test - checkLockedFiles is false)
+	mockDB := &mock_diskmanager.MockInterface{}
 
 	// Create test files
 	testFiles := []struct {
@@ -924,15 +916,11 @@ func testUsageBasedCleanupWithRealFiles(
 
 // TestUsageBasedCleanupBelowThreshold tests that no files are deleted when disk usage is below threshold
 func TestUsageBasedCleanupBelowThreshold(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	// Create a temporary directory
 	tempDir := t.TempDir()
 
-	// Create a mock DB
-	mockDB := mock_diskmanager.NewMockInterface(ctrl)
-	mockDB.EXPECT().GetLockedNotesClipPaths().Return([]string{}, nil).AnyTimes()
+	// Create a mock DB (not used in this test - checkLockedFiles is false)
+	mockDB := &mock_diskmanager.MockInterface{}
 
 	// Create test files
 	testFiles := []struct {
@@ -993,9 +981,6 @@ func TestUsageBasedCleanupBelowThreshold(t *testing.T) {
 
 // TestUsageBasedCleanupLockedFiles tests that locked files are not deleted
 func TestUsageBasedCleanupLockedFiles(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	// Create a temporary directory
 	tempDir := t.TempDir()
 
@@ -1003,8 +988,8 @@ func TestUsageBasedCleanupLockedFiles(t *testing.T) {
 	lockedFilePath := filepath.Join(tempDir, "erithacus_rubecula_80p_20210101T150405Z.wav")
 
 	// Create a mock DB
-	mockDB := mock_diskmanager.NewMockInterface(ctrl)
-	mockDB.EXPECT().GetLockedNotesClipPaths().Return([]string{lockedFilePath}, nil).AnyTimes()
+	mockDB := &mock_diskmanager.MockInterface{}
+	mockDB.On("GetLockedNotesClipPaths").Return([]string{lockedFilePath}, nil).Once()
 
 	// Create test files
 	testFiles := []struct {
@@ -1053,6 +1038,9 @@ func TestUsageBasedCleanupLockedFiles(t *testing.T) {
 
 	// Calculate expected disk utilization after deleting 2 files
 	expectedDiskUtilization := int(initialDiskUsage - (2 * diskUsageReductionPerFile))
+
+	// Assert that mock expectations were met
+	mockDB.AssertExpectations(t)
 
 	// Verify the return values
 	require.NoError(t, result.Err, "UsageBasedCleanup should not return an error")

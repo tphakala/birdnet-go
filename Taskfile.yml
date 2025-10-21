@@ -114,7 +114,7 @@ tasks:
         echo "  • Go 1.25.3"
         echo "  • Node.js LTS"
         echo "  • Build tools (gcc, git, wget, etc.)"
-        echo "  • Go dev tools (golangci-lint, air, mockgen)"
+        echo "  • Go dev tools (golangci-lint, air)"
         echo "  • Frontend dependencies and Playwright browsers"
         echo ""
         read -p "Continue with setup? (y/N) " -n 1 -r
@@ -388,17 +388,6 @@ tasks:
           echo "✅ air already installed"
         fi
 
-        # Install mockgen for testing
-        if ! command -v mockgen >/dev/null 2>&1; then
-          echo "📥 Installing mockgen..."
-          if ! go install go.uber.org/mock/mockgen@latest; then
-            echo "❌ Failed to install mockgen"
-            exit 1
-          fi
-        else
-          echo "✅ mockgen already installed"
-        fi
-
         echo "✅ Go tools installed"
 
   setup-frontend-dev:
@@ -511,13 +500,6 @@ tasks:
         else
           echo "❌ air: not found (required for 'task dev_server' and 'air' commands)"
           exit 1
-        fi
-
-        # Check mockgen (required for testing)
-        if command -v mockgen >/dev/null 2>&1; then
-          echo "✅ mockgen: installed"
-        else
-          echo "⚠️  mockgen: not found (needed for generating test mocks)"
         fi
 
         # Check task

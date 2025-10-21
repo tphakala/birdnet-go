@@ -215,7 +215,6 @@ The `setup-dev` task will automatically:
 - ✅ Install ARM64 cross-compilation tools (Linux only)
 - ✅ Install golangci-lint (Go linter)
 - ✅ Install air (hot reload for Go)
-- ✅ Install mockgen (testing tool)
 - ✅ Install frontend dependencies (npm packages)
 - ✅ Install Playwright browsers for E2E testing
 - ✅ Initialize git hooks (Husky pre-commit checks)
