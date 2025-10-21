@@ -202,6 +202,13 @@ func InitializeGoth(settings *conf.Settings) {
 		logger().Info("Using filesystem session store", "path", sessionPath)
 	}
 
+	// TEMPORARILY DISABLED: FilesystemStore causes file locking contention with multiple browser tabs
+	// Force use of CookieStore to eliminate blocking issues during troubleshooting
+	_ = sessionPath // Silence linter - variable assigned above but not used due to temporary workaround
+	logger().Warn("TEMPORARY: Using CookieStore instead of FilesystemStore to avoid session file locking")
+	gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
+
+	/* ORIGINAL CODE - TEMPORARILY DISABLED FOR TROUBLESHOOTING
 	// Ensure directory exists
 	if err := os.MkdirAll(sessionPath, 0o755); err != nil {
 		logger().Error("Failed to create session directory, falling back to in-memory cookie store", "path", sessionPath, "error", err)
@@ -219,6 +226,11 @@ func InitializeGoth(settings *conf.Settings) {
 
 		// Configure session store options
 		store := gothic.Store.(*sessions.FilesystemStore)
+	*/
+
+	// Configure CookieStore options directly (adapted from FilesystemStore config)
+	{
+		store := gothic.Store.(*sessions.CookieStore)
 		maxAge := 86400 * 7 // 7 days
 		if settings.Security.SessionDuration > 0 {
 			maxAge = int(settings.Security.SessionDuration.Seconds())
@@ -231,12 +243,11 @@ func InitializeGoth(settings *conf.Settings) {
 			Secure:   secureCookie,
 			SameSite: http.SameSiteLaxMode,
 		}
-		logger().Info("Filesystem session store configured", "path", sessionPath, "max_age_seconds", maxAge, "secure", secureCookie)
+		logger().Info("CookieStore session configured (TEMPORARY WORKAROUND)", "max_age_seconds", maxAge, "secure", secureCookie)
 
-		// Set reasonable values for session cookie storage
-		maxSize := 1024 * 1024 // 1MB max size
-		store.MaxLength(maxSize)
-		logger().Debug("Set session store max length", "max_bytes", maxSize)
+		// Note: MaxLength is only available for FilesystemStore, not CookieStore
+		// CookieStore has built-in browser size limits (~4KB typically)
+		logger().Debug("CookieStore will use browser default size limits (~4KB)")
 	}
 
 initProviders:
