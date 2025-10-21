@@ -156,48 +156,75 @@ github.com/stretchr/testify
 
 ### AI Model Integration
 
-**BirdNET TensorFlow Lite Model**
+**Dual TensorFlow Lite Model Architecture**
 
-The core of the application is the BirdNET AI model, a deep learning model trained to identify bird species from audio recordings.
+BirdNET-Go uses **TWO** TensorFlow Lite models from the BirdNET Analyzer project:
 
-**Implementation Details:**
+1. **Analysis Model** - Species identification from audio
+2. **Range Filter Model** - Geographic/regional filtering of species
+
+Both models work together to provide accurate, location-aware bird identification.
+
+**Package Structure:**
 
 ```
 internal/birdnet/
-├── predict.go          # Model inference wrapper
-├── model.go            # Model loading and lifecycle
-└── labels.go           # Species label management
+├── birdnet.go              # Main BirdNET struct and initialization
+├── analyze.go              # Audio analysis and species detection
+├── range_filter.go         # Geographic range filtering
+├── model_registry.go       # Model metadata and registry
+├── models_embedded.go      # Embedded model data
+├── models_external.go      # External model loading
+├── label_files.go          # Label file management
+├── taxonomy.go             # Taxonomy mapping
+└── queue.go                # Analysis queue management
 ```
 
-**CGO Integration:**
+**TensorFlow Lite Integration via go-tflite:**
+
+BirdNET-Go uses the `github.com/tphakala/go-tflite` library for TensorFlow Lite integration:
 
 ```go
-// C API bindings for TensorFlow Lite
-/*
-#cgo LDFLAGS: -ltensorflowlite_c
-#include <tensorflow/lite/c/c_api.h>
-*/
-import "C"
+// internal/birdnet/birdnet.go
+import (
+    tflite "github.com/tphakala/go-tflite"
+    "github.com/tphakala/go-tflite/delegates/xnnpack"
+)
 
-// Model inference uses CGO to call TensorFlow Lite C API
-func (bn *BirdNET) Predict(pcm []float32) ([]Prediction, error) {
-    // Convert Go audio buffer to C types
-    // Call TensorFlow Lite inference
-    // Convert results back to Go types
+type BirdNET struct {
+    AnalysisInterpreter *tflite.Interpreter  // Species identification model
+    RangeInterpreter    *tflite.Interpreter  // Geographic filtering model
+    // ...
 }
 ```
 
+The `go-tflite` library handles CGO/C API bindings to TensorFlow Lite internally, providing a clean Go interface to the BirdNET package.
+
 **Model Files:**
 
-- `BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite` - Lightweight model
-- `BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite` - Full precision model
-- `BirdNET_GLOBAL_6K_V2.4_Labels.txt` - Species labels (6,000+ species)
+| Model Type             | Filename                                            | Precision | Purpose                                               |
+| ---------------------- | --------------------------------------------------- | --------- | ----------------------------------------------------- |
+| Analysis               | `BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite`          | FP32      | Species identification (default, embedded)            |
+| Range Filter (Legacy)  | `BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite`    | FP16      | Geographic filtering (embedded)                       |
+| Range Filter (Updated) | `BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite` | FP16      | Geographic filtering (embedded)                       |
+| Labels                 | `BirdNET_GLOBAL_6K_V2.4_Labels_<locale>.txt`        | N/A       | Species labels in multiple languages (6,000+ species) |
+
+**Model Workflow:**
+
+```
+Audio PCM → Analysis Model → Species Predictions → Range Filter Model → Filtered Results
+    ↓              ↓                    ↓                     ↓                 ↓
+  48kHz        TFLite FP32         Confidence scores    Location-based      Final
+  Mono         Inference           (all species)        probability         detections
+```
 
 **Performance Characteristics:**
 
-- Inference time: ~100-500ms per 3-second audio chunk (hardware dependent)
-- Memory: ~50-200MB model footprint
-- Supports CPU inference only
+- **Analysis Model Inference**: ~100-500ms per 3-second audio chunk (hardware dependent)
+- **Range Filter**: Negligible overhead (<10ms)
+- **Memory**: ~50-200MB total footprint (both models loaded)
+- **Hardware Acceleration**: XNNPACK delegate for CPU optimization
+- **Supported Platforms**: CPU inference (ARM64, AMD64)
 
 ### Web Framework
 
@@ -398,34 +425,61 @@ BirdNET-Go supports various audio input sources:
 
 ```
 internal/analysis/
-├── processor.go        # Main processing orchestrator
-├── queue.go            # Job queue for analysis tasks
-└── buffer/             # Audio buffer management
+├── realtime.go         # Real-time processing orchestrator and entry point
+├── control_monitor.go  # Control signals and system restart handling
+└── processor/
+    ├── processor.go    # Main audio analysis processor
+    └── workers.go      # Worker pool for parallel analysis
 
 internal/myaudio/
-├── capture.go          # Audio capture from devices
-├── converter.go        # Format conversion
-├── vad.go              # Voice Activity Detection
-└── buffer_pool.go      # Memory-efficient buffer pooling
+├── capture.go          # Audio capture from devices (via malgo)
+├── encode.go           # Audio encoding (PCM to WAV)
+├── ffmpeg_export.go    # FFmpeg-based audio export and conversion
+├── ffmpeg_stream.go    # RTSP stream handling via FFmpeg
+├── ffmpeg_manager.go   # FFmpeg process lifecycle management
+├── resample.go         # Audio resampling (file analysis mode only)
+├── buffer_pool.go      # Memory-efficient buffer pooling
+├── analysis_buffer.go  # Analysis buffer management
+├── capture_buffer.go   # Capture buffer management
+└── source_registry.go  # Audio source registration and management
 ```
+
+**Audio Device Interface (malgo/miniaudio):**
+
+BirdNET-Go uses **malgo** (Go wrapper for miniaudio.h) for cross-platform audio device access:
+
+- **Linux**: ALSA backend
+- **macOS**: CoreAudio backend
+- **Windows**: WASAPI backend
+
+**Audio Format Requirements:**
+
+- **Realtime Mode**: Expects 48kHz, 16-bit mono PCM from audio source
+  - No explicit resampling in BirdNET-Go code
+  - malgo/miniaudio may handle format conversion internally
+- **File Analysis Mode**: Uses `resample.go` for format conversion to 48kHz mono
 
 **Processing Pipeline:**
 
 ```
 Audio Source → Capture → Buffer → Analyze → Detect → Store → Notify
      ↓           ↓         ↓        ↓         ↓       ↓       ↓
-  RTSP/Mic    FFmpeg    3-sec    BirdNET  Threshold Database MQTT/
-                        chunks    Model    Filter             Webhook
+  RTSP/Mic    malgo/    3-sec    BirdNET  Threshold Database MQTT/
+              FFmpeg    chunks   Analysis  + Range           Webhook
+                                + Range   Filter
+                                Filter
 ```
 
 **FFmpeg Integration:**
 
 FFmpeg is used for:
 
-- Audio conversion from PCM to AAC, FLAC, Opus and MP3
-- Audio conversion from formats not supported by SoX for spectrogram generation
-- RTSP stream ingestion and audio extraction
-- Audio gain control including normalization
+- **RTSP Stream Ingestion**: Capturing audio from IP cameras and network streams
+- **Audio Format Conversion**: PCM to AAC, FLAC, Opus, and MP3 (at audio export/save stage)
+- **Gain Control and Normalization**: EBU R128 loudnorm filter or simple volume adjustment
+  - Normalization: `loudnorm` filter with configurable LUFS target
+  - Gain adjustment: `volume` filter for dB boost/cut
+- **NOT used for resampling**: File analysis uses Go code (`resample.go`), realtime expects 48kHz from source
 
 **SoX Integration:**
 
@@ -437,12 +491,12 @@ SoX (Sound eXchange) is used exclusively for:
 
 ```
 internal/spectrogram/
-├── generator.go        # Spectrogram creation
-├── cache.go            # Pre-rendered cache management
-└── styles.go           # Visual styling options
+├── generator.go        # Spectrogram creation with SoX
+├── prerenderer.go      # Pre-rendering logic and queue management
+└── utils.go            # Utility functions for spectrogram operations
 ```
 
-Spectrograms are generated on-demand or pre-rendered for dashboard display.
+Spectrograms are generated on-demand or pre-rendered for dashboard display using SoX.
 
 **Buffer Management:**
 
@@ -760,11 +814,8 @@ frontend/
 │   │   │   └── date.ts           # Date formatting
 │   │   ├── types/                # TypeScript type definitions
 │   │   └── stores/               # Global state stores
-│   ├── routes/                   # Application routes
-│   │   ├── +page.svelte          # Dashboard route
-│   │   ├── settings/             # Settings routes
-│   │   └── detections/           # Detection history routes
-│   └── app.html                  # HTML shell
+│   ├── App.svelte                # Main application component
+│   └── main.js                   # Application entry point
 ├── static/                       # Static assets
 │   ├── images/                   # Images
 │   ├── icons/                    # Icons
@@ -772,10 +823,10 @@ frontend/
 ├── tests/                        # E2E tests
 │   ├── dashboard.test.ts         # Dashboard E2E tests
 │   └── settings.test.ts          # Settings E2E tests
-├── vite.config.ts                # Vite configuration
+├── vite.config.js                # Vite configuration
 ├── tsconfig.json                 # TypeScript configuration
 ├── tailwind.config.js            # Tailwind configuration
-├── vitest.config.ts              # Vitest configuration
+├── vitest.config.ts              # Vitest configuration (in vite.config.js)
 └── playwright.config.ts          # Playwright configuration
 ```
 
@@ -1095,14 +1146,12 @@ npm run build
 **Output:**
 
 ```
-frontend/build/
-├── _app/
-│   ├── immutable/
-│   │   ├── chunks/       # Code-split chunks
-│   │   ├── assets/       # CSS and static assets
-│   │   └── entry/        # Entry point files
-│   └── version.json      # Build version
-└── index.html            # HTML shell
+frontend/dist/
+├── index.html           # HTML entry point
+├── *.js                 # JavaScript bundles
+├── *.css                # Stylesheets
+├── messages/            # i18n message files
+└── assets/              # Images and other static assets
 ```
 
 ### Embedding in Go Binary
@@ -1112,24 +1161,31 @@ frontend/build/
 The compiled frontend is embedded using Go's `embed` package:
 
 ```go
-// internal/httpcontroller/server.go
+// frontend/embed.go
+package frontend
+
 import (
     "embed"
     "io/fs"
 )
 
-//go:embed all:frontend/build
-var frontendFS embed.FS
+//go:embed all:dist
+var distDir embed.FS
 
-func (s *Server) setupStaticFiles() {
-    // Strip frontend/build prefix
-    stripped, _ := fs.Sub(frontendFS, "frontend/build")
+// DistFS is the embedded Svelte build output filesystem
+var DistFS fs.FS
 
-    // Serve embedded filesystem
-    s.echo.GET("/*", echo.WrapHandler(
-        http.FileServer(http.FS(stripped)),
-    ))
+func init() {
+    // Strip the "dist" prefix to serve files directly
+    DistFS, _ = fs.Sub(distDir, "dist")
 }
+```
+
+The `DistFS` variable is then used by the HTTP controller to serve static assets:
+
+```go
+// internal/httpcontroller/svelte_handler.go
+file, err := frontend.DistFS.Open(path)
 ```
 
 **Benefits:**
