@@ -139,6 +139,38 @@ Join our [Discord server](https://discord.gg/gcSCFGUtsd) for support, discussion
 - [BirdNET-Go ESP32 RTSP Microphone](https://github.com/Sukecz/birdnetgo-esp32-rtsp-mic) - ESP32-based RTSP streaming microphone for remote audio capture
 - [ESP32 Audio Streamer](https://github.com/jpmurray/esp32-audio-streamer) - Alternative ESP32 RTSP streaming solution for BirdNET-Go audio input
 
+## Contributing
+
+**Want to contribute?** We welcome contributions from the community! 🎉
+
+For comprehensive contributing guidelines, development setup, and workflow documentation, see [**CONTRIBUTING.md**](CONTRIBUTING.md).
+
+### Quick Start for Contributors
+
+**Experienced developers** can get started in 5 minutes:
+
+```bash
+git clone https://github.com/tphakala/birdnet-go.git && cd birdnet-go
+task setup-dev  # One command installs everything (Go, Node.js, tools, git hooks)
+air realtime    # Start developing with hot reload
+```
+
+**New to the project?** The [contributing guide](CONTRIBUTING.md) includes:
+
+- 📋 [TL;DR Quick Start](CONTRIBUTING.md#tldr---quick-start-for-experienced-developers) - 5-minute setup
+- 🔧 [Automated Environment Setup](CONTRIBUTING.md#development-environment-setup) - `task setup-dev` handles everything
+- 📖 [Development Workflow](CONTRIBUTING.md#development-workflow) - Hot reload, git hooks, testing
+- ⚖️ [License & Privacy](CONTRIBUTING.md#license-and-legal) - CC BY-NC-SA 4.0, privacy-by-design
+- 💬 [Discord Community](https://discord.gg/gcSCFGUtsd) - Get help and discuss features
+
+All contributions must follow:
+
+- ✅ Privacy-by-design principles
+- ✅ Code quality standards (automated via git hooks)
+- ✅ CC BY-NC-SA 4.0 license terms
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for complete details.
+
 ## License
 
 Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
