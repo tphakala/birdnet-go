@@ -422,11 +422,6 @@ Source: Apache-2.0
 License: https://github.com/uber-go/goleak/blob/v1.3.0/LICENSE
 Source: MIT
 
-### go.uber.org/mock/gomock
-
-License: https://github.com/uber/mock/blob/v0.6.0/LICENSE
-Source: Apache-2.0
-
 ### go.yaml.in/yaml/v2
 
 License: https://github.com/yaml/go-yaml/blob/v2.4.2/LICENSE
@@ -521,3 +516,4 @@ Source: MIT
 
 License: https://github.com/go-gorm/gorm/blob/v1.31.0/LICENSE
 Source: MIT
+
