@@ -100,6 +100,261 @@ tasks:
             *) echo "unsupported";;
           esac
 
+  setup-dev:
+    desc: Setup development environment on Linux (apt) or macOS (homebrew)
+    cmds:
+      - task: detect-and-install-deps
+      - task: install-go-tools
+      - task: setup-frontend-dev
+      - task: check-tensorflow
+      - task: verify-dev-setup
+      - |
+        echo ""
+        echo "✅ Development environment setup complete!"
+        echo ""
+        echo "Next steps:"
+        echo "  1. Run 'task' to build the project"
+        echo "  2. Run 'task dev_server' for development with hot reload"
+        echo "  3. Run 'task frontend-dev' to start frontend dev server"
+        echo ""
+
+  detect-and-install-deps:
+    desc: Detect OS and install system dependencies
+    internal: true
+    cmds:
+      - |
+        echo "🔍 Detecting operating system..."
+
+        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+          echo "📦 Installing dependencies for Linux (apt-based)..."
+
+          # Check if running as root or with sudo
+          if [ "$EUID" -ne 0 ]; then
+            SUDO="sudo"
+          else
+            SUDO=""
+          fi
+
+          # Update package list
+          $SUDO apt-get update
+
+          # Install base development tools
+          $SUDO apt-get install -y \
+            build-essential \
+            git \
+            wget \
+            curl \
+            unzip \
+            ca-certificates
+
+          # Install Go if not present or version is too old
+          if ! command -v go >/dev/null 2>&1; then
+            echo "📥 Installing Go..."
+            GO_VERSION="1.25.3"
+            wget "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"
+            $SUDO rm -rf /usr/local/go
+            $SUDO tar -C /usr/local -xzf "go${GO_VERSION}.linux-amd64.tar.gz"
+            rm "go${GO_VERSION}.linux-amd64.tar.gz"
+
+            # Add Go to PATH if not already there
+            if ! grep -q "/usr/local/go/bin" ~/.profile 2>/dev/null; then
+              echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.profile
+              echo 'export PATH=$PATH:$HOME/go/bin' >> ~/.profile
+              echo "⚠️  Please run 'source ~/.profile' or restart your shell"
+            fi
+            export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
+          fi
+
+          # Install Node.js (LTS) if not present
+          if ! command -v node >/dev/null 2>&1; then
+            echo "📥 Installing Node.js LTS..."
+            curl -fsSL https://deb.nodesource.com/setup_lts.x | $SUDO -E bash -
+            $SUDO apt-get install -y nodejs
+          fi
+
+          # Install cross-compilation toolchains (optional but useful)
+          if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
+            echo "📥 Installing ARM64 cross-compilation tools..."
+            $SUDO apt-get install -y gcc-aarch64-linux-gnu
+          fi
+
+          # Install task if not present
+          if ! command -v task >/dev/null 2>&1; then
+            echo "📥 Installing Task (go-task)..."
+            sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+          fi
+
+        elif [[ "$OSTYPE" == "darwin"* ]]; then
+          echo "📦 Installing dependencies for macOS (homebrew)..."
+
+          # Check if homebrew is installed
+          if ! command -v brew >/dev/null 2>&1; then
+            echo "❌ Homebrew not found. Please install it first:"
+            echo "   /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+            exit 1
+          fi
+
+          # Update homebrew
+          brew update
+
+          # Install base tools
+          brew install git wget curl
+
+          # Install Go
+          if ! command -v go >/dev/null 2>&1; then
+            echo "📥 Installing Go..."
+            brew install go@1.25
+          fi
+
+          # Install Node.js LTS
+          if ! command -v node >/dev/null 2>&1; then
+            echo "📥 Installing Node.js LTS..."
+            brew install node@22
+          fi
+
+          # Install task
+          if ! command -v task >/dev/null 2>&1; then
+            echo "📥 Installing Task (go-task)..."
+            brew install go-task
+          fi
+
+        else
+          echo "❌ Unsupported operating system: $OSTYPE"
+          echo "This script supports Linux (apt-based) and macOS (homebrew)"
+          exit 1
+        fi
+
+        echo "✅ System dependencies installed"
+
+  install-go-tools:
+    desc: Install Go development tools
+    internal: true
+    cmds:
+      - |
+        echo "🔧 Installing Go development tools..."
+
+        # Install golangci-lint
+        if ! command -v golangci-lint >/dev/null 2>&1; then
+          echo "📥 Installing golangci-lint..."
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+        else
+          echo "✅ golangci-lint already installed"
+        fi
+
+        # Install air for hot reload (optional)
+        if ! command -v air >/dev/null 2>&1; then
+          echo "📥 Installing air (hot reload)..."
+          go install github.com/air-verse/air@latest
+        else
+          echo "✅ air already installed"
+        fi
+
+        # Install mockgen for testing
+        if ! command -v mockgen >/dev/null 2>&1; then
+          echo "📥 Installing mockgen..."
+          go install go.uber.org/mock/mockgen@latest
+        else
+          echo "✅ mockgen already installed"
+        fi
+
+        echo "✅ Go tools installed"
+
+  setup-frontend-dev:
+    desc: Setup frontend development environment
+    internal: true
+    dir: frontend
+    cmds:
+      - |
+        echo "🎨 Setting up frontend development environment..."
+
+        # Install frontend dependencies
+        if [ ! -d "node_modules" ]; then
+          echo "📥 Installing frontend dependencies..."
+          npm install
+        else
+          echo "✅ Frontend dependencies already installed"
+        fi
+
+        # Install Playwright browsers for E2E testing
+        echo "📥 Installing Playwright browsers..."
+        npx playwright install --with-deps chromium
+
+        echo "✅ Frontend setup complete"
+
+  verify-dev-setup:
+    desc: Verify development environment setup
+    internal: true
+    cmds:
+      - |
+        echo ""
+        echo "🔍 Verifying development environment..."
+        echo ""
+
+        # Check Go
+        if command -v go >/dev/null 2>&1; then
+          echo "✅ Go: $(go version)"
+        else
+          echo "❌ Go: not found"
+          exit 1
+        fi
+
+        # Check Node.js
+        if command -v node >/dev/null 2>&1; then
+          echo "✅ Node.js: $(node --version)"
+        else
+          echo "❌ Node.js: not found"
+          exit 1
+        fi
+
+        # Check npm
+        if command -v npm >/dev/null 2>&1; then
+          echo "✅ npm: $(npm --version)"
+        else
+          echo "❌ npm: not found"
+          exit 1
+        fi
+
+        # Check golangci-lint
+        if command -v golangci-lint >/dev/null 2>&1; then
+          echo "✅ golangci-lint: $(golangci-lint --version | head -n1)"
+        else
+          echo "⚠️  golangci-lint: not found (optional)"
+        fi
+
+        # Check air
+        if command -v air >/dev/null 2>&1; then
+          echo "✅ air: installed"
+        else
+          echo "⚠️  air: not found (optional)"
+        fi
+
+        # Check task
+        if command -v task >/dev/null 2>&1; then
+          echo "✅ task: $(task --version)"
+        else
+          echo "❌ task: not found"
+          exit 1
+        fi
+
+        # Check git
+        if command -v git >/dev/null 2>&1; then
+          echo "✅ git: $(git --version)"
+        else
+          echo "❌ git: not found"
+          exit 1
+        fi
+
+        # Check frontend dependencies
+        if [ -d "frontend/node_modules" ]; then
+          echo "✅ Frontend dependencies: installed"
+        else
+          echo "❌ Frontend dependencies: not installed"
+          exit 1
+        fi
+
+        echo ""
+        echo "✅ All required tools are installed"
+
   check-tools:
     cmds:
       - |
