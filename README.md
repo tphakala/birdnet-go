@@ -72,6 +72,9 @@ bash ./install.sh
 
 For developers who want to contribute or build from source:
 
+> ⚠️ **Security Note:** The setup commands download and execute scripts from the internet.
+> Review [CONTRIBUTING.md](CONTRIBUTING.md#step-1-install-task-runner) for security details.
+
 ```bash
 # Clone the repository
 git clone https://github.com/tphakala/birdnet-go.git

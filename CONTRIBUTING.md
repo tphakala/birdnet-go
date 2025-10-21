@@ -158,8 +158,8 @@ This is the fastest way to get started on **Linux (apt-based)** or **macOS (with
 
 ⚠️ **Security Note:** The installation scripts below download and execute code from the internet. Review the scripts before running if security is a concern:
 
-- Task install script: https://taskfile.dev/install.sh
-- Homebrew install script: https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh
+- [Task install script](https://taskfile.dev/install.sh)
+- [Homebrew install script](https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)
 
 **Linux:**
 
@@ -542,7 +542,7 @@ task e2e-report
 
 ## Project Structure
 
-```
+```text
 birdnet-go/
 ├── cmd/                    # Viper CLI commands
 ├── internal/               # Private Go packages
@@ -609,7 +609,7 @@ birdnet-go/
 
    Follow conventional commits format:
 
-   ```
+   ```text
    type(scope): brief description
 
    Longer explanation if needed.
@@ -621,7 +621,7 @@ birdnet-go/
 
    **Examples:**
 
-   ```
+   ```text
    feat(api): add spectrogram generation endpoint
    fix(frontend): resolve audio player freeze issue (BG-14)
    docs(contributing): add air hot reload documentation
@@ -644,7 +644,7 @@ birdnet-go/
 
 2. **PR Title Format:**
 
-   ```
+   ```text
    type(scope): Brief description of changes
    ```
 

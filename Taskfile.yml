@@ -200,10 +200,19 @@ tasks:
 
           if [ "$INSTALL_GO" = true ]; then
             echo "📥 Installing Go ${GO_VERSION}..."
-            wget "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"
+            if ! wget "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"; then
+              echo "❌ Failed to download Go ${GO_VERSION}"
+              echo "   Check your internet connection and try again"
+              exit 1
+            fi
+
             $SUDO rm -rf /usr/local/go
-            $SUDO tar -C /usr/local -xzf "go${GO_VERSION}.linux-amd64.tar.gz"
-            rm "go${GO_VERSION}.linux-amd64.tar.gz"
+            if ! $SUDO tar -C /usr/local -xzf "go${GO_VERSION}.linux-amd64.tar.gz"; then
+              echo "❌ Failed to extract Go ${GO_VERSION}"
+              rm -f "go${GO_VERSION}.linux-amd64.tar.gz"
+              exit 1
+            fi
+            rm -f "go${GO_VERSION}.linux-amd64.tar.gz"
 
             # Add Go to PATH if not already there
             if ! grep -q "/usr/local/go/bin" ~/.profile 2>/dev/null; then
@@ -219,8 +228,16 @@ tasks:
           if ! command -v node >/dev/null 2>&1; then
             echo "📥 Installing Node.js LTS..."
             # Install latest LTS (currently 22.x, but will update automatically)
-            curl -fsSL https://deb.nodesource.com/setup_lts.x | $SUDO -E bash -
-            $SUDO apt-get install -y nodejs
+            # Add timeout for script download and execution
+            if ! timeout 120 bash -c "curl -fsSL https://deb.nodesource.com/setup_lts.x | $SUDO -E bash -"; then
+              echo "❌ Failed to setup NodeSource repository"
+              echo "   Check your internet connection and try again"
+              exit 1
+            fi
+            if ! $SUDO apt-get install -y nodejs; then
+              echo "❌ Failed to install Node.js"
+              exit 1
+            fi
             INSTALLED_NODE=$(node --version)
             echo "✅ Node.js ${INSTALLED_NODE} installed"
           else
@@ -350,8 +367,10 @@ tasks:
         # Install golangci-lint
         if ! command -v golangci-lint >/dev/null 2>&1; then
           echo "📥 Installing golangci-lint..."
-          if ! curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin; then
+          # Add timeout for install script download and execution
+          if ! timeout 120 bash -c "curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$(go env GOPATH)/bin"; then
             echo "❌ Failed to install golangci-lint"
+            echo "   Check your internet connection and try again"
             exit 1
           fi
         else
@@ -442,11 +461,23 @@ tasks:
         echo "🔍 Verifying development environment..."
         echo ""
 
-        # Check Go
+        # Check Go with version validation
+        REQUIRED_GO_VERSION="1.25"
         if command -v go >/dev/null 2>&1; then
-          echo "✅ Go: $(go version)"
+          CURRENT_GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
+          CURRENT_GO_MINOR=$(echo "$CURRENT_GO_VERSION" | cut -d. -f1,2)
+
+          if [[ "$CURRENT_GO_MINOR" == "$REQUIRED_GO_VERSION"* ]]; then
+            echo "✅ Go: ${CURRENT_GO_VERSION} (meets ${REQUIRED_GO_VERSION}.x requirement)"
+          else
+            echo "❌ Go: ${CURRENT_GO_VERSION} found, but ${REQUIRED_GO_VERSION}.x required"
+            echo "   Current version does not match project requirements"
+            echo "   Run 'task setup-dev' to install the correct version"
+            exit 1
+          fi
         else
           echo "❌ Go: not found"
+          echo "   Run 'task setup-dev' to install Go"
           exit 1
         fi
 
