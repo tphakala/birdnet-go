@@ -2,6 +2,44 @@
 
 Thank you for your interest in contributing to BirdNET-Go! This document provides guidelines and instructions for setting up your development environment and contributing to the project.
 
+## TL;DR - Quick Start (For Experienced Developers)
+
+> "Trust me, I know what I'm doing."
+
+**Legal:** By contributing, you agree to [CC BY-NC-SA 4.0 license](#project-license) and [privacy-by-design principles](PRIVACY.md).
+
+**Setup (5 minutes):**
+
+```bash
+# Clone and setup everything
+git clone https://github.com/tphakala/birdnet-go.git && cd birdnet-go
+sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin  # Install Task
+task setup-dev  # One command to rule them all (Go 1.25, Node.js, tools, git hooks)
+source ~/.profile  # If Go was just installed
+
+# Develop with hot reload
+air realtime  # or 'task dev_server'
+
+# Before commit (auto-runs via git hooks anyway)
+golangci-lint run -v && cd frontend && npm run check:all
+
+# Commit (pre-commit hook auto-formats & lints)
+git checkout -b feature/my-feature
+git commit -m "feat(scope): what you did"
+```
+
+**Key Rules:**
+
+- ❌ No API v1 expansion → use `internal/api/v2/`
+- ❌ No telemetry without explicit user opt-in
+- ❌ No `any` types in TypeScript
+- ✅ Frontend is embedded in Go binary (use `air`, not Vite dev server)
+- ✅ Pre-commit hooks auto-format & lint (can't commit broken code)
+
+**Need details?** Read the full guide below. **Questions?** [Discord](https://discord.gg/gcSCFGUtsd)
+
+---
+
 ## Table of Contents
 
 - [Code of Conduct](#code-of-conduct)
