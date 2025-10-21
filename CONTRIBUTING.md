@@ -10,6 +10,8 @@ Thank you for your interest in contributing to BirdNET-Go! This document provide
 
 **Setup (5 minutes):**
 
+**Option A: Automated Setup (Linux/macOS)**
+
 ```bash
 # Clone and setup everything
 git clone https://github.com/tphakala/birdnet-go.git && cd birdnet-go
@@ -36,6 +38,24 @@ task frontend-quality
 git checkout -b feature/my-feature
 git commit -m "feat(scope): what you did"
 ```
+
+**Option B: Dev Container (All Platforms)**
+
+```bash
+# Clone repository
+git clone https://github.com/tphakala/birdnet-go.git && cd birdnet-go
+
+# Open in VS Code
+code .
+
+# Press F1 → "Dev Containers: Reopen in Container"
+# Everything auto-installs (Go, Node.js, tools, TensorFlow Lite)
+
+# Start developing immediately
+air realtime
+```
+
+Requirements: Docker + VS Code + Dev Containers extension. See [full setup details](#option-2-dev-container-vs-code).
 
 **Key Rules:**
 
