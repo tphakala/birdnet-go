@@ -170,9 +170,36 @@ tasks:
             ca-certificates
 
           # Install Go if not present or version is too old
+          REQUIRED_GO_VERSION="1.25"
+          GO_VERSION="1.25.3"
+          INSTALL_GO=false
+
           if ! command -v go >/dev/null 2>&1; then
-            echo "📥 Installing Go..."
-            GO_VERSION="1.25.3"
+            echo "📥 Go not found, installing Go ${GO_VERSION}..."
+            INSTALL_GO=true
+          else
+            CURRENT_GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
+            CURRENT_GO_MINOR=$(echo "$CURRENT_GO_VERSION" | cut -d. -f1,2)
+
+            if [[ "$CURRENT_GO_MINOR" != "$REQUIRED_GO_VERSION"* ]]; then
+              echo "⚠️  Go ${CURRENT_GO_VERSION} found, but Go ${REQUIRED_GO_VERSION}.x required"
+              echo "   Current: ${CURRENT_GO_VERSION}"
+              echo "   Required: ${REQUIRED_GO_VERSION}.x"
+              echo ""
+              read -p "   Upgrade to Go ${GO_VERSION}? (y/N) " -n 1 -r
+              echo
+              if [[ $REPLY =~ ^[Yy]$ ]]; then
+                INSTALL_GO=true
+              else
+                echo "⚠️  Continuing with Go ${CURRENT_GO_VERSION} - you may encounter compatibility issues"
+              fi
+            else
+              echo "✅ Go ${CURRENT_GO_VERSION} is already installed (meets requirement)"
+            fi
+          fi
+
+          if [ "$INSTALL_GO" = true ]; then
+            echo "📥 Installing Go ${GO_VERSION}..."
             wget "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"
             $SUDO rm -rf /usr/local/go
             $SUDO tar -C /usr/local -xzf "go${GO_VERSION}.linux-amd64.tar.gz"
@@ -185,19 +212,39 @@ tasks:
               echo "⚠️  Please run 'source ~/.profile' or restart your shell"
             fi
             export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin
+            echo "✅ Go ${GO_VERSION} installed successfully"
           fi
 
           # Install Node.js (LTS) if not present
           if ! command -v node >/dev/null 2>&1; then
             echo "📥 Installing Node.js LTS..."
+            # Install latest LTS (currently 22.x, but will update automatically)
             curl -fsSL https://deb.nodesource.com/setup_lts.x | $SUDO -E bash -
             $SUDO apt-get install -y nodejs
+            INSTALLED_NODE=$(node --version)
+            echo "✅ Node.js ${INSTALLED_NODE} installed"
+          else
+            echo "✅ Node.js $(node --version) is already installed"
           fi
 
-          # Install cross-compilation toolchains (optional but useful)
+          # Install cross-compilation toolchains (optional)
           if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
-            echo "📥 Installing ARM64 cross-compilation tools..."
-            $SUDO apt-get install -y gcc-aarch64-linux-gnu
+            echo ""
+            echo "🔧 ARM64 cross-compilation tools (optional):"
+            echo "   Allows building for ARM64/aarch64 from x86_64"
+            echo "   Useful for building for Raspberry Pi, etc."
+            echo ""
+            read -p "   Install ARM64 cross-compilation tools? (y/N) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+              echo "📥 Installing ARM64 cross-compilation tools..."
+              $SUDO apt-get install -y gcc-aarch64-linux-gnu
+              echo "✅ ARM64 cross-compilation tools installed"
+            else
+              echo "⏭️  Skipping ARM64 cross-compilation tools"
+            fi
+          else
+            echo "✅ ARM64 cross-compilation tools already installed"
           fi
 
           # Install task if not present
@@ -222,16 +269,61 @@ tasks:
           # Install base tools
           brew install git wget curl
 
-          # Install Go
+          # Install Go with version checking
+          REQUIRED_GO_VERSION="1.25"
+          INSTALL_GO=false
+
           if ! command -v go >/dev/null 2>&1; then
-            echo "📥 Installing Go..."
-            brew install go@1.25
+            echo "📥 Go not found, installing..."
+            INSTALL_GO=true
+          else
+            CURRENT_GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
+            CURRENT_GO_MINOR=$(echo "$CURRENT_GO_VERSION" | cut -d. -f1,2)
+
+            if [[ "$CURRENT_GO_MINOR" != "$REQUIRED_GO_VERSION"* ]]; then
+              echo "⚠️  Go ${CURRENT_GO_VERSION} found, but Go ${REQUIRED_GO_VERSION}.x required"
+              echo "   Current: ${CURRENT_GO_VERSION}"
+              echo "   Required: ${REQUIRED_GO_VERSION}.x"
+              echo ""
+              read -p "   Upgrade to Go ${REQUIRED_GO_VERSION}? (y/N) " -n 1 -r
+              echo
+              if [[ $REPLY =~ ^[Yy]$ ]]; then
+                INSTALL_GO=true
+              else
+                echo "⚠️  Continuing with Go ${CURRENT_GO_VERSION} - you may encounter compatibility issues"
+              fi
+            else
+              echo "✅ Go ${CURRENT_GO_VERSION} is already installed (meets requirement)"
+            fi
           fi
 
-          # Install Node.js LTS
+          if [ "$INSTALL_GO" = true ]; then
+            echo "📥 Installing Go ${REQUIRED_GO_VERSION}..."
+            # Try versioned formula first, fallback to latest
+            if brew install go@1.25 2>/dev/null; then
+              echo "✅ Go 1.25.x installed via go@1.25"
+              # Link the versioned formula
+              brew link go@1.25 || true
+            else
+              echo "⚠️  go@1.25 formula not available, installing latest Go"
+              brew install go
+              INSTALLED_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
+              echo "✅ Go ${INSTALLED_VERSION} installed"
+              if [[ "$INSTALLED_VERSION" != "$REQUIRED_GO_VERSION"* ]]; then
+                echo "⚠️  Installed version may not match project requirements"
+              fi
+            fi
+          fi
+
+          # Install Node.js LTS (current LTS, not locked to specific version)
           if ! command -v node >/dev/null 2>&1; then
             echo "📥 Installing Node.js LTS..."
-            brew install node@22
+            # Install latest LTS instead of locking to Node 22
+            brew install node
+            INSTALLED_NODE=$(node --version)
+            echo "✅ Node.js ${INSTALLED_NODE} installed"
+          else
+            echo "✅ Node.js $(node --version) is already installed"
           fi
 
           # Install task
@@ -428,6 +520,17 @@ tasks:
           echo "⚠️  Git hooks: not initialized"
           echo "   Run: cd frontend && npm run prepare"
         fi
+
+        # Check Playwright (optional for E2E tests)
+        cd frontend
+        if npx playwright --version >/dev/null 2>&1; then
+          PLAYWRIGHT_VERSION=$(npx playwright --version)
+          echo "✅ Playwright: ${PLAYWRIGHT_VERSION}"
+        else
+          echo "⚠️  Playwright: not installed (optional for E2E tests)"
+          echo "   Install with: cd frontend && npx playwright install --with-deps chromium"
+        fi
+        cd ..
 
         echo ""
         echo "✅ All required tools are installed"
