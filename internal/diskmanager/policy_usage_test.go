@@ -314,9 +314,8 @@ type UsageBasedTestHelper struct {
 func (h *UsageBasedTestHelper) Execute(t *testing.T) {
 	t.Helper()
 
-	// Create mock DB
+	// Create mock DB (not used by UsageBasedCleanupForTests - it uses h.lockedFilePaths directly)
 	mockDB := &mock_diskmanager.MockInterface{}
-	mockDB.On("GetLockedNotesClipPaths").Return(h.lockedFilePaths, nil).Maybe()
 
 	// Create test disk cleanup with our helper
 	diskCleaner := UsageBasedCleanupForTests{
@@ -749,9 +748,8 @@ func TestUsageBasedCleanupReturnValues(t *testing.T) {
 	// Create a temporary directory
 	tempDir := t.TempDir()
 
-	// Create a mock DB
+	// Create a mock DB (not used in this test - checkLockedFiles is false)
 	mockDB := &mock_diskmanager.MockInterface{}
-	mockDB.On("GetLockedNotesClipPaths").Return([]string{}, nil).Maybe()
 
 	// Create test files
 	testFiles := []struct {
@@ -921,9 +919,8 @@ func TestUsageBasedCleanupBelowThreshold(t *testing.T) {
 	// Create a temporary directory
 	tempDir := t.TempDir()
 
-	// Create a mock DB
+	// Create a mock DB (not used in this test - checkLockedFiles is false)
 	mockDB := &mock_diskmanager.MockInterface{}
-	mockDB.On("GetLockedNotesClipPaths").Return([]string{}, nil).Maybe()
 
 	// Create test files
 	testFiles := []struct {
