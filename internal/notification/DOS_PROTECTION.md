@@ -11,27 +11,31 @@ BirdNET-Go's push notification system is designed to be a **well-behaved interne
 **Purpose**: Immediately stop requests to failing services
 
 **How it works**:
+
 ```text
 Normal Operation → Failures Detected → Circuit Opens → Service Protected
      (Closed)         (Threshold: 5)      (Block All)     (Recovery Test)
 ```
 
 **Configuration** (`config.yaml`):
+
 ```yaml
 circuit_breaker:
   enabled: true
-  max_failures: 5          # Stop after 5 consecutive failures
-  timeout: 30s             # Wait 30s before testing recovery
-  half_open_max_requests: 1  # Only 1 test request during recovery
+  max_failures: 5 # Stop after 5 consecutive failures
+  timeout: 30s # Wait 30s before testing recovery
+  half_open_max_requests: 1 # Only 1 test request during recovery
 ```
 
 **Protection Scenarios**:
+
 - ✅ API endpoint down → Stops after 5 attempts, waits 30s
 - ✅ Network timeout → Prevents retry storms
 - ✅ Authentication failure → Blocks requests until manual intervention
 - ✅ Rate limit response from API → Circuit opens, prevents further violations
 
 **Example**:
+
 ```text
 Telegram API returns 429 (Too Many Requests)
 → Circuit breaker opens after 5 failures
@@ -46,19 +50,22 @@ Telegram API returns 429 (Too Many Requests)
 **Purpose**: Prevent bursts even when circuit is closed
 
 **How it works**: Token bucket algorithm
+
 - Tokens refill at a steady rate (e.g., 60/minute = 1/second)
 - Each request consumes 1 token
 - Burst capacity allows temporary spikes (default: 10 tokens)
 
 **Configuration** (coming in config update):
+
 ```yaml
 rate_limiting:
   enabled: true
-  requests_per_minute: 60  # Average 1 req/sec
-  burst_size: 10           # Allow bursts up to 10
+  requests_per_minute: 60 # Average 1 req/sec
+  burst_size: 10 # Allow bursts up to 10
 ```
 
 **Protection Scenarios**:
+
 - ✅ Rapid detection events → Smoothed to 1/second average
 - ✅ Bug causes notification loop → Limited to 60/minute
 - ✅ Multiple concurrent detections → Burst handled, then rate-limited
@@ -68,6 +75,7 @@ rate_limiting:
 **Purpose**: Gradual retry with increasing delays
 
 **Configuration**:
+
 ```yaml
 push:
   max_retries: 3
@@ -75,6 +83,7 @@ push:
 ```
 
 **Behavior**:
+
 ```text
 Attempt 1: Immediate
 Attempt 2: Wait 5s
@@ -88,12 +97,14 @@ Then: Give up or circuit breaker opens
 **Purpose**: Prevent hanging connections
 
 **Configuration**:
+
 ```yaml
 push:
   default_timeout: 30s
 ```
 
 **Protection**:
+
 - No request hangs forever
 - Frees resources promptly
 - Counts as failure for circuit breaker
@@ -103,11 +114,13 @@ push:
 **Purpose**: One failed provider doesn't affect others
 
 **How it works**:
+
 - Each provider has its own circuit breaker
 - Each provider has its own rate limiter
 - Each provider has its own health check
 
 **Example**:
+
 ```text
 Telegram circuit opens (API down)
 → Discord notifications continue working
@@ -120,6 +133,7 @@ Telegram circuit opens (API down)
 ### Example 1: API Endpoint Goes Down
 
 **Without Protection**:
+
 ```text
 App generates 1000 detections/hour
 → Each tries to send to Telegram (down)
@@ -129,6 +143,7 @@ App generates 1000 detections/hour
 ```
 
 **With BirdNET-Go Protection**:
+
 ```text
 App generates 1000 detections/hour
 → First 5 fail to Telegram
@@ -145,6 +160,7 @@ App generates 1000 detections/hour
 **Scenario**: Bug causes same detection to trigger 100 times/second
 
 **Without Protection**:
+
 ```text
 100 notifications/second × 60 seconds = 6000 requests
 → Telegram API rate limit: 30 requests/second
@@ -152,6 +168,7 @@ App generates 1000 detections/hour
 ```
 
 **With BirdNET-Go Protection**:
+
 ```text
 Rate limiter allows 10 burst requests
 → Then limits to 1 request/second (60/minute)
@@ -165,6 +182,7 @@ Rate limiter allows 10 burst requests
 **Scenario**: Your internet connection drops every 5 minutes
 
 **Without Protection**:
+
 ```text
 Every notification fails during outage
 → Retries hammer the API
@@ -173,6 +191,7 @@ Every notification fails during outage
 ```
 
 **With BirdNET-Go Protection**:
+
 ```text
 First 5 failures during outage
 → Circuit breaker opens
@@ -195,18 +214,19 @@ First 5 failures during outage
 
 All defaults are chosen to be **extremely safe** for external APIs:
 
-| Setting | Default | Reasoning |
-|---------|---------|-----------|
-| max_failures | 5 | Quick failure detection |
-| timeout | 30s | Most APIs complete in <10s |
-| retry_delay | 5s | Gentle backoff |
-| max_retries | 3 | Reasonable attempts |
-| circuit_timeout | 30s | Quick recovery test |
-| requests_per_minute | 60 | Well below most API limits |
+| Setting             | Default | Reasoning                  |
+| ------------------- | ------- | -------------------------- |
+| max_failures        | 5       | Quick failure detection    |
+| timeout             | 30s     | Most APIs complete in <10s |
+| retry_delay         | 5s      | Gentle backoff             |
+| max_retries         | 3       | Reasonable attempts        |
+| circuit_timeout     | 30s     | Quick recovery test        |
+| requests_per_minute | 60      | Well below most API limits |
 
 ### API Compliance
 
 **Common API Rate Limits**:
+
 - Telegram Bot API: 30 messages/second (BirdNET-Go: 1/second)
 - Discord: 50 requests/second (BirdNET-Go: 1/second)
 - Pushover: 10,000/month (BirdNET-Go: ~43,000/month worst case @ 1/sec)
@@ -254,11 +274,11 @@ If you expect >100 detections/hour:
 ```yaml
 push:
   circuit_breaker:
-    max_failures: 3        # Fail faster
-    timeout: 60s           # Wait longer before recovery
+    max_failures: 3 # Fail faster
+    timeout: 60s # Wait longer before recovery
   rate_limiting:
-    requests_per_minute: 30  # More conservative
-    burst_size: 5            # Smaller bursts
+    requests_per_minute: 30 # More conservative
+    burst_size: 5 # Smaller bursts
 ```
 
 ### For Rare/Critical Alerts Only
@@ -268,11 +288,11 @@ If you only send 1-5 notifications/day:
 ```yaml
 push:
   circuit_breaker:
-    max_failures: 10       # More tolerant of transient issues
-    timeout: 15s           # Recover faster
+    max_failures: 10 # More tolerant of transient issues
+    timeout: 15s # Recover faster
   rate_limiting:
-    requests_per_minute: 120  # Less restrictive
-    burst_size: 20           # Allow larger bursts
+    requests_per_minute: 120 # Less restrictive
+    burst_size: 20 # Allow larger bursts
 ```
 
 ### For Testing/Development
@@ -280,9 +300,9 @@ push:
 ```yaml
 push:
   circuit_breaker:
-    enabled: false         # Disable for testing (NOT recommended for production)
-  max_retries: 0           # No retries
-  default_timeout: 5s      # Faster timeouts
+    enabled: false # Disable for testing (NOT recommended for production)
+  max_retries: 0 # No retries
+  default_timeout: 5s # Faster timeouts
 ```
 
 ## Emergency Manual Intervention

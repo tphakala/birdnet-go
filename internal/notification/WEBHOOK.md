@@ -81,7 +81,7 @@ endpoints:
     method: POST
     auth:
       type: bearer
-      token: "${WEBHOOK_API_TOKEN}"  # Use environment variables for secrets
+      token: "${WEBHOOK_API_TOKEN}" # Use environment variables for secrets
 ```
 
 #### Basic Authentication
@@ -160,10 +160,11 @@ endpoints:
   - url: "https://api.example.com/webhook"
     auth:
       type: bearer
-      token_file: "/run/secrets/api_token"  # Read from mounted secret file
+      token_file: "/run/secrets/api_token" # Read from mounted secret file
 ```
 
 **Docker Swarm Example:**
+
 ```yaml
 services:
   birdnet:
@@ -176,6 +177,7 @@ secrets:
 ```
 
 **Kubernetes Example:**
+
 ```yaml
 apiVersion: v1
 kind: Secret
@@ -189,18 +191,19 @@ apiVersion: v1
 kind: Pod
 spec:
   containers:
-  - name: birdnet-go
-    volumeMounts:
-    - name: secrets
-      mountPath: "/run/secrets"
-      readOnly: true
+    - name: birdnet-go
+      volumeMounts:
+        - name: secrets
+          mountPath: "/run/secrets"
+          readOnly: true
   volumes:
-  - name: secrets
-    secret:
-      secretName: webhook-secrets
+    - name: secrets
+      secret:
+        secretName: webhook-secrets
 ```
 
 **File Permissions:** Set restrictive permissions on secret files:
+
 ```bash
 chmod 400 /run/secrets/webhook_token  # Read-only for owner
 ```
@@ -214,24 +217,27 @@ endpoints:
   - url: "https://api.example.com/webhook"
     auth:
       type: bearer
-      token: "${WEBHOOK_TOKEN}"  # Expands from environment variable
+      token: "${WEBHOOK_TOKEN}" # Expands from environment variable
 ```
 
 **Docker Example:**
+
 ```bash
 docker run -e WEBHOOK_TOKEN=your-secret-token ghcr.io/tphakala/birdnet-go:latest
 ```
 
 **Docker Compose Example:**
+
 ```yaml
 services:
   birdnet:
     image: ghcr.io/tphakala/birdnet-go:latest
     environment:
-      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN}  # From host environment
+      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN} # From host environment
 ```
 
 **Systemd Service Example:**
+
 ```ini
 [Service]
 Environment="WEBHOOK_TOKEN=your-secret-token"
@@ -239,6 +245,7 @@ ExecStart=/usr/local/bin/birdnet-go
 ```
 
 **Default Values:** Use `${VAR:-default}` syntax for optional variables:
+
 ```yaml
 token: "${WEBHOOK_TOKEN:-fallback-token}"
 ```
@@ -252,7 +259,7 @@ endpoints:
   - url: "http://localhost:8080/webhook"
     auth:
       type: bearer
-      token: "dev-token-123"  # Literal value - NOT for production!
+      token: "dev-token-123" # Literal value - NOT for production!
 ```
 
 ### Security Checklist
@@ -292,22 +299,22 @@ endpoints:
   - url: "https://api.example.com/webhook"
     auth:
       type: basic
-      user: "${API_USER}"              # From environment
-      pass_file: "/run/secrets/api_pass"  # From file
+      user: "${API_USER}" # From environment
+      pass_file: "/run/secrets/api_pass" # From file
 ```
 
 **Precedence:** File references always take precedence over value fields when both are provided.
 
 ### Multi-Platform Secret Management
 
-| Platform | Recommended Method | Example |
-|----------|-------------------|---------|
-| **Docker** | Environment variables | `-e TOKEN=xyz` |
-| **Docker Compose** | Environment + secrets | `secrets:` + `environment:` |
-| **Kubernetes** | Mounted secrets | `volumeMounts` from `Secret` |
-| **Systemd** | Environment in service | `Environment=` in `.service` file |
-| **Binary** | Environment or files | `export TOKEN=xyz` or config file |
-| **Development** | `.env` file | Load with `source .env` |
+| Platform           | Recommended Method     | Example                           |
+| ------------------ | ---------------------- | --------------------------------- |
+| **Docker**         | Environment variables  | `-e TOKEN=xyz`                    |
+| **Docker Compose** | Environment + secrets  | `secrets:` + `environment:`       |
+| **Kubernetes**     | Mounted secrets        | `volumeMounts` from `Secret`      |
+| **Systemd**        | Environment in service | `Environment=` in `.service` file |
+| **Binary**         | Environment or files   | `export TOKEN=xyz` or config file |
+| **Development**    | `.env` file            | Load with `source .env`           |
 
 ## Default Payload Structure
 
@@ -545,22 +552,26 @@ Access metrics at: `http://localhost:8080/metrics`
 ### Common Issues
 
 **Issue**: Webhook not sending
+
 - Check: `notification.push.enabled: true`
 - Check: Provider `enabled: true`
 - Verify: Endpoint URL is correct
 - Test: Run `birdnet-go notify` command
 
 **Issue**: Authentication failures
+
 - Verify: Environment variables are set
 - Check: Token/credentials are valid
 - Test: Use `curl` to test endpoint manually
 
 **Issue**: Timeouts
+
 - Increase: `endpoint.timeout` value
 - Check: Network connectivity to endpoint
 - Verify: Endpoint is responding within timeout
 
 **Issue**: All endpoints fail
+
 - Check: Circuit breaker hasn't opened
 - Verify: Rate limiting isn't blocking requests
 - Review: Logs for specific error messages
@@ -580,6 +591,7 @@ Check logs at `~/.config/birdnet-go/birdnet-go.log`
 ### Reusable HTTP Client
 
 The webhook provider uses a shared `httpclient` package that can be reused for:
+
 - Other webhook integrations
 - External API calls (weather, bird databases)
 - Health check endpoints
@@ -588,6 +600,7 @@ The webhook provider uses a shared `httpclient` package that can be reused for:
 ### Context Management
 
 All webhook calls properly handle context cancellation:
+
 - Immediate cleanup on application shutdown
 - Timeout enforcement at multiple levels
 - No hanging connections or goroutine leaks

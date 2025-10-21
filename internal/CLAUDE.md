@@ -81,7 +81,7 @@ func TestAPI(t *testing.T) {
     // Add test metadata
     t.Attr("component", "api")
     t.Attr("version", "v2")
-    
+
     // Structured output
     output := t.Output()
     fmt.Fprintf(output, "Request: %v\n", req)

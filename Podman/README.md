@@ -16,7 +16,6 @@ This directory contains Podman-specific configuration files for running BirdNET-
   - Requires ports 80 and 443 for ACME challenges
   - Requires a valid domain name
 
-
 ## Quadlet Integration
 
 The `quadlet/` subdirectory contains systemd Quadlet unit files for native systemd integration:
@@ -64,4 +63,3 @@ BirdNET-Go container images are built following the OCI (Open Container Initiati
 - **Podman 5.4+** for full feature support (including Quadlet)
 - **Debian 13+**, **Ubuntu 25.04+**, or compatible distributions
 - Audio device access for real-time bird detection (optional for file processing)
-
