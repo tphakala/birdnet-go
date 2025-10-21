@@ -82,7 +82,7 @@ cd birdnet-go
 
 # Install Task runner (if not already installed)
 # Linux: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
-# macOS: brew install go-task
+# macOS: brew install go-task (assumes Homebrew being installed)
 
 # Setup development environment (Linux apt-based or macOS with homebrew)
 task setup-dev
@@ -91,20 +91,16 @@ task setup-dev
 task
 
 # Start development server with hot reload
-task dev_server
-
-# Start frontend development server
-task frontend-dev
+task dev_server # or "air realtime"
 ```
 
 The `setup-dev` task will automatically install:
 
-- Go 1.25.3
+- Go 1.25
 - Node.js LTS
 - Build tools (gcc, git, wget, etc.)
 - golangci-lint (Go linter)
 - air (hot reload for Go)
-- mockgen (testing tool)
 - Frontend dependencies and Playwright browsers
 
 ## Web Dashboard
