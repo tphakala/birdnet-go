@@ -130,10 +130,10 @@ jobs:
             echo "Exit code: $TEST_EXIT_CODE" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
 
-            # Quick preview of failures
+            # Quick preview of failures - parse JSON to extract test names
             echo "### Quick Preview of Failures" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            grep -E "^--- FAIL:|^FAIL\s" /tmp/gotest.log | head -20 >> $GITHUB_STEP_SUMMARY || echo "No failure patterns found" >> $GITHUB_STEP_SUMMARY
+            grep '"Action":"fail"' /tmp/gotest.log | jq -r 'select(.Test) | (.Package + " " + .Test)' | head -20 >> $GITHUB_STEP_SUMMARY 2>&1 || echo "Failed to parse test failures" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "👇 See 'Generate test failure report' step below for detailed analysis" >> $GITHUB_STEP_SUMMARY
@@ -158,21 +158,36 @@ jobs:
           echo "# Test Failure Analysis" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Count failures
-          FAIL_COUNT=$(grep -c "^--- FAIL:" /tmp/gotest.log || echo "0")
+          # Count failures from JSON (count test-level failures, not package-level)
+          FAIL_COUNT=$(grep '"Action":"fail"' /tmp/gotest.log | jq -s '[.[] | select(.Test)] | length' 2>/dev/null || echo "0")
           echo "**Total Failed Tests: $FAIL_COUNT**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Extract failed test names with package info
+          # Extract failed test details with error messages from JSON
           echo "## Failed Test Details" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          grep -A 5 "^--- FAIL:" /tmp/gotest.log | head -100 >> $GITHUB_STEP_SUMMARY || echo "Unable to extract test details" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Get list of failed tests
+          FAILED_TESTS=$(grep '"Action":"fail"' /tmp/gotest.log | jq -r 'select(.Test) | (.Package + "|" + .Test)' 2>/dev/null | sort -u)
+
+          if [ -n "$FAILED_TESTS" ]; then
+            while IFS='|' read -r pkg test; do
+              echo "### ❌ \`$test\`" >> $GITHUB_STEP_SUMMARY
+              echo "**Package:** \`$pkg\`" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              # Extract all output for this specific test from JSON, filtering out test framework lines
+              grep "\"Test\":\"$test\"" /tmp/gotest.log | jq -r 'select(.Action == "output") | .Output' 2>/dev/null | grep -v "^===" | grep -v "^---" >> $GITHUB_STEP_SUMMARY || echo "No error details found" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            done <<< "$FAILED_TESTS"
+          else
+            echo "No test failures found in JSON output" >> $GITHUB_STEP_SUMMARY
+          fi
 
           # Extract unique failing packages
           echo "## Affected Packages" >> $GITHUB_STEP_SUMMARY
-          grep "^FAIL\s" /tmp/gotest.log | awk '{print $2}' | sort -u >> $GITHUB_STEP_SUMMARY || echo "No packages identified" >> $GITHUB_STEP_SUMMARY
+          grep '"Action":"fail"' /tmp/gotest.log | jq -r 'select(.Package) | .Package' 2>/dev/null | sort -u >> $GITHUB_STEP_SUMMARY || echo "No packages identified" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           echo "---" >> $GITHUB_STEP_SUMMARY
