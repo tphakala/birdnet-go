@@ -71,16 +71,14 @@ bash ./install.sh
 ## Development Setup
 
 For developers who want to contribute or build from source:
-
-> ⚠️ **Security Note:** The setup commands download and execute scripts from the internet.
-> Review [CONTRIBUTING.md](CONTRIBUTING.md#step-1-install-task-runner) for security details.
+> See [CONTRIBUTING.md](CONTRIBUTING.md#step-1-install-task-runner) for more details.
 
 ```bash
 # Clone the repository
 git clone https://github.com/tphakala/birdnet-go.git
 cd birdnet-go
 
-# Install Task runner (if not already installed)
+# Install Task (if not already installed)
 # Linux: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 # macOS: brew install go-task (assumes Homebrew is installed)
 
