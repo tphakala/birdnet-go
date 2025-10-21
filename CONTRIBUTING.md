@@ -44,6 +44,7 @@ git commit -m "feat(scope): what you did"
 - ❌ No `any` types in TypeScript
 - ✅ Frontend is embedded in Go binary (use `air`, not Vite dev server)
 - ✅ Pre-commit hooks auto-format & lint (can't commit broken code)
+- ✅ AI-assisted coding encouraged (Claude Code, CodeRabbit) - use responsibly
 
 **Need details?** Read the full guide below. **Questions?** [Discord](https://discord.gg/gcSCFGUtsd)
 
@@ -63,6 +64,7 @@ git commit -m "feat(scope): what you did"
   - [Building the Project](#building-the-project)
 - [Code Quality and Linting](#code-quality-and-linting)
 - [Testing](#testing)
+- [AI-Assisted Development](#ai-assisted-development)
 - [Project Structure](#project-structure)
 - [Submitting Changes](#submitting-changes)
 - [Additional Resources](#additional-resources)
@@ -149,6 +151,8 @@ Before contributing, please:
    - [`internal/CLAUDE.md`](internal/CLAUDE.md) - Go backend guidelines
    - [`frontend/CLAUDE.md`](frontend/CLAUDE.md) - Svelte 5 frontend guidelines
    - [`internal/api/v2/CLAUDE.md`](internal/api/v2/CLAUDE.md) - API v2 guidelines
+
+   **Note:** These CLAUDE.md files are optimized for AI-assisted coding tools (particularly Claude Code), but serve as comprehensive project guidelines for all contributors, whether using AI assistance or coding manually.
 
 ## Development Environment Setup
 
@@ -545,6 +549,102 @@ task e2e-test-ui
 task e2e-report
 ```
 
+## AI-Assisted Development
+
+BirdNET-Go **welcomes and encourages** the use of AI-assisted coding tools. The project has been successfully developed using AI assistance, and we believe these tools can help contributors write better code faster.
+
+### AI Tools Used in This Project
+
+**Claude Code (Primary Development Tool)**
+
+The main developer uses [Claude Code](https://claude.ai/claude-code) with the Sonnet 4.5 model for most pull requests. Claude Code has been instrumental in:
+
+- Writing new features with comprehensive test coverage
+- Refactoring complex code while maintaining correctness
+- Identifying and fixing bugs
+- Generating documentation and code comments
+- Ensuring consistency with project guidelines
+
+**CodeRabbit (Automated PR Reviews)**
+
+All pull requests receive automated code review from [CodeRabbit AI](https://coderabbit.ai/), which:
+
+- Performs comprehensive code analysis
+- Identifies potential bugs and security issues
+- Suggests improvements and best practices
+- Checks for code quality and consistency
+- Provides actionable feedback for contributors
+
+### CLAUDE.md Guidelines
+
+The project includes detailed `CLAUDE.md` files that serve a dual purpose:
+
+1. **AI-Optimized Instructions**: Structured guidelines for AI coding assistants (especially Claude Code)
+2. **Human-Readable Guidelines**: Comprehensive project standards for manual development
+
+These files are located at:
+
+- [`CLAUDE.md`](CLAUDE.md) - Project overview and universal rules
+- [`internal/CLAUDE.md`](internal/CLAUDE.md) - Go backend development standards
+- [`frontend/CLAUDE.md`](frontend/CLAUDE.md) - Svelte 5 frontend development patterns
+- [`internal/api/v2/CLAUDE.md`](internal/api/v2/CLAUDE.md) - API v2 endpoint guidelines
+
+**Whether you use AI assistance or code manually**, these files contain valuable project-specific patterns, conventions, and best practices that all contributors should follow.
+
+### Responsible AI Usage
+
+While AI tools are encouraged, please use them responsibly:
+
+**✅ Good AI Usage:**
+
+- Use AI to understand codebase patterns and architecture
+- Generate boilerplate code and tests
+- Refactor code while maintaining existing behavior
+- Write documentation and comments
+- Identify potential bugs and edge cases
+- Learn new programming concepts and best practices
+
+**⚠️ Important Considerations:**
+
+- **Review all AI-generated code** - Don't blindly accept suggestions
+- **Understand what the code does** - You're responsible for your contributions
+- **Test thoroughly** - AI-generated code must pass all linting and testing requirements
+- **Follow project guidelines** - AI outputs must conform to CLAUDE.md standards
+- **Respect privacy** - Never share private/sensitive repository data with AI tools
+- **Maintain code quality** - AI assistance doesn't exempt you from quality standards
+
+**❌ Prohibited AI Usage:**
+
+- Submitting AI-generated code without understanding it
+- Using AI to bypass code quality checks or testing requirements
+- Sharing proprietary or sensitive data with external AI services
+- Copying code from AI suggestions without verifying licensing/attribution
+- Using AI to generate misleading or obfuscated code
+
+### AI-Assisted Development Workflow
+
+1. **Setup**: Configure your AI tool to use the project's CLAUDE.md files as context
+2. **Development**: Use AI assistance for coding, refactoring, and documentation
+3. **Review**: Carefully review all AI-generated code changes
+4. **Testing**: Ensure all tests pass (`task test`, `task frontend-test`)
+5. **Linting**: Verify code quality (`golangci-lint run -v`, `npm run check:all`)
+6. **Commit**: Use standard git workflow (pre-commit hooks will validate)
+7. **Pull Request**: Submit PR for CodeRabbit AI review and human review
+
+### Getting Started with Claude Code
+
+If you want to use Claude Code for contributing to BirdNET-Go:
+
+1. **Install**: Follow [Claude Code installation guide](https://docs.claude.com/en/docs/claude-code)
+2. **Open Project**: Open the BirdNET-Go repository in your editor
+3. **Read Guidelines**: The CLAUDE.md files will automatically provide context to Claude
+4. **Start Coding**: Ask Claude to help with specific tasks, referencing the guidelines
+5. **Iterate**: Review and refine AI suggestions based on project requirements
+
+### Questions About AI Usage?
+
+Join our [Discord server](https://discord.gg/gcSCFGUtsd) to discuss AI-assisted development practices and share experiences with other contributors.
+
 ## Project Structure
 
 ```text
@@ -684,9 +784,11 @@ birdnet-go/
    ```
 
 4. **Review Process:**
-   - Address reviewer feedback promptly
+   - **CodeRabbit AI** will automatically review your PR and provide feedback
+   - Address both AI and human reviewer feedback promptly
    - Keep discussions respectful and constructive
    - Squash commits if requested
+   - See [AI-Assisted Development](#ai-assisted-development) for details on automated reviews
 
 ### Critical Constraints
 
