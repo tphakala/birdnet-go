@@ -427,9 +427,23 @@ BirdNET-Go supports various audio input sources:
 internal/analysis/
 ├── realtime.go         # Real-time processing orchestrator and entry point
 ├── control_monitor.go  # Control signals and system restart handling
-└── processor/
-    ├── processor.go    # Main audio analysis processor
-    └── workers.go      # Worker pool for parallel analysis
+├── file.go             # File analysis mode implementation
+├── directory.go        # Directory batch processing
+├── buffer_manager.go   # Audio buffer management
+├── processor/
+│   ├── processor.go    # Main audio analysis processor
+│   ├── workers.go      # Task queue management and job enqueueing
+│   ├── actions.go      # Action types (Database, MQTT, BirdWeather, SSE, etc.)
+│   ├── execute.go      # Action execution logic
+│   ├── eventtracker.go # Event frequency tracking
+│   └── jobqueue_adapter.go  # Adapter between processor and job queue
+├── jobqueue/
+│   ├── queue.go        # Job queue implementation with retry capabilities
+│   ├── job.go          # Job lifecycle and state management
+│   ├── types.go        # Job status, retry config, and interfaces
+│   └── logger.go       # Job queue logging
+└── species/
+    └── species_tracker.go  # New species detection and tracking
 
 internal/myaudio/
 ├── capture.go          # Audio capture from devices (via malgo)
@@ -479,7 +493,7 @@ FFmpeg is used for:
 - **Gain Control and Normalization**: EBU R128 loudnorm filter or simple volume adjustment
   - Normalization: `loudnorm` filter with configurable LUFS target
   - Gain adjustment: `volume` filter for dB boost/cut
-- **NOT used for resampling**: File analysis uses Go code (`resample.go`), realtime expects 48kHz from source
+
 
 **SoX Integration:**
 
@@ -497,6 +511,94 @@ internal/spectrogram/
 ```
 
 Spectrograms are generated on-demand or pre-rendered for dashboard display using SoX.
+
+**Async Task Processing System:**
+
+BirdNET-Go uses an asynchronous job queue system for handling detection actions (database saves, MQTT publishes, BirdWeather uploads, etc.):
+
+```
+internal/analysis/jobqueue/
+├── queue.go        # JobQueue implementation with retry and backoff
+├── job.go          # Job lifecycle management (pending → running → completed/failed)
+├── types.go        # RetryConfig, JobStatus, Action interface
+└── logger.go       # Structured logging for job execution
+```
+
+**Job Queue Features:**
+
+- **Async Execution**: Actions execute in background goroutines, non-blocking
+- **Retry with Exponential Backoff**: Configurable retry policies per action type
+- **Graceful Degradation**: Failed jobs don't block new detections
+- **Queue Limits**: Bounded queue prevents memory exhaustion (default: 1000 jobs)
+- **Job Archival**: Completed/failed jobs archived for debugging (max 100)
+- **Statistics Tracking**: Per-action success/failure rates
+
+**Action Types** (internal/analysis/processor/actions.go):
+
+| Action Type           | Purpose                                          | Retry | Timeout |
+| --------------------- | ------------------------------------------------ | ----- | ------- |
+| LogAction             | Write detection to log file                      | No    | N/A     |
+| DatabaseAction        | Save detection to database + audio clip          | No    | 30s     |
+| SaveAudioAction       | Export audio clip to disk (WAV/FLAC/MP3)         | No    | 30s     |
+| BirdWeatherAction     | Upload detection to BirdWeather API              | Yes   | 30s     |
+| MqttAction            | Publish detection to MQTT broker                 | Yes   | 10s     |
+| SSEAction             | Broadcast detection via Server-Sent Events       | Yes   | 30s     |
+| UpdateRangeFilterAction | Update BirdNET species filter daily            | No    | 30s     |
+| CompositeAction       | Execute multiple actions sequentially            | N/A   | 30s/action |
+
+**Task Processing Flow:**
+
+```
+Detection → ProcessDetection() → CreateActions() → EnqueueTask()
+                                                      ↓
+                                          JobQueue.Enqueue()
+                                                      ↓
+                                          [Async Execution]
+                                                      ↓
+                                   ┌─────────────────┴─────────────────┐
+                                   ↓                                   ↓
+                            Action.Execute()                    [Retry Logic]
+                                   ↓                                   ↓
+                            Success/Failure            Exponential Backoff
+                                   ↓                                   ↓
+                            Archive Job              Retry or Mark Failed
+```
+
+**Retry Configuration:**
+
+Actions can specify retry behavior via `RetryConfig`:
+
+```go
+type RetryConfig struct {
+    Enabled      bool          // Enable retries
+    MaxRetries   int           // Max attempts (e.g., 3)
+    InitialDelay time.Duration // First retry delay (e.g., 5s)
+    MaxDelay     time.Duration // Cap on delay (e.g., 5min)
+    Multiplier   float64       // Backoff multiplier (e.g., 2.0 = exponential)
+}
+```
+
+**Example: BirdWeather Upload with Retry**
+
+1. Detection arrives → BirdWeatherAction created with retry enabled
+2. EnqueueTask() adds job to queue (non-blocking)
+3. Job executes in background goroutine
+4. If upload fails (network error): retry after 5s, then 10s, then 20s
+5. If max retries exceeded: mark as failed, log error, archive job
+6. Success: archive job with success status
+
+**CompositeAction for Sequential Execution:**
+
+Introduced to fix race condition between DatabaseAction and SSEAction (GitHub issue #1158):
+
+```go
+// SSEAction needs database ID assigned by DatabaseAction first
+composite := &CompositeAction{
+    Actions: []Action{databaseAction, sseAction},
+    Description: "Save to database then broadcast",
+    Timeout: 45 * time.Second,  // Override default timeout
+}
+```
 
 **Buffer Management:**
 
@@ -530,55 +632,103 @@ internal/analysis/
 ├── control_monitor.go  # Control signals and system restart handling
 └── processor/
     ├── processor.go    # Main audio analysis processor
-    └── workers.go      # Worker pool for parallel analysis
+    ├── workers.go      # Task queue management and job enqueueing
+    ├── actions.go      # Action types (Database, MQTT, BirdWeather, SSE, etc.)
+    ├── execute.go      # Action execution logic
+    └── jobqueue_adapter.go  # Adapter between processor and job queue
+```
+
+**Job Queue:**
+
+```
+internal/analysis/jobqueue/
+├── queue.go        # JobQueue implementation with retry and backoff
+├── job.go          # Job lifecycle management
+├── types.go        # RetryConfig, JobStatus, Action interface
+└── logger.go       # Job queue logging
 ```
 
 **Processing Flow:**
 
 1. **Initialization**
-   - Load BirdNET model
-   - Initialize audio capture
+   - Load BirdNET TensorFlow Lite model
+   - Initialize audio sources (devices/RTSP streams)
+   - Initialize buffers:
+     - Analysis buffer: 6x buffer size to avoid underruns
+     - Capture buffer: 120 seconds for audio clip export
+   - Initialize job queue for async task processing (max 1000 jobs)
    - Start web server (if enabled)
    - Connect to MQTT broker (if configured)
+   - Initialize species tracker and event tracker
 
 2. **Capture Loop** (continuous)
-   - Capture 3-second audio chunks
-   - Apply Voice Activity Detection (VAD)
-   - Queue audio for analysis
+   - Capture audio continuously (48kHz, 16-bit PCM)
+   - Write to both analysis buffer and capture buffer simultaneously
+   - All audio analyzed - no Voice Activity Detection
 
-3. **Analysis Loop** (parallel)
-   - Dequeue audio chunks
-   - Run BirdNET inference
+3. **Analysis Loop** (continuous)
+   - Buffer monitor reads 3-second audio chunks from analysis buffer
+   - Chunks overlap by configurable amount (default: 0.0s, range: 0.0-2.9s)
+   - Queue audio chunks to BirdNET analysis queue (default size: 5)
+   - BirdNET predicts species using TensorFlow Lite model
    - Filter results by confidence threshold
-   - Apply species filters (if configured)
+   - Apply species filters (location, time-based, custom lists)
+   - Apply privacy filter (if enabled):
+     - BirdNET model detects "human" vocalizations
+     - Not traditional VAD - uses BirdNET's species detection
+     - Filters bird detections when human speech detected
+     - Protects privacy by preventing audio clip export during conversations
 
-4. **Detection Handling**
-   - Store detection in database
-   - Generate spectrogram (async)
-   - Publish to MQTT (if configured)
-   - Trigger webhooks (if configured)
-   - Send SSE event to connected clients
+4. **Detection Handling** (async via job queue)
+   - Create actions based on configuration
+   - Enqueue tasks to job queue (non-blocking)
+   - Actions execute in background:
+     - DatabaseAction: Save detection to database with audio clip
+     - SSEAction: Broadcast detection via Server-Sent Events
+     - MqttAction: Publish to MQTT broker (with retry)
+     - BirdWeatherAction: Upload to BirdWeather API (with retry)
+     - SaveAudioAction: Export audio clip to disk
+   - Failed actions retry with exponential backoff
 
 **Concurrency Model:**
 
+BirdNET-Go uses a job queue system for concurrent action processing:
+
 ```go
-// Concurrent processing with worker pool
-for i := 0; i < numWorkers; i++ {
-    go func() {
-        for chunk := range audioQueue {
-            predictions, err := birdnet.Predict(chunk)
-            if err != nil {
-                continue
-            }
-            for _, pred := range predictions {
-                if pred.Confidence >= threshold {
-                    handleDetection(pred)
-                }
-            }
-        }
-    }()
+// Initialize job queue with capacity and options
+processor.JobQueue = jobqueue.NewJobQueueWithOptions(
+    1000,  // maxJobs: queue capacity
+    100,   // maxArchivedJobs: keep completed jobs for debugging
+    false, // logAllSuccesses: only log retries by default
+)
+
+// Start background processing goroutine
+processor.JobQueue.Start()
+
+// Detection handling - non-blocking enqueue
+for _, detection := range detections {
+    task := &Task{
+        Type:      TaskTypeAction,
+        Detection: detection,
+        Action:    action, // DatabaseAction, MqttAction, etc.
+    }
+
+    // Enqueue returns immediately, action executes asynchronously
+    if err := processor.EnqueueTask(task); err != nil {
+        // Handle queue full or stopped errors
+        log.Printf("Failed to enqueue task: %v", err)
+    }
 }
 ```
+
+**Job Queue Processing Loop:**
+
+The job queue runs a background goroutine that:
+1. Checks for jobs ready to execute (pending or retrying after backoff)
+2. Executes actions in separate goroutines (concurrent execution)
+3. Handles retry logic with exponential backoff on failure
+4. Archives completed/failed jobs for debugging
+5. Respects queue capacity limits to prevent memory exhaustion
 
 **Graceful Shutdown:**
 
@@ -620,9 +770,19 @@ internal/notification/
 
 ```
 internal/birdweather/
-├── client.go           # BirdWeather API client
-└── uploader.go         # Detection upload to BirdWeather
+├── birdweather_client.go  # BirdWeather API client and upload logic
+├── audio.go               # Audio processing and normalization (LUFS)
+└── testing.go             # Test helpers and mock client
 ```
+
+**Features:**
+
+- **Soundscape Upload**: Uploads 15-second audio clips to BirdWeather
+- **Audio Normalization**: Uses FFmpeg loudnorm filter to achieve -23 LUFS (EBU R128 standard)
+- **Detection Metadata**: Sends species, confidence, location, and timestamp
+- **Error Handling**: Retry logic via job queue for network failures
+- **Logging**: Dedicated file logger (`logs/birdweather.log`) for debugging uploads
+- **API Compliance**: Follows BirdWeather API v2 specification
 
 Optional integration with [BirdWeather.com](https://birdweather.com) for global bird activity tracking.
 
@@ -1285,7 +1445,7 @@ Air watches both Go and frontend files, rebuilding and restarting the server aut
 - **Linux**: Primary development platform
   - Debian/Ubuntu (systemd service support)
   - Raspberry Pi OS (ARM32/ARM64)
-  - Alpine Linux (Docker)
+  - Debian Trixie (Docker base image)
 - **macOS**: Desktop support
   - Intel (amd64)
   - Apple Silicon (arm64)
