@@ -71,6 +71,7 @@ bash ./install.sh
 ## Development Setup
 
 For developers who want to contribute or build from source:
+
 > See [CONTRIBUTING.md](CONTRIBUTING.md#step-1-install-task-runner) for more details.
 
 ```bash

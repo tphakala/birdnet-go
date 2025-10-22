@@ -494,7 +494,6 @@ FFmpeg is used for:
   - Normalization: `loudnorm` filter with configurable LUFS target
   - Gain adjustment: `volume` filter for dB boost/cut
 
-
 **SoX Integration:**
 
 SoX (Sound eXchange) is used exclusively for:
@@ -535,16 +534,16 @@ internal/analysis/jobqueue/
 
 **Action Types** (internal/analysis/processor/actions.go):
 
-| Action Type           | Purpose                                          | Retry | Timeout |
-| --------------------- | ------------------------------------------------ | ----- | ------- |
-| LogAction             | Write detection to log file                      | No    | N/A     |
-| DatabaseAction        | Save detection to database + audio clip          | No    | 30s     |
-| SaveAudioAction       | Export audio clip to disk (WAV/FLAC/MP3)         | No    | 30s     |
-| BirdWeatherAction     | Upload detection to BirdWeather API              | Yes   | 30s     |
-| MqttAction            | Publish detection to MQTT broker                 | Yes   | 10s     |
-| SSEAction             | Broadcast detection via Server-Sent Events       | Yes   | 30s     |
-| UpdateRangeFilterAction | Update BirdNET species filter daily            | No    | 30s     |
-| CompositeAction       | Execute multiple actions sequentially            | N/A   | 30s/action |
+| Action Type             | Purpose                                    | Retry | Timeout    |
+| ----------------------- | ------------------------------------------ | ----- | ---------- |
+| LogAction               | Write detection to log file                | No    | N/A        |
+| DatabaseAction          | Save detection to database + audio clip    | No    | 30s        |
+| SaveAudioAction         | Export audio clip to disk (WAV/FLAC/MP3)   | No    | 30s        |
+| BirdWeatherAction       | Upload detection to BirdWeather API        | Yes   | 30s        |
+| MqttAction              | Publish detection to MQTT broker           | Yes   | 10s        |
+| SSEAction               | Broadcast detection via Server-Sent Events | Yes   | 30s        |
+| UpdateRangeFilterAction | Update BirdNET species filter daily        | No    | 30s        |
+| CompositeAction         | Execute multiple actions sequentially      | N/A   | 30s/action |
 
 **Task Processing Flow:**
 
@@ -724,6 +723,7 @@ for _, detection := range detections {
 **Job Queue Processing Loop:**
 
 The job queue runs a background goroutine that:
+
 1. Checks for jobs ready to execute (pending or retrying after backoff)
 2. Executes actions in separate goroutines (concurrent execution)
 3. Handles retry logic with exponential backoff on failure
