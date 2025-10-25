@@ -53,10 +53,12 @@ else
     echo "Running as user: $USER_NAME"
 fi
 
-# Set read permissions for model files
-chmod -R a+r /data/models/*.tflite 2>/dev/null || true
-# Ensure directory is executable (browsable)
-chmod a+x /data/models
+# Set read permissions for model files (only when running as root)
+if [ "$RUNNING_AS_ROOT" = true ]; then
+    chmod -R a+r /data/models/*.tflite 2>/dev/null || true
+    # Ensure directory is executable (browsable)
+    chmod a+x /data/models 2>/dev/null || true
+fi
 
 # Check if user has custom model path configured via environment variable
 if [ ! -z "$BIRDNET_MODELPATH" ]; then
