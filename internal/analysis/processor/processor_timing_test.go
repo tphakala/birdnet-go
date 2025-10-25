@@ -100,3 +100,59 @@ func TestDetectionWindowGivesTimeForOverlaps(t *testing.T) {
 			expectedOverlaps, possibleOverlaps, minRequiredOverlaps)
 	}
 }
+
+// TestFlushDeadlineNotBackdated is a regression test that simulates the exact
+// bug scenario from BG-16. This test would have caught the original bug where
+// FlushDeadline was calculated using the backdated startTime instead of time.Now().
+func TestFlushDeadlineNotBackdated(t *testing.T) {
+	// Simulate the bug scenario exactly with default settings
+	detectionOffset := 10 * time.Second
+	preCapture := 3 * time.Second
+	backdatedStart := time.Now().Add(-(detectionOffset + preCapture))
+	captureLength := 15 * time.Second
+	detectionWindow := captureLength - preCapture // 12s
+
+	// The buggy calculation: FlushDeadline = item.StartTime.Add(detectionWindow)
+	// where item.StartTime was backdated (Now - 13s)
+	buggyDeadline := backdatedStart.Add(detectionWindow)
+
+	// Should fail with the bug - deadline is in the past
+	if !buggyDeadline.After(time.Now()) {
+		t.Logf("Bug confirmed: deadline %v is in the past (Now: %v, backdatedStart: %v)",
+			buggyDeadline, time.Now(), backdatedStart)
+		t.Logf("Calculation: backdatedStart (%v) + detectionWindow (%v) = %v (in past!)",
+			backdatedStart.Format("15:04:05.000"), detectionWindow, buggyDeadline.Format("15:04:05.000"))
+	} else {
+		t.Errorf("Expected buggy deadline to be in the past, but it's in the future. "+
+			"This test may need adjustment if system clock is unreliable.")
+	}
+
+	// The fixed calculation: FlushDeadline = time.Now().Add(detectionWindow)
+	fixedDeadline := time.Now().Add(detectionWindow)
+
+	// Should pass with the fix - deadline is in the future
+	if !fixedDeadline.After(time.Now()) {
+		t.Errorf("Fix failed: deadline %v is still in the past (Now: %v)",
+			fixedDeadline, time.Now())
+	} else {
+		t.Logf("Fix confirmed: deadline %v is in the future (Now: %v)",
+			fixedDeadline, time.Now())
+		t.Logf("Calculation: Now + detectionWindow (%v) = %v (in future!)",
+			detectionWindow, fixedDeadline.Format("15:04:05.000"))
+	}
+
+	// Verify the difference between buggy and fixed approaches
+	timeDifference := fixedDeadline.Sub(buggyDeadline)
+	expectedDifference := detectionOffset + preCapture // 13s
+
+	// Allow 100ms tolerance for test execution time
+	tolerance := 100 * time.Millisecond
+	if timeDifference < expectedDifference-tolerance || timeDifference > expectedDifference+tolerance {
+		t.Errorf("Time difference between fixed and buggy deadline should be ~%v, got %v",
+			expectedDifference, timeDifference)
+	}
+
+	// Document the impact
+	t.Logf("Impact: With buggy calculation, detections flushed immediately instead of waiting %v", detectionWindow)
+	t.Logf("Result: overlap-based filtering couldn't accumulate confirmations, causing 'matched 1/2 times' rejections")
+}

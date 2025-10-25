@@ -165,6 +165,25 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	}
 	p.logDedup = NewLogDeduplicator(logConfig)
 
+	// Validate detection window configuration
+	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
+	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
+	detectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
+
+	// Warn if detection window is very short (may affect overlap-based filtering)
+	minRecommendedWindow := 3 * time.Second
+	if detectionWindow < minRecommendedWindow {
+		GetLogger().Warn("Detection window very short, may affect accuracy",
+			"window_seconds", detectionWindow.Seconds(),
+			"capture_length_seconds", captureLength.Seconds(),
+			"pre_capture_seconds", preCaptureLength.Seconds(),
+			"min_recommended_seconds", minRecommendedWindow.Seconds(),
+			"operation", "config_validation")
+		log.Printf("Warning: Detection window (%v) is very short, may affect overlap-based filtering accuracy. "+
+			"Minimum recommended: %v (capture_length=%v, pre_capture=%v)",
+			detectionWindow, minRecommendedWindow, captureLength, preCaptureLength)
+	}
+
 	// Initialize new species tracker if enabled
 	if settings.Realtime.SpeciesTracking.Enabled {
 		// Validate species tracking configuration
@@ -898,6 +917,15 @@ func (p *Processor) pendingDetectionsFlusher() {
 						delete(p.pendingDetections, species)
 						continue
 					}
+
+					// Log when detection is flushed to help debug future timing issues
+					GetLogger().Debug("Flushing detection",
+						"species", species,
+						"source", p.getDisplayNameForSource(item.Source),
+						"deadline_reached", now.After(item.FlushDeadline),
+						"count", item.Count,
+						"required", minDetections,
+						"operation", "flush_detection")
 
 					p.processApprovedDetection(&item, species)
 					delete(p.pendingDetections, species)
