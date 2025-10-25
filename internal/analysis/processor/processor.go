@@ -301,6 +301,8 @@ func (p *Processor) processDetections(item birdnet.Results) {
 		"operation", "process_detections_entry")
 
 	// Detection window sets wait time before a detection is considered final and is flushed.
+	// This represents the duration to wait from NOW (detection creation time) before flushing,
+	// allowing overlapping analyses to accumulate confirmations for false positive filtering.
 	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
 	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
 	// Ensure detectionWindow is non-negative to prevent early flushes
@@ -347,14 +349,16 @@ func (p *Processor) processDetections(item birdnet.Results) {
 				"species", commonName,
 				"confidence", confidence,
 				"source", item.Source.DisplayName,
-				"flush_deadline", item.StartTime.Add(detectionWindow),
+				"flush_deadline", time.Now().Add(detectionWindow),
 				"operation", "create_pending_detection")
 			p.pendingDetections[commonName] = PendingDetection{
 				Detection:     detection,
 				Confidence:    confidence,
 				Source:        item.Source.ID,
 				FirstDetected: item.StartTime,
-				FlushDeadline: item.StartTime.Add(detectionWindow),
+				// FlushDeadline is relative to NOW (not startTime) to ensure it's always in the future.
+				// startTime is backdated for audio extraction, but FlushDeadline needs to be a future deadline.
+				FlushDeadline: time.Now().Add(detectionWindow),
 				Count:         1,
 			}
 		}
