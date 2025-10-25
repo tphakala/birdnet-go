@@ -1622,85 +1622,234 @@ Consistent error responses:
 
 ### Authentication
 
-**JWT-Based Authentication:**
+**OAuth2-Based Authentication:**
 
 ```
 internal/security/
-├── jwt.go              # JWT token generation/validation
-├── middleware.go       # Authentication middleware
-└── password.go         # Password hashing (bcrypt)
+├── auth.go             # Authentication method constants
+├── oauth.go            # OAuth2Server core implementation
+├── basic.go            # Basic auth with OAuth2 flow
+├── util.go             # Redirect URI and path validation
+└── logging.go          # Security-specific logging
 ```
 
-**Token Flow:**
+**Authentication Methods:**
 
-1. User logs in with username/password
-2. Server validates credentials
-3. Server generates JWT with claims
-4. Client stores token (localStorage/sessionStorage)
-5. Client includes token in `Authorization` header
-6. Server validates token on protected routes
+```go
+// Supported authentication methods
+const (
+    AuthMethodNone        AuthMethod = "none"   // No authentication
+    AuthMethodLocalSubnet AuthMethod = "subnet" // Local subnet bypass
+    AuthMethodOAuth2      AuthMethod = "oauth2" // OAuth2 tokens
+    AuthMethodAPIKey      AuthMethod = "apikey" // API Key (future)
+)
+```
+
+**Architecture Components:**
+
+1. **OAuth2Server** - Core authentication manager
+   - Manages authorization codes and access tokens
+   - Handles token lifecycle (generation, validation, expiration)
+   - Persistent token storage across restarts
+   - Automatic cleanup of expired tokens
+
+2. **Basic Authentication** - Password-based flow
+   - OAuth2 authorization code flow (not JWT)
+   - Client ID/Secret validation
+   - Generates time-limited auth codes and access tokens
+   - Session-based authentication
+
+3. **Social Authentication** - Third-party identity providers
+   - Google OAuth2 (via Goth library)
+   - GitHub OAuth2 (via Goth library)
+   - User ID allowlist validation
+   - Persistent sessions via filesystem store
+
+4. **Local Subnet Bypass** - Network-based authentication
+   - Automatic authentication for local subnet clients
+   - Container-aware subnet detection
+   - Configurable allowed subnet (CIDR notation)
+   - Loopback address support
+
+### Authentication Flow
+
+**Basic Auth Flow:**
+
+1. User navigates to protected route
+2. Server redirects to `/login` page
+3. User submits password (client ID/secret)
+4. Server validates credentials
+5. Server generates authorization code (short-lived)
+6. User redirected to callback with code
+7. Server exchanges code for access token
+8. Access token stored in session (filesystem-backed)
+9. User redirected to original destination
+
+**Social Auth Flow:**
+
+1. User clicks "Login with Google/GitHub"
+2. Server initiates OAuth2 flow with provider
+3. User authenticates with provider
+4. Provider redirects back with auth data
+5. Server validates user ID against allowlist
+6. Session created and stored persistently
+7. User redirected to dashboard
+
+**Local Subnet Flow:**
+
+1. Client IP checked against server subnets
+2. If same /24 subnet → auto-authenticated
+3. If in allowed CIDR ranges → auto-authenticated
+4. Otherwise → requires explicit authentication
 
 ### Authorization
 
-**Role-Based Access Control (RBAC):**
+**Binary Authentication Model:**
+
+BirdNET-Go uses a **binary authentication model** (authenticated or not) rather than role-based access control. There are no user roles or permission levels.
+
+**Protected Routes:**
 
 ```go
-// Roles
-const (
-    RoleAdmin = "admin"
-    RoleUser  = "user"
-    RoleGuest = "guest"
-)
+// Routes requiring authentication
+- /settings/*                    // All settings pages
+- /api/v2/*                      // All API v2 endpoints
+- /api/v1/detections/delete      // Detection deletion
+- /api/v1/mqtt/*                 // MQTT configuration
+- /api/v1/audio-stream-hls       // HLS audio streaming
+- /logout                        // Logout endpoint
 
-// Middleware
-func RequireRole(role string) echo.MiddlewareFunc {
-    return func(next echo.HandlerFunc) echo.HandlerFunc {
-        return func(c echo.Context) error {
-            userRole := getUserRole(c)
-            if userRole != role {
-                return echo.ErrForbidden
-            }
-            return next(c)
+// Public routes (even if auth enabled)
+- /api/v2/detections             // Detection listings
+- /api/v2/analytics              // Analytics data
+- /api/v2/media/species-image    // Species images
+- /api/v2/spectrogram/*          // Spectrograms
+- /api/v2/audio/*                // Audio files
+```
+
+**Middleware Authentication Check:**
+
+```go
+func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
+    clientIP := net.ParseIP(c.RealIP())
+
+    // 1. Check local subnet bypass
+    if IsInLocalSubnet(clientIP) {
+        return true
+    }
+
+    // 2. Check OAuth2 access token
+    if token, err := gothic.GetFromSession("access_token", c.Request()); err == nil {
+        if s.ValidateAccessToken(token) == nil {
+            return true
         }
     }
+
+    // 3. Check social provider sessions
+    if userId, err := gothic.GetFromSession("userId", c.Request()); err == nil {
+        if s.Settings.Security.GoogleAuth.Enabled {
+            if googleUser, _ := gothic.GetFromSession("google", c.Request()); googleUser != "" {
+                if isValidUserId(s.Settings.Security.GoogleAuth.UserId, userId) {
+                    return true
+                }
+            }
+        }
+        // Similar check for GitHub...
+    }
+
+    return false
 }
 ```
 
-### Content Security Policy
+### Security Features
 
-**CSP Headers:**
+**Token Management:**
+
+- Cryptographically secure token generation (`crypto/rand`)
+- Configurable expiration times for auth codes and access tokens
+- Automatic cleanup of expired tokens (hourly)
+- Persistent token storage in JSON format (0600 permissions)
+- Atomic file writes (temp file + rename)
+
+**Session Security:**
+
+- Filesystem-backed sessions (gorilla/sessions)
+- Session files stored in config directory
+- Configurable session duration (default: 7 days)
+- Secure cookies over HTTPS
+- HTTP-only cookies (XSS protection)
+- SameSite=Lax for CSRF protection
+- Session regeneration on login (prevents session fixation)
+
+**Redirect Protection:**
 
 ```go
-// Strict CSP for XSS protection
-c.Response().Header().Set("Content-Security-Policy",
-    "default-src 'self'; "+
-    "script-src 'self' 'unsafe-inline'; "+
-    "style-src 'self' 'unsafe-inline'; "+
-    "img-src 'self' data: https:; "+
-    "connect-src 'self' wss:; "+
-    "font-src 'self'; "+
-    "object-src 'none'; "+
-    "base-uri 'self'; "+
-    "form-action 'self';")
+// Strict redirect URI validation
+func ValidateRedirectURI(providedURI string, expectedURI *url.URL) error {
+    // - Scheme must match (http/https)
+    // - Hostname must match (case-insensitive)
+    // - Port must match (normalized)
+    // - Path must match (cleaned)
+    // - No query parameters allowed
+    // - No fragment allowed
+    // - Path traversal prevention
+    // - CR/LF injection prevention
+}
 ```
 
-### Input Validation
-
-**Request Validation:**
+**Path Safety Checks:**
 
 ```go
-// Validation tags
-type CreateDetectionRequest struct {
-    CommonName     string  `json:"common_name" validate:"required,min=1,max=100"`
-    ScientificName string  `json:"scientific_name" validate:"required,min=1,max=200"`
-    Confidence     float64 `json:"confidence" validate:"required,min=0,max=1"`
-    Timestamp      string  `json:"timestamp" validate:"required,datetime"`
+func IsSafePath(pathStr string) bool {
+    return strings.HasPrefix(pathStr, "/") &&
+        !strings.Contains(pathStr, "//") &&        // No double slashes
+        !strings.Contains(pathStr, "\\") &&        // No backslashes
+        !strings.Contains(pathStr, "://") &&       // No protocols
+        !strings.Contains(pathStr, "..") &&        // No traversal
+        !strings.Contains(pathStr, "\x00") &&      // No null bytes
+        len(pathStr) < 512                          // Length limit
+}
+```
+
+### Configuration
+
+**Security Settings:**
+
+```go
+type Security struct {
+    Debug             bool              // Enable debug logging
+    Host              string            // Server hostname
+    AutoTLS           bool              // Automatic TLS via Let's Encrypt
+    RedirectToHTTPS   bool              // Force HTTPS redirect
+    SessionSecret     string            // Session encryption key (32+ chars)
+    SessionDuration   time.Duration     // Session lifetime (default: 7d)
+    AllowSubnetBypass AllowSubnetBypass // Subnet authentication bypass
+    BasicAuth         BasicAuth         // Password-based auth
+    GoogleAuth        SocialProvider    // Google OAuth2
+    GithubAuth        SocialProvider    // GitHub OAuth2
 }
 
-// Validator middleware
-validator := validator.New()
-if err := validator.Struct(req); err != nil {
-    return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+type BasicAuth struct {
+    Enabled        bool          // Enable basic auth
+    Password       string        // Login password
+    ClientID       string        // OAuth2 client ID
+    ClientSecret   string        // OAuth2 client secret
+    RedirectURI    string        // OAuth2 callback URL
+    AuthCodeExp    time.Duration // Auth code lifetime (default: 10min)
+    AccessTokenExp time.Duration // Access token lifetime (default: 24h)
+}
+
+type SocialProvider struct {
+    Enabled      bool   // Enable this provider
+    ClientID     string // Provider OAuth2 client ID
+    ClientSecret string // Provider OAuth2 client secret
+    RedirectURI  string // Provider OAuth2 callback URL
+    UserId       string // Comma-separated allowlist of user IDs
+}
+
+type AllowSubnetBypass struct {
+    Enabled bool   // Enable subnet bypass
+    Subnet  string // CIDR notation (e.g., "192.168.1.0/24")
 }
 ```
 
@@ -1712,12 +1861,176 @@ if err := validator.Struct(req); err != nil {
 - Optional opt-in analytics
 - No external API calls without user consent
 - Local-first data storage
+- Sessions stored locally (not in-memory or external)
 
 **Data Retention:**
 
 - User-configurable detection history retention
 - Automatic cleanup of old detections
 - Audio clips not stored by default (only metadata)
+- Session files cleaned up on logout
+- Expired tokens cleaned up hourly
+
+**Security Best Practices:**
+
+1. Always use strong SessionSecret (32+ characters, auto-generated if empty)
+2. Use HTTPS in production environments (`AutoTLS` or reverse proxy)
+3. Restrict subnet bypass to trusted networks only
+4. Regularly rotate OAuth2 client secrets
+5. Use specific user ID allowlists for social auth
+6. Ensure config directory has proper permissions (0755)
+7. Monitor security logs for authentication failures
+
+### API v2 Authentication Architecture
+
+**Adapter Pattern:**
+
+The API v2 authentication system uses an adapter pattern to provide a clean, testable interface over the security package.
+
+```
+internal/api/v2/auth/
+├── service.go          # Service interface definition
+├── adapter.go          # SecurityAdapter implementation
+├── middleware.go       # Authentication middleware
+└── authmethod_string.go # Generated AuthMethod string methods
+```
+
+**Service Interface:**
+
+```go
+type Service interface {
+    // CheckAccess validates if a request has access to protected resources
+    CheckAccess(c echo.Context) error
+
+    // IsAuthRequired checks if authentication is required for this request
+    IsAuthRequired(c echo.Context) bool
+
+    // GetUsername retrieves the username of the authenticated user
+    GetUsername(c echo.Context) string
+
+    // GetAuthMethod returns the authentication method used
+    GetAuthMethod(c echo.Context) AuthMethod
+
+    // ValidateToken checks if a bearer token is valid
+    ValidateToken(token string) error
+
+    // AuthenticateBasic handles basic authentication
+    AuthenticateBasic(c echo.Context, username, password string) (string, error)
+
+    // Logout invalidates the current session/token
+    Logout(c echo.Context) error
+}
+```
+
+**SecurityAdapter Implementation:**
+
+The `SecurityAdapter` wraps `OAuth2Server` and implements the `Service` interface:
+
+```go
+type SecurityAdapter struct {
+    OAuth2Server *security.OAuth2Server
+    logger       *slog.Logger
+}
+
+// Example: CheckAccess delegates to OAuth2Server
+func (a *SecurityAdapter) CheckAccess(c echo.Context) error {
+    if a.OAuth2Server.IsUserAuthenticated(c) {
+        return nil
+    }
+    return ErrSessionNotFound
+}
+```
+
+**Authentication Middleware:**
+
+The API v2 middleware supports multiple authentication methods in priority order:
+
+1. **Bearer Token** (from `Authorization` header)
+   - Validates OAuth2 access token
+   - Sets context: `authMethod=AuthMethodToken`
+   - Returns `401` with `WWW-Authenticate` header on failure
+
+2. **Session** (from cookies)
+   - Validates browser session
+   - Checks local subnet bypass
+   - Sets context: `authMethod=AuthMethodBrowserSession` or `AuthMethodLocalSubnet`
+
+3. **Unauthenticated Response Handling**
+   - Browser requests → redirect to `/login?redirect=<path>`
+   - HTMX requests → `HX-Redirect` header
+   - API requests → JSON `401 Unauthorized`
+
+**Authentication Methods (v2):**
+
+```go
+type AuthMethod int
+
+const (
+    AuthMethodUnknown        // Unknown/unset
+    AuthMethodNone          // No auth required (bypass)
+    AuthMethodBasicAuth     // Username/password
+    AuthMethodToken         // Bearer token
+    AuthMethodOAuth2        // OAuth2 token
+    AuthMethodBrowserSession // Browser session
+    AuthMethodAPIKey        // API key (future)
+    AuthMethodLocalSubnet   // Local subnet bypass
+)
+```
+
+**Context Values:**
+
+After successful authentication, middleware sets:
+
+```go
+c.Set("isAuthenticated", true)
+c.Set("authMethod", AuthMethodToken)      // or other method
+c.Set("username", "user@example.com")     // if available
+c.Set("userClaims", nil)                  // reserved for future use
+```
+
+**Error Types:**
+
+```go
+var (
+    ErrInvalidCredentials = errors.New("invalid credentials")
+    ErrInvalidToken       = errors.New("invalid or expired token")
+    ErrSessionNotFound    = errors.New("session not found or expired")
+    ErrLogoutFailed       = errors.New("logout operation failed")
+    ErrBasicAuthDisabled  = errors.New("basic authentication is disabled")
+)
+```
+
+**Benefits of Adapter Pattern:**
+
+1. **Clean separation** - API v2 doesn't directly depend on security internals
+2. **Testability** - Mock the Service interface for unit tests
+3. **Flexibility** - Can swap implementations without changing API handlers
+4. **Type safety** - Strongly typed AuthMethod enum vs strings
+5. **Logging** - Centralized security logging in one place
+
+**Integration Example:**
+
+```go
+// Create adapter
+authService := auth.NewSecurityAdapter(oauth2Server, logger)
+
+// Create middleware
+authMiddleware := auth.NewMiddleware(authService, logger)
+
+// Apply to routes
+api := e.Group("/api/v2")
+api.Use(authMiddleware.Authenticate)
+
+// Handlers can access auth state
+api.GET("/protected", func(c echo.Context) error {
+    username := c.Get("username").(string)
+    method := c.Get("authMethod").(auth.AuthMethod)
+    return c.JSON(200, map[string]interface{}{
+        "user": username,
+        "auth": method.String(),
+    })
+})
+```
 
 ---
 
