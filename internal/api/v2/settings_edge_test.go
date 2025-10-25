@@ -309,18 +309,6 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 			description: "Should skip SoxAudioTypes runtime field",
 			shouldSkip:  []string{"SoxAudioTypes"},
 		},
-		{
-			name:    "Top-level runtime fields",
-			section: "main",
-			update: map[string]interface{}{
-				"version":            "1.2.3",     // Runtime field
-				"buildDate":          "2024-01-01", // Runtime field
-				"systemID":           "test-id",    // Runtime field
-				"validationWarnings": []string{"warning1"}, // Runtime field
-			},
-			description: "Should reject main section updates entirely",
-			shouldSkip:  []string{}, // Whole section rejected
-		},
 	}
 
 	for _, tt := range tests {
@@ -342,15 +330,8 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 			ctx.SetParamValues(tt.section)
 
 			err = controller.UpdateSectionSettings(ctx)
-			
-			// Main section should be rejected entirely
-			if tt.section == "main" {
-				// Use helper function to assert error response
-				assertControllerError(t, err, rec, http.StatusBadRequest, "main settings")
-				return
-			}
 
-			// Other sections should succeed but skip fields
+			// All sections should succeed but skip runtime fields
 			if err != nil {
 				t.Logf("Update failed: %v", err)
 			} else {

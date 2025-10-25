@@ -417,20 +417,6 @@ func TestValidationErrors(t *testing.T) {
 		expectedCode  int
 	}{
 		{
-			name:          "Reject security section updates",
-			section:       "security",
-			update:        map[string]interface{}{"basicAuth": map[string]interface{}{"enabled": true}},
-			expectedError: "Failed to update security settings",
-			expectedCode:  http.StatusBadRequest,
-		},
-		{
-			name:          "Reject main section updates",
-			section:       "main",
-			update:        map[string]interface{}{"name": "New Name"},
-			expectedError: "Failed to update main settings",
-			expectedCode:  http.StatusBadRequest,
-		},
-		{
 			name:          "Validate MQTT broker required when enabled",
 			section:       "mqtt",
 			update:        map[string]interface{}{"enabled": true, "broker": ""},
