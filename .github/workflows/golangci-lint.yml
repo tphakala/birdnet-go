@@ -8,13 +8,17 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - '.github/workflows/**'
-      - '**.md'
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.golangci.yml'
   pull_request:
-    paths-ignore:
-      - '.github/workflows/**'
-      - '**.md'
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.golangci.yml'
   workflow_call:
 
 permissions:
