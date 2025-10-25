@@ -2464,15 +2464,6 @@ go tool pprof http://localhost:8080/debug/pprof/profile
 go tool pprof http://localhost:8080/debug/pprof/heap
 ```
 
-**Frontend Debugging:**
-
-```bash
-# Development mode with source maps
-npm run dev
-
-# Svelte DevTools (browser extension)
-# https://github.com/sveltejs/svelte-devtools
-```
 
 ### Documentation
 
