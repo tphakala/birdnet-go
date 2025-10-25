@@ -120,7 +120,10 @@ RUN chmod +x /usr/bin/reset_auth.sh
 COPY --from=build /home/dev-user/src/BirdNET-Go/Docker/entrypoint.sh /usr/bin/
 RUN chmod +x /usr/bin/entrypoint.sh
 
-# Create config and data directories
+# Create config and data directories with proper permissions for rootless compatibility
+# Make them world-writable so non-root users can create subdirectories
+RUN mkdir -p /config /data/clips /data/models && \
+    chmod 777 /config /data /data/clips /data/models
 VOLUME /config
 VOLUME /data
 WORKDIR /data
