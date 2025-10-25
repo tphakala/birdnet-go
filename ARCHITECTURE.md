@@ -243,26 +243,34 @@ Echo was chosen for its:
 ```
 internal/httpcontroller/
 ├── server.go           # Echo server initialization
+├── middleware.go       # Authentication, CSRF, cache control, Vary headers
+├── auth_routes.go      # Authentication routes (login, logout, OAuth2)
+├── htmx_routes.go      # HTMX routes (legacy UI)
+├── svelte_handler.go   # Svelte frontend handler
+├── fileserver.go       # Static file serving
+├── template_functions.go # Template helper functions
+├── template_renderers.go # Template rendering logic
 ├── handlers/           # HTTP request handlers
 │   ├── dashboard.go    # Dashboard endpoints
-│   ├── settings.go     # Settings management
-│   ├── detections.go   # Detection history
-│   └── sse.go          # Server-Sent Events
-├── middleware/         # Custom middleware
-│   ├── auth.go         # Authentication
-│   ├── cors.go         # CORS handling
-│   └── security.go     # Security headers
-└── securefs/           # Embedded filesystem with security
+│   ├── media.go        # Media endpoints (audio, spectrograms)
+│   ├── weather.go      # Weather integration
+│   ├── birdweather.go  # BirdWeather integration
+│   ├── mqtt.go         # MQTT endpoints
+│   ├── audio_stream_hls.go # HLS audio streaming
+│   └── audio_level_sse.go  # Audio level SSE
+└── securefs/           # Embedded filesystem with security (FIFO queue, caching)
 ```
 
 **Middleware Stack:**
 
-1. **Recovery**: Panic recovery and error handling
-2. **Logger**: Request/response logging
-3. **CORS**: Cross-origin resource sharing
-4. **Security Headers**: CSP, X-Frame-Options, etc.
-5. **Authentication**: JWT-based auth for protected routes
-6. **Rate Limiting**: DoS protection
+1. **Recovery**: Panic recovery and error handling (Echo built-in)
+2. **Sentry**: Error tracking and reporting (optional)
+3. **Logger**: Structured request/response logging
+4. **CSRF**: Cross-site request forgery protection
+5. **Authentication**: OAuth2-based auth for protected routes
+6. **Gzip**: Response compression
+7. **CacheControl**: Cache headers for assets and API responses
+8. **Vary**: HTMX-aware caching headers
 
 **Server-Sent Events (SSE):**
 
@@ -352,38 +360,113 @@ GORM provides a developer-friendly abstraction over database operations:
 
 ```
 internal/datastore/
-├── datastore.go        # Database interface
-├── models.go           # Data models
-├── migrations.go       # Schema migrations
-└── queries.go          # Common queries
+├── interfaces.go       # Database interface and methods
+├── model.go            # Data models
+├── sqlite.go           # SQLite implementation
+├── mysql.go            # MySQL implementation
+├── manage.go           # Database management operations
+├── analytics.go        # Analytics queries
+├── search_advanced.go  # Advanced search functionality
+└── dynamic_threshold.go # Dynamic threshold persistence
 ```
 
 **Core Models:**
 
 ```go
-// Detection record
+// Detection record (Note)
 type Note struct {
-    ID              uint      `gorm:"primaryKey"`
-    Date            time.Time `gorm:"index"`
-    Time            time.Time
-    InputFile       string
-    BeginTime       float64
-    EndTime         float64
-    ScientificName  string    `gorm:"index"`
-    CommonName      string    `gorm:"index"`
-    Confidence      float64   `gorm:"index"`
-    Latitude        float64
-    Longitude       float64
-    Threshold       float64
-    Verified        *bool
-    Comment         string
+    ID             uint           `gorm:"primaryKey"`
+    SourceNode     string
+    Date           string         `gorm:"index"` // String format for flexibility
+    Time           string         `gorm:"index"`
+    Source         AudioSource    `gorm:"-"`     // Runtime only
+    BeginTime      time.Time
+    EndTime        time.Time
+    SpeciesCode    string
+    ScientificName string         `gorm:"index"`
+    CommonName     string         `gorm:"index"`
+    Confidence     float64        `gorm:"index"`
+    Latitude       float64
+    Longitude      float64
+    Threshold      float64
+    Sensitivity    float64
+    ClipName       string
+    ProcessingTime time.Duration
+
+    // Relationships (with cascade delete)
+    Results  []Results     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
+    Review   *NoteReview   `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
+    Comments []NoteComment `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
+    Lock     *NoteLock     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
+
+    // Virtual fields (not stored)
+    Verified string `gorm:"-"` // Populated from Review.Verified
+    Locked   bool   `gorm:"-"` // Populated from Lock presence
 }
 
-// Settings storage
-type Settings struct {
-    Key         string `gorm:"primaryKey"`
-    Value       string
-    Description string
+// Review status for detections
+type NoteReview struct {
+    ID        uint      `gorm:"primaryKey"`
+    NoteID    uint      `gorm:"uniqueIndex"`
+    Verified  string    // "correct" or "false_positive"
+    CreatedAt time.Time
+    UpdatedAt time.Time
+}
+
+// User comments on detections
+type NoteComment struct {
+    ID        uint      `gorm:"primaryKey"`
+    NoteID    uint      `gorm:"index"`
+    Entry     string    `gorm:"type:text"`
+    CreatedAt time.Time
+    UpdatedAt time.Time
+}
+
+// Lock status for detections
+type NoteLock struct {
+    ID       uint      `gorm:"primaryKey"`
+    NoteID   uint      `gorm:"uniqueIndex"`
+    LockedAt time.Time
+}
+
+// Weather data models
+type DailyEvents struct {
+    ID       uint   `gorm:"primaryKey"`
+    Date     string `gorm:"index"`
+    Sunrise  int64
+    Sunset   int64
+    Country  string
+    CityName string
+}
+
+type HourlyWeather struct {
+    ID            uint `gorm:"primaryKey"`
+    DailyEventsID uint `gorm:"index"`
+    Time          time.Time
+    Temperature   float64
+    // ... weather fields
+}
+
+// Species image cache
+type ImageCache struct {
+    ID             uint      `gorm:"primaryKey"`
+    ProviderName   string    `gorm:"index"`
+    ScientificName string    `gorm:"index"`
+    URL            string
+    LicenseName    string
+    AuthorName     string
+    CachedAt       time.Time
+}
+
+// Dynamic threshold persistence
+type DynamicThreshold struct {
+    ID            uint      `gorm:"primaryKey"`
+    SpeciesName   string    `gorm:"uniqueIndex"`
+    Level         int       // Adjustment level (0-3)
+    CurrentValue  float64
+    BaseThreshold float64
+    ExpiresAt     time.Time
+    // ... threshold tracking fields
 }
 ```
 
@@ -1526,78 +1609,108 @@ Located in: `internal/api/v2/`
 - **RESTful**: Standard HTTP methods and status codes
 - **JSON**: All requests/responses in JSON format
 - **Versioned**: `/api/v2/` prefix for versioning
-- **Authenticated**: JWT tokens for protected endpoints
-- **Documented**: OpenAPI/Swagger documentation
+- **Authenticated**: OAuth2 tokens for protected endpoints
+- **Documented**: See `internal/api/v2/README.md` for endpoint documentation
 
 **API Structure:**
 
 ```
 internal/api/v2/
-├── router.go           # API v2 router
-├── middleware.go       # API v2 middleware
-├── auth/               # Authentication endpoints
-│   ├── login.go        # POST /api/v2/auth/login
-│   └── logout.go       # POST /api/v2/auth/logout
-├── detections/         # Detection endpoints
-│   ├── list.go         # GET /api/v2/detections
-│   ├── get.go          # GET /api/v2/detections/:id
-│   └── delete.go       # DELETE /api/v2/detections/:id
-├── settings/           # Settings endpoints
-│   ├── get.go          # GET /api/v2/settings
-│   └── update.go       # PUT /api/v2/settings
-├── spectrogram/        # Spectrogram endpoints
-│   ├── get.go          # GET /api/v2/spectrogram/:id
-│   └── generate.go     # POST /api/v2/spectrogram/:id/generate
-└── events/             # SSE endpoints
-    ├── detections.go   # GET /api/v2/events/detections
-    └── status.go       # GET /api/v2/events/status
+├── api.go              # Main API router and registration
+├── auth/               # Authentication service adapter
+│   ├── service.go      # Service interface definition
+│   ├── adapter.go      # SecurityAdapter implementation
+│   ├── middleware.go   # Authentication middleware
+│   └── authmethod_string.go  # Generated AuthMethod string methods
+├── auth.go             # Authentication endpoints (login/logout)
+├── detections.go       # Detection CRUD endpoints
+├── analytics.go        # Analytics and statistics endpoints
+├── settings.go         # Settings management endpoints
+├── media.go            # Media endpoints (audio, spectrograms)
+├── sse.go              # Server-Sent Events (detections, audio levels)
+├── streams.go          # Audio stream management
+├── streams_health.go   # Stream health monitoring
+├── system.go           # System info and control endpoints
+├── weather.go          # Weather integration endpoints
+├── species.go          # Species information endpoints
+├── range.go            # Geographic range filter endpoints
+├── search.go           # Search endpoints
+├── notifications.go    # Notification management
+├── integrations.go     # External integrations (MQTT, BirdWeather)
+├── control.go          # System control endpoints
+├── debug.go            # Debug endpoints
+├── filesystem.go       # Filesystem operations
+├── support.go          # Support bundle generation
+└── utils.go            # Shared utilities
 ```
 
-**Example Endpoint:**
+**API Controller Pattern:**
+
+All API v2 endpoints are methods on the `Controller` struct:
 
 ```go
-// internal/api/v2/detections/list.go
-package detections
+// internal/api/v2/api.go
+package api
 
-import (
-    "net/http"
-    "github.com/labstack/echo/v4"
-)
-
-type ListRequest struct {
-    StartDate  string  `query:"start_date"`
-    EndDate    string  `query:"end_date"`
-    Species    string  `query:"species"`
-    MinConfidence float64 `query:"min_confidence"`
-    Limit      int     `query:"limit"`
-    Offset     int     `query:"offset"`
+type Controller struct {
+    Group          *echo.Group
+    Settings       *conf.Settings
+    DS             datastore.Interface
+    SSEController  *SSEController
+    AuthMiddleware echo.MiddlewareFunc
+    // ... other dependencies
 }
 
-type ListResponse struct {
-    Detections []Detection `json:"detections"`
-    Total      int         `json:"total"`
-    Limit      int         `json:"limit"`
-    Offset     int         `json:"offset"`
+// Route registration
+func (c *Controller) initDetectionRoutes() {
+    // Public endpoints
+    c.Group.GET("/detections", c.GetDetections)
+    c.Group.GET("/detections/:id", c.GetDetection)
+
+    // Protected endpoints
+    detectionGroup := c.Group.Group("/detections", c.AuthMiddleware)
+    detectionGroup.DELETE("/:id", c.DeleteDetection)
+    detectionGroup.POST("/:id/review", c.ReviewDetection)
+}
+```
+
+**Example Handler:**
+
+```go
+// internal/api/v2/detections.go
+package api
+
+// DetectionResponse represents a detection in API responses
+type DetectionResponse struct {
+    ID             uint    `json:"id"`
+    Date           string  `json:"date"`
+    ScientificName string  `json:"scientificName"`
+    CommonName     string  `json:"commonName"`
+    Confidence     float64 `json:"confidence"`
+    // ... other fields
 }
 
-func List(c echo.Context) error {
-    var req ListRequest
-    if err := c.Bind(&req); err != nil {
+// GetDetections returns a paginated list of detections
+func (c *Controller) GetDetections(ctx echo.Context) error {
+    // Parse query parameters
+    startDate := ctx.QueryParam("start_date")
+    endDate := ctx.QueryParam("end_date")
+
+    // Validate parameters
+    if err := validateDateParam(startDate, "start_date"); err != nil {
         return echo.NewHTTPError(http.StatusBadRequest, err.Error())
     }
 
     // Query database
-    detections, total, err := queryDetections(req)
+    notes, err := c.DS.GetNotesWithinRange(startDate, endDate)
     if err != nil {
         return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
     }
 
-    return c.JSON(http.StatusOK, ListResponse{
-        Detections: detections,
-        Total:      total,
-        Limit:      req.Limit,
-        Offset:     req.Offset,
-    })
+    // Transform to response format
+    detections := transformNotesToResponses(notes)
+
+    return ctx.JSON(http.StatusOK, detections)
 }
 ```
 
