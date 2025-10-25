@@ -63,11 +63,9 @@ jobs:
       - name: Get Build Version
         id: get_build_version
         run: |
-          # Get version with commit count for nightly builds
-          VERSION=$(git describe --tags --always)
-          COMMIT_COUNT=$(git rev-list --count HEAD)
+          # Use simple date format for nightly builds
           DATE=$(date +'%Y%m%d')
-          BUILD_VERSION="nightly-${DATE}-${COMMIT_COUNT}-g${VERSION##*-g}"
+          BUILD_VERSION="nightly-${DATE}"
           echo "BUILD_VERSION=${BUILD_VERSION}" >> ${GITHUB_ENV}
           echo "build_version=${BUILD_VERSION}" >> $GITHUB_OUTPUT
 
@@ -155,10 +153,8 @@ jobs:
         id: get_version
         run: |
           # Use same version format as binary builds for consistency
-          VERSION=$(git describe --tags --always)
-          COMMIT_COUNT=$(git rev-list --count HEAD)
           DATE=$(date +'%Y%m%d')
-          BUILD_VERSION="nightly-${DATE}-${COMMIT_COUNT}-g${VERSION##*-g}"
+          BUILD_VERSION="nightly-${DATE}"
           echo "VERSION=${BUILD_VERSION}" >> ${GITHUB_ENV}
           echo "version=${BUILD_VERSION}" >> $GITHUB_OUTPUT
 
