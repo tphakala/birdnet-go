@@ -177,6 +177,7 @@ internal/birdnet/
 ├── models_external.go      # External model loading
 ├── label_files.go          # Label file management
 ├── taxonomy.go             # Taxonomy mapping
+├── tracing.go              # Tracing and telemetry helpers
 └── queue.go                # Analysis queue management
 ```
 
@@ -519,7 +520,14 @@ internal/analysis/
 │   ├── actions.go      # Action types (Database, MQTT, BirdWeather, SSE, etc.)
 │   ├── execute.go      # Action execution logic
 │   ├── eventtracker.go # Event frequency tracking
-│   └── jobqueue_adapter.go  # Adapter between processor and job queue
+│   ├── jobqueue_adapter.go  # Adapter between processor and job queue
+│   ├── dynamic_threshold.go      # Dynamic confidence threshold adjustment
+│   ├── threshold_persistence.go  # Save/load threshold state
+│   ├── mqtt.go         # MQTT publishing logic
+│   ├── logger.go       # Processor-specific logging
+│   ├── soundlevel_monitoring.go  # Sound level monitoring
+│   ├── soundlevel_calibration.go # Sound level calibration
+│   └── soundlevel_telemetry.go   # Sound level telemetry
 ├── jobqueue/
 │   ├── queue.go        # Job queue implementation with retry capabilities
 │   ├── job.go          # Job lifecycle and state management
@@ -910,10 +918,12 @@ func TestDetectionThreshold(t *testing.T) {
 internal/package/
 ├── package.go          # Implementation
 ├── package_test.go     # Unit tests
-└── testdata/           # Test fixtures
+└── testdata/           # Test fixtures (optional, used where needed)
     ├── audio/          # Test audio files
     └── expected/       # Expected results
 ```
+
+**Note:** The `testdata/` directory is used only in packages that require external test data (e.g., `internal/ebird`, `internal/httpcontroller`). Most packages use inline test data or mocks.
 
 **Mock Framework:**
 
@@ -1042,15 +1052,18 @@ frontend/
 │   ├── lib/
 │   │   ├── desktop/              # Desktop-specific UI
 │   │   │   ├── components/       # Reusable components
-│   │   │   │   ├── ui/           # Basic UI components
+│   │   │   │   ├── ui/           # Basic UI components (40+ components)
 │   │   │   │   ├── media/        # Audio/spectrogram players
 │   │   │   │   ├── forms/        # Form components
-│   │   │   │   └── data/         # Data display components
+│   │   │   │   ├── data/         # Data display components
+│   │   │   │   ├── modals/       # Modal dialogs
+│   │   │   │   └── review/       # Review-related components
 │   │   │   ├── features/         # Feature-specific modules
 │   │   │   │   ├── dashboard/    # Dashboard feature
 │   │   │   │   ├── settings/     # Settings management
 │   │   │   │   └── detections/   # Detection history
-│   │   │   └── layouts/          # Page layouts
+│   │   │   ├── layouts/          # Page layouts
+│   │   │   └── views/            # Top-level views (DEPRECATED: HTMX-based UI, do not expand)
 │   │   ├── utils/                # Utility functions
 │   │   │   ├── api.ts            # API client
 │   │   │   ├── cn.ts             # Class name utility
@@ -1063,13 +1076,19 @@ frontend/
 │   ├── images/                   # Images
 │   ├── icons/                    # Icons
 │   └── messages/                 # i18n message files
-├── tests/                        # E2E tests
-│   ├── dashboard.test.ts         # Dashboard E2E tests
-│   └── settings.test.ts          # Settings E2E tests
-├── vite.config.js                # Vite configuration
+├── tests/                        # Testing infrastructure
+│   ├── e2e/                      # E2E tests (Playwright)
+│   │   ├── auth/                 # Authentication tests
+│   │   │   └── basic.spec.ts
+│   │   ├── dashboard/            # Dashboard tests
+│   │   │   ├── smoke.spec.ts
+│   │   │   └── error-handling.spec.ts
+│   │   └── setup.setup.ts        # E2E test setup
+│   ├── fixtures/                 # Test fixtures
+│   └── support/                  # Test support utilities
+├── vite.config.js                # Vite + Vitest configuration
 ├── tsconfig.json                 # TypeScript configuration
 ├── tailwind.config.js            # Tailwind configuration
-├── vitest.config.ts              # Vitest configuration (in vite.config.js)
 └── playwright.config.ts          # Playwright configuration
 ```
 
@@ -1190,23 +1209,45 @@ interface Props {
 The frontend uses SSE for real-time updates from the backend:
 
 ```typescript
-// utils/sse.ts
-export class SSEClient {
-  private eventSource: EventSource | null = null;
+// stores/sseNotifications.ts
+import ReconnectingEventSource from "reconnecting-eventsource";
 
-  connect(url: string, handlers: Record<string, (data: any) => void>) {
-    this.eventSource = new EventSource(url);
+class SSENotificationManager {
+  private eventSource: ReconnectingEventSource | null = null;
+  private isConnected = false;
 
-    for (const [event, handler] of Object.entries(handlers)) {
-      this.eventSource.addEventListener(event, (e) => {
-        handler(JSON.parse(e.data));
-      });
-    }
+  connect(): void {
+    this.eventSource = new ReconnectingEventSource(
+      "/api/v2/notifications/stream",
+      {
+        max_retry_time: 30000,
+        withCredentials: true,
+      },
+    );
+
+    this.eventSource.addEventListener("toast", (event: Event) => {
+      const messageEvent = event as MessageEvent;
+      const toastData: SSEToastData = JSON.parse(messageEvent.data);
+      this.handleToast(toastData);
+    });
+
+    this.eventSource.addEventListener("open", () => {
+      this.isConnected = true;
+    });
   }
 
-  disconnect() {
+  disconnect(): void {
     this.eventSource?.close();
+    this.isConnected = false;
   }
+}
+
+// Singleton instance
+export const sseNotifications = new SSENotificationManager();
+
+// Auto-connect when module imported (browser only)
+if (typeof window !== "undefined") {
+  setTimeout(() => sseNotifications.connect(), 100);
 }
 ```
 
@@ -1214,25 +1255,24 @@ export class SSEClient {
 
 ```svelte
 <script lang="ts">
-  import { SSEClient } from '$lib/utils/sse.js';
-  import { onMount, onDestroy } from 'svelte';
-
-  let detections = $state<Detection[]>([]);
-  const sseClient = new SSEClient();
+  import { sseNotifications } from '$lib/stores/sseNotifications';
+  import { onMount } from 'svelte';
 
   onMount(() => {
-    sseClient.connect('/api/v2/events/detections', {
-      'detection': (detection) => {
-        detections = [detection, ...detections];
-      }
-    });
-  });
-
-  onDestroy(() => {
-    sseClient.disconnect();
+    // SSE auto-connects on import, just ensure it's initialized
+    if (sseNotifications) {
+      console.log('SSE notifications active');
+    }
   });
 </script>
 ```
+
+**Key Features:**
+
+- Uses `ReconnectingEventSource` for automatic reconnection
+- Singleton pattern with auto-connection
+- Handles toast notifications from backend
+- Reconnects automatically on connection loss
 
 ### State Management
 
@@ -1390,12 +1430,18 @@ npm run build
 
 ```
 frontend/dist/
-├── index.html           # HTML entry point
-├── *.js                 # JavaScript bundles
-├── *.css                # Stylesheets
-├── messages/            # i18n message files
-└── assets/              # Images and other static assets
+├── index.html              # HTML entry point
+├── index.js                # Main application bundle (~705KB uncompressed)
+├── *.js                    # Route-specific bundles (lazy-loaded)
+├── *.css                   # Stylesheets
+└── messages/               # i18n translations (*.json)
+    ├── en.json
+    ├── de.json
+    ├── es.json
+    └── fi.json
 ```
+
+**Note:** Static assets (images, icons) are served from the Go backend, not embedded in the frontend build output. The frontend build contains only JavaScript, CSS, and i18n message files.
 
 ### Embedding in Go Binary
 
@@ -1499,8 +1545,8 @@ Configuration (`.air.toml`):
 [build]
   cmd = "task frontend-build && go build -o ./tmp/main ."
   bin = "./tmp/main"
-  include_ext = ["go", "html", "svelte", "ts"]
-  exclude_dir = ["tmp", "vendor", "frontend/node_modules"]
+  include_ext = ["go", "tpl", "tmpl", "html", "css", "js", "svelte", "ts"]
+  exclude_dir = ["tmp", "vendor", "frontend/node_modules", "frontend/dist"]
 ```
 
 **Hot Module Replacement (HMR):**
@@ -2170,12 +2216,16 @@ defer pcmBufferPool.Put(buf) // Return to pool
 
 **Database Connection Pooling:**
 
+Configure GORM connection pools for optimal performance:
+
 ```go
-// GORM configuration
+// Recommended GORM configuration (not currently implemented)
 db.DB().SetMaxIdleConns(10)
 db.DB().SetMaxOpenConns(100)
 db.DB().SetConnMaxLifetime(time.Hour)
 ```
+
+**Note:** This configuration is recommended for production deployments but not currently implemented in the codebase.
 
 ### Concurrency
 
@@ -2196,18 +2246,36 @@ for i := 0; i < numWorkers; i++ {
 
 **Rate Limiting:**
 
+The project uses a combination of semaphore and singleflight for concurrent spectrogram generation:
+
 ```go
-// Limit concurrent spectrogram generation
-semaphore := make(chan struct{}, 2) // Max 2 concurrent
+import "golang.org/x/sync/singleflight"
+
+// Package-level concurrency control
+var (
+    spectrogramSemaphore = make(chan struct{}, maxConcurrentSpectrograms)
+    spectrogramGroup     singleflight.Group
+)
 
 func generateSpectrogram(id string) error {
-    semaphore <- struct{}{}        // Acquire
-    defer func() { <-semaphore }() // Release
+    // Singleflight prevents duplicate work for same ID
+    _, err, _ := spectrogramGroup.Do(id, func() (any, error) {
+        // Semaphore limits total concurrent operations
+        spectrogramSemaphore <- struct{}{}
+        defer func() { <-spectrogramSemaphore }()
 
-    // Generate spectrogram
-    return generate(id)
+        return performGeneration(id)
+    })
+    return err
 }
 ```
+
+**Benefits:**
+
+- **Singleflight**: Multiple requests for the same spectrogram only generate once
+- **Semaphore**: Limits total concurrent generations (prevents resource exhaustion)
+
+See [internal/api/v2/media.go](internal/api/v2/media.go) for full implementation.
 
 ### Caching
 
@@ -2243,7 +2311,7 @@ data/
 
 **Code Splitting:**
 
-The frontend uses **server-side routing** (handled by Go backend). Components are lazy-loaded based on the current path:
+The frontend uses **client-side routing with lazy-loaded components**. The Go backend serves the same HTML shell for all UI routes, and the client-side JavaScript determines which component to load:
 
 ```javascript
 // App.svelte - Dynamic component loading
@@ -2265,25 +2333,44 @@ async function loadComponent(route: string): Promise<void> {
 }
 ```
 
-**Note:** There is **no client-side router** (like React Router or SvelteKit routing). The Go backend serves different pages at different URLs (`/ui/dashboard`, `/ui/settings`, etc.), and the frontend determines which component to render based on `window.location.pathname`.
+**How it works:**
+
+1. Go backend serves `/ui/*` routes with the same HTML entry point
+2. Client-side code reads `window.location.pathname`
+3. Components are dynamically imported based on the current path
+4. Only the necessary code is loaded, reducing initial bundle size
+
+**Note:** This is **not SvelteKit routing** or **server-side rendering**. It's a manual lazy-loading implementation that works with the embedded Go server.
 
 **Bundle Size Optimization:**
 
 ```bash
-# Production build with analysis
-npm run build -- --mode production
+# Production build
+npm run build
 
-# Typical bundle sizes:
-# - Main chunk: ~150KB (gzipped)
-# - Vendor chunk: ~80KB (gzipped)
-# - Route chunks: ~20-30KB each (gzipped)
+# Actual bundle sizes (uncompressed):
+# - Main chunk (index.js):        ~705KB
+# - Vendor chunk (vendor.js):      ~40KB (Svelte core)
+# - Charts chunk (charts.js):     ~202KB (Chart.js)
+# - MapLibre chunk:               ~917KB (Map rendering - largest)
+# - Route chunks:                  11-223KB (lazy-loaded on demand)
 ```
+
+**Size Breakdown:**
+
+- Largest chunks: MapLibre (917KB), Main bundle (705KB)
+- Route-specific chunks loaded on-demand
+- Most route chunks under 100KB
+- Gzipped sizes typically 20-30% of uncompressed
+
+**Note:** Run `npm run analyze:bundle:size` to analyze bundle composition.
 
 **Image Optimization:**
 
 - Lazy loading for spectrogram images
-- WebP format for smaller file sizes
-- Responsive images with srcset
+- PNG format for spectrograms (generated on-demand)
+- Cached on filesystem to avoid regeneration
+- Multiple size variants (sm: 400px, md: 800px, lg: 1000px, xl: 1200px)
 
 ---
 
@@ -2294,11 +2381,14 @@ npm run build -- --mode production
 **Linting:**
 
 ```bash
-# Backend linting
+# Backend linting (from project root)
 golangci-lint run -v
 
-# Frontend linting
-npm run check:all
+# Frontend linting (from frontend/ directory)
+cd frontend && npm run check:all
+
+# Or use Taskfile (from project root)
+task frontend-lint
 ```
 
 **Formatting:**
@@ -2316,25 +2406,45 @@ npm run format
 
 ### Pre-Commit Hooks
 
-**Husky Hooks:**
+**Husky v9 Configuration:**
 
-Automatically run linting and formatting before commits:
+The project uses Husky v9 for Git hooks with a bash-based pre-commit script:
+
+```bash
+# .husky/pre-commit - Automated checks before commit
+
+# Go Backend Checks:
+# - Auto-format Go files with gofmt
+# - Run golangci-lint on staged Go files only
+# - Skip vendor/, generated files, protobuf files
+
+# Frontend Checks (from frontend/):
+# - Run lint-staged for JS/TS/Svelte files
+# - Run TypeScript type checking
+```
+
+**lint-staged Configuration** (frontend/package.json):
 
 ```json
-// package.json
 {
-  "husky": {
-    "hooks": {
-      "pre-commit": "lint-staged"
-    }
+  "scripts": {
+    "prepare": "husky"
   },
   "lint-staged": {
-    "*.go": ["golangci-lint run --fix"],
-    "*.{ts,svelte}": ["prettier --write", "eslint --fix"],
-    "*.md": ["prettier --write"]
+    "*.{js,ts,svelte}": ["prettier --write", "eslint --fix"],
+    "*.css": ["stylelint --fix"]
   }
 }
 ```
+
+**Setup:**
+
+```bash
+cd frontend
+npm run prepare  # Initialize Husky hooks
+```
+
+See [.husky/pre-commit](.husky/pre-commit) for complete implementation.
 
 ### Debugging
 
@@ -2384,52 +2494,5 @@ func Example() *Detection {
 }
 ```
 
-**API Documentation:**
-
-API v2 includes OpenAPI/Swagger documentation (planned):
-
-```
-http://localhost:8080/api/v2/docs
-```
-
----
-
-## Future Architecture Considerations
-
-### Planned Improvements
-
-1. **Distributed Processing**: Support for multiple nodes analyzing different audio sources
-2. **Cloud Storage**: Optional S3-compatible storage for audio clips and spectrograms
-3. **Advanced ML Models**: Support for custom-trained models beyond BirdNET
-4. **Real-Time Dashboards**: WebSocket-based live spectrogram streaming
-5. **Mobile Apps**: Native iOS/Android apps with push notifications
-6. **GraphQL API**: Alternative API for complex queries and subscriptions
-
-### Scalability
-
-**Horizontal Scaling:**
-
-- Multiple BirdNET-Go instances behind load balancer
-- Shared MySQL database for detections
-- Redis for session storage and caching
-- Message queue (NATS/RabbitMQ) for detection distribution
-
-**Vertical Scaling:**
-
-- GPU acceleration for BirdNET inference
-- Multi-threaded audio processing
-- Memory-mapped file I/O for large audio files
-
----
-
-## Conclusion
-
-BirdNET-Go's architecture balances simplicity with power:
-
-- **Go backend**: Fast, efficient, cross-platform
-- **Svelte 5 frontend**: Modern, reactive, type-safe
-- **Single binary**: Easy deployment and distribution
-- **Privacy-first**: No telemetry without opt-in
-- **Extensible**: Clean API for integrations
 
 For questions or contributions, see [CONTRIBUTING.md](CONTRIBUTING.md) or join our [Discord](https://discord.gg/gcSCFGUtsd).
