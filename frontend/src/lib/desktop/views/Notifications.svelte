@@ -228,7 +228,6 @@
 
   // Get notification card class
   function getNotificationCardClass(notification) {
-    logger.debug('getNotificationCardClass');
     let classes = 'card bg-base-100 shadow-sm hover:shadow-md transition-shadow';
     if (!notification.read) {
       classes += ' bg-base-200/30';
@@ -241,7 +240,6 @@
 
   // Check if notification is clickable
   function isClickable(notification) {
-    logger.debug('isClickable');
     return notification.type === 'detection' && notification.metadata?.note_id;
   }
 
