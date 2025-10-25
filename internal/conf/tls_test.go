@@ -139,42 +139,34 @@ func TestTLSManager(t *testing.T) {
 	}
 
 	t.Run("SaveAndRetrieveCertificates", func(t *testing.T) {
-		t.Parallel()
 		testSaveAndRetrieveCertificates(t, tm, testData)
 	})
 
 	t.Run("RemoveCertificate", func(t *testing.T) {
-		t.Parallel()
 		testRemoveCertificate(t, tm)
 	})
 
 	t.Run("RemoveAllCertificates", func(t *testing.T) {
-		t.Parallel()
 		testRemoveAllCertificates(t, tm, testData)
 	})
 
 	t.Run("EmptyContentRemovesCertificate", func(t *testing.T) {
-		t.Parallel()
 		testEmptyContentRemovesCertificate(t, tm, testData.caCert)
 	})
 
 	t.Run("InvalidCertificateValidation", func(t *testing.T) {
-		t.Parallel()
 		testInvalidCertificateValidation(t, tm)
 	})
 
 	t.Run("ConcurrentAccess", func(t *testing.T) {
-		t.Parallel()
 		testConcurrentAccess(t, tm, testData.caCert)
 	})
 
 	t.Run("ServiceIsolation", func(t *testing.T) {
-		t.Parallel()
 		testServiceIsolation(t, tm, testData.caCert)
 	})
 
 	t.Run("DirectoryPermissions", func(t *testing.T) {
-		t.Parallel()
 		testDirectoryPermissions(t, tempDir, testData.caCert)
 	})
 }
