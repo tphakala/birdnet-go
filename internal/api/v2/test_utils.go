@@ -78,10 +78,6 @@ func setupAnalyticsTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterfa
 
 	// Create a test datastore
 	mockDS := mocks.NewMockInterface(t)
-	mockDS.On("Open").Return(nil)
-
-	// Call Open to satisfy the mock expectation
-	_ = mockDS.Open()
 
 	// Create a controller with the test datastore
 	controller := &Controller{
