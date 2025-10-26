@@ -100,7 +100,8 @@ func main() {
 	}
 
 	// Build genus map and species index
-	for _, genus := range fullData {
+	for i := range fullData {
+		genus := &fullData[i]
 		// Use lowercase genus name as key for case-insensitive lookups
 		genusKey := strings.ToLower(genus.Genus)
 
@@ -142,7 +143,7 @@ func main() {
 	}
 
 	outputFile := "/tmp/genus_taxonomy.json"
-	if err := os.WriteFile(outputFile, optimizedData2, 0644); err != nil {
+	if err := os.WriteFile(outputFile, optimizedData2, 0o644); err != nil {
 		log.Fatalf("Failed to write optimized data: %v", err)
 	}
 
@@ -178,7 +179,7 @@ func main() {
 	if genus, ok := db.SpeciesIndex[strings.ToLower(testSpecies)]; ok {
 		if meta, ok := db.Genera[genus]; ok {
 			fmt.Printf("\n1. Species to Genus:\n")
-			fmt.Printf("   %s -> %s (%s, %s)\n", testSpecies, strings.Title(genus), meta.Family, meta.Order)
+			fmt.Printf("   %s -> %s (%s, %s)\n", testSpecies, strings.ToUpper(genus[:1])+genus[1:], meta.Family, meta.Order)
 		}
 	}
 
@@ -186,7 +187,7 @@ func main() {
 	testGenus := "corvus"
 	if meta, ok := db.Genera[testGenus]; ok {
 		fmt.Printf("\n2. Genus to Species:\n")
-		fmt.Printf("   %s has %d species:\n", strings.Title(testGenus), len(meta.Species))
+		fmt.Printf("   %s has %d species:\n", strings.ToUpper(testGenus[:1])+testGenus[1:], len(meta.Species))
 		for i, sp := range meta.Species {
 			if i < 5 {
 				fmt.Printf("   - %s\n", sp)
@@ -202,11 +203,11 @@ func main() {
 	if meta, ok := db.Families[testFamily]; ok {
 		fmt.Printf("\n3. Family to Genera:\n")
 		fmt.Printf("   %s (%s) has %d genera and %d species\n",
-			strings.Title(testFamily), meta.FamilyCommon, len(meta.Genera), meta.SpeciesCount)
+			strings.ToUpper(testFamily[:1])+testFamily[1:], meta.FamilyCommon, len(meta.Genera), meta.SpeciesCount)
 		fmt.Printf("   First 5 genera:\n")
 		for i, g := range meta.Genera {
 			if i < 5 {
-				fmt.Printf("   - %s\n", strings.Title(g))
+				fmt.Printf("   - %s\n", strings.ToUpper(g[:1])+g[1:])
 			}
 		}
 		if len(meta.Genera) > 5 {
