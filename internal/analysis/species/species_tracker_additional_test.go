@@ -19,12 +19,12 @@ func TestUpdateSpeciesComprehensive(t *testing.T) {
 
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 		// BG-17: InitFromDatabase requires notification history
 		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil)
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -122,12 +122,12 @@ func TestBuildSpeciesStatusLocked(t *testing.T) {
 
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 		// BG-17: InitFromDatabase requires notification history
 		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil)
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -297,7 +297,7 @@ func TestGetSpeciesStatusCacheHit(t *testing.T) {
 
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -338,12 +338,12 @@ func TestConcurrentBatchOperations(t *testing.T) {
 
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 		// BG-17: InitFromDatabase requires notification history
 		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil)
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -394,10 +394,10 @@ func TestNotificationSuppressionEdgeCases(t *testing.T) {
 
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: RecordNotificationSent saves to database (called in subtests)
 	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
 		Return(nil).Maybe()
@@ -456,7 +456,15 @@ func TestCleanupOldNotificationRecordsLocked(t *testing.T) {
 
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
+	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+		Return(nil).Maybe()
+	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return(int64(0), nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:                      true,
@@ -502,7 +510,15 @@ func TestEmptySeasonMap(t *testing.T) {
 
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
+	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+		Return(nil).Maybe()
+	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return(int64(0), nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -547,7 +563,7 @@ func TestInitFromDatabaseWithValidData(t *testing.T) {
 
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-		Return(historicalData, nil)
+		Return(historicalData, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything,
 		mock.AnythingOfType("string"), mock.AnythingOfType("string"),
 		mock.AnythingOfType("int"), mock.AnythingOfType("int")).

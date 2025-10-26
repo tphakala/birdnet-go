@@ -23,12 +23,12 @@ func TestNegativeDaysFixValidation(t *testing.T) {
 	// Create tracker
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -105,12 +105,12 @@ func TestConcurrentAccessFixValidation(t *testing.T) {
 	// Create tracker
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -193,12 +193,12 @@ func TestPrecisionEdgeCases(t *testing.T) {
 	// Create tracker
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,

@@ -306,7 +306,7 @@ func TestDatabaseFailureRecovery(t *testing.T) {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, fmt.Errorf("lifetime data load failed"))
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.NewSpeciesData{}, nil)
+					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 			case "timeout_then_success":
 				// First call fails, subsequent calls succeed
@@ -315,33 +315,33 @@ func TestDatabaseFailureRecovery(t *testing.T) {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{
 						{ScientificName: "Test_Species", FirstSeenDate: "2024-01-01"},
-					}, nil)
+					}, nil).Maybe()
 		// BG-17: InitFromDatabase requires notification history
 		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil)
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.NewSpeciesData{}, nil)
+					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 			case "empty_results":
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.NewSpeciesData{}, nil)
+					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 				// BG-17: InitFromDatabase now loads notification history
 				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-					Return([]datastore.NotificationHistory{}, nil)
+					Return([]datastore.NotificationHistory{}, nil).Maybe()
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.NewSpeciesData{}, nil)
+					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 			case "corrupt_data":
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{
 						{ScientificName: "", FirstSeenDate: "invalid-date"},            // Invalid data
 						{ScientificName: "Valid_Species", FirstSeenDate: "2024-01-01"}, // Valid data
-					}, nil)
+					}, nil).Maybe()
 		// BG-17: InitFromDatabase requires notification history
 		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil)
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.NewSpeciesData{}, nil)
+					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 			}
 
 			settings := &conf.SpeciesTrackingSettings{

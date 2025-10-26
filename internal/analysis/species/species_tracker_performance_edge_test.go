@@ -70,9 +70,9 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 			}
 
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return(lifetimeData, nil)
+				Return(lifetimeData, nil).Maybe()
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]datastore.NewSpeciesData{}, nil)
+				Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 			settings := &conf.SpeciesTrackingSettings{
 				Enabled:              true,
@@ -225,12 +225,12 @@ func TestCacheEvictionUnderPressure(t *testing.T) {
 	// Create tracker with forced cache limit conditions
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,

@@ -162,7 +162,7 @@ func TestBuildSpeciesStatusLocked_CriticalReliability(t *testing.T) {
 			// Create mock datastore
 			ds := mocks.NewMockInterface(t)
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return(tt.lifetimeData, nil)
+				Return(tt.lifetimeData, nil).Maybe()
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return(tt.yearlyData, nil).Maybe()
 			if len(tt.seasonalData) > 0 {
@@ -330,12 +330,12 @@ func TestComputeCurrentSeason_CriticalReliability(t *testing.T) {
 			// Create minimal tracker for season testing
 			ds := mocks.NewMockInterface(t)
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]datastore.NewSpeciesData{}, nil)
+				Return([]datastore.NewSpeciesData{}, nil).Maybe()
 			// BG-17: InitFromDatabase now loads notification history
 			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-				Return([]datastore.NotificationHistory{}, nil)
+				Return([]datastore.NotificationHistory{}, nil).Maybe()
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]datastore.NewSpeciesData{}, nil)
+				Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 			settings := &conf.SpeciesTrackingSettings{
 				Enabled:              true,
@@ -412,12 +412,12 @@ func TestDateRangeFunctions_CriticalReliability(t *testing.T) {
 			// Create tracker for date range testing
 			ds := mocks.NewMockInterface(t)
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]datastore.NewSpeciesData{}, nil)
+				Return([]datastore.NewSpeciesData{}, nil).Maybe()
 			// BG-17: InitFromDatabase now loads notification history
 			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-				Return([]datastore.NotificationHistory{}, nil)
+				Return([]datastore.NotificationHistory{}, nil).Maybe()
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]datastore.NewSpeciesData{}, nil)
+				Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 			settings := &conf.SpeciesTrackingSettings{
 				Enabled:              true,

@@ -37,10 +37,10 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 					Return([]datastore.NewSpeciesData{
 						{ScientificName: "Lifetime_Species_1", FirstSeenDate: "2024-01-01"},
 						{ScientificName: "Lifetime_Species_2", FirstSeenDate: "2024-02-01"},
-					}, nil)
+					}, nil).Maybe()
 		// BG-17: InitFromDatabase requires notification history
 		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil)
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 				// Yearly data
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{
@@ -97,10 +97,10 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 			func(ds *mocks.MockInterface) {
 				// Lifetime succeeds
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.NewSpeciesData{}, nil)
+					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 				// BG-17: InitFromDatabase now loads notification history
 				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-					Return([]datastore.NotificationHistory{}, nil)
+					Return([]datastore.NotificationHistory{}, nil).Maybe()
 				// Yearly fails
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, fmt.Errorf("query timeout"))
@@ -119,10 +119,10 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 			func(ds *mocks.MockInterface) {
 				// Lifetime succeeds
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.NewSpeciesData{}, nil)
+					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 				// BG-17: InitFromDatabase now loads notification history
 				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-					Return([]datastore.NotificationHistory{}, nil)
+					Return([]datastore.NotificationHistory{}, nil).Maybe()
 				// First season fails
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, fmt.Errorf("seasonal query failed")).Once()
@@ -140,10 +140,10 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 			"empty_database_initialization",
 			func(ds *mocks.MockInterface) {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.NewSpeciesData{}, nil)
+					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 				// BG-17: InitFromDatabase now loads notification history
 				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-					Return([]datastore.NotificationHistory{}, nil)
+					Return([]datastore.NotificationHistory{}, nil).Maybe()
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 			},

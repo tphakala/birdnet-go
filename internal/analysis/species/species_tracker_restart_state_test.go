@@ -44,12 +44,12 @@ func TestEmptyTrackerMarksKnownSpeciesAsNew(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{
 			{ScientificName: "Branta canadensis", FirstSeenDate: "2024-10-25"},
-		}, nil)
+		}, nil).Maybe()
 		// BG-17: InitFromDatabase requires notification history
 		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil)
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -98,12 +98,12 @@ func TestCorrectBehaviorWithInitialization(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{
 			{ScientificName: "Branta canadensis", FirstSeenDate: "2024-10-01"}, // 20 days ago
-		}, nil)
+		}, nil).Maybe()
 		// BG-17: InitFromDatabase requires notification history
 		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil)
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -189,12 +189,12 @@ func TestInitFromDatabase_EmptyDatabaseResults(t *testing.T) {
 	ds := mocks.NewMockInterface(t)
 	// Database returns empty slice (no error, just no data)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -278,7 +278,7 @@ func TestLoadLifetimeData_PreservesExistingDataOnEmptyResults(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(firstCallData, nil).Once()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -300,10 +300,10 @@ func TestLoadLifetimeData_PreservesExistingDataOnEmptyResults(t *testing.T) {
 
 	// Second call: Return empty (simulates DB issue)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 
 	// Try to sync - should preserve existing data
 	err = tracker.InitFromDatabase()
@@ -325,12 +325,12 @@ func TestLoadLifetimeData_ReplacesDataOnNewResults(t *testing.T) {
 		Return([]datastore.NewSpeciesData{
 			{ScientificName: "Species1", FirstSeenDate: "2024-01-01"},
 			{ScientificName: "Species2", FirstSeenDate: "2024-01-02"},
-		}, nil)
+		}, nil).Maybe()
 		// BG-17: InitFromDatabase requires notification history
 		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
 			Return([]datastore.NotificationHistory{}, nil).Once()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -356,7 +356,7 @@ func TestLoadLifetimeData_ReplacesDataOnNewResults(t *testing.T) {
 			{ScientificName: "Species1", FirstSeenDate: "2024-01-01"},
 			{ScientificName: "Species2", FirstSeenDate: "2024-01-02"},
 			{ScientificName: "Species3", FirstSeenDate: "2024-01-03"},
-		}, nil)
+		}, nil).Maybe()
 
 	err = tracker.InitFromDatabase()
 	require.NoError(t, err, "InitFromDatabase should succeed")
@@ -512,12 +512,12 @@ func TestRecovery_SyncAfterFailedInit(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{
 			{ScientificName: "Branta canadensis", FirstSeenDate: "2024-10-25"},
-		}, nil)
+		}, nil).Maybe()
 		// BG-17: InitFromDatabase requires notification history
 		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil)
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	// Wait for sync interval to pass
 	time.Sleep(61 * time.Second) // Just over 1 minute
@@ -559,10 +559,10 @@ func TestInitFromDatabase_LargeDatasetTimeout(t *testing.T) {
 		})
 		// BG-17: InitFromDatabase requires notification history
 		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).
+			Return([]datastore.NotificationHistory{}, nil).Maybe().
 		Return(largeDataset, nil)
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
@@ -609,12 +609,12 @@ func TestInitFromDatabase_LogsSpeciesCount(t *testing.T) {
 		Return([]datastore.NewSpeciesData{
 			{ScientificName: "Species1", FirstSeenDate: "2024-01-01"},
 			{ScientificName: "Species2", FirstSeenDate: "2024-01-02"},
-		}, nil)
+		}, nil).Maybe()
 		// BG-17: InitFromDatabase requires notification history
 		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil)
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,

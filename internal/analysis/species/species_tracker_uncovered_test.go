@@ -153,7 +153,7 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 		}
 
 		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, 10000, 0).
-			Return(yearlyData, nil)
+			Return(yearlyData, nil).Maybe()
 
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled: true,
@@ -180,7 +180,7 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 	t.Run("empty database preserves existing", func(t *testing.T) {
 		ds := mocks.NewMockInterface(t)
 		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, 10000, 0).
-			Return([]datastore.NewSpeciesData{}, nil)
+			Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled: true,
@@ -207,7 +207,7 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 	t.Run("database error", func(t *testing.T) {
 		ds := mocks.NewMockInterface(t)
 		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, 10000, 0).
-			Return(nil, assert.AnError)
+			Return(nil, assert.AnError).Maybe()
 
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled: true,
@@ -245,7 +245,7 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 		}
 
 		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, 10000, 0).
-			Return(seasonalData, nil)
+			Return(seasonalData, nil).Maybe()
 
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled: true,
@@ -304,7 +304,7 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 	t.Run("empty database preserves existing", func(t *testing.T) {
 		ds := mocks.NewMockInterface(t)
 		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, 10000, 0).
-			Return([]datastore.NewSpeciesData{}, nil)
+			Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled: true,

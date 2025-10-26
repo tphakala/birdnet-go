@@ -109,18 +109,19 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 			ds := mocks.NewMockInterface(t)
 			if tt.mockError != nil {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return(nil, tt.mockError)
+					Return(nil, tt.mockError).Maybe()
 			} else {
-				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).
-					Return(tt.mockData, nil)
+				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(tt.mockData, nil).Maybe()
 			}
 
-			// Mock other required methods
+			// BG-17: InitFromDatabase requires notification history (optional)
+			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+				Return([]datastore.NotificationHistory{}, nil).Maybe()
+
+			// Mock other required methods (optional based on settings)
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]datastore.NewSpeciesData{}, nil)
+				Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 			// Create tracker
 			settings := &conf.SpeciesTrackingSettings{
@@ -247,17 +248,17 @@ func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 			// Create mock datastore
 			ds := mocks.NewMockInterface(t)
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]datastore.NewSpeciesData{}, nil)
+				Return([]datastore.NewSpeciesData{}, nil).Maybe()
 			// BG-17: InitFromDatabase now loads notification history
 			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-				Return([]datastore.NotificationHistory{}, nil) // Lifetime data
+				Return([]datastore.NotificationHistory{}, nil).Maybe() // Lifetime data
 
 			if tt.mockError != nil {
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return(nil, tt.mockError)
+					Return(nil, tt.mockError).Maybe()
 			} else {
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return(tt.mockData, nil)
+					Return(tt.mockData, nil).Maybe()
 			}
 
 			// Create tracker with yearly tracking enabled
