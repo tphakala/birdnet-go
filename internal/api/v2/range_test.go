@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // MockBirdNET is a mock implementation of BirdNET for testing
@@ -44,7 +45,7 @@ func (m *MockProcessor) GetBirdNET() *birdnet.BirdNET {
 }
 
 // setupRangeTestEnvironment creates a test environment specifically for range filter tests
-func setupRangeTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller) {
+func setupRangeTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Controller) {
 	t.Helper()
 
 	e, mockDS, controller := setupTestEnvironment(t)

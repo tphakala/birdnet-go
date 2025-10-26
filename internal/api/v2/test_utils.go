@@ -3,30 +3,20 @@
 package api
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/mock"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
-	"gorm.io/gorm"
 )
-
-// MockDataStore implements the datastore.Interface for testing
-// This is a shared implementation that can be used across all test files
-// It provides a full mock of all datastore methods with proper expectations
-type MockDataStore struct {
-	mock.Mock
-}
 
 // safeSlice is a helper for mock methods returning slices.
 // It safely handles nil arguments and performs type assertion.
@@ -55,336 +45,6 @@ func safePointer[T any](args mock.Arguments, index int) *T {
 	}
 	return nil // Return nil if the argument itself is nil
 }
-
-// Implement required methods of the datastore.Interface
-func (m *MockDataStore) Open() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-func (m *MockDataStore) Close() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-func (m *MockDataStore) SetMetrics(metrics *datastore.Metrics) {
-	// Mock implementation - no-op
-}
-
-func (m *MockDataStore) SetSunCalcMetrics(suncalcMetrics any) {
-	// Mock implementation - no-op
-}
-
-func (m *MockDataStore) Optimize(ctx context.Context) error {
-	args := m.Called(ctx)
-	return args.Error(0)
-}
-
-func (m *MockDataStore) Save(note *datastore.Note, results []datastore.Results) error {
-	args := m.Called(note, results)
-	return args.Error(0)
-}
-
-func (m *MockDataStore) Delete(id string) error {
-	args := m.Called(id)
-	return args.Error(0)
-}
-
-func (m *MockDataStore) Get(id string) (datastore.Note, error) {
-	args := m.Called(id)
-	if args.Get(0) == nil {
-		return datastore.Note{}, args.Error(1)
-	}
-	return args.Get(0).(datastore.Note), args.Error(1)
-}
-
-func (m *MockDataStore) GetAllNotes() ([]datastore.Note, error) {
-	args := m.Called()
-	return safeSlice[datastore.Note](args, 0), args.Error(1)
-}
-
-func (m *MockDataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
-	args := m.Called(selectedDate, minConfidenceNormalized)
-	return safeSlice[datastore.Note](args, 0), args.Error(1)
-}
-
-func (m *MockDataStore) GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
-	args := m.Called(date, commonName, minConfidenceNormalized)
-	return args.Get(0).([24]int), args.Error(1)
-}
-
-func (m *MockDataStore) SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit, offset int) ([]datastore.Note, error) {
-	args := m.Called(species, date, hour, duration, sortAscending, limit, offset)
-	return safeSlice[datastore.Note](args, 0), args.Error(1)
-}
-
-func (m *MockDataStore) GetLastDetections(numDetections int) ([]datastore.Note, error) {
-	args := m.Called(numDetections)
-	return safeSlice[datastore.Note](args, 0), args.Error(1)
-}
-
-func (m *MockDataStore) GetAllDetectedSpecies() ([]datastore.Note, error) {
-	args := m.Called()
-	return safeSlice[datastore.Note](args, 0), args.Error(1)
-}
-
-func (m *MockDataStore) SearchNotes(query string, sortAscending bool, limit, offset int) ([]datastore.Note, error) {
-	args := m.Called(query, sortAscending, limit, offset)
-	return safeSlice[datastore.Note](args, 0), args.Error(1)
-}
-func (m *MockDataStore) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
-	args := m.Called(filters)
-	return safeSlice[datastore.Note](args, 0), args.Get(1).(int64), args.Error(2)
-}
-
-func (m *MockDataStore) GetNoteClipPath(noteID string) (string, error) {
-	args := m.Called(noteID)
-	return args.String(0), args.Error(1)
-}
-
-func (m *MockDataStore) DeleteNoteClipPath(noteID string) error {
-	args := m.Called(noteID)
-	return args.Error(0)
-}
-
-func (m *MockDataStore) GetNoteReview(noteID string) (*datastore.NoteReview, error) {
-	args := m.Called(noteID)
-	return args.Get(0).(*datastore.NoteReview), args.Error(1)
-}
-
-func (m *MockDataStore) SaveNoteReview(review *datastore.NoteReview) error {
-	args := m.Called(review)
-	return args.Error(0)
-}
-
-func (m *MockDataStore) GetNoteComments(noteID string) ([]datastore.NoteComment, error) {
-	args := m.Called(noteID)
-	return safeSlice[datastore.NoteComment](args, 0), args.Error(1)
-}
-
-func (m *MockDataStore) SaveNoteComment(comment *datastore.NoteComment) error {
-	args := m.Called(comment)
-	return args.Error(0)
-}
-
-func (m *MockDataStore) UpdateNoteComment(commentID, entry string) error {
-	args := m.Called(commentID, entry)
-	return args.Error(0)
-}
-
-func (m *MockDataStore) DeleteNoteComment(commentID string) error {
-	args := m.Called(commentID)
-	return args.Error(0)
-}
-
-func (m *MockDataStore) SaveDailyEvents(dailyEvents *datastore.DailyEvents) error {
-	args := m.Called(dailyEvents)
-	return args.Error(0)
-}
-
-func (m *MockDataStore) GetDailyEvents(date string) (datastore.DailyEvents, error) {
-	args := m.Called(date)
-	return args.Get(0).(datastore.DailyEvents), args.Error(1)
-}
-
-func (m *MockDataStore) SaveHourlyWeather(hourlyWeather *datastore.HourlyWeather) error {
-	args := m.Called(hourlyWeather)
-	return args.Error(0)
-}
-
-func (m *MockDataStore) GetHourlyWeather(date string) ([]datastore.HourlyWeather, error) {
-	args := m.Called(date)
-	return safeSlice[datastore.HourlyWeather](args, 0), args.Error(1)
-}
-
-func (m *MockDataStore) LatestHourlyWeather() (*datastore.HourlyWeather, error) {
-	args := m.Called()
-	return args.Get(0).(*datastore.HourlyWeather), args.Error(1)
-}
-
-func (m *MockDataStore) GetHourlyDetections(date, hour string, duration, limit, offset int) ([]datastore.Note, error) {
-	args := m.Called(date, hour, duration, limit, offset)
-	return safeSlice[datastore.Note](args, 0), args.Error(1)
-}
-
-func (m *MockDataStore) CountSpeciesDetections(species, date, hour string, duration int) (int64, error) {
-	args := m.Called(species, date, hour, duration)
-	return args.Get(0).(int64), args.Error(1)
-}
-
-func (m *MockDataStore) CountSearchResults(query string) (int64, error) {
-	args := m.Called(query)
-	return args.Get(0).(int64), args.Error(1)
-}
-
-func (m *MockDataStore) Transaction(fc func(tx *gorm.DB) error) error {
-	args := m.Called(fc)
-	return args.Error(0)
-}
-
-func (m *MockDataStore) LockNote(noteID string) error {
-	args := m.Called(noteID)
-	return args.Error(0)
-}
-
-func (m *MockDataStore) UnlockNote(noteID string) error {
-	args := m.Called(noteID)
-	return args.Error(0)
-}
-
-func (m *MockDataStore) GetNoteLock(noteID string) (*datastore.NoteLock, error) {
-	args := m.Called(noteID)
-	return args.Get(0).(*datastore.NoteLock), args.Error(1)
-}
-
-func (m *MockDataStore) IsNoteLocked(noteID string) (bool, error) {
-	args := m.Called(noteID)
-	return args.Bool(0), args.Error(1)
-}
-
-func (m *MockDataStore) GetImageCache(query datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
-	args := m.Called(query)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*datastore.ImageCache), args.Error(1)
-}
-
-func (m *MockDataStore) SaveImageCache(cache *datastore.ImageCache) error {
-	args := m.Called(cache)
-	return args.Error(0)
-}
-
-func (m *MockDataStore) GetAllImageCaches(providerName string) ([]datastore.ImageCache, error) {
-	args := m.Called(providerName)
-	return safeSlice[datastore.ImageCache](args, 0), args.Error(1)
-}
-
-func (m *MockDataStore) GetImageCacheBatch(providerName string, scientificNames []string) (map[string]*datastore.ImageCache, error) {
-	args := m.Called(providerName, scientificNames)
-	if result := args.Get(0); result != nil {
-		return result.(map[string]*datastore.ImageCache), args.Error(1)
-	}
-	return nil, args.Error(1)
-}
-
-func (m *MockDataStore) GetLockedNotesClipPaths() ([]string, error) {
-	args := m.Called()
-	return safeSlice[string](args, 0), args.Error(1)
-}
-
-func (m *MockDataStore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
-	args := m.Called(date, hour, duration)
-	return args.Get(0).(int64), args.Error(1)
-}
-
-func (m *MockDataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
-	args := m.Called(ctx, startDate, endDate)
-	return safeSlice[datastore.SpeciesSummaryData](args, 0), args.Error(1)
-}
-
-func (m *MockDataStore) GetHourlyAnalyticsData(ctx context.Context, date, species string) ([]datastore.HourlyAnalyticsData, error) {
-	args := m.Called(ctx, date, species)
-	return safeSlice[datastore.HourlyAnalyticsData](args, 0), args.Error(1)
-}
-
-func (m *MockDataStore) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
-	args := m.Called(ctx, startDate, endDate, species)
-	return safeSlice[datastore.DailyAnalyticsData](args, 0), args.Error(1)
-}
-
-func (m *MockDataStore) GetDetectionTrends(ctx context.Context, period string, limit int) ([]datastore.DailyAnalyticsData, error) {
-	args := m.Called(ctx, period, limit)
-	return safeSlice[datastore.DailyAnalyticsData](args, 0), args.Error(1)
-}
-
-// GetHourlyDistribution implements the datastore.Interface GetHourlyDistribution method
-func (m *MockDataStore) GetHourlyDistribution(ctx context.Context, startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
-	args := m.Called(ctx, startDate, endDate, species)
-	return safeSlice[datastore.HourlyDistributionData](args, 0), args.Error(1)
-}
-
-func (m *MockDataStore) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
-	args := m.Called(filters)
-	return safeSlice[datastore.DetectionRecord](args, 0), args.Int(1), args.Error(2)
-}
-
-// Dynamic threshold methods
-func (m *MockDataStore) SaveDynamicThreshold(threshold *datastore.DynamicThreshold) error {
-	args := m.Called(threshold)
-	return args.Error(0)
-}
-func (m *MockDataStore) GetDynamicThreshold(speciesName string) (*datastore.DynamicThreshold, error) {
-	args := m.Called(speciesName)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*datastore.DynamicThreshold), args.Error(1)
-}
-func (m *MockDataStore) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicThreshold, error) {
-	args := m.Called(limit)
-	return safeSlice[datastore.DynamicThreshold](args, 0), args.Error(1)
-}
-func (m *MockDataStore) DeleteDynamicThreshold(speciesName string) error {
-	args := m.Called(speciesName)
-	return args.Error(0)
-}
-func (m *MockDataStore) DeleteExpiredDynamicThresholds(before time.Time) (int64, error) {
-	args := m.Called(before)
-	if args.Get(0) == nil {
-		return 0, args.Error(1)
-	}
-	return args.Get(0).(int64), args.Error(1)
-}
-func (m *MockDataStore) UpdateDynamicThresholdExpiry(speciesName string, expiresAt time.Time) error {
-	args := m.Called(speciesName, expiresAt)
-	return args.Error(0)
-}
-func (m *MockDataStore) BatchSaveDynamicThresholds(thresholds []datastore.DynamicThreshold) error {
-	args := m.Called(thresholds)
-	return args.Error(0)
-}
-
-// GetNewSpeciesDetections implements the datastore.Interface GetNewSpeciesDetections method
-func (m *MockDataStore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	args := m.Called(ctx, startDate, endDate, limit, offset)
-	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
-}
-
-// GetSpeciesFirstDetectionInPeriod implements the datastore.Interface GetSpeciesFirstDetectionInPeriod method
-func (m *MockDataStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	args := m.Called(ctx, startDate, endDate, limit, offset)
-	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
-}
-
-// BG-17 fix: Add notification history methods
-func (m *MockDataStore) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
-	args := m.Called(after)
-	return safeSlice[datastore.NotificationHistory](args, 0), args.Error(1)
-}
-
-func (m *MockDataStore) GetNotificationHistory(scientificName, notificationType string) (*datastore.NotificationHistory, error) {
-	args := m.Called(scientificName, notificationType)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*datastore.NotificationHistory), args.Error(1)
-}
-
-func (m *MockDataStore) SaveNotificationHistory(history *datastore.NotificationHistory) error {
-	args := m.Called(history)
-	return args.Error(0)
-}
-
-func (m *MockDataStore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
-	args := m.Called(before)
-	// Protect against nil return value to avoid panic
-	if v := args.Get(0); v != nil {
-		return v.(int64), args.Error(1)
-	}
-	return 0, args.Error(1)
-}
-
 // TestImageProvider implements the imageprovider.Provider interface for testing
 // with a function field for easier test setup.
 // Use this when you need a simple mock with customizable behavior via FetchFunc.
@@ -410,15 +70,15 @@ func NewTestMetrics(t *testing.T) *observability.Metrics {
 	return metrics
 }
 
-// setupAnalyticsTestEnvironment creates a test environment with Echo, MockDataStore, and Controller
+// setupAnalyticsTestEnvironment creates a test environment with Echo, mocks.MockInterface, and Controller
 // for analytics tests
-func setupAnalyticsTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller) {
+func setupAnalyticsTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Controller) {
 	t.Helper()
 	// Create a new Echo instance
 	e := echo.New()
 
 	// Create a test datastore
-	mockDS := new(MockDataStore)
+	mockDS := mocks.NewMockInterface(t)
 	mockDS.On("Open").Return(nil)
 
 	// Call Open to satisfy the mock expectation
@@ -435,315 +95,6 @@ func setupAnalyticsTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *C
 	// controller.initRoutes()
 
 	return e, mockDS, controller
-}
-
-// MockDataStoreV2 provides a mock implementation for datastore.Interface
-// Focused on methods used specifically in newer V2 analytics endpoints
-// Embeds testify/mock for standard expectation handling
-type MockDataStoreV2 struct {
-	mock.Mock // Embed testify mock
-	// Removed function fields like GetTopBirdsDataFunc, etc.
-}
-
-// Implement required methods of the datastore.Interface using testify/mock
-
-func (m *MockDataStoreV2) GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]datastore.Note, error) {
-	args := m.Called(selectedDate, minConfidenceNormalized)
-	return safeSlice[datastore.Note](args, 0), args.Error(1)
-}
-
-func (m *MockDataStoreV2) GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error) {
-	args := m.Called(date, commonName, minConfidenceNormalized)
-	return args.Get(0).([24]int), args.Error(1)
-}
-
-// GetHourlyDistribution implements the datastore.Interface GetHourlyDistribution method
-func (m *MockDataStoreV2) GetHourlyDistribution(ctx context.Context, startDate, endDate, species string) ([]datastore.HourlyDistributionData, error) {
-	args := m.Called(ctx, startDate, endDate, species)
-	return safeSlice[datastore.HourlyDistributionData](args, 0), args.Error(1)
-}
-
-// ---- Methods below are stubs required by the interface but likely unused in V2 analytics tests ----
-// ---- If needed, implement them fully using m.Called() similar to above methods ----
-
-// Satisfy the remaining methods of the datastore.Interface (with empty implementations)
-// These need to be implemented to satisfy the interface, even if not used directly in tests.
-// If a test needs a specific behavior for one of these, define an expectation using m.On(...)
-
-func (m *MockDataStoreV2) Open() error { args := m.Called(); return args.Error(0) }
-func (m *MockDataStoreV2) Save(note *datastore.Note, results []datastore.Results) error {
-	args := m.Called(note, results)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) Delete(id string) error { args := m.Called(id); return args.Error(0) }
-func (m *MockDataStoreV2) Get(id string) (datastore.Note, error) {
-	args := m.Called(id)
-	return args.Get(0).(datastore.Note), args.Error(1)
-}
-func (m *MockDataStoreV2) Close() error { args := m.Called(); return args.Error(0) }
-func (m *MockDataStoreV2) SetMetrics(metrics *datastore.Metrics) {
-	// Mock implementation - no-op
-}
-
-func (m *MockDataStoreV2) SetSunCalcMetrics(suncalcMetrics any) {
-	// Mock implementation - no-op
-}
-
-func (m *MockDataStoreV2) Optimize(ctx context.Context) error {
-	args := m.Called(ctx)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) GetAllNotes() ([]datastore.Note, error) {
-	args := m.Called()
-	return safeSlice[datastore.Note](args, 0), args.Error(1)
-}
-func (m *MockDataStoreV2) SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit, offset int) ([]datastore.Note, error) {
-	args := m.Called(species, date, hour, duration, sortAscending, limit, offset)
-	return safeSlice[datastore.Note](args, 0), args.Error(1)
-}
-func (m *MockDataStoreV2) GetLastDetections(numDetections int) ([]datastore.Note, error) {
-	args := m.Called(numDetections)
-	return safeSlice[datastore.Note](args, 0), args.Error(1)
-}
-func (m *MockDataStoreV2) GetAllDetectedSpecies() ([]datastore.Note, error) {
-	args := m.Called()
-	return safeSlice[datastore.Note](args, 0), args.Error(1)
-}
-func (m *MockDataStoreV2) SearchNotes(query string, sortAscending bool, limit, offset int) ([]datastore.Note, error) {
-	args := m.Called(query, sortAscending, limit, offset)
-	return safeSlice[datastore.Note](args, 0), args.Error(1)
-}
-func (m *MockDataStoreV2) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
-	args := m.Called(filters)
-	return safeSlice[datastore.Note](args, 0), args.Get(1).(int64), args.Error(2)
-}
-func (m *MockDataStoreV2) GetNoteClipPath(noteID string) (string, error) {
-	args := m.Called(noteID)
-	return args.String(0), args.Error(1)
-}
-func (m *MockDataStoreV2) DeleteNoteClipPath(noteID string) error {
-	args := m.Called(noteID)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) GetNoteReview(noteID string) (*datastore.NoteReview, error) {
-	args := m.Called(noteID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*datastore.NoteReview), args.Error(1)
-}
-func (m *MockDataStoreV2) SaveNoteReview(review *datastore.NoteReview) error {
-	args := m.Called(review)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) GetNoteComments(noteID string) ([]datastore.NoteComment, error) {
-	args := m.Called(noteID)
-	return safeSlice[datastore.NoteComment](args, 0), args.Error(1)
-}
-func (m *MockDataStoreV2) SaveNoteComment(comment *datastore.NoteComment) error {
-	args := m.Called(comment)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) UpdateNoteComment(commentID, entry string) error {
-	args := m.Called(commentID, entry)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) DeleteNoteComment(commentID string) error {
-	args := m.Called(commentID)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) SaveDailyEvents(dailyEvents *datastore.DailyEvents) error {
-	args := m.Called(dailyEvents)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) GetDailyEvents(date string) (datastore.DailyEvents, error) {
-	args := m.Called(date)
-	return args.Get(0).(datastore.DailyEvents), args.Error(1)
-}
-func (m *MockDataStoreV2) SaveHourlyWeather(hourlyWeather *datastore.HourlyWeather) error {
-	args := m.Called(hourlyWeather)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) GetHourlyWeather(date string) ([]datastore.HourlyWeather, error) {
-	args := m.Called(date)
-	return safeSlice[datastore.HourlyWeather](args, 0), args.Error(1)
-}
-func (m *MockDataStoreV2) LatestHourlyWeather() (*datastore.HourlyWeather, error) {
-	args := m.Called()
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*datastore.HourlyWeather), args.Error(1)
-}
-func (m *MockDataStoreV2) GetHourlyDetections(date, hour string, duration, limit, offset int) ([]datastore.Note, error) {
-	args := m.Called(date, hour, duration, limit, offset)
-	return safeSlice[datastore.Note](args, 0), args.Error(1)
-}
-func (m *MockDataStoreV2) CountSpeciesDetections(species, date, hour string, duration int) (int64, error) {
-	args := m.Called(species, date, hour, duration)
-	return args.Get(0).(int64), args.Error(1)
-}
-func (m *MockDataStoreV2) CountSearchResults(query string) (int64, error) {
-	args := m.Called(query)
-	return args.Get(0).(int64), args.Error(1)
-}
-func (m *MockDataStoreV2) Transaction(fc func(tx *gorm.DB) error) error {
-	args := m.Called(fc)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) LockNote(noteID string) error {
-	args := m.Called(noteID)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) UnlockNote(noteID string) error {
-	args := m.Called(noteID)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) GetNoteLock(noteID string) (*datastore.NoteLock, error) {
-	args := m.Called(noteID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*datastore.NoteLock), args.Error(1)
-}
-func (m *MockDataStoreV2) IsNoteLocked(noteID string) (bool, error) {
-	args := m.Called(noteID)
-	return args.Bool(0), args.Error(1)
-}
-func (m *MockDataStoreV2) GetImageCache(query datastore.ImageCacheQuery) (*datastore.ImageCache, error) {
-	args := m.Called(query)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*datastore.ImageCache), args.Error(1)
-}
-func (m *MockDataStoreV2) SaveImageCache(cache *datastore.ImageCache) error {
-	args := m.Called(cache)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) GetAllImageCaches(providerName string) ([]datastore.ImageCache, error) {
-	args := m.Called(providerName)
-	return safeSlice[datastore.ImageCache](args, 0), args.Error(1)
-}
-func (m *MockDataStoreV2) GetImageCacheBatch(providerName string, scientificNames []string) (map[string]*datastore.ImageCache, error) {
-	args := m.Called(providerName, scientificNames)
-	// Handle function return for dynamic mocking
-	if fn, ok := args.Get(0).(func(string, []string) map[string]*datastore.ImageCache); ok {
-		return fn(providerName, scientificNames), args.Error(1)
-	}
-	// Handle regular return
-	if result := args.Get(0); result != nil {
-		return result.(map[string]*datastore.ImageCache), args.Error(1)
-	}
-	return nil, args.Error(1)
-}
-func (m *MockDataStoreV2) GetLockedNotesClipPaths() ([]string, error) {
-	args := m.Called()
-	return safeSlice[string](args, 0), args.Error(1)
-}
-func (m *MockDataStoreV2) CountHourlyDetections(date, hour string, duration int) (int64, error) {
-	args := m.Called(date, hour, duration)
-	return args.Get(0).(int64), args.Error(1)
-}
-func (m *MockDataStoreV2) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
-	args := m.Called(ctx, startDate, endDate)
-	return safeSlice[datastore.SpeciesSummaryData](args, 0), args.Error(1)
-}
-func (m *MockDataStoreV2) GetHourlyAnalyticsData(ctx context.Context, date, species string) ([]datastore.HourlyAnalyticsData, error) {
-	args := m.Called(ctx, date, species)
-	return safeSlice[datastore.HourlyAnalyticsData](args, 0), args.Error(1)
-}
-func (m *MockDataStoreV2) GetDailyAnalyticsData(ctx context.Context, startDate, endDate, species string) ([]datastore.DailyAnalyticsData, error) {
-	args := m.Called(ctx, startDate, endDate, species)
-	return safeSlice[datastore.DailyAnalyticsData](args, 0), args.Error(1)
-}
-
-// GetNewSpeciesDetections implements the datastore.Interface GetNewSpeciesDetections method
-func (m *MockDataStoreV2) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	args := m.Called(ctx, startDate, endDate, limit, offset)
-	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
-}
-
-// GetSpeciesFirstDetectionInPeriod implements the datastore.Interface GetSpeciesFirstDetectionInPeriod method
-func (m *MockDataStoreV2) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	args := m.Called(ctx, startDate, endDate, limit, offset)
-	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
-}
-
-// GetDetectionTrends implements the datastore.Interface GetDetectionTrends method
-func (m *MockDataStoreV2) GetDetectionTrends(ctx context.Context, period string, limit int) ([]datastore.DailyAnalyticsData, error) {
-	args := m.Called(ctx, period, limit)
-	return safeSlice[datastore.DailyAnalyticsData](args, 0), args.Error(1)
-}
-
-// SearchDetections implements the datastore.Interface SearchDetections method
-func (m *MockDataStoreV2) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
-	args := m.Called(filters)
-	return safeSlice[datastore.DetectionRecord](args, 0), args.Int(1), args.Error(2)
-}
-
-// Dynamic threshold methods for MockDataStoreV2
-func (m *MockDataStoreV2) SaveDynamicThreshold(threshold *datastore.DynamicThreshold) error {
-	args := m.Called(threshold)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) GetDynamicThreshold(speciesName string) (*datastore.DynamicThreshold, error) {
-	args := m.Called(speciesName)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*datastore.DynamicThreshold), args.Error(1)
-}
-func (m *MockDataStoreV2) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicThreshold, error) {
-	args := m.Called(limit)
-	return safeSlice[datastore.DynamicThreshold](args, 0), args.Error(1)
-}
-func (m *MockDataStoreV2) DeleteDynamicThreshold(speciesName string) error {
-	args := m.Called(speciesName)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) DeleteExpiredDynamicThresholds(before time.Time) (int64, error) {
-	args := m.Called(before)
-	if args.Get(0) == nil {
-		return 0, args.Error(1)
-	}
-	return args.Get(0).(int64), args.Error(1)
-}
-func (m *MockDataStoreV2) UpdateDynamicThresholdExpiry(speciesName string, expiresAt time.Time) error {
-	args := m.Called(speciesName, expiresAt)
-	return args.Error(0)
-}
-func (m *MockDataStoreV2) BatchSaveDynamicThresholds(thresholds []datastore.DynamicThreshold) error {
-	args := m.Called(thresholds)
-	return args.Error(0)
-}
-
-// BG-17 fix: Add notification history methods
-func (m *MockDataStoreV2) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
-	args := m.Called(after)
-	return safeSlice[datastore.NotificationHistory](args, 0), args.Error(1)
-}
-
-func (m *MockDataStoreV2) GetNotificationHistory(scientificName, notificationType string) (*datastore.NotificationHistory, error) {
-	args := m.Called(scientificName, notificationType)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*datastore.NotificationHistory), args.Error(1)
-}
-
-func (m *MockDataStoreV2) SaveNotificationHistory(history *datastore.NotificationHistory) error {
-	args := m.Called(history)
-	return args.Error(0)
-}
-
-func (m *MockDataStoreV2) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
-	args := m.Called(before)
-	// Protect against nil return value to avoid panic
-	if v := args.Get(0); v != nil {
-		return v.(int64), args.Error(1)
-	}
-	return 0, args.Error(1)
 }
 
 // MockImageProvider is a mock implementation of imageprovider.ImageProvider interface
@@ -763,7 +114,7 @@ func (m *MockImageProvider) Fetch(scientificName string) (imageprovider.BirdImag
 //
 // This function creates a complete test environment for API tests with the following components:
 // 1. Echo instance - A new Echo web framework instance for handling HTTP requests
-// 2. MockDataStore - A mock implementation of the datastore interface for test data
+// 2. mocks.MockInterface - A generated mock implementation of the datastore interface for test data
 // 3. Settings - Default configuration settings for testing
 // 4. Logger - A test logger that outputs to stdout
 // 5. MockImageProvider - A mock image provider for bird images
@@ -771,16 +122,16 @@ func (m *MockImageProvider) Fetch(scientificName string) (imageprovider.BirdImag
 // 7. SunCalc - A mock sun calculator for time-based calculations
 // 8. Control channel - A channel for control messages between components
 //
-// The function returns the Echo instance, MockDataStore, and Controller for use in tests.
+// The function returns the Echo instance, mocks.MockInterface, and Controller for use in tests.
 // Note: Callers are responsible for closing any resources (like channels) when tests complete.
-func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller) {
+func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Controller) {
 	t.Helper()
 
 	// Create Echo instance
 	e := echo.New()
 
 	// Create mock datastore
-	mockDS := new(MockDataStore)
+	mockDS := mocks.NewMockInterface(t)
 
 	// Create settings
 	settings := &conf.Settings{
@@ -840,12 +191,4 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller
 	})
 
 	return e, mockDS, controller
-}
-
-func (m *MockDataStore) GetNote(id int) (datastore.Note, error) {
-	args := m.Called(id)
-	if args.Get(0) == nil {
-		return datastore.Note{}, args.Error(1)
-	}
-	return args.Get(0).(datastore.Note), args.Error(1)
 }
