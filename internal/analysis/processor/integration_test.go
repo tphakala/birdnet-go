@@ -27,6 +27,19 @@ func (m *MockDatastoreAdapter) GetSpeciesFirstDetectionInPeriod(ctx context.Cont
 	return m.ds.GetSpeciesFirstDetectionInPeriod(ctx, startDate, endDate, limit, offset)
 }
 
+// BG-17 fix: Add notification history methods
+func (m *MockDatastoreAdapter) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
+	return m.ds.GetActiveNotificationHistory(after)
+}
+
+func (m *MockDatastoreAdapter) SaveNotificationHistory(history *datastore.NotificationHistory) error {
+	return m.ds.SaveNotificationHistory(history)
+}
+
+func (m *MockDatastoreAdapter) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
+	return m.ds.DeleteExpiredNotificationHistory(before)
+}
+
 // setupIntegrationTestDB creates a real SQLite database for integration testing
 func setupIntegrationTestDB(t *testing.T) *datastore.DataStore {
 	t.Helper()

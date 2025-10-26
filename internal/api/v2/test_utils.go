@@ -357,6 +357,30 @@ func (m *MockDataStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, st
 	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
 }
 
+// BG-17 fix: Add notification history methods
+func (m *MockDataStore) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
+	args := m.Called(after)
+	return safeSlice[datastore.NotificationHistory](args, 0), args.Error(1)
+}
+
+func (m *MockDataStore) GetNotificationHistory(scientificName, notificationType string) (*datastore.NotificationHistory, error) {
+	args := m.Called(scientificName, notificationType)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*datastore.NotificationHistory), args.Error(1)
+}
+
+func (m *MockDataStore) SaveNotificationHistory(history *datastore.NotificationHistory) error {
+	args := m.Called(history)
+	return args.Error(0)
+}
+
+func (m *MockDataStore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
+	args := m.Called(before)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 // TestImageProvider implements the imageprovider.Provider interface for testing
 // with a function field for easier test setup.
 // Use this when you need a simple mock with customizable behavior via FetchFunc.
@@ -688,6 +712,30 @@ func (m *MockDataStoreV2) UpdateDynamicThresholdExpiry(speciesName string, expir
 func (m *MockDataStoreV2) BatchSaveDynamicThresholds(thresholds []datastore.DynamicThreshold) error {
 	args := m.Called(thresholds)
 	return args.Error(0)
+}
+
+// BG-17 fix: Add notification history methods
+func (m *MockDataStoreV2) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
+	args := m.Called(after)
+	return safeSlice[datastore.NotificationHistory](args, 0), args.Error(1)
+}
+
+func (m *MockDataStoreV2) GetNotificationHistory(scientificName, notificationType string) (*datastore.NotificationHistory, error) {
+	args := m.Called(scientificName, notificationType)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*datastore.NotificationHistory), args.Error(1)
+}
+
+func (m *MockDataStoreV2) SaveNotificationHistory(history *datastore.NotificationHistory) error {
+	args := m.Called(history)
+	return args.Error(0)
+}
+
+func (m *MockDataStoreV2) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
+	args := m.Called(before)
+	return args.Get(0).(int64), args.Error(1)
 }
 
 // MockImageProvider is a mock implementation of imageprovider.ImageProvider interface

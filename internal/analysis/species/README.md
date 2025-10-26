@@ -168,12 +168,14 @@ CheckAndUpdateSpecies(scientificName string, detectionTime time.Time) (isNew boo
 // Check if notification should be suppressed
 ShouldSuppressNotification(scientificName string, currentTime time.Time) bool
 
-// Record that notification was sent
+// Record that notification was sent (persists to database - BG-17 fix)
 RecordNotificationSent(scientificName string, sentTime time.Time)
 
-// Cleanup old notification records
+// Cleanup old notification records (memory + database - BG-17 fix)
 CleanupOldNotificationRecords(currentTime time.Time) int
 ```
+
+**BG-17 Fix**: Notification suppression state is now persisted to the database via the `notification_histories` table. This prevents duplicate "new species" notifications after application restarts. The state is automatically loaded during `InitFromDatabase()` and saved asynchronously when notifications are sent.
 
 ### Maintenance
 

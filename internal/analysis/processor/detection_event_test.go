@@ -59,7 +59,7 @@ func TestSpeciesStatusTracking(t *testing.T) {
 	t.Parallel()
 
 	// Create mock datastore using testify/mock
-	mockDS := &MockSpeciesDatastore{}
+	mockDS := &species.MockSpeciesDatastore{}
 	// Note: This test doesn't call InitFromDatabase, so no expectation is needed
 
 	// First detection should be new

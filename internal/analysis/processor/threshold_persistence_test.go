@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
 )
 
@@ -227,6 +228,26 @@ func (m *MockDatastore) BatchSaveDynamicThresholds(thresholds []datastore.Dynami
 		m.thresholds[threshold.SpeciesName] = &threshold
 	}
 	return nil
+}
+
+// BG-17 fix: Add notification history methods
+func (m *MockDatastore) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
+	return []datastore.NotificationHistory{}, nil
+}
+
+func (m *MockDatastore) GetNotificationHistory(scientificName, notificationType string) (*datastore.NotificationHistory, error) {
+	return nil, errors.Newf("notification history not found").
+		Component("datastore").
+		Category(errors.CategoryNotFound).
+		Build()
+}
+
+func (m *MockDatastore) SaveNotificationHistory(history *datastore.NotificationHistory) error {
+	return nil
+}
+
+func (m *MockDatastore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
+	return 0, nil
 }
 
 // createTestProcessor creates a processor with mock datastore for testing

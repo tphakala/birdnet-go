@@ -176,3 +176,16 @@ type DynamicThreshold struct {
 	UpdatedAt     time.Time `gorm:"not null"`                      // Last update time
 	TriggerCount  int       `gorm:"not null;default:0"`            // Total number of times triggered (for statistics)
 }
+
+// NotificationHistory tracks sent notifications to prevent duplicate notifications after restart
+// Similar to DynamicThreshold, this ensures notification suppression state survives application restarts.
+// Resolves BG-17: Species tracker loses state on restart - causes false "New Species" notifications
+type NotificationHistory struct {
+	ID               uint      `gorm:"primaryKey"`
+	ScientificName   string    `gorm:"index:idx_notification_history_species_type,unique;not null;size:200"` // Scientific name of the species
+	NotificationType string    `gorm:"index:idx_notification_history_species_type,unique;not null;size:50;default:new_species"` // Type: "new_species", "yearly", "seasonal"
+	LastSent         time.Time `gorm:"index;not null"`                                                       // When notification was last sent
+	ExpiresAt        time.Time `gorm:"index;not null"`                                                       // When this record expires (2x suppression window)
+	CreatedAt        time.Time `gorm:"not null"`                                                             // When first created
+	UpdatedAt        time.Time `gorm:"not null"`                                                             // Last update time
+}

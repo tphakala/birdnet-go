@@ -100,6 +100,11 @@ type Interface interface {
 	DeleteExpiredDynamicThresholds(before time.Time) (int64, error) // Returns count deleted
 	UpdateDynamicThresholdExpiry(speciesName string, expiresAt time.Time) error
 	BatchSaveDynamicThresholds(thresholds []DynamicThreshold) error
+	// Notification History methods
+	SaveNotificationHistory(history *NotificationHistory) error
+	GetNotificationHistory(scientificName string, notificationType string) (*NotificationHistory, error)
+	GetActiveNotificationHistory(after time.Time) ([]NotificationHistory, error)
+	DeleteExpiredNotificationHistory(before time.Time) (int64, error) // Returns count deleted
 }
 
 // DataStore implements StoreInterface using a GORM database.

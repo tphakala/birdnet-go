@@ -462,6 +462,7 @@ func migrateTables(db *gorm.DB, dbType string, lgr *slog.Logger) (int, error) {
 		{&NoteLock{}, "note_locks"},
 		{&ImageCache{}, "image_caches"},
 		{&DynamicThreshold{}, "dynamic_thresholds"},
+		{&NotificationHistory{}, "notification_histories"}, // BG-17: Notification suppression persistence
 	}
 	
 	lgr.Info("Starting table migrations",
