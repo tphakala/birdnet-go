@@ -111,7 +111,10 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, tt.mockError)
 			} else {
-				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil).
 					Return(tt.mockData, nil)
 			}
 
@@ -417,9 +420,13 @@ func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
 					Return(syncData, nil).Once()
 			}
 
-			// Always setup for period data calls
+			// BG-17: InitFromDatabase requires notification history (optional)
+			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+				Return([]datastore.NotificationHistory{}, nil).Maybe()
+
+			// Always setup for period data calls (optional based on settings)
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]datastore.NewSpeciesData{}, nil)
+				Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 			// Create tracker
 			settings := &conf.SpeciesTrackingSettings{

@@ -38,6 +38,9 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 						{ScientificName: "Lifetime_Species_1", FirstSeenDate: "2024-01-01"},
 						{ScientificName: "Lifetime_Species_2", FirstSeenDate: "2024-02-01"},
 					}, nil)
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil)
 				// Yearly data
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{

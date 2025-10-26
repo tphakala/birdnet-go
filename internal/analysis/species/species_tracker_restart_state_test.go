@@ -45,6 +45,9 @@ func TestEmptyTrackerMarksKnownSpeciesAsNew(t *testing.T) {
 		Return([]datastore.NewSpeciesData{
 			{ScientificName: "Branta canadensis", FirstSeenDate: "2024-10-25"},
 		}, nil)
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil)
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
 
@@ -96,6 +99,9 @@ func TestCorrectBehaviorWithInitialization(t *testing.T) {
 		Return([]datastore.NewSpeciesData{
 			{ScientificName: "Branta canadensis", FirstSeenDate: "2024-10-01"}, // 20 days ago
 		}, nil)
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil)
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
 
@@ -319,7 +325,10 @@ func TestLoadLifetimeData_ReplacesDataOnNewResults(t *testing.T) {
 		Return([]datastore.NewSpeciesData{
 			{ScientificName: "Species1", FirstSeenDate: "2024-01-01"},
 			{ScientificName: "Species2", FirstSeenDate: "2024-01-02"},
-		}, nil).Once()
+		}, nil)
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil).Once()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
 
@@ -504,6 +513,9 @@ func TestRecovery_SyncAfterFailedInit(t *testing.T) {
 		Return([]datastore.NewSpeciesData{
 			{ScientificName: "Branta canadensis", FirstSeenDate: "2024-10-25"},
 		}, nil)
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil)
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
 
@@ -544,7 +556,10 @@ func TestInitFromDatabase_LargeDatasetTimeout(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
 			time.Sleep(2 * time.Second) // Simulate slow query
-		}).
+		})
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil).
 		Return(largeDataset, nil)
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
@@ -595,6 +610,9 @@ func TestInitFromDatabase_LogsSpeciesCount(t *testing.T) {
 			{ScientificName: "Species1", FirstSeenDate: "2024-01-01"},
 			{ScientificName: "Species2", FirstSeenDate: "2024-01-02"},
 		}, nil)
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil)
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
 

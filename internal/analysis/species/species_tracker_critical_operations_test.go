@@ -178,9 +178,9 @@ func TestUpdateSpecies_CriticalReliability(t *testing.T) {
 			ds := mocks.NewMockInterface(t)
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil)
-			// BG-17: InitFromDatabase now loads notification history
+			// BG-17: InitFromDatabase loads notification history (optional - only if suppression enabled)
 			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-				Return([]datastore.NotificationHistory{}, nil)
+				Return([]datastore.NotificationHistory{}, nil).Maybe()
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil)
 
@@ -367,9 +367,9 @@ func TestCheckAndResetPeriods_CriticalReliability(t *testing.T) {
 			ds := mocks.NewMockInterface(t)
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil)
-			// BG-17: InitFromDatabase now loads notification history
+			// BG-17: InitFromDatabase loads notification history (optional - only if suppression enabled)
 			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-				Return([]datastore.NotificationHistory{}, nil)
+				Return([]datastore.NotificationHistory{}, nil).Maybe()
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil)
 
