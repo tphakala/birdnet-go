@@ -17,8 +17,5 @@ packages:
       # Main datastore interface - this is the critical one
       Interface:
         config:
-          with-expecter: true
           filename: "mock_Interface.go"
-          # Generate in a mocks subdirectory
-          dir: "{{.InterfaceDir}}/mocks"
           mockname: "MockInterface"
