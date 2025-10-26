@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"testing"
 
 	"github.com/labstack/echo/v4"
