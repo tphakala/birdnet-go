@@ -3,6 +3,7 @@ package api
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -91,6 +92,10 @@ func (c *Controller) GetGenusSpecies(ctx echo.Context) error {
 		TotalCount:   len(species),
 	}
 
+	// Set cache headers (taxonomy data is static)
+	ctx.Response().Header().Set("Cache-Control", "public, max-age=86400")
+	ctx.Response().Header().Set("Vary", "Accept-Encoding")
+
 	return ctx.JSON(http.StatusOK, response)
 }
 
@@ -144,6 +149,10 @@ func (c *Controller) GetFamilySpecies(ctx echo.Context) error {
 		TotalCount:   len(species),
 	}
 
+	// Set cache headers (taxonomy data is static)
+	ctx.Response().Header().Set("Cache-Control", "public, max-age=86400")
+	ctx.Response().Header().Set("Vary", "Accept-Encoding")
+
 	return ctx.JSON(http.StatusOK, response)
 }
 
@@ -160,9 +169,17 @@ func (c *Controller) GetSpeciesTree(ctx echo.Context) error {
 
 	// Validate scientific name format (basic validation)
 	scientificName = strings.TrimSpace(scientificName)
-	// Replace URL-encoded spaces
-	scientificName = strings.ReplaceAll(scientificName, "+", " ")
-	scientificName = strings.ReplaceAll(scientificName, "%20", " ")
+
+	// Properly decode URL-encoded characters
+	decodedName, err := url.PathUnescape(scientificName)
+	if err != nil {
+		return c.HandleError(ctx, errors.Newf("invalid URL encoding in scientific name").
+			Category(errors.CategoryValidation).
+			Context("raw_name", scientificName).
+			Component("api-taxonomy").
+			Build(), "Invalid URL encoding in scientific name", http.StatusBadRequest)
+	}
+	scientificName = strings.TrimSpace(decodedName)
 
 	if len(scientificName) < 3 || !strings.Contains(scientificName, " ") {
 		return c.HandleError(ctx, errors.Newf("invalid scientific name format").
@@ -185,6 +202,10 @@ func (c *Controller) GetSpeciesTree(ctx echo.Context) error {
 	if err != nil {
 		return c.HandleError(ctx, err, "Species not found", http.StatusNotFound)
 	}
+
+	// Set cache headers (taxonomy data is static)
+	ctx.Response().Header().Set("Cache-Control", "public, max-age=86400")
+	ctx.Response().Header().Set("Vary", "Accept-Encoding")
 
 	return ctx.JSON(http.StatusOK, result)
 }
