@@ -392,9 +392,16 @@ func CaptureError(err error, component string) {
 			"scrubbed_message": scrubbedErrorMsg,
 		})
 
-		// Create a new error with scrubbed message to avoid exposing sensitive data
-		scrubbedErr := fmt.Errorf("%s", scrubbedErrorMsg)
-		sentry.CaptureException(scrubbedErr)
+		// Create event with custom message to avoid error type prefix in title
+		event := sentry.NewEvent()
+		event.Level = sentry.LevelError
+		event.Message = scrubbedErrorMsg
+		event.Exception = []sentry.Exception{{
+			Type:  fmt.Sprintf("%T", err),
+			Value: scrubbedErrorMsg,
+		}}
+
+		sentry.CaptureEvent(event)
 	})
 
 	// Log successful submission
