@@ -11,6 +11,41 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
+// FakeTimeSource is a time source that returns a fixed time for testing
+type FakeTimeSource struct {
+	mu          sync.Mutex
+	currentTime time.Time
+}
+
+func NewFakeTimeSource(t time.Time) *FakeTimeSource {
+	return &FakeTimeSource{currentTime: t}
+}
+
+func (f *FakeTimeSource) Now() time.Time {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.currentTime
+}
+
+func (f *FakeTimeSource) Advance(d time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.currentTime = f.currentTime.Add(d)
+}
+
+// mockSentryReporter is a no-op Sentry reporter for testing (doesn't spawn goroutines)
+type mockSentryReporter struct {
+	enabled bool
+}
+
+func (m *mockSentryReporter) ReportError(ee *errors.EnhancedError) {
+	// No-op: don't actually report to Sentry or spawn goroutines
+}
+
+func (m *mockSentryReporter) IsEnabled() bool {
+	return m.enabled
+}
+
 // mockErrorEvent implements the ErrorEvent interface for testing
 type mockErrorEvent struct {
 	component string
@@ -122,85 +157,82 @@ func TestTelemetryWorker_ProcessEvent(t *testing.T) {
 func TestTelemetryWorker_RateLimiting(t *testing.T) {
 	t.Parallel()
 
-	// Use synctest for deterministic time-based testing
-	synctest.Test(t, func(t *testing.T) {
-		// Initialize logging
-		logging.Init()
+	// Initialize logging
+	logging.Init()
 
-		// Create worker with low rate limit
-		config := &WorkerConfig{
-			FailureThreshold:   10,
-			RecoveryTimeout:    60 * time.Second,
-			HalfOpenMaxEvents:  5,
-			RateLimitWindow:    100 * time.Millisecond,
-			RateLimitMaxEvents: 2, // Very low to test rate limiting
-			SamplingRate:       1.0,
-		}
+	// Create a fake time source starting at a fixed time
+	fakeTime := NewFakeTimeSource(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 
-		worker, err := NewTelemetryWorker(true, config)
-		if err != nil {
-			t.Fatalf("Failed to create worker: %v", err)
-		}
+	// Create worker with low rate limit
+	config := &WorkerConfig{
+		FailureThreshold:   10,
+		RecoveryTimeout:    60 * time.Second,
+		HalfOpenMaxEvents:  5,
+		RateLimitWindow:    100 * time.Millisecond,
+		RateLimitMaxEvents: 2, // Very low to test rate limiting
+		SamplingRate:       1.0,
+	}
 
-		// Process multiple events rapidly - all at the same instant in synctest
-		for i := 0; i < 5; i++ {
-			event := &mockErrorEvent{
-				component: "test",
-				category:  string(errors.CategorySystem),
-				message:   "Test error",
-				timestamp: time.Now(),
-			}
-			_ = worker.ProcessEvent(event)
-		}
+	worker, err := NewTelemetryWorker(true, config)
+	if err != nil {
+		t.Fatalf("Failed to create worker: %v", err)
+	}
 
-		// Wait for all goroutines to complete
-		synctest.Wait()
+	// Replace the Sentry reporter with a mock to prevent goroutine spawning
+	worker.sentryReporter = &mockSentryReporter{enabled: true}
 
-		stats := worker.GetStats()
+	// Inject the fake time source into the rate limiter
+	worker.rateLimiter.timeSource = fakeTime
 
-		// With rate limiting, should have processed at most 2 events
-		// The rest should be dropped
-		totalHandled := stats.EventsProcessed + stats.EventsDropped
-		if totalHandled != 5 {
-			t.Errorf("Expected 5 total events handled (processed + dropped), got %d", totalHandled)
-		}
-
-		if stats.EventsProcessed > 2 {
-			t.Errorf("Expected at most 2 events processed, got %d", stats.EventsProcessed)
-		}
-
-		if stats.EventsProcessed < 1 {
-			t.Errorf("Expected at least 1 event processed, got %d", stats.EventsProcessed)
-		}
-
-		// Record stats before waiting for rate limit window to pass
-		statsBefore := worker.GetStats()
-
-		// Wait for rate limit window to pass - synctest advances time instantly
-		time.Sleep(150 * time.Millisecond)
-		synctest.Wait()
-
-		// Should be able to process more events now
+	// Process multiple events rapidly - all at the SAME fixed time
+	for i := 0; i < 5; i++ {
 		event := &mockErrorEvent{
 			component: "test",
 			category:  string(errors.CategorySystem),
-			message:   "Test error after wait",
-			timestamp: time.Now(),
+			message:   "Test error",
+			timestamp: fakeTime.Now(),
 		}
-		err = worker.ProcessEvent(event)
-		if err != nil {
-			t.Errorf("ProcessEvent failed after rate limit window: %v", err)
-		}
+		_ = worker.ProcessEvent(event)
+	}
 
-		// Wait for processing to complete
-		synctest.Wait()
+	stats := worker.GetStats()
 
-		newStats := worker.GetStats()
-		if newStats.EventsProcessed <= statsBefore.EventsProcessed {
-			t.Errorf("Expected at least one more event to be processed after rate limit window reset, before: %d, after: %d",
-				statsBefore.EventsProcessed, newStats.EventsProcessed)
-		}
-	})
+	// With rate limiting, should have processed exactly 2 events
+	// The rest should be dropped (3 events dropped)
+	totalHandled := stats.EventsProcessed + stats.EventsDropped
+	if totalHandled != 5 {
+		t.Errorf("Expected 5 total events handled (processed + dropped), got %d (processed=%d, dropped=%d)",
+			totalHandled, stats.EventsProcessed, stats.EventsDropped)
+	}
+
+	if stats.EventsProcessed != 2 {
+		t.Errorf("Expected exactly 2 events processed, got %d", stats.EventsProcessed)
+	}
+
+	if stats.EventsDropped != 3 {
+		t.Errorf("Expected exactly 3 events dropped, got %d", stats.EventsDropped)
+	}
+
+	// Advance time past the rate limit window
+	fakeTime.Advance(150 * time.Millisecond)
+
+	// Should be able to process more events now
+	event := &mockErrorEvent{
+		component: "test",
+		category:  string(errors.CategorySystem),
+		message:   "Test error after window",
+		timestamp: fakeTime.Now(),
+	}
+	err = worker.ProcessEvent(event)
+	if err != nil {
+		t.Errorf("ProcessEvent failed after rate limit window: %v", err)
+	}
+
+	newStats := worker.GetStats()
+	if newStats.EventsProcessed != 3 {
+		t.Errorf("Expected 3 events processed after rate limit window reset (2 + 1), got %d",
+			newStats.EventsProcessed)
+	}
 }
 
 func TestTelemetryWorker_CircuitBreaker(t *testing.T) {

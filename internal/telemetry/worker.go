@@ -35,10 +35,10 @@ type TelemetryWorker struct {
 	
 	// Rate limiting
 	rateLimiter *RateLimiter
-	
-	// Sentry reporter
-	sentryReporter *errors.SentryReporter
-	
+
+	// Sentry reporter (using interface for testability)
+	sentryReporter errors.TelemetryReporter
+
 	logger *slog.Logger
 }
 
@@ -87,12 +87,23 @@ type CircuitBreaker struct {
 	config          *WorkerConfig
 }
 
+// TimeSource is an interface for getting the current time (allows testing with fake time)
+type TimeSource interface {
+	Now() time.Time
+}
+
+// RealTimeSource uses the actual system time
+type RealTimeSource struct{}
+
+func (RealTimeSource) Now() time.Time { return time.Now() }
+
 // RateLimiter implements rate limiting for telemetry
 type RateLimiter struct {
 	mu         sync.Mutex
 	window     time.Duration
 	maxEvents  int
 	eventTimes []time.Time
+	timeSource TimeSource // Injectable time source for testing
 }
 
 // NewTelemetryWorker creates a new telemetry worker
@@ -109,8 +120,9 @@ func NewTelemetryWorker(enabled bool, config *WorkerConfig) (*TelemetryWorker, e
 			config: config,
 		},
 		rateLimiter: &RateLimiter{
-			window:    config.RateLimitWindow,
-			maxEvents: config.RateLimitMaxEvents,
+			window:     config.RateLimitWindow,
+			maxEvents:  config.RateLimitMaxEvents,
+			timeSource: RealTimeSource{}, // Use real time by default
 		},
 		sentryReporter: errors.NewSentryReporter(enabled),
 		logger:         getLoggerSafe("telemetry-worker"),
@@ -360,8 +372,8 @@ func (cb *CircuitBreaker) State() string {
 func (rl *RateLimiter) Allow() bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
-	
-	now := time.Now()
+
+	now := rl.timeSource.Now()
 	cutoff := now.Add(-rl.window)
 	
 	// Remove old events outside the window
