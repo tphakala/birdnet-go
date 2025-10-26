@@ -1917,12 +1917,29 @@ func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, abs
 
 	// Use shared generator which handles Sox→FFmpeg fallback internally
 	if err := c.spectrogramGenerator.GenerateFromFile(ctx, absAudioPath, absSpectrogramPath, width, raw); err != nil {
-		getSpectrogramLogger().Error("Spectrogram generation failed",
-			"spectrogram_key", spectrogramKey,
-			"error", err.Error(),
-			"duration_ms", time.Since(generationStart).Milliseconds(),
-			"abs_audio_path", absAudioPath,
-			"abs_spectrogram_path", absSpectrogramPath)
+		// Check if this is an expected operational error (context canceled, process killed)
+		// These are normal events during shutdown, timeout, or resource management
+		isOperationalError := errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) ||
+			strings.Contains(err.Error(), "signal: killed")
+
+		if isOperationalError {
+			// Log at Debug level for expected operational events
+			getSpectrogramLogger().Debug("Spectrogram generation canceled or interrupted",
+				"spectrogram_key", spectrogramKey,
+				"error", err.Error(),
+				"duration_ms", time.Since(generationStart).Milliseconds(),
+				"abs_audio_path", absAudioPath,
+				"abs_spectrogram_path", absSpectrogramPath)
+		} else {
+			// Log at Error level for unexpected failures
+			getSpectrogramLogger().Error("Spectrogram generation failed",
+				"spectrogram_key", spectrogramKey,
+				"error", err.Error(),
+				"duration_ms", time.Since(generationStart).Milliseconds(),
+				"abs_audio_path", absAudioPath,
+				"abs_spectrogram_path", absSpectrogramPath)
+		}
 		return err
 	}
 

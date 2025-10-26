@@ -438,14 +438,33 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 
 	// Generate spectrogram using shared generator
 	if err := pr.generator.GenerateFromPCM(ctx, job.PCMData, spectrogramPath, width, pr.settings.Realtime.Dashboard.Spectrogram.Raw); err != nil {
-		pr.logger.Error("Failed to generate spectrogram",
-			"worker_id", workerID,
-			"note_id", job.NoteID,
-			"clip_path", job.ClipPath,
-			"spectrogram_path", spectrogramPath,
-			"error", err,
-			"duration_ms", time.Since(start).Milliseconds(),
-			"operation", "spectrogram_generation_failed")
+		// Check if this is an expected operational error (context canceled, process killed)
+		// These are normal events during shutdown, timeout, or resource management
+		isOperationalError := errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) ||
+			strings.Contains(err.Error(), "signal: killed")
+
+		if isOperationalError {
+			// Log at Debug level for expected operational events
+			pr.logger.Debug("Spectrogram generation canceled or interrupted",
+				"worker_id", workerID,
+				"note_id", job.NoteID,
+				"clip_path", job.ClipPath,
+				"spectrogram_path", spectrogramPath,
+				"error", err,
+				"duration_ms", time.Since(start).Milliseconds(),
+				"operation", "spectrogram_generation_canceled")
+		} else {
+			// Log at Error level for unexpected failures
+			pr.logger.Error("Failed to generate spectrogram",
+				"worker_id", workerID,
+				"note_id", job.NoteID,
+				"clip_path", job.ClipPath,
+				"spectrogram_path", spectrogramPath,
+				"error", err,
+				"duration_ms", time.Since(start).Milliseconds(),
+				"operation", "spectrogram_generation_failed")
+		}
 		pr.mu.Lock()
 		pr.stats.Failed++
 		pr.mu.Unlock()
