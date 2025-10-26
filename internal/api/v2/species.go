@@ -326,17 +326,80 @@ func (c *Controller) GetSpeciesTaxonomy(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, taxonomyInfo)
 }
 
-// getDetailedTaxonomy retrieves detailed taxonomy information from eBird
+// getDetailedTaxonomy retrieves detailed taxonomy information
+// Tries local database first, falls back to eBird API if needed
 func (c *Controller) getDetailedTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies, includeHierarchy bool) (*TaxonomyInfo, error) {
-	// Check if eBird client is available
-	if c.EBirdClient == nil {
-		return nil, errors.Newf("eBird integration not available").
-			Category(errors.CategoryConfiguration).
-			Priority(errors.PriorityLow).
-			Component("api-species").
-			Build()
+	// Try local taxonomy database first
+	if c.TaxonomyDB != nil {
+		taxonomyTree, err := c.TaxonomyDB.BuildFamilyTree(scientificName)
+		if err == nil {
+			// Successfully retrieved from local database
+			info := &TaxonomyInfo{
+				ScientificName: scientificName,
+				Metadata: map[string]interface{}{
+					"source":     "local",
+					"updated_at": time.Now().Format(time.RFC3339),
+				},
+			}
+
+			// Add hierarchy if requested
+			if includeHierarchy && taxonomyTree != nil {
+				info.Taxonomy = &TaxonomyHierarchy{
+					Kingdom:       taxonomyTree.Kingdom,
+					Phylum:        taxonomyTree.Phylum,
+					Class:         taxonomyTree.Class,
+					Order:         taxonomyTree.Order,
+					Family:        taxonomyTree.Family,
+					FamilyCommon:  taxonomyTree.FamilyCommon,
+					Genus:         taxonomyTree.Genus,
+					Species:       taxonomyTree.Species,
+					SpeciesCommon: taxonomyTree.SpeciesCommon,
+				}
+			}
+
+			// If subspecies requested or locale specified, try to enhance with eBird data
+			if (includeSubspecies || locale != "") && c.EBirdClient != nil {
+				c.Debug("Enhancing local taxonomy data with eBird API for subspecies/locale")
+				ebirdInfo, ebirdErr := c.getEBirdTaxonomy(ctx, scientificName, locale, includeSubspecies)
+				if ebirdErr == nil {
+					// Merge eBird subspecies data
+					if includeSubspecies && len(ebirdInfo.Subspecies) > 0 {
+						info.Subspecies = ebirdInfo.Subspecies
+					}
+					// Use eBird species code if available
+					if ebirdInfo.SpeciesCode != "" {
+						info.SpeciesCode = ebirdInfo.SpeciesCode
+					}
+					// Update metadata to indicate hybrid source
+					info.Metadata["source"] = "local+ebird"
+					if locale != "" {
+						info.Metadata["locale"] = locale
+					}
+				}
+			}
+
+			return info, nil
+		}
+		// Local lookup failed, will try eBird API below
+		c.Debug("Local taxonomy lookup failed for %s: %v, falling back to eBird API", scientificName, err)
 	}
 
+	// Fall back to eBird API
+	if c.EBirdClient != nil {
+		return c.getEBirdTaxonomy(ctx, scientificName, locale, includeSubspecies)
+	}
+
+	// Neither local DB nor eBird API available
+	return nil, errors.Newf("taxonomy data not available (no local database or eBird API)").
+		Category(errors.CategoryConfiguration).
+		Priority(errors.PriorityLow).
+		Context("scientific_name", scientificName).
+		Component("api-species").
+		Build()
+}
+
+// getEBirdTaxonomy retrieves taxonomy information from eBird API
+func (c *Controller) getEBirdTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies bool) (*TaxonomyInfo, error) {
 	// Get full taxonomy data with locale if specified
 	taxonomyData, err := c.EBirdClient.GetTaxonomy(ctx, locale)
 	if err != nil {
@@ -371,26 +434,23 @@ func (c *Controller) getDetailedTaxonomy(ctx context.Context, scientificName, lo
 		},
 	}
 
-	// Add hierarchy if requested
-	if includeHierarchy {
-		// Parse genus from scientific name
-		parts := strings.Split(speciesEntry.ScientificName, " ")
-		genus := ""
-		if len(parts) > 0 {
-			genus = parts[0]
-		}
+	// Parse genus from scientific name
+	parts := strings.Split(speciesEntry.ScientificName, " ")
+	genus := ""
+	if len(parts) > 0 {
+		genus = parts[0]
+	}
 
-		info.Taxonomy = &TaxonomyHierarchy{
-			Kingdom:       "Animalia", // All birds are in kingdom Animalia
-			Phylum:        "Chordata", // All birds are in phylum Chordata
-			Class:         "Aves",     // All entries are birds
-			Order:         speciesEntry.Order,
-			Family:        speciesEntry.FamilySciName,
-			FamilyCommon:  speciesEntry.FamilyComName,
-			Genus:         genus,
-			Species:       speciesEntry.ScientificName,
-			SpeciesCommon: speciesEntry.CommonName,
-		}
+	info.Taxonomy = &TaxonomyHierarchy{
+		Kingdom:       "Animalia", // All birds are in kingdom Animalia
+		Phylum:        "Chordata", // All birds are in phylum Chordata
+		Class:         "Aves",     // All entries are birds
+		Order:         speciesEntry.Order,
+		Family:        speciesEntry.FamilySciName,
+		FamilyCommon:  speciesEntry.FamilyComName,
+		Genus:         genus,
+		Species:       speciesEntry.ScientificName,
+		SpeciesCommon: speciesEntry.CommonName,
 	}
 
 	// Add subspecies if requested and it's a species entry
