@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -28,6 +30,19 @@ type FamilySpeciesResponse struct {
 	Genera       []string `json:"genera"`
 	Species      []string `json:"species"`
 	TotalCount   int      `json:"total_count"`
+}
+
+// titleFirst returns a string with its first rune converted to title case.
+// This is Unicode-safe and handles empty strings without panicking.
+func titleFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	r, size := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError {
+		return s
+	}
+	return string(unicode.ToTitle(r)) + s[size:]
 }
 
 // GetGenusSpecies retrieves all species in a given genus
@@ -59,32 +74,28 @@ func (c *Controller) GetGenusSpecies(ctx echo.Context) error {
 			Build(), "Taxonomy database not available", http.StatusServiceUnavailable)
 	}
 
-	// Get genus information
-	genusName, genusMetadata, err := c.TaxonomyDB.GetGenusByScientificName(genus)
+	// Get all species in the genus
+	species, err := c.TaxonomyDB.GetAllSpeciesInGenus(genus)
 	if err != nil {
-		// Try direct genus lookup if scientific name lookup fails
-		species, lookupErr := c.TaxonomyDB.GetAllSpeciesInGenus(genus)
-		if lookupErr != nil {
-			return c.HandleError(ctx, lookupErr, "Genus not found", http.StatusNotFound)
-		}
-
-		// Get metadata from first species if genus lookup succeeded
-		if len(species) > 0 {
-			genusName, genusMetadata, err = c.TaxonomyDB.GetGenusByScientificName(species[0])
-			if err != nil {
-				return c.HandleError(ctx, err, "Failed to get genus metadata", http.StatusInternalServerError)
-			}
-		}
+		return c.HandleError(ctx, err, "Genus not found", http.StatusNotFound)
 	}
 
-	// Get all species in genus
-	species, err := c.TaxonomyDB.GetAllSpeciesInGenus(genusName)
+	// Get genus metadata from the first species in the genus
+	if len(species) == 0 {
+		return c.HandleError(ctx, errors.Newf("genus has no species").
+			Category(errors.CategoryValidation).
+			Context("genus", genus).
+			Component("api-taxonomy").
+			Build(), "Genus has no species", http.StatusInternalServerError)
+	}
+
+	genusName, genusMetadata, err := c.TaxonomyDB.GetGenusByScientificName(species[0])
 	if err != nil {
-		return c.HandleError(ctx, err, "Failed to retrieve species list", http.StatusInternalServerError)
+		return c.HandleError(ctx, err, "Failed to get genus metadata", http.StatusInternalServerError)
 	}
 
 	response := GenusSpeciesResponse{
-		Genus:        strings.ToUpper(genusName[:1]) + genusName[1:],
+		Genus:        titleFirst(genusName),
 		Family:       genusMetadata.Family,
 		FamilyCommon: genusMetadata.FamilyCommon,
 		Order:        genusMetadata.Order,
@@ -141,7 +152,7 @@ func (c *Controller) GetFamilySpecies(ctx echo.Context) error {
 	}
 
 	response := FamilySpeciesResponse{
-		Family:       strings.ToUpper(family[:1]) + family[1:],
+		Family:       titleFirst(family),
 		FamilyCommon: familyMetadata.FamilyCommon,
 		Order:        familyMetadata.Order,
 		Genera:       familyMetadata.Genera,

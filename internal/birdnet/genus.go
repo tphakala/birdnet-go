@@ -4,6 +4,7 @@ package birdnet
 import (
 	_ "embed" // For embedding data
 	"encoding/json"
+	"slices"
 	"strings"
 	"time"
 
@@ -65,8 +66,8 @@ func LoadTaxonomyDatabase() (*TaxonomyDatabase, error) {
 			Build()
 	}
 
-	// Validate database
-	if len(db.Genera) == 0 {
+	// Validate database - require all core data structures to be populated
+	if len(db.Genera) == 0 || len(db.Families) == 0 || len(db.SpeciesIndex) == 0 {
 		return nil, errors.Newf("taxonomy database is empty or invalid").
 			Category(errors.CategoryValidation).
 			Component("birdnet-genus").
@@ -134,7 +135,8 @@ func (db *TaxonomyDatabase) GetAllSpeciesInGenus(genusName string) ([]string, er
 			Build()
 	}
 
-	return genusMetadata.Species, nil
+	// Return a copy to prevent mutation of internal state
+	return slices.Clone(genusMetadata.Species), nil
 }
 
 // GetAllSpeciesInFamily returns all species in a given family
@@ -222,7 +224,7 @@ func (db *TaxonomyDatabase) GetSpeciesTree(scientificName string) (*SpeciesTreeR
 	// Build result with related species
 	result := &SpeciesTreeResult{
 		TaxonomyTree:    tree,
-		RelatedInGenus:  genusMetadata.Species,
+		RelatedInGenus:  slices.Clone(genusMetadata.Species), // Clone to prevent mutation
 		TotalInGenus:    len(genusMetadata.Species),
 		TotalInFamily:   familyMetadata.SpeciesCount,
 	}
