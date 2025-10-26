@@ -44,7 +44,8 @@
       "no": "Ei",
       "ok": "OK",
       "edit-config": "Muokkaa asetuksia",
-      "add-action": "Lisää toiminto"
+      "add-action": "Lisää toiminto",
+      "learnMore": "Lue lisää"
     },
     "ui": {
       "loading": "Ladataan...",
@@ -100,6 +101,8 @@
       "removeSpecies": "Poista laji",
       "dismissError": "Hylkää virhe",
       "downloadCsv": "Lataa lajilista CSV-tiedostona",
+      "visitEbirdLink": "Avaa eBird.org uuteen välilehteen",
+      "learnEbirdTaxonomyLink": "Avaa eBird-taksonomia uuteen välilehteen",
       "calendarNavigation": "Kalenterinavigointi: käytä nuolinäppäimiä siirtymiseen, Enter valitsee, Esc sulkee"
     },
     "modal": {

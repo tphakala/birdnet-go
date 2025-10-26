@@ -44,7 +44,8 @@
       "no": "Nein",
       "ok": "OK",
       "edit-config": "Konfiguration bearbeiten",
-      "add-action": "Aktion hinzufügen"
+      "add-action": "Aktion hinzufügen",
+      "learnMore": "Mehr erfahren"
     },
     "ui": {
       "loading": "Wird geladen...",
@@ -99,7 +100,9 @@
       "editSpecies": "Art bearbeiten",
       "removeSpecies": "Art entfernen",
       "dismissError": "Fehler verwerfen",
-      "downloadCsv": "Artenliste als CSV herunterladen"
+      "downloadCsv": "Artenliste als CSV herunterladen",
+      "visitEbirdLink": "eBird.org in neuem Tab öffnen",
+      "learnEbirdTaxonomyLink": "eBird-Taxonomie in neuem Tab öffnen"
     },
     "modal": {
       "confirmAction": "Aktion bestätigen",

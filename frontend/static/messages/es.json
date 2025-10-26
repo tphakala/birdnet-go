@@ -44,7 +44,8 @@
       "no": "No",
       "ok": "OK",
       "edit-config": "Editar configuración",
-      "add-action": "Añadir acción"
+      "add-action": "Añadir acción",
+      "learnMore": "Más información"
     },
     "ui": {
       "loading": "Cargando...",
@@ -100,6 +101,8 @@
       "removeSpecies": "Eliminar especie",
       "dismissError": "Descartar error",
       "downloadCsv": "Descargar lista de especies en CSV",
+      "visitEbirdLink": "Abrir eBird.org en una nueva pestaña",
+      "learnEbirdTaxonomyLink": "Abrir Taxonomía de eBird en una nueva pestaña",
       "calendarNavigation": "Navegación del calendario: usa las flechas para moverte, Enter para seleccionar, Esc para cerrar"
     },
     "modal": {
@@ -183,7 +186,7 @@
     "ebirdApiV2": "eBird API v2",
     "copyright": "Derechos de autor",
     "coverage": "Cobertura",
-    "taxonomyCoverage": "2.374 géneros, 254 familias, 11.145 especies",
+    "taxonomyCoverage": "{genera} géneros, {families} familias, {species} especies",
     "visitEbird": "Visitar eBird.org",
     "ebirdOrg": "eBird.org",
     "learnEbirdTaxonomy": "Más información sobre la taxonomía de eBird",

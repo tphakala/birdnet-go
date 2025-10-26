@@ -79,7 +79,9 @@ func LoadTaxonomyDatabase() (*TaxonomyDatabase, error) {
 	// This prevents subtle lookup bugs from case mismatches
 	db.Genera = normalizeGeneraKeys(db.Genera)
 	db.Families = normalizeFamiliesKeys(db.Families)
+	db.Families = normalizeFamilyGeneraValues(db.Families)
 	db.SpeciesIndex = normalizeSpeciesIndexKeys(db.SpeciesIndex)
+	db.SpeciesIndex = normalizeSpeciesIndexValues(db.SpeciesIndex)
 
 	return &db, nil
 }
@@ -109,6 +111,24 @@ func normalizeSpeciesIndexKeys(speciesIndex map[string]string) map[string]string
 		normalized[strings.ToLower(key)] = value
 	}
 	return normalized
+}
+
+// normalizeSpeciesIndexValues lower-cases all genus values in the species index
+func normalizeSpeciesIndexValues(si map[string]string) map[string]string {
+	for k, v := range si {
+		si[k] = strings.ToLower(v)
+	}
+	return si
+}
+
+// normalizeFamilyGeneraValues lower-cases genera lists in each family
+func normalizeFamilyGeneraValues(families map[string]*FamilyMetadata) map[string]*FamilyMetadata {
+	for _, fm := range families {
+		for i, g := range fm.Genera {
+			fm.Genera[i] = strings.ToLower(g)
+		}
+	}
+	return families
 }
 
 // GetGenusByScientificName retrieves genus metadata by scientific name
@@ -243,6 +263,12 @@ func (db *TaxonomyDatabase) GetSpeciesTree(scientificName string) (*SpeciesTreeR
 	}
 
 	// Build taxonomy tree compatible with eBird API
+	// Use deterministic timestamp from DB metadata when available
+	updatedAt := time.Now().UTC()
+	if t, err := time.Parse(time.RFC3339, db.UpdatedAt); err == nil {
+		updatedAt = t
+	}
+
 	tree := &ebird.TaxonomyTree{
 		Kingdom:       "Animalia",
 		Phylum:        "Chordata",
@@ -253,7 +279,7 @@ func (db *TaxonomyDatabase) GetSpeciesTree(scientificName string) (*SpeciesTreeR
 		Genus:         genus,
 		Species:       scientificName,
 		SpeciesCommon: "", // Would need common name mapping
-		UpdatedAt:     time.Now().UTC(),
+		UpdatedAt:     updatedAt,
 	}
 
 	// Build result with related species

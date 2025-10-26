@@ -43,7 +43,8 @@
       "no": "Non",
       "ok": "OK",
       "edit-config": "Modifier la configuration",
-      "add-action": "Ajouter une action"
+      "add-action": "Ajouter une action",
+      "learnMore": "En savoir plus"
     },
     "ui": {
       "loading": "Chargement...",
@@ -99,6 +100,8 @@
       "removeSpecies": "Supprimer l'espèce",
       "dismissError": "Ignorer l'erreur",
       "downloadCsv": "Télécharger la liste des espèces au format CSV",
+      "visitEbirdLink": "Ouvrir eBird.org dans un nouvel onglet",
+      "learnEbirdTaxonomyLink": "Ouvrir la taxonomie eBird dans un nouvel onglet",
       "calendarNavigation": "Navigation du calendrier : utilisez les flèches pour vous déplacer, Entrée pour sélectionner, Échap pour fermer"
     },
     "modal": {
@@ -192,10 +195,10 @@
     "taxonomyDataTitle": "Données taxonomiques",
     "taxonomyDataIntro": "BirdNET-Go inclut des données taxonomiques d'oiseaux intégrées dérivées de la liste eBird/Clements, permettant des recherches locales rapides par genre et famille.",
     "source": "Source",
-    "ebirdApiV2": "eBird API v2",
+    "ebirdApiV2": "API eBird v2",
     "copyright": "Droits d'auteur",
     "coverage": "Couverture",
-    "taxonomyCoverage": "2 374 genres, 254 familles, 11 145 espèces",
+    "taxonomyCoverage": "{genera} genres, {families} familles, {species} espèces",
     "visitEbird": "Visiter eBird.org",
     "ebirdOrg": "eBird.org",
     "learnEbirdTaxonomy": "En savoir plus sur la taxonomie eBird",

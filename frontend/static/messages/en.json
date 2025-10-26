@@ -44,7 +44,8 @@
       "no": "No",
       "ok": "OK",
       "edit-config": "Edit Config",
-      "add-action": "Add Action"
+      "add-action": "Add Action",
+      "learnMore": "Learn More"
     },
     "ui": {
       "loading": "Loading...",
@@ -106,7 +107,9 @@
       "selectToday": "Select today",
       "dateSelected": "Date selected: {date}",
       "calendarNavigation": "Use arrow keys to navigate calendar, Enter to select, Escape to close",
-      "downloadCsv": "Download species list as CSV"
+      "downloadCsv": "Download species list as CSV",
+      "visitEbirdLink": "Open eBird.org in a new tab",
+      "learnEbirdTaxonomyLink": "Open eBird Taxonomy in a new tab"
     },
     "actions": {
       "back": "Back",

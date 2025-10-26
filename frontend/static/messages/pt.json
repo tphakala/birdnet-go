@@ -44,7 +44,8 @@
       "no": "Não",
       "ok": "OK",
       "edit-config": "Editar configuração",
-      "add-action": "Adicionar ação"
+      "add-action": "Adicionar ação",
+      "learnMore": "Saiba mais"
     },
     "ui": {
       "loading": "Carregando...",
@@ -100,6 +101,8 @@
       "removeSpecies": "Remover espécie",
       "dismissError": "Descartar erro",
       "downloadCsv": "Baixar lista de espécies em CSV",
+      "visitEbirdLink": "Abrir eBird.org em uma nova aba",
+      "learnEbirdTaxonomyLink": "Abrir Taxonomia eBird em uma nova aba",
       "calendarNavigation": "Navegação do calendário: use as setas para mover, Enter para selecionar, Esc para fechar"
     },
     "modal": {
