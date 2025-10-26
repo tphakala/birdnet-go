@@ -633,19 +633,19 @@ func TestDDoSProtection(t *testing.T) {
 	// Setup
 	e, mockDS, controller := setupTestEnvironment(t)
 
-	// Setup mock expectations using expecter pattern
+	// Number of concurrent requests to simulate
+	concurrentRequests := 50
+
+	// Setup mock expectations with explicit call counts to enforce deterministic behavior
 	mockDS.EXPECT().
 		SearchNotes(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.Note{}, nil).
-		Maybe()
+		Times(concurrentRequests) // Each of the 50 requests calls SearchNotes
 
 	mockDS.EXPECT().
 		CountSearchResults(mock.Anything).
 		Return(int64(0), nil).
-		Maybe()
-
-	// Number of concurrent requests to simulate
-	concurrentRequests := 50
+		Times(concurrentRequests) // Each of the 50 requests calls CountSearchResults
 
 	// Create a wait group to synchronize goroutines
 	// Go 1.25: Using WaitGroup.Go() for automatic Add/Done management
