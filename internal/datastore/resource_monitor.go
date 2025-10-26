@@ -16,10 +16,11 @@ import (
 
 // Disk space requirements for different operations (in MB)
 const (
-	MinDiskSpaceVacuum   = 500 // VACUUM can temporarily double database size
-	MinDiskSpaceBackup   = 200 // Backup operations need significant space
-	MinDiskSpaceBulk     = 100 // Bulk operations need extra space
-	MinDiskSpaceDefault  = 50  // Default minimum for normal operations
+	MinDiskSpaceStartup  = 1024 // Startup requires 1GB for safe operation (migrations, backups, WAL, etc.)
+	MinDiskSpaceVacuum   = 500  // VACUUM can temporarily double database size
+	MinDiskSpaceBackup   = 200  // Backup operations need significant space
+	MinDiskSpaceBulk     = 100  // Bulk operations need extra space
+	MinDiskSpaceDefault  = 50   // Default minimum for normal operations
 )
 
 // Mount info cache for performance
@@ -271,6 +272,77 @@ type ProcessMemoryUsage struct {
 	VirtualMB  int64
 }
 
+// ValidateStartupDiskSpace checks if there's sufficient disk space before starting the application.
+//
+// This function performs early validation during application startup to prevent cryptic database
+// migration failures. It requires a minimum of 1GB (1024MB) free disk space to ensure safe operation
+// across all database operations including migrations, backups, WAL files, and temporary space.
+//
+// Parameters:
+//   - dbPath: Full path to the SQLite database file
+//
+// Returns:
+//   - nil if sufficient disk space is available (≥1GB)
+//   - Structured error with detailed context if insufficient space or error checking disk
+//
+// The returned error includes:
+//   - Available disk space in MB
+//   - Required minimum (1024MB)
+//   - Total disk space
+//   - Database path
+//   - Critical priority flag
+//
+// This function should be called before any database initialization to fail fast with
+// actionable error messages rather than encountering confusing migration failures later.
+func ValidateStartupDiskSpace(dbPath string) error {
+	// Get directory containing the database file
+	dir := filepath.Dir(dbPath)
+
+	// Use diskmanager to get available space
+	availableBytes, err := diskmanager.GetAvailableSpace(dir)
+	if err != nil {
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategorySystem).
+			Context("operation", "startup_disk_validation").
+			Context("path", dir).
+			Priority(errors.PriorityCritical).
+			Build()
+	}
+
+	availableMB := availableBytes / 1024 / 1024
+
+	// Require minimum 1GB disk space for startup to ensure safe operation
+	// This accounts for: database growth, migrations, backups, WAL files, and temp space
+	if availableMB < MinDiskSpaceStartup {
+		// Get total disk space for better error message
+		var totalMB uint64
+		if diskInfo, diskErr := diskmanager.GetDetailedDiskUsage(dir); diskErr == nil {
+			totalMB = diskInfo.TotalBytes / 1024 / 1024
+		}
+		// totalMB will be 0 if GetDetailedDiskUsage fails, which is acceptable for error context
+
+		return errors.Newf("insufficient disk space to start application: %dMB available (minimum: %dMB required)",
+			availableMB, MinDiskSpaceStartup).
+			Component("datastore").
+			Category(errors.CategorySystem).
+			Context("operation", "startup_validation").
+			Context("disk_available_mb", availableMB).
+			Context("disk_required_mb", MinDiskSpaceStartup).
+			Context("disk_total_mb", totalMB).
+			Context("db_path", dbPath).
+			Priority(errors.PriorityCritical).
+			Build()
+	}
+
+	getLogger().Info("Startup disk space validation passed",
+		"available_mb", availableMB,
+		"required_mb", MinDiskSpaceStartup,
+		"path", dir)
+
+	return nil
+}
+
 // ValidateResourceAvailability checks if system resources are sufficient for operations
 func ValidateResourceAvailability(dbPath, operation string) error {
 	snapshot, err := CaptureResourceSnapshot(dbPath)
@@ -283,17 +355,17 @@ func ValidateResourceAvailability(dbPath, operation string) error {
 	}
 
 	// Check disk space requirements based on operation
-	minFreeMB := getMinimumDiskSpaceForOperation(operation)
-	freeSpaceMB := snapshot.DiskSpace.AvailableBytes / 1024 / 1024
+	minRequiredMB := getMinimumDiskSpaceForOperation(operation)
+	availableSpaceMB := snapshot.DiskSpace.AvailableBytes / 1024 / 1024
 
-	if freeSpaceMB < minFreeMB {
-		return errors.Newf("insufficient disk space for operation '%s': %dMB free (minimum: %dMB required)", 
-			operation, freeSpaceMB, minFreeMB).
+	if availableSpaceMB < minRequiredMB {
+		return errors.Newf("insufficient disk space for operation '%s': %dMB available (minimum: %dMB required)",
+			operation, availableSpaceMB, minRequiredMB).
 			Component("datastore").
 			Category(errors.CategorySystem).
 			Context("operation", operation).
-			Context("disk_free_mb", freeSpaceMB).
-			Context("disk_required_mb", minFreeMB).
+			Context("disk_available_mb", availableSpaceMB).
+			Context("disk_required_mb", minRequiredMB).
 			Context("disk_total_mb", snapshot.DiskSpace.TotalBytes/1024/1024).
 			Context("mount_point", snapshot.DiskSpace.MountPoint).
 			Build()
