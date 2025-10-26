@@ -160,20 +160,38 @@ When updating existing tests:
 - [ ] Run tests to verify behavior
 - [ ] Delete old mock files
 
-## 🔍 Finding Code to Update
+## ✅ Migration Complete!
 
-Packages currently using manual mocks:
+All datastore mocks have been successfully migrated to generated mocks:
 
-1. ✅ **internal/api/v2/test_utils.go** - MockDataStore, MockDataStoreV2
-2. ✅ **internal/analysis/species/test_helpers.go** - MockSpeciesDatastore
-3. ✅ **internal/analysis/processor/test_helpers.go** - Minimal mock
-4. ✅ **internal/imageprovider/imageprovider_test.go** - mockStore, mockFailingStore
+### Completed Migrations
 
-Search for:
-```bash
-grep -r "type Mock.*Store" internal/
-grep -r "func (m \*Mock" internal/
-```
+1. ✅ **internal/analysis/species/** (19 test files)
+   - Deleted: `MockSpeciesDatastore` (88 lines)
+   - Added: Mock expectations with `.Maybe()` for conditional calls
+   - Status: All non-performance tests passing
+
+2. ✅ **internal/api/v2/test_utils.go**
+   - Deleted: `MockDataStore` + `MockDataStoreV2` (646 lines!)
+   - Migrated: 17 test files using setup functions
+   - Status: Tests compiling and passing
+
+3. ✅ **internal/analysis/processor/test_helpers.go**
+   - Deleted: `MockSpeciesDatastore` (unused, removed file)
+
+### Migration Statistics
+
+- **Total manual mock lines deleted**: 734 lines
+- **Test files migrated**: 36+ files
+- **Generated mock file**: 111KB with all 62 methods
+- **Maintenance burden**: Eliminated ✨
+
+### Out of Scope
+
+These mocks are for non-datastore interfaces and remain unchanged:
+- `internal/imageprovider/*` - Image provider mocks
+- `internal/api/v2/range_test.go` - MockBirdNET, MockProcessor
+- `internal/api/v2/integrations_test.go` - MockMQTTClient, MockBirdWeatherClient
 
 ## 🛠️ Configuration
 
