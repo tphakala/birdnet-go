@@ -538,7 +538,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 		)
 		h.Debug("ServeSpectrogram: Successfully created spectrogram at: %s", absSpectrogramPath)
 
-		// Update spectrogramPath to use the absolute path for the final check
+		// Update spectrogramPath to absolute path for final check and serving
 		spectrogramPath = absSpectrogramPath
 	} else {
 		logger.Debug("Existing spectrogram found, serving cached version",
