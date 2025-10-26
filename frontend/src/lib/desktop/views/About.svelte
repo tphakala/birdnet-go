@@ -275,6 +275,45 @@
         {t('about.patrickLevinGithub')}
       </a>
     </div>
+
+    <p class="text-xl font-medium mt-6">Taxonomy Data</p>
+    <p class="mt-2">
+      BirdNET-Go includes embedded bird taxonomy data derived from the eBird/Clements Checklist,
+      providing fast local genus and family lookups.
+    </p>
+    <div class="mt-2 space-y-1">
+      <p class="text-sm">
+        <span class="font-medium">Source:</span> eBird API v2
+      </p>
+      <p class="text-sm">
+        <span class="font-medium">Copyright:</span> © Cornell Lab of Ornithology
+      </p>
+      <p class="text-sm">
+        <span class="font-medium">Coverage:</span> 2,374 genera, 254 families, 11,145 species
+      </p>
+    </div>
+    <div class="flex gap-2 mt-4">
+      <a
+        href="https://ebird.org"
+        class="btn btn-sm btn-outline gap-2"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Visit eBird.org"
+      >
+        {@html systemIcons.globe}
+        eBird.org
+      </a>
+      <a
+        href="https://ebird.org/science/use-ebird-data/the-ebird-taxonomy"
+        class="btn btn-sm btn-outline gap-2"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Learn about eBird Taxonomy"
+      >
+        {@html dataIcons.document}
+        Learn More
+      </a>
+    </div>
   </Card>
 
   <!-- Version Information -->
