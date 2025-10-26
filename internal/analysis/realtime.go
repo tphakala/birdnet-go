@@ -172,6 +172,13 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	dataStore.SetMetrics(metrics.Datastore)
 	dataStore.SetSunCalcMetrics(metrics.SunCalc)
 
+	// Validate disk space before attempting to open the database
+	// This prevents startup failures due to insufficient disk space
+	// ValidateStartupDiskSpace already returns a fully structured error, so we return it directly
+	if err := datastore.ValidateStartupDiskSpace(settings.Output.SQLite.Path); err != nil {
+		return err
+	}
+
 	// Open a connection to the database and handle possible errors.
 	if err := dataStore.Open(); err != nil {
 		return err // Return error to stop execution if database connection fails.
