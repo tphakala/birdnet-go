@@ -166,6 +166,21 @@ All contributions must follow:
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for complete details.
 
+## Data Sources
+
+### Taxonomy Data
+
+BirdNET-Go includes embedded taxonomy data derived from the eBird/Clements Checklist:
+
+- **Source**: [eBird API v2](https://api.ebird.org/v2/ref/taxonomy/ebird)
+- **Copyright**: © Cornell Lab of Ornithology
+- **License**: Used under eBird API Terms of Use for non-commercial purposes
+- **Attribution**: Taxonomy data powered by [eBird.org](https://ebird.org)
+- **Purpose**: Provides fast local genus/family lookups without requiring API calls
+- **Coverage**: 2,374 genera, 254 families, 11,145 species
+
+For more information about eBird's taxonomy, visit [eBird Taxonomy](https://ebird.org/science/use-ebird-data/the-ebird-taxonomy).
+
 ## License
 
 Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International

@@ -59,9 +59,14 @@ func (c *Controller) initSpeciesRoutes() {
 	// Public endpoints for species information
 	c.Group.GET("/species", c.GetSpeciesInfo)
 	c.Group.GET("/species/taxonomy", c.GetSpeciesTaxonomy)
-	
+
 	// RESTful thumbnail endpoint - uses species code from path
 	c.Group.GET("/species/:code/thumbnail", c.GetSpeciesThumbnail)
+
+	// New taxonomy endpoints using local database
+	c.Group.GET("/taxonomy/genus/:genus", c.GetGenusSpecies)
+	c.Group.GET("/taxonomy/family/:family", c.GetFamilySpecies)
+	c.Group.GET("/taxonomy/tree/:scientific_name", c.GetSpeciesTree)
 }
 
 // GetSpeciesInfo retrieves extended information about a bird species
@@ -149,16 +154,30 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 		info.Rarity = rarityInfo
 	}
 
-	// Get taxonomy/family tree information from eBird if available
-	if c.EBirdClient != nil {
+	// Get taxonomy/family tree information - try local database first, then eBird API
+	if c.TaxonomyDB != nil {
+		// Try local taxonomy database first (fast, no network)
+		taxonomyTree, err := c.TaxonomyDB.BuildFamilyTree(scientificName)
+		if err == nil {
+			info.Taxonomy = taxonomyTree
+			c.Debug("Retrieved taxonomy for %s from local database", scientificName)
+		} else {
+			// Fall back to eBird API if local lookup fails
+			c.Debug("Local taxonomy lookup failed for %s: %v, falling back to eBird API", scientificName, err)
+			if c.EBirdClient != nil {
+				taxonomyTree, ebirdErr := c.EBirdClient.BuildFamilyTree(ctx, scientificName)
+				if ebirdErr != nil {
+					c.Debug("Failed to get taxonomy info from eBird for species %s: %v", scientificName, ebirdErr)
+				} else {
+					info.Taxonomy = taxonomyTree
+				}
+			}
+		}
+	} else if c.EBirdClient != nil {
+		// No local database available, use eBird API directly
 		taxonomyTree, err := c.EBirdClient.BuildFamilyTree(ctx, scientificName)
 		if err != nil {
-			// The eBird client already creates enhanced errors with proper
-			// categorization. These errors will be automatically published
-			// to the event bus when Build() is called in the client.
-			// We just log here for debugging purposes.
 			c.Debug("Failed to get taxonomy info from eBird for species %s: %v", scientificName, err)
-			// Continue without taxonomy info
 		} else {
 			info.Taxonomy = taxonomyTree
 		}
