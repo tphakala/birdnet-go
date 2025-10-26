@@ -927,18 +927,119 @@ internal/package/
 
 **Mock Framework:**
 
-Using `testify/mock` for dependency mocking:
+**Automated Mock Generation with Mockery v2**
+
+BirdNET-Go uses [Mockery v2](https://vektra.github.io/mockery/) for automated mock generation, eliminating manual mock maintenance:
+
+```
+internal/datastore/mocks/
+├── mock_Interface.go   # Auto-generated mock (111KB, 62 methods)
+└── README.md           # Complete usage guide
+```
+
+**Key Benefits:**
+
+- **Zero Maintenance Burden**: Mocks automatically regenerate when interfaces change
+- **Type Safety**: Compiler catches mismatched method signatures immediately
+- **Expecter Pattern**: Clean `.EXPECT()` syntax for setting expectations
+- **734 Lines Eliminated**: Migration removed 734 lines of manual mock code across 36+ test files
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  internal/datastore/interfaces.go                           │
+│  //go:generate mockery                                      │
+│  type Interface interface { ... }  (62 methods)             │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼ (go generate)
+┌─────────────────────────────────────────────────────────────┐
+│  .mockery.yaml (configuration)                              │
+│  - with-expecter: true                                      │
+│  - filename: "mock_{{.InterfaceName}}.go"                   │
+│  - outpkg: mocks                                            │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  internal/datastore/mocks/mock_Interface.go (generated)     │
+│  - NewMockInterface(t) constructor                          │
+│  - All 62 interface methods implemented                     │
+│  - EXPECT() methods for all operations                      │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          ▼ (import in tests)
+┌─────────────────────────────────────────────────────────────┐
+│  Test Files (36+ files migrated)                            │
+│  - internal/analysis/species/*_test.go (19 files)           │
+│  - internal/api/v2/*_test.go (17 files)                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Usage Example:**
 
 ```go
-type MockDatastore struct {
-    mock.Mock
-}
+import (
+    "testing"
+    "github.com/stretchr/testify/mock"
+    "github.com/tphakala/birdnet-go/internal/datastore/mocks"
+)
 
-func (m *MockDatastore) Save(detection *Note) error {
-    args := m.Called(detection)
-    return args.Error(0)
+func TestDetectionSave(t *testing.T) {
+    // Create auto-generated mock
+    mockDS := mocks.NewMockInterface(t)
+
+    // Set expectations using expecter pattern
+    mockDS.EXPECT().
+        Save(mock.AnythingOfType("*datastore.Note")).
+        Return(nil).
+        Once()
+
+    // Use mock in test
+    err := saveDetection(mockDS, detection)
+
+    // Assertions handled automatically
+    assert.NoError(t, err)
 }
 ```
+
+**Conditional Mock Calls:**
+
+For methods called conditionally or asynchronously, use `.Maybe()`:
+
+```go
+// Method only called when feature enabled
+mockDS.EXPECT().
+    GetActiveNotificationHistory(mock.AnythingOfType("time.Time")).
+    Return([]datastore.NotificationHistory{}, nil).
+    Maybe()  // Won't fail if not called
+
+// Async operation in goroutine
+mockDS.EXPECT().
+    SaveNotificationHistory(mock.AnythingOfType("*datastore.NotificationHistory")).
+    Return(nil).
+    Maybe()  // Non-blocking
+```
+
+**Regenerating Mocks:**
+
+When `datastore.Interface` changes:
+
+```bash
+# From project root
+go generate ./internal/datastore
+
+# Or directly
+mockery --config .mockery.yaml
+```
+
+**Documentation:**
+
+- Complete guide: `internal/datastore/mocks/README.md`
+- Migration examples and patterns
+- Common troubleshooting scenarios
+- Statistics: 734 lines deleted, 36+ files migrated
 
 **Test Coverage Goals:**
 

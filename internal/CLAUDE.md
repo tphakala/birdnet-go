@@ -33,6 +33,107 @@
 - `b.ResetTimer()` after benchmark setup
 - Use `t.Attr()` for test metadata (Go 1.25)
 
+### Mock Generation with Mockery
+
+**IMPORTANT**: Never manually write mocks. Use mockery for automated mock generation.
+
+**Quick Start:**
+
+```bash
+# Generate mocks for all interfaces
+go generate ./internal/datastore
+
+# Or use mockery directly
+mockery --config .mockery.yaml
+```
+
+**Using Generated Mocks in Tests:**
+
+```go
+import (
+    "testing"
+    "github.com/stretchr/testify/mock"
+    "github.com/tphakala/birdnet-go/internal/datastore/mocks"
+)
+
+func TestMyFunction(t *testing.T) {
+    // Create mock
+    mockDS := mocks.NewMockInterface(t)
+
+    // Set expectations using .EXPECT() pattern
+    mockDS.EXPECT().
+        Save(mock.Anything, mock.Anything).
+        Return(nil).
+        Once()
+
+    // Use the mock
+    err := myFunction(mockDS)
+
+    // Assertions happen automatically
+}
+```
+
+**Critical Rules:**
+
+- **Conditional Mock Calls**: Use `.Maybe()` for methods called conditionally
+
+```go
+// Method only called when NotificationSuppressionHours > 0
+mockDS.EXPECT().
+    GetActiveNotificationHistory(mock.AnythingOfType("time.Time")).
+    Return([]datastore.NotificationHistory{}, nil).
+    Maybe()  // Won't fail if not called
+```
+
+- **Async Operations**: Use `.Maybe()` for methods called in goroutines
+
+```go
+// Called asynchronously in RecordNotificationSent
+mockDS.EXPECT().
+    SaveNotificationHistory(mock.AnythingOfType("*datastore.NotificationHistory")).
+    Return(nil).
+    Maybe()  // Non-blocking operation
+```
+
+- **Test Helpers**: Always use `t.Helper()` in setup functions
+
+```go
+func createTestTracker(t *testing.T) *Tracker {
+    t.Helper()  // Stack traces point to caller, not this function
+    // ... setup
+}
+```
+
+**Common Patterns:**
+
+```go
+// Match any argument type
+mockDS.EXPECT().Get(mock.Anything).Return(note, nil)
+
+// Match specific type
+mockDS.EXPECT().Save(mock.AnythingOfType("*datastore.Note")).Return(nil)
+
+// Multiple calls
+mockDS.EXPECT().Get(mock.Anything).Return(note, nil).Times(3)
+
+// Return different values on subsequent calls
+mockDS.EXPECT().Get("123").Return(note1, nil).Once()
+mockDS.EXPECT().Get("123").Return(note2, nil).Once()
+```
+
+**When Interface Changes:**
+
+1. Update the interface in `internal/datastore/interfaces.go`
+2. Run `go generate ./internal/datastore`
+3. Mocks automatically regenerate with all methods
+4. **Never** manually edit files in `internal/datastore/mocks/`
+
+**Documentation:**
+
+- Complete guide: `internal/datastore/mocks/README.md`
+- Configuration: `.mockery.yaml`
+- Migration guide and examples in README
+
 ## Go 1.25 Testing Features
 
 See [Go 1.25 Release Notes](https://go.dev/doc/go1.25) for complete changelog.
