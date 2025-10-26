@@ -765,6 +765,7 @@
         <!-- Tab Navigation -->
         <div class="tabs tabs-boxed mb-6" role="tablist" aria-label="Detection details tabs">
           <button
+            id="tab-overview"
             role="tab"
             class="tab"
             class:tab-active={activeTab === 'overview'}
@@ -800,6 +801,7 @@
             {t('detections.tabs.overview')}
           </button>
           <button
+            id="tab-taxonomy"
             role="tab"
             class="tab"
             class:tab-active={activeTab === 'taxonomy'}
@@ -833,6 +835,7 @@
             {t('detections.tabs.taxonomy')}
           </button>
           <button
+            id="tab-history"
             role="tab"
             class="tab"
             class:tab-active={activeTab === 'history'}
@@ -866,6 +869,7 @@
             {t('detections.tabs.history')}
           </button>
           <button
+            id="tab-notes"
             role="tab"
             class="tab"
             class:tab-active={activeTab === 'notes'}
@@ -900,6 +904,7 @@
           </button>
           {#if canReview}
             <button
+              id="tab-review"
               role="tab"
               class="tab"
               class:tab-active={activeTab === 'review'}
@@ -934,39 +939,57 @@
         </div>
 
         <!-- Tab Content -->
-        <div class="tab-content">
-          {#if activeTab === 'overview'}
-            <div
-              role="tabpanel"
-              id="tab-panel-overview"
-              aria-labelledby="tab-overview"
-              tabindex="0"
-            >
-              {@render overviewTab(detection)}
-            </div>
-          {:else if activeTab === 'taxonomy'}
-            <div
-              role="tabpanel"
-              id="tab-panel-taxonomy"
-              aria-labelledby="tab-taxonomy"
-              tabindex="0"
-            >
-              {@render taxonomyTab()}
-            </div>
-          {:else if activeTab === 'history'}
-            <div role="tabpanel" id="tab-panel-history" aria-labelledby="tab-history" tabindex="0">
-              {@render historyTab()}
-            </div>
-          {:else if activeTab === 'notes'}
-            <div role="tabpanel" id="tab-panel-notes" aria-labelledby="tab-notes" tabindex="0">
-              {@render notesTab(detection)}
-            </div>
-          {:else if activeTab === 'review' && canReview && ReviewCard}
-            <div role="tabpanel" id="tab-panel-review" aria-labelledby="tab-review" tabindex="0">
-              <ReviewCard {detection} onSaveComplete={handleReviewComplete} />
-            </div>
-          {/if}
-        </div>
+        {#if activeTab === 'overview'}
+          <div
+            role="tabpanel"
+            id="tab-panel-overview"
+            aria-labelledby="tab-overview"
+            aria-hidden="false"
+            tabindex="0"
+          >
+            {@render overviewTab(detection)}
+          </div>
+        {:else if activeTab === 'taxonomy'}
+          <div
+            role="tabpanel"
+            id="tab-panel-taxonomy"
+            aria-labelledby="tab-taxonomy"
+            aria-hidden="false"
+            tabindex="0"
+          >
+            {@render taxonomyTab()}
+          </div>
+        {:else if activeTab === 'history'}
+          <div
+            role="tabpanel"
+            id="tab-panel-history"
+            aria-labelledby="tab-history"
+            aria-hidden="false"
+            tabindex="0"
+          >
+            {@render historyTab()}
+          </div>
+        {:else if activeTab === 'notes'}
+          <div
+            role="tabpanel"
+            id="tab-panel-notes"
+            aria-labelledby="tab-notes"
+            aria-hidden="false"
+            tabindex="0"
+          >
+            {@render notesTab(detection)}
+          </div>
+        {:else if activeTab === 'review' && canReview && ReviewCard}
+          <div
+            role="tabpanel"
+            id="tab-panel-review"
+            aria-labelledby="tab-review"
+            aria-hidden="false"
+            tabindex="0"
+          >
+            <ReviewCard {detection} onSaveComplete={handleReviewComplete} />
+          </div>
+        {/if}
       </div>
     </section>
   {/if}
