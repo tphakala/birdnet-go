@@ -160,6 +160,7 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 		taxonomyTree, err := c.TaxonomyDB.BuildFamilyTree(scientificName)
 		if err == nil {
 			info.Taxonomy = taxonomyTree
+			info.Metadata["source"] = "local"
 			c.Debug("Retrieved taxonomy for %s from local database", scientificName)
 		} else {
 			// Fall back to eBird API if local lookup fails
@@ -170,6 +171,7 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 					c.Debug("Failed to get taxonomy info from eBird for species %s: %v", scientificName, ebirdErr)
 				} else {
 					info.Taxonomy = taxonomyTree
+					info.Metadata["source"] = "ebird"
 				}
 			}
 		}
@@ -180,6 +182,7 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 			c.Debug("Failed to get taxonomy info from eBird for species %s: %v", scientificName, err)
 		} else {
 			info.Taxonomy = taxonomyTree
+			info.Metadata["source"] = "ebird"
 		}
 	}
 
@@ -338,7 +341,7 @@ func (c *Controller) getDetailedTaxonomy(ctx context.Context, scientificName, lo
 				ScientificName: scientificName,
 				Metadata: map[string]interface{}{
 					"source":     "local",
-					"updated_at": time.Now().Format(time.RFC3339),
+					"updated_at": c.TaxonomyDB.UpdatedAt,
 				},
 			}
 
@@ -435,7 +438,7 @@ func (c *Controller) getEBirdTaxonomy(ctx context.Context, scientificName, local
 	}
 
 	// Parse genus from scientific name
-	parts := strings.Split(speciesEntry.ScientificName, " ")
+	parts := strings.Fields(speciesEntry.ScientificName)
 	genus := ""
 	if len(parts) > 0 {
 		genus = parts[0]

@@ -175,7 +175,18 @@
     "licenseText": "Sowohl das BirdNET KI-Modell als auch BirdNET-Go sind lizenziert unter der",
     "ccLicense": "Creative Commons Namensnennung-Nicht kommerziell-Weitergabe unter gleichen Bedingungen 4.0 International Lizenz",
     "licenseDescription": "Diese Lizenz ermöglicht es anderen, dieses Werk nicht-kommerziell zu remixen, anzupassen und darauf aufzubauen, solange angemessene Anerkennung gegeben wird und neue Kreationen unter identischen Bedingungen lizenziert werden.",
-    "dependencyLicenses": "Abhängigkeitslizenzen"
+    "dependencyLicenses": "Abhängigkeitslizenzen",
+    "taxonomyDataTitle": "Taxonomy Data",
+    "taxonomyDataIntro": "BirdNET-Go includes embedded bird taxonomy data derived from the eBird/Clements Checklist, providing fast local genus and family lookups.",
+    "source": "Source",
+    "ebirdApiV2": "eBird API v2",
+    "copyright": "Copyright",
+    "coverage": "Coverage",
+    "taxonomyCoverage": "2,374 genera, 254 families, 11,145 species",
+    "visitEbird": "Visit eBird.org",
+    "ebirdOrg": "eBird.org",
+    "learnEbirdTaxonomy": "Learn about eBird Taxonomy",
+    "learnMore": "Learn More"
   },
   "notifications": {
     "title": "Benachrichtigungen",

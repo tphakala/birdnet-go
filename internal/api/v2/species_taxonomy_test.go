@@ -99,6 +99,7 @@ func TestGetGenusSpecies(t *testing.T) {
 			if tt.expectedStatus == http.StatusOK {
 				require.NoError(t, err, "Expected no error")
 				assert.Equal(t, http.StatusOK, rec.Code, "Expected HTTP 200 OK")
+				assert.Contains(t, rec.Header().Get("Content-Type"), "application/json", "Expected JSON content type")
 
 				if tt.checkResponse != nil {
 					// Parse JSON response
@@ -173,6 +174,7 @@ func TestGetFamilySpecies(t *testing.T) {
 			if tt.expectedStatus == http.StatusOK {
 				require.NoError(t, err, "Expected no error")
 				assert.Equal(t, http.StatusOK, rec.Code, "Expected HTTP 200 OK")
+				assert.Contains(t, rec.Header().Get("Content-Type"), "application/json", "Expected JSON content type")
 
 				var resp map[string]interface{}
 				err := json.Unmarshal(rec.Body.Bytes(), &resp)
@@ -266,6 +268,7 @@ func TestGetSpeciesTree(t *testing.T) {
 			if tt.expectedStatus == http.StatusOK {
 				require.NoError(t, err, "Expected no error")
 				assert.Equal(t, http.StatusOK, rec.Code, "Expected HTTP 200 OK")
+				assert.Contains(t, rec.Header().Get("Content-Type"), "application/json", "Expected JSON content type")
 
 				var resp map[string]interface{}
 				err := json.Unmarshal(rec.Body.Bytes(), &resp)

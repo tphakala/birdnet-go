@@ -276,20 +276,21 @@
       </a>
     </div>
 
-    <p class="text-xl font-medium mt-6">Taxonomy Data</p>
+    <p class="text-xl font-medium mt-6">{t('about.taxonomyDataTitle')}</p>
     <p class="mt-2">
-      BirdNET-Go includes embedded bird taxonomy data derived from the eBird/Clements Checklist,
-      providing fast local genus and family lookups.
+      {t('about.taxonomyDataIntro')}
     </p>
     <div class="mt-2 space-y-1">
       <p class="text-sm">
-        <span class="font-medium">Source:</span> eBird API v2
+        <span class="font-medium">{t('about.source')}:</span>
+        {t('about.ebirdApiV2')}
       </p>
       <p class="text-sm">
-        <span class="font-medium">Copyright:</span> © Cornell Lab of Ornithology
+        <span class="font-medium">{t('about.copyright')}:</span> © Cornell Lab of Ornithology
       </p>
       <p class="text-sm">
-        <span class="font-medium">Coverage:</span> 2,374 genera, 254 families, 11,145 species
+        <span class="font-medium">{t('about.coverage')}:</span>
+        {t('about.taxonomyCoverage')}
       </p>
     </div>
     <div class="flex gap-2 mt-4">
@@ -298,20 +299,20 @@
         class="btn btn-sm btn-outline gap-2"
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="Visit eBird.org"
+        aria-label={t('about.visitEbird')}
       >
         {@html systemIcons.globe}
-        eBird.org
+        {t('about.ebirdOrg')}
       </a>
       <a
         href="https://ebird.org/science/use-ebird-data/the-ebird-taxonomy"
         class="btn btn-sm btn-outline gap-2"
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="Learn about eBird Taxonomy"
+        aria-label={t('about.learnEbirdTaxonomy')}
       >
         {@html dataIcons.document}
-        Learn More
+        {t('about.learnMore')}
       </a>
     </div>
   </Card>
