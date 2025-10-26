@@ -44,7 +44,8 @@
       "no": "Nein",
       "ok": "OK",
       "edit-config": "Konfiguration bearbeiten",
-      "add-action": "Aktion hinzufügen"
+      "add-action": "Aktion hinzufügen",
+      "learnMore": "Mehr erfahren"
     },
     "ui": {
       "loading": "Wird geladen...",
@@ -99,7 +100,9 @@
       "editSpecies": "Art bearbeiten",
       "removeSpecies": "Art entfernen",
       "dismissError": "Fehler verwerfen",
-      "downloadCsv": "Artenliste als CSV herunterladen"
+      "downloadCsv": "Artenliste als CSV herunterladen",
+      "visitEbirdLink": "eBird.org in neuem Tab öffnen",
+      "learnEbirdTaxonomyLink": "eBird-Taxonomie in neuem Tab öffnen"
     },
     "modal": {
       "confirmAction": "Aktion bestätigen",
@@ -175,7 +178,17 @@
     "licenseText": "Sowohl das BirdNET KI-Modell als auch BirdNET-Go sind lizenziert unter der",
     "ccLicense": "Creative Commons Namensnennung-Nicht kommerziell-Weitergabe unter gleichen Bedingungen 4.0 International Lizenz",
     "licenseDescription": "Diese Lizenz ermöglicht es anderen, dieses Werk nicht-kommerziell zu remixen, anzupassen und darauf aufzubauen, solange angemessene Anerkennung gegeben wird und neue Kreationen unter identischen Bedingungen lizenziert werden.",
-    "dependencyLicenses": "Abhängigkeitslizenzen"
+    "dependencyLicenses": "Abhängigkeitslizenzen",
+    "taxonomyDataTitle": "Taxonomiedaten",
+    "taxonomyDataIntro": "BirdNET-Go enthält eingebettete Vogeltaxonomiedaten aus der eBird/Clements-Checkliste und ermöglicht schnelle lokale Gattungs- und Familiensuchen.",
+    "source": "Quelle",
+    "ebirdApiV2": "eBird API v2",
+    "copyright": "Urheberrecht",
+    "coverage": "Abdeckung",
+    "taxonomyCoverage": "2.374 Gattungen, 254 Familien, 11.145 Arten",
+    "visitEbird": "eBird.org besuchen",
+    "ebirdOrg": "eBird.org",
+    "learnEbirdTaxonomy": "Mehr über eBird-Taxonomie erfahren"
   },
   "notifications": {
     "title": "Benachrichtigungen",

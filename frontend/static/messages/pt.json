@@ -44,7 +44,8 @@
       "no": "Não",
       "ok": "OK",
       "edit-config": "Editar configuração",
-      "add-action": "Adicionar ação"
+      "add-action": "Adicionar ação",
+      "learnMore": "Saiba mais"
     },
     "ui": {
       "loading": "Carregando...",
@@ -100,6 +101,8 @@
       "removeSpecies": "Remover espécie",
       "dismissError": "Descartar erro",
       "downloadCsv": "Baixar lista de espécies em CSV",
+      "visitEbirdLink": "Abrir eBird.org em uma nova aba",
+      "learnEbirdTaxonomyLink": "Abrir Taxonomia eBird em uma nova aba",
       "calendarNavigation": "Navegação do calendário: use as setas para mover, Enter para selecionar, Esc para fechar"
     },
     "modal": {
@@ -176,7 +179,17 @@
     "licenseText": "Tanto o modelo de IA BirdNET quanto o BirdNET-Go estão licenciados sob a",
     "ccLicense": "Licença Creative Commons Atribuição-NãoComercial-CompartilhaIgual 4.0 Internacional",
     "licenseDescription": "Esta licença permite que outros remixem, adaptem e construam sobre este trabalho de forma não comercial, desde que o crédito apropriado seja dado e as novas criações sejam licenciadas sob termos idênticos.",
-    "dependencyLicenses": "Licenças de dependências"
+    "dependencyLicenses": "Licenças de dependências",
+    "taxonomyDataTitle": "Dados de taxonomia",
+    "taxonomyDataIntro": "BirdNET-Go inclui dados de taxonomia de aves incorporados derivados da lista eBird/Clements, fornecendo pesquisas locais rápidas por gênero e família.",
+    "source": "Fonte",
+    "ebirdApiV2": "eBird API v2",
+    "copyright": "Direitos autorais",
+    "coverage": "Cobertura",
+    "taxonomyCoverage": "{genera} gêneros, {families} famílias, {species} espécies",
+    "visitEbird": "Visite eBird.org",
+    "ebirdOrg": "eBird.org",
+    "learnEbirdTaxonomy": "Saiba mais sobre a taxonomia do eBird"
   },
   "notifications": {
     "title": "Notificações",

@@ -44,7 +44,8 @@
       "no": "No",
       "ok": "OK",
       "edit-config": "Edit Config",
-      "add-action": "Add Action"
+      "add-action": "Add Action",
+      "learnMore": "Learn More"
     },
     "ui": {
       "loading": "Loading...",
@@ -106,7 +107,9 @@
       "selectToday": "Select today",
       "dateSelected": "Date selected: {date}",
       "calendarNavigation": "Use arrow keys to navigate calendar, Enter to select, Escape to close",
-      "downloadCsv": "Download species list as CSV"
+      "downloadCsv": "Download species list as CSV",
+      "visitEbirdLink": "Open eBird.org in a new tab",
+      "learnEbirdTaxonomyLink": "Open eBird Taxonomy in a new tab"
     },
     "actions": {
       "back": "Back",
@@ -207,7 +210,17 @@
     "licenseText": "Both the BirdNET AI model and BirdNET-Go are licensed under the",
     "ccLicense": "Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License",
     "licenseDescription": "This license allows others to remix, adapt, and build upon this work non-commercially, as long as appropriate credit is given and new creations are licensed under identical terms.",
-    "dependencyLicenses": "Dependency Licenses"
+    "dependencyLicenses": "Dependency Licenses",
+    "taxonomyDataTitle": "Taxonomy Data",
+    "taxonomyDataIntro": "BirdNET-Go includes embedded bird taxonomy data derived from the eBird/Clements Checklist, providing fast local genus and family lookups.",
+    "source": "Source",
+    "ebirdApiV2": "eBird API v2",
+    "copyright": "Copyright",
+    "coverage": "Coverage",
+    "taxonomyCoverage": "2,374 genera, 254 families, 11,145 species",
+    "visitEbird": "Visit eBird.org",
+    "ebirdOrg": "eBird.org",
+    "learnEbirdTaxonomy": "Learn about eBird Taxonomy"
   },
   "notifications": {
     "title": "Notifications",

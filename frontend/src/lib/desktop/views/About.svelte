@@ -275,6 +275,46 @@
         {t('about.patrickLevinGithub')}
       </a>
     </div>
+
+    <p class="text-xl font-medium mt-6">{t('about.taxonomyDataTitle')}</p>
+    <p class="mt-2">
+      {t('about.taxonomyDataIntro')}
+    </p>
+    <div class="mt-2 space-y-1">
+      <p class="text-sm">
+        <span class="font-medium">{t('about.source')}:</span>
+        {t('about.ebirdApiV2')}
+      </p>
+      <p class="text-sm">
+        <span class="font-medium">{t('about.copyright')}:</span> © Cornell Lab of Ornithology
+      </p>
+      <p class="text-sm">
+        <span class="font-medium">{t('about.coverage')}:</span>
+        {t('about.taxonomyCoverage')}
+      </p>
+    </div>
+    <div class="flex gap-2 mt-4">
+      <a
+        href="https://ebird.org"
+        class="btn btn-sm btn-outline gap-2"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={t('about.visitEbird')}
+      >
+        {@html systemIcons.globe}
+        {t('about.ebirdOrg')}
+      </a>
+      <a
+        href="https://ebird.org/science/use-ebird-data/the-ebird-taxonomy"
+        class="btn btn-sm btn-outline gap-2"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={t('about.learnEbirdTaxonomy')}
+      >
+        {@html dataIcons.document}
+        {t('common.buttons.learnMore')}
+      </a>
+    </div>
   </Card>
 
   <!-- Version Information -->

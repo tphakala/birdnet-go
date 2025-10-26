@@ -23,6 +23,7 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/v2/auth"
+	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/ebird"
@@ -46,6 +47,7 @@ type Controller struct {
 	SunCalc             *suncalc.SunCalc
 	Processor           *processor.Processor
 	EBirdClient         *ebird.Client
+	TaxonomyDB          *birdnet.TaxonomyDatabase
 	logger              *log.Logger
 	controlChan         chan string
 	speciesExcludeMutex sync.RWMutex // Mutex for species exclude list operations
@@ -286,6 +288,35 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		c.apiLogger = apiLogger
 		c.apiLoggerClose = closeFunc
 		logger.Printf("API structured logging initialized to %s", apiLogPath)
+	}
+
+	// Load local taxonomy database for fast species lookups
+	taxonomyDB, err := birdnet.LoadTaxonomyDatabase()
+	if err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to load taxonomy database", "error", err)
+			c.apiLogger.Warn("Species taxonomy lookups will fall back to eBird API")
+		} else {
+			logger.Printf("Warning: Failed to load taxonomy database: %v", err)
+			logger.Printf("Species taxonomy lookups will fall back to eBird API")
+		}
+		// Continue without taxonomy database - eBird API fallback will be used
+		c.TaxonomyDB = nil
+	} else {
+		c.TaxonomyDB = taxonomyDB
+		stats := taxonomyDB.Stats()
+		if c.apiLogger != nil {
+			c.apiLogger.Info("Loaded taxonomy database",
+				"genus_count", stats["genus_count"],
+				"family_count", stats["family_count"],
+				"species_count", stats["species_count"],
+				"version", taxonomyDB.Version,
+				"updated_at", taxonomyDB.UpdatedAt,
+			)
+		} else {
+			logger.Printf("Loaded taxonomy database: %v genera, %v families, %v species",
+				stats["genus_count"], stats["family_count"], stats["species_count"])
+		}
 	}
 
 	// If OAuth2Server is provided, setup authentication service and middleware function

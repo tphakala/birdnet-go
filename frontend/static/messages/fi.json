@@ -44,7 +44,8 @@
       "no": "Ei",
       "ok": "OK",
       "edit-config": "Muokkaa asetuksia",
-      "add-action": "Lisää toiminto"
+      "add-action": "Lisää toiminto",
+      "learnMore": "Lue lisää"
     },
     "ui": {
       "loading": "Ladataan...",
@@ -100,6 +101,8 @@
       "removeSpecies": "Poista laji",
       "dismissError": "Hylkää virhe",
       "downloadCsv": "Lataa lajilista CSV-tiedostona",
+      "visitEbirdLink": "Avaa eBird.org uuteen välilehteen",
+      "learnEbirdTaxonomyLink": "Avaa eBird-taksonomia uuteen välilehteen",
       "calendarNavigation": "Kalenterinavigointi: käytä nuolinäppäimiä siirtymiseen, Enter valitsee, Esc sulkee"
     },
     "modal": {
@@ -176,7 +179,17 @@
     "licenseText": "Sekä BirdNET AI-malli että BirdNET-Go on lisensoitu",
     "ccLicense": "Creative Commons Nimeä-EiKaupallinen-JaaSamoin 4.0 Kansainvälinen -lisenssillä",
     "licenseDescription": "Tämä lisenssi sallii muiden remiksata, muokata ja rakentaa tämän työn pohjalta ei-kaupallisiin tarkoituksiin, kunhan asianmukainen tunnustus annetaan ja uudet luomukset lisensoidaan samoin ehdoin.",
-    "dependencyLicenses": "Riippuvuuksien lisenssit"
+    "dependencyLicenses": "Riippuvuuksien lisenssit",
+    "taxonomyDataTitle": "Taksonomiatiedot",
+    "taxonomyDataIntro": "BirdNET-Go sisältää upotetut lintutaksonomiatiedot, jotka on johdettu eBird/Clements-tarkistuslistasta, tarjoten nopeat paikalliset suku- ja perhehaut.",
+    "source": "Lähde",
+    "ebirdApiV2": "eBird API v2",
+    "copyright": "Tekijänoikeus",
+    "coverage": "Kattavuus",
+    "taxonomyCoverage": "2 374 sukua, 254 perhettä, 11 145 lajia",
+    "visitEbird": "Vieraile eBird.org-sivustolla",
+    "ebirdOrg": "eBird.org",
+    "learnEbirdTaxonomy": "Lue lisää eBird-taksonomiasta"
   },
   "notifications": {
     "title": "Ilmoitukset",
