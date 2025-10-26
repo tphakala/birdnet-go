@@ -11,10 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
 // performanceMetrics holds atomic counters for performance tracking
@@ -78,12 +75,6 @@ type sustainedLoadConfig struct {
 // createPerformanceTestTracker creates and initializes a test tracker for performance tests
 func createPerformanceTestTracker(t *testing.T) *SpeciesTracker {
 	t.Helper()
-	ds := &MockSpeciesDatastore{}
-	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
-	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
-
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
 		NewSpeciesWindowDays: 14,
@@ -98,9 +89,7 @@ func createPerformanceTestTracker(t *testing.T) *SpeciesTracker {
 		},
 	}
 
-	tracker := NewTrackerFromSettings(ds, settings)
-	require.NotNil(t, tracker)
-	require.NoError(t, tracker.InitFromDatabase())
+	tracker, _ := createTestTrackerWithMocks(t, settings)
 	return tracker
 }
 

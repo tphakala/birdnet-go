@@ -1856,29 +1856,31 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 	// However, SQLite is local and GORM has internal timeouts, so hangs are unlikely.
 	// If a goroutine does leak due to database hang, in-memory suppression still works.
 	// TODO(BG-17): Consider adding context.Context parameter to SaveNotificationHistory interface
-	go func() {
-		expiresAt := sentTime.Add(2 * t.notificationSuppressionWindow)
-		history := &datastore.NotificationHistory{
-			ScientificName:   scientificName,
-			NotificationType: "new_species",
-			LastSent:         sentTime,
-			ExpiresAt:        expiresAt,
-			CreatedAt:        sentTime,
-			UpdatedAt:        sentTime,
-		}
+	if t.ds != nil {
+		go func() {
+			expiresAt := sentTime.Add(2 * t.notificationSuppressionWindow)
+			history := &datastore.NotificationHistory{
+				ScientificName:   scientificName,
+				NotificationType: "new_species",
+				LastSent:         sentTime,
+				ExpiresAt:        expiresAt,
+				CreatedAt:        sentTime,
+				UpdatedAt:        sentTime,
+			}
 
-		if err := t.ds.SaveNotificationHistory(history); err != nil {
-			logger.Error("Failed to save notification history to database",
-				"species", scientificName,
-				"error", err,
-				"operation", "save_notification_history")
-			// Don't crash - in-memory suppression still works
-		} else {
-			logger.Debug("Persisted notification history to database",
-				"species", scientificName,
-				"expires_at", expiresAt.Format("2006-01-02 15:04:05"))
-		}
-	}()
+			if err := t.ds.SaveNotificationHistory(history); err != nil {
+				logger.Error("Failed to save notification history to database",
+					"species", scientificName,
+					"error", err,
+					"operation", "save_notification_history")
+				// Don't crash - in-memory suppression still works
+			} else {
+				logger.Debug("Persisted notification history to database",
+					"species", scientificName,
+					"expires_at", expiresAt.Format("2006-01-02 15:04:05"))
+			}
+		}()
+	}
 }
 
 // CleanupOldNotificationRecords removes notification records older than 2x the suppression window
@@ -1907,19 +1909,21 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 	// Note: Database methods don't accept context, so timeout cannot be enforced.
 	// However, SQLite is local and GORM has internal timeouts, so hangs are unlikely.
 	// TODO(BG-17): Consider adding context.Context parameter to DeleteExpiredNotificationHistory interface
-	go func() {
-		cutoffTime := currentTime.Add(-2 * t.notificationSuppressionWindow)
-		deletedCount, err := t.ds.DeleteExpiredNotificationHistory(cutoffTime)
-		if err != nil {
-			logger.Error("Failed to cleanup expired notification history from database",
-				"error", err,
-				"cutoff_time", cutoffTime.Format("2006-01-02 15:04:05"))
-		} else if deletedCount > 0 {
-			logger.Debug("Cleaned up expired notification history from database",
-				"deleted_count", deletedCount,
-				"cutoff_time", cutoffTime.Format("2006-01-02 15:04:05"))
-		}
-	}()
+	if t.ds != nil {
+		go func() {
+			cutoffTime := currentTime.Add(-2 * t.notificationSuppressionWindow)
+			deletedCount, err := t.ds.DeleteExpiredNotificationHistory(cutoffTime)
+			if err != nil {
+				logger.Error("Failed to cleanup expired notification history from database",
+					"error", err,
+					"cutoff_time", cutoffTime.Format("2006-01-02 15:04:05"))
+			} else if deletedCount > 0 {
+				logger.Debug("Cleaned up expired notification history from database",
+					"deleted_count", deletedCount,
+					"cutoff_time", cutoffTime.Format("2006-01-02 15:04:05"))
+			}
+		}()
+	}
 
 	return cleaned
 }

@@ -376,6 +376,8 @@ func TestFullWorkflow_MemoryManagement(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
+	// BG-17: PruneOldEntries deletes from database
+	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).Return(int64(0), nil).Maybe()
 
 	// Verify all mock expectations are met
 	t.Cleanup(func() { ds.AssertExpectations(t) })
@@ -439,6 +441,10 @@ func TestFullWorkflow_NotificationSystem(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
+	// BG-17: RecordNotificationSent saves to database
+	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).Return(nil).Maybe()
+	// BG-17: CleanupOldNotificationRecords deletes from database
+	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).Return(int64(0), nil).Maybe()
 
 	// Verify all mock expectations are met
 	t.Cleanup(func() { ds.AssertExpectations(t) })

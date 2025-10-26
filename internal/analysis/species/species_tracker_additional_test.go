@@ -385,6 +385,12 @@ func TestNotificationSuppressionEdgeCases(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
+	// BG-17: InitFromDatabase now loads notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil)
+	// BG-17: RecordNotificationSent saves to database (called in subtests)
+	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+		Return(nil).Maybe()
 
 	t.Run("exactly at suppression window boundary", func(t *testing.T) {
 		settings := &conf.SpeciesTrackingSettings{
