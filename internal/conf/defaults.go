@@ -96,6 +96,7 @@ func setDefaultConfig() {
 
 	// Spectrogram pre-rendering configuration
 	viper.SetDefault("realtime.dashboard.spectrogram.enabled", false) // Opt-in for safety
+	viper.SetDefault("realtime.dashboard.spectrogram.mode", "auto")   // Default to auto mode (generate on demand)
 	viper.SetDefault("realtime.dashboard.spectrogram.size", "sm")     // 400px, matches frontend RecentDetectionsCard
 	viper.SetDefault("realtime.dashboard.spectrogram.raw", true)      // Raw spectrogram (no axes/legend)
 

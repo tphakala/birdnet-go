@@ -151,7 +151,8 @@
   let isGeneratingSpectrogram = $state(false);
   // eslint-disable-next-line no-unused-vars
   let generationError = $state<string | null>(null);
-  let spectrogramMode = $state<string | null>(null);
+  // Default to "auto" mode if backend doesn't specify
+  let spectrogramMode = $state<string>('auto');
 
   // Audio processing state
   let audioContext: AudioContext | null = null;
@@ -420,7 +421,7 @@
   // showing the generate button.
   const checkSpectrogramMode = async () => {
     if (!spectrogramUrl) {
-      spectrogramMode = null;
+      spectrogramMode = 'auto';
       debugLog('checkSpectrogramMode: no spectrogramUrl');
       return;
     }
@@ -437,8 +438,8 @@
         const contentType = response.headers.get('Content-Type');
         if (contentType?.includes('application/json')) {
           const responseData = await response.json();
-          // Extract mode from data field in API v2 envelope
-          spectrogramMode = responseData.data?.mode ?? null;
+          // Extract mode from data field in API v2 envelope, default to "auto" if not specified
+          spectrogramMode = responseData.data?.mode ?? 'auto';
 
           debugLog('checkSpectrogramMode: mode detected', { mode: spectrogramMode });
 
@@ -449,15 +450,16 @@
           }
         }
       } else if (response.ok) {
-        // Spectrogram exists
-        spectrogramMode = null;
+        // Spectrogram exists - mode is no longer relevant
+        spectrogramMode = 'auto';
         spectrogramNeedsGeneration = false;
         debugLog('checkSpectrogramMode: spectrogram exists');
       }
     } catch (err) {
       logger.debug('Failed to check spectrogram mode', { detectionId, error: err });
       debugLog('checkSpectrogramMode: error', err);
-      spectrogramMode = null;
+      // Default to auto mode on error
+      spectrogramMode = 'auto';
     }
   };
 
