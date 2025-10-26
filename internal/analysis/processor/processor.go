@@ -1488,17 +1488,37 @@ func (p *Processor) NewWithSpeciesInfo(
 
 // logDetectionResults logs detection processing results using the LogDeduplicator
 // to prevent repetitive logging while maintaining observability.
+//
+// Strategy (BG-18):
+//   - INFO level: Only when filtered_detections_count > 0 (actual detections)
+//   - DEBUG level: Zero-detection cycles (for troubleshooting without log spam)
+//
+// This prevents ~40,000+ identical "filtered_detections_count:0" logs per day
+// while still allowing debug-mode visibility into the detection pipeline.
 func (p *Processor) logDetectionResults(source string, rawCount, filteredCount int) {
 	// Use the LogDeduplicator to determine if we should log
 	shouldLog, reason := p.logDedup.ShouldLog(source, rawCount, filteredCount)
 
 	if shouldLog {
-		GetLogger().Info("Detection processing results",
-			"source", p.getDisplayNameForSource(source),
-			"raw_results_count", rawCount,
-			"filtered_detections_count", filteredCount,
-			"log_reason", reason,
-			"operation", "process_detections_summary")
+		// Only log at INFO level when there are actual filtered detections
+		// This prevents log spam from empty analysis cycles
+		if filteredCount > 0 {
+			GetLogger().Info("Detection processing results",
+				"source", p.getDisplayNameForSource(source),
+				"raw_results_count", rawCount,
+				"filtered_detections_count", filteredCount,
+				"log_reason", reason,
+				"operation", "process_detections_summary")
+		} else {
+			// Log zero-detection cycles at DEBUG level for troubleshooting
+			// without flooding INFO logs with noise
+			GetLogger().Debug("Detection processing results",
+				"source", p.getDisplayNameForSource(source),
+				"raw_results_count", rawCount,
+				"filtered_detections_count", 0,
+				"log_reason", reason,
+				"operation", "process_detections_summary")
+		}
 	}
 }
 

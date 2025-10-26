@@ -832,6 +832,31 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 		}
 	}
 
+	// Get file size for logging
+	fileInfo, err := os.Stat(outputPath)
+	var fileSize int64
+	if err == nil {
+		fileSize = fileInfo.Size()
+	} else {
+		// Debug log if we can't stat the file (shouldn't happen after successful write)
+		GetLogger().Debug("Failed to stat audio file for size logging",
+			"component", "analysis.processor.actions",
+			"detection_id", a.CorrelationID,
+			"error", err,
+			"path", outputPath,
+			"operation", "audio_export_stat")
+	}
+
+	// Log successful audio export at INFO level (BG-18)
+	// This provides evidence that audio export completed successfully
+	GetLogger().Info("Audio clip saved successfully",
+		"component", "analysis.processor.actions",
+		"detection_id", a.CorrelationID,
+		"clip_path", a.ClipName,
+		"file_size_bytes", fileSize,
+		"format", a.Settings.Realtime.Audio.Export.Type,
+		"operation", "audio_export_success")
+
 	// Submit for pre-rendering if enabled
 	if a.Settings.Realtime.Dashboard.Spectrogram.Enabled && a.PreRenderer != nil {
 		// Create pre-render job using local DTO (avoids direct spectrogram dependency)
