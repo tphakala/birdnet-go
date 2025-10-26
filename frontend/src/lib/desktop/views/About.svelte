@@ -312,7 +312,7 @@
         aria-label={t('about.learnEbirdTaxonomy')}
       >
         {@html dataIcons.document}
-        {t('about.learnMore')}
+        {t('common.buttons.learnMore')}
       </a>
     </div>
   </Card>

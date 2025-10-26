@@ -201,8 +201,7 @@
     "taxonomyCoverage": "{genera} genres, {families} familles, {species} espèces",
     "visitEbird": "Visiter eBird.org",
     "ebirdOrg": "eBird.org",
-    "learnEbirdTaxonomy": "En savoir plus sur la taxonomie eBird",
-    "learnMore": "En savoir plus"
+    "learnEbirdTaxonomy": "En savoir plus sur la taxonomie eBird"
   },
   "notifications": {
     "title": "Notifications",
