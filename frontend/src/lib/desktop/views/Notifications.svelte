@@ -101,10 +101,14 @@
   }
 
   // Handle notification click
-  function handleNotificationClick(notification) {
+  async function handleNotificationClick(notification) {
     // For detection notifications with note_id, navigate to detection detail page
     if (notification.type === 'detection' && notification.metadata?.note_id) {
-      markAsRead(notification.id);
+      try {
+        await markAsRead(notification.id);
+      } catch (error) {
+        console.error('Failed to mark notification as read:', error);
+      }
       window.location.href = `/ui/detections/${notification.metadata.note_id}`;
     }
   }
