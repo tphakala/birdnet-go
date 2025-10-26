@@ -89,10 +89,13 @@ func (ds *DataStore) GetNotificationHistory(scientificName, notificationType str
 // GetActiveNotificationHistory retrieves all notification history records that were sent after the specified time
 // This is used during initialization to load recent notification history into memory
 // Typical usage: Load notifications from past 2x suppression window (14 days)
+// Currently filters to only "new_species" type as that's the only type consumed by the tracker
 func (ds *DataStore) GetActiveNotificationHistory(after time.Time) ([]NotificationHistory, error) {
 	var histories []NotificationHistory
 
-	err := ds.DB.Where("last_sent >= ?", after).
+	// Filter by notification_type to reduce data transfer (optimization)
+	// Currently only "new_species" notifications are used by the species tracker
+	err := ds.DB.Where("notification_type = ? AND last_sent >= ?", "new_species", after).
 		Order("last_sent DESC").
 		Find(&histories).Error
 

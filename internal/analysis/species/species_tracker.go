@@ -38,6 +38,7 @@ const (
 
 	// Notification suppression
 	defaultNotificationSuppressionWindow = 168 * time.Hour // Default suppression window (7 days)
+	notificationTypeNewSpecies           = "new_species"   // Notification type for new species alerts
 
 	// Cache management
 	maxStatusCacheSize = 1000 // Maximum number of species to cache
@@ -935,7 +936,7 @@ func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(now time.Time) erro
 	for i := range histories {
 		// Filter by notification type to prevent future types from overwriting new_species entries
 		// This is future-proofing for when we add yearly/seasonal notification tracking
-		if histories[i].NotificationType != "new_species" {
+		if histories[i].NotificationType != notificationTypeNewSpecies {
 			continue
 		}
 
@@ -1867,7 +1868,7 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 			expiresAt := sentTime.Add(t.notificationSuppressionWindow)
 			history := &datastore.NotificationHistory{
 				ScientificName:   scientificName,
-				NotificationType: "new_species",
+				NotificationType: notificationTypeNewSpecies,
 				LastSent:         sentTime,
 				ExpiresAt:        expiresAt,
 				CreatedAt:        sentTime,

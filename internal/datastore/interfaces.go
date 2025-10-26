@@ -27,9 +27,13 @@ const sunriseSetWindowMinutes = 30
 
 // Sentinel errors for not found cases
 var (
-	ErrNoteReviewNotFound          = errors.Newf("note review not found").Component("datastore").Category(errors.CategoryNotFound).Build()
-	ErrNoteLockNotFound            = errors.Newf("note lock not found").Component("datastore").Category(errors.CategoryNotFound).Build()
-	ErrImageCacheNotFound          = errors.Newf("image cache not found").Component("datastore").Category(errors.CategoryNotFound).Build()
+	// ErrNoteReviewNotFound indicates the requested note review was not found.
+	ErrNoteReviewNotFound = errors.Newf("note review not found").Component("datastore").Category(errors.CategoryNotFound).Build()
+	// ErrNoteLockNotFound indicates the requested note lock was not found.
+	ErrNoteLockNotFound = errors.Newf("note lock not found").Component("datastore").Category(errors.CategoryNotFound).Build()
+	// ErrImageCacheNotFound indicates the requested image cache entry was not found.
+	ErrImageCacheNotFound = errors.Newf("image cache not found").Component("datastore").Category(errors.CategoryNotFound).Build()
+	// ErrNotificationHistoryNotFound indicates no notification history record exists for the given species and type.
 	ErrNotificationHistoryNotFound = errors.Newf("notification history not found").Component("datastore").Category(errors.CategoryNotFound).Build()
 )
 
