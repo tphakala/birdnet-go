@@ -5,6 +5,7 @@ import (
 	_ "embed" // For embedding data
 	"encoding/json"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -74,7 +75,40 @@ func LoadTaxonomyDatabase() (*TaxonomyDatabase, error) {
 			Build()
 	}
 
+	// Normalize all map keys to lowercase at load time
+	// This prevents subtle lookup bugs from case mismatches
+	db.Genera = normalizeGeneraKeys(db.Genera)
+	db.Families = normalizeFamiliesKeys(db.Families)
+	db.SpeciesIndex = normalizeSpeciesIndexKeys(db.SpeciesIndex)
+
 	return &db, nil
+}
+
+// normalizeGeneraKeys normalizes all genus names to lowercase
+func normalizeGeneraKeys(genera map[string]*GenusMetadata) map[string]*GenusMetadata {
+	normalized := make(map[string]*GenusMetadata, len(genera))
+	for key, value := range genera {
+		normalized[strings.ToLower(key)] = value
+	}
+	return normalized
+}
+
+// normalizeFamiliesKeys normalizes all family names to lowercase
+func normalizeFamiliesKeys(families map[string]*FamilyMetadata) map[string]*FamilyMetadata {
+	normalized := make(map[string]*FamilyMetadata, len(families))
+	for key, value := range families {
+		normalized[strings.ToLower(key)] = value
+	}
+	return normalized
+}
+
+// normalizeSpeciesIndexKeys normalizes all species names to lowercase
+func normalizeSpeciesIndexKeys(speciesIndex map[string]string) map[string]string {
+	normalized := make(map[string]string, len(speciesIndex))
+	for key, value := range speciesIndex {
+		normalized[strings.ToLower(key)] = value
+	}
+	return normalized
 }
 
 // GetGenusByScientificName retrieves genus metadata by scientific name
@@ -161,7 +195,8 @@ func (db *TaxonomyDatabase) GetAllSpeciesInFamily(familyName string) ([]string, 
 	}
 
 	// Collect all species from all genera in the family
-	var allSpecies []string
+	// Preallocate with known species count for efficiency
+	allSpecies := make([]string, 0, familyMetadata.SpeciesCount)
 	for _, genusName := range familyMetadata.Genera {
 		genusMetadata, exists := db.Genera[genusName]
 		if exists {
@@ -218,7 +253,7 @@ func (db *TaxonomyDatabase) GetSpeciesTree(scientificName string) (*SpeciesTreeR
 		Genus:         genus,
 		Species:       scientificName,
 		SpeciesCommon: "", // Would need common name mapping
-		UpdatedAt:     time.Now(),
+		UpdatedAt:     time.Now().UTC(),
 	}
 
 	// Build result with related species
@@ -266,6 +301,30 @@ func (db *TaxonomyDatabase) GetFamilyInfo(familyName string) (*FamilyMetadata, e
 	return familyMetadata, nil
 }
 
+// GetGenusInfo retrieves genus information including all species
+func (db *TaxonomyDatabase) GetGenusInfo(genusName string) (*GenusMetadata, error) {
+	if db == nil || db.Genera == nil {
+		return nil, errors.Newf("taxonomy database not initialized").
+			Category(errors.CategorySystem).
+			Component("birdnet-genus").
+			Build()
+	}
+
+	// Normalize genus name (lowercase)
+	normalized := strings.ToLower(strings.TrimSpace(genusName))
+
+	genusMetadata, exists := db.Genera[normalized]
+	if !exists {
+		return nil, errors.Newf("genus '%s' not found in taxonomy database", genusName).
+			Category(errors.CategoryNotFound).
+			Context("genus", genusName).
+			Component("birdnet-genus").
+			Build()
+	}
+
+	return genusMetadata, nil
+}
+
 // SearchGenus performs a case-insensitive search for genera matching a pattern
 func (db *TaxonomyDatabase) SearchGenus(pattern string) []string {
 	if db == nil || db.Genera == nil {
@@ -280,6 +339,9 @@ func (db *TaxonomyDatabase) SearchGenus(pattern string) []string {
 			matches = append(matches, genusName)
 		}
 	}
+
+	// Sort results alphabetically for stable output
+	sort.Strings(matches)
 
 	return matches
 }
@@ -299,6 +361,9 @@ func (db *TaxonomyDatabase) SearchFamily(pattern string) []string {
 		}
 	}
 
+	// Sort results alphabetically for stable output
+	sort.Strings(matches)
+
 	return matches
 }
 
@@ -312,10 +377,13 @@ func (db *TaxonomyDatabase) Stats() map[string]any {
 
 	return map[string]any{
 		"version":       db.Version,
+		"description":   db.Description,
 		"updated_at":    db.UpdatedAt,
 		"genus_count":   len(db.Genera),
 		"family_count":  len(db.Families),
 		"species_count": len(db.SpeciesIndex),
 		"source":        db.Source,
+		"license":       db.License,
+		"attribution":   db.Attribution,
 	}
 }

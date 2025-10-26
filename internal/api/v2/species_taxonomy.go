@@ -12,6 +12,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// Cache headers for taxonomy endpoints (taxonomy data is static)
+const (
+	taxonomyCacheControl = "public, max-age=86400"
+	taxonomyVary         = "Accept-Encoding"
+)
+
 // GenusSpeciesResponse represents the response for genus species lookup
 type GenusSpeciesResponse struct {
 	Genus        string   `json:"genus"`
@@ -32,8 +38,9 @@ type FamilySpeciesResponse struct {
 	TotalCount   int      `json:"total_count"`
 }
 
-// titleFirst returns a string with its first rune converted to title case.
-// This is Unicode-safe and handles empty strings without panicking.
+// titleFirst returns a string with its first rune converted to title case
+// and the rest converted to lowercase. This is Unicode-safe and handles
+// empty strings without panicking.
 func titleFirst(s string) string {
 	if s == "" {
 		return s
@@ -42,7 +49,7 @@ func titleFirst(s string) string {
 	if r == utf8.RuneError {
 		return s
 	}
-	return string(unicode.ToTitle(r)) + s[size:]
+	return string(unicode.ToTitle(r)) + strings.ToLower(s[size:])
 }
 
 // GetGenusSpecies retrieves all species in a given genus
@@ -74,38 +81,24 @@ func (c *Controller) GetGenusSpecies(ctx echo.Context) error {
 			Build(), "Taxonomy database not available", http.StatusServiceUnavailable)
 	}
 
-	// Get all species in the genus
-	species, err := c.TaxonomyDB.GetAllSpeciesInGenus(genus)
+	// Get genus metadata
+	genusMetadata, err := c.TaxonomyDB.GetGenusInfo(genus)
 	if err != nil {
 		return c.HandleError(ctx, err, "Genus not found", http.StatusNotFound)
 	}
 
-	// Get genus metadata from the first species in the genus
-	if len(species) == 0 {
-		return c.HandleError(ctx, errors.Newf("genus has no species").
-			Category(errors.CategoryValidation).
-			Context("genus", genus).
-			Component("api-taxonomy").
-			Build(), "Genus has no species", http.StatusInternalServerError)
-	}
-
-	genusName, genusMetadata, err := c.TaxonomyDB.GetGenusByScientificName(species[0])
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to get genus metadata", http.StatusInternalServerError)
-	}
-
 	response := GenusSpeciesResponse{
-		Genus:        titleFirst(genusName),
+		Genus:        titleFirst(genus),
 		Family:       genusMetadata.Family,
 		FamilyCommon: genusMetadata.FamilyCommon,
 		Order:        genusMetadata.Order,
-		Species:      species,
-		TotalCount:   len(species),
+		Species:      genusMetadata.Species,
+		TotalCount:   len(genusMetadata.Species),
 	}
 
 	// Set cache headers (taxonomy data is static)
-	ctx.Response().Header().Set("Cache-Control", "public, max-age=86400")
-	ctx.Response().Header().Set("Vary", "Accept-Encoding")
+	ctx.Response().Header().Set("Cache-Control", taxonomyCacheControl)
+	ctx.Response().Header().Set("Vary", taxonomyVary)
 
 	return ctx.JSON(http.StatusOK, response)
 }
@@ -161,8 +154,8 @@ func (c *Controller) GetFamilySpecies(ctx echo.Context) error {
 	}
 
 	// Set cache headers (taxonomy data is static)
-	ctx.Response().Header().Set("Cache-Control", "public, max-age=86400")
-	ctx.Response().Header().Set("Vary", "Accept-Encoding")
+	ctx.Response().Header().Set("Cache-Control", taxonomyCacheControl)
+	ctx.Response().Header().Set("Vary", taxonomyVary)
 
 	return ctx.JSON(http.StatusOK, response)
 }
@@ -215,8 +208,8 @@ func (c *Controller) GetSpeciesTree(ctx echo.Context) error {
 	}
 
 	// Set cache headers (taxonomy data is static)
-	ctx.Response().Header().Set("Cache-Control", "public, max-age=86400")
-	ctx.Response().Header().Set("Vary", "Accept-Encoding")
+	ctx.Response().Header().Set("Cache-Control", taxonomyCacheControl)
+	ctx.Response().Header().Set("Vary", taxonomyVary)
 
 	return ctx.JSON(http.StatusOK, result)
 }

@@ -101,6 +101,10 @@ func TestGetGenusSpecies(t *testing.T) {
 				assert.Equal(t, http.StatusOK, rec.Code, "Expected HTTP 200 OK")
 				assert.Contains(t, rec.Header().Get("Content-Type"), "application/json", "Expected JSON content type")
 
+				// Verify cache headers
+				assert.Equal(t, "public, max-age=86400", rec.Header().Get("Cache-Control"), "Expected cache control header")
+				assert.Equal(t, "Accept-Encoding", rec.Header().Get("Vary"), "Expected vary header")
+
 				if tt.checkResponse != nil {
 					// Parse JSON response
 					var resp map[string]interface{}
@@ -176,6 +180,10 @@ func TestGetFamilySpecies(t *testing.T) {
 				assert.Equal(t, http.StatusOK, rec.Code, "Expected HTTP 200 OK")
 				assert.Contains(t, rec.Header().Get("Content-Type"), "application/json", "Expected JSON content type")
 
+				// Verify cache headers
+				assert.Equal(t, "public, max-age=86400", rec.Header().Get("Cache-Control"), "Expected cache control header")
+				assert.Equal(t, "Accept-Encoding", rec.Header().Get("Vary"), "Expected vary header")
+
 				var resp map[string]interface{}
 				err := json.Unmarshal(rec.Body.Bytes(), &resp)
 				require.NoError(t, err, "Failed to parse JSON response")
@@ -239,7 +247,7 @@ func TestGetSpeciesTree(t *testing.T) {
 		},
 		{
 			name:           "url encoded spaces",
-			scientificName: "Turdus%20migratorius",
+			scientificName: "Turdus migratorius",
 			expectedStatus: http.StatusOK,
 			wantGenus:      "Turdus",
 			wantFamily:     "Turdidae",
@@ -255,13 +263,14 @@ func TestGetSpeciesTree(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := echo.New()
-			// URL-encode the scientific name for the request
+			// URL-encode the scientific name for the request URL
 			encodedName := url.PathEscape(tt.scientificName)
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/taxonomy/tree/"+encodedName, http.NoBody)
 			rec := httptest.NewRecorder()
 			echoCtx := e.NewContext(req, rec)
 			echoCtx.SetParamNames("scientific_name")
-			echoCtx.SetParamValues(tt.scientificName)
+			// Echo would decode the URL param, so pass the encoded value to simulate that
+			echoCtx.SetParamValues(encodedName)
 
 			err := c.GetSpeciesTree(echoCtx)
 
@@ -269,6 +278,10 @@ func TestGetSpeciesTree(t *testing.T) {
 				require.NoError(t, err, "Expected no error")
 				assert.Equal(t, http.StatusOK, rec.Code, "Expected HTTP 200 OK")
 				assert.Contains(t, rec.Header().Get("Content-Type"), "application/json", "Expected JSON content type")
+
+				// Verify cache headers
+				assert.Equal(t, "public, max-age=86400", rec.Header().Get("Cache-Control"), "Expected cache control header")
+				assert.Equal(t, "Accept-Encoding", rec.Header().Get("Vary"), "Expected vary header")
 
 				var resp map[string]interface{}
 				err := json.Unmarshal(rec.Body.Bytes(), &resp)
