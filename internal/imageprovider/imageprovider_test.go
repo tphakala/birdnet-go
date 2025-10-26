@@ -277,7 +277,7 @@ func (m *mockStore) GetActiveNotificationHistory(after time.Time) ([]datastore.N
 }
 
 func (m *mockStore) GetNotificationHistory(scientificName, notificationType string) (*datastore.NotificationHistory, error) {
-	return nil, datastore.ErrImageCacheNotFound // Reuse error for "not found"
+	return nil, datastore.ErrNotificationHistoryNotFound
 }
 
 func (m *mockStore) SaveNotificationHistory(history *datastore.NotificationHistory) error {

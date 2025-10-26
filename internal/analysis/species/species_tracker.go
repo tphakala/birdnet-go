@@ -933,8 +933,13 @@ func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(now time.Time) erro
 
 	// Load notification history into memory
 	for i := range histories {
+		// Filter by notification type to prevent future types from overwriting new_species entries
+		// This is future-proofing for when we add yearly/seasonal notification tracking
+		if histories[i].NotificationType != "new_species" {
+			continue
+		}
+
 		// Store the most recent notification time for each species
-		// Use scientific name as key (notification type is always "new_species" for now)
 		t.notificationLastSent[histories[i].ScientificName] = histories[i].LastSent
 
 		logger.Debug("Loaded notification history",
@@ -1858,7 +1863,8 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 	// TODO(BG-17): Consider adding context.Context parameter to SaveNotificationHistory interface
 	if t.ds != nil {
 		go func() {
-			expiresAt := sentTime.Add(2 * t.notificationSuppressionWindow)
+			// ExpiresAt = when the suppression ends (sentTime + suppressionWindow)
+			expiresAt := sentTime.Add(t.notificationSuppressionWindow)
 			history := &datastore.NotificationHistory{
 				ScientificName:   scientificName,
 				NotificationType: "new_species",
@@ -1883,7 +1889,7 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 	}
 }
 
-// CleanupOldNotificationRecords removes notification records older than 2x the suppression window
+// CleanupOldNotificationRecords removes notification records older than the suppression window
 // to prevent unbounded memory growth.
 // BG-17 fix: Also cleans up expired records from database
 func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) int {
@@ -1892,35 +1898,37 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 		return 0
 	}
 
-	// Clean up in-memory records
+	// Clean up in-memory records (removes entries older than currentTime - suppressionWindow)
 	t.mu.Lock()
 	cleaned := t.cleanupOldNotificationRecordsLocked(currentTime)
 	t.mu.Unlock()
 
 	if cleaned > 0 {
-		cutoffTime := currentTime.Add(-2 * t.notificationSuppressionWindow)
+		// Log the actual cutoff used by cleanupOldNotificationRecordsLocked
+		cutoffTime := currentTime.Add(-t.notificationSuppressionWindow)
 		logger.Debug("Cleaned up old notification records from memory",
 			"removed_count", cleaned,
 			"cutoff_time", cutoffTime.Format("2006-01-02 15:04:05"))
 	}
 
 	// Clean up database records asynchronously (BG-17 fix)
+	// Deletes records where ExpiresAt < currentTime (i.e., suppression has expired)
 	//
 	// Note: Database methods don't accept context, so timeout cannot be enforced.
 	// However, SQLite is local and GORM has internal timeouts, so hangs are unlikely.
 	// TODO(BG-17): Consider adding context.Context parameter to DeleteExpiredNotificationHistory interface
 	if t.ds != nil {
 		go func() {
-			cutoffTime := currentTime.Add(-2 * t.notificationSuppressionWindow)
-			deletedCount, err := t.ds.DeleteExpiredNotificationHistory(cutoffTime)
+			// Delete records that have expired (ExpiresAt < now)
+			deletedCount, err := t.ds.DeleteExpiredNotificationHistory(currentTime)
 			if err != nil {
 				logger.Error("Failed to cleanup expired notification history from database",
 					"error", err,
-					"cutoff_time", cutoffTime.Format("2006-01-02 15:04:05"))
+					"current_time", currentTime.Format("2006-01-02 15:04:05"))
 			} else if deletedCount > 0 {
 				logger.Debug("Cleaned up expired notification history from database",
 					"deleted_count", deletedCount,
-					"cutoff_time", cutoffTime.Format("2006-01-02 15:04:05"))
+					"current_time", currentTime.Format("2006-01-02 15:04:05"))
 			}
 		}()
 	}

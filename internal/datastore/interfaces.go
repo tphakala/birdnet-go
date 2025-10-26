@@ -27,9 +27,10 @@ const sunriseSetWindowMinutes = 30
 
 // Sentinel errors for not found cases
 var (
-	ErrNoteReviewNotFound = errors.Newf("note review not found").Component("datastore").Category(errors.CategoryNotFound).Build()
-	ErrNoteLockNotFound   = errors.Newf("note lock not found").Component("datastore").Category(errors.CategoryNotFound).Build()
-	ErrImageCacheNotFound = errors.Newf("image cache not found").Component("datastore").Category(errors.CategoryNotFound).Build()
+	ErrNoteReviewNotFound          = errors.Newf("note review not found").Component("datastore").Category(errors.CategoryNotFound).Build()
+	ErrNoteLockNotFound            = errors.Newf("note lock not found").Component("datastore").Category(errors.CategoryNotFound).Build()
+	ErrImageCacheNotFound          = errors.Newf("image cache not found").Component("datastore").Category(errors.CategoryNotFound).Build()
+	ErrNotificationHistoryNotFound = errors.Newf("notification history not found").Component("datastore").Category(errors.CategoryNotFound).Build()
 )
 
 // StoreInterface abstracts the underlying database implementation and defines the interface for database operations.
@@ -101,6 +102,12 @@ type Interface interface {
 	UpdateDynamicThresholdExpiry(speciesName string, expiresAt time.Time) error
 	BatchSaveDynamicThresholds(thresholds []DynamicThreshold) error
 	// Notification History methods
+	// TODO(BG-17): Add context.Context as first parameter for cancellation/timeout support:
+	//   SaveNotificationHistory(ctx context.Context, history *NotificationHistory) error
+	//   GetNotificationHistory(ctx context.Context, scientificName string, notificationType string) (*NotificationHistory, error)
+	//   GetActiveNotificationHistory(ctx context.Context, after time.Time) ([]NotificationHistory, error)
+	//   DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error)
+	// This requires updating all implementations and call sites (breaking change)
 	SaveNotificationHistory(history *NotificationHistory) error
 	GetNotificationHistory(scientificName string, notificationType string) (*NotificationHistory, error)
 	GetActiveNotificationHistory(after time.Time) ([]NotificationHistory, error)

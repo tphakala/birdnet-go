@@ -75,13 +75,7 @@ func (ds *DataStore) GetNotificationHistory(scientificName, notificationType str
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.Newf("notification history not found").
-				Component("datastore").
-				Category(errors.CategoryNotFound).
-				Context("operation", "get_notification_history").
-				Context("species", scientificName).
-				Context("notification_type", notificationType).
-				Build()
+			return nil, ErrNotificationHistoryNotFound
 		}
 		return nil, dbError(err, "get_notification_history", errors.PriorityMedium,
 			"species", scientificName,

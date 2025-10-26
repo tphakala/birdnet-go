@@ -44,7 +44,11 @@ func (m *MockSpeciesDatastore) SaveNotificationHistory(history *datastore.Notifi
 // DeleteExpiredNotificationHistory implements the SpeciesDatastore interface method using testify/mock
 func (m *MockSpeciesDatastore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
 	args := m.Called(before)
-	return args.Get(0).(int64), args.Error(1)
+	// Protect against nil return value to avoid panic
+	if v := args.Get(0); v != nil {
+		return v.(int64), args.Error(1)
+	}
+	return 0, args.Error(1)
 }
 
 // safeSlice is a helper for mock methods returning slices.

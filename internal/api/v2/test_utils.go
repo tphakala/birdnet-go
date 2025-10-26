@@ -378,7 +378,11 @@ func (m *MockDataStore) SaveNotificationHistory(history *datastore.NotificationH
 
 func (m *MockDataStore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
 	args := m.Called(before)
-	return args.Get(0).(int64), args.Error(1)
+	// Protect against nil return value to avoid panic
+	if v := args.Get(0); v != nil {
+		return v.(int64), args.Error(1)
+	}
+	return 0, args.Error(1)
 }
 
 // TestImageProvider implements the imageprovider.Provider interface for testing
@@ -735,7 +739,11 @@ func (m *MockDataStoreV2) SaveNotificationHistory(history *datastore.Notificatio
 
 func (m *MockDataStoreV2) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
 	args := m.Called(before)
-	return args.Get(0).(int64), args.Error(1)
+	// Protect against nil return value to avoid panic
+	if v := args.Get(0); v != nil {
+		return v.(int64), args.Error(1)
+	}
+	return 0, args.Error(1)
 }
 
 // MockImageProvider is a mock implementation of imageprovider.ImageProvider interface
