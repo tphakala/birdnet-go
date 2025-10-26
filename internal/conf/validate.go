@@ -611,6 +611,28 @@ func validateDashboardSettings(settings *Dashboard) error {
 		}
 	}
 
+	// Validate spectrogram settings
+	if settings.Spectrogram.Mode != "" {
+		validModes := []string{"auto", "prerender", "user-requested"}
+		isValid := false
+		for _, validMode := range validModes {
+			if settings.Spectrogram.Mode == validMode {
+				isValid = true
+				break
+			}
+		}
+		if !isValid {
+			// Log warning but don't fail - GetMode() will handle fallback
+			log.Printf("WARNING: Invalid spectrogram mode '%s', valid modes are: auto, prerender, user-requested. Using GetMode() fallback.", settings.Spectrogram.Mode)
+		}
+	}
+
+	// Log the effective spectrogram mode at startup for troubleshooting
+	effectiveMode := settings.Spectrogram.GetMode()
+	log.Printf("Spectrogram configuration: enabled=%v, mode='%s', effective_mode='%s', size='%s', raw=%v",
+		settings.Spectrogram.Enabled, settings.Spectrogram.Mode, effectiveMode,
+		settings.Spectrogram.Size, settings.Spectrogram.Raw)
+
 	return nil
 }
 
