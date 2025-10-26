@@ -16,6 +16,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
@@ -900,7 +901,7 @@ func TestServeAudioByID(t *testing.T) {
 	require.NoError(t, err)
 
 	// Setup mock data store to return the test file path
-	mockDS := &MockDataStore{}
+	mockDS := mocks.NewMockInterface(t)
 	// Mock the GetNoteClipPath method to return our test filename
 	mockDS.On("GetNoteClipPath", "123").Return(testFilename, nil)
 	mockDS.On("GetNoteClipPath", "999").Return("", errors.New("record not found"))
@@ -995,7 +996,7 @@ func TestServeAudioByID_AudioFormats(t *testing.T) {
 	}
 
 	// Setup mock data store
-	mockDS := &MockDataStore{}
+	mockDS := mocks.NewMockInterface(t)
 	controller.DS = mockDS
 
 	// Using Go 1.25's modern range over int syntax for cleaner iteration
@@ -1073,7 +1074,7 @@ func TestServeSpectrogramByIDRawParameter(t *testing.T) {
 	require.NoError(t, err)
 
 	// Setup mock data store
-	mockDS := &MockDataStore{}
+	mockDS := mocks.NewMockInterface(t)
 	mockDS.On("GetNoteClipPath", "123").Return(testFilename, nil)
 	controller.DS = mockDS
 

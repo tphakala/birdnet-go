@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // runGetHourlyWeatherForDayNoDataTest runs the hourly weather endpoint test with no data for a given date
@@ -110,15 +111,15 @@ func TestGetDailyWeather(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-// setupWeatherTestEnvironment creates a test environment with Echo, MockDataStore, and Controller
+// setupWeatherTestEnvironment creates a test environment with Echo, mocks.MockInterface, and Controller
 // specifically configured for weather API tests
-func setupWeatherTestEnvironment(t *testing.T) (*echo.Echo, *MockDataStore, *Controller) {
+func setupWeatherTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Controller) {
 	t.Helper()
 	// Create a new Echo instance
 	e := echo.New()
 
 	// Create a test datastore
-	mockDS := new(MockDataStore)
+	mockDS := mocks.NewMockInterface(t)
 	mockDS.On("Open").Return(nil)
 
 	// Call Open to satisfy the mock expectation

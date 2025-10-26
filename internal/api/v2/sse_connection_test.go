@@ -30,6 +30,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
@@ -391,7 +392,7 @@ func setupSSETestServer(t *testing.T) (*httptest.Server, *Controller) {
 	e := echo.New()
 
 	// Create mock datastore
-	mockDS := new(MockDataStore)
+	mockDS := mocks.NewMockInterface(t)
 
 	// Create settings with required paths
 	settings := &conf.Settings{
@@ -477,7 +478,7 @@ func BenchmarkSSEConnectionSetup(b *testing.B) {
 func setupSSETestServerForBench(b *testing.B) (*httptest.Server, *Controller) {
 	b.Helper()
 	e := echo.New()
-	mockDS := new(MockDataStore)
+	mockDS := mocks.NewMockInterface(b)
 	settings := &conf.Settings{
 		WebServer: conf.WebServerSettings{Debug: false}, // Disable debug for benchmarking
 		Realtime: conf.RealtimeSettings{

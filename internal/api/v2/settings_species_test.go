@@ -18,7 +18,7 @@ import (
 // TestUpdateSpeciesSettingsWithZeroValues tests that zero values in species config are preserved
 func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 	t.Parallel()
-	
+
 	// Setup
 	e := echo.New()
 	controller := createTestController(t)
@@ -118,11 +118,11 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 
 			// Verify the settings were updated correctly
 			actualConfig := controller.Settings.Realtime.Species.Config[birdName]
-			assert.InDelta(t, tt.expectedConfig.Threshold, actualConfig.Threshold, 0.0001, 
+			assert.InDelta(t, tt.expectedConfig.Threshold, actualConfig.Threshold, 0.0001,
 				"%s: Threshold should match", tt.description)
-			assert.Equal(t, tt.expectedConfig.Interval, actualConfig.Interval, 
+			assert.Equal(t, tt.expectedConfig.Interval, actualConfig.Interval,
 				"%s: Interval should match", tt.description)
-			
+
 			// Verify Actions slice is empty but not nil (should match expected)
 			assert.Empty(t, actualConfig.Actions, "%s: Actions should be empty", tt.description)
 			assert.NotNil(t, actualConfig.Actions, "%s: Actions should be empty slice, not nil", tt.description)
@@ -131,7 +131,7 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 			var response map[string]any
 			err := json.Unmarshal(rec.Body.Bytes(), &response)
 			require.NoError(t, err, "Response should be valid JSON")
-			
+
 			// Type-assert the message field to ensure it's a string
 			messageField, exists := response["message"]
 			require.True(t, exists, "Response should contain message field")
@@ -142,10 +142,10 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 	}
 }
 
-// TestSpeciesSettingsUpdate tests that species config updates preserve zero values correctly  
+// TestSpeciesSettingsUpdate tests that species config updates preserve zero values correctly
 func TestSpeciesSettingsUpdate(t *testing.T) {
 	t.Parallel()
-	
+
 	// Setup
 	e := echo.New()
 	controller := &Controller{
@@ -182,7 +182,7 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 				},
 				"New Bird": map[string]any{
 					"threshold": 0.0, // Add new bird with zero values
-					"interval":  0,   
+					"interval":  0,
 					"actions":   []any{},
 				},
 			},
@@ -200,7 +200,7 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 	assert.Empty(t, initialBird.Actions, "Initial Bird actions should be empty")
 	assert.NotNil(t, initialBird.Actions, "Initial Bird actions should be empty slice, not nil")
 
-	newBird := controller.Settings.Realtime.Species.Config["New Bird"] 
+	newBird := controller.Settings.Realtime.Species.Config["New Bird"]
 	assert.InDelta(t, 0.0, newBird.Threshold, 0.0001, "New Bird threshold should be zero")
 	assert.Equal(t, 0, newBird.Interval, "New Bird interval should be zero")
 	assert.Empty(t, newBird.Actions, "New Bird actions should be empty")
@@ -210,7 +210,7 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 	var response map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err, "Response should be valid JSON")
-	
+
 	// Type-assert the message field to ensure it's a string
 	messageField, exists := response["message"]
 	require.True(t, exists, "Response should contain message field")
@@ -222,7 +222,7 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 // TestPartialSpeciesConfigUpdate tests that partial updates don't lose existing data
 func TestPartialSpeciesConfigUpdate(t *testing.T) {
 	t.Parallel()
-	
+
 	// Setup with existing configs
 	e := echo.New()
 	controller := &Controller{
@@ -292,7 +292,7 @@ func TestPartialSpeciesConfigUpdate(t *testing.T) {
 // This ensures that updates to controller.Settings are reflected in GET responses
 func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 	t.Parallel()
-	
+
 	// Setup controller with its own settings (simulating real usage)
 	e := echo.New()
 	controller := &Controller{
@@ -379,7 +379,7 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 // TestSpeciesSettingsRejectInvalid tests that invalid species config is rejected by the API
 func TestSpeciesSettingsRejectInvalid(t *testing.T) {
 	t.Parallel()
-	
+
 	// Setup
 	e := echo.New()
 	controller := createTestController(t)
@@ -398,7 +398,7 @@ func TestSpeciesSettingsRejectInvalid(t *testing.T) {
 	}
 
 	rec := patchRealtime(t, e, controller, invalidPayload)
-	
+
 	// Should return client error status (400 Bad Request)
 	assert.Equal(t, http.StatusBadRequest, rec.Code, "Should reject invalid species config")
 
@@ -406,10 +406,10 @@ func TestSpeciesSettingsRejectInvalid(t *testing.T) {
 	var response map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err, "Response should be valid JSON")
-	
-	// Assert the presence/shape of the validation error 
+
+	// Assert the presence/shape of the validation error
 	assert.Contains(t, response, "error", "Response should contain error field for validation failure")
-	
+
 	// Verify error message mentions validation failure
 	if errorField, exists := response["error"]; exists {
 		errorString, ok := errorField.(string)
@@ -504,7 +504,7 @@ func getRealtime(t *testing.T, e *echo.Echo, c *Controller) *httptest.ResponseRe
 // createTestController creates a test controller with initialized settings for species tests
 func createTestController(t *testing.T) *Controller {
 	t.Helper()
-	
+
 	return &Controller{
 		Settings: &conf.Settings{
 			Realtime: conf.RealtimeSettings{
@@ -516,6 +516,6 @@ func createTestController(t *testing.T) *Controller {
 			},
 		},
 		DisableSaveSettings: true,
-		logger: log.New(io.Discard, "", 0), // Add a discard logger for tests
+		logger:              log.New(io.Discard, "", 0), // Add a discard logger for tests
 	}
 }

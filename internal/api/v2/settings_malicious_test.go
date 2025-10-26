@@ -131,7 +131,7 @@ func TestMaliciousInputData(t *testing.T) {
 			body, err := json.Marshal(tt.maliciousData)
 			require.NoError(t, err)
 
-			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section, 
+			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section,
 				bytes.NewReader(body))
 			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 			rec := httptest.NewRecorder()
@@ -249,7 +249,7 @@ func TestTypeConfusionAttacks(t *testing.T) {
 			body, err := json.Marshal(tt.confusedData)
 			require.NoError(t, err)
 
-			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section, 
+			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section,
 				bytes.NewReader(body))
 			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 			rec := httptest.NewRecorder()

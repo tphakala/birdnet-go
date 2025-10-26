@@ -69,7 +69,7 @@ func TestMalformedJSONData(t *testing.T) {
 		},
 		{
 			name:          "Completely malformed JSON",
-			section:       "species", 
+			section:       "species",
 			malformedData: `{this is not json at all}`,
 			expectedError: "Failed to parse request body",
 		},
@@ -88,7 +88,7 @@ func TestMalformedJSONData(t *testing.T) {
 			e := echo.New()
 			controller := getTestController(t, e)
 
-			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section, 
+			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section,
 				strings.NewReader(tt.malformedData))
 			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 			rec := httptest.NewRecorder()
@@ -97,7 +97,7 @@ func TestMalformedJSONData(t *testing.T) {
 			ctx.SetParamValues(tt.section)
 
 			err := controller.UpdateSectionSettings(ctx)
-			
+
 			// Use helper function to assert error response
 			assertControllerError(t, err, rec, http.StatusBadRequest, tt.expectedError)
 		})
