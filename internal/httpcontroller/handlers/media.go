@@ -366,7 +366,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	// Sanitize the clip name
 	sanitizedClipName, err := h.sanitizeClipName(clipName)
 	if err != nil {
-		logger.Debug("Clip name sanitization failed, serving placeholder",
+		logger.Error("Clip name sanitization failed, serving placeholder",
 			slog.String("raw_clip_name", clipName),
 			slog.String("error", err.Error()),
 			slog.Duration("request_duration", time.Since(startTime)),
@@ -391,7 +391,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	// Verify that the audio file exists
 	exists, err := fileExists(fullPath)
 	if err != nil {
-		logger.Debug("Audio file existence check failed, serving placeholder",
+		logger.Error("Audio file existence check failed, serving placeholder",
 			slog.String("full_path", fullPath),
 			slog.String("error", err.Error()),
 			slog.Duration("request_duration", time.Since(startTime)),
@@ -400,7 +400,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 		return serveSpectrogramPlaceholder(c)
 	}
 	if !exists {
-		logger.Debug("Audio file not found, serving placeholder",
+		logger.Error("Audio file not found, serving placeholder",
 			slog.String("full_path", fullPath),
 			slog.Duration("request_duration", time.Since(startTime)),
 		)
@@ -416,7 +416,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	spectrogramWidth := 400 // Default width for HTMX API
 	spectrogramPath, err := h.getSpectrogramPath(fullPath, spectrogramWidth)
 	if err != nil {
-		logger.Debug("Spectrogram path generation failed, serving placeholder",
+		logger.Error("Spectrogram path generation failed, serving placeholder",
 			slog.String("full_path", fullPath),
 			slog.Int("width", spectrogramWidth),
 			slog.String("error", err.Error()),
@@ -435,7 +435,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	// Verify the spectrogram exists
 	exists, err = fileExists(spectrogramPath)
 	if err != nil {
-		logger.Debug("Spectrogram existence check failed, serving placeholder",
+		logger.Error("Spectrogram existence check failed, serving placeholder",
 			slog.String("spectrogram_path", spectrogramPath),
 			slog.String("error", err.Error()),
 			slog.Duration("request_duration", time.Since(startTime)),
@@ -444,7 +444,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 		return serveSpectrogramPlaceholder(c)
 	}
 	if !exists {
-		logger.Debug("Spectrogram not found, initiating generation",
+		logger.Info("Spectrogram not found, initiating on-demand generation",
 			slog.String("spectrogram_path", spectrogramPath),
 			slog.String("audio_path", fullPath),
 			slog.Int("width", spectrogramWidth),
@@ -471,13 +471,55 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 		}()
 
 		// Try to create the spectrogram using shared generator
+		// HTMX handler always uses auto mode (on-demand generation) regardless of config
 		generationStartTime := time.Now()
 		ctx := c.Request().Context()
-		if err := h.spectrogramGenerator.GenerateFromFile(ctx, fullPath, spectrogramPath, spectrogramWidth, false); err != nil {
-			generationDuration := time.Since(generationStartTime)
-			logger.Debug("Spectrogram generation failed, serving placeholder",
+
+		// Defensive check for nil generator
+		if h.spectrogramGenerator == nil {
+			logger.Error("Spectrogram generator is not initialized",
 				slog.String("audio_path", fullPath),
 				slog.String("spectrogram_path", spectrogramPath),
+			)
+			h.Debug("ServeSpectrogram: Generator is nil!")
+			return serveSpectrogramPlaceholder(c)
+		}
+
+		// Ensure paths are absolute before calling generator
+		// The generator requires absolute paths for security validation
+		absAudioPath, err := filepath.Abs(fullPath)
+		if err != nil {
+			logger.Error("Failed to get absolute path for audio file",
+				slog.String("full_path", fullPath),
+				slog.String("error", err.Error()),
+			)
+			return serveSpectrogramPlaceholder(c)
+		}
+
+		absSpectrogramPath, err := filepath.Abs(spectrogramPath)
+		if err != nil {
+			logger.Error("Failed to get absolute path for spectrogram",
+				slog.String("spectrogram_path", spectrogramPath),
+				slog.String("error", err.Error()),
+			)
+			return serveSpectrogramPlaceholder(c)
+		}
+
+		logger.Info("Calling spectrogram generator",
+			slog.String("audio_path", absAudioPath),
+			slog.String("output_path", absSpectrogramPath),
+			slog.Int("width", spectrogramWidth),
+			slog.Bool("raw", true),
+		)
+
+		// HTMX UI always uses raw=true (no axes/legends) for backward compatibility
+		err = h.spectrogramGenerator.GenerateFromFile(ctx, absAudioPath, absSpectrogramPath, spectrogramWidth, true)
+		generationDuration := time.Since(generationStartTime)
+
+		if err != nil {
+			logger.Error("Spectrogram generation returned error",
+				slog.String("audio_path", absAudioPath),
+				slog.String("spectrogram_path", absSpectrogramPath),
 				slog.Int("width", spectrogramWidth),
 				slog.String("error", err.Error()),
 				slog.Duration("generation_duration", generationDuration),
@@ -486,15 +528,18 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 			h.Debug("ServeSpectrogram: Failed to create spectrogram: %v", err)
 			return serveSpectrogramPlaceholder(c)
 		}
-		generationDuration := time.Since(generationStartTime)
-		logger.Debug("Spectrogram generated successfully",
-			slog.String("audio_path", fullPath),
-			slog.String("spectrogram_path", spectrogramPath),
+
+		logger.Info("Spectrogram generation returned success",
+			slog.String("audio_path", absAudioPath),
+			slog.String("spectrogram_path", absSpectrogramPath),
 			slog.Int("width", spectrogramWidth),
 			slog.Duration("generation_duration", generationDuration),
 			slog.Duration("semaphore_wait_duration", semaphoreWaitDuration),
 		)
-		h.Debug("ServeSpectrogram: Successfully created spectrogram at: %s", spectrogramPath)
+		h.Debug("ServeSpectrogram: Successfully created spectrogram at: %s", absSpectrogramPath)
+
+		// Update spectrogramPath to use the absolute path for the final check
+		spectrogramPath = absSpectrogramPath
 	} else {
 		logger.Debug("Existing spectrogram found, serving cached version",
 			slog.String("spectrogram_path", spectrogramPath),
@@ -504,7 +549,7 @@ func (h *Handlers) ServeSpectrogram(c echo.Context) error {
 	// Final check if the spectrogram exists after potential creation
 	exists, _ = fileExists(spectrogramPath)
 	if !exists {
-		logger.Debug("Spectrogram still not found after creation attempt, serving placeholder",
+		logger.Error("Spectrogram still not found after creation attempt, serving placeholder",
 			slog.String("spectrogram_path", spectrogramPath),
 			slog.Duration("total_request_duration", time.Since(startTime)),
 		)
