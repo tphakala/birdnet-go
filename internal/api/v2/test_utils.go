@@ -147,8 +147,8 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 		},
 	}
 
-	// Create a test logger
-	logger := log.New(os.Stdout, "API TEST: ", log.LstdFlags)
+	// Create a test logger (use io.Discard to avoid noisy stdout in CI)
+	logger := log.New(io.Discard, "API TEST: ", log.LstdFlags)
 
 	// Create a mock ImageProvider for testing
 	mockImageProvider := new(MockImageProvider)

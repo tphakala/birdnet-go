@@ -353,8 +353,11 @@ func BenchmarkSpeciesTracker_GetSpeciesStatus(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	// Go 1.25: Use b.Loop() instead of manual for i := 0; i < b.N; i++
+	i := 0
+	for b.Loop() {
 		_ = tracker.GetSpeciesStatus(species[i%100], currentTime)
+		i++
 	}
 }
 
@@ -391,8 +394,11 @@ func BenchmarkSpeciesTracker_UpdateSpecies(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	// Go 1.25: Use b.Loop() instead of manual for i := 0; i < b.N; i++
+	i := 0
+	for b.Loop() {
 		tracker.UpdateSpecies(species[i], currentTime)
+		i++
 	}
 }
 
@@ -484,12 +490,15 @@ func BenchmarkSpeciesTracker_MapMemoryUsage(b *testing.B) {
 	b.ReportAllocs()
 
 	// Benchmark memory allocation when adding many species
-	for i := 0; i < b.N; i++ {
+	// Go 1.25: Use b.Loop() instead of manual for i := 0; i < b.N; i++
+	i := 0
+	for b.Loop() {
 		tracker.UpdateSpecies(uniqueSpeciesNames[i], currentTime)
 		if i%1000 == 0 {
 			// Periodically check a species to prevent optimization
 			_ = tracker.GetSpeciesStatus(uniqueSpeciesNames[0], currentTime)
 		}
+		i++
 	}
 }
 

@@ -26,7 +26,7 @@ func TestWinterSeasonAdjustmentBug(t *testing.T) {
 	historicalData := []datastore.NewSpeciesData{
 		{ScientificName: "Parus major", FirstSeenDate: "2023-01-15"},
 		{ScientificName: "Turdus merula", FirstSeenDate: "2023-06-15"},
-		{ScientificName: "Corvus corvax", FirstSeenDate: "2023-12-25"},
+		{ScientificName: "Corvus corax", FirstSeenDate: "2023-12-25"},
 	}
 
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).

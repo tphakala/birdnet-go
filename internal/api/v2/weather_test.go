@@ -56,7 +56,6 @@ func runGetHourlyWeatherForDayNoDataTest(t *testing.T, date string) {
 	}
 
 	// Verify mock expectations
-	mockDS.AssertExpectations(t)
 }
 
 // TestGetDailyWeather tests the daily weather endpoint
@@ -108,7 +107,6 @@ func TestGetDailyWeather(t *testing.T) {
 	}
 
 	// Verify mock expectations
-	mockDS.AssertExpectations(t)
 }
 
 // setupWeatherTestEnvironment creates a test environment with Echo, mocks.MockInterface, and Controller
@@ -120,10 +118,6 @@ func setupWeatherTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface
 
 	// Create a test datastore
 	mockDS := mocks.NewMockInterface(t)
-	mockDS.On("Open").Return(nil)
-
-	// Call Open to satisfy the mock expectation
-	_ = mockDS.Open()
 
 	// Create a controller with the test datastore
 	controller := &Controller{
@@ -214,7 +208,6 @@ func TestGetDailyWeatherDatabaseError(t *testing.T) {
 	assert.Contains(t, errorResponse.Error, "database error")
 
 	// Verify mock expectations
-	mockDS.AssertExpectations(t)
 }
 
 // TestGetHourlyWeatherForDay tests the hourly weather for day endpoint
@@ -307,7 +300,6 @@ func TestGetHourlyWeatherForDay(t *testing.T) {
 	}
 
 	// Verify mock expectations
-	mockDS.AssertExpectations(t)
 }
 
 // TestGetHourlyWeatherForDayNoData tests the hourly weather endpoint with no data
@@ -353,7 +345,6 @@ func TestGetHourlyWeatherForDayFutureDate(t *testing.T) {
 	}
 
 	// Verify mock expectations
-	mockDS.AssertExpectations(t)
 }
 
 // TestGetHourlyWeatherForDayInvalidDate tests the hourly weather endpoint with an invalid date
@@ -396,7 +387,6 @@ func TestGetHourlyWeatherForDayDatabaseError(t *testing.T) {
 	assert.Contains(t, errorResponse.Error, "database error")
 
 	// Verify mock expectations
-	mockDS.AssertExpectations(t)
 }
 
 // TestGetHourlyWeatherForHour tests the hourly weather for specific hour endpoint
@@ -460,7 +450,6 @@ func TestGetHourlyWeatherForHour(t *testing.T) {
 	}
 
 	// Verify mock expectations
-	mockDS.AssertExpectations(t)
 }
 
 // TestGetHourlyWeatherForHourNotFound tests the hourly weather for hour endpoint when hour not found
@@ -508,7 +497,6 @@ func TestGetHourlyWeatherForHourNotFound(t *testing.T) {
 	assert.Equal(t, "Weather data not found for specified hour", errorResponse.Message)
 
 	// Verify mock expectations
-	mockDS.AssertExpectations(t)
 }
 
 // TestGetHourlyWeatherForHourInvalidHour tests the hourly weather for hour endpoint with invalid hour format
@@ -615,7 +603,6 @@ func TestGetWeatherForDetection(t *testing.T) {
 	}
 
 	// Verify mock expectations
-	mockDS.AssertExpectations(t)
 }
 
 // TestGetWeatherForDetectionMissingID tests the weather for detection endpoint with missing ID
@@ -717,5 +704,4 @@ func TestGetLatestWeather(t *testing.T) {
 	}
 
 	// Verify mock expectations
-	mockDS.AssertExpectations(t)
 }
