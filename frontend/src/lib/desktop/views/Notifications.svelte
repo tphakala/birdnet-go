@@ -367,6 +367,7 @@
       </div>
     {:else}
       {#each notifications as notification (notification.id)}
+        <!-- Tabindex is conditionally added only when role="link" is set for clickable notifications -->
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
           class={getNotificationCardClass(notification)}
@@ -374,7 +375,11 @@
           role={isClickable(notification) ? 'link' : undefined}
           tabindex={isClickable(notification) ? 0 : undefined}
           onkeydown={e => {
-            if (isClickable(notification) && e.currentTarget === e.target && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) {
+            if (
+              isClickable(notification) &&
+              e.currentTarget === e.target &&
+              (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')
+            ) {
               e.preventDefault();
               handleNotificationClick(notification);
             }
