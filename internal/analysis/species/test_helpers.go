@@ -1,87 +1,45 @@
 package species
 
 import (
-	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
-
-// MockSpeciesDatastore implements the SpeciesDatastore interface using testify/mock
-type MockSpeciesDatastore struct {
-	mock.Mock
-}
-
-// GetNewSpeciesDetections implements the SpeciesDatastore interface method using testify/mock
-func (m *MockSpeciesDatastore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	args := m.Called(ctx, startDate, endDate, limit, offset)
-	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
-}
-
-// GetSpeciesFirstDetectionInPeriod implements the SpeciesDatastore interface method using testify/mock
-func (m *MockSpeciesDatastore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {
-	args := m.Called(ctx, startDate, endDate, limit, offset)
-	return safeSlice[datastore.NewSpeciesData](args, 0), args.Error(1)
-}
-
-// BG-17 fix: Add notification history methods
-// GetActiveNotificationHistory implements the SpeciesDatastore interface method using testify/mock
-func (m *MockSpeciesDatastore) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
-	args := m.Called(after)
-	return safeSlice[datastore.NotificationHistory](args, 0), args.Error(1)
-}
-
-// SaveNotificationHistory implements the SpeciesDatastore interface method using testify/mock
-func (m *MockSpeciesDatastore) SaveNotificationHistory(history *datastore.NotificationHistory) error {
-	args := m.Called(history)
-	return args.Error(0)
-}
-
-// DeleteExpiredNotificationHistory implements the SpeciesDatastore interface method using testify/mock
-func (m *MockSpeciesDatastore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
-	args := m.Called(before)
-	// Protect against nil return value to avoid panic
-	if v := args.Get(0); v != nil {
-		return v.(int64), args.Error(1)
-	}
-	return 0, args.Error(1)
-}
-
-// safeSlice is a helper for mock methods returning slices.
-// It safely handles nil arguments and performs type assertion.
-// TODO: Move to a shared test utilities package to reduce duplication
-func safeSlice[T any](args mock.Arguments, index int) []T {
-	if arg := args.Get(index); arg != nil {
-		if slice, ok := arg.([]T); ok {
-			return slice
-		}
-		panic("safeSlice: type assertion failed")
-	}
-	return nil
-}
 
 // createTestTrackerWithMocks creates a SpeciesTracker with all necessary mock expectations set up.
 // This consolidates duplicate test setup code and reduces duplication.
 // BG-17: Includes notification history mocks required by InitFromDatabase.
-func createTestTrackerWithMocks(t *testing.T, settings *conf.SpeciesTrackingSettings) (*SpeciesTracker, *MockSpeciesDatastore) {
+// BG-21: Migrated to use auto-generated mocks from mockery.
+func createTestTrackerWithMocks(t *testing.T, settings *conf.SpeciesTrackingSettings) (*SpeciesTracker, *mocks.MockInterface) {
 	t.Helper()
 
-	ds := &MockSpeciesDatastore{}
-	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
-	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
-	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+	// Use generated mock instead of manual implementation
+	mockDS := mocks.NewMockInterface(t)
 
-	tracker := NewTrackerFromSettings(ds, settings)
+	// Set up expectations using the expecter pattern
+	mockDS.EXPECT().
+		GetNewSpeciesDetections(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return([]datastore.NewSpeciesData{}, nil).
+		Maybe() // Allow this to be called zero or more times
+
+	// BG-17: InitFromDatabase now loads notification history
+	mockDS.EXPECT().
+		GetActiveNotificationHistory(mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).
+		Maybe()
+
+	mockDS.EXPECT().
+		GetSpeciesFirstDetectionInPeriod(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return([]datastore.NewSpeciesData{}, nil).
+		Maybe()
+
+	tracker := NewTrackerFromSettings(mockDS, settings)
 	require.NotNil(t, tracker)
 	require.NoError(t, tracker.InitFromDatabase())
 
-	return tracker, ds
+	return tracker, mockDS
 }

@@ -580,8 +580,8 @@ func TestSouthernHemisphereSeasonAdjustment(t *testing.T) {
 	}{
 		{
 			seasonName:       "spring",
-			northernMonth:    3,  // March in Northern
-			expectedSouthern: 9,  // September in Southern
+			northernMonth:    3, // March in Northern
+			expectedSouthern: 9, // September in Southern
 			description:      "Spring should be in September for southern hemisphere",
 		},
 		{
@@ -592,8 +592,8 @@ func TestSouthernHemisphereSeasonAdjustment(t *testing.T) {
 		},
 		{
 			seasonName:       "fall",
-			northernMonth:    9,  // September in Northern
-			expectedSouthern: 3,  // March in Southern
+			northernMonth:    9, // September in Northern
+			expectedSouthern: 3, // March in Southern
 			description:      "Fall should be in March for southern hemisphere",
 		},
 		{
@@ -609,7 +609,7 @@ func TestSouthernHemisphereSeasonAdjustment(t *testing.T) {
 			northSeason := northernSeasons[tc.seasonName]
 			southSeason := southernSeasons[tc.seasonName]
 
-			assert.Equal(t, tc.northernMonth, northSeason.StartMonth, 
+			assert.Equal(t, tc.northernMonth, northSeason.StartMonth,
 				"Northern hemisphere %s should start in month %d", tc.seasonName, tc.northernMonth)
 			assert.Equal(t, tc.expectedSouthern, southSeason.StartMonth,
 				"Southern hemisphere %s should start in month %d", tc.seasonName, tc.expectedSouthern)
@@ -650,7 +650,7 @@ func TestHemisphereSeasonTracking(t *testing.T) {
 			tracker.mu.Lock()
 			season := tracker.computeCurrentSeason(tc.date)
 			tracker.mu.Unlock()
-			assert.Equal(t, tc.expectedSeason, season, 
+			assert.Equal(t, tc.expectedSeason, season,
 				"Northern hemisphere %s should be %s", tc.date.Month(), tc.expectedSeason)
 		}
 	})

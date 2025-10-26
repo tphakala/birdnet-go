@@ -14,6 +14,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // TestFullWorkflow_BasicTracking tests basic species tracking workflow
@@ -22,7 +23,7 @@ func TestFullWorkflow_BasicTracking(t *testing.T) {
 	t.Parallel()
 
 	// Create a mock datastore
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 
 	// Setup mock to return empty results for any date range
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil)
@@ -88,7 +89,7 @@ func TestFullWorkflow_YearlyTracking(t *testing.T) {
 	t.Parallel()
 
 	// Create mock datastore
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 
 	// Setup mock responses for yearly data
 	yearlyData := []datastore.NewSpeciesData{
@@ -165,7 +166,7 @@ func TestFullWorkflow_SeasonalTracking(t *testing.T) {
 	t.Parallel()
 
 	// Create mock datastore
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 
 	// Setup mock for seasonal data
 	springData := []datastore.NewSpeciesData{
@@ -232,7 +233,7 @@ func TestFullWorkflow_CombinedTracking(t *testing.T) {
 	t.Parallel()
 
 	// Create mock datastore
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 
 	// Setup default mock responses
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
@@ -343,7 +344,7 @@ func TestFullWorkflow_ErrorRecovery(t *testing.T) {
 	assert.Equal(t, 0, days)
 
 	// Test with datastore that returns errors
-	errorDS := &MockSpeciesDatastore{}
+	errorDS := mocks.NewMockInterface(t)
 	errorDS.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData(nil), fmt.Errorf("database error"))
 	// Basic tracking doesn't use yearly/seasonal, so this may not be called
 	errorDS.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData(nil), fmt.Errorf("database error")).Maybe()
@@ -373,7 +374,7 @@ func TestFullWorkflow_ErrorRecovery(t *testing.T) {
 func TestFullWorkflow_MemoryManagement(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: PruneOldEntries deletes from database
@@ -438,7 +439,7 @@ func TestFullWorkflow_MemoryManagement(t *testing.T) {
 func TestFullWorkflow_NotificationSystem(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: RecordNotificationSent saves to database
@@ -506,7 +507,7 @@ func TestFullWorkflow_PerformanceUnderLoad(t *testing.T) {
 		t.Skip("Skipping performance test in short mode")
 	}
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 

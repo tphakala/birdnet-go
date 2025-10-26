@@ -18,6 +18,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // TestConcurrentAccessUnderLoad tests species tracker under high concurrent load
@@ -291,7 +292,7 @@ func TestDatabaseFailureRecovery(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Testing database failure scenario: %s", tt.description)
 
-			ds := &MockSpeciesDatastore{}
+			ds := mocks.NewMockInterface(t)
 
 			// Configure mock behavior based on failure type
 			switch tt.failureType {
@@ -321,9 +322,9 @@ func TestDatabaseFailureRecovery(t *testing.T) {
 			case "empty_results":
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil)
-	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+				// BG-17: InitFromDatabase now loads notification history
+				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+					Return([]datastore.NotificationHistory{}, nil)
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil)
 

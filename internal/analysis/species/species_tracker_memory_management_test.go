@@ -16,6 +16,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // TestCleanupExpiredCache_CriticalReliability tests cache cleanup for memory management
@@ -96,12 +97,12 @@ func TestCleanupExpiredCache_CriticalReliability(t *testing.T) {
 			t.Logf("Testing cache cleanup scenario: %s", tt.description)
 
 			// Create tracker
-			ds := &MockSpeciesDatastore{}
+			ds := mocks.NewMockInterface(t)
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil)
-	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+			// BG-17: InitFromDatabase now loads notification history
+			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+				Return([]datastore.NotificationHistory{}, nil)
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil)
 
@@ -220,7 +221,7 @@ func TestCacheLRUEviction_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
 	// Create tracker
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -388,12 +389,12 @@ func TestBuildSpeciesStatusWithBuffer_CriticalReliability(t *testing.T) {
 			t.Logf("Testing status building: %s", tt.description)
 
 			// Create tracker
-			ds := &MockSpeciesDatastore{}
+			ds := mocks.NewMockInterface(t)
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil)
-	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+			// BG-17: InitFromDatabase now loads notification history
+			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+				Return([]datastore.NotificationHistory{}, nil)
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil)
 
@@ -488,7 +489,7 @@ func TestConcurrentCacheOperations_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
 	// Create tracker
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history

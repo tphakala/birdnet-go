@@ -9,13 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // TestSpeciesTracker_Close tests the Close method
 func TestSpeciesTracker_Close(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled: true,
 	}
@@ -38,7 +39,7 @@ func TestSpeciesTracker_Close(t *testing.T) {
 func TestSpeciesTracker_SetCurrentYearForTesting(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled: true,
 		YearlyTracking: conf.YearlyTrackingSettings{
@@ -112,7 +113,7 @@ func TestSpeciesTracker_shouldResetYear(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ds := &MockSpeciesDatastore{}
+			ds := mocks.NewMockInterface(t)
 			settings := &conf.SpeciesTrackingSettings{
 				Enabled: true,
 				YearlyTracking: conf.YearlyTrackingSettings{
@@ -135,7 +136,7 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 	t.Parallel()
 
 	t.Run("successful load", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 
 		// Mock data
 		yearlyData := []datastore.NewSpeciesData{
@@ -177,7 +178,7 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 	})
 
 	t.Run("empty database preserves existing", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, 10000, 0).
 			Return([]datastore.NewSpeciesData{}, nil)
 
@@ -204,7 +205,7 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 	})
 
 	t.Run("database error", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, 10000, 0).
 			Return(nil, assert.AnError)
 
@@ -227,7 +228,7 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 	t.Parallel()
 
 	t.Run("successful load", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 
 		// Mock data
 		seasonalData := []datastore.NewSpeciesData{
@@ -279,7 +280,7 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 	})
 
 	t.Run("no season maps", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled: true,
@@ -301,7 +302,7 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 	})
 
 	t.Run("empty database preserves existing", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, 10000, 0).
 			Return([]datastore.NewSpeciesData{}, nil)
 
@@ -347,7 +348,7 @@ func TestSpeciesTracker_getYearDateRange(t *testing.T) {
 	t.Parallel()
 
 	t.Run("standard year range", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		settings := &conf.SpeciesTrackingSettings{
 			YearlyTracking: conf.YearlyTrackingSettings{
 				ResetMonth: 1,
@@ -365,7 +366,7 @@ func TestSpeciesTracker_getYearDateRange(t *testing.T) {
 	})
 
 	t.Run("custom reset date", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		settings := &conf.SpeciesTrackingSettings{
 			YearlyTracking: conf.YearlyTrackingSettings{
 				ResetMonth: 7,
@@ -387,7 +388,7 @@ func TestSpeciesTracker_getYearDateRange(t *testing.T) {
 	})
 
 	t.Run("before reset date", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		settings := &conf.SpeciesTrackingSettings{
 			YearlyTracking: conf.YearlyTrackingSettings{
 				ResetMonth: 10,
@@ -411,7 +412,7 @@ func TestSpeciesTracker_getSeasonDateRange(t *testing.T) {
 	t.Parallel()
 
 	t.Run("spring season", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		settings := &conf.SpeciesTrackingSettings{
 			SeasonalTracking: conf.SeasonalTrackingSettings{
 				Enabled: true,
@@ -432,7 +433,7 @@ func TestSpeciesTracker_getSeasonDateRange(t *testing.T) {
 	})
 
 	t.Run("winter season crossing year", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		settings := &conf.SpeciesTrackingSettings{
 			SeasonalTracking: conf.SeasonalTrackingSettings{
 				Enabled: true,
@@ -454,7 +455,7 @@ func TestSpeciesTracker_getSeasonDateRange(t *testing.T) {
 	})
 
 	t.Run("no current season", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		settings := &conf.SpeciesTrackingSettings{
 			SeasonalTracking: conf.SeasonalTrackingSettings{
 				Enabled: true,
@@ -471,7 +472,7 @@ func TestSpeciesTracker_getSeasonDateRange(t *testing.T) {
 	})
 
 	t.Run("invalid season format", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		settings := &conf.SpeciesTrackingSettings{}
 
 		tracker := NewTrackerFromSettings(ds, settings)
@@ -491,7 +492,7 @@ func TestSpeciesTracker_getSeasonDateRange(t *testing.T) {
 func TestSpeciesTracker_isWithinCurrentYear(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	settings := &conf.SpeciesTrackingSettings{
 		YearlyTracking: conf.YearlyTrackingSettings{
 			ResetMonth: 1,
@@ -547,7 +548,7 @@ func TestSpeciesTracker_yearlyResetBoundaries(t *testing.T) {
 	t.Parallel()
 
 	t.Run("mid-year reset", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		settings := &conf.SpeciesTrackingSettings{
 			YearlyTracking: conf.YearlyTrackingSettings{
 				Enabled:    true,

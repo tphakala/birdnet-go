@@ -13,6 +13,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // TestNegativeDaysFixValidation validates the defensive fix for negative days
@@ -20,7 +21,7 @@ func TestNegativeDaysFixValidation(t *testing.T) {
 	t.Parallel()
 
 	// Create tracker
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -102,7 +103,7 @@ func TestConcurrentAccessFixValidation(t *testing.T) {
 	t.Parallel()
 
 	// Create tracker
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -190,7 +191,7 @@ func TestPrecisionEdgeCases(t *testing.T) {
 	t.Parallel()
 
 	// Create tracker
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history

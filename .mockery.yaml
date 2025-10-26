@@ -1,0 +1,24 @@
+# Mockery v2 configuration for BirdNET-Go
+# This file configures automated mock generation for testing
+
+# Global settings
+with-expecter: true  # Generate expecter methods for better test readability
+filename: "mock_{{.InterfaceName}}.go"  # Name mocks clearly
+dir: "{{.InterfaceDir}}/mocks"  # Put mocks in mocks subdirectory
+outpkg: mocks  # Package name for generated mocks
+
+# Package-specific configurations
+packages:
+  github.com/tphakala/birdnet-go/internal/datastore:
+    config:
+      # All interfaces in this package should be mocked
+      all: true
+    interfaces:
+      # Main datastore interface - this is the critical one
+      Interface:
+        config:
+          with-expecter: true
+          filename: "mock_Interface.go"
+          # Generate in a mocks subdirectory
+          dir: "{{.InterfaceDir}}/mocks"
+          mockname: "MockInterface"

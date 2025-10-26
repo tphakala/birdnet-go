@@ -14,6 +14,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // TestLoadLifetimeDataFromDatabase_CriticalReliability tests the core data loading function
@@ -105,7 +106,7 @@ func TestLoadLifetimeDataFromDatabase_CriticalReliability(t *testing.T) {
 			t.Logf("Testing critical scenario: %s", tt.description)
 
 			// Create mock datastore
-			ds := &MockSpeciesDatastore{}
+			ds := mocks.NewMockInterface(t)
 			if tt.mockError != nil {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, tt.mockError)
@@ -241,12 +242,12 @@ func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 			t.Logf("Testing yearly data loading: %s", tt.description)
 
 			// Create mock datastore
-			ds := &MockSpeciesDatastore{}
+			ds := mocks.NewMockInterface(t)
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil)
-	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil) // Lifetime data
+			// BG-17: InitFromDatabase now loads notification history
+			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+				Return([]datastore.NotificationHistory{}, nil) // Lifetime data
 
 			if tt.mockError != nil {
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -375,7 +376,7 @@ func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
 			t.Logf("Testing sync scenario: %s", tt.description)
 
 			// Create mock datastore
-			ds := &MockSpeciesDatastore{}
+			ds := mocks.NewMockInterface(t)
 
 			// Setup mock data for initial load and sync calls with recent dates
 			recentDate := time.Now().AddDate(0, 0, -5).Format("2006-01-02")      // 5 days ago

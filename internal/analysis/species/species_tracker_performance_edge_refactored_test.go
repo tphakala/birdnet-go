@@ -33,7 +33,7 @@ func newPerformanceMetrics() *performanceMetrics {
 func (m *performanceMetrics) updateMetrics(duration time.Duration) {
 	m.totalOperations.Add(1)
 	m.responseTimeSum.Add(int64(duration))
-	
+
 	// Update max response time
 	for {
 		oldMax := m.maxResponseTime.Load()
@@ -41,7 +41,7 @@ func (m *performanceMetrics) updateMetrics(duration time.Duration) {
 			break
 		}
 	}
-	
+
 	// Update min response time
 	for {
 		oldMin := m.minResponseTime.Load()
@@ -119,9 +119,9 @@ func performTrackerOperation(tracker *SpeciesTracker, opType int, speciesName st
 }
 
 // runLoadWorker executes the load generation worker
-func runLoadWorker(ctx context.Context, tracker *SpeciesTracker, config sustainedLoadConfig, 
+func runLoadWorker(ctx context.Context, tracker *SpeciesTracker, config sustainedLoadConfig,
 	metrics *performanceMetrics, species []string) {
-	
+
 	endTime := time.Now().Add(time.Duration(config.durationSeconds) * time.Second)
 	operationInterval := time.Second / time.Duration(config.operationsPerSecond)
 	operationTicker := time.NewTicker(operationInterval)
@@ -138,14 +138,14 @@ func runLoadWorker(ctx context.Context, tracker *SpeciesTracker, config sustaine
 
 			// Measure operation response time
 			opStart := time.Now()
-			
+
 			// Rotate through different operations
 			opCount := metrics.totalOperations.Load()
 			speciesName := species[int(opCount)%len(species)]
 			currentTime := time.Now()
-			
+
 			performTrackerOperation(tracker, int(opCount%3), speciesName, currentTime)
-			
+
 			opDuration := time.Since(opStart)
 			metrics.updateMetrics(opDuration)
 		}
@@ -153,10 +153,10 @@ func runLoadWorker(ctx context.Context, tracker *SpeciesTracker, config sustaine
 }
 
 // verifyPerformanceResults checks performance test results
-func verifyPerformanceResults(t *testing.T, config sustainedLoadConfig, metrics *performanceMetrics, 
+func verifyPerformanceResults(t *testing.T, config sustainedLoadConfig, metrics *performanceMetrics,
 	startTime time.Time, tracker *SpeciesTracker) {
 	t.Helper()
-	
+
 	actualDuration := time.Since(startTime)
 	finalOps, avgResponseTime, minResponseTime, maxResponseTime := metrics.getStats()
 	actualOpsPerSec := float64(finalOps) / actualDuration.Seconds()
@@ -233,19 +233,19 @@ func TestPerformanceUnderSustainedLoadRefactored(t *testing.T) {
 			tracker := createPerformanceTestTracker(t)
 			metrics := newPerformanceMetrics()
 			species := generateSpeciesPool(config.speciesCount)
-			
+
 			// Create context with timeout
-			ctx, cancel := context.WithTimeout(context.Background(), 
+			ctx, cancel := context.WithTimeout(context.Background(),
 				time.Duration(config.durationSeconds)*time.Second+5*time.Second)
 			defer cancel()
 
 			// Start time tracking
 			startTime := time.Now()
-			
+
 			// Run load worker using WaitGroup.Go
 			var wg sync.WaitGroup
 			done := make(chan struct{})
-			
+
 			wg.Go(func() {
 				defer close(done)
 				runLoadWorker(ctx, tracker, config, metrics, species)
@@ -258,7 +258,7 @@ func TestPerformanceUnderSustainedLoadRefactored(t *testing.T) {
 			case <-ctx.Done():
 				t.Fatalf("Test timed out or was cancelled")
 			}
-			
+
 			wg.Wait()
 
 			// Verify results

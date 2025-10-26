@@ -15,6 +15,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // TestMemoryExhaustionScenarios tests tracker behavior under memory pressure
@@ -57,7 +58,7 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 			initialMemory := m1.Alloc
 
 			// Create tracker with realistic database data
-			ds := &MockSpeciesDatastore{}
+			ds := mocks.NewMockInterface(t)
 
 			// Simulate large database with many species
 			lifetimeData := make([]datastore.NewSpeciesData, tt.speciesCount)
@@ -222,7 +223,7 @@ func TestCacheEvictionUnderPressure(t *testing.T) {
 	t.Parallel()
 
 	// Create tracker with forced cache limit conditions
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history

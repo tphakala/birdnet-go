@@ -12,13 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // TestIsNewSpecies tests the IsNewSpecies method
 func TestIsNewSpecies(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -59,7 +60,7 @@ func TestIsNewSpecies(t *testing.T) {
 func TestGetBatchSpeciesStatus(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -117,7 +118,7 @@ func TestSyncIfNeeded(t *testing.T) {
 	t.Parallel()
 
 	t.Run("sync not needed within interval", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		// No expectations set - should not be called
 
 		settings := &conf.SpeciesTrackingSettings{
@@ -137,7 +138,7 @@ func TestSyncIfNeeded(t *testing.T) {
 	})
 
 	t.Run("sync needed after interval", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 			Return([]datastore.NewSpeciesData{
 				{ScientificName: "Test Species", FirstSeenDate: "2024-01-01"},
@@ -160,7 +161,7 @@ func TestSyncIfNeeded(t *testing.T) {
 	})
 
 	t.Run("sync handles database error with existing data", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 			Return(nil, errors.New("database error"))
 
@@ -188,7 +189,7 @@ func TestSyncIfNeeded(t *testing.T) {
 func TestCleanupExpiredCache(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -239,7 +240,7 @@ func TestCleanupExpiredCache(t *testing.T) {
 func TestCleanupExpiredCacheLRU(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -296,7 +297,7 @@ func TestCleanupExpiredCacheLRU(t *testing.T) {
 func TestCheckAndUpdateSpeciesAtomic(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -374,7 +375,7 @@ func TestCheckAndUpdateSpeciesAtomic(t *testing.T) {
 func TestIsSeasonMapInitializedAndCount(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -442,7 +443,7 @@ func TestIsSeasonMapInitializedAndCount(t *testing.T) {
 func TestExpireCacheForTesting(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -483,7 +484,7 @@ func TestExpireCacheForTesting(t *testing.T) {
 func TestClearCacheForTestingMethod(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -528,7 +529,7 @@ func TestClearCacheForTestingMethod(t *testing.T) {
 func TestShouldSuppressNotificationMethod(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -589,7 +590,7 @@ func TestShouldSuppressNotificationMethod(t *testing.T) {
 func TestRecordNotificationSentMethod(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -647,7 +648,7 @@ func TestRecordNotificationSentMethod(t *testing.T) {
 func TestCleanupOldNotificationRecordsMethod(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -702,7 +703,7 @@ func TestCleanupOldNotificationRecordsMethod(t *testing.T) {
 func TestCloseMethod(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
 		NewSpeciesWindowDays: 14,
@@ -733,7 +734,7 @@ func TestPackageLevelClose(t *testing.T) {
 func TestCheckAndResetPeriods(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -792,7 +793,7 @@ func TestCheckAndResetPeriods(t *testing.T) {
 func TestIsSameSeasonPeriodComprehensive(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
 		NewSpeciesWindowDays: 14,
@@ -859,7 +860,7 @@ func TestIsSameSeasonPeriodComprehensive(t *testing.T) {
 func TestPruneOldEntriesComprehensive(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -963,7 +964,7 @@ func TestConcurrentOperationsStress(t *testing.T) {
 		t.Skip("Skipping stress test in short mode")
 	}
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
 	// BG-17: InitFromDatabase now loads notification history
@@ -1047,7 +1048,7 @@ func TestLoadDataErrorPaths(t *testing.T) {
 	t.Parallel()
 
 	t.Run("invalid date format in lifetime data", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 			Return([]datastore.NewSpeciesData{
 				{ScientificName: "Test Species", FirstSeenDate: "invalid-date"},
@@ -1068,7 +1069,7 @@ func TestLoadDataErrorPaths(t *testing.T) {
 	})
 
 	t.Run("empty first seen date", func(t *testing.T) {
-		ds := &MockSpeciesDatastore{}
+		ds := mocks.NewMockInterface(t)
 		ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 			Return([]datastore.NewSpeciesData{
 				{ScientificName: "Test Species", FirstSeenDate: ""},
@@ -1093,7 +1094,7 @@ func TestLoadDataErrorPaths(t *testing.T) {
 func TestSetCurrentYearForTestingMethod(t *testing.T) {
 	// Note: This test doesn't use t.Parallel() because it modifies internal state
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
 		NewSpeciesWindowDays: 14,

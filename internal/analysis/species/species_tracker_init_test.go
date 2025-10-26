@@ -14,6 +14,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // TestInitFromDatabase_CriticalReliability tests complete initialization flow
@@ -23,14 +24,14 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		setupMock     func(*MockSpeciesDatastore)
+		setupMock     func(*mocks.MockInterface)
 		settings      *conf.SpeciesTrackingSettings
 		expectedError bool
 		description   string
 	}{
 		{
 			"successful_full_initialization",
-			func(ds *MockSpeciesDatastore) {
+			func(ds *mocks.MockInterface) {
 				// Lifetime data
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{
@@ -78,7 +79,7 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 		},
 		{
 			"lifetime_data_load_failure",
-			func(ds *MockSpeciesDatastore) {
+			func(ds *mocks.MockInterface) {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, fmt.Errorf("database connection lost"))
 			},
@@ -90,13 +91,13 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 		},
 		{
 			"yearly_data_load_failure",
-			func(ds *MockSpeciesDatastore) {
+			func(ds *mocks.MockInterface) {
 				// Lifetime succeeds
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil)
-	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+				// BG-17: InitFromDatabase now loads notification history
+				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+					Return([]datastore.NotificationHistory{}, nil)
 				// Yearly fails
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, fmt.Errorf("query timeout"))
@@ -112,13 +113,13 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 		},
 		{
 			"partial_seasonal_failure_continues",
-			func(ds *MockSpeciesDatastore) {
+			func(ds *mocks.MockInterface) {
 				// Lifetime succeeds
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil)
-	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+				// BG-17: InitFromDatabase now loads notification history
+				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+					Return([]datastore.NotificationHistory{}, nil)
 				// First season fails
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, fmt.Errorf("seasonal query failed")).Once()
@@ -134,12 +135,12 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 		},
 		{
 			"empty_database_initialization",
-			func(ds *MockSpeciesDatastore) {
+			func(ds *mocks.MockInterface) {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil)
-	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+				// BG-17: InitFromDatabase now loads notification history
+				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+					Return([]datastore.NotificationHistory{}, nil)
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 			},
@@ -157,7 +158,7 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 
 			var tracker *SpeciesTracker
 			if tt.setupMock != nil {
-				ds := &MockSpeciesDatastore{}
+				ds := mocks.NewMockInterface(t)
 				tt.setupMock(ds)
 				tracker = NewTrackerFromSettings(ds, tt.settings)
 			} else {
