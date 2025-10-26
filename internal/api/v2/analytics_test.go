@@ -487,25 +487,11 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 	}
 
 	mockDS := mocks.NewMockInterface(t)
-	// Add necessary mock expectations based on the specific endpoint being tested, if any.
-	mockDS.On("GetSettings").Return(appSettings, nil) // Needed for cache init if controller setup does it
-	// Add GetAllImageCaches mock if cache init happens here
-	mockDS.On("GetAllImageCaches", mock.AnythingOfType("string")).Return([]datastore.ImageCache{}, nil)
-	// Mock GetImageCacheBatch to return cached images with URLs containing scientific names
-	// Use dynamic return based on input parameters
-	mockDS.On("GetImageCacheBatch", mock.AnythingOfType("string"), mock.AnythingOfType("[]string")).Return(
-		func(provider string, names []string) map[string]*datastore.ImageCache {
-			result := make(map[string]*datastore.ImageCache)
-			for _, name := range names {
-				result[name] = &datastore.ImageCache{
-					ScientificName: name,
-					URL:            "http://example.com/" + name + ".jpg",
-					CachedAt:       time.Now(),
-					ProviderName:   provider,
-				}
-			}
-			return result
-		}, nil)
+	// Mock expectations for image cache initialization
+	mockDS.EXPECT().
+		GetAllImageCaches(mock.AnythingOfType("string")).
+		Return([]datastore.ImageCache{}, nil).
+		Maybe()
 
 	// Initialize a mock image cache for controller creation - ONCE for all test cases
 	testMetrics, _ := observability.NewMetrics() // Create a dummy metrics instance

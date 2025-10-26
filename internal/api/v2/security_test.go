@@ -633,9 +633,16 @@ func TestDDoSProtection(t *testing.T) {
 	// Setup
 	e, mockDS, controller := setupTestEnvironment(t)
 
-	// Setup mock expectations
-	mockDS.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
-	mockDS.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
+	// Setup mock expectations using expecter pattern
+	mockDS.EXPECT().
+		SearchNotes(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return([]datastore.Note{}, nil).
+		Maybe()
+
+	mockDS.EXPECT().
+		CountSearchResults(mock.Anything).
+		Return(int64(0), nil).
+		Maybe()
 
 	// Number of concurrent requests to simulate
 	concurrentRequests := 50
