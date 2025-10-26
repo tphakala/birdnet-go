@@ -106,8 +106,8 @@
     if (notification.type === 'detection' && notification.metadata?.note_id) {
       try {
         await markAsRead(notification.id);
-      } catch (error) {
-        console.error('Failed to mark notification as read:', error);
+      } catch {
+        // Silently handle mark as read failures
       }
       window.location.href = `/ui/detections/${notification.metadata.note_id}`;
     }
@@ -371,10 +371,10 @@
         <div
           class={getNotificationCardClass(notification)}
           onclick={() => handleNotificationClick(notification)}
-          role={isClickable(notification) ? 'button' : undefined}
+          role={isClickable(notification) ? 'link' : undefined}
           tabindex={isClickable(notification) ? 0 : undefined}
           onkeydown={e => {
-            if (isClickable(notification) && (e.key === 'Enter' || e.key === ' ')) {
+            if (isClickable(notification) && e.currentTarget === e.target && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) {
               e.preventDefault();
               handleNotificationClick(notification);
             }
