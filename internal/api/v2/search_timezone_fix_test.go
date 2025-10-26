@@ -14,49 +14,49 @@ import (
 // TestTimezoneParsingBug demonstrates the timezone bug in search results
 // This test shows how the current implementation incorrectly handles timezone conversion
 func TestTimezoneParsingBug(t *testing.T) {
-	// This test demonstrates the core problem: 
+	// This test demonstrates the core problem:
 	// Database stores "2024-01-15 14:30:00" as local time string
 	// Current code parses this with time.Parse() which assumes UTC
 	// This causes 12-hour offset for users in timezone UTC+12
 
 	testCases := []struct {
-		name             string
-		dbDateString     string // What's stored in database (local time)
-		dbTimeString     string // What's stored in database (local time)
-		expectedDate     string // What date should be in API response
-		expectedHour     int    // What hour should be in API response
-		expectedMinute   int    // What minute should be in API response
-		userTimezone     string // User's timezone (for context)
+		name               string
+		dbDateString       string // What's stored in database (local time)
+		dbTimeString       string // What's stored in database (local time)
+		expectedDate       string // What date should be in API response
+		expectedHour       int    // What hour should be in API response
+		expectedMinute     int    // What minute should be in API response
+		userTimezone       string // User's timezone (for context)
 		problemDescription string
 	}{
 		{
-			name:             "afternoon_detection_utc_plus_12",
-			dbDateString:     "2024-01-15",
-			dbTimeString:     "14:30:00", // 2:30 PM local time stored in DB
-			expectedDate:     "2024-01-15",
-			expectedHour:     14, // Should remain 14 (2 PM), not convert to 2 AM
-			expectedMinute:   30,
-			userTimezone:     "Pacific/Auckland", // UTC+12 during summer
+			name:               "afternoon_detection_utc_plus_12",
+			dbDateString:       "2024-01-15",
+			dbTimeString:       "14:30:00", // 2:30 PM local time stored in DB
+			expectedDate:       "2024-01-15",
+			expectedHour:       14, // Should remain 14 (2 PM), not convert to 2 AM
+			expectedMinute:     30,
+			userTimezone:       "Pacific/Auckland", // UTC+12 during summer
 			problemDescription: "User in Auckland sees 2:30 AM instead of 2:30 PM",
 		},
 		{
-			name:             "morning_detection_utc_plus_12", 
-			dbDateString:     "2024-01-15",
-			dbTimeString:     "08:15:00", // 8:15 AM local time stored in DB
-			expectedDate:     "2024-01-15",
-			expectedHour:     8, // Should remain 8 AM, not convert to 8 PM previous day
-			expectedMinute:   15,
-			userTimezone:     "Pacific/Auckland",
+			name:               "morning_detection_utc_plus_12",
+			dbDateString:       "2024-01-15",
+			dbTimeString:       "08:15:00", // 8:15 AM local time stored in DB
+			expectedDate:       "2024-01-15",
+			expectedHour:       8, // Should remain 8 AM, not convert to 8 PM previous day
+			expectedMinute:     15,
+			userTimezone:       "Pacific/Auckland",
 			problemDescription: "User in Auckland sees 8:15 PM on Jan 14 instead of 8:15 AM on Jan 15",
 		},
 		{
-			name:             "evening_detection_utc_plus_12",
-			dbDateString:     "2024-01-15", 
-			dbTimeString:     "22:45:00", // 10:45 PM local time stored in DB
-			expectedDate:     "2024-01-15",
-			expectedHour:     22, // Should remain 22 (10 PM), not convert to 10 AM
-			expectedMinute:   45,
-			userTimezone:     "Pacific/Auckland",
+			name:               "evening_detection_utc_plus_12",
+			dbDateString:       "2024-01-15",
+			dbTimeString:       "22:45:00", // 10:45 PM local time stored in DB
+			expectedDate:       "2024-01-15",
+			expectedHour:       22, // Should remain 22 (10 PM), not convert to 10 AM
+			expectedMinute:     45,
+			userTimezone:       "Pacific/Auckland",
 			problemDescription: "User in Auckland sees 10:45 AM instead of 10:45 PM",
 		},
 	}
@@ -65,7 +65,7 @@ func TestTimezoneParsingBug(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Simulate what currently happens in SearchDetections (interfaces.go:1882)
 			// timestamp, err := time.Parse("2006-01-02 15:04:05", scanned.Date+" "+scanned.Time)
-			
+
 			dbTimestamp := tc.dbDateString + " " + tc.dbTimeString
 			t.Logf("Database stores: %s (local time)", dbTimestamp)
 			t.Logf("User timezone: %s", tc.userTimezone)
@@ -98,7 +98,7 @@ func TestTimezoneParsingBug(t *testing.T) {
 			// Validate the problem exists
 			assert.NotEqual(t, expectedTime.Hour(), userSeesTime.Hour(),
 				"Current implementation causes wrong hour due to timezone conversion")
-			
+
 			// Validate what the correct values should be
 			assert.Equal(t, tc.expectedDate, expectedTime.Format("2006-01-02"),
 				"Expected date should match database date")
@@ -128,14 +128,14 @@ func TestTimezoneParsingFix(t *testing.T) {
 			userTimezone: "Pacific/Auckland",
 		},
 		{
-			name:         "fix_for_utc_minus_8", 
+			name:         "fix_for_utc_minus_8",
 			dbDateString: "2024-01-15",
 			dbTimeString: "14:30:00",
 			userTimezone: "America/Los_Angeles",
 		},
 		{
 			name:         "fix_for_utc",
-			dbDateString: "2024-01-15", 
+			dbDateString: "2024-01-15",
 			dbTimeString: "14:30:00",
 			userTimezone: "UTC",
 		},
@@ -156,13 +156,13 @@ func TestTimezoneParsingFix(t *testing.T) {
 
 			// Alternative fix: Parse as UTC but manually adjust to avoid double conversion
 			// This would require knowing the server's timezone offset
-			
+
 			t.Logf("Database time: %s", dbTimestamp)
 			t.Logf("Parsed as local time in %s: %s", tc.userTimezone, localTime.Format(time.RFC3339))
 
 			// Validate that the fix preserves the database time components
 			assert.Equal(t, "2024-01-15", localTime.Format("2006-01-02"), "Date should be preserved")
-			assert.Equal(t, 14, localTime.Hour(), "Hour should be preserved") 
+			assert.Equal(t, 14, localTime.Hour(), "Hour should be preserved")
 			assert.Equal(t, 30, localTime.Minute(), "Minute should be preserved")
 
 			// When this gets JSON marshaled and sent to frontend, it should preserve local time
@@ -202,7 +202,7 @@ func TestTimezoneEdgeCases(t *testing.T) {
 		},
 		{
 			name:         "just_before_midnight",
-			dbDate:       "2024-01-15", 
+			dbDate:       "2024-01-15",
 			dbTime:       "23:59:59",
 			expectedHour: 23,
 			expectedDate: "2024-01-15",
@@ -211,7 +211,7 @@ func TestTimezoneEdgeCases(t *testing.T) {
 		{
 			name:         "noon_detection",
 			dbDate:       "2024-01-15",
-			dbTime:       "12:00:00", 
+			dbTime:       "12:00:00",
 			expectedHour: 12,
 			expectedDate: "2024-01-15",
 			description:  "Noon detection should remain at noon",
@@ -233,7 +233,7 @@ func TestTimezoneEdgeCases(t *testing.T) {
 			// What user sees (with timezone conversion)
 			userTime := currentTime.In(aucklandTz)
 
-			// Proposed fix approach  
+			// Proposed fix approach
 			fixedTime, err := time.ParseInLocation("2006-01-02 15:04:05", dbTimestamp, aucklandTz)
 			require.NoError(t, err)
 
@@ -248,7 +248,7 @@ func TestTimezoneEdgeCases(t *testing.T) {
 
 			// Demonstrate the problem exists
 			if tc.expectedHour != userTime.Hour() {
-				t.Logf("BUG CONFIRMED: Current implementation shows hour %d instead of expected hour %d", 
+				t.Logf("BUG CONFIRMED: Current implementation shows hour %d instead of expected hour %d",
 					userTime.Hour(), tc.expectedHour)
 			}
 		})

@@ -46,7 +46,7 @@ func TestExtremeValues(t *testing.T) {
 			name:    "Extreme coordinates",
 			section: "birdnet",
 			extremeData: map[string]interface{}{
-				"latitude":  91.0,  // Invalid latitude  
+				"latitude":  91.0,  // Invalid latitude
 				"longitude": 181.0, // Invalid longitude
 			},
 			expectedError: true, // Implementation rejects out-of-range coordinates
@@ -183,7 +183,7 @@ func TestExtremeValues(t *testing.T) {
 			body, err := json.Marshal(tt.extremeData)
 			require.NoError(t, err)
 
-			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section, 
+			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section,
 				bytes.NewReader(body))
 			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 			rec := httptest.NewRecorder()
@@ -213,10 +213,10 @@ func TestMemoryExhaustionAttempts(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name         string
-		section      string
-		largeData    func() interface{}
-		description  string
+		name        string
+		section     string
+		largeData   func() interface{}
+		description string
 	}{
 		{
 			name:    "Very large nested object",
@@ -319,7 +319,7 @@ func TestMemoryExhaustionAttempts(t *testing.T) {
 			// The JSON might be very large
 			t.Logf("Test data size: %d bytes", len(body))
 
-			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section, 
+			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section,
 				bytes.NewReader(body))
 			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 			rec := httptest.NewRecorder()

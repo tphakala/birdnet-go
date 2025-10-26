@@ -8,6 +8,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"go.uber.org/goleak"
 )
@@ -16,7 +17,7 @@ import (
 // are properly cleaned up when the controller is shut down
 func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
 	// Defer goleak check to verify no goroutines leak after test
-	defer goleak.VerifyNone(t, 
+	defer goleak.VerifyNone(t,
 		// Ignore goroutines from testing framework and other standard libraries
 		goleak.IgnoreTopFunction("testing.(*T).Run"),
 		goleak.IgnoreTopFunction("runtime.gopark"),
@@ -31,7 +32,7 @@ func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
 	e := echo.New()
 
 	// Create mock datastore
-	mockDS := new(MockDataStore)
+	mockDS := mocks.NewMockInterface(t)
 
 	// Create settings with required paths
 	settings := &conf.Settings{
@@ -64,7 +65,7 @@ func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
 
 	// Shutdown the controller
 	controller.Shutdown()
-	
+
 	// Close control channel to prevent any lingering goroutines
 	close(controlChan)
 }
@@ -74,7 +75,7 @@ func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
 func TestGoroutineCleanupWithoutRoutes(t *testing.T) {
 	// Register cleanup with goleak at the beginning
 	t.Cleanup(func() {
-		goleak.VerifyNone(t, 
+		goleak.VerifyNone(t,
 			// Ignore goroutines from testing framework and other standard libraries
 			goleak.IgnoreTopFunction("testing.(*T).Run"),
 			goleak.IgnoreTopFunction("runtime.gopark"),

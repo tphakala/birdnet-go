@@ -14,6 +14,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // TestFullWorkflow_BasicTracking tests basic species tracking workflow
@@ -22,10 +23,13 @@ func TestFullWorkflow_BasicTracking(t *testing.T) {
 	t.Parallel()
 
 	// Create a mock datastore
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 
 	// Setup mock to return empty results for any date range
-	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil)
+	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// Basic tracking doesn't use yearly/seasonal, so this may not be called
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
@@ -88,7 +92,7 @@ func TestFullWorkflow_YearlyTracking(t *testing.T) {
 	t.Parallel()
 
 	// Create mock datastore
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 
 	// Setup mock responses for yearly data
 	yearlyData := []datastore.NewSpeciesData{
@@ -101,7 +105,10 @@ func TestFullWorkflow_YearlyTracking(t *testing.T) {
 	// Set up mocks carefully to match actual implementation behavior
 	// For lifetime tracking (GetNewSpeciesDetections), return empty to simulate
 	// that this species has never been seen before in lifetime tracking
-	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil)
+	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 
 	// For yearly tracking, return the species data for 2024
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, "2024-01-01", "2024-12-31", mock.Anything, mock.Anything).Return(yearlyData, nil).Once()
@@ -165,7 +172,7 @@ func TestFullWorkflow_SeasonalTracking(t *testing.T) {
 	t.Parallel()
 
 	// Create mock datastore
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 
 	// Setup mock for seasonal data
 	springData := []datastore.NewSpeciesData{
@@ -232,10 +239,13 @@ func TestFullWorkflow_CombinedTracking(t *testing.T) {
 	t.Parallel()
 
 	// Create mock datastore
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 
 	// Setup default mock responses
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	// Verify all mock expectations are met
@@ -343,10 +353,10 @@ func TestFullWorkflow_ErrorRecovery(t *testing.T) {
 	assert.Equal(t, 0, days)
 
 	// Test with datastore that returns errors
-	errorDS := &MockSpeciesDatastore{}
-	errorDS.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData(nil), fmt.Errorf("database error"))
+	errorDS := mocks.NewMockInterface(t)
+	errorDS.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("database error")).Maybe()
 	// Basic tracking doesn't use yearly/seasonal, so this may not be called
-	errorDS.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData(nil), fmt.Errorf("database error")).Maybe()
+	errorDS.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, fmt.Errorf("database error")).Maybe()
 
 	// Verify error mock expectations are met
 	t.Cleanup(func() { errorDS.AssertExpectations(t) })
@@ -373,8 +383,11 @@ func TestFullWorkflow_ErrorRecovery(t *testing.T) {
 func TestFullWorkflow_MemoryManagement(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: PruneOldEntries deletes from database
 	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).Return(int64(0), nil).Maybe()
@@ -438,8 +451,11 @@ func TestFullWorkflow_MemoryManagement(t *testing.T) {
 func TestFullWorkflow_NotificationSystem(t *testing.T) {
 	t.Parallel()
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: RecordNotificationSent saves to database
 	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).Return(nil).Maybe()
@@ -506,8 +522,11 @@ func TestFullWorkflow_PerformanceUnderLoad(t *testing.T) {
 		t.Skip("Skipping performance test in short mode")
 	}
 
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	// Verify all mock expectations are met

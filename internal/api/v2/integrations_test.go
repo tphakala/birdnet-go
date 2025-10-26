@@ -26,7 +26,7 @@ func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Control
 	expectedBody   string
 }) {
 	t.Helper()
-	
+
 	// Run test cases
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -71,7 +71,7 @@ func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Control
 // Currently skipped because it requires mocking package-level functions for network operations.
 func runIntegrationConnectionWithDisconnectionTest(t *testing.T, handlerFunc func(*Controller, echo.Context) error, endpoint string, setupSettings func(*Controller)) {
 	t.Helper()
-	
+
 	// Skip this test since we can't override package-level functions in our test environment
 	t.Skip("This test requires mocking package-level functions - preserved for future implementation")
 

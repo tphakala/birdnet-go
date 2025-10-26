@@ -86,12 +86,12 @@ func TestSeasonValidationInTracker(t *testing.T) {
 			Enabled:    true,
 			WindowDays: 7,
 			Seasons: map[string]conf.Season{
-				"spring":       {StartMonth: 3, StartDay: 20},    // Valid
-				"summer":       {StartMonth: 6, StartDay: 31},    // Invalid - June has 30 days
-				"fall":         {StartMonth: 9, StartDay: 22},    // Valid
-				"winter":       {StartMonth: 12, StartDay: 21},   // Valid
-				"invalid_month": {StartMonth: 13, StartDay: 1},   // Invalid month
-				"invalid_day":  {StartMonth: 2, StartDay: 30},    // Invalid - Feb 30
+				"spring":        {StartMonth: 3, StartDay: 20},  // Valid
+				"summer":        {StartMonth: 6, StartDay: 31},  // Invalid - June has 30 days
+				"fall":          {StartMonth: 9, StartDay: 22},  // Valid
+				"winter":        {StartMonth: 12, StartDay: 21}, // Valid
+				"invalid_month": {StartMonth: 13, StartDay: 1},  // Invalid month
+				"invalid_day":   {StartMonth: 2, StartDay: 30},  // Invalid - Feb 30
 			},
 		},
 	}

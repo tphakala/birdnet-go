@@ -1,6 +1,17 @@
 // interfaces.go: this code defines the interface for the database operations
 package datastore
 
+//go:generate mockery
+
+// IMPORTANT: When the Interface definition in this file changes:
+// 1. DO NOT manually edit mock files
+// 2. Run: go generate ./internal/datastore
+// 3. The mockery tool will automatically regenerate all mocks
+// 4. Generated mocks are in: internal/datastore/mocks/
+// 5. Configuration is in: .mockery.yaml at project root
+//
+// This saves significant manual work and ensures mocks stay in sync with interfaces.
+
 import (
 	"context"
 	"fmt"
@@ -47,9 +58,9 @@ type Interface interface {
 	Delete(id string) error
 	Get(id string) (Note, error)
 	Close() error
-	SetMetrics(metrics *Metrics) // Set metrics instance for observability
+	SetMetrics(metrics *Metrics)          // Set metrics instance for observability
 	SetSunCalcMetrics(suncalcMetrics any) // Set metrics for SunCalc service
-	Optimize(ctx context.Context) error // Perform database optimization (VACUUM, ANALYZE, etc.)
+	Optimize(ctx context.Context) error   // Perform database optimization (VACUUM, ANALYZE, etc.)
 	GetAllNotes() ([]Note, error)
 	GetTopBirdsData(selectedDate string, minConfidenceNormalized float64) ([]Note, error)
 	GetHourlyOccurrences(date, commonName string, minConfidenceNormalized float64) ([24]int, error)
@@ -123,9 +134,9 @@ type DataStore struct {
 	DB            *gorm.DB         // GORM database instance
 	SunCalc       *suncalc.SunCalc // Instance for calculating sun times (Assumed initialized)
 	sunTimesCache sync.Map         // Thread-safe map for caching sun times by date
-	metrics       *Metrics // Metrics instance for tracking operations
+	metrics       *Metrics         // Metrics instance for tracking operations
 	metricsMu     sync.RWMutex     // Mutex to protect metrics field access
-	
+
 	// Monitoring lifecycle management
 	monitoringCtx    context.Context    // Context for monitoring goroutines
 	monitoringCancel context.CancelFunc // Function to cancel monitoring
@@ -170,7 +181,7 @@ func (ds *DataStore) SetSunCalcMetrics(suncalcMetrics any) {
 	ds.metricsMu.RLock()
 	sunCalc := ds.SunCalc
 	ds.metricsMu.RUnlock()
-	
+
 	if sunCalc != nil && suncalcMetrics != nil {
 		// Type assert to the actual metrics type
 		if m, ok := suncalcMetrics.(*metrics.SunCalcMetrics); ok {
@@ -185,7 +196,7 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
 	txStart := time.Now()
 	txLogger := getLogger().With("tx_id", txID, "operation", "save_note")
-	
+
 	txLogger.Debug("Starting transaction",
 		"note_scientific_name", note.ScientificName,
 		"results_count", len(results))
@@ -204,17 +215,17 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 				"attempt", fmt.Sprintf("%d", attempt+1),
 				"action", "save_detection",
 				"table", "notes")
-			
+
 			txLogger.Error("Failed to begin transaction",
 				"error", lastErr,
 				"attempt", attempt+1)
-				
+
 			continue
 		}
 
 		// Execute transaction with rollback on error
 		transactionErr := ds.executeTransaction(tx, note, results, txID, attempt+1, txLogger)
-		
+
 		if transactionErr != nil {
 			lastErr = transactionErr
 			if isDatabaseLocked(transactionErr) {
@@ -282,7 +293,7 @@ func (ds *DataStore) Delete(id string) error {
 			"action", "validate_deletion_permissions")
 	}
 	if isLocked {
-		return conflictError(errors.NewStd("cannot delete note: note is locked"), 
+		return conflictError(errors.NewStd("cannot delete note: note is locked"),
 			"delete_note", "note_locked",
 			"note_id", id,
 			"action", "delete_detection_record")
@@ -1353,7 +1364,7 @@ func (ds *DataStore) GetImageCache(query ImageCacheQuery) (*ImageCache, error) {
 // SaveImageCache saves an image cache entry to the database
 func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 	start := time.Now()
-	
+
 	if cache.ProviderName == "" {
 		err := validationError("provider name cannot be empty", "provider_name", "")
 		getLogger().Error("Invalid image cache data: empty provider name", "error", err)
@@ -1383,10 +1394,10 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 				"scientific_name", cache.ScientificName,
 				"provider", cache.ProviderName,
 				"action", "cache_species_thumbnail")
-			
+
 			getLogger().Error("Failed to save image cache",
 				"error", enhancedErr)
-			
+
 			// Record error metric
 			ds.metricsMu.RLock()
 			metricsInstance := ds.metrics
@@ -1395,11 +1406,11 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 				metricsInstance.RecordImageCacheOperation("save", "error")
 				metricsInstance.RecordImageCacheDuration("save", time.Since(start).Seconds())
 			}
-			
+
 			return enhancedErr
 		}
 	}
-	
+
 	// Record success metric
 	ds.metricsMu.RLock()
 	metricsInstance := ds.metrics
@@ -1408,7 +1419,7 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 		metricsInstance.RecordImageCacheOperation("save", "success")
 		metricsInstance.RecordImageCacheDuration("save", time.Since(start).Seconds())
 	}
-	
+
 	return nil
 }
 
@@ -2000,7 +2011,7 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 			Locked:         scanned.IsLocked, // Use derived status
 			HasAudio:       scanned.ClipName != "",
 			Device:         scanned.SourceNode,
-			Source:         "", // Source field was runtime-only, not stored in database
+			Source:         "",        // Source field was runtime-only, not stored in database
 			TimeOfDay:      timeOfDay, // Include calculated time of day
 		}
 
@@ -2062,12 +2073,12 @@ func (ds *DataStore) saveNoteInTransaction(tx *gorm.DB, note *Note, txID string,
 			Context("tx_id", txID).
 			Context("attempt", fmt.Sprintf("%d", attempt)).
 			Build()
-		
+
 		txLogger.Error("Failed to save note",
 			"error", enhancedErr,
 			"note_id", note.ID,
 			"scientific_name", note.ScientificName)
-		
+
 		// Record error metric
 		ds.metricsMu.RLock()
 		metricsInstance := ds.metrics
@@ -2076,10 +2087,10 @@ func (ds *DataStore) saveNoteInTransaction(tx *gorm.DB, note *Note, txID string,
 			metricsInstance.RecordNoteOperation("save", "error")
 			metricsInstance.RecordDbOperationError("create", "notes", categorizeError(err))
 		}
-		
+
 		return enhancedErr
 	}
-	
+
 	// Record success metric for note
 	ds.metricsMu.RLock()
 	metricsInstance := ds.metrics
@@ -2087,7 +2098,7 @@ func (ds *DataStore) saveNoteInTransaction(tx *gorm.DB, note *Note, txID string,
 	if metricsInstance != nil {
 		metricsInstance.RecordNoteOperation("save", "success")
 	}
-	
+
 	return nil
 }
 
@@ -2105,19 +2116,19 @@ func (ds *DataStore) saveResultsInTransaction(tx *gorm.DB, results []Results, no
 				Context("tx_id", txID).
 				Context("attempt", fmt.Sprintf("%d", attempt)).
 				Build()
-			
+
 			txLogger.Error("Failed to save result",
 				"error", enhancedErr,
 				"note_id", noteID,
 				"result_index", i)
-			
+
 			ds.metricsMu.RLock()
 			metricsInstance := ds.metrics
 			ds.metricsMu.RUnlock()
 			if metricsInstance != nil {
 				metricsInstance.RecordDbOperationError("create", "results", categorizeError(err))
 			}
-			
+
 			return enhancedErr
 		}
 	}
@@ -2132,15 +2143,15 @@ func (ds *DataStore) commitTransactionWithMetrics(tx *gorm.DB, txID string, atte
 		if isDatabaseCorruption(err) {
 			priority = errors.PriorityCritical
 		}
-		
+
 		enhancedErr := dbError(err, "commit_transaction", priority,
 			"tx_id", txID,
 			"attempt", fmt.Sprintf("%d", attempt),
 			"action", "finalize_detection_save")
-		
+
 		txLogger.Error("Failed to commit transaction",
 			"error", enhancedErr)
-		
+
 		ds.metricsMu.RLock()
 		metricsInstance := ds.metrics
 		ds.metricsMu.RUnlock()
@@ -2148,10 +2159,10 @@ func (ds *DataStore) commitTransactionWithMetrics(tx *gorm.DB, txID string, atte
 			metricsInstance.RecordTransaction("rollback")
 			metricsInstance.RecordTransactionError("save_note", categorizeError(err))
 		}
-		
+
 		return enhancedErr
 	}
-	
+
 	// Record commit success
 	ds.metricsMu.RLock()
 	metricsInstance := ds.metrics
@@ -2159,7 +2170,7 @@ func (ds *DataStore) commitTransactionWithMetrics(tx *gorm.DB, txID string, atte
 	if metricsInstance != nil {
 		metricsInstance.RecordTransaction("committed")
 	}
-	
+
 	return nil
 }
 
@@ -2170,13 +2181,13 @@ func (ds *DataStore) handleDatabaseLockError(attempt, maxRetries int, baseDelay 
 	// Add 0-25% jitter to the base backoff
 	jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff))
 	delay := baseBackoff + jitter
-	
+
 	txLogger.Warn("Database locked, scheduling retry",
 		"attempt", attempt+1,
 		"max_attempts", maxRetries,
 		"backoff_ms", delay.Milliseconds(),
 		"jitter_ms", jitter.Milliseconds())
-	
+
 	// Record retry metric
 	ds.metricsMu.RLock()
 	metricsInstance := ds.metrics
@@ -2184,7 +2195,7 @@ func (ds *DataStore) handleDatabaseLockError(attempt, maxRetries int, baseDelay 
 	if metricsInstance != nil {
 		metricsInstance.RecordTransactionRetry("save_note", "database_locked")
 	}
-	
+
 	time.Sleep(delay)
 }
 
@@ -2233,7 +2244,7 @@ func (ds *DataStore) recordTransactionSuccess(txStart time.Time, attempts, resul
 		"duration", duration,
 		"attempts", attempts,
 		"rows_affected", 1+resultsCount)
-	
+
 	// Record success metrics
 	ds.metricsMu.RLock()
 	metricsInstance := ds.metrics
@@ -2253,11 +2264,11 @@ func (ds *DataStore) handleMaxRetriesExhausted(lastErr error, txID string, txSta
 		"max_retries_exhausted", "true",
 		"action", "save_detection_data",
 		"total_duration_ms", time.Since(txStart).Milliseconds())
-	
+
 	txLogger.Error("Transaction failed after max retries",
 		"error", enhancedErr,
 		"total_duration", time.Since(txStart))
-	
+
 	// Record failure metrics
 	ds.metricsMu.RLock()
 	metricsInstance := ds.metrics
@@ -2267,6 +2278,6 @@ func (ds *DataStore) handleMaxRetriesExhausted(lastErr error, txID string, txSta
 		metricsInstance.RecordTransactionError("save_note", "max_retries_exhausted")
 		metricsInstance.RecordLockContention("database", "max_retries_exhausted")
 	}
-	
+
 	return enhancedErr
 }

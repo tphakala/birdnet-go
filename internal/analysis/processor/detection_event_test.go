@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/events"
 )
 
@@ -58,9 +59,9 @@ func TestDetectionEventCreation(t *testing.T) {
 func TestSpeciesStatusTracking(t *testing.T) {
 	t.Parallel()
 
-	// Create mock datastore using testify/mock
-	mockDS := &species.MockSpeciesDatastore{}
-	// Note: This test doesn't call InitFromDatabase, so no expectation is needed
+	// Create mock datastore using generated mocks (BG-21)
+	mockDS := mocks.NewMockInterface(t)
+	// Note: This test doesn't call InitFromDatabase, so no expectations needed
 
 	// First detection should be new
 	now := time.Now()

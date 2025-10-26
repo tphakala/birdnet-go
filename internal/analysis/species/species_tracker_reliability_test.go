@@ -18,6 +18,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // TestConcurrentAccessUnderLoad tests species tracker under high concurrent load
@@ -291,7 +292,7 @@ func TestDatabaseFailureRecovery(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Testing database failure scenario: %s", tt.description)
 
-			ds := &MockSpeciesDatastore{}
+			ds := mocks.NewMockInterface(t)
 
 			// Configure mock behavior based on failure type
 			switch tt.failureType {
@@ -299,13 +300,13 @@ func TestDatabaseFailureRecovery(t *testing.T) {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, fmt.Errorf("database connection failed"))
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return(nil, fmt.Errorf("database connection failed"))
+					Return(nil, fmt.Errorf("database connection failed")).Maybe() // Not called if GetNewSpeciesDetections fails first
 
 			case "lifetime_fail":
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, fmt.Errorf("lifetime data load failed"))
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.NewSpeciesData{}, nil)
+					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 			case "timeout_then_success":
 				// First call fails, subsequent calls succeed
@@ -314,27 +315,33 @@ func TestDatabaseFailureRecovery(t *testing.T) {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{
 						{ScientificName: "Test_Species", FirstSeenDate: "2024-01-01"},
-					}, nil)
+					}, nil).Maybe()
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.NewSpeciesData{}, nil)
+					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 			case "empty_results":
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.NewSpeciesData{}, nil)
-	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+					Return([]datastore.NewSpeciesData{}, nil).Maybe()
+				// BG-17: InitFromDatabase now loads notification history
+				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+					Return([]datastore.NotificationHistory{}, nil).Maybe()
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.NewSpeciesData{}, nil)
+					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 			case "corrupt_data":
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{
 						{ScientificName: "", FirstSeenDate: "invalid-date"},            // Invalid data
 						{ScientificName: "Valid_Species", FirstSeenDate: "2024-01-01"}, // Valid data
-					}, nil)
+					}, nil).Maybe()
+		// BG-17: InitFromDatabase requires notification history
+		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+			Return([]datastore.NotificationHistory{}, nil).Maybe()
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return([]datastore.NewSpeciesData{}, nil)
+					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 			}
 
 			settings := &conf.SpeciesTrackingSettings{

@@ -42,10 +42,10 @@ func TestController_createToastEventData(t *testing.T) {
 				Component: "test-component",
 				Timestamp: time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
 				Metadata: map[string]any{
-					"isToast":    true,
-					"toastId":    "toast-123",
-					"toastType":  "success",
-					"duration":   5000,
+					"isToast":   true,
+					"toastId":   "toast-123",
+					"toastType": "success",
+					"duration":  5000,
 					"action": &notification.ToastAction{
 						Label:   "View Details",
 						URL:     "/details",
@@ -242,11 +242,11 @@ func TestController_setNotificationSSEHeaders(t *testing.T) {
 	c.setNotificationSSEHeaders(ctx)
 
 	expectedHeaders := map[string]string{
-		"Content-Type":                   "text/event-stream",
-		"Cache-Control":                  "no-cache",
-		"Connection":                     "keep-alive",
-		"Access-Control-Allow-Origin":    "*",
-		"Access-Control-Allow-Headers":   "Cache-Control",
+		"Content-Type":                 "text/event-stream",
+		"Cache-Control":                "no-cache",
+		"Connection":                   "keep-alive",
+		"Access-Control-Allow-Origin":  "*",
+		"Access-Control-Allow-Headers": "Cache-Control",
 	}
 
 	for key, expectedValue := range expectedHeaders {

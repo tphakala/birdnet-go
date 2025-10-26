@@ -15,6 +15,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // TestMemoryExhaustionScenarios tests tracker behavior under memory pressure
@@ -57,7 +58,7 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 			initialMemory := m1.Alloc
 
 			// Create tracker with realistic database data
-			ds := &MockSpeciesDatastore{}
+			ds := mocks.NewMockInterface(t)
 
 			// Simulate large database with many species
 			lifetimeData := make([]datastore.NewSpeciesData, tt.speciesCount)
@@ -69,9 +70,9 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 			}
 
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return(lifetimeData, nil)
+				Return(lifetimeData, nil).Maybe()
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]datastore.NewSpeciesData{}, nil)
+				Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 			settings := &conf.SpeciesTrackingSettings{
 				Enabled:              true,
@@ -222,14 +223,14 @@ func TestCacheEvictionUnderPressure(t *testing.T) {
 	t.Parallel()
 
 	// Create tracker with forced cache limit conditions
-	ds := &MockSpeciesDatastore{}
+	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,

@@ -13,6 +13,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // TestBuildSpeciesStatusLocked_CriticalReliability tests the core business logic engine
@@ -159,9 +160,9 @@ func TestBuildSpeciesStatusLocked_CriticalReliability(t *testing.T) {
 			t.Logf("Testing business logic scenario: %s", tt.description)
 
 			// Create mock datastore
-			ds := &MockSpeciesDatastore{}
+			ds := mocks.NewMockInterface(t)
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return(tt.lifetimeData, nil)
+				Return(tt.lifetimeData, nil).Maybe()
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return(tt.yearlyData, nil).Maybe()
 			if len(tt.seasonalData) > 0 {
@@ -327,14 +328,14 @@ func TestComputeCurrentSeason_CriticalReliability(t *testing.T) {
 			t.Logf("Testing season calculation: %s", tt.description)
 
 			// Create minimal tracker for season testing
-			ds := &MockSpeciesDatastore{}
+			ds := mocks.NewMockInterface(t)
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]datastore.NewSpeciesData{}, nil)
-	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+				Return([]datastore.NewSpeciesData{}, nil).Maybe()
+			// BG-17: InitFromDatabase now loads notification history
+			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+				Return([]datastore.NotificationHistory{}, nil).Maybe()
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]datastore.NewSpeciesData{}, nil)
+				Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 			settings := &conf.SpeciesTrackingSettings{
 				Enabled:              true,
@@ -409,14 +410,14 @@ func TestDateRangeFunctions_CriticalReliability(t *testing.T) {
 			t.Logf("Testing date range calculation: %s", tt.description)
 
 			// Create tracker for date range testing
-			ds := &MockSpeciesDatastore{}
+			ds := mocks.NewMockInterface(t)
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]datastore.NewSpeciesData{}, nil)
-	// BG-17: InitFromDatabase now loads notification history
-	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-		Return([]datastore.NotificationHistory{}, nil)
+				Return([]datastore.NewSpeciesData{}, nil).Maybe()
+			// BG-17: InitFromDatabase now loads notification history
+			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+				Return([]datastore.NotificationHistory{}, nil).Maybe()
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]datastore.NewSpeciesData{}, nil)
+				Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
 			settings := &conf.SpeciesTrackingSettings{
 				Enabled:              true,

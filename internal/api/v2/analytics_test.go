@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
@@ -485,26 +486,12 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 		},
 	}
 
-	mockDS := new(MockDataStoreV2)
-	// Add necessary mock expectations based on the specific endpoint being tested, if any.
-	mockDS.On("GetSettings").Return(appSettings, nil) // Needed for cache init if controller setup does it
-	// Add GetAllImageCaches mock if cache init happens here
-	mockDS.On("GetAllImageCaches", mock.AnythingOfType("string")).Return([]datastore.ImageCache{}, nil)
-	// Mock GetImageCacheBatch to return cached images with URLs containing scientific names
-	// Use dynamic return based on input parameters
-	mockDS.On("GetImageCacheBatch", mock.AnythingOfType("string"), mock.AnythingOfType("[]string")).Return(
-		func(provider string, names []string) map[string]*datastore.ImageCache {
-			result := make(map[string]*datastore.ImageCache)
-			for _, name := range names {
-				result[name] = &datastore.ImageCache{
-					ScientificName: name,
-					URL:            "http://example.com/" + name + ".jpg",
-					CachedAt:       time.Now(),
-					ProviderName:   provider,
-				}
-			}
-			return result
-		}, nil)
+	mockDS := mocks.NewMockInterface(t)
+	// Mock expectations for image cache initialization
+	mockDS.EXPECT().
+		GetAllImageCaches(mock.AnythingOfType("string")).
+		Return([]datastore.ImageCache{}, nil).
+		Maybe()
 
 	// Initialize a mock image cache for controller creation - ONCE for all test cases
 	testMetrics, _ := observability.NewMetrics() // Create a dummy metrics instance
@@ -579,7 +566,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	e := echo.New()
 
 	// Create a mock datastore using testify/mock
-	mockDS := new(MockDataStoreV2)
+	mockDS := mocks.NewMockInterface(t)
 
 	testDate := "2025-03-07"
 	minConfidence := 0.0
@@ -780,7 +767,7 @@ func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
 	e := echo.New()
 
 	// Create a mock datastore using testify/mock
-	mockDS := new(MockDataStoreV2)
+	mockDS := mocks.NewMockInterface(t)
 
 	// Expected data for GetTopBirdsData
 	mockNotesSingle := []datastore.Note{
@@ -901,7 +888,7 @@ func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
 	e := echo.New()
 
 	// Create a mock datastore that returns no detections
-	mockDS := new(MockDataStoreV2)
+	mockDS := mocks.NewMockInterface(t)
 
 	// Setup mock expectations using m.On()
 	// Expect GetTopBirdsData to be called and return empty slice
@@ -948,7 +935,7 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 	e := echo.New()
 
 	// Create a mock datastore using testify/mock
-	mockDS := new(MockDataStoreV2)
+	mockDS := mocks.NewMockInterface(t)
 
 	// Expected data for GetTopBirdsData
 	mockNotesTime := []datastore.Note{
@@ -1036,7 +1023,7 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 	e := echo.New()
 
 	// Create a mock datastore using testify/mock
-	mockDS := new(MockDataStoreV2)
+	mockDS := mocks.NewMockInterface(t)
 
 	// Expected confidence filter value (passed as %) -> converted to decimal
 	expectedMinConfidence := 0.7 // 70%
@@ -1122,7 +1109,7 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 	e := echo.New()
 
 	// Create a mock datastore using testify/mock
-	mockDS := new(MockDataStoreV2)
+	mockDS := mocks.NewMockInterface(t)
 
 	// Expected data for GetTopBirdsData (more than the limit)
 	mockNotesLimit := []datastore.Note{
