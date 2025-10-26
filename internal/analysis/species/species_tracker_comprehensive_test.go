@@ -355,6 +355,15 @@ func TestNotificationRecordCleanup(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
+	// BG-17: InitFromDatabase now loads notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil)
+	// BG-17: RecordNotificationSent saves to database
+	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+		Return(nil).Maybe()
+	// BG-17: CleanupOldNotificationRecords deletes from database
+	ds.On("DeleteExpiredNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return(int64(0), nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:                      true,
@@ -784,6 +793,12 @@ func TestConcurrentNotificationOperations(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil)
+	// BG-17: InitFromDatabase now loads notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil)
+	// BG-17: RecordNotificationSent saves to database
+	ds.On("SaveNotificationHistory", mock.AnythingOfType("*datastore.NotificationHistory")).
+		Return(nil).Maybe()
 
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:                      true,

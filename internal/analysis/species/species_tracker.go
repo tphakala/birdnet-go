@@ -38,6 +38,7 @@ const (
 
 	// Notification suppression
 	defaultNotificationSuppressionWindow = 168 * time.Hour // Default suppression window (7 days)
+	notificationTypeNewSpecies           = "new_species"   // Notification type for new species alerts
 
 	// Cache management
 	maxStatusCacheSize = 1000 // Maximum number of species to cache
@@ -89,6 +90,10 @@ func Close() error {
 type SpeciesDatastore interface {
 	GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error)
 	GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error)
+	// Notification history methods for BG-17 fix
+	GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error)
+	SaveNotificationHistory(history *datastore.NotificationHistory) error
+	DeleteExpiredNotificationHistory(before time.Time) (int64, error)
 }
 
 // SpeciesStatus represents the tracking status of a species across multiple periods
@@ -687,12 +692,29 @@ func (t *SpeciesTracker) InitFromDatabase() error {
 		}
 	}
 
+	// Step 4: Load notification history (BG-17 fix)
+	// Design decision: Don't fail initialization if notification history load fails
+	// Rationale:
+	// 1. Notification suppression is a "nice-to-have" feature, not critical for core functionality
+	// 2. First-run scenarios: On fresh installs, the table will be empty (not an error)
+	// 3. Graceful degradation: New notifications will still be suppressed (just not historical ones)
+	// 4. Self-healing: As new notifications are sent, the suppression state rebuilds automatically
+	// 5. The table will be created by GORM AutoMigrate on first run
+	if err := t.loadNotificationHistoryFromDatabase(now); err != nil {
+		logger.Error("Failed to load notification history from database",
+			"error", err,
+			"operation", "load_notification_history",
+			"impact", "May send duplicate notifications for species detected recently")
+		// Continue initialization - the feature will work for new notifications going forward
+	}
+
 	t.lastSyncTime = now
 
 	logger.Debug("Database initialization complete",
 		"lifetime_species", len(t.speciesFirstSeen),
 		"yearly_species", len(t.speciesThisYear),
-		"total_seasons", len(t.speciesBySeason))
+		"total_seasons", len(t.speciesBySeason),
+		"notification_history_loaded", len(t.notificationLastSent))
 
 	return nil
 }
@@ -872,6 +894,64 @@ func (t *SpeciesTracker) loadSeasonalDataFromDatabase(now time.Time) error {
 		logger.Debug("All seasons returned empty data, restoring existing seasonal tracking data")
 		t.speciesBySeason = existingSeasonData
 	}
+
+	return nil
+}
+
+// loadNotificationHistoryFromDatabase loads recent notification history from database
+// This prevents duplicate "new species" notifications after restart (BG-17 fix)
+func (t *SpeciesTracker) loadNotificationHistoryFromDatabase(now time.Time) error {
+	// Only load if notification suppression is enabled
+	if t.notificationSuppressionWindow <= 0 {
+		logger.Debug("Notification suppression disabled, skipping history load")
+		return nil
+	}
+
+	// Load notifications from past 2x suppression window to ensure coverage
+	// This handles cases where notifications were sent just before the suppression window
+	lookbackTime := now.Add(-2 * t.notificationSuppressionWindow)
+
+	logger.Debug("Loading notification history from database",
+		"lookback_time", lookbackTime.Format("2006-01-02 15:04:05"),
+		"suppression_window", t.notificationSuppressionWindow)
+
+	// Get notification history from database
+	histories, err := t.ds.GetActiveNotificationHistory(lookbackTime)
+	if err != nil {
+		return errors.Newf("failed to load notification history from database: %w", err).
+			Component("new-species-tracker").
+			Category(errors.CategoryDatabase).
+			Context("operation", "load_notification_history").
+			Context("lookback_time", lookbackTime.Format("2006-01-02 15:04:05")).
+			Build()
+	}
+
+	// Populate in-memory notification map
+	// Initialize map if needed
+	if t.notificationLastSent == nil {
+		t.notificationLastSent = make(map[string]time.Time, len(histories))
+	}
+
+	// Load notification history into memory
+	for i := range histories {
+		// Filter by notification type to prevent future types from overwriting new_species entries
+		// This is future-proofing for when we add yearly/seasonal notification tracking
+		if histories[i].NotificationType != notificationTypeNewSpecies {
+			continue
+		}
+
+		// Store the most recent notification time for each species
+		t.notificationLastSent[histories[i].ScientificName] = histories[i].LastSent
+
+		logger.Debug("Loaded notification history",
+			"species", histories[i].ScientificName,
+			"last_sent", histories[i].LastSent.Format("2006-01-02 15:04:05"),
+			"notification_type", histories[i].NotificationType)
+	}
+
+	logger.Debug("Notification history loaded successfully",
+		"notifications_loaded", len(histories),
+		"map_size", len(t.notificationLastSent))
 
 	return nil
 }
@@ -1774,25 +1854,84 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 	logger.Debug("Recorded notification sent",
 		"species", scientificName,
 		"sent_time", sentTime.Format("2006-01-02 15:04:05"))
+
+	// Persist to database asynchronously to avoid blocking (BG-17 fix)
+	// This ensures notification suppression state survives application restarts
+	//
+	// Note: Database methods don't accept context, so timeout cannot be enforced.
+	// However, SQLite is local and GORM has internal timeouts, so hangs are unlikely.
+	// If a goroutine does leak due to database hang, in-memory suppression still works.
+	// TODO(BG-17): Consider adding context.Context parameter to SaveNotificationHistory interface
+	if t.ds != nil {
+		go func() {
+			// ExpiresAt = when the suppression ends (sentTime + suppressionWindow)
+			expiresAt := sentTime.Add(t.notificationSuppressionWindow)
+			history := &datastore.NotificationHistory{
+				ScientificName:   scientificName,
+				NotificationType: notificationTypeNewSpecies,
+				LastSent:         sentTime,
+				ExpiresAt:        expiresAt,
+				CreatedAt:        sentTime,
+				UpdatedAt:        sentTime,
+			}
+
+			if err := t.ds.SaveNotificationHistory(history); err != nil {
+				logger.Error("Failed to save notification history to database",
+					"species", scientificName,
+					"error", err,
+					"operation", "save_notification_history")
+				// Don't crash - in-memory suppression still works
+			} else {
+				logger.Debug("Persisted notification history to database",
+					"species", scientificName,
+					"expires_at", expiresAt.Format("2006-01-02 15:04:05"))
+			}
+		}()
+	}
 }
 
-// CleanupOldNotificationRecords removes notification records older than 2x the suppression window
+// CleanupOldNotificationRecords removes notification records older than the suppression window
 // to prevent unbounded memory growth.
+// BG-17 fix: Also cleans up expired records from database
 func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) int {
 	// Early return if suppression is disabled (0 window)
 	if t.notificationSuppressionWindow <= 0 {
 		return 0
 	}
 
+	// Clean up in-memory records (removes entries older than currentTime - suppressionWindow)
 	t.mu.Lock()
 	cleaned := t.cleanupOldNotificationRecordsLocked(currentTime)
 	t.mu.Unlock()
 
 	if cleaned > 0 {
-		cutoffTime := currentTime.Add(-2 * t.notificationSuppressionWindow)
-		logger.Debug("Cleaned up old notification records",
+		// Log the actual cutoff used by cleanupOldNotificationRecordsLocked
+		cutoffTime := currentTime.Add(-t.notificationSuppressionWindow)
+		logger.Debug("Cleaned up old notification records from memory",
 			"removed_count", cleaned,
 			"cutoff_time", cutoffTime.Format("2006-01-02 15:04:05"))
+	}
+
+	// Clean up database records asynchronously (BG-17 fix)
+	// Deletes records where ExpiresAt < currentTime (i.e., suppression has expired)
+	//
+	// Note: Database methods don't accept context, so timeout cannot be enforced.
+	// However, SQLite is local and GORM has internal timeouts, so hangs are unlikely.
+	// TODO(BG-17): Consider adding context.Context parameter to DeleteExpiredNotificationHistory interface
+	if t.ds != nil {
+		go func() {
+			// Delete records that have expired (ExpiresAt < now)
+			deletedCount, err := t.ds.DeleteExpiredNotificationHistory(currentTime)
+			if err != nil {
+				logger.Error("Failed to cleanup expired notification history from database",
+					"error", err,
+					"current_time", currentTime.Format("2006-01-02 15:04:05"))
+			} else if deletedCount > 0 {
+				logger.Debug("Cleaned up expired notification history from database",
+					"deleted_count", deletedCount,
+					"current_time", currentTime.Format("2006-01-02 15:04:05"))
+			}
+		}()
 	}
 
 	return cleaned

@@ -177,6 +177,9 @@ func TestUpdateSpecies_CriticalReliability(t *testing.T) {
 			ds := &MockSpeciesDatastore{}
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil)
+	// BG-17: InitFromDatabase now loads notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil)
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil)
 
@@ -363,6 +366,9 @@ func TestCheckAndResetPeriods_CriticalReliability(t *testing.T) {
 			ds := &MockSpeciesDatastore{}
 			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil)
+	// BG-17: InitFromDatabase now loads notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil)
 			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return([]datastore.NewSpeciesData{}, nil)
 
@@ -445,6 +451,9 @@ func TestGetBatchSpeciesStatus_CriticalReliability(t *testing.T) {
 	ds := &MockSpeciesDatastore{}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
+	// BG-17: InitFromDatabase now loads notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil)
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
 

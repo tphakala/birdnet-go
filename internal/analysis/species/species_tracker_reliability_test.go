@@ -92,12 +92,6 @@ func runConcurrentLoadTest(t *testing.T, name string, numGoroutines, operationsP
 func createTrackerForConcurrentTest(t *testing.T, enableYearly, enableSeasonal bool) *SpeciesTracker {
 	t.Helper()
 
-	ds := &MockSpeciesDatastore{}
-	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
-	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.NewSpeciesData{}, nil)
-
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
 		NewSpeciesWindowDays: 14,
@@ -112,9 +106,7 @@ func createTrackerForConcurrentTest(t *testing.T, enableYearly, enableSeasonal b
 		},
 	}
 
-	tracker := NewTrackerFromSettings(ds, settings)
-	require.NotNil(t, tracker)
-	require.NoError(t, tracker.InitFromDatabase())
+	tracker, _ := createTestTrackerWithMocks(t, settings)
 	return tracker
 }
 
@@ -329,6 +321,9 @@ func TestDatabaseFailureRecovery(t *testing.T) {
 			case "empty_results":
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil)
+	// BG-17: InitFromDatabase now loads notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil)
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil)
 

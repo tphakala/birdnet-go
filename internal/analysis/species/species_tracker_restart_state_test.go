@@ -183,6 +183,9 @@ func TestInitFromDatabase_EmptyDatabaseResults(t *testing.T) {
 	// Database returns empty slice (no error, just no data)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
+	// BG-17: InitFromDatabase now loads notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil)
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
 
@@ -291,6 +294,9 @@ func TestLoadLifetimeData_PreservesExistingDataOnEmptyResults(t *testing.T) {
 	// Second call: Return empty (simulates DB issue)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
+	// BG-17: InitFromDatabase now loads notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil)
 
 	// Try to sync - should preserve existing data
 	err = tracker.InitFromDatabase()
@@ -361,6 +367,9 @@ func TestRestartScenario_SuccessfulInitialization(t *testing.T) {
 	ds1 := &MockSpeciesDatastore{}
 	ds1.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
+	// BG-17: InitFromDatabase now loads notification history
+	ds1.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil)
 	ds1.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil)
 

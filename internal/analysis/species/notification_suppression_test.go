@@ -20,6 +20,19 @@ func (m *mockSpeciesDatastore) GetSpeciesFirstDetectionInPeriod(ctx context.Cont
 	return []datastore.NewSpeciesData{}, nil
 }
 
+// BG-17 fix: Add notification history methods
+func (m *mockSpeciesDatastore) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
+	return []datastore.NotificationHistory{}, nil
+}
+
+func (m *mockSpeciesDatastore) SaveNotificationHistory(history *datastore.NotificationHistory) error {
+	return nil
+}
+
+func (m *mockSpeciesDatastore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
+	return 0, nil
+}
+
 // TestNotificationSuppression tests the simplified notification suppression logic
 func TestNotificationSuppression(t *testing.T) {
 	// Create a mock datastore

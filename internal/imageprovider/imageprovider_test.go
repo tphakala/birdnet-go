@@ -271,6 +271,23 @@ func (m *mockStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startD
 	return []datastore.NewSpeciesData{}, nil
 }
 
+// BG-17 fix: Add notification history methods
+func (m *mockStore) GetActiveNotificationHistory(after time.Time) ([]datastore.NotificationHistory, error) {
+	return []datastore.NotificationHistory{}, nil
+}
+
+func (m *mockStore) GetNotificationHistory(scientificName, notificationType string) (*datastore.NotificationHistory, error) {
+	return nil, datastore.ErrNotificationHistoryNotFound
+}
+
+func (m *mockStore) SaveNotificationHistory(history *datastore.NotificationHistory) error {
+	return nil
+}
+
+func (m *mockStore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
+	return 0, nil
+}
+
 // mockFailingStore is a mock implementation that simulates database failures
 type mockFailingStore struct {
 	mockStore
