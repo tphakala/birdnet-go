@@ -67,8 +67,9 @@ func LoadTaxonomyDatabase() (*TaxonomyDatabase, error) {
 			Build()
 	}
 
-	// Validate database - require all core data structures to be populated
-	if len(db.Genera) == 0 || len(db.Families) == 0 || len(db.SpeciesIndex) == 0 {
+	// Validate database - require all core data structures to be populated and non-nil
+	if db.Genera == nil || db.Families == nil || db.SpeciesIndex == nil ||
+		len(db.Genera) == 0 || len(db.Families) == 0 || len(db.SpeciesIndex) == 0 {
 		return nil, errors.Newf("taxonomy database is empty or invalid").
 			Category(errors.CategoryValidation).
 			Component("birdnet-genus").
@@ -115,20 +116,31 @@ func normalizeSpeciesIndexKeys(speciesIndex map[string]string) map[string]string
 
 // normalizeSpeciesIndexValues lower-cases all genus values in the species index
 func normalizeSpeciesIndexValues(si map[string]string) map[string]string {
+	normalized := make(map[string]string, len(si))
 	for k, v := range si {
-		si[k] = strings.ToLower(v)
+		normalized[k] = strings.ToLower(v)
 	}
-	return si
+	return normalized
 }
 
 // normalizeFamilyGeneraValues lower-cases genera lists in each family
 func normalizeFamilyGeneraValues(families map[string]*FamilyMetadata) map[string]*FamilyMetadata {
-	for _, fm := range families {
+	normalized := make(map[string]*FamilyMetadata, len(families))
+	for key, fm := range families {
+		// Create normalized genera slice
+		genera := make([]string, len(fm.Genera))
 		for i, g := range fm.Genera {
-			fm.Genera[i] = strings.ToLower(g)
+			genera[i] = strings.ToLower(g)
+		}
+		// Create new FamilyMetadata with normalized genera
+		normalized[key] = &FamilyMetadata{
+			FamilyCommon: fm.FamilyCommon,
+			Order:        fm.Order,
+			Genera:       genera,
+			SpeciesCount: fm.SpeciesCount,
 		}
 	}
-	return families
+	return normalized
 }
 
 // GetGenusByScientificName retrieves genus metadata by scientific name
@@ -245,10 +257,14 @@ func (db *TaxonomyDatabase) GetSpeciesTree(scientificName string) (*SpeciesTreeR
 
 	// Extract genus from scientific name
 	parts := strings.Fields(scientificName)
-	genus := ""
-	if len(parts) > 0 {
-		genus = parts[0]
+	if len(parts) == 0 {
+		return nil, errors.Newf("invalid scientific name format: '%s'", scientificName).
+			Category(errors.CategoryValidation).
+			Context("scientific_name", scientificName).
+			Component("birdnet-genus").
+			Build()
 	}
+	genus := parts[0]
 
 	// Get family metadata
 	familyName := strings.ToLower(genusMetadata.Family)
