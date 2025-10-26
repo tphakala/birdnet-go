@@ -37,6 +37,17 @@ func createTestTrackerWithMocks(t *testing.T, settings *conf.SpeciesTrackingSett
 		Return([]datastore.NewSpeciesData{}, nil).
 		Maybe()
 
+	// BG-17: Notification persistence - async operations called in goroutines
+	mockDS.EXPECT().
+		SaveNotificationHistory(mock.AnythingOfType("*datastore.NotificationHistory")).
+		Return(nil).
+		Maybe() // Called asynchronously by RecordNotificationSent
+
+	mockDS.EXPECT().
+		DeleteExpiredNotificationHistory(mock.AnythingOfType("time.Time")).
+		Return(int64(0), nil).
+		Maybe() // Called asynchronously by CleanupOldNotificationRecords
+
 	tracker := NewTrackerFromSettings(mockDS, settings)
 	require.NotNil(t, tracker)
 	require.NoError(t, tracker.InitFromDatabase())

@@ -300,7 +300,7 @@ func TestDatabaseFailureRecovery(t *testing.T) {
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, fmt.Errorf("database connection failed"))
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-					Return(nil, fmt.Errorf("database connection failed"))
+					Return(nil, fmt.Errorf("database connection failed")).Maybe() // Not called if GetNewSpeciesDetections fails first
 
 			case "lifetime_fail":
 				ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
