@@ -316,7 +316,19 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	case pr.jobs <- job:
 		pr.mu.Lock()
 		pr.stats.Queued++
+		totalQueued := pr.stats.Queued
 		pr.mu.Unlock()
+
+		// Get actual current queue depth for diagnostic visibility
+		currentQueueDepth := len(pr.jobs)
+
+		// Log at INFO level when spectrogram generation is queued (BG-18)
+		// This provides visibility into the pre-rendering pipeline without debug mode
+		pr.logger.Info("Spectrogram generation queued",
+			"note_id", job.NoteID,
+			"queue_depth", currentQueueDepth,     // Current backlog (0-3 for default queue size)
+			"total_queued", totalQueued,          // Lifetime counter
+			"operation", "spectrogram_queued")
 		return nil
 	default:
 		pr.logger.Warn("Pre-render queue full, dropping job",
@@ -416,6 +428,14 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	ctx, cancel := context.WithTimeout(pr.ctx, generationTimeout)
 	defer cancel()
 
+	// Log at INFO level when generation starts (BG-18)
+	// This provides visibility into the generation pipeline
+	pr.logger.Info("Spectrogram generation started",
+		"note_id", job.NoteID,
+		"audio_path", job.ClipPath,
+		"size", pr.settings.Realtime.Dashboard.Spectrogram.Size,
+		"operation", "spectrogram_generation_start")
+
 	// Generate spectrogram using shared generator
 	if err := pr.generator.GenerateFromPCM(ctx, job.PCMData, spectrogramPath, width, pr.settings.Realtime.Dashboard.Spectrogram.Raw); err != nil {
 		pr.logger.Error("Failed to generate spectrogram",
@@ -424,18 +444,35 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 			"clip_path", job.ClipPath,
 			"spectrogram_path", spectrogramPath,
 			"error", err,
-			"duration", time.Since(start))
+			"duration_ms", time.Since(start).Milliseconds(),
+			"operation", "spectrogram_generation_failed")
 		pr.mu.Lock()
 		pr.stats.Failed++
 		pr.mu.Unlock()
 		return
 	}
 
-	pr.logger.Debug("Spectrogram pre-rendered successfully",
-		"worker_id", workerID,
+	// Get file size for logging
+	fileInfo, err := os.Stat(spectrogramPath)
+	var fileSize int64
+	if err == nil {
+		fileSize = fileInfo.Size()
+	} else {
+		// Debug log if we can't stat the file (shouldn't happen after successful generation)
+		pr.logger.Debug("Failed to stat spectrogram file for size logging",
+			"note_id", job.NoteID,
+			"error", err,
+			"path", spectrogramPath)
+	}
+
+	// Log at INFO level when generation succeeds (BG-18)
+	// This provides confirmation that spectrograms are being created successfully
+	pr.logger.Info("Spectrogram generated successfully",
 		"note_id", job.NoteID,
-		"spectrogram_path", spectrogramPath,
-		"duration", time.Since(start))
+		"output_path", spectrogramPath,
+		"file_size_bytes", fileSize,
+		"duration_ms", time.Since(start).Milliseconds(),
+		"operation", "spectrogram_generation_success")
 
 	// Allow GC to reclaim PCM buffer promptly
 	job.PCMData = nil
