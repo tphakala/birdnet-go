@@ -1618,5 +1618,12 @@
         "error": "Erro ao carregar calendário"
       }
     }
+  },
+  "detection": {
+    "actions": {
+      "back": "Voltar",
+      "review": "Revisar",
+      "download": "Baixar"
+    }
   }
 }

@@ -1610,5 +1610,12 @@
         "error": "Virhe kalenterin lataamisessa"
       }
     }
+  },
+  "detection": {
+    "actions": {
+      "back": "Takaisin",
+      "review": "Tarkista",
+      "download": "Lataa"
+    }
   }
 }

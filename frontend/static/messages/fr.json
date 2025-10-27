@@ -1632,5 +1632,12 @@
         "error": "Erreur lors du chargement du calendrier"
       }
     }
+  },
+  "detection": {
+    "actions": {
+      "back": "Retour",
+      "review": "Réviser",
+      "download": "Télécharger"
+    }
   }
 }

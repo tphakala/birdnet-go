@@ -1605,5 +1605,12 @@
         "error": "Error al cargar el calendario"
       }
     }
+  },
+  "detection": {
+    "actions": {
+      "back": "Atrás",
+      "review": "Revisar",
+      "download": "Descargar"
+    }
   }
 }

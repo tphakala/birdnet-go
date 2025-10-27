@@ -92,18 +92,17 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 			messageSet = true
 		}
 	} else {
-		// Fallback: create template data with empty base URL when settings not available.
+		// Fallback: create template data with placeholder base URL when settings not available.
 		// This should only occur during:
 		// - Early startup before settings are fully initialized
 		// - Unit tests that don't initialize settings
-		// URLs will be empty strings, making it obvious when configuration is incomplete.
-		// Detection notifications will still be created but with incomplete metadata.
-		c.logger.Error("CRITICAL: settings unavailable during detection notification, URL fields will be incomplete",
+		// URLs will use "http://localhost" as fallback, indicating incomplete configuration.
+		// Detection notifications will still be created but with generic localhost URLs.
+		c.logger.Warn("Settings unavailable during detection notification, using localhost for URL fields",
 			"species", event.GetSpeciesName(),
-			"confidence", event.GetConfidence(),
-			"note", "This indicates a race condition or initialization order issue")
-		// Use empty baseURL and default 24h time format
-		templateData = NewTemplateData(event, "", true)
+			"confidence", event.GetConfidence())
+		// Use localhost fallback and default 24h time format
+		templateData = NewTemplateData(event, "http://localhost", true)
 	}
 
 	// Use defaults only if settings not available or template rendering failed

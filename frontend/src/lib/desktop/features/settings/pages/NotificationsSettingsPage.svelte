@@ -264,9 +264,21 @@
         </div>
       </div>
       <ul class="text-sm ml-8 space-y-1 list-disc list-inside">
-        <li><strong>{t('settings.notifications.privacy.gps')}</strong>: {t('settings.notifications.privacy.gpsDetails')}</li>
-        <li><strong>{t('settings.notifications.privacy.urls')}</strong>: {t('settings.notifications.privacy.urlsDetails')}</li>
-        <li><strong>{t('settings.notifications.privacy.species')}</strong>: {t('settings.notifications.privacy.speciesDetails')}</li>
+        <li>
+          <strong>{t('settings.notifications.privacy.gps')}</strong>: {t(
+            'settings.notifications.privacy.gpsDetails'
+          )}
+        </li>
+        <li>
+          <strong>{t('settings.notifications.privacy.urls')}</strong>: {t(
+            'settings.notifications.privacy.urlsDetails'
+          )}
+        </li>
+        <li>
+          <strong>{t('settings.notifications.privacy.species')}</strong>: {t(
+            'settings.notifications.privacy.speciesDetails'
+          )}
+        </li>
       </ul>
       <p class="text-sm ml-8 mt-2">
         {t('settings.notifications.privacy.recommendation')}

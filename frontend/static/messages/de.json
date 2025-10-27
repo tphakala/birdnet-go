@@ -1627,5 +1627,12 @@
         "error": "Fehler beim Laden des Kalenders"
       }
     }
+  },
+  "detection": {
+    "actions": {
+      "back": "Zurück",
+      "review": "Überprüfen",
+      "download": "Herunterladen"
+    }
   }
 }

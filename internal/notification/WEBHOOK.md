@@ -391,7 +391,7 @@ Metadata fields are stored in a `map[string]interface{}` and require type awaren
 
 **Important Type Information:**
 - `bg_latitude` and `bg_longitude` are `float64` (numeric values)
-- `bg_confidence_percent` is `string` (text, not numeric!)
+- `bg_confidence_percent` is `string` (pre-formatted percentage like "95", not decimal 0.95)
 - All other `bg_*` fields are strings
 - Missing fields return zero values (0 for numbers, "" for strings)
 - No errors are thrown for undefined fields
