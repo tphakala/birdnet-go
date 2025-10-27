@@ -126,17 +126,11 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 		WithMetadata("location", event.GetLocation()).
 		WithMetadata("is_new_species", true).
 		WithMetadata("days_since_first_seen", event.GetDaysSinceFirstSeen()).
-		// Expose all TemplateData fields with bg_ prefix for use in provider templates
-		// See: https://github.com/tphakala/birdnet-go/issues/1457
-		WithMetadata("bg_detection_url", templateData.DetectionURL).
-		WithMetadata("bg_image_url", templateData.ImageURL).
-		WithMetadata("bg_confidence_percent", templateData.ConfidencePercent).
-		WithMetadata("bg_detection_time", templateData.DetectionTime).
-		WithMetadata("bg_detection_date", templateData.DetectionDate).
-		WithMetadata("bg_latitude", templateData.Latitude).
-		WithMetadata("bg_longitude", templateData.Longitude).
-		WithMetadata("bg_location", templateData.Location).
 		WithExpiry(24 * time.Hour)
+
+	// Expose all TemplateData fields with bg_ prefix for use in provider templates
+	// See: https://github.com/tphakala/birdnet-go/issues/1457
+	notification = EnrichWithTemplateData(notification, templateData)
 
 	// Add note_id from event metadata if available for navigation to detection detail
 	if eventMetadata := event.GetMetadata(); eventMetadata != nil {

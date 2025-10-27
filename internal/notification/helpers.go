@@ -253,3 +253,29 @@ func scrubIPAddress(ip string) string {
 	}
 	return privacy.AnonymizeIP(ip)
 }
+
+// EnrichWithTemplateData adds all template data fields as metadata to a notification.
+// This ensures both real detections and test notifications have consistent metadata
+// available for use in provider templates (webhooks, etc.).
+//
+// Fields are prefixed with "bg_" to avoid conflicts with existing metadata.
+//
+// Returns the original notification unchanged if either parameter is nil.
+// Otherwise returns the notification with added metadata fields.
+//
+// See: https://github.com/tphakala/birdnet-go/issues/1457
+func EnrichWithTemplateData(notification *Notification, data *TemplateData) *Notification {
+	if notification == nil || data == nil {
+		return notification // Maintain fluent API - nil-in, nil-out
+	}
+
+	return notification.
+		WithMetadata("bg_detection_url", data.DetectionURL).
+		WithMetadata("bg_image_url", data.ImageURL).
+		WithMetadata("bg_confidence_percent", data.ConfidencePercent).
+		WithMetadata("bg_detection_time", data.DetectionTime).
+		WithMetadata("bg_detection_date", data.DetectionDate).
+		WithMetadata("bg_latitude", data.Latitude).
+		WithMetadata("bg_longitude", data.Longitude).
+		WithMetadata("bg_location", data.Location)
+}

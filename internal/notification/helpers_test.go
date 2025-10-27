@@ -229,3 +229,94 @@ func TestScrubIPAddress(t *testing.T) {
 		})
 	}
 }
+
+func TestEnrichWithTemplateData(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		notification *Notification
+		templateData *TemplateData
+		wantNil      bool
+	}{
+		{
+			name:         "nil notification",
+			notification: nil,
+			templateData: &TemplateData{
+				DetectionURL:      "http://localhost/detections/1",
+				ImageURL:          "http://localhost/image.jpg",
+				ConfidencePercent: "95",
+				DetectionTime:     "14:30:00",
+				DetectionDate:     "2025-10-27",
+				Latitude:          42.3601,
+				Longitude:         -71.0589,
+				Location:          "Test Location",
+			},
+			wantNil: true,
+		},
+		{
+			name:         "nil template data",
+			notification: NewNotification(TypeDetection, PriorityHigh, "Test", "Test Message"),
+			templateData: nil,
+			wantNil:      false,
+		},
+		{
+			name:         "valid notification and template data",
+			notification: NewNotification(TypeDetection, PriorityHigh, "Test", "Test Message"),
+			templateData: &TemplateData{
+				DetectionURL:      "http://localhost/detections/1",
+				ImageURL:          "http://localhost/image.jpg",
+				ConfidencePercent: "95",
+				DetectionTime:     "14:30:00",
+				DetectionDate:     "2025-10-27",
+				Latitude:          42.3601,
+				Longitude:         -71.0589,
+				Location:          "Test Location",
+			},
+			wantNil: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := EnrichWithTemplateData(tt.notification, tt.templateData)
+
+			if tt.wantNil && result != nil {
+				t.Errorf("EnrichWithTemplateData() expected nil, got %v", result)
+				return
+			}
+
+			if !tt.wantNil && result == nil {
+				t.Errorf("EnrichWithTemplateData() expected non-nil result")
+				return
+			}
+
+			// Verify metadata was added when both inputs are valid
+			if tt.notification != nil && tt.templateData != nil && result != nil {
+				// Verify all field values match expected template data
+				expectedValues := map[string]interface{}{
+					"bg_detection_url":      tt.templateData.DetectionURL,
+					"bg_image_url":          tt.templateData.ImageURL,
+					"bg_confidence_percent": tt.templateData.ConfidencePercent,
+					"bg_detection_time":     tt.templateData.DetectionTime,
+					"bg_detection_date":     tt.templateData.DetectionDate,
+					"bg_latitude":           tt.templateData.Latitude,
+					"bg_longitude":          tt.templateData.Longitude,
+					"bg_location":           tt.templateData.Location,
+				}
+
+				for field, expectedValue := range expectedValues {
+					actualValue, exists := result.Metadata[field]
+					if !exists {
+						t.Errorf("EnrichWithTemplateData() missing expected field: %s", field)
+						continue
+					}
+					if actualValue != expectedValue {
+						t.Errorf("%s = %v, want %v", field, actualValue, expectedValue)
+					}
+				}
+			}
+		})
+	}
+}

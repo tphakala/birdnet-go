@@ -750,6 +750,11 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 		WithMetadata("note_id", 1).
 		WithExpiry(24 * time.Hour) // New species notifications expire after 24 hours
 
+	// Expose all TemplateData fields with bg_ prefix for use in provider templates
+	// This ensures test notifications have the same metadata as real detections
+	// See: https://github.com/tphakala/birdnet-go/issues/1457
+	testNotification = notification.EnrichWithTemplateData(testNotification, testTemplateData)
+
 	// Use CreateWithMetadata to persist and broadcast
 	if err := service.CreateWithMetadata(testNotification); err != nil {
 		if c.apiLogger != nil {
