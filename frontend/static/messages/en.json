@@ -1105,6 +1105,17 @@
       "systemInfo": {
         "howToView": "How to view notifications:",
         "technicalDetails": "Technical details about notifications in BirdNET-Go:"
+      },
+      "privacy": {
+        "title": "Privacy Notice for External Webhooks",
+        "description": "Detection notifications may include sensitive data when sent to external services:",
+        "gps": "GPS Coordinates",
+        "gpsDetails": "Exact location (latitude/longitude) if configured",
+        "urls": "Detection URLs",
+        "urlsDetails": "May expose internal network information",
+        "species": "Species Data",
+        "speciesDetails": "What birds were detected and when",
+        "recommendation": "Only enable external webhooks if you trust the receiving service or use self-hosted/local services."
       }
     },
     "filters": {
