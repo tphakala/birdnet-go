@@ -74,12 +74,12 @@ Source: BSD-3-Clause
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.36.0/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.36.1/LICENSE
 Source: MIT
 
 ### github.com/getsentry/sentry-go/echo
 
-License: https://github.com/getsentry/sentry-go/blob/echo/v0.36.0/echo/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/echo/v0.36.1/echo/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -244,7 +244,12 @@ Source: BSD-3-Clause
 
 ### github.com/nicholas-fedor/shoutrrr
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.10.3/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.11.0/LICENSE.md
+Source: MIT
+
+### github.com/nicholas-fedor/shoutrrr/pkg/color
+
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.11.0/pkg/color/LICENSE.md
 Source: MIT
 
 ### github.com/patrickmn/go-cache
@@ -259,7 +264,7 @@ Source: MIT
 
 ### github.com/pkg/sftp
 
-License: https://github.com/pkg/sftp/blob/v1.13.9/LICENSE
+License: https://github.com/pkg/sftp/blob/v1.13.10/LICENSE
 Source: BSD-2-Clause
 
 ### github.com/pmezard/go-difflib/difflib
@@ -363,6 +368,11 @@ License: Unknown
 Source: Unknown
 
 ### github.com/tphakala/birdnet-go/frontend
+
+License: Unknown
+Source: Unknown
+
+### github.com/tphakala/birdnet-go/scripts
 
 License: Unknown
 Source: Unknown
@@ -474,17 +484,17 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.252.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.253.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/7c0ddcbb5797/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/4626949a642f/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
 
-License: https://github.com/grpc/grpc-go/blob/v1.75.1/LICENSE
+License: https://github.com/grpc/grpc-go/blob/v1.76.0/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/protobuf
