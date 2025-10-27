@@ -247,10 +247,10 @@ func TestDetectionNotificationConsumer_MetadataFieldsExposure(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// Add GPS coordinates to metadata
+	// Add obviously fake GPS coordinates to metadata for testing
 	metadata := event.GetMetadata()
-	metadata["latitude"] = 45.123456
-	metadata["longitude"] = -122.987654
+	metadata["latitude"] = 0.000001  // Test value - not a real location
+	metadata["longitude"] = 0.000001 // Test value - not a real location
 
 	// Process the event
 	err = consumer.ProcessDetectionEvent(event)
@@ -279,8 +279,8 @@ func TestDetectionNotificationConsumer_MetadataFieldsExposure(t *testing.T) {
 	assert.NotEmpty(t, notif.Metadata["bg_detection_date"], "bg_detection_date should be present")
 
 	// Verify GPS coordinates are exposed
-	assert.InDelta(t, 45.123456, notif.Metadata["bg_latitude"], 0.000001, "bg_latitude should match input")
-	assert.InDelta(t, -122.987654, notif.Metadata["bg_longitude"], 0.000001, "bg_longitude should match input")
+	assert.InDelta(t, 0.000001, notif.Metadata["bg_latitude"], 0.000001, "bg_latitude should match input")
+	assert.InDelta(t, 0.000001, notif.Metadata["bg_longitude"], 0.000001, "bg_longitude should match input")
 
 	// Verify original metadata fields are still present (backward compatibility)
 	assert.Equal(t, "Northern Cardinal", notif.Metadata["species"])

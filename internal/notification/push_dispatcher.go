@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"net"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -1058,26 +1060,48 @@ func containsLocalhost(baseURL string) bool {
 }
 
 // hasExternalWebhooks checks if any webhook providers are configured with external URLs
-// (not localhost, 127.0.0.1, or private networks)
+// (not localhost, 127.0.0.1, or private networks). Uses proper IP parsing to detect
+// loopback and private addresses per RFC 1918 (IPv4) and RFC 4193 (IPv6).
 func hasExternalWebhooks(providers []enhancedProvider) bool {
 	for i := range providers {
 		if webhookProv, ok := providers[i].prov.(*WebhookProvider); ok {
 			endpoints := webhookProv.GetEndpoints()
 			for j := range endpoints {
-				// Check if the webhook URL is external (not localhost or private network)
-				lower := strings.ToLower(endpoints[j].URL)
-				isLocal := strings.Contains(lower, "localhost") ||
-					strings.Contains(lower, "127.0.0.1") ||
-					strings.Contains(lower, "192.168.") ||
-					strings.Contains(lower, "10.") ||
-					strings.Contains(lower, "172.16.") ||
-					strings.Contains(lower, "[::1]")
-
-				if !isLocal {
+				if !isPrivateOrLocalURL(endpoints[j].URL) {
 					return true
 				}
 			}
 		}
 	}
+	return false
+}
+
+// isPrivateOrLocalURL checks if a URL points to localhost or a private network.
+// Returns true for loopback addresses (127.0.0.0/8, ::1) and private networks
+// (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7).
+func isPrivateOrLocalURL(urlStr string) bool {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		// If we can't parse it, assume it's external to be safe
+		return false
+	}
+
+	hostname := u.Hostname()
+
+	// Check for localhost string match first (covers "localhost" domain)
+	if strings.EqualFold(hostname, "localhost") {
+		return true
+	}
+
+	// Try to parse as IP address
+	ip := net.ParseIP(hostname)
+	if ip != nil {
+		// Use built-in Go functions for proper private/loopback detection
+		return ip.IsLoopback() || ip.IsPrivate()
+	}
+
+	// If hostname is not an IP, we can't determine if it resolves to private IP
+	// without DNS lookup. For now, assume domain names are external.
+	// This is safe because the warning is about protecting internal URLs.
 	return false
 }

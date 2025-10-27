@@ -343,6 +343,36 @@ When no custom template is specified, the webhook provider sends:
 
 Detection notifications include additional metadata fields with the `bg_` prefix (BirdNET-Go specific fields). These fields are available in custom templates for webhook providers.
 
+### Template Safety and Error Handling
+
+Go templates used in webhook providers follow these rules:
+
+- **Accessing undefined fields**: Produces empty strings (no error thrown)
+- **Type safety**: Metadata values are type-asserted when accessed
+- **Nil safety**: Missing metadata keys return empty values
+
+**Best Practices**:
+```yaml
+# Always use conditionals for optional fields
+{{if .Metadata.bg_latitude}}
+  "location": {"lat": {{.Metadata.bg_latitude}}, "lon": {{.Metadata.bg_longitude}}}
+{{end}}
+
+# Check for non-zero GPS coordinates
+{{if ne .Metadata.bg_latitude 0.0}}
+  "gps": "{{.Metadata.bg_latitude}}, {{.Metadata.bg_longitude}}"
+{{end}}
+
+# Provide fallback values
+{{.Metadata.bg_detection_url | default "N/A"}}
+```
+
+**Testing Templates**: Test your templates with various scenarios:
+- Detections with GPS configured
+- Detections without GPS (bg_latitude/bg_longitude will be 0)
+- Different confidence levels
+- Various time formats (24h vs 12h)
+
 ### Available Metadata Fields
 
 | Field | Type | Example | Description |
@@ -448,6 +478,11 @@ providers:
 ```
 
 ### Use Case 3: Slack/Discord Integration
+
+**Note**: Discord embed color `5814783` is green (hex `0x58B05F`). Adjust for your needs:
+- Red: `15158332` (0xE74C3C)
+- Blue: `3447003` (0x3498DB)
+- Yellow: `16776960` (0xFFFF00)
 
 ```yaml
 providers:

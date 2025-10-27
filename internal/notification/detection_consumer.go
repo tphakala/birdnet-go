@@ -92,8 +92,11 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 			messageSet = true
 		}
 	} else {
-		// Fallback: create template data with default values when settings not available
-		templateData = NewTemplateData(event, "http://localhost", true)
+		// Fallback: create template data with empty base URL when settings not available.
+		// URLs will be empty strings, making it obvious they're not configured.
+		// This should rarely happen as settings are typically available during normal operation.
+		c.logger.Warn("settings not available for detection notification, URL fields will be empty")
+		templateData = NewTemplateData(event, "", true)
 	}
 
 	// Use defaults only if settings not available or template rendering failed
