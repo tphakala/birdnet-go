@@ -104,12 +104,16 @@
   async function handleNotificationClick(notification) {
     // For detection notifications with note_id, navigate to detection detail page
     if (notification.type === 'detection' && notification.metadata?.note_id) {
-      try {
-        await markAsRead(notification.id);
-      } catch {
-        // Silently handle mark as read failures
+      const noteId = notification.metadata.note_id;
+      // Validate note_id is a positive integer
+      if (typeof noteId === 'number' && Number.isInteger(noteId) && noteId > 0) {
+        try {
+          await markAsRead(notification.id);
+        } catch {
+          // Silently handle mark as read failures
+        }
+        window.location.href = `/ui/detections/${noteId}`;
       }
-      window.location.href = `/ui/detections/${notification.metadata.note_id}`;
     }
   }
 
@@ -232,11 +236,12 @@
 
   // Get notification card class
   function getNotificationCardClass(notification) {
-    let classes = 'card bg-base-100 shadow-sm hover:shadow-md transition-shadow';
+    let classes =
+      'card bg-base-100 shadow-sm hover:shadow-md transition-shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
     if (!notification.read) {
       classes += ' bg-base-200/30';
     }
-    if (notification.type === 'detection' && notification.metadata?.note_id) {
+    if (isClickable(notification)) {
       classes += ' cursor-pointer';
     }
     return classes;
