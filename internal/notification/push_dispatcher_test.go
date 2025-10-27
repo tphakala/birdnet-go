@@ -1320,6 +1320,7 @@ func TestCheckMetadataFilters(t *testing.T) {
 
 // TestContainsLocalhost verifies localhost detection in base URLs
 func TestContainsLocalhost(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		baseURL  string
@@ -1347,6 +1348,7 @@ func TestContainsLocalhost(t *testing.T) {
 
 // TestIsPrivateOrLocalURL verifies private/local network detection
 func TestIsPrivateOrLocalURL(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		urlStr   string
@@ -1383,6 +1385,18 @@ func TestIsPrivateOrLocalURL(t *testing.T) {
 		{".home TLD", "http://router.home", true},
 		{".corp TLD", "http://intranet.corp", true},
 		{".private TLD", "http://api.private", true},
+
+		// Link-local addresses (169.254.0.0/16 and fe80::/10)
+		{"ipv4 link-local", "http://169.254.10.20", true},
+		{"ipv4 link-local start", "http://169.254.0.1", true},
+		{"ipv4 link-local end", "http://169.254.255.254", true},
+		{"ipv6 link-local", "http://[fe80::1]", true},
+		{"ipv6 link-local with zone", "http://[fe80::1%25eth0]", true},
+
+		// CGNAT range (100.64.0.0/10, RFC 6598)
+		{"cgnat start", "http://100.64.0.1", true},
+		{"cgnat mid", "http://100.100.0.1", true},
+		{"cgnat end", "http://100.127.255.254", true},
 
 		// External/public addresses (should return false)
 		{"public IP", "http://8.8.8.8", false},

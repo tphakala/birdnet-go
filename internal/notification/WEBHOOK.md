@@ -384,6 +384,7 @@ Go templates used in webhook providers follow these rules:
 | `{{.Metadata.bg_detection_date}}` | string | "2025-10-27" | Date of detection (YYYY-MM-DD) |
 | `{{.Metadata.bg_latitude}}` | float64 | 45.123456 | GPS latitude (0 if not configured) |
 | `{{.Metadata.bg_longitude}}` | float64 | -122.987654 | GPS longitude (0 if not configured) |
+| `{{.Metadata.bg_location}}` | string | "backyard-camera" | Audio input source name |
 
 ### Type Safety in Templates
 

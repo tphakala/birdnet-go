@@ -135,6 +135,7 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 		WithMetadata("bg_detection_date", templateData.DetectionDate).
 		WithMetadata("bg_latitude", templateData.Latitude).
 		WithMetadata("bg_longitude", templateData.Longitude).
+		WithMetadata("bg_location", templateData.Location).
 		WithExpiry(24 * time.Hour)
 
 	if err := c.service.store.Save(notification); err != nil {

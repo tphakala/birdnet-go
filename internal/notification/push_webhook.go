@@ -33,6 +33,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -236,11 +237,18 @@ func (w *WebhookProvider) SupportsType(t Type) bool {
 	return w.types[string(t)]
 }
 
-// GetEndpoints returns a copy of the webhook endpoints for this provider.
+// GetEndpoints returns a deep copy of the webhook endpoints for this provider.
 // Returns a defensive copy to prevent external modification of internal state.
+// Both the slice and the Headers maps within each endpoint are cloned.
 func (w *WebhookProvider) GetEndpoints() []WebhookEndpoint {
 	endpoints := make([]WebhookEndpoint, len(w.endpoints))
-	copy(endpoints, w.endpoints)
+	for i, ep := range w.endpoints {
+		endpoints[i] = ep
+		// Deep copy the Headers map to prevent external mutation
+		if ep.Headers != nil {
+			endpoints[i].Headers = maps.Clone(ep.Headers)
+		}
+	}
 	return endpoints
 }
 
