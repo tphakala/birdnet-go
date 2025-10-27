@@ -242,11 +242,11 @@ func (w *WebhookProvider) SupportsType(t Type) bool {
 // Both the slice and the Headers maps within each endpoint are cloned.
 func (w *WebhookProvider) GetEndpoints() []WebhookEndpoint {
 	endpoints := make([]WebhookEndpoint, len(w.endpoints))
-	for i, ep := range w.endpoints {
-		endpoints[i] = ep
+	for i := range w.endpoints {
+		endpoints[i] = w.endpoints[i]
 		// Deep copy the Headers map to prevent external mutation
-		if ep.Headers != nil {
-			endpoints[i].Headers = maps.Clone(ep.Headers)
+		if w.endpoints[i].Headers != nil {
+			endpoints[i].Headers = maps.Clone(w.endpoints[i].Headers)
 		}
 	}
 	return endpoints
