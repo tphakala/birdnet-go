@@ -10,9 +10,13 @@ Thank you for your interest in contributing to BirdNET-Go!
 
 ```bash
 git clone https://github.com/tphakala/birdnet-go.git && cd birdnet-go
+# install Task
 sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+# install development tools (compilers, linters, etc)
 task setup-dev
+# reload profile
 source ~/.profile  # If Go was just installed
+# start hot reloading dev server with
 air realtime
 ```
 
