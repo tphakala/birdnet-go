@@ -294,35 +294,27 @@ func TestEnrichWithTemplateData(t *testing.T) {
 
 			// Verify metadata was added when both inputs are valid
 			if tt.notification != nil && tt.templateData != nil && result != nil {
-				expectedFields := []string{
-					"bg_detection_url",
-					"bg_image_url",
-					"bg_confidence_percent",
-					"bg_detection_time",
-					"bg_detection_date",
-					"bg_latitude",
-					"bg_longitude",
-					"bg_location",
+				// Verify all field values match expected template data
+				expectedValues := map[string]interface{}{
+					"bg_detection_url":      tt.templateData.DetectionURL,
+					"bg_image_url":          tt.templateData.ImageURL,
+					"bg_confidence_percent": tt.templateData.ConfidencePercent,
+					"bg_detection_time":     tt.templateData.DetectionTime,
+					"bg_detection_date":     tt.templateData.DetectionDate,
+					"bg_latitude":           tt.templateData.Latitude,
+					"bg_longitude":          tt.templateData.Longitude,
+					"bg_location":           tt.templateData.Location,
 				}
 
-				for _, field := range expectedFields {
-					if _, exists := result.Metadata[field]; !exists {
+				for field, expectedValue := range expectedValues {
+					actualValue, exists := result.Metadata[field]
+					if !exists {
 						t.Errorf("EnrichWithTemplateData() missing expected field: %s", field)
+						continue
 					}
-				}
-
-				// Verify specific values
-				if result.Metadata["bg_detection_url"] != tt.templateData.DetectionURL {
-					t.Errorf("bg_detection_url = %v, want %v",
-						result.Metadata["bg_detection_url"], tt.templateData.DetectionURL)
-				}
-				if result.Metadata["bg_image_url"] != tt.templateData.ImageURL {
-					t.Errorf("bg_image_url = %v, want %v",
-						result.Metadata["bg_image_url"], tt.templateData.ImageURL)
-				}
-				if result.Metadata["bg_confidence_percent"] != tt.templateData.ConfidencePercent {
-					t.Errorf("bg_confidence_percent = %v, want %v",
-						result.Metadata["bg_confidence_percent"], tt.templateData.ConfidencePercent)
+					if actualValue != expectedValue {
+						t.Errorf("%s = %v, want %v", field, actualValue, expectedValue)
+					}
 				}
 			}
 		})

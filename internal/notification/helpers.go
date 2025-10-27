@@ -257,11 +257,16 @@ func scrubIPAddress(ip string) string {
 // EnrichWithTemplateData adds all template data fields as metadata to a notification.
 // This ensures both real detections and test notifications have consistent metadata
 // available for use in provider templates (webhooks, etc.).
+//
 // Fields are prefixed with "bg_" to avoid conflicts with existing metadata.
+//
+// Returns the original notification unchanged if either parameter is nil.
+// Otherwise returns the notification with added metadata fields.
+//
 // See: https://github.com/tphakala/birdnet-go/issues/1457
 func EnrichWithTemplateData(notification *Notification, data *TemplateData) *Notification {
 	if notification == nil || data == nil {
-		return notification
+		return notification // Maintain fluent API - nil-in, nil-out
 	}
 
 	return notification.
