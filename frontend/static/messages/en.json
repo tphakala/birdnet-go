@@ -11,7 +11,11 @@
     "search": "Search",
     "filter": "Filter",
     "sort": "Sort",
-    "actions": "Actions",
+    "actions": {
+      "back": "Back",
+      "review": "Review",
+      "download": "Download"
+    },
     "settings": "Settings",
     "close": "Close",
     "back": "Back",
@@ -110,11 +114,6 @@
       "downloadCsv": "Download species list as CSV",
       "visitEbirdLink": "Open eBird.org in a new tab",
       "learnEbirdTaxonomyLink": "Open eBird Taxonomy in a new tab"
-    },
-    "actions": {
-      "back": "Back",
-      "review": "Review",
-      "download": "Download"
     },
     "labels": {
       "confidence": "Confidence"
@@ -1110,6 +1109,17 @@
       "systemInfo": {
         "howToView": "How to view notifications:",
         "technicalDetails": "Technical details about notifications in BirdNET-Go:"
+      },
+      "privacy": {
+        "title": "Privacy Notice for External Webhooks",
+        "description": "Detection notifications may include sensitive data when sent to external services:",
+        "gps": "GPS Coordinates",
+        "gpsDetails": "Exact location (latitude/longitude) if configured",
+        "urls": "Detection URLs",
+        "urlsDetails": "May expose internal network information",
+        "species": "Species Data",
+        "speciesDetails": "What birds were detected and when",
+        "recommendation": "Only enable external webhooks if you trust the receiving service or use self-hosted/local services."
       }
     },
     "filters": {

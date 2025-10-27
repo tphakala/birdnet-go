@@ -1015,6 +1015,17 @@
       "systemInfo": {
         "howToView": "Kuinka tarkastella ilmoituksia:",
         "technicalDetails": "Tekniset tiedot ilmoituksista BirdNET-Go:ssa:"
+      },
+      "privacy": {
+        "title": "Tietosuojailmoitus ulkoisille webhokeille",
+        "description": "Tunnistamisilmoitukset voivat sisältää arkaluonteisia tietoja, kun ne lähetetään ulkoisiin palveluihin:",
+        "gps": "GPS-koordinaatit",
+        "gpsDetails": "Tarkka sijainti (leveyspiiri/pituuspiiri), jos määritetty",
+        "urls": "Tunnistus-URL:t",
+        "urlsDetails": "Voivat paljastaa sisäisen verkon tietoja",
+        "species": "Lajitiedot",
+        "speciesDetails": "Mitkä linnut tunnistettiin ja milloin",
+        "recommendation": "Ota ulkoiset webhookit käyttöön vain, jos luotat vastaanottavaan palveluun tai käytät itse isännöityjä/paikallisia palveluja."
       }
     },
     "filters": {

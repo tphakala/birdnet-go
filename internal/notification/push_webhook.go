@@ -236,6 +236,11 @@ func (w *WebhookProvider) SupportsType(t Type) bool {
 	return w.types[string(t)]
 }
 
+// GetEndpoints returns the webhook endpoints for this provider.
+func (w *WebhookProvider) GetEndpoints() []WebhookEndpoint {
+	return w.endpoints
+}
+
 // ValidateConfig validates the webhook provider configuration.
 // Called once during initialization to catch configuration errors early.
 func (w *WebhookProvider) ValidateConfig() error {

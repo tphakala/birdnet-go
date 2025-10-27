@@ -131,6 +131,16 @@ func InitializePushFromConfigWithMetrics(settings *conf.Settings, notificationMe
 
 		globalPushDispatcher = pd
 
+		// Warn if localhost URLs are used with external webhooks
+		// See: https://github.com/tphakala/birdnet-go/issues/1457
+		baseURL := BuildBaseURL(settings.Security.Host, settings.WebServer.Port, settings.Security.AutoTLS)
+		if containsLocalhost(baseURL) && hasExternalWebhooks(pd.providers) {
+			pd.log.Info("detection URLs use localhost with external webhooks",
+				"base_url", baseURL,
+				"note", "External services may not access these URLs",
+				"fix", "Set security.host in config or BIRDNET_HOST environment variable")
+		}
+
 		// Move start() inside Once to prevent race conditions
 		if pd.enabled && len(pd.providers) > 0 {
 			if err := pd.start(); err != nil {
@@ -1039,4 +1049,35 @@ func convertWebhookEndpoints(cfgEndpoints []conf.WebhookEndpointConfig, log *slo
 		})
 	}
 	return endpoints, nil
+}
+
+// containsLocalhost checks if a URL contains localhost or 127.0.0.1
+func containsLocalhost(baseURL string) bool {
+	lower := strings.ToLower(baseURL)
+	return strings.Contains(lower, "localhost") || strings.Contains(lower, "127.0.0.1")
+}
+
+// hasExternalWebhooks checks if any webhook providers are configured with external URLs
+// (not localhost, 127.0.0.1, or private networks)
+func hasExternalWebhooks(providers []enhancedProvider) bool {
+	for i := range providers {
+		if webhookProv, ok := providers[i].prov.(*WebhookProvider); ok {
+			endpoints := webhookProv.GetEndpoints()
+			for j := range endpoints {
+				// Check if the webhook URL is external (not localhost or private network)
+				lower := strings.ToLower(endpoints[j].URL)
+				isLocal := strings.Contains(lower, "localhost") ||
+					strings.Contains(lower, "127.0.0.1") ||
+					strings.Contains(lower, "192.168.") ||
+					strings.Contains(lower, "10.") ||
+					strings.Contains(lower, "172.16.") ||
+					strings.Contains(lower, "[::1]")
+
+				if !isLocal {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

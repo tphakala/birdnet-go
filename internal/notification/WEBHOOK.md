@@ -339,6 +339,66 @@ When no custom template is specified, the webhook provider sends:
 
 **Note**: Fields with zero values are omitted (`omitzero` tag) for cleaner payloads.
 
+## Detection Metadata Fields
+
+Detection notifications include additional metadata fields with the `bg_` prefix (BirdNET-Go specific fields). These fields are available in custom templates for webhook providers.
+
+### Available Metadata Fields
+
+| Field | Type | Example | Description |
+|-------|------|---------|-------------|
+| `{{.Metadata.bg_detection_url}}` | string | `http://host/ui/detections/123` | Link to detection details page |
+| `{{.Metadata.bg_image_url}}` | string | `http://host/api/v2/media/...` | Species image URL |
+| `{{.Metadata.bg_confidence_percent}}` | string | "95" | Confidence percentage (without % sign) |
+| `{{.Metadata.bg_detection_time}}` | string | "15:04:05" | Time of detection (24h or 12h format) |
+| `{{.Metadata.bg_detection_date}}` | string | "2025-10-27" | Date of detection (YYYY-MM-DD) |
+| `{{.Metadata.bg_latitude}}` | float64 | 45.123456 | GPS latitude (0 if not configured) |
+| `{{.Metadata.bg_longitude}}` | float64 | -122.987654 | GPS longitude (0 if not configured) |
+
+**Conditional GPS**: Use template conditionals to include GPS only when available:
+
+```yaml
+template: |
+  {
+    "species": "{{.Title}}",
+    {{if ne .Metadata.bg_latitude 0.0}}
+    "location": {
+      "lat": {{.Metadata.bg_latitude}},
+      "lon": {{.Metadata.bg_longitude}}
+    },
+    {{end}}
+    "confidence": "{{.Metadata.bg_confidence_percent}}%"
+  }
+```
+
+### Privacy Considerations
+
+**⚠️ Important**: Detection notifications may include sensitive data when sent to external services:
+
+- **GPS Coordinates**: Exact location (latitude/longitude) if configured
+- **Detection URLs**: May expose internal network information
+- **Species Data**: What birds were detected and when
+
+**Recommendations**:
+- Use external webhooks only with trusted services
+- Prefer self-hosted or local services for sensitive deployments
+- Consider using VPN or SSH tunnels for external webhooks
+- Review what data is exposed in your custom templates
+
+**Setting Host URLs**: Configure proper base URLs to avoid exposing `localhost`:
+```yaml
+# In config.yaml
+security:
+  host: "birdnet.example.com"  # Your public or VPN hostname
+```
+
+Or set environment variable:
+```bash
+export BIRDNET_HOST="birdnet.example.com"
+```
+
+When localhost URLs are used with external webhooks, BirdNET-Go logs an informational warning at startup.
+
 ## Use Cases
 
 ### Use Case 1: Integration with IFTTT/Zapier
@@ -401,21 +461,25 @@ providers:
 
     template: |
       {
-        "content": "**{{.Title}}**\n{{.Message}}",
         "embeds": [{
-          "title": "{{.Type | title}}",
+          "title": "{{.Title}}",
+          "url": "{{.Metadata.bg_detection_url}}",
           "description": "{{.Message}}",
-          "color": 15258703,
+          "color": 5814783,
+          "thumbnail": {
+            "url": "{{.Metadata.bg_image_url}}"
+          },
           "fields": [
-            {"name": "Priority", "value": "{{.Priority}}", "inline": true},
-            {"name": "Component", "value": "{{.Component}}", "inline": true}
+            {"name": "Confidence", "value": "{{.Metadata.bg_confidence_percent}}%", "inline": true},
+            {"name": "Time", "value": "{{.Metadata.bg_detection_date}} {{.Metadata.bg_detection_time}}", "inline": true}{{if ne .Metadata.bg_latitude 0.0}},
+            {"name": "Location", "value": "{{.Metadata.bg_latitude}}, {{.Metadata.bg_longitude}}", "inline": true}{{end}}
           ],
           "timestamp": "{{.Timestamp}}"
         }]
       }
 
     filter:
-      types: [error, detection]
+      types: [detection]
       priorities: [high, critical]
 ```
 

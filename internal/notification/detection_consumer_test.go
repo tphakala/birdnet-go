@@ -214,3 +214,134 @@ func TestDetectionNotificationConsumer_PreSanitizedLocations(t *testing.T) {
 		})
 	}
 }
+
+// TestDetectionNotificationConsumer_MetadataFieldsExposure verifies that all TemplateData fields
+// are exposed in notification metadata with the bg_ prefix for use in provider templates.
+// See: https://github.com/tphakala/birdnet-go/issues/1457
+func TestDetectionNotificationConsumer_MetadataFieldsExposure(t *testing.T) {
+	t.Parallel()
+
+	// Create notification service
+	config := &ServiceConfig{
+		MaxNotifications:   100,
+		CleanupInterval:    5 * time.Minute,
+		RateLimitWindow:    1 * time.Minute,
+		RateLimitMaxEvents: 100,
+	}
+	service := NewService(config)
+	require.NotNil(t, service)
+	defer service.Stop()
+
+	// Create detection consumer
+	consumer := NewDetectionNotificationConsumer(service)
+	require.NotNil(t, consumer)
+
+	// Create a new species detection event with GPS coordinates
+	event, err := events.NewDetectionEvent(
+		"Northern Cardinal",
+		"Cardinalis cardinalis", //nolint:misspell // Cardinalis is a scientific name, not a misspelling
+		0.95,
+		"backyard-camera",
+		true, // isNewSpecies
+		5,    // daysSinceFirstSeen
+	)
+	require.NoError(t, err)
+
+	// Add GPS coordinates to metadata
+	metadata := event.GetMetadata()
+	metadata["latitude"] = 45.123456
+	metadata["longitude"] = -122.987654
+
+	// Process the event
+	err = consumer.ProcessDetectionEvent(event)
+	require.NoError(t, err)
+
+	// Verify notification was created
+	notifications, err := service.List(&FilterOptions{
+		Types: []Type{TypeDetection},
+		Limit: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, notifications, 1)
+
+	notif := notifications[0]
+
+	// Verify all bg_ prefixed metadata fields are present
+	assert.NotEmpty(t, notif.Metadata["bg_detection_url"], "bg_detection_url should be present")
+	assert.Contains(t, notif.Metadata["bg_detection_url"], "/ui/detections", "detection URL should contain UI path")
+
+	assert.NotEmpty(t, notif.Metadata["bg_image_url"], "bg_image_url should be present")
+	assert.Contains(t, notif.Metadata["bg_image_url"], "Cardinalis", "image URL should contain scientific name") //nolint:misspell // Cardinalis is a scientific name
+
+	assert.Equal(t, "95", notif.Metadata["bg_confidence_percent"], "bg_confidence_percent should be 95")
+
+	assert.NotEmpty(t, notif.Metadata["bg_detection_time"], "bg_detection_time should be present")
+	assert.NotEmpty(t, notif.Metadata["bg_detection_date"], "bg_detection_date should be present")
+
+	// Verify GPS coordinates are exposed
+	assert.InDelta(t, 45.123456, notif.Metadata["bg_latitude"], 0.000001, "bg_latitude should match input")
+	assert.InDelta(t, -122.987654, notif.Metadata["bg_longitude"], 0.000001, "bg_longitude should match input")
+
+	// Verify original metadata fields are still present (backward compatibility)
+	assert.Equal(t, "Northern Cardinal", notif.Metadata["species"])
+	assert.Equal(t, "Cardinalis cardinalis", notif.Metadata["scientific_name"]) //nolint:misspell // Cardinalis is a scientific name
+	assert.InDelta(t, 0.95, notif.Metadata["confidence"], 0.001)
+	assert.Equal(t, "backyard-camera", notif.Metadata["location"])
+	assert.Equal(t, true, notif.Metadata["is_new_species"])
+	assert.Equal(t, 5, notif.Metadata["days_since_first_seen"])
+}
+
+// TestDetectionNotificationConsumer_MetadataFieldsWithoutGPS verifies that GPS fields
+// are present but set to 0 when no GPS coordinates are provided.
+func TestDetectionNotificationConsumer_MetadataFieldsWithoutGPS(t *testing.T) {
+	t.Parallel()
+
+	// Create notification service
+	config := &ServiceConfig{
+		MaxNotifications:   100,
+		CleanupInterval:    5 * time.Minute,
+		RateLimitWindow:    1 * time.Minute,
+		RateLimitMaxEvents: 100,
+	}
+	service := NewService(config)
+	require.NotNil(t, service)
+	defer service.Stop()
+
+	// Create detection consumer
+	consumer := NewDetectionNotificationConsumer(service)
+	require.NotNil(t, consumer)
+
+	// Create a new species detection event WITHOUT GPS coordinates
+	event, err := events.NewDetectionEvent(
+		"Blue Jay",
+		"Cyanocitta cristata",
+		0.88,
+		"feeder-camera",
+		true, // isNewSpecies
+		0,    // daysSinceFirstSeen
+	)
+	require.NoError(t, err)
+
+	// Process the event
+	err = consumer.ProcessDetectionEvent(event)
+	require.NoError(t, err)
+
+	// Verify notification was created
+	notifications, err := service.List(&FilterOptions{
+		Types: []Type{TypeDetection},
+		Limit: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, notifications, 1)
+
+	notif := notifications[0]
+
+	// Verify GPS fields are present but set to 0
+	assert.InDelta(t, 0.0, notif.Metadata["bg_latitude"], 0.000001, "bg_latitude should be 0 when not configured")
+	assert.InDelta(t, 0.0, notif.Metadata["bg_longitude"], 0.000001, "bg_longitude should be 0 when not configured")
+
+	// Verify other bg_ fields are still present
+	assert.NotEmpty(t, notif.Metadata["bg_detection_url"])
+	assert.NotEmpty(t, notif.Metadata["bg_image_url"])
+	assert.Equal(t, "88", notif.Metadata["bg_confidence_percent"])
+}
