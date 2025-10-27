@@ -1317,3 +1317,104 @@ func TestCheckMetadataFilters(t *testing.T) {
 		})
 	}
 }
+
+// TestContainsLocalhost verifies localhost detection in base URLs
+func TestContainsLocalhost(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		baseURL  string
+		expected bool
+	}{
+		{"localhost lowercase", "http://localhost:8080", true},
+		{"localhost uppercase", "HTTP://LOCALHOST:8080", true},
+		{"localhost mixed case", "http://LocalHost:8080", true},
+		{"127.0.0.1", "http://127.0.0.1:8080", true},
+		{"127.0.0.1 no port", "http://127.0.0.1", true},
+		{"external domain", "https://example.com", false},
+		{"internal.local", "http://birdnet.local", false}, // Different function handles this
+		{"192.168.x.x", "http://192.168.1.1", false},      // Not localhost
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := containsLocalhost(tt.baseURL)
+			if result != tt.expected {
+				t.Errorf("containsLocalhost(%q) = %v, expected %v", tt.baseURL, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestIsPrivateOrLocalURL verifies private/local network detection
+func TestIsPrivateOrLocalURL(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		urlStr   string
+		expected bool
+	}{
+		// Localhost tests
+		{"localhost", "http://localhost:8080/webhook", true},
+		{"LOCALHOST uppercase", "http://LOCALHOST/webhook", true},
+
+		// IPv4 loopback tests
+		{"127.0.0.1", "http://127.0.0.1:8080", true},
+		{"127.0.0.255", "http://127.0.0.255", true},
+		{"127.1.2.3", "http://127.1.2.3", true},
+
+		// IPv6 loopback test
+		{"::1", "http://[::1]:8080", true},
+
+		// IPv4 private networks (RFC 1918)
+		{"10.x.x.x", "http://10.0.0.1", true},
+		{"10.255.255.255", "http://10.255.255.255", true},
+		{"172.16.x.x", "http://172.16.0.1", true},
+		{"172.31.255.255", "http://172.31.255.255", true},
+		{"192.168.x.x", "http://192.168.1.1", true},
+		{"192.168.255.255", "http://192.168.255.255", true},
+
+		// IPv6 private networks (RFC 4193)
+		{"fc00::", "http://[fc00::1]", true},
+		{"fd00::", "http://[fd00::1]", true},
+
+		// Internal TLD tests
+		{".local TLD", "http://birdnet.local", true},
+		{".internal TLD", "http://server.internal", true},
+		{".lan TLD", "http://nas.lan", true},
+		{".home TLD", "http://router.home", true},
+		{".corp TLD", "http://intranet.corp", true},
+		{".private TLD", "http://api.private", true},
+
+		// Link-local addresses (169.254.0.0/16 and fe80::/10)
+		{"ipv4 link-local", "http://169.254.10.20", true},
+		{"ipv4 link-local start", "http://169.254.0.1", true},
+		{"ipv4 link-local end", "http://169.254.255.254", true},
+		{"ipv6 link-local", "http://[fe80::1]", true},
+		{"ipv6 link-local with zone", "http://[fe80::1%25eth0]", true},
+
+		// CGNAT range (100.64.0.0/10, RFC 6598)
+		{"cgnat start", "http://100.64.0.1", true},
+		{"cgnat mid", "http://100.100.0.1", true},
+		{"cgnat end", "http://100.127.255.254", true},
+
+		// External/public addresses (should return false)
+		{"public IP", "http://8.8.8.8", false},
+		{"external domain", "https://api.external.com", false},
+		{"discord webhook", "https://discord.com/api/webhooks/xxx", false},
+		{"example.com", "https://example.com/webhook", false},
+
+		// Edge cases
+		{"invalid URL", "not-a-url", false}, // Invalid URLs treated as external (safe default)
+		{"empty string", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isPrivateOrLocalURL(tt.urlStr)
+			if result != tt.expected {
+				t.Errorf("isPrivateOrLocalURL(%q) = %v, expected %v", tt.urlStr, result, tt.expected)
+			}
+		})
+	}
+}

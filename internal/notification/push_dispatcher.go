@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"net"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -130,6 +132,16 @@ func InitializePushFromConfigWithMetrics(settings *conf.Settings, notificationMe
 		}
 
 		globalPushDispatcher = pd
+
+		// Warn if localhost URLs are used with external webhooks
+		// See: https://github.com/tphakala/birdnet-go/issues/1457
+		baseURL := BuildBaseURL(settings.Security.Host, settings.WebServer.Port, settings.Security.AutoTLS)
+		if containsLocalhost(baseURL) && hasExternalWebhooks(pd.providers) {
+			pd.log.Info("detection URLs use localhost with external webhooks",
+				"base_url", baseURL,
+				"note", "External services may not access these URLs",
+				"fix", "Set security.host in config or BIRDNET_HOST environment variable")
+		}
 
 		// Move start() inside Once to prevent race conditions
 		if pd.enabled && len(pd.providers) > 0 {
@@ -1039,4 +1051,102 @@ func convertWebhookEndpoints(cfgEndpoints []conf.WebhookEndpointConfig, log *slo
 		})
 	}
 	return endpoints, nil
+}
+
+// containsLocalhost checks if a URL contains localhost or loopback IP address.
+// Uses proper URL parsing to avoid false positives from substring matching.
+func containsLocalhost(baseURL string) bool {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
+// hasExternalWebhooks checks if any webhook providers are configured with external URLs
+// (not localhost, 127.0.0.1, or private networks). Uses proper IP parsing to detect
+// loopback and private addresses per RFC 1918 (IPv4) and RFC 4193 (IPv6).
+func hasExternalWebhooks(providers []enhancedProvider) bool {
+	for i := range providers {
+		if webhookProv, ok := providers[i].prov.(*WebhookProvider); ok {
+			endpoints := webhookProv.GetEndpoints()
+			for j := range endpoints {
+				if !isPrivateOrLocalURL(endpoints[j].URL) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// isPrivateOrLocalURL checks if a URL points to localhost or a private network.
+// Returns true for loopback addresses (127.0.0.0/8, ::1), private networks
+// (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7), link-local addresses
+// (169.254.0.0/16, fe80::/10), and CGNAT addresses (100.64.0.0/10).
+func isPrivateOrLocalURL(urlStr string) bool {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		// If we can't parse it, assume it's external to be safe
+		return false
+	}
+
+	hostname := u.Hostname()
+
+	// Check for localhost string match first (covers "localhost" domain)
+	if strings.EqualFold(hostname, "localhost") {
+		return true
+	}
+
+	// Strip zone ID from IPv6 addresses (e.g., "fe80::1%eth0" -> "fe80::1")
+	// net.ParseIP doesn't handle zone IDs, but they indicate link-local addresses
+	if idx := strings.IndexByte(hostname, '%'); idx >= 0 {
+		hostname = hostname[:idx]
+	}
+
+	// Try to parse as IP address
+	ip := net.ParseIP(hostname)
+	if ip != nil {
+		// Use built-in Go functions for proper private/loopback/link-local detection
+		// Note: IsPrivate() does NOT include link-local or CGNAT, so we check explicitly
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() {
+			return true
+		}
+		// Check for CGNAT range (100.64.0.0/10, RFC 6598)
+		// Go's IsPrivate() doesn't include this, but it's carrier-grade NAT and should be treated as private
+		if ipv4 := ip.To4(); ipv4 != nil {
+			if ipv4[0] == 100 && (ipv4[1]&0xC0) == 64 {
+				return true // 100.64.0.0/10
+			}
+		}
+	}
+
+	// Check for common internal/private TLD patterns
+	// These are commonly used for internal networks and should not trigger external webhook warnings
+	internalTLDs := []string{
+		".local",    // mDNS/Bonjour (RFC 6762)
+		".internal", // Common internal convention
+		".lan",      // Common home network convention
+		".home",     // Common home network convention
+		".corp",     // Corporate networks
+		".private",  // Private networks
+	}
+
+	lowerHostname := strings.ToLower(hostname)
+	for _, tld := range internalTLDs {
+		if strings.HasSuffix(lowerHostname, tld) {
+			return true
+		}
+	}
+
+	// If hostname is not an IP and doesn't match internal TLDs,
+	// assume it's external for safety (triggers privacy warning).
+	return false
 }

@@ -33,8 +33,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"text/template"
 	"time"
@@ -234,6 +236,20 @@ func (w *WebhookProvider) IsEnabled() bool {
 // SupportsType checks if this provider handles the given notification type.
 func (w *WebhookProvider) SupportsType(t Type) bool {
 	return w.types[string(t)]
+}
+
+// GetEndpoints returns a deep copy of the webhook endpoints for this provider.
+// Returns a defensive copy to prevent external modification of internal state.
+// Both the slice and the Headers maps within each endpoint are cloned.
+func (w *WebhookProvider) GetEndpoints() []WebhookEndpoint {
+	endpoints := slices.Clone(w.endpoints)
+	for i := range endpoints {
+		// Deep copy the Headers map to prevent external mutation
+		if endpoints[i].Headers != nil {
+			endpoints[i].Headers = maps.Clone(endpoints[i].Headers)
+		}
+	}
+	return endpoints
 }
 
 // ValidateConfig validates the webhook provider configuration.

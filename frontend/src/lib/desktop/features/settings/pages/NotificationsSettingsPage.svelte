@@ -248,6 +248,44 @@
 </script>
 
 <div class="space-y-4 settings-page-content">
+  <!-- Privacy Warning for External Webhooks -->
+  <!-- See: https://github.com/tphakala/birdnet-go/issues/1457 -->
+  <div class="alert alert-warning">
+    <div class="flex flex-col gap-2 w-full">
+      <div class="flex items-start gap-3">
+        <div class="h-5 w-5 flex-shrink-0">
+          {@html alertIconsSvg.warning}
+        </div>
+        <div class="flex-1">
+          <h3 class="font-semibold text-base mb-1">
+            {t('settings.notifications.privacy.title')}
+          </h3>
+          <p class="text-sm mb-2">{t('settings.notifications.privacy.description')}</p>
+        </div>
+      </div>
+      <ul class="text-sm ml-8 space-y-1 list-disc list-inside">
+        <li>
+          <strong>{t('settings.notifications.privacy.gps')}</strong>: {t(
+            'settings.notifications.privacy.gpsDetails'
+          )}
+        </li>
+        <li>
+          <strong>{t('settings.notifications.privacy.urls')}</strong>: {t(
+            'settings.notifications.privacy.urlsDetails'
+          )}
+        </li>
+        <li>
+          <strong>{t('settings.notifications.privacy.species')}</strong>: {t(
+            'settings.notifications.privacy.speciesDetails'
+          )}
+        </li>
+      </ul>
+      <p class="text-sm ml-8 mt-2">
+        {t('settings.notifications.privacy.recommendation')}
+      </p>
+    </div>
+  </div>
+
   <SettingsSection
     title={t('settings.notifications.templates.title')}
     description={t('settings.notifications.templates.description')}

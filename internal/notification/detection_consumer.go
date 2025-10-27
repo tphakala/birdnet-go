@@ -46,6 +46,7 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 
 	var title, message string
 	var titleSet, messageSet bool
+	var templateData *TemplateData
 
 	settings := conf.GetSettings()
 	if settings != nil {
@@ -53,7 +54,7 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 		baseURL := BuildBaseURL(settings.Security.Host, settings.WebServer.Port, settings.Security.AutoTLS)
 
 		// Create template data from event
-		templateData := NewTemplateData(event, baseURL, settings.Main.TimeAs24h)
+		templateData = NewTemplateData(event, baseURL, settings.Main.TimeAs24h)
 
 		// Render title template
 		titleTemplate := settings.Notification.Templates.NewSpecies.Title
@@ -90,6 +91,18 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 			// Empty template means user wants no message (unlikely but allowed)
 			messageSet = true
 		}
+	} else {
+		// Fallback: create template data with placeholder base URL when settings not available.
+		// This should only occur during:
+		// - Early startup before settings are fully initialized
+		// - Unit tests that don't initialize settings
+		// URLs will use "http://localhost" as fallback, indicating incomplete configuration.
+		// Detection notifications will still be created but with generic localhost URLs.
+		c.logger.Warn("Settings unavailable during detection notification, using localhost for URL fields",
+			"species", event.GetSpeciesName(),
+			"confidence", event.GetConfidence())
+		// Use localhost fallback and default 24h time format
+		templateData = NewTemplateData(event, "http://localhost", true)
 	}
 
 	// Use defaults only if settings not available or template rendering failed
@@ -113,6 +126,16 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 		WithMetadata("location", event.GetLocation()).
 		WithMetadata("is_new_species", true).
 		WithMetadata("days_since_first_seen", event.GetDaysSinceFirstSeen()).
+		// Expose all TemplateData fields with bg_ prefix for use in provider templates
+		// See: https://github.com/tphakala/birdnet-go/issues/1457
+		WithMetadata("bg_detection_url", templateData.DetectionURL).
+		WithMetadata("bg_image_url", templateData.ImageURL).
+		WithMetadata("bg_confidence_percent", templateData.ConfidencePercent).
+		WithMetadata("bg_detection_time", templateData.DetectionTime).
+		WithMetadata("bg_detection_date", templateData.DetectionDate).
+		WithMetadata("bg_latitude", templateData.Latitude).
+		WithMetadata("bg_longitude", templateData.Longitude).
+		WithMetadata("bg_location", templateData.Location).
 		WithExpiry(24 * time.Hour)
 
 	// Add note_id from event metadata if available for navigation to detection detail

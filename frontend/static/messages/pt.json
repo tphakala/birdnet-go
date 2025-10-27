@@ -1014,6 +1014,17 @@
       "systemInfo": {
         "howToView": "Como visualizar notificações:",
         "technicalDetails": "Detalhes técnicos sobre notificações no BirdNET-Go:"
+      },
+      "privacy": {
+        "title": "Aviso de privacidade para webhooks externos",
+        "description": "As notificações de detecção podem incluir dados sensíveis quando enviadas para serviços externos:",
+        "gps": "Coordenadas GPS",
+        "gpsDetails": "Localização exata (latitude/longitude) se configurada",
+        "urls": "URLs de detecção",
+        "urlsDetails": "Podem expor informações da rede interna",
+        "species": "Dados de espécies",
+        "speciesDetails": "Quais aves foram detectadas e quando",
+        "recommendation": "Ative webhooks externos apenas se confiar no serviço receptor ou usar serviços auto-hospedados/locais."
       }
     },
     "filters": {
@@ -1606,6 +1617,13 @@
         "loading": "Carregando calendário...",
         "error": "Erro ao carregar calendário"
       }
+    }
+  },
+  "detection": {
+    "actions": {
+      "back": "Voltar",
+      "review": "Revisar",
+      "download": "Baixar"
     }
   }
 }
