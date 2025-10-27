@@ -229,3 +229,102 @@ func TestScrubIPAddress(t *testing.T) {
 		})
 	}
 }
+
+func TestEnrichWithTemplateData(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		notification *Notification
+		templateData *TemplateData
+		wantNil      bool
+	}{
+		{
+			name:         "nil notification",
+			notification: nil,
+			templateData: &TemplateData{
+				DetectionURL:      "http://localhost/detections/1",
+				ImageURL:          "http://localhost/image.jpg",
+				ConfidencePercent: "95",
+				DetectionTime:     "14:30:00",
+				DetectionDate:     "2025-10-27",
+				Latitude:          42.3601,
+				Longitude:         -71.0589,
+				Location:          "Test Location",
+			},
+			wantNil: true,
+		},
+		{
+			name:         "nil template data",
+			notification: NewNotification(TypeDetection, PriorityHigh, "Test", "Test Message"),
+			templateData: nil,
+			wantNil:      false,
+		},
+		{
+			name:         "valid notification and template data",
+			notification: NewNotification(TypeDetection, PriorityHigh, "Test", "Test Message"),
+			templateData: &TemplateData{
+				DetectionURL:      "http://localhost/detections/1",
+				ImageURL:          "http://localhost/image.jpg",
+				ConfidencePercent: "95",
+				DetectionTime:     "14:30:00",
+				DetectionDate:     "2025-10-27",
+				Latitude:          42.3601,
+				Longitude:         -71.0589,
+				Location:          "Test Location",
+			},
+			wantNil: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := EnrichWithTemplateData(tt.notification, tt.templateData)
+
+			if tt.wantNil && result != nil {
+				t.Errorf("EnrichWithTemplateData() expected nil, got %v", result)
+				return
+			}
+
+			if !tt.wantNil && result == nil {
+				t.Errorf("EnrichWithTemplateData() expected non-nil result")
+				return
+			}
+
+			// Verify metadata was added when both inputs are valid
+			if tt.notification != nil && tt.templateData != nil && result != nil {
+				expectedFields := []string{
+					"bg_detection_url",
+					"bg_image_url",
+					"bg_confidence_percent",
+					"bg_detection_time",
+					"bg_detection_date",
+					"bg_latitude",
+					"bg_longitude",
+					"bg_location",
+				}
+
+				for _, field := range expectedFields {
+					if _, exists := result.Metadata[field]; !exists {
+						t.Errorf("EnrichWithTemplateData() missing expected field: %s", field)
+					}
+				}
+
+				// Verify specific values
+				if result.Metadata["bg_detection_url"] != tt.templateData.DetectionURL {
+					t.Errorf("bg_detection_url = %v, want %v",
+						result.Metadata["bg_detection_url"], tt.templateData.DetectionURL)
+				}
+				if result.Metadata["bg_image_url"] != tt.templateData.ImageURL {
+					t.Errorf("bg_image_url = %v, want %v",
+						result.Metadata["bg_image_url"], tt.templateData.ImageURL)
+				}
+				if result.Metadata["bg_confidence_percent"] != tt.templateData.ConfidencePercent {
+					t.Errorf("bg_confidence_percent = %v, want %v",
+						result.Metadata["bg_confidence_percent"], tt.templateData.ConfidencePercent)
+				}
+			}
+		})
+	}
+}
