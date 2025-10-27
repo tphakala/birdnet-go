@@ -115,6 +115,13 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 		WithMetadata("days_since_first_seen", event.GetDaysSinceFirstSeen()).
 		WithExpiry(24 * time.Hour)
 
+	// Add note_id from event metadata if available for navigation to detection detail
+	if eventMetadata := event.GetMetadata(); eventMetadata != nil {
+		if noteID, ok := eventMetadata["note_id"]; ok {
+			notification = notification.WithMetadata("note_id", noteID)
+		}
+	}
+
 	if err := c.service.store.Save(notification); err != nil {
 		c.logger.Error("failed to save new species notification",
 			"species", event.GetSpeciesName(),

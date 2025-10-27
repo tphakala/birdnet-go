@@ -75,7 +75,10 @@
   }
 
   // Mark notification as read
-  async function markAsRead(id) {
+  async function markAsRead(id, event) {
+    if (event) {
+      event.stopPropagation();
+    }
     try {
       const response = await fetch(`/api/v2/notifications/${id}/read`, {
         method: 'PUT',
@@ -97,6 +100,23 @@
     }
   }
 
+  // Handle notification click
+  async function handleNotificationClick(notification) {
+    // For detection notifications with note_id, navigate to detection detail page
+    if (notification.type === 'detection' && notification.metadata?.note_id) {
+      const noteId = notification.metadata.note_id;
+      // Validate note_id is a positive integer
+      if (typeof noteId === 'number' && Number.isInteger(noteId) && noteId > 0) {
+        try {
+          await markAsRead(notification.id);
+        } catch {
+          // Silently handle mark as read failures
+        }
+        window.location.href = `/ui/detections/${noteId}`;
+      }
+    }
+  }
+
   // Mark all as read
   async function markAllAsRead() {
     const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
@@ -104,7 +124,10 @@
   }
 
   // Acknowledge notification
-  async function acknowledge(id) {
+  async function acknowledge(id, event) {
+    if (event) {
+      event.stopPropagation();
+    }
     try {
       const response = await fetch(`/api/v2/notifications/${id}/acknowledge`, {
         method: 'PUT',
@@ -125,7 +148,10 @@
   }
 
   // Delete notification
-  async function deleteNotification(id) {
+  async function deleteNotification(id, event) {
+    if (event) {
+      event.stopPropagation();
+    }
     pendingDeleteId = id;
     deleteModal?.showModal();
   }
@@ -206,6 +232,24 @@
       system: 'bg-primary/20 text-primary',
     };
     return `${baseClass} ${safeGet(typeClasses, notification.type, 'bg-base-300')}`;
+  }
+
+  // Get notification card class
+  function getNotificationCardClass(notification) {
+    let classes =
+      'card bg-base-100 shadow-sm hover:shadow-md transition-shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
+    if (!notification.read) {
+      classes += ' bg-base-200/30';
+    }
+    if (isClickable(notification)) {
+      classes += ' cursor-pointer';
+    }
+    return classes;
+  }
+
+  // Check if notification is clickable
+  function isClickable(notification) {
+    return notification.type === 'detection' && notification.metadata?.note_id;
   }
 
   // Get priority badge class
@@ -328,10 +372,23 @@
       </div>
     {:else}
       {#each notifications as notification (notification.id)}
-        <article
-          class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow {!notification.read
-            ? 'bg-base-200/30'
-            : ''}"
+        <!-- Tabindex is conditionally added only when role="link" is set for clickable notifications -->
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <div
+          class={getNotificationCardClass(notification)}
+          onclick={() => handleNotificationClick(notification)}
+          role={isClickable(notification) ? 'link' : undefined}
+          tabindex={isClickable(notification) ? 0 : undefined}
+          onkeydown={e => {
+            if (
+              isClickable(notification) &&
+              e.currentTarget === e.target &&
+              (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')
+            ) {
+              e.preventDefault();
+              handleNotificationClick(notification);
+            }
+          }}
         >
           <div class="card-body">
             <div class="flex items-start gap-4">
@@ -379,7 +436,7 @@
                   <div class="flex items-center gap-2">
                     {#if !notification.read}
                       <button
-                        onclick={() => markAsRead(notification.id)}
+                        onclick={e => markAsRead(notification.id, e)}
                         class="btn btn-ghost btn-xs"
                         aria-label={t('notifications.actions.markAsRead')}
                       >
@@ -388,7 +445,7 @@
                     {/if}
                     {#if notification.read && notification.status !== 'acknowledged'}
                       <button
-                        onclick={() => acknowledge(notification.id)}
+                        onclick={e => acknowledge(notification.id, e)}
                         class="btn btn-ghost btn-xs"
                         aria-label={t('notifications.actions.acknowledge')}
                       >
@@ -396,7 +453,7 @@
                       </button>
                     {/if}
                     <button
-                      onclick={() => deleteNotification(notification.id)}
+                      onclick={e => deleteNotification(notification.id, e)}
                       class="btn btn-ghost btn-xs text-error"
                       aria-label={t('notifications.actions.delete')}
                     >
@@ -407,7 +464,7 @@
               </div>
             </div>
           </div>
-        </article>
+        </div>
       {/each}
     {/if}
 
