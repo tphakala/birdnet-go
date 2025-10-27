@@ -1100,8 +1100,25 @@ func isPrivateOrLocalURL(urlStr string) bool {
 		return ip.IsLoopback() || ip.IsPrivate()
 	}
 
-	// If hostname is not an IP, we can't determine if it resolves to private IP
-	// without DNS lookup. For now, assume domain names are external.
-	// This is safe because the warning is about protecting internal URLs.
+	// Check for common internal/private TLD patterns
+	// These are commonly used for internal networks and should not trigger external webhook warnings
+	internalTLDs := []string{
+		".local",    // mDNS/Bonjour (RFC 6762)
+		".internal", // Common internal convention
+		".lan",      // Common home network convention
+		".home",     // Common home network convention
+		".corp",     // Corporate networks
+		".private",  // Private networks
+	}
+
+	lowerHostname := strings.ToLower(hostname)
+	for _, tld := range internalTLDs {
+		if strings.HasSuffix(lowerHostname, tld) {
+			return true
+		}
+	}
+
+	// If hostname is not an IP and doesn't match internal TLDs,
+	// assume it's external for safety (triggers privacy warning).
 	return false
 }

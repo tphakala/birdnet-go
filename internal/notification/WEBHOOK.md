@@ -385,6 +385,39 @@ Go templates used in webhook providers follow these rules:
 | `{{.Metadata.bg_latitude}}` | float64 | 45.123456 | GPS latitude (0 if not configured) |
 | `{{.Metadata.bg_longitude}}` | float64 | -122.987654 | GPS longitude (0 if not configured) |
 
+### Type Safety in Templates
+
+Metadata fields are stored in a `map[string]interface{}` and require type awareness when used in templates:
+
+**Important Type Information:**
+- `bg_latitude` and `bg_longitude` are `float64` (numeric values)
+- `bg_confidence_percent` is `string` (text, not numeric!)
+- All other `bg_*` fields are strings
+- Missing fields return zero values (0 for numbers, "" for strings)
+- No errors are thrown for undefined fields
+
+**Safe Usage Patterns:**
+
+```yaml
+# Numeric comparison for GPS (use numeric 0.0, not string "0")
+{{if ne .Metadata.bg_latitude 0.0}}
+  "location": {
+    "lat": {{.Metadata.bg_latitude}},
+    "lon": {{.Metadata.bg_longitude}}
+  }
+{{end}}
+
+# String fields can be checked with empty string
+{{if .Metadata.bg_detection_url}}
+  "url": "{{.Metadata.bg_detection_url}}"
+{{end}}
+
+# Confidence is STRING, not number - don't use numeric comparisons
+{{if .Metadata.bg_confidence_percent}}
+  "confidence": "{{.Metadata.bg_confidence_percent}}%"
+{{end}}
+```
+
 **Conditional GPS**: Use template conditionals to include GPS only when available:
 
 ```yaml
