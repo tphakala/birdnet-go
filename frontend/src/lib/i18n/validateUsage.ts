@@ -330,11 +330,52 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   // Parse CLI options
   const args = process.argv.slice(2);
+  const jsonOutput = args.includes('--json');
   const options: UsageOptions = {
     showUnused: args.includes('--unused') || args.includes('--show-unused'),
     showDetails: args.includes('--details') || args.includes('--verbose'),
     allowDynamic: args.includes('--allow-dynamic'),
   };
+
+  // Suppress console output if JSON output requested
+  if (jsonOutput) {
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = () => {};
+    console.error = () => {};
+
+    const result = await validator.validate(options);
+
+    console.log = originalLog;
+    console.error = originalError;
+
+    // Output LLM-friendly structured JSON
+    const jsonReport = {
+      success: result.missingInTranslations.length === 0,
+      timestamp: new Date().toISOString(),
+      summary: {
+        uniqueKeysUsed: result.usedKeys.size,
+        totalUsages: result.totalUsages,
+        totalFiles: result.totalFiles,
+        translationKeysDefined: validator.translationKeys.size,
+        missingInTranslations: result.missingInTranslations.length,
+        unusedInCode: result.unusedInCode.length,
+      },
+      issues: result.missingInTranslations.map(key => ({
+        type: 'missing_translation',
+        key,
+        severity: 'error',
+        message: `Key "${key}" used in code but not in ${DEFAULT_LOCALE}.json`,
+        file: DEFAULT_LOCALE + '.json',
+        fixable: true,
+        suggestedFix: `Add key to ${DEFAULT_LOCALE}.json`,
+      })),
+      unusedKeys: options.showUnused ? result.unusedInCode : [],
+    };
+
+    console.log(JSON.stringify(jsonReport, null, 2));
+    process.exit(jsonReport.success ? 0 : 1);
+  }
 
   const result = await validator.validate(options);
 

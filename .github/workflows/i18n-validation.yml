@@ -37,11 +37,21 @@ jobs:
         id: validate-files
         working-directory: frontend
         run: |
-          npx tsx src/lib/i18n/validateTranslations.ts --json > validation-report.json 2>&1 || true
-          cat validation-report.json
+          # Run validation and capture JSON output (stderr goes to stderr naturally)
+          npx tsx src/lib/i18n/validateTranslations.ts --json > validation-report.json || true
 
-          # Check if validation passed
-          if jq -e '.success == false' validation-report.json > /dev/null; then
+          # Verify JSON is valid and handle errors gracefully
+          if [ ! -f validation-report.json ]; then
+            echo '{"success":false,"error":"validation-report.json not created"}' > validation-report.json
+            echo "validation_failed=true" >> $GITHUB_OUTPUT
+            echo "### ❌ Translation File Validation Failed" >> $GITHUB_STEP_SUMMARY
+            echo "Error: Report file was not created" >> $GITHUB_STEP_SUMMARY
+          elif ! jq empty validation-report.json 2>/dev/null; then
+            echo "Invalid JSON in validation-report.json:" >> $GITHUB_STEP_SUMMARY
+            cat validation-report.json >> $GITHUB_STEP_SUMMARY
+            echo '{"success":false,"error":"Invalid JSON in validation report"}' > validation-report.json
+            echo "validation_failed=true" >> $GITHUB_OUTPUT
+          elif jq -e '.success == false' validation-report.json > /dev/null; then
             echo "validation_failed=true" >> $GITHUB_OUTPUT
             echo "### ❌ Translation File Validation Failed" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -59,14 +69,35 @@ jobs:
         working-directory: frontend
         continue-on-error: true
         run: |
-          npx tsx src/lib/i18n/validateUsage.ts > usage-report.txt 2>&1 || true
+          # Run usage validation and capture JSON output
+          npx tsx src/lib/i18n/validateUsage.ts --json > usage-report.json || true
 
-          # Check if there are missing translations
-          if grep -q "❌ Missing Translations" usage-report.txt; then
+          # Verify JSON is valid and handle errors gracefully
+          if [ ! -f usage-report.json ]; then
+            echo '{"success":false,"error":"usage-report.json not created","summary":{"missingInTranslations":0}}' > usage-report.json
+            echo "usage_check_failed=true" >> $GITHUB_OUTPUT
+            echo "### ❌ Translation Usage Check Failed" >> $GITHUB_STEP_SUMMARY
+            echo "Error: Report file was not created" >> $GITHUB_STEP_SUMMARY
+          elif ! jq empty usage-report.json 2>/dev/null; then
+            echo "Invalid JSON in usage-report.json:" >> $GITHUB_STEP_SUMMARY
+            cat usage-report.json >> $GITHUB_STEP_SUMMARY
+            echo '{"success":false,"error":"Invalid JSON in usage report","summary":{"missingInTranslations":0}}' > usage-report.json
+            echo "usage_check_failed=true" >> $GITHUB_OUTPUT
+          elif jq -e '.success == false' usage-report.json > /dev/null; then
             echo "usage_check_failed=true" >> $GITHUB_OUTPUT
             echo "### ⚠️ Translation Usage Issues" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            grep -A 20 "❌ Missing Translations" usage-report.txt >> $GITHUB_STEP_SUMMARY || true
+            echo "#### Summary" >> $GITHUB_STEP_SUMMARY
+            echo "- Missing translations: $(jq '.summary.missingInTranslations' usage-report.json)" >> $GITHUB_STEP_SUMMARY
+            echo "- Unique keys used: $(jq '.summary.uniqueKeysUsed' usage-report.json)" >> $GITHUB_STEP_SUMMARY
+            echo "- Files scanned: $(jq '.summary.totalFiles' usage-report.json)" >> $GITHUB_STEP_SUMMARY
+            if [ "$(jq '.summary.missingInTranslations' usage-report.json)" -gt 0 ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "#### Missing Keys" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              jq -r '.issues[] | .key' usage-report.json | head -20 >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+            fi
           else
             echo "usage_check_failed=false" >> $GITHUB_OUTPUT
             echo "### ✅ All Translation Keys Valid" >> $GITHUB_STEP_SUMMARY
@@ -86,6 +117,7 @@ jobs:
           name: i18n-validation-report
           path: |
             frontend/validation-report.json
+            frontend/usage-report.json
             frontend/translation-report.md
           retention-days: 30
 
@@ -101,29 +133,60 @@ jobs:
 
             let report = '## 🌍 i18n Validation Results\n\n';
 
-            // Read JSON report
-            const jsonReport = JSON.parse(fs.readFileSync('frontend/validation-report.json', 'utf8'));
+            // Read and parse validation JSON report with error handling
+            let jsonReport = null;
+            try {
+              const jsonContent = fs.readFileSync('frontend/validation-report.json', 'utf8');
+              jsonReport = JSON.parse(jsonContent);
+            } catch (e) {
+              jsonReport = {
+                success: false,
+                error: 'Failed to parse validation-report.json: ' + e.message,
+                summary: { totalErrors: 0, totalWarnings: 0, passedLocales: 0, totalLocales: 0 }
+              };
+              report += `⚠️ **Error reading validation report:** ${e.message}\n\n`;
+            }
+
+            // Read and parse usage JSON report with error handling
+            let usageReport = null;
             const usageCheckFailed = '${{ steps.check-usage.outputs.usage_check_failed }}' === 'true';
+            try {
+              const usageContent = fs.readFileSync('frontend/usage-report.json', 'utf8');
+              usageReport = JSON.parse(usageContent);
+            } catch (e) {
+              usageReport = {
+                success: false,
+                error: 'Failed to parse usage-report.json: ' + e.message,
+                summary: { missingInTranslations: 0, uniqueKeysUsed: 0, totalFiles: 0 },
+                issues: []
+              };
+              if (usageCheckFailed) {
+                report += `⚠️ **Error reading usage report:** ${e.message}\n\n`;
+              }
+            }
 
             report += `### Summary\n\n`;
             report += `- **Translation Files:** ${jsonReport.success ? '✅ Passed' : '❌ Failed'}\n`;
             report += `- **Usage Validation:** ${usageCheckFailed ? '❌ Failed' : '✅ Passed'}\n`;
-            report += `- **Total Errors:** ${jsonReport.summary.totalErrors}\n`;
-            report += `- **Total Warnings:** ${jsonReport.summary.totalWarnings}\n`;
-            report += `- **Passed Locales:** ${jsonReport.summary.passedLocales}/${jsonReport.summary.totalLocales}\n\n`;
+            report += `- **Total Errors:** ${jsonReport.summary.totalErrors || 0}\n`;
+            report += `- **Total Warnings:** ${jsonReport.summary.totalWarnings || 0}\n`;
+            report += `- **Passed Locales:** ${jsonReport.summary.passedLocales || 0}/${jsonReport.summary.totalLocales || 0}\n\n`;
 
             // Add usage validation results
-            if (usageCheckFailed) {
+            if (usageCheckFailed && usageReport) {
               report += `### ❌ Translation Usage Issues\n\n`;
-              report += `Keys are used in code but missing from \`en.json\`:\n\n`;
-              try {
-                const usageReport = fs.readFileSync('frontend/usage-report.txt', 'utf8');
-                const missingSection = usageReport.match(/❌ Missing Translations[\s\S]*?(?=\n\n|$)/);
-                if (missingSection) {
-                  report += `\`\`\`\n${missingSection[0]}\n\`\`\`\n\n`;
+              report += `**Missing Translations:** ${usageReport.summary.missingInTranslations || 0}\n\n`;
+              if (usageReport.issues && usageReport.issues.length > 0) {
+                report += `Keys used in code but missing from \`en.json\`:\n\n`;
+                report += `\`\`\`\n`;
+                const topIssues = usageReport.issues.slice(0, 20);
+                topIssues.forEach(issue => {
+                  report += `${issue.key}\n`;
+                });
+                if (usageReport.issues.length > 20) {
+                  report += `... and ${usageReport.issues.length - 20} more\n`;
                 }
-              } catch (e) {
-                report += `_Could not read usage report_\n\n`;
+                report += `\`\`\`\n\n`;
               }
             }
 
