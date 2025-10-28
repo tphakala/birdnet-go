@@ -1218,7 +1218,7 @@
         "title": "Äänitason seuranta",
         "description": "Seuraa ja raportoi ympäristön äänitasoja",
         "enable": "Ota äänitason seuranta käyttöön",
-        "enableHelp": "Seuraa ympäristön melutasoja ymmärtääksesi tallennusympäristöäsi ja korreloida linkkien aktiivisuusmallien kanssa.",
+        "enableHelp": "Seuraa ympäristön melutasoja ymmärtääksesi tallennusympäristöäsi ja korreloida lintujen aktiivisuusmallien kanssa.",
         "intervalLabel": "Mittausväli (sekuntia)",
         "intervalHelp": "Kuinka usein äänitasot mitataan ja raportoidaan. Matalammat arvot tarjoavat tarkempia tietoja mutta käyttävät enemmän resursseja. Vähintään 5 sekuntia, suositus 60 sekuntia.",
         "dataOutputTitle": "Äänitasotietojen lähtö",
