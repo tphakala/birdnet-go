@@ -84,7 +84,7 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 		if p.Settings.Realtime.DynamicThreshold.Debug {
 			GetLogger().Debug("Loaded dynamic threshold",
 				"species", dbThreshold.SpeciesName,
-				"level", dbThreshold.Level,
+				"threshold_level", dbThreshold.Level,
 				"current_value", dbThreshold.CurrentValue,
 				"expires_at", dbThreshold.ExpiresAt,
 				"operation", "load_dynamic_thresholds")
@@ -142,8 +142,8 @@ func (p *Processor) persistDynamicThresholds() error {
 			HighConfCount: threshold.HighConfCount,
 			ValidHours:    threshold.ValidHours,
 			ExpiresAt:     threshold.Timer,
-			LastTriggered: now,  // Track when we last saw activity
-			FirstCreated:  now,  // Will be preserved by upsert if record exists
+			LastTriggered: now, // Track when we last saw activity
+			FirstCreated:  now, // Will be preserved by upsert if record exists
 			UpdatedAt:     now,
 			TriggerCount:  threshold.HighConfCount, // Use HighConfCount as trigger count
 		})
