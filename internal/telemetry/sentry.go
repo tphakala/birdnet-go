@@ -372,9 +372,10 @@ func logInitializationSuccess(settings *conf.Settings, deferredCount int) {
 func generateErrorTitle(scrubbedErrorMsg, component string) string {
 	errorType := parseErrorType(scrubbedErrorMsg)
 
-	// Build title with component context
-	if component != "" && component != "unknown" {
-		return fmt.Sprintf("%s: %s", titleCaseComponent(component), errorType)
+	// Normalize component: trim whitespace and check for "unknown" case-insensitively
+	comp := strings.TrimSpace(component)
+	if comp != "" && !strings.EqualFold(comp, "unknown") {
+		return fmt.Sprintf("%s: %s", titleCaseComponent(comp), errorType)
 	}
 
 	return errorType
@@ -417,9 +418,11 @@ func parseErrorType(errMsg string) string {
 		}
 		return "Interface Conversion Failed"
 	case strings.HasPrefix(lower, "panic:"):
-		// Extract panic message after "panic: " and trim at newline to avoid stack traces
-		const panicPrefix = "panic: "
+		// Extract panic message after "panic:" and handle optional space
+		const panicPrefix = "panic:"
 		panicMsg := errMsg[len(panicPrefix):]
+		// Trim leading whitespace (handles both "panic: " and "panic:")
+		panicMsg = strings.TrimLeft(panicMsg, " \t")
 		// Trim at first newline to exclude stack traces
 		if idx := strings.IndexByte(panicMsg, '\n'); idx >= 0 {
 			panicMsg = panicMsg[:idx]
@@ -445,34 +448,55 @@ func parseErrorType(errMsg string) string {
 
 // titleCaseComponent converts component names to title case for better readability
 // Examples: "httpcontroller" -> "HTTP Controller", "datastore" -> "Datastore"
+// Uses prefix-only matching to avoid mid-word replacements (e.g., "capistrano" stays intact)
 func titleCaseComponent(component string) string {
-	// Handle common abbreviations
-	component = strings.ReplaceAll(component, "http", "HTTP ")
-	component = strings.ReplaceAll(component, "rtsp", "RTSP ")
-	component = strings.ReplaceAll(component, "mqtt", "MQTT ")
-	component = strings.ReplaceAll(component, "api", "API ")
-	component = strings.ReplaceAll(component, "db", "DB ")
-
-	// Handle camelCase and snake_case
+	// Normalize: trim, lowercase, split on separators
+	component = strings.TrimSpace(component)
+	component = strings.ToLower(component)
 	component = strings.ReplaceAll(component, "_", " ")
+	component = strings.ReplaceAll(component, "-", " ")
 
-	// Clean up extra spaces
 	words := strings.Fields(component)
+	result := make([]string, 0, len(words))
 
-	// Capitalize first letter of each word
-	for i, word := range words {
-		if word != "" {
-			// Skip if already all uppercase (abbreviations like HTTP, API)
-			if strings.ToUpper(word) == word {
+	// Process each word, checking for known abbreviation prefixes
+	for _, word := range words {
+		if word == "" {
+			continue
+		}
+
+		// Check if entire word is a known abbreviation
+		switch word {
+		case "http", "rtsp", "mqtt", "api", "db":
+			result = append(result, strings.ToUpper(word))
+			continue
+		}
+
+		// Check for abbreviation prefix and handle separately
+		handled := false
+		for _, prefix := range []string{"http", "rtsp", "mqtt", "api", "db"} {
+			if !strings.HasPrefix(word, prefix) || len(word) <= len(prefix) {
 				continue
 			}
+			// Split: prefix as uppercase + remainder as title case
+			result = append(result, strings.ToUpper(prefix))
+			remainder := word[len(prefix):]
+			runes := []rune(remainder)
+			runes[0] = unicode.ToUpper(runes[0])
+			result = append(result, string(runes))
+			handled = true
+			break
+		}
+
+		if !handled {
+			// Regular title case
 			runes := []rune(word)
 			runes[0] = unicode.ToUpper(runes[0])
-			words[i] = string(runes)
+			result = append(result, string(runes))
 		}
 	}
 
-	return strings.Join(words, " ")
+	return strings.Join(result, " ")
 }
 
 // CaptureError captures an error with privacy-compliant context
@@ -499,9 +523,12 @@ func CaptureError(err error, component string) {
 	sentry.WithScope(func(scope *sentry.Scope) {
 		// Generate meaningful error title from scrubbed message to prevent PII leakage
 		errorTitle := generateErrorTitle(scrubbedErrorMsg, component)
+		errorType := parseErrorType(scrubbedErrorMsg)
 
 		scope.SetTag("component", component)
 		scope.SetTag("error_title", errorTitle)
+		// Add parsed error type to extras for easier filtering in Sentry
+		scope.SetExtra("error_type", errorType)
 		scope.SetContext("error", map[string]any{
 			"type":             fmt.Sprintf("%T", err),
 			"scrubbed_message": scrubbedErrorMsg,
@@ -517,7 +544,13 @@ func CaptureError(err error, component string) {
 		}}
 
 		// Set custom fingerprint for better grouping
-		scope.SetFingerprint([]string{errorTitle, component})
+		// Exclude empty/unknown components to avoid noisy fingerprints
+		comp := strings.TrimSpace(component)
+		if comp == "" || strings.EqualFold(comp, "unknown") {
+			scope.SetFingerprint([]string{errorTitle})
+		} else {
+			scope.SetFingerprint([]string{errorTitle, comp})
+		}
 
 		sentry.CaptureEvent(event)
 	})

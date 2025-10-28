@@ -73,6 +73,11 @@ func TestParseErrorType(t *testing.T) {
 			expected: "Panic: something went wrong",
 		},
 		{
+			name:     "panic without space after colon",
+			errMsg:   "panic:NoSpaceHere",
+			expected: "Panic: NoSpaceHere",
+		},
+		{
 			name:     "panic with long message",
 			errMsg:   "panic: this is a very long panic message that should be truncated to avoid overly long titles in the error tracking system",
 			expected: "Panic: this is a very long panic message that should be t...",
