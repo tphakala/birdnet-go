@@ -322,6 +322,10 @@ class UsageValidator {
       return lines.join('\n');
     }
   }
+
+  getTranslationKeysCount(): number {
+    return this.translationKeys.size;
+  }
 }
 
 // CLI execution
@@ -357,7 +361,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         uniqueKeysUsed: result.usedKeys.size,
         totalUsages: result.totalUsages,
         totalFiles: result.totalFiles,
-        translationKeysDefined: validator.translationKeys.size,
+        translationKeysDefined: validator.getTranslationKeysCount(),
         missingInTranslations: result.missingInTranslations.length,
         unusedInCode: result.unusedInCode.length,
       },
