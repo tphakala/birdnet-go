@@ -976,7 +976,7 @@
         "titleLabel": "Otsikkopohja",
         "titlePlaceholder": "esim. Uusi laji: {{.CommonName}}",
         "messageLabel": "Viestipohja",
-        "messagePlaceholder": "esim. Ensimmäinen havainto lajista {{.CommonName}} ({{.ScientificName}}) {{.ConfidencePercent}}% varmuudella",
+        "messagePlaceholder": "esim. Ensimmäinen havainto lajista {{.CommonName}}  ({{.ScientificName}})  {{.ConfidencePercent}}% varmuudella",
         "resetButton": "Palauta",
         "saveButton": "Tallenna pohjat",
         "saveButtonUnsaved": "Tallenna pohjat *",

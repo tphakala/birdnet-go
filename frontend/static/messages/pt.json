@@ -186,7 +186,7 @@
     "ebirdApiV2": "eBird API v2",
     "copyright": "Direitos autorais",
     "coverage": "Cobertura",
-    "taxonomyCoverage": "{genera} gêneros, {families} famílias, {species} espécies",
+    "taxonomyCoverage": "2.374 gêneros, 254 famílias, 11.145 espécies",
     "visitEbird": "Visite eBird.org",
     "ebirdOrg": "eBird.org",
     "learnEbirdTaxonomy": "Saiba mais sobre a taxonomia do eBird"
@@ -975,7 +975,7 @@
         "titleLabel": "Modelo de título",
         "titlePlaceholder": "ex. Nova espécie: {{.CommonName}}",
         "messageLabel": "Modelo de mensagem",
-        "messagePlaceholder": "ex. Primeira detecção de {{.CommonName}} ({{.ScientificName}}) com {{.ConfidencePercent}}% de confiança",
+        "messagePlaceholder": "ex. Primeira detecção de {{.CommonName}}  ({{.ScientificName}})  com {{.ConfidencePercent}}% de confiança",
         "resetButton": "Redefinir",
         "saveButton": "Salvar modelos",
         "saveButtonUnsaved": "Salvar modelos *",
@@ -1307,7 +1307,7 @@
         "description": "Ativar configuração avançada para comportamentos de espécies personalizados"
       },
       "actionsModal": {
-        "title": "Ações de espécies",
+        "title": "Ações para {species}",
         "description": "Configurar ações personalizadas para detecções de espécies específicas",
         "editTitle": "Editar ação",
         "addTitle": "Adicionar nova ação",

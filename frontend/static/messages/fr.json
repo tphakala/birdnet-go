@@ -198,7 +198,7 @@
     "ebirdApiV2": "API eBird v2",
     "copyright": "Droits d'auteur",
     "coverage": "Couverture",
-    "taxonomyCoverage": "{genera} genres, {families} familles, {species} espèces",
+    "taxonomyCoverage": "2 374 genres, 254 familles, 11 145 espèces",
     "visitEbird": "Visiter eBird.org",
     "ebirdOrg": "eBird.org",
     "learnEbirdTaxonomy": "En savoir plus sur la taxonomie eBird"
@@ -248,9 +248,9 @@
     },
     "timeAgo": {
       "justNow": "À l'instant",
-      "minutesAgo": "{minutes, plural, one {Il y a # minute} other {Il y a # minutes}}",
-      "hoursAgo": "{hours,   plural, one {Il y a # heure}  other {Il y a # heures}}",
-      "daysAgo": "{days,    plural, one {Il y a # jour}   other {Il y a # jours}}"
+      "minutesAgo": "Il y a {minutes}min",
+      "hoursAgo": "Il y a {hours}h",
+      "daysAgo": "Il y a {days}j"
     }
   },
   "search": {
@@ -992,7 +992,7 @@
         "titleLabel": "Modèle de titre",
         "titlePlaceholder": "ex. Nouvelle espèce : {{.CommonName}}",
         "messageLabel": "Modèle de message",
-        "messagePlaceholder": "ex. Première détection de {{.CommonName}} ({{.ScientificName}}) avec {{.ConfidencePercent}}% de confiance",
+        "messagePlaceholder": "ex. Première détection de {{.CommonName}}  ({{.ScientificName}})  avec {{.ConfidencePercent}}% de confiance",
         "resetButton": "Réinitialiser",
         "saveButton": "Enregistrer les modèles",
         "saveButtonUnsaved": "Enregistrer les modèles *",

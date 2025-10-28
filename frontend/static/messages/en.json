@@ -11,7 +11,6 @@
     "search": "Search",
     "filter": "Filter",
     "sort": "Sort",
-    "actions": "Actions",
     "settings": "Settings",
     "close": "Close",
     "back": "Back",
@@ -28,6 +27,10 @@
     "loginToViewDetails": "Login to View Details",
     "pageNotFound": "Page Not Found",
     "internalServerError": "Internal Server Error",
+    "actions": {
+      "download": "Download",
+      "review": "Review"
+    },
     "buttons": {
       "save": "Save Changes",
       "reset": "Reset",
@@ -43,6 +46,7 @@
       "yes": "Yes",
       "no": "No",
       "ok": "OK",
+      "clear": "Clear",
       "edit-config": "Edit Config",
       "add-action": "Add Action",
       "learnMore": "Learn More"
@@ -144,11 +148,21 @@
         "addComment": "Add Comment",
         "hideComment": "Hide Comment",
         "commentPlaceholder": "Add a comment about this detection...",
-        "commentCount": "({chars} chars)"
+        "commentCount": "({chars} chars)",
+        "chars": "chars",
+        "commentsLabel": "Comments",
+        "currentStatusTitle": "Current Status",
+        "detectionStatusTitle": "Detection Status",
+        "lockLabel": "Lock Status",
+        "reviewLabel": "Review Status",
+        "saveReview": "Save Review"
       },
       "errors": {
         "saveFailed": "Failed to save review. Please try again.",
-        "noAudio": "No audio recording available for this detection."
+        "noAudio": "No audio recording available for this detection.",
+        "commentFailed": "Failed to save comment. Please try again.",
+        "lockStatusFailed": "Failed to update lock status. Please try again.",
+        "verificationFailed": "Failed to update verification status. Please try again."
       }
     }
   },
@@ -391,6 +405,12 @@
         "biHourlyDetections": "{count} detections from {startHour}:00-{endHour}:00 - Click to view",
         "sixHourlyDetections": "{count} detections from {startHour}:00-{endHour}:00 - Click to view"
       },
+      "loading": {
+        "preparing": "Preparing data...",
+        "fetching": "Fetching detections...",
+        "error": "Failed to load data",
+        "complete": "Data loaded successfully"
+      },
       "noSpecies": "No species detected on this date"
     },
     "recentDetections": {
@@ -455,6 +475,12 @@
       "status": "Status",
       "recording": "Recording",
       "actions": "Actions"
+    },
+    "status": {
+      "locked": "Locked"
+    },
+    "table": {
+      "caption": "List of bird detections with date, species, confidence, and status information"
     },
     "empty": {
       "title": "No detections found",
@@ -533,7 +559,8 @@
     "title": "System Dashboard",
     "refreshData": "Refresh Data",
     "aria": {
-      "refreshData": "Refresh system data"
+      "refreshData": "Refresh system data",
+      "dashboard": "System dashboard with performance metrics and information"
     },
     "systemInfo": {
       "title": "System Information",
@@ -1066,7 +1093,7 @@
         "titleLabel": "Title Template",
         "titlePlaceholder": "e.g., New Species: {{.CommonName}}",
         "messageLabel": "Message Template",
-        "messagePlaceholder": "e.g., First detection of {{.CommonName}} ({{.ScientificName}}) with {{.ConfidencePercent}}% confidence",
+        "messagePlaceholder": "e.g., First detection of {{.CommonName}}  ({{.ScientificName}})  with {{.ConfidencePercent}}% confidence",
         "resetButton": "Reset",
         "saveButton": "Save Templates",
         "saveButtonUnsaved": "Save Templates *",
@@ -1140,7 +1167,10 @@
       },
       "speciesNamePlaceholder": "Species name",
       "typeSpeciesName": "Type species name...",
-      "dogBarkSpeciesList": "Dog Bark Species List"
+      "dogBarkSpeciesList": "Dog Bark Species List",
+      "errors": {
+        "speciesLoadFailed": "Failed to load species list. Please try again."
+      }
     },
     "integration": {
       "birdweather": {
@@ -1562,7 +1592,10 @@
       "addSpeciesToExclude": "Add species to exclude",
       "addSpeciesToExcludeLabel": "Add New Species to Exclude",
       "commandPathPlaceholder": "/path/to/your/command",
-      "parametersPlaceholder": "Parameters will appear here"
+      "parametersPlaceholder": "Parameters will appear here",
+      "errors": {
+        "speciesLoadFailed": "Failed to load species list. Please try again."
+      }
     },
     "database": {
       "sqlitePlaceholder": "Enter SQLite database path",

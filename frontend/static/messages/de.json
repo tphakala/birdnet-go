@@ -975,7 +975,7 @@
         "titleLabel": "Titelvorlage",
         "titlePlaceholder": "z.B. Neue Art: {{.CommonName}}",
         "messageLabel": "Nachrichtenvorlage",
-        "messagePlaceholder": "z.B. Erste Erkennung von {{.CommonName}} ({{.ScientificName}}) mit {{.ConfidencePercent}}% Konfidenz",
+        "messagePlaceholder": "z.B. Erste Erkennung von {{.CommonName}}  ({{.ScientificName}})  mit {{.ConfidencePercent}}% Konfidenz",
         "resetButton": "Zurücksetzen",
         "saveButton": "Vorlagen speichern",
         "saveButtonUnsaved": "Vorlagen speichern *",

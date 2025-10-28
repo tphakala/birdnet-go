@@ -186,7 +186,7 @@
     "ebirdApiV2": "eBird API v2",
     "copyright": "Derechos de autor",
     "coverage": "Cobertura",
-    "taxonomyCoverage": "{genera} géneros, {families} familias, {species} especies",
+    "taxonomyCoverage": "2374 géneros, 254 familias, 11 145 especies",
     "visitEbird": "Visitar eBird.org",
     "ebirdOrg": "eBird.org",
     "learnEbirdTaxonomy": "Más información sobre la taxonomía de eBird"
@@ -976,7 +976,7 @@
         "titleLabel": "Plantilla de título",
         "titlePlaceholder": "ej., Nueva especie: {{.CommonName}}",
         "messageLabel": "Plantilla de mensaje",
-        "messagePlaceholder": "ej., Primera detección de {{.CommonName}} ({{.ScientificName}}) con {{.ConfidencePercent}}% de confianza",
+        "messagePlaceholder": "ej., Primera detección de {{.CommonName}}  ({{.ScientificName}})  con {{.ConfidencePercent}}% de confianza",
         "resetButton": "Restablecer",
         "saveButton": "Guardar plantillas",
         "saveButtonUnsaved": "Guardar plantillas *",
