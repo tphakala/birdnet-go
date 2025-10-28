@@ -64,7 +64,7 @@ npm run i18n:report:md
 
 ### Example Output
 
-```
+```text
 🌍 Validating translation files...
 
 📚 Reference (en.json): 1193 keys
@@ -142,7 +142,7 @@ npm run i18n:find-unused
 
 ### Example Output
 
-```
+```text
 🔍 Scanning codebase for translation key usage...
 
 📚 Loaded 1193 keys from en.json
@@ -244,7 +244,7 @@ Translation keys must:
 
 ### Common Errors
 
-**Empty Value**
+#### Empty Value
 
 ```json
 {
@@ -252,7 +252,7 @@ Translation keys must:
 }
 ```
 
-**Parameter Mismatch**
+#### Parameter Mismatch
 
 ```json
 // en.json
@@ -266,7 +266,7 @@ Translation keys must:
 }
 ```
 
-**Invalid ICU Syntax**
+#### Invalid ICU Syntax
 
 ```json
 {
@@ -274,7 +274,7 @@ Translation keys must:
 }
 ```
 
-**Missing Translation**
+#### Missing Translation
 
 ```typescript
 // Component.svelte

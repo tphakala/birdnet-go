@@ -401,6 +401,10 @@ class TranslationValidator {
   getResults(): ValidationResult[] {
     return this.results;
   }
+
+  getReferenceKeys(): string[] {
+    return this.getAllKeys(this.referenceMessages);
+  }
 }
 
 // CLI execution
@@ -428,10 +432,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
     // Output LLM-friendly structured JSON
     const results = validator.getResults();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const referenceKeys = (validator as any)['getAllKeys'](
-      (validator as any)['referenceMessages']
-    ) as string[];
+    const referenceKeys = validator.getReferenceKeys();
     const jsonReport = {
       success: passed,
       timestamp: new Date().toISOString(),

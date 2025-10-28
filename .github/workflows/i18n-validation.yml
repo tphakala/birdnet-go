@@ -37,7 +37,7 @@ jobs:
         id: validate-files
         working-directory: frontend
         run: |
-          npm run i18n:validate:json > validation-report.json || true
+          npx tsx src/lib/i18n/validateTranslations.ts --json > validation-report.json 2>&1 || true
           cat validation-report.json
 
           # Check if validation passed
@@ -59,7 +59,7 @@ jobs:
         working-directory: frontend
         continue-on-error: true
         run: |
-          npm run i18n:check-usage > usage-report.txt 2>&1 || true
+          npx tsx src/lib/i18n/validateUsage.ts > usage-report.txt 2>&1 || true
 
           # Check if there are missing translations
           if grep -q "❌ Missing Translations" usage-report.txt; then
@@ -76,7 +76,7 @@ jobs:
         if: steps.validate-files.outputs.validation_failed == 'true'
         working-directory: frontend
         run: |
-          npm run i18n:report:md > translation-report.md
+          npx tsx src/lib/i18n/validateTranslations.ts --report --format=markdown > translation-report.md 2>&1
           cat translation-report.md >> $GITHUB_STEP_SUMMARY
 
       - name: Upload validation report
