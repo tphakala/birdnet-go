@@ -1,0 +1,139 @@
+name: i18n Validation
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/static/messages/*.json'
+      - 'frontend/src/**/*.svelte'
+      - 'frontend/src/**/*.ts'
+      - 'frontend/src/lib/i18n/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/static/messages/*.json'
+      - 'frontend/src/lib/i18n/**'
+
+jobs:
+  validate-translations:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Validate translation files
+        id: validate-files
+        working-directory: frontend
+        run: |
+          npm run i18n:validate:json > validation-report.json || true
+          cat validation-report.json
+
+          # Check if validation passed
+          if jq -e '.success == false' validation-report.json > /dev/null; then
+            echo "validation_failed=true" >> $GITHUB_OUTPUT
+            echo "### ❌ Translation File Validation Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "#### Summary" >> $GITHUB_STEP_SUMMARY
+            echo "- Total Errors: $(jq '.summary.totalErrors' validation-report.json)" >> $GITHUB_STEP_SUMMARY
+            echo "- Total Warnings: $(jq '.summary.totalWarnings' validation-report.json)" >> $GITHUB_STEP_SUMMARY
+            echo "- Passed Locales: $(jq '.summary.passedLocales' validation-report.json)/$(jq '.summary.totalLocales' validation-report.json)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "validation_failed=false" >> $GITHUB_OUTPUT
+            echo "### ✅ Translation File Validation Passed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check translation usage
+        id: check-usage
+        working-directory: frontend
+        run: |
+          npm run i18n:check-usage || echo "usage_check_failed=true" >> $GITHUB_OUTPUT
+
+      - name: Generate detailed report
+        if: steps.validate-files.outputs.validation_failed == 'true'
+        working-directory: frontend
+        run: |
+          npm run i18n:report:md > translation-report.md
+          cat translation-report.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: i18n-validation-report
+          path: |
+            frontend/validation-report.json
+            frontend/translation-report.md
+          retention-days: 30
+
+      - name: Comment on PR
+        if: |
+          github.event_name == 'pull_request' &&
+          steps.validate-files.outputs.validation_failed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            let report = '## 🌍 i18n Validation Results\n\n';
+
+            // Read JSON report
+            const jsonReport = JSON.parse(fs.readFileSync('frontend/validation-report.json', 'utf8'));
+
+            report += `### Summary\n\n`;
+            report += `- **Status:** ${jsonReport.success ? '✅ Passed' : '❌ Failed'}\n`;
+            report += `- **Total Errors:** ${jsonReport.summary.totalErrors}\n`;
+            report += `- **Total Warnings:** ${jsonReport.summary.totalWarnings}\n`;
+            report += `- **Passed Locales:** ${jsonReport.summary.passedLocales}/${jsonReport.summary.totalLocales}\n\n`;
+
+            if (jsonReport.errors.length > 0) {
+              report += `### ❌ Errors (${jsonReport.errors.length})\n\n`;
+              report += `<details><summary>Click to expand</summary>\n\n`;
+
+              const errorsByType = jsonReport.errors.reduce((acc, err) => {
+                acc[err.type] = acc[err.type] || [];
+                acc[err.type].push(err);
+                return acc;
+              }, {});
+
+              for (const [type, errors] of Object.entries(errorsByType)) {
+                report += `#### ${type.replace(/_/g, ' ').toUpperCase()}\n\n`;
+                errors.slice(0, 10).forEach(err => {
+                  report += `- **${err.locale}**: \`${err.key}\`\n`;
+                  report += `  - ${err.message}\n`;
+                  report += `  - 💡 Suggested fix: ${err.suggestedFix}\n\n`;
+                });
+                if (errors.length > 10) {
+                  report += `_... and ${errors.length - 10} more errors of this type_\n\n`;
+                }
+              }
+
+              report += `</details>\n\n`;
+            }
+
+            report += `\n📊 [View detailed report](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n`;
+
+            // Post comment
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });
+
+      - name: Fail if validation failed
+        if: steps.validate-files.outputs.validation_failed == 'true'
+        run: |
+          echo "❌ Translation validation failed. Please fix the errors above."
+          exit 1
