@@ -235,12 +235,43 @@ jobs:
         if: |
           steps.validate-files.outputs.validation_failed == 'true' ||
           steps.check-usage.outputs.usage_check_failed == 'true'
+        working-directory: frontend
         run: |
-          echo "❌ i18n validation failed. Please fix the errors above."
+          echo ""
+          echo "════════════════════════════════════════════════════════"
+          echo "❌ i18n Validation Failed"
+          echo "════════════════════════════════════════════════════════"
+          echo ""
+
           if [ "${{ steps.validate-files.outputs.validation_failed }}" = "true" ]; then
-            echo "  - Translation file validation failed"
+            echo "📋 Translation File Validation:"
+            if [ -f validation-report.json ]; then
+              ERRORS=$(jq '.summary.totalErrors // 0' validation-report.json)
+              WARNINGS=$(jq '.summary.totalWarnings // 0' validation-report.json)
+              PASSED=$(jq '.summary.passedLocales // 0' validation-report.json)
+              TOTAL=$(jq '.summary.totalLocales // 0' validation-report.json)
+              echo "   • Errors: $ERRORS"
+              echo "   • Warnings: $WARNINGS"
+              echo "   • Passed: $PASSED/$TOTAL locales"
+            else
+              echo "   • Report file not available"
+            fi
+            echo ""
           fi
+
           if [ "${{ steps.check-usage.outputs.usage_check_failed }}" = "true" ]; then
-            echo "  - Translation usage validation failed (missing keys used in code)"
+            echo "🔍 Translation Usage Validation:"
+            if [ -f usage-report.json ]; then
+              MISSING=$(jq '.summary.missingInTranslations // 0' usage-report.json)
+              USED=$(jq '.summary.uniqueKeysUsed // 0' usage-report.json)
+              echo "   • Missing translations: $MISSING keys"
+              echo "   • Keys used in code: $USED"
+            else
+              echo "   • Report file not available"
+            fi
+            echo ""
           fi
+
+          echo "📊 View detailed reports in the artifacts or step summary above."
+          echo ""
           exit 1
