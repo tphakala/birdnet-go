@@ -13,6 +13,8 @@
  *   npm run i18n:find-unused       # Find unused translation keys
  */
 
+/* eslint-disable no-console, no-undef */
+
 import { execSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -34,9 +36,9 @@ interface UsageOptions {
 }
 
 class UsageValidator {
-  private messagesPath = join(process.cwd(), 'static/messages');
-  private srcPath = join(process.cwd(), 'src');
-  private usedKeys = new Map<string, string[]>();
+  private readonly messagesPath = join(process.cwd(), 'static/messages');
+  private readonly srcPath = join(process.cwd(), 'src');
+  private readonly usedKeys = new Map<string, string[]>();
   private translationKeys = new Set<string>();
 
   async validate(options: UsageOptions = {}): Promise<UsageResult> {
@@ -60,6 +62,7 @@ class UsageValidator {
   private loadTranslationKeys(): void {
     const filePath = join(this.messagesPath, `${DEFAULT_LOCALE}.json`);
     try {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
       const messages = JSON.parse(readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
       this.translationKeys = new Set(this.getAllKeys(messages));
       console.log(`📚 Loaded ${this.translationKeys.size} keys from ${DEFAULT_LOCALE}.json\n`);
@@ -133,7 +136,7 @@ class UsageValidator {
             continue;
           }
 
-          const files = this.usedKeys.get(key) || [];
+          const files = this.usedKeys.get(key) ?? [];
           const location = `${file}:${lineNum}`;
 
           if (!files.includes(location)) {
@@ -219,7 +222,7 @@ class UsageValidator {
       console.log(`   Keys used in code but not found in ${DEFAULT_LOCALE}.json:\n`);
 
       for (const key of result.missingInTranslations) {
-        const locations = result.usedKeys.get(key) || [];
+        const locations = result.usedKeys.get(key) ?? [];
         console.log(`   • ${key}`);
         if (options.showDetails) {
           for (const location of locations) {

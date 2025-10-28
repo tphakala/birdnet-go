@@ -13,6 +13,8 @@
  *   npm run i18n:validate -- --min-coverage 90
  */
 
+/* eslint-disable no-console, no-undef */
+
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { parse as parseICU } from '@formatjs/icu-messageformat-parser';
@@ -39,9 +41,9 @@ interface ValidationOptions {
 }
 
 class TranslationValidator {
-  private messagesPath = join(process.cwd(), 'static/messages');
+  private readonly messagesPath = join(process.cwd(), 'static/messages');
   private referenceMessages: Record<string, unknown> = {};
-  private results: ValidationResult[] = [];
+  private readonly results: ValidationResult[] = [];
 
   async validate(options: ValidationOptions = {}): Promise<boolean> {
     console.log('🌍 Validating translation files...\n');
@@ -70,6 +72,7 @@ class TranslationValidator {
   private loadMessages(locale: string): Record<string, unknown> {
     const filePath = join(this.messagesPath, `${locale}.json`);
     try {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
       return JSON.parse(readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
     } catch (error) {
       console.error(`❌ Failed to load ${locale}.json:`, error);
@@ -95,9 +98,8 @@ class TranslationValidator {
 
   private getValueByPath(obj: Record<string, unknown>, path: string): unknown {
     return path.split('.').reduce((current, key) => {
-      return current && typeof current === 'object'
-        ? (current as Record<string, unknown>)[key]
-        : undefined;
+      // eslint-disable-next-line security/detect-object-injection
+      return current && typeof current === 'object' ? (current as Record<string, unknown>)[key] : undefined;
     }, obj as unknown);
   }
 
@@ -197,6 +199,7 @@ class TranslationValidator {
     const params = new Set<string>();
 
     // Match {param}, {param, plural, ...}, {param, select, ...}
+    // eslint-disable-next-line security/detect-unsafe-regex
     const paramRegex = /\{(\w+)(?:,\s*(?:plural|select|selectordinal|number|date|time))?/g;
     let match;
 
@@ -394,15 +397,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // Suppress console output if JSON output requested
   if (jsonOutput) {
     const originalLog = console.log;
-    // eslint-disable-next-line no-console
     console.log = () => {};
     const passed = await validator.validate(options);
-    // eslint-disable-next-line no-console
     console.log = originalLog;
 
     // Output LLM-friendly structured JSON
     const results = validator.getResults();
-    const referenceKeys = validator['getAllKeys'](validator['referenceMessages']);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const referenceKeys = (validator as any)['getAllKeys']((validator as any)['referenceMessages']) as string[];
     const jsonReport = {
       success: passed,
       timestamp: new Date().toISOString(),
@@ -502,7 +504,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       })),
     };
 
-    // eslint-disable-next-line no-console
     console.log(JSON.stringify(jsonReport, null, 2));
     process.exit(passed ? 0 : 1);
   }
@@ -513,7 +514,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   if (args.includes('--report')) {
     const format = args.includes('--format=markdown') ? 'markdown' : 'json';
     const report = validator.generateReport(format);
-    // eslint-disable-next-line no-console
     console.log('\n' + report);
   }
 
