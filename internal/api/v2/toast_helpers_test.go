@@ -324,7 +324,9 @@ func TestController_SendToast_TypeMapping(t *testing.T) {
 }
 
 func TestController_SendToast_ServiceNotInitialized(t *testing.T) {
-	t.Parallel()
+	// Note: Cannot use t.Parallel() because this test uses the global notification service
+	// which has a shared rate limiter. Running in parallel with other tests causes
+	// rate limit exhaustion and test failures.
 
 	// Create a controller without initializing the notification service
 	c := mockController()
