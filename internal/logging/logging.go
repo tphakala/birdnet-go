@@ -53,12 +53,18 @@ func defaultReplaceAttr(groups []string, a slog.Attr) slog.Attr {
 	}
 	// Customize level names
 	if a.Key == slog.LevelKey {
-		level := a.Value.Any().(slog.Level)
-		levelLabel, exists := levelNames[level]
-		if !exists {
-			levelLabel = level.String()
+		// Safety check: ensure the value is actually a slog.Level
+		if level, ok := a.Value.Any().(slog.Level); ok {
+			levelLabel, exists := levelNames[level]
+			if !exists {
+				levelLabel = level.String()
+			}
+			a.Value = slog.StringValue(levelLabel)
+		} else {
+			// If it's not a slog.Level, convert it to string to avoid panic
+			// This can happen when user code accidentally uses "level" as an attribute key
+			a.Value = slog.StringValue(fmt.Sprintf("%v", a.Value.Any()))
 		}
-		a.Value = slog.StringValue(levelLabel)
 	}
 	// Truncate float64 values to 2 decimal places
 	if a.Value.Kind() == slog.KindFloat64 {
