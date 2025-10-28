@@ -237,10 +237,7 @@ class TranslationValidator {
     return Array.from(params).sort();
   }
 
-  private extractParamsFromAST(
-    elements: ReturnType<typeof parseICU>,
-    params: Set<string>
-  ): void {
+  private extractParamsFromAST(elements: ReturnType<typeof parseICU>, params: Set<string>): void {
     for (const element of elements) {
       // Handle different AST node types based on type field
       const node = element as unknown as Record<string, unknown>;
