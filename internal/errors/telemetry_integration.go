@@ -65,9 +65,49 @@ func (sr *SentryReporter) IsEnabled() bool {
 	return sr.enabled
 }
 
+// shouldReportToSentry determines if an error should be sent to Sentry
+// It filters out operational/configuration errors that aren't code bugs
+func shouldReportToSentry(ee *EnhancedError) bool {
+	errorMsg := strings.ToLower(ee.Err.Error())
+
+	// Check for MQTT authentication/authorization errors (user config issues)
+	if ee.Category == CategoryMQTTConnection || ee.Category == CategoryMQTTAuth {
+		// Common MQTT authentication/authorization error patterns
+		authPatterns := []string{
+			"not authorized",
+			"authentication failed",
+			"bad username or password",
+			"connection refused, not authorized",
+			"connection refused, bad user name or password",
+			"access denied",
+			"unauthorized",
+		}
+
+		for _, pattern := range authPatterns {
+			if strings.Contains(errorMsg, pattern) {
+				return false // Don't report auth errors - these are config issues
+			}
+		}
+	}
+
+	// Add more filters here for other operational errors as needed
+	// Examples that could be added in future:
+	// - DNS resolution failures (user's network/config issue)
+	// - "connection refused" (service not running)
+	// - "no route to host" (network issue)
+
+	return true // Report everything else
+}
+
 // ReportError reports an enhanced error to Sentry with privacy protection
 func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 	if !sr.enabled || ee.IsReported() {
+		return
+	}
+
+	// Skip operational/configuration errors that aren't code bugs
+	if !shouldReportToSentry(ee) {
+		ee.MarkReported() // Mark as reported to prevent retry
 		return
 	}
 
