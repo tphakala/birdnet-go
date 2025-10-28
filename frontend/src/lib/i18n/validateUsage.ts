@@ -104,13 +104,10 @@ class UsageValidator {
       // - Can't validate complex dynamic keys (documented limitation)
       //
       // Security: Command uses process.cwd() which is trusted, no user input
-      const output = execSync(
-        `grep -rn 't(' src/ --include="*.svelte" --include="*.ts" || true`,
-        {
-          cwd: process.cwd(),
-          encoding: 'utf-8',
-        }
-      );
+      const output = execSync(`grep -rn 't(' src/ --include="*.svelte" --include="*.ts" || true`, {
+        cwd: process.cwd(),
+        encoding: 'utf-8',
+      });
 
       if (!output.trim()) {
         console.log('   No translation keys found in codebase\n');
@@ -142,7 +139,7 @@ class UsageValidator {
             !key.includes('.') ||
             key.length < 3 ||
             /^[\d.]+$/.test(key) || // Skip pure numbers like "1" or "10.5"
-            /^\./.test(key) ||      // Skip keys starting with dot
+            /^\./.test(key) || // Skip keys starting with dot
             file.includes('.test.') // Skip test files to reduce noise
           ) {
             continue;
@@ -158,13 +155,14 @@ class UsageValidator {
         }
       }
 
-      console.log(`   Found ${this.usedKeys.size} unique keys in ${this.countUniqueFiles()} files\n`);
+      console.log(
+        `   Found ${this.usedKeys.size} unique keys in ${this.countUniqueFiles()} files\n`
+      );
     } catch (error) {
       console.error('Error scanning codebase:', error);
       console.log('   No translation keys found in codebase\n');
     }
   }
-
 
   private countUniqueFiles(): number {
     const files = new Set<string>();
@@ -231,7 +229,9 @@ class UsageValidator {
             console.log(`     └─ ${location}`);
           }
         } else {
-          console.log(`     └─ ${locations[0]}${locations.length > 1 ? ` (+${locations.length - 1} more)` : ''}`);
+          console.log(
+            `     └─ ${locations[0]}${locations.length > 1 ? ` (+${locations.length - 1} more)` : ''}`
+          );
         }
       }
       console.log('');
@@ -266,7 +266,9 @@ class UsageValidator {
     const hasErrors = result.missingInTranslations.length > 0;
     if (hasErrors) {
       console.log('❌ Validation failed: Missing translations detected');
-      console.log(`   Add these ${result.missingInTranslations.length} keys to ${DEFAULT_LOCALE}.json\n`);
+      console.log(
+        `   Add these ${result.missingInTranslations.length} keys to ${DEFAULT_LOCALE}.json\n`
+      );
     } else {
       console.log('✅ Validation passed: All translation keys validated\n');
     }

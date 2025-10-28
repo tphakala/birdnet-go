@@ -30,12 +30,14 @@ npm run i18n:find-unused
 ### Features
 
 ✅ **Completeness Checks**
+
 - Missing keys (compared to en.json)
 - Extra/outdated keys
 - Empty string values
 - Untranslated strings (identical to English)
 
 ✅ **Correctness Checks**
+
 - Valid JSON syntax
 - ICU MessageFormat syntax validation
 - Parameter consistency ({param} names match)
@@ -122,6 +124,7 @@ npm run i18n:validate:json
 ### Features
 
 ✅ **Usage Validation**
+
 - Scans all `.svelte` and `.ts` files for `t('key')` calls
 - Finds missing translations (keys used but not in en.json)
 - Finds unused translations (keys in en.json never used in code)
@@ -167,21 +170,22 @@ npm run i18n:find-unused
 
 ## npm Scripts
 
-| Script | Description |
-|--------|-------------|
-| `i18n:validate` | Basic translation file validation |
-| `i18n:validate:strict` | Detailed validation output |
-| `i18n:validate:ci` | CI mode (min 85% coverage, fail on warnings) |
-| `i18n:validate:json` | JSON output for LLM parsing |
-| `i18n:report` | Generate JSON report |
-| `i18n:report:md` | Generate Markdown report |
-| `i18n:check-usage` | Find missing translations for used keys |
-| `i18n:find-unused` | Find unused translation keys |
-| `i18n:validate:full` | Run all validations |
+| Script                 | Description                                  |
+| ---------------------- | -------------------------------------------- |
+| `i18n:validate`        | Basic translation file validation            |
+| `i18n:validate:strict` | Detailed validation output                   |
+| `i18n:validate:ci`     | CI mode (min 85% coverage, fail on warnings) |
+| `i18n:validate:json`   | JSON output for LLM parsing                  |
+| `i18n:report`          | Generate JSON report                         |
+| `i18n:report:md`       | Generate Markdown report                     |
+| `i18n:check-usage`     | Find missing translations for used keys      |
+| `i18n:find-unused`     | Find unused translation keys                 |
+| `i18n:validate:full`   | Run all validations                          |
 
 ## GitHub Actions Integration
 
 Validation runs automatically on:
+
 - Pull requests touching translation files or Svelte/TS files
 - Pushes to main branch touching translation files
 
@@ -199,6 +203,7 @@ Validation runs automatically on:
 ## 🌍 i18n Validation Results
 
 ### Summary
+
 - **Status:** ❌ Failed
 - **Total Errors:** 22
 - **Total Warnings:** 943
@@ -207,6 +212,7 @@ Validation runs automatically on:
 ### ❌ Errors (22)
 
 #### INVALID_ICU
+
 - **de**: `settings.notifications.templates.titlePlaceholder`
   - Invalid ICU MessageFormat syntax
   - 💡 Suggested fix: Fix ICU syntax error: MALFORMED_ARGUMENT
@@ -219,6 +225,7 @@ Validation runs automatically on:
 ### Translation Keys
 
 Translation keys must:
+
 - Be in dot notation: `common.buttons.save`
 - Exist in English (`en.json`) first
 - Have matching parameter names across all languages
@@ -238,13 +245,15 @@ Translation keys must:
 ### Common Errors
 
 **Empty Value**
+
 ```json
 {
-  "common.save": ""  // ❌ Error: empty value
+  "common.save": "" // ❌ Error: empty value
 }
 ```
 
 **Parameter Mismatch**
+
 ```json
 // en.json
 {
@@ -258,16 +267,20 @@ Translation keys must:
 ```
 
 **Invalid ICU Syntax**
+
 ```json
 {
-  "count": "{count, plural, {No items}"  // ❌ Error: malformed ICU syntax
+  "count": "{count, plural, {No items}" // ❌ Error: malformed ICU syntax
 }
 ```
 
 **Missing Translation**
+
 ```typescript
 // Component.svelte
-{t('new.feature.title')}  // ❌ Error: key not in en.json
+{
+  t('new.feature.title');
+} // ❌ Error: key not in en.json
 ```
 
 ## Fixing Issues
@@ -373,9 +386,9 @@ Edit `validateUsage.ts` to adjust file filtering:
 
 ```typescript
 if (
-  file.includes('.test.') ||    // Skip test files
-  file.includes('.spec.') ||    // Skip spec files
-  file.includes('node_modules')  // Skip dependencies
+  file.includes('.test.') || // Skip test files
+  file.includes('.spec.') || // Skip spec files
+  file.includes('node_modules') // Skip dependencies
 ) {
   continue;
 }

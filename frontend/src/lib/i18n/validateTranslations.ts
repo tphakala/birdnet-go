@@ -82,7 +82,9 @@ class TranslationValidator {
 
       if (error instanceof Error) {
         if (error.message.includes('ENOENT')) {
-          console.error(`   → File does not exist. Run 'npm run i18n:validate' from frontend directory.`);
+          console.error(
+            `   → File does not exist. Run 'npm run i18n:validate' from frontend directory.`
+          );
         } else if (error.message.includes('JSON')) {
           console.error(`   → Invalid JSON syntax. Please fix the file.`);
         }
@@ -111,7 +113,9 @@ class TranslationValidator {
   private getValueByPath(obj: Record<string, unknown>, path: string): unknown {
     return path.split('.').reduce((current, key) => {
       // eslint-disable-next-line security/detect-object-injection
-      return current && typeof current === 'object' ? (current as Record<string, unknown>)[key] : undefined;
+      return current && typeof current === 'object'
+        ? (current as Record<string, unknown>)[key]
+        : undefined;
     }, obj as unknown);
   }
 
@@ -239,7 +243,9 @@ class TranslationValidator {
       ).toFixed(2);
       const status = this.getStatus(result, options);
 
-      console.log(`${status} ${result.locale.toUpperCase()}: ${result.totalKeys} keys (${coverage}% coverage)`);
+      console.log(
+        `${status} ${result.locale.toUpperCase()}: ${result.totalKeys} keys (${coverage}% coverage)`
+      );
 
       if (result.missingKeys.length > 0) {
         console.log(`  ⚠️  Missing: ${result.missingKeys.length} keys`);
@@ -273,7 +279,9 @@ class TranslationValidator {
         console.log(`  ❌ Parameter mismatches: ${result.parameterMismatches.length}`);
         if (options.strictMode) {
           result.parameterMismatches.forEach(({ key, expected, actual }) => {
-            console.log(`      ${key}: expected [${expected.join(', ')}], got [${actual.join(', ')}]`);
+            console.log(
+              `      ${key}: expected [${expected.join(', ')}], got [${actual.join(', ')}]`
+            );
           });
         }
       }
@@ -421,7 +429,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     // Output LLM-friendly structured JSON
     const results = validator.getResults();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const referenceKeys = (validator as any)['getAllKeys']((validator as any)['referenceMessages']) as string[];
+    const referenceKeys = (validator as any)['getAllKeys'](
+      (validator as any)['referenceMessages']
+    ) as string[];
     const jsonReport = {
       success: passed,
       timestamp: new Date().toISOString(),
@@ -436,10 +446,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             r.parameterMismatches.length === 0
         ).length,
         totalErrors: results.reduce(
-          (sum, r) => sum + r.emptyValues.length + r.invalidICU.length + r.parameterMismatches.length,
+          (sum, r) =>
+            sum + r.emptyValues.length + r.invalidICU.length + r.parameterMismatches.length,
           0
         ),
-        totalWarnings: results.reduce((sum, r) => sum + r.missingKeys.length + r.untranslated.length, 0),
+        totalWarnings: results.reduce(
+          (sum, r) => sum + r.missingKeys.length + r.untranslated.length,
+          0
+        ),
       },
       errors: results.flatMap(r => [
         ...r.emptyValues.map(key => ({
