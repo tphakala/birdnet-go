@@ -540,15 +540,27 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(passed ? 0 : 1);
   }
 
-  const passed = await validator.validate(options);
+  // Suppress console output if generating report
+  const generateReport = args.includes('--report');
+  if (generateReport) {
+    const originalLog = console.log;
+    const originalError = console.error;
+    console.log = () => {};
+    console.error = () => {};
 
-  // Generate report if requested
-  if (args.includes('--report')) {
+    const passed = await validator.validate(options);
+
+    console.log = originalLog;
+    console.error = originalError;
+
     const format = args.includes('--format=markdown') ? 'markdown' : 'json';
     const report = validator.generateReport(format);
-    console.log('\n' + report);
+    console.log(report);
+
+    process.exit(passed ? 0 : 1);
   }
 
+  const passed = await validator.validate(options);
   process.exit(passed ? 0 : 1);
 }
 

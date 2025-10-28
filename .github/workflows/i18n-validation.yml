@@ -107,8 +107,14 @@ jobs:
         if: steps.validate-files.outputs.validation_failed == 'true'
         working-directory: frontend
         run: |
-          npx tsx src/lib/i18n/validateTranslations.ts --report --format=markdown > translation-report.md 2>&1
-          cat translation-report.md >> $GITHUB_STEP_SUMMARY
+          # Run with || true to ignore exit code since we know validation failed
+          # Redirect only stdout to capture markdown, let stderr go to logs
+          npx tsx src/lib/i18n/validateTranslations.ts --report --format=markdown > translation-report.md 2>&1 || true
+
+          # Only append if file has content
+          if [ -s translation-report.md ]; then
+            cat translation-report.md >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Upload validation report
         if: always()
