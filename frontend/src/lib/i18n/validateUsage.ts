@@ -346,4 +346,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   process.exit(hasErrors ? 1 : 0);
 }
 
-export { UsageValidator, UsageOptions, UsageResult };
+export { UsageValidator };
+export type { UsageOptions, UsageResult };

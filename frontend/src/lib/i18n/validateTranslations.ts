@@ -520,4 +520,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   process.exit(passed ? 0 : 1);
 }
 
-export { TranslationValidator, ValidationOptions, ValidationResult };
+export { TranslationValidator };
+export type { ValidationOptions, ValidationResult };
