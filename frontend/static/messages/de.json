@@ -11,7 +11,10 @@
     "search": "Suchen",
     "filter": "Filtern",
     "sort": "Sortieren",
-    "actions": "Aktionen",
+    "actions": {
+      "download": "Herunterladen",
+      "review": "Überprüfen"
+    },
     "settings": "Einstellungen",
     "close": "Schließen",
     "back": "Zurück",
@@ -43,6 +46,7 @@
       "yes": "Ja",
       "no": "Nein",
       "ok": "OK",
+      "clear": "Löschen",
       "edit-config": "Konfiguration bearbeiten",
       "add-action": "Aktion hinzufügen",
       "learnMore": "Mehr erfahren"
@@ -100,9 +104,23 @@
       "editSpecies": "Art bearbeiten",
       "removeSpecies": "Art entfernen",
       "dismissError": "Fehler verwerfen",
+      "datePickerCalendar": "Datumsauswahl-Kalender",
+      "selectDate": "Datum auswählen",
+      "previousMonth": "Vorheriger Monat",
+      "nextMonth": "Nächster Monat",
+      "selectToday": "Heute auswählen",
+      "dateSelected": "Datum ausgewählt: {date}",
+      "calendarNavigation": "Verwenden Sie die Pfeiltasten zur Navigation im Kalender, Enter zum Auswählen, Escape zum Schließen",
       "downloadCsv": "Artenliste als CSV herunterladen",
       "visitEbirdLink": "eBird.org in neuem Tab öffnen",
       "learnEbirdTaxonomyLink": "eBird-Taxonomie in neuem Tab öffnen"
+    },
+    "labels": {
+      "confidence": "Konfidenz"
+    },
+    "values": {
+      "yes": "Ja",
+      "no": "Nein"
     },
     "modal": {
       "confirmAction": "Aktion bestätigen",
@@ -117,11 +135,34 @@
       },
       "form": {
         "correctDetection": "Korrekte Erkennung",
-        "falsePositiveLabel": "Falsch positiv"
+        "falsePositiveLabel": "Falsch positiv",
+        "reviewDetectionTitle": "Erkennung überprüfen",
+        "lockDetection": "Diese Erkennung nach dem Speichern sperren",
+        "lockDetectionHelp": "Das Sperren dieser Erkennung verhindert, dass sie bei der regulären Bereinigung gelöscht wird.",
+        "unlockDetection": "Diese Erkennung nach dem Speichern entsperren",
+        "unlockDetectionHelp": "Das Entsperren ermöglicht die Löschung dieser Erkennung bei der regulären Bereinigung.",
+        "ignoreSpecies": "Diese Art ignorieren",
+        "ignoreSpeciesHelp": "Das Ignorieren dieser Art verhindert zukünftige Erkennungen dieser Art. Bestehende Erkennungen werden nicht entfernt.",
+        "detectionLocked": "Diese Erkennung ist derzeit gesperrt.",
+        "comment": "Kommentar",
+        "addComment": "Kommentar hinzufügen",
+        "hideComment": "Kommentar ausblenden",
+        "commentPlaceholder": "Fügen Sie einen Kommentar zu dieser Erkennung hinzu...",
+        "commentCount": "({chars} Zeichen)",
+        "chars": "Zeichen",
+        "commentsLabel": "Kommentare",
+        "currentStatusTitle": "Aktueller Status",
+        "detectionStatusTitle": "Erkennungsstatus",
+        "lockLabel": "Sperrstatus",
+        "reviewLabel": "Überprüfungsstatus",
+        "saveReview": "Überprüfung speichern"
       },
       "errors": {
         "saveFailed": "Fehler beim Speichern der Überprüfung. Bitte versuchen Sie es erneut.",
-        "noAudio": "Keine Audioaufnahme für diese Erkennung verfügbar."
+        "noAudio": "Keine Audioaufnahme für diese Erkennung verfügbar.",
+        "commentFailed": "Fehler beim Speichern des Kommentars. Bitte versuchen Sie es erneut.",
+        "lockStatusFailed": "Fehler beim Aktualisieren des Sperrstatus. Bitte versuchen Sie es erneut.",
+        "verificationFailed": "Fehler beim Aktualisieren des Verifizierungsstatus. Bitte versuchen Sie es erneut."
       }
     }
   },
@@ -265,6 +306,8 @@
       "timeOfDay": "Tageszeit"
     },
     "advancedFilters": "Erweiterte Filter",
+    "showAdvancedFilters": "Erweiterte Filter anzeigen",
+    "hideAdvancedFilters": "Erweiterte Filter ausblenden",
     "verifiedOptions": {
       "any": "Alle Status",
       "verified": "Nur verifiziert",
@@ -362,6 +405,12 @@
         "biHourlyDetections": "{count} Erkennungen von {startHour}:00 bis {endHour}:00 Uhr - Klicken zum Anzeigen",
         "sixHourlyDetections": "{count} Erkennungen von {startHour}:00 bis {endHour}:00 Uhr - Klicken zum Anzeigen"
       },
+      "loading": {
+        "preparing": "Daten werden vorbereitet...",
+        "fetching": "Erkennungen werden abgerufen...",
+        "error": "Fehler beim Laden der Daten",
+        "complete": "Daten erfolgreich geladen"
+      },
       "noSpecies": "Keine Arten an diesem Datum erkannt"
     },
     "recentDetections": {
@@ -373,6 +422,8 @@
       "headers": {
         "dateTime": "Datum & Zeit",
         "commonName": "Deutscher Name",
+        "species": "Art",
+        "confidence": "Konfidenz",
         "thumbnail": "Vorschau",
         "status": "Status",
         "recording": "Aufnahme",
@@ -419,10 +470,17 @@
       "dateTime": "Datum & Zeit",
       "weather": "Wetter",
       "species": "Art",
+      "confidence": "Konfidenz",
       "thumbnail": "Vorschau",
       "status": "Status",
       "recording": "Aufnahme",
       "actions": "Aktionen"
+    },
+    "status": {
+      "locked": "Gesperrt"
+    },
+    "table": {
+      "caption": "Liste der Vogelerkennungen mit Datum, Art, Konfidenz und Statusinformationen"
     },
     "empty": {
       "title": "Keine Erkennungen gefunden",
@@ -432,17 +490,77 @@
       "showing": "Zeige {from} bis {to} von {total} Ergebnissen"
     },
     "weather": {
-      "noData": "Keine Wetterdaten"
+      "noData": "Keine Wetterdaten",
+      "units": {
+        "temperature": "°C",
+        "windSpeed": "m/s",
+        "humidity": "%"
+      },
+      "conditions": {
+        "clearsky_day": "Klarer Himmel",
+        "clearsky_night": "Klarer Himmel",
+        "fair_day": "Heiter",
+        "fair_night": "Heiter",
+        "partlycloudy_day": "Teilweise bewölkt",
+        "partlycloudy_night": "Teilweise bewölkt",
+        "cloudy": "Bewölkt",
+        "rainshowers_day": "Regenschauer",
+        "rainshowers_night": "Regenschauer",
+        "rain": "Regen",
+        "thunder": "Gewitter",
+        "sleet": "Schneeregen",
+        "snow": "Schnee",
+        "fog": "Nebel",
+        "unknown": "Unbekannt"
+      }
+    },
+    "media": {
+      "title": "Aufnahme & Spektrogramm"
+    },
+    "tabs": {
+      "overview": "Übersicht",
+      "taxonomy": "Taxonomie",
+      "history": "Verlauf",
+      "notes": "Notizen"
+    },
+    "environmental": {
+      "title": "Umgebungsbedingungen"
+    },
+    "metadata": {
+      "title": "Erkennungsmetadaten",
+      "source": "Quelle",
+      "duration": "Dauer",
+      "status": "Status",
+      "locked": "Gesperrt"
+    },
+    "history": {
+      "title": "Erkennungsverlauf",
+      "comingSoon": "Verlaufsverfolgung in Kürze verfügbar..."
+    },
+    "notes": {
+      "title": "Notizen & Kommentare",
+      "noComments": "Keine Kommentare oder Notizen für diese Erkennung."
     },
     "row": {
       "viewDetails": "Details für {species} anzeigen"
+    }
+  },
+  "species": {
+    "rarity": {
+      "title": "Seltenheit der Art"
+    },
+    "taxonomy": {
+      "hierarchy": "Taxonomische Klassifizierung",
+      "subspecies": "Unterarten",
+      "noData": "Keine Taxonomiedaten verfügbar."
     }
   },
   "system": {
     "title": "System-Dashboard",
     "refreshData": "Daten aktualisieren",
     "aria": {
-      "refreshData": "Systemdaten aktualisieren"
+      "refreshData": "Systemdaten aktualisieren",
+      "dashboard": "System-Dashboard mit Leistungsmetriken und Informationen"
     },
     "systemInfo": {
       "title": "Systeminformationen",
@@ -959,7 +1077,7 @@
     },
     "notifications": {
       "sections": {
-        "test": {
+        "testing": {
           "title": "Test-Benachrichtigungen",
           "description": "Test-Benachrichtigungen senden, um zu überprüfen, ob Ihr Benachrichtigungssystem ordnungsgemäß funktioniert"
         },
@@ -975,7 +1093,7 @@
         "titleLabel": "Titelvorlage",
         "titlePlaceholder": "z.B. Neue Art: {{.CommonName}}",
         "messageLabel": "Nachrichtenvorlage",
-        "messagePlaceholder": "z.B. Erste Erkennung von {{.CommonName}} ({{.ScientificName}}) mit {{.ConfidencePercent}}% Konfidenz",
+        "messagePlaceholder": "z.B. Erste Erkennung von {{.CommonName}}  ({{.ScientificName}})  mit {{.ConfidencePercent}}% Konfidenz",
         "resetButton": "Zurücksetzen",
         "saveButton": "Vorlagen speichern",
         "saveButtonUnsaved": "Vorlagen speichern *",
@@ -1049,7 +1167,10 @@
       },
       "speciesNamePlaceholder": "Artname",
       "typeSpeciesName": "Artname eingeben...",
-      "dogBarkSpeciesList": "Hundebell-Artenliste"
+      "dogBarkSpeciesList": "Hundebell-Artenliste",
+      "errors": {
+        "speciesLoadFailed": "Fehler beim Laden der Artenliste. Bitte versuchen Sie es erneut."
+      }
     },
     "integration": {
       "birdweather": {
@@ -1198,15 +1319,19 @@
         "description": "Audioaufnahmequelle festlegen, Soundkarte oder RTSP-Stream",
         "soundCardSource": "Soundkartenquelle",
         "audioSourceLabel": "Audioquelle (erfordert Anwendungsneustart)",
+        "audioSourceHelp": "Wählen Sie das Audio-Eingabegerät für die Vogelklangerkennung. Änderungen erfordern einen Anwendungsneustart.",
         "noSoundCardCapture": "Keine Soundkartenaufnahme",
         "rtspSource": "RTSP-Quelle",
         "rtspTransportLabel": "RTSP-Transportprotokoll",
-        "rtspUrlsLabel": "RTSP-Stream-URLs"
+        "rtspTransportHelp": "TCP ist zuverlässiger, kann aber höhere Latenz haben. UDP ist schneller, kann aber bei schlechten Netzwerken Paketverluste erleiden.",
+        "rtspUrlsLabel": "RTSP-Stream-URLs",
+        "rtspUrlsHelp": "Geben Sie eine oder mehrere RTSP-Stream-URLs für Netzwerk-Audioquellen ein. Format: rtsp://ip:port/stream. Hinweis: Authentifizierungsdaten sollten aus Sicherheitsgründen separat in Ihren RTSP-Server-Einstellungen konfiguriert werden."
       },
       "audioFilters": {
         "title": "Audiofilter",
         "description": "Audioverarbeitungsfilter konfigurieren",
         "enableEqualizer": "Audio-Equalizer aktivieren",
+        "enableEqualizerHelp": "Frequenzfilterung anwenden, um die Vogelruferkennung zu verbessern, indem unerwünschte Geräusche und Frequenzen reduziert werden.",
         "filterType": "Filtertyp",
         "newFilterType": "Neuer Filtertyp",
         "selectFilterType": "Filtertyp auswählen",
@@ -1214,9 +1339,14 @@
         "remove": "Entfernen",
         "frequencyResponse": "Frequenzgang",
         "cutoffFrequency": "Grenzfrequenz",
+        "cutoffFrequencyHelp": "Frequenz, bei der der Filter beginnt, Signale zu dämpfen. Vogelrufe liegen typischerweise zwischen 1-10 kHz.",
         "qFactor": "Q-Faktor",
+        "qFactorHelp": "Qualitätsfaktor steuert die Schärfe des Filters. Niedrigere Werte (0,1-1) erzeugen sanftere Übergänge, höhere Werte (1-10) erzeugen steilere Abschnitte.",
         "gain": "Verstärkung",
+        "gainHelp": "Verstärkungs- oder Dämpfungspegel in Dezibel (dB).",
         "attenuation": "Dämpfung",
+        "attenuationHelp": "Filterabrollrate. Höhere Werte sorgen für steilere Dämpfung gefilterter Frequenzen.",
+        "filterHelp": "Fügen Sie mehrere Filter hinzu, um den Frequenzgang für optimale Vogelerkennung in Ihrer Umgebung zu gestalten.",
         "attenuationLevels": {
           "0db": "0dB",
           "12db": "12dB",
@@ -1229,8 +1359,9 @@
         "title": "Schallpegelüberwachung",
         "description": "Umgebungsschallpegel überwachen und melden",
         "enable": "Schallpegelüberwachung aktivieren",
+        "enableHelp": "Umgebungsgeräuschpegel verfolgen, um Ihre Aufnahmeumgebung zu verstehen und mit Vogelaktivitätsmustern zu korrelieren.",
         "intervalLabel": "Messintervall (Sekunden)",
-        "intervalHelp": "Wie oft Schallpegelmessungen gemeldet werden",
+        "intervalHelp": "Wie oft Schallpegel gemessen und gemeldet werden. Niedrigere Werte liefern detailliertere Daten, verbrauchen aber mehr Ressourcen. Mindestens 5 Sekunden, empfohlen 60 Sekunden.",
         "dataOutputTitle": "Schallpegeldatenausgabe",
         "dataOutputDescription": "Wenn aktiviert, werden Schallpegelmessungen veröffentlicht über:",
         "mqttTopic": "MQTT-Topic:",
@@ -1242,11 +1373,8 @@
         "description": "Konfigurieren Sie die Audioaufnahme und -verarbeitung für identifizierte Vogelrufe"
       },
       "audioExport": {
-        "title": "Audio-Export",
-        "description": "Speichern von Audioclips für identifizierte Vogelrufe konfigurieren",
         "enable": "Audioaufnahme aktivieren",
         "enableHelp": "Speichern Sie Audioclips von erkannten Vogelrufen zur Überprüfung, zum Teilen oder zum Erstellen eigener Datensätze.",
-        "enableDebug": "Debug-Modus aktivieren",
         "captureSettings": "Aufnahmeeinstellungen",
         "lengthLabel": "Aufnahmelänge",
         "lengthHelp": "Dauer der Audioaufnahme für jede Erkennung (10-60 Sekunden). Längere Clips bieten mehr Kontext, benötigen aber mehr Speicherplatz.",
@@ -1278,11 +1406,15 @@
         "title": "Audioclip-Aufbewahrung",
         "description": "Audioclip-Bereinigung konfigurieren",
         "policyLabel": "Aufbewahrungsrichtlinie",
+        "policyHelp": "Wählen Sie aus, wie Audioclips automatisch gelöscht werden. Keine: alle Clips behalten. Alter: Clips älter als angegeben löschen. Nutzung: älteste Clips löschen, wenn die Festplattennutzung die Grenze überschreitet.",
         "maxAgeLabel": "Maximales Alter",
+        "maxAgeHelp": "Audioclips löschen, die älter als diese Dauer sind. Format: Zahl gefolgt von Einheit (h=Stunden, d=Tage, w=Wochen, m=Monate). Beispiele: '7d' für 7 Tage, '4w' für 4 Wochen.",
         "maxUsageLabel": "Maximale Festplattennutzung",
         "maxUsageHelp": "Älteste Clips löschen, wenn das Audioverzeichnis mehr als diesen Prozentsatz des verfügbaren Speicherplatzes verwendet.",
-        "minClipsLabel": "Minimale Clips",
+        "minClipsLabel": "Minimale Clips pro Art",
+        "minClipsHelp": "Mindestens so viele Clips für jede Vogelart behalten, unabhängig von Alter oder Festplattennutzung. Hilft, seltene Aufnahmen zu bewahren.",
         "keepSpectrograms": "Spektrogrammbilder behalten",
+        "keepSpectrogramsHelp": "Spektrogrammbilder behalten, auch wenn Audioclips gelöscht werden. Spektrogramme nutzen weniger Platz und bieten eine visuelle Referenz.",
         "policies": {
           "none": "Keine",
           "age": "Alter",
@@ -1299,6 +1431,17 @@
       "transport": {
         "tcp": "TCP",
         "udp": "UDP"
+      },
+      "filterTypes": {
+        "lowpass": "Tiefpassfilter",
+        "highpass": "Hochpassfilter",
+        "bandpass": "Bandpassfilter",
+        "bandstop": "Bandsperrefilter"
+      },
+      "errors": {
+        "devicesLoadFailed": "Fehler beim Laden der Audiogeräte. Bitte überprüfen Sie die Systemberechtigungen.",
+        "invalidBitrate": "Ungültiger Bitratenwert",
+        "invalidRetentionPolicy": "Ungültige Aufbewahrungsrichtlinie"
       }
     },
     "species": {
@@ -1384,7 +1527,10 @@
       "addSpeciesToExclude": "Arten zum Ausschließen hinzufügen",
       "addSpeciesToExcludeLabel": "Neue Arten zum Ausschließen hinzufügen",
       "commandPathPlaceholder": "/pfad/zu/ihrem/befehl",
-      "parametersPlaceholder": "Parameter werden hier angezeigt"
+      "parametersPlaceholder": "Parameter werden hier angezeigt",
+      "errors": {
+        "speciesLoadFailed": "Fehler beim Laden der Artenliste. Bitte versuchen Sie es erneut."
+      }
     },
     "security": {
       "hostLabel": "Host-Adresse",
@@ -1460,7 +1606,25 @@
   "auth": {
     "login": "Anmelden",
     "logout": "Abmelden",
-    "openLoginModal": "Anmeldefenster öffnen"
+    "openLoginModal": "Anmeldefenster öffnen",
+    "loginTitle": "Bei BirdNET-Go anmelden",
+    "password": "Passwort",
+    "passwordPlaceholder": "Geben Sie Ihr Passwort ein",
+    "or": "oder",
+    "loginWithGoogle": "Mit Google anmelden",
+    "loginWithGithub": "Mit GitHub anmelden",
+    "errors": {
+      "loginFailed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihr Passwort und versuchen Sie es erneut.",
+      "passwordRequired": "Passwort ist erforderlich.",
+      "passwordTooLong": "Passwort ist zu lang.",
+      "invalidCharacters": "Passwort enthält ungültige Zeichen.",
+      "invalidCredentials": "Ungültiger Benutzername oder Passwort.",
+      "tooManyAttempts": "Zu viele Anmeldeversuche. Bitte versuchen Sie es später erneut.",
+      "serverError": "Serverfehler aufgetreten. Bitte versuchen Sie es später erneut.",
+      "rateLimited": "Zu viele Versuche. Bitte warten Sie {minutes} Minuten, bevor Sie es erneut versuchen.",
+      "configurationError": "Authentifizierungskonfigurationsfehler. Bitte kontaktieren Sie den Support.",
+      "invalidInput": "Ungültige Eingabe bereitgestellt."
+    }
   },
   "dataDisplay": {
     "table": {

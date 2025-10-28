@@ -11,7 +11,10 @@
     "search": "Haku",
     "filter": "Suodata",
     "sort": "Lajittele",
-    "actions": "Toiminnot",
+    "actions": {
+      "download": "Lataa",
+      "review": "Tarkastele"
+    },
     "settings": "Asetukset",
     "close": "Sulje",
     "back": "Takaisin",
@@ -43,6 +46,7 @@
       "yes": "Kyllä",
       "no": "Ei",
       "ok": "OK",
+      "clear": "Tyhjennä",
       "edit-config": "Muokkaa asetuksia",
       "add-action": "Lisää toiminto",
       "learnMore": "Lue lisää"
@@ -100,10 +104,23 @@
       "editSpecies": "Muokkaa lajia",
       "removeSpecies": "Poista laji",
       "dismissError": "Hylkää virhe",
+      "datePickerCalendar": "Päivämääränvalitsimen kalenteri",
+      "selectDate": "Valitse päivämäärä",
+      "previousMonth": "Edellinen kuukausi",
+      "nextMonth": "Seuraava kuukausi",
+      "selectToday": "Valitse tänään",
+      "dateSelected": "Päivämäärä valittu: {date}",
+      "calendarNavigation": "Käytä nuolinäppäimiä kalenterissa liikkumiseen, Enter valitsee, Esc sulkee",
       "downloadCsv": "Lataa lajilista CSV-tiedostona",
       "visitEbirdLink": "Avaa eBird.org uuteen välilehteen",
-      "learnEbirdTaxonomyLink": "Avaa eBird-taksonomia uuteen välilehteen",
-      "calendarNavigation": "Kalenterinavigointi: käytä nuolinäppäimiä siirtymiseen, Enter valitsee, Esc sulkee"
+      "learnEbirdTaxonomyLink": "Avaa eBird-taksonomia uuteen välilehteen"
+    },
+    "labels": {
+      "confidence": "Luottamus"
+    },
+    "values": {
+      "yes": "Kyllä",
+      "no": "Ei"
     },
     "modal": {
       "confirmAction": "Vahvista toiminto",
@@ -118,11 +135,34 @@
       },
       "form": {
         "correctDetection": "Oikea havainto",
-        "falsePositiveLabel": "Virheellinen havainto"
+        "falsePositiveLabel": "Virheellinen havainto",
+        "reviewDetectionTitle": "Tarkista havainto",
+        "lockDetection": "Lukitse tämä havainto tallennuksen yhteydessä",
+        "lockDetectionHelp": "Havainnon lukitseminen estää sen poistamisen säännöllisen siivouksen aikana.",
+        "unlockDetection": "Avaa tämä havainto tallennuksen yhteydessä",
+        "unlockDetectionHelp": "Havainnon avaaminen sallii sen poistamisen säännöllisen siivouksen aikana.",
+        "ignoreSpecies": "Ohita tämä laji",
+        "ignoreSpeciesHelp": "Lajin ohittaminen estää tulevat tämän lajin havainnot. Tämä ei poista olemassa olevia havaintoja.",
+        "detectionLocked": "Tämä havainto on tällä hetkellä lukittu.",
+        "comment": "Kommentti",
+        "addComment": "Lisää kommentti",
+        "hideComment": "Piilota kommentti",
+        "commentPlaceholder": "Lisää kommentti tästä havainnosta...",
+        "commentCount": "({chars} merkkiä)",
+        "chars": "merkkiä",
+        "commentsLabel": "Kommentit",
+        "currentStatusTitle": "Nykyinen tila",
+        "detectionStatusTitle": "Havainnon tila",
+        "lockLabel": "Lukitustila",
+        "reviewLabel": "Tarkistustila",
+        "saveReview": "Tallenna tarkistus"
       },
       "errors": {
         "saveFailed": "Tarkistuksen tallennus epäonnistui. Yritä uudelleen.",
-        "noAudio": "Tälle havainnolle ei ole saatavilla äänitallenetta."
+        "noAudio": "Tälle havainnolle ei ole saatavilla äänitallenetta.",
+        "commentFailed": "Kommentin tallennus epäonnistui. Yritä uudelleen.",
+        "lockStatusFailed": "Lukitustilan päivitys epäonnistui. Yritä uudelleen.",
+        "verificationFailed": "Todennustilan päivitys epäonnistui. Yritä uudelleen."
       }
     }
   },
@@ -266,6 +306,8 @@
       "timeOfDay": "Vuorokaudenaika"
     },
     "advancedFilters": "Lisäsuodattimet",
+    "showAdvancedFilters": "Näytä lisäsuodattimet",
+    "hideAdvancedFilters": "Piilota lisäsuodattimet",
     "verifiedOptions": {
       "any": "Kaikki tilat",
       "verified": "Vain todennetut",
@@ -363,6 +405,12 @@
         "biHourlyDetections": "{count} havaintoa välillä {startHour}.00-{endHour}.00 - Klikkaa nähdäksesi",
         "sixHourlyDetections": "{count} havaintoa välillä {startHour}.00-{endHour}.00 - Klikkaa nähdäksesi"
       },
+      "loading": {
+        "preparing": "Valmistellaan tietoja...",
+        "fetching": "Haetaan havaintoja...",
+        "error": "Tietojen lataus epäonnistui",
+        "complete": "Tiedot ladattu onnistuneesti"
+      },
       "noSpecies": "Ei havaintoja tänä päivänä"
     },
     "recentDetections": {
@@ -374,6 +422,8 @@
       "headers": {
         "dateTime": "Päivä ja aika",
         "commonName": "Suomenkielinen nimi",
+        "species": "Laji",
+        "confidence": "Luottamus",
         "thumbnail": "Pienoiskuva",
         "status": "Tila",
         "recording": "Tallenne",
@@ -420,10 +470,17 @@
       "dateTime": "Päivä ja aika",
       "weather": "Sää",
       "species": "Laji",
+      "confidence": "Luottamus",
       "thumbnail": "Pienoiskuva",
       "status": "Tila",
       "recording": "Tallenne",
       "actions": "Toiminnot"
+    },
+    "status": {
+      "locked": "Lukittu"
+    },
+    "table": {
+      "caption": "Lintuhavaintojen lista päivämäärällä, lajilla, luottamuksella ja tilatiedoilla"
     },
     "empty": {
       "title": "Havaintoja ei löytynyt",
@@ -433,17 +490,77 @@
       "showing": "Näytetään {from}-{to} / {total} tuloksesta"
     },
     "weather": {
-      "noData": "Ei säätietoja"
+      "noData": "Ei säätietoja",
+      "units": {
+        "temperature": "°C",
+        "windSpeed": "m/s",
+        "humidity": "%"
+      },
+      "conditions": {
+        "clearsky_day": "Selkeä taivas",
+        "clearsky_night": "Selkeä taivas",
+        "fair_day": "Melko selkeää",
+        "fair_night": "Melko selkeää",
+        "partlycloudy_day": "Puolipilvistä",
+        "partlycloudy_night": "Puolipilvistä",
+        "cloudy": "Pilvistä",
+        "rainshowers_day": "Sadekuuroja",
+        "rainshowers_night": "Sadekuuroja",
+        "rain": "Sadetta",
+        "thunder": "Ukkosta",
+        "sleet": "Räntää",
+        "snow": "Lunta",
+        "fog": "Sumua",
+        "unknown": "Tuntematon"
+      }
     },
     "row": {
       "viewDetails": "Näytä {species} tiedot"
+    },
+    "media": {
+      "title": "Tallenne ja spektrogrammi"
+    },
+    "tabs": {
+      "overview": "Yleiskatsaus",
+      "taxonomy": "Taksonomia",
+      "history": "Historia",
+      "notes": "Huomiot"
+    },
+    "environmental": {
+      "title": "Ympäristöolosuhteet"
+    },
+    "metadata": {
+      "title": "Havainnon metatiedot",
+      "source": "Lähde",
+      "duration": "Kesto",
+      "status": "Tila",
+      "locked": "Lukittu"
+    },
+    "history": {
+      "title": "Havainnon historia",
+      "comingSoon": "Historian seuranta tulossa pian..."
+    },
+    "notes": {
+      "title": "Huomiot ja kommentit",
+      "noComments": "Ei kommentteja tai huomioita tälle havainnolle."
+    }
+  },
+  "species": {
+    "rarity": {
+      "title": "Lajin harvinaisuus"
+    },
+    "taxonomy": {
+      "hierarchy": "Taksonomiluokitus",
+      "subspecies": "Alalajit",
+      "noData": "Taksonomiatietoja ei ole saatavilla."
     }
   },
   "system": {
     "title": "Järjestelmän kojelautta",
     "refreshData": "Päivitä tiedot",
     "aria": {
-      "refreshData": "Päivitä järjestelmätiedot"
+      "refreshData": "Päivitä järjestelmätiedot",
+      "dashboard": "Järjestelmän kojelauta suorituskykyarvioilla ja tiedoilla"
     },
     "systemInfo": {
       "title": "Järjestelmätiedot",
@@ -960,7 +1077,7 @@
     },
     "notifications": {
       "sections": {
-        "test": {
+        "testing": {
           "title": "Testi-ilmoitukset",
           "description": "Lähetä testi-ilmoituksia varmistaaksesi, että ilmoitusjärjestelmäsi toimii oikein"
         },
@@ -976,7 +1093,7 @@
         "titleLabel": "Otsikkopohja",
         "titlePlaceholder": "esim. Uusi laji: {{.CommonName}}",
         "messageLabel": "Viestipohja",
-        "messagePlaceholder": "esim. Ensimmäinen havainto lajista {{.CommonName}} ({{.ScientificName}}) {{.ConfidencePercent}}% varmuudella",
+        "messagePlaceholder": "esim. Ensimmäinen havainto lajista {{.CommonName}}  ({{.ScientificName}})  {{.ConfidencePercent}}% varmuudella",
         "resetButton": "Palauta",
         "saveButton": "Tallenna pohjat",
         "saveButtonUnsaved": "Tallenna pohjat *",
@@ -1050,7 +1167,10 @@
       },
       "speciesNamePlaceholder": "Lajin nimi",
       "typeSpeciesName": "Kirjoita lajin nimi...",
-      "dogBarkSpeciesList": "Koiran haukunnan lajiluettelo"
+      "dogBarkSpeciesList": "Koiran haukunnan lajiluettelo",
+      "errors": {
+        "speciesLoadFailed": "Lajiluettelon lataus epäonnistui. Yritä uudelleen."
+      }
     },
     "audio": {
       "audioCapture": {
@@ -1058,15 +1178,19 @@
         "description": "Aseta äänen tallennuslähde, äänikortti tai RTSP-virta",
         "soundCardSource": "Äänikorttilähde",
         "audioSourceLabel": "Äänilähde (vaatii sovelluksen uudelleenkäynnistyksen)",
+        "audioSourceHelp": "Valitse äänen syöttölaite lintuäänten tunnistukseen. Muutokset vaativat sovelluksen uudelleenkäynnistyksen.",
         "noSoundCardCapture": "Ei äänikortin tallennusta",
         "rtspSource": "RTSP-lähde",
         "rtspTransportLabel": "RTSP-siirtoprotokolla",
-        "rtspUrlsLabel": "RTSP-virran URL-osoitteet"
+        "rtspTransportHelp": "TCP on luotettavampi mutta saattaa aiheuttaa suurempaa viivettä. UDP on nopeampi mutta saattaa kokea pakettihäviötä heikoissa verkoissa.",
+        "rtspUrlsLabel": "RTSP-virran URL-osoitteet",
+        "rtspUrlsHelp": "Syötä yksi tai useampi RTSP-virran URL-osoite verkkoäänilähteille. Muoto: rtsp://ip:portti/virta. Huom: Todennustiedot tulisi määrittää erikseen RTSP-palvelimen asetuksissa tietoturvan vuoksi."
       },
       "audioFilters": {
         "title": "Äänisuodattimet",
         "description": "Määritä äänenkäsittelysuodattimet",
         "enableEqualizer": "Ota taajuuskorjain käyttöön",
+        "enableEqualizerHelp": "Käytä taajuussuodatusta parantaaksesi lintuäänten tunnistusta vähentämällä ei-toivottua melua ja taajuuksia.",
         "filterType": "Suodatintyyppi",
         "newFilterType": "Uusi suodatintyyppi",
         "selectFilterType": "Valitse suodatintyyppi",
@@ -1074,9 +1198,14 @@
         "remove": "Poista",
         "frequencyResponse": "Taajuusvaste",
         "cutoffFrequency": "Rajataajuus",
+        "cutoffFrequencyHelp": "Taajuus, jossa suodatin alkaa vaimentaa signaaleja. Lintuäänten taajuudet ovat tyypillisesti 1-10 kHz välillä.",
         "qFactor": "Q-kerroin",
+        "qFactorHelp": "Laatukerroin ohjaa suodattimen terävyyttä. Matalat arvot (0.1-1) luovat loivempia kaarevia, korkeammat arvot (1-10) luovat jyrkempiä katkoja.",
         "gain": "Vahvistus",
+        "gainHelp": "Vahvistus tai vaimennus desibeleinä (dB).",
         "attenuation": "Vaimennus",
+        "attenuationHelp": "Suodattimen vaimennusnopeus. Korkeammat arvot tarjoavat jyrkemmän suodatettujen taajuuksien vaimentamisen.",
+        "filterHelp": "Lisää useita suodattimia muodostaaksesi taajuusvasteen optimaaliseen lintujen tunnistukseen ympäristössäsi.",
         "attenuationLevels": {
           "0db": "0dB",
           "12db": "12dB",
@@ -1089,8 +1218,9 @@
         "title": "Äänitason seuranta",
         "description": "Seuraa ja raportoi ympäristön äänitasoja",
         "enable": "Ota äänitason seuranta käyttöön",
+        "enableHelp": "Seuraa ympäristön melutasoja ymmärtääksesi tallennusympäristöäsi ja korreloida lintujen aktiivisuusmallien kanssa.",
         "intervalLabel": "Mittausväli (sekuntia)",
-        "intervalHelp": "Kuinka usein äänitasomittauksia raportoidaan",
+        "intervalHelp": "Kuinka usein äänitasot mitataan ja raportoidaan. Matalammat arvot tarjoavat tarkempia tietoja mutta käyttävät enemmän resursseja. Vähintään 5 sekuntia, suositus 60 sekuntia.",
         "dataOutputTitle": "Äänitasotietojen lähtö",
         "dataOutputDescription": "Kun käytössä, äänitasomittaukset julkaistaan kautta:",
         "mqttTopic": "MQTT-aihe:",
@@ -1102,24 +1232,48 @@
         "description": "Määritä äänileikkeiden tallennus ja käsittely tunnistetuille lintuäänille"
       },
       "audioExport": {
-        "title": "Äänen vienti",
-        "description": "Määritä äänileikkeiden tallennus tunnistetuille lintuäänille",
         "enable": "Ota äänen tallennus käyttöön",
         "enableHelp": "Tallenna havaittujen lintuäänten äänileikkeitä tarkastelua, jakamista tai mukautettujen tietojoukkojen rakentamista varten.",
-        "enableDebug": "Ota virheenkorjaustila käyttöön",
+        "captureSettings": "Tallennusasetukset",
+        "lengthLabel": "Tallennuspituus",
+        "lengthHelp": "Äänen kesto tallennettavaksi jokaiselle havainnolle (10-60 sekuntia). Pidemmät leikkeet tarjoavat enemmän kontekstia mutta käyttävät enemmän tallennustilaa.",
+        "preCaptureLabel": "Esitallennuspuskuri",
+        "preCaptureHelp": "Sekuntimäärä ääntä sisällytettäväksi ennen linnun havaitsemista (0-{max} sekuntia). Varmistaa, että koko lintuääni tallennetaan alusta alkaen.",
+        "gainLabel": "Äänenvahvistus",
+        "gainHelp": "Äänen vahvistus tallennetuille leikkeille desibeleinä (0-20 dB). Tekee tallennetuista äänileikkeistä voimakkaampia helpompaan kuunteluun. Ei vaikuta tunnistukseen. 0 dB tarkoittaa ei vahvistusta.",
+        "normalization": "Äänen normalisointi",
+        "normalizationEnable": "Ota käyttöön äänenvoimakkuuden normalisointi",
+        "normalizationHelp": "Säädä äänentasoja automaattisesti EBU R128 -lähetysstandardin mukaisesti tasaiseen toistoäänenvoimakkuuteen kaikissa leikkeissä.",
+        "targetLUFSLabel": "Tavoiteäänenvoimakkuus (LUFS)",
+        "targetLUFSHelp": "Integroitu äänenvoimakkuustavoite LUFS:na (Loudness Units relative to Full Scale). -23 LUFS on EBU R128 -lähetysstandardi. Alue: -40 - -10 LUFS.",
+        "loudnessRangeLabel": "Äänenvoimakkuusalue (LU)",
+        "loudnessRangeHelp": "Enimmäisvaihtelu äänenvoimakkuudessa leikkeen sisällä (0-20 LU). Matalammat arvot luovat tasaisemman äänenvoimakkuuden mutta saattavat vähentää dynamiikkaa.",
+        "truePeakLabel": "Todellinen huippuraja (dBTP)",
+        "truePeakHelp": "Enimmäinen todellinen huipputaso digitaalisen leikkauksen estämiseksi (-10 - 0 dBTP). -2 dBTP tarjoaa turvallisen marginaalin useimmille toistoalgoille.",
+        "normalizationNote": "EBU R128 -standardi",
+        "normalizationNoteDescription": "Äänen normalisointi noudattaa EBU R128 -lähetysstandardia varmistaen tasaiset toistotasot eri laitteilla ja estäen leikkauksen.",
+        "fileSettings": "Tiedostoasetukset",
         "pathLabel": "Vientipolku",
-        "typeLabel": "Vientityyppi",
-        "bitrateLabel": "Bittinopeus"
+        "pathHelp": "Hakemisto, johon äänileikkeet tallennetaan. Suhteelliset polut ovat sovellushakemistosta. Esimerkki: 'clips/' tai '/var/audio/birds/'",
+        "typeLabel": "Vientimuoto",
+        "typeHelp": "Tallennettujen leikkeiden äänimuoto. WAV ja FLAC ovat häviöttömiä (paras laatu, suuremmat tiedostot). MP3, AAC ja Opus ovat häviöllisiä (pienemmät tiedostot, pieni laatutappio).",
+        "bitrateLabel": "Bittinopeus",
+        "bitrateHelp": "Äänen pakkauksen bittinopeus häviöllisille muodoille. Alue: {min}-{max} kbps. Korkeammat arvot tarjoavat parempaa laatua mutta suurempia tiedostoja.",
+        "losslessNote": "Häviöttömät muodot säilyttävät alkuperäisen äänenlaadun ilman pakkaushäiriöitä."
       },
       "audioClipRetention": {
         "title": "Äänileikkeiden säilytys",
         "description": "Määritä äänileikkeiden siivous",
         "policyLabel": "Säilytyskäytäntö",
+        "policyHelp": "Valitse, miten äänileikkeet poistetaan automaattisesti. Ei mitään: säilytä kaikki leikkeet. Ikä: poista tiettyä vanhemmat leikkeet. Käyttö: poista vanhimmat leikkeet kun levyn käyttö ylittää rajan.",
         "maxAgeLabel": "Enimmäisikä",
+        "maxAgeHelp": "Poista tätä vanhemmat äänileikkeet. Muoto: numero ja yksikkö (h=tunnit, d=päivät, w=viikot, m=kuukaudet). Esimerkkejä: '7d' 7 päivälle, '4w' 4 viikolle.",
         "maxUsageLabel": "Levyn enimmäiskäyttö",
         "maxUsageHelp": "Poista vanhimmat leikkeet, kun äänihakemisto käyttää enemmän kuin tämän prosenttiosuuden käytettävissä olevasta levytilasta.",
-        "minClipsLabel": "Vähimmäisleikkeet",
+        "minClipsLabel": "Vähimmäisleikkeet lajia kohden",
+        "minClipsHelp": "Säilytä aina vähintään tämä määrä leikkeitä jokaiselle lintulajille iästä tai levyn käytöstä riippumatta. Auttaa säilyttämään harvinaisia tallenteita.",
         "keepSpectrograms": "Säilytä spektrogrammikuvat",
+        "keepSpectrogramsHelp": "Säilytä spektrogrammikuvat vaikka äänileikkeet poistettaisiin. Spektrogrammit käyttävät vähemmän tilaa ja tarjoavat visuaalisen viitteen.",
         "policies": {
           "none": "Ei mitään",
           "age": "Ikä",
@@ -1136,6 +1290,17 @@
       "transport": {
         "tcp": "TCP",
         "udp": "UDP"
+      },
+      "filterTypes": {
+        "lowpass": "Alipäästösuodatin",
+        "highpass": "Ylipäästösuodatin",
+        "bandpass": "Kaistanpäästösuodatin",
+        "bandstop": "Kaistansulkusuodatin"
+      },
+      "errors": {
+        "devicesLoadFailed": "Äänilaitteiden lataus epäonnistui. Tarkista järjestelmän käyttöoikeudet.",
+        "invalidBitrate": "Virheellinen bittinopeusarvo",
+        "invalidRetentionPolicy": "Virheellinen säilytyskäytäntö"
       }
     },
     "integration": {
@@ -1230,8 +1395,6 @@
           }
         },
         "wunderground": {
-          "title": "Weather Underground",
-          "description": "Hae säätiedot havainnoille Weather Underground -rajapinnan kautta (vain englanniksi)",
           "apiKey": {
             "label": "API-avain",
             "helpText": "Weather Underground API-avaimesi. Pidä tämä salassa!"
@@ -1246,11 +1409,7 @@
           },
           "units": {
             "label": "Lämpötilayksiköt",
-            "helpText": "Valitse lämpötilan näyttöyksiköt",
-            "metric": "Metrinen (°C)",
-            "imperial": "Brittiläinen (°F)",
-            "ukhybrid": "UK Hybrid (°C/°F)",
-            "scientific": "Tieteellinen (K)"
+            "helpText": "Valitse lämpötilan näyttöyksiköt"
           }
         },
         "notes": {
@@ -1271,7 +1430,8 @@
           "options": {
             "standard": "Vakio",
             "metric": "Metrinen",
-            "imperial": "Brittiläinen"
+            "imperial": "Brittiläinen",
+            "ukhybrid": "UK-hybridi"
           }
         },
         "test": {
@@ -1367,7 +1527,10 @@
       "addSpeciesToExclude": "Lisää pois jätettäviä lajeja",
       "addSpeciesToExcludeLabel": "Lisää uusia pois jätettäviä lajeja",
       "commandPathPlaceholder": "/polku/komentoon",
-      "parametersPlaceholder": "Parametrit ilmestyvät tähän"
+      "parametersPlaceholder": "Parametrit ilmestyvät tähän",
+      "errors": {
+        "speciesLoadFailed": "Lajiluettelon lataus epäonnistui. Yritä uudelleen."
+      }
     },
     "security": {
       "hostLabel": "Isäntäosoite",
@@ -1443,7 +1606,25 @@
   "auth": {
     "login": "Kirjaudu",
     "logout": "Kirjaudu ulos",
-    "openLoginModal": "Avaa kirjautumisikkuna"
+    "openLoginModal": "Avaa kirjautumisikkuna",
+    "loginTitle": "Kirjaudu BirdNET-Go:hon",
+    "password": "Salasana",
+    "passwordPlaceholder": "Syötä salasanasi",
+    "or": "tai",
+    "loginWithGoogle": "Kirjaudu Googlella",
+    "loginWithGithub": "Kirjaudu GitHubilla",
+    "errors": {
+      "loginFailed": "Kirjautuminen epäonnistui. Tarkista salasanasi ja yritä uudelleen.",
+      "passwordRequired": "Salasana vaaditaan.",
+      "passwordTooLong": "Salasana on liian pitkä.",
+      "invalidCharacters": "Salasana sisältää virheellisiä merkkejä.",
+      "invalidCredentials": "Virheellinen käyttäjätunnus tai salasana.",
+      "tooManyAttempts": "Liian monta kirjautumisyritystä. Yritä myöhemmin uudelleen.",
+      "serverError": "Palvelinvirhe. Yritä myöhemmin uudelleen.",
+      "rateLimited": "Liian monta yritystä. Odota {minutes} minuuttia ennen uutta yritystä.",
+      "configurationError": "Tunnistautumisen määritysvirhe. Ota yhteyttä tukeen.",
+      "invalidInput": "Virheellinen syöte."
+    }
   },
   "dataDisplay": {
     "table": {

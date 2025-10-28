@@ -11,7 +11,10 @@
     "search": "Pesquisar",
     "filter": "Filtrar",
     "sort": "Ordenar",
-    "actions": "Ações",
+    "actions": {
+      "download": "Baixar",
+      "review": "Revisar"
+    },
     "settings": "Configurações",
     "close": "Fechar",
     "back": "Voltar",
@@ -43,6 +46,7 @@
       "yes": "Sim",
       "no": "Não",
       "ok": "OK",
+      "clear": "Limpar",
       "edit-config": "Editar configuração",
       "add-action": "Adicionar ação",
       "learnMore": "Saiba mais"
@@ -103,7 +107,20 @@
       "downloadCsv": "Baixar lista de espécies em CSV",
       "visitEbirdLink": "Abrir eBird.org em uma nova aba",
       "learnEbirdTaxonomyLink": "Abrir Taxonomia eBird em uma nova aba",
-      "calendarNavigation": "Navegação do calendário: use as setas para mover, Enter para selecionar, Esc para fechar"
+      "datePickerCalendar": "Calendário de seleção de data",
+      "selectDate": "Selecionar data",
+      "previousMonth": "Mês anterior",
+      "nextMonth": "Próximo mês",
+      "selectToday": "Selecionar hoje",
+      "dateSelected": "Data selecionada: {date}",
+      "calendarNavigation": "Use as teclas de seta para navegar no calendário, Enter para selecionar, Escape para fechar"
+    },
+    "labels": {
+      "confidence": "Confiança"
+    },
+    "values": {
+      "yes": "Sim",
+      "no": "Não"
     },
     "modal": {
       "confirmAction": "Confirmar ação",
@@ -118,11 +135,34 @@
       },
       "form": {
         "correctDetection": "Detecção correta",
-        "falsePositiveLabel": "Falso positivo"
+        "falsePositiveLabel": "Falso positivo",
+        "reviewDetectionTitle": "Revisar detecção",
+        "lockDetection": "Bloquear esta detecção após salvar",
+        "lockDetectionHelp": "Bloquear esta detecção impedirá que ela seja excluída durante a limpeza regular.",
+        "unlockDetection": "Desbloquear esta detecção após salvar",
+        "unlockDetectionHelp": "Desbloquear permitirá que esta detecção seja excluída durante a limpeza regular.",
+        "ignoreSpecies": "Ignorar esta espécie",
+        "ignoreSpeciesHelp": "Ignorar esta espécie impedirá futuras detecções desta espécie. Isso não removerá detecções existentes.",
+        "detectionLocked": "Esta detecção está atualmente bloqueada.",
+        "comment": "Comentário",
+        "addComment": "Adicionar comentário",
+        "hideComment": "Ocultar comentário",
+        "commentPlaceholder": "Adicione um comentário sobre esta detecção...",
+        "commentCount": "({chars} caracteres)",
+        "chars": "caracteres",
+        "commentsLabel": "Comentários",
+        "currentStatusTitle": "Status atual",
+        "detectionStatusTitle": "Status da detecção",
+        "lockLabel": "Status de bloqueio",
+        "reviewLabel": "Status de revisão",
+        "saveReview": "Salvar revisão"
       },
       "errors": {
         "saveFailed": "Falha ao salvar revisão. Por favor, tente novamente.",
-        "noAudio": "Nenhuma gravação de áudio disponível para esta detecção."
+        "noAudio": "Nenhuma gravação de áudio disponível para esta detecção.",
+        "commentFailed": "Falha ao salvar comentário. Por favor, tente novamente.",
+        "lockStatusFailed": "Falha ao atualizar status de bloqueio. Por favor, tente novamente.",
+        "verificationFailed": "Falha ao atualizar status de verificação. Por favor, tente novamente."
       }
     }
   },
@@ -186,7 +226,7 @@
     "ebirdApiV2": "eBird API v2",
     "copyright": "Direitos autorais",
     "coverage": "Cobertura",
-    "taxonomyCoverage": "{genera} gêneros, {families} famílias, {species} espécies",
+    "taxonomyCoverage": "2.374 gêneros, 254 famílias, 11.145 espécies",
     "visitEbird": "Visite eBird.org",
     "ebirdOrg": "eBird.org",
     "learnEbirdTaxonomy": "Saiba mais sobre a taxonomia do eBird"
@@ -266,6 +306,8 @@
       "timeOfDay": "Hora do dia"
     },
     "advancedFilters": "Filtros avançados",
+    "showAdvancedFilters": "Mostrar filtros avançados",
+    "hideAdvancedFilters": "Ocultar filtros avançados",
     "verifiedOptions": {
       "any": "Qualquer status",
       "verified": "Apenas verificados",
@@ -363,6 +405,12 @@
         "biHourlyDetections": "{count} detecções de {startHour}:00 a {endHour}:00 - Clique para ver",
         "sixHourlyDetections": "{count} detecções de {startHour}:00 a {endHour}:00 - Clique para ver"
       },
+      "loading": {
+        "preparing": "Preparando dados...",
+        "fetching": "Buscando detecções...",
+        "error": "Falha ao carregar dados",
+        "complete": "Dados carregados com sucesso"
+      },
       "noSpecies": "Nenhuma espécie detectada nesta data"
     },
     "recentDetections": {
@@ -374,6 +422,8 @@
       "headers": {
         "dateTime": "Data e hora",
         "commonName": "Nome comum",
+        "species": "Espécie",
+        "confidence": "Confiança",
         "thumbnail": "Miniatura",
         "status": "Status",
         "recording": "Gravação",
@@ -420,10 +470,17 @@
       "dateTime": "Data e hora",
       "weather": "Clima",
       "species": "Espécie",
+      "confidence": "Confiança",
       "thumbnail": "Miniatura",
       "status": "Status",
       "recording": "Gravação",
       "actions": "Ações"
+    },
+    "status": {
+      "locked": "Bloqueado"
+    },
+    "table": {
+      "caption": "Lista de detecções de pássaros com data, espécie, confiança e informações de status"
     },
     "empty": {
       "title": "Nenhuma detecção encontrada",
@@ -433,17 +490,77 @@
       "showing": "Mostrando {from} a {to} de {total} resultados"
     },
     "weather": {
-      "noData": "Sem dados meteorológicos"
+      "noData": "Sem dados meteorológicos",
+      "units": {
+        "temperature": "°C",
+        "windSpeed": "m/s",
+        "humidity": "%"
+      },
+      "conditions": {
+        "clearsky_day": "Céu limpo",
+        "clearsky_night": "Céu limpo",
+        "fair_day": "Bom tempo",
+        "fair_night": "Bom tempo",
+        "partlycloudy_day": "Parcialmente nublado",
+        "partlycloudy_night": "Parcialmente nublado",
+        "cloudy": "Nublado",
+        "rainshowers_day": "Pancadas de chuva",
+        "rainshowers_night": "Pancadas de chuva",
+        "rain": "Chuva",
+        "thunder": "Tempestade",
+        "sleet": "Chuva congelante",
+        "snow": "Neve",
+        "fog": "Neblina",
+        "unknown": "Desconhecido"
+      }
     },
     "row": {
       "viewDetails": "Ver detalhes para {species}"
+    },
+    "media": {
+      "title": "Gravação e espectrograma"
+    },
+    "tabs": {
+      "overview": "Visão geral",
+      "taxonomy": "Taxonomia",
+      "history": "Histórico",
+      "notes": "Notas"
+    },
+    "environmental": {
+      "title": "Condições ambientais"
+    },
+    "metadata": {
+      "title": "Metadados da detecção",
+      "source": "Fonte",
+      "duration": "Duração",
+      "status": "Status",
+      "locked": "Bloqueado"
+    },
+    "history": {
+      "title": "Histórico de detecção",
+      "comingSoon": "Rastreamento de histórico em breve..."
+    },
+    "notes": {
+      "title": "Notas e comentários",
+      "noComments": "Sem comentários ou notas para esta detecção."
+    }
+  },
+  "species": {
+    "rarity": {
+      "title": "Raridade da espécie"
+    },
+    "taxonomy": {
+      "hierarchy": "Classificação taxonômica",
+      "subspecies": "Subespécie",
+      "noData": "Sem dados de taxonomia disponíveis."
     }
   },
   "system": {
     "title": "Painel do sistema",
     "refreshData": "Atualizar dados",
     "aria": {
-      "refreshData": "Atualizar dados do sistema"
+      "refreshData": "Atualizar dados do sistema",
+      "dashboard": "Painel do sistema com métricas de desempenho e informações"
     },
     "systemInfo": {
       "title": "Informações do sistema",
@@ -755,6 +872,14 @@
         "userInterface": {
           "title": "Configurações da interface do usuário",
           "description": "Personalizar a interface do usuário",
+          "language": {
+            "title": "Idioma",
+            "description": "Configure o idioma de exibição para a interface do usuário",
+            "locale": {
+              "label": "Idioma da interface",
+              "helpText": "Selecione o idioma para a interface do usuário"
+            }
+          },
           "interface": {
             "title": "Configurações de interface",
             "description": "Escolha seu idioma e versão de interface preferidos",
@@ -765,13 +890,6 @@
             "newUI": {
               "label": "Usar interface moderna",
               "helpText": "Ativa a nova interface baseada em Svelte com desempenho e recursos aprimorados. Quando desativada, usa a interface HTMX clássica."
-            }
-          },
-          "language": {
-            "title": "Idioma",
-            "locale": {
-              "label": "Idioma da interface",
-              "helpText": "Selecione o idioma para a interface do usuário"
             }
           },
           "dashboard": {
@@ -959,8 +1077,8 @@
     },
     "notifications": {
       "sections": {
-        "test": {
-          "title": "Notificações de teste",
+        "testing": {
+          "title": "Testar notificações",
           "description": "Envie notificações de teste para verificar se seu sistema de notificações está funcionando corretamente"
         },
         "info": {
@@ -975,7 +1093,7 @@
         "titleLabel": "Modelo de título",
         "titlePlaceholder": "ex. Nova espécie: {{.CommonName}}",
         "messageLabel": "Modelo de mensagem",
-        "messagePlaceholder": "ex. Primeira detecção de {{.CommonName}} ({{.ScientificName}}) com {{.ConfidencePercent}}% de confiança",
+        "messagePlaceholder": "ex. Primeira detecção de {{.CommonName}}  ({{.ScientificName}})  com {{.ConfidencePercent}}% de confiança",
         "resetButton": "Redefinir",
         "saveButton": "Salvar modelos",
         "saveButtonUnsaved": "Salvar modelos *",
@@ -1028,6 +1146,9 @@
       }
     },
     "filters": {
+      "errors": {
+        "speciesLoadFailed": "Falha ao carregar lista de espécies. Por favor, tente novamente."
+      },
       "privacyFiltering": {
         "title": "Filtragem de privacidade",
         "description": "A filtragem de privacidade evita salvar clipes de áudio quando vozes humanas são detectadas",
@@ -1049,14 +1170,7 @@
       },
       "speciesNamePlaceholder": "Nome da espécie",
       "typeSpeciesName": "Digite o nome da espécie...",
-      "confidenceRange": {
-        "label": "Faixa de Confiança",
-        "description": "Configurar valores mínimos e máximos de confiança"
-      },
-      "dogBarkSpeciesList": {
-        "label": "Lista de Espécies de Latido de Cão",
-        "description": "Configurar espécies para detecção de latido de cão"
-      }
+      "dogBarkSpeciesList": "Lista de espécies de latido de cão"
     },
     "audio": {
       "audioCapture": {
@@ -1064,15 +1178,19 @@
         "description": "Definir fonte de captura de áudio, placa de som ou fluxo RTSP",
         "soundCardSource": "Fonte da placa de som",
         "audioSourceLabel": "Fonte de áudio (requer reinicialização da aplicação)",
+        "audioSourceHelp": "Selecione o dispositivo de entrada de áudio para detecção de sons de pássaros. As alterações requerem reinicialização da aplicação para entrar em vigor.",
         "noSoundCardCapture": "Sem captura de placa de som",
         "rtspSource": "Fonte RTSP",
         "rtspTransportLabel": "Protocolo de transporte RTSP",
-        "rtspUrlsLabel": "URLs de fluxo RTSP"
+        "rtspTransportHelp": "TCP é mais confiável, mas pode ter maior latência. UDP é mais rápido, mas pode apresentar perda de pacotes em redes com problemas.",
+        "rtspUrlsLabel": "URLs de fluxo RTSP",
+        "rtspUrlsHelp": "Digite uma ou mais URLs de fluxo RTSP para fontes de áudio de rede. Formato: rtsp://ip:porta/fluxo. Nota: As credenciais de autenticação devem ser configuradas separadamente nas configurações do servidor RTSP para segurança."
       },
       "audioFilters": {
         "title": "Filtros de áudio",
         "description": "Configurar filtros de processamento de áudio",
         "enableEqualizer": "Ativar equalizador de áudio",
+        "enableEqualizerHelp": "Aplicar filtragem de frequência para melhorar a detecção de cantos de pássaros, reduzindo ruídos e frequências indesejadas.",
         "filterType": "Tipo de filtro",
         "newFilterType": "Novo tipo de filtro",
         "selectFilterType": "Selecionar tipo de filtro",
@@ -1080,9 +1198,14 @@
         "remove": "Remover",
         "frequencyResponse": "Resposta de frequência",
         "cutoffFrequency": "Frequência de corte",
+        "cutoffFrequencyHelp": "Frequência na qual o filtro começa a atenuar sinais. Os cantos de pássaros normalmente variam de 1 a 10 kHz.",
         "qFactor": "Fator Q",
+        "qFactorHelp": "O fator de qualidade controla a nitidez do filtro. Valores mais baixos (0,1-1) criam inclinações mais suaves, valores mais altos (1-10) criam cortes mais acentuados.",
         "gain": "Ganho",
+        "gainHelp": "Nível de amplificação ou atenuação em decibéis (dB).",
         "attenuation": "Atenuação",
+        "attenuationHelp": "Taxa de atenuação do filtro. Valores mais altos fornecem atenuação mais acentuada de frequências filtradas.",
+        "filterHelp": "Adicione vários filtros para moldar a resposta de frequência para detecção ideal de pássaros em seu ambiente.",
         "attenuationLevels": {
           "0db": "0dB",
           "12db": "12dB",
@@ -1095,8 +1218,9 @@
         "title": "Monitoramento do nível sonoro",
         "description": "Monitorar e relatar níveis sonoros ambientais",
         "enable": "Ativar monitoramento do nível sonoro",
+        "enableHelp": "Rastreie os níveis de ruído ambiente para entender seu ambiente de gravação e correlacionar com padrões de atividade de pássaros.",
         "intervalLabel": "Intervalo de medição (segundos)",
-        "intervalHelp": "Com que frequência relatar medições do nível sonoro",
+        "intervalHelp": "Com que frequência medir e relatar os níveis sonoros. Valores mais baixos fornecem dados mais granulares, mas usam mais recursos. Mínimo 5 segundos, recomendado 60 segundos.",
         "dataOutputTitle": "Saída de dados do nível sonoro",
         "dataOutputDescription": "Quando ativado, as medições do nível sonoro são publicadas via:",
         "mqttTopic": "Tópico MQTT:",
@@ -1108,11 +1232,31 @@
         "description": "Configurar captura e processamento de clipes de áudio para chamados de pássaros identificados"
       },
       "audioExport": {
-        "title": "Exportação de áudio",
-        "description": "Configurar salvamento de clipes de áudio para chamados de pássaros identificados",
         "enable": "Ativar captura de áudio",
         "enableHelp": "Salvar clipes de áudio de chamados de pássaros detectados para revisão, compartilhamento ou criação de conjuntos de dados personalizados.",
-        "enableDebug": "Ativar modo de depuração",
+        "captureSettings": "Configurações de captura",
+        "lengthLabel": "Duração da captura",
+        "lengthHelp": "Duração do áudio a ser capturado para cada detecção (10-60 segundos). Clipes mais longos fornecem mais contexto, mas usam mais armazenamento.",
+        "preCaptureLabel": "Buffer pré-detecção",
+        "preCaptureHelp": "Segundos de áudio a incluir antes da detecção do pássaro (0-{max} segundos). Garante que o canto completo do pássaro seja capturado desde o início.",
+        "gainLabel": "Ganho de áudio",
+        "gainHelp": "Amplificação de áudio para clipes salvos em decibéis (0 a 20 dB). Torna os clipes de áudio salvos mais altos para facilitar a audição. Não afeta a detecção. 0 dB significa sem amplificação.",
+        "normalization": "Normalização de áudio",
+        "normalizationEnable": "Ativar normalização de volume",
+        "normalizationHelp": "Ajustar automaticamente os níveis de áudio para o padrão de transmissão EBU R128 para volume de reprodução consistente em todos os clipes.",
+        "targetLUFSLabel": "Volume alvo (LUFS)",
+        "targetLUFSHelp": "Alvo de volume integrado em LUFS (Unidades de Volume relativas à Escala Completa). -23 LUFS é o padrão de transmissão EBU R128. Intervalo: -40 a -10 LUFS.",
+        "loudnessRangeLabel": "Intervalo de volume (LU)",
+        "loudnessRangeHelp": "Variação máxima de volume dentro do clipe (0-20 LU). Valores mais baixos criam volume mais consistente, mas podem reduzir a dinâmica.",
+        "truePeakLabel": "Limite de pico verdadeiro (dBTP)",
+        "truePeakHelp": "Nível máximo de pico verdadeiro para evitar distorção digital (-10 a 0 dBTP). -2 dBTP fornece margem segura para a maioria dos sistemas de reprodução.",
+        "normalizationNote": "Padrão EBU R128",
+        "normalizationNoteDescription": "A normalização de áudio segue o padrão de transmissão EBU R128, garantindo níveis de reprodução consistentes em diferentes dispositivos e evitando distorção.",
+        "fileSettings": "Configurações de arquivo",
+        "pathHelp": "Diretório onde os clipes de áudio serão salvos. Caminhos relativos são do diretório da aplicação. Exemplo: 'clips/' ou '/var/audio/birds/'",
+        "typeHelp": "Formato de áudio para clipes salvos. WAV e FLAC são sem perdas (melhor qualidade, arquivos maiores). MP3, AAC e Opus são com perdas (arquivos menores, pequena perda de qualidade).",
+        "bitrateHelp": "Taxa de bits de compressão de áudio para formatos com perdas. Intervalo: {min}-{max} kbps. Valores mais altos fornecem melhor qualidade, mas arquivos maiores.",
+        "losslessNote": "Formatos sem perdas preservam a qualidade de áudio original sem artefatos de compressão.",
         "pathLabel": "Caminho de exportação",
         "typeLabel": "Tipo de exportação",
         "bitrateLabel": "Taxa de bits"
@@ -1121,11 +1265,15 @@
         "title": "Retenção de clipes de áudio",
         "description": "Configurar limpeza de clipes de áudio",
         "policyLabel": "Política de retenção",
+        "policyHelp": "Escolha como os clipes de áudio são excluídos automaticamente. Nenhuma: manter todos os clipes. Idade: excluir clipes mais antigos do que o especificado. Uso: excluir clipes mais antigos quando o uso do disco exceder o limite.",
         "maxAgeLabel": "Idade máxima",
+        "maxAgeHelp": "Excluir clipes de áudio mais antigos do que esta duração. Formato: número seguido de unidade (h=horas, d=dias, w=semanas, m=meses). Exemplos: '7d' para 7 dias, '4w' para 4 semanas.",
         "maxUsageLabel": "Uso máximo do disco",
         "maxUsageHelp": "Excluir os clipes mais antigos quando o diretório de áudio usar mais do que esta porcentagem do espaço disponível em disco.",
-        "minClipsLabel": "Clipes mínimos",
+        "minClipsLabel": "Clipes mínimos por espécie",
+        "minClipsHelp": "Sempre manter pelo menos este número de clipes para cada espécie de pássaro, independentemente da idade ou uso do disco. Ajuda a preservar gravações raras.",
         "keepSpectrograms": "Manter imagens de espectrograma",
+        "keepSpectrogramsHelp": "Manter imagens de espectrograma mesmo quando os clipes de áudio forem excluídos. Espectrogramas usam menos espaço e fornecem referência visual.",
         "policies": {
           "none": "Nenhuma",
           "age": "Idade",
@@ -1142,125 +1290,114 @@
       "transport": {
         "tcp": "TCP",
         "udp": "UDP"
+      },
+      "filterTypes": {
+        "lowpass": "Filtro passa-baixa",
+        "highpass": "Filtro passa-alta",
+        "bandpass": "Filtro passa-banda",
+        "bandstop": "Filtro rejeita-banda"
+      },
+      "errors": {
+        "devicesLoadFailed": "Falha ao carregar dispositivos de áudio. Por favor, verifique as permissões do sistema.",
+        "invalidBitrate": "Valor de taxa de bits inválido",
+        "invalidRetentionPolicy": "Política de retenção inválida"
       }
     },
     "integration": {
       "birdweather": {
         "title": "BirdWeather",
-        "description": "Publicar detecções de aves no BirdWeather",
-        "enabled": {
-          "label": "Ativar publicação BirdWeather"
+        "description": "Enviar detecções para o BirdWeather",
+        "ffmpegWarning": {
+          "title": "FFmpeg não detectado",
+          "message": "Por favor, instale o FFmpeg para habilitar o suporte à codificação FLAC. O BirdWeather está descontinuando uploads WAV em favor de arquivos de áudio FLAC comprimidos."
         },
-        "debug": {
-          "label": "Ativar depuração BirdWeather"
+        "enable": "Ativar uploads para BirdWeather",
+        "token": {
+          "label": "Token do BirdWeather",
+          "helpText": "Seu token exclusivo do BirdWeather."
         },
-        "stationIdInput": {
-          "idLabel": "ID da estação BirdWeather",
-          "idPlaceholder": "Digite o ID da estação BirdWeather",
-          "idHelpText": "Seu ID exclusivo da estação BirdWeather"
+        "threshold": {
+          "label": "Limiar de upload",
+          "helpText": "Limiar mínimo de confiança para enviar previsões ao BirdWeather."
         },
-        "locationAccuracy": {
-          "label": "Precisão da localização",
-          "helpText": "Adicionar ruído aleatório à localização para privacidade (em metros)"
-        },
-        "thresholdConfidence": {
-          "label": "Limiar de confiança",
-          "helpText": "Confiança mínima para enviar detecções ao BirdWeather (0.0-1.0)",
-          "valueDisplay": "Valor: {value}"
-        },
-        "processingModes": {
-          "label": "Tipo de processamento de detecção",
-          "helpText": "Como processar detecções antes de enviar ao BirdWeather",
-          "liveAnalysis": "Análise ao vivo",
-          "realtimeProcessing": "Processamento em tempo real"
-        },
-        "uploadTiming": {
-          "label": "Tempo de upload",
-          "helpText": "Quando fazer upload de detecções para o BirdWeather",
-          "realtime": "Tempo real",
-          "endOfDay": "Fim do dia"
-        },
-        "excludeSpecies": {
-          "label": "Espécies a excluir",
-          "helpText": "Espécies para excluir dos envios ao BirdWeather"
+        "test": {
+          "button": "Testar conexão com BirdWeather",
+          "loading": "Testando...",
+          "enabledRequired": "O BirdWeather deve estar ativado para testar",
+          "tokenRequired": "O token do BirdWeather deve ser especificado",
+          "inProgress": "Teste em andamento...",
+          "description": "Testar conexão com BirdWeather"
         }
       },
       "mqtt": {
         "title": "MQTT",
-        "description": "Publicar eventos em um broker MQTT",
-        "enabled": {
-          "label": "Ativar publicação MQTT"
-        },
-        "brokerInput": {
+        "description": "Configurar conexão com broker MQTT",
+        "enable": "Ativar integração MQTT",
+        "broker": {
           "label": "Broker MQTT",
-          "placeholder": "Digite o endereço do broker MQTT",
-          "helpText": "Endereço do broker MQTT (ex: tcp://192.168.1.10:1883)"
+          "placeholder": "mqtt://localhost:1883"
         },
-        "topicInput": {
-          "label": "Prefixo do tópico",
-          "placeholder": "Digite o prefixo do tópico MQTT",
-          "helpText": "Prefixo do tópico MQTT"
-        },
-        "clientIdInput": {
-          "label": "ID do cliente",
-          "placeholder": "Digite o ID do cliente MQTT",
-          "helpText": "ID do cliente MQTT"
+        "topic": {
+          "label": "Tópico MQTT",
+          "placeholder": "birdnet/detections"
         },
         "authentication": {
-          "usernameLabel": "Nome de usuário",
-          "usernamePlaceholder": "Digite o nome de usuário MQTT",
-          "passwordLabel": "Senha",
-          "passwordPlaceholder": "Digite a senha MQTT"
+          "title": "Autenticação",
+          "username": {
+            "label": "Nome de usuário"
+          },
+          "password": {
+            "label": "Senha",
+            "helpText": "A senha MQTT."
+          }
+        },
+        "messageSettings": {
+          "title": "Configurações de mensagem",
+          "retain": {
+            "label": "Reter mensagens",
+            "note": "<strong>Usuários do Home Assistant:</strong> É recomendado ativar a flag de retenção para integração com Home Assistant. Sem retenção, os sensores MQTT aparecerão como 'desconhecido' quando o Home Assistant reiniciar."
+          }
+        },
+        "tls": {
+          "title": "Segurança TLS/SSL",
+          "enable": "Ativar TLS/SSL",
+          "skipVerify": "Ignorar verificação de certificado",
+          "configNote": "<strong>Configuração TLS:</strong><br />• TLS padrão: Deixe os certificados vazios para brokers públicos<br />• Certificados autoassinados: Forneça o certificado CA<br />• TLS mútuo (mTLS): Forneça todos os três certificados"
+        },
+        "test": {
+          "button": "Testar conexão MQTT",
+          "loading": "Testando...",
+          "enabledRequired": "O MQTT deve estar ativado para testar",
+          "brokerRequired": "O broker MQTT deve ser especificado",
+          "inProgress": "Teste em andamento...",
+          "description": "Testar conexão MQTT"
         }
       },
       "observability": {
         "title": "Observabilidade",
-        "description": "Configurar monitoramento e rastreamento",
-        "metrics": {
-          "title": "Métricas Prometheus",
-          "enabled": {
-            "label": "Ativar métricas Prometheus"
-          },
-          "portInput": {
-            "label": "Porta de métricas",
-            "helpText": "Porta para endpoint de métricas Prometheus"
-          }
-        },
-        "profiling": {
-          "title": "Perfilagem",
-          "enabled": {
-            "label": "Ativar perfilagem",
-            "helpText": "Expor endpoints de perfilagem em /debug/pprof/"
-          }
-        },
-        "tracing": {
-          "title": "Rastreamento",
-          "enabled": {
-            "label": "Ativar rastreamento"
-          },
-          "urlInput": {
-            "label": "URL de rastreamento",
-            "placeholder": "Digite a URL de rastreamento",
-            "helpText": "URL do OpenTelemetry ou rastreamento compatível"
-          }
+        "description": "Monitore o desempenho do BirdNET-Go e métricas de detecção de aves através de endpoint compatível com Prometheus",
+        "enable": "Ativar integração de observabilidade",
+        "listenAddress": {
+          "label": "Endereço de escuta",
+          "placeholder": "0.0.0.0:8090"
         }
       },
       "weather": {
-        "title": "Integração meteorológica",
-        "description": "Obter dados meteorológicos para detecções usando a API OpenWeather",
-        "providerSelect": {
-          "label": "Provedor meteorológico",
-          "helpText": "Selecione o provedor de dados meteorológicos"
-        },
+        "title": "Clima",
+        "description": "Configurar coleta de dados meteorológicos",
         "provider": {
+          "label": "Provedor de clima",
           "options": {
+            "none": "Nenhum",
+            "yrno": "Yr.no",
+            "openweather": "OpenWeather",
             "wunderground": "Weather Underground"
           }
         },
         "wunderground": {
           "apiKey": {
             "label": "Chave API do Weather Underground",
-            "helpText": "Digite sua chave API do Weather Underground. Necessária para dados meteorológicos. Mantenha em segredo!"
+            "helpText": "Digite sua chave API do Weather Underground. Necessária para dados meteorológicos."
           },
           "stationId": {
             "label": "ID da estação",
@@ -1272,54 +1409,117 @@
           },
           "units": {
             "label": "Unidades",
-            "helpText": "Selecione unidades para temperatura e velocidade do vento (m = Métrico, e = Imperial, h = Híbrido do Reino Unido)."
+            "helpText": "Selecione unidades para temperatura e velocidade do vento (m = Métrico, e = Imperial, h = Híbrido UK)."
           }
         },
         "notes": {
-          "wunderground": "Requer uma chave API do Weather Underground e um ID de estação PWS válido. Os dados meteorológicos do Weather Underground estão disponíveis apenas em inglês. Veja <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> para detalhes."
+          "none": "Nenhum dado meteorológico será recuperado.",
+          "yrno": {
+            "description": "Os dados de previsão do tempo são fornecidos pelo Yr.no, um serviço conjunto do Instituto Meteorológico Norueguês (met.no) e da Corporação Norueguesa de Radiodifusão (NRK).",
+            "freeService": "Yr é um serviço gratuito de dados meteorológicos. Para mais informações, visite <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
+          },
+          "openweather": "O uso do OpenWeather requer uma chave de API. Inscreva-se para uma chave de API gratuita em <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
+          "wunderground": "Requer uma chave API do Weather Underground e um ID de estação PWS válido. Veja <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> para detalhes."
         },
-        "apiKeyInput": {
-          "label": "Chave API",
-          "placeholder": "Digite a chave API",
-          "helpText": "Sua chave API para o provedor meteorológico selecionado. Mantenha em segredo!"
+        "apiKey": {
+          "label": "Chave de API",
+          "helpText": "Sua chave de API para o provedor de clima selecionado. Mantenha em segredo!"
         },
         "units": {
-          "label": "Unidades de temperatura",
-          "helpText": "Selecione unidades de temperatura para exibição",
-          "metric": "Métrica (°C)",
-          "imperial": "Imperial (°F)",
-          "ukhybrid": "Híbrido do Reino Unido",
-          "scientific": "Científica (K)"
+          "label": "Unidades de medida",
+          "options": {
+            "standard": "Padrão",
+            "metric": "Métrico",
+            "imperial": "Imperial",
+            "ukhybrid": "UK Híbrido"
+          }
+        },
+        "test": {
+          "button": "Testar provedor de clima",
+          "loading": "Testando...",
+          "noProvider": "Nenhum provedor de clima selecionado",
+          "apiKeyRequired": "A chave de API deve ser especificada",
+          "inProgress": "Teste em andamento...",
+          "description": "Testar conexão com provedor de clima"
         }
       }
     },
     "species": {
       "alwaysInclude": {
-        "title": "Sempre incluir",
-        "description": "Espécies que são sempre incluídas independentemente das configurações de filtro de alcance"
+        "title": "Sempre incluir espécies",
+        "description": "Espécies nesta lista serão sempre incluídas no alcance de espécies detectadas",
+        "noSpeciesMessage": "Nenhuma espécie adicionada à lista de inclusão"
       },
       "alwaysExclude": {
-        "title": "Sempre excluir",
-        "description": "Espécies que nunca são incluídas"
+        "title": "Sempre excluir espécies",
+        "description": "Espécies nesta lista serão sempre excluídas da detecção",
+        "noSpeciesMessage": "Nenhuma espécie adicionada à lista de exclusão"
       },
       "customConfiguration": {
         "title": "Configuração personalizada de espécies",
-        "description": "Ativar configuração avançada para comportamentos de espécies personalizados"
+        "description": "Valores de limiar específicos de espécies, intervalos de detecção e ações",
+        "helpText": {
+          "intro": "Configure configurações específicas da espécie:",
+          "threshold": "Limiar: Pontuação mínima de confiança (0-1) necessária para detecção",
+          "interval": "Intervalo: Tempo mínimo em segundos entre detecções da mesma espécie (0 = usar padrão global)",
+          "actions": "Ações: Comandos personalizados a executar quando esta espécie for detectada"
+        },
+        "columnHeaders": {
+          "species": "Espécie",
+          "settings": "Configurações",
+          "actions": "Ações"
+        },
+        "badges": {
+          "threshold": "Limiar: {value}",
+          "interval": "Intervalo: {value}s",
+          "customAction": "Ação personalizada",
+          "executeDefaults": "+Padrões"
+        },
+        "dropdown": {
+          "editConfig": "Editar configuração",
+          "addAction": "Adicionar ação",
+          "remove": "Remover"
+        },
+        "labels": {
+          "threshold": "Limiar",
+          "interval": "Intervalo",
+          "intervalSeconds": "Intervalo (seg)",
+          "addButton": "Adicionar"
+        },
+        "noConfigurationsMessage": "Nenhuma configuração personalizada de espécie adicionada",
+        "addForm": {
+          "speciesPlaceholder": "Nome da espécie",
+          "thresholdPlaceholder": "0,5",
+          "intervalPlaceholder": "0"
+        }
       },
       "actionsModal": {
-        "title": "Ações de espécies",
-        "description": "Configurar ações personalizadas para detecções de espécies específicas",
-        "editTitle": "Editar ação",
-        "addTitle": "Adicionar nova ação",
-        "form": {
-          "commandLabel": "Comando",
-          "commandPlaceholder": "/caminho/para/seu/comando",
-          "commandHelp": "Caminho completo para o executável do comando",
-          "parametersLabel": "Parâmetros",
-          "parametersPlaceholder": "Os parâmetros aparecerão aqui",
-          "parametersHelp": "Os parâmetros serão passados para o comando com espaços reservados substituídos",
-          "placeholdersTitle": "Espaços reservados disponíveis:",
-          "placeholdersList": "{{species}} - Nome científico da espécie\n{{common_name}} - Nome comum\n{{confidence}} - Pontuação de confiança\n{{date}} - Data da detecção\n{{time}} - Hora da detecção\n{{audio_file}} - Caminho do arquivo de áudio"
+        "title": "Ações para {species}",
+        "actionType": {
+          "label": "Tipo de ação",
+          "executeCommand": "Executar comando",
+          "onlySupported": "Atualmente, apenas ações de Executar Comando são suportadas"
+        },
+        "command": {
+          "label": "Comando",
+          "helpText": "Forneça o caminho completo para o comando ou script que deseja executar"
+        },
+        "parameters": {
+          "label": "Parâmetros",
+          "helpText": "Esses valores serão passados para seu comando na ordem listada",
+          "availableTitle": "Parâmetros disponíveis",
+          "buttons": {
+            "commonName": "NomeComum",
+            "scientificName": "NomeCientífico",
+            "confidence": "Confiança",
+            "time": "Hora",
+            "source": "Fonte",
+            "clearParameters": "Limpar parâmetros"
+          }
+        },
+        "executeDefaults": {
+          "label": "Também executar ações padrão (armazenamento em banco de dados, notificações, etc.)",
+          "helpText": "Quando ativado, tanto sua ação personalizada quanto as ações padrão do sistema serão executadas. Quando desativado, apenas sua ação personalizada será executada."
         }
       },
       "addSpeciesToInclude": "Adicionar espécies para incluir",
@@ -1327,104 +1527,59 @@
       "addSpeciesToExclude": "Adicionar espécies para excluir",
       "addSpeciesToExcludeLabel": "Adicionar novas espécies para excluir",
       "commandPathPlaceholder": "/caminho/para/seu/comando",
-      "parametersPlaceholder": "Os parâmetros aparecerão aqui"
+      "parametersPlaceholder": "Os parâmetros aparecerão aqui",
+      "errors": {
+        "speciesLoadFailed": "Falha ao carregar lista de espécies. Por favor, tente novamente."
+      }
     },
     "security": {
       "serverConfiguration": {
         "title": "Configuração do servidor",
-        "description": "Configurar host e opções de TLS",
-        "hostLabel": "Endereço do host",
-        "hostPlaceholder": "Por exemplo, localhost:8080 ou example.domain.com",
-        "hostHelp": "Endereço do host onde a aplicação escutará. Use 'localhost:8080' para acesso local apenas, ou '0.0.0.0:8080' para acesso de qualquer endereço.",
-        "tlsSettings": {
-          "title": "Configurações TLS",
-          "description": "Acesso seguro com criptografia SSL/TLS",
-          "enabled": {
-            "label": "Ativar HTTPS/TLS"
-          },
-          "autoTls": {
-            "label": "Certificado TLS automático",
-            "helpText": "Obter automaticamente certificado SSL/TLS via Let's Encrypt"
-          },
-          "certPaths": {
-            "certFile": {
-              "label": "Arquivo de certificado",
-              "placeholder": "/caminho/para/cert.pem",
-              "helpText": "Caminho para o arquivo de certificado SSL/TLS"
-            },
-            "keyFile": {
-              "label": "Arquivo de chave",
-              "placeholder": "/caminho/para/key.pem",
-              "helpText": "Caminho para o arquivo de chave SSL/TLS"
-            }
-          }
+        "description": "Configurar HTTPS e configurações SSL/TLS",
+        "autoTlsLabel": "Gerenciamento automático de certificado SSL (AutoTLS)",
+        "autoTlsRequirements": {
+          "title": "Requisitos do AutoTLS:",
+          "domainRequired": "Um nome de domínio registrado é obrigatório",
+          "domainPointing": "O domínio deve apontar para o IP público deste servidor",
+          "portsAccessible": "As portas 80 e 443 devem estar acessíveis pela internet"
         }
       },
       "basicAuthentication": {
         "title": "Autenticação básica",
         "description": "Acesso seguro com uma senha simples",
-        "enabled": {
-          "label": "Ativar autenticação básica"
-        },
-        "username": {
-          "label": "Nome de usuário",
-          "placeholder": "Digite o nome de usuário",
-          "helpText": "Nome de usuário para autenticação básica"
-        },
-        "password": {
-          "label": "Senha",
-          "placeholder": "Digite a senha",
-          "helpText": "Senha para autenticação básica"
-        }
+        "enableLabel": "Ativar autenticação por senha",
+        "passwordLabel": "Senha",
+        "passwordHelpText": "Limitar acesso às configurações com uma senha."
       },
       "oauth": {
-        "title": "OAuth",
-        "description": "Acesso seguro via SSO",
-        "enabled": {
-          "label": "Ativar OAuth",
-          "helpText": "Ativar autenticação OAuth via Authentik"
+        "title": "OAuth2 - Autenticação social",
+        "description": "Login único com sua conta existente",
+        "google": {
+          "title": "OAuth do Google",
+          "enableLabel": "Permitir login OAuth2 via Google",
+          "redirectUriTitle": "URI de redirecionamento para o Console do Google Cloud:",
+          "getCredentialsLabel": "Obtenha suas credenciais do Console do Google Cloud",
+          "clientIdLabel": "ID do cliente",
+          "clientIdHelpText": "O ID do cliente OAuth 2.0 obtido do Console do Google Cloud ao configurar as credenciais OAuth.",
+          "clientSecretLabel": "Segredo do cliente",
+          "clientSecretHelpText": "O segredo do cliente OAuth 2.0 obtido do Console do Google Cloud ao configurar as credenciais OAuth.",
+          "userIdLabel": "ID do usuário"
         },
-        "providerUrl": {
-          "label": "URL do provedor",
-          "placeholder": "Digite a URL do provedor OAuth",
-          "helpText": "URL do provedor OAuth"
-        },
-        "clientId": {
-          "label": "ID do cliente",
-          "placeholder": "Digite o ID do cliente OAuth",
-          "helpText": "ID do cliente OAuth"
-        },
-        "clientSecret": {
-          "label": "Segredo do cliente",
-          "placeholder": "Digite o segredo do cliente OAuth",
-          "helpText": "Segredo do cliente OAuth"
-        },
-        "redirectUrl": {
-          "label": "URL de redirecionamento",
-          "placeholder": "Digite a URL de redirecionamento OAuth",
-          "helpText": "URL de redirecionamento OAuth"
-        },
-        "allowedUsers": {
-          "label": "Usuários permitidos",
-          "placeholder": "Digite um ou mais e-mails de usuários permitidos",
-          "helpText": "Lista de endereços de e-mail de usuários permitidos a fazer login (um por linha)"
+        "github": {
+          "title": "OAuth do GitHub",
+          "enableLabel": "Permitir login OAuth2 via GitHub",
+          "redirectUriTitle": "URI de redirecionamento para Configurações de desenvolvedor do GitHub:",
+          "getCredentialsLabel": "Obtenha suas credenciais das Configurações de desenvolvedor do GitHub",
+          "clientIdLabel": "ID do cliente",
+          "clientIdHelpText": "O ID do cliente OAuth 2.0 obtido das Configurações de desenvolvedor do GitHub ao configurar as credenciais OAuth.",
+          "clientSecretLabel": "Segredo do cliente",
+          "clientSecretHelpText": "O segredo do cliente OAuth 2.0 obtido das Configurações de desenvolvedor do GitHub ao configurar as credenciais OAuth.",
+          "userIdLabel": "ID do usuário"
         }
       },
       "bypassAuthentication": {
         "title": "Bypass de autenticação",
-        "description": "Permitir acesso sem autenticação de redes confiáveis",
-        "allowSubnetBypass": {
-          "label": "Permitir acesso da sub-rede para contornar autenticação"
-        },
-        "allowedSubnets": {
-          "label": "Sub-redes permitidas",
-          "placeholder": "Digite uma sub-rede CIDR (ex. 192.168.1.0/24)",
-          "helpText": "Intervalos de rede permitidos para contornar o login (notação CIDR, lista separada por vírgulas)"
-        },
-        "securityWarning": {
-          "title": "Aviso de segurança:",
-          "text": "Dispositivos dessas sub-redes terão acesso irrestrito. Inclua apenas redes internas confiáveis."
-        }
+        "description": "Permitir acesso sem autenticação de redes confiáveis"
       },
       "hostLabel": "Endereço do host",
       "allowSubnetBypassLabel": "Permitir acesso da sub-rede para contornar autenticação",
@@ -1451,7 +1606,25 @@
   "auth": {
     "login": "Entrar",
     "logout": "Sair",
-    "openLoginModal": "Abrir janela de login"
+    "openLoginModal": "Abrir janela de login",
+    "loginTitle": "Entrar no BirdNET-Go",
+    "password": "Senha",
+    "passwordPlaceholder": "Digite sua senha",
+    "or": "ou",
+    "loginWithGoogle": "Entrar com Google",
+    "loginWithGithub": "Entrar com GitHub",
+    "errors": {
+      "loginFailed": "Falha no login. Por favor, verifique sua senha e tente novamente.",
+      "passwordRequired": "A senha é obrigatória.",
+      "passwordTooLong": "A senha é muito longa.",
+      "invalidCharacters": "A senha contém caracteres inválidos.",
+      "invalidCredentials": "Nome de usuário ou senha inválidos.",
+      "tooManyAttempts": "Muitas tentativas de login. Por favor, tente novamente mais tarde.",
+      "serverError": "Erro do servidor. Por favor, tente novamente mais tarde.",
+      "rateLimited": "Muitas tentativas. Por favor, aguarde {minutes} minutos antes de tentar novamente.",
+      "configurationError": "Erro de configuração de autenticação. Por favor, contate o suporte.",
+      "invalidInput": "Entrada inválida fornecida."
+    }
   },
   "dataDisplay": {
     "table": {
