@@ -1,0 +1,277 @@
+name: i18n Validation
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/static/messages/*.json'
+      - 'frontend/src/**/*.svelte'
+      - 'frontend/src/**/*.ts'
+      - 'frontend/src/lib/i18n/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/static/messages/*.json'
+      - 'frontend/src/lib/i18n/**'
+
+jobs:
+  validate-translations:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Validate translation files
+        id: validate-files
+        working-directory: frontend
+        run: |
+          # Run validation and capture JSON output (stderr goes to stderr naturally)
+          npx tsx src/lib/i18n/validateTranslations.ts --json > validation-report.json || true
+
+          # Verify JSON is valid and handle errors gracefully
+          if [ ! -f validation-report.json ]; then
+            echo '{"success":false,"error":"validation-report.json not created"}' > validation-report.json
+            echo "validation_failed=true" >> $GITHUB_OUTPUT
+            echo "### ❌ Translation File Validation Failed" >> $GITHUB_STEP_SUMMARY
+            echo "Error: Report file was not created" >> $GITHUB_STEP_SUMMARY
+          elif ! jq empty validation-report.json 2>/dev/null; then
+            echo "Invalid JSON in validation-report.json:" >> $GITHUB_STEP_SUMMARY
+            cat validation-report.json >> $GITHUB_STEP_SUMMARY
+            echo '{"success":false,"error":"Invalid JSON in validation report"}' > validation-report.json
+            echo "validation_failed=true" >> $GITHUB_OUTPUT
+          elif jq -e '.success == false' validation-report.json > /dev/null; then
+            echo "validation_failed=true" >> $GITHUB_OUTPUT
+            echo "### ❌ Translation File Validation Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "#### Summary" >> $GITHUB_STEP_SUMMARY
+            echo "- Total Errors: $(jq '.summary.totalErrors' validation-report.json)" >> $GITHUB_STEP_SUMMARY
+            echo "- Total Warnings: $(jq '.summary.totalWarnings' validation-report.json)" >> $GITHUB_STEP_SUMMARY
+            echo "- Passed Locales: $(jq '.summary.passedLocales' validation-report.json)/$(jq '.summary.totalLocales' validation-report.json)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "validation_failed=false" >> $GITHUB_OUTPUT
+            echo "### ✅ Translation File Validation Passed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check translation usage
+        id: check-usage
+        working-directory: frontend
+        continue-on-error: true
+        run: |
+          # Run usage validation and capture JSON output
+          npx tsx src/lib/i18n/validateUsage.ts --json > usage-report.json || true
+
+          # Verify JSON is valid and handle errors gracefully
+          if [ ! -f usage-report.json ]; then
+            echo '{"success":false,"error":"usage-report.json not created","summary":{"missingInTranslations":0}}' > usage-report.json
+            echo "usage_check_failed=true" >> $GITHUB_OUTPUT
+            echo "### ❌ Translation Usage Check Failed" >> $GITHUB_STEP_SUMMARY
+            echo "Error: Report file was not created" >> $GITHUB_STEP_SUMMARY
+          elif ! jq empty usage-report.json 2>/dev/null; then
+            echo "Invalid JSON in usage-report.json:" >> $GITHUB_STEP_SUMMARY
+            cat usage-report.json >> $GITHUB_STEP_SUMMARY
+            echo '{"success":false,"error":"Invalid JSON in usage report","summary":{"missingInTranslations":0}}' > usage-report.json
+            echo "usage_check_failed=true" >> $GITHUB_OUTPUT
+          elif jq -e '.success == false' usage-report.json > /dev/null; then
+            echo "usage_check_failed=true" >> $GITHUB_OUTPUT
+            echo "### ⚠️ Translation Usage Issues" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "#### Summary" >> $GITHUB_STEP_SUMMARY
+            echo "- Missing translations: $(jq '.summary.missingInTranslations' usage-report.json)" >> $GITHUB_STEP_SUMMARY
+            echo "- Unique keys used: $(jq '.summary.uniqueKeysUsed' usage-report.json)" >> $GITHUB_STEP_SUMMARY
+            echo "- Files scanned: $(jq '.summary.totalFiles' usage-report.json)" >> $GITHUB_STEP_SUMMARY
+            if [ "$(jq '.summary.missingInTranslations' usage-report.json)" -gt 0 ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "#### Missing Keys" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              jq -r '.issues[] | .key' usage-report.json | head -20 >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "usage_check_failed=false" >> $GITHUB_OUTPUT
+            echo "### ✅ All Translation Keys Valid" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Generate detailed report
+        if: steps.validate-files.outputs.validation_failed == 'true'
+        working-directory: frontend
+        run: |
+          # Run with || true to ignore exit code since we know validation failed
+          # Redirect only stdout to capture markdown, let stderr go to logs
+          npx tsx src/lib/i18n/validateTranslations.ts --report --format=markdown > translation-report.md 2>&1 || true
+
+          # Only append if file has content
+          if [ -s translation-report.md ]; then
+            cat translation-report.md >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: i18n-validation-report
+          path: |
+            frontend/validation-report.json
+            frontend/usage-report.json
+            frontend/translation-report.md
+          retention-days: 30
+
+      - name: Comment on PR
+        if: |
+          github.event_name == 'pull_request' &&
+          (steps.validate-files.outputs.validation_failed == 'true' ||
+           steps.check-usage.outputs.usage_check_failed == 'true')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            let report = '## 🌍 i18n Validation Results\n\n';
+
+            // Read and parse validation JSON report with error handling
+            let jsonReport = null;
+            try {
+              const jsonContent = fs.readFileSync('frontend/validation-report.json', 'utf8');
+              jsonReport = JSON.parse(jsonContent);
+            } catch (e) {
+              jsonReport = {
+                success: false,
+                error: 'Failed to parse validation-report.json: ' + e.message,
+                summary: { totalErrors: 0, totalWarnings: 0, passedLocales: 0, totalLocales: 0 }
+              };
+              report += `⚠️ **Error reading validation report:** ${e.message}\n\n`;
+            }
+
+            // Read and parse usage JSON report with error handling
+            let usageReport = null;
+            const usageCheckFailed = '${{ steps.check-usage.outputs.usage_check_failed }}' === 'true';
+            try {
+              const usageContent = fs.readFileSync('frontend/usage-report.json', 'utf8');
+              usageReport = JSON.parse(usageContent);
+            } catch (e) {
+              usageReport = {
+                success: false,
+                error: 'Failed to parse usage-report.json: ' + e.message,
+                summary: { missingInTranslations: 0, uniqueKeysUsed: 0, totalFiles: 0 },
+                issues: []
+              };
+              if (usageCheckFailed) {
+                report += `⚠️ **Error reading usage report:** ${e.message}\n\n`;
+              }
+            }
+
+            report += `### Summary\n\n`;
+            report += `- **Translation Files:** ${jsonReport.success ? '✅ Passed' : '❌ Failed'}\n`;
+            report += `- **Usage Validation:** ${usageCheckFailed ? '❌ Failed' : '✅ Passed'}\n`;
+            report += `- **Total Errors:** ${jsonReport.summary.totalErrors || 0}\n`;
+            report += `- **Total Warnings:** ${jsonReport.summary.totalWarnings || 0}\n`;
+            report += `- **Passed Locales:** ${jsonReport.summary.passedLocales || 0}/${jsonReport.summary.totalLocales || 0}\n\n`;
+
+            // Add usage validation results
+            if (usageCheckFailed && usageReport) {
+              report += `### ❌ Translation Usage Issues\n\n`;
+              report += `**Missing Translations:** ${usageReport.summary.missingInTranslations || 0}\n\n`;
+              if (usageReport.issues && usageReport.issues.length > 0) {
+                report += `Keys used in code but missing from \`en.json\`:\n\n`;
+                report += `\`\`\`\n`;
+                const topIssues = usageReport.issues.slice(0, 20);
+                topIssues.forEach(issue => {
+                  report += `${issue.key}\n`;
+                });
+                if (usageReport.issues.length > 20) {
+                  report += `... and ${usageReport.issues.length - 20} more\n`;
+                }
+                report += `\`\`\`\n\n`;
+              }
+            }
+
+            if (jsonReport.errors.length > 0) {
+              report += `### ❌ Translation File Errors (${jsonReport.errors.length})\n\n`;
+              report += `<details><summary>Click to expand</summary>\n\n`;
+
+              const errorsByType = jsonReport.errors.reduce((acc, err) => {
+                acc[err.type] = acc[err.type] || [];
+                acc[err.type].push(err);
+                return acc;
+              }, {});
+
+              for (const [type, errors] of Object.entries(errorsByType)) {
+                report += `#### ${type.replace(/_/g, ' ').toUpperCase()}\n\n`;
+                errors.slice(0, 10).forEach(err => {
+                  report += `- **${err.locale}**: \`${err.key}\`\n`;
+                  report += `  - ${err.message}\n`;
+                  report += `  - 💡 Suggested fix: ${err.suggestedFix}\n\n`;
+                });
+                if (errors.length > 10) {
+                  report += `_... and ${errors.length - 10} more errors of this type_\n\n`;
+                }
+              }
+
+              report += `</details>\n\n`;
+            }
+
+            report += `\n📊 [View detailed report](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n`;
+
+            // Post comment
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });
+
+      - name: Fail if validation failed
+        if: |
+          steps.validate-files.outputs.validation_failed == 'true' ||
+          steps.check-usage.outputs.usage_check_failed == 'true'
+        working-directory: frontend
+        run: |
+          echo ""
+          echo "════════════════════════════════════════════════════════"
+          echo "❌ i18n Validation Failed"
+          echo "════════════════════════════════════════════════════════"
+          echo ""
+
+          if [ "${{ steps.validate-files.outputs.validation_failed }}" = "true" ]; then
+            echo "📋 Translation File Validation:"
+            if [ -f validation-report.json ]; then
+              ERRORS=$(jq '.summary.totalErrors // 0' validation-report.json)
+              WARNINGS=$(jq '.summary.totalWarnings // 0' validation-report.json)
+              PASSED=$(jq '.summary.passedLocales // 0' validation-report.json)
+              TOTAL=$(jq '.summary.totalLocales // 0' validation-report.json)
+              echo "   • Errors: $ERRORS"
+              echo "   • Warnings: $WARNINGS"
+              echo "   • Passed: $PASSED/$TOTAL locales"
+            else
+              echo "   • Report file not available"
+            fi
+            echo ""
+          fi
+
+          if [ "${{ steps.check-usage.outputs.usage_check_failed }}" = "true" ]; then
+            echo "🔍 Translation Usage Validation:"
+            if [ -f usage-report.json ]; then
+              MISSING=$(jq '.summary.missingInTranslations // 0' usage-report.json)
+              USED=$(jq '.summary.uniqueKeysUsed // 0' usage-report.json)
+              echo "   • Missing translations: $MISSING keys"
+              echo "   • Keys used in code: $USED"
+            else
+              echo "   • Report file not available"
+            fi
+            echo ""
+          fi
+
+          echo "📊 View detailed reports in the artifacts or step summary above."
+          echo ""
+          exit 1

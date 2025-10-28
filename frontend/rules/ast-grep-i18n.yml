@@ -1,0 +1,12 @@
+ruleDirs: []
+rules:
+  - id: i18n-extract-keys
+    message: 'Translation key usage detected'
+    severity: info
+    language: typescript
+    rule:
+      any:
+        - pattern: t('$KEY')
+        - pattern: t("$KEY")
+        - pattern: t('$KEY', $PARAMS)
+        - pattern: t("$KEY", $PARAMS)
