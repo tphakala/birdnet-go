@@ -368,9 +368,9 @@ func logInitializationSuccess(settings *conf.Settings, deferredCount int) {
 
 // generateErrorTitle creates a meaningful error title for Sentry based on error type and component
 // This function parses common runtime errors and panic messages to create human-readable titles
-func generateErrorTitle(err error, component string) string {
-	errMsg := err.Error()
-	errorType := parseErrorType(errMsg)
+// IMPORTANT: Pass the scrubbed error message to prevent PII leakage in Sentry titles
+func generateErrorTitle(scrubbedErrorMsg, component string) string {
+	errorType := parseErrorType(scrubbedErrorMsg)
 
 	// Build title with component context
 	if component != "" && component != "unknown" {
@@ -381,46 +381,60 @@ func generateErrorTitle(err error, component string) string {
 }
 
 // parseErrorType extracts a human-readable error type from the error message
+// Uses case-insensitive matching for robustness and trims multi-line content
 func parseErrorType(errMsg string) string {
+	// Normalize for case-insensitive matching
+	lower := strings.ToLower(errMsg)
+
 	// Check for common runtime panic patterns
 	switch {
-	case strings.Contains(errMsg, "nil pointer dereference"):
+	case strings.Contains(lower, "nil pointer dereference"):
 		return "Nil Pointer Dereference"
-	case strings.Contains(errMsg, "index out of range"):
+	case strings.Contains(lower, "index out of range"):
 		return "Index Out of Range"
-	case strings.Contains(errMsg, "slice bounds out of range"):
+	case strings.Contains(lower, "slice bounds out of range"):
 		return "Slice Bounds Out of Range"
-	case strings.Contains(errMsg, "integer divide by zero"):
+	case strings.Contains(lower, "integer divide by zero"):
 		return "Integer Divide by Zero"
-	case strings.Contains(errMsg, "invalid memory address"):
+	case strings.Contains(lower, "invalid memory address"):
 		return "Invalid Memory Access"
-	case strings.Contains(errMsg, "send on closed channel"):
+	case strings.Contains(lower, "send on closed channel"):
 		return "Send on Closed Channel"
-	case strings.Contains(errMsg, "close of closed channel"):
+	case strings.Contains(lower, "close of closed channel"):
 		return "Close of Closed Channel"
-	case strings.Contains(errMsg, "concurrent map"):
+	case strings.Contains(lower, "concurrent map"):
 		// Check for "read" first to handle "concurrent map read and map write"
-		if strings.Contains(errMsg, "read") {
+		if strings.Contains(lower, "read") {
 			return "Concurrent Map Access"
 		}
-		if strings.Contains(errMsg, "write") {
+		if strings.Contains(lower, "write") {
 			return "Concurrent Map Write"
 		}
 		return "Concurrent Map Access"
-	case strings.Contains(errMsg, "interface conversion"):
-		if strings.Contains(errMsg, "is nil") {
+	case strings.Contains(lower, "interface conversion"):
+		if strings.Contains(lower, "is nil") {
 			return "Interface Conversion: Nil Value"
 		}
 		return "Interface Conversion Failed"
-	case strings.HasPrefix(errMsg, "panic:"):
-		// Extract panic message after "panic: "
-		panicMsg := strings.TrimPrefix(errMsg, "panic: ")
+	case strings.HasPrefix(lower, "panic:"):
+		// Extract panic message after "panic: " and trim at newline to avoid stack traces
+		const panicPrefix = "panic: "
+		panicMsg := errMsg[len(panicPrefix):]
+		// Trim at first newline to exclude stack traces
+		if idx := strings.IndexByte(panicMsg, '\n'); idx >= 0 {
+			panicMsg = panicMsg[:idx]
+		}
+		// Truncate if still too long
 		if len(panicMsg) > 50 {
 			panicMsg = panicMsg[:50] + "..."
 		}
 		return fmt.Sprintf("Panic: %s", panicMsg)
 	default:
 		// For unknown errors, use a generic title
+		// Trim at first newline
+		if idx := strings.IndexByte(errMsg, '\n'); idx >= 0 {
+			errMsg = errMsg[:idx]
+		}
 		// Truncate very long messages
 		if len(errMsg) > 60 {
 			return errMsg[:60] + "..."
@@ -471,7 +485,7 @@ func CaptureError(err error, component string) {
 		}
 	}
 
-	// Create a scrubbed error for privacy
+	// Create a scrubbed error for privacy - this prevents PII leakage
 	scrubbedErrorMsg := privacy.ScrubMessage(err.Error())
 
 	// Log the error being sent (privacy-safe)
@@ -483,8 +497,8 @@ func CaptureError(err error, component string) {
 	)
 
 	sentry.WithScope(func(scope *sentry.Scope) {
-		// Generate meaningful error title for better grouping and readability
-		errorTitle := generateErrorTitle(err, component)
+		// Generate meaningful error title from scrubbed message to prevent PII leakage
+		errorTitle := generateErrorTitle(scrubbedErrorMsg, component)
 
 		scope.SetTag("component", component)
 		scope.SetTag("error_title", errorTitle)
