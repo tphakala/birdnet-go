@@ -11,7 +11,11 @@
     "search": "Rechercher",
     "filter": "Filtrer",
     "sort": "Trier",
-    "actions": "Actions",
+    "done": "Terminé",
+    "actions": {
+      "download": "Télécharger",
+      "review": "Réviser"
+    },
     "settings": "Paramètres",
     "close": "Fermer",
     "back": "Retour",
@@ -42,6 +46,7 @@
       "yes": "Oui",
       "no": "Non",
       "ok": "OK",
+      "clear": "Effacer",
       "edit-config": "Modifier la configuration",
       "add-action": "Ajouter une action",
       "learnMore": "En savoir plus"
@@ -102,7 +107,20 @@
       "downloadCsv": "Télécharger la liste des espèces au format CSV",
       "visitEbirdLink": "Ouvrir eBird.org dans un nouvel onglet",
       "learnEbirdTaxonomyLink": "Ouvrir la taxonomie eBird dans un nouvel onglet",
+      "datePickerCalendar": "Calendrier de sélection de date",
+      "selectDate": "Sélectionner une date",
+      "previousMonth": "Mois précédent",
+      "nextMonth": "Mois suivant",
+      "selectToday": "Sélectionner aujourd'hui",
+      "dateSelected": "Date sélectionnée : {date}",
       "calendarNavigation": "Navigation du calendrier : utilisez les flèches pour vous déplacer, Entrée pour sélectionner, Échap pour fermer"
+    },
+    "labels": {
+      "confidence": "Confiance"
+    },
+    "values": {
+      "yes": "Oui",
+      "no": "Non"
     },
     "modal": {
       "confirmAction": "Confirmer l'action",
@@ -130,11 +148,21 @@
         "addComment": "Ajouter un commentaire",
         "hideComment": "Masquer le commentaire",
         "commentPlaceholder": "Ajoutez un commentaire à propos de cette détection...",
-        "commentCount": "({chars} caractères)"
+        "commentCount": "({chars} caractères)",
+        "chars": "caractères",
+        "commentsLabel": "Commentaires",
+        "currentStatusTitle": "Statut actuel",
+        "detectionStatusTitle": "Statut de détection",
+        "lockLabel": "Statut de verrouillage",
+        "reviewLabel": "Statut d'examen",
+        "saveReview": "Enregistrer l'examen"
       },
       "errors": {
         "saveFailed": "Échec de l'enregistrement de l'examen. Veuillez réessayer.",
-        "noAudio": "Aucun enregistrement audio disponible pour cette détection."
+        "noAudio": "Aucun enregistrement audio disponible pour cette détection.",
+        "commentFailed": "Échec de l'enregistrement du commentaire. Veuillez réessayer.",
+        "lockStatusFailed": "Échec de la mise à jour du statut de verrouillage. Veuillez réessayer.",
+        "verificationFailed": "Échec de la mise à jour du statut de vérification. Veuillez réessayer."
       }
     }
   },
@@ -377,6 +405,12 @@
         "biHourlyDetections": "{count} détections de {startHour}h00 à {endHour}h00 - Cliquer pour voir",
         "sixHourlyDetections": "{count} détections de {startHour}h00 à {endHour}h00 - Cliquer pour voir"
       },
+      "loading": {
+        "preparing": "Préparation des données...",
+        "fetching": "Récupération des détections...",
+        "error": "Échec du chargement des données",
+        "complete": "Données chargées avec succès"
+      },
       "noSpecies": "Aucune espèce détectée à cette date"
     },
     "recentDetections": {
@@ -476,13 +510,57 @@
     },
     "row": {
       "viewDetails": "Voir les détails pour {species}"
+    },
+    "status": {
+      "locked": "Verrouillé"
+    },
+    "table": {
+      "caption": "Liste des détections d'oiseaux avec date, espèce, confiance et informations de statut"
+    },
+    "media": {
+      "title": "Enregistrement et spectrogramme"
+    },
+    "tabs": {
+      "overview": "Vue d'ensemble",
+      "taxonomy": "Taxonomie",
+      "history": "Historique",
+      "notes": "Notes"
+    },
+    "environmental": {
+      "title": "Conditions environnementales"
+    },
+    "metadata": {
+      "title": "Métadonnées de détection",
+      "source": "Source",
+      "duration": "Durée",
+      "status": "Statut",
+      "locked": "Verrouillé"
+    },
+    "history": {
+      "title": "Historique de détection",
+      "comingSoon": "Suivi de l'historique à venir..."
+    },
+    "notes": {
+      "title": "Notes et commentaires",
+      "noComments": "Aucun commentaire ou note pour cette détection."
+    }
+  },
+  "species": {
+    "rarity": {
+      "title": "Rareté de l'espèce"
+    },
+    "taxonomy": {
+      "hierarchy": "Classification taxonomique",
+      "subspecies": "Sous-espèces",
+      "noData": "Aucune donnée taxonomique disponible."
     }
   },
   "system": {
     "title": "Tableau de bord système",
     "refreshData": "Actualiser les données",
     "aria": {
-      "refreshData": "Actualiser les données système"
+      "refreshData": "Actualiser les données système",
+      "dashboard": "Tableau de bord système avec métriques de performance et informations"
     },
     "systemInfo": {
       "title": "Informations système",
@@ -635,6 +713,7 @@
     "loading": "Chargement des paramètres...",
     "sections": {
       "node": "Paramètres principaux",
+      "userinterface": "Interface utilisateur",
       "audio": "Paramètres audio",
       "filters": "Filtres de détection",
       "integration": "Intégrations",
@@ -793,20 +872,42 @@
         "userInterface": {
           "title": "Paramètres de l'interface utilisateur",
           "description": "Personnaliser l'interface utilisateur",
+          "interface": {
+            "title": "Paramètres d'interface",
+            "description": "Choisissez votre langue préférée et la version de l'interface",
+            "locale": {
+              "label": "Langue d'affichage",
+              "helpText": "Sélectionnez la langue de l'interface utilisateur"
+            },
+            "newUI": {
+              "label": "Utiliser l'interface moderne",
+              "helpText": "Activer la nouvelle interface basée sur Svelte avec des performances et fonctionnalités améliorées. Lorsque désactivée, utilise l'interface classique HTMX."
+            }
+          },
           "language": {
             "title": "Langue",
+            "description": "Configurer la langue d'affichage de l'interface utilisateur",
             "locale": {
               "label": "Langue de l'interface",
               "helpText": "Sélectionnez la langue de l'interface utilisateur"
             }
           },
           "dashboard": {
-            "title": "Tableau de bord",
+            "title": "Affichage du tableau de bord",
+            "description": "Configurer l'affichage des détections sur le tableau de bord",
+            "general": {
+              "title": "Paramètres généraux"
+            },
             "summaryLimit": {
               "label": "Nombre maximum d'espèces dans le tableau de résumé quotidien",
               "helpText": "Nombre maximum d'espèces affichées dans le tableau de résumé quotidien (valeur entre 10 et 1000)"
             },
+            "newUI": {
+              "label": "Utiliser la nouvelle interface utilisateur",
+              "helpText": "Activer la redirection de l'ancienne interface HTMX vers la nouvelle interface Svelte"
+            },
             "thumbnails": {
+              "title": "Affichage des miniatures",
               "summary": {
                 "label": "Afficher les miniatures dans le tableau de résumé quotidien",
                 "helpText": "Activer pour afficher les miniatures des espèces détectées dans le tableau de résumé quotidien"
@@ -976,8 +1077,8 @@
     },
     "notifications": {
       "sections": {
-        "test": {
-          "title": "Notifications de test",
+        "testing": {
+          "title": "Test des notifications",
           "description": "Envoyez des notifications de test pour vérifier que votre système de notifications fonctionne correctement"
         },
         "info": {
@@ -1066,7 +1167,10 @@
       },
       "speciesNamePlaceholder": "Nom de l'espèce",
       "typeSpeciesName": "Tapez le nom de l'espèce...",
-      "dogBarkSpeciesList": "Liste des espèces d'aboiement de chien"
+      "dogBarkSpeciesList": "Liste des espèces d'aboiement de chien",
+      "errors": {
+        "speciesLoadFailed": "Échec du chargement de la liste des espèces. Veuillez réessayer."
+      }
     },
     "integration": {
       "birdweather": {
@@ -1175,12 +1279,6 @@
           "units": {
             "label": "Unités",
             "helpText": "Sélectionnez les unités pour la température et la vitesse du vent (m = Métrique, e = Impérial, h = Hybride UK)."
-          },
-          "test": {
-            "button": "Tester la connexion Wunderground",
-            "loading": "Test en cours...",
-            "description": "Tester la connexion au fournisseur Wunderground",
-            "inProgress": "Test en cours..."
           }
         },
         "notes": {
@@ -1221,15 +1319,19 @@
         "description": "Définir la source de capture audio, carte son ou flux RTSP",
         "soundCardSource": "Source audio",
         "audioSourceLabel": "Source audio (nécessite un redémarrage de l'application)",
+        "audioSourceHelp": "Sélectionnez le périphérique d'entrée audio pour la détection des sons d'oiseaux. Les modifications nécessitent un redémarrage de l'application.",
         "noSoundCardCapture": "Aucune carte son disponible pour la capture",
         "rtspSource": "Source RTSP",
         "rtspTransportLabel": "Protocole de transport RTSP",
-        "rtspUrlsLabel": "URLs de flux RTSP"
+        "rtspTransportHelp": "TCP est plus fiable mais peut avoir une latence plus élevée. UDP est plus rapide mais peut subir des pertes de paquets sur les réseaux de mauvaise qualité.",
+        "rtspUrlsLabel": "URLs de flux RTSP",
+        "rtspUrlsHelp": "Entrez une ou plusieurs URLs de flux RTSP pour les sources audio réseau. Format : rtsp://ip:port/flux. Note : Les identifiants d'authentification doivent être configurés séparément dans les paramètres de votre serveur RTSP pour des raisons de sécurité."
       },
       "audioFilters": {
         "title": "Filtres audio",
         "description": "Configurer les filtres de traitement audio",
         "enableEqualizer": "Activer l'égaliseur audio",
+        "enableEqualizerHelp": "Appliquer un filtrage de fréquence pour améliorer la détection des chants d'oiseaux en réduisant les bruits et fréquences indésirables.",
         "filterType": "Type de filtre",
         "newFilterType": "Nouveau type de filtre",
         "selectFilterType": "Sélectionner le type de filtre",
@@ -1237,23 +1339,29 @@
         "remove": "Supprimer",
         "frequencyResponse": "Réponse en fréquence",
         "cutoffFrequency": "Fréquence de coupure",
+        "cutoffFrequencyHelp": "Fréquence à laquelle le filtre commence à atténuer les signaux. Les chants d'oiseaux se situent généralement entre 1 et 10 kHz.",
         "qFactor": "Facteur Q",
+        "qFactorHelp": "Le facteur de qualité contrôle la netteté du filtre. Des valeurs faibles (0,1-1) créent des pentes douces, des valeurs élevées (1-10) créent des coupures plus abruptes.",
         "gain": "Gain",
+        "gainHelp": "Niveau d'amplification ou d'atténuation en décibels (dB).",
         "attenuation": "Atténuation",
+        "attenuationHelp": "Taux de décroissance du filtre. Des valeurs plus élevées fournissent une atténuation plus abrupte des fréquences filtrées.",
         "attenuationLevels": {
           "0db": "0dB",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
           "48db": "48dB"
-        }
+        },
+        "filterHelp": "Ajoutez plusieurs filtres pour façonner la réponse en fréquence pour une détection optimale des oiseaux dans votre environnement."
       },
       "soundLevelMonitoring": {
         "title": "Surveillance du niveau sonore",
         "description": "Surveiller et signaler les niveaux sonores environnementaux",
         "enable": "Activer la surveillance du niveau sonore",
+        "enableHelp": "Suivre les niveaux de bruit ambiant pour comprendre votre environnement d'enregistrement et corréler avec les modèles d'activité des oiseaux.",
         "intervalLabel": "Intervalle de mesure (secondes)",
-        "intervalHelp": "Fréquence de rapport des mesures du niveau sonore",
+        "intervalHelp": "Fréquence de mesure et de rapport des niveaux sonores. Des valeurs plus faibles fournissent des données plus granulaires mais utilisent plus de ressources. Minimum 5 secondes, recommandé 60 secondes.",
         "dataOutputTitle": "Sortie des données de niveau sonore",
         "dataOutputDescription": "Lorsqu'activé, les mesures du niveau sonore sont publiées via :",
         "mqttTopic": "Topic MQTT :",
@@ -1265,23 +1373,48 @@
         "description": "Configurer la capture et le traitement des clips audio pour les chants d'oiseaux identifiés"
       },
       "audioExport": {
-        "title": "Export audio",
-        "description": "Configurer l'enregistrement des clips audio pour les chants d'oiseaux identifiés",
         "enable": "Activer la capture audio",
         "enableHelp": "Enregistrer des clips audio des chants d'oiseaux détectés pour révision, partage ou création de jeux de données personnalisés.",
-        "enableDebug": "Activer le mode débogage",
+        "captureSettings": "Paramètres de capture",
+        "lengthLabel": "Durée de capture",
+        "lengthHelp": "Durée d'audio à capturer pour chaque détection (10-60 secondes). Des clips plus longs fournissent plus de contexte mais utilisent plus d'espace de stockage.",
+        "preCaptureLabel": "Tampon de pré-détection",
+        "preCaptureHelp": "Secondes d'audio à inclure avant la détection de l'oiseau (0-{max} secondes). Garantit que le chant complet de l'oiseau est capturé depuis son début.",
+        "gainLabel": "Gain audio",
+        "gainHelp": "Amplification audio pour les clips enregistrés en décibels (0 à 20 dB). Rend les clips audio enregistrés plus forts pour une écoute plus facile. N'affecte pas la détection. 0 dB signifie aucune amplification.",
+        "normalization": "Normalisation audio",
+        "normalizationEnable": "Activer la normalisation de volume",
+        "normalizationHelp": "Ajuster automatiquement les niveaux audio selon la norme de diffusion EBU R128 pour un volume de lecture cohérent sur tous les clips.",
+        "targetLUFSLabel": "Volume cible (LUFS)",
+        "targetLUFSHelp": "Cible de volume intégré en LUFS (Loudness Units relative to Full Scale). -23 LUFS est la norme de diffusion EBU R128. Plage : -40 à -10 LUFS.",
+        "loudnessRangeLabel": "Plage de volume (LU)",
+        "loudnessRangeHelp": "Variation maximale de volume dans le clip (0-20 LU). Des valeurs plus faibles créent un volume plus cohérent mais peuvent réduire la dynamique.",
+        "truePeakLabel": "Limite de pic réel (dBTP)",
+        "truePeakHelp": "Niveau de pic réel maximal pour éviter l'écrêtage numérique (-10 à 0 dBTP). -2 dBTP fournit une marge de sécurité pour la plupart des systèmes de lecture.",
+        "normalizationNote": "Norme EBU R128",
+        "normalizationNoteDescription": "La normalisation audio suit la norme de diffusion EBU R128, garantissant des niveaux de lecture cohérents sur différents appareils et évitant l'écrêtage.",
+        "fileSettings": "Paramètres de fichier",
         "pathLabel": "Chemin d'export",
-        "typeLabel": "Type d'export",
-        "bitrateLabel": "Débit (bitrate)"
+        "pathHelp": "Répertoire où les clips audio seront enregistrés. Les chemins relatifs sont par rapport au répertoire de l'application. Exemple : 'clips/' ou '/var/audio/birds/'",
+        "typeLabel": "Format d'export",
+        "typeHelp": "Format audio pour les clips enregistrés. WAV et FLAC sont sans perte (meilleure qualité, fichiers plus volumineux). MP3, AAC et Opus sont avec perte (fichiers plus petits, légère perte de qualité).",
+        "bitrateLabel": "Débit",
+        "bitrateHelp": "Débit de compression audio pour les formats avec perte. Plage : {min}-{max} kbps. Des valeurs plus élevées offrent une meilleure qualité mais des fichiers plus volumineux.",
+        "losslessNote": "Les formats sans perte préservent la qualité audio originale sans artefacts de compression."
       },
       "audioClipRetention": {
         "title": "Rétention des clips audio",
         "description": "Configurer le nettoyage des clips audio",
         "policyLabel": "Politique de rétention",
+        "policyHelp": "Choisissez comment les clips audio sont automatiquement supprimés. Aucune : conserver tous les clips. Âge : supprimer les clips plus anciens que spécifié. Utilisation : supprimer les clips les plus anciens lorsque l'utilisation du disque dépasse la limite.",
         "maxAgeLabel": "Âge maximum",
-        "maxUsageLabel": "Utilisation maximale (pourcentage)",
-        "minClipsLabel": "Nombre minimum de clips",
+        "maxAgeHelp": "Supprimer les clips audio plus anciens que cette durée. Format : nombre suivi de l'unité (h=heures, d=jours, w=semaines, m=mois). Exemples : '7d' pour 7 jours, '4w' pour 4 semaines.",
+        "maxUsageLabel": "Utilisation maximale du disque",
+        "maxUsageHelp": "Supprimer les clips les plus anciens lorsque le répertoire audio utilise plus que ce pourcentage de l'espace disque disponible.",
+        "minClipsLabel": "Clips minimum par espèce",
+        "minClipsHelp": "Toujours conserver au moins ce nombre de clips pour chaque espèce d'oiseau, quel que soit l'âge ou l'utilisation du disque. Aide à préserver les enregistrements rares.",
         "keepSpectrograms": "Conserver les images de spectrogramme",
+        "keepSpectrogramsHelp": "Conserver les images de spectrogramme même lorsque les clips audio sont supprimés. Les spectrogrammes utilisent moins d'espace et fournissent une référence visuelle.",
         "policies": {
           "none": "Aucune",
           "age": "Âge",
@@ -1304,6 +1437,11 @@
         "highpass": "Filtre passe-haut",
         "bandpass": "Filtre passe-bande",
         "bandstop": "Filtre coupe-bande"
+      },
+      "errors": {
+        "devicesLoadFailed": "Échec du chargement des périphériques audio. Veuillez vérifier les permissions système.",
+        "invalidBitrate": "Valeur de débit invalide",
+        "invalidRetentionPolicy": "Politique de rétention invalide"
       }
     },
     "security": {
@@ -1454,7 +1592,10 @@
       "addSpeciesToExclude": "Ajouter des espèces à exclure",
       "addSpeciesToExcludeLabel": "Ajouter de nouvelles espèces à exclure",
       "commandPathPlaceholder": "/chemin/vers/votre/commande",
-      "parametersPlaceholder": "Les paramètres apparaîtront ici"
+      "parametersPlaceholder": "Les paramètres apparaîtront ici",
+      "errors": {
+        "speciesLoadFailed": "Échec du chargement de la liste des espèces. Veuillez réessayer."
+      }
     },
     "database": {
       "sqlitePlaceholder": "Entrez le chemin de la base de données SQLite",
@@ -1465,7 +1606,25 @@
   "auth": {
     "login": "Connexion",
     "logout": "Déconnexion",
-    "openLoginModal": "Ouvrir la fenêtre de connexion"
+    "openLoginModal": "Ouvrir la fenêtre de connexion",
+    "loginTitle": "Connexion à BirdNET-Go",
+    "password": "Mot de passe",
+    "passwordPlaceholder": "Entrez votre mot de passe",
+    "or": "ou",
+    "loginWithGoogle": "Se connecter avec Google",
+    "loginWithGithub": "Se connecter avec GitHub",
+    "errors": {
+      "loginFailed": "Échec de la connexion. Veuillez vérifier votre mot de passe et réessayer.",
+      "passwordRequired": "Le mot de passe est requis.",
+      "passwordTooLong": "Le mot de passe est trop long.",
+      "invalidCharacters": "Le mot de passe contient des caractères invalides.",
+      "invalidCredentials": "Nom d'utilisateur ou mot de passe invalide.",
+      "tooManyAttempts": "Trop de tentatives de connexion. Veuillez réessayer plus tard.",
+      "serverError": "Une erreur serveur s'est produite. Veuillez réessayer plus tard.",
+      "rateLimited": "Trop de tentatives. Veuillez attendre {minutes} minutes avant de réessayer.",
+      "configurationError": "Erreur de configuration de l'authentification. Veuillez contacter le support.",
+      "invalidInput": "Entrée invalide fournie."
+    }
   },
   "dataDisplay": {
     "table": {
