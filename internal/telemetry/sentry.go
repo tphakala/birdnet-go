@@ -6,9 +6,11 @@ import (
 	"log"
 	"log/slog"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -364,6 +366,139 @@ func logInitializationSuccess(settings *conf.Settings, deferredCount int) {
 	}
 }
 
+// generateErrorTitle creates a meaningful error title for Sentry based on error type and component
+// This function parses common runtime errors and panic messages to create human-readable titles
+// IMPORTANT: Pass the scrubbed error message to prevent PII leakage in Sentry titles
+func generateErrorTitle(scrubbedErrorMsg, component string) string {
+	errorType := parseErrorType(scrubbedErrorMsg)
+
+	// Normalize component: trim whitespace and check for "unknown" case-insensitively
+	comp := strings.TrimSpace(component)
+	if comp != "" && !strings.EqualFold(comp, "unknown") {
+		return fmt.Sprintf("%s: %s", titleCaseComponent(comp), errorType)
+	}
+
+	return errorType
+}
+
+// parseErrorType extracts a human-readable error type from the error message
+// Uses case-insensitive matching for robustness and trims multi-line content
+func parseErrorType(errMsg string) string {
+	// Normalize for case-insensitive matching
+	lower := strings.ToLower(errMsg)
+
+	// Check for common runtime panic patterns
+	switch {
+	case strings.Contains(lower, "nil pointer dereference"):
+		return "Nil Pointer Dereference"
+	case strings.Contains(lower, "index out of range"):
+		return "Index Out of Range"
+	case strings.Contains(lower, "slice bounds out of range"):
+		return "Slice Bounds Out of Range"
+	case strings.Contains(lower, "integer divide by zero"):
+		return "Integer Divide by Zero"
+	case strings.Contains(lower, "invalid memory address"):
+		return "Invalid Memory Access"
+	case strings.Contains(lower, "send on closed channel"):
+		return "Send on Closed Channel"
+	case strings.Contains(lower, "close of closed channel"):
+		return "Close of Closed Channel"
+	case strings.Contains(lower, "concurrent map"):
+		// Check for "read" first to handle "concurrent map read and map write"
+		if strings.Contains(lower, "read") {
+			return "Concurrent Map Access"
+		}
+		if strings.Contains(lower, "write") {
+			return "Concurrent Map Write"
+		}
+		return "Concurrent Map Access"
+	case strings.Contains(lower, "interface conversion"):
+		if strings.Contains(lower, "is nil") {
+			return "Interface Conversion: Nil Value"
+		}
+		return "Interface Conversion Failed"
+	case strings.HasPrefix(lower, "panic:"):
+		// Extract panic message after "panic:" and handle optional space
+		const panicPrefix = "panic:"
+		panicMsg := errMsg[len(panicPrefix):]
+		// Trim leading whitespace (handles both "panic: " and "panic:")
+		panicMsg = strings.TrimLeft(panicMsg, " \t")
+		// Trim at first newline to exclude stack traces
+		if idx := strings.IndexByte(panicMsg, '\n'); idx >= 0 {
+			panicMsg = panicMsg[:idx]
+		}
+		// Truncate if still too long
+		if len(panicMsg) > 50 {
+			panicMsg = panicMsg[:50] + "..."
+		}
+		return fmt.Sprintf("Panic: %s", panicMsg)
+	default:
+		// For unknown errors, use a generic title
+		// Trim at first newline
+		if idx := strings.IndexByte(errMsg, '\n'); idx >= 0 {
+			errMsg = errMsg[:idx]
+		}
+		// Truncate very long messages
+		if len(errMsg) > 60 {
+			return errMsg[:60] + "..."
+		}
+		return errMsg
+	}
+}
+
+// titleCaseComponent converts component names to title case for better readability
+// Examples: "httpcontroller" -> "HTTP Controller", "datastore" -> "Datastore"
+// Uses prefix-only matching to avoid mid-word replacements (e.g., "capistrano" stays intact)
+func titleCaseComponent(component string) string {
+	// Normalize: trim, lowercase, split on separators
+	component = strings.TrimSpace(component)
+	component = strings.ToLower(component)
+	component = strings.ReplaceAll(component, "_", " ")
+	component = strings.ReplaceAll(component, "-", " ")
+
+	words := strings.Fields(component)
+	result := make([]string, 0, len(words))
+
+	// Process each word, checking for known abbreviation prefixes
+	for _, word := range words {
+		if word == "" {
+			continue
+		}
+
+		// Check if entire word is a known abbreviation
+		switch word {
+		case "http", "rtsp", "mqtt", "api", "db":
+			result = append(result, strings.ToUpper(word))
+			continue
+		}
+
+		// Check for abbreviation prefix and handle separately
+		handled := false
+		for _, prefix := range []string{"http", "rtsp", "mqtt", "api", "db"} {
+			if !strings.HasPrefix(word, prefix) || len(word) <= len(prefix) {
+				continue
+			}
+			// Split: prefix as uppercase + remainder as title case
+			result = append(result, strings.ToUpper(prefix))
+			remainder := word[len(prefix):]
+			runes := []rune(remainder)
+			runes[0] = unicode.ToUpper(runes[0])
+			result = append(result, string(runes))
+			handled = true
+			break
+		}
+
+		if !handled {
+			// Regular title case
+			runes := []rune(word)
+			runes[0] = unicode.ToUpper(runes[0])
+			result = append(result, string(runes))
+		}
+	}
+
+	return strings.Join(result, " ")
+}
+
 // CaptureError captures an error with privacy-compliant context
 func CaptureError(err error, component string) {
 	// Skip settings check in test mode
@@ -374,7 +509,7 @@ func CaptureError(err error, component string) {
 		}
 	}
 
-	// Create a scrubbed error for privacy
+	// Create a scrubbed error for privacy - this prevents PII leakage
 	scrubbedErrorMsg := privacy.ScrubMessage(err.Error())
 
 	// Log the error being sent (privacy-safe)
@@ -386,20 +521,36 @@ func CaptureError(err error, component string) {
 	)
 
 	sentry.WithScope(func(scope *sentry.Scope) {
+		// Generate meaningful error title from scrubbed message to prevent PII leakage
+		errorTitle := generateErrorTitle(scrubbedErrorMsg, component)
+		errorType := parseErrorType(scrubbedErrorMsg)
+
 		scope.SetTag("component", component)
+		scope.SetTag("error_title", errorTitle)
+		// Add parsed error type to extras for easier filtering in Sentry
+		scope.SetExtra("error_type", errorType)
 		scope.SetContext("error", map[string]any{
 			"type":             fmt.Sprintf("%T", err),
 			"scrubbed_message": scrubbedErrorMsg,
 		})
 
-		// Create event with custom message to avoid error type prefix in title
+		// Create event with custom title to replace generic error type prefix
 		event := sentry.NewEvent()
 		event.Level = sentry.LevelError
 		event.Message = scrubbedErrorMsg
 		event.Exception = []sentry.Exception{{
-			Type:  fmt.Sprintf("%T", err),
+			Type:  errorTitle, // Use human-readable title instead of Go type
 			Value: scrubbedErrorMsg,
 		}}
+
+		// Set custom fingerprint for better grouping
+		// Exclude empty/unknown components to avoid noisy fingerprints
+		comp := strings.TrimSpace(component)
+		if comp == "" || strings.EqualFold(comp, "unknown") {
+			scope.SetFingerprint([]string{errorTitle})
+		} else {
+			scope.SetFingerprint([]string{errorTitle, comp})
+		}
 
 		sentry.CaptureEvent(event)
 	})
