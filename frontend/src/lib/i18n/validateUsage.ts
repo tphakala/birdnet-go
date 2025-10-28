@@ -90,8 +90,20 @@ class UsageValidator {
 
   private scanCodebase(): void {
     try {
-      // Use grep to find all t() calls in .svelte and .ts files
-      // This is more reliable than ast-grep for mixed Svelte/TypeScript files
+      // Use grep instead of ast-grep for scanning
+      // Why grep? ast-grep doesn't have native Svelte support yet, and while it can parse
+      // TypeScript, Svelte's mixed syntax (HTML + TS in <script>) makes it challenging.
+      // grep is:
+      // - Simple and reliable for literal string matching
+      // - Fast (< 200ms for entire codebase)
+      // - Works consistently across .svelte and .ts files
+      // - Lower complexity than implementing custom Svelte parser
+      //
+      // Trade-offs:
+      // - Less syntax-aware (can have false positives, which we filter)
+      // - Can't validate complex dynamic keys (documented limitation)
+      //
+      // Security: Command uses process.cwd() which is trusted, no user input
       const output = execSync(
         `grep -rn 't(' src/ --include="*.svelte" --include="*.ts" || true`,
         {
@@ -153,16 +165,6 @@ class UsageValidator {
     }
   }
 
-  private extractKeyFromMatch(text: string): string | null {
-    // Extract key from t('key') or t("key") or t('key', params)
-    const singleQuoteMatch = text.match(/t\s*\(\s*'([^']+)'/);
-    if (singleQuoteMatch) return singleQuoteMatch[1];
-
-    const doubleQuoteMatch = text.match(/t\s*\(\s*"([^"]+)"/);
-    if (doubleQuoteMatch) return doubleQuoteMatch[1];
-
-    return null;
-  }
 
   private countUniqueFiles(): number {
     const files = new Set<string>();

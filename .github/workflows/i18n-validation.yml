@@ -57,8 +57,20 @@ jobs:
       - name: Check translation usage
         id: check-usage
         working-directory: frontend
+        continue-on-error: true
         run: |
-          npm run i18n:check-usage || echo "usage_check_failed=true" >> $GITHUB_OUTPUT
+          npm run i18n:check-usage > usage-report.txt 2>&1 || true
+
+          # Check if there are missing translations
+          if grep -q "❌ Missing Translations" usage-report.txt; then
+            echo "usage_check_failed=true" >> $GITHUB_OUTPUT
+            echo "### ⚠️ Translation Usage Issues" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            grep -A 20 "❌ Missing Translations" usage-report.txt >> $GITHUB_STEP_SUMMARY || true
+          else
+            echo "usage_check_failed=false" >> $GITHUB_OUTPUT
+            echo "### ✅ All Translation Keys Valid" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Generate detailed report
         if: steps.validate-files.outputs.validation_failed == 'true'
@@ -80,7 +92,8 @@ jobs:
       - name: Comment on PR
         if: |
           github.event_name == 'pull_request' &&
-          steps.validate-files.outputs.validation_failed == 'true'
+          (steps.validate-files.outputs.validation_failed == 'true' ||
+           steps.check-usage.outputs.usage_check_failed == 'true')
         uses: actions/github-script@v7
         with:
           script: |
@@ -90,15 +103,32 @@ jobs:
 
             // Read JSON report
             const jsonReport = JSON.parse(fs.readFileSync('frontend/validation-report.json', 'utf8'));
+            const usageCheckFailed = '${{ steps.check-usage.outputs.usage_check_failed }}' === 'true';
 
             report += `### Summary\n\n`;
-            report += `- **Status:** ${jsonReport.success ? '✅ Passed' : '❌ Failed'}\n`;
+            report += `- **Translation Files:** ${jsonReport.success ? '✅ Passed' : '❌ Failed'}\n`;
+            report += `- **Usage Validation:** ${usageCheckFailed ? '❌ Failed' : '✅ Passed'}\n`;
             report += `- **Total Errors:** ${jsonReport.summary.totalErrors}\n`;
             report += `- **Total Warnings:** ${jsonReport.summary.totalWarnings}\n`;
             report += `- **Passed Locales:** ${jsonReport.summary.passedLocales}/${jsonReport.summary.totalLocales}\n\n`;
 
+            // Add usage validation results
+            if (usageCheckFailed) {
+              report += `### ❌ Translation Usage Issues\n\n`;
+              report += `Keys are used in code but missing from \`en.json\`:\n\n`;
+              try {
+                const usageReport = fs.readFileSync('frontend/usage-report.txt', 'utf8');
+                const missingSection = usageReport.match(/❌ Missing Translations[\s\S]*?(?=\n\n|$)/);
+                if (missingSection) {
+                  report += `\`\`\`\n${missingSection[0]}\n\`\`\`\n\n`;
+                }
+              } catch (e) {
+                report += `_Could not read usage report_\n\n`;
+              }
+            }
+
             if (jsonReport.errors.length > 0) {
-              report += `### ❌ Errors (${jsonReport.errors.length})\n\n`;
+              report += `### ❌ Translation File Errors (${jsonReport.errors.length})\n\n`;
               report += `<details><summary>Click to expand</summary>\n\n`;
 
               const errorsByType = jsonReport.errors.reduce((acc, err) => {
@@ -133,7 +163,15 @@ jobs:
             });
 
       - name: Fail if validation failed
-        if: steps.validate-files.outputs.validation_failed == 'true'
+        if: |
+          steps.validate-files.outputs.validation_failed == 'true' ||
+          steps.check-usage.outputs.usage_check_failed == 'true'
         run: |
-          echo "❌ Translation validation failed. Please fix the errors above."
+          echo "❌ i18n validation failed. Please fix the errors above."
+          if [ "${{ steps.validate-files.outputs.validation_failed }}" = "true" ]; then
+            echo "  - Translation file validation failed"
+          fi
+          if [ "${{ steps.check-usage.outputs.usage_check_failed }}" = "true" ]; then
+            echo "  - Translation usage validation failed (missing keys used in code)"
+          fi
           exit 1

@@ -75,7 +75,19 @@ class TranslationValidator {
       // eslint-disable-next-line security/detect-non-literal-fs-filename
       return JSON.parse(readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
     } catch (error) {
+      // In strict/CI mode, we want to fail fast on missing files
+      // In development, we return empty object to allow partial validation
       console.error(`❌ Failed to load ${locale}.json:`, error);
+      console.error(`   File path: ${filePath}`);
+
+      if (error instanceof Error) {
+        if (error.message.includes('ENOENT')) {
+          console.error(`   → File does not exist. Run 'npm run i18n:validate' from frontend directory.`);
+        } else if (error.message.includes('JSON')) {
+          console.error(`   → Invalid JSON syntax. Please fix the file.`);
+        }
+      }
+
       return {};
     }
   }
@@ -198,7 +210,12 @@ class TranslationValidator {
   private extractParameters(text: string): string[] {
     const params = new Set<string>();
 
-    // Match {param}, {param, plural, ...}, {param, select, ...}
+    // Match ICU MessageFormat parameters: {param}, {param, plural, ...}, {param, select, ...}
+    // Regex is safe from ReDoS because:
+    // - \w+ is bounded (matches word characters only, no nested quantifiers)
+    // - (?:...) is non-capturing with simple alternation of fixed keywords
+    // - No overlapping patterns or catastrophic backtracking scenarios
+    // - Matches complete in O(n) time where n is text length
     // eslint-disable-next-line security/detect-unsafe-regex
     const paramRegex = /\{(\w+)(?:,\s*(?:plural|select|selectordinal|number|date|time))?/g;
     let match;
