@@ -6,9 +6,11 @@ import (
 	"log"
 	"log/slog"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -364,6 +366,101 @@ func logInitializationSuccess(settings *conf.Settings, deferredCount int) {
 	}
 }
 
+// generateErrorTitle creates a meaningful error title for Sentry based on error type and component
+// This function parses common runtime errors and panic messages to create human-readable titles
+func generateErrorTitle(err error, component string) string {
+	errMsg := err.Error()
+	errorType := parseErrorType(errMsg)
+
+	// Build title with component context
+	if component != "" && component != "unknown" {
+		return fmt.Sprintf("%s: %s", titleCaseComponent(component), errorType)
+	}
+
+	return errorType
+}
+
+// parseErrorType extracts a human-readable error type from the error message
+func parseErrorType(errMsg string) string {
+	// Check for common runtime panic patterns
+	switch {
+	case strings.Contains(errMsg, "nil pointer dereference"):
+		return "Nil Pointer Dereference"
+	case strings.Contains(errMsg, "index out of range"):
+		return "Index Out of Range"
+	case strings.Contains(errMsg, "slice bounds out of range"):
+		return "Slice Bounds Out of Range"
+	case strings.Contains(errMsg, "integer divide by zero"):
+		return "Integer Divide by Zero"
+	case strings.Contains(errMsg, "invalid memory address"):
+		return "Invalid Memory Access"
+	case strings.Contains(errMsg, "send on closed channel"):
+		return "Send on Closed Channel"
+	case strings.Contains(errMsg, "close of closed channel"):
+		return "Close of Closed Channel"
+	case strings.Contains(errMsg, "concurrent map"):
+		// Check for "read" first to handle "concurrent map read and map write"
+		if strings.Contains(errMsg, "read") {
+			return "Concurrent Map Access"
+		}
+		if strings.Contains(errMsg, "write") {
+			return "Concurrent Map Write"
+		}
+		return "Concurrent Map Access"
+	case strings.Contains(errMsg, "interface conversion"):
+		if strings.Contains(errMsg, "is nil") {
+			return "Interface Conversion: Nil Value"
+		}
+		return "Interface Conversion Failed"
+	case strings.HasPrefix(errMsg, "panic:"):
+		// Extract panic message after "panic: "
+		panicMsg := strings.TrimPrefix(errMsg, "panic: ")
+		if len(panicMsg) > 50 {
+			panicMsg = panicMsg[:50] + "..."
+		}
+		return fmt.Sprintf("Panic: %s", panicMsg)
+	default:
+		// For unknown errors, use a generic title
+		// Truncate very long messages
+		if len(errMsg) > 60 {
+			return errMsg[:60] + "..."
+		}
+		return errMsg
+	}
+}
+
+// titleCaseComponent converts component names to title case for better readability
+// Examples: "httpcontroller" -> "HTTP Controller", "datastore" -> "Datastore"
+func titleCaseComponent(component string) string {
+	// Handle common abbreviations
+	component = strings.ReplaceAll(component, "http", "HTTP ")
+	component = strings.ReplaceAll(component, "rtsp", "RTSP ")
+	component = strings.ReplaceAll(component, "mqtt", "MQTT ")
+	component = strings.ReplaceAll(component, "api", "API ")
+	component = strings.ReplaceAll(component, "db", "DB ")
+
+	// Handle camelCase and snake_case
+	component = strings.ReplaceAll(component, "_", " ")
+
+	// Clean up extra spaces
+	words := strings.Fields(component)
+
+	// Capitalize first letter of each word
+	for i, word := range words {
+		if word != "" {
+			// Skip if already all uppercase (abbreviations like HTTP, API)
+			if strings.ToUpper(word) == word {
+				continue
+			}
+			runes := []rune(word)
+			runes[0] = unicode.ToUpper(runes[0])
+			words[i] = string(runes)
+		}
+	}
+
+	return strings.Join(words, " ")
+}
+
 // CaptureError captures an error with privacy-compliant context
 func CaptureError(err error, component string) {
 	// Skip settings check in test mode
@@ -386,20 +483,27 @@ func CaptureError(err error, component string) {
 	)
 
 	sentry.WithScope(func(scope *sentry.Scope) {
+		// Generate meaningful error title for better grouping and readability
+		errorTitle := generateErrorTitle(err, component)
+
 		scope.SetTag("component", component)
+		scope.SetTag("error_title", errorTitle)
 		scope.SetContext("error", map[string]any{
 			"type":             fmt.Sprintf("%T", err),
 			"scrubbed_message": scrubbedErrorMsg,
 		})
 
-		// Create event with custom message to avoid error type prefix in title
+		// Create event with custom title to replace generic error type prefix
 		event := sentry.NewEvent()
 		event.Level = sentry.LevelError
 		event.Message = scrubbedErrorMsg
 		event.Exception = []sentry.Exception{{
-			Type:  fmt.Sprintf("%T", err),
+			Type:  errorTitle, // Use human-readable title instead of Go type
 			Value: scrubbedErrorMsg,
 		}}
+
+		// Set custom fingerprint for better grouping
+		scope.SetFingerprint([]string{errorTitle, component})
 
 		sentry.CaptureEvent(event)
 	})
