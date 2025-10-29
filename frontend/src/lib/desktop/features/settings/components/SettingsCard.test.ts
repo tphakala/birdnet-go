@@ -133,7 +133,7 @@ describe('SettingsCard', () => {
       const bodyDivs = card.querySelectorAll('div');
 
       // Find the body div (contains our content)
-      const bodyDiv = Array.from(bodyDivs).find(div => div.textContent?.includes('Content'));
+      const bodyDiv = Array.from(bodyDivs).find(div => div.textContent.includes('Content'));
 
       expect(bodyDiv).toBeInTheDocument();
       // When padding is false, bodyClasses is empty string

@@ -112,9 +112,9 @@ class TranslationValidator {
 
   private getValueByPath(obj: Record<string, unknown>, path: string): unknown {
     return path.split('.').reduce((current, key) => {
-      // eslint-disable-next-line security/detect-object-injection
       return current && typeof current === 'object'
-        ? (current as Record<string, unknown>)[key]
+        ? // eslint-disable-next-line security/detect-object-injection -- Safe: key from trusted path
+          (current as Record<string, unknown>)[key]
         : undefined;
     }, obj as unknown);
   }

@@ -577,7 +577,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
         // Search within the document body, as component container not directly accessible
         const scriptElements = document.body.querySelectorAll('script');
         const maliciousScripts = Array.from(scriptElements).filter(script =>
-          script.textContent?.includes('alert("xss")')
+          script.textContent.includes('alert("xss")')
         );
         expect(maliciousScripts.length).toBe(0); // No executable scripts should exist
 

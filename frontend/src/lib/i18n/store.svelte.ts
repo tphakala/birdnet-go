@@ -192,7 +192,7 @@ export function t(key: string, params?: Record<string, unknown>): string {
   const cacheKey = `${key}:${paramsKey}:${currentLocale}`;
 
   const cached = translationCache.get(cacheKey);
-  if (cached && cached.locale === currentLocale && cached.params === paramsKey) {
+  if (cached?.locale === currentLocale && cached.params === paramsKey) {
     return cached.value;
   }
 
