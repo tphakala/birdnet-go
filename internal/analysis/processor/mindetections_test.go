@@ -272,12 +272,12 @@ func TestHelperFunctions(t *testing.T) {
 			level       int
 			shouldContain []string // Verify key phrases are present
 		}{
-			{0, []string{"No filtering", "testing", "quiet environments"}},
-			{1, []string{"Lenient", "2 confirmations", "noisy urban"}},
-			{2, []string{"Moderate", "3 confirmations", "balanced"}},
-			{3, []string{"Balanced", "5 confirmations", "original"}},
-			{4, []string{"Strict", "12 confirmations", "RPi 4+", "research"}},
-			{5, []string{"Maximum", "21 confirmations", "RPi 4+", "laboratory"}},
+			{0, []string{"No filtering", "Default", "BirdNET-Pi"}},
+			{1, []string{"Lenient", "2 confirmations", "RTSP", "surveillance"}},
+			{2, []string{"Moderate", "3 confirmations", "Balanced", "hobby"}},
+			{3, []string{"Balanced", "5 confirmations", "Original", "pre-September"}},
+			{4, []string{"Strict", "12 confirmations", "RPi 4+", "high-quality"}},
+			{5, []string{"Maximum", "21 confirmations", "RPi 4+", "professional-grade"}},
 		}
 
 		for _, tt := range tests {

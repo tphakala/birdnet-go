@@ -108,17 +108,17 @@ func getRecommendedLevelForOverlap(overlap float64) (level int, overlapSufficien
 func getLevelDescription(level int) string {
 	switch level {
 	case 0:
-		return "No filtering - accepts first detection immediately. Use for testing or very quiet environments."
+		return "No filtering - accepts first detection immediately. Default for new installs, matches BirdNET-Pi sensitivity."
 	case 1:
-		return "Lenient filtering - requires 2 confirmations. Good for very noisy urban environments."
+		return "Lenient filtering - requires 2 confirmations. Good for low-quality audio sources like RTSP surveillance cameras, webcam mics, or cheap USB microphones."
 	case 2:
-		return "Moderate filtering - requires 3 confirmations. Current default, balanced for most users."
+		return "Moderate filtering - requires 3 confirmations. Balanced for typical hobby setups with decent USB microphones."
 	case 3:
-		return "Balanced filtering - requires 5 confirmations. Restores original (pre-September 2025) behavior."
+		return "Balanced filtering - requires 5 confirmations. Original pre-September 2025 behavior, good for quality USB mics in average conditions."
 	case 4:
-		return "Strict filtering - requires 12 confirmations. Needs RPi 4+. For quiet environments and research."
+		return "Strict filtering - requires 12 confirmations. Needs RPi 4+. For high-quality microphones capturing lots of environmental detail."
 	case 5:
-		return "Maximum filtering - requires 21 confirmations. Needs RPi 4+. For laboratory settings with extreme noise."
+		return "Maximum filtering - requires 21 confirmations. Needs RPi 4+. For professional-grade microphones with high sensitivity that capture everything including wind, leaves, and distant sounds."
 	default:
 		return "Unknown filtering level"
 	}
