@@ -471,6 +471,14 @@ type FalsePositiveFilterSettings struct {
 	Level int `json:"level"` // Filtering aggressivity level (0-5): 0=Off, 1=Lenient, 2=Moderate, 3=Balanced, 4=Strict, 5=Maximum
 }
 
+// Validate checks if the filter level is within the valid range (0-5).
+func (f *FalsePositiveFilterSettings) Validate() error {
+	if f.Level < 0 || f.Level > 5 {
+		return fmt.Errorf("invalid false positive filter level %d: must be 0-5 (0=Off, 1=Lenient, 2=Moderate, 3=Balanced, 4=Strict, 5=Maximum)", f.Level)
+	}
+	return nil
+}
+
 // RealtimeSettings contains all settings related to realtime processing.
 type RealtimeSettings struct {
 	Interval            int                          `json:"interval"`            // minimum interval between log messages in seconds

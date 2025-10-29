@@ -186,6 +186,16 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	}
 
 	// Validate and log false positive filter configuration
+	if err := settings.Realtime.FalsePositiveFilter.Validate(); err != nil {
+		GetLogger().Error("Invalid false positive filter configuration",
+			"error", err,
+			"operation", "false_positive_filter_validation")
+		log.Printf("⚠️  Configuration error: %v", err)
+		log.Printf("   Falling back to default: Level 0 (Off)")
+		// Reset to safe default
+		settings.Realtime.FalsePositiveFilter.Level = 0
+	}
+
 	level := settings.Realtime.FalsePositiveFilter.Level
 	overlap := settings.BirdNET.Overlap
 	minOverlap := getMinimumOverlapForLevel(level)

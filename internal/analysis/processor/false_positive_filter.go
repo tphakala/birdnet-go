@@ -1,4 +1,4 @@
-// falsepositive.go
+// false_positive_filter.go
 package processor
 
 // getMinimumOverlapForLevel returns the minimum overlap required for each filtering level.
