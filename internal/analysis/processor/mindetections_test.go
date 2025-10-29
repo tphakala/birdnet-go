@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -181,6 +182,8 @@ func TestHelperFunctions(t *testing.T) {
 			{3, 2.4},
 			{4, 2.7},
 			{5, 2.8},
+			{99, 2.2},  // Invalid level should return default (Moderate)
+			{-1, 2.2},  // Invalid level should return default (Moderate)
 		}
 
 		for _, tt := range tests {
@@ -203,6 +206,8 @@ func TestHelperFunctions(t *testing.T) {
 			{3, 0.50},
 			{4, 0.60},
 			{5, 0.70},
+			{99, 0.30},  // Invalid level should return default (Moderate)
+			{-1, 0.30},  // Invalid level should return default (Moderate)
 		}
 
 		for _, tt := range tests {
@@ -225,6 +230,8 @@ func TestHelperFunctions(t *testing.T) {
 			{3, "Balanced"},
 			{4, "Strict"},
 			{5, "Maximum"},
+			{99, "Unknown"},  // Invalid level should return "Unknown"
+			{-1, "Unknown"},  // Invalid level should return "Unknown"
 		}
 
 		for _, tt := range tests {
@@ -247,6 +254,8 @@ func TestHelperFunctions(t *testing.T) {
 			{3, "Any (RPi 3B or better)"},
 			{4, "RPi 4 or better required"},
 			{5, "RPi 4 or better required"},
+			{99, "Unknown"},  // Invalid level should return "Unknown"
+			{-1, "Unknown"},  // Invalid level should return "Unknown"
 		}
 
 		for _, tt := range tests {
@@ -255,6 +264,41 @@ func TestHelperFunctions(t *testing.T) {
 				t.Errorf("Level %d: got hardware %q, want %q",
 					tt.level, result, tt.hardware)
 			}
+		}
+	})
+
+	t.Run("getLevelDescription", func(t *testing.T) {
+		tests := []struct {
+			level       int
+			shouldContain []string // Verify key phrases are present
+		}{
+			{0, []string{"No filtering", "testing", "quiet environments"}},
+			{1, []string{"Lenient", "2 confirmations", "noisy urban"}},
+			{2, []string{"Moderate", "3 confirmations", "balanced"}},
+			{3, []string{"Balanced", "5 confirmations", "original"}},
+			{4, []string{"Strict", "12 confirmations", "RPi 4+", "research"}},
+			{5, []string{"Maximum", "21 confirmations", "RPi 4+", "laboratory"}},
+		}
+
+		for _, tt := range tests {
+			result := getLevelDescription(tt.level)
+			if result == "" {
+				t.Errorf("Level %d: got empty description", tt.level)
+				continue
+			}
+
+			for _, phrase := range tt.shouldContain {
+				if !strings.Contains(result, phrase) {
+					t.Errorf("Level %d: description missing expected phrase %q\nGot: %s",
+						tt.level, phrase, result)
+				}
+			}
+		}
+
+		// Test invalid level
+		result := getLevelDescription(99)
+		if !strings.Contains(result, "Unknown") {
+			t.Errorf("Invalid level should return 'Unknown', got: %s", result)
 		}
 	})
 }
