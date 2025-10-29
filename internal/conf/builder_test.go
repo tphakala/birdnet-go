@@ -433,7 +433,9 @@ func TestSettingsBuilder_Build(t *testing.T) {
 func TestSettingsBuilder_Apply(t *testing.T) {
 	// Store original settings
 	originalSettings := GetSettings()
-	defer SetTestSettings(originalSettings)
+	t.Cleanup(func() {
+		SetTestSettings(originalSettings)
+	})
 
 	// Apply new settings
 	appliedSettings := NewTestSettings().
