@@ -33,6 +33,26 @@
 - `b.ResetTimer()` after benchmark setup
 - Use `t.Attr()` for test metadata (Go 1.25)
 
+### Test Cleanup Best Practices
+
+- **Use `t.Cleanup()` instead of `defer`** for test resource cleanup
+- `t.Cleanup()` runs after all defers, providing more predictable cleanup order
+- Particularly important for tests that restore global state
+- Example:
+  ```go
+  func TestWithGlobalState(t *testing.T) {
+      // ❌ Wrong - defer may run at unpredictable times
+      originalValue := GetGlobalValue()
+      defer SetGlobalValue(originalValue)
+
+      // ✅ Correct - cleanup runs after all test defers
+      originalValue := GetGlobalValue()
+      t.Cleanup(func() {
+          SetGlobalValue(originalValue)
+      })
+  }
+  ```
+
 ### Test Parallelization Guidelines
 
 - Add `t.Parallel()` to **test functions** and **subtests** for speed
