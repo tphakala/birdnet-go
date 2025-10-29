@@ -362,7 +362,7 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
           checkbox =>
             // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Logical OR is correct here for falsy value handling
             checkbox.getAttribute('id')?.includes('equalizer') ||
-            checkbox.closest('label')?.textContent?.toLowerCase().includes('equalizer')
+            checkbox.closest('label')?.textContent.toLowerCase().includes('equalizer')
         );
 
         for (const checkbox of equalizerCheckboxes) {
