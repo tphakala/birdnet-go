@@ -57,6 +57,201 @@ func logValidationWarning(err error, validationType, warningType string) {
 		Build()
 }
 
+// ValidationResult captures validation outcomes without side effects.
+// Used by pure validation functions to return validation state, errors, warnings,
+// and normalized/transformed configuration.
+type ValidationResult struct {
+	Valid      bool        // Overall validation result
+	Errors     []string    // Validation errors (fatal)
+	Warnings   []string    // Non-fatal warnings
+	Normalized interface{} // Normalized/transformed config (type matches input)
+}
+
+// ValidateBirdNETSettingsPure performs BirdNET validation without side effects.
+// Returns normalized settings and any errors/warnings.
+// This pure version enables testing without log output or settings mutation.
+//
+// The existing validateBirdNETSettings() calls this internally and handles
+// logging/mutation as side effects.
+func ValidateBirdNETSettingsPure(cfg *BirdNETConfig) ValidationResult {
+	result := ValidationResult{Valid: true, Warnings: []string{}}
+	normalized := *cfg
+
+	// Sensitivity range check
+	if cfg.Sensitivity < 0 || cfg.Sensitivity > 1.5 {
+		result.Valid = false
+		result.Errors = append(result.Errors, "BirdNET sensitivity must be between 0 and 1.5")
+	}
+
+	// Threshold range check
+	if cfg.Threshold < 0 || cfg.Threshold > 1 {
+		result.Valid = false
+		result.Errors = append(result.Errors, "BirdNET threshold must be between 0 and 1")
+	}
+
+	// Overlap range check
+	if cfg.Overlap < 0 || cfg.Overlap > 2.99 {
+		result.Valid = false
+		result.Errors = append(result.Errors, "BirdNET overlap value must be between 0 and 2.99 seconds")
+	}
+
+	// Longitude range check
+	if cfg.Longitude < -180 || cfg.Longitude > 180 {
+		result.Valid = false
+		result.Errors = append(result.Errors, "BirdNET longitude must be between -180 and 180")
+	}
+
+	// Latitude range check
+	if cfg.Latitude < -90 || cfg.Latitude > 90 {
+		result.Valid = false
+		result.Errors = append(result.Errors, "BirdNET latitude must be between -90 and 90")
+	}
+
+	// Threads check
+	if cfg.Threads < 0 {
+		result.Valid = false
+		result.Errors = append(result.Errors, "BirdNET threads must be at least 0")
+	}
+
+	// RangeFilter model check
+	if cfg.RangeFilter.Model == "" {
+		result.Valid = false
+		result.Errors = append(result.Errors, "RangeFilter model must not be empty")
+	}
+
+	// RangeFilter threshold check
+	if cfg.RangeFilter.Threshold < 0 || cfg.RangeFilter.Threshold > 1 {
+		result.Valid = false
+		result.Errors = append(result.Errors, "RangeFilter threshold must be between 0 and 1")
+	}
+
+	// Locale validation and normalization (pure transformation)
+	if cfg.Locale != "" {
+		normalizedLocale, err := NormalizeLocale(cfg.Locale)
+		if err != nil {
+			// Locale normalization fell back to default - this is a warning, not an error
+			message := fmt.Sprintf("BirdNET locale '%s' is not supported, will use fallback '%s'", cfg.Locale, normalizedLocale)
+			result.Warnings = append(result.Warnings, message)
+		}
+		// Update the normalized locale
+		normalized.Locale = normalizedLocale
+	}
+
+	result.Normalized = &normalized
+	return result
+}
+
+// ValidateBirdweatherSettingsPure performs Birdweather validation without side effects.
+// Returns validation result with normalized settings.
+func ValidateBirdweatherSettingsPure(settings *BirdweatherSettings) ValidationResult {
+	result := ValidationResult{Valid: true, Warnings: []string{}}
+	normalized := *settings
+
+	if settings.Enabled {
+		// Check if ID is provided when enabled
+		if settings.ID == "" {
+			result.Valid = false
+			result.Errors = append(result.Errors, "Birdweather ID is required when enabled")
+			// Suggest disabling
+			normalized.Enabled = false
+			result.Warnings = append(result.Warnings, "Birdweather will be disabled due to missing ID")
+		} else {
+			// Validate Birdweather ID format
+			validIDPattern := regexp.MustCompile("^[a-zA-Z0-9]{24}$")
+			if !validIDPattern.MatchString(settings.ID) {
+				result.Valid = false
+				result.Errors = append(result.Errors, "Invalid Birdweather ID format: must be 24 alphanumeric characters")
+				normalized.Enabled = false
+				result.Warnings = append(result.Warnings, "Birdweather will be disabled due to invalid ID format")
+			}
+		}
+
+		// Check threshold range
+		if settings.Threshold < 0 || settings.Threshold > 1 {
+			result.Valid = false
+			result.Errors = append(result.Errors, "birdweather threshold must be between 0 and 1")
+		}
+
+		// Check location accuracy
+		if settings.LocationAccuracy < 0 {
+			result.Valid = false
+			result.Errors = append(result.Errors, "birdweather location accuracy must be non-negative")
+		}
+	}
+
+	result.Normalized = &normalized
+	return result
+}
+
+// ValidateWebhookProviderPure performs webhook provider validation without side effects.
+// Returns validation result with errors.
+func ValidateWebhookProviderPure(p *PushProviderConfig) ValidationResult {
+	result := ValidationResult{Valid: true}
+
+	if !p.Enabled {
+		result.Normalized = p
+		return result
+	}
+
+	// Webhook requires at least one endpoint
+	if len(p.Endpoints) == 0 {
+		result.Valid = false
+		result.Errors = append(result.Errors,
+			fmt.Sprintf("webhook provider '%s' requires at least one endpoint when enabled", p.Name))
+		result.Normalized = p
+		return result
+	}
+
+	// Validate custom template if specified
+	if p.Template != "" {
+		if _, err := template.New("validation").Parse(p.Template); err != nil {
+			result.Valid = false
+			result.Errors = append(result.Errors,
+				fmt.Sprintf("webhook provider '%s': invalid template syntax: %v", p.Name, err))
+		}
+	}
+
+	// Validate each endpoint
+	for i := range p.Endpoints {
+		endpoint := &p.Endpoints[i]
+
+		// URL is required
+		if strings.TrimSpace(endpoint.URL) == "" {
+			result.Valid = false
+			result.Errors = append(result.Errors,
+				fmt.Sprintf("webhook provider '%s' endpoint %d: URL is required", p.Name, i))
+			continue
+		}
+
+		// URL must start with http:// or https://
+		if !strings.HasPrefix(endpoint.URL, "http://") && !strings.HasPrefix(endpoint.URL, "https://") {
+			result.Valid = false
+			result.Errors = append(result.Errors,
+				fmt.Sprintf("webhook provider '%s' endpoint %d: URL must start with http:// or https://", p.Name, i))
+		}
+
+		// Validate HTTP method if specified
+		if endpoint.Method != "" {
+			method := strings.ToUpper(endpoint.Method)
+			if method != "POST" && method != "PUT" && method != "PATCH" {
+				result.Valid = false
+				result.Errors = append(result.Errors,
+					fmt.Sprintf("webhook provider '%s' endpoint %d: method must be POST, PUT, or PATCH, got %s", p.Name, i, endpoint.Method))
+			}
+		}
+
+		// Validate timeout
+		if endpoint.Timeout < 0 {
+			result.Valid = false
+			result.Errors = append(result.Errors,
+				fmt.Sprintf("webhook provider '%s' endpoint %d: timeout must be non-negative", p.Name, i))
+		}
+	}
+
+	result.Normalized = p
+	return result
+}
+
 // ValidateSettings validates the entire Settings struct
 func ValidateSettings(settings *Settings) error {
 	ve := ValidationError{}
