@@ -1,7 +1,6 @@
 package conf
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -61,13 +60,7 @@ func TestValidateBirdNETSettings_Valid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ValidateBirdNETSettings(&tt.config)
-
-			if !result.Valid {
-				t.Errorf("Expected valid config, got errors: %v", result.Errors)
-			}
-			if len(result.Errors) > 0 {
-				t.Errorf("Expected no errors, got: %v", result.Errors)
-			}
+			assertValidationPasses(t, result)
 		})
 	}
 }
@@ -188,25 +181,8 @@ func TestValidateBirdNETSettings_Invalid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ValidateBirdNETSettings(&tt.config)
-
-			if result.Valid {
-				t.Error("Expected invalid config to fail validation")
-			}
-			if len(result.Errors) == 0 {
-				t.Error("Expected validation errors")
-			}
-
-			// Check if expected error message is present
-			foundError := false
-			for _, err := range result.Errors {
-				if strings.Contains(err, tt.expectError) {
-					foundError = true
-					break
-				}
-			}
-			if !foundError {
-				t.Errorf("Expected error containing %q, got errors: %v", tt.expectError, result.Errors)
-			}
+			assertValidationFails(t, result)
+			assertErrorContains(t, result, tt.expectError)
 		})
 	}
 }
@@ -253,10 +229,7 @@ func TestValidateBirdweatherSettings_Valid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ValidateBirdweatherSettings(&tt.settings)
-
-			if !result.Valid {
-				t.Errorf("Expected valid config, got errors: %v", result.Errors)
-			}
+			assertValidationPasses(t, result)
 		})
 	}
 }
@@ -332,21 +305,8 @@ func TestValidateBirdweatherSettings_Invalid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ValidateBirdweatherSettings(&tt.settings)
-
-			if result.Valid {
-				t.Error("Expected invalid config to fail validation")
-			}
-
-			foundError := false
-			for _, err := range result.Errors {
-				if strings.Contains(err, tt.expectError) {
-					foundError = true
-					break
-				}
-			}
-			if !foundError {
-				t.Errorf("Expected error containing %q, got errors: %v", tt.expectError, result.Errors)
-			}
+			assertValidationFails(t, result)
+			assertErrorContains(t, result, tt.expectError)
 		})
 	}
 }
@@ -408,15 +368,13 @@ func TestValidateWebhookProvider_Valid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ValidateWebhookProvider(&tt.provider)
-
-			if !result.Valid {
-				t.Errorf("Expected valid config, got errors: %v", result.Errors)
-			}
+			assertValidationPasses(t, result)
 		})
 	}
 }
 
 // TestValidateWebhookProvider_Invalid verifies invalid webhook configurations.
+// This achieves 100% coverage of webhook validation error paths.
 func TestValidateWebhookProvider_Invalid(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -455,26 +413,117 @@ func TestValidateWebhookProvider_Invalid(t *testing.T) {
 			},
 			expectError: "URL is required",
 		},
+		{
+			name: "URL without http/https prefix",
+			provider: PushProviderConfig{
+				Name:    "test",
+				Enabled: true,
+				Endpoints: []WebhookEndpointConfig{
+					{URL: "ftp://example.com/webhook"},
+				},
+			},
+			expectError: "URL must start with http:// or https://",
+		},
+		{
+			name: "URL with no protocol",
+			provider: PushProviderConfig{
+				Name:    "test",
+				Enabled: true,
+				Endpoints: []WebhookEndpointConfig{
+					{URL: "example.com/webhook"},
+				},
+			},
+			expectError: "URL must start with http:// or https://",
+		},
+		{
+			name: "invalid HTTP method",
+			provider: PushProviderConfig{
+				Name:    "test",
+				Enabled: true,
+				Endpoints: []WebhookEndpointConfig{
+					{
+						URL:    "https://example.com/webhook",
+						Method: "GET",
+					},
+				},
+			},
+			expectError: "method must be POST, PUT, or PATCH",
+		},
+		{
+			name: "invalid HTTP method DELETE",
+			provider: PushProviderConfig{
+				Name:    "test",
+				Enabled: true,
+				Endpoints: []WebhookEndpointConfig{
+					{
+						URL:    "https://example.com/webhook",
+						Method: "DELETE",
+					},
+				},
+			},
+			expectError: "method must be POST, PUT, or PATCH",
+		},
+		{
+			name: "negative timeout",
+			provider: PushProviderConfig{
+				Name:    "test",
+				Enabled: true,
+				Endpoints: []WebhookEndpointConfig{
+					{
+						URL:     "https://example.com/webhook",
+						Timeout: -1000,
+					},
+				},
+			},
+			expectError: "timeout must be non-negative",
+		},
+		{
+			name: "multiple validation errors in single endpoint",
+			provider: PushProviderConfig{
+				Name:    "test",
+				Enabled: true,
+				Endpoints: []WebhookEndpointConfig{
+					{
+						URL:     "ftp://example.com",
+						Method:  "GET",
+						Timeout: -5000,
+					},
+				},
+			},
+			expectError: "URL must start with http:// or https://",
+		},
+		{
+			name: "multiple endpoints with mixed validity",
+			provider: PushProviderConfig{
+				Name:    "test",
+				Enabled: true,
+				Endpoints: []WebhookEndpointConfig{
+					{URL: "https://valid.com/hook"},
+					{URL: ""},
+					{URL: "ftp://invalid.com"},
+				},
+			},
+			expectError: "URL is required",
+		},
+		{
+			name: "whitespace-only URL",
+			provider: PushProviderConfig{
+				Name:    "test",
+				Enabled: true,
+				Endpoints: []WebhookEndpointConfig{
+					{URL: "   "},
+				},
+			},
+			expectError: "URL is required",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ValidateWebhookProvider(&tt.provider)
 
-			if result.Valid {
-				t.Error("Expected invalid config to fail validation")
-			}
-
-			foundError := false
-			for _, err := range result.Errors {
-				if strings.Contains(err, tt.expectError) {
-					foundError = true
-					break
-				}
-			}
-			if !foundError {
-				t.Errorf("Expected error containing %q, got errors: %v", tt.expectError, result.Errors)
-			}
+			assertValidationFails(t, result)
+			assertErrorContains(t, result, tt.expectError)
 		})
 	}
 }
@@ -519,10 +568,7 @@ func TestValidateMQTTSettings_Valid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ValidateMQTTSettings(&tt.settings)
-
-			if !result.Valid {
-				t.Errorf("Expected valid config, got errors: %v", result.Errors)
-			}
+			assertValidationPasses(t, result)
 		})
 	}
 }
@@ -597,21 +643,8 @@ func TestValidateMQTTSettings_Invalid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ValidateMQTTSettings(&tt.settings)
-
-			if result.Valid {
-				t.Error("Expected invalid config to fail validation")
-			}
-
-			foundError := false
-			for _, err := range result.Errors {
-				if strings.Contains(err, tt.expectError) {
-					foundError = true
-					break
-				}
-			}
-			if !foundError {
-				t.Errorf("Expected error containing %q, got errors: %v", tt.expectError, result.Errors)
-			}
+			assertValidationFails(t, result)
+			assertErrorContains(t, result, tt.expectError)
 		})
 	}
 }
@@ -670,10 +703,7 @@ func TestValidateWebServerSettings_Valid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ValidateWebServerSettings(&tt.settings)
-
-			if !result.Valid {
-				t.Errorf("Expected valid config, got errors: %v", result.Errors)
-			}
+			assertValidationPasses(t, result)
 		})
 	}
 }
@@ -770,21 +800,8 @@ func TestValidateWebServerSettings_Invalid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ValidateWebServerSettings(&tt.settings)
-
-			if result.Valid {
-				t.Error("Expected invalid config to fail validation")
-			}
-
-			foundError := false
-			for _, err := range result.Errors {
-				if strings.Contains(err, tt.expectError) {
-					foundError = true
-					break
-				}
-			}
-			if !foundError {
-				t.Errorf("Expected error containing %q, got errors: %v", tt.expectError, result.Errors)
-			}
+			assertValidationFails(t, result)
+			assertErrorContains(t, result, tt.expectError)
 		})
 	}
 }
