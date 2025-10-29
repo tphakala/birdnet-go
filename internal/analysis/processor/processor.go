@@ -184,6 +184,87 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 			detectionWindow, minRecommendedWindow, captureLength, preCaptureLength)
 	}
 
+	// Validate and log false positive filter configuration
+	level := settings.Realtime.FalsePositiveFilter.Level
+	overlap := settings.BirdNET.Overlap
+	minOverlap := getMinimumOverlapForLevel(level)
+
+	// Calculate what minDetections will be with current settings
+	// Create a temporary processor just for calculation
+	tempProcessor := &Processor{Settings: settings}
+	minDetections := tempProcessor.calculateMinDetections()
+
+	if level == 0 {
+		// Smart migration: suggest a level based on current overlap
+		recommendedLevel, _ := getRecommendedLevelForOverlap(overlap)
+		if recommendedLevel > 0 {
+			GetLogger().Info("False positive filtering is disabled",
+				"current_level", level,
+				"current_overlap", overlap,
+				"recommended_level", recommendedLevel,
+				"recommended_level_name", getLevelName(recommendedLevel),
+				"recommendation", fmt.Sprintf("Consider enabling filtering with level %d (%s) which matches your current overlap %.1f",
+					recommendedLevel, getLevelName(recommendedLevel), overlap),
+				"operation", "false_positive_filter_config")
+			log.Printf("False positive filtering: DISABLED (level 0)")
+			log.Printf("💡 Suggestion: Your current overlap (%.1f) supports up to Level %d (%s) filtering",
+				overlap, recommendedLevel, getLevelName(recommendedLevel))
+			log.Printf("   Enable filtering to reduce false positives: set realtime.falsepositivefilter.level = %d", recommendedLevel)
+		} else {
+			GetLogger().Info("False positive filtering is disabled",
+				"current_level", level,
+				"operation", "false_positive_filter_config")
+			log.Printf("False positive filtering: DISABLED (level 0)")
+		}
+	} else {
+		// Filtering is enabled
+		if overlap < minOverlap {
+			// Overlap is too low for this level
+			GetLogger().Warn("Overlap below recommended minimum for filtering level",
+				"level", level,
+				"level_name", getLevelName(level),
+				"min_overlap", minOverlap,
+				"current_overlap", overlap,
+				"min_detections", minDetections,
+				"hardware_req", getHardwareRequirementForLevel(level),
+				"operation", "false_positive_filter_config")
+			log.Printf("⚠️  False positive filtering: Level %d (%s) - OVERLAP TOO LOW",
+				level, getLevelName(level))
+			log.Printf("   Current overlap: %.1f, Recommended minimum: %.1f", overlap, minOverlap)
+			log.Printf("   Requires %d confirmations in 6 seconds", minDetections)
+			log.Printf("   Hardware: %s", getHardwareRequirementForLevel(level))
+			recommendedForCurrent, _ := getRecommendedLevelForOverlap(overlap)
+			log.Printf("   Consider increasing overlap or using Level %d for your current overlap",
+				recommendedForCurrent)
+		} else {
+			// Configuration is good
+			GetLogger().Info("False positive filtering configured",
+				"level", level,
+				"level_name", getLevelName(level),
+				"overlap", overlap,
+				"min_overlap", minOverlap,
+				"min_detections", minDetections,
+				"hardware_req", getHardwareRequirementForLevel(level),
+				"operation", "false_positive_filter_config")
+			log.Printf("False positive filtering: Level %d (%s)",
+				level, getLevelName(level))
+			log.Printf("  Overlap: %.1f (min required: %.1f) ✓", overlap, minOverlap)
+			log.Printf("  Requires %d confirmations in 6 seconds", minDetections)
+			log.Printf("  Hardware: %s", getHardwareRequirementForLevel(level))
+
+			// Warn if using high levels (4-5) which require fast hardware
+			if level >= 4 {
+				stepSize := 3.0 - overlap
+				maxInferenceTime := stepSize * 1000 // Convert to ms
+				GetLogger().Warn("High filtering level requires fast hardware",
+					"level", level,
+					"required_inference_ms", maxInferenceTime,
+					"operation", "false_positive_filter_config")
+				log.Printf("  ⚠️  High level requires fast hardware: inference must complete in < %.0fms", maxInferenceTime)
+			}
+		}
+	}
+
 	// Initialize new species tracker if enabled
 	if settings.Realtime.SpeciesTracking.Enabled {
 		// Validate species tracking configuration
@@ -810,7 +891,8 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 }
 
 // calculateMinDetections computes the minimum number of required detections based on
-// the overlap setting to filter false positives through repeated detection confirmation.
+// the overlap setting and false positive filter level to filter false positives through
+// repeated detection confirmation.
 //
 // The overlap determines how frequently the same audio content is analyzed:
 //   - With overlap 2.0: step size = 1.0s, so a 3-second chunk is analyzed ~3 times
@@ -820,48 +902,74 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 // while false positives (noise, wind) are random and won't repeat reliably.
 //
 // The function calculates:
-//   1. How many times a 3-second chunk is analyzed (based on overlap)
-//   2. Requires a percentage of those analyses to detect the same species (default 50%)
+//   1. How many times audio can be analyzed within a 6-second bird vocalization window
+//   2. Requires a percentage of those analyses to detect the same species (based on level)
 //
-// Example with overlap 2.2, 60s capture, 15s pre-capture:
-//   OLD: minDetections = 14 (too strict, rejected real birds)
-//   NEW: minDetections = 2  (balanced, accepts birds with repeated confirmation)
+// Filtering Levels (0-5):
+//   Level 0: Off (no filtering, 1 detection required)
+//   Level 1: Lenient (20% threshold, ~2 detections)
+//   Level 2: Moderate (30% threshold, ~3 detections)
+//   Level 3: Balanced (50% threshold, ~5 detections - original pre-Sept 2025 behavior)
+//   Level 4: Strict (60% threshold, ~12 detections - requires RPi 4+)
+//   Level 5: Maximum (70% threshold, ~21 detections - requires RPi 4+)
 //
 // Note: Audio clip length (captureLength/preCapture) does NOT affect this calculation.
 // Those settings control saved audio length, not detection sensitivity.
 //
 // Edge cases handled:
+//   - If level is 0: minDetections = 1 (filtering disabled)
 //   - If overlap is 0 (no overlap): minDetections = 1 (no repeated confirmation possible)
-//   - Very high overlap (>2.9): may require many detections but cap ensures reasonability
+//   - Very high overlap (>2.9): may require many detections at higher levels
 //   - Floating-point precision: epsilon subtraction prevents values like 5.0000003 from ceiling to 6
 func (p *Processor) calculateMinDetections() int {
 	// BirdNET uses 3-second chunks for analysis
 	const chunkDurationSeconds = 3.0
+	// Bird vocalization reference window - typical duration of a bird call
+	// Used to calculate how many detections are possible within a single vocalization
+	const referenceWindowSeconds = 6.0
 	// Minimum segment length to prevent division by near-zero values
 	const minSegmentLength = 0.1
 	// Small epsilon to prevent floating-point rounding errors in ceil()
 	// Without this, values like 5.0000000003 would ceil to 6 instead of 5
 	const epsilon = 1e-9
 
+	// Get filtering level from settings
+	level := p.Settings.Realtime.FalsePositiveFilter.Level
+	overlap := p.Settings.BirdNET.Overlap
+
+	// Level 0: no filtering
+	if level == 0 {
+		return 1
+	}
+
+	// Validate overlap meets minimum for level (warning only, don't block)
+	minOverlap := getMinimumOverlapForLevel(level)
+	if overlap < minOverlap {
+		GetLogger().Warn("Overlap too low for filtering level",
+			"level", level,
+			"level_name", getLevelName(level),
+			"min_overlap", minOverlap,
+			"current_overlap", overlap,
+			"operation", "calculate_min_detections")
+		// Continue with calculation - system will work but may not achieve target filtering
+	}
+
 	// Calculate segment length (how often we analyze)
-	segmentLength := math.Max(minSegmentLength, chunkDurationSeconds-p.Settings.BirdNET.Overlap)
+	segmentLength := math.Max(minSegmentLength, chunkDurationSeconds-overlap)
 
-	// How many times is a 3-second audio chunk analyzed?
-	// This represents the maximum possible detections for a bird call
-	maxDetectionsPerChunk := chunkDurationSeconds / segmentLength
+	// How many detections are possible within a 6-second bird vocalization window?
+	maxDetectionsIn6s := referenceWindowSeconds / segmentLength
 
-	// Require 50% of analyses to detect the same species to confirm it's real
-	// This balances false positive filtering with detection sensitivity
-	// Chosen empirically through testing with overlap settings 2.0-2.5
-	const confirmationThreshold = 0.5
+	// Get threshold percentage for this level
+	threshold := getThresholdForLevel(level)
 
 	// Calculate minimum required detections
 	// Use Ceil to ensure we require at least the threshold percentage
 	// Subtract epsilon before ceiling to handle floating-point precision issues
 	// (e.g., 5.0000000003 becomes 4.9999999993, which correctly ceils to 5)
 	// Always require at least 1 detection
-	threshold := maxDetectionsPerChunk*confirmationThreshold - epsilon
-	minDetections := int(math.Max(1, math.Ceil(threshold)))
+	required := maxDetectionsIn6s*threshold - epsilon
+	minDetections := int(math.Max(1, math.Ceil(required)))
 
 	return minDetections
 }

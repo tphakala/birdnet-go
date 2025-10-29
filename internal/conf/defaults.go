@@ -117,6 +117,12 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dynamicthreshold.min", 0.20)
 	viper.SetDefault("realtime.dynamicthreshold.validhours", 24)
 
+	// False positive filter configuration
+	// Level 0 = Off (no filtering, backward compatible default)
+	// Level 1 = Lenient, Level 2 = Moderate, Level 3 = Balanced (original behavior)
+	// Level 4 = Strict (RPi 4+ required), Level 5 = Maximum (RPi 4+ required)
+	viper.SetDefault("realtime.falsepositivefilter.level", 0)
+
 	// Log configuration
 	viper.SetDefault("realtime.log.enabled", false)
 	viper.SetDefault("realtime.log.path", "birdnet.txt")
