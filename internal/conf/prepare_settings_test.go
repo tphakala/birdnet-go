@@ -1,11 +1,13 @@
 package conf
 
 import (
+	"maps"
 	"testing"
 )
 
 // TestPrepareSettingsForSave_NoSeasonalTracking verifies behavior when seasonal tracking is disabled.
 func TestPrepareSettingsForSave_NoSeasonalTracking(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		latitude float64
@@ -17,6 +19,7 @@ func TestPrepareSettingsForSave_NoSeasonalTracking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			settings := &Settings{}
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = false
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = nil
@@ -33,6 +36,7 @@ func TestPrepareSettingsForSave_NoSeasonalTracking(t *testing.T) {
 
 // TestPrepareSettingsForSave_EnabledWithExistingSeasons verifies existing seasons are preserved.
 func TestPrepareSettingsForSave_EnabledWithExistingSeasons(t *testing.T) {
+	t.Parallel()
 	customSeasons := map[string]Season{
 		"winter": {StartMonth: 1, StartDay: 1},
 		"spring": {StartMonth: 4, StartDay: 1},
@@ -49,9 +53,10 @@ func TestPrepareSettingsForSave_EnabledWithExistingSeasons(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			settings := &Settings{}
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
-			settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = customSeasons
+			settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = maps.Clone(customSeasons)
 
 			result := prepareSettingsForSave(settings, tt.latitude)
 
@@ -81,6 +86,7 @@ func TestPrepareSettingsForSave_EnabledWithExistingSeasons(t *testing.T) {
 
 // TestPrepareSettingsForSave_NorthernHemisphere verifies default seasons for northern latitudes.
 func TestPrepareSettingsForSave_NorthernHemisphere(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		latitude float64
@@ -93,6 +99,7 @@ func TestPrepareSettingsForSave_NorthernHemisphere(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			settings := &Settings{}
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = nil
@@ -118,7 +125,8 @@ func TestPrepareSettingsForSave_NorthernHemisphere(t *testing.T) {
 
 // TestPrepareSettingsForSave_SouthernHemisphere verifies default seasons for southern latitudes.
 func TestPrepareSettingsForSave_SouthernHemisphere(t *testing.T) {
-	tests := []struct {
+	t.Parallel()
+	tests := []struct{
 		name     string
 		latitude float64
 	}{
@@ -130,6 +138,7 @@ func TestPrepareSettingsForSave_SouthernHemisphere(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			settings := &Settings{}
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = nil
@@ -155,6 +164,7 @@ func TestPrepareSettingsForSave_SouthernHemisphere(t *testing.T) {
 
 // TestPrepareSettingsForSave_EquatorialRegion verifies default seasons near equator.
 func TestPrepareSettingsForSave_EquatorialRegion(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		latitude float64
@@ -168,6 +178,7 @@ func TestPrepareSettingsForSave_EquatorialRegion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			settings := &Settings{}
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = nil
@@ -184,6 +195,7 @@ func TestPrepareSettingsForSave_EquatorialRegion(t *testing.T) {
 
 // TestPrepareSettingsForSave_DoesNotMutateInput verifies original settings unchanged.
 func TestPrepareSettingsForSave_DoesNotMutateInput(t *testing.T) {
+	t.Parallel()
 	originalSettings := &Settings{}
 	originalSettings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 	originalSettings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = nil
@@ -198,6 +210,7 @@ func TestPrepareSettingsForSave_DoesNotMutateInput(t *testing.T) {
 
 // TestPrepareSettingsForSave_DifferentLatitudes verifies correct hemisphere detection.
 func TestPrepareSettingsForSave_DifferentLatitudes(t *testing.T) {
+	t.Parallel()
 	latitudes := []struct {
 		value             float64
 		expectedHemisphere string
@@ -215,6 +228,7 @@ func TestPrepareSettingsForSave_DifferentLatitudes(t *testing.T) {
 
 	for _, lat := range latitudes {
 		t.Run(lat.expectedHemisphere, func(t *testing.T) {
+			t.Parallel()
 			settings := &Settings{}
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 			settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = nil
@@ -234,6 +248,7 @@ func BenchmarkPrepareSettingsForSave(b *testing.B) {
 	settings.Realtime.SpeciesTracking.SeasonalTracking.Enabled = true
 	settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = nil
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = prepareSettingsForSave(settings, 45.0)
@@ -248,6 +263,7 @@ func BenchmarkPrepareSettingsForSave_WithExistingSeasons(b *testing.B) {
 		"winter": {StartMonth: 1, StartDay: 1},
 	}
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = prepareSettingsForSave(settings, 45.0)

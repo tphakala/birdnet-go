@@ -6,6 +6,7 @@ import (
 
 // TestSettingsBuilder_NewTestSettings verifies that NewTestSettings creates a valid builder.
 func TestSettingsBuilder_NewTestSettings(t *testing.T) {
+	t.Parallel()
 	builder := NewTestSettings()
 
 	if builder == nil {
@@ -24,6 +25,7 @@ func TestSettingsBuilder_NewTestSettings(t *testing.T) {
 
 // TestSettingsBuilder_WithBirdNET verifies BirdNET configuration.
 func TestSettingsBuilder_WithBirdNET(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		threshold float64
@@ -58,6 +60,7 @@ func TestSettingsBuilder_WithBirdNET(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			settings := NewTestSettings().
 				WithBirdNET(tt.threshold, tt.latitude, tt.longitude).
 				Build()
@@ -79,6 +82,7 @@ func TestSettingsBuilder_WithBirdNET(t *testing.T) {
 //
 //nolint:dupl // Similar test structure but tests different builder methods
 func TestSettingsBuilder_WithMQTT(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		broker string
@@ -103,6 +107,7 @@ func TestSettingsBuilder_WithMQTT(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			settings := NewTestSettings().
 				WithMQTT(tt.broker, tt.topic).
 				Build()
@@ -122,6 +127,7 @@ func TestSettingsBuilder_WithMQTT(t *testing.T) {
 
 // TestSettingsBuilder_WithAudioExport verifies audio export configuration.
 func TestSettingsBuilder_WithAudioExport(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		path       string
@@ -150,6 +156,7 @@ func TestSettingsBuilder_WithAudioExport(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			settings := NewTestSettings().
 				WithAudioExport(tt.path, tt.exportType, tt.bitrate).
 				Build()
@@ -174,6 +181,7 @@ func TestSettingsBuilder_WithAudioExport(t *testing.T) {
 //
 //nolint:dupl // Similar test structure but tests different builder methods
 func TestSettingsBuilder_WithSpeciesTracking(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		windowDays   int
@@ -198,6 +206,7 @@ func TestSettingsBuilder_WithSpeciesTracking(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			settings := NewTestSettings().
 				WithSpeciesTracking(tt.windowDays, tt.syncInterval).
 				Build()
@@ -217,6 +226,7 @@ func TestSettingsBuilder_WithSpeciesTracking(t *testing.T) {
 
 // TestSettingsBuilder_WithRTSPHealthThreshold verifies RTSP health threshold configuration.
 func TestSettingsBuilder_WithRTSPHealthThreshold(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		seconds int
@@ -229,6 +239,7 @@ func TestSettingsBuilder_WithRTSPHealthThreshold(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			settings := NewTestSettings().
 				WithRTSPHealthThreshold(tt.seconds).
 				Build()
@@ -242,6 +253,7 @@ func TestSettingsBuilder_WithRTSPHealthThreshold(t *testing.T) {
 
 // TestSettingsBuilder_WithImageProvider verifies image provider configuration.
 func TestSettingsBuilder_WithImageProvider(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		provider       string
@@ -266,6 +278,7 @@ func TestSettingsBuilder_WithImageProvider(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			settings := NewTestSettings().
 				WithImageProvider(tt.provider, tt.fallbackPolicy).
 				Build()
@@ -281,7 +294,10 @@ func TestSettingsBuilder_WithImageProvider(t *testing.T) {
 }
 
 // TestSettingsBuilder_WithSecurity verifies security configuration.
+//
+//nolint:dupl // Similar test structure but tests different builder methods
 func TestSettingsBuilder_WithSecurity(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		host    string
@@ -306,6 +322,7 @@ func TestSettingsBuilder_WithSecurity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			settings := NewTestSettings().
 				WithSecurity(tt.host, tt.autoTLS).
 				Build()
@@ -321,7 +338,10 @@ func TestSettingsBuilder_WithSecurity(t *testing.T) {
 }
 
 // TestSettingsBuilder_WithWebServer verifies web server configuration.
+//
+//nolint:dupl // Similar test structure but tests different builder methods
 func TestSettingsBuilder_WithWebServer(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		port    string
@@ -346,6 +366,7 @@ func TestSettingsBuilder_WithWebServer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			settings := NewTestSettings().
 				WithWebServer(tt.port, tt.enabled).
 				Build()
@@ -362,6 +383,7 @@ func TestSettingsBuilder_WithWebServer(t *testing.T) {
 
 // TestSettingsBuilder_MethodChaining verifies that builder methods can be chained.
 func TestSettingsBuilder_MethodChaining(t *testing.T) {
+	t.Parallel()
 	settings := NewTestSettings().
 		WithBirdNET(0.8, 45.0, -122.0).
 		WithMQTT("tcp://localhost:1883", "test/topic").
@@ -386,6 +408,7 @@ func TestSettingsBuilder_MethodChaining(t *testing.T) {
 
 // TestSettingsBuilder_Build verifies that Build returns a valid settings object.
 func TestSettingsBuilder_Build(t *testing.T) {
+	t.Parallel()
 	settings := NewTestSettings().
 		WithBirdNET(0.7, 40.0, -100.0).
 		Build()
@@ -435,6 +458,7 @@ func BenchmarkSettingsBuilder_Build(b *testing.B) {
 		WithBirdNET(0.7, 45.0, -122.0).
 		WithMQTT("tcp://localhost:1883", "test/topic")
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = builder.Build()
@@ -443,6 +467,7 @@ func BenchmarkSettingsBuilder_Build(b *testing.B) {
 
 // BenchmarkSettingsBuilder_FullChain benchmarks a complete builder chain.
 func BenchmarkSettingsBuilder_FullChain(b *testing.B) {
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = NewTestSettings().

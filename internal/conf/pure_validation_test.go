@@ -6,6 +6,7 @@ import (
 
 // TestValidateBirdNETSettings_Valid verifies valid BirdNET configurations pass.
 func TestValidateBirdNETSettings_Valid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		config BirdNETConfig
@@ -59,6 +60,7 @@ func TestValidateBirdNETSettings_Valid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ValidateBirdNETSettings(&tt.config)
 			assertValidationPasses(t, result)
 		})
@@ -67,6 +69,7 @@ func TestValidateBirdNETSettings_Valid(t *testing.T) {
 
 // TestValidateBirdNETSettings_Invalid verifies invalid configurations are rejected.
 func TestValidateBirdNETSettings_Invalid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		config      BirdNETConfig
@@ -180,6 +183,7 @@ func TestValidateBirdNETSettings_Invalid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ValidateBirdNETSettings(&tt.config)
 			assertValidationFails(t, result)
 			assertErrorContains(t, result, tt.expectError)
@@ -189,6 +193,7 @@ func TestValidateBirdNETSettings_Invalid(t *testing.T) {
 
 // TestValidateBirdweatherSettings_Valid verifies valid Birdweather configurations.
 func TestValidateBirdweatherSettings_Valid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		settings BirdweatherSettings
@@ -228,6 +233,7 @@ func TestValidateBirdweatherSettings_Valid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ValidateBirdweatherSettings(&tt.settings)
 			assertValidationPasses(t, result)
 		})
@@ -236,6 +242,7 @@ func TestValidateBirdweatherSettings_Valid(t *testing.T) {
 
 // TestValidateBirdweatherSettings_Invalid verifies invalid Birdweather configurations.
 func TestValidateBirdweatherSettings_Invalid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		settings    BirdweatherSettings
@@ -304,6 +311,7 @@ func TestValidateBirdweatherSettings_Invalid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ValidateBirdweatherSettings(&tt.settings)
 			assertValidationFails(t, result)
 			assertErrorContains(t, result, tt.expectError)
@@ -313,6 +321,7 @@ func TestValidateBirdweatherSettings_Invalid(t *testing.T) {
 
 // TestValidateWebhookProvider_Valid verifies valid webhook configurations.
 func TestValidateWebhookProvider_Valid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		provider PushProviderConfig
@@ -367,6 +376,7 @@ func TestValidateWebhookProvider_Valid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ValidateWebhookProvider(&tt.provider)
 			assertValidationPasses(t, result)
 		})
@@ -376,6 +386,7 @@ func TestValidateWebhookProvider_Valid(t *testing.T) {
 // TestValidateWebhookProvider_Invalid verifies invalid webhook configurations.
 // This achieves 100% coverage of webhook validation error paths.
 func TestValidateWebhookProvider_Invalid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		provider    PushProviderConfig
@@ -520,6 +531,7 @@ func TestValidateWebhookProvider_Invalid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ValidateWebhookProvider(&tt.provider)
 
 			assertValidationFails(t, result)
@@ -530,6 +542,7 @@ func TestValidateWebhookProvider_Invalid(t *testing.T) {
 
 // TestValidateMQTTSettings_Valid verifies valid MQTT configurations.
 func TestValidateMQTTSettings_Valid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		settings MQTTSettings
@@ -567,6 +580,7 @@ func TestValidateMQTTSettings_Valid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ValidateMQTTSettings(&tt.settings)
 			assertValidationPasses(t, result)
 		})
@@ -575,6 +589,7 @@ func TestValidateMQTTSettings_Valid(t *testing.T) {
 
 // TestValidateMQTTSettings_Invalid verifies invalid MQTT configurations.
 func TestValidateMQTTSettings_Invalid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		settings    MQTTSettings
@@ -642,6 +657,7 @@ func TestValidateMQTTSettings_Invalid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ValidateMQTTSettings(&tt.settings)
 			assertValidationFails(t, result)
 			assertErrorContains(t, result, tt.expectError)
@@ -651,6 +667,7 @@ func TestValidateMQTTSettings_Invalid(t *testing.T) {
 
 // TestValidateWebServerSettings_Valid verifies valid web server configurations.
 func TestValidateWebServerSettings_Valid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		settings WebServerSettings
@@ -702,6 +719,7 @@ func TestValidateWebServerSettings_Valid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ValidateWebServerSettings(&tt.settings)
 			assertValidationPasses(t, result)
 		})
@@ -710,6 +728,7 @@ func TestValidateWebServerSettings_Valid(t *testing.T) {
 
 // TestValidateWebServerSettings_Invalid verifies invalid web server configurations.
 func TestValidateWebServerSettings_Invalid(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		settings    WebServerSettings
@@ -799,6 +818,7 @@ func TestValidateWebServerSettings_Invalid(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ValidateWebServerSettings(&tt.settings)
 			assertValidationFails(t, result)
 			assertErrorContains(t, result, tt.expectError)
@@ -821,6 +841,7 @@ func BenchmarkValidateBirdNETSettings(b *testing.B) {
 		},
 	}
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = ValidateBirdNETSettings(cfg)
@@ -835,6 +856,7 @@ func BenchmarkValidateBirdweatherSettings(b *testing.B) {
 		Threshold: 0.7,
 	}
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = ValidateBirdweatherSettings(settings)
@@ -849,6 +871,7 @@ func BenchmarkValidateMQTTSettings(b *testing.B) {
 		Topic:   "test/topic",
 	}
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = ValidateMQTTSettings(settings)
