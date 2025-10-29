@@ -25,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/securefs"
@@ -210,6 +211,13 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 			log.Printf("💡 Suggestion: Your current overlap (%.1f) supports up to Level %d (%s) filtering",
 				overlap, recommendedLevel, getLevelName(recommendedLevel))
 			log.Printf("   Enable filtering to reduce false positives: set realtime.falsepositivefilter.level = %d", recommendedLevel)
+
+			// Notify users through the web UI
+			notification.NotifyInfo(
+				"False Positive Filtering Disabled",
+				fmt.Sprintf("Your system can support Level %d (%s) filtering with your current overlap of %.1f. Enable it in settings to reduce false detections from wind, cars, and other noise.",
+					recommendedLevel, getLevelName(recommendedLevel), overlap),
+			)
 		} else {
 			GetLogger().Info("False positive filtering is disabled",
 				"current_level", level,
@@ -236,6 +244,14 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 			recommendedForCurrent, _ := getRecommendedLevelForOverlap(overlap)
 			log.Printf("   Consider increasing overlap or using Level %d for your current overlap",
 				recommendedForCurrent)
+
+			// Warn users through the web UI
+			notification.NotifyWarning(
+				"analysis",
+				"Filter Level May Not Work Optimally",
+				fmt.Sprintf("Level %d (%s) filtering requires overlap %.1f or higher, but current overlap is %.1f. Consider increasing overlap to %.1f or using Level %d (%s) instead.",
+					level, getLevelName(level), minOverlap, overlap, minOverlap, recommendedForCurrent, getLevelName(recommendedForCurrent)),
+			)
 		} else {
 			// Configuration is good
 			GetLogger().Info("False positive filtering configured",
