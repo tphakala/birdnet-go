@@ -159,7 +159,7 @@ func TestValidateBirdNETSettings_Invalid(t *testing.T) {
 					Model: "invalid",
 				},
 			},
-			expectError: "RangeFilter model must be either empty (v2 default) or 'legacy'",
+			expectError: "RangeFilter model must be either empty (v2 default), 'latest', or 'legacy'",
 		},
 		{
 			name: "range filter threshold too low",
