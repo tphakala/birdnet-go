@@ -310,6 +310,13 @@ func ValidateWebServerSettings(settings *WebServerSettings) ValidationResult {
 		if settings.Port == "" {
 			result.Valid = false
 			result.Errors = append(result.Errors, "WebServer port is required when enabled")
+		} else {
+			// Validate port is a valid number in range 1-65535
+			if port, err := strconv.Atoi(settings.Port); err != nil || port < 1 || port > 65535 {
+				result.Valid = false
+				result.Errors = append(result.Errors,
+					fmt.Sprintf("WebServer port must be a number between 1 and 65535, got %q", settings.Port))
+			}
 		}
 	}
 
@@ -403,7 +410,10 @@ func validateBirdNETSettings(birdnetSettings *BirdNETConfig, settings *Settings)
 		*birdnetSettings = *normalized
 	} else if !ok {
 		// Type assertion failed - this indicates a bug in ValidateBirdNETSettings
-		log.Printf("Internal error: ValidateBirdNETSettings returned unexpected type %T", result.Normalized)
+		return errors.New(fmt.Errorf("internal error: ValidateBirdNETSettings returned unexpected type %T", result.Normalized)).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "birdnet-type-assertion").
+			Build()
 	}
 
 	// Handle warnings (side effects: logging + storing in settings)
@@ -587,7 +597,10 @@ func validateBirdweatherSettings(settings *BirdweatherSettings) error {
 		*settings = *normalized
 	} else if !ok {
 		// Type assertion failed - this indicates a bug in ValidateBirdweatherSettings
-		log.Printf("Internal error: ValidateBirdweatherSettings returned unexpected type %T", result.Normalized)
+		return errors.New(fmt.Errorf("internal error: ValidateBirdweatherSettings returned unexpected type %T", result.Normalized)).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "birdweather-type-assertion").
+			Build()
 	}
 
 	// Handle warnings (side effect: logging)
