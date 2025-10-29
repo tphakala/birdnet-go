@@ -831,6 +831,14 @@ type AllowSubnetBypass struct {
 type Security struct {
 	Debug bool `json:"debug"` // true to enable debug mode
 
+	// BaseURL is the complete external URL for this instance, including
+	// scheme, host, and optional port (e.g., "https://birdnet.example.com:5500").
+	// Used for generating OAuth redirect URLs and notification links.
+	// Takes precedence over Host when set.
+	// Can be overridden with BIRDNET_URL environment variable.
+	// NOTE: This field is prepared for future implementation (issue #1462)
+	BaseURL string `json:"baseUrl"`
+
 	// Host is the primary hostname used for TLS certificates,
 	// OAuth redirect URLs, and notification link generation.
 	// Required when using AutoTLS or authentication providers.
