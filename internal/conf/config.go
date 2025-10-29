@@ -463,14 +463,31 @@ type SentrySettings struct {
 	Debug   bool `json:"debug"`   // true to enable transparent telemetry logging
 }
 
+// FalsePositiveFilterSettings contains settings for false positive filtering aggressivity levels.
+// The filtering system requires multiple confirmations of a detection within overlapping analyses
+// to filter out false positives (wind, cars, etc.). Higher levels require more confirmations
+// but need faster hardware and higher overlap settings.
+type FalsePositiveFilterSettings struct {
+	Level int `json:"level"` // Filtering aggressivity level (0-5): 0=Off, 1=Lenient, 2=Moderate, 3=Balanced, 4=Strict, 5=Maximum
+}
+
+// Validate checks if the filter level is within the valid range (0-5).
+func (f *FalsePositiveFilterSettings) Validate() error {
+	if f.Level < 0 || f.Level > 5 {
+		return fmt.Errorf("invalid false positive filter level %d: must be 0-5 (0=Off, 1=Lenient, 2=Moderate, 3=Balanced, 4=Strict, 5=Maximum)", f.Level)
+	}
+	return nil
+}
+
 // RealtimeSettings contains all settings related to realtime processing.
 type RealtimeSettings struct {
-	Interval         int                      `json:"interval"`         // minimum interval between log messages in seconds
-	ProcessingTime   bool                     `json:"processingTime"`   // true to report processing time for each prediction
-	Audio            AudioSettings            `json:"audio"`            // Audio processing settings
-	Dashboard        Dashboard                `json:"dashboard"`        // Dashboard settings
-	DynamicThreshold DynamicThresholdSettings `json:"dynamicThreshold"` // Dynamic threshold settings
-	Log              struct {
+	Interval            int                          `json:"interval"`            // minimum interval between log messages in seconds
+	ProcessingTime      bool                         `json:"processingTime"`      // true to report processing time for each prediction
+	Audio               AudioSettings                `json:"audio"`               // Audio processing settings
+	Dashboard           Dashboard                    `json:"dashboard"`           // Dashboard settings
+	DynamicThreshold    DynamicThresholdSettings     `json:"dynamicThreshold"`    // Dynamic threshold settings
+	FalsePositiveFilter FalsePositiveFilterSettings  `json:"falsePositiveFilter"` // False positive filtering aggressivity settings
+	Log                 struct {
 		Enabled bool   `json:"enabled"` // true to enable OBS chat log
 		Path    string `json:"path"`    // path to OBS chat log
 	} `json:"log"`
