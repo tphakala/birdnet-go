@@ -120,72 +120,11 @@ type PendingDetection struct {
 // ensuring thread safety when the map is accessed or modified by concurrent goroutines.
 var mutex sync.Mutex
 
-// func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *observability.Metrics) *Processor {
-func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache) *Processor {
-	p := &Processor{
-		Settings:       settings,
-		Ds:             ds,
-		Bn:             bn,
-		BirdImageCache: birdImageCache,
-		EventTracker: NewEventTrackerWithConfig(
-			time.Duration(settings.Realtime.Interval)*time.Second,
-			settings.Realtime.Species.Config,
-		),
-		Metrics:             metrics,
-		LastDogDetection:    make(map[string]time.Time),
-		LastHumanDetection:  make(map[string]time.Time),
-		DynamicThresholds:   make(map[string]*DynamicThreshold),
-		pendingDetections:   make(map[string]PendingDetection),
-		lastDogDetectionLog: make(map[string]time.Time),
-		controlChan:         make(chan string, 10),  // Buffered channel to prevent blocking
-		JobQueue:            jobqueue.NewJobQueue(), // Initialize the job queue
-	}
-
-	// Initialize log deduplicator with configuration from settings
-	// This addresses separation of concerns by extracting deduplication logic
-	healthCheckInterval := 60 * time.Second // default
-
-	// Validate and use settings if available
-	if settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds > 0 {
-		// Cap at reasonable maximum (1 hour) to prevent misconfiguration
-		if settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds > 3600 {
-			healthCheckInterval = time.Hour
-			GetLogger().Warn("Log deduplication health check interval capped at 1 hour",
-				"requested_seconds", settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds,
-				"capped_seconds", 3600,
-				"operation", "config_validation")
-		} else {
-			healthCheckInterval = time.Duration(settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds) * time.Second
-		}
-	}
-	enabled := settings.Realtime.LogDeduplication.Enabled
-
-	logConfig := DeduplicationConfig{
-		HealthCheckInterval: healthCheckInterval,
-		Enabled:             enabled,
-	}
-	p.logDedup = NewLogDeduplicator(logConfig)
-
-	// Validate detection window configuration
-	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
-	detectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
-
-	// Warn if detection window is very short (may affect overlap-based filtering)
-	minRecommendedWindow := 3 * time.Second
-	if detectionWindow < minRecommendedWindow {
-		GetLogger().Warn("Detection window very short, may affect accuracy",
-			"window_seconds", detectionWindow.Seconds(),
-			"capture_length_seconds", captureLength.Seconds(),
-			"pre_capture_seconds", preCaptureLength.Seconds(),
-			"min_recommended_seconds", minRecommendedWindow.Seconds(),
-			"operation", "config_validation")
-		log.Printf("Warning: Detection window (%v) is very short, may affect overlap-based filtering accuracy. "+
-			"Minimum recommended: %v (capture_length=%v, pre_capture=%v)",
-			detectionWindow, minRecommendedWindow, captureLength, preCaptureLength)
-	}
-
-	// Validate and log false positive filter configuration
+// validateAndLogFilterConfig validates false positive filter configuration,
+// logs appropriate messages, and sends UI notifications. This function handles
+// all validation, logging, and user notification for the false positive filter.
+func validateAndLogFilterConfig(settings *conf.Settings) {
+	// Validate configuration
 	if err := settings.Realtime.FalsePositiveFilter.Validate(); err != nil {
 		GetLogger().Error("Invalid false positive filter configuration",
 			"error", err,
@@ -201,9 +140,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	minOverlap := getMinimumOverlapForLevel(level)
 
 	// Calculate what minDetections will be with current settings
-	// Create a temporary processor just for calculation
-	tempProcessor := &Processor{Settings: settings}
-	minDetections := tempProcessor.calculateMinDetections()
+	minDetections := calculateMinDetectionsFromSettings(settings)
 
 	if level == 0 {
 		// Smart migration: suggest a level based on current overlap
@@ -278,18 +215,95 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 			log.Printf("  Requires %d confirmations in 6 seconds", minDetections)
 			log.Printf("  Hardware: %s", getHardwareRequirementForLevel(level))
 
-			// Warn if using high levels (4-5) which require fast hardware
+			// Validate overlap upper bound for hardware warning
 			if level >= 4 {
-				stepSize := 3.0 - overlap
-				maxInferenceTime := stepSize * 1000 // Convert to ms
-				GetLogger().Warn("High filtering level requires fast hardware",
-					"level", level,
-					"required_inference_ms", maxInferenceTime,
-					"operation", "false_positive_filter_config")
-				log.Printf("  ⚠️  High level requires fast hardware: inference must complete in < %.0fms", maxInferenceTime)
+				// Check if overlap is within valid range for calculation
+				if overlap >= 3.0 {
+					GetLogger().Warn("Overlap value too high for hardware calculation",
+						"overlap", overlap,
+						"max_valid", 2.9,
+						"operation", "false_positive_filter_config")
+				} else {
+					stepSize := 3.0 - overlap
+					maxInferenceTime := stepSize * 1000 // Convert to ms
+					GetLogger().Warn("High filtering level requires fast hardware",
+						"level", level,
+						"required_inference_ms", maxInferenceTime,
+						"operation", "false_positive_filter_config")
+					log.Printf("  ⚠️  High level requires fast hardware: inference must complete in < %.0fms", maxInferenceTime)
+				}
 			}
 		}
 	}
+}
+
+// func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, audioBuffers map[string]*myaudio.AudioBuffer, metrics *observability.Metrics) *Processor {
+func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache) *Processor {
+	p := &Processor{
+		Settings:       settings,
+		Ds:             ds,
+		Bn:             bn,
+		BirdImageCache: birdImageCache,
+		EventTracker: NewEventTrackerWithConfig(
+			time.Duration(settings.Realtime.Interval)*time.Second,
+			settings.Realtime.Species.Config,
+		),
+		Metrics:             metrics,
+		LastDogDetection:    make(map[string]time.Time),
+		LastHumanDetection:  make(map[string]time.Time),
+		DynamicThresholds:   make(map[string]*DynamicThreshold),
+		pendingDetections:   make(map[string]PendingDetection),
+		lastDogDetectionLog: make(map[string]time.Time),
+		controlChan:         make(chan string, 10),  // Buffered channel to prevent blocking
+		JobQueue:            jobqueue.NewJobQueue(), // Initialize the job queue
+	}
+
+	// Initialize log deduplicator with configuration from settings
+	// This addresses separation of concerns by extracting deduplication logic
+	healthCheckInterval := 60 * time.Second // default
+
+	// Validate and use settings if available
+	if settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds > 0 {
+		// Cap at reasonable maximum (1 hour) to prevent misconfiguration
+		if settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds > 3600 {
+			healthCheckInterval = time.Hour
+			GetLogger().Warn("Log deduplication health check interval capped at 1 hour",
+				"requested_seconds", settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds,
+				"capped_seconds", 3600,
+				"operation", "config_validation")
+		} else {
+			healthCheckInterval = time.Duration(settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds) * time.Second
+		}
+	}
+	enabled := settings.Realtime.LogDeduplication.Enabled
+
+	logConfig := DeduplicationConfig{
+		HealthCheckInterval: healthCheckInterval,
+		Enabled:             enabled,
+	}
+	p.logDedup = NewLogDeduplicator(logConfig)
+
+	// Validate detection window configuration
+	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
+	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
+	detectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
+
+	// Warn if detection window is very short (may affect overlap-based filtering)
+	minRecommendedWindow := 3 * time.Second
+	if detectionWindow < minRecommendedWindow {
+		GetLogger().Warn("Detection window very short, may affect accuracy",
+			"window_seconds", detectionWindow.Seconds(),
+			"capture_length_seconds", captureLength.Seconds(),
+			"pre_capture_seconds", preCaptureLength.Seconds(),
+			"min_recommended_seconds", minRecommendedWindow.Seconds(),
+			"operation", "config_validation")
+		log.Printf("Warning: Detection window (%v) is very short, may affect overlap-based filtering accuracy. "+
+			"Minimum recommended: %v (capture_length=%v, pre_capture=%v)",
+			detectionWindow, minRecommendedWindow, captureLength, preCaptureLength)
+	}
+
+	// Validate and log false positive filter configuration
+	validateAndLogFilterConfig(settings)
 
 	// Initialize new species tracker if enabled
 	if settings.Realtime.SpeciesTracking.Enabled {
@@ -947,7 +961,9 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 //   - If overlap is 0 (no overlap): minDetections = 1 (no repeated confirmation possible)
 //   - Very high overlap (>2.9): may require many detections at higher levels
 //   - Floating-point precision: epsilon subtraction prevents values like 5.0000003 from ceiling to 6
-func (p *Processor) calculateMinDetections() int {
+// calculateMinDetectionsFromSettings computes minimum detections from settings alone.
+// This is a standalone function that doesn't require a Processor instance.
+func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
 	// BirdNET uses 3-second chunks for analysis
 	const chunkDurationSeconds = 3.0
 	// Bird vocalization reference window - typical duration of a bird call
@@ -960,12 +976,21 @@ func (p *Processor) calculateMinDetections() int {
 	const epsilon = 1e-9
 
 	// Get filtering level from settings
-	level := p.Settings.Realtime.FalsePositiveFilter.Level
-	overlap := p.Settings.BirdNET.Overlap
+	level := settings.Realtime.FalsePositiveFilter.Level
+	overlap := settings.BirdNET.Overlap
 
 	// Level 0: no filtering
 	if level == 0 {
 		return 1
+	}
+
+	// Validate overlap is within valid range
+	if overlap >= chunkDurationSeconds {
+		GetLogger().Warn("Overlap equals or exceeds chunk duration",
+			"overlap", overlap,
+			"chunk_duration", chunkDurationSeconds,
+			"operation", "calculate_min_detections")
+		// Continue with safe fallback
 	}
 
 	// Validate overlap meets minimum for level (warning only, don't block)
@@ -998,6 +1023,12 @@ func (p *Processor) calculateMinDetections() int {
 	minDetections := int(math.Max(1, math.Ceil(required)))
 
 	return minDetections
+}
+
+// calculateMinDetections is a convenience method that calls calculateMinDetectionsFromSettings
+// with the processor's settings.
+func (p *Processor) calculateMinDetections() int {
+	return calculateMinDetectionsFromSettings(p.Settings)
 }
 
 // pendingDetectionsFlusher runs a goroutine that periodically checks the pending detections
