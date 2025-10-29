@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -1367,8 +1368,7 @@ func SaveSettings() error {
 	// Create a separate copy of the species list with proper locking
 	// Note: This MUST stay here to maintain correct mutex semantics
 	speciesListMutex.RLock()
-	settingsCopy.BirdNET.RangeFilter.Species = make([]string, len(settingsInstance.BirdNET.RangeFilter.Species))
-	copy(settingsCopy.BirdNET.RangeFilter.Species, settingsInstance.BirdNET.RangeFilter.Species)
+	settingsCopy.BirdNET.RangeFilter.Species = slices.Clone(settingsInstance.BirdNET.RangeFilter.Species)
 	speciesListMutex.RUnlock()
 
 	// Apply data transformations (seasonal tracking, etc.)

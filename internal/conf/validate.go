@@ -21,6 +21,12 @@ const MinSoundLevelInterval = 5
 // DefaultCleanupCheckInterval is the default disk cleanup check interval in minutes
 const DefaultCleanupCheckInterval = 15
 
+// Precompiled regular expressions for validation
+var (
+	// birdweatherIDPattern validates Birdweather ID format (24 alphanumeric characters)
+	birdweatherIDPattern = regexp.MustCompile(`^[a-zA-Z0-9]{24}$`)
+)
+
 // Audio gain limits in dB
 const (
 	MinAudioGain = -40.0 // Minimum allowed audio gain in dB
@@ -112,10 +118,10 @@ func ValidateBirdNETSettings(cfg *BirdNETConfig) ValidationResult {
 		result.Errors = append(result.Errors, "BirdNET threads must be at least 0")
 	}
 
-	// RangeFilter model check
-	if cfg.RangeFilter.Model == "" {
+	// RangeFilter model check - empty string is valid (v2 default)
+	if cfg.RangeFilter.Model != "" && cfg.RangeFilter.Model != "legacy" {
 		result.Valid = false
-		result.Errors = append(result.Errors, "RangeFilter model must not be empty")
+		result.Errors = append(result.Errors, "RangeFilter model must be either empty (v2 default) or 'legacy'")
 	}
 
 	// RangeFilter threshold check
@@ -154,15 +160,12 @@ func ValidateBirdweatherSettings(settings *BirdweatherSettings) ValidationResult
 			// Suggest disabling
 			normalized.Enabled = false
 			result.Warnings = append(result.Warnings, "Birdweather will be disabled due to missing ID")
-		} else {
-			// Validate Birdweather ID format
-			validIDPattern := regexp.MustCompile("^[a-zA-Z0-9]{24}$")
-			if !validIDPattern.MatchString(settings.ID) {
-				result.Valid = false
-				result.Errors = append(result.Errors, "Invalid Birdweather ID format: must be 24 alphanumeric characters")
-				normalized.Enabled = false
-				result.Warnings = append(result.Warnings, "Birdweather will be disabled due to invalid ID format")
-			}
+		} else if !birdweatherIDPattern.MatchString(settings.ID) {
+			// Validate Birdweather ID format using precompiled regex
+			result.Valid = false
+			result.Errors = append(result.Errors, "Invalid Birdweather ID format: must be 24 alphanumeric characters")
+			normalized.Enabled = false
+			result.Warnings = append(result.Warnings, "Birdweather will be disabled due to invalid ID format")
 		}
 
 		// Check threshold range
