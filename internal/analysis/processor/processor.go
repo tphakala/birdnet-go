@@ -120,6 +120,108 @@ type PendingDetection struct {
 // ensuring thread safety when the map is accessed or modified by concurrent goroutines.
 var mutex sync.Mutex
 
+// suggestLevelForDisabledFilter provides smart recommendations for filter levels
+// when filtering is disabled (level 0). It analyzes current overlap settings
+// and suggests an appropriate filter level that matches the user's configuration.
+func suggestLevelForDisabledFilter(overlap float64) {
+	recommendedLevel, _ := getRecommendedLevelForOverlap(overlap)
+	if recommendedLevel > 0 {
+		GetLogger().Info("False positive filtering is disabled",
+			"current_level", 0,
+			"current_overlap", overlap,
+			"recommended_level", recommendedLevel,
+			"recommended_level_name", getLevelName(recommendedLevel),
+			"recommendation", fmt.Sprintf("Consider enabling filtering with level %d (%s) which matches your current overlap %.1f",
+				recommendedLevel, getLevelName(recommendedLevel), overlap),
+			"operation", "false_positive_filter_config")
+		log.Printf("False positive filtering: DISABLED (level 0)")
+		log.Printf("💡 Suggestion: Your current overlap (%.1f) supports up to Level %d (%s) filtering",
+			overlap, recommendedLevel, getLevelName(recommendedLevel))
+		log.Printf("   Enable filtering to reduce false positives: set realtime.falsepositivefilter.level = %d", recommendedLevel)
+
+		// Notify users through the web UI
+		notification.NotifyInfo(
+			"False Positive Filtering Disabled",
+			fmt.Sprintf("Your system can support Level %d (%s) filtering with your current overlap of %.1f. Enable it in settings to reduce false detections from wind, cars, and other noise.",
+				recommendedLevel, getLevelName(recommendedLevel), overlap),
+		)
+	} else {
+		GetLogger().Info("False positive filtering is disabled",
+			"current_level", 0,
+			"operation", "false_positive_filter_config")
+		log.Printf("False positive filtering: DISABLED (level 0)")
+	}
+}
+
+// validateOverlapForLevel checks if the current overlap is sufficient for the
+// configured filter level and provides warnings/recommendations if not optimal.
+func validateOverlapForLevel(level int, overlap, minOverlap float64, minDetections int) {
+	if overlap < minOverlap {
+		// Overlap is too low for this level
+		GetLogger().Warn("Overlap below recommended minimum for filtering level",
+			"level", level,
+			"level_name", getLevelName(level),
+			"min_overlap", minOverlap,
+			"current_overlap", overlap,
+			"min_detections", minDetections,
+			"hardware_req", getHardwareRequirementForLevel(level),
+			"operation", "false_positive_filter_config")
+		log.Printf("⚠️  False positive filtering: Level %d (%s) - OVERLAP TOO LOW",
+			level, getLevelName(level))
+		log.Printf("   Current overlap: %.1f, Recommended minimum: %.1f", overlap, minOverlap)
+		log.Printf("   Requires %d confirmations in 6 seconds", minDetections)
+		log.Printf("   Hardware: %s", getHardwareRequirementForLevel(level))
+		recommendedForCurrent, _ := getRecommendedLevelForOverlap(overlap)
+		log.Printf("   Consider increasing overlap or using Level %d for your current overlap",
+			recommendedForCurrent)
+
+		// Warn users through the web UI
+		notification.NotifyWarning(
+			"analysis",
+			"Filter Level May Not Work Optimally",
+			fmt.Sprintf("Level %d (%s) filtering requires overlap %.1f or higher, but current overlap is %.1f. Consider increasing overlap to %.1f or using Level %d (%s) instead.",
+				level, getLevelName(level), minOverlap, overlap, minOverlap, recommendedForCurrent, getLevelName(recommendedForCurrent)),
+		)
+	} else {
+		// Configuration is good
+		GetLogger().Info("False positive filtering configured",
+			"level", level,
+			"level_name", getLevelName(level),
+			"overlap", overlap,
+			"min_overlap", minOverlap,
+			"min_detections", minDetections,
+			"hardware_req", getHardwareRequirementForLevel(level),
+			"operation", "false_positive_filter_config")
+		log.Printf("False positive filtering: Level %d (%s)",
+			level, getLevelName(level))
+		log.Printf("  Overlap: %.1f (min required: %.1f) ✓", overlap, minOverlap)
+		log.Printf("  Requires %d confirmations in 6 seconds", minDetections)
+		log.Printf("  Hardware: %s", getHardwareRequirementForLevel(level))
+	}
+}
+
+// warnAboutHardwareRequirements checks if high filter levels (4-5) have
+// sufficient hardware performance based on overlap settings and inference time.
+func warnAboutHardwareRequirements(level int, overlap float64) {
+	if level >= 4 {
+		// Check if overlap is within valid range for calculation
+		if overlap >= 3.0 {
+			GetLogger().Warn("Overlap value too high for hardware calculation",
+				"overlap", overlap,
+				"max_valid", 2.9,
+				"operation", "false_positive_filter_config")
+		} else {
+			stepSize := 3.0 - overlap
+			maxInferenceTime := stepSize * 1000 // Convert to ms
+			GetLogger().Warn("High filtering level requires fast hardware",
+				"level", level,
+				"required_inference_ms", maxInferenceTime,
+				"operation", "false_positive_filter_config")
+			log.Printf("  ⚠️  High level requires fast hardware: inference must complete in < %.0fms", maxInferenceTime)
+		}
+	}
+}
+
 // validateAndLogFilterConfig validates false positive filter configuration,
 // logs appropriate messages, and sends UI notifications. This function handles
 // all validation, logging, and user notification for the false positive filter.
@@ -144,96 +246,11 @@ func validateAndLogFilterConfig(settings *conf.Settings) {
 
 	if level == 0 {
 		// Smart migration: suggest a level based on current overlap
-		recommendedLevel, _ := getRecommendedLevelForOverlap(overlap)
-		if recommendedLevel > 0 {
-			GetLogger().Info("False positive filtering is disabled",
-				"current_level", level,
-				"current_overlap", overlap,
-				"recommended_level", recommendedLevel,
-				"recommended_level_name", getLevelName(recommendedLevel),
-				"recommendation", fmt.Sprintf("Consider enabling filtering with level %d (%s) which matches your current overlap %.1f",
-					recommendedLevel, getLevelName(recommendedLevel), overlap),
-				"operation", "false_positive_filter_config")
-			log.Printf("False positive filtering: DISABLED (level 0)")
-			log.Printf("💡 Suggestion: Your current overlap (%.1f) supports up to Level %d (%s) filtering",
-				overlap, recommendedLevel, getLevelName(recommendedLevel))
-			log.Printf("   Enable filtering to reduce false positives: set realtime.falsepositivefilter.level = %d", recommendedLevel)
-
-			// Notify users through the web UI
-			notification.NotifyInfo(
-				"False Positive Filtering Disabled",
-				fmt.Sprintf("Your system can support Level %d (%s) filtering with your current overlap of %.1f. Enable it in settings to reduce false detections from wind, cars, and other noise.",
-					recommendedLevel, getLevelName(recommendedLevel), overlap),
-			)
-		} else {
-			GetLogger().Info("False positive filtering is disabled",
-				"current_level", level,
-				"operation", "false_positive_filter_config")
-			log.Printf("False positive filtering: DISABLED (level 0)")
-		}
+		suggestLevelForDisabledFilter(overlap)
 	} else {
-		// Filtering is enabled
-		if overlap < minOverlap {
-			// Overlap is too low for this level
-			GetLogger().Warn("Overlap below recommended minimum for filtering level",
-				"level", level,
-				"level_name", getLevelName(level),
-				"min_overlap", minOverlap,
-				"current_overlap", overlap,
-				"min_detections", minDetections,
-				"hardware_req", getHardwareRequirementForLevel(level),
-				"operation", "false_positive_filter_config")
-			log.Printf("⚠️  False positive filtering: Level %d (%s) - OVERLAP TOO LOW",
-				level, getLevelName(level))
-			log.Printf("   Current overlap: %.1f, Recommended minimum: %.1f", overlap, minOverlap)
-			log.Printf("   Requires %d confirmations in 6 seconds", minDetections)
-			log.Printf("   Hardware: %s", getHardwareRequirementForLevel(level))
-			recommendedForCurrent, _ := getRecommendedLevelForOverlap(overlap)
-			log.Printf("   Consider increasing overlap or using Level %d for your current overlap",
-				recommendedForCurrent)
-
-			// Warn users through the web UI
-			notification.NotifyWarning(
-				"analysis",
-				"Filter Level May Not Work Optimally",
-				fmt.Sprintf("Level %d (%s) filtering requires overlap %.1f or higher, but current overlap is %.1f. Consider increasing overlap to %.1f or using Level %d (%s) instead.",
-					level, getLevelName(level), minOverlap, overlap, minOverlap, recommendedForCurrent, getLevelName(recommendedForCurrent)),
-			)
-		} else {
-			// Configuration is good
-			GetLogger().Info("False positive filtering configured",
-				"level", level,
-				"level_name", getLevelName(level),
-				"overlap", overlap,
-				"min_overlap", minOverlap,
-				"min_detections", minDetections,
-				"hardware_req", getHardwareRequirementForLevel(level),
-				"operation", "false_positive_filter_config")
-			log.Printf("False positive filtering: Level %d (%s)",
-				level, getLevelName(level))
-			log.Printf("  Overlap: %.1f (min required: %.1f) ✓", overlap, minOverlap)
-			log.Printf("  Requires %d confirmations in 6 seconds", minDetections)
-			log.Printf("  Hardware: %s", getHardwareRequirementForLevel(level))
-
-			// Validate overlap upper bound for hardware warning
-			if level >= 4 {
-				// Check if overlap is within valid range for calculation
-				if overlap >= 3.0 {
-					GetLogger().Warn("Overlap value too high for hardware calculation",
-						"overlap", overlap,
-						"max_valid", 2.9,
-						"operation", "false_positive_filter_config")
-				} else {
-					stepSize := 3.0 - overlap
-					maxInferenceTime := stepSize * 1000 // Convert to ms
-					GetLogger().Warn("High filtering level requires fast hardware",
-						"level", level,
-						"required_inference_ms", maxInferenceTime,
-						"operation", "false_positive_filter_config")
-					log.Printf("  ⚠️  High level requires fast hardware: inference must complete in < %.0fms", maxInferenceTime)
-				}
-			}
-		}
+		// Filtering is enabled - validate overlap and warn about hardware if needed
+		validateOverlapForLevel(level, overlap, minOverlap, minDetections)
+		warnAboutHardwareRequirements(level, overlap)
 	}
 }
 
