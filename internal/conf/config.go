@@ -1330,13 +1330,16 @@ func GetSettings() *Settings {
 	return settingsInstance
 }
 
-// prepareSettingsForSave applies any necessary transformations to settings before saving.
+// prepareSettingsForSave applies data transformations to settings before saving.
 // This function is separated from SaveSettings to enable unit testing without filesystem I/O.
-// It handles data transformations only - locking and file operations remain in SaveSettings.
 //
-// Important: This function does NOT handle mutex locking or species list copying.
-// Those operations must be handled by the caller (SaveSettings) to maintain proper
-// synchronization semantics.
+// Current transformations:
+//   - Auto-populates seasonal tracking seasons based on latitude if not already set
+//
+// Note: This is a pure function that only transforms data. It does not handle:
+//   - Mutex locking (handled by SaveSettings caller)
+//   - File I/O operations (handled by SaveSettings)
+//   - Species list synchronization (handled separately in SaveSettings)
 func prepareSettingsForSave(s *Settings, latitude float64) Settings {
 	settingsCopy := *s
 

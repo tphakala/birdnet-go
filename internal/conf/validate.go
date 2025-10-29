@@ -396,8 +396,11 @@ func validateBirdNETSettings(birdnetSettings *BirdNETConfig, settings *Settings)
 	result := ValidateBirdNETSettings(birdnetSettings)
 
 	// Apply normalized configuration (side effect: mutation)
-	if normalized, ok := result.Normalized.(*BirdNETConfig); ok {
+	if normalized, ok := result.Normalized.(*BirdNETConfig); ok && normalized != nil {
 		*birdnetSettings = *normalized
+	} else if !ok {
+		// Type assertion failed - this indicates a bug in ValidateBirdNETSettings
+		log.Printf("Internal error: ValidateBirdNETSettings returned unexpected type %T", result.Normalized)
 	}
 
 	// Handle warnings (side effects: logging + storing in settings)
@@ -577,8 +580,11 @@ func validateBirdweatherSettings(settings *BirdweatherSettings) error {
 	result := ValidateBirdweatherSettings(settings)
 
 	// Apply normalized configuration (side effect: mutation)
-	if normalized, ok := result.Normalized.(*BirdweatherSettings); ok {
+	if normalized, ok := result.Normalized.(*BirdweatherSettings); ok && normalized != nil {
 		*settings = *normalized
+	} else if !ok {
+		// Type assertion failed - this indicates a bug in ValidateBirdweatherSettings
+		log.Printf("Internal error: ValidateBirdweatherSettings returned unexpected type %T", result.Normalized)
 	}
 
 	// Handle warnings (side effect: logging)
