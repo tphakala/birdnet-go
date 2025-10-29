@@ -33,6 +33,70 @@
 - `b.ResetTimer()` after benchmark setup
 - Use `t.Attr()` for test metadata (Go 1.25)
 
+### Test Cleanup Best Practices
+
+- **Use `t.Cleanup()` instead of `defer`** for test resource cleanup
+- `t.Cleanup()` runs after all defers, providing more predictable cleanup order
+- Particularly important for tests that restore global state
+- Example:
+  ```go
+  func TestWithGlobalState(t *testing.T) {
+      // ❌ Wrong - defer may run at unpredictable times
+      originalValue := GetGlobalValue()
+      defer SetGlobalValue(originalValue)
+
+      // ✅ Correct - cleanup runs after all test defers
+      originalValue := GetGlobalValue()
+      t.Cleanup(func() {
+          SetGlobalValue(originalValue)
+      })
+  }
+  ```
+
+### Test Parallelization Guidelines
+
+- Add `t.Parallel()` to **test functions** and **subtests** for speed
+- **NEVER parallelize tests that**:
+  - Mutate global state (e.g., `conf.SetTestSettings()`)
+  - Share mutable data structures without synchronization
+  - Use shared map references without cloning
+- **Always clone shared test data** in subtests:
+  ```go
+  import "maps"
+
+  customSeasons := map[string]Season{...}
+  for _, tt := range tests {
+      t.Run(tt.name, func(t *testing.T) {
+          t.Parallel()
+          // Clone to avoid aliasing - prevents false positives
+          settings.Seasons = maps.Clone(customSeasons)
+      })
+  }
+  ```
+
+### Test Helper File Naming
+
+- Name test-only helper files with `_test.go` suffix
+- **Wrong**: `internal/conf/test_helpers.go` (included in production builds)
+- **Correct**: `internal/conf/test_helpers_test.go` (test-only)
+- This ensures helpers with `*testing.T` parameters don't bloat binaries
+
+### Benchmark Best Practices
+
+- Always call `b.ReportAllocs()` before `b.ResetTimer()` to track allocations
+- Use `b.Loop()` (Go 1.24+) for cleaner benchmark loops (optional)
+- Benchmark example:
+  ```go
+  func BenchmarkValidation(b *testing.B) {
+      cfg := &Config{...}
+      b.ReportAllocs()
+      b.ResetTimer()
+      for i := 0; i < b.N; i++ {
+          _ = Validate(cfg)
+      }
+  }
+  ```
+
 ### Mock Generation with Mockery
 
 **IMPORTANT**: Never manually write mocks. Use mockery for automated mock generation.
