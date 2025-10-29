@@ -21,6 +21,12 @@ const MinSoundLevelInterval = 5
 // DefaultCleanupCheckInterval is the default disk cleanup check interval in minutes
 const DefaultCleanupCheckInterval = 15
 
+// Precompiled regular expressions for validation
+var (
+	// birdweatherIDPattern validates Birdweather ID format (24 alphanumeric characters)
+	birdweatherIDPattern = regexp.MustCompile(`^[a-zA-Z0-9]{24}$`)
+)
+
 // Audio gain limits in dB
 const (
 	MinAudioGain = -40.0 // Minimum allowed audio gain in dB
@@ -55,6 +61,280 @@ func logValidationWarning(err error, validationType, warningType string) {
 		Context("validation_type", validationType).
 		Context("warning", warningType).
 		Build()
+}
+
+// ValidationResult captures validation outcomes without side effects.
+// Used by pure validation functions to return validation state, errors, warnings,
+// and normalized/transformed configuration.
+type ValidationResult struct {
+	Valid      bool     // Overall validation result
+	Errors     []string // Validation errors (fatal)
+	Warnings   []string // Non-fatal warnings
+	Normalized any      // Normalized/transformed config (type matches input)
+}
+
+// ValidateBirdNETSettings performs BirdNET validation without side effects.
+// Returns normalized settings and any errors/warnings.
+// This pure function enables testing without log output or settings mutation.
+//
+// The private validateBirdNETSettings() calls this and handles side effects.
+func ValidateBirdNETSettings(cfg *BirdNETConfig) ValidationResult {
+	result := ValidationResult{Valid: true, Warnings: []string{}}
+	normalized := *cfg
+
+	// Sensitivity range check
+	if cfg.Sensitivity < 0 || cfg.Sensitivity > 1.5 {
+		result.Valid = false
+		result.Errors = append(result.Errors, "BirdNET sensitivity must be between 0 and 1.5")
+	}
+
+	// Threshold range check
+	if cfg.Threshold < 0 || cfg.Threshold > 1 {
+		result.Valid = false
+		result.Errors = append(result.Errors, "BirdNET threshold must be between 0 and 1")
+	}
+
+	// Overlap range check
+	if cfg.Overlap < 0 || cfg.Overlap > 2.99 {
+		result.Valid = false
+		result.Errors = append(result.Errors, "BirdNET overlap value must be between 0 and 2.99 seconds")
+	}
+
+	// Longitude range check
+	if cfg.Longitude < -180 || cfg.Longitude > 180 {
+		result.Valid = false
+		result.Errors = append(result.Errors, "BirdNET longitude must be between -180 and 180")
+	}
+
+	// Latitude range check
+	if cfg.Latitude < -90 || cfg.Latitude > 90 {
+		result.Valid = false
+		result.Errors = append(result.Errors, "BirdNET latitude must be between -90 and 90")
+	}
+
+	// Threads check
+	if cfg.Threads < 0 {
+		result.Valid = false
+		result.Errors = append(result.Errors, "BirdNET threads must be at least 0")
+	}
+
+	// RangeFilter model check - empty string is valid (v2 default)
+	if cfg.RangeFilter.Model != "" && cfg.RangeFilter.Model != "legacy" {
+		result.Valid = false
+		result.Errors = append(result.Errors, "RangeFilter model must be either empty (v2 default) or 'legacy'")
+	}
+
+	// RangeFilter threshold check
+	if cfg.RangeFilter.Threshold < 0 || cfg.RangeFilter.Threshold > 1 {
+		result.Valid = false
+		result.Errors = append(result.Errors, "RangeFilter threshold must be between 0 and 1")
+	}
+
+	// Locale validation and normalization (pure transformation)
+	if cfg.Locale != "" {
+		normalizedLocale, err := NormalizeLocale(cfg.Locale)
+		if err != nil {
+			// Locale normalization fell back to default - this is a warning, not an error
+			message := fmt.Sprintf("BirdNET locale '%s' is not supported, will use fallback '%s'", cfg.Locale, normalizedLocale)
+			result.Warnings = append(result.Warnings, message)
+		}
+		// Update the normalized locale
+		normalized.Locale = normalizedLocale
+	}
+
+	result.Normalized = &normalized
+	return result
+}
+
+// ValidateBirdweatherSettings performs Birdweather validation without side effects.
+// Returns validation result with normalized settings.
+func ValidateBirdweatherSettings(settings *BirdweatherSettings) ValidationResult {
+	result := ValidationResult{Valid: true, Warnings: []string{}}
+	normalized := *settings
+
+	if settings.Enabled {
+		// Check if ID is provided when enabled
+		if settings.ID == "" {
+			result.Valid = false
+			result.Errors = append(result.Errors, "Birdweather ID is required when enabled")
+			// Suggest disabling
+			normalized.Enabled = false
+			result.Warnings = append(result.Warnings, "Birdweather will be disabled due to missing ID")
+		} else if !birdweatherIDPattern.MatchString(settings.ID) {
+			// Validate Birdweather ID format using precompiled regex
+			result.Valid = false
+			result.Errors = append(result.Errors, "Invalid Birdweather ID format: must be 24 alphanumeric characters")
+			normalized.Enabled = false
+			result.Warnings = append(result.Warnings, "Birdweather will be disabled due to invalid ID format")
+		}
+
+		// Check threshold range
+		if settings.Threshold < 0 || settings.Threshold > 1 {
+			result.Valid = false
+			result.Errors = append(result.Errors, "birdweather threshold must be between 0 and 1")
+		}
+
+		// Check location accuracy
+		if settings.LocationAccuracy < 0 {
+			result.Valid = false
+			result.Errors = append(result.Errors, "birdweather location accuracy must be non-negative")
+		}
+	}
+
+	result.Normalized = &normalized
+	return result
+}
+
+// ValidateWebhookProvider performs webhook provider validation without side effects.
+// Returns validation result with errors.
+func ValidateWebhookProvider(p *PushProviderConfig) ValidationResult {
+	result := ValidationResult{Valid: true}
+
+	if !p.Enabled {
+		result.Normalized = p
+		return result
+	}
+
+	// Webhook requires at least one endpoint
+	if len(p.Endpoints) == 0 {
+		result.Valid = false
+		result.Errors = append(result.Errors,
+			fmt.Sprintf("webhook provider '%s' requires at least one endpoint when enabled", p.Name))
+		result.Normalized = p
+		return result
+	}
+
+	// Validate custom template if specified
+	if p.Template != "" {
+		if _, err := template.New("validation").Parse(p.Template); err != nil {
+			result.Valid = false
+			result.Errors = append(result.Errors,
+				fmt.Sprintf("webhook provider '%s': invalid template syntax: %v", p.Name, err))
+		}
+	}
+
+	// Validate each endpoint
+	for i := range p.Endpoints {
+		endpoint := &p.Endpoints[i]
+
+		// URL is required
+		if strings.TrimSpace(endpoint.URL) == "" {
+			result.Valid = false
+			result.Errors = append(result.Errors,
+				fmt.Sprintf("webhook provider '%s' endpoint %d: URL is required", p.Name, i))
+			continue
+		}
+
+		// URL must start with http:// or https://
+		if !strings.HasPrefix(endpoint.URL, "http://") && !strings.HasPrefix(endpoint.URL, "https://") {
+			result.Valid = false
+			result.Errors = append(result.Errors,
+				fmt.Sprintf("webhook provider '%s' endpoint %d: URL must start with http:// or https://", p.Name, i))
+		}
+
+		// Validate HTTP method if specified
+		if endpoint.Method != "" {
+			method := strings.ToUpper(endpoint.Method)
+			if method != "POST" && method != "PUT" && method != "PATCH" {
+				result.Valid = false
+				result.Errors = append(result.Errors,
+					fmt.Sprintf("webhook provider '%s' endpoint %d: method must be POST, PUT, or PATCH, got %s", p.Name, i, endpoint.Method))
+			}
+		}
+
+		// Validate timeout
+		if endpoint.Timeout < 0 {
+			result.Valid = false
+			result.Errors = append(result.Errors,
+				fmt.Sprintf("webhook provider '%s' endpoint %d: timeout must be non-negative", p.Name, i))
+		}
+	}
+
+	result.Normalized = p
+	return result
+}
+
+// ValidateMQTTSettings performs MQTT validation without side effects.
+// Returns validation result with errors.
+func ValidateMQTTSettings(settings *MQTTSettings) ValidationResult {
+	result := ValidationResult{Valid: true}
+
+	if !settings.Enabled {
+		result.Normalized = settings
+		return result
+	}
+
+	// Check if broker is provided when enabled
+	if settings.Broker == "" {
+		result.Valid = false
+		result.Errors = append(result.Errors, "MQTT broker URL is required when MQTT is enabled")
+	}
+
+	// Check if topic is provided when enabled
+	if settings.Topic == "" {
+		result.Valid = false
+		result.Errors = append(result.Errors, "MQTT topic is required when MQTT is enabled")
+	}
+
+	// Validate retry settings if enabled
+	if settings.RetrySettings.Enabled {
+		if settings.RetrySettings.MaxRetries < 0 {
+			result.Valid = false
+			result.Errors = append(result.Errors, "MQTT max retries must be non-negative")
+		}
+		if settings.RetrySettings.InitialDelay < 0 {
+			result.Valid = false
+			result.Errors = append(result.Errors, "MQTT initial delay must be non-negative")
+		}
+		if settings.RetrySettings.MaxDelay < settings.RetrySettings.InitialDelay {
+			result.Valid = false
+			result.Errors = append(result.Errors, "MQTT max delay must be greater than or equal to initial delay")
+		}
+		if settings.RetrySettings.BackoffMultiplier <= 0 {
+			result.Valid = false
+			result.Errors = append(result.Errors, "MQTT backoff multiplier must be positive")
+		}
+	}
+
+	result.Normalized = settings
+	return result
+}
+
+// ValidateWebServerSettings performs WebServer validation without side effects.
+// Returns validation result with errors.
+func ValidateWebServerSettings(settings *WebServerSettings) ValidationResult {
+	result := ValidationResult{Valid: true}
+
+	if settings.Enabled {
+		// Check if port is provided when enabled
+		if settings.Port == "" {
+			result.Valid = false
+			result.Errors = append(result.Errors, "WebServer port is required when enabled")
+		} else {
+			// Validate port is a valid number in range 1-65535
+			if port, err := strconv.Atoi(settings.Port); err != nil || port < 1 || port > 65535 {
+				result.Valid = false
+				result.Errors = append(result.Errors,
+					fmt.Sprintf("WebServer port must be a number between 1 and 65535, got %q", settings.Port))
+			}
+		}
+	}
+
+	// Validate LiveStream settings
+	if settings.LiveStream.BitRate < 16 || settings.LiveStream.BitRate > 320 {
+		result.Valid = false
+		result.Errors = append(result.Errors,
+			fmt.Sprintf("LiveStream bitrate must be between 16 and 320 kbps, got %d", settings.LiveStream.BitRate))
+	}
+
+	if settings.LiveStream.SegmentLength < 1 || settings.LiveStream.SegmentLength > 30 {
+		result.Valid = false
+		result.Errors = append(result.Errors,
+			fmt.Sprintf("LiveStream segment length must be between 1 and 30 seconds, got %d", settings.LiveStream.SegmentLength))
+	}
+
+	result.Normalized = settings
+	return result
 }
 
 // ValidateSettings validates the entire Settings struct
@@ -118,74 +398,39 @@ func ValidateSettings(settings *Settings) error {
 	return nil
 }
 
-// validateBirdNETSettings validates the BirdNET-specific settings
+// validateBirdNETSettings validates the BirdNET-specific settings.
+// This function uses ValidateBirdNETSettings internally and handles side effects
+// (logging, mutation) to maintain backward compatibility.
 func validateBirdNETSettings(birdnetSettings *BirdNETConfig, settings *Settings) error {
-	var errs []string
+	// Call the pure validation function
+	result := ValidateBirdNETSettings(birdnetSettings)
 
-	// Check if sensitivity is within valid range
-	if birdnetSettings.Sensitivity < 0 || birdnetSettings.Sensitivity > 1.5 {
-		errs = append(errs, "BirdNET sensitivity must be between 0 and 1.5")
+	// Apply normalized configuration (side effect: mutation)
+	if normalized, ok := result.Normalized.(*BirdNETConfig); ok && normalized != nil {
+		*birdnetSettings = *normalized
+	} else if !ok {
+		// Type assertion failed - this indicates a bug in ValidateBirdNETSettings
+		return errors.New(fmt.Errorf("internal error: ValidateBirdNETSettings returned unexpected type %T", result.Normalized)).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "birdnet-type-assertion").
+			Build()
 	}
 
-	// Check if threshold is within valid range
-	if birdnetSettings.Threshold < 0 || birdnetSettings.Threshold > 1 {
-		errs = append(errs, "BirdNET threshold must be between 0 and 1")
-	}
+	// Handle warnings (side effects: logging + storing in settings)
+	for _, warning := range result.Warnings {
+		log.Printf("Configuration warning: %s", warning)
 
-	// Check if overlap is within valid range
-	if birdnetSettings.Overlap < 0 || birdnetSettings.Overlap > 2.99 {
-		errs = append(errs, "BirdNET overlap value must be between 0 and 2.99 seconds")
-	}
-
-	// Check if longitude is within valid range
-	if birdnetSettings.Longitude < -180 || birdnetSettings.Longitude > 180 {
-		errs = append(errs, "BirdNET longitude must be between -180 and 180")
-	}
-
-	// Check if latitude is within valid range
-	if birdnetSettings.Latitude < -90 || birdnetSettings.Latitude > 90 {
-		errs = append(errs, "BirdNET latitude must be between -90 and 90")
-	}
-
-	// Check if threads is non-negative
-	if birdnetSettings.Threads < 0 {
-		errs = append(errs, "BirdNET threads must be at least 0")
-	}
-
-	// Validate RangeFilter settings
-	if birdnetSettings.RangeFilter.Model == "" {
-		errs = append(errs, "RangeFilter model must not be empty")
-	}
-
-	// Check if RangeFilter threshold is within valid range
-	if birdnetSettings.RangeFilter.Threshold < 0 || birdnetSettings.RangeFilter.Threshold > 1 {
-		errs = append(errs, "RangeFilter threshold must be between 0 and 1")
-	}
-
-	// Validate locale setting
-	if birdnetSettings.Locale != "" {
-		normalizedLocale, err := NormalizeLocale(birdnetSettings.Locale)
-		if err != nil {
-			// This means locale normalization fell back to default
-			message := fmt.Sprintf("BirdNET locale '%s' is not supported, will use fallback '%s'", birdnetSettings.Locale, normalizedLocale)
-			errs = append(errs, message)
-
-			// Store the validation warning for telemetry reporting
-			// We can't call telemetry directly here due to import cycles
-			// This will be handled by the calling code in main.go
-			if settings.ValidationWarnings == nil {
-				settings.ValidationWarnings = make([]string, 0)
-			}
-			settings.ValidationWarnings = append(settings.ValidationWarnings,
-				fmt.Sprintf("config-locale-validation: %s", message))
+		// Store the validation warning for telemetry reporting
+		if settings.ValidationWarnings == nil {
+			settings.ValidationWarnings = make([]string, 0)
 		}
-		// Update the settings with the normalized locale
-		birdnetSettings.Locale = normalizedLocale
+		settings.ValidationWarnings = append(settings.ValidationWarnings,
+			fmt.Sprintf("config-locale-validation: %s", warning))
 	}
 
-	// If there are any errors, return them as a single error
-	if len(errs) > 0 {
-		return errors.New(fmt.Errorf("birdnet settings errors: %v", errs)).
+	// Return errors if validation failed
+	if !result.Valid {
+		return errors.New(fmt.Errorf("birdnet settings errors: %v", result.Errors)).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "birdnet-settings-collection").
 			Build()
@@ -194,33 +439,20 @@ func validateBirdNETSettings(birdnetSettings *BirdNETConfig, settings *Settings)
 	return nil
 }
 
-// validateWebServerSettings validates the WebServer-specific settings
+// validateWebServerSettings validates the WebServer-specific settings.
+// This function uses ValidateWebServerSettings internally and handles error formatting
+// to maintain backward compatibility.
 func validateWebServerSettings(settings *WebServerSettings) error {
-	if settings.Enabled {
-		// Check if port is provided when enabled
-		if settings.Port == "" {
-			return errors.New(fmt.Errorf("WebServer port is required when enabled")).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "webserver-port-required").
-				Build()
-		}
-		// You might want to add more specific port validation here
-	}
+	// Call the pure validation function
+	result := ValidateWebServerSettings(settings)
 
-	// Validate LiveStream settings
-	if settings.LiveStream.BitRate < 16 || settings.LiveStream.BitRate > 320 {
-		return errors.New(fmt.Errorf("LiveStream bitrate must be between 16 and 320 kbps, got %d", settings.LiveStream.BitRate)).
+	// Return errors if validation failed
+	if !result.Valid {
+		// Format first error with enhanced error for backward compatibility
+		firstError := result.Errors[0]
+		return errors.New(fmt.Errorf("%s", firstError)).
 			Category(errors.CategoryValidation).
-			Context("validation_type", "livestream-bitrate").
-			Context("bitrate", settings.LiveStream.BitRate).
-			Build()
-	}
-
-	if settings.LiveStream.SegmentLength < 1 || settings.LiveStream.SegmentLength > 30 {
-		return errors.New(fmt.Errorf("LiveStream segment length must be between 1 and 30 seconds, got %d", settings.LiveStream.SegmentLength)).
-			Category(errors.CategoryValidation).
-			Context("validation_type", "livestream-segment-length").
-			Context("segment_length", settings.LiveStream.SegmentLength).
+			Context("validation_type", "webserver-settings").
 			Build()
 	}
 
@@ -316,56 +548,23 @@ func validateRealtimeSettings(settings *RealtimeSettings) error {
 	return nil
 }
 
-// validateMQTTSettings validates the MQTT-specific settings
+// validateMQTTSettings validates the MQTT-specific settings.
+// This function uses ValidateMQTTSettings internally and handles error formatting
+// to maintain backward compatibility.
 func validateMQTTSettings(settings *MQTTSettings) error {
-	if settings.Enabled {
-		// Check if broker is provided when enabled
-		if settings.Broker == "" {
-			return errors.New(fmt.Errorf("MQTT broker URL is required when MQTT is enabled")).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "mqtt-broker-required").
-				Build()
-		}
+	// Call the pure validation function
+	result := ValidateMQTTSettings(settings)
 
-		// Check if topic is provided when enabled
-		if settings.Topic == "" {
-			return errors.New(fmt.Errorf("MQTT topic is required when MQTT is enabled")).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "mqtt-topic-required").
-				Build()
-		}
-
-		// Explicitly support anonymous connections (empty username and password)
-		// No validation required for username/password - they can be empty for anonymous connections
-
-		// Validate retry settings if enabled
-		if settings.RetrySettings.Enabled {
-			if settings.RetrySettings.MaxRetries < 0 {
-				return errors.New(fmt.Errorf("MQTT max retries must be non-negative")).
-					Category(errors.CategoryValidation).
-					Context("validation_type", "mqtt-max-retries").
-					Build()
-			}
-			if settings.RetrySettings.InitialDelay < 0 {
-				return errors.New(fmt.Errorf("MQTT initial delay must be non-negative")).
-					Category(errors.CategoryValidation).
-					Context("validation_type", "mqtt-initial-delay").
-					Build()
-			}
-			if settings.RetrySettings.MaxDelay < settings.RetrySettings.InitialDelay {
-				return errors.New(fmt.Errorf("MQTT max delay must be greater than or equal to initial delay")).
-					Category(errors.CategoryValidation).
-					Context("validation_type", "mqtt-max-delay").
-					Build()
-			}
-			if settings.RetrySettings.BackoffMultiplier <= 0 {
-				return errors.New(fmt.Errorf("MQTT backoff multiplier must be positive")).
-					Category(errors.CategoryValidation).
-					Context("validation_type", "mqtt-backoff-multiplier").
-					Build()
-			}
-		}
+	// Return errors if validation failed
+	if !result.Valid {
+		// Format first error with enhanced error for backward compatibility
+		firstError := result.Errors[0]
+		return errors.New(fmt.Errorf("%s", firstError)).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "mqtt-settings").
+			Build()
 	}
+
 	return nil
 }
 
@@ -386,40 +585,38 @@ func validateSoundLevelSettings(settings *SoundLevelSettings) error {
 	return nil
 }
 
-// validateBirdweatherSettings validates the Birdweather-specific settings
+// validateBirdweatherSettings validates the Birdweather-specific settings.
+// This function uses ValidateBirdweatherSettings internally and handles side effects
+// (logging, mutation) to maintain backward compatibility.
 func validateBirdweatherSettings(settings *BirdweatherSettings) error {
-	if settings.Enabled {
-		// Check if ID is provided when enabled
-		if settings.ID == "" {
-			log.Println("Error: Birdweather ID is required when enabled. Disabling Birdweather.")
-			settings.Enabled = false
-			return nil
-		}
+	// Call the pure validation function
+	result := ValidateBirdweatherSettings(settings)
 
-		// Validate Birdweather ID format
-		validIDPattern := regexp.MustCompile("^[a-zA-Z0-9]{24}$")
-		if !validIDPattern.MatchString(settings.ID) {
-			log.Println("Error: Invalid Birdweather ID format: must be 24 alphanumeric characters. Disabling Birdweather.")
-			settings.Enabled = false
-			return nil
-		}
-
-		// Check if threshold is within valid range
-		if settings.Threshold < 0 || settings.Threshold > 1 {
-			return errors.New(fmt.Errorf("birdweather threshold must be between 0 and 1")).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "birdweather-threshold").
-				Build()
-		}
-
-		// Check if location accuracy is non-negative
-		if settings.LocationAccuracy < 0 {
-			return errors.New(fmt.Errorf("birdweather location accuracy must be non-negative")).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "birdweather-location-accuracy").
-				Build()
-		}
+	// Apply normalized configuration (side effect: mutation)
+	if normalized, ok := result.Normalized.(*BirdweatherSettings); ok && normalized != nil {
+		*settings = *normalized
+	} else if !ok {
+		// Type assertion failed - this indicates a bug in ValidateBirdweatherSettings
+		return errors.New(fmt.Errorf("internal error: ValidateBirdweatherSettings returned unexpected type %T", result.Normalized)).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "birdweather-type-assertion").
+			Build()
 	}
+
+	// Handle warnings (side effect: logging)
+	for _, warning := range result.Warnings {
+		log.Println(warning)
+	}
+
+	// Return errors if validation failed
+	if !result.Valid {
+		// Join errors for backward compatibility
+		return errors.New(fmt.Errorf("%s", strings.Join(result.Errors, "; "))).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "birdweather-settings").
+			Build()
+	}
+
 	return nil
 }
 
@@ -867,84 +1064,36 @@ func validateNotificationSettings(n *NotificationConfig) error {
 	return nil
 }
 
-// validateWebhookProvider validates webhook provider configuration
+// validateWebhookProvider validates webhook provider configuration.
+// This function uses ValidateWebhookProvider internally and handles error formatting
+// to maintain backward compatibility. Authentication validation is still performed separately
+// via validateWebhookAuth due to its complexity.
 func validateWebhookProvider(p *PushProviderConfig) error {
-	if !p.Enabled {
-		return nil
-	}
+	// Call the pure validation function
+	result := ValidateWebhookProvider(p)
 
-	// Webhook requires at least one endpoint
-	if len(p.Endpoints) == 0 {
-		return errors.New(fmt.Errorf("webhook provider '%s' requires at least one endpoint when enabled", p.Name)).
+	// Return early if basic validation failed
+	if !result.Valid {
+		// Format first error with enhanced error for backward compatibility
+		firstError := result.Errors[0]
+		return errors.New(fmt.Errorf("%s", firstError)).
 			Category(errors.CategoryValidation).
-			Context("validation_type", "notification-push-webhook-endpoints").
+			Context("validation_type", "notification-push-webhook").
 			Context("provider_name", p.Name).
 			Build()
 	}
 
-	// Validate custom template if specified
-	if p.Template != "" {
-		if _, err := template.New("validation").Parse(p.Template); err != nil {
-			return errors.New(fmt.Errorf("webhook provider '%s': invalid template syntax: %w", p.Name, err)).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "notification-push-webhook-template").
-				Context("provider_name", p.Name).
-				Context("error_detail", err.Error()).
-				Build()
-		}
+	// If disabled or no endpoints, no need to validate auth
+	if !p.Enabled || len(p.Endpoints) == 0 {
+		return nil
 	}
 
-	// Validate each endpoint (use index to avoid copying 144-byte struct)
+	// Validate authentication for each endpoint
+	// Note: Auth validation is kept separate as it's complex and not yet in pure version
 	for i := range p.Endpoints {
 		endpoint := &p.Endpoints[i]
-		// URL is required
-		if strings.TrimSpace(endpoint.URL) == "" {
-			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: URL is required", p.Name, i)).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "notification-push-webhook-url").
-				Context("provider_name", p.Name).
-				Context("endpoint_index", i).
-				Build()
-		}
-
-		// URL must start with http:// or https://
-		if !strings.HasPrefix(endpoint.URL, "http://") && !strings.HasPrefix(endpoint.URL, "https://") {
-			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: URL must start with http:// or https://", p.Name, i)).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "notification-push-webhook-url-scheme").
-				Context("provider_name", p.Name).
-				Context("endpoint_index", i).
-				Context("url", endpoint.URL).
-				Build()
-		}
-
-		// Validate HTTP method if specified (empty method defaults to POST in webhook provider)
-		if endpoint.Method != "" {
-			method := strings.ToUpper(endpoint.Method)
-			if method != "POST" && method != "PUT" && method != "PATCH" {
-				return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: method must be POST, PUT, or PATCH, got %s", p.Name, i, endpoint.Method)).
-					Category(errors.CategoryValidation).
-					Context("validation_type", "notification-push-webhook-method").
-					Context("provider_name", p.Name).
-					Context("endpoint_index", i).
-					Context("method", endpoint.Method).
-					Build()
-			}
-		}
-
-		// Validate authentication configuration
 		if err := validateWebhookAuth(&endpoint.Auth, p.Name, i); err != nil {
 			return err
-		}
-
-		// Validate timeout if specified
-		if endpoint.Timeout < 0 {
-			return errors.New(fmt.Errorf("webhook provider '%s' endpoint %d: timeout must be non-negative", p.Name, i)).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "notification-push-webhook-timeout").
-				Context("provider_name", p.Name).
-				Context("endpoint_index", i).
-				Build()
 		}
 	}
 

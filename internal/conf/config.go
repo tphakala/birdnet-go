@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -1330,6 +1331,31 @@ func GetSettings() *Settings {
 	return settingsInstance
 }
 
+// prepareSettingsForSave applies data transformations to settings before saving.
+// This function is separated from SaveSettings to enable unit testing without filesystem I/O.
+//
+// Current transformations:
+//   - Auto-populates seasonal tracking seasons based on latitude if not already set
+//
+// Note: This is a pure function that only transforms data. It does not handle:
+//   - Mutex locking (handled by SaveSettings caller)
+//   - File I/O operations (handled by SaveSettings)
+//   - Species list synchronization (handled separately in SaveSettings)
+func prepareSettingsForSave(s *Settings, latitude float64) Settings {
+	settingsCopy := *s
+
+	// Auto-update seasonal tracking dates based on latitude if seasonal tracking is enabled
+	// and no custom seasons are already defined
+	if settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Enabled &&
+		len(settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons) == 0 {
+		// Get hemisphere-appropriate default seasons
+		defaultSeasons := GetDefaultSeasons(latitude)
+		settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons = defaultSeasons
+	}
+
+	return settingsCopy
+}
+
 // SaveSettings saves the current settings to the configuration file.
 // It uses UpdateYAMLConfig to handle the atomic write process.
 func SaveSettings() error {
@@ -1339,20 +1365,14 @@ func SaveSettings() error {
 	// Create a deep copy of the settings
 	settingsCopy := *settingsInstance
 
-	// Create a separate copy of the species list
+	// Create a separate copy of the species list with proper locking
+	// Note: This MUST stay here to maintain correct mutex semantics
 	speciesListMutex.RLock()
-	settingsCopy.BirdNET.RangeFilter.Species = make([]string, len(settingsInstance.BirdNET.RangeFilter.Species))
-	copy(settingsCopy.BirdNET.RangeFilter.Species, settingsInstance.BirdNET.RangeFilter.Species)
+	settingsCopy.BirdNET.RangeFilter.Species = slices.Clone(settingsInstance.BirdNET.RangeFilter.Species)
 	speciesListMutex.RUnlock()
 
-	// Auto-update seasonal tracking dates based on latitude if seasonal tracking is enabled
-	// and no custom seasons are already defined
-	if settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Enabled &&
-		len(settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons) == 0 {
-		// Get hemisphere-appropriate default seasons
-		defaultSeasons := GetDefaultSeasons(settingsCopy.BirdNET.Latitude)
-		settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons = defaultSeasons
-	}
+	// Apply data transformations (seasonal tracking, etc.)
+	settingsCopy = prepareSettingsForSave(&settingsCopy, settingsInstance.BirdNET.Latitude)
 
 	// Find the path of the current config file
 	configPath, err := FindConfigFile()
@@ -1441,6 +1461,99 @@ func GetTestSettings() *Settings {
 	settings.Output.SQLite.Path = ":memory:"
 
 	return settings
+}
+
+// SettingsBuilder provides a fluent interface for constructing test settings.
+// It simplifies test setup by providing convenient methods for common configuration patterns.
+//
+// Example usage:
+//
+//	settings := conf.NewTestSettings().
+//	    WithBirdNET(0.9, 45.0, -122.0).
+//	    WithMQTT("tcp://localhost:1883", "test").
+//	    Build()
+type SettingsBuilder struct {
+	settings *Settings
+}
+
+// NewTestSettings creates a new SettingsBuilder initialized with default test settings.
+func NewTestSettings() *SettingsBuilder {
+	return &SettingsBuilder{
+		settings: GetTestSettings(),
+	}
+}
+
+// WithBirdNET configures BirdNET-specific settings.
+func (b *SettingsBuilder) WithBirdNET(threshold, latitude, longitude float64) *SettingsBuilder {
+	b.settings.BirdNET.Threshold = threshold
+	b.settings.BirdNET.Latitude = latitude
+	b.settings.BirdNET.Longitude = longitude
+	return b
+}
+
+// WithMQTT configures MQTT settings and enables MQTT.
+func (b *SettingsBuilder) WithMQTT(broker, topic string) *SettingsBuilder {
+	b.settings.Realtime.MQTT.Enabled = true
+	b.settings.Realtime.MQTT.Broker = broker
+	b.settings.Realtime.MQTT.Topic = topic
+	return b
+}
+
+// WithAudioExport configures audio export settings and enables audio export.
+func (b *SettingsBuilder) WithAudioExport(path, exportType, bitrate string) *SettingsBuilder {
+	b.settings.Realtime.Audio.Export.Enabled = true
+	b.settings.Realtime.Audio.Export.Path = path
+	b.settings.Realtime.Audio.Export.Type = exportType
+	b.settings.Realtime.Audio.Export.Bitrate = bitrate
+	return b
+}
+
+// WithSpeciesTracking configures species tracking settings and enables species tracking.
+func (b *SettingsBuilder) WithSpeciesTracking(windowDays, syncInterval int) *SettingsBuilder {
+	b.settings.Realtime.SpeciesTracking.Enabled = true
+	b.settings.Realtime.SpeciesTracking.NewSpeciesWindowDays = windowDays
+	b.settings.Realtime.SpeciesTracking.SyncIntervalMinutes = syncInterval
+	return b
+}
+
+// WithRTSPHealthThreshold configures RTSP health monitoring threshold.
+func (b *SettingsBuilder) WithRTSPHealthThreshold(seconds int) *SettingsBuilder {
+	b.settings.Realtime.RTSP.Health.HealthyDataThreshold = seconds
+	return b
+}
+
+// WithImageProvider configures thumbnail image provider settings.
+func (b *SettingsBuilder) WithImageProvider(provider, fallbackPolicy string) *SettingsBuilder {
+	b.settings.Realtime.Dashboard.Thumbnails.ImageProvider = provider
+	b.settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = fallbackPolicy
+	return b
+}
+
+// WithSecurity configures security settings.
+func (b *SettingsBuilder) WithSecurity(host string, autoTLS bool) *SettingsBuilder {
+	b.settings.Security.Host = host
+	b.settings.Security.AutoTLS = autoTLS
+	return b
+}
+
+// WithWebServer configures web server settings.
+func (b *SettingsBuilder) WithWebServer(port string, enabled bool) *SettingsBuilder {
+	b.settings.WebServer.Port = port
+	b.settings.WebServer.Enabled = enabled
+	return b
+}
+
+// Build returns the constructed settings without modifying global state.
+// Use this when you need the settings object for manual manipulation.
+func (b *SettingsBuilder) Build() *Settings {
+	return b.settings
+}
+
+// Apply sets the built settings as the global test settings.
+// This is equivalent to calling SetTestSettings() with the built settings.
+func (b *SettingsBuilder) Apply() *Settings {
+	SetTestSettings(b.settings)
+	return b.settings
 }
 
 // Note: SendValidationWarningsAsNotifications function removed as it was unused
