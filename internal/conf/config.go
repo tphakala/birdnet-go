@@ -1330,6 +1330,28 @@ func GetSettings() *Settings {
 	return settingsInstance
 }
 
+// prepareSettingsForSave applies any necessary transformations to settings before saving.
+// This function is separated from SaveSettings to enable unit testing without filesystem I/O.
+// It handles data transformations only - locking and file operations remain in SaveSettings.
+//
+// Important: This function does NOT handle mutex locking or species list copying.
+// Those operations must be handled by the caller (SaveSettings) to maintain proper
+// synchronization semantics.
+func prepareSettingsForSave(s *Settings, latitude float64) Settings {
+	settingsCopy := *s
+
+	// Auto-update seasonal tracking dates based on latitude if seasonal tracking is enabled
+	// and no custom seasons are already defined
+	if settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Enabled &&
+		len(settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons) == 0 {
+		// Get hemisphere-appropriate default seasons
+		defaultSeasons := GetDefaultSeasons(latitude)
+		settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons = defaultSeasons
+	}
+
+	return settingsCopy
+}
+
 // SaveSettings saves the current settings to the configuration file.
 // It uses UpdateYAMLConfig to handle the atomic write process.
 func SaveSettings() error {
@@ -1339,20 +1361,15 @@ func SaveSettings() error {
 	// Create a deep copy of the settings
 	settingsCopy := *settingsInstance
 
-	// Create a separate copy of the species list
+	// Create a separate copy of the species list with proper locking
+	// Note: This MUST stay here to maintain correct mutex semantics
 	speciesListMutex.RLock()
 	settingsCopy.BirdNET.RangeFilter.Species = make([]string, len(settingsInstance.BirdNET.RangeFilter.Species))
 	copy(settingsCopy.BirdNET.RangeFilter.Species, settingsInstance.BirdNET.RangeFilter.Species)
 	speciesListMutex.RUnlock()
 
-	// Auto-update seasonal tracking dates based on latitude if seasonal tracking is enabled
-	// and no custom seasons are already defined
-	if settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Enabled &&
-		len(settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons) == 0 {
-		// Get hemisphere-appropriate default seasons
-		defaultSeasons := GetDefaultSeasons(settingsCopy.BirdNET.Latitude)
-		settingsCopy.Realtime.SpeciesTracking.SeasonalTracking.Seasons = defaultSeasons
-	}
+	// Apply data transformations (seasonal tracking, etc.)
+	settingsCopy = prepareSettingsForSave(&settingsCopy, settingsInstance.BirdNET.Latitude)
 
 	// Find the path of the current config file
 	configPath, err := FindConfigFile()
