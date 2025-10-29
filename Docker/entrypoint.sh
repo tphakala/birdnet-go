@@ -151,6 +151,51 @@ if [ -d "/dev/snd" ]; then
     fi
 fi
 
+# Pre-flight checks before starting application
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🔍 Running pre-flight checks..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Check data directory disk space
+DATA_SPACE_KB=$(df -k /data | awk 'NR==2 {print $4}')
+DATA_SPACE_MB=$((DATA_SPACE_KB / 1024))
+REQUIRED_SPACE_MB=1024
+
+if [ "$DATA_SPACE_MB" -lt "$REQUIRED_SPACE_MB" ]; then
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "❌ STARTUP ERROR: Insufficient disk space"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Location:  /data"
+    echo "Required:  ${REQUIRED_SPACE_MB}MB"
+    echo "Available: ${DATA_SPACE_MB}MB"
+    echo ""
+    echo "💡 To resolve:"
+    echo "  1. Increase volume size for /data mount"
+    echo "  2. Free up space: docker exec birdnet-go rm -rf /data/clips/*"
+    echo "  3. Check host mount: df -h"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "Container will exit in 30 seconds..."
+    echo "Use 'journalctl -u birdnet-go.service -n 50' to view this message"
+    sleep 30
+    exit 1
+fi
+
+# Check config directory exists and is writable
+if [ ! -w /config ]; then
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "❌ STARTUP ERROR: Config directory not writable"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Check permissions on host directory mounted to /config"
+    echo "Container will exit in 10 seconds..."
+    sleep 10
+    exit 1
+fi
+
+echo "✅ Pre-flight checks passed"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
 # Execute the application
 if [ "$RUNNING_AS_ROOT" = true ]; then
     echo "Starting BirdNET-Go as user $USER_NAME ($APP_UID:$APP_GID)"

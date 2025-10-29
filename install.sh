@@ -1960,11 +1960,55 @@ check_docker_space() {
     local required_space=2000000  # 2GB in KB
     local available_space
     available_space=$(df -k /var/lib/docker | awk 'NR==2 {print $4}')
-    
+
     if [ "$available_space" -lt "$required_space" ]; then
         print_message "❌ Insufficient disk space for Docker image" "$RED"
         print_message "Required: 2GB, Available: $((available_space/1024))MB" "$YELLOW"
         exit 1
+    fi
+}
+
+# Function to check data directory disk space requirements
+check_data_directory_space() {
+    local required_space=1048576  # 1GB in KB (1024*1024)
+    local data_dir="${1:-$DATA_DIR}"
+
+    # Ensure directory exists
+    mkdir -p "$data_dir" 2>/dev/null || true
+
+    # Get available space in KB
+    local available_space
+    available_space=$(df -k "$data_dir" | awk 'NR==2 {print $4}')
+    local available_mb=$((available_space/1024))
+
+    if [ "$available_space" -lt "$required_space" ]; then
+        print_message "❌ ERROR: Insufficient disk space for BirdNET-Go data directory" "$RED"
+        print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "$RED"
+        print_message "Location:  $data_dir" "$YELLOW"
+        print_message "Required:  1024 MB minimum" "$YELLOW"
+        print_message "Available: ${available_mb} MB" "$RED"
+        print_message "" "$NC"
+        print_message "💡 To resolve this issue:" "$YELLOW"
+        print_message "  1. Free up disk space on the volume" "$YELLOW"
+        print_message "  2. Use a different location with more space" "$YELLOW"
+        print_message "  3. Clean up old data: rm -rf $data_dir/clips/*" "$YELLOW"
+        print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "$RED"
+
+        # Send telemetry if enabled
+        local diagnostic_json=$(cat <<EOF
+{
+    "data_directory": "$(echo "$data_dir" | sed 's/\"/\\\"/g')",
+    "required_mb": 1024,
+    "available_mb": $available_mb,
+    "mount_point": "$(df "$data_dir" | awk 'NR==2 {print $1}')"
+}
+EOF
+)
+        send_telemetry_event "error" "Insufficient disk space for data directory" "error" "step=check_data_space" "$diagnostic_json"
+        exit 1
+    else
+        log_message "INFO" "Data directory space check passed: ${available_mb}MB available (minimum: 1024MB)"
+        print_message "✅ Data directory has sufficient space: ${available_mb}MB available" "$GREEN"
     fi
 }
 
@@ -3803,6 +3847,42 @@ check_container_running() {
     fi
 }
 
+# Function to show service diagnostics
+show_service_diagnostics() {
+    print_message "\n📋 BirdNET-Go Service Diagnostics" "$GREEN"
+    print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "$GRAY"
+
+    # Service status
+    if systemctl is-active --quiet birdnet-go.service; then
+        print_message "✅ Service Status: Running" "$GREEN"
+    else
+        print_message "❌ Service Status: Not Running" "$RED"
+        print_message "\n📄 Last 30 log lines:" "$YELLOW"
+        journalctl -u birdnet-go.service -n 30 --no-pager 2>/dev/null || echo "Unable to retrieve logs"
+
+        print_message "\n💡 To view live logs, run:" "$YELLOW"
+        print_message "   journalctl -u birdnet-go.service -f" "$NC"
+    fi
+
+    # Container status
+    print_message "\n🐳 Docker Container Status:" "$YELLOW"
+    docker ps -a --filter "name=birdnet-go" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "Unable to retrieve container status"
+
+    # Disk space
+    print_message "\n💾 Disk Space:" "$YELLOW"
+    print_message "Data directory: $DATA_DIR" "$NC"
+    df -h "$DATA_DIR" 2>/dev/null | tail -1 || echo "Unable to check disk space"
+
+    # If service failed, show prominent error
+    if systemctl is-failed --quiet birdnet-go.service; then
+        print_message "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "$RED"
+        print_message "⚠️  SERVICE FAILED TO START" "$RED"
+        print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "$RED"
+        print_message "\nTo restart: sudo systemctl restart birdnet-go.service" "$YELLOW"
+        print_message "View logs:  sudo journalctl -u birdnet-go.service -n 50" "$YELLOW"
+    fi
+}
+
 # Function to get all BirdNET containers (including stopped ones)
 get_all_containers() {
     if command_exists docker; then
@@ -5314,6 +5394,10 @@ mkdir -p "$DATA_DIR"
 mkdir -p "$DATA_DIR/clips"
 print_message "✅ Created data directory and clips subdirectory" "$GREEN"
 
+# Check data directory has sufficient space
+print_message "\n💾 Checking data directory disk space..." "$YELLOW"
+check_data_directory_space "$DATA_DIR"
+
 # Download base config file
 download_base_config
 
@@ -5441,6 +5525,17 @@ if check_mdns; then
 else
     log_message "INFO" "mDNS not available"
 fi
+
+# Show service diagnostics
+show_service_diagnostics
+
+# Display helpful commands
+print_message "\n📚 Helpful Commands:" "$GREEN"
+print_message "  Check status:    sudo systemctl status birdnet-go" "$NC"
+print_message "  View logs:       sudo journalctl -u birdnet-go.service -f" "$NC"
+print_message "  Check disk:      df -h $DATA_DIR" "$NC"
+print_message "  Restart service: sudo systemctl restart birdnet-go" "$NC"
+print_message "  Container logs:  docker logs birdnet-go" "$NC"
 
 log_message "INFO" "Install.sh script execution completed successfully"
 log_message "INFO" "=== End of BirdNET-Go Installation/Update Session ==="

@@ -120,6 +120,10 @@ RUN chmod +x /usr/bin/reset_auth.sh
 COPY --from=build /home/dev-user/src/BirdNET-Go/Docker/entrypoint.sh /usr/bin/
 RUN chmod +x /usr/bin/entrypoint.sh
 
+# Add startup wrapper script for error capture and display
+COPY --from=build /home/dev-user/src/BirdNET-Go/Docker/startup-wrapper.sh /usr/bin/
+RUN chmod +x /usr/bin/startup-wrapper.sh
+
 # Create config and data directories with proper permissions for rootless compatibility
 # Make them world-writable so non-root users can create subdirectories
 RUN mkdir -p /config /data/clips /data/models && \
@@ -161,5 +165,9 @@ LABEL usage.podman="podman run -d --name birdnet-go -p 8080:8080 -v ./config:/co
 LABEL usage.compose.docker="Use Docker/docker-compose.yml"
 LABEL usage.compose.podman="Use Podman/podman-compose.yml"
 
-ENTRYPOINT ["/usr/bin/entrypoint.sh"]
+# Add healthcheck to monitor container status
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8080/ || exit 1
+
+ENTRYPOINT ["/usr/bin/entrypoint.sh", "/usr/bin/startup-wrapper.sh"]
 CMD ["birdnet-go", "realtime"]
