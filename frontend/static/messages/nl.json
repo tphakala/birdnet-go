@@ -7,7 +7,7 @@
     "reset": "Terug zetten",
     "refresh": "Verversen",
     "delete": "Verwijderen",
-    "edit": "Wijzigien",
+    "edit": "Wijzigen",
     "search": "Zoeken",
     "filter": "Filteren",
     "sort": "Sorteren",
@@ -33,7 +33,7 @@
     },
     "buttons": {
       "save": "Bewaar",
-      "reset": "Zet treug",
+      "reset": "Zet terug",
       "delete": "Verwijder",
       "cancel": "Annuleer",
       "apply": "Pas toe",
@@ -327,7 +327,7 @@
     },
     "sortOptions": {
       "dateDesc": "Datum (Nieuwste eerst)",
-      "dateAsc": "Datum (Oudste eerst",
+      "dateAsc": "Datum (Oudste eerst)",
       "speciesAsc": "Soorten (A-Z)",
       "confidenceDesc": "Betrouwbaarheid (Hoog-Laag)"
     },
@@ -592,7 +592,7 @@
         "memory": "Geheugen",
         "uptime": "Werktijd"
       },
-      "showAll": "Toon ale processen",
+      "showAll": "Toon alle processen",
       "showBirdnetOnly": "Toon alleen BirdNET"
     },
     "errors": {
@@ -1644,7 +1644,7 @@
       "goToPreviousPage": "Ga naar de vorige pagina",
       "goToNextPage": "Ga naar de volgende pagina",
       "firstPage": "Eerste pagina",
-      "lastPage": "Laatstw pagina"
+      "lastPage": "Laatste pagina"
     },
     "stats": {
       "total": "Totaal",
@@ -1729,7 +1729,7 @@
       "empty": "Geen soort toegevoegd",
       "maxReached": "Maximale aantal van {maxItems} soorten bereikt",
       "aria": {
-        "dragToReorder": "Sleep om de sortereing te wijzigen {species}",
+        "dragToReorder": "Sleep om de sortering te wijzigen {species}",
         "edit": "Bewerk soort",
         "remove": "Verwijder soort"
       }
