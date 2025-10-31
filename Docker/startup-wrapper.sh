@@ -8,15 +8,12 @@ set -o pipefail
 # Store command as array to preserve argument boundaries
 APP_CMD=("$@")
 STARTUP_LOG="/tmp/birdnet-startup.log"
-TEE_PID=""
 APP_PID=""
 
 # Cleanup function
 cleanup() {
-    # Wait for tee to finish flushing
-    if [ -n "$TEE_PID" ] && kill -0 "$TEE_PID" 2>/dev/null; then
-        wait "$TEE_PID" 2>/dev/null || true
-    fi
+    # Give tee a moment to finish writing
+    sleep 1
 }
 
 # Signal handler to forward signals to child process
@@ -39,14 +36,13 @@ echo "Command: ${APP_CMD[*]}"
 echo "Time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 echo ""
 
-# Start tee in background to capture output
-"${APP_CMD[@]}" 2>&1 | tee "$STARTUP_LOG" &
-TEE_PID=$!
+# Start application with output going to tee via process substitution
+# This allows us to capture the real application PID for signal forwarding
+"${APP_CMD[@]}" > >(tee "$STARTUP_LOG") 2>&1 &
+APP_PID=$!
 
-# Get the PID of the actual application (first process in pipeline)
-# Note: In bash, the APP_CMD process PID is not directly accessible via $!
-# We'll wait for the pipeline and capture its exit code
-wait $TEE_PID
+# Wait for the application to finish and capture its exit code
+wait "$APP_PID"
 EXIT_CODE=$?
 
 # Check if the application failed
