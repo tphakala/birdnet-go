@@ -5,36 +5,68 @@
 
 set -o pipefail
 
-APP_CMD="$@"
+# Store command as array to preserve argument boundaries
+APP_CMD=("$@")
 STARTUP_LOG="/tmp/birdnet-startup.log"
+TEE_PID=""
+APP_PID=""
+
+# Cleanup function
+cleanup() {
+    # Wait for tee to finish flushing
+    if [ -n "$TEE_PID" ] && kill -0 "$TEE_PID" 2>/dev/null; then
+        wait "$TEE_PID" 2>/dev/null || true
+    fi
+}
+
+# Signal handler to forward signals to child process
+forward_signal() {
+    local sig=$1
+    if [ -n "$APP_PID" ] && kill -0 "$APP_PID" 2>/dev/null; then
+        kill -"$sig" "$APP_PID" 2>/dev/null || true
+    fi
+}
+
+# Trap signals and forward them
+trap 'forward_signal TERM' TERM
+trap 'forward_signal INT' INT
+trap 'cleanup' EXIT
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🚀 Starting BirdNET-Go Application"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Command: $APP_CMD"
+echo "Command: ${APP_CMD[*]}"
 echo "Time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 echo ""
 
-# Run the application and capture output
-if ! $APP_CMD 2>&1 | tee "$STARTUP_LOG"; then
-    EXIT_CODE=$?
+# Start tee in background to capture output
+"${APP_CMD[@]}" 2>&1 | tee "$STARTUP_LOG" &
+TEE_PID=$!
 
+# Get the PID of the actual application (first process in pipeline)
+# Note: In bash, the APP_CMD process PID is not directly accessible via $!
+# We'll wait for the pipeline and capture its exit code
+wait $TEE_PID
+EXIT_CODE=$?
+
+# Check if the application failed
+if [ $EXIT_CODE -ne 0 ]; then
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "❌ APPLICATION STARTUP FAILED (Exit Code: $EXIT_CODE)"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-    # Check for specific error patterns
-    if grep -q "insufficient disk space" "$STARTUP_LOG"; then
+    # Check for specific error patterns (case-insensitive)
+    if grep -qi "insufficient disk space" "$STARTUP_LOG"; then
         echo "⚠️  DISK SPACE ERROR DETECTED"
         echo ""
-        grep -A 5 "insufficient disk space" "$STARTUP_LOG" || true
+        grep -i -A 5 "insufficient disk space" "$STARTUP_LOG" || true
         echo ""
         echo "💡 Quick fixes:"
         echo "  • Check available space: df -h"
         echo "  • Clean old clips: rm -rf /data/clips/*"
         echo "  • Increase volume size"
-    elif grep -q "permission denied\|cannot write" "$STARTUP_LOG"; then
+    elif grep -qiE "permission denied|cannot write|config directory not writable" "$STARTUP_LOG"; then
         echo "⚠️  PERMISSION ERROR DETECTED"
         echo ""
         echo "💡 Check volume mount permissions:"

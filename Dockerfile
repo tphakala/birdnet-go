@@ -166,7 +166,8 @@ LABEL usage.compose.docker="Use Docker/docker-compose.yml"
 LABEL usage.compose.podman="Use Podman/podman-compose.yml"
 
 # Add healthcheck to monitor container status
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+# Extended start-period for low-power devices (e.g., Raspberry Pi)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
     CMD curl -f http://localhost:8080/ || exit 1
 
 ENTRYPOINT ["/usr/bin/entrypoint.sh", "/usr/bin/startup-wrapper.sh"]

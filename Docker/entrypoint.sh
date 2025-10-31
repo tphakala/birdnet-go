@@ -157,40 +157,47 @@ echo "🔍 Running pre-flight checks..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Check data directory disk space
-DATA_SPACE_KB=$(df -k /data | awk 'NR==2 {print $4}')
+DATA_SPACE_KB=$(df -Pk /data 2>/dev/null | awk 'NR==2 {print $4}')
+if [ -z "$DATA_SPACE_KB" ]; then
+    echo "Failed to read free space for /data" >&2
+    exit 1
+fi
 DATA_SPACE_MB=$((DATA_SPACE_KB / 1024))
 REQUIRED_SPACE_MB=1024
 
 if [ "$DATA_SPACE_MB" -lt "$REQUIRED_SPACE_MB" ]; then
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "❌ STARTUP ERROR: Insufficient disk space"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Location:  /data"
-    echo "Required:  ${REQUIRED_SPACE_MB}MB"
-    echo "Available: ${DATA_SPACE_MB}MB"
-    echo ""
-    echo "💡 To resolve:"
-    echo "  1. Increase volume size for /data mount"
-    echo "  2. Free up space: docker exec birdnet-go rm -rf /data/clips/*"
-    echo "  3. Check host mount: df -h"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    echo "Container will exit in 30 seconds..."
-    echo "Use 'journalctl -u birdnet-go.service -n 50' to view this message"
-    sleep 30
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "❌ STARTUP ERROR: Insufficient disk space" >&2
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "Location:  /data" >&2
+    echo "Required:  ${REQUIRED_SPACE_MB}MB" >&2
+    echo "Available: ${DATA_SPACE_MB}MB" >&2
+    echo "" >&2
+    echo "💡 To resolve:" >&2
+    echo "  1. Increase volume size for /data mount" >&2
+    echo "  2. Free up space: docker exec birdnet-go rm -rf /data/clips/*" >&2
+    echo "  3. Check host mount: df -h" >&2
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "" >&2
+    STARTUP_FAIL_DELAY="${BIRDNET_STARTUP_FAIL_DELAY:-10}"
+    echo "Container will exit in ${STARTUP_FAIL_DELAY}s..." >&2
+    echo "Use 'journalctl -u birdnet-go.service -n 50' to view this message" >&2
+    sleep "${STARTUP_FAIL_DELAY}"
     exit 1
 fi
 
 # Check config directory exists and is writable
-if [ ! -w /config ]; then
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "❌ STARTUP ERROR: Config directory not writable"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Check permissions on host directory mounted to /config"
-    echo "Container will exit in 10 seconds..."
-    sleep 10
+if [ ! -d /config ] || ! touch /config/.write_test 2>/dev/null; then
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "❌ STARTUP ERROR: Config directory not writable" >&2
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" >&2
+    echo "Check permissions on host directory mounted to /config" >&2
+    STARTUP_FAIL_DELAY="${BIRDNET_STARTUP_FAIL_DELAY:-10}"
+    echo "Container will exit in ${STARTUP_FAIL_DELAY}s..." >&2
+    sleep "${STARTUP_FAIL_DELAY}"
     exit 1
 fi
+rm -f /config/.write_test 2>/dev/null || true
 
 echo "✅ Pre-flight checks passed"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

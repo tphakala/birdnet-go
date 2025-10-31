@@ -1976,9 +1976,16 @@ check_data_directory_space() {
     # Ensure directory exists
     mkdir -p "$data_dir" 2>/dev/null || true
 
-    # Get available space in KB
+    # Get available space in KB with POSIX-compliant output
     local available_space
-    available_space=$(df -k "$data_dir" | awk 'NR==2 {print $4}')
+    available_space=$(df -Pk "$data_dir" 2>/dev/null | awk 'NR==2 {print $4}')
+
+    # Check if df succeeded
+    if [ -z "$available_space" ]; then
+        print_message "❌ Unable to determine free space for $data_dir" "$RED"
+        exit 1
+    fi
+
     local available_mb=$((available_space/1024))
 
     if [ "$available_space" -lt "$required_space" ]; then
@@ -1994,13 +2001,21 @@ check_data_directory_space() {
         print_message "  3. Clean up old data: rm -rf $data_dir/clips/*" "$YELLOW"
         print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "$RED"
 
-        # Send telemetry if enabled
-        local diagnostic_json=$(cat <<EOF
+        # Send telemetry if enabled (with PII redaction)
+        # Redact path by hashing it to avoid exposing user's directory structure
+        local path_hash
+        path_hash=$(echo -n "$data_dir" | sha256sum | cut -d' ' -f1)
+        local mount_point
+        mount_point=$(df -P "$data_dir" 2>/dev/null | awk 'NR==2 {print $1}')
+
+        # Split declaration and assignment to avoid SC2155
+        local diagnostic_json
+        diagnostic_json=$(cat <<EOF
 {
-    "data_directory": "$(echo "$data_dir" | sed 's/\"/\\\"/g')",
+    "data_directory_hash": "$path_hash",
     "required_mb": 1024,
     "available_mb": $available_mb,
-    "mount_point": "$(df "$data_dir" | awk 'NR==2 {print $1}')"
+    "mount_point": "$mount_point"
 }
 EOF
 )
@@ -3852,34 +3867,52 @@ show_service_diagnostics() {
     print_message "\n📋 BirdNET-Go Service Diagnostics" "$GREEN"
     print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "$GRAY"
 
-    # Service status
-    if systemctl is-active --quiet birdnet-go.service; then
-        print_message "✅ Service Status: Running" "$GREEN"
-    else
-        print_message "❌ Service Status: Not Running" "$RED"
-        print_message "\n📄 Last 30 log lines:" "$YELLOW"
-        journalctl -u birdnet-go.service -n 30 --no-pager 2>/dev/null || echo "Unable to retrieve logs"
+    # Service status (only if systemd is available)
+    if command_exists systemctl; then
+        if systemctl is-active --quiet birdnet-go.service 2>/dev/null; then
+            print_message "✅ Service Status: Running" "$GREEN"
+        else
+            print_message "❌ Service Status: Not Running" "$RED"
 
-        print_message "\n💡 To view live logs, run:" "$YELLOW"
-        print_message "   journalctl -u birdnet-go.service -f" "$NC"
+            # Only show logs if journalctl is available
+            if command_exists journalctl; then
+                print_message "\n📄 Last 30 log lines:" "$YELLOW"
+                journalctl -u birdnet-go.service -n 30 --no-pager 2>/dev/null || echo "Unable to retrieve logs"
+
+                print_message "\n💡 To view live logs, run:" "$YELLOW"
+                print_message "   journalctl -u birdnet-go.service -f" "$NC"
+            fi
+        fi
+    else
+        print_message "⚠️  systemd not available - cannot check service status" "$YELLOW"
     fi
 
-    # Container status
-    print_message "\n🐳 Docker Container Status:" "$YELLOW"
-    docker ps -a --filter "name=birdnet-go" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "Unable to retrieve container status"
+    # Container status (only if Docker is available)
+    if command_exists docker; then
+        print_message "\n🐳 Docker Container Status:" "$YELLOW"
+        safe_docker ps -a --filter "name=birdnet-go" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "Unable to retrieve container status"
+    else
+        print_message "\n⚠️  Docker not available - cannot check container status" "$YELLOW"
+    fi
 
-    # Disk space
-    print_message "\n💾 Disk Space:" "$YELLOW"
-    print_message "Data directory: $DATA_DIR" "$NC"
-    df -h "$DATA_DIR" 2>/dev/null | tail -1 || echo "Unable to check disk space"
+    # Disk space (only if DATA_DIR is set)
+    if [ -n "$DATA_DIR" ]; then
+        print_message "\n💾 Disk Space:" "$YELLOW"
+        print_message "Data directory: $DATA_DIR" "$NC"
+        df -h "$DATA_DIR" 2>/dev/null | tail -1 || echo "Unable to check disk space"
+    else
+        print_message "\n⚠️  Data directory not configured - cannot check disk space" "$YELLOW"
+    fi
 
-    # If service failed, show prominent error
-    if systemctl is-failed --quiet birdnet-go.service; then
+    # If service failed, show prominent error (only if systemd is available)
+    if command_exists systemctl && systemctl is-failed --quiet birdnet-go.service 2>/dev/null; then
         print_message "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "$RED"
         print_message "⚠️  SERVICE FAILED TO START" "$RED"
         print_message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" "$RED"
         print_message "\nTo restart: sudo systemctl restart birdnet-go.service" "$YELLOW"
-        print_message "View logs:  sudo journalctl -u birdnet-go.service -n 50" "$YELLOW"
+        if command_exists journalctl; then
+            print_message "View logs:  sudo journalctl -u birdnet-go.service -n 50" "$YELLOW"
+        fi
     fi
 }
 
@@ -5536,6 +5569,7 @@ print_message "  View logs:       sudo journalctl -u birdnet-go.service -f" "$NC
 print_message "  Check disk:      df -h $DATA_DIR" "$NC"
 print_message "  Restart service: sudo systemctl restart birdnet-go" "$NC"
 print_message "  Container logs:  docker logs birdnet-go" "$NC"
+print_message "  Health status:   docker inspect --format '{{json .State.Health}}' birdnet-go | jq" "$NC"
 
 log_message "INFO" "Install.sh script execution completed successfully"
 log_message "INFO" "=== End of BirdNET-Go Installation/Update Session ==="
