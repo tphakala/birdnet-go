@@ -4168,7 +4168,8 @@ start_birdnet_go() {
         # Get container-specific logs if container exists (even if exited)
         local container_logs="none"
         local container_exit_code="unknown"
-        local container_id=$(docker ps -a --filter "name=birdnet-go" --format "{{.ID}}" 2>/dev/null | head -1)
+        local container_id
+        container_id=$(docker ps -a --filter "name=birdnet-go" --format "{{.ID}}" 2>/dev/null | head -1)
 
         if [ -n "$container_id" ]; then
             container_logs=$(docker logs --tail 30 "$container_id" 2>&1 | sed 's/"/\\"/g' | tr '\n' ';' | tail -c "$MAX_LOG_LENGTH")
@@ -4216,7 +4217,8 @@ start_birdnet_go() {
         local port_conflicts=()
         for port in 80 443 "${WEB_PORT:-8080}" 8090; do
             if ! check_port_availability "$port" 2>/dev/null; then
-                local proc_info=$(get_port_process_info "$port" 2>/dev/null)
+                local proc_info
+                proc_info=$(get_port_process_info "$port" 2>/dev/null)
                 port_conflicts+=("\"$port:$(echo "$proc_info" | sed 's/"/\\"/g')\"")
             fi
         done
