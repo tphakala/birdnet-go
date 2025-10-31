@@ -1,0 +1,1802 @@
+{
+  "common": {
+    "loading": "Ładowanie...",
+    "error": "Błąd",
+    "save": "Zapisz",
+    "cancel": "Anuluj",
+    "reset": "Resetuj",
+    "refresh": "Odśwież",
+    "delete": "Usuń",
+    "edit": "Edytuj",
+    "search": "Szukaj",
+    "filter": "Filtruj",
+    "sort": "Sortuj",
+    "settings": "Ustawienia",
+    "close": "Zamknij",
+    "back": "Wstecz",
+    "next": "Dalej",
+    "previous": "Poprzednie",
+    "yes": "Tak",
+    "no": "Nie",
+    "ok": "OK",
+    "apply": "Zastosuj",
+    "clear": "Wyczyść",
+    "done": "Gotowe",
+    "goToDashboard": "Przejdź do Panelu",
+    "reportIssue": "Zgłoś Problem",
+    "loginToViewDetails": "Zaloguj się, aby Zobaczyć Szczegóły",
+    "pageNotFound": "Strona Nie Znaleziona",
+    "internalServerError": "Wewnętrzny Błąd Serwera",
+    "actions": {
+      "download": "Pobierz",
+      "review": "Przejrzyj"
+    },
+    "buttons": {
+      "save": "Zapisz Zmiany",
+      "reset": "Resetuj",
+      "delete": "Usuń",
+      "cancel": "Anuluj",
+      "apply": "Zastosuj",
+      "confirm": "Potwierdź",
+      "edit": "Edytuj",
+      "close": "Zamknij",
+      "back": "Wstecz",
+      "next": "Dalej",
+      "previous": "Poprzednie",
+      "yes": "Tak",
+      "no": "Nie",
+      "ok": "OK",
+      "clear": "Wyczyść",
+      "edit-config": "Edytuj Konfigurację",
+      "add-action": "Dodaj Akcję",
+      "learnMore": "Dowiedz się Więcej"
+    },
+    "ui": {
+      "loading": "Ładowanie...",
+      "noData": "Brak dostępnych danych",
+      "empty": "Nie znaleziono elementów",
+      "error": "Wystąpił błąd",
+      "retry": "Spróbuj ponownie",
+      "dismiss": "Odrzuć",
+      "showMore": "Pokaż więcej",
+      "showLess": "Pokaż mniej",
+      "selectAll": "Zaznacz wszystko",
+      "selectNone": "Odznacz wszystko",
+      "required": "Wymagane",
+      "optional": "Opcjonalne"
+    },
+    "status": {
+      "success": "Sukces",
+      "error": "Błąd",
+      "warning": "Ostrzeżenie",
+      "info": "Informacja",
+      "pending": "Oczekujące",
+      "processing": "Przetwarzanie",
+      "completed": "Zakończone",
+      "failed": "Nieudane"
+    },
+    "validation": {
+      "required": "To pole jest wymagane",
+      "invalid": "Nieprawidłowa wartość",
+      "minLength": "Musi zawierać co najmniej {min} znaków",
+      "maxLength": "Nie może zawierać więcej niż {max} znaków",
+      "minValue": "Musi wynosić co najmniej {min}",
+      "maxValue": "Nie może być większe niż {max}",
+      "email": "Nieprawidłowy adres e-mail",
+      "url": "Nieprawidłowy URL",
+      "pattern": "Nieprawidłowy format"
+    },
+    "aria": {
+      "closeModal": "Zamknij okno modalne",
+      "dismissAlert": "Odrzuć alert",
+      "closeNotification": "Zamknij powiadomienie",
+      "toggleDropdown": "Przełącz rozwijane menu",
+      "sortAscending": "Sortuj rosnąco",
+      "selectLanguage": "Wybierz język",
+      "sortDescending": "Sortuj malejąco",
+      "expandSection": "Rozwiń sekcję",
+      "collapseSection": "Zwiń sekcję",
+      "playAudio": "Odtwórz dźwięk",
+      "pauseAudio": "Wstrzymaj dźwięk",
+      "loading": "Ładowanie zawartości",
+      "saveChanges": "Zapisz zmiany",
+      "cancelEdit": "Anuluj edycję",
+      "editSpecies": "Edytuj gatunek",
+      "removeSpecies": "Usuń gatunek",
+      "dismissError": "Odrzuć błąd",
+      "datePickerCalendar": "Kalendarz wyboru daty",
+      "selectDate": "Wybierz datę",
+      "previousMonth": "Poprzedni miesiąc",
+      "nextMonth": "Następny miesiąc",
+      "selectToday": "Wybierz dzisiaj",
+      "dateSelected": "Wybrana data: {date}",
+      "calendarNavigation": "Użyj klawiszy strzałek do nawigacji po kalendarzu, Enter aby wybrać, Escape aby zamknąć",
+      "downloadCsv": "Pobierz listę gatunków jako CSV",
+      "visitEbirdLink": "Otwórz eBird.org w nowej karcie",
+      "learnEbirdTaxonomyLink": "Otwórz Taksonomię eBird w nowej karcie"
+    },
+    "labels": {
+      "confidence": "Pewność"
+    },
+    "values": {
+      "yes": "Tak",
+      "no": "Nie"
+    },
+    "modal": {
+      "confirmAction": "Potwierdź Akcję",
+      "confirmMessage": "Czy na pewno chcesz wykonać tę akcję?"
+    },
+    "review": {
+      "modalTitle": "Przejrzyj Detekcję: {species}",
+      "status": {
+        "verifiedCorrect": "Zweryfikowane Poprawnie",
+        "falsePositive": "Fałszywie Pozytywne",
+        "notReviewed": "Nieprzejrzane"
+      },
+      "form": {
+        "correctDetection": "Poprawna Detekcja",
+        "falsePositiveLabel": "Fałszywie Pozytywne",
+        "reviewDetectionTitle": "Przejrzyj Detekcję",
+        "lockDetection": "Zablokuj tę detekcję po zapisaniu",
+        "lockDetectionHelp": "Zablokowanie tej detekcji uniemożliwi jej usunięcie podczas regularnego czyszczenia.",
+        "unlockDetection": "Odblokuj tę detekcję po zapisaniu",
+        "unlockDetectionHelp": "Odblokowanie umożliwi usunięcie tej detekcji podczas regularnego czyszczenia.",
+        "ignoreSpecies": "Ignoruj ten gatunek",
+        "ignoreSpeciesHelp": "Ignorowanie tego gatunku zapobiegnie przyszłym detekcjom tego gatunku. Nie usunie to istniejących detekcji.",
+        "detectionLocked": "Ta detekcja jest obecnie zablokowana.",
+        "comment": "Komentarz",
+        "addComment": "Dodaj Komentarz",
+        "hideComment": "Ukryj Komentarz",
+        "commentPlaceholder": "Dodaj komentarz o tej detekcji...",
+        "commentCount": "({chars} znaków)",
+        "chars": "znaków",
+        "commentsLabel": "Komentarze",
+        "currentStatusTitle": "Aktualny Status",
+        "detectionStatusTitle": "Status Detekcji",
+        "lockLabel": "Status Blokady",
+        "reviewLabel": "Status Przeglądu",
+        "saveReview": "Zapisz Przegląd"
+      },
+      "errors": {
+        "saveFailed": "Nie udało się zapisać przeglądu. Spróbuj ponownie.",
+        "noAudio": "Brak nagrania audio dla tej detekcji.",
+        "commentFailed": "Nie udało się zapisać komentarza. Spróbuj ponownie.",
+        "lockStatusFailed": "Nie udało się zaktualizować statusu blokady. Spróbuj ponownie.",
+        "verificationFailed": "Nie udało się zaktualizować statusu weryfikacji. Spróbuj ponownie."
+      }
+    }
+  },
+  "navigation": {
+    "dashboard": "Panel",
+    "detections": "Detekcje",
+    "search": "Szukaj",
+    "analytics": "Analityka",
+    "notifications": "Powiadomienia",
+    "system": "System",
+    "settings": "Ustawienia",
+    "about": "O Programie",
+    "toggleSidebar": "Przełącz menu boczne",
+    "mainNavigation": "Główna nawigacja",
+    "closeSidebar": "Zamknij menu boczne",
+    "analyticsSubmenu": "Podmenu analityki",
+    "settingsSubmenu": "Podmenu ustawień"
+  },
+  "about": {
+    "title": "BirdNET-Go",
+    "subtitle": "Nowoczesny interfejs do detekcji i klasyfikacji dźwięków ptaków w czasie rzeczywistym",
+    "logoAlt": "Logo BirdNET-Go",
+    "overview": "Przegląd",
+    "overviewText": "BirdNET-Go to implementacja oparta na Go do detekcji i klasyfikacji dźwięków ptaków w czasie rzeczywistym, zbudowana na fundamencie projektu BirdNET. Ta aplikacja zapewnia przyjazny interfejs użytkownika do ciągłego monitorowania i analizy dźwięków ptaków.",
+    "birdnetProject": "Projekt BirdNET",
+    "birdnetDescription": "BirdNET-Go nie byłby możliwy bez przełomowej pracy projektu BirdNET. Model sztucznej inteligencji zasilający możliwości detekcji BirdNET-Go jest wynikiem innowacyjnych badań i rozwoju projektu BirdNET.",
+    "developedBy": "Opracowany przez",
+    "developersText": "K. Lisa Yang Center for Conservation Bioacoustics w Cornell Lab of Ornithology we współpracy z Chemnitz University of Technology:",
+    "visitBirdnetAnalyzer": "Odwiedź Projekt BirdNET-Analyzer",
+    "contributors": "Współtwórcy",
+    "contributorsText": "BirdNET-Go rozwijał się i poprawiał dzięki wspólnym wysiłkom wielu osób. Ich wkład, od ulepszeń kodu po sugestie funkcji, był nieoceniony w uczynieniu tego projektu lepszym.",
+    "mainDeveloper": "Główny Deweloper",
+    "githubContributors": "Współtwórcy GitHub",
+    "contributorsNote": "Specjalne podziękowania dla tych współtwórców za ich cenną pracę nad ulepszeniem BirdNET-Go:",
+    "communityAcknowledgment": "Podziękowania dla Społeczności",
+    "communityText": "Chcielibyśmy również wyrazić wdzięczność wszystkim użytkownikom, którzy przyczynili się poprzez:",
+    "bugReports": "Zgłaszanie błędów i śledzenie problemów",
+    "featureSuggestions": "Sugestie funkcji i opinie",
+    "testing": "Testowanie i walidację",
+    "documentation": "Ulepszenia dokumentacji",
+    "additionalCredits": "Dodatkowe Podziękowania",
+    "birdnetPiProject": "Projekt BirdNET-Pi",
+    "birdnetPiDescription": "Specjalne podziękowania dla Patricka McGuire'a za jego inspirującą pracę nad BirdNET-Pi, która wpłynęła na rozwój BirdNET-Go. BirdNET-Pi demonstruje potencjał detekcji dźwięków ptaków na urządzeniach wbudowanych i ustanowił wysoki standard dla rozwoju napędzanego przez społeczność.",
+    "visitBirdnetPi": "Odwiedź Projekt BirdNET-Pi",
+    "labelTranslations": "Tłumaczenia Etykiet BirdNET",
+    "labelTranslationsBy": "Dostarczone przez Patricka Levina dla projektu BirdNET-Pi Patricka McGuire'a",
+    "patrickLevinGithub": "GitHub Patricka Levina",
+    "versionInformation": "Informacje o Wersji",
+    "currentVersion": "Bieżąca Wersja",
+    "buildDate": "Data Kompilacji",
+    "developmentBuild": "Kompilacja Deweloperska",
+    "unknown": "Nieznany",
+    "licenseInformation": "Informacje o Licencji",
+    "licenseText": "Zarówno model AI BirdNET, jak i BirdNET-Go są objęte licencją",
+    "ccLicense": "Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License",
+    "licenseDescription": "Ta licencja pozwala innym na remiks, adaptację i budowanie na tej pracy w sposób niekomercyjny, o ile zostanie podane odpowiednie uznanie autorstwa, a nowe utwory będą licencjonowane na identycznych warunkach.",
+    "dependencyLicenses": "Licencje Zależności",
+    "taxonomyDataTitle": "Dane Taksonomiczne",
+    "taxonomyDataIntro": "BirdNET-Go zawiera osadzone dane taksonomii ptaków pochodzące z eBird/Clements Checklist, zapewniające szybkie lokalne wyszukiwanie rodzajów i rodzin.",
+    "source": "Źródło",
+    "ebirdApiV2": "eBird API v2",
+    "copyright": "Prawa Autorskie",
+    "coverage": "Zakres",
+    "taxonomyCoverage": "2374 rodzaje, 254 rodziny, 11145 gatunków",
+    "visitEbird": "Odwiedź eBird.org",
+    "ebirdOrg": "eBird.org",
+    "learnEbirdTaxonomy": "Dowiedz się o Taksonomii eBird"
+  },
+  "notifications": {
+    "title": "Powiadomienia",
+    "subtitle": "Wyświetl i zarządzaj wszystkimi powiadomieniami systemowymi",
+    "filters": {
+      "allStatus": "Wszystkie Statusy",
+      "unread": "Nieprzeczytane",
+      "read": "Przeczytane",
+      "acknowledged": "Potwierdzone",
+      "allTypes": "Wszystkie Typy",
+      "errors": "Błędy",
+      "warnings": "Ostrzeżenia",
+      "info": "Informacje",
+      "system": "System",
+      "detections": "Detekcje",
+      "allPriorities": "Wszystkie Priorytety",
+      "critical": "Krytyczny",
+      "high": "Wysoki",
+      "medium": "Średni",
+      "low": "Niski"
+    },
+    "actions": {
+      "markAllRead": "Oznacz Wszystkie jako Przeczytane",
+      "refresh": "Odśwież powiadomienia",
+      "markAsRead": "Oznacz jako przeczytane",
+      "acknowledge": "Potwierdź",
+      "delete": "Usuń",
+      "confirmDelete": "Potwierdź Usunięcie",
+      "deleteConfirmation": "Czy na pewno chcesz usunąć to powiadomienie?"
+    },
+    "aria": {
+      "filterByStatus": "Filtruj według statusu",
+      "filterByType": "Filtruj według typu",
+      "filterByPriority": "Filtruj według priorytetu"
+    },
+    "empty": {
+      "title": "Nie znaleziono powiadomień",
+      "subtitle": "Dostosuj filtry lub sprawdź później"
+    },
+    "errors": {
+      "loadFailed": "Nie udało się załadować powiadomień. Spróbuj ponownie.",
+      "deleteFailed": "Nie udało się usunąć powiadomienia. Spróbuj ponownie.",
+      "networkError": "Wystąpił błąd sieci. Spróbuj ponownie."
+    },
+    "timeAgo": {
+      "justNow": "Przed chwilą",
+      "minutesAgo": "{minutes}m temu",
+      "hoursAgo": "{hours}h temu",
+      "daysAgo": "{days}d temu"
+    }
+  },
+  "search": {
+    "title": "Filtry Wyszukiwania",
+    "results": "Wyniki Wyszukiwania",
+    "resultsCount": "{count, plural, =0 {Brak wyników} one {# wynik} few {# wyniki} other {# wyników}}",
+    "noSearchPerformed": "Nie wykonano jeszcze wyszukiwania",
+    "noSearchPerformedHint": "Użyj filtrów wyszukiwania powyżej, aby znaleźć detekcje ptaków",
+    "loadingResults": "Ładowanie wyników...",
+    "noResultsFound": "Nie znaleziono wyników",
+    "noResultsHint": "Spróbuj dostosować filtry wyszukiwania",
+    "fields": {
+      "species": "Gatunek",
+      "speciesPlaceholder": "Wprowadź nazwę gatunku",
+      "speciesHelp": "Wprowadź pełną lub częściową nazwę gatunku (bez rozróżniania wielkości liter)",
+      "dateRange": "Zakres Dat",
+      "dateRangeHelp": "Filtruj detekcje według zakresu dat (zostaw puste dla wszystkich dat)",
+      "from": "Od",
+      "to": "Do",
+      "confidenceRange": "Zakres Pewności (%)",
+      "confidenceMin": "Minimalny procent pewności",
+      "confidenceMax": "Maksymalny procent pewności",
+      "verifiedStatus": "Status Weryfikacji",
+      "lockedStatus": "Status Blokady",
+      "timeOfDay": "Pora Dnia"
+    },
+    "advancedFilters": "Zaawansowane Filtry",
+    "showAdvancedFilters": "Pokaż Zaawansowane Filtry",
+    "hideAdvancedFilters": "Ukryj Zaawansowane Filtry",
+    "verifiedOptions": {
+      "any": "Dowolny Status",
+      "verified": "Tylko Zweryfikowane",
+      "unverified": "Tylko Niezweryfikowane"
+    },
+    "lockedOptions": {
+      "any": "Dowolny Status",
+      "locked": "Tylko Zablokowane",
+      "unlocked": "Tylko Odblokowane"
+    },
+    "timeOfDayOptions": {
+      "any": "Dowolny Czas",
+      "day": "Tylko Dzień",
+      "night": "Tylko Noc",
+      "sunrise": "Wschód Słońca +/- 30min",
+      "sunset": "Zachód Słońca +/- 30min"
+    },
+    "sortOptions": {
+      "dateDesc": "Data (Najnowsze Najpierw)",
+      "dateAsc": "Data (Najstarsze Najpierw)",
+      "speciesAsc": "Gatunek (A-Z)",
+      "confidenceDesc": "Pewność (Wysoka-Niska)"
+    },
+    "tableHeaders": {
+      "dateTime": "Data i Czas",
+      "timeOfDay": "Pora Dnia",
+      "species": "Gatunek",
+      "confidence": "Pewność",
+      "status": "Status",
+      "actions": "Akcje"
+    },
+    "statusBadges": {
+      "verified": "Zweryfikowane",
+      "false": "Fałszywe",
+      "unverified": "Niezweryfikowane",
+      "locked": "Zablokowane",
+      "unlocked": "Odblokowane"
+    },
+    "detailsPanel": {
+      "audioPlayer": "Odtwarzacz Audio",
+      "expandDetails": "Rozwiń szczegóły dla {species}",
+      "collapseDetails": "Zwiń szczegóły dla {species}",
+      "playAudio": "Odtwórz dźwięk dla {species}",
+      "viewDetails": "Wyświetl szczegóły dla {species}",
+      "unknownSpecies": "Nieznany gatunek",
+      "clickToCollapse": "Kliknij, aby zwinąć"
+    },
+    "errors": {
+      "searchFailed": "Wyszukiwanie nie powiodło się: {error}",
+      "minMaxConfidence": "Minimalna pewność nie może być większa niż maksymalna pewność."
+    },
+    "pagination": {
+      "page": "Strona {current} z {total}",
+      "goToPrevious": "Przejdź do poprzedniej strony",
+      "goToNext": "Przejdź do następnej strony"
+    }
+  },
+  "error": {
+    "404": {
+      "code": "404",
+      "title": "Strona Nie Znaleziona",
+      "goToDashboard": "Przejdź do Panelu"
+    },
+    "500": {
+      "code": "500",
+      "title": "Wewnętrzny Błąd Serwera",
+      "defaultMessage": "Wystąpił wewnętrzny błąd serwera.",
+      "goToDashboard": "Przejdź do Panelu"
+    },
+    "generic": {
+      "errorDetails": "Szczegóły Błędu",
+      "stackTrace": "Ślad Stosu",
+      "goToDashboard": "Przejdź do Panelu",
+      "reportIssue": "Zgłoś Problem",
+      "loginToViewDetails": "Zaloguj się, aby Zobaczyć Szczegóły"
+    }
+  },
+  "dashboard": {
+    "dailySummary": {
+      "title": "Podsumowanie Dzienne",
+      "columns": {
+        "species": "Gatunek",
+        "detections": "Detekcje"
+      },
+      "navigation": {
+        "previousDay": "Poprzedni dzień",
+        "nextDay": "Następny dzień",
+        "today": "Dzisiaj"
+      },
+      "tooltips": {
+        "viewHourly": "Wyświetl wszystkie detekcje dla {hour}:00",
+        "viewBiHourly": "Wyświetl wszystkie detekcje dla {startHour}:00-{endHour}:00",
+        "viewSixHourly": "Wyświetl wszystkie detekcje dla {startHour}:00-{endHour}:00",
+        "hourlyDetections": "{count} detekcji o {hour}:00 - Kliknij aby wyświetlić",
+        "biHourlyDetections": "{count} detekcji od {startHour}:00-{endHour}:00 - Kliknij aby wyświetlić",
+        "sixHourlyDetections": "{count} detekcji od {startHour}:00-{endHour}:00 - Kliknij aby wyświetlić"
+      },
+      "loading": {
+        "preparing": "Przygotowywanie danych...",
+        "fetching": "Pobieranie detekcji...",
+        "error": "Nie udało się załadować danych",
+        "complete": "Dane załadowane pomyślnie"
+      },
+      "noSpecies": "Nie wykryto gatunków w tym dniu"
+    },
+    "recentDetections": {
+      "title": "Ostatnie Detekcje",
+      "controls": {
+        "show": "Pokaż:",
+        "refresh": "Odśwież detekcje"
+      },
+      "headers": {
+        "dateTime": "Data i Czas",
+        "commonName": "Nazwa Pospolita",
+        "species": "Gatunek",
+        "confidence": "Pewność",
+        "thumbnail": "Miniatura",
+        "status": "Status",
+        "recording": "Nagranie",
+        "actions": "Akcje"
+      },
+      "status": {
+        "verified": "Zweryfikowane",
+        "false": "Fałszywe",
+        "unverified": "Niezweryfikowane",
+        "locked": "Zablokowane"
+      },
+      "modals": {
+        "showSpecies": "Pokaż Gatunek {species}",
+        "ignoreSpecies": "Ignoruj Gatunek {species}",
+        "showSpeciesConfirm": "Czy na pewno chcesz pokazać przyszłe detekcje {species}?",
+        "ignoreSpeciesConfirm": "Czy na pewno chcesz ignorować przyszłe detekcje {species}? Wpłynie to tylko na nowe detekcje - istniejące detekcje pozostaną w bazie danych.",
+        "unlockDetection": "Odblokuj Detekcję",
+        "lockDetection": "Zablokuj Detekcję",
+        "unlockDetectionConfirm": "Czy na pewno chcesz odblokować tę detekcję {species}? Umożliwi to jej usunięcie podczas regularnego czyszczenia.",
+        "lockDetectionConfirm": "Czy na pewno chcesz zablokować tę detekcję {species}? Uniemożliwi to jej usunięcie podczas regularnego czyszczenia.",
+        "deleteDetection": "Usuń Detekcję {species}",
+        "deleteDetectionConfirm": "Czy na pewno chcesz usunąć detekcję {species}? Ta akcja nie może być cofnięta."
+      },
+      "noDetections": "Brak ostatnich detekcji"
+    },
+    "errors": {
+      "dailySummaryFetch": "Nie udało się pobrać podsumowania dziennego: {status}",
+      "dailySummaryLoad": "Nie udało się załadować podsumowania dziennego",
+      "recentDetectionsFetch": "Nie udało się pobrać ostatnich detekcji: {status}",
+      "recentDetectionsLoad": "Nie udało się załadować ostatnich detekcji",
+      "configFetch": "Nie udało się pobrać konfiguracji panelu: {status}"
+    }
+  },
+  "detections": {
+    "title": "Detekcje",
+    "titles": {
+      "hourly": "Wyniki Godzinowe dla {hour}:00 dnia {date}",
+      "hourlyRange": "Wyniki Godzinowe od {startHour}:00 do {endHour}:00 dnia {date}",
+      "species": "Wyniki dla {species} dnia {date}",
+      "search": "Wyniki Wyszukiwania dla \"{query}\"",
+      "allDetections": "Wszystkie Detekcje dla {date}"
+    },
+    "headers": {
+      "dateTime": "Data i Czas",
+      "weather": "Pogoda",
+      "species": "Gatunek",
+      "confidence": "Pewność",
+      "thumbnail": "Miniatura",
+      "status": "Status",
+      "recording": "Nagranie",
+      "actions": "Akcje"
+    },
+    "status": {
+      "locked": "Zablokowane"
+    },
+    "table": {
+      "caption": "Lista detekcji ptaków z datą, gatunkiem, pewnością i informacjami o statusie"
+    },
+    "empty": {
+      "title": "Nie znaleziono detekcji",
+      "description": "Spróbuj dostosować filtry lub kryteria wyszukiwania"
+    },
+    "pagination": {
+      "showing": "Pokazywanie {from} do {to} z {total} wyników"
+    },
+    "weather": {
+      "noData": "Brak danych pogodowych",
+      "units": {
+        "temperature": "°C",
+        "windSpeed": "m/s",
+        "humidity": "%"
+      },
+      "conditions": {
+        "clearsky_day": "Czyste Niebo",
+        "clearsky_night": "Czyste Niebo",
+        "fair_day": "Pogodnie",
+        "fair_night": "Pogodnie",
+        "partlycloudy_day": "Częściowe Zachmurzenie",
+        "partlycloudy_night": "Częściowe Zachmurzenie",
+        "cloudy": "Pochmurno",
+        "rainshowers_day": "Przelotne Opady",
+        "rainshowers_night": "Przelotne Opady",
+        "rain": "Deszcz",
+        "thunder": "Burza",
+        "sleet": "Deszcz ze Śniegiem",
+        "snow": "Śnieg",
+        "fog": "Mgła",
+        "unknown": "Nieznane"
+      }
+    },
+    "row": {
+      "viewDetails": "Wyświetl szczegóły dla {species}"
+    },
+    "media": {
+      "title": "Nagranie i Spektrogram"
+    },
+    "tabs": {
+      "overview": "Przegląd",
+      "taxonomy": "Taksonomia",
+      "history": "Historia",
+      "notes": "Notatki"
+    },
+    "environmental": {
+      "title": "Warunki Środowiskowe"
+    },
+    "metadata": {
+      "title": "Metadane Detekcji",
+      "source": "Źródło",
+      "duration": "Czas Trwania",
+      "status": "Status",
+      "locked": "Zablokowane"
+    },
+    "history": {
+      "title": "Historia Detekcji",
+      "comingSoon": "Śledzenie historii już wkrótce..."
+    },
+    "notes": {
+      "title": "Notatki i Komentarze",
+      "noComments": "Brak komentarzy lub notatek dla tej detekcji."
+    }
+  },
+  "species": {
+    "rarity": {
+      "title": "Rzadkość Gatunku"
+    },
+    "taxonomy": {
+      "hierarchy": "Klasyfikacja Taksonomiczna",
+      "subspecies": "Podgatunek",
+      "noData": "Brak dostępnych danych taksonomicznych."
+    }
+  },
+  "system": {
+    "title": "Panel Systemowy",
+    "refreshData": "Odśwież Dane",
+    "aria": {
+      "refreshData": "Odśwież dane systemowe",
+      "dashboard": "Panel systemowy z metrykami wydajności i informacjami"
+    },
+    "systemInfo": {
+      "title": "Informacje Systemowe",
+      "os": "System Operacyjny",
+      "hostname": "Nazwa Hosta",
+      "uptime": "Czas Pracy",
+      "cpus": "Procesory",
+      "model": "Model Systemu",
+      "timezone": "Strefa Czasowa",
+      "temperature": "Temperatura CPU",
+      "temperatureValue": "{temp}°C",
+      "temperatureUnavailable": "Dane temperatury niedostępne"
+    },
+    "diskUsage": {
+      "title": "Użycie Dysku",
+      "emptyMessage": "Brak dostępnych informacji o dysku"
+    },
+    "memoryUsage": {
+      "title": "Użycie Pamięci",
+      "ramUsage": "Użycie RAM"
+    },
+    "processInfo": {
+      "title": "Informacje o Procesach",
+      "headers": {
+        "pid": "PID",
+        "name": "Nazwa",
+        "status": "Status",
+        "cpu": "CPU",
+        "memory": "Pamięć",
+        "uptime": "Czas Pracy"
+      },
+      "showAll": "Pokaż Wszystkie Procesy",
+      "showBirdnetOnly": "Pokaż Tylko BirdNET"
+    },
+    "errors": {
+      "systemInfo": "Nie udało się załadować informacji systemowych: {error}",
+      "diskUsage": "Nie udało się załadować użycia dysku: {error}",
+      "memoryUsage": "Nie udało się załadować użycia pamięci: {error}",
+      "temperature": "Nie udało się załadować temperatury: {error}",
+      "processes": "Nie udało się załadować informacji o procesach: {error}"
+    }
+  },
+  "analytics": {
+    "title": "Przegląd",
+    "loadingError": "Nie udało się załadować niektórych danych analitycznych. Spróbuj ponownie później.",
+    "stats": {
+      "totalDetections": "Wszystkie Detekcje",
+      "uniqueSpecies": "Unikalne Gatunki",
+      "avgConfidence": "Średnia Pewność",
+      "mostCommon": "Najczęstszy",
+      "none": "Brak",
+      "detections": "detekcje",
+      "totalSpecies": "Wszystkie Gatunki",
+      "overallAverage": "Średnia ogólna"
+    },
+    "periods": {
+      "today": "Dzisiaj",
+      "lastWeek": "Ostatnie 7 dni",
+      "lastMonth": "Ostatnie 30 dni",
+      "last90Days": "Ostatnie 90 dni",
+      "lastYear": "Ostatnie 12 miesięcy",
+      "customRange": "Zakres niestandardowy",
+      "allTime": "Cały czas"
+    },
+    "filters": {
+      "title": "Filtruj Dane",
+      "timePeriod": "Okres Czasu",
+      "from": "Od",
+      "to": "Do",
+      "sortBy": "Sortuj Według",
+      "searchSpecies": "Szukaj Gatunków",
+      "searchPlaceholder": "Szukaj według nazwy...",
+      "reset": "Resetuj",
+      "applyFilters": "Zastosuj Filtry",
+      "exportCsv": "Eksportuj CSV",
+      "species": "gatunki",
+      "filtered": "(filtrowane)"
+    },
+    "timePeriodOptions": {
+      "allTime": "Cały Czas",
+      "today": "Dzisiaj",
+      "lastWeek": "Ostatnie 7 Dni",
+      "lastMonth": "Ostatnie 30 Dni",
+      "last90Days": "Ostatnie 90 Dni",
+      "lastYear": "Ostatnie 12 Miesięcy",
+      "customRange": "Zakres Niestandardowy"
+    },
+    "sortOptions": {
+      "mostDetections": "Najwięcej Detekcji",
+      "fewestDetections": "Najmniej Detekcji",
+      "nameAZ": "Nazwa (A-Z)",
+      "nameZA": "Nazwa (Z-A)",
+      "recentlyFirstSeen": "Ostatnio Pierwszy Raz Widziany",
+      "earliestFirstSeen": "Najwcześniej Pierwszy Raz Widziany",
+      "recentlyLastSeen": "Ostatnio Widziany",
+      "highestConfidence": "Najwyższa Pewność"
+    },
+    "charts": {
+      "top10Species": "Top 10 Gatunków",
+      "detectionsByTimeOfDay": "Detekcje według Pory Dnia",
+      "detectionTrends": "Trendy Detekcji",
+      "newSpeciesDetected": "Nowe Wykryte Gatunki",
+      "noNewSpecies": "Brak nowych gatunków wykrytych w tym okresie.",
+      "noDataAvailable": "Brak dostępnych danych",
+      "numberOfDetections": "Liczba Detekcji",
+      "detections": "Detekcje",
+      "timePeriod": "Okres Czasu",
+      "dailyDetections": "Detekcje Dzienne",
+      "date": "Data",
+      "firstHeardOn": "Po raz Pierwszy Usłyszany",
+      "firstHeardDate": "Data Pierwszego Usłyszenia",
+      "firstHeard": "Pierwszy Raz Usłyszany"
+    },
+    "recentDetections": {
+      "title": "Ostatnie Detekcje",
+      "headers": {
+        "dateTime": "Data i Czas",
+        "species": "Gatunek",
+        "confidence": "Pewność",
+        "timeOfDay": "Pora Dnia"
+      },
+      "noRecentDetections": "Nie znaleziono ostatnich detekcji",
+      "unknownSpecies": "Nieznany",
+      "unknown": "Nieznany"
+    },
+    "species": {
+      "title": "Gatunki",
+      "subtitle": "Kompleksowa lista wszystkich wykrytych gatunków ptaków",
+      "speciesList": "Lista Gatunków",
+      "switchToGrid": "Przełącz na widok siatki",
+      "switchToList": "Przełącz na widok listy",
+      "noSpeciesFound": "Nie znaleziono gatunków pasujących do twoich filtrów.",
+      "headers": {
+        "species": "Gatunek",
+        "detections": "Detekcje",
+        "avgConfidence": "Średnia Pewność",
+        "maxConfidence": "Maks. Pewność",
+        "firstDetected": "Pierwsze Wykrycie",
+        "lastDetected": "Ostatnie Wykrycie"
+      },
+      "card": {
+        "detections": "Detekcje:",
+        "confidence": "Pewność:",
+        "first": "Pierwsze:"
+      }
+    }
+  },
+  "settings": {
+    "title": "Ustawienia - BirdNET-Go",
+    "loading": "Ładowanie ustawień...",
+    "sections": {
+      "node": "Ustawienia Główne",
+      "userinterface": "Interfejs Użytkownika",
+      "audio": "Ustawienia Audio",
+      "filters": "Filtry Detekcji",
+      "integration": "Integracje",
+      "security": "Bezpieczeństwo",
+      "species": "Gatunki",
+      "notifications": "Powiadomienia",
+      "support": "Wsparcie"
+    },
+    "notFound": {
+      "title": "Nie Znaleziono Ustawień",
+      "message": "Nie można znaleźć żądanej sekcji ustawień \"{section}\"."
+    },
+    "actions": {
+      "save": "Zapisz Zmiany",
+      "saving": "Zapisywanie...",
+      "reset": "Resetuj",
+      "resetAriaLabel": "Resetuj wszystkie zmiany",
+      "saveAriaLabel": "Zapisz Zmiany",
+      "savingAriaLabel": "Zapisywanie zmian...",
+      "unsavedChanges": "Niezapisane zmiany"
+    },
+    "card": {
+      "changed": "zmieniono",
+      "changedAriaLabel": "Ustawienia zmienione"
+    },
+    "main": {
+      "sections": {
+        "main": {
+          "title": "Ustawienia Główne",
+          "description": "Konfiguruj główne ustawienia aplikacji"
+        },
+        "birdnet": {
+          "title": "Ustawienia BirdNET",
+          "description": "Konfiguruj ustawienia specyficzne dla modelu AI BirdNET"
+        },
+        "ui": {
+          "title": "Ustawienia Interfejsu Użytkownika",
+          "description": "Dostosuj interfejs użytkownika"
+        },
+        "customClassifier": {
+          "title": "Niestandardowy Klasyfikator BirdNET",
+          "modelPath": {
+            "label": "Ścieżka Modelu (Wymaga restartu do zastosowania)",
+            "placeholder": "Ścieżka do pliku modelu",
+            "helpText": "Ścieżka do zewnętrznego pliku modelu BirdNET. Wprowadź ścieżkę bezwzględną lub względną do pliku binarnego birdnet-go. Zostaw puste, aby użyć domyślnego modelu wbudowanego."
+          },
+          "labelPath": {
+            "label": "Ścieżka Etykiet (Wymaga restartu do zastosowania)",
+            "placeholder": "Ścieżka do pliku etykiet",
+            "helpText": "Ścieżka do zewnętrznego pliku etykiet modelu, plik .zip lub .txt. Wprowadź ścieżkę bezwzględną lub względną do pliku binarnego birdnet-go. Zostaw puste, aby użyć domyślnych wbudowanych etykiet."
+          }
+        },
+        "dynamicThreshold": {
+          "title": "Próg Dynamiczny",
+          "enable": {
+            "label": "Włącz Próg Dynamiczny (funkcja specyficzna dla BirdNET-Go)",
+            "helpText": "Włącza funkcję dynamicznego progu pewności dla bardziej adaptacyjnej detekcji odgłosów ptaków."
+          },
+          "trigger": {
+            "label": "Próg Wyzwalający",
+            "helpText": "Poziom pewności, przy którym aktywowany jest próg dynamiczny. Jeśli odgłos ptaka zostanie wykryty z pewnością powyżej tej wartości, próg dla pozytywnych dopasowań tego gatunku zostanie obniżony dla kolejnych wywołań."
+          },
+          "minimum": {
+            "label": "Minimalny Próg Dynamiczny",
+            "helpText": "Minimalna wartość, do której można obniżyć próg dynamiczny. Zapewnia to, że próg nie spadnie poniżej niepożądanego poziomu."
+          },
+          "expireTime": {
+            "label": "Czas Wygaśnięcia Progu Dynamicznego (Godziny)",
+            "helpText": "Liczba godzin, przez które korekty progu dynamicznego pozostają ważne. Po tym okresie próg dynamiczny jest resetowany."
+          }
+        },
+        "rangeFilter": {
+          "title": "Filtr Zasięgu",
+          "stationLocation": {
+            "label": "Lokalizacja Stacji",
+            "helpText": "Lokalizacja stacji, używana do ograniczenia gatunków ptaków do tych prawdopodobnych w regionie."
+          },
+          "latitude": {
+            "label": "Szerokość Geograficzna",
+            "helpText": "Szerokość geograficzna lokalizacji stacji, używana do ograniczenia gatunków ptaków do tych prawdopodobnych w regionie."
+          },
+          "longitude": {
+            "label": "Długość Geograficzna",
+            "helpText": "Długość geograficzna lokalizacji stacji, używana do ograniczenia gatunków ptaków do tych prawdopodobnych w regionie."
+          },
+          "model": {
+            "label": "Model Filtra Zasięgu",
+            "helpText": "Wersja modelu filtra zasięgu BirdNET: najnowsza lub starszy."
+          },
+          "threshold": {
+            "label": "Próg",
+            "helpText": "Kontroluje, które gatunki są uwzględniane na podstawie ich prawdopodobieństwa wystąpienia dla twojej lokalizacji i pory roku. Domyślna wartość (0.01) jest zalecana dla większości użytkowników. Wyższe wartości (0.05-0.3) uwzględniają mniej gatunków o wyższym prawdopodobieństwie wystąpienia. Bardzo wysokie wartości (0.5+) uwzględniają tylko najczęstsze gatunki."
+          },
+          "speciesCount": {
+            "label": "Bieżąca Liczba Gatunków",
+            "helpText": "Liczba gatunków uwzględnionych w filtrze zasięgu. Aktualizuje się automatycznie przy zmianie progu, szerokości lub długości geograficznej.",
+            "loading": "Ładowanie...",
+            "viewSpecies": "Wyświetl Gatunki"
+          },
+          "downloadTitle": "Pobierz listę gatunków jako CSV",
+          "csvDownloaded": "Lista gatunków pobrana pomyślnie",
+          "csvDownloadFailed": "Nie udało się pobrać listy gatunków. Spróbuj ponownie.",
+          "modal": {
+            "title": "Gatunki Filtra Zasięgu",
+            "speciesCount": "Liczba Gatunków:",
+            "threshold": "Próg:",
+            "latitude": "Szerokość Geograficzna:",
+            "longitude": "Długość Geograficzna:",
+            "loadingSpecies": "Ładowanie gatunków...",
+            "noSpeciesFound": "Nie znaleziono gatunków z bieżącymi ustawieniami",
+            "close": "Zamknij"
+          }
+        },
+        "database": {
+          "title": "Ustawienia Bazy Danych",
+          "description": "Ustawienia bazy danych detekcji",
+          "type": {
+            "label": "Wybierz Typ Bazy Danych",
+            "helpText": "Wybierz typ bazy danych do przechowywania detekcji."
+          },
+          "sqlite": {
+            "note": "SQLite jest zalecanym typem bazy danych dla większości użytkowników.",
+            "path": {
+              "label": "Ścieżka Bazy Danych SQLite",
+              "placeholder": "Wprowadź ścieżkę bazy danych SQLite",
+              "helpText": "Ścieżka pliku bazy danych SQLite względem katalogu aplikacji"
+            }
+          },
+          "mysql": {
+            "host": {
+              "label": "Host MySQL",
+              "placeholder": "Wprowadź host MySQL",
+              "helpText": "Host bazy danych MySQL (IP lub nazwa hosta)"
+            },
+            "port": {
+              "label": "Port MySQL",
+              "helpText": "Port bazy danych MySQL (domyślnie 3306/TCP)"
+            },
+            "username": {
+              "label": "Nazwa Użytkownika MySQL",
+              "placeholder": "Wprowadź nazwę użytkownika MySQL",
+              "helpText": "Nazwa użytkownika bazy danych MySQL"
+            },
+            "password": {
+              "label": "Hasło MySQL",
+              "placeholder": "Wprowadź hasło MySQL",
+              "helpText": "Hasło do bazy danych MySQL"
+            },
+            "database": {
+              "label": "Baza Danych MySQL",
+              "placeholder": "Wprowadź nazwę bazy danych MySQL",
+              "helpText": "Nazwa bazy danych MySQL"
+            }
+          }
+        },
+        "userInterface": {
+          "title": "Ustawienia Interfejsu Użytkownika",
+          "description": "Dostosuj interfejs użytkownika",
+          "interface": {
+            "title": "Ustawienia Interfejsu",
+            "description": "Wybierz preferowany język i wersję interfejsu",
+            "locale": {
+              "label": "Język Wyświetlania",
+              "helpText": "Wybierz język dla interfejsu użytkownika"
+            },
+            "newUI": {
+              "label": "Użyj Nowoczesnego Interfejsu",
+              "helpText": "Włącz nowy interfejs oparty na Svelte z ulepszoną wydajnością i funkcjami. Po wyłączeniu używa klasycznego interfejsu HTMX."
+            }
+          },
+          "language": {
+            "title": "Język",
+            "description": "Konfiguruj język wyświetlania dla interfejsu użytkownika",
+            "locale": {
+              "label": "Język Interfejsu",
+              "helpText": "Wybierz język dla interfejsu użytkownika"
+            }
+          },
+          "dashboard": {
+            "title": "Wyświetlanie Panelu",
+            "description": "Konfiguruj sposób wyświetlania detekcji na panelu",
+            "general": {
+              "title": "Ustawienia Ogólne"
+            },
+            "summaryLimit": {
+              "label": "Maksymalna Liczba Gatunków w Tabeli Podsumowania Dziennego",
+              "helpText": "Maksymalna liczba gatunków wyświetlanych w tabeli podsumowania dziennego (Wartość między 10 a 1000)"
+            },
+            "newUI": {
+              "label": "Użyj Nowego Interfejsu Użytkownika",
+              "helpText": "Włącz przekierowanie ze starego interfejsu HTMX do nowego interfejsu Svelte"
+            },
+            "thumbnails": {
+              "title": "Wyświetlanie Miniatur",
+              "summary": {
+                "label": "Pokaż Miniatury w Tabeli Podsumowania Dziennego",
+                "helpText": "Włącz, aby pokazać miniatury wykrytych gatunków w tabeli podsumowania dziennego"
+              },
+              "recent": {
+                "label": "Pokaż Miniatury na Liście Ostatnich Detekcji",
+                "helpText": "Włącz, aby pokazać miniatury wykrytych gatunków na liście ostatnich detekcji"
+              },
+              "imageProvider": {
+                "label": "Dostawca Obrazów",
+                "helpText": "Wybierz preferowanego dostawcę obrazów dla miniatur ptaków"
+              },
+              "fallbackPolicy": {
+                "label": "Polityka Zastępcza",
+                "helpText": "Wybierz, co się stanie, gdy preferowany dostawca nie znajdzie obrazu",
+                "options": {
+                  "all": "Wypróbuj wszystkich dostawców w kolejności",
+                  "none": "Użyj tylko wybranego dostawcy"
+                }
+              }
+            },
+            "spectrogram": {
+              "title": "Generowanie Spektrogramu",
+              "mode": {
+                "label": "Tryb Generowania",
+                "auto": {
+                  "label": "Automatyczny (Zalecany)",
+                  "helpText": "Spektrogramy są generowane automatycznie, gdy detekcja jest wyświetlana w interfejsie użytkownika. Dla długiej listy detekcji generowanie spektrogramu może zająć dużo czasu na systemach z ograniczonymi zasobami CPU."
+                },
+                "prerender": {
+                  "label": "Wstępne Renderowanie w Tle",
+                  "helpText": "Generuj spektrogramy automatycznie podczas zapisywania klipu audio. Na systemach o ograniczonych zasobach, takich jak Raspberry Pi Zero lub 3, zapewnia to bardziej responsywny interfejs użytkownika ze względu na renderowanie spektrogramów w tle, jednak ten tryb zużyje więcej miejsca na dysku, ponieważ spektrogramy są tworzone dla każdej detekcji."
+                },
+                "userRequested": {
+                  "label": "Tylko na Żądanie Użytkownika",
+                  "helpText": "Generuj spektrogramy tylko wtedy, gdy klikniesz przycisk generowania. Idealne dla systemów o ograniczonych zasobach (Raspberry Pi 3/Zero) - zero automatycznego obciążenia, ty kontrolujesz, kiedy używane jest CPU."
+                }
+              },
+              "enabled": {
+                "label": "Włącz Wstępne Renderowanie Spektrogramu",
+                "helpText": "PRZESTARZAŁE: Użyj zamiast tego Trybu Generowania. Generuj spektrogramy w tle podczas zapisywania detekcji, aby wyeliminować opóźnienia interfejsu użytkownika."
+              }
+            }
+          }
+        }
+      },
+      "fields": {
+        "nodeName": {
+          "label": "Nazwa Węzła",
+          "placeholder": "Wprowadź nazwę węzła",
+          "helpText": "Nazwa węzła służy do identyfikacji systemu źródłowego w konfiguracji wielowęzłowej, używana również jako identyfikator dla wiadomości MQTT."
+        },
+        "sensitivity": {
+          "label": "Czułość",
+          "helpText": "Czułość detekcji. Wyższe wartości skutkują wyższą czułością. Wartości w zakresie 0.5, 1.5."
+        },
+        "threshold": {
+          "label": "Próg",
+          "helpText": "Minimalny próg pewności. Wartości w zakresie 0.01, 0.99."
+        },
+        "overlap": {
+          "label": "Nakładanie",
+          "helpText": "Nakładanie segmentów predykcji. Wartości w zakresie 0.0, 2.9."
+        },
+        "locale": {
+          "label": "Lokalizacja",
+          "helpText": "Lokalizacja dla przetłumaczonych nazw pospolitych gatunków."
+        },
+        "tensorflowThreads": {
+          "label": "Wątki CPU TensorFlow",
+          "helpText": "Liczba wątków CPU. Ustaw na 0, aby użyć wszystkich dostępnych wątków."
+        }
+      },
+      "errors": {
+        "localesLoadFailed": "Nie można załadować opcji językowych. Używanie domyślnych.",
+        "providersLoadFailed": "Nie można załadować dostawców obrazów. Używanie domyślnych.",
+        "rangeFilterTestFailed": "Nie udało się przetestować ustawień filtra zasięgu",
+        "rangeFilterLoadFailed": "Nie udało się załadować listy gatunków",
+        "rangeFilterCountFailed": "Nie udało się załadować liczby gatunków"
+      }
+    },
+    "support": {
+      "sections": {
+        "telemetry": {
+          "title": "Śledzenie Błędów i Telemetria",
+          "description": "Opcjonalne śledzenie błędów, aby pomóc poprawić niezawodność i wydajność BirdNET-Go"
+        },
+        "diagnostics": {
+          "title": "Wsparcie i Diagnostyka",
+          "description": "Pomóż programistom szybciej naprawić twoje problemy, dostarczając niezbędne informacje diagnostyczne"
+        }
+      },
+      "telemetry": {
+        "privacyNotice": "Informacja o Prywatności",
+        "privacyPoints": {
+          "noPersonalData": "Nie są zbierane żadne dane osobowe",
+          "anonymousData": "Wszystkie dane telemetryczne są anonimowe",
+          "helpImprove": "Dane telemetryczne pomagają programistom identyfikować i naprawiać problemy w BirdNET-Go"
+        },
+        "enableTracking": "Włącz Śledzenie Błędów (Opt-in)"
+      },
+      "systemId": {
+        "label": "Twój Identyfikator Systemu",
+        "description": "Użyj tego ID podczas zgłaszania problemów",
+        "copyButton": "Kopiuj",
+        "errorLoading": "Błąd ładowania identyfikatora systemu"
+      },
+      "diagnostics": {
+        "includeRecentLogs": "Dołącz ostatnie logi",
+        "includeConfiguration": "Dołącz konfigurację (wrażliwe dane usunięte)",
+        "includeSystemInfo": "Dołącz informacje systemowe"
+      },
+      "supportReport": {
+        "title": "Generuj Raport Wsparcia",
+        "description": {
+          "intro": "Raporty wsparcia są **niezbędne do rozwiązywania problemów** i dramatycznie poprawiają naszą zdolność do rozwiązywania problemów, których doświadczasz. Dostarczają programistom kluczowy kontekst dotyczący konfiguracji twojego systemu, ostatnich logów aplikacji i wzorców błędów, które byłyby niemożliwe do zdiagnozowania w inny sposób."
+        },
+        "githubRequired": {
+          "title": "Wymagane: Problem GitHub do Przesyłania Wsparcia",
+          "description": "<strong>Przesyłanie wsparcia wymaga numeru problemu GitHub.</strong> Proszę <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">utwórz problem GitHub</a> opisujący twój problem <strong>przed</strong> wygenerowaniem raportu wsparcia. Bez powiązanego problemu programiści nie mogą działać na twoich danych wsparcia."
+        },
+        "githubIssue": {
+          "label": "Numer Problemu GitHub",
+          "placeholder": "np. 123 lub #123",
+          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Wyświetl istniejące problemy</a> lub <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">utwórz nowy problem</a> najpierw"
+        },
+        "whatsIncluded": {
+          "title": "Co jest zawarte w raporcie:",
+          "applicationLogs": "**Logi aplikacji** - Ostatnie błędy i informacje debugowania",
+          "configuration": "**Konfiguracja** - Twoje ustawienia z usuniętymi wrażliwymi danymi",
+          "systemInfo": "**Informacje systemowe** - Wersja systemu operacyjnego, pamięć i szczegóły środowiska uruchomieniowego",
+          "notIncluded": "**NIE zawiera** - Pliki audio, detekcje ptaków ani dane osobowe"
+        },
+        "userMessage": {
+          "label": "Opisz problem",
+          "placeholder": "Proszę opisać problem i dołącz link do problemu GitHub, jeśli dotyczy (np. #123)",
+          "githubTip": "💡 Wskazówka: Jeśli masz problem GitHub, proszę dołącz numer problemu (np. #123) i wspomnij swój Identyfikator Systemu {systemId} w problemie GitHub, aby pomóc programistom powiązać twoje dane wsparcia.",
+          "labelOptional": "Dodatkowe szczegóły (opcjonalnie)",
+          "placeholderOptional": "Podaj dodatkowy kontekst dotyczący problemu, którego nie ma w twoim problemie GitHub",
+          "systemIdNote": "💡 Wskazówka: Twój Identyfikator Systemu {systemId} zostanie automatycznie dołączony do przesyłania"
+        },
+        "uploadOption": {
+          "label": "Prześlij do programistów (zalecane)",
+          "labelWithRequirement": "Prześlij do programistów (wymaga numeru problemu GitHub)",
+          "details": {
+            "sentryUpload": "Dane są przesyłane do usługi w chmurze [Sentry](https://sentry.io)",
+            "euDataCenter": "Przechowywane w centrum danych UE (Frankfurt, Niemcy)",
+            "privacyCompliant": "Zgodne z prywatnością z usuniętymi wrażliwymi danymi",
+            "manualWarning": "Odznacz tylko jeśli wolisz obsługiwać plik wsparcia ręcznie"
+          }
+        },
+        "generateButton": {
+          "upload": "Generuj i Prześlij",
+          "download": "Generuj i Pobierz"
+        },
+        "statusMessages": {
+          "preparing": "Przygotowywanie zrzutu wsparcia...",
+          "uploadSuccess": "Zrzut wsparcia został pomyślnie przesłany do programistów!",
+          "uploadSuccessWithId": "Zrzut wsparcia został pomyślnie przesłany do programistów! ID referencyjne: {dumpId}",
+          "downloadSuccess": "Zrzut wsparcia wygenerowany pomyślnie! Pobieranie...",
+          "generateSuccess": "Zrzut wsparcia wygenerowany pomyślnie!",
+          "generateFailed": "Nie udało się wygenerować zrzutu wsparcia: {message}",
+          "error": "Błąd: {message}",
+          "githubIssueRequired": "Proszę wprowadzić numer problemu GitHub, aby przesłać dane wsparcia"
+        }
+      }
+    },
+    "notifications": {
+      "sections": {
+        "testing": {
+          "title": "Testuj Powiadomienia",
+          "description": "Wyślij testowe powiadomienia, aby zweryfikować, że system powiadomień działa poprawnie"
+        },
+        "info": {
+          "title": "Informacje Systemowe",
+          "description": "Dowiedz się, jak wyświetlać i zarządzać powiadomieniami"
+        }
+      },
+      "templates": {
+        "title": "Szablony Powiadomień",
+        "description": "Dostosuj wiadomości powiadomień dla detekcji nowych gatunków za pomocą zmiennych szablonów",
+        "newSpeciesTitle": "Szablon Powiadomienia o Nowym Gatunku",
+        "titleLabel": "Szablon Tytułu",
+        "titlePlaceholder": "np. Nowy Gatunek: {{.CommonName}}",
+        "messageLabel": "Szablon Wiadomości",
+        "messagePlaceholder": "np. Pierwsza detekcja {{.CommonName}} ({{.ScientificName}}) z {{.ConfidencePercent}}% pewnością",
+        "resetButton": "Resetuj",
+        "saveButton": "Zapisz Szablony",
+        "saveButtonUnsaved": "Zapisz Szablony *",
+        "testButton": "Test",
+        "savingButton": "Zapisywanie...",
+        "sendingButton": "Wysyłanie...",
+        "resetConfirm": "Zresetować szablony do domyślnych? Spowoduje to odrzucenie bieżących zmian i przywrócenie domyślnych wartości szablonów.",
+        "unsavedChangesWarning": "Masz niezapisane zmiany szablonu. Test użyje aktualnie zapisanych szablonów, a nie twoich edycji. Kontynuować?",
+        "testWithUnsavedChanges": "Ostrzeżenie: Masz niezapisane zmiany. Test użyje zapisanych szablonów.",
+        "testNormal": "Wyślij testowe powiadomienie",
+        "saveSuccess": "Szablony zapisane pomyślnie!",
+        "saveError": "Błąd: {message}",
+        "availableVariables": "Dostępne Zmienne Szablonu",
+        "variablesDescription": "Użyj tych zmiennych w swoich szablonach ze składnią",
+        "loading": "Ładowanie..."
+      },
+      "testNotification": {
+        "title": "Wyślij Testowe Powiadomienie o Nowym Gatunku",
+        "description": "Wygeneruj testowe powiadomienie dla detekcji nowego gatunku, aby zweryfikować, że system powiadomień działa",
+        "whatHappens": "Co się stanie, gdy klikniesz 'Wyślij Test':",
+        "sendButton": "Wyślij Test",
+        "sendingButton": "Wysyłanie...",
+        "statusMessages": {
+          "sending": "Wysyłanie testowego powiadomienia...",
+          "success": "Testowe powiadomienie wysłane pomyślnie! Sprawdź dzwonek powiadomień.",
+          "error": "Nie udało się wysłać testowego powiadomienia: {message}",
+          "serviceUnavailable": "Usługa powiadomień jest niedostępna. Proszę sprawdzić ustawienia powiadomień."
+        }
+      },
+      "statusMessages": {
+        "sending": "Wysyłanie testowego powiadomienia...",
+        "success": "Testowe powiadomienie wysłane pomyślnie!",
+        "error": "Nie udało się wysłać testowego powiadomienia: {message}",
+        "serviceUnavailable": "Usługa powiadomień jest niedostępna. Proszę sprawdzić ustawienia powiadomień."
+      },
+      "systemInfo": {
+        "howToView": "Jak wyświetlić powiadomienia:",
+        "technicalDetails": "Szczegóły techniczne dotyczące powiadomień w BirdNET-Go:"
+      },
+      "privacy": {
+        "title": "Informacja o Prywatności dla Zewnętrznych Webhooków",
+        "description": "Powiadomienia o detekcjach mogą zawierać wrażliwe dane podczas wysyłania do usług zewnętrznych:",
+        "gps": "Współrzędne GPS",
+        "gpsDetails": "Dokładna lokalizacja (szerokość/długość geograficzna) jeśli skonfigurowana",
+        "urls": "Adresy URL Detekcji",
+        "urlsDetails": "Mogą ujawnić informacje o sieci wewnętrznej",
+        "species": "Dane o Gatunkach",
+        "speciesDetails": "Jakie ptaki zostały wykryte i kiedy",
+        "recommendation": "Włącz zewnętrzne webhooki tylko jeśli ufasz usłudze odbiorczej lub używasz usług self-hosted/lokalnych."
+      }
+    },
+    "filters": {
+      "privacyFiltering": {
+        "title": "Filtrowanie Prywatności",
+        "description": "Filtrowanie prywatności unika zapisywania klipów audio, gdy wykryte są głosy ludzkie",
+        "enable": "Włącz Filtrowanie Prywatności",
+        "confidenceLabel": "Próg Pewności dla Detekcji Człowieka",
+        "confidenceHelp": "Ustaw poziom pewności dla detekcji głosu ludzkiego, niższa wartość sprawia, że filtr jest bardziej czuły"
+      },
+      "falsePositivePrevention": {
+        "title": "Zapobieganie Fałszywym Pozytywnościom",
+        "description": "Konfiguruj filtry fałszywych detekcji",
+        "enableDogBark": "Włącz Filtr Szczekania Psa",
+        "confidenceLabel": "Próg Pewności",
+        "confidenceHelp": "Ustaw poziom pewności dla detekcji szczekania psa, niższa wartość sprawia, że filtr jest bardziej czuły",
+        "expireTimeLabel": "Czas Wygaśnięcia Szczekania Psa (Minuty)",
+        "expireTimeHelp": "Ustaw, jak długo pamiętać wykryte szczekanie psa",
+        "addDogBarkSpeciesLabel": "Dodaj Gatunki Szczekania Psa",
+        "addDogBarkSpeciesHelp": "Szukaj i dodaj gatunki, które mogą być mylone ze szczekaniem psa",
+        "addSpeciesButton": "Dodaj"
+      },
+      "speciesNamePlaceholder": "Nazwa gatunku",
+      "typeSpeciesName": "Wpisz nazwę gatunku...",
+      "dogBarkSpeciesList": "Lista Gatunków Szczekania Psa",
+      "errors": {
+        "speciesLoadFailed": "Nie udało się załadować listy gatunków. Spróbuj ponownie."
+      }
+    },
+    "integration": {
+      "birdweather": {
+        "title": "BirdWeather",
+        "description": "Przesyłaj detekcje do BirdWeather",
+        "ffmpegWarning": {
+          "title": "Nie wykryto FFmpeg",
+          "message": "Proszę zainstalować FFmpeg, aby włączyć obsługę kodowania FLAC, BirdWeather wycofuje przesyłanie WAV na rzecz skompresowanych plików audio FLAC."
+        },
+        "enable": "Włącz Przesyłanie do BirdWeather",
+        "token": {
+          "label": "Token BirdWeather",
+          "helpText": "Twój unikalny token BirdWeather."
+        },
+        "threshold": {
+          "label": "Próg Przesyłania",
+          "helpText": "Minimalny próg pewności do przesyłania predykcji do BirdWeather."
+        },
+        "test": {
+          "button": "Testuj Połączenie BirdWeather",
+          "loading": "Testowanie...",
+          "enabledRequired": "BirdWeather musi być włączony do testowania",
+          "tokenRequired": "Token BirdWeather musi być określony",
+          "inProgress": "Test w toku...",
+          "description": "Testuj połączenie BirdWeather"
+        }
+      },
+      "mqtt": {
+        "title": "MQTT",
+        "description": "Konfiguruj połączenie brokera MQTT",
+        "enable": "Włącz Integrację MQTT",
+        "broker": {
+          "label": "Broker MQTT",
+          "placeholder": "mqtt://localhost:1883"
+        },
+        "topic": {
+          "label": "Temat MQTT",
+          "placeholder": "birdnet/detections"
+        },
+        "authentication": {
+          "title": "Uwierzytelnianie",
+          "username": {
+            "label": "Nazwa Użytkownika"
+          },
+          "password": {
+            "label": "Hasło",
+            "helpText": "Hasło MQTT."
+          }
+        },
+        "messageSettings": {
+          "title": "Ustawienia Wiadomości",
+          "retain": {
+            "label": "Zachowaj Wiadomości",
+            "note": "<strong>Użytkownicy Home Assistant:</strong> Zaleca się włączenie flagi zachowania dla integracji Home Assistant. Bez zachowania, czujniki MQTT będą wyświetlane jako 'nieznane' po restarcie Home Assistant."
+          }
+        },
+        "tls": {
+          "title": "Bezpieczeństwo TLS/SSL",
+          "enable": "Włącz TLS/SSL",
+          "skipVerify": "Pomiń Weryfikację Certyfikatu",
+          "configNote": "<strong>Konfiguracja TLS:</strong><br />• Standardowe TLS: Zostaw certyfikaty puste dla publicznych brokerów<br />• Certyfikaty self-signed: Podaj Certyfikat CA<br />• Mutual TLS (mTLS): Podaj wszystkie trzy certyfikaty"
+        },
+        "test": {
+          "button": "Testuj Połączenie MQTT",
+          "loading": "Testowanie...",
+          "enabledRequired": "MQTT musi być włączony do testowania",
+          "brokerRequired": "Broker MQTT musi być określony",
+          "inProgress": "Test w toku...",
+          "description": "Testuj połączenie MQTT"
+        }
+      },
+      "observability": {
+        "title": "Obserwowalność",
+        "description": "Monitoruj wydajność BirdNET-Go i metryki detekcji ptaków poprzez punkt końcowy kompatybilny z Prometheus",
+        "enable": "Włącz Integrację Obserwowalności",
+        "listenAddress": {
+          "label": "Adres Nasłuchiwania",
+          "placeholder": "0.0.0.0:8090"
+        }
+      },
+      "weather": {
+        "title": "Pogoda",
+        "description": "Konfiguruj zbieranie danych pogodowych",
+        "provider": {
+          "label": "Dostawca Pogody",
+          "options": {
+            "none": "Brak",
+            "yrno": "Yr.no",
+            "openweather": "OpenWeather",
+            "wunderground": "Weather Underground"
+          }
+        },
+        "wunderground": {
+          "apiKey": {
+            "label": "Klucz API Weather Underground",
+            "helpText": "Wprowadź swój klucz API Weather Underground. Wymagany dla danych pogodowych."
+          },
+          "stationId": {
+            "label": "ID Stacji",
+            "helpText": "Twój ID stacji PWS Weather Underground (np. KCAOAKLA12)."
+          },
+          "endpoint": {
+            "label": "Punkt Końcowy API",
+            "helpText": "Zastąp domyślny punkt końcowy API Weather Underground, jeśli to konieczne. Domyślnie https://api.weather.com/v2/pws/observations/current jeśli pozostawione puste."
+          },
+          "units": {
+            "label": "Jednostki",
+            "helpText": "Wybierz jednostki dla temperatury i prędkości wiatru (m = Metryczne, e = Imperialne, h = UK Hybrid)."
+          }
+        },
+        "notes": {
+          "none": "Nie będą pobierane żadne dane pogodowe.",
+          "yrno": {
+            "description": "Dane prognozy pogody są dostarczane przez Yr.no, wspólną usługę Norweskiego Instytutu Meteorologicznego (met.no) i Norweskiej Korporacji Nadawczej (NRK).",
+            "freeService": "Yr to bezpłatna usługa danych pogodowych. Aby uzyskać więcej informacji, odwiedź <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
+          },
+          "openweather": "Użycie OpenWeather wymaga klucza API, zarejestruj się po bezpłatny klucz API na <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
+          "wunderground": "Wymaga klucza API Weather Underground i prawidłowego ID stacji PWS. Zobacz <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> dla szczegółów."
+        },
+        "apiKey": {
+          "label": "Klucz API",
+          "helpText": "Twój klucz API dla wybranego dostawcy pogody. Trzymaj to w tajemnicy!"
+        },
+        "units": {
+          "label": "Jednostki Miary",
+          "options": {
+            "standard": "Standardowe",
+            "metric": "Metryczne",
+            "imperial": "Imperialne",
+            "ukhybrid": "UK Hybrid"
+          }
+        },
+        "test": {
+          "button": "Testuj Dostawcę Pogody",
+          "loading": "Testowanie...",
+          "noProvider": "Nie wybrano dostawcy pogody",
+          "apiKeyRequired": "Klucz API musi być określony",
+          "inProgress": "Test w toku...",
+          "description": "Testuj połączenie z dostawcą pogody"
+        }
+      }
+    },
+    "audio": {
+      "audioCapture": {
+        "title": "Przechwytywanie Audio",
+        "description": "Ustaw źródło przechwytywania audio, kartę dźwiękową lub strumień RTSP",
+        "soundCardSource": "Źródło Karty Dźwiękowej",
+        "audioSourceLabel": "Źródło Audio (wymaga restartu aplikacji do zastosowania)",
+        "audioSourceHelp": "Wybierz urządzenie wejściowe audio do detekcji dźwięków ptaków. Zmiany wymagają restartu aplikacji, aby zostały zastosowane.",
+        "noSoundCardCapture": "Brak przechwytywania karty dźwiękowej",
+        "rtspSource": "Źródło RTSP",
+        "rtspTransportLabel": "Protokół Transportu RTSP",
+        "rtspTransportHelp": "TCP jest bardziej niezawodny, ale może mieć większe opóźnienie. UDP jest szybszy, ale może doświadczać utraty pakietów w słabych sieciach.",
+        "rtspUrlsLabel": "Adresy URL Strumienia RTSP",
+        "rtspUrlsHelp": "Wprowadź jeden lub więcej adresów URL strumienia RTSP dla sieciowych źródeł audio. Format: rtsp://ip:port/stream. Uwaga: Dane uwierzytelniające powinny być skonfigurowane oddzielnie w ustawieniach serwera RTSP ze względów bezpieczeństwa."
+      },
+      "audioFilters": {
+        "title": "Filtry Audio",
+        "description": "Konfiguruj filtry przetwarzania audio",
+        "enableEqualizer": "Włącz Equalizer Audio",
+        "enableEqualizerHelp": "Zastosuj filtrowanie częstotliwości, aby poprawić detekcję odgłosów ptaków, redukując niechciany hałas i częstotliwości.",
+        "filterType": "Typ Filtra",
+        "newFilterType": "Nowy Typ Filtra",
+        "selectFilterType": "Wybierz typ filtra",
+        "addFilter": "Dodaj Filtr",
+        "remove": "Usuń",
+        "frequencyResponse": "Charakterystyka Częstotliwościowa",
+        "cutoffFrequency": "Częstotliwość Odcięcia",
+        "cutoffFrequencyHelp": "Częstotliwość, przy której filtr zaczyna tłumić sygnały. Odgłosy ptaków zazwyczaj mieszczą się w zakresie 1-10 kHz.",
+        "qFactor": "Współczynnik Q",
+        "qFactorHelp": "Współczynnik jakości kontroluje ostrość filtra. Niższe wartości (0.1-1) tworzą łagodniejsze zbocza, wyższe wartości (1-10) tworzą ostrzejsze odcięcia.",
+        "gain": "Wzmocnienie",
+        "gainHelp": "Poziom wzmocnienia lub tłumienia w decybelach (dB).",
+        "attenuation": "Tłumienie",
+        "attenuationHelp": "Szybkość tłumienia filtra. Wyższe wartości zapewniają ostrzejsze tłumienie filtrowanych częstotliwości.",
+        "attenuationLevels": {
+          "0db": "0dB",
+          "12db": "12dB",
+          "24db": "24dB",
+          "36db": "36dB",
+          "48db": "48dB"
+        },
+        "filterHelp": "Dodaj wiele filtrów, aby ukształtować charakterystykę częstotliwościową dla optymalnej detekcji ptaków w twoim środowisku."
+      },
+      "soundLevelMonitoring": {
+        "title": "Monitorowanie Poziomu Dźwięku",
+        "description": "Monitoruj i raportuj poziomy dźwięku środowiskowego",
+        "enable": "Włącz Monitorowanie Poziomu Dźwięku",
+        "enableHelp": "Śledź poziomy hałasu otoczenia, aby zrozumieć środowisko nagrywania i skorelować ze wzorcami aktywności ptaków.",
+        "intervalLabel": "Interwał Pomiaru (sekundy)",
+        "intervalHelp": "Jak często mierzyć i raportować poziomy dźwięku. Niższe wartości zapewniają bardziej szczegółowe dane, ale wykorzystują więcej zasobów. Minimum 5 sekund, zalecane 60 sekund.",
+        "dataOutputTitle": "Wyjście Danych Poziomu Dźwięku",
+        "dataOutputDescription": "Po włączeniu pomiary poziomu dźwięku są publikowane przez:",
+        "mqttTopic": "Temat MQTT:",
+        "sseEndpoint": "Punkt końcowy SSE:",
+        "prometheusMetrics": "Metryki Prometheus:"
+      },
+      "clipSettings": {
+        "title": "Ustawienia Klipów",
+        "description": "Konfiguruj przechwytywanie i przetwarzanie klipów audio dla zidentyfikowanych odgłosów ptaków"
+      },
+      "audioExport": {
+        "enable": "Włącz Przechwytywanie Audio",
+        "enableHelp": "Zapisuj klipy audio wykrytych odgłosów ptaków do przeglądu, udostępniania lub budowania niestandardowych zbiorów danych.",
+        "captureSettings": "Ustawienia Przechwytywania",
+        "lengthLabel": "Długość Przechwytywania",
+        "lengthHelp": "Czas trwania audio do przechwycenia dla każdej detekcji (10-60 sekund). Dłuższe klipy zapewniają więcej kontekstu, ale wykorzystują więcej miejsca.",
+        "preCaptureLabel": "Bufor Przed Detekcją",
+        "preCaptureHelp": "Sekundy audio do uwzględnienia przed wykryciem ptaka (0-{max} sekund). Zapewnia, że kompletny odgłos ptaka jest przechwycony od początku.",
+        "gainLabel": "Wzmocnienie Audio",
+        "gainHelp": "Wzmocnienie audio dla zapisanych klipów w decybelach (0 do 20 dB). Sprawia, że zapisane klipy audio są głośniejsze dla łatwiejszego słuchania. Nie wpływa na detekcję. 0 dB oznacza brak wzmocnienia.",
+        "normalization": "Normalizacja Audio",
+        "normalizationEnable": "Włącz Normalizację Głośności",
+        "normalizationHelp": "Automatycznie dostosuj poziomy audio do standardu nadawczego EBU R128 dla spójnej głośności odtwarzania wszystkich klipów.",
+        "targetLUFSLabel": "Docelowa Głośność (LUFS)",
+        "targetLUFSHelp": "Docelowa zintegrowana głośność w LUFS (Jednostki Głośności Względem Pełnej Skali). -23 LUFS jest standardem nadawczym EBU R128. Zakres: -40 do -10 LUFS.",
+        "loudnessRangeLabel": "Zakres Głośności (LU)",
+        "loudnessRangeHelp": "Maksymalna zmienność głośności w klipie (0-20 LU). Niższe wartości tworzą bardziej spójną głośność, ale mogą zmniejszyć dynamikę.",
+        "truePeakLabel": "Limit True Peak (dBTP)",
+        "truePeakHelp": "Maksymalny poziom true peak, aby zapobiec cyfrowej kompresji (-10 do 0 dBTP). -2 dBTP zapewnia bezpieczną rezerwę dla większości systemów odtwarzania.",
+        "normalizationNote": "Standard EBU R128",
+        "normalizationNoteDescription": "Normalizacja audio przestrzega standardu nadawczego EBU R128, zapewniając spójne poziomy odtwarzania na różnych urządzeniach i zapobiegając kompresji.",
+        "fileSettings": "Ustawienia Pliku",
+        "pathLabel": "Ścieżka Eksportu",
+        "pathHelp": "Katalog, w którym będą zapisywane klipy audio. Ścieżki względne są od katalogu aplikacji. Przykład: 'clips/' lub '/var/audio/birds/'",
+        "typeLabel": "Format Eksportu",
+        "typeHelp": "Format audio dla zapisanych klipów. WAV i FLAC są bezstratne (najlepsza jakość, większe pliki). MP3, AAC i Opus są stratne (mniejsze pliki, niewielka utrata jakości).",
+        "bitrateLabel": "Bitrate",
+        "bitrateHelp": "Bitrate kompresji audio dla formatów stratnych. Zakres: {min}-{max} kbps. Wyższe wartości zapewniają lepszą jakość, ale większe pliki.",
+        "losslessNote": "Formaty bezstratne zachowują oryginalną jakość audio bez artefaktów kompresji."
+      },
+      "audioClipRetention": {
+        "title": "Retencja Klipów Audio",
+        "description": "Konfiguruj automatyczne czyszczenie zapisanych klipów audio",
+        "policyLabel": "Polityka Retencji",
+        "policyHelp": "Wybierz, jak klipy audio są automatycznie usuwane. Brak: zachowaj wszystkie klipy. Wiek: usuń klipy starsze niż określone. Użycie: usuń najstarsze klipy, gdy użycie dysku przekroczy limit.",
+        "maxAgeLabel": "Maksymalny Wiek",
+        "maxAgeHelp": "Usuń klipy audio starsze niż ten okres. Format: liczba po której następuje jednostka (h=godziny, d=dni, w=tygodnie, m=miesiące). Przykłady: '7d' dla 7 dni, '4w' dla 4 tygodni.",
+        "maxUsageLabel": "Maksymalne Użycie Dysku",
+        "maxUsageHelp": "Usuń najstarsze klipy, gdy katalog audio wykorzystuje więcej niż ten procent dostępnego miejsca na dysku.",
+        "minClipsLabel": "Minimalne Klipy na Gatunek",
+        "minClipsHelp": "Zawsze zachowuj co najmniej tyle klipów dla każdego gatunku ptaków, niezależnie od wieku lub użycia dysku. Pomaga zachować rzadkie nagrania.",
+        "keepSpectrograms": "Zachowaj Obrazy Spektrogramów",
+        "keepSpectrogramsHelp": "Zachowaj obrazy spektrogramów nawet gdy klipy audio są usuwane. Spektrogramy wykorzystują mniej miejsca i zapewniają odniesienie wizualne.",
+        "policies": {
+          "none": "Brak - Zachowaj Wszystko",
+          "age": "Na Podstawie Wieku",
+          "usage": "Na Podstawie Użycia Dysku"
+        }
+      },
+      "formats": {
+        "wav": "WAV",
+        "flac": "FLAC",
+        "aac": "AAC",
+        "opus": "Opus",
+        "mp3": "MP3"
+      },
+      "transport": {
+        "tcp": "TCP",
+        "udp": "UDP"
+      },
+      "filterTypes": {
+        "lowpass": "Filtr Dolnoprzepustowy",
+        "highpass": "Filtr Górnoprzepustowy",
+        "bandpass": "Filtr Pasmowy",
+        "bandstop": "Filtr Zaporowy"
+      },
+      "errors": {
+        "devicesLoadFailed": "Nie udało się załadować urządzeń audio. Proszę sprawdzić uprawnienia systemowe.",
+        "invalidBitrate": "Nieprawidłowa wartość bitrate",
+        "invalidRetentionPolicy": "Nieprawidłowa polityka retencji"
+      }
+    },
+    "security": {
+      "hostLabel": "Adres Hosta",
+      "allowSubnetBypassLabel": "Zezwól na Dostęp z Podsieci Omijając Uwierzytelnianie",
+      "allowedSubnetsLabel": "Dozwolone Podsieci",
+      "allowedSubnetsHelp": "Dozwolone zakresy sieci do ominięcia logowania (notacja CIDR, lista oddzielona przecinkami)",
+      "securityWarningTitle": "Ostrzeżenie Bezpieczeństwa:",
+      "subnetWarningText": "Urządzenia z tych podsieci będą miały nieograniczony dostęp. Uwzględnij tylko zaufane sieci wewnętrzne.",
+      "httpsSettingsTitle": "Ustawienia HTTPS",
+      "httpsSettingsDescription": "Bezpieczny dostęp z szyfrowaniem SSL/TLS",
+      "basicAuthTitle": "Podstawowe Uwierzytelnianie",
+      "basicAuthDescription": "Bezpieczny dostęp za pomocą prostego hasła",
+      "serverConfiguration": {
+        "title": "Konfiguracja Serwera",
+        "description": "Konfiguruj HTTPS i ustawienia SSL/TLS",
+        "autoTlsLabel": "Automatyczne Zarządzanie Certyfikatem SSL (AutoTLS)",
+        "autoTlsRequirements": {
+          "title": "Wymagania AutoTLS:",
+          "domainRequired": "Wymagana jest zarejestrowana domena",
+          "domainPointing": "Domena musi wskazywać na publiczny adres IP tego serwera",
+          "portsAccessible": "Porty 80 i 443 muszą być dostępne z Internetu"
+        }
+      },
+      "basicAuthentication": {
+        "title": "Podstawowe Uwierzytelnianie",
+        "description": "Bezpieczny dostęp za pomocą prostego hasła",
+        "enableLabel": "Włącz Uwierzytelnianie Hasłem",
+        "passwordLabel": "Hasło",
+        "passwordHelpText": "Ogranicz dostęp do ustawień za pomocą hasła."
+      },
+      "oauth": {
+        "title": "Uwierzytelnianie Społecznościowe OAuth2",
+        "description": "Pojedyncze logowanie za pomocą istniejącego konta",
+        "google": {
+          "title": "Google OAuth",
+          "enableLabel": "Zezwalaj na Logowanie OAuth2 przez Google",
+          "redirectUriTitle": "URI Przekierowania dla Google Cloud Console:",
+          "getCredentialsLabel": "Uzyskaj swoje poświadczenia z Google Cloud Console",
+          "clientIdLabel": "ID Klienta",
+          "clientIdHelpText": "ID Klienta OAuth 2.0 uzyskane z Google Cloud Console podczas konfigurowania poświadczeń OAuth.",
+          "clientSecretLabel": "Sekret Klienta",
+          "clientSecretHelpText": "Sekret Klienta OAuth 2.0 uzyskany z Google Cloud Console podczas konfigurowania poświadczeń OAuth.",
+          "userIdLabel": "ID Użytkownika"
+        },
+        "github": {
+          "title": "GitHub OAuth",
+          "enableLabel": "Zezwalaj na Logowanie OAuth2 przez GitHub",
+          "redirectUriTitle": "URI Przekierowania dla Ustawień Deweloperskich GitHub:",
+          "getCredentialsLabel": "Uzyskaj swoje poświadczenia z Ustawień Deweloperskich GitHub",
+          "clientIdLabel": "ID Klienta",
+          "clientIdHelpText": "ID Klienta OAuth 2.0 uzyskane z Ustawień Deweloperskich GitHub podczas konfigurowania poświadczeń OAuth.",
+          "clientSecretLabel": "Sekret Klienta",
+          "clientSecretHelpText": "Sekret Klienta OAuth 2.0 uzyskany z Ustawień Deweloperskich GitHub podczas konfigurowania poświadczeń OAuth.",
+          "userIdLabel": "ID Użytkownika"
+        }
+      },
+      "bypassAuthentication": {
+        "title": "Omiń Uwierzytelnianie",
+        "description": "Zezwalaj na dostęp do ustawień bez uwierzytelniania"
+      },
+      "placeholders": {
+        "host": "Na przykład, localhost:8080 lub example.domain.com",
+        "allowedUsers": "Wprowadź jeden lub więcej dozwolonych adresów e-mail użytkowników",
+        "subnet": "Wprowadź podsieć CIDR (np. 192.168.1.0/24)"
+      }
+    },
+    "species": {
+      "alwaysInclude": {
+        "title": "Zawsze Uwzględniaj Gatunki",
+        "description": "Gatunki z tej listy będą zawsze uwzględniane w zakresie wykrytych gatunków",
+        "noSpeciesMessage": "Nie dodano gatunków do listy uwzględnianych"
+      },
+      "alwaysExclude": {
+        "title": "Zawsze Wykluczaj Gatunki",
+        "description": "Gatunki z tej listy będą zawsze wykluczone z detekcji",
+        "noSpeciesMessage": "Nie dodano gatunków do listy wykluczanych"
+      },
+      "customConfiguration": {
+        "title": "Niestandardowa Konfiguracja Gatunków",
+        "description": "Wartości progowe specyficzne dla gatunków, interwały detekcji i akcje",
+        "helpText": {
+          "intro": "Konfiguruj ustawienia specyficzne dla gatunków:",
+          "threshold": "Próg: Minimalny wynik pewności (0-1) wymagany do detekcji",
+          "interval": "Interwał: Minimalny czas w sekundach między detekcjami tego samego gatunku (0 = użyj globalnego domyślnego)",
+          "actions": "Akcje: Niestandardowe polecenia do wykonania po wykryciu tego gatunku"
+        },
+        "columnHeaders": {
+          "species": "Gatunek",
+          "settings": "Ustawienia",
+          "actions": "Akcje"
+        },
+        "badges": {
+          "threshold": "Próg: {value}",
+          "interval": "Interwał: {value}s",
+          "customAction": "Akcja Niestandardowa",
+          "executeDefaults": "+Domyślne"
+        },
+        "dropdown": {
+          "editConfig": "Edytuj Konfigurację",
+          "addAction": "Dodaj Akcję",
+          "remove": "Usuń"
+        },
+        "labels": {
+          "threshold": "Próg",
+          "interval": "Interwał",
+          "intervalSeconds": "Interwał (sek)",
+          "addButton": "Dodaj"
+        },
+        "noConfigurationsMessage": "Nie dodano niestandardowych konfiguracji gatunków",
+        "addForm": {
+          "speciesPlaceholder": "Nazwa gatunku",
+          "thresholdPlaceholder": "0.5",
+          "intervalPlaceholder": "0"
+        }
+      },
+      "actionsModal": {
+        "title": "Akcje dla {species}",
+        "actionType": {
+          "label": "Typ Akcji",
+          "executeCommand": "Wykonaj Polecenie",
+          "onlySupported": "Obecnie obsługiwane są tylko akcje Wykonaj Polecenie"
+        },
+        "command": {
+          "label": "Polecenie",
+          "helpText": "Podaj pełną ścieżkę do polecenia lub skryptu, który chcesz wykonać"
+        },
+        "parameters": {
+          "label": "Parametry",
+          "helpText": "Te wartości zostaną przekazane do twojego polecenia w podanej kolejności",
+          "availableTitle": "Dostępne Parametry",
+          "buttons": {
+            "commonName": "NazwaPospolita",
+            "scientificName": "NazwaNaukowa",
+            "confidence": "Pewność",
+            "time": "Czas",
+            "source": "Źródło",
+            "clearParameters": "Wyczyść Parametry"
+          }
+        },
+        "executeDefaults": {
+          "label": "Uruchom również domyślne akcje (przechowywanie w bazie danych, powiadomienia itp.)",
+          "helpText": "Po włączeniu będą działać zarówno twoja niestandardowa akcja, jak i domyślne akcje systemu. Po wyłączeniu zostanie wykonana tylko twoja niestandardowa akcja."
+        }
+      },
+      "addSpeciesToInclude": "Dodaj gatunki do uwzględnienia",
+      "addSpeciesToIncludeLabel": "Dodaj Nowy Gatunek do Uwzględnienia",
+      "addSpeciesToExclude": "Dodaj gatunki do wykluczenia",
+      "addSpeciesToExcludeLabel": "Dodaj Nowy Gatunek do Wykluczenia",
+      "commandPathPlaceholder": "/ścieżka/do/twojego/polecenia",
+      "parametersPlaceholder": "Parametry pojawią się tutaj",
+      "errors": {
+        "speciesLoadFailed": "Nie udało się załadować listy gatunków. Spróbuj ponownie."
+      }
+    },
+    "database": {
+      "sqlitePlaceholder": "Wprowadź ścieżkę bazy danych SQLite",
+      "mysqlHostPlaceholder": "Wprowadź host MySQL",
+      "mysqlUsernamePlaceholder": "Wprowadź nazwę użytkownika MySQL"
+    }
+  },
+  "auth": {
+    "login": "Zaloguj",
+    "logout": "Wyloguj",
+    "openLoginModal": "Otwórz okno logowania",
+    "loginTitle": "Zaloguj się do BirdNET-Go",
+    "password": "Hasło",
+    "passwordPlaceholder": "Wprowadź swoje hasło",
+    "or": "lub",
+    "loginWithGoogle": "Zaloguj się przez Google",
+    "loginWithGithub": "Zaloguj się przez GitHub",
+    "errors": {
+      "loginFailed": "Logowanie nie powiodło się. Sprawdź swoje hasło i spróbuj ponownie.",
+      "passwordRequired": "Hasło jest wymagane.",
+      "passwordTooLong": "Hasło jest za długie.",
+      "invalidCharacters": "Hasło zawiera nieprawidłowe znaki.",
+      "invalidCredentials": "Nieprawidłowa nazwa użytkownika lub hasło.",
+      "tooManyAttempts": "Zbyt wiele prób logowania. Spróbuj ponownie później.",
+      "serverError": "Wystąpił błąd serwera. Spróbuj ponownie później.",
+      "rateLimited": "Zbyt wiele prób. Proszę poczekać {minutes} minut przed ponowną próbą.",
+      "configurationError": "Błąd konfiguracji uwierzytelniania. Skontaktuj się z obsługą.",
+      "invalidInput": "Podano nieprawidłowe dane wejściowe."
+    }
+  },
+  "dataDisplay": {
+    "table": {
+      "noData": "Brak dostępnych danych",
+      "loading": "Ładowanie danych...",
+      "error": "Nie udało się załadować danych",
+      "sortBy": "Sortuj według {column}",
+      "rowsPerPage": "Wierszy na stronę",
+      "pageInfo": "Pokazywanie {from} do {to} z {total} wyników"
+    },
+    "pagination": {
+      "ariaLabel": "Nawigacja Paginacji",
+      "previous": "Poprzednie",
+      "next": "Dalej",
+      "page": "Strona {current} z {total}",
+      "goToPage": "Przejdź do strony {page}",
+      "goToPreviousPage": "Przejdź do poprzedniej strony",
+      "goToNextPage": "Przejdź do następnej strony",
+      "firstPage": "Pierwsza strona",
+      "lastPage": "Ostatnia strona"
+    },
+    "stats": {
+      "total": "Razem",
+      "average": "Średnia",
+      "min": "Minimum",
+      "max": "Maksimum",
+      "count": "Liczba"
+    }
+  },
+  "forms": {
+    "placeholders": {
+      "text": "Wprowadź {field}",
+      "select": "Wybierz {field}",
+      "search": "Szukaj...",
+      "date": "Wybierz datę",
+      "dateRange": "Wybierz zakres dat",
+      "number": "Wprowadź liczbę",
+      "password": "Wprowadź hasło",
+      "url": "Wprowadź URL",
+      "email": "Wprowadź e-mail",
+      "selectFilterType": "Wybierz typ filtra",
+      "speciesName": "Nazwa gatunku"
+    },
+    "labels": {
+      "showPassword": "Pokaż hasło",
+      "hidePassword": "Ukryj hasło",
+      "copyToClipboard": "Kopiuj do schowka",
+      "clearSelection": "Wyczyść wybór",
+      "selectOption": "Wybierz opcję"
+    },
+    "help": {
+      "passwordStrength": "Siła hasła: {strength}",
+      "charactersRemaining": "pozostało {count} znaków",
+      "dateFormat": "Format: {format}"
+    },
+    "password": {
+      "strength": {
+        "label": "Siła Hasła:",
+        "levels": {
+          "weak": "Słabe",
+          "fair": "Przeciętne",
+          "good": "Dobre",
+          "strong": "Silne"
+        },
+        "suggestions": {
+          "title": "Sugestie:",
+          "minLength": "Co najmniej 8 znaków",
+          "mixedCase": "Mieszanka wielkich i małych liter",
+          "number": "Co najmniej jedna cyfra",
+          "special": "Co najmniej jeden znak specjalny"
+        }
+      }
+    },
+    "errors": {
+      "radioValueRequired": "Właściwość radioValue jest wymagana dla wejść radio"
+    },
+    "dateRange": {
+      "labels": {
+        "startDate": "Data Rozpoczęcia",
+        "endDate": "Data Zakończenia",
+        "quickSelect": "Szybki Wybór",
+        "selected": "Wybrano: {startDate} - {endDate}"
+      },
+      "presets": {
+        "today": "Dzisiaj",
+        "yesterday": "Wczoraj",
+        "last7Days": "Ostatnie 7 dni",
+        "last30Days": "Ostatnie 30 dni",
+        "thisMonth": "Ten miesiąc",
+        "lastMonth": "Ostatni miesiąc",
+        "thisYear": "Ten rok"
+      },
+      "errors": {
+        "invalidStartDate": "Nieprawidłowa data rozpoczęcia",
+        "invalidEndDate": "Nieprawidłowa data zakończenia",
+        "startAfterEnd": "Data rozpoczęcia nie może być późniejsza niż data zakończenia",
+        "endBeforeStart": "Data zakończenia nie może być wcześniejsza niż data rozpoczęcia"
+      }
+    },
+    "species": {
+      "placeholder": "Wprowadź nazwę gatunku...",
+      "empty": "Nie dodano gatunków",
+      "maxReached": "Osiągnięto maksimum {maxItems} gatunków",
+      "aria": {
+        "dragToReorder": "Przeciągnij, aby zmienić kolejność {species}",
+        "edit": "Edytuj gatunek",
+        "remove": "Usuń gatunek"
+      }
+    }
+  },
+  "media": {
+    "audio": {
+      "play": "Odtwórz",
+      "pause": "Wstrzymaj",
+      "stop": "Zatrzymaj",
+      "volume": "Głośność",
+      "mute": "Wycisz",
+      "unmute": "Wyłącz wyciszenie",
+      "download": "Pobierz audio",
+      "currentTime": "{current} / {total}",
+      "loading": "Ładowanie audio...",
+      "error": "Nie udało się załadować audio",
+      "volumeGain": "Kontrola wzmocnienia głośności: {value} dB",
+      "filterControl": "Kontrola filtra",
+      "highPassFilter": "Kontrola filtra górnoprzepustowego: {freq} Hz",
+      "seekProgress": "Szukaj postępu audio: {current} / {total} sekund"
+    },
+    "spectrogram": {
+      "notGenerated": "Spektrogram jeszcze niegenerowany",
+      "generate": "Generuj spektrogram",
+      "generateButton": "Generuj",
+      "generating": "Generowanie...",
+      "generationFailed": "Nie udało się wygenerować spektrogramu",
+      "generationSuccess": "Spektrogram wygenerowany pomyślnie"
+    }
+  },
+  "components": {
+    "forms": {
+      "numberField": {
+        "adjustedToMinimum": "Wartość została dostosowana do minimum ({value})",
+        "adjustedToMaximum": "Wartość została dostosowana do maksimum ({value})"
+      }
+    },
+    "datePicker": {
+      "today": "Dzisiaj",
+      "feedback": {
+        "endDateCleared": "Data zakończenia wyczyszczona, aby zachować prawidłowy zakres",
+        "startDateCleared": "Data rozpoczęcia wyczyszczona, aby zachować prawidłowy zakres",
+        "invalidDateFormat": "Nieprawidłowy format daty. Proszę użyć formatu RRRR-MM-DD",
+        "dateOutOfRange": "Wybrana data jest poza dozwolonym zakresem",
+        "futureDate": "Nie można wybrać przyszłych dat",
+        "pastDate": "Nie można wybrać przeszłych dat"
+      },
+      "aria": {
+        "dateSelected": "Wybrano datę {date}",
+        "calendarOpened": "Kalendarz otwarty do wyboru daty",
+        "calendarClosed": "Kalendarz zamknięty",
+        "monthChanged": "Pokazywanie {month} {year}",
+        "dayUnavailable": "Dzień {day} nie jest dostępny do wyboru",
+        "todayButton": "Wybierz dzisiejszą datę: {today}"
+      },
+      "status": {
+        "loading": "Ładowanie kalendarza...",
+        "error": "Błąd ładowania kalendarza"
+      }
+    }
+  },
+  "detection": {
+    "actions": {
+      "back": "Wstecz",
+      "review": "Przejrzyj",
+      "download": "Pobierz"
+    }
+  }
+}
