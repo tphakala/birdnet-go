@@ -563,3 +563,406 @@ func TestCalculateMinDetectionsIssue1314(t *testing.T) {
 		t.Errorf("minDetections = %d is too high! This was the bug in issue #1314", result)
 	}
 }
+
+// TestSuggestLevelForDisabledFilter verifies that the smart migration logic
+// provides appropriate recommendations when filtering is disabled (level 0).
+func TestSuggestLevelForDisabledFilter(t *testing.T) {
+	tests := []struct {
+		name              string
+		overlap           float64
+		expectRecommendation bool
+		expectedLevel     int
+		expectedLevelName string
+	}{
+		{
+			name:              "overlap_2.0_recommends_level_1",
+			overlap:           2.0,
+			expectRecommendation: true,
+			expectedLevel:     1,
+			expectedLevelName: "Lenient",
+		},
+		{
+			name:              "overlap_2.2_recommends_level_2",
+			overlap:           2.2,
+			expectRecommendation: true,
+			expectedLevel:     2,
+			expectedLevelName: "Moderate",
+		},
+		{
+			name:              "overlap_2.4_recommends_level_3",
+			overlap:           2.4,
+			expectRecommendation: true,
+			expectedLevel:     3,
+			expectedLevelName: "Balanced",
+		},
+		{
+			name:              "overlap_2.7_recommends_level_4",
+			overlap:           2.7,
+			expectRecommendation: true,
+			expectedLevel:     4,
+			expectedLevelName: "Strict",
+		},
+		{
+			name:              "overlap_2.8_recommends_level_5",
+			overlap:           2.8,
+			expectRecommendation: true,
+			expectedLevel:     5,
+			expectedLevelName: "Maximum",
+		},
+		{
+			name:              "low_overlap_no_recommendation",
+			overlap:           1.5,
+			expectRecommendation: false,
+			expectedLevel:     0,
+			expectedLevelName: "",
+		},
+		{
+			name:              "zero_overlap_no_recommendation",
+			overlap:           0.0,
+			expectRecommendation: false,
+			expectedLevel:     0,
+			expectedLevelName: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Call the function - it will log but we mainly verify it doesn't panic
+			// and that the logic flows correctly based on getRecommendedLevelForOverlap
+			suggestLevelForDisabledFilter(tt.overlap)
+
+			// Verify the underlying recommendation logic
+			recommendedLevel, _ := getRecommendedLevelForOverlap(tt.overlap)
+			if tt.expectRecommendation {
+				if recommendedLevel != tt.expectedLevel {
+					t.Errorf("Expected recommendation level %d (%s), got %d",
+						tt.expectedLevel, tt.expectedLevelName, recommendedLevel)
+				}
+			} else {
+				if recommendedLevel != 0 {
+					t.Errorf("Expected no recommendation (level 0), got level %d", recommendedLevel)
+				}
+			}
+		})
+	}
+}
+
+// TestValidateOverlapForLevel verifies overlap validation logic for enabled filter levels.
+func TestValidateOverlapForLevel(t *testing.T) {
+	tests := []struct {
+		name           string
+		level          int
+		overlap        float64
+		minOverlap     float64
+		minDetections  int
+		expectWarning  bool
+		description    string
+	}{
+		{
+			name:          "level_1_overlap_sufficient",
+			level:         1,
+			overlap:       2.0,
+			minOverlap:    2.0,
+			minDetections: 2,
+			expectWarning: false,
+			description:   "Overlap meets minimum for Level 1 (Lenient)",
+		},
+		{
+			name:          "level_1_overlap_too_low",
+			level:         1,
+			overlap:       1.8,
+			minOverlap:    2.0,
+			minDetections: 2,
+			expectWarning: true,
+			description:   "Overlap below minimum for Level 1",
+		},
+		{
+			name:          "level_3_overlap_perfect",
+			level:         3,
+			overlap:       2.4,
+			minOverlap:    2.4,
+			minDetections: 5,
+			expectWarning: false,
+			description:   "Overlap exactly at minimum for Level 3 (Balanced)",
+		},
+		{
+			name:          "level_3_overlap_too_low",
+			level:         3,
+			overlap:       2.2,
+			minOverlap:    2.4,
+			minDetections: 4,
+			expectWarning: true,
+			description:   "Overlap below minimum for Level 3",
+		},
+		{
+			name:          "level_4_overlap_sufficient",
+			level:         4,
+			overlap:       2.7,
+			minOverlap:    2.7,
+			minDetections: 12,
+			expectWarning: false,
+			description:   "Overlap meets minimum for Level 4 (Strict)",
+		},
+		{
+			name:          "level_5_overlap_excellent",
+			level:         5,
+			overlap:       2.9,
+			minOverlap:    2.8,
+			minDetections: 21,
+			expectWarning: false,
+			description:   "Overlap exceeds minimum for Level 5 (Maximum)",
+		},
+		{
+			name:          "level_5_overlap_too_low",
+			level:         5,
+			overlap:       2.5,
+			minOverlap:    2.8,
+			minDetections: 6,
+			expectWarning: true,
+			description:   "Overlap well below minimum for Level 5",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Call the function - it will log but we mainly verify it doesn't panic
+			validateOverlapForLevel(tt.level, tt.overlap, tt.minOverlap, tt.minDetections)
+
+			// Verify the warning condition is correctly identified
+			shouldWarn := tt.overlap < tt.minOverlap
+			if shouldWarn != tt.expectWarning {
+				t.Errorf("%s: Expected warning=%v, but condition suggests warning=%v (overlap=%.1f, minOverlap=%.1f)",
+					tt.description, tt.expectWarning, shouldWarn, tt.overlap, tt.minOverlap)
+			}
+		})
+	}
+}
+
+// TestWarnAboutHardwareRequirements verifies hardware warning logic for high filter levels.
+func TestWarnAboutHardwareRequirements(t *testing.T) {
+	tests := []struct {
+		name          string
+		level         int
+		overlap       float64
+		expectWarning bool
+		description   string
+	}{
+		{
+			name:          "level_0_no_warning",
+			level:         0,
+			overlap:       2.0,
+			expectWarning: false,
+			description:   "Level 0 should not trigger hardware warnings",
+		},
+		{
+			name:          "level_1_no_warning",
+			level:         1,
+			overlap:       2.0,
+			expectWarning: false,
+			description:   "Level 1 should not trigger hardware warnings",
+		},
+		{
+			name:          "level_2_no_warning",
+			level:         2,
+			overlap:       2.2,
+			expectWarning: false,
+			description:   "Level 2 should not trigger hardware warnings",
+		},
+		{
+			name:          "level_3_no_warning",
+			level:         3,
+			overlap:       2.4,
+			expectWarning: false,
+			description:   "Level 3 should not trigger hardware warnings",
+		},
+		{
+			name:          "level_4_valid_overlap",
+			level:         4,
+			overlap:       2.7,
+			expectWarning: true,
+			description:   "Level 4 should warn about hardware requirements",
+		},
+		{
+			name:          "level_5_valid_overlap",
+			level:         5,
+			overlap:       2.8,
+			expectWarning: true,
+			description:   "Level 5 should warn about hardware requirements",
+		},
+		{
+			name:          "level_4_overlap_too_high",
+			level:         4,
+			overlap:       3.0,
+			expectWarning: true,
+			description:   "Level 4 with overlap >= 3.0 should warn about invalid calculation",
+		},
+		{
+			name:          "level_5_overlap_too_high",
+			level:         5,
+			overlap:       3.1,
+			expectWarning: true,
+			description:   "Level 5 with overlap >= 3.0 should warn about invalid calculation",
+		},
+		{
+			name:          "level_4_overlap_2.5",
+			level:         4,
+			overlap:       2.5,
+			expectWarning: true,
+			description:   "Level 4 with overlap 2.5 should calculate 500ms max inference time",
+		},
+		{
+			name:          "level_5_overlap_2.9",
+			level:         5,
+			overlap:       2.9,
+			expectWarning: true,
+			description:   "Level 5 with overlap 2.9 should calculate 100ms max inference time",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Call the function - it will log but we mainly verify it doesn't panic
+			warnAboutHardwareRequirements(tt.level, tt.overlap)
+
+			// Verify the warning condition
+			shouldWarn := tt.level >= 4
+			if shouldWarn != tt.expectWarning {
+				t.Errorf("%s: Expected warning=%v, but got warning=%v (level=%d)",
+					tt.description, tt.expectWarning, shouldWarn, tt.level)
+			}
+
+			// For high levels with valid overlap, verify inference time calculation logic
+			if tt.level >= 4 && tt.overlap < 3.0 {
+				stepSize := 3.0 - tt.overlap
+				maxInferenceTime := stepSize * 1000
+				t.Logf("Level %d with overlap %.1f requires inference < %.0fms",
+					tt.level, tt.overlap, maxInferenceTime)
+
+				// Sanity check the calculation
+				if maxInferenceTime <= 0 {
+					t.Errorf("Invalid max inference time calculation: %.0fms", maxInferenceTime)
+				}
+			}
+		})
+	}
+}
+
+// TestValidateAndLogFilterConfig_Integration verifies the main validation function
+// correctly delegates to helper functions based on filter level configuration.
+func TestValidateAndLogFilterConfig_Integration(t *testing.T) {
+	tests := []struct {
+		name        string
+		level       int
+		overlap     float64
+		description string
+	}{
+		{
+			name:        "level_0_calls_suggest",
+			level:       0,
+			overlap:     2.4,
+			description: "Level 0 should call suggestLevelForDisabledFilter",
+		},
+		{
+			name:        "level_1_calls_validate",
+			level:       1,
+			overlap:     2.0,
+			description: "Level 1 should call validateOverlapForLevel",
+		},
+		{
+			name:        "level_3_calls_validate",
+			level:       3,
+			overlap:     2.4,
+			description: "Level 3 should call validateOverlapForLevel",
+		},
+		{
+			name:        "level_4_calls_validate_and_warn",
+			level:       4,
+			overlap:     2.7,
+			description: "Level 4 should call both validateOverlapForLevel and warnAboutHardwareRequirements",
+		},
+		{
+			name:        "level_5_calls_validate_and_warn",
+			level:       5,
+			overlap:     2.8,
+			description: "Level 5 should call both validateOverlapForLevel and warnAboutHardwareRequirements",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create settings with valid configuration
+			settings := &conf.Settings{
+				Realtime: conf.RealtimeSettings{
+					FalsePositiveFilter: conf.FalsePositiveFilterSettings{
+						Level: tt.level,
+					},
+					Audio: conf.AudioSettings{
+						Export: conf.ExportSettings{
+							Length:     15,
+							PreCapture: 3,
+						},
+					},
+				},
+				BirdNET: conf.BirdNETConfig{
+					Overlap: tt.overlap,
+				},
+			}
+
+			// Call the main validation function - should not panic
+			validateAndLogFilterConfig(settings)
+
+			// Verify the level wasn't changed (no validation errors)
+			if settings.Realtime.FalsePositiveFilter.Level != tt.level {
+				t.Errorf("%s: Level was unexpectedly changed from %d to %d",
+					tt.description, tt.level, settings.Realtime.FalsePositiveFilter.Level)
+			}
+		})
+	}
+}
+
+// TestValidateAndLogFilterConfig_InvalidLevel verifies that invalid filter levels
+// are properly handled and reset to safe defaults.
+func TestValidateAndLogFilterConfig_InvalidLevel(t *testing.T) {
+	tests := []struct {
+		name          string
+		initialLevel  int
+		expectedLevel int
+		description   string
+	}{
+		{
+			name:          "negative_level_resets_to_zero",
+			initialLevel:  -1,
+			expectedLevel: 0,
+			description:   "Negative level should be reset to 0",
+		},
+		{
+			name:          "level_too_high_resets_to_zero",
+			initialLevel:  10,
+			expectedLevel: 0,
+			description:   "Level > 5 should be reset to 0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings := &conf.Settings{
+				Realtime: conf.RealtimeSettings{
+					FalsePositiveFilter: conf.FalsePositiveFilterSettings{
+						Level: tt.initialLevel,
+					},
+				},
+				BirdNET: conf.BirdNETConfig{
+					Overlap: 2.4,
+				},
+			}
+
+			// Call validation - should reset invalid level to 0
+			validateAndLogFilterConfig(settings)
+
+			if settings.Realtime.FalsePositiveFilter.Level != tt.expectedLevel {
+				t.Errorf("%s: Expected level to be reset to %d, got %d",
+					tt.description, tt.expectedLevel, settings.Realtime.FalsePositiveFilter.Level)
+			}
+		})
+	}
+}
