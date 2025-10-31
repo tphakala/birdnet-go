@@ -170,5 +170,27 @@ LABEL usage.compose.podman="Use Podman/podman-compose.yml"
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
     CMD curl -f http://localhost:8080/ || exit 1
 
+# Container startup execution chain:
+# 1. entrypoint.sh - Sets up user permissions, timezone, device access, and performs
+#    pre-flight checks (disk space, config writability). Handles both rootful and
+#    rootless container modes. Exits early with clear error messages if checks fail.
+#
+# 2. startup-wrapper.sh - Wraps the application to capture output, detect errors,
+#    and forward signals (SIGTERM/SIGINT) for graceful shutdown. Provides formatted
+#    error messages with resolution steps if startup fails.
+#
+# 3. birdnet-go - The actual application (specified in CMD below)
+#
+# Environment variables affecting startup:
+#   BIRDNET_UID / BIRDNET_GID        - User/group ID for file ownership (default: 1000)
+#   BIRDNET_STARTUP_FAIL_DELAY       - Seconds to wait before exit on error (default: 10)
+#   TZ                                - Timezone configuration (e.g., "America/Denver")
+#   BIRDNET_MODELPATH                 - Optional custom model file path
+#
+# This layered approach ensures:
+#   - Proper error visibility in container logs
+#   - Clean signal handling for orchestration (Docker, Kubernetes)
+#   - Early failure detection before wasting resources
+#   - Actionable error messages for troubleshooting
 ENTRYPOINT ["/usr/bin/entrypoint.sh", "/usr/bin/startup-wrapper.sh"]
 CMD ["birdnet-go", "realtime"]
