@@ -4121,35 +4121,177 @@ start_birdnet_go() {
     
     # Start or restart the service
     log_message "INFO" "Executing systemctl $action birdnet-go.service"
+    local systemctl_exit_code=0
     sudo systemctl $action birdnet-go.service
-    log_command_result "systemctl $action birdnet-go.service" $? "${action_msg} BirdNET-Go service"
-    
+    systemctl_exit_code=$?
+    log_command_result "systemctl $action birdnet-go.service" $systemctl_exit_code "${action_msg} BirdNET-Go service"
+
     # Check if service started
     if ! sudo systemctl is-active --quiet birdnet-go.service; then
         log_message "ERROR" "BirdNET-Go service failed to start"
 
         # Collect comprehensive service diagnostics
         local service_status=$(systemctl status birdnet-go.service 2>&1 | sed 's/"/\\"/g' | tr '\n' ';')
-        local service_logs=$(journalctl -u birdnet-go.service -n 20 --no-pager 2>&1 | sed 's/"/\\"/g' | tr '\n' ';')
+        local service_logs=$(journalctl -u birdnet-go.service -n 50 --no-pager 2>&1 | sed 's/"/\\"/g' | tr '\n' ';')
         local service_enabled=$(systemctl is-enabled birdnet-go.service 2>&1 || echo "unknown")
         local docker_running=$(docker ps --format "{{.Names}}: {{.Status}}" 2>&1 | sed 's/"/\\"/g' | tr '\n' ';')
         local docker_errors=$(docker ps -a --filter "status=exited" --format "{{.Names}}: {{.Status}}" 2>&1 | sed 's/"/\\"/g' | tr '\n' ';')
 
-        local diagnostic_json=$(cat <<EOF
-{
-    "service_status": "$(echo "$service_status" | head -c 500)",
-    "service_enabled": "$service_enabled",
-    "recent_logs": "$(echo "$service_logs" | head -c 1000)",
-    "docker_running_containers": "$(echo "$docker_running" | head -c 300)",
-    "docker_exited_containers": "$(echo "$docker_errors" | head -c 300)",
-    "action_attempted": "$action",
-    "image": "${BIRDNET_GO_IMAGE}",
-    "web_port": "${WEB_PORT:-8080}"
-}
-EOF
-)
+        # Extract structured error information
+        local error_type="unknown"
+        local error_detail=""
 
-        send_telemetry_event "error" "Service startup failed after $action attempt" "error" "step=start_birdnet_go" "$diagnostic_json"
+        # Check for common failure patterns in logs
+        if echo "$service_logs" | grep -qi "bind: address already in use"; then
+            error_type="port_conflict"
+            error_detail=$(echo "$service_logs" | grep -oP "port \d+" | head -1 || echo "port conflict detected")
+        elif echo "$service_logs" | grep -qi "permission denied"; then
+            error_type="permission_denied"
+            error_detail=$(echo "$service_logs" | grep -i "permission denied" | head -1 | sed 's/"/\\"/g' | head -c 200)
+        elif echo "$service_logs" | grep -qi "No such image\|image not found"; then
+            error_type="image_missing"
+            error_detail="$BIRDNET_GO_IMAGE"
+        elif echo "$service_logs" | grep -qi "OOMKilled\|Out of memory"; then
+            error_type="out_of_memory"
+            error_detail="Container killed due to memory exhaustion"
+        elif echo "$service_logs" | grep -qi "container .* is already in use\|name.*already in use"; then
+            error_type="container_name_conflict"
+            error_detail="Container name 'birdnet-go' already exists"
+        elif echo "$service_logs" | grep -qi "timeout\|timed out"; then
+            error_type="timeout"
+            error_detail="Service startup timeout"
+        elif echo "$service_logs" | grep -qi "failed to create endpoint\|network"; then
+            error_type="network_error"
+            error_detail=$(echo "$service_logs" | grep -i "network\|endpoint" | head -1 | sed 's/"/\\"/g' | head -c 200)
+        fi
+
+        # Get container-specific logs if container exists (even if exited)
+        local container_logs="none"
+        local container_exit_code="unknown"
+        local container_id
+        container_id=$(docker ps -a --filter "name=birdnet-go" --format "{{.ID}}" 2>/dev/null | head -1)
+
+        if [ -n "$container_id" ]; then
+            container_logs=$(docker logs --tail 30 "$container_id" 2>&1 | sed 's/"/\\"/g' | tr '\n' ';' | tail -c "$MAX_LOG_LENGTH")
+            container_exit_code=$(docker inspect "$container_id" --format='{{.State.ExitCode}}' 2>/dev/null || echo "unknown")
+        fi
+
+        # Check for resource constraints
+        local disk_full="false"
+        local memory_available="unknown"
+        local docker_space="unknown"
+
+        # Check disk space on critical paths
+        if [ -d "$CONFIG_DIR" ] && [ "$(df --output=pcent "$CONFIG_DIR" 2>/dev/null | tail -1 | tr -d '% ' || echo 0)" -gt 95 ]; then
+            disk_full="config_dir"
+        elif [ -d "/var/lib/docker" ] && [ "$(df --output=pcent /var/lib/docker 2>/dev/null | tail -1 | tr -d '% ' || echo 0)" -gt 95 ]; then
+            disk_full="docker_dir"
+        fi
+
+        memory_available=$(free -m 2>/dev/null | awk 'NR==2 {print $7}' || echo "unknown")
+        docker_space=$(df -h /var/lib/docker 2>/dev/null | awk 'NR==2 {print $4}' || echo "unknown")
+
+        # Verify the Docker image
+        local image_exists="false"
+        local image_size="unknown"
+        if docker inspect "$BIRDNET_GO_IMAGE" >/dev/null 2>&1; then
+            image_exists="true"
+            image_size=$(docker inspect "$BIRDNET_GO_IMAGE" --format='{{.Size}}' 2>/dev/null | awk '{printf "%.1f MB", $1/1024/1024}' || echo "unknown")
+        fi
+
+        # Check config file validity
+        local config_valid="unknown"
+        local config_error="none"
+        local config_exists="false"
+
+        if [ -f "$CONFIG_FILE" ]; then
+            config_exists="true"
+            # Basic YAML syntax check if available
+            if command -v yamllint >/dev/null 2>&1; then
+                config_error=$(yamllint "$CONFIG_FILE" 2>&1 | head -c 300)
+                [ $? -eq 0 ] && config_valid="true" || config_valid="false"
+            fi
+        fi
+
+        # Check for port conflicts
+        local port_conflicts=()
+        for port in 80 443 "${WEB_PORT:-8080}" 8090; do
+            if ! check_port_availability "$port" 2>/dev/null; then
+                local proc_info
+                proc_info=$(get_port_process_info "$port" 2>/dev/null)
+                port_conflicts+=("\"$port:$(echo "$proc_info" | sed 's/"/\\"/g')\"")
+            fi
+        done
+
+        # Build comprehensive diagnostic JSON using jq for safety
+        local diagnostic_json
+        diagnostic_json=$(jq -n \
+            --arg exit_code "$systemctl_exit_code" \
+            --arg error_type "$error_type" \
+            --arg error_detail "$error_detail" \
+            --arg service_status "$(echo "$service_status" | tail -c 500)" \
+            --arg service_enabled "$service_enabled" \
+            --arg service_logs "$(echo "$service_logs" | tail -c 800)" \
+            --arg action "$action" \
+            --arg container_id "${container_id:-none}" \
+            --arg container_logs "$container_logs" \
+            --arg container_exit_code "$container_exit_code" \
+            --arg docker_running "$(echo "$docker_running" | head -c 300)" \
+            --arg docker_errors "$(echo "$docker_errors" | head -c 300)" \
+            --arg image_tag "${BIRDNET_GO_IMAGE}" \
+            --arg image_exists "$image_exists" \
+            --arg image_size "$image_size" \
+            --arg image_changed "${IMAGE_CHANGED}" \
+            --arg disk_full "$disk_full" \
+            --arg memory_available "$memory_available" \
+            --arg docker_space "$docker_space" \
+            --arg config_exists "$config_exists" \
+            --arg config_valid "$config_valid" \
+            --arg config_error "$config_error" \
+            --arg web_port "${WEB_PORT:-8080}" \
+            --argjson port_conflicts "[$(IFS=,; echo "${port_conflicts[*]}")]" \
+            '{
+                error_analysis: {
+                    exit_code: ($exit_code | tonumber),
+                    error_type: $error_type,
+                    error_detail: $error_detail
+                },
+                service: {
+                    status: $service_status,
+                    enabled: $service_enabled,
+                    logs: $service_logs,
+                    action_attempted: $action
+                },
+                container: {
+                    id: $container_id,
+                    logs: $container_logs,
+                    exit_code: $container_exit_code,
+                    running_containers: $docker_running,
+                    exited_containers: $docker_errors
+                },
+                image: {
+                    tag: $image_tag,
+                    exists: $image_exists,
+                    size: $image_size,
+                    changed: $image_changed
+                },
+                resources: {
+                    disk_full: $disk_full,
+                    memory_available_mb: $memory_available,
+                    docker_space: $docker_space
+                },
+                config: {
+                    file_exists: $config_exists,
+                    valid: $config_valid,
+                    error: $config_error
+                },
+                ports: {
+                    web_port: $web_port,
+                    conflicts: $port_conflicts
+                }
+            }')
+
+        send_telemetry_event "error" "Service startup failed: $error_type" "error" "step=start_birdnet_go,error_type=$error_type" "$diagnostic_json"
         print_message "❌ Failed to start BirdNET-Go service" "$RED"
 
         # Get and display journald logs for troubleshooting
