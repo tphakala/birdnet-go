@@ -688,6 +688,8 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 		Latitude:           42.3601,
 		Longitude:          -71.0589,
 		Location:           "Test Location (Sample Data)",
+		DetectionID:        "test",
+		DetectionPath:      "/ui/detections/test",
 		DetectionURL:       baseURL + "/ui/detections/test",
 		ImageURL:           "https://static.avicommons.org/houfin-DzFZcHoKwyx9JOmg-320.jpg",
 		DaysSinceFirstSeen: 0,
