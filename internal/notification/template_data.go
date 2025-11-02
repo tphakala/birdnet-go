@@ -21,6 +21,8 @@ type TemplateData struct {
 	Latitude           float64
 	Longitude          float64
 	Location           string
+	DetectionID        string
+	DetectionPath      string
 	DetectionURL       string
 	ImageURL           string
 	DaysSinceFirstSeen int
@@ -65,12 +67,14 @@ func NewTemplateData(event events.DetectionEvent, baseURL string, timeAs24h bool
 		noteID = fmt.Sprintf("%d", id)
 	}
 
-	var detectionURL string
+	var detectionPath string
 	if noteID != "" {
-		detectionURL = fmt.Sprintf("%s/ui/detections/%s", baseURL, noteID)
+		detectionPath = fmt.Sprintf("/ui/detections/%s", noteID)
 	} else {
-		detectionURL = fmt.Sprintf("%s/ui/detections", baseURL)
+		detectionPath = "/ui/detections"
 	}
+
+	detectionURL := baseURL + detectionPath
 
 	scientificName := event.GetScientificName()
 
@@ -95,6 +99,8 @@ func NewTemplateData(event events.DetectionEvent, baseURL string, timeAs24h bool
 		Latitude:           latitude,
 		Longitude:          longitude,
 		Location:           location,
+		DetectionID:        noteID,
+		DetectionPath:      detectionPath,
 		DetectionURL:       detectionURL,
 		ImageURL:           imageURL,
 		DaysSinceFirstSeen: event.GetDaysSinceFirstSeen(),
