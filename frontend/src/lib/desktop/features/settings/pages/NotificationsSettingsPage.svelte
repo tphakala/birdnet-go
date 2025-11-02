@@ -62,7 +62,10 @@
     { name: 'Longitude', description: 'GPS longitude coordinate' },
     { name: 'Location', description: 'Formatted coordinates (e.g., "42.360100, -71.058900")' },
     { name: 'DetectionID', description: 'Detection ID number (e.g., "1234")' },
-    { name: 'DetectionPath', description: 'Relative path to detection (e.g., "/ui/detections/1234")' },
+    {
+      name: 'DetectionPath',
+      description: 'Relative path to detection (e.g., "/ui/detections/1234")',
+    },
     { name: 'DetectionURL', description: 'Full URL to detection in UI' },
     { name: 'ImageURL', description: 'Link to species image' },
     { name: 'DaysSinceFirstSeen', description: 'Number of days since first detected' },

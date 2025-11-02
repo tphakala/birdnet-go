@@ -243,6 +243,8 @@ func TestEnrichWithTemplateData(t *testing.T) {
 			name:         "nil notification",
 			notification: nil,
 			templateData: &TemplateData{
+				DetectionID:       "1",
+				DetectionPath:     "/ui/detections/1",
 				DetectionURL:      "http://localhost/detections/1",
 				ImageURL:          "http://localhost/image.jpg",
 				ConfidencePercent: "95",
@@ -264,6 +266,8 @@ func TestEnrichWithTemplateData(t *testing.T) {
 			name:         "valid notification and template data",
 			notification: NewNotification(TypeDetection, PriorityHigh, "Test", "Test Message"),
 			templateData: &TemplateData{
+				DetectionID:       "1",
+				DetectionPath:     "/ui/detections/1",
 				DetectionURL:      "http://localhost/detections/1",
 				ImageURL:          "http://localhost/image.jpg",
 				ConfidencePercent: "95",
@@ -296,6 +300,8 @@ func TestEnrichWithTemplateData(t *testing.T) {
 			if tt.notification != nil && tt.templateData != nil && result != nil {
 				// Verify all field values match expected template data
 				expectedValues := map[string]interface{}{
+					"bg_detection_id":       tt.templateData.DetectionID,
+					"bg_detection_path":     tt.templateData.DetectionPath,
 					"bg_detection_url":      tt.templateData.DetectionURL,
 					"bg_image_url":          tt.templateData.ImageURL,
 					"bg_confidence_percent": tt.templateData.ConfidencePercent,
