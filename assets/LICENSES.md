@@ -74,12 +74,12 @@ Source: BSD-3-Clause
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.36.1/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.36.2/LICENSE
 Source: MIT
 
 ### github.com/getsentry/sentry-go/echo
 
-License: https://github.com/getsentry/sentry-go/blob/echo/v0.36.1/echo/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/echo/v0.36.2/echo/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -244,12 +244,12 @@ Source: BSD-3-Clause
 
 ### github.com/nicholas-fedor/shoutrrr
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.11.0/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.11.1/LICENSE.md
 Source: MIT
 
 ### github.com/nicholas-fedor/shoutrrr/pkg/color
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.11.0/pkg/color/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.11.1/pkg/color/LICENSE.md
 Source: MIT
 
 ### github.com/patrickmn/go-cache
@@ -484,12 +484,12 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.253.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.254.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/4626949a642f/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/3a174f9686a8/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
@@ -524,6 +524,6 @@ Source: MIT
 
 ### gorm.io/gorm
 
-License: https://github.com/go-gorm/gorm/blob/v1.31.0/LICENSE
+License: https://github.com/go-gorm/gorm/blob/v1.31.1/LICENSE
 Source: MIT
 
