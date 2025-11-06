@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -96,7 +97,7 @@ func atomicWriteFile(targetPath, tempPattern string, perm os.FileMode, write fun
 type LocalTarget struct {
 	path   string
 	debug  bool
-	logger backup.Logger
+	logger *slog.Logger
 }
 
 // LocalTargetConfig holds configuration for the local filesystem target
@@ -139,7 +140,7 @@ func (t *LocalTarget) withRetry(op func() error) error {
 		} else {
 			lastErr = err
 			if t.debug {
-				t.logger.Printf("Retrying operation after error: %v (attempt %d/%d)", err, i+1, maxRetries)
+				t.logger.Info(fmt.Sprintf("Retrying operation after error: %v (attempt %d/%d)", err, i+1, maxRetries))
 			}
 		}
 		time.Sleep(backoffDuration(i))
@@ -255,7 +256,7 @@ func validatePath(path string) error {
 }
 
 // NewLocalTarget creates a new local filesystem target
-func NewLocalTarget(config LocalTargetConfig, logger backup.Logger) (*LocalTarget, error) {
+func NewLocalTarget(config LocalTargetConfig, logger *slog.Logger) (*LocalTarget, error) {
 	// Validate and clean the path
 	if err := validatePath(config.Path); err != nil {
 		return nil, err
@@ -263,7 +264,7 @@ func NewLocalTarget(config LocalTargetConfig, logger backup.Logger) (*LocalTarge
 	cleanPath := filepath.Clean(config.Path)
 
 	if logger == nil {
-		logger = backup.DefaultLogger()
+		logger = slog.Default()
 	}
 
 	// Convert to absolute path
@@ -323,7 +324,7 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	}
 
 	if t.debug {
-		t.logger.Printf("🔄 Storing backup from %s to local target", sourcePath)
+		t.logger.Info(fmt.Sprintf("🔄 Storing backup from %s to local target", sourcePath))
 	}
 
 	// Validate source file
@@ -393,7 +394,7 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 			}
 			defer func() {
 				if err := srcFile.Close(); err != nil {
-					t.logger.Printf("local: failed to close source file %s: %v", cleanSourcePath, err)
+					t.logger.Info(fmt.Sprintf("local: failed to close source file %s: %v", cleanSourcePath, err))
 				}
 			}()
 
@@ -450,7 +451,7 @@ func (t *LocalTarget) Store(ctx context.Context, sourcePath string, metadata *ba
 	}
 
 	if t.debug {
-		t.logger.Printf("✅ Successfully stored backup %s with metadata", filepath.Base(sourcePath))
+		t.logger.Info(fmt.Sprintf("✅ Successfully stored backup %s with metadata", filepath.Base(sourcePath)))
 	}
 
 	return nil
@@ -495,7 +496,7 @@ func (t *LocalTarget) verifyBackup(ctx context.Context, backupPath string, expec
 // List returns a list of available backups
 func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	if t.debug {
-		t.logger.Printf("🔄 Listing backups in local target")
+		t.logger.Info("🔄 Listing backups in local target")
 	}
 
 	entries, err := os.ReadDir(t.path)
@@ -521,7 +522,7 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		// Check if the corresponding backup file exists
 		if _, err := os.Stat(backupPath); err != nil {
 			if t.debug {
-				t.logger.Printf("⚠️ Skipping orphaned metadata file %s: backup file not found", entry.Name())
+				t.logger.Info(fmt.Sprintf("⚠️ Skipping orphaned metadata file %s: backup file not found", entry.Name()))
 			}
 			continue
 		}
@@ -531,7 +532,7 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		secureOp := backup.NewSecureFileOp("backup")
 		metadataFile, cleanMetadataPath, err := secureOp.SecureOpen(metadataPath)
 		if err != nil {
-			t.logger.Printf("⚠️ Skipping backup %s: %v", backupName, err)
+			t.logger.Info(fmt.Sprintf("⚠️ Skipping backup %s: %v", backupName, err))
 			continue
 		}
 
@@ -539,13 +540,13 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 		decoder := json.NewDecoder(metadataFile)
 		if err := decoder.Decode(&metadata); err != nil {
 			if err := metadataFile.Close(); err != nil {
-				t.logger.Printf("local: failed to close metadata file %s: %v", cleanMetadataPath, err)
+				t.logger.Info(fmt.Sprintf("local: failed to close metadata file %s: %v", cleanMetadataPath, err))
 			}
-			t.logger.Printf("⚠️ Invalid metadata in backup %s: %v", backupName, err)
+			t.logger.Info(fmt.Sprintf("⚠️ Invalid metadata in backup %s: %v", backupName, err))
 			continue
 		}
 		if err := metadataFile.Close(); err != nil {
-			t.logger.Printf("local: failed to close metadata file %s: %v", cleanMetadataPath, err)
+			t.logger.Info(fmt.Sprintf("local: failed to close metadata file %s: %v", cleanMetadataPath, err))
 		}
 
 		backupInfo := backup.BackupInfo{
@@ -566,7 +567,7 @@ func (t *LocalTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 // Delete removes a backup
 func (t *LocalTarget) Delete(ctx context.Context, backupID string) error {
 	if t.debug {
-		t.logger.Printf("🔄 Deleting backup %s from local target", backupID)
+		t.logger.Info(fmt.Sprintf("🔄 Deleting backup %s from local target", backupID))
 	}
 
 	// Delete both the backup file and its metadata
@@ -596,7 +597,7 @@ func (t *LocalTarget) Delete(ctx context.Context, backupID string) error {
 	}
 
 	if t.debug {
-		t.logger.Printf("✅ Successfully deleted backup %s", backupID)
+		t.logger.Info(fmt.Sprintf("✅ Successfully deleted backup %s", backupID))
 	}
 
 	return nil
@@ -651,10 +652,10 @@ func (t *LocalTarget) Validate() error {
 		return err
 	}
 	if err := f.Close(); err != nil {
-		t.logger.Printf("local: failed to close test file %s: %v", cleanTmpFile, err)
+		t.logger.Info(fmt.Sprintf("local: failed to close test file %s: %v", cleanTmpFile, err))
 	}
 	if err := os.Remove(cleanTmpFile); err != nil {
-		t.logger.Printf("local: failed to remove test file: %v", err)
+		t.logger.Info(fmt.Sprintf("local: failed to remove test file: %v", err))
 	}
 
 	// Check available disk space
@@ -683,7 +684,7 @@ func (t *LocalTarget) Validate() error {
 	}
 
 	if t.logger != nil {
-		t.logger.Printf("💾 Available disk space at backup location: %.1f GB", availableGB)
+		t.logger.Info(fmt.Sprintf("💾 Available disk space at backup location: %.1f GB", availableGB))
 	}
 
 	return nil
