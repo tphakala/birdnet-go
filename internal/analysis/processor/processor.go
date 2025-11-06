@@ -1408,6 +1408,7 @@ func (p *Processor) GetJobQueueStats() jobqueue.JobStatsSnapshot {
 }
 
 // GetBn returns the BirdNET instance
+//
 // Deprecated: Use GetBirdNET instead
 func (p *Processor) GetBn() *birdnet.BirdNET {
 	return p.Bn

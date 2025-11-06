@@ -39,7 +39,7 @@ func TestRetryBackoffWithMockClock(t *testing.T) {
 	// Create a mock action that always fails and records execution times
 	action := &MockAction{
 		Description: "Backoff Test Action",
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			currentTime := mockClock.Now()
 			t.Logf("Execution at %v", currentTime)
 

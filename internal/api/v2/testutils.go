@@ -1,5 +1,4 @@
 //go:build test
-// +build test
 
 // Package api provides test utilities for API tests
 package api

@@ -3,6 +3,7 @@ package backup
 import "log"
 
 // Logger is an interface for logging backup operations
+//
 // Deprecated: This interface is being phased out in favor of *slog.Logger
 // for structured logging. New code should use slog.Logger directly.
 // This interface remains for backward compatibility with existing target
@@ -18,6 +19,7 @@ type defaultLogger struct {
 }
 
 // DefaultLogger returns a new default logger
+//
 // Deprecated: Use slog.Default() or create a new *slog.Logger instead.
 func DefaultLogger() Logger {
 	return &defaultLogger{

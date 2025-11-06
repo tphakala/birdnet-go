@@ -783,6 +783,7 @@ func (s *OAuth2Server) cleanupExpired() {
 }
 
 // Debug logs a debug message if debug mode is enabled
+//
 // Deprecated: Use logger().Debug directly
 func (s *OAuth2Server) Debug(format string, v ...interface{}) {
 	if s.debug {

@@ -469,6 +469,7 @@ func ExportAudioWithCustomFFmpegArgs(pcmData []byte, ffmpegPath string, customAr
 }
 
 // runCustomFFmpegCommandToBuffer executes FFmpeg, piping PCM input and capturing codec output to a buffer.
+//
 // Deprecated: Prefer runCustomFFmpegCommandToBufferWithContext for cancellation/timeout control.
 func runCustomFFmpegCommandToBuffer(ffmpegPath string, pcmData []byte, customArgs []string) (*bytes.Buffer, error) {
 	// Call the context-aware version with a background context
@@ -733,6 +734,7 @@ type LoudnessStats struct {
 }
 
 // AnalyzeAudioLoudness runs the first pass of FFmpeg's loudnorm filter to get audio statistics.
+//
 // Deprecated: Prefer AnalyzeAudioLoudnessWithContext for cancellation/timeout control.
 func AnalyzeAudioLoudness(pcmData []byte, ffmpegPath string) (*LoudnessStats, error) {
 	// Call the context-aware version with a background context

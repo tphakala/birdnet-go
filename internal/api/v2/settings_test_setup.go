@@ -1,4 +1,4 @@
-// +build !maintest
+//go:build !maintest
 
 package api
 
