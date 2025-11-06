@@ -79,7 +79,7 @@ Source: MIT
 
 ### github.com/getsentry/sentry-go/echo
 
-License: https://github.com/getsentry/sentry-go/blob/echo/v0.36.1/echo/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/echo/v0.36.2/echo/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
