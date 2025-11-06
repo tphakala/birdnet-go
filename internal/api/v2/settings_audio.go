@@ -44,8 +44,8 @@ func (c *Controller) handleEqualizerChange(settings *conf.Settings) error {
 }
 
 // getAudioBlockedFields returns the blocked fields map for the audio section
-func getAudioBlockedFields() map[string]interface{} {
-	return map[string]interface{}{
+func getAudioBlockedFields() map[string]any {
+	return map[string]any{
 		"SoxAudioTypes": true, // Runtime list of supported audio types
 	}
 }
@@ -86,11 +86,11 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 }
 
 // getAudioSectionValue returns a pointer to the audio section of settings for in-place updates
-func getAudioSectionValue(settings *conf.Settings) interface{} {
+func getAudioSectionValue(settings *conf.Settings) any {
 	return &settings.Realtime.Audio
 }
 
 // getAudioSection returns the audio section of settings
-func getAudioSection(settings *conf.Settings) interface{} {
+func getAudioSection(settings *conf.Settings) any {
 	return settings.Realtime.Audio
 }

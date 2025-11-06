@@ -527,7 +527,7 @@ func TestGetNewSpeciesDetections(t *testing.T) {
 		ds := setupTestDB(t)
 
 		// Multiple detections of same species
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			note := Note{
 				Date:           "2024-07-20",
 				Time:           fmt.Sprintf("%02d:00:00", 10+i),
@@ -655,14 +655,14 @@ func TestDatabasePerformance(t *testing.T) {
 	detectionsPerSpecies := 50
 	startDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 
-	for i := 0; i < numSpecies; i++ {
+	for i := range numSpecies {
 		scientificName := fmt.Sprintf("Species %03d", i)
 		commonName := fmt.Sprintf("Common Species %03d", i)
 
 		// First detection at different dates
 		firstDetectionDate := startDate.AddDate(0, 0, i)
 
-		for j := 0; j < detectionsPerSpecies; j++ {
+		for j := range detectionsPerSpecies {
 			detectionDate := firstDetectionDate.AddDate(0, 0, j)
 			note := Note{
 				Date:           detectionDate.Format("2006-01-02"),

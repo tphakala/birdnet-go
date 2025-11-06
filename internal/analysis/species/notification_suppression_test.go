@@ -127,7 +127,7 @@ func TestNotificationSuppressionThreadSafety(t *testing.T) {
 
 	// Goroutine 1: Record notifications
 	go func() {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			tracker.RecordNotificationSent("Species1", now)
 			tracker.RecordNotificationSent("Species2", now)
 		}
@@ -136,7 +136,7 @@ func TestNotificationSuppressionThreadSafety(t *testing.T) {
 
 	// Goroutine 2: Check suppression
 	go func() {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			tracker.ShouldSuppressNotification("Species1", now)
 			tracker.ShouldSuppressNotification("Species2", now)
 		}
@@ -145,7 +145,7 @@ func TestNotificationSuppressionThreadSafety(t *testing.T) {
 
 	// Goroutine 3: Cleanup
 	go func() {
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			tracker.CleanupOldNotificationRecords(now)
 		}
 		done <- true

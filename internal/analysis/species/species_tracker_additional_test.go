@@ -20,9 +20,9 @@ func TestUpdateSpeciesComprehensive(t *testing.T) {
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+	// BG-17: InitFromDatabase requires notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
@@ -123,9 +123,9 @@ func TestBuildSpeciesStatusLocked(t *testing.T) {
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+	// BG-17: InitFromDatabase requires notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
@@ -339,9 +339,9 @@ func TestConcurrentBatchOperations(t *testing.T) {
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+	// BG-17: InitFromDatabase requires notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
@@ -376,13 +376,11 @@ func TestConcurrentBatchOperations(t *testing.T) {
 
 	// Run concurrent batch operations
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 10 {
+		wg.Go(func() {
 			statuses := tracker.GetBatchSpeciesStatus(species, now)
 			assert.Len(t, statuses, len(species), "Should return all species")
-		}()
+		})
 	}
 
 	wg.Wait()

@@ -461,8 +461,8 @@ func BenchmarkSettingsBuilder_Build(b *testing.B) {
 		WithMQTT("tcp://localhost:1883", "test/topic")
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = builder.Build()
 	}
 }
@@ -470,8 +470,8 @@ func BenchmarkSettingsBuilder_Build(b *testing.B) {
 // BenchmarkSettingsBuilder_FullChain benchmarks a complete builder chain.
 func BenchmarkSettingsBuilder_FullChain(b *testing.B) {
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = NewTestSettings().
 			WithBirdNET(0.8, 45.0, -122.0).
 			WithMQTT("tcp://localhost:1883", "test").

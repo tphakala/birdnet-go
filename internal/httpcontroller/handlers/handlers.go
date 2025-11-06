@@ -31,22 +31,22 @@ var settingsMutex sync.RWMutex
 // Handlers contains all the handler functions and their dependencies
 type Handlers struct {
 	baseHandler
-	DS                datastore.Interface
-	Settings          *conf.Settings
-	DashboardSettings *conf.Dashboard
-	BirdImageCache    *imageprovider.BirdImageCache
-	SSE               *SSEHandler                 // Server Side Events handler
-	SunCalc           *suncalc.SunCalc            // SunCalc instance for calculating sun event times
-	AudioLevelChan    chan myaudio.AudioLevelData // Channel for audio level updates
-	OAuth2Server      *security.OAuth2Server
-	controlChan       chan string
-	notificationChan  chan Notification
-	debug             bool
-	Server               serviceapi.ServerFacade      // Server facade providing security and processor access
-	Telemetry            *TelemetryMiddleware         // Telemetry middleware for metrics and enhanced error handling
-	Metrics              *observability.Metrics       // Shared metrics instance
-	rtspAnonymMap        map[string]string            // Maps source IDs to anonymized names for O(1) lookups
-	spectrogramGenerator *spectrogram.Generator       // Shared spectrogram generator
+	DS                   datastore.Interface
+	Settings             *conf.Settings
+	DashboardSettings    *conf.Dashboard
+	BirdImageCache       *imageprovider.BirdImageCache
+	SSE                  *SSEHandler                 // Server Side Events handler
+	SunCalc              *suncalc.SunCalc            // SunCalc instance for calculating sun event times
+	AudioLevelChan       chan myaudio.AudioLevelData // Channel for audio level updates
+	OAuth2Server         *security.OAuth2Server
+	controlChan          chan string
+	notificationChan     chan Notification
+	debug                bool
+	Server               serviceapi.ServerFacade // Server facade providing security and processor access
+	Telemetry            *TelemetryMiddleware    // Telemetry middleware for metrics and enhanced error handling
+	Metrics              *observability.Metrics  // Shared metrics instance
+	rtspAnonymMap        map[string]string       // Maps source IDs to anonymized names for O(1) lookups
+	spectrogramGenerator *spectrogram.Generator  // Shared spectrogram generator
 }
 
 // HandlerError is a custom error type that includes an HTTP status code and a user-friendly message.
@@ -137,30 +137,30 @@ func New(ds datastore.Interface, settings *conf.Settings, dashboardSettings *con
 // Maps source IDs to their anonymized names (camera-1, camera-2, etc.)
 func buildRTSPAnonymizationMap(settings *conf.Settings) map[string]string {
 	anonymMap := make(map[string]string)
-	
+
 	if settings == nil || len(settings.Realtime.RTSP.URLs) == 0 {
 		return anonymMap
 	}
-	
+
 	// Get the audio source registry to map URLs to source IDs
 	registry := myaudio.GetRegistry()
 	if registry == nil {
 		return anonymMap
 	}
-	
+
 	// Build the mapping from source ID to anonymized name
 	for i, url := range settings.Realtime.RTSP.URLs {
 		if url == "" {
 			continue
 		}
-		
+
 		// Get the source from registry to get its ID
 		if source, exists := registry.GetSourceByConnection(url); exists {
 			anonymizedName := fmt.Sprintf("camera-%d", i+1)
 			anonymMap[source.ID] = anonymizedName
 		}
 	}
-	
+
 	return anonymMap
 }
 
@@ -225,7 +225,7 @@ func (h *Handlers) HandleError(err error, c echo.Context) error {
 		StackTrace string
 		Settings   *conf.Settings
 		Security   *Security // Use the Security type from handlers package
-		User       interface{}
+		User       any
 		Debug      bool
 	}{
 		Code:       he.Code,

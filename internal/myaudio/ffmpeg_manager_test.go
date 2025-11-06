@@ -147,7 +147,7 @@ func TestFFmpegManager_HealthCheck(t *testing.T) {
 		// Use deterministic synchronization - wait for stream to be registered
 		streamInitialized := make(chan bool, 1)
 		go func() {
-			for i := 0; i < 100; i++ {
+			for range 100 {
 				health := manager.HealthCheck()
 				if len(health) > 0 {
 					streamInitialized <- true
@@ -236,7 +236,7 @@ func TestFFmpegManager_ConcurrentOperations(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Concurrently start streams
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -253,7 +253,7 @@ func TestFFmpegManager_ConcurrentOperations(t *testing.T) {
 	assert.Len(t, activeStreams, 10)
 
 	// Concurrently restart and stop streams
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -308,7 +308,7 @@ func TestFFmpegManager_MonitoringIntegration(t *testing.T) {
 		monitoringComplete := make(chan bool, 1)
 		go func() {
 			// Check health multiple times to ensure monitoring has had a chance to run
-			for i := 0; i < 5; i++ {
+			for range 5 {
 				health := manager.HealthCheck()
 				if len(health) > 0 {
 					monitoringComplete <- true
@@ -367,7 +367,7 @@ func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 
 	// Generate unique URLs for testing - use localhost to avoid DNS issues
 	urls := make([]string, numStreams)
-	for i := 0; i < numStreams; i++ {
+	for i := range numStreams {
 		urls[i] = fmt.Sprintf("rtsp://localhost:554/stream%d", i)
 	}
 
@@ -375,7 +375,7 @@ func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Concurrent start operations - Go 1.25 WaitGroup.Go() pattern
-	for i := 0; i < numOperations/2; i++ {
+	for i := range numOperations / 2 {
 		idx := i // Capture loop variable for closure
 		wg.Go(func() {
 			// Go 1.25: Automatic Add/Done handling with WaitGroup.Go()
@@ -388,7 +388,7 @@ func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 	}
 
 	// Concurrent restart operations with modern goroutine management
-	for i := 0; i < numOperations/4; i++ {
+	for i := range numOperations / 4 {
 		idx := i
 		wg.Go(func() {
 			// Go 1.25: WaitGroup.Go() provides cleaner concurrency patterns
@@ -400,7 +400,7 @@ func TestFFmpegManager_ConcurrentStreamOperations(t *testing.T) {
 	}
 
 	// Concurrent stop operations with automatic goroutine tracking
-	for i := 0; i < numOperations/4; i++ {
+	for i := range numOperations / 4 {
 		idx := i
 		wg.Go(func() {
 			// Go 1.25: No manual defer wg.Done() needed with WaitGroup.Go()
@@ -514,7 +514,7 @@ func TestFFmpegManager_StressTestWithHealthChecks(t *testing.T) {
 	}()
 
 	// Wait for all stress test goroutines
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		select {
 		case <-done:
 			// Test completed

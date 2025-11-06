@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -643,9 +644,7 @@ func deepMergeMaps(dst, src map[string]any) map[string]any {
 	result := make(map[string]any)
 
 	// Copy all values from dst
-	for k, v := range dst {
-		result[k] = v
-	}
+	maps.Copy(result, dst)
 
 	// Merge values from src
 	for k, v := range src {
@@ -1578,9 +1577,7 @@ func (c *Controller) GetLocales(ctx echo.Context) error {
 	// Return locales in the same format as v1 for compatibility
 	// This matches the client-side expectation of key-value pairs
 	locales := make(map[string]string)
-	for code, name := range conf.LocaleCodes {
-		locales[code] = name
-	}
+	maps.Copy(locales, conf.LocaleCodes)
 
 	c.logAPIRequest(ctx, slog.LevelInfo, "Retrieved locales successfully", "count", len(locales))
 

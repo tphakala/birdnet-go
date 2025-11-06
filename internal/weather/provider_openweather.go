@@ -99,7 +99,7 @@ func (p *OpenWeatherProvider) FetchWeather(settings *conf.Settings) (*WeatherDat
 	var weatherData OpenWeatherResponse
 	var resp *http.Response
 
-	for i := 0; i < MaxRetries; i++ {
+	for i := range MaxRetries {
 		attemptLogger := logger.With("attempt", i+1, "max_attempts", MaxRetries)
 		attemptLogger.Debug("Sending HTTP request")
 		resp, err = client.Do(req)

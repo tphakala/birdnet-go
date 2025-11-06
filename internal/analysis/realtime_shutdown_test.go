@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
-	
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,24 +28,24 @@ func TestMonitorShutdownSignals(t *testing.T) {
 			signal: syscall.SIGTERM,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create quit channel
 			quitChan := make(chan struct{})
-			
+
 			// Start monitoring in a goroutine
 			monitorShutdownSignals(quitChan)
-			
+
 			// Give the monitor time to set up
 			time.Sleep(10 * time.Millisecond)
-			
+
 			// Send signal to self
 			proc, err := os.FindProcess(os.Getpid())
 			require.NoError(t, err)
 			err = proc.Signal(tt.signal)
 			require.NoError(t, err)
-			
+
 			// Wait for quit channel to close with timeout
 			select {
 			case <-quitChan:
@@ -63,30 +63,30 @@ func TestCleanupHLSWithTimeout(t *testing.T) {
 		// Test that the cleanup function respects context timeout
 		// We can't directly mock cleanupHLSStreamingFiles since it's not a variable,
 		// but we can test the timeout behavior of cleanupHLSWithTimeout
-		
+
 		// Create a context that's already cancelled
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
-		
+
 		// This should return quickly without waiting
 		start := time.Now()
 		cleanupHLSWithTimeout(ctx)
 		elapsed := time.Since(start)
-		
+
 		// Should return almost immediately when context is already cancelled
 		assert.Less(t, elapsed, 100*time.Millisecond, "Should return quickly when context is cancelled")
 	})
-	
+
 	t.Run("cleanup timeout behavior", func(t *testing.T) {
 		// Test with a valid context that has sufficient timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		
+
 		// Run cleanup - it should complete normally or timeout after 2 seconds
 		start := time.Now()
 		cleanupHLSWithTimeout(ctx)
 		elapsed := time.Since(start)
-		
+
 		// Should complete within the 2-second internal timeout plus some buffer
 		assert.Less(t, elapsed, 3*time.Second, "Should complete within internal timeout")
 	})
@@ -98,16 +98,14 @@ func TestShutdownSequenceWithContext(t *testing.T) {
 		// Create a context with a reasonable timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		
+
 		// Simulate shutdown steps
 		shutdownComplete := make(chan struct{})
 		var wg sync.WaitGroup
-		
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+
+		wg.Go(func() {
 			defer close(shutdownComplete)
-			
+
 			// Simulate various shutdown steps
 			steps := []struct {
 				name     string
@@ -119,7 +117,7 @@ func TestShutdownSequenceWithContext(t *testing.T) {
 				{"Shutdown HTTP", 30 * time.Millisecond},
 				{"Wait goroutines", 100 * time.Millisecond},
 			}
-			
+
 			for _, step := range steps {
 				select {
 				case <-ctx.Done():
@@ -129,8 +127,8 @@ func TestShutdownSequenceWithContext(t *testing.T) {
 					time.Sleep(step.duration)
 				}
 			}
-		}()
-		
+		})
+
 		// Wait for completion or timeout
 		select {
 		case <-shutdownComplete:
@@ -138,20 +136,20 @@ func TestShutdownSequenceWithContext(t *testing.T) {
 		case <-ctx.Done():
 			t.Fatal("Context timeout during shutdown sequence")
 		}
-		
+
 		wg.Wait()
 	})
-	
+
 	t.Run("shutdown exceeds timeout", func(t *testing.T) {
 		// Create a context with a very short timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		defer cancel()
-		
+
 		shutdownComplete := make(chan struct{})
-		
+
 		go func() {
 			defer close(shutdownComplete)
-			
+
 			// Simulate a long-running shutdown step
 			select {
 			case <-time.After(200 * time.Millisecond):
@@ -161,7 +159,7 @@ func TestShutdownSequenceWithContext(t *testing.T) {
 				return
 			}
 		}()
-		
+
 		// Wait for timeout
 		select {
 		case <-shutdownComplete:
@@ -169,7 +167,7 @@ func TestShutdownSequenceWithContext(t *testing.T) {
 		case <-time.After(100 * time.Millisecond):
 			// Give it some extra time to ensure it stopped
 		}
-		
+
 		assert.Equal(t, context.DeadlineExceeded, ctx.Err(), "Context should have timed out")
 	})
 }
@@ -184,18 +182,18 @@ func TestShutdownConstants(t *testing.T) {
 func TestSignalNotification(t *testing.T) {
 	t.Run("signal channel receives notifications", func(t *testing.T) {
 		sigChan := make(chan os.Signal, 1)
-		
+
 		// Register for signals
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 		defer signal.Stop(sigChan)
-		
+
 		// Send a signal to self
 		proc, err := os.FindProcess(os.Getpid())
 		require.NoError(t, err)
-		
+
 		err = proc.Signal(syscall.SIGINT)
 		require.NoError(t, err)
-		
+
 		// Wait for signal with timeout
 		select {
 		case sig := <-sigChan:

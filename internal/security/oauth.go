@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -89,13 +90,13 @@ func NewOAuth2Server() *OAuth2Server {
 		logger().Error("CRITICAL SECURITY WARNING: SessionSecret is empty. A temporary secret will be generated, but this should be fixed in configuration.",
 			"debug_mode", settings.WebServer.Debug,
 			"recommendation", "BirdNET-Go will auto-generate a SessionSecret on next restart")
-		
+
 		// Generate a temporary session secret to allow the application to continue
 		// This ensures backward compatibility while maintaining security
 		tempSecret := conf.GenerateRandomSecret()
 		settings.Security.SessionSecret = tempSecret
 		logger().Info("Generated temporary SessionSecret for this session")
-		
+
 		// Report to telemetry for monitoring
 		// Creating this error will automatically report it to telemetry
 		_ = intErrors.New(
@@ -112,7 +113,7 @@ func NewOAuth2Server() *OAuth2Server {
 			"recommended_length", 32,
 			"debug_mode", settings.WebServer.Debug,
 			"recommendation", "Consider regenerating with a stronger secret")
-		
+
 		// Report weak session secret to telemetry
 		// Creating this error will automatically report it to telemetry
 		_ = intErrors.New(
@@ -677,13 +678,9 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 
 	// Create copies to avoid holding lock during marshaling/writing
 	authCodesCopy := make(map[string]AuthCode, len(s.authCodes))
-	for k, v := range s.authCodes {
-		authCodesCopy[k] = v
-	}
+	maps.Copy(authCodesCopy, s.authCodes)
 	accessTokensCopy := make(map[string]AccessToken, len(s.accessTokens))
-	for k, v := range s.accessTokens {
-		accessTokensCopy[k] = v
-	}
+	maps.Copy(accessTokensCopy, s.accessTokens)
 
 	// Check context before marshaling/writing
 	select {
@@ -785,7 +782,7 @@ func (s *OAuth2Server) cleanupExpired() {
 // Debug logs a debug message if debug mode is enabled
 //
 // Deprecated: Use logger().Debug directly
-func (s *OAuth2Server) Debug(format string, v ...interface{}) {
+func (s *OAuth2Server) Debug(format string, v ...any) {
 	if s.debug {
 		logger().Debug(fmt.Sprintf(format, v...))
 	}

@@ -132,7 +132,7 @@ func backoffDuration(attempt int) time.Duration {
 // withRetry executes an operation with retry logic for transient errors
 func (t *LocalTarget) withRetry(op func() error) error {
 	var lastErr error
-	for i := 0; i < maxRetries; i++ {
+	for i := range maxRetries {
 		if err := op(); err == nil {
 			return nil
 		} else if !isTransientError(err) {
@@ -219,8 +219,8 @@ func validatePath(path string) error {
 	// Windows-specific checks
 	if runtime.GOOS == "windows" {
 		// Check for reserved names
-		parts := strings.Split(cleanPath, string(os.PathSeparator))
-		for _, part := range parts {
+		parts := strings.SplitSeq(cleanPath, string(os.PathSeparator))
+		for part := range parts {
 			baseName := strings.ToUpper(strings.Split(part, ".")[0])
 			if windowsReservedNames[baseName] {
 				return errors.Newf("path contains reserved name: %s", part).

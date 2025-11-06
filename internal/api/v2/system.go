@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -184,9 +185,9 @@ func GetCachedCPUUsage() []float64 {
 
 // JobQueueStats represents the job queue statistics
 type JobQueueStats struct {
-	Queue     map[string]interface{} `json:"queue"`
-	Actions   map[string]interface{} `json:"actions"`
-	Timestamp string                 `json:"timestamp"`
+	Queue     map[string]any `json:"queue"`
+	Actions   map[string]any `json:"actions"`
+	Timestamp string         `json:"timestamp"`
 }
 
 // GetJobQueueStats returns statistics about the job queue
@@ -251,7 +252,7 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 	}
 
 	// Parse the JSON string back to a map for proper JSON response
-	var statsMap map[string]interface{}
+	var statsMap map[string]any
 	if err := json.Unmarshal([]byte(jsonStats), &statsMap); err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to parse job queue stats JSON",
@@ -453,8 +454,8 @@ func getSystemModelFromProc() string {
 	}
 
 	systemModel := ""
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(string(data), "\n")
+	for line := range lines {
 		// Look specifically for lines starting with "Model" (case-sensitive)
 		if strings.HasPrefix(line, "Model") {
 			parts := strings.SplitN(line, ":", 2)
@@ -781,12 +782,7 @@ func isRemoteFilesystem(fstype string) bool {
 // isReadOnlyMount returns true if the filesystem is mounted as read-only
 func isReadOnlyMount(opts []string) bool {
 	// Look for read-only option in the mount options
-	for _, opt := range opts {
-		if opt == "ro" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(opts, "ro")
 }
 
 // GetAudioDevices handles GET /api/v2/system/audio/devices
@@ -871,7 +867,7 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 				"ip", ctx.RealIP(),
 			)
 		}
-		return ctx.JSON(http.StatusOK, map[string]interface{}{
+		return ctx.JSON(http.StatusOK, map[string]any{
 			"device":   nil,
 			"active":   false,
 			"verified": false,
@@ -888,7 +884,7 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 	}
 
 	// Diagnostic information map
-	diagnostics := map[string]interface{}{
+	diagnostics := map[string]any{
 		"os":                runtime.GOOS,
 		"check_time":        time.Now().Format(time.RFC3339),
 		"error_details":     nil,
@@ -926,7 +922,7 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 		}
 
 		// Still return the configured device, but note that we couldn't verify it exists
-		return ctx.JSON(http.StatusOK, map[string]interface{}{
+		return ctx.JSON(http.StatusOK, map[string]any{
 			"device":      activeDevice,
 			"active":      true,
 			"verified":    false,
@@ -972,7 +968,7 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 			)
 		}
 
-		return ctx.JSON(http.StatusOK, map[string]interface{}{
+		return ctx.JSON(http.StatusOK, map[string]any{
 			"device":      activeDevice,
 			"active":      true,
 			"verified":    false,
@@ -994,7 +990,7 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 	}
 
 	// Device is configured and verified to exist
-	return ctx.JSON(http.StatusOK, map[string]interface{}{
+	return ctx.JSON(http.StatusOK, map[string]any{
 		"device":      activeDevice,
 		"active":      true,
 		"verified":    true,
@@ -1061,10 +1057,9 @@ func (c *Controller) getSingleProcessInfo(p *process.Process) (ProcessInfo, erro
 		uptimeSeconds = 0
 	} else {
 		// Calculate uptime relative to now
-		uptimeSeconds = time.Now().Unix() - (createTimeMillis / 1000)
-		if uptimeSeconds < 0 { // Sanity check for clock skew
-			uptimeSeconds = 0
-		}
+		uptimeSeconds = max(time.Now().Unix()-(createTimeMillis/1000),
+			// Sanity check for clock skew
+			0)
 	}
 
 	return ProcessInfo{

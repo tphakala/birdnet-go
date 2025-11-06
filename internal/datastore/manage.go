@@ -20,7 +20,7 @@ const (
 	// impact user experience. This threshold helps identify queries that need optimization
 	// while avoiding false positives from typical database operations.
 	DefaultSlowQueryThreshold = 200 * time.Millisecond
-	
+
 	// MaxColumnsForDetailedDisplay defines the maximum number of columns to display
 	// in detailed logs. When more columns are present, only the count is shown to
 	// keep log output concise and readable.
@@ -255,9 +255,9 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string) error {
 	migrationStart := time.Now()
 	migrationLogger := getLogger().With("db_type", dbType)
-	
+
 	migrationLogger.Info("Starting database migration")
-	
+
 	// Validate and fix schema if needed
 	if err := validateAndFixSchema(db, dbType, connectionInfo, debug, migrationLogger); err != nil {
 		return err
@@ -268,12 +268,12 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 	if err != nil {
 		return err
 	}
-	
+
 	// Create optimized indexes for new species tracking performance
 	if err := createOptimizedIndexes(db, dbType, migrationLogger); err != nil {
 		return err
 	}
-	
+
 	// Log successful migration completion
 	migrationLogger.Info("Database migration completed successfully",
 		"db_type", dbType,
@@ -368,10 +368,10 @@ func redactSensitiveInfo(dsn string) string {
 	// Reconstruct the string. If we added a dummy scheme/host, remove it.
 	sanitized := u.String()
 	if needsDummyScheme {
-		if strings.HasPrefix(sanitized, "dummy://dummyhost") {
-			sanitized = strings.TrimPrefix(sanitized, "dummy://dummyhost")
-		} else if strings.HasPrefix(sanitized, "dummy://") {
-			sanitized = strings.TrimPrefix(sanitized, "dummy://")
+		if after, ok := strings.CutPrefix(sanitized, "dummy://dummyhost"); ok {
+			sanitized = after
+		} else if after, ok := strings.CutPrefix(sanitized, "dummy://"); ok {
+			sanitized = after
 		}
 	}
 
@@ -395,7 +395,7 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 				"db_type", dbType,
 				"table", "image_caches",
 				"action", "database_schema_validation")
-			
+
 			lgr.Error("Schema validation failed", "error", enhancedErr)
 			return enhancedErr
 		}
@@ -413,7 +413,7 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 					"table", "image_caches",
 					"database", dbName,
 					"action", "database_schema_validation")
-				
+
 				lgr.Error("Schema validation failed", "error", enhancedErr)
 				return enhancedErr
 			}
@@ -423,7 +423,7 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 			"db_type", dbType)
 		schemaCorrect = true // Avoid dropping for unsupported types
 	}
-	
+
 	lgr.Info("Schema validation completed",
 		"schema_correct", schemaCorrect)
 
@@ -443,14 +443,14 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 			lgr.Debug("Schema for 'image_caches' appears correct. Skipping drop")
 		}
 	}
-	
+
 	return nil
 }
 
 // migrateTables performs the actual table migrations
 func migrateTables(db *gorm.DB, dbType string, lgr *slog.Logger) (int, error) {
 	tableMappings := []struct {
-		model interface{}
+		model any
 		name  string
 	}{
 		{&Note{}, "notes"},
@@ -464,10 +464,10 @@ func migrateTables(db *gorm.DB, dbType string, lgr *slog.Logger) (int, error) {
 		{&DynamicThreshold{}, "dynamic_thresholds"},
 		{&NotificationHistory{}, "notification_histories"}, // BG-17: Notification suppression persistence
 	}
-	
+
 	lgr.Info("Starting table migrations",
 		"table_count", len(tableMappings))
-	
+
 	// Migrate each table individually for better logging
 	successCount := 0
 	for _, table := range tableMappings {
@@ -476,47 +476,47 @@ func migrateTables(db *gorm.DB, dbType string, lgr *slog.Logger) (int, error) {
 		}
 		successCount++
 	}
-	
+
 	return successCount, nil
 }
 
 // migrateTable migrates a single table with detailed logging
-func migrateTable(db *gorm.DB, model interface{}, tableName, dbType string, lgr *slog.Logger) error {
+func migrateTable(db *gorm.DB, model any, tableName, dbType string, lgr *slog.Logger) error {
 	tableStart := time.Now()
-	
+
 	// Check if table exists before migration
 	tableExists := db.Migrator().HasTable(model)
-	
+
 	lgr.Debug("Migrating table",
 		"table", tableName,
 		"exists", tableExists)
-	
+
 	// Get column information before migration (if table exists)
 	columnsBefore := getTableColumns(db, model, tableExists)
-	
+
 	if err := db.AutoMigrate(model); err != nil {
 		enhancedErr := criticalError(err, "auto_migrate_table", "schema_migration_failed",
 			"db_type", dbType,
 			"table", tableName,
 			"action", "database_schema_setup")
-		
+
 		lgr.Error("Table migration failed",
 			"table", tableName,
 			"error", enhancedErr)
 		return enhancedErr
 	}
-	
+
 	// Determine what changed
 	action, addedColumns := determineTableChanges(db, model, tableExists, columnsBefore)
-	
+
 	// Log migration result
 	logTableMigration(lgr, tableName, action, addedColumns, time.Since(tableStart))
-	
+
 	return nil
 }
 
 // getTableColumns retrieves column names for a table
-func getTableColumns(db *gorm.DB, model interface{}, tableExists bool) []string {
+func getTableColumns(db *gorm.DB, model any, tableExists bool) []string {
 	var columns []string
 	if tableExists {
 		if cols, err := db.Migrator().ColumnTypes(model); err == nil {
@@ -529,9 +529,9 @@ func getTableColumns(db *gorm.DB, model interface{}, tableExists bool) []string 
 }
 
 // determineTableChanges checks what changed after migration
-func determineTableChanges(db *gorm.DB, model interface{}, tableExists bool, columnsBefore []string) (action string, addedColumns []string) {
+func determineTableChanges(db *gorm.DB, model any, tableExists bool, columnsBefore []string) (action string, addedColumns []string) {
 	action = "updated"
-	
+
 	if !tableExists {
 		action = "created"
 		// Get all columns for newly created table
@@ -547,14 +547,14 @@ func determineTableChanges(db *gorm.DB, model interface{}, tableExists bool, col
 			action = "unchanged"
 		}
 	}
-	
+
 	return action, addedColumns
 }
 
 // findNewColumns identifies columns added during migration
-func findNewColumns(db *gorm.DB, model interface{}, columnsBefore []string) []string {
+func findNewColumns(db *gorm.DB, model any, columnsBefore []string) []string {
 	var addedColumns []string
-	
+
 	if cols, err := db.Migrator().ColumnTypes(model); err == nil {
 		for _, col := range cols {
 			colName := col.Name()
@@ -563,7 +563,7 @@ func findNewColumns(db *gorm.DB, model interface{}, columnsBefore []string) []st
 			}
 		}
 	}
-	
+
 	return addedColumns
 }
 
@@ -572,12 +572,12 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, lgr *slog.Logger) error 
 	indexStart := time.Now()
 	lgr.Info("Creating optimized indexes",
 		"db_type", dbType)
-	
+
 	// Define the optimized index for new species tracking
 	// This index benefits the new species tracking queries that filter by scientific_name and date
 	indexName := "idx_notes_sciname_date_optimized"
 	tableName := "notes"
-	
+
 	// Check if index already exists using GORM's migrator
 	if db.Migrator().HasIndex(&Note{}, indexName) {
 		lgr.Debug("Optimized index already exists, skipping creation",
@@ -585,17 +585,17 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, lgr *slog.Logger) error 
 			"table", tableName)
 		return nil
 	}
-	
+
 	// Create the optimized composite index using GORM's built-in index management
 	// Column order (scientific_name, date) is critical for query performance
 	if err := db.Migrator().CreateIndex(&Note{}, indexName); err != nil {
 		// Handle duplicate index errors gracefully
 		errMsg := strings.ToLower(err.Error())
-		isDuplicateIndex := strings.Contains(errMsg, "duplicate key name") || 
-							strings.Contains(errMsg, "already exists") || 
-							strings.Contains(errMsg, "duplicate") ||
-							strings.Contains(errMsg, "index") && strings.Contains(errMsg, "exist")
-		
+		isDuplicateIndex := strings.Contains(errMsg, "duplicate key name") ||
+			strings.Contains(errMsg, "already exists") ||
+			strings.Contains(errMsg, "duplicate") ||
+			strings.Contains(errMsg, "index") && strings.Contains(errMsg, "exist")
+
 		if isDuplicateIndex {
 			lgr.Debug("Index already exists, continuing",
 				"index", indexName,
@@ -603,7 +603,7 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, lgr *slog.Logger) error 
 				"db_type", dbType)
 			return nil
 		}
-		
+
 		return errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
@@ -613,13 +613,13 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, lgr *slog.Logger) error 
 			Context("table_name", tableName).
 			Build()
 	}
-	
+
 	lgr.Info("Optimized index created successfully",
 		"index", indexName,
 		"table", tableName,
 		"duration", time.Since(indexStart),
 		"db_type", dbType)
-	
+
 	return nil
 }
 
@@ -630,13 +630,13 @@ func logTableMigration(lgr *slog.Logger, tableName, action string, addedColumns 
 		"action", action,
 		"duration", duration,
 	}
-	
+
 	if len(addedColumns) > 0 {
 		logFields = append(logFields, "columns_added", len(addedColumns))
 		if len(addedColumns) <= MaxColumnsForDetailedDisplay {
 			logFields = append(logFields, "new_columns", addedColumns)
 		}
 	}
-	
+
 	lgr.Info("Table migration completed", logFields...)
 }

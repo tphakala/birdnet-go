@@ -36,7 +36,7 @@ func TestEncodePCMtoWAV_ValidInput(t *testing.T) {
 	pcmData := make([]byte, sampleCount*2) // 16-bit samples = 2 bytes per sample
 
 	// Fill with some non-zero values (could be a simple pattern)
-	for i := 0; i < sampleCount; i++ {
+	for i := range sampleCount {
 		// Write a simple sawtooth pattern
 		value := uint16(i % 32768) //nolint:gosec // G115: test data bounded by 16-bit range
 		binary.LittleEndian.PutUint16(pcmData[i*2:], value)
@@ -151,7 +151,7 @@ func TestEncodePCMtoWAV_RecreateOriginalPCM(t *testing.T) {
 	pcmData := make([]byte, sampleCount*2)
 
 	// Fill with an easily recognizable pattern
-	for i := 0; i < sampleCount; i++ {
+	for i := range sampleCount {
 		value := uint16(i % 256) //nolint:gosec // G115: test data bounded by 8-bit range
 		binary.LittleEndian.PutUint16(pcmData[i*2:], value)
 	}
@@ -195,7 +195,7 @@ func TestEncodePCMtoWAV_LargeInput(t *testing.T) {
 	largeData := make([]byte, sampleCount*2) // 16-bit samples
 
 	// Fill with some pattern
-	for i := 0; i < sampleCount; i++ {
+	for i := range sampleCount {
 		value := uint16(i % 32768) //nolint:gosec // G115: test data bounded by 16-bit range
 		binary.LittleEndian.PutUint16(largeData[i*2:], value)
 	}
@@ -265,7 +265,7 @@ func TestEncodeFlacUsingFFmpeg(t *testing.T) {
 	pcmData := make([]byte, sampleCount*2)
 
 	// Generate a sine wave at 440Hz (A4 note)
-	for i := 0; i < sampleCount; i++ {
+	for i := range sampleCount {
 		// Calculate sine wave value (-32767 to 32767)
 		value := int16(32767.0 * math.Sin(2.0*math.Pi*440.0*float64(i)/48000.0))
 		// Convert to bytes and store in PCM data

@@ -15,7 +15,7 @@ func BenchmarkReadFromAnalysisBuffer_Original(b *testing.B) {
 	const (
 		bufferCapacity = 1024 * 1024 * 10 // 10MB for benchmark
 		testStream     = "benchmark_stream"
-		dataSize       = 48000 * 2        // 1 second of 16-bit audio at 48kHz
+		dataSize       = 48000 * 2 // 1 second of 16-bit audio at 48kHz
 	)
 
 	// Set up read size based on constants
@@ -31,7 +31,7 @@ func BenchmarkReadFromAnalysisBuffer_Original(b *testing.B) {
 	if prevData == nil {
 		prevData = make(map[string][]byte)
 	}
-	
+
 	ab := ringbuffer.New(bufferCapacity)
 	analysisBuffers[testStream] = ab
 	prevData[testStream] = nil
@@ -46,7 +46,7 @@ func BenchmarkReadFromAnalysisBuffer_Original(b *testing.B) {
 	// Fill buffer to have enough data
 	// We need to write enough data so that after reading readSize bytes,
 	// we still have enough for processing
-	totalNeeded := readSize * 2 + conf.BufferSize
+	totalNeeded := readSize*2 + conf.BufferSize
 	written := 0
 	for written < totalNeeded {
 		abMutex.Lock()
@@ -66,7 +66,7 @@ func BenchmarkReadFromAnalysisBuffer_Original(b *testing.B) {
 		// Read until we get data (might need multiple reads due to sliding window)
 		var data []byte
 		var err error
-		for j := 0; j < 10; j++ {
+		for range 10 {
 			data, err = ReadFromAnalysisBuffer(testStream)
 			if err != nil {
 				b.Fatalf("ReadFromAnalysisBuffer failed: %v", err)
@@ -82,7 +82,7 @@ func BenchmarkReadFromAnalysisBuffer_Original(b *testing.B) {
 				b.Fatalf("Failed to write test data: %v", err)
 			}
 		}
-		
+
 		if data == nil {
 			b.Fatalf("ReadFromAnalysisBuffer returned nil data at iteration %d after multiple attempts", i)
 		}
@@ -136,7 +136,7 @@ func BenchmarkReadFromAnalysisBuffer_Concurrent(b *testing.B) {
 		for i := range testData {
 			testData[i] = byte(i % 256)
 		}
-		for j := 0; j < 3; j++ {
+		for range 3 {
 			_, err := ab.Write(testData)
 			if err != nil {
 				b.Fatalf("Failed to write test data for stream %s: %v", stream, err)
@@ -154,7 +154,7 @@ func BenchmarkReadFromAnalysisBuffer_Concurrent(b *testing.B) {
 		for pb.Next() {
 			stream := streams[streamIdx%numStreams]
 			streamIdx++
-			
+
 			data, err := ReadFromAnalysisBuffer(stream)
 			if err != nil {
 				b.Fatalf("ReadFromAnalysisBuffer failed: %v", err)
@@ -180,7 +180,7 @@ func BenchmarkReadFromAnalysisBuffer_MemoryPressure(b *testing.B) {
 	const (
 		bufferCapacity = 1024 * 1024 * 10 // 10MB
 		testStream     = "pressure_test"
-		dataSize       = 48000 * 2        // 1 second of 16-bit audio at 48kHz
+		dataSize       = 48000 * 2 // 1 second of 16-bit audio at 48kHz
 	)
 
 	// Set up read size
@@ -206,7 +206,7 @@ func BenchmarkReadFromAnalysisBuffer_MemoryPressure(b *testing.B) {
 	for i := range testData {
 		testData[i] = byte(i % 256)
 	}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		abMutex.Lock()
 		_, err := ab.Write(testData)
 		abMutex.Unlock()

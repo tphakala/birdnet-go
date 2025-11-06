@@ -135,7 +135,7 @@ func TestCircuitBreaker_CooldownPeriod(t *testing.T) {
 	stream := NewFFmpegStream("rtsp://test.local/cooldown", "tcp", audioChan)
 
 	// Force circuit breaker to open
-	for i := 0; i < 12; i++ { // More than threshold
+	for range 12 { // More than threshold
 		stream.recordFailure(100 * time.Millisecond)
 	}
 
@@ -370,11 +370,9 @@ func TestCircuitBreaker_ConcurrentFailureAndReset(t *testing.T) {
 	startBarrier := make(chan struct{})
 
 	// Concurrent failure recording
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		<-startBarrier // Wait for signal to start
-		for i := 0; i < numFailures; i++ {
+		for range numFailures {
 			// Use 100ms runtime - this is less than circuitBreakerImmediateRuntime (1s)
 			// so it should trigger the immediate threshold (3 failures)
 			stream.recordFailure(100 * time.Millisecond)
@@ -382,22 +380,20 @@ func TestCircuitBreaker_ConcurrentFailureAndReset(t *testing.T) {
 			// Small yield to allow interleaving with resets
 			runtime.Gosched()
 		}
-	}()
+	})
 
 	// Concurrent failure resetting
 	// Note: With the fix, resetFailures() alone doesn't clear circuit state,
 	// so failures should still accumulate even with concurrent resets
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		<-startBarrier // Wait for signal to start
-		for i := 0; i < numResets; i++ {
+		for range numResets {
 			stream.resetFailures()
 			atomic.AddInt32(&resetCount, 1)
 			// Small yield to allow interleaving with failures
 			runtime.Gosched()
 		}
-	}()
+	})
 
 	// Start all goroutines simultaneously
 	close(startBarrier)

@@ -281,7 +281,7 @@ func TestCleanupExpiredCacheLRU(t *testing.T) {
 
 	// Add more than maxStatusCacheSize (1000) entries
 	tracker.mu.Lock()
-	for i := 0; i < 1100; i++ {
+	for i := range 1100 {
 		species := fmt.Sprintf("Species%d", i)
 		tracker.statusCache[species] = cachedSpeciesStatus{
 			status:    SpeciesStatus{},
@@ -543,7 +543,7 @@ func TestClearCacheForTestingMethod(t *testing.T) {
 
 	// Add multiple species to cache
 	now := time.Now()
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		species := fmt.Sprintf("Species%d", i)
 		tracker.UpdateSpecies(species, now)
 		_ = tracker.GetSpeciesStatus(species, now)
@@ -1072,11 +1072,11 @@ func TestConcurrentOperationsStress(t *testing.T) {
 	now := time.Now()
 
 	// Stress test with many concurrent operations
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for j := range numOperations {
 				sp := species[j%len(species)]
 				op := (id + j) % 10
 

@@ -149,7 +149,7 @@ type MockMQTTClient struct {
 	ConnectFunc     func(ctx context.Context) error
 	DisconnectFunc  func()
 	IsConnectedFunc func() bool
-	TestConnectFunc func(ctx context.Context, resultChan chan<- map[string]interface{})
+	TestConnectFunc func(ctx context.Context, resultChan chan<- map[string]any)
 }
 
 func (m *MockMQTTClient) Connect(ctx context.Context) error {
@@ -176,7 +176,7 @@ func (m *MockMQTTClient) IsConnected() bool {
 	return args.Bool(0)
 }
 
-func (m *MockMQTTClient) TestConnection(ctx context.Context, resultChan chan<- map[string]interface{}) {
+func (m *MockMQTTClient) TestConnection(ctx context.Context, resultChan chan<- map[string]any) {
 	if m.TestConnectFunc != nil {
 		m.TestConnectFunc(ctx, resultChan)
 		return
@@ -187,11 +187,11 @@ func (m *MockMQTTClient) TestConnection(ctx context.Context, resultChan chan<- m
 // MockBirdWeatherClient is a mock implementation for BirdWeather client testing
 type MockBirdWeatherClient struct {
 	mock.Mock
-	TestConnectFunc func(ctx context.Context, resultChan chan<- map[string]interface{})
+	TestConnectFunc func(ctx context.Context, resultChan chan<- map[string]any)
 	CloseFunc       func()
 }
 
-func (m *MockBirdWeatherClient) TestConnection(ctx context.Context, resultChan chan<- map[string]interface{}) {
+func (m *MockBirdWeatherClient) TestConnection(ctx context.Context, resultChan chan<- map[string]any) {
 	if m.TestConnectFunc != nil {
 		m.TestConnectFunc(ctx, resultChan)
 		return
@@ -216,7 +216,7 @@ func TestGetMQTTStatus(t *testing.T) {
 		mqttBroker     string
 		mqttTopic      string
 		expectedStatus int
-		validateResult func(*testing.T, map[string]interface{})
+		validateResult func(*testing.T, map[string]any)
 	}{
 		{
 			name:           "MQTT Disabled",
@@ -224,7 +224,7 @@ func TestGetMQTTStatus(t *testing.T) {
 			mqttBroker:     "tcp://mqtt.example.com:1883",
 			mqttTopic:      "birdnet/detections",
 			expectedStatus: http.StatusOK,
-			validateResult: func(t *testing.T, result map[string]interface{}) {
+			validateResult: func(t *testing.T, result map[string]any) {
 				t.Helper()
 				assert.False(t, result["connected"].(bool), "Connected should be false when MQTT is disabled")
 				assert.Equal(t, "tcp://mqtt.example.com:1883", result["broker"], "Broker should match configuration")
@@ -239,7 +239,7 @@ func TestGetMQTTStatus(t *testing.T) {
 			mqttBroker:     "tcp://mqtt.example.com:1883",
 			mqttTopic:      "birdnet/detections",
 			expectedStatus: http.StatusOK,
-			validateResult: func(t *testing.T, result map[string]interface{}) {
+			validateResult: func(t *testing.T, result map[string]any) {
 				t.Helper()
 				assert.False(t, result["connected"].(bool), "Connected should be false when MQTT connection fails")
 				assert.Contains(t, result["last_error"], "error:connection:mqtt_broker", "Error should mention connection failure")
@@ -272,7 +272,7 @@ func TestGetMQTTStatus(t *testing.T) {
 			assert.Equal(t, tc.expectedStatus, rec.Code)
 
 			// Parse and validate response
-			var result map[string]interface{}
+			var result map[string]any
 			err = json.Unmarshal(rec.Body.Bytes(), &result)
 			require.NoError(t, err)
 
@@ -291,7 +291,7 @@ func TestGetBirdWeatherStatus(t *testing.T) {
 		bwThreshold    float64
 		bwLocationAcc  float64
 		expectedStatus int
-		validateResult func(*testing.T, map[string]interface{})
+		validateResult func(*testing.T, map[string]any)
 	}{
 		{
 			name:           "BirdWeather Disabled",
@@ -300,7 +300,7 @@ func TestGetBirdWeatherStatus(t *testing.T) {
 			bwThreshold:    0.7,
 			bwLocationAcc:  50.0,
 			expectedStatus: http.StatusOK,
-			validateResult: func(t *testing.T, result map[string]interface{}) {
+			validateResult: func(t *testing.T, result map[string]any) {
 				t.Helper()
 				assert.False(t, result["enabled"].(bool), "Enabled should be false")
 				assert.Empty(t, result["station_id"], "Station ID should be empty")
@@ -315,7 +315,7 @@ func TestGetBirdWeatherStatus(t *testing.T) {
 			bwThreshold:    0.8,
 			bwLocationAcc:  100.0,
 			expectedStatus: http.StatusOK,
-			validateResult: func(t *testing.T, result map[string]interface{}) {
+			validateResult: func(t *testing.T, result map[string]any) {
 				t.Helper()
 				assert.True(t, result["enabled"].(bool), "Enabled should be true")
 				assert.Equal(t, "ABC123", result["station_id"], "Station ID should match configuration")
@@ -350,7 +350,7 @@ func TestGetBirdWeatherStatus(t *testing.T) {
 			assert.Equal(t, tc.expectedStatus, rec.Code)
 
 			// Parse response body
-			var result map[string]interface{}
+			var result map[string]any
 			err = json.Unmarshal(rec.Body.Bytes(), &result)
 			require.NoError(t, err)
 
@@ -439,11 +439,11 @@ func TestWriteJSONResponse(t *testing.T) {
 	c.Response().WriteHeader(http.StatusOK)
 
 	// Test data
-	testData := map[string]interface{}{
+	testData := map[string]any{
 		"key1": "value1",
 		"key2": 42,
 		"key3": true,
-		"nested": map[string]interface{}{
+		"nested": map[string]any{
 			"nested_key": "nested_value",
 		},
 	}
@@ -453,7 +453,7 @@ func TestWriteJSONResponse(t *testing.T) {
 	require.NoError(t, err)
 
 	// Parse the response
-	var result map[string]interface{}
+	var result map[string]any
 	err = json.Unmarshal(rec.Body.Bytes(), &result)
 	require.NoError(t, err)
 
@@ -461,8 +461,8 @@ func TestWriteJSONResponse(t *testing.T) {
 	assert.Equal(t, "value1", result["key1"])
 	assert.InDelta(t, 42, result["key2"], 0.01)
 	assert.Equal(t, true, result["key3"])
-	assert.IsType(t, map[string]interface{}{}, result["nested"])
-	nestedMap := result["nested"].(map[string]interface{})
+	assert.IsType(t, map[string]any{}, result["nested"])
+	nestedMap := result["nested"].(map[string]any)
 	assert.Equal(t, "nested_value", nestedMap["nested_key"])
 }
 
@@ -510,7 +510,7 @@ func TestGetMQTTStatusWithControlChannel(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Parse response body
-	var result map[string]interface{}
+	var result map[string]any
 	err = json.Unmarshal(rec.Body.Bytes(), &result)
 	require.NoError(t, err)
 

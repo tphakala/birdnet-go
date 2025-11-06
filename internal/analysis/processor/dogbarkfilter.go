@@ -2,6 +2,7 @@
 package processor
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -14,10 +15,8 @@ var DogBarkFilterTimeLimit = time.Duration(conf.Setting().Realtime.DogBarkFilter
 // Check if the species should be filtered based on the last dog bark timestamp.
 func (p *Processor) CheckDogBarkFilter(species string, lastDogBark time.Time) bool {
 	species = strings.ToLower(species)
-	for _, s := range p.Settings.Realtime.DogBarkFilter.Species {
-		if s == species {
-			return time.Since(lastDogBark) <= DogBarkFilterTimeLimit
-		}
+	if slices.Contains(p.Settings.Realtime.DogBarkFilter.Species, species) {
+		return time.Since(lastDogBark) <= DogBarkFilterTimeLimit
 	}
 	return false
 }

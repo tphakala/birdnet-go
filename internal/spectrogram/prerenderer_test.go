@@ -168,8 +168,7 @@ func TestPreRenderer_Submit_QueueFull(t *testing.T) {
 
 // TestPreRenderer_GracefulShutdown tests shutdown with timeout
 func TestPreRenderer_GracefulShutdown(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create minimal settings
 	tempDir := t.TempDir()
@@ -236,8 +235,7 @@ func TestPreRenderer_Stats(t *testing.T) {
 
 // TestPreRenderer_Submit_AfterStop tests submit after stop (panic guard)
 func TestPreRenderer_Submit_AfterStop(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	tempDir := t.TempDir()
 	settings := &conf.Settings{}

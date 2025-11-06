@@ -118,10 +118,8 @@ func TestConcurrentBufferAllocation(t *testing.T) {
 	var successMutex sync.Mutex
 
 	// Try to allocate the same buffer from multiple goroutines
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numGoroutines {
+		wg.Go(func() {
 
 			err := AllocateCaptureBuffer(60, 48000, 2, source)
 			if err == nil {
@@ -129,7 +127,7 @@ func TestConcurrentBufferAllocation(t *testing.T) {
 				successCount++
 				successMutex.Unlock()
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -218,7 +216,7 @@ func TestMemoryLeakPrevention(t *testing.T) {
 	const iterations = 100
 	source := "hw:4,0"
 
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		// Allocate
 		err := AllocateCaptureBuffer(60, 48000, 2, source)
 		require.NoError(t, err, "Allocation %d should succeed", i)
@@ -239,9 +237,8 @@ func TestMemoryLeakPrevention(t *testing.T) {
 
 // BenchmarkCaptureBufferAllocation benchmarks buffer allocation performance
 func BenchmarkCaptureBufferAllocation(b *testing.B) {
-	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		source := fmt.Sprintf("bench_source_%d", i)
 		err := AllocateCaptureBuffer(60, 48000, 2, source)
 		if err != nil {

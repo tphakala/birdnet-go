@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"strings"
@@ -34,9 +35,7 @@ func NewScriptProvider(name string, enabled bool, command string, args []string,
 	if sp.name == "" {
 		sp.name = "script"
 	}
-	for k, v := range env {
-		sp.env[k] = v
-	}
+	maps.Copy(sp.env, env)
 	if sp.inputFormat == "" {
 		sp.inputFormat = "env"
 	}

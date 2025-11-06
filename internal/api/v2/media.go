@@ -707,13 +707,13 @@ func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath 
 //   - Status: 404 Not Found
 //   - Body (API v2 envelope):
 //     {
-//       "error": "spectrogram not generated",
-//       "message": "Spectrogram has not been generated yet. Click 'Generate Spectrogram' to create it.",
-//       "code": 404,
-//       "correlation_id": "abc12345",
-//       "data": {
-//         "mode": "user-requested"
-//       }
+//     "error": "spectrogram not generated",
+//     "message": "Spectrogram has not been generated yet. Click 'Generate Spectrogram' to create it.",
+//     "code": 404,
+//     "correlation_id": "abc12345",
+//     "data": {
+//     "mode": "user-requested"
+//     }
 //     }
 //
 // IMPORTANT: Clients must check Content-Type header to determine response format:
@@ -721,8 +721,10 @@ func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath 
 //   - application/json: Error response (handle error, show generate button if data.mode=user-requested)
 //
 // TODO: Consider adding a dedicated endpoint or format query parameter for cleaner API design:
-//   Option A: GET /api/v2/spectrogram/:id/info - Returns JSON metadata including mode and status
-//   Option B: GET /api/v2/spectrogram/:id?format=json - Explicit format parameter
+//
+//	Option A: GET /api/v2/spectrogram/:id/info - Returns JSON metadata including mode and status
+//	Option B: GET /api/v2/spectrogram/:id?format=json - Explicit format parameter
+//
 // This would eliminate Content-Type-based response type detection and provide a cleaner separation
 // between image serving and metadata/status queries.
 //
@@ -1847,7 +1849,7 @@ func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectr
 	// We'll use a direct filesystem check because os.Root may have issues with newly created files
 	// Retry a few times to handle filesystem sync delays
 	var statErr error
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		// Try direct filesystem check first (more reliable for newly created files)
 		if _, err := os.Stat(absSpectrogramPath); err == nil {
 			getSpectrogramLogger().Debug("Spectrogram verified via direct filesystem check",
@@ -1903,7 +1905,6 @@ func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectr
 
 	return spectrogramStatusGenerated, nil
 }
-
 
 // generateWithFallback attempts to generate a spectrogram with SoX, falling back to FFmpeg on failure
 func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, absSpectrogramPath, spectrogramKey string, width int, raw bool) error {

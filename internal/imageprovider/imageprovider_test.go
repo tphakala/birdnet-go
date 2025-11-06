@@ -744,7 +744,7 @@ func TestConcurrentInitialization(t *testing.T) {
 	errs := make(chan error, numRequests)
 
 	// Launch concurrent requests
-	for i := 0; i < numRequests; i++ {
+	for range numRequests {
 		go func() {
 			defer wg.Done()
 			image, err := cache.Get(scientificName)
@@ -836,10 +836,9 @@ func TestInitializationTimeout(t *testing.T) {
 
 	// Check duration: main Get should wait for approx. 1.9s for the 2s background fetch.
 	// Set a minimum expected duration to ensure the second call actually waits for the first fetch
-	minExpectedWait := mockProvider.fetchDelay - (200 * time.Millisecond) // Allow some leeway
-	if minExpectedWait < 0 {
-		minExpectedWait = 0
-	}
+	minExpectedWait := max(
+		// Allow some leeway
+		mockProvider.fetchDelay-(200*time.Millisecond), 0)
 	// Max expected duration can be a bit more than fetch delay for overhead.
 	maxExpectedDuration := mockProvider.fetchDelay + (1 * time.Second)
 
@@ -934,7 +933,7 @@ func TestUserRequestsNotRateLimited(t *testing.T) {
 	start := time.Now()
 
 	// Make rapid consecutive requests (should not be rate limited)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		species := testSpecies[i%len(testSpecies)]
 		_, err := cache.Get(species)
 		if err != nil && !errors.Is(err, imageprovider.ErrImageNotFound) {
@@ -987,7 +986,7 @@ func TestBackgroundRequestsRateLimited(t *testing.T) {
 	// Pre-populate with stale entries to trigger background refresh
 	staleTime := time.Now().Add(-15 * 24 * time.Hour)
 	numStaleEntries := 5
-	for i := 0; i < numStaleEntries; i++ {
+	for i := range numStaleEntries {
 		species := fmt.Sprintf("StaleSpecies_%d", i)
 		if err := mockStore.SaveImageCache(&datastore.ImageCache{
 			ScientificName: species,

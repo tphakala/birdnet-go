@@ -87,7 +87,7 @@ func (p *YrNoProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 	var response YrResponse
 	var resp *http.Response // Declare outside loop
 
-	for i := 0; i < MaxRetries; i++ {
+	for i := range MaxRetries {
 		attemptLogger := logger.With("attempt", i+1, "max_attempts", MaxRetries)
 		attemptLogger.Debug("Sending HTTP request")
 		resp, err = client.Do(req)

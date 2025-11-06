@@ -941,7 +941,7 @@ func calculateAudioLevel(samples []byte, source, name string) AudioLevelData {
 
 // Pool of fixed-size byte slices to avoid frequent allocations
 var s16BufferPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		// Pre-allocate buffers for typical frame size (2048 bytes for malgo / 1024 16-bit samples)
 		buffer := make([]byte, 2048)
 		return &buffer // Return a pointer to avoid allocations
@@ -1012,7 +1012,7 @@ func ConvertToS16(samples []byte, sourceFormat malgo.FormatType, outputBuffer []
 
 	// Convert samples into the dereferenced buffer
 	actualOutputBuffer := *outputBufferPtr
-	for i := 0; i < validSampleCount; i++ {
+	for i := range validSampleCount {
 		srcIdx := i * bytesPerSample
 		dstIdx := i * 2
 

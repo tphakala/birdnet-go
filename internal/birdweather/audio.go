@@ -104,10 +104,7 @@ func saveBufferToFile(buffer *bytes.Buffer, filename string, startTime, endTime 
 	// Add format-specific info if known (basic for now)
 	if fileExt == ".wav" {
 		// Calculate estimated PCM data size for WAV
-		pcmDataSize := actualFileSize - WAVHeaderSize
-		if pcmDataSize < 0 {
-			pcmDataSize = 0
-		}
+		pcmDataSize := max(actualFileSize-WAVHeaderSize, 0)
 		metaInfo += fmt.Sprintf("Estimated PCM Data Size: %d bytes\n", pcmDataSize)
 		metaInfo += fmt.Sprintf("Expected Audio Duration (PCM): %.3f seconds\n",
 			float64(pcmDataSize)/(48000.0*2.0))

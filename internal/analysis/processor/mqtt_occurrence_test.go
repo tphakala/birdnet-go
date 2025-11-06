@@ -16,10 +16,10 @@ import (
 
 // MockMqttClientWithCapture captures published messages for testing
 type MockMqttClientWithCapture struct {
-	Connected       bool
-	PublishedTopic  string
-	PublishedData   string
-	PublishError    error
+	Connected      bool
+	PublishedTopic string
+	PublishedData  string
+	PublishError   error
 }
 
 func (m *MockMqttClientWithCapture) Connect(_ context.Context) error {
@@ -113,7 +113,7 @@ func TestMqttAction_IncludesOccurrence(t *testing.T) {
 
 	// Parse the published JSON to verify occurrence is included
 	// The structure is NoteWithBirdImage which embeds Note directly
-	var publishedData map[string]interface{}
+	var publishedData map[string]any
 	err = json.Unmarshal([]byte(mockClient.PublishedData), &publishedData)
 	require.NoError(t, err, "Failed to parse published JSON")
 
@@ -189,7 +189,7 @@ func TestMqttAction_OmitsOccurrenceWhenZero(t *testing.T) {
 	assert.NotEmpty(t, mockClient.PublishedData)
 
 	// Parse the published JSON to verify occurrence is omitted when zero
-	var publishedData map[string]interface{}
+	var publishedData map[string]any
 	err = json.Unmarshal([]byte(mockClient.PublishedData), &publishedData)
 	require.NoError(t, err, "Failed to parse published JSON")
 
@@ -203,4 +203,3 @@ func TestMqttAction_OmitsOccurrenceWhenZero(t *testing.T) {
 	confidence, _ := publishedData["Confidence"].(float64)
 	assert.InDelta(t, 0.85, confidence, 0.001)
 }
-

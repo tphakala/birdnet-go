@@ -17,7 +17,7 @@ func TestMockTransport(t *testing.T) {
 	t.Run("SendEvent stores events", func(t *testing.T) {
 		t.Parallel()
 		transport := NewMockTransport()
-		
+
 		event := &sentry.Event{
 			Message: "test event",
 			Level:   sentry.LevelInfo,
@@ -25,113 +25,113 @@ func TestMockTransport(t *testing.T) {
 				"component": "test",
 			},
 		}
-		
+
 		transport.SendEvent(event)
-		
+
 		if count := transport.GetEventCount(); count != 1 {
 			t.Errorf("Expected 1 event, got %d", count)
 		}
-		
+
 		captured := transport.GetLastEvent()
 		if captured == nil {
 			t.Fatal("Expected event to be captured")
 		}
-		
+
 		if captured.Message != "test event" {
 			t.Errorf("Expected message 'test event', got %s", captured.Message)
 		}
 	})
-	
+
 	t.Run("Clear removes all events", func(t *testing.T) {
 		transport := NewMockTransport()
-		
+
 		// Send multiple events
 		for i := range 5 {
 			transport.SendEvent(&sentry.Event{
 				Message: fmt.Sprintf("event %d", i),
 			})
 		}
-		
+
 		if count := transport.GetEventCount(); count != 5 {
 			t.Errorf("Expected 5 events, got %d", count)
 		}
-		
+
 		transport.Clear()
-		
+
 		if count := transport.GetEventCount(); count != 0 {
 			t.Errorf("Expected 0 events after clear, got %d", count)
 		}
 	})
-	
+
 	t.Run("SetDisabled prevents event capture", func(t *testing.T) {
 		t.Parallel()
 		transport := NewMockTransport()
 		transport.SetDisabled(true)
-		
+
 		transport.SendEvent(&sentry.Event{Message: "should not be captured"})
-		
+
 		if count := transport.GetEventCount(); count != 0 {
 			t.Errorf("Expected 0 events when disabled, got %d", count)
 		}
 	})
-	
+
 	t.Run("FindEventByMessage locates events", func(t *testing.T) {
 		t.Parallel()
 		transport := NewMockTransport()
-		
+
 		events := []string{"first", "second", "third"}
 		for _, msg := range events {
 			transport.SendEvent(&sentry.Event{Message: msg})
 		}
-		
+
 		found := transport.FindEventByMessage("second")
 		if found == nil {
 			t.Error("Expected to find event with message 'second'")
 		} else if found.Message != "second" {
 			t.Errorf("Found wrong event: %s", found.Message)
 		}
-		
+
 		notFound := transport.FindEventByMessage("fourth")
 		if notFound != nil {
 			t.Error("Should not find non-existent event")
 		}
 	})
-	
+
 	t.Run("WaitForEventCount with timeout", func(t *testing.T) {
 		t.Parallel()
 		transport := NewMockTransport()
-		
+
 		// Test immediate success
 		transport.SendEvent(&sentry.Event{Message: "event1"})
 		transport.SendEvent(&sentry.Event{Message: "event2"})
-		
+
 		if !transport.WaitForEventCount(2, 100*time.Millisecond) {
 			t.Error("Expected WaitForEventCount to succeed immediately")
 		}
-		
+
 		// Test timeout
 		if transport.WaitForEventCount(5, 50*time.Millisecond) {
 			t.Error("Expected WaitForEventCount to timeout")
 		}
 	})
-	
+
 	t.Run("FlushWithContext respects cancellation", func(t *testing.T) {
 		t.Parallel()
 		transport := NewMockTransport()
 		transport.SetDelay(100 * time.Millisecond)
-		
+
 		// Test with cancelled context
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
-		
+
 		if transport.FlushWithContext(ctx) {
 			t.Error("Expected flush to fail with cancelled context")
 		}
-		
+
 		// Test with timeout
 		ctx, cancel = context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
-		
+
 		if !transport.FlushWithContext(ctx) {
 			t.Error("Expected flush to succeed within timeout")
 		}
@@ -176,11 +176,11 @@ func TestURLAnonymization(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			scrubbed := privacy.ScrubMessage(tt.input)
-			
+
 			if tt.notContains != "" && strings.Contains(scrubbed, tt.notContains) {
 				t.Errorf("Scrubbed message should not contain %q, got: %s", tt.notContains, scrubbed)
 			}
-			
+
 			if tt.contains != "" && !strings.Contains(scrubbed, tt.contains) {
 				t.Errorf("Scrubbed message should contain %q, got: %s", tt.contains, scrubbed)
 			}
@@ -191,7 +191,7 @@ func TestURLAnonymization(t *testing.T) {
 func TestEventSummaries(t *testing.T) {
 	t.Parallel()
 	transport := NewMockTransport()
-	
+
 	// Create events with different properties
 	events := []struct {
 		message string
@@ -212,7 +212,7 @@ func TestEventSummaries(t *testing.T) {
 			extra:   map[string]any{"endpoint": "/test"},
 		},
 	}
-	
+
 	for _, e := range events {
 		event := &sentry.Event{
 			Message:   e.message,
@@ -223,12 +223,12 @@ func TestEventSummaries(t *testing.T) {
 		}
 		transport.SendEvent(event)
 	}
-	
+
 	summaries := transport.GetEventSummaries()
 	if len(summaries) != len(events) {
 		t.Fatalf("Expected %d summaries, got %d", len(events), len(summaries))
 	}
-	
+
 	// Verify first summary
 	s := summaries[0]
 	if s.Message != "Info event" {
@@ -258,12 +258,12 @@ func TestEventSummaries(t *testing.T) {
 func TestConcurrentAccess(t *testing.T) {
 	t.Parallel()
 	transport := NewMockTransport()
-	
+
 	// Run concurrent operations
 	var wg sync.WaitGroup
 	numGoroutines := 10
 	eventsPerGoroutine := 100
-	
+
 	// Writers
 	for i := range numGoroutines {
 		wg.Add(1)
@@ -276,22 +276,20 @@ func TestConcurrentAccess(t *testing.T) {
 			}
 		}(i)
 	}
-	
+
 	// Readers
 	for range numGoroutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range eventsPerGoroutine {
 				_ = transport.GetEventCount()
 				_ = transport.GetEvents()
 				time.Sleep(time.Microsecond) // Small delay to increase contention
 			}
-		}()
+		})
 	}
-	
+
 	wg.Wait()
-	
+
 	// Verify all events were captured
 	expectedCount := numGoroutines * eventsPerGoroutine
 	if count := transport.GetEventCount(); count != expectedCount {

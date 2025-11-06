@@ -8,7 +8,7 @@ import (
 
 // CacheEntry represents a cached result with expiration
 type CacheEntry struct {
-	value  interface{}
+	value  any
 	expiry time.Time
 }
 
@@ -25,7 +25,7 @@ type PathCache struct {
 	// Cache for ValidateRelativePath results - these are deterministic
 	validatePathCache sync.Map // map[string]CacheEntry
 
-	// Cache for IsPathWithinBase results - these are deterministic 
+	// Cache for IsPathWithinBase results - these are deterministic
 	withinBaseCache sync.Map // map[string]CacheEntry
 
 	// Cache for symlink resolution - these can change but usually stable
@@ -76,7 +76,7 @@ func (pc *PathCache) GetAbsPath(path string, compute func(string) (string, error
 		expiry: time.Now().Add(pc.absPathTTL),
 	}
 	pc.absPathCache.Store(path, cacheEntry)
-	
+
 	return result, err
 }
 
@@ -103,7 +103,7 @@ func (pc *PathCache) GetValidatePath(path string, compute func(string) (string, 
 		expiry: time.Now().Add(pc.validateTTL),
 	}
 	pc.validatePathCache.Store(path, cacheEntry)
-	
+
 	return result, err
 }
 
@@ -130,7 +130,7 @@ func (pc *PathCache) GetWithinBase(key string, compute func() (bool, error)) (bo
 		expiry: time.Now().Add(pc.withinBaseTTL),
 	}
 	pc.withinBaseCache.Store(key, cacheEntry)
-	
+
 	return within, err
 }
 
@@ -157,7 +157,7 @@ func (pc *PathCache) GetSymlinkResolution(path string, compute func(string) (str
 		expiry: time.Now().Add(pc.symlinkTTL),
 	}
 	pc.symlinkCache.Store(path, cacheEntry)
-	
+
 	return resolved, err
 }
 
@@ -184,7 +184,7 @@ func (pc *PathCache) GetStat(path string, compute func(string) (fs.FileInfo, err
 		expiry: time.Now().Add(pc.statTTL),
 	}
 	pc.statCache.Store(path, cacheEntry)
-	
+
 	return info, err
 }
 
@@ -192,9 +192,9 @@ func (pc *PathCache) GetStat(path string, compute func(string) (fs.FileInfo, err
 // This should be called periodically to prevent memory leaks
 func (pc *PathCache) ClearExpired() {
 	now := time.Now()
-	
+
 	clearMap := func(m *sync.Map) {
-		m.Range(func(key, value interface{}) bool {
+		m.Range(func(key, value any) bool {
 			if cacheEntry := value.(CacheEntry); cacheEntry.expiry.Before(now) {
 				m.Delete(key)
 			}
@@ -213,7 +213,7 @@ func (pc *PathCache) ClearExpired() {
 func (pc *PathCache) GetCacheStats() CacheStats {
 	countEntries := func(m *sync.Map) (total, expired int) {
 		now := time.Now()
-		m.Range(func(key, value interface{}) bool {
+		m.Range(func(key, value any) bool {
 			total++
 			if cacheEntry := value.(CacheEntry); cacheEntry.expiry.Before(now) {
 				expired++
@@ -229,7 +229,7 @@ func (pc *PathCache) GetCacheStats() CacheStats {
 	stats.WithinBaseTotal, stats.WithinBaseExpired = countEntries(&pc.withinBaseCache)
 	stats.SymlinkTotal, stats.SymlinkExpired = countEntries(&pc.symlinkCache)
 	stats.StatTotal, stats.StatExpired = countEntries(&pc.statCache)
-	
+
 	return stats
 }
 
@@ -261,14 +261,14 @@ type statResult struct {
 
 // CacheStats provides statistics about cache performance
 type CacheStats struct {
-	AbsPathTotal     int
-	AbsPathExpired   int
-	ValidateTotal    int
-	ValidateExpired  int
-	WithinBaseTotal  int
+	AbsPathTotal      int
+	AbsPathExpired    int
+	ValidateTotal     int
+	ValidateExpired   int
+	WithinBaseTotal   int
 	WithinBaseExpired int
-	SymlinkTotal     int
-	SymlinkExpired   int
-	StatTotal        int
-	StatExpired      int
+	SymlinkTotal      int
+	SymlinkExpired    int
+	StatTotal         int
+	StatExpired       int
 }

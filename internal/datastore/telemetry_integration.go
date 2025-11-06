@@ -28,34 +28,34 @@ func NewDatastoreTelemetry(enabled bool, dbPath string) *DatastoreTelemetry {
 
 // ErrorContext represents comprehensive error context for telemetry
 type ErrorContext struct {
-	Timestamp         string                 `json:"timestamp"`
-	Operation         string                 `json:"operation"`
-	Error             string                 `json:"error"`
-	ErrorType         string                 `json:"error_type"`
-	ResourceSnapshot  *ResourceSnapshot      `json:"resource_snapshot,omitempty"`
-	DatabaseHealth    *DatabaseHealthReport  `json:"database_health,omitempty"`
-	RecentOperations  []RecentOperation      `json:"recent_operations,omitempty"`
-	Severity          string                 `json:"severity"`
-	Recommendations   []string               `json:"recommendations,omitempty"`
+	Timestamp        string                `json:"timestamp"`
+	Operation        string                `json:"operation"`
+	Error            string                `json:"error"`
+	ErrorType        string                `json:"error_type"`
+	ResourceSnapshot *ResourceSnapshot     `json:"resource_snapshot,omitempty"`
+	DatabaseHealth   *DatabaseHealthReport `json:"database_health,omitempty"`
+	RecentOperations []RecentOperation     `json:"recent_operations,omitempty"`
+	Severity         string                `json:"severity"`
+	Recommendations  []string              `json:"recommendations,omitempty"`
 }
 
 // DatabaseHealthReport represents the current health of the database
 type DatabaseHealthReport struct {
-	TableCount         int                    `json:"table_count"`
-	IndexCount         int                    `json:"index_count"`
-	OrphanedObjects    []string               `json:"orphaned_objects,omitempty"`
-	IntegrityCheck     bool                   `json:"integrity_check_passed"`
-	FragmentationLevel float64               `json:"fragmentation_level"`
-	TableSizes         map[string]int64       `json:"table_sizes,omitempty"`
+	TableCount         int              `json:"table_count"`
+	IndexCount         int              `json:"index_count"`
+	OrphanedObjects    []string         `json:"orphaned_objects,omitempty"`
+	IntegrityCheck     bool             `json:"integrity_check_passed"`
+	FragmentationLevel float64          `json:"fragmentation_level"`
+	TableSizes         map[string]int64 `json:"table_sizes,omitempty"`
 }
 
 // RecentOperation represents a recent database operation
 type RecentOperation struct {
-	Timestamp   string `json:"timestamp"`
-	Operation   string `json:"operation"`
-	DurationMS  int64  `json:"duration_ms"`
-	Status      string `json:"status"`
-	RowsAffected int64 `json:"rows_affected,omitempty"`
+	Timestamp    string `json:"timestamp"`
+	Operation    string `json:"operation"`
+	DurationMS   int64  `json:"duration_ms"`
+	Status       string `json:"status"`
+	RowsAffected int64  `json:"rows_affected,omitempty"`
 }
 
 // CaptureEnhancedError captures a database error with comprehensive context
@@ -66,26 +66,26 @@ func (dt *DatastoreTelemetry) CaptureEnhancedError(err error, operation string, 
 
 	// Gather comprehensive error context
 	context := dt.gatherErrorContext(err, operation, store)
-	
+
 	// Determine severity level
 	severity := dt.calculateSeverity(err, context)
-	
+
 	// Create enhanced error with full context
 	enhancedErr := dt.buildEnhancedError(err, operation, context)
-	
+
 	// Log locally with full context
-	logFields := []interface{}{
+	logFields := []any{
 		"operation", operation,
 		"error", err.Error(),
 		"severity", severity,
 		"recommendations", context.Recommendations,
 	}
-	
+
 	// Add resource summary only if ResourceSnapshot is available
 	if context.ResourceSnapshot != nil {
 		logFields = append(logFields, "resource_summary", context.ResourceSnapshot.FormatResourceSummary())
 	}
-	
+
 	getLogger().Error("Database error with context", logFields...)
 
 	// Send to telemetry based on severity
@@ -182,13 +182,13 @@ func (dt *DatastoreTelemetry) buildEnhancedError(err error, operation string, co
 // calculateSeverity determines the severity level based on error and context
 func (dt *DatastoreTelemetry) calculateSeverity(err error, context *ErrorContext) string {
 	errStr := strings.ToLower(err.Error())
-	
+
 	// Critical errors that indicate data corruption or system failure
-	if strings.Contains(errStr, "malformed") || 
-	   strings.Contains(errStr, "corrupt") ||
-	   strings.Contains(errStr, "no such table") ||
-	   strings.Contains(errStr, "disk full") ||
-	   strings.Contains(errStr, "out of memory") {
+	if strings.Contains(errStr, "malformed") ||
+		strings.Contains(errStr, "corrupt") ||
+		strings.Contains(errStr, "no such table") ||
+		strings.Contains(errStr, "disk full") ||
+		strings.Contains(errStr, "out of memory") {
 		return "critical"
 	}
 
@@ -205,8 +205,8 @@ func (dt *DatastoreTelemetry) calculateSeverity(err error, context *ErrorContext
 
 	// Medium severity for operational issues
 	if strings.Contains(errStr, "constraint") ||
-	   strings.Contains(errStr, "deadlock") ||
-	   strings.Contains(errStr, "timeout") {
+		strings.Contains(errStr, "deadlock") ||
+		strings.Contains(errStr, "timeout") {
 		return "medium"
 	}
 
@@ -257,17 +257,17 @@ func (dt *DatastoreTelemetry) sendCriticalErrorToTelemetry(err error, context *E
 		}
 
 		// Add breadcrumb with summary
-		breadcrumbData := map[string]interface{}{
+		breadcrumbData := map[string]any{
 			"operation": context.Operation,
 			"severity":  context.Severity,
 		}
-		
+
 		// Add resource data only if ResourceSnapshot is not nil
 		if context.ResourceSnapshot != nil {
 			breadcrumbData["disk_free_mb"] = context.ResourceSnapshot.DiskSpace.AvailableBytes / 1024 / 1024
 			breadcrumbData["db_size_mb"] = context.ResourceSnapshot.DatabaseFile.SizeBytes / 1024 / 1024
 		}
-		
+
 		scope.AddBreadcrumb(&sentry.Breadcrumb{
 			Category: "database.error",
 			Message:  fmt.Sprintf("Critical database error: %s", context.Operation),
@@ -295,11 +295,11 @@ func (dt *DatastoreTelemetry) sendErrorToTelemetry(err error, context *ErrorCont
 		// Add key context as tags for filtering
 		if context.ResourceSnapshot != nil {
 			scope.SetTag("disk_critical", fmt.Sprintf("%t", context.ResourceSnapshot.IsCriticalResourceState()))
-			scope.SetContext("resources", map[string]interface{}{
-				"disk_free_mb":    context.ResourceSnapshot.DiskSpace.AvailableBytes / 1024 / 1024,
-				"disk_used_pct":   context.ResourceSnapshot.DiskSpace.UsedPercent,
-				"memory_free_mb":  context.ResourceSnapshot.SystemMemory.AvailableBytes / 1024 / 1024,
-				"db_size_mb":      context.ResourceSnapshot.DatabaseFile.SizeBytes / 1024 / 1024,
+			scope.SetContext("resources", map[string]any{
+				"disk_free_mb":   context.ResourceSnapshot.DiskSpace.AvailableBytes / 1024 / 1024,
+				"disk_used_pct":  context.ResourceSnapshot.DiskSpace.UsedPercent,
+				"memory_free_mb": context.ResourceSnapshot.SystemMemory.AvailableBytes / 1024 / 1024,
+				"db_size_mb":     context.ResourceSnapshot.DatabaseFile.SizeBytes / 1024 / 1024,
 			})
 		}
 
@@ -311,4 +311,3 @@ func (dt *DatastoreTelemetry) sendErrorToTelemetry(err error, context *ErrorCont
 type StoreInterface interface {
 	GetDBPath() string
 }
-

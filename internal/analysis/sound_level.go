@@ -198,8 +198,8 @@ func normalizeBandKey(key string) string {
 
 	// Handle "1000Hz" -> "1.0_kHz" conversion
 	key = strings.ToLower(key)
-	if strings.HasSuffix(key, "hz") {
-		freq := strings.TrimSuffix(key, "hz")
+	if before, ok := strings.CutSuffix(key, "hz"); ok {
+		freq := before
 		if val, err := strconv.ParseFloat(freq, 64); err == nil {
 			if val >= 1000 {
 				return fmt.Sprintf("%.1f_kHz", val/1000)
@@ -361,9 +361,7 @@ func toCompactFormat(data myaudio.SoundLevelData, nodeName string) CompactSoundL
 
 // startSoundLevelMQTTPublisher starts a goroutine to consume sound level data and publish to MQTT
 func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan <-chan struct{}, proc *processor.Processor, soundLevelChan <-chan myaudio.SoundLevelData) {
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 
 		for {
 			select {
@@ -396,7 +394,7 @@ func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan <-chan struct{}, 
 				}
 			}
 		}
-	}()
+	})
 }
 
 // publishSoundLevelToMQTT publishes sound level data to MQTT
@@ -539,9 +537,7 @@ func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc 
 
 // startSoundLevelMQTTPublisherWithDone starts MQTT publisher with a custom done channel
 func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan <-chan struct{}, proc *processor.Processor, soundLevelChan <-chan myaudio.SoundLevelData) {
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		getSoundLevelLogger().Info("Started sound level MQTT publisher")
 
 		for {
@@ -573,7 +569,7 @@ func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan <-chan st
 				}
 			}
 		}
-	}()
+	})
 }
 
 // startSoundLevelSSEPublisherWithDone starts SSE publisher with a custom done channel
@@ -660,9 +656,7 @@ func getSoundLevelMetricsFromAPI(apiController *api.Controller) *metrics.SoundLe
 
 // startSoundLevelMetricsPublisherWithDone starts metrics publisher with a custom done channel
 func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, metricsInstance *observability.Metrics, soundLevelChan chan myaudio.SoundLevelData) {
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		log.Println("📊 Started sound level metrics publisher")
 
 		for {
@@ -686,7 +680,7 @@ func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan s
 				}
 			}
 		}
-	}()
+	})
 }
 
 // registerSoundLevelProcessorsForActiveSources registers sound level processors for all active audio sources

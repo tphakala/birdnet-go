@@ -131,11 +131,11 @@ func TestPruneOldEntries_CriticalReliability(t *testing.T) {
 			"massive_dataset_pruning",
 			func(tracker *SpeciesTracker, now time.Time) {
 				// Add 1000 very old entries (> 10 years) and 100 recent ones
-				for i := 0; i < 1000; i++ {
+				for i := range 1000 {
 					speciesName := "Very_Old_Species_" + string(rune(i))
 					tracker.speciesFirstSeen[speciesName] = now.AddDate(-11, 0, -i) // 11+ years ago
 				}
-				for i := 0; i < 100; i++ {
+				for i := range 100 {
 					speciesName := "Recent_Species_" + string(rune(i))
 					tracker.speciesFirstSeen[speciesName] = now.AddDate(0, 0, -10) // 10 days ago
 				}
@@ -432,11 +432,11 @@ func TestCleanupOldNotificationRecords_CriticalReliability(t *testing.T) {
 			"large_dataset_cleanup",
 			func(tracker *SpeciesTracker, now time.Time) {
 				// Add 500 old records and 100 recent ones
-				for i := 0; i < 500; i++ {
+				for i := range 500 {
 					species := "Old_" + string(rune(i))
 					tracker.notificationLastSent[species] = now.Add(-time.Duration(200+i) * time.Hour)
 				}
-				for i := 0; i < 100; i++ {
+				for i := range 100 {
 					species := "Recent_" + string(rune(i))
 					tracker.notificationLastSent[species] = now.Add(-time.Duration(10+i) * time.Hour)
 				}
@@ -504,7 +504,7 @@ func TestNotificationSystem_ConcurrentAccess(t *testing.T) {
 	now := time.Now()
 
 	// 100 goroutines recording notifications
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		go func(id int) {
 			species := "Species_" + string(rune(id%20)) // 20 different species
 			sentTime := now.Add(-time.Duration(id) * time.Hour)
@@ -514,7 +514,7 @@ func TestNotificationSystem_ConcurrentAccess(t *testing.T) {
 	}
 
 	// 100 goroutines checking suppression
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		go func(id int) {
 			species := "Species_" + string(rune(id%20))
 			_ = tracker.ShouldSuppressNotification(species, now)
@@ -523,7 +523,7 @@ func TestNotificationSystem_ConcurrentAccess(t *testing.T) {
 	}
 
 	// 100 goroutines performing cleanup
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		go func(id int) {
 			cleanupTime := now.Add(time.Duration(id) * time.Minute)
 			_ = tracker.CleanupOldNotificationRecords(cleanupTime)
@@ -532,7 +532,7 @@ func TestNotificationSystem_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Wait for all goroutines
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		<-done
 	}
 

@@ -65,7 +65,7 @@ func parseOffset(offsetStr string, defaultOffset int) int {
 }
 
 // Debug logs debug messages if debug mode is enabled
-func (h *Handlers) Debug(format string, v ...interface{}) {
+func (h *Handlers) Debug(format string, v ...any) {
 	if h.Settings.WebServer.Debug {
 		if len(v) == 0 {
 			log.Print(format)

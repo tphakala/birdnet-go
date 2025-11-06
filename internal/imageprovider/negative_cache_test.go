@@ -35,7 +35,7 @@ func TestNegativeCachingBehavior(t *testing.T) {
 			t.Fatalf("Failed to create cache: %v", err)
 		}
 		cache.SetImageProvider(mockProvider)
-		
+
 		// Ensure the provider is set by attempting a dummy fetch
 		// This synchronizes with any background operations
 		species := "Notfoundicus imaginary"
@@ -51,7 +51,7 @@ func TestNegativeCachingBehavior(t *testing.T) {
 		}
 
 		// Make 5 more requests - should use negative cache
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			_, err := cache.Get(species)
 			if !errors.Is(err, imageprovider.ErrImageNotFound) {
 				t.Errorf("Request %d: Expected ErrImageNotFound, got %v", i+2, err)
@@ -131,7 +131,7 @@ func TestNegativeCachingBehavior(t *testing.T) {
 		species := "Any species"
 
 		// Make 3 requests - each should hit API (no caching of transient errors)
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			_, err := cache.Get(species)
 			if err == nil {
 				t.Errorf("Request %d: Expected transient error, got nil", i+1)

@@ -15,7 +15,7 @@ func runBooleanTests(t *testing.T, testFunc func(string) bool, tests []struct {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := testFunc(tt.input)
 			if result != tt.expected {
 				t.Errorf("Expected %t, got %t for input %q", tt.expected, result, tt.input)
@@ -34,7 +34,7 @@ func runScrubTests(t *testing.T, testFunc func(string) string, tests []struct {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := testFunc(tt.input)
 			if result != tt.expected {
 				t.Errorf("Expected %q, but got %q", tt.expected, result)
@@ -47,57 +47,57 @@ func TestScrubMessage(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		input    string
-		contains []string // strings that should be in the output
+		name        string
+		input       string
+		contains    []string // strings that should be in the output
 		notContains []string // strings that should NOT be in the output
 	}{
 		{
-			name:     "Basic RTSP URL with credentials",
-			input:    "Failed to connect to rtsp://admin:password@192.168.1.100:554/stream1",
-			contains: []string{"Failed to connect to url-"},
+			name:        "Basic RTSP URL with credentials",
+			input:       "Failed to connect to rtsp://admin:password@192.168.1.100:554/stream1",
+			contains:    []string{"Failed to connect to url-"},
 			notContains: []string{"admin", "password", "192.168.1.100"},
 		},
 		{
-			name:     "HTTP URL with domain",
-			input:    "Error fetching http://example.com/api/v1/data",
-			contains: []string{"Error fetching url-"},
+			name:        "HTTP URL with domain",
+			input:       "Error fetching http://example.com/api/v1/data",
+			contains:    []string{"Error fetching url-"},
 			notContains: []string{"example.com"},
 		},
 		{
-			name:     "Multiple URLs in message",
-			input:    "Failed rtsp://user:pass@cam1.local/stream and https://api.service.com/upload",
-			contains: []string{"Failed url-", "and url-"},
+			name:        "Multiple URLs in message",
+			input:       "Failed rtsp://user:pass@cam1.local/stream and https://api.service.com/upload",
+			contains:    []string{"Failed url-", "and url-"},
 			notContains: []string{"user", "pass", "cam1.local", "api.service.com"},
 		},
 		{
-			name:     "Message with GPS coordinates",
-			input:    "Weather fetch failed for location 60.1699,24.9384",
-			contains: []string{"Weather fetch failed for location [LAT],[LON]"},
+			name:        "Message with GPS coordinates",
+			input:       "Weather fetch failed for location 60.1699,24.9384",
+			contains:    []string{"Weather fetch failed for location [LAT],[LON]"},
 			notContains: []string{"60.1699", "24.9384"},
 		},
 		{
-			name:     "Message with API token",
-			input:    "API call failed with token abc123XYZ789",
-			contains: []string{"API call failed with token [TOKEN]"},
+			name:        "Message with API token",
+			input:       "API call failed with token abc123XYZ789",
+			contains:    []string{"API call failed with token [TOKEN]"},
 			notContains: []string{"abc123XYZ789"},
 		},
 		{
-			name:     "Complex message with multiple sensitive data",
-			input:    "Failed to upload to rtsp://admin:pass@192.168.1.100:554/stream at coordinates 60.1699,24.9384",
-			contains: []string{"Failed to upload to url-", "[LAT],[LON]"},
+			name:        "Complex message with multiple sensitive data",
+			input:       "Failed to upload to rtsp://admin:pass@192.168.1.100:554/stream at coordinates 60.1699,24.9384",
+			contains:    []string{"Failed to upload to url-", "[LAT],[LON]"},
 			notContains: []string{"admin", "pass", "192.168.1.100", "60.1699", "24.9384"},
 		},
 		{
-			name:     "Message without sensitive data",
-			input:    "Simple error message without any sensitive information",
-			contains: []string{"Simple error message without any sensitive information"},
+			name:        "Message without sensitive data",
+			input:       "Simple error message without any sensitive information",
+			contains:    []string{"Simple error message without any sensitive information"},
 			notContains: []string{"url-", "[LAT],[LON]", "[TOKEN]"},
 		},
 		{
-			name:     "Empty message",
-			input:    "",
-			contains: []string{""},
+			name:        "Empty message",
+			input:       "",
+			contains:    []string{""},
 			notContains: []string{"url-"},
 		},
 	}
@@ -105,15 +105,15 @@ func TestScrubMessage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := ScrubMessage(tt.input)
-			
+
 			for _, expected := range tt.contains {
 				if !strings.Contains(result, expected) {
 					t.Errorf("Expected result to contain %q, but got: %s", expected, result)
 				}
 			}
-			
+
 			for _, unexpected := range tt.notContains {
 				if strings.Contains(result, unexpected) {
 					t.Errorf("Expected result to NOT contain %q, but got: %s", unexpected, result)
@@ -127,33 +127,33 @@ func TestAnonymizeURL(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		input     string
+		name         string
+		input        string
 		expectPrefix string
 	}{
 		{
-			name:      "RTSP URL with credentials",
-			input:     "rtsp://admin:password@192.168.1.100:554/stream1",
+			name:         "RTSP URL with credentials",
+			input:        "rtsp://admin:password@192.168.1.100:554/stream1",
 			expectPrefix: "url-",
 		},
 		{
-			name:      "HTTP URL with domain",
-			input:     "http://example.com/api/data",
+			name:         "HTTP URL with domain",
+			input:        "http://example.com/api/data",
 			expectPrefix: "url-",
 		},
 		{
-			name:      "HTTPS URL with port",
-			input:     "https://secure.example.com:8443/secure/api",
+			name:         "HTTPS URL with port",
+			input:        "https://secure.example.com:8443/secure/api",
 			expectPrefix: "url-",
 		},
 		{
-			name:      "Invalid URL",
-			input:     "not-a-valid-url",
+			name:         "Invalid URL",
+			input:        "not-a-valid-url",
 			expectPrefix: "url-",
 		},
 		{
-			name:      "Localhost URL",
-			input:     "http://localhost:8080/api",
+			name:         "Localhost URL",
+			input:        "http://localhost:8080/api",
 			expectPrefix: "url-",
 		},
 	}
@@ -161,13 +161,13 @@ func TestAnonymizeURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := AnonymizeURL(tt.input)
-			
+
 			if !strings.HasPrefix(result, tt.expectPrefix) {
 				t.Errorf("Expected result to start with %q, but got: %s", tt.expectPrefix, result)
 			}
-			
+
 			// Ensure consistent anonymization - same input should produce same output
 			result2 := AnonymizeURL(tt.input)
 			if result != result2 {
@@ -225,7 +225,7 @@ func TestSanitizeRTSPUrl(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := SanitizeRTSPUrl(tt.input)
 			if result != tt.expected {
 				t.Errorf("Expected %q, but got %q", tt.expected, result)
@@ -277,7 +277,7 @@ func TestSanitizeRTSPUrls(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := SanitizeRTSPUrls(tt.input)
 			if result != tt.expected {
 				t.Errorf("SanitizeRTSPUrls() = %q, want %q", result, tt.expected)
@@ -291,28 +291,28 @@ func TestGenerateSystemID(t *testing.T) {
 
 	// Test multiple generations to ensure they're unique
 	ids := make(map[string]bool)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		id, err := GenerateSystemID()
 		if err != nil {
 			t.Fatalf("GenerateSystemID failed: %v", err)
 		}
-		
+
 		// Check format
 		if !IsValidSystemID(id) {
 			t.Errorf("Generated ID %q is not valid", id)
 		}
-		
+
 		// Check uniqueness
 		if ids[id] {
 			t.Errorf("Duplicate ID generated: %q", id)
 		}
 		ids[id] = true
-		
+
 		// Check format manually as well
 		if len(id) != 14 {
 			t.Errorf("Expected ID length 14, got %d for ID: %q", len(id), id)
 		}
-		
+
 		if id[4] != '-' || id[9] != '-' {
 			t.Errorf("Expected hyphens at positions 4 and 9, got: %q", id)
 		}
@@ -377,7 +377,7 @@ func TestIsValidSystemID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := IsValidSystemID(tt.input)
 			if result != tt.valid {
 				t.Errorf("Expected IsValidSystemID(%q) = %v, got %v", tt.input, tt.valid, result)
@@ -469,7 +469,7 @@ func TestCategorizeHost(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := categorizeHost(tt.input)
 			if result != tt.expected {
 				t.Errorf("Expected categorizeHost(%q) = %q, got %q", tt.input, tt.expected, result)
@@ -546,7 +546,7 @@ func TestIsPrivateIP(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := IsPrivateIP(tt.input)
 			if result != tt.expected {
 				t.Errorf("Expected isPrivateIP(%q) = %v, got %v", tt.input, tt.expected, result)
@@ -603,7 +603,7 @@ func TestIsIPAddress(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := isIPAddress(tt.input)
 			if result != tt.expected {
 				t.Errorf("Expected isIPAddress(%q) = %v, got %v", tt.input, tt.expected, result)
@@ -781,7 +781,7 @@ func TestIsHexChar(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := isHexChar(tt.input)
 			if result != tt.expected {
 				t.Errorf("Expected isHexChar(%q) = %v, got %v", tt.input, tt.expected, result)
@@ -853,7 +853,7 @@ func TestCategorizeDomain(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := categorizeDomain(tt.input)
 			if result != tt.expected {
 				t.Errorf("Expected categorizeDomain(%q) = %q, got %q", tt.input, tt.expected, result)
@@ -968,8 +968,6 @@ func TestScrubAPITokens(t *testing.T) {
 	runScrubTests(t, ScrubAPITokens, tests)
 }
 
-
-
 func TestScrubEmails(t *testing.T) {
 	t.Parallel()
 
@@ -1008,7 +1006,7 @@ func TestScrubEmails(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := ScrubEmails(tt.input)
 			if result != tt.expected {
 				t.Errorf("Expected %q, but got %q", tt.expected, result)
@@ -1055,7 +1053,7 @@ func TestScrubUUIDs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := ScrubUUIDs(tt.input)
 			if result != tt.expected {
 				t.Errorf("Expected %q, but got %q", tt.expected, result)
@@ -1108,15 +1106,15 @@ func TestScrubStandaloneIPs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := ScrubStandaloneIPs(tt.input)
-			
+
 			for _, expected := range tt.contains {
 				if !strings.Contains(result, expected) {
 					t.Errorf("Expected result to contain %q, but got: %s", expected, result)
 				}
 			}
-			
+
 			for _, unexpected := range tt.notContains {
 				if strings.Contains(result, unexpected) {
 					t.Errorf("Expected result to NOT contain %q, but got: %s", unexpected, result)
@@ -1154,7 +1152,7 @@ func TestBearerTokenScrubbing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := ScrubAPITokens(tt.input)
 			if result != tt.expected {
 				t.Errorf("Expected %q, but got %q", tt.expected, result)
@@ -1232,9 +1230,9 @@ func TestRedactUserAgent(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := RedactUserAgent(tc.input)
-			
+
 			// Check exact match if expected is specified
 			if tc.expected != "" {
 				if tc.expected == "ua-" {
@@ -1246,14 +1244,14 @@ func TestRedactUserAgent(t *testing.T) {
 					t.Errorf("Expected %q, got %q", tc.expected, result)
 				}
 			}
-			
+
 			// Check that expected components are present
 			for _, component := range tc.contains {
 				if !strings.Contains(result, component) {
 					t.Errorf("Expected result to contain %q, got %q", component, result)
 				}
 			}
-			
+
 			// Ensure no version numbers are present
 			if tc.input != "" && tc.expected != "" {
 				// Check that common version patterns are removed
@@ -1271,7 +1269,6 @@ func TestRedactUserAgent(t *testing.T) {
 		})
 	}
 }
-
 
 func TestSanitizeFFmpegError(t *testing.T) {
 	t.Parallel()

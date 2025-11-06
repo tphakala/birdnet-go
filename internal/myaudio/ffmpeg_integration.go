@@ -224,9 +224,7 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 	}
 
 	// Handle restart signals in a separate goroutine
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-quitChan:
@@ -250,7 +248,7 @@ func CaptureAudioRTSP(url, transport string, wg *sync.WaitGroup, quitChan <-chan
 				}
 			}
 		}
-	}()
+	})
 }
 
 // SyncRTSPStreamsWithConfig synchronizes running RTSP streams with configuration

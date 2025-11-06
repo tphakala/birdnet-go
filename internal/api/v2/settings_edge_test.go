@@ -22,13 +22,13 @@ func TestBoundaryValues(t *testing.T) {
 	tests := []struct {
 		name         string
 		section      string
-		boundaryData interface{}
+		boundaryData any
 		description  string
 	}{
 		{
 			name:    "Port number boundaries",
 			section: "webserver",
-			boundaryData: map[string]interface{}{
+			boundaryData: map[string]any{
 				"port": "1", // Minimum valid port
 			},
 			description: "Should accept minimum port number",
@@ -36,7 +36,7 @@ func TestBoundaryValues(t *testing.T) {
 		{
 			name:    "Maximum valid port",
 			section: "webserver",
-			boundaryData: map[string]interface{}{
+			boundaryData: map[string]any{
 				"port": "65535", // Maximum valid port
 			},
 			description: "Should accept maximum port number",
@@ -44,7 +44,7 @@ func TestBoundaryValues(t *testing.T) {
 		{
 			name:    "Zero threshold",
 			section: "birdnet",
-			boundaryData: map[string]interface{}{
+			boundaryData: map[string]any{
 				"threshold": 0.0,
 			},
 			description: "Should accept zero threshold",
@@ -52,7 +52,7 @@ func TestBoundaryValues(t *testing.T) {
 		{
 			name:    "Maximum threshold",
 			section: "birdnet",
-			boundaryData: map[string]interface{}{
+			boundaryData: map[string]any{
 				"threshold": 1.0,
 			},
 			description: "Should accept maximum threshold",
@@ -60,7 +60,7 @@ func TestBoundaryValues(t *testing.T) {
 		{
 			name:    "Minimum latitude",
 			section: "birdnet",
-			boundaryData: map[string]interface{}{
+			boundaryData: map[string]any{
 				"latitude": -90.0,
 			},
 			description: "Should accept minimum latitude",
@@ -68,7 +68,7 @@ func TestBoundaryValues(t *testing.T) {
 		{
 			name:    "Maximum latitude",
 			section: "birdnet",
-			boundaryData: map[string]interface{}{
+			boundaryData: map[string]any{
 				"latitude": 90.0,
 			},
 			description: "Should accept maximum latitude",
@@ -76,7 +76,7 @@ func TestBoundaryValues(t *testing.T) {
 		{
 			name:    "Minimum longitude",
 			section: "birdnet",
-			boundaryData: map[string]interface{}{
+			boundaryData: map[string]any{
 				"longitude": -180.0,
 			},
 			description: "Should accept minimum longitude",
@@ -84,7 +84,7 @@ func TestBoundaryValues(t *testing.T) {
 		{
 			name:    "Maximum longitude",
 			section: "birdnet",
-			boundaryData: map[string]interface{}{
+			boundaryData: map[string]any{
 				"longitude": 180.0,
 			},
 			description: "Should accept maximum longitude",
@@ -92,7 +92,7 @@ func TestBoundaryValues(t *testing.T) {
 		{
 			name:    "Empty string in text field",
 			section: "mqtt",
-			boundaryData: map[string]interface{}{
+			boundaryData: map[string]any{
 				"topic": "",
 			},
 			description: "Should accept empty string in topic",
@@ -100,10 +100,10 @@ func TestBoundaryValues(t *testing.T) {
 		{
 			name:    "Maximum array size",
 			section: "rtsp",
-			boundaryData: map[string]interface{}{
+			boundaryData: map[string]any{
 				"urls": func() []string {
 					urls := make([]string, 100)
-					for i := 0; i < 100; i++ {
+					for i := range 100 {
 						urls[i] = fmt.Sprintf("rtsp://camera%d.example.com:554/stream%d", i+1, i+1)
 					}
 					return urls
@@ -114,7 +114,7 @@ func TestBoundaryValues(t *testing.T) {
 		{
 			name:    "Single character string",
 			section: "dashboard",
-			boundaryData: map[string]interface{}{
+			boundaryData: map[string]any{
 				"locale": "a",
 			},
 			description: "Should accept single character locale",
@@ -122,7 +122,7 @@ func TestBoundaryValues(t *testing.T) {
 		{
 			name:    "Maximum string length",
 			section: "mqtt",
-			boundaryData: map[string]interface{}{
+			boundaryData: map[string]any{
 				"broker": "tcp://" + strings.Repeat("a", 250),
 			},
 			description: "Should handle long broker strings",
@@ -164,13 +164,13 @@ func TestSpecialCharacterHandling(t *testing.T) {
 	tests := []struct {
 		name        string
 		section     string
-		specialData interface{}
+		specialData any
 		description string
 	}{
 		{
 			name:    "UTF-8 characters in strings",
 			section: "species",
-			specialData: map[string]interface{}{
+			specialData: map[string]any{
 				"include": []string{"🦅 Eagle", "ñandú", "räkättirastas", "鳥"},
 			},
 			description: "Should handle UTF-8 characters",
@@ -178,7 +178,7 @@ func TestSpecialCharacterHandling(t *testing.T) {
 		{
 			name:    "Escaped characters",
 			section: "mqtt",
-			specialData: map[string]interface{}{
+			specialData: map[string]any{
 				"topic": "birdnet\\detection\\new",
 			},
 			description: "Should handle escaped backslashes",
@@ -186,7 +186,7 @@ func TestSpecialCharacterHandling(t *testing.T) {
 		{
 			name:    "Quotes in strings",
 			section: "dashboard",
-			specialData: map[string]interface{}{
+			specialData: map[string]any{
 				"locale": `en"US'test`,
 			},
 			description: "Should handle quotes in strings",
@@ -194,7 +194,7 @@ func TestSpecialCharacterHandling(t *testing.T) {
 		{
 			name:    "Line breaks in strings",
 			section: "mqtt",
-			specialData: map[string]interface{}{
+			specialData: map[string]any{
 				"topic": "birdnet\ndetection",
 			},
 			description: "Should handle line breaks",
@@ -202,7 +202,7 @@ func TestSpecialCharacterHandling(t *testing.T) {
 		{
 			name:    "Tab characters",
 			section: "mqtt",
-			specialData: map[string]interface{}{
+			specialData: map[string]any{
 				"topic": "birdnet\tdetection",
 			},
 			description: "Should handle tab characters",
@@ -210,7 +210,7 @@ func TestSpecialCharacterHandling(t *testing.T) {
 		{
 			name:    "URL encoding",
 			section: "mqtt",
-			specialData: map[string]interface{}{
+			specialData: map[string]any{
 				"broker": "tcp://broker.example.com:1883?param=value&other=test",
 			},
 			description: "Should handle URL with query parameters",
@@ -218,7 +218,7 @@ func TestSpecialCharacterHandling(t *testing.T) {
 		{
 			name:    "HTML entities",
 			section: "dashboard",
-			specialData: map[string]interface{}{
+			specialData: map[string]any{
 				"locale": "&lt;en&gt;",
 			},
 			description: "Should handle HTML entities",
@@ -226,8 +226,8 @@ func TestSpecialCharacterHandling(t *testing.T) {
 		{
 			name:    "Mixed case field names",
 			section: "birdnet",
-			specialData: map[string]interface{}{
-				"rangeFilter": map[string]interface{}{
+			specialData: map[string]any{
+				"rangeFilter": map[string]any{
 					"threshold": 0.05,
 				},
 			},
@@ -271,14 +271,14 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 	tests := []struct {
 		name        string
 		section     string
-		update      interface{}
+		update      any
 		description string
 		shouldSkip  []string
 	}{
 		{
 			name:    "Runtime fields in BirdNET",
 			section: "birdnet",
-			update: map[string]interface{}{
+			update: map[string]any{
 				"labels": []string{"test1", "test2"}, // Runtime field
 			},
 			description: "Should skip runtime-only fields",
@@ -287,8 +287,8 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 		{
 			name:    "RangeFilter runtime fields",
 			section: "birdnet",
-			update: map[string]interface{}{
-				"rangeFilter": map[string]interface{}{
+			update: map[string]any{
+				"rangeFilter": map[string]any{
 					"species":     []string{"test species"}, // Runtime field
 					"lastUpdated": "2024-01-01T00:00:00Z",   // Runtime field
 					"threshold":   0.05,                     // Allowed field
@@ -300,9 +300,9 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 		{
 			name:    "Audio runtime fields",
 			section: "audio",
-			update: map[string]interface{}{
+			update: map[string]any{
 				"soxAudioTypes": []string{"wav", "mp3"}, // Runtime field
-				"export": map[string]interface{}{
+				"export": map[string]any{
 					"enabled": true, // Allowed field
 				},
 			},
@@ -338,11 +338,11 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 				assert.Equal(t, http.StatusOK, rec.Code)
 
 				// Check response for skipped fields
-				var response map[string]interface{}
+				var response map[string]any
 				err = json.Unmarshal(rec.Body.Bytes(), &response)
 				require.NoError(t, err)
 
-				if skippedFields, ok := response["skippedFields"].([]interface{}); ok && len(tt.shouldSkip) > 0 {
+				if skippedFields, ok := response["skippedFields"].([]any); ok && len(tt.shouldSkip) > 0 {
 					t.Logf("Skipped fields: %v", skippedFields)
 					// Verify expected fields were skipped
 					for _, expectedSkip := range tt.shouldSkip {
@@ -394,9 +394,9 @@ func TestComplexNestedPreservation(t *testing.T) {
 	copy(initialExclude, controller.Settings.Realtime.Species.Exclude)
 
 	// Update only one deeply nested field
-	update := map[string]interface{}{
-		"config": map[string]interface{}{
-			"Robin": map[string]interface{}{
+	update := map[string]any{
+		"config": map[string]any{
+			"Robin": map[string]any{
 				"threshold": 0.85, // Only change this
 			},
 		},

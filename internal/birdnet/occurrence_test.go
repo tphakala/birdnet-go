@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/observation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/observation"
 	"go.uber.org/goleak"
 )
 
@@ -92,7 +92,7 @@ func TestObservationWithOccurrence(t *testing.T) {
 	// Create a test observation with occurrence value
 	beginTime := time.Now()
 	endTime := beginTime.Add(3 * time.Second)
-	species := "Turdus merula_blackbird"  // Format: "Scientific Name_Common Name"
+	species := "Turdus merula_blackbird" // Format: "Scientific Name_Common Name"
 	confidence := 0.85
 	source := "test_audio"
 	clipName := "test_clip.wav"
@@ -133,11 +133,11 @@ func TestObservationWithOccurrence_Rounding(t *testing.T) {
 	beginTime := time.Now()
 	endTime := beginTime.Add(3 * time.Second)
 	species := "Turdus merula_blackbird"
-	confidence := 0.853  // Value that gets rounded to two decimals
+	confidence := 0.853 // Value that gets rounded to two decimals
 	source := "test_audio"
 	clipName := "test_clip.wav"
 	elapsedTime := 100 * time.Millisecond
-	occurrence := 0.853  // Test occurrence value that should be rounded
+	occurrence := 0.853 // Test occurrence value that should be rounded
 
 	// Create the note
 	note := observation.New(settings, beginTime, endTime, species, confidence, source, clipName, elapsedTime, occurrence)
@@ -178,14 +178,14 @@ func TestNoteJSONIncludesOccurrence(t *testing.T) {
 	require.NoError(t, err, "JSON marshaling should not error")
 
 	// Unmarshal into map to properly test the occurrence field
-	var jsonMap map[string]interface{}
+	var jsonMap map[string]any
 	err = json.Unmarshal(jsonData, &jsonMap)
 	require.NoError(t, err, "JSON unmarshaling should not error")
 
 	// Assert that the occurrence key exists and has the correct numeric value
 	occurrenceValue, exists := jsonMap["occurrence"]
 	require.True(t, exists, "JSON should contain occurrence key")
-	
+
 	// Cast to float64 and assert the value with epsilon for floating-point comparison
 	occurrenceFloat, ok := occurrenceValue.(float64)
 	require.True(t, ok, "occurrence value should be a float64")
@@ -223,7 +223,7 @@ func TestNoteJSONOmitsOccurrenceWhenZero(t *testing.T) {
 	require.NoError(t, err, "JSON marshaling should not error")
 
 	// Unmarshal into map to verify occurrence key is omitted
-	var jsonMap map[string]interface{}
+	var jsonMap map[string]any
 	err = json.Unmarshal(jsonData, &jsonMap)
 	require.NoError(t, err, "JSON unmarshaling should not error")
 
@@ -231,4 +231,3 @@ func TestNoteJSONOmitsOccurrenceWhenZero(t *testing.T) {
 	_, exists := jsonMap["occurrence"]
 	assert.False(t, exists, "JSON should omit occurrence key when value is 0.0 due to omitzero tag")
 }
-

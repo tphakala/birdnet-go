@@ -113,21 +113,21 @@ func TestMergeJSONIntoStruct(t *testing.T) {
 func TestDeepMergeMaps(t *testing.T) {
 	tests := []struct {
 		name     string
-		dst      map[string]interface{}
-		src      map[string]interface{}
-		expected map[string]interface{}
+		dst      map[string]any
+		src      map[string]any
+		expected map[string]any
 	}{
 		{
 			name: "Simple merge",
-			dst: map[string]interface{}{
+			dst: map[string]any{
 				"a": 1,
 				"b": 2,
 			},
-			src: map[string]interface{}{
+			src: map[string]any{
 				"b": 3,
 				"c": 4,
 			},
-			expected: map[string]interface{}{
+			expected: map[string]any{
 				"a": 1,
 				"b": 3,
 				"c": 4,
@@ -135,20 +135,20 @@ func TestDeepMergeMaps(t *testing.T) {
 		},
 		{
 			name: "Nested merge",
-			dst: map[string]interface{}{
-				"top": map[string]interface{}{
+			dst: map[string]any{
+				"top": map[string]any{
 					"a": 1,
 					"b": 2,
 				},
 			},
-			src: map[string]interface{}{
-				"top": map[string]interface{}{
+			src: map[string]any{
+				"top": map[string]any{
 					"b": 3,
 					"c": 4,
 				},
 			},
-			expected: map[string]interface{}{
-				"top": map[string]interface{}{
+			expected: map[string]any{
+				"top": map[string]any{
 					"a": 1,
 					"b": 3,
 					"c": 4,
@@ -157,23 +157,23 @@ func TestDeepMergeMaps(t *testing.T) {
 		},
 		{
 			name: "Preserve unmodified nested objects",
-			dst: map[string]interface{}{
-				"settings": map[string]interface{}{
-					"rangeFilter": map[string]interface{}{
+			dst: map[string]any{
+				"settings": map[string]any{
+					"rangeFilter": map[string]any{
 						"model":     "latest",
 						"threshold": 0.03,
 					},
 					"latitude": 40.0,
 				},
 			},
-			src: map[string]interface{}{
-				"settings": map[string]interface{}{
+			src: map[string]any{
+				"settings": map[string]any{
 					"latitude": 50.0,
 				},
 			},
-			expected: map[string]interface{}{
-				"settings": map[string]interface{}{
-					"rangeFilter": map[string]interface{}{
+			expected: map[string]any{
+				"settings": map[string]any{
+					"rangeFilter": map[string]any{
 						"model":     "latest",
 						"threshold": 0.03,
 					},
@@ -183,15 +183,15 @@ func TestDeepMergeMaps(t *testing.T) {
 		},
 		{
 			name: "Handle nil values",
-			dst: map[string]interface{}{
+			dst: map[string]any{
 				"a": 1,
 				"b": 2,
 			},
-			src: map[string]interface{}{
+			src: map[string]any{
 				"b": nil,
 				"c": 3,
 			},
-			expected: map[string]interface{}{
+			expected: map[string]any{
 				"a": 1,
 				"b": nil,
 				"c": 3,

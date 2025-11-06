@@ -14,10 +14,10 @@ func TestDiskMonitoring(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		paths          []string
-		checkFunc      func(t *testing.T, monitor *SystemMonitor)
-		skipCheckDisk  bool // Some tests need custom threshold checks
+		name          string
+		paths         []string
+		checkFunc     func(t *testing.T, monitor *SystemMonitor)
+		skipCheckDisk bool // Some tests need custom threshold checks
 	}{
 		{
 			name:  "multiple paths",
@@ -235,15 +235,13 @@ func TestSystemMonitorLifecycle(t *testing.T) {
 
 	// Use a channel to signal when the monitor has started
 	started := make(chan struct{})
-	
+
 	// Wrap Start() to signal when it's running
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		monitor.Start()
 		close(started)
-	}()
+	})
 
 	// Wait for the monitor to start or timeout
 	select {
@@ -257,7 +255,7 @@ func TestSystemMonitorLifecycle(t *testing.T) {
 	// Since CheckInterval is 1 second, wait slightly longer
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
-	
+
 	// Wait for one tick to ensure monitor is running
 	<-ticker.C
 

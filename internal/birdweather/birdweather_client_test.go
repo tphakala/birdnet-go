@@ -52,7 +52,7 @@ func createTestFLACData(t *testing.T) []byte {
 	t.Helper()
 	// Create test PCM data (1 second of 48kHz mono audio)
 	pcmData := make([]byte, 48000*2) // 2 bytes per sample for 16-bit
-	
+
 	// Fill with simple sine wave pattern for more realistic audio
 	for i := 0; i < len(pcmData); i += 2 {
 		// Simple 440Hz sine wave
@@ -60,29 +60,29 @@ func createTestFLACData(t *testing.T) []byte {
 		pcmData[i] = byte(sample & 0xFF)
 		pcmData[i+1] = byte((sample >> 8) & 0xFF)
 	}
-	
+
 	ffmpegPath := findFFmpegPath()
 	if ffmpegPath == "" {
 		t.Skip("FFmpeg not found in PATH, skipping FLAC test")
 	}
-	
+
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	
+
 	// Use the same custom args as in the main code
 	customArgs := []string{
 		"-af", "volume=15.0dB", // Simple gain adjustment
 		"-c:a", "flac",
 		"-f", "flac",
 	}
-	
+
 	// Use the myaudio package to create FLAC data
 	flacBuffer, err := myaudio.ExportAudioWithCustomFFmpegArgsContext(ctx, pcmData, ffmpegPath, customArgs)
 	if err != nil {
 		t.Fatalf("Failed to create test FLAC data: %v", err)
 	}
-	
+
 	return flacBuffer.Bytes()
 }
 
@@ -179,7 +179,7 @@ func TestRandomizeLocation(t *testing.T) {
 			// Run multiple times to check randomness
 			coordinatePairs := make(map[string]bool)
 
-			for i := 0; i < 10; i++ {
+			for range 10 {
 				lat, lon := client.RandomizeLocation(tc.radius)
 
 				// Check if coordinates are within expected range
@@ -422,7 +422,7 @@ func TestPostDetection(t *testing.T) {
 		}
 
 		// Check request body
-		var reqBody map[string]interface{}
+		var reqBody map[string]any
 		decoder := json.NewDecoder(r.Body)
 		if err := decoder.Decode(&reqBody); err != nil {
 			t.Errorf("Failed to decode request body: %v", err)

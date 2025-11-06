@@ -580,7 +580,7 @@ func TestGetBatchSpeciesStatus_CriticalReliability(t *testing.T) {
 		species := []string{"Species_A", "Species_B", "Species_C"}
 
 		// Run many concurrent batch operations
-		for i := 0; i < concurrentOps; i++ {
+		for i := range concurrentOps {
 			wg.Add(1)
 			go func(id int) {
 				defer wg.Done()
@@ -605,7 +605,7 @@ func TestGetBatchSpeciesStatus_CriticalReliability(t *testing.T) {
 // generateLargeSpeciesList creates a list of species names for testing
 func generateLargeSpeciesList(count int) []string {
 	species := make([]string, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		species[i] = fmt.Sprintf("Batch_Test_Species_%04d", i)
 	}
 	return species

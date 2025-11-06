@@ -48,18 +48,18 @@ func TestNewClient(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			disableLogging(t)
-			
+
 			client, err := NewClient(tt.config)
-			
+
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errMsg)
 				return
 			}
-			
+
 			require.NoError(t, err)
 			require.NotNil(t, client)
-			
+
 			// Check defaults were applied
 			if tt.config.BaseURL == "" {
 				assert.Equal(t, DefaultConfig().BaseURL, client.config.BaseURL)
@@ -67,7 +67,7 @@ func TestNewClient(t *testing.T) {
 			if tt.config.Timeout == 0 {
 				assert.Equal(t, DefaultConfig().Timeout, client.config.Timeout)
 			}
-			
+
 			// Cleanup
 			client.Close()
 		})
@@ -76,7 +76,7 @@ func TestNewClient(t *testing.T) {
 
 func TestDoRequest(t *testing.T) {
 	// Don't use t.Parallel() - these tests share the mock server
-	
+
 	tests := []struct {
 		name         string
 		method       string
@@ -134,32 +134,32 @@ func TestDoRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			logBuf := captureTestLogs(t)
-			
+
 			server := setupMockServer(t, map[string]mockResponse{
 				tt.path: tt.response,
 			})
 			defer server.Close()
-			
+
 			client := setupTestClient(t, server)
-			
-			var result map[string]interface{}
+
+			var result map[string]any
 			err := client.doRequest(context.Background(), tt.method, server.URL+tt.path, nil, &result)
-			
+
 			if tt.wantErr {
 				require.Error(t, err)
-				
+
 				var enhancedErr *errors.EnhancedError
 				if errors.As(err, &enhancedErr) {
 					assert.Equal(t, tt.wantCategory, enhancedErr.Category)
 				}
-				
+
 				// Check for specific error logging
 				if tt.response.status == http.StatusUnauthorized {
 					assertLogContains(t, logBuf, "eBird API authentication failed")
 				}
 				return
 			}
-			
+
 			require.NoError(t, err)
 			assert.NotNil(t, result)
 		})
@@ -168,10 +168,10 @@ func TestDoRequest(t *testing.T) {
 
 func TestGetTaxonomy(t *testing.T) {
 	// Don't use t.Parallel() - tests share cache
-	
+
 	taxonomyData := loadTestData(t, "taxonomy.json")
 	finnishData := loadTestData(t, "taxonomy_finnish.json")
-	
+
 	server := setupMockServer(t, map[string]mockResponse{
 		"/ref/taxonomy/ebird?fmt=json": {
 			status: http.StatusOK,
@@ -183,10 +183,10 @@ func TestGetTaxonomy(t *testing.T) {
 		},
 	})
 	defer server.Close()
-	
+
 	client := setupTestClient(t, server)
 	logBuf := captureTestLogs(t)
-	
+
 	// Test 1: First request - cache miss
 	t.Run("cache miss", func(t *testing.T) {
 		taxonomy, err := client.GetTaxonomy(context.Background(), "")
@@ -194,32 +194,32 @@ func TestGetTaxonomy(t *testing.T) {
 		assert.Len(t, taxonomy, 3)
 		assert.Equal(t, "Turdus migratorius", taxonomy[0].ScientificName)
 		assert.Equal(t, "American Robin", taxonomy[0].CommonName)
-		
+
 		// Should log cache storage
 		assertLogContains(t, logBuf, "eBird taxonomy cached")
 	})
-	
+
 	// Test 2: Second request - cache hit
 	t.Run("cache hit", func(t *testing.T) {
 		logBuf.Reset()
-		
+
 		taxonomy, err := client.GetTaxonomy(context.Background(), "")
 		require.NoError(t, err)
 		assert.Len(t, taxonomy, 3)
-		
+
 		// Should log cache hit
 		assertLogContains(t, logBuf, "eBird taxonomy cache hit")
 	})
-	
+
 	// Test 3: Different locale - cache miss
 	t.Run("locale variation", func(t *testing.T) {
 		logBuf.Reset()
-		
+
 		taxonomy, err := client.GetTaxonomy(context.Background(), "fi")
 		require.NoError(t, err)
 		assert.Len(t, taxonomy, 2)
 		assert.Equal(t, "punarintarastas", taxonomy[0].CommonName)
-		
+
 		// Should cache with locale key
 		assertLogContains(t, logBuf, "taxonomy:fi")
 	})
@@ -237,22 +237,22 @@ func TestGetSpeciesTaxonomy(t *testing.T) {
 		},
 	})
 	defer server.Close()
-	
+
 	client := setupTestClient(t, server)
 	disableLogging(t)
-	
+
 	t.Run("existing species", func(t *testing.T) {
 		entry, err := client.GetSpeciesTaxonomy(context.Background(), "amerob", "")
 		require.NoError(t, err)
 		assert.Equal(t, "Turdus migratorius", entry.ScientificName)
 		assert.Equal(t, "American Robin", entry.CommonName)
 	})
-	
+
 	t.Run("non-existent species", func(t *testing.T) {
 		_, err := client.GetSpeciesTaxonomy(context.Background(), "invalid", "")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "species not found")
-		
+
 		var enhancedErr *errors.EnhancedError
 		if errors.As(err, &enhancedErr) {
 			assert.Equal(t, errors.CategoryNotFound, enhancedErr.Category)
@@ -262,7 +262,7 @@ func TestGetSpeciesTaxonomy(t *testing.T) {
 
 func TestBuildFamilyTree(t *testing.T) {
 	taxonomyData := loadTestData(t, "taxonomy.json")
-	
+
 	server := setupMockServer(t, map[string]mockResponse{
 		"/ref/taxonomy/ebird?fmt=json": {
 			status: http.StatusOK,
@@ -270,14 +270,14 @@ func TestBuildFamilyTree(t *testing.T) {
 		},
 	})
 	defer server.Close()
-	
+
 	client := setupTestClient(t, server)
 	logBuf := captureTestLogs(t)
-	
+
 	t.Run("valid species", func(t *testing.T) {
 		tree, err := client.BuildFamilyTree(context.Background(), "Turdus migratorius")
 		require.NoError(t, err)
-		
+
 		assert.Equal(t, "Animalia", tree.Kingdom)
 		assert.Equal(t, "Chordata", tree.Phylum)
 		assert.Equal(t, "Aves", tree.Class)
@@ -288,10 +288,10 @@ func TestBuildFamilyTree(t *testing.T) {
 		assert.Equal(t, "Turdus migratorius", tree.Species)
 		assert.Equal(t, "American Robin", tree.SpeciesCommon)
 		assert.Len(t, tree.Subspecies, 1) // One subspecies in test data
-		
+
 		assertLogContains(t, logBuf, "eBird family tree built")
 	})
-	
+
 	t.Run("non-existent species", func(t *testing.T) {
 		_, err := client.BuildFamilyTree(context.Background(), "Nonexistent species")
 		require.Error(t, err)
@@ -309,20 +309,20 @@ func TestCaching(t *testing.T) {
 		_, _ = w.Write([]byte(`[{"sciName": "Test species", "comName": "Test", "speciesCode": "test1"}]`))
 	}))
 	defer server.Close()
-	
+
 	client := setupTestClient(t, server)
 	disableLogging(t)
-	
+
 	// First call - should hit API
 	_, err := client.GetTaxonomy(context.Background(), "")
 	require.NoError(t, err)
 	assert.Equal(t, 1, callCount)
-	
+
 	// Second call - should use cache
 	_, err = client.GetTaxonomy(context.Background(), "")
 	require.NoError(t, err)
 	assert.Equal(t, 1, callCount, "Should use cached response")
-	
+
 	// Clear cache and verify
 	client.ClearCache()
 	_, err = client.GetTaxonomy(context.Background(), "")
@@ -337,7 +337,7 @@ func TestRateLimiting(t *testing.T) {
 		_, _ = w.Write([]byte(`{"result": "ok"}`))
 	}))
 	defer server.Close()
-	
+
 	client := setupTestClient(t, server)
 	// Need to stop the existing rate limiter and create a new one
 	client.rateLimiter.Stop()
@@ -347,15 +347,15 @@ func TestRateLimiting(t *testing.T) {
 		client.rateLimiter.Stop()
 	})
 	disableLogging(t)
-	
+
 	start := time.Now()
-	
+
 	// Make 3 requests
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		err := client.doRequest(context.Background(), "GET", server.URL+"/test", nil, nil)
 		require.NoError(t, err)
 	}
-	
+
 	elapsed := time.Since(start)
 	assert.GreaterOrEqual(t, elapsed, 200*time.Millisecond, "Should enforce rate limit")
 }
@@ -372,27 +372,27 @@ func TestAuthenticationLogging(t *testing.T) {
 		_, _ = w.Write([]byte(`[{"sciName": "Test"}]`))
 	}))
 	defer server.Close()
-	
+
 	t.Run("successful authentication", func(t *testing.T) {
 		client := setupTestClient(t, server)
 		logBuf := captureTestLogs(t)
-		
+
 		// First successful request should log authentication
 		_, err := client.GetTaxonomy(context.Background(), "")
 		require.NoError(t, err)
-		
+
 		assertLogContains(t, logBuf, "eBird API authentication successful")
 		assertLogContains(t, logBuf, "eBird API key is valid and working")
 	})
-	
+
 	t.Run("failed authentication", func(t *testing.T) {
 		client := setupTestClient(t, server)
 		client.config.APIKey = "" // Remove API key
 		logBuf := captureTestLogs(t)
-		
+
 		_, err := client.GetTaxonomy(context.Background(), "")
 		require.Error(t, err)
-		
+
 		assertLogContains(t, logBuf, "eBird API authentication failed")
 		assertLogContains(t, logBuf, "Check your eBird API key")
 	})
@@ -418,7 +418,7 @@ func TestParseErrors(t *testing.T) {
 			wantErr:     "eBird API returned non-JSON response",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := setupMockServer(t, map[string]mockResponse{
@@ -429,15 +429,15 @@ func TestParseErrors(t *testing.T) {
 				},
 			})
 			defer server.Close()
-			
+
 			client := setupTestClient(t, server)
 			logBuf := captureTestLogs(t)
-			
-			var result interface{}
+
+			var result any
 			err := client.doRequest(context.Background(), "GET", server.URL+"/test", nil, &result)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
-			
+
 			if strings.Contains(tt.wantErr, "parse") {
 				assertLogContains(t, logBuf, "Failed to parse eBird API response")
 			}
@@ -448,15 +448,15 @@ func TestParseErrors(t *testing.T) {
 func TestCacheStats(t *testing.T) {
 	client := setupTestClient(t, httptest.NewServer(nil))
 	disableLogging(t)
-	
+
 	// Initially empty
 	count, _ := client.GetCacheStats()
 	assert.Equal(t, 0, count)
-	
+
 	// Add some items to cache
 	client.cache.Set("test1", "value1", time.Hour)
 	client.cache.Set("test2", "value2", time.Hour)
-	
+
 	count, _ = client.GetCacheStats()
 	assert.Equal(t, 2, count)
 }
@@ -473,21 +473,21 @@ func TestMetrics(t *testing.T) {
 		},
 	})
 	defer server.Close()
-	
+
 	client := setupTestClient(t, server)
 	disableLogging(t)
-	
+
 	// Initial metrics should be zero
 	metrics := client.GetMetrics()
 	assert.Equal(t, int64(0), metrics.APICalls)
 	assert.Equal(t, int64(0), metrics.CacheHits)
 	assert.Equal(t, int64(0), metrics.CacheMisses)
 	assert.Equal(t, int64(0), metrics.APIErrors)
-	
+
 	// Make a successful API call (cache miss)
 	_, err := client.GetTaxonomy(context.Background(), "")
 	require.NoError(t, err)
-	
+
 	metrics = client.GetMetrics()
 	assert.Equal(t, int64(1), metrics.APICalls)
 	assert.Equal(t, int64(0), metrics.CacheHits)
@@ -495,19 +495,19 @@ func TestMetrics(t *testing.T) {
 	assert.Equal(t, int64(0), metrics.APIErrors)
 	assert.Greater(t, metrics.TotalDuration, time.Duration(0))
 	assert.Greater(t, metrics.AvgDuration, time.Duration(0))
-	
+
 	// Make another call (cache hit)
 	_, err = client.GetTaxonomy(context.Background(), "")
 	require.NoError(t, err)
-	
+
 	metrics = client.GetMetrics()
 	assert.Equal(t, int64(1), metrics.APICalls, "API calls should not increase for cache hit")
 	assert.Equal(t, int64(1), metrics.CacheHits)
 	assert.Equal(t, int64(1), metrics.CacheMisses)
-	
+
 	// Make an error call
 	_ = client.doRequestWithRetry(context.Background(), "GET", server.URL+"/error", nil, nil)
-	
+
 	metrics = client.GetMetrics()
 	assert.Equal(t, int64(4), metrics.APICalls, "Should count all retry attempts")
 	assert.Equal(t, int64(3), metrics.APIErrors, "Should count all error responses")

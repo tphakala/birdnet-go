@@ -11,10 +11,10 @@ import (
 
 // SimpleDeduplicator provides basic error deduplication using a map
 type SimpleDeduplicator struct {
-	mu       sync.RWMutex
-	seen     map[string]time.Time
-	window   time.Duration
-	maxSize  int
+	mu      sync.RWMutex
+	seen    map[string]time.Time
+	window  time.Duration
+	maxSize int
 }
 
 // NewSimpleDeduplicator creates a new deduplicator
@@ -31,7 +31,7 @@ func (d *SimpleDeduplicator) IsDuplicate(key string) bool {
 	d.mu.RLock()
 	lastSeen, exists := d.seen[key]
 	d.mu.RUnlock()
-	
+
 	if !exists {
 		d.mu.Lock()
 		// Double-check after acquiring write lock
@@ -45,7 +45,7 @@ func (d *SimpleDeduplicator) IsDuplicate(key string) bool {
 		d.mu.Unlock()
 		return false
 	}
-	
+
 	// Check if within deduplication window
 	return time.Since(lastSeen) < d.window
 }
@@ -58,7 +58,7 @@ func (d *SimpleDeduplicator) cleanup() {
 	if targetDeletions == 0 {
 		return
 	}
-	
+
 	// Collect keys to delete first to avoid modifying map during iteration
 	keysToDelete := make([]string, 0, targetDeletions)
 	count := 0
@@ -69,7 +69,7 @@ func (d *SimpleDeduplicator) cleanup() {
 			break
 		}
 	}
-	
+
 	// Now delete the collected keys
 	for _, k := range keysToDelete {
 		delete(d.seen, k)
@@ -79,11 +79,11 @@ func (d *SimpleDeduplicator) cleanup() {
 // BenchmarkDeduplication measures the performance of error deduplication
 func BenchmarkDeduplication(b *testing.B) {
 	dedup := NewSimpleDeduplicator(1*time.Minute, 10000)
-	
+
 	b.Run("UniqueErrors", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		i := 0
 		for b.Loop() {
 			// Each error is unique
@@ -92,16 +92,16 @@ func BenchmarkDeduplication(b *testing.B) {
 			i++
 		}
 	})
-	
+
 	b.Run("DuplicateErrors", func(b *testing.B) {
 		// Pre-populate with some errors
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			dedup.IsDuplicate(fmt.Sprintf("error_%d", i))
 		}
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		i := 0
 		for b.Loop() {
 			// Rotate through 100 known errors
@@ -110,11 +110,11 @@ func BenchmarkDeduplication(b *testing.B) {
 			i++
 		}
 	})
-	
+
 	b.Run("MixedErrors", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		i := 0
 		for b.Loop() {
 			// 80% duplicates, 20% unique
@@ -128,11 +128,11 @@ func BenchmarkDeduplication(b *testing.B) {
 			i++
 		}
 	})
-	
+
 	b.Run("ConcurrentAccess", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		b.RunParallel(func(pb *testing.PB) {
 			i := 0
 			for pb.Next() {
@@ -148,10 +148,10 @@ func BenchmarkDeduplication(b *testing.B) {
 func BenchmarkDeduplicationMemory(b *testing.B) {
 	b.Run("LargeCache", func(b *testing.B) {
 		dedup := NewSimpleDeduplicator(5*time.Minute, 100000)
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		i := 0
 		for b.Loop() {
 			// Fill the cache with unique errors
@@ -159,7 +159,7 @@ func BenchmarkDeduplicationMemory(b *testing.B) {
 			_ = dedup.IsDuplicate(key)
 			i++
 		}
-		
+
 		b.Logf("Final cache size: %d entries", len(dedup.seen))
 	})
 }
@@ -167,20 +167,20 @@ func BenchmarkDeduplicationMemory(b *testing.B) {
 // BenchmarkHashingStrategies tests different key generation strategies
 func BenchmarkHashingStrategies(b *testing.B) {
 	err := fmt.Errorf("connection failed to https://api.example.com: timeout after 30s")
-	
+
 	b.Run("FullError", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		for b.Loop() {
 			_ = err.Error() // Use full error as key
 		}
 	})
-	
+
 	b.Run("SimplifiedError", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		for b.Loop() {
 			// Simplified: remove URLs and numbers
 			_ = privacy.ScrubMessage(err.Error())

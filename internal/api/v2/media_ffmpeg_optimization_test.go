@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 
@@ -37,8 +38,6 @@ func getSoxSpectrogramArgsBenchHelper(b *testing.B, ctx context.Context, audioPa
 
 // TestGetSoxSpectrogramArgs_FFmpegVersionOptimization verifies the FFmpeg 7.x optimization
 // that skips the expensive ffprobe call by omitting the -d (duration) parameter.
-//
-//nolint:gocognit // Comprehensive test with multiple validation steps per test case
 func TestGetSoxSpectrogramArgs_FFmpegVersionOptimization(t *testing.T) {
 	ctx := context.Background()
 	absSpectrogramPath := "/tmp/test.png"
@@ -151,13 +150,7 @@ func TestGetSoxSpectrogramArgs_FFmpegVersionOptimization(t *testing.T) {
 			// Verify essential SoX parameters are always present
 			requiredParams := []string{"-n", "rate", "24k", "spectrogram", "-x", "-y", "-z", "-o"}
 			for _, param := range requiredParams {
-				found := false
-				for _, arg := range args {
-					if arg == param {
-						found = true
-						break
-					}
-				}
+				found := slices.Contains(args, param)
 				if !found {
 					t.Errorf("Required SoX parameter %q missing from args: %v", param, args)
 				}
@@ -165,13 +158,7 @@ func TestGetSoxSpectrogramArgs_FFmpegVersionOptimization(t *testing.T) {
 
 			// Verify -r flag for raw spectrograms
 			if raw {
-				hasRawFlag := false
-				for _, arg := range args {
-					if arg == "-r" {
-						hasRawFlag = true
-						break
-					}
-				}
+				hasRawFlag := slices.Contains(args, "-r")
 				if !hasRawFlag {
 					t.Errorf("Raw flag (-r) should be present for raw=true, args: %v", args)
 				}
@@ -231,8 +218,7 @@ func BenchmarkGetSoxSpectrogramArgs_WithFFmpeg7(b *testing.B) {
 		},
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = getSoxSpectrogramArgsBenchHelper(b, ctx, "/tmp/test.flac", "/tmp/test.png", 800, true, settings)
 	}
 }
@@ -256,8 +242,8 @@ func BenchmarkGetSoxSpectrogramArgs_WithFFmpeg5(b *testing.B) {
 
 	// Note: This benchmark will show the overhead of the duration lookup path
 	// In production, the cache would help reduce this overhead for repeated calls
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = getSoxSpectrogramArgsBenchHelper(b, ctx, "/tmp/test.flac", "/tmp/test.png", 800, true, settings)
 	}
 }
@@ -282,13 +268,7 @@ func TestGetSoxSpectrogramArgs_NilSettings(t *testing.T) {
 	args := getSoxSpectrogramArgsHelper(t, ctx, "/tmp/test.flac", "/tmp/test.png", 800, true, nil)
 
 	// If we reach here without panic, verify duration parameter is present (safety fallback)
-	hasDurationFlag := false
-	for _, arg := range args {
-		if arg == "-d" {
-			hasDurationFlag = true
-			break
-		}
-	}
+	hasDurationFlag := slices.Contains(args, "-d")
 
 	if !hasDurationFlag {
 		t.Errorf("With nil settings, expected safety fallback with -d flag, but it was missing")
@@ -361,13 +341,7 @@ func TestGetSoxSpectrogramArgs_PartialSettings(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			args := getSoxSpectrogramArgsHelper(t, ctx, "/tmp/test.flac", "/tmp/test.png", 800, true, tt.settings)
 
-			hasDurationFlag := false
-			for _, arg := range args {
-				if arg == "-d" {
-					hasDurationFlag = true
-					break
-				}
-			}
+			hasDurationFlag := slices.Contains(args, "-d")
 
 			if hasDurationFlag != tt.expectDurationFlag {
 				t.Errorf("%s:\n  Expected -d flag: %v\n  Got -d flag: %v\n  Args: %v",

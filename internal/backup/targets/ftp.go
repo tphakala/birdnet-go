@@ -98,7 +98,7 @@ func NewFTPTarget(config *FTPTargetConfig, logger *slog.Logger) (*FTPTarget, err
 }
 
 // NewFTPTargetFromMap creates a new FTP target from a map configuration (for backward compatibility)
-func NewFTPTargetFromMap(settings map[string]interface{}) (*FTPTarget, error) {
+func NewFTPTargetFromMap(settings map[string]any) (*FTPTarget, error) {
 	config := FTPTargetConfig{}
 
 	// Required settings

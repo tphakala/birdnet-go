@@ -21,13 +21,13 @@ func TestMaliciousInputData(t *testing.T) {
 	tests := []struct {
 		name          string
 		section       string
-		maliciousData interface{}
+		maliciousData any
 		description   string
 	}{
 		{
 			name:    "SQL injection attempt in string field",
 			section: "mqtt",
-			maliciousData: map[string]interface{}{
+			maliciousData: map[string]any{
 				"broker": "tcp://localhost:1883'; DROP TABLE users; --",
 				"topic":  "birdnet' OR '1'='1",
 			},
@@ -36,7 +36,7 @@ func TestMaliciousInputData(t *testing.T) {
 		{
 			name:    "XSS attempt in display fields",
 			section: "dashboard",
-			maliciousData: map[string]interface{}{
+			maliciousData: map[string]any{
 				"locale": "<script>alert('XSS')</script>",
 			},
 			description: "Should accept but fields should be escaped when displayed",
@@ -44,8 +44,8 @@ func TestMaliciousInputData(t *testing.T) {
 		{
 			name:    "Path traversal attempt",
 			section: "audio",
-			maliciousData: map[string]interface{}{
-				"export": map[string]interface{}{
+			maliciousData: map[string]any{
+				"export": map[string]any{
 					"path": "../../../etc/passwd",
 				},
 			},
@@ -54,10 +54,10 @@ func TestMaliciousInputData(t *testing.T) {
 		{
 			name:    "Command injection attempt",
 			section: "species",
-			maliciousData: map[string]interface{}{
-				"config": map[string]interface{}{
-					"Test Bird": map[string]interface{}{
-						"actions": []map[string]interface{}{
+			maliciousData: map[string]any{
+				"config": map[string]any{
+					"Test Bird": map[string]any{
+						"actions": []map[string]any{
 							{
 								"type":       "ExecuteCommand",
 								"command":    "/bin/sh",
@@ -72,7 +72,7 @@ func TestMaliciousInputData(t *testing.T) {
 		{
 			name:    "Buffer overflow attempt with long string",
 			section: "mqtt",
-			maliciousData: map[string]interface{}{
+			maliciousData: map[string]any{
 				"topic": strings.Repeat("A", 10000),
 			},
 			description: "Should handle very long strings gracefully",
@@ -80,7 +80,7 @@ func TestMaliciousInputData(t *testing.T) {
 		{
 			name:    "Unicode injection",
 			section: "dashboard",
-			maliciousData: map[string]interface{}{
+			maliciousData: map[string]any{
 				"locale": "en\u202E\u0000\u200E",
 			},
 			description: "Should handle Unicode control characters",
@@ -88,8 +88,8 @@ func TestMaliciousInputData(t *testing.T) {
 		{
 			name:    "Null byte injection",
 			section: "audio",
-			maliciousData: map[string]interface{}{
-				"export": map[string]interface{}{
+			maliciousData: map[string]any{
+				"export": map[string]any{
 					"path": "clips\x00/etc/passwd",
 				},
 			},
@@ -98,7 +98,7 @@ func TestMaliciousInputData(t *testing.T) {
 		{
 			name:    "LDAP injection attempt",
 			section: "mqtt",
-			maliciousData: map[string]interface{}{
+			maliciousData: map[string]any{
 				"username": "admin)(uid=*))(|(uid=*",
 			},
 			description: "Should handle LDAP injection attempts",
@@ -106,7 +106,7 @@ func TestMaliciousInputData(t *testing.T) {
 		{
 			name:    "XML injection attempt",
 			section: "dashboard",
-			maliciousData: map[string]interface{}{
+			maliciousData: map[string]any{
 				"locale": "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><foo>&xxe;</foo>",
 			},
 			description: "Should handle XML injection attempts",
@@ -114,7 +114,7 @@ func TestMaliciousInputData(t *testing.T) {
 		{
 			name:    "JSON injection in nested field",
 			section: "mqtt",
-			maliciousData: map[string]interface{}{
+			maliciousData: map[string]any{
 				"topic": `","enabled":true,"broker":"evil.com:1883","topic":"`,
 			},
 			description: "Should handle JSON injection attempts",
@@ -164,13 +164,13 @@ func TestTypeConfusionAttacks(t *testing.T) {
 	tests := []struct {
 		name          string
 		section       string
-		confusedData  interface{}
+		confusedData  any
 		expectedError string
 	}{
 		{
 			name:    "String instead of boolean",
 			section: "mqtt",
-			confusedData: map[string]interface{}{
+			confusedData: map[string]any{
 				"enabled": "yes",
 			},
 			expectedError: "json: cannot unmarshal",
@@ -178,7 +178,7 @@ func TestTypeConfusionAttacks(t *testing.T) {
 		{
 			name:    "Number instead of string",
 			section: "mqtt",
-			confusedData: map[string]interface{}{
+			confusedData: map[string]any{
 				"broker": 12345,
 			},
 			expectedError: "json: cannot unmarshal",
@@ -186,7 +186,7 @@ func TestTypeConfusionAttacks(t *testing.T) {
 		{
 			name:    "Object instead of array",
 			section: "rtsp",
-			confusedData: map[string]interface{}{
+			confusedData: map[string]any{
 				"urls": map[string]string{"url1": "rtsp://localhost"},
 			},
 			expectedError: "json: cannot unmarshal",
@@ -194,7 +194,7 @@ func TestTypeConfusionAttacks(t *testing.T) {
 		{
 			name:    "Array instead of object",
 			section: "dashboard",
-			confusedData: map[string]interface{}{
+			confusedData: map[string]any{
 				"thumbnails": []string{"summary", "recent"},
 			},
 			expectedError: "json: cannot unmarshal",
@@ -202,7 +202,7 @@ func TestTypeConfusionAttacks(t *testing.T) {
 		{
 			name:    "Null for required field",
 			section: "birdnet",
-			confusedData: map[string]interface{}{
+			confusedData: map[string]any{
 				"latitude": nil,
 			},
 			expectedError: "json: cannot unmarshal",
@@ -210,7 +210,7 @@ func TestTypeConfusionAttacks(t *testing.T) {
 		{
 			name:    "Boolean instead of number",
 			section: "birdnet",
-			confusedData: map[string]interface{}{
+			confusedData: map[string]any{
 				"threshold": true,
 			},
 			expectedError: "json: cannot unmarshal",
@@ -218,9 +218,9 @@ func TestTypeConfusionAttacks(t *testing.T) {
 		{
 			name:    "String instead of number array",
 			section: "audio",
-			confusedData: map[string]interface{}{
-				"export": map[string]interface{}{
-					"retention": map[string]interface{}{
+			confusedData: map[string]any{
+				"export": map[string]any{
+					"retention": map[string]any{
 						"minClips": "ten",
 					},
 				},
@@ -230,8 +230,8 @@ func TestTypeConfusionAttacks(t *testing.T) {
 		{
 			name:    "Invalid enum value",
 			section: "audio",
-			confusedData: map[string]interface{}{
-				"export": map[string]interface{}{
+			confusedData: map[string]any{
+				"export": map[string]any{
 					"type": "invalid_format",
 				},
 			},

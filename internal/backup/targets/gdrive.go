@@ -49,7 +49,7 @@ func newRateLimiter(maxTokens int, resetInterval time.Duration) *rateLimiter {
 	}
 
 	// Initialize tokens
-	for i := 0; i < maxTokens; i++ {
+	for range maxTokens {
 		rl.tokens <- struct{}{}
 	}
 
@@ -801,7 +801,7 @@ func (t *GDriveTarget) Close() error {
 }
 
 // NewGDriveTargetFromMap creates a new Google Drive target from a map configuration
-func NewGDriveTargetFromMap(settings map[string]interface{}) (*GDriveTarget, error) {
+func NewGDriveTargetFromMap(settings map[string]any) (*GDriveTarget, error) {
 	config := GDriveTargetConfig{}
 
 	// Required settings

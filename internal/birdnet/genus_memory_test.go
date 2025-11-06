@@ -39,11 +39,11 @@ func TestConcurrentAccess(t *testing.T) {
 	// Track errors from goroutines
 	errChan := make(chan error, numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(routineID int) {
 			defer wg.Done()
 
-			for j := 0; j < lookupsPerGoroutine; j++ {
+			for j := range lookupsPerGoroutine {
 				tc := testCases[j%len(testCases)]
 
 				// Test GetGenusByScientificName
@@ -104,7 +104,7 @@ func TestMemoryLeaks(t *testing.T) {
 
 	// Perform many operations
 	const iterations = 10000
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		// Rotate through different species
 		species := []string{
 			"Turdus migratorius",
@@ -253,9 +253,8 @@ func BenchmarkGetAllSpeciesInGenus(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := db.GetAllSpeciesInGenus("turdus")
 		if err != nil {
 			b.Fatalf("GetAllSpeciesInGenus failed: %v", err)
@@ -271,9 +270,8 @@ func BenchmarkGetAllSpeciesInFamily(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := db.GetAllSpeciesInFamily("strigidae")
 		if err != nil {
 			b.Fatalf("GetAllSpeciesInFamily failed: %v", err)
@@ -289,9 +287,8 @@ func BenchmarkSearchGenus(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		matches := db.SearchGenus("corv")
 		if len(matches) == 0 {
 			b.Fatal("Expected matches")
@@ -307,9 +304,8 @@ func BenchmarkSearchFamily(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		matches := db.SearchFamily("strig")
 		if len(matches) == 0 {
 			b.Fatal("Expected matches")

@@ -16,11 +16,11 @@ import (
 
 // Disk space requirements for different operations (in MB)
 const (
-	MinDiskSpaceStartup  = 1024 // Startup requires 1GB for safe operation (migrations, backups, WAL, etc.)
-	MinDiskSpaceVacuum   = 500  // VACUUM can temporarily double database size
-	MinDiskSpaceBackup   = 200  // Backup operations need significant space
-	MinDiskSpaceBulk     = 100  // Bulk operations need extra space
-	MinDiskSpaceDefault  = 50   // Default minimum for normal operations
+	MinDiskSpaceStartup = 1024 // Startup requires 1GB for safe operation (migrations, backups, WAL, etc.)
+	MinDiskSpaceVacuum  = 500  // VACUUM can temporarily double database size
+	MinDiskSpaceBackup  = 200  // Backup operations need significant space
+	MinDiskSpaceBulk    = 100  // Bulk operations need extra space
+	MinDiskSpaceDefault = 50   // Default minimum for normal operations
 )
 
 // Mount info cache for performance
@@ -48,59 +48,59 @@ var operationDiskRequirements = map[string]uint64{
 
 // ResourceSnapshot captures system resources at a point in time
 type ResourceSnapshot struct {
-	Timestamp        time.Time         `json:"timestamp"`
-	DiskSpace        DiskSpaceInfo     `json:"disk_space"`
-	DatabaseFile     DatabaseFileInfo  `json:"database_file"`
-	SystemMemory     MemoryInfo        `json:"system_memory"`
-	ProcessInfo      ProcessInfo       `json:"process_info"`
-	DatabaseMetrics  DatabaseMetrics   `json:"database_metrics,omitempty"`
+	Timestamp       time.Time        `json:"timestamp"`
+	DiskSpace       DiskSpaceInfo    `json:"disk_space"`
+	DatabaseFile    DatabaseFileInfo `json:"database_file"`
+	SystemMemory    MemoryInfo       `json:"system_memory"`
+	ProcessInfo     ProcessInfo      `json:"process_info"`
+	DatabaseMetrics DatabaseMetrics  `json:"database_metrics"`
 }
 
 // DiskSpaceInfo contains disk space information for the database partition
 type DiskSpaceInfo struct {
-	MountPoint      string  `json:"mount_point"`
-	TotalBytes      uint64  `json:"total_bytes"`
-	AvailableBytes  uint64  `json:"available_bytes"`
-	UsedBytes       uint64  `json:"used_bytes"`
-	UsedPercent     float64 `json:"used_percent"`
-	InodesFree      uint64  `json:"inodes_free,omitempty"`
-	InodesTotal     uint64  `json:"inodes_total,omitempty"`
-	FileSystemType  string  `json:"filesystem_type,omitempty"`
+	MountPoint     string  `json:"mount_point"`
+	TotalBytes     uint64  `json:"total_bytes"`
+	AvailableBytes uint64  `json:"available_bytes"`
+	UsedBytes      uint64  `json:"used_bytes"`
+	UsedPercent    float64 `json:"used_percent"`
+	InodesFree     uint64  `json:"inodes_free,omitempty"`
+	InodesTotal    uint64  `json:"inodes_total,omitempty"`
+	FileSystemType string  `json:"filesystem_type,omitempty"`
 }
 
 // DatabaseFileInfo contains information about database files
 type DatabaseFileInfo struct {
-	Path            string    `json:"path"`
-	SizeBytes       int64     `json:"size_bytes"`
-	Permissions     string    `json:"permissions"`
-	LastModified    time.Time `json:"last_modified"`
-	JournalExists   bool      `json:"journal_exists"`
-	JournalSize     int64     `json:"journal_size"`
-	WALExists       bool      `json:"wal_exists"`
-	WALSize         int64     `json:"wal_size"`
-	SHMExists       bool      `json:"shm_exists"`
-	SHMSize         int64     `json:"shm_size"`
+	Path          string    `json:"path"`
+	SizeBytes     int64     `json:"size_bytes"`
+	Permissions   string    `json:"permissions"`
+	LastModified  time.Time `json:"last_modified"`
+	JournalExists bool      `json:"journal_exists"`
+	JournalSize   int64     `json:"journal_size"`
+	WALExists     bool      `json:"wal_exists"`
+	WALSize       int64     `json:"wal_size"`
+	SHMExists     bool      `json:"shm_exists"`
+	SHMSize       int64     `json:"shm_size"`
 }
 
 // MemoryInfo contains system memory information
 type MemoryInfo struct {
-	TotalBytes      uint64  `json:"total_bytes"`
-	AvailableBytes  uint64  `json:"available_bytes"`
-	UsedBytes       uint64  `json:"used_bytes"`
-	UsedPercent     float64 `json:"used_percent"`
-	SwapTotalBytes  uint64  `json:"swap_total_bytes,omitempty"`
-	SwapUsedBytes   uint64  `json:"swap_used_bytes,omitempty"`
+	TotalBytes     uint64  `json:"total_bytes"`
+	AvailableBytes uint64  `json:"available_bytes"`
+	UsedBytes      uint64  `json:"used_bytes"`
+	UsedPercent    float64 `json:"used_percent"`
+	SwapTotalBytes uint64  `json:"swap_total_bytes,omitempty"`
+	SwapUsedBytes  uint64  `json:"swap_used_bytes,omitempty"`
 }
 
 // ProcessInfo contains current process resource usage
 type ProcessInfo struct {
-	PID                int     `json:"pid"`
-	ResidentMemoryMB   int64   `json:"resident_memory_mb"`
-	VirtualMemoryMB    int64   `json:"virtual_memory_mb"`
-	CPUUsagePercent    float64 `json:"cpu_usage_percent,omitempty"`
-	GoroutineCount     int     `json:"goroutine_count"`
-	HeapAllocMB        int64   `json:"heap_alloc_mb"`
-	HeapSysMB          int64   `json:"heap_sys_mb"`
+	PID              int     `json:"pid"`
+	ResidentMemoryMB int64   `json:"resident_memory_mb"`
+	VirtualMemoryMB  int64   `json:"virtual_memory_mb"`
+	CPUUsagePercent  float64 `json:"cpu_usage_percent,omitempty"`
+	GoroutineCount   int     `json:"goroutine_count"`
+	HeapAllocMB      int64   `json:"heap_alloc_mb"`
+	HeapSysMB        int64   `json:"heap_sys_mb"`
 }
 
 // DatabaseMetrics contains database-specific metrics
@@ -152,10 +152,10 @@ func CaptureResourceSnapshot(dbPath string) (*ResourceSnapshot, error) {
 // captureDiskSpaceWithManager gathers disk space information using diskmanager package
 func captureDiskSpaceWithManager(dbPath string) (DiskSpaceInfo, error) {
 	info := DiskSpaceInfo{}
-	
+
 	// Get directory containing the database file
 	dir := filepath.Dir(dbPath)
-	
+
 	// Use diskmanager for core disk space data
 	diskData, err := diskmanager.GetDetailedDiskUsage(dir)
 	if err != nil {
@@ -166,8 +166,8 @@ func captureDiskSpaceWithManager(dbPath string) (DiskSpaceInfo, error) {
 			Context("path", dir).
 			Build()
 	}
-	
-	// Get available space using diskmanager  
+
+	// Get available space using diskmanager
 	availableBytes, err := diskmanager.GetAvailableSpace(dir)
 	if err != nil {
 		return info, errors.New(err).
@@ -177,17 +177,17 @@ func captureDiskSpaceWithManager(dbPath string) (DiskSpaceInfo, error) {
 			Context("path", dir).
 			Build()
 	}
-	
+
 	// Populate core disk data from diskmanager
 	info.TotalBytes = diskData.TotalBytes
 	info.UsedBytes = diskData.UsedBytes
 	info.AvailableBytes = availableBytes
-	
+
 	// Calculate usage percentage
 	if info.TotalBytes > 0 {
 		info.UsedPercent = float64(info.UsedBytes) / float64(info.TotalBytes) * 100.0
 	}
-	
+
 	// Add our value-add fields: mount point, filesystem type, inodes
 	if mountInfo, err := getMountInfo(dir); err == nil {
 		info.MountPoint = mountInfo.MountPoint
@@ -197,13 +197,13 @@ func captureDiskSpaceWithManager(dbPath string) (DiskSpaceInfo, error) {
 		info.MountPoint = dir
 		info.FileSystemType = "unknown"
 	}
-	
+
 	// Add inode information (Unix-specific, will be 0 on Windows)
 	if inodeInfo, err := getInodeInfo(dir); err == nil {
 		info.InodesFree = inodeInfo.Free
 		info.InodesTotal = inodeInfo.Total
 	}
-	
+
 	return info, nil
 }
 
@@ -253,7 +253,7 @@ func captureProcessInfo() (ProcessInfo, error) {
 	// Capture Go runtime memory stats
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
-	
+
 	info.HeapAllocMB = int64(memStats.HeapAlloc / 1024 / 1024)
 	info.HeapSysMB = int64(memStats.HeapSys / 1024 / 1024)
 
@@ -373,7 +373,7 @@ func ValidateResourceAvailability(dbPath, operation string) error {
 
 	// Check inode availability (important for databases with many files)
 	if snapshot.DiskSpace.InodesFree > 0 && snapshot.DiskSpace.InodesFree < 1000 {
-		return errors.Newf("insufficient inodes available: %d free (minimum: 1000)", 
+		return errors.Newf("insufficient inodes available: %d free (minimum: 1000)",
 			snapshot.DiskSpace.InodesFree).
 			Component("datastore").
 			Category(errors.CategorySystem).
@@ -387,7 +387,7 @@ func ValidateResourceAvailability(dbPath, operation string) error {
 	if isMemoryIntensiveOperation(operation) {
 		availableMemoryMB := snapshot.SystemMemory.AvailableBytes / 1024 / 1024
 		if availableMemoryMB < 100 { // Require at least 100MB free
-			return errors.Newf("insufficient memory for operation '%s': %dMB available (minimum: 100MB)", 
+			return errors.Newf("insufficient memory for operation '%s': %dMB available (minimum: 100MB)",
 				operation, availableMemoryMB).
 				Component("datastore").
 				Category(errors.CategorySystem).
@@ -412,10 +412,10 @@ func getMinimumDiskSpaceForOperation(operation string) uint64 {
 // isMemoryIntensiveOperation checks if an operation requires significant memory
 func isMemoryIntensiveOperation(operation string) bool {
 	memoryIntensiveOps := []string{
-		"vacuum", "optimize", "bulk_insert", "migration", 
+		"vacuum", "optimize", "bulk_insert", "migration",
 		"analytics", "search", "export",
 	}
-	
+
 	for _, op := range memoryIntensiveOps {
 		if strings.Contains(strings.ToLower(operation), op) {
 			return true
@@ -426,7 +426,7 @@ func isMemoryIntensiveOperation(operation string) bool {
 
 // FormatResourceSummary creates a human-readable summary of resource usage
 func (r *ResourceSnapshot) FormatResourceSummary() string {
-	return fmt.Sprintf("Resources: Disk=%dMB free (%.1f%% used), Memory=%dMB free, DB=%dMB, Process=%dMB heap", 
+	return fmt.Sprintf("Resources: Disk=%dMB free (%.1f%% used), Memory=%dMB free, DB=%dMB, Process=%dMB heap",
 		r.DiskSpace.AvailableBytes/1024/1024,
 		r.DiskSpace.UsedPercent,
 		r.SystemMemory.AvailableBytes/1024/1024,
@@ -441,57 +441,57 @@ func (r *ResourceSnapshot) IsCriticalResourceState() bool {
 	if r.DiskSpace.AvailableBytes < 50*1024*1024 || r.DiskSpace.UsedPercent > 95.0 {
 		return true
 	}
-	
+
 	// Critical if less than 100MB system memory available
 	if r.SystemMemory.AvailableBytes < 100*1024*1024 {
 		return true
 	}
-	
+
 	// Critical if process heap is over 500MB (potential memory leak)
 	if r.ProcessInfo.HeapAllocMB > 500 {
 		return true
 	}
-	
+
 	return false
 }
 
 // GetResourceRecommendations returns actionable recommendations based on resource state
 func (r *ResourceSnapshot) GetResourceRecommendations() []string {
 	var recommendations []string
-	
+
 	const criticalDiskUsagePercent = 90.0
 	const largeWALSizeMB = 50
 	const criticalHeapAllocMB = 200
 	const criticalGoroutineCount = 1000
 
 	if r.DiskSpace.UsedPercent > criticalDiskUsagePercent {
-		recommendations = append(recommendations, 
-			fmt.Sprintf("Disk space critically low: %.1f%% used (%dMB free)", 
+		recommendations = append(recommendations,
+			fmt.Sprintf("Disk space critically low: %.1f%% used (%dMB free)",
 				r.DiskSpace.UsedPercent, r.DiskSpace.AvailableBytes/1024/1024))
 	}
-	
+
 	if r.DatabaseFile.WALExists && r.DatabaseFile.WALSize > largeWALSizeMB*1024*1024 {
-		recommendations = append(recommendations, 
-			fmt.Sprintf("Large WAL file detected: %dMB - consider checkpoint", 
+		recommendations = append(recommendations,
+			fmt.Sprintf("Large WAL file detected: %dMB - consider checkpoint",
 				r.DatabaseFile.WALSize/1024/1024))
 	}
-	
+
 	if r.ProcessInfo.HeapAllocMB > criticalHeapAllocMB {
-		recommendations = append(recommendations, 
-			fmt.Sprintf("High process memory usage: %dMB heap allocated", 
+		recommendations = append(recommendations,
+			fmt.Sprintf("High process memory usage: %dMB heap allocated",
 				r.ProcessInfo.HeapAllocMB))
 	}
-	
+
 	if r.ProcessInfo.GoroutineCount > criticalGoroutineCount {
-		recommendations = append(recommendations, 
-			fmt.Sprintf("High goroutine count: %d active", 
+		recommendations = append(recommendations,
+			fmt.Sprintf("High goroutine count: %d active",
 				r.ProcessInfo.GoroutineCount))
 	}
-	
+
 	if len(recommendations) == 0 {
 		recommendations = append(recommendations, "System resources are healthy")
 	}
-	
+
 	return recommendations
 }
 

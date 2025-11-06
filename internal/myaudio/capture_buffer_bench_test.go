@@ -7,7 +7,7 @@ import (
 )
 
 // benchResultCB prevents compiler optimizations for capture buffer benchmarks
-var benchResultCB interface{}
+var benchResultCB any
 
 // BenchmarkNewCaptureBuffer benchmarks the raw buffer creation
 func BenchmarkNewCaptureBuffer(b *testing.B) {
@@ -45,20 +45,20 @@ func BenchmarkCaptureBufferLifecycle(b *testing.B) {
 	i := 0
 	for b.Loop() {
 		source := fmt.Sprintf("bench_%d", i)
-		
+
 		// Allocate
 		err := AllocateCaptureBuffer(60, 48000, 2, source)
 		if err != nil {
 			b.Fatalf("Allocation failed: %v", err)
 		}
-		
+
 		// Use the buffer
 		data := make([]byte, 4096)
 		err = WriteToCaptureBuffer(source, data)
 		if err != nil {
 			b.Fatalf("Write failed: %v", err)
 		}
-		
+
 		// Remove
 		err = RemoveCaptureBuffer(source)
 		if err != nil {
@@ -76,12 +76,12 @@ func BenchmarkAllocateCaptureBuffer(b *testing.B) {
 	i := 0
 	for b.Loop() {
 		source := fmt.Sprintf("bench_alloc_%d", i)
-		
+
 		err := AllocateCaptureBuffer(60, 48000, 2, source)
 		if err != nil {
 			b.Fatalf("Allocation failed: %v", err)
 		}
-		
+
 		// Clean up to avoid memory exhaustion
 		err = RemoveCaptureBuffer(source)
 		if err != nil {
@@ -94,7 +94,7 @@ func BenchmarkAllocateCaptureBuffer(b *testing.B) {
 // BenchmarkAllocateCaptureBufferIfNeeded benchmarks the conditional allocation
 func BenchmarkAllocateCaptureBufferIfNeeded(b *testing.B) {
 	source := "bench_if_needed"
-	
+
 	// Pre-allocate the buffer
 	err := AllocateCaptureBuffer(60, 48000, 2, source)
 	if err != nil {
@@ -119,7 +119,7 @@ func BenchmarkAllocateCaptureBufferIfNeeded(b *testing.B) {
 // BenchmarkCaptureBufferWrite benchmarks writing to capture buffer
 func BenchmarkCaptureBufferWrite(b *testing.B) {
 	source := "bench_write"
-	
+
 	// Pre-allocate the buffer
 	err := AllocateCaptureBuffer(60, 48000, 2, source)
 	if err != nil {
@@ -143,7 +143,7 @@ func BenchmarkCaptureBufferWrite(b *testing.B) {
 
 	for _, tc := range testCases {
 		data := make([]byte, tc.size)
-		
+
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
@@ -162,16 +162,16 @@ func BenchmarkCaptureBufferWrite(b *testing.B) {
 func BenchmarkConcurrentCaptureBufferAccess(b *testing.B) {
 	numSources := 10
 	sources := make([]string, numSources)
-	
+
 	// Pre-allocate buffers
-	for i := 0; i < numSources; i++ {
+	for i := range numSources {
 		sources[i] = fmt.Sprintf("concurrent_%d", i)
 		err := AllocateCaptureBuffer(60, 48000, 2, sources[i])
 		if err != nil {
 			b.Fatalf("Allocation failed: %v", err)
 		}
 	}
-	
+
 	// Clean up after benchmark
 	defer func() {
 		for _, source := range sources {
@@ -200,19 +200,19 @@ func BenchmarkConcurrentCaptureBufferAccess(b *testing.B) {
 func BenchmarkHasCaptureBuffer(b *testing.B) {
 	// Create buffers with varying numbers
 	numBuffers := []int{10, 100, 1000}
-	
+
 	for _, n := range numBuffers {
 		b.Run(fmt.Sprintf("%d_buffers", n), func(b *testing.B) {
 			// Setup buffers
 			sources := make([]string, n)
-			for i := 0; i < n; i++ {
+			for i := range n {
 				sources[i] = fmt.Sprintf("has_check_%d", i)
 				err := AllocateCaptureBuffer(60, 48000, 2, sources[i])
 				if err != nil {
 					b.Fatalf("Allocation failed: %v", err)
 				}
 			}
-			
+
 			// Clean up after benchmark
 			defer func() {
 				for _, source := range sources {
@@ -231,7 +231,6 @@ func BenchmarkHasCaptureBuffer(b *testing.B) {
 		})
 	}
 }
-
 
 // BenchmarkMemoryUsage estimates memory usage for different buffer configurations
 func BenchmarkMemoryUsage(b *testing.B) {
@@ -285,7 +284,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 				// Calculate memory usage
 				memUsed := memStatsAfter.Alloc - memStatsBefore.Alloc
 				expectedSize := uint64(cfg.numSources * cfg.duration * cfg.sampleRate * cfg.bytesPerSample)
-				
+
 				// Only log on first iteration to avoid spam
 				if i == 0 {
 					b.Logf("Configuration: %s", cfg.name)

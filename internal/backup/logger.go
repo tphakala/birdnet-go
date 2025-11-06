@@ -9,8 +9,8 @@ import "log"
 // This interface remains for backward compatibility with existing target
 // implementations (ftp.go, gdrive.go, rsync.go) that haven't been migrated yet.
 type Logger interface {
-	Printf(format string, v ...interface{})
-	Println(v ...interface{})
+	Printf(format string, v ...any)
+	Println(v ...any)
 }
 
 // defaultLogger implements the Logger interface using the standard log package
@@ -28,11 +28,11 @@ func DefaultLogger() Logger {
 }
 
 // Printf implements Logger.Printf
-func (l *defaultLogger) Printf(format string, v ...interface{}) {
+func (l *defaultLogger) Printf(format string, v ...any) {
 	l.logger.Printf(format, v...)
 }
 
 // Println implements Logger.Println
-func (l *defaultLogger) Println(v ...interface{}) {
+func (l *defaultLogger) Println(v ...any) {
 	l.logger.Println(v...)
 }

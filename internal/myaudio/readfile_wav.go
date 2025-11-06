@@ -308,10 +308,10 @@ func convertPCMToFloat32(data []byte, bytesPerSample, numChannels int, divisor f
 	frameCount := len(data) / (bytesPerSample * numChannels)
 	result := make([]float32, frameCount)
 
-	for i := 0; i < frameCount; i++ {
+	for i := range frameCount {
 		// Average channels if needed
 		var sum int32
-		for ch := 0; ch < numChannels; ch++ {
+		for ch := range numChannels {
 			offset := i*bytesPerSample*numChannels + ch*bytesPerSample
 			var sample int32
 

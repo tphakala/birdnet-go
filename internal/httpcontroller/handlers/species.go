@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -23,13 +24,7 @@ func (h *Handlers) IgnoreSpecies(c echo.Context) error {
 	settings := conf.Setting()
 
 	// Check if species is already in the excluded list
-	isExcluded := false
-	for _, s := range settings.Realtime.Species.Exclude {
-		if s == commonName {
-			isExcluded = true
-			break
-		}
-	}
+	isExcluded := slices.Contains(settings.Realtime.Species.Exclude, commonName)
 
 	if isExcluded {
 		// Remove from excluded list

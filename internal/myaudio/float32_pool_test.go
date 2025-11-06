@@ -127,9 +127,9 @@ func TestFloat32PoolConcurrency(t *testing.T) {
 	require.NoError(t, err)
 
 	runPoolConcurrencyWithStats(t, bufferSize, numWorkers, opsPerWorker,
-		func() interface{} { return pool.Get() },
-		func(buf interface{}) { pool.Put(buf.([]float32)) },
-		func(buf interface{}) {
+		func() any { return pool.Get() },
+		func(buf any) { pool.Put(buf.([]float32)) },
+		func(buf any) {
 			buffer := buf.([]float32)
 			assert.Len(t, buffer, bufferSize)
 			// Simulate some work with the buffer
@@ -145,13 +145,13 @@ func TestFloat32PoolMemoryReuse(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get and return multiple buffers to increase chance of reuse
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		buf := pool.Get()
 		pool.Put(buf)
 	}
 
 	// Get more buffers - some should be reused from pool
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		buf := pool.Get()
 		assert.Len(t, buf, bufferSize)
 		pool.Put(buf)

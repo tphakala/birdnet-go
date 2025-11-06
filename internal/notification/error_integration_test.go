@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -17,14 +18,14 @@ func TestGetNotificationPriority(t *testing.T) {
 		{"AudioAnalysis", string(errors.CategoryAudioAnalysis), PriorityCritical},
 		{"Worker", string(errors.CategoryWorker), PriorityCritical},
 		{"Database", string(errors.CategoryDatabase), PriorityCritical},
-		
+
 		// High priorities
 		{"JobQueue", string(errors.CategoryJobQueue), PriorityHigh},
 		{"Buffer", string(errors.CategoryBuffer), PriorityHigh},
 		{"CommandExecution", string(errors.CategoryCommandExecution), PriorityHigh},
 		{"System", string(errors.CategorySystem), PriorityHigh},
 		{"Configuration", string(errors.CategoryConfiguration), PriorityHigh},
-		
+
 		// Medium priorities
 		{"Threshold", string(errors.CategoryThreshold), PriorityMedium},
 		{"SpeciesTracking", string(errors.CategorySpeciesTracking), PriorityMedium},
@@ -34,21 +35,21 @@ func TestGetNotificationPriority(t *testing.T) {
 		{"Broadcast", string(errors.CategoryBroadcast), PriorityMedium},
 		{"Integration", string(errors.CategoryIntegration), PriorityMedium},
 		{"Network", string(errors.CategoryNetwork), PriorityMedium},
-		
+
 		// Low priorities
 		{"SoundLevel", string(errors.CategorySoundLevel), PriorityLow},
 		{"EventTracking", string(errors.CategoryEventTracking), PriorityLow},
 		{"Validation", string(errors.CategoryValidation), PriorityLow},
-		
+
 		// Default (unknown category)
 		{"Unknown", "unknown-category", PriorityMedium},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			priority := getNotificationPriority(tt.category, "")
 			if priority != tt.expected {
-				t.Errorf("getNotificationPriority(%s) = %v, want %v", 
+				t.Errorf("getNotificationPriority(%s) = %v, want %v",
 					tt.category, priority, tt.expected)
 			}
 		})
@@ -62,7 +63,7 @@ func TestExplicitPriorityOverride(t *testing.T) {
 	if priority != PriorityCritical {
 		t.Errorf("Explicit critical priority should override category priority, got %v", priority)
 	}
-	
+
 	// Critical category but explicit low priority
 	priority = getNotificationPriority(string(errors.CategoryAudioAnalysis), "low")
 	if priority != PriorityLow {
@@ -89,7 +90,7 @@ func TestAllCategoriesHavePriority(t *testing.T) {
 		errors.CategoryBroadcast,
 		errors.CategoryIntegration,
 	}
-	
+
 	for _, category := range categories {
 		priority := getNotificationPriority(string(category), "")
 		// Should not be empty/zero value
@@ -103,13 +104,7 @@ func TestAllCategoriesHavePriority(t *testing.T) {
 			PriorityMedium,
 			PriorityLow,
 		}
-		found := false
-		for _, valid := range validPriorities {
-			if priority == valid {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(validPriorities, priority)
 		if !found {
 			t.Errorf("Category %s has invalid priority: %v", category, priority)
 		}

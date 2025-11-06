@@ -1,7 +1,6 @@
 package jobqueue
 
 import (
-	"context"
 	"errors"
 	"testing"
 	"time"
@@ -17,8 +16,7 @@ func TestRetryBackoffWithMockClock(t *testing.T) {
 	t.Skip("This test is a demonstration of using MockClock and is not meant to be run regularly")
 
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)

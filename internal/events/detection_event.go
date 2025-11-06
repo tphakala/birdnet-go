@@ -26,7 +26,7 @@ type DetectionEvent interface {
 	GetLocation() string
 
 	// GetMetadata returns additional context data
-	GetMetadata() map[string]interface{}
+	GetMetadata() map[string]any
 
 	// IsNewSpecies returns true if this is the first detection of this species
 	IsNewSpecies() bool
@@ -42,7 +42,7 @@ type detectionEventImpl struct {
 	confidence         float64
 	timestamp          time.Time
 	location           string
-	metadata           map[string]interface{}
+	metadata           map[string]any
 	isNewSpecies       bool
 	daysSinceFirstSeen int
 }
@@ -90,7 +90,7 @@ func NewDetectionEvent(
 		confidence:         confidence,
 		timestamp:          time.Now(),
 		location:           location,
-		metadata:           make(map[string]interface{}),
+		metadata:           make(map[string]any),
 		isNewSpecies:       isNewSpecies,
 		daysSinceFirstSeen: daysSinceFirstSeen,
 	}, nil
@@ -122,7 +122,7 @@ func (e *detectionEventImpl) GetLocation() string {
 }
 
 // GetMetadata returns additional context data
-func (e *detectionEventImpl) GetMetadata() map[string]interface{} {
+func (e *detectionEventImpl) GetMetadata() map[string]any {
 	return e.metadata
 }
 

@@ -28,7 +28,7 @@ type MockFileInfo struct {
 	FileMode    os.FileMode
 	FileModTime time.Time
 	FileIsDir   bool
-	FileSys     interface{}
+	FileSys     any
 }
 
 func (m *MockFileInfo) Name() string       { return m.FileName }
@@ -36,7 +36,7 @@ func (m *MockFileInfo) Size() int64        { return m.FileSize }
 func (m *MockFileInfo) Mode() os.FileMode  { return m.FileMode }
 func (m *MockFileInfo) ModTime() time.Time { return m.FileModTime }
 func (m *MockFileInfo) IsDir() bool        { return m.FileIsDir }
-func (m *MockFileInfo) Sys() interface{}   { return m.FileSys }
+func (m *MockFileInfo) Sys() any           { return m.FileSys }
 
 // Helper function to create a mock FileInfo
 func createMockFileInfo(filename string, size int64) os.FileInfo {

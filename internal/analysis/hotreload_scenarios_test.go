@@ -18,14 +18,14 @@ import (
 // TestHotReloadScenarios tests various hot reload scenarios systematically
 func TestHotReloadScenarios(t *testing.T) {
 	// Cannot run in parallel due to global settings
-	
+
 	scenarios := []struct {
-		name           string
-		setupSettings  func(*conf.Settings)
-		changeSettings func(*conf.Settings)
-		signal         string
-		expectRunning  bool
-		expectNotification bool
+		name                 string
+		setupSettings        func(*conf.Settings)
+		changeSettings       func(*conf.Settings)
+		signal               string
+		expectRunning        bool
+		expectNotification   bool
 		notificationContains string
 	}{
 		{
@@ -37,9 +37,9 @@ func TestHotReloadScenarios(t *testing.T) {
 				s.Realtime.Audio.SoundLevel.Enabled = true
 				s.Realtime.Audio.SoundLevel.Interval = 10
 			},
-			signal:         "reconfigure_sound_level",
-			expectRunning:  true,
-			expectNotification: true,
+			signal:               "reconfigure_sound_level",
+			expectRunning:        true,
+			expectNotification:   true,
 			notificationContains: "started",
 		},
 		{
@@ -51,9 +51,9 @@ func TestHotReloadScenarios(t *testing.T) {
 			changeSettings: func(s *conf.Settings) {
 				s.Realtime.Audio.SoundLevel.Enabled = false
 			},
-			signal:         "reconfigure_sound_level",
-			expectRunning:  false,
-			expectNotification: true,
+			signal:               "reconfigure_sound_level",
+			expectRunning:        false,
+			expectNotification:   true,
 			notificationContains: "disabled",
 		},
 		{
@@ -65,9 +65,9 @@ func TestHotReloadScenarios(t *testing.T) {
 			changeSettings: func(s *conf.Settings) {
 				s.Realtime.Audio.SoundLevel.Interval = 30
 			},
-			signal:         "reconfigure_sound_level",
-			expectRunning:  true,
-			expectNotification: true,
+			signal:               "reconfigure_sound_level",
+			expectRunning:        true,
+			expectNotification:   true,
 			notificationContains: "restarted",
 		},
 		{
@@ -79,13 +79,13 @@ func TestHotReloadScenarios(t *testing.T) {
 			changeSettings: func(s *conf.Settings) {
 				s.Realtime.Audio.SoundLevel.Debug = true
 			},
-			signal:         "reconfigure_sound_level",
-			expectRunning:  true,
-			expectNotification: true,
+			signal:               "reconfigure_sound_level",
+			expectRunning:        true,
+			expectNotification:   true,
 			notificationContains: "restarted",
 		},
 	}
-	
+
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			// Setup
@@ -93,42 +93,42 @@ func TestHotReloadScenarios(t *testing.T) {
 			if settings == nil {
 				t.Skip("No settings available")
 			}
-			
+
 			// Save original values
 			originalEnabled := settings.Realtime.Audio.SoundLevel.Enabled
 			originalInterval := settings.Realtime.Audio.SoundLevel.Interval
 			originalDebug := settings.Realtime.Audio.SoundLevel.Debug
-			
+
 			// Restore settings after test
 			defer func() {
 				settings.Realtime.Audio.SoundLevel.Enabled = originalEnabled
 				settings.Realtime.Audio.SoundLevel.Interval = originalInterval
 				settings.Realtime.Audio.SoundLevel.Debug = originalDebug
 			}()
-			
+
 			// Apply setup settings
 			scenario.setupSettings(settings)
-			
+
 			// Create components
 			soundLevelChan := make(chan myaudio.SoundLevelData, 100)
 			manager := NewSoundLevelManager(soundLevelChan, nil, nil, nil)
-			
+
 			// Start if expected to be running initially
 			if scenario.setupSettings != nil {
 				_ = manager.Start()
 			}
-			
+
 			// Apply configuration changes
 			scenario.changeSettings(settings)
-			
+
 			// Simulate hot reload
 			err := manager.Restart()
 			require.NoError(t, err, "Restart should not error")
-			
+
 			// Verify final state
 			assert.Equal(t, scenario.expectRunning, manager.IsRunning(),
 				"Manager running state should match expectation")
-			
+
 			// Cleanup
 			manager.Stop()
 			close(soundLevelChan)
@@ -140,12 +140,12 @@ func TestHotReloadScenarios(t *testing.T) {
 func TestHotReloadNotificationMessages(t *testing.T) {
 	// This test directly calls the notification methods to verify message formatting
 	// without needing to manipulate global settings
-	
+
 	testCases := []struct {
-		name             string
-		testFunc         func(*ControlMonitor)
-		expectedMessage  string
-		expectedType     string
+		name            string
+		testFunc        func(*ControlMonitor)
+		expectedMessage string
+		expectedType    string
 	}{
 		{
 			name: "Success notification",
@@ -172,20 +172,20 @@ func TestHotReloadNotificationMessages(t *testing.T) {
 			expectedType:    "success",
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create notification channel
 			notificationChan := make(chan handlers.Notification, 1)
-			
+
 			// Create control monitor with minimal setup
 			cm := &ControlMonitor{
 				notificationChan: notificationChan,
 			}
-			
+
 			// Call the test function
 			tc.testFunc(cm)
-			
+
 			// Read the notification from the channel
 			select {
 			case notification := <-notificationChan:
@@ -194,7 +194,7 @@ func TestHotReloadNotificationMessages(t *testing.T) {
 			case <-time.After(time.Second):
 				t.Fatal("No notification received within timeout")
 			}
-			
+
 			// Cleanup
 			close(notificationChan)
 		})
@@ -212,7 +212,7 @@ func TestHandleReconfigureSoundLevelMessages(t *testing.T) {
 		}
 		settings = conf.GetSettings()
 	}
-	
+
 	// Save original values
 	originalEnabled := settings.Realtime.Audio.SoundLevel.Enabled
 	originalInterval := settings.Realtime.Audio.SoundLevel.Interval
@@ -221,13 +221,13 @@ func TestHandleReconfigureSoundLevelMessages(t *testing.T) {
 		settings.Realtime.Audio.SoundLevel.Enabled = originalEnabled
 		settings.Realtime.Audio.SoundLevel.Interval = originalInterval
 	}()
-	
+
 	testCases := []struct {
-		name             string
-		enabled          bool
-		interval         int
-		expectedMessage  string
-		expectedType     string
+		name            string
+		enabled         bool
+		interval        int
+		expectedMessage string
+		expectedType    string
 	}{
 		{
 			name:            "Enabled with interval 15",
@@ -251,35 +251,35 @@ func TestHandleReconfigureSoundLevelMessages(t *testing.T) {
 			expectedType:    "success",
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Update settings for this test case
 			settings.Realtime.Audio.SoundLevel.Enabled = tc.enabled
 			settings.Realtime.Audio.SoundLevel.Interval = tc.interval
-			
+
 			// Create necessary channels
 			soundLevelChan := make(chan myaudio.SoundLevelData, 1)
 			notificationChan := make(chan handlers.Notification, 1)
 			controlChan := make(chan string, 1)
-			
+
 			// Create a minimal processor for testing
 			proc := &processor.Processor{}
-			
+
 			// Create control monitor
 			cm := &ControlMonitor{
-				controlChan:       controlChan,
-				notificationChan:  notificationChan,
-				soundLevelChan:    soundLevelChan,
-				proc:              proc,
+				controlChan:      controlChan,
+				notificationChan: notificationChan,
+				soundLevelChan:   soundLevelChan,
+				proc:             proc,
 			}
-			
+
 			// Create sound level manager
 			cm.soundLevelManager = NewSoundLevelManager(soundLevelChan, proc, nil, nil)
-			
+
 			// Call the function under test
 			cm.handleReconfigureSoundLevel()
-			
+
 			// Read the notification from the channel
 			select {
 			case notification := <-notificationChan:
@@ -288,7 +288,7 @@ func TestHandleReconfigureSoundLevelMessages(t *testing.T) {
 			case <-time.After(time.Second):
 				t.Fatal("No notification received within timeout")
 			}
-			
+
 			// Cleanup
 			cm.soundLevelManager.Stop()
 			close(soundLevelChan)
@@ -301,9 +301,9 @@ func TestHandleReconfigureSoundLevelMessages(t *testing.T) {
 // TestSoundLevelDataValidation tests data validation edge cases
 func TestSoundLevelDataValidation(t *testing.T) {
 	testCases := []struct {
-		name        string
-		data        myaudio.SoundLevelData
-		shouldError bool
+		name          string
+		data          myaudio.SoundLevelData
+		shouldError   bool
 		errorContains string
 	}{
 		{
@@ -354,7 +354,7 @@ func TestSoundLevelDataValidation(t *testing.T) {
 			errorContains: "octave band",
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := validateSoundLevelData(&tc.data)
@@ -375,12 +375,12 @@ func TestHotReloadRaceConditions(t *testing.T) {
 	// Setup
 	soundLevelChan := make(chan myaudio.SoundLevelData, 100)
 	manager := NewSoundLevelManager(soundLevelChan, nil, nil, nil)
-	
+
 	settings := conf.Setting()
 	if settings == nil {
 		t.Skip("No settings available")
 	}
-	
+
 	// Save original state
 	originalEnabled := settings.Realtime.Audio.SoundLevel.Enabled
 	defer func() {
@@ -388,42 +388,42 @@ func TestHotReloadRaceConditions(t *testing.T) {
 		manager.Stop()
 		close(soundLevelChan)
 	}()
-	
+
 	// Enable sound level
 	settings.Realtime.Audio.SoundLevel.Enabled = true
-	
+
 	// Start multiple goroutines that will:
 	// 1. Toggle settings
 	// 2. Call restart
 	// 3. Check status
-	
+
 	var wg sync.WaitGroup
 	errors := make(chan error, 100)
-	
+
 	// Settings modifier goroutines
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < 10; j++ {
+			for j := range 10 {
 				// Toggle enabled state
 				enabled := (j%2 == 0)
 				settings.Realtime.Audio.SoundLevel.Enabled = enabled
-				
+
 				// Change interval
 				settings.Realtime.Audio.SoundLevel.Interval = 5 + j
-				
+
 				time.Sleep(time.Millisecond)
 			}
 		}(i)
 	}
-	
+
 	// Restart goroutines
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < 15; j++ {
+			for range 15 {
 				if err := manager.Restart(); err != nil {
 					errors <- err
 				}
@@ -431,33 +431,33 @@ func TestHotReloadRaceConditions(t *testing.T) {
 			}
 		}(i)
 	}
-	
+
 	// Status check goroutines
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < 20; j++ {
+			for range 20 {
 				_ = manager.IsRunning()
 				time.Sleep(time.Millisecond)
 			}
 		}(i)
 	}
-	
+
 	// Wait for completion
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
 		close(done)
 	}()
-	
+
 	select {
 	case <-done:
 		// Success
 	case <-time.After(5 * time.Second):
 		t.Fatal("Race condition test timed out")
 	}
-	
+
 	// Check for errors
 	close(errors)
 	errorCount := 0
@@ -474,10 +474,10 @@ func TestHotReloadWithControlMonitor(t *testing.T) {
 	controlChan := make(chan string, 10)
 	notificationChan := make(chan handlers.Notification, 10)
 	soundLevelChan := make(chan myaudio.SoundLevelData, 100)
-	
+
 	// Create manager
 	manager := NewSoundLevelManager(soundLevelChan, nil, nil, nil)
-	
+
 	// Simulate control monitor handler
 	handleSignal := func(signal string) {
 		if signal == "reconfigure_sound_level" {
@@ -485,9 +485,9 @@ func TestHotReloadWithControlMonitor(t *testing.T) {
 			if settings == nil {
 				return
 			}
-			
+
 			var notification handlers.Notification
-			
+
 			if !settings.Realtime.Audio.SoundLevel.Enabled {
 				notification = handlers.Notification{
 					Message: "🔇 Sound level monitoring is disabled",
@@ -512,18 +512,18 @@ func TestHotReloadWithControlMonitor(t *testing.T) {
 					}
 				}
 			}
-			
+
 			notificationChan <- notification
 		}
 	}
-	
+
 	// Test sequence
 	settings := conf.Setting()
 	if settings != nil {
 		// Test 1: Enable
 		settings.Realtime.Audio.SoundLevel.Enabled = true
 		handleSignal("reconfigure_sound_level")
-		
+
 		select {
 		case notif := <-notificationChan:
 			assert.Contains(t, notif.Message, "started")
@@ -531,11 +531,11 @@ func TestHotReloadWithControlMonitor(t *testing.T) {
 		case <-time.After(time.Second):
 			t.Error("No notification received for enable")
 		}
-		
+
 		// Test 2: Disable
 		settings.Realtime.Audio.SoundLevel.Enabled = false
 		handleSignal("reconfigure_sound_level")
-		
+
 		select {
 		case notif := <-notificationChan:
 			assert.Contains(t, notif.Message, "disabled")
@@ -544,7 +544,7 @@ func TestHotReloadWithControlMonitor(t *testing.T) {
 			t.Error("No notification received for disable")
 		}
 	}
-	
+
 	// Cleanup
 	manager.Stop()
 	close(controlChan)
@@ -555,56 +555,56 @@ func TestHotReloadWithControlMonitor(t *testing.T) {
 // TestFFmpegRestartWithSoundLevel tests that sound level processors survive FFmpeg stream restarts
 func TestFFmpegRestartWithSoundLevel(t *testing.T) {
 	t.Parallel()
-	
+
 	// Create a test manager with sound level monitoring enabled
 	suite := NewHotReloadTestSuite(t)
 	defer suite.Cleanup()
-	
+
 	// Enable sound level monitoring with RTSP sources
 	suite.UpdateSettings(func(s *conf.Settings) {
 		s.Realtime.Audio.SoundLevel.Enabled = true
 		s.Realtime.Audio.SoundLevel.Interval = 5
 		s.Realtime.RTSP.URLs = []string{"rtsp://test.example.com/stream1"}
 	})
-	
+
 	// Create a sound level manager to test with
 	manager := NewSoundLevelManager(
-		make(chan myaudio.SoundLevelData, 10), 
+		make(chan myaudio.SoundLevelData, 10),
 		nil, // processor - can be nil for this test
-		nil, // httpServer - can be nil for this test  
+		nil, // httpServer - can be nil for this test
 		nil, // metrics - can be nil for this test
 	)
-	
+
 	// Start sound level monitoring
 	err := manager.Start()
 	require.NoError(t, err, "Should start sound level monitoring successfully")
 	assert.True(t, manager.IsRunning(), "Sound level monitoring should be running")
-	
+
 	// Simulate an FFmpeg stream restart by stopping and restarting the manager
 	// This tests the critical path where processors need to be re-registered
 	log.Println("🔄 Simulating FFmpeg stream restart scenario...")
-	
+
 	// Stop the manager (simulating stream failure)
 	manager.Stop()
 	assert.False(t, manager.IsRunning(), "Sound level monitoring should be stopped")
-	
+
 	// Restart the manager (simulating stream recovery)
 	err = manager.Start()
 	require.NoError(t, err, "Should restart sound level monitoring successfully after simulated crash")
 	assert.True(t, manager.IsRunning(), "Sound level monitoring should be running after restart")
-	
+
 	// Verify restart works multiple times (simulating multiple crashes)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		log.Printf("🔄 Testing restart cycle %d...", i+1)
-		
+
 		err = manager.Restart()
 		require.NoError(t, err, "Should restart successfully on cycle %d", i+1)
 		assert.True(t, manager.IsRunning(), "Should be running after restart cycle %d", i+1)
-		
+
 		// Small delay to simulate real restart timing
 		time.Sleep(50 * time.Millisecond)
 	}
-	
+
 	// Final cleanup
 	manager.Stop()
 	assert.False(t, manager.IsRunning(), "Should be stopped after final cleanup")
@@ -614,7 +614,7 @@ func TestFFmpegRestartWithSoundLevel(t *testing.T) {
 // registration remains consistent across various stream lifecycle scenarios
 func TestSoundLevelProcessorRegistrationConsistency(t *testing.T) {
 	t.Parallel()
-	
+
 	// Test with multiple RTSP URLs to ensure all get registered
 	testSettings := &conf.Settings{
 		Realtime: conf.RealtimeSettings{
@@ -628,7 +628,7 @@ func TestSoundLevelProcessorRegistrationConsistency(t *testing.T) {
 			RTSP: conf.RTSPSettings{
 				URLs: []string{
 					"rtsp://camera1.test.com/stream",
-					"rtsp://camera2.test.com/stream", 
+					"rtsp://camera2.test.com/stream",
 					"rtsp://camera3.test.com/stream",
 				},
 			},
@@ -639,20 +639,20 @@ func TestSoundLevelProcessorRegistrationConsistency(t *testing.T) {
 			Longitude: -120.0,
 		},
 	}
-	
+
 	// Test registration for all sources
 	err := registerSoundLevelProcessorsForActiveSources(testSettings)
 	require.NoError(t, err, "Should register all sound level processors successfully")
-	
+
 	// Test unregistration of all sources
 	unregisterAllSoundLevelProcessors(testSettings)
-	
+
 	// Test partial configuration (only some RTSP sources)
 	testSettings.Realtime.RTSP.URLs = []string{"rtsp://camera1.test.com/stream"}
-	
+
 	err = registerSoundLevelProcessorsForActiveSources(testSettings)
 	require.NoError(t, err, "Should handle partial RTSP configuration")
-	
+
 	// Cleanup
 	unregisterAllSoundLevelProcessors(testSettings)
 }
@@ -661,41 +661,41 @@ func TestSoundLevelProcessorRegistrationConsistency(t *testing.T) {
 // when RTSP configuration changes dynamically
 func TestSoundLevelWithRTSPConfigChanges(t *testing.T) {
 	t.Parallel()
-	
+
 	// Test that sound level manager handles restarts properly
 	// This simulates configuration changes that would trigger restarts
 	manager := NewSoundLevelManager(
 		make(chan myaudio.SoundLevelData, 10),
 		nil, nil, nil,
 	)
-	
+
 	// Start with current configuration
 	err := manager.Start()
 	require.NoError(t, err, "Should start with current configuration")
-	
+
 	// Test multiple restart cycles to simulate configuration changes
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		log.Printf("Testing restart cycle %d for config changes", i+1)
-		
+
 		// Restart to simulate configuration change
 		err = manager.Restart()
 		require.NoError(t, err, "Should handle restart for config change %d", i+1)
-		
+
 		// Verify manager is still running after restart
 		assert.True(t, manager.IsRunning(), "Should be running after config change restart %d", i+1)
-		
+
 		// Small delay to simulate real timing
 		time.Sleep(25 * time.Millisecond)
 	}
-	
+
 	// Test stopping and restarting (simulates disable/enable)
 	manager.Stop()
 	assert.False(t, manager.IsRunning(), "Should be stopped")
-	
+
 	err = manager.Start()
 	require.NoError(t, err, "Should restart after being stopped")
 	assert.True(t, manager.IsRunning(), "Should be running after restart from stopped state")
-	
+
 	// Final cleanup
 	manager.Stop()
 	assert.False(t, manager.IsRunning(), "Should be stopped after final cleanup")
@@ -705,7 +705,7 @@ func TestSoundLevelWithRTSPConfigChanges(t *testing.T) {
 // operating when some sound level processors fail to register
 func TestGracefulDegradationWithPartialFailures(t *testing.T) {
 	t.Parallel()
-	
+
 	// Test with mixed valid and invalid sources to simulate partial failures
 	testSettings := &conf.Settings{
 		Realtime: conf.RealtimeSettings{
@@ -730,15 +730,15 @@ func TestGracefulDegradationWithPartialFailures(t *testing.T) {
 			Longitude: -120.0,
 		},
 	}
-	
+
 	// The function should not return an error for partial failures
 	// It should only return an error if ALL registrations fail
 	err := registerSoundLevelProcessorsForActiveSources(testSettings)
-	
+
 	// Even if some registrations fail, the function should not error
 	// This tests graceful degradation
 	require.NoError(t, err, "Should not error on partial failures - graceful degradation")
-	
+
 	// Cleanup
 	unregisterAllSoundLevelProcessors(testSettings)
 }
@@ -746,23 +746,23 @@ func TestGracefulDegradationWithPartialFailures(t *testing.T) {
 // TestShutdownTimeout tests that the shutdown timeout mechanism works correctly
 func TestShutdownTimeout(t *testing.T) {
 	t.Parallel()
-	
+
 	// Create a manager
 	manager := NewSoundLevelManager(
 		make(chan myaudio.SoundLevelData, 10),
 		nil, nil, nil,
 	)
-	
+
 	// Start the manager
 	err := manager.Start()
 	require.NoError(t, err, "Should start successfully")
-	
+
 	// Record start time
 	startTime := time.Now()
-	
+
 	// Stop the manager - this should complete quickly (not timeout)
 	manager.Stop()
-	
+
 	// Verify it completed in reasonable time (much less than 30s timeout)
 	elapsed := time.Since(startTime)
 	assert.Less(t, elapsed, 5*time.Second, "Normal shutdown should complete quickly, took %v", elapsed)

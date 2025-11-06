@@ -79,7 +79,7 @@ func TestCleanupExpiredCacheComprehensive(t *testing.T) {
 
 		now := time.Now()
 		// Add 1500 cache entries (exceeds maxCacheSize of 1000)
-		for i := 0; i < 1500; i++ {
+		for i := range 1500 {
 			species := fmt.Sprintf("species_%d", i)
 			tracker.statusCache[species] = cachedSpeciesStatus{
 				status:    SpeciesStatus{IsNew: i%2 == 0},
@@ -95,7 +95,7 @@ func TestCleanupExpiredCacheComprehensive(t *testing.T) {
 
 		// Verify that newer entries are kept
 		// Species_0 to species_799 should be kept (newest)
-		for i := 0; i < 800; i++ {
+		for i := range 800 {
 			species := fmt.Sprintf("species_%d", i)
 			assert.Contains(t, tracker.statusCache, species, "Newer entry should be kept")
 		}
@@ -290,7 +290,7 @@ func TestCheckAndUpdateSpeciesComprehensive(t *testing.T) {
 		done := make(chan bool, 10)
 		now := time.Now()
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			go func(id int) {
 				species := fmt.Sprintf("species_%d", id)
 				isNew, days := tracker.CheckAndUpdateSpecies(species, now)
@@ -301,7 +301,7 @@ func TestCheckAndUpdateSpeciesComprehensive(t *testing.T) {
 		}
 
 		// Wait for all goroutines
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			<-done
 		}
 

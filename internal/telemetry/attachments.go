@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"maps"
 	"path/filepath"
 	"time"
 
@@ -113,7 +114,7 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	event.Timestamp = now
 
 	// Add custom context
-	supportContext := map[string]interface{}{
+	supportContext := map[string]any{
 		"system_id":    systemID,
 		"user_message": scrubbedMessage,
 		"dump_size":    len(dumpData),
@@ -214,7 +215,7 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 }
 
 // CreateSupportEvent creates a support request event without an attachment
-func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, message string, metadata map[string]interface{}) error {
+func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, message string, metadata map[string]any) error {
 	logTelemetryInfo(nil, "telemetry: creating support event",
 		"system_id", systemID,
 		"has_metadata", len(metadata) > 0)
@@ -268,10 +269,8 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 	event.Timestamp = time.Now()
 
 	// Create a copy of metadata to avoid modifying the input
-	supportContext := make(map[string]interface{})
-	for k, v := range metadata {
-		supportContext[k] = v
-	}
+	supportContext := make(map[string]any)
+	maps.Copy(supportContext, metadata)
 	supportContext["system_id"] = systemID
 	supportContext["message"] = scrubbedMessage
 	if traceID != "" {

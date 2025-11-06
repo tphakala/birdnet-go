@@ -136,7 +136,8 @@ type NoopTelemetryReporter struct{}
 func (n *NoopTelemetryReporter) CaptureError(err error, component string) {}
 
 // CaptureEvent is a no-op
-func (n *NoopTelemetryReporter) CaptureEvent(message, level string, tags map[string]string, contexts map[string]any) {}
+func (n *NoopTelemetryReporter) CaptureEvent(message, level string, tags map[string]string, contexts map[string]any) {
+}
 
 // IsEnabled always returns false
 func (n *NoopTelemetryReporter) IsEnabled() bool {
@@ -270,7 +271,7 @@ func (nt *NotificationTelemetry) ProviderInitializationError(
 // WorkerPanicRecovered reports a panic that was caught and recovered in a worker
 func (nt *NotificationTelemetry) WorkerPanicRecovered(
 	workerType string,
-	panicValue interface{},
+	panicValue any,
 	stackTrace string,
 	eventsProcessed uint64,
 	eventsDropped uint64,
@@ -336,10 +337,10 @@ func (nt *NotificationTelemetry) RateLimitExceeded(
 
 	// Build tags
 	tags := map[string]string{
-		"component":        "notification",
-		"subsystem":        "rate_limiter",
-		"drop_rate":        fmt.Sprintf("%.1f", dropRatePercent),
-		"severity":         "high_drop_rate",
+		"component": "notification",
+		"subsystem": "rate_limiter",
+		"drop_rate": fmt.Sprintf("%.1f", dropRatePercent),
+		"severity":  "high_drop_rate",
 	}
 
 	// Build contexts

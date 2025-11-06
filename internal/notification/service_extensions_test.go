@@ -11,7 +11,7 @@ func TestService_CreateWithMetadata(t *testing.T) {
 
 	// Create service with test configuration
 	service := createTestService()
-	
+
 	t.Run("creates notification with metadata", func(t *testing.T) {
 		testCreateWithMetadata(t, service)
 	})
@@ -48,7 +48,7 @@ func createTestService() *Service {
 // testCreateWithMetadata tests creating a notification with metadata
 func testCreateWithMetadata(t *testing.T, service *Service) {
 	t.Helper()
-	
+
 	// Create a notification with metadata
 	notif := NewNotification(TypeInfo, PriorityLow, "Test Title", "Test Message").
 		WithComponent("test-component").
@@ -75,7 +75,7 @@ func testCreateWithMetadata(t *testing.T, service *Service) {
 // verifyStoredNotificationFields verifies basic notification fields
 func verifyStoredNotificationFields(t *testing.T, stored *Notification) {
 	t.Helper()
-	
+
 	if stored.Type != TypeInfo {
 		t.Errorf("stored notification type = %v, want %v", stored.Type, TypeInfo)
 	}
@@ -100,7 +100,7 @@ func verifyStoredNotificationFields(t *testing.T, stored *Notification) {
 // verifyStoredNotificationMetadata verifies notification metadata
 func verifyStoredNotificationMetadata(t *testing.T, stored *Notification) {
 	t.Helper()
-	
+
 	if stored.Metadata == nil {
 		t.Fatal("stored notification should have metadata")
 	}
@@ -121,7 +121,7 @@ func verifyStoredNotificationMetadata(t *testing.T, stored *Notification) {
 // testBroadcastWithMetadata tests broadcasting notifications with metadata
 func testBroadcastWithMetadata(t *testing.T, service *Service) {
 	t.Helper()
-	
+
 	// Subscribe to notifications
 	notifCh, _ := service.Subscribe()
 	defer service.Unsubscribe(notifCh)
@@ -142,7 +142,7 @@ func testBroadcastWithMetadata(t *testing.T, service *Service) {
 // verifyBroadcastedNotification verifies a broadcasted notification
 func verifyBroadcastedNotification(t *testing.T, notifCh <-chan *Notification, original *Notification) {
 	t.Helper()
-	
+
 	select {
 	case receivedNotif := <-notifCh:
 		if receivedNotif.ID != original.ID {
@@ -166,7 +166,7 @@ func verifyBroadcastedNotification(t *testing.T, notifCh <-chan *Notification, o
 // testRateLimitingWithMetadata tests rate limiting with metadata creation
 func testRateLimitingWithMetadata(t *testing.T) {
 	t.Helper()
-	
+
 	// Create service with tight rate limiting for testing
 	strictConfig := &ServiceConfig{
 		MaxNotifications:   10,
@@ -201,7 +201,7 @@ func testRateLimitingWithMetadata(t *testing.T) {
 // testNilNotificationHandling tests handling of nil notifications
 func testNilNotificationHandling(t *testing.T, service *Service) {
 	t.Helper()
-	
+
 	// This test verifies the function doesn't panic with nil input
 	// In practice, this would be a programming error, but good to test robustness
 	err := service.CreateWithMetadata(nil)
@@ -213,7 +213,7 @@ func testNilNotificationHandling(t *testing.T, service *Service) {
 // testExpirationPreservation tests preservation of notification expiration
 func testExpirationPreservation(t *testing.T, service *Service) {
 	t.Helper()
-	
+
 	// Create notification with expiration
 	expiryTime := time.Now().Add(10 * time.Minute)
 	notif := NewNotification(TypeInfo, PriorityLow, "Expiry Test", "Test expiration")
@@ -243,12 +243,12 @@ func TestService_CreateWithMetadata_ErrorHandling(t *testing.T) {
 	// Create service
 	config := DefaultServiceConfig()
 	service := NewService(config)
-	
+
 	t.Run("handles store save error", func(t *testing.T) {
 		// Create a notification that might cause store issues
 		// In this case, we'll test with a very large notification that might exceed limits
 		largeMetadata := make(map[string]any)
-		for i := 0; i < 1000; i++ {
+		for i := range 1000 {
 			largeMetadata[string(rune('a'+i%26))] = "large data that might cause issues"
 		}
 
@@ -291,7 +291,6 @@ func TestService_CreateWithMetadata_WithFailingStore(t *testing.T) {
 	}
 	service.store = failingStore
 
-	
 	notif := NewNotification(TypeInfo, PriorityLow, "Fail Test", "Test store failure")
 
 	err := service.CreateWithMetadata(notif)
@@ -316,19 +315,17 @@ func BenchmarkService_CreateWithMetadata(b *testing.B) {
 	}
 
 	service := NewService(config)
-	
+
 	// Pre-create notification template
 	template := NewNotification(TypeInfo, PriorityLow, "Benchmark", "Performance test").
 		WithComponent("benchmark").
 		WithMetadata("test", true).
 		WithMetadata("iteration", 0)
 
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		// Create unique notification for each iteration
 		notif := *template // Shallow copy
-		notif.ID = "" // Will be regenerated
+		notif.ID = ""      // Will be regenerated
 		notif.Timestamp = time.Now()
 		notif.Metadata["iteration"] = i
 

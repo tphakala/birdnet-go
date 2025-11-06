@@ -10,7 +10,7 @@ import (
 type MockFunctions struct {
 	// Mock function implementations
 	GetDiskUsage         func(path string) (float64, error)
-	GetAudioFiles        func(baseDir string, allowedExts []string, db interface{}, debug bool) ([]interface{}, error)
+	GetAudioFiles        func(baseDir string, allowedExts []string, db any, debug bool) ([]any, error)
 	Setting              func() *conf.Settings
 	ParseRetentionPeriod func(period string) (int, error)
 	ParsePercentage      func(percentage string) (float64, error)
@@ -23,8 +23,8 @@ func NewMockFunctions() *MockFunctions {
 		GetDiskUsage: func(path string) (float64, error) {
 			return 0.0, nil
 		},
-		GetAudioFiles: func(baseDir string, allowedExts []string, db interface{}, debug bool) ([]interface{}, error) {
-			return []interface{}{}, nil
+		GetAudioFiles: func(baseDir string, allowedExts []string, db any, debug bool) ([]any, error) {
+			return []any{}, nil
 		},
 		Setting: func() *conf.Settings {
 			return &conf.Settings{}
@@ -48,7 +48,7 @@ func NewMockFunctions() *MockFunctions {
 var MockGetDiskUsage func(path string) (float64, error)
 
 // MockGetAudioFiles is a mock for the GetAudioFiles function
-var MockGetAudioFiles func(baseDir string, allowedExts []string, db interface{}, debug bool) ([]interface{}, error)
+var MockGetAudioFiles func(baseDir string, allowedExts []string, db any, debug bool) ([]any, error)
 
 // MockSetting is a mock for the conf.Setting function
 var MockSetting func() *conf.Settings

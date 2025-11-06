@@ -21,9 +21,9 @@ func TestSeasonalPeriodInitialization(t *testing.T) {
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+	// BG-17: InitFromDatabase requires notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
@@ -275,9 +275,9 @@ func TestSpeciesStatusForDailySummaryCard(t *testing.T) {
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+	// BG-17: InitFromDatabase requires notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
@@ -474,10 +474,8 @@ func BenchmarkBatchSpeciesStatusPerformance(b *testing.B) {
 		tracker.UpdateSpecies(sp, detectionTime)
 	}
 
-	b.ResetTimer()
-
 	// Benchmark the batch retrieval operation
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = tracker.GetBatchSpeciesStatus(species, currentTime)
 	}
 }
@@ -525,7 +523,7 @@ func TestConcurrentSeasonalUpdates(t *testing.T) {
 
 	species := []string{"Species1", "Species2", "Species3", "Species4"}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(iteration int) {
 			defer wg.Done()
@@ -553,9 +551,9 @@ func TestSeasonalWindowExpiration(t *testing.T) {
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+	// BG-17: InitFromDatabase requires notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
@@ -673,9 +671,9 @@ func TestDefaultSeasonInitialization(t *testing.T) {
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+	// BG-17: InitFromDatabase requires notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
@@ -743,9 +741,9 @@ func TestSeasonMapInitializationOnTransition(t *testing.T) {
 	ds := mocks.NewMockInterface(t)
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+	// BG-17: InitFromDatabase requires notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 

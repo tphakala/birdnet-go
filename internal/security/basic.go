@@ -245,7 +245,7 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 
 	// Return the access token in the response body
 	expiresInSeconds := int(s.Settings.Security.BasicAuth.AccessTokenExp.Seconds())
-	resp := map[string]interface{}{ // Use interface{} for mixed types
+	resp := map[string]any{ // Use interface{} for mixed types
 		"access_token": accessToken, // This is sent to the client, unavoidable
 		"token_type":   "Bearer",
 		"expires_in":   expiresInSeconds,

@@ -43,7 +43,7 @@ var v24LabelFiles embed.FS
 
 // Logger interface for dependency injection in tests
 type Logger interface {
-	Debug(format string, v ...interface{})
+	Debug(format string, v ...any)
 }
 
 // getModelFileSystem returns the appropriate embedded filesystem for the given model version

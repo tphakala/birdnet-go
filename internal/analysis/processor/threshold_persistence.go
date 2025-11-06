@@ -174,7 +174,7 @@ func (p *Processor) persistDynamicThresholds() error {
 	baseDelay := 100 * time.Millisecond
 
 	var err error
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		err = p.Ds.BatchSaveDynamicThresholds(dbThresholds)
 		if err == nil {
 			break // Success

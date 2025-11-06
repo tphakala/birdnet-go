@@ -41,7 +41,7 @@ func NewBufferPool(size int) (*BufferPool, error) {
 		size: size,
 	}
 
-	bp.pool.New = func() interface{} {
+	bp.pool.New = func() any {
 		// New is called when pool is empty
 		bp.news.Add(1)
 		return make([]byte, size)
@@ -56,12 +56,12 @@ func NewBufferPool(size int) (*BufferPool, error) {
 func (bp *BufferPool) Get() []byte {
 	bp.gets.Add(1)
 	buf := bp.pool.Get().([]byte)
-	
+
 	// Verify buffer size for safety
 	if len(buf) == bp.size {
 		return buf
 	}
-	
+
 	// Buffer size mismatch - discard and allocate new
 	bp.discarded.Add(1)
 	bp.news.Add(1)
@@ -76,7 +76,7 @@ func (bp *BufferPool) Put(buf []byte) {
 		bp.discarded.Add(1)
 		return
 	}
-	
+
 	//nolint:staticcheck // SA6002: sync.Pool is designed to work with slices
 	bp.pool.Put(buf)
 }
@@ -93,13 +93,13 @@ type BufferPoolStats struct {
 func (bp *BufferPool) GetStats() BufferPoolStats {
 	gets := bp.gets.Load()
 	news := bp.news.Load()
-	
+
 	// Calculate hits as gets minus news
 	hits := uint64(0)
 	if gets > news {
 		hits = gets - news
 	}
-	
+
 	return BufferPoolStats{
 		Hits:      hits,
 		Misses:    news,
@@ -115,7 +115,7 @@ func (bp *BufferPool) RecordMetrics(m *metrics.MyAudioMetrics, poolName string) 
 	}
 
 	stats := bp.GetStats()
-	
+
 	// Calculate hit rate
 	total := float64(stats.Hits + stats.Misses)
 	hitRate := float64(0)
@@ -138,7 +138,7 @@ func (bp *BufferPool) Clear() {
 	// sync.Pool doesn't provide a clear method, but we can hint to GC
 	// by creating a new pool instance
 	bp.pool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			bp.news.Add(1)
 			return make([]byte, bp.size)
 		},

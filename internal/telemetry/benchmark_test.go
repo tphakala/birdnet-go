@@ -18,7 +18,7 @@ func BenchmarkTelemetryDisabled(b *testing.B) {
 			Enabled: false,
 		},
 	}
-	
+
 	// Initialize with disabled telemetry
 	if err := InitSentry(settings); err != nil {
 		b.Fatalf("Failed to initialize Sentry: %v", err)
@@ -29,7 +29,7 @@ func BenchmarkTelemetryDisabled(b *testing.B) {
 		err := fmt.Errorf("benchmark error")
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		for b.Loop() {
 			CaptureError(err, "benchmark")
 		}
@@ -38,7 +38,7 @@ func BenchmarkTelemetryDisabled(b *testing.B) {
 	b.Run("CaptureMessage", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		for b.Loop() {
 			CaptureMessage("benchmark message", sentry.LevelInfo, "benchmark")
 		}
@@ -47,13 +47,13 @@ func BenchmarkTelemetryDisabled(b *testing.B) {
 	b.Run("EnhancedError", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		for b.Loop() {
 			err := errors.New(fmt.Errorf("benchmark")).
 				Component("benchmark").
 				Category(errors.CategoryNetwork).
 				Build()
-			
+
 			// This should be nearly free when telemetry is disabled
 			CaptureError(err, err.GetComponent())
 		}
@@ -65,18 +65,18 @@ func BenchmarkTelemetryEnabled(b *testing.B) {
 	// Initialize with mock transport
 	config, cleanup := InitForTesting(b)
 	defer cleanup()
-	
+
 	InitializeErrorIntegration()
 
 	b.Run("CaptureError", func(b *testing.B) {
 		err := fmt.Errorf("benchmark error")
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		for b.Loop() {
 			CaptureError(err, "benchmark")
 		}
-		
+
 		b.Logf("Captured %d events", config.MockTransport.GetEventCount())
 	})
 
@@ -84,11 +84,11 @@ func BenchmarkTelemetryEnabled(b *testing.B) {
 		config.MockTransport.Clear()
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		for b.Loop() {
 			CaptureMessage("benchmark message", sentry.LevelInfo, "benchmark")
 		}
-		
+
 		b.Logf("Captured %d events", config.MockTransport.GetEventCount())
 	})
 
@@ -96,17 +96,17 @@ func BenchmarkTelemetryEnabled(b *testing.B) {
 		config.MockTransport.Clear()
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		for b.Loop() {
 			err := errors.New(fmt.Errorf("benchmark")).
 				Component("benchmark").
 				Category(errors.CategoryNetwork).
 				Context("key", "value").
 				Build()
-			
+
 			CaptureError(err, err.GetComponent())
 		}
-		
+
 		b.Logf("Captured %d events", config.MockTransport.GetEventCount())
 	})
 }
@@ -139,7 +139,7 @@ func BenchmarkScrubMessage(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
-			
+
 			for b.Loop() {
 				_ = privacy.ScrubMessage(tc.message)
 			}
@@ -159,28 +159,28 @@ func BenchmarkMockTransport(b *testing.B) {
 				"component": "benchmark",
 			},
 		}
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		for b.Loop() {
 			transport.SendEvent(event)
 		}
-		
+
 		b.Logf("Stored %d events", transport.GetEventCount())
 	})
 
 	b.Run("GetEvents", func(b *testing.B) {
 		// Pre-populate with events
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			transport.SendEvent(&sentry.Event{
 				Message: fmt.Sprintf("event %d", i),
 			})
 		}
-		
+
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		for b.Loop() {
 			_ = transport.GetEvents()
 		}
@@ -195,7 +195,7 @@ func BenchmarkConcurrentCapture(b *testing.B) {
 	b.Run("Parallel-8", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		b.RunParallel(func(pb *testing.PB) {
 			i := 0
 			for pb.Next() {
@@ -204,7 +204,7 @@ func BenchmarkConcurrentCapture(b *testing.B) {
 				i++
 			}
 		})
-		
+
 		b.Logf("Captured %d events", config.MockTransport.GetEventCount())
 	})
 }

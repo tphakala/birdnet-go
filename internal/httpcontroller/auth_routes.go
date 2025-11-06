@@ -218,7 +218,7 @@ func (s *Server) handleLoginPage(c echo.Context) error {
 			redirect = "/"
 		}
 
-		return c.Render(http.StatusOK, "login", map[string]interface{}{
+		return c.Render(http.StatusOK, "login", map[string]any{
 			"RedirectURL":   redirect,
 			"BasicEnabled":  s.Settings.Security.BasicAuth.Enabled,
 			"GoogleEnabled": s.Settings.Security.GoogleAuth.Enabled,

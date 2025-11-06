@@ -634,7 +634,7 @@ func TestStats(t *testing.T) {
 func BenchmarkLoadTaxonomyDatabase(b *testing.B) {
 	b.ReportAllocs()
 
-	for range b.N {
+	for b.Loop() {
 		db, err := LoadTaxonomyDatabase()
 		if err != nil {
 			b.Fatalf("Failed to load database: %v", err)
@@ -654,9 +654,7 @@ func BenchmarkGetGenusByScientificName(b *testing.B) {
 		b.Fatalf("Failed to load database: %v", err)
 	}
 
-	b.ResetTimer()
-
-	for range b.N {
+	for b.Loop() {
 		_, _, err := db.GetGenusByScientificName("Turdus migratorius")
 		if err != nil {
 			b.Fatalf("Lookup failed: %v", err)
@@ -673,9 +671,7 @@ func BenchmarkGetSpeciesTree(b *testing.B) {
 		b.Fatalf("Failed to load database: %v", err)
 	}
 
-	b.ResetTimer()
-
-	for range b.N {
+	for b.Loop() {
 		_, err := db.GetSpeciesTree("Turdus migratorius")
 		if err != nil {
 			b.Fatalf("Tree building failed: %v", err)

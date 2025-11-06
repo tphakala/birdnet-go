@@ -12,12 +12,12 @@ import (
 
 // fakeProvider implements PushProvider for testing
 type fakeProvider struct {
-	name       string
-	enabled    bool
-	types      map[Type]bool
-	recvCh     chan *Notification
-	sendDelay  time.Duration
-	sendFunc   func(context.Context, *Notification) error
+	name      string
+	enabled   bool
+	types     map[Type]bool
+	recvCh    chan *Notification
+	sendDelay time.Duration
+	sendFunc  func(context.Context, *Notification) error
 }
 
 func (f *fakeProvider) GetName() string          { return f.name }
@@ -135,13 +135,13 @@ func TestMatchesProviderFilter_ConfidenceOperators(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter := &conf.PushFilterConfig{
-				MetadataFilters: map[string]interface{}{
+				MetadataFilters: map[string]any{
 					"confidence": tt.condition,
 				},
 			}
 
 			notif := &Notification{
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"confidence": tt.confidence,
 				},
 			}
@@ -158,29 +158,29 @@ func TestMatchesProviderFilter_ConfidenceOperators(t *testing.T) {
 func TestMatchesProviderFilter_ConfidenceErrorCases(t *testing.T) {
 	tests := []struct {
 		name      string
-		condition interface{}
-		metadata  map[string]interface{}
+		condition any
+		metadata  map[string]any
 		expected  bool
 	}{
 		// Invalid operator formats
-		{"invalid_operator", "~0.8", map[string]interface{}{"confidence": 0.8}, false},
-		{"empty_condition", "", map[string]interface{}{"confidence": 0.8}, false},
-		{"no_operator", "0.8", map[string]interface{}{"confidence": 0.8}, false},
+		{"invalid_operator", "~0.8", map[string]any{"confidence": 0.8}, false},
+		{"empty_condition", "", map[string]any{"confidence": 0.8}, false},
+		{"no_operator", "0.8", map[string]any{"confidence": 0.8}, false},
 
 		// Invalid values
-		{"invalid_threshold", ">abc", map[string]interface{}{"confidence": 0.8}, false},
-		{"non_string_condition", 0.8, map[string]interface{}{"confidence": 0.8}, false},
+		{"invalid_threshold", ">abc", map[string]any{"confidence": 0.8}, false},
+		{"non_string_condition", 0.8, map[string]any{"confidence": 0.8}, false},
 
 		// Missing or invalid confidence
-		{"missing_confidence", ">0.8", map[string]interface{}{}, false},
-		{"invalid_confidence_type", ">0.8", map[string]interface{}{"confidence": "invalid"}, false},
-		{"nil_confidence", ">0.8", map[string]interface{}{"confidence": nil}, false},
+		{"missing_confidence", ">0.8", map[string]any{}, false},
+		{"invalid_confidence_type", ">0.8", map[string]any{"confidence": "invalid"}, false},
+		{"nil_confidence", ">0.8", map[string]any{"confidence": nil}, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter := &conf.PushFilterConfig{
-				MetadataFilters: map[string]interface{}{
+				MetadataFilters: map[string]any{
 					"confidence": tt.condition,
 				},
 			}
@@ -200,7 +200,7 @@ func TestMatchesProviderFilter_ConfidenceErrorCases(t *testing.T) {
 func TestMatchesProviderFilter_ConfidenceTypes(t *testing.T) {
 	tests := []struct {
 		name       string
-		confidence interface{}
+		confidence any
 		expected   bool
 	}{
 		{"float64", 0.85, true},
@@ -214,13 +214,13 @@ func TestMatchesProviderFilter_ConfidenceTypes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter := &conf.PushFilterConfig{
-				MetadataFilters: map[string]interface{}{
+				MetadataFilters: map[string]any{
 					"confidence": ">0.8",
 				},
 			}
 
 			notif := &Notification{
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"confidence": tt.confidence,
 				},
 			}
@@ -275,7 +275,7 @@ func TestPushDispatcher_ConcurrencyLimit(t *testing.T) {
 	}()
 
 	// Send 5 notifications with some spacing to allow queue processing
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		_, err := svc.Create(TypeInfo, PriorityLow, "Test", "Message")
 		if err != nil {
 			t.Fatalf("create notification failed: %v", err)
@@ -309,19 +309,19 @@ func TestPushDispatcher_ConcurrencyLimit(t *testing.T) {
 // TestPushDispatcher_ExponentialBackoff verifies exponential backoff with jitter.
 func TestPushDispatcher_ExponentialBackoff(t *testing.T) {
 	tests := []struct {
-		name          string
-		attempts      int
-		baseDelay     time.Duration
-		maxDelay      time.Duration
-		expectedMin   time.Duration
-		expectedMax   time.Duration
+		name        string
+		attempts    int
+		baseDelay   time.Duration
+		maxDelay    time.Duration
+		expectedMin time.Duration
+		expectedMax time.Duration
 	}{
 		{
 			name:        "first_retry",
 			attempts:    1,
 			baseDelay:   1 * time.Second,
 			maxDelay:    30 * time.Second,
-			expectedMin: 1 * time.Second,       // base - 25% jitter
+			expectedMin: 1 * time.Second,                      // base - 25% jitter
 			expectedMax: 1*time.Second + 250*time.Millisecond, // base + 25% jitter
 		},
 		{
@@ -337,8 +337,8 @@ func TestPushDispatcher_ExponentialBackoff(t *testing.T) {
 			attempts:    3,
 			baseDelay:   1 * time.Second,
 			maxDelay:    30 * time.Second,
-			expectedMin: 3 * time.Second,       // 4s - 25%
-			expectedMax: 5 * time.Second,       // 4s + 25%
+			expectedMin: 3 * time.Second, // 4s - 25%
+			expectedMax: 5 * time.Second, // 4s + 25%
 		},
 		{
 			name:        "capped_at_max",
@@ -354,7 +354,7 @@ func TestPushDispatcher_ExponentialBackoff(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Calculate delay multiple times to verify jitter distribution
 			delays := make([]time.Duration, 100)
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				// We can't easily test the actual wait, but we can verify the calculation
 				// by inspecting the logic in waitForRetry
 
@@ -375,13 +375,7 @@ func TestPushDispatcher_ExponentialBackoff(t *testing.T) {
 					jitter = time.Duration(rand.Int64N(jitterMax)) - jitterRange
 				}
 
-				delay := exponential + jitter
-				if delay < tt.baseDelay {
-					delay = tt.baseDelay
-				}
-				if delay > tt.maxDelay {
-					delay = tt.maxDelay
-				}
+				delay := min(max(exponential+jitter, tt.baseDelay), tt.maxDelay)
 
 				delays[i] = delay
 			}
@@ -401,7 +395,7 @@ func TestPushDispatcher_ExponentialBackoff(t *testing.T) {
 func TestToFloat_TypeCoverage(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    interface{}
+		input    any
 		expected float64
 		ok       bool
 	}{
@@ -494,13 +488,13 @@ func TestMatchesProviderFilterWithReason(t *testing.T) {
 		{
 			name: "confidence_threshold_not_met",
 			filter: &conf.PushFilterConfig{
-				MetadataFilters: map[string]interface{}{
+				MetadataFilters: map[string]any{
 					"confidence": ">0.8",
 				},
 			},
 			notification: &Notification{
 				Type: TypeInfo,
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"confidence": 0.5,
 				},
 			},
@@ -510,13 +504,13 @@ func TestMatchesProviderFilterWithReason(t *testing.T) {
 		{
 			name: "metadata_mismatch",
 			filter: &conf.PushFilterConfig{
-				MetadataFilters: map[string]interface{}{
+				MetadataFilters: map[string]any{
 					"source": "sensor1",
 				},
 			},
 			notification: &Notification{
 				Type: TypeInfo,
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"source": "sensor2",
 				},
 			},
@@ -805,11 +799,11 @@ func TestCheckPriorityFilter(t *testing.T) {
 	t.Attr("function", "checkPriorityFilter")
 
 	tests := []struct {
-		name              string
-		filterPriorities  []string
-		notifPriority     Priority
-		expectedMatch     bool
-		expectedReason    string
+		name             string
+		filterPriorities []string
+		notifPriority    Priority
+		expectedMatch    bool
+		expectedReason   string
 	}{
 		{
 			name:             "no_filter_passes",
@@ -937,11 +931,12 @@ func TestCheckComponentFilter(t *testing.T) {
 //
 // Best Practices for LLMs:
 // - When testing complex functions, categorize test cases:
-//   * Valid cases (happy path)
-//   * Invalid filter value
-//   * Invalid operators
-//   * Invalid thresholds
-//   * Missing/invalid metadata
+//   - Valid cases (happy path)
+//   - Invalid filter value
+//   - Invalid operators
+//   - Invalid thresholds
+//   - Missing/invalid metadata
+//
 // - Use descriptive test names that explain the scenario
 // - Group related tests with comments
 func TestCheckConfidenceFilter(t *testing.T) {
@@ -1076,7 +1071,8 @@ func TestCheckConfidenceFilter(t *testing.T) {
 //
 // Best Practices for LLMs:
 // - When functions compare any types, test ALL common types:
-//   * strings, integers, floats, booleans
+//   - strings, integers, floats, booleans
+//
 // - Test type coercion (fmt.Sprint converts everything to string)
 // - Test missing keys and empty maps
 // - Document the comparison strategy in comments
@@ -1209,10 +1205,11 @@ func TestCheckExactMetadataMatch(t *testing.T) {
 //
 // Best Practices for LLMs:
 // - Orchestration functions should be tested for:
-//   * Empty inputs (no filters)
-//   * Single filter type (confidence OR exact)
-//   * Multiple filter types (confidence AND exact)
-//   * Partial success scenarios (one passes, one fails)
+//   - Empty inputs (no filters)
+//   - Single filter type (confidence OR exact)
+//   - Multiple filter types (confidence AND exact)
+//   - Partial success scenarios (one passes, one fails)
+//
 // - Test early-return behavior (first failure stops processing)
 // - This demonstrates how refactored code enables easier testing
 func TestCheckMetadataFilters(t *testing.T) {

@@ -28,10 +28,10 @@ func TestDataStoreMetricsThreadSafety(t *testing.T) {
 	wg.Add(numGoroutines * 2) // 2 types of operations
 
 	// Start goroutines that set metrics
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				// Create a new metrics instance for each set operation
 				newMetrics := &Metrics{}
 				ds.SetMetrics(newMetrics)
@@ -41,10 +41,10 @@ func TestDataStoreMetricsThreadSafety(t *testing.T) {
 	}
 
 	// Start goroutines that set SunCalc metrics
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				// Create a new SunCalc metrics instance
 				sunCalcMetrics := &metrics.SunCalcMetrics{}
 				ds.SetSunCalcMetrics(sunCalcMetrics)
@@ -77,10 +77,10 @@ func TestDataStoreMetricsAccessThreadSafety(t *testing.T) {
 	wg.Add(numGoroutines * 2) // 2 types of operations
 
 	// Start goroutines that set metrics
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				newMetrics := &Metrics{}
 				ds.SetMetrics(newMetrics)
 				time.Sleep(time.Microsecond)
@@ -89,15 +89,15 @@ func TestDataStoreMetricsAccessThreadSafety(t *testing.T) {
 	}
 
 	// Start goroutines that access metrics (simulating monitoring)
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				// Simulate the pattern used in monitoring.go
 				ds.metricsMu.RLock()
 				metricsInstance := ds.metrics
 				ds.metricsMu.RUnlock()
-				
+
 				// Use the metrics reference safely
 				if metricsInstance != nil {
 					// Simulate metrics call (no-op for test)
@@ -126,10 +126,10 @@ func TestDataStoreSetSunCalcMetricsThreadSafety(t *testing.T) {
 	wg.Add(numGoroutines * 2)
 
 	// Start goroutines that set SunCalc metrics
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				sunCalcMetrics := &metrics.SunCalcMetrics{}
 				ds.SetSunCalcMetrics(sunCalcMetrics)
 				time.Sleep(time.Microsecond)
@@ -138,15 +138,15 @@ func TestDataStoreSetSunCalcMetricsThreadSafety(t *testing.T) {
 	}
 
 	// Start goroutines that access SunCalc field
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				// Simulate the pattern used in SetSunCalcMetrics
 				ds.metricsMu.RLock()
 				sunCalc := ds.SunCalc
 				ds.metricsMu.RUnlock()
-				
+
 				if sunCalc != nil {
 					// Simulate accessing SunCalc (no-op for test)
 					_ = sunCalc
@@ -200,30 +200,30 @@ func TestDataStoreMetricsRaceCondition(t *testing.T) {
 	wg.Add(numGoroutines * 3) // 3 types of operations
 
 	// Concurrent SetMetrics operations
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				ds.SetMetrics(&Metrics{})
 			}
 		}()
 	}
 
 	// Concurrent SetSunCalcMetrics operations
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				ds.SetSunCalcMetrics(&metrics.SunCalcMetrics{})
 			}
 		}()
 	}
 
 	// Concurrent metrics access operations
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				// Access pattern similar to monitoring code
 				ds.metricsMu.RLock()
 				localMetrics := ds.metrics

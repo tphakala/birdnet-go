@@ -238,8 +238,7 @@ func TestBasicQueueFunctionality(t *testing.T) {
 func TestMultipleJobs(t *testing.T) {
 	t.Parallel()
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)
@@ -265,7 +264,7 @@ func TestMultipleJobs(t *testing.T) {
 	}
 
 	// Enqueue multiple jobs
-	for i := 0; i < numJobs; i++ {
+	for i := range numJobs {
 		// Create a mock action that decrements the wait group when executed
 		action := &MockAction{
 			ExecuteFunc: func(data any) error {
@@ -284,7 +283,7 @@ func TestMultipleJobs(t *testing.T) {
 	}
 
 	// Force immediate processing to ensure all jobs are processed
-	for i := 0; i < numJobs; i++ {
+	for range numJobs {
 		queue.ProcessImmediately(ctx)
 		time.Sleep(5 * time.Millisecond)
 	}
@@ -322,8 +321,7 @@ func TestMultipleJobs(t *testing.T) {
 func TestRetryProcess(t *testing.T) {
 	t.Parallel()
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	queue := setupTestQueue(t, 100, 10, false)
 	defer teardownTestQueue(t, queue)
@@ -426,8 +424,7 @@ func TestRetryProcess(t *testing.T) {
 func TestRetryExhaustion(t *testing.T) {
 	t.Parallel()
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)
@@ -524,8 +521,7 @@ func TestRetryBackoff(t *testing.T) {
 	// See the Clock interface and MockClock implementation for a potential approach.
 
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)
@@ -686,7 +682,7 @@ func TestJobExpiration(t *testing.T) {
 	}
 
 	// Enqueue 3 successful jobs
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		action := &MockAction{
 			ExecuteFunc: func(data any) error {
 				defer wg.Done()
@@ -699,7 +695,7 @@ func TestJobExpiration(t *testing.T) {
 	}
 
 	// Enqueue 2 failing jobs
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		action := &MockAction{
 			ExecuteFunc: func(data any) error {
 				return errors.New("simulated failure")
@@ -769,7 +765,7 @@ func TestArchiveLimit(t *testing.T) {
 	}
 
 	// Enqueue 6 jobs
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		action := &MockAction{
 			ExecuteFunc: func(data any) error {
 				defer wg.Done()
@@ -818,8 +814,7 @@ func TestQueueOverflow(t *testing.T) {
 	}()
 
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a job queue with a small capacity
 	queueCapacity := 3
@@ -896,7 +891,7 @@ func TestQueueOverflow(t *testing.T) {
 	require.NoError(t, err, "Should be able to enqueue a job after making room")
 
 	// Process remaining jobs to clean up
-	for i := 0; i < queueCapacity; i++ {
+	for range queueCapacity {
 		queue.ProcessImmediately(ctx)
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -1051,7 +1046,7 @@ func TestDropOldestJob(t *testing.T) {
 	close(jobBlock)
 
 	// Process all remaining jobs
-	for i := 0; i < queueCapacity; i++ {
+	for range queueCapacity {
 		queue.ProcessImmediately(ctx)
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -1195,8 +1190,7 @@ func TestStressTest(t *testing.T) {
 	}
 
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue with large capacity
 	maxJobs := 100
@@ -1224,7 +1218,7 @@ func TestStressTest(t *testing.T) {
 	}
 
 	// Create a mix of fast, slow, and failing jobs
-	for i := 0; i < numJobs; i++ {
+	for i := range numJobs {
 		var action *MockAction
 
 		// Create different types of actions based on the job index
@@ -1283,11 +1277,9 @@ func TestStressTest(t *testing.T) {
 					// Only call wg.Done() and increment failedJobs once, on the final attempt
 					count := attemptCount.Add(1)
 					// Safely check if count reached max retries
-					maxRetries := config.MaxRetries + 1
-					if maxRetries > math.MaxInt32 {
+					maxRetries := min(config.MaxRetries+1,
 						// This should not happen in practice, but handle it
-						maxRetries = math.MaxInt32
-					}
+						math.MaxInt32)
 					if count >= int32(maxRetries) { //nolint:gosec // G115: test values small, safe conversion
 						defer wg.Done()
 						failedJobs.Add(1)
@@ -1307,7 +1299,7 @@ func TestStressTest(t *testing.T) {
 
 	// Force immediate processing to ensure all jobs are processed
 	// We need multiple processing cycles to handle retries
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		queue.ProcessImmediately(ctx)
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -1351,8 +1343,7 @@ func TestStressTest(t *testing.T) {
 // TestConcurrentJobSubmission tests that the job queue can handle concurrent job submissions
 func TestConcurrentJobSubmission(t *testing.T) {
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue with large capacity
 	queue := setupTestQueue(t, 1000, 50, false)
@@ -1365,10 +1356,10 @@ func TestConcurrentJobSubmission(t *testing.T) {
 	wg.Add(numGoroutines)
 
 	// Have multiple goroutines submit jobs concurrently
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(goroutineID int) {
 			defer wg.Done()
-			for j := 0; j < jobsPerGoroutine; j++ {
+			for j := range jobsPerGoroutine {
 				action := &MockAction{}
 				data := &TestData{ID: fmt.Sprintf("goroutine-%d-job-%d", goroutineID, j)}
 				config := RetryConfig{Enabled: false}
@@ -1382,7 +1373,7 @@ func TestConcurrentJobSubmission(t *testing.T) {
 	wg.Wait()
 
 	// Process all jobs
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		queue.ProcessImmediately(ctx)
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -1399,8 +1390,7 @@ func TestConcurrentJobSubmission(t *testing.T) {
 // TestRecoveryFromPanic tests that the job queue can recover from panics in job execution
 func TestRecoveryFromPanic(t *testing.T) {
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)
@@ -1428,7 +1418,7 @@ func TestRecoveryFromPanic(t *testing.T) {
 	require.NoError(t, err)
 
 	// Process the jobs
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		queue.ProcessImmediately(ctx)
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -1449,8 +1439,7 @@ func TestRecoveryFromPanic(t *testing.T) {
 // TestGracefulShutdownWithInProgressJobs tests that the job queue waits for in-progress jobs to complete during shutdown
 func TestGracefulShutdownWithInProgressJobs(t *testing.T) {
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)
@@ -1523,7 +1512,7 @@ func TestRateLimiting(t *testing.T) {
 	var successCount, rejectionCount atomic.Int32
 
 	// Submit jobs at a high rate
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		action := &MockAction{}
 		data := &TestData{ID: fmt.Sprintf("job-%d", i)}
 		config := RetryConfig{Enabled: false}
@@ -1637,8 +1626,7 @@ func TestJobCancellation(t *testing.T) {
 // TestLongRunningJobs tests that short jobs can be processed while a long job is running
 func TestLongRunningJobs(t *testing.T) {
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	queue := setupTestQueue(t, 100, 10, false)
 	defer teardownTestQueue(t, queue)
@@ -1671,7 +1659,7 @@ func TestLongRunningJobs(t *testing.T) {
 	}
 
 	// Process the short jobs
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		queue.ProcessImmediately(ctx)
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -1694,8 +1682,7 @@ func TestLongRunningJobs(t *testing.T) {
 // TestJobTypeStatistics tests that job statistics are tracked correctly per action type
 func TestJobTypeStatistics(t *testing.T) {
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)
@@ -1857,7 +1844,7 @@ func TestMemoryManagementWithLargeJobLoads(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(jobCount)
 
-	for i := 0; i < jobCount; i++ {
+	for i := range jobCount {
 		action := &MockAction{
 			ExecuteFunc: func(data any) error {
 				defer wg.Done()
@@ -1906,8 +1893,7 @@ func TestMemoryManagementWithLargeJobLoads(t *testing.T) {
 // TestStatsToJSON tests the ToJSON method of JobStatsSnapshot
 func TestStatsToJSON(t *testing.T) {
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)

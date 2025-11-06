@@ -28,17 +28,17 @@ func getLoggerSafe(service string) *slog.Logger {
 
 // NotificationWorker implements EventConsumer to process error events
 type NotificationWorker struct {
-	service       *Service
-	templates     map[string]*template.Template
-	templateMu    sync.RWMutex
-	config        *WorkerConfig
+	service        *Service
+	templates      map[string]*template.Template
+	templateMu     sync.RWMutex
+	config         *WorkerConfig
 	circuitBreaker *CircuitBreaker
-	
+
 	// Metrics
 	eventsProcessed atomic.Uint64
 	eventsDropped   atomic.Uint64
 	eventsFailed    atomic.Uint64
-	
+
 	logger *slog.Logger
 }
 
@@ -53,20 +53,20 @@ type WorkerConfig struct {
 	// BatchTimeout is how long to wait for a full batch
 	BatchTimeout time.Duration
 	// CircuitBreaker settings
-	FailureThreshold   int
-	RecoveryTimeout    time.Duration
-	HalfOpenMaxEvents  int
+	FailureThreshold  int
+	RecoveryTimeout   time.Duration
+	HalfOpenMaxEvents int
 }
 
 // DefaultWorkerConfig returns default configuration
 func DefaultWorkerConfig() *WorkerConfig {
 	return &WorkerConfig{
-		BatchingEnabled:    false, // Start with single event processing
-		BatchSize:          10,
-		BatchTimeout:       100 * time.Millisecond,
-		FailureThreshold:   5,
-		RecoveryTimeout:    30 * time.Second,
-		HalfOpenMaxEvents:  3,
+		BatchingEnabled:   false, // Start with single event processing
+		BatchSize:         10,
+		BatchTimeout:      100 * time.Millisecond,
+		FailureThreshold:  5,
+		RecoveryTimeout:   30 * time.Second,
+		HalfOpenMaxEvents: 3,
 	}
 }
 
@@ -86,11 +86,11 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 	if service == nil {
 		return nil, fmt.Errorf("notification service is required")
 	}
-	
+
 	if config == nil {
 		config = DefaultWorkerConfig()
 	}
-	
+
 	logger := getFileLogger(config.Debug)
 	worker := &NotificationWorker{
 		service:   service,
@@ -103,7 +103,7 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 		},
 		logger: logger,
 	}
-	
+
 	// Pre-compile templates
 	if err := worker.initTemplates(); err != nil {
 		return nil, errors.New(err).
@@ -112,7 +112,7 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 			Context("operation", "init_templates").
 			Build()
 	}
-	
+
 	// Log worker initialization
 	logger.Info("notification worker initialized",
 		"batch_size", config.BatchSize,
@@ -121,20 +121,20 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 		"recovery_timeout", config.RecoveryTimeout,
 		"half_open_max_events", config.HalfOpenMaxEvents,
 		"debug", config.Debug)
-	
+
 	return worker, nil
 }
 
 // initTemplates pre-compiles notification templates
 func (w *NotificationWorker) initTemplates() error {
 	templates := map[string]string{
-		"error_critical": "Critical {{.Category}} error in {{.Component}}: {{.Message}}",
-		"error_high":     "{{.Category}} error in {{.Component}}: {{.Message}}",
-		"error_medium":   "{{.Component}} reported: {{.Message}}",
-		"error_low":      "Minor issue in {{.Component}}",
+		"error_critical":     "Critical {{.Category}} error in {{.Component}}: {{.Message}}",
+		"error_high":         "{{.Category}} error in {{.Component}}: {{.Message}}",
+		"error_medium":       "{{.Component}} reported: {{.Message}}",
+		"error_low":          "Minor issue in {{.Component}}",
 		"error_with_context": "{{.Component}} error ({{.Category}}): {{.Message}}\nContext: {{.Context}}",
 	}
-	
+
 	for name, tmplStr := range templates {
 		tmpl, err := template.New(name).Parse(tmplStr)
 		if err != nil {
@@ -142,12 +142,12 @@ func (w *NotificationWorker) initTemplates() error {
 		}
 		w.templates[name] = tmpl
 	}
-	
+
 	if w.config.Debug {
 		w.logger.Debug("notification templates initialized",
 			"template_count", len(templates))
 	}
-	
+
 	return nil
 }
 
@@ -165,7 +165,7 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 			"error_message_length", len(event.GetMessage()),
 			"context", scrubContextMap(event.GetContext()))
 	}
-	
+
 	// Check circuit breaker
 	if !w.circuitBreaker.Allow() {
 		w.eventsDropped.Add(1)
@@ -175,14 +175,14 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 		)
 		return nil // Don't propagate error when circuit is open
 	}
-	
+
 	// Determine priority based on category and explicit priority if available
 	explicitPriority := ""
 	if enhancedErr, ok := event.(*errors.EnhancedError); ok {
 		explicitPriority = enhancedErr.GetPriority()
 	}
 	priority := getNotificationPriority(event.GetCategory(), explicitPriority)
-	
+
 	// Filter out low priority notifications
 	if priority == PriorityLow {
 		w.logger.Debug("skipping low priority error notification",
@@ -192,11 +192,11 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 		)
 		return nil
 	}
-	
+
 	// Create notification
 	title := w.generateTitle(event, priority)
 	message := w.generateMessage(event, priority)
-	
+
 	notification, err := w.service.CreateWithComponent(
 		TypeError,
 		priority,
@@ -204,11 +204,11 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 		message,
 		event.GetComponent(),
 	)
-	
+
 	if err != nil {
 		w.eventsFailed.Add(1)
 		w.circuitBreaker.RecordFailure()
-		
+
 		// Check if it's a rate limit error
 		var enhErr *errors.EnhancedError
 		if errors.As(err, &enhErr) && enhErr.GetMessage() == "rate limit exceeded" {
@@ -216,7 +216,7 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 			w.eventsDropped.Add(1)
 			return nil
 		}
-		
+
 		w.logger.Error("failed to create notification",
 			"error", privacy.ScrubMessage(err.Error()),
 			"component", event.GetComponent(),
@@ -224,23 +224,23 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 		)
 		return err
 	}
-	
+
 	// Success
 	w.eventsProcessed.Add(1)
 	w.circuitBreaker.RecordSuccess()
-	
+
 	// Add context metadata
 	if notification != nil && event.GetContext() != nil {
 		for k, v := range event.GetContext() {
 			notification.WithMetadata(k, v)
 		}
-		
+
 		// Set expiry for non-critical notifications
 		if priority != PriorityCritical {
 			notification.WithExpiry(24 * time.Hour)
 		}
 	}
-	
+
 	if w.config.Debug {
 		w.logger.Debug("created error notification",
 			"notification_id", notification.ID,
@@ -250,7 +250,7 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 			"metadata_count", len(event.GetContext()),
 			"scrubbed_context", scrubContextMap(event.GetContext()))
 	}
-	
+
 	return nil
 }
 
@@ -259,21 +259,21 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 	if len(errorEvents) == 0 {
 		return nil
 	}
-	
+
 	if w.config.Debug {
 		w.logger.Debug("processing event batch",
 			"batch_size", len(errorEvents))
 	}
-	
+
 	// Group events by component and category for aggregation
 	type eventKey struct {
 		component string
 		category  string
 		priority  Priority
 	}
-	
+
 	eventGroups := make(map[eventKey][]events.ErrorEvent)
-	
+
 	// Group events by key
 	for _, event := range errorEvents {
 		// Determine priority based on category and explicit priority if available
@@ -282,12 +282,12 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 			explicitPriority = enhancedErr.GetPriority()
 		}
 		priority := getNotificationPriority(event.GetCategory(), explicitPriority)
-		
+
 		// Skip low priority events
 		if priority == PriorityLow {
 			continue
 		}
-		
+
 		key := eventKey{
 			component: event.GetComponent(),
 			category:  event.GetCategory(),
@@ -295,11 +295,11 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 		}
 		eventGroups[key] = append(eventGroups[key], event)
 	}
-	
+
 	// Process each group
 	var aggregatedErrors []error
 	successCount := 0
-	
+
 	for key, events := range eventGroups {
 		// Check circuit breaker once per group
 		if !w.circuitBreaker.Allow() {
@@ -311,22 +311,22 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 			)
 			continue
 		}
-		
+
 		// Create aggregated notification
-		title := fmt.Sprintf("%s (%d occurrences)", 
+		title := fmt.Sprintf("%s (%d occurrences)",
 			w.generateTitle(events[0], key.priority), len(events))
-		
+
 		// Aggregate messages
 		var messageBuilder strings.Builder
-		messageBuilder.WriteString(fmt.Sprintf("Multiple %s errors in %s:\n", 
+		messageBuilder.WriteString(fmt.Sprintf("Multiple %s errors in %s:\n",
 			key.category, key.component))
-		
+
 		// Include up to 5 unique messages
 		uniqueMessages := make(map[string]bool)
 		for _, event := range events {
 			msg := event.GetMessage()
 			if len(uniqueMessages) >= 5 {
-				messageBuilder.WriteString(fmt.Sprintf("\n... and %d more errors", 
+				messageBuilder.WriteString(fmt.Sprintf("\n... and %d more errors",
 					len(events)-len(uniqueMessages)))
 				break
 			}
@@ -336,7 +336,7 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 				messageBuilder.WriteString(w.truncateMessage(msg, 100))
 			}
 		}
-		
+
 		// Create single notification for the group
 		notification, err := w.service.CreateWithComponent(
 			TypeError,
@@ -345,12 +345,12 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 			messageBuilder.String(),
 			key.component,
 		)
-		
+
 		if err != nil {
 			w.eventsFailed.Add(uint64(len(events)))
 			w.circuitBreaker.RecordFailure()
 			aggregatedErrors = append(aggregatedErrors, err)
-			
+
 			// Check for rate limit
 			var enhErr *errors.EnhancedError
 			if errors.As(err, &enhErr) && enhErr.GetMessage() == "rate limit exceeded" {
@@ -360,7 +360,7 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 			w.eventsProcessed.Add(uint64(len(events)))
 			w.circuitBreaker.RecordSuccess()
 			successCount += len(events)
-			
+
 			// Add aggregated context
 			if notification != nil {
 				notification.WithMetadata("error_count", len(events))
@@ -369,19 +369,19 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 			}
 		}
 	}
-	
+
 	w.logger.Debug("processed event batch with aggregation",
 		"total", len(errorEvents),
 		"groups", len(eventGroups),
 		"success", successCount,
 		"failed", len(errorEvents)-successCount,
 	)
-	
+
 	// Return aggregated errors if any
 	if len(aggregatedErrors) > 0 {
 		return errors.Join(aggregatedErrors...)
 	}
-	
+
 	return nil
 }
 
@@ -402,7 +402,7 @@ func (w *NotificationWorker) SupportsBatching() bool {
 func (w *NotificationWorker) generateTitle(event events.ErrorEvent, priority Priority) string {
 	category := event.GetCategory()
 	component := event.GetComponent()
-	
+
 	switch priority {
 	case PriorityCritical:
 		return fmt.Sprintf("Critical %s Error in %s", category, component)
@@ -429,29 +429,29 @@ func (w *NotificationWorker) generateMessage(event events.ErrorEvent, priority P
 	default:
 		templateName = "error_medium"
 	}
-	
+
 	// Get template
 	w.templateMu.RLock()
 	tmpl, exists := w.templates[templateName]
 	w.templateMu.RUnlock()
-	
+
 	if !exists {
 		// Fallback to simple message if template not found
 		return w.truncateMessage(event.GetMessage(), 500)
 	}
-	
+
 	// Prepare template data
-	data := map[string]interface{}{
+	data := map[string]any{
 		"Component": event.GetComponent(),
 		"Category":  event.GetCategory(),
 		"Message":   event.GetMessage(),
 	}
-	
+
 	// Add context if available
 	if ctx := event.GetContext(); len(ctx) > 0 {
 		data["Context"] = formatContext(ctx)
 	}
-	
+
 	// Execute template
 	var buf strings.Builder
 	if err := tmpl.Execute(&buf, data); err != nil {
@@ -462,28 +462,28 @@ func (w *NotificationWorker) generateMessage(event events.ErrorEvent, priority P
 		// Fallback to simple message
 		return w.truncateMessage(event.GetMessage(), 500)
 	}
-	
+
 	// Truncate if necessary
 	result := buf.String()
 	const maxLength = 500
 	if len(result) > maxLength {
 		result = result[:maxLength-3] + "..."
 	}
-	
+
 	return result
 }
 
 // formatContext formats the error context for display
-func formatContext(ctx map[string]interface{}) string {
+func formatContext(ctx map[string]any) string {
 	if len(ctx) == 0 {
 		return ""
 	}
-	
+
 	parts := make([]string, 0, len(ctx))
 	for k, v := range ctx {
 		parts = append(parts, fmt.Sprintf("%s=%v", k, v))
 	}
-	
+
 	// Sort for consistent output
 	sort.Strings(parts)
 	return strings.Join(parts, ", ")
@@ -513,7 +513,7 @@ type WorkerStats struct {
 func (cb *CircuitBreaker) Allow() bool {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	
+
 	switch cb.state {
 	case "open":
 		// Check if we should transition to half-open
@@ -530,11 +530,11 @@ func (cb *CircuitBreaker) Allow() bool {
 			return true
 		}
 		return false
-		
+
 	case "half-open":
 		// Allow limited events in half-open state
 		return cb.successCount < cb.config.HalfOpenMaxEvents
-		
+
 	default: // closed
 		return true
 	}
@@ -544,9 +544,9 @@ func (cb *CircuitBreaker) Allow() bool {
 func (cb *CircuitBreaker) RecordSuccess() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	
+
 	cb.failures = 0
-	
+
 	if cb.state == "half-open" {
 		cb.successCount++
 		if cb.successCount >= cb.config.HalfOpenMaxEvents {
@@ -566,10 +566,10 @@ func (cb *CircuitBreaker) RecordSuccess() {
 func (cb *CircuitBreaker) RecordFailure() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	
+
 	cb.failures++
 	cb.lastFailureTime = time.Now()
-	
+
 	if cb.failures >= cb.config.FailureThreshold {
 		oldState := cb.state
 		cb.state = "open"
@@ -581,7 +581,7 @@ func (cb *CircuitBreaker) RecordFailure() {
 				"threshold", cb.config.FailureThreshold)
 		}
 	}
-	
+
 	if cb.state == "half-open" {
 		oldState := cb.state
 		cb.state = "open"
@@ -605,7 +605,7 @@ func (cb *CircuitBreaker) State() string {
 func (cb *CircuitBreaker) Reset() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	
+
 	cb.state = "closed"
 	cb.failures = 0
 	cb.successCount = 0

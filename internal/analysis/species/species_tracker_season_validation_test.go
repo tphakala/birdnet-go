@@ -144,7 +144,7 @@ func TestCachedSeasonOrderPerformance(t *testing.T) {
 
 	// Call computeCurrentSeason multiple times
 	testDate := time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC) // Mid-June
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		tracker.mu.Lock()
 		_ = tracker.computeCurrentSeason(testDate)
 		tracker.mu.Unlock()

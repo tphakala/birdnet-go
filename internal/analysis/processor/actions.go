@@ -63,7 +63,7 @@ const (
 
 // Action is the base interface for all actions that can be executed
 type Action interface {
-	Execute(data interface{}) error
+	Execute(data any) error
 	GetDescription() string
 }
 
@@ -71,7 +71,7 @@ type Action interface {
 // This allows for proper cancellation and timeout propagation
 type ContextAction interface {
 	Action
-	ExecuteContext(ctx context.Context, data interface{}) error
+	ExecuteContext(ctx context.Context, data any) error
 }
 
 type LogAction struct {
@@ -101,8 +101,8 @@ type SaveAudioAction struct {
 	Settings      *conf.Settings
 	ClipName      string
 	pcmData       []byte
-	NoteID        uint               // Note ID for correlation logging with pre-renderer
-	PreRenderer   PreRendererSubmit  // Injected from processor
+	NoteID        uint              // Note ID for correlation logging with pre-renderer
+	PreRenderer   PreRendererSubmit // Injected from processor
 	EventTracker  *EventTracker
 	Description   string
 	CorrelationID string     // Detection correlation ID for log tracking
@@ -285,7 +285,7 @@ func (a *CompositeAction) GetDescription() string {
 
 // Execute runs all actions sequentially, stopping on first error
 // This method is designed to prevent deadlocks and handle timeouts properly
-func (a *CompositeAction) Execute(data interface{}) error {
+func (a *CompositeAction) Execute(data any) error {
 	// Handle nil or empty actions gracefully
 	if a == nil || a.Actions == nil || len(a.Actions) == 0 {
 		return nil // Nothing to execute
@@ -328,7 +328,7 @@ func (a *CompositeAction) Execute(data interface{}) error {
 }
 
 // executeActionWithRecovery executes a single action with panic recovery and proper context handling
-func (a *CompositeAction) executeActionWithRecovery(action Action, data interface{}, step, total int) error {
+func (a *CompositeAction) executeActionWithRecovery(action Action, data any, step, total int) error {
 	// Determine the timeout to use
 	timeout := CompositeActionTimeout
 	if a.Timeout != nil {
@@ -507,7 +507,7 @@ func (a *CompositeAction) executeActionWithRecovery(action Action, data interfac
 }
 
 // Execute logs the note to the chag log file
-func (a *LogAction) Execute(data interface{}) error {
+func (a *LogAction) Execute(data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -546,7 +546,7 @@ func (a *LogAction) Execute(data interface{}) error {
 }
 
 // Execute saves the note to the database
-func (a *DatabaseAction) Execute(data interface{}) error {
+func (a *DatabaseAction) Execute(data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -781,7 +781,7 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 }
 
 // Execute saves the audio clip to a file
-func (a *SaveAudioAction) Execute(data interface{}) error {
+func (a *SaveAudioAction) Execute(data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -883,7 +883,7 @@ func (a *SaveAudioAction) Execute(data interface{}) error {
 }
 
 // Execute sends the note to the BirdWeather API
-func (a *BirdWeatherAction) Execute(data interface{}) error {
+func (a *BirdWeatherAction) Execute(data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -998,7 +998,7 @@ type NoteWithBirdImage struct {
 }
 
 // Execute sends the note to the MQTT broker
-func (a *MqttAction) Execute(data interface{}) error {
+func (a *MqttAction) Execute(data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -1176,7 +1176,7 @@ func (a *MqttAction) Execute(data interface{}) error {
 // Execute updates the range filter species list, this is run every day
 // Note: The ShouldUpdateRangeFilterToday() check in processor.go ensures this action
 // is only created once per day, preventing duplicate concurrent updates (GitHub issue #1357)
-func (a *UpdateRangeFilterAction) Execute(data interface{}) error {
+func (a *UpdateRangeFilterAction) Execute(data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -1218,7 +1218,7 @@ func (a *UpdateRangeFilterAction) Execute(data interface{}) error {
 }
 
 // Execute broadcasts the detection via Server-Sent Events
-func (a *SSEAction) Execute(data interface{}) error {
+func (a *SSEAction) Execute(data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 

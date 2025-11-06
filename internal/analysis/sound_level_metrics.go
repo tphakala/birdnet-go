@@ -58,9 +58,7 @@ func startSoundLevelMetricsPublisher(wg *sync.WaitGroup, quitChan chan struct{},
 		return
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 
 		log.Println("📊 Started sound level metrics publisher")
 
@@ -74,7 +72,7 @@ func startSoundLevelMetricsPublisher(wg *sync.WaitGroup, quitChan chan struct{},
 				updateSoundLevelMetrics(soundData, metrics)
 			}
 		}
-	}()
+	})
 }
 
 // updateSoundLevelMetrics updates Prometheus metrics with sound level data

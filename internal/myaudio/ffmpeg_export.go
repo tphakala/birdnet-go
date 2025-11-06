@@ -894,7 +894,7 @@ func EncodePCMtoWAVWithContext(ctx context.Context, pcmData []byte) (*bytes.Buff
 	buffer := bytes.NewBuffer(nil)
 
 	// List of data elements to write sequentially to the buffer
-	elements := []interface{}{
+	elements := []any{
 		[]byte("RIFF"), chunkSize, []byte("WAVE"),
 		[]byte("fmt "), uint32(16), uint16(1), uint16(numChannels),
 		uint32(sampleRate), uint32(byteRate), uint16(blockAlign), uint16(bitDepth),

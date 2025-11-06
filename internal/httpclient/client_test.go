@@ -300,7 +300,7 @@ func TestDo_ConcurrentRequests(t *testing.T) {
 
 	errChan := make(chan error, concurrency)
 
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		go func() {
 			defer wg.Done()
 

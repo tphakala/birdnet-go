@@ -272,12 +272,10 @@ func TestFFmpegStream_ConcurrentRestartRequests(t *testing.T) {
 	}
 
 	// Also trigger cleanup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		time.Sleep(25 * time.Millisecond)
 		stream.cleanupProcess()
-	}()
+	})
 
 	wg.Wait()
 

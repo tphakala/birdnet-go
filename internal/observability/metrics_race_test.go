@@ -15,7 +15,7 @@ func TestNewMetricsConcurrency(t *testing.T) {
 	wg.Add(numGoroutines)
 
 	// Start multiple goroutines that all try to create metrics concurrently
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
 
@@ -100,10 +100,10 @@ func TestSetMetricsIdempotent(t *testing.T) {
 	if firstMetrics.BirdNET != nil && secondMetrics.BirdNET != nil {
 		// Set metrics with first instance
 		initializeTracing(firstMetrics.BirdNET)
-		
+
 		// Try to set with second instance - should be ignored
 		initializeTracing(secondMetrics.BirdNET)
-		
+
 		// Verify by checking that a metric operation uses the first instance
 		// This is indirect but avoids exposing internal state
 		t.Log("BirdNET SetMetrics is idempotent - second call ignored as expected")
@@ -113,10 +113,10 @@ func TestSetMetricsIdempotent(t *testing.T) {
 	if firstMetrics.MyAudio != nil && secondMetrics.MyAudio != nil {
 		// Set all MyAudio metrics with first instance
 		initializeMyAudioMetrics(firstMetrics.MyAudio)
-		
+
 		// Try to set with second instance - should be ignored
 		initializeMyAudioMetrics(secondMetrics.MyAudio)
-		
+
 		t.Log("MyAudio SetMetrics is idempotent - second call ignored as expected")
 	}
 
@@ -126,7 +126,7 @@ func TestSetMetricsIdempotent(t *testing.T) {
 
 	// Create multiple metrics instances
 	metricsInstances := make([]*Metrics, numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		m, err := NewMetrics()
 		if err != nil {
 			t.Fatalf("Failed to create metrics instance %d: %v", i, err)
@@ -136,10 +136,10 @@ func TestSetMetricsIdempotent(t *testing.T) {
 
 	// Try to set metrics concurrently - only the first should succeed
 	wg.Add(numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(idx int) {
 			defer wg.Done()
-			
+
 			// Try to set metrics with this instance
 			if metricsInstances[idx].BirdNET != nil {
 				initializeTracing(metricsInstances[idx].BirdNET)

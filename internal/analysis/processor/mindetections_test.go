@@ -102,15 +102,15 @@ func TestCalculateMinDetections_OverlapVariation(t *testing.T) {
 		expectedMin int
 	}{
 		// Level 3 with different overlaps
-		{"level_3_overlap_2.4", 3, 2.4, 5},  // exact minimum
-		{"level_3_overlap_2.5", 3, 2.5, 6},  // higher overlap = more detections possible
-		{"level_3_overlap_2.6", 3, 2.6, 8},  // even higher
-		{"level_3_overlap_2.2", 3, 2.2, 4},  // below minimum but still works
+		{"level_3_overlap_2.4", 3, 2.4, 5}, // exact minimum
+		{"level_3_overlap_2.5", 3, 2.5, 6}, // higher overlap = more detections possible
+		{"level_3_overlap_2.6", 3, 2.6, 8}, // even higher
+		{"level_3_overlap_2.2", 3, 2.2, 4}, // below minimum but still works
 
 		// Level 1 with different overlaps
-		{"level_1_overlap_2.0", 1, 2.0, 2},  // exact minimum
-		{"level_1_overlap_2.5", 1, 2.5, 3},  // higher overlap
-		{"level_1_overlap_1.5", 1, 1.5, 1},  // below minimum
+		{"level_1_overlap_2.0", 1, 2.0, 2}, // exact minimum
+		{"level_1_overlap_2.5", 1, 2.5, 3}, // higher overlap
+		{"level_1_overlap_1.5", 1, 1.5, 1}, // below minimum
 	}
 
 	for _, tt := range tests {
@@ -142,18 +142,18 @@ func TestCalculateMinDetections_OverlapVariation(t *testing.T) {
 // that recommends appropriate filtering levels based on overlap.
 func TestGetRecommendedLevelForOverlap(t *testing.T) {
 	tests := []struct {
-		overlap          float64
-		expectedLevel    int
+		overlap           float64
+		expectedLevel     int
 		overlapSufficient bool
 	}{
-		{0.0, 0, true},   // Very low overlap -> Level 0
-		{1.5, 0, true},   // Low overlap -> Level 0
-		{2.0, 1, true},   // Can support Level 1
-		{2.2, 2, true},   // Can support Level 2
-		{2.4, 3, true},   // Can support Level 3
-		{2.7, 4, true},   // Can support Level 4
-		{2.8, 5, true},   // Can support Level 5
-		{2.9, 5, true},   // High overlap -> Level 5
+		{0.0, 0, true}, // Very low overlap -> Level 0
+		{1.5, 0, true}, // Low overlap -> Level 0
+		{2.0, 1, true}, // Can support Level 1
+		{2.2, 2, true}, // Can support Level 2
+		{2.4, 3, true}, // Can support Level 3
+		{2.7, 4, true}, // Can support Level 4
+		{2.8, 5, true}, // Can support Level 5
+		{2.9, 5, true}, // High overlap -> Level 5
 	}
 
 	for _, tt := range tests {
@@ -173,8 +173,8 @@ func TestGetRecommendedLevelForOverlap(t *testing.T) {
 func TestHelperFunctions(t *testing.T) {
 	t.Run("getMinimumOverlapForLevel", func(t *testing.T) {
 		tests := []struct {
-			level       int
-			minOverlap  float64
+			level      int
+			minOverlap float64
 		}{
 			{0, 0.0},
 			{1, 2.0},
@@ -182,8 +182,8 @@ func TestHelperFunctions(t *testing.T) {
 			{3, 2.4},
 			{4, 2.7},
 			{5, 2.8},
-			{99, 2.2},  // Invalid level should return default (Moderate)
-			{-1, 2.2},  // Invalid level should return default (Moderate)
+			{99, 2.2}, // Invalid level should return default (Moderate)
+			{-1, 2.2}, // Invalid level should return default (Moderate)
 		}
 
 		for _, tt := range tests {
@@ -206,8 +206,8 @@ func TestHelperFunctions(t *testing.T) {
 			{3, 0.50},
 			{4, 0.60},
 			{5, 0.70},
-			{99, 0.30},  // Invalid level should return default (Moderate)
-			{-1, 0.30},  // Invalid level should return default (Moderate)
+			{99, 0.30}, // Invalid level should return default (Moderate)
+			{-1, 0.30}, // Invalid level should return default (Moderate)
 		}
 
 		for _, tt := range tests {
@@ -230,8 +230,8 @@ func TestHelperFunctions(t *testing.T) {
 			{3, "Balanced"},
 			{4, "Strict"},
 			{5, "Maximum"},
-			{99, "Unknown"},  // Invalid level should return "Unknown"
-			{-1, "Unknown"},  // Invalid level should return "Unknown"
+			{99, "Unknown"}, // Invalid level should return "Unknown"
+			{-1, "Unknown"}, // Invalid level should return "Unknown"
 		}
 
 		for _, tt := range tests {
@@ -254,8 +254,8 @@ func TestHelperFunctions(t *testing.T) {
 			{3, "Any (RPi 3B or better)"},
 			{4, "RPi 4 or better required"},
 			{5, "RPi 4 or better required"},
-			{99, "Unknown"},  // Invalid level should return "Unknown"
-			{-1, "Unknown"},  // Invalid level should return "Unknown"
+			{99, "Unknown"}, // Invalid level should return "Unknown"
+			{-1, "Unknown"}, // Invalid level should return "Unknown"
 		}
 
 		for _, tt := range tests {
@@ -269,7 +269,7 @@ func TestHelperFunctions(t *testing.T) {
 
 	t.Run("getLevelDescription", func(t *testing.T) {
 		tests := []struct {
-			level       int
+			level         int
 			shouldContain []string // Verify key phrases are present
 		}{
 			{0, []string{"No filtering", "Default", "BirdNET-Pi"}},
@@ -416,23 +416,23 @@ func TestCalculateMinDetections(t *testing.T) {
 // NOTE: Uses Level 2 (Moderate, 30% threshold) for realistic test values
 func TestCalculateMinDetectionsIndependentOfClipLength(t *testing.T) {
 	tests := []struct {
-		name            string
-		level           int
-		overlap         float64
-		clipConfigs     []struct{ length, preCapture int }
-		expectedMinDet  int
-		description     string
+		name           string
+		level          int
+		overlap        float64
+		clipConfigs    []struct{ length, preCapture int }
+		expectedMinDet int
+		description    string
 	}{
 		{
 			name:    "overlap_2.2_various_clip_lengths",
 			level:   2, // Moderate (30%)
 			overlap: 2.2,
 			clipConfigs: []struct{ length, preCapture int }{
-				{15, 3},   // default
-				{30, 5},   // medium
-				{60, 15},  // long (user's config from issue #1314)
-				{60, 30},  // very long pre-capture
-				{10, 0},   // short, no pre-capture
+				{15, 3},  // default
+				{30, 5},  // medium
+				{60, 15}, // long (user's config from issue #1314)
+				{60, 30}, // very long pre-capture
+				{10, 0},  // short, no pre-capture
 			},
 			expectedMinDet: 3, // Level 2 with overlap 2.2: step=0.8s, max ~8 in 6s, 30% = 3
 			description:    "Overlap 2.2 with Level 2 should always require 3 detections regardless of clip length",
@@ -508,7 +508,7 @@ func TestCalculateMinDetectionsConsistency(t *testing.T) {
 
 	// Call multiple times and verify consistent results
 	first := p.calculateMinDetections()
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		result := p.calculateMinDetections()
 		if result != first {
 			t.Errorf("Inconsistent results: iteration %d returned %d, expected %d", i, result, first)
@@ -568,60 +568,60 @@ func TestCalculateMinDetectionsIssue1314(t *testing.T) {
 // provides appropriate recommendations when filtering is disabled (level 0).
 func TestSuggestLevelForDisabledFilter(t *testing.T) {
 	tests := []struct {
-		name              string
-		overlap           float64
+		name                 string
+		overlap              float64
 		expectRecommendation bool
-		expectedLevel     int
-		expectedLevelName string
+		expectedLevel        int
+		expectedLevelName    string
 	}{
 		{
-			name:              "overlap_2.0_recommends_level_1",
-			overlap:           2.0,
+			name:                 "overlap_2.0_recommends_level_1",
+			overlap:              2.0,
 			expectRecommendation: true,
-			expectedLevel:     1,
-			expectedLevelName: "Lenient",
+			expectedLevel:        1,
+			expectedLevelName:    "Lenient",
 		},
 		{
-			name:              "overlap_2.2_recommends_level_2",
-			overlap:           2.2,
+			name:                 "overlap_2.2_recommends_level_2",
+			overlap:              2.2,
 			expectRecommendation: true,
-			expectedLevel:     2,
-			expectedLevelName: "Moderate",
+			expectedLevel:        2,
+			expectedLevelName:    "Moderate",
 		},
 		{
-			name:              "overlap_2.4_recommends_level_3",
-			overlap:           2.4,
+			name:                 "overlap_2.4_recommends_level_3",
+			overlap:              2.4,
 			expectRecommendation: true,
-			expectedLevel:     3,
-			expectedLevelName: "Balanced",
+			expectedLevel:        3,
+			expectedLevelName:    "Balanced",
 		},
 		{
-			name:              "overlap_2.7_recommends_level_4",
-			overlap:           2.7,
+			name:                 "overlap_2.7_recommends_level_4",
+			overlap:              2.7,
 			expectRecommendation: true,
-			expectedLevel:     4,
-			expectedLevelName: "Strict",
+			expectedLevel:        4,
+			expectedLevelName:    "Strict",
 		},
 		{
-			name:              "overlap_2.8_recommends_level_5",
-			overlap:           2.8,
+			name:                 "overlap_2.8_recommends_level_5",
+			overlap:              2.8,
 			expectRecommendation: true,
-			expectedLevel:     5,
-			expectedLevelName: "Maximum",
+			expectedLevel:        5,
+			expectedLevelName:    "Maximum",
 		},
 		{
-			name:              "low_overlap_no_recommendation",
-			overlap:           1.5,
+			name:                 "low_overlap_no_recommendation",
+			overlap:              1.5,
 			expectRecommendation: false,
-			expectedLevel:     0,
-			expectedLevelName: "",
+			expectedLevel:        0,
+			expectedLevelName:    "",
 		},
 		{
-			name:              "zero_overlap_no_recommendation",
-			overlap:           0.0,
+			name:                 "zero_overlap_no_recommendation",
+			overlap:              0.0,
 			expectRecommendation: false,
-			expectedLevel:     0,
-			expectedLevelName: "",
+			expectedLevel:        0,
+			expectedLevelName:    "",
 		},
 	}
 
@@ -650,13 +650,13 @@ func TestSuggestLevelForDisabledFilter(t *testing.T) {
 // TestValidateOverlapForLevel verifies overlap validation logic for enabled filter levels.
 func TestValidateOverlapForLevel(t *testing.T) {
 	tests := []struct {
-		name           string
-		level          int
-		overlap        float64
-		minOverlap     float64
-		minDetections  int
-		expectWarning  bool
-		description    string
+		name          string
+		level         int
+		overlap       float64
+		minOverlap    float64
+		minDetections int
+		expectWarning bool
+		description   string
 	}{
 		{
 			name:          "level_1_overlap_sufficient",

@@ -36,20 +36,20 @@ func TestGetGenusSpecies(t *testing.T) {
 		name           string
 		genus          string
 		expectedStatus int
-		checkResponse  func(*testing.T, map[string]interface{})
+		checkResponse  func(*testing.T, map[string]any)
 	}{
 		{
 			name:           "valid genus - corvus",
 			genus:          "corvus",
 			expectedStatus: http.StatusOK,
-			checkResponse: func(t *testing.T, resp map[string]interface{}) {
+			checkResponse: func(t *testing.T, resp map[string]any) {
 				t.Helper()
 				genus, ok := resp["genus"].(string)
 				assert.True(t, ok, "Expected genus field in response")
 				// Genus is returned in proper case (Corvus), not lowercase
 				assert.Equal(t, "Corvus", genus, "Expected genus 'Corvus'")
 
-				species, ok := resp["species"].([]interface{})
+				species, ok := resp["species"].([]any)
 				assert.True(t, ok, "Expected species array")
 				assert.GreaterOrEqual(t, len(species), 10, "Expected at least 10 corvus species")
 			},
@@ -58,9 +58,9 @@ func TestGetGenusSpecies(t *testing.T) {
 			name:           "valid genus - turdus",
 			genus:          "turdus",
 			expectedStatus: http.StatusOK,
-			checkResponse: func(t *testing.T, resp map[string]interface{}) {
+			checkResponse: func(t *testing.T, resp map[string]any) {
 				t.Helper()
-				species, ok := resp["species"].([]interface{})
+				species, ok := resp["species"].([]any)
 				assert.True(t, ok, "Expected species array")
 				assert.GreaterOrEqual(t, len(species), 50, "Expected at least 50 turdus species")
 			},
@@ -69,7 +69,7 @@ func TestGetGenusSpecies(t *testing.T) {
 			name:           "case insensitive - CORVUS",
 			genus:          "CORVUS",
 			expectedStatus: http.StatusOK,
-			checkResponse: func(t *testing.T, resp map[string]interface{}) {
+			checkResponse: func(t *testing.T, resp map[string]any) {
 				t.Helper()
 				genus, ok := resp["genus"].(string)
 				assert.True(t, ok, "Expected genus field in response")
@@ -107,7 +107,7 @@ func TestGetGenusSpecies(t *testing.T) {
 
 				if tt.checkResponse != nil {
 					// Parse JSON response
-					var resp map[string]interface{}
+					var resp map[string]any
 					err := json.Unmarshal(rec.Body.Bytes(), &resp)
 					require.NoError(t, err, "Failed to parse JSON response")
 					tt.checkResponse(t, resp)
@@ -184,11 +184,11 @@ func TestGetFamilySpecies(t *testing.T) {
 				assert.Equal(t, "public, max-age=86400", rec.Header().Get("Cache-Control"), "Expected cache control header")
 				assert.Equal(t, "Accept-Encoding", rec.Header().Get("Vary"), "Expected vary header")
 
-				var resp map[string]interface{}
+				var resp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &resp)
 				require.NoError(t, err, "Failed to parse JSON response")
 
-				species, ok := resp["species"].([]interface{})
+				species, ok := resp["species"].([]any)
 				assert.True(t, ok, "Expected species array in response")
 				assert.GreaterOrEqual(t, len(species), tt.minSpecies,
 					"Expected at least %d species in family %s", tt.minSpecies, tt.family)
@@ -283,12 +283,12 @@ func TestGetSpeciesTree(t *testing.T) {
 				assert.Equal(t, "public, max-age=86400", rec.Header().Get("Cache-Control"), "Expected cache control header")
 				assert.Equal(t, "Accept-Encoding", rec.Header().Get("Vary"), "Expected vary header")
 
-				var resp map[string]interface{}
+				var resp map[string]any
 				err := json.Unmarshal(rec.Body.Bytes(), &resp)
 				require.NoError(t, err, "Failed to parse JSON response")
 
 				// Check taxonomy tree structure (JSON field is "taxonomy_tree" with underscore)
-				tree, ok := resp["taxonomy_tree"].(map[string]interface{})
+				tree, ok := resp["taxonomy_tree"].(map[string]any)
 				assert.True(t, ok, "Expected taxonomy_tree in response")
 
 				assert.Equal(t, tt.wantGenus, tree["genus"], "Expected genus to match")

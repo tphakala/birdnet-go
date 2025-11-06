@@ -20,12 +20,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
-	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	obsmetrics "github.com/tphakala/birdnet-go/internal/observability/metrics"
+	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/serviceapi"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
@@ -310,7 +310,7 @@ func (s *Server) initLogger() {
 }
 
 // Debug logs debug messages if debug mode is enabled
-func (s *Server) Debug(format string, v ...interface{}) {
+func (s *Server) Debug(format string, v ...any) {
 	if s.Settings.WebServer.Debug {
 		// Original debug logging (keep for backward compatibility)
 		switch len(v) {

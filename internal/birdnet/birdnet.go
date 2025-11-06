@@ -7,6 +7,7 @@ import (
 	_ "embed" // Embedding data directly into the binary.
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -33,8 +34,8 @@ var modelVersion = "BirdNET GLOBAL 6K V2.4 FP32"
 // speciesCacheEntry holds cached species scores for a composite cache key.
 // Scores are immutable once stored - callers must not mutate the returned map.
 type speciesCacheEntry struct {
-	key          string                   // Composite cache key: date + rounded lat/lon + model id
-	scores       map[string]float64       // Species occurrence scores keyed by label
+	key    string             // Composite cache key: date + rounded lat/lon + model id
+	scores map[string]float64 // Species occurrence scores keyed by label
 }
 
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
@@ -49,10 +50,10 @@ type BirdNET struct {
 	mu                  sync.Mutex
 	resultsBuffer       []datastore.Results // Pre-allocated buffer for results to reduce allocations
 	confidenceBuffer    []float32           // Pre-allocated buffer for confidence values to reduce allocations
-	
+
 	// Species occurrence cache to avoid repeated GetProbableSpecies calls within same day
-	speciesCacheMu      sync.RWMutex
-	speciesCache        map[string]*speciesCacheEntry
+	speciesCacheMu sync.RWMutex
+	speciesCache   map[string]*speciesCacheEntry
 }
 
 // NewBirdNET initializes a new BirdNET instance with given settings.
@@ -194,7 +195,7 @@ func (bn *BirdNET) initializeModel() error {
 		options.SetNumThread(threads)
 	}
 
-	options.SetErrorReporter(func(msg string, user_data interface{}) {
+	options.SetErrorReporter(func(msg string, user_data any) {
 		fmt.Println(msg)
 	}, nil)
 
@@ -206,7 +207,7 @@ func (bn *BirdNET) initializeModel() error {
 	if status := bn.AnalysisInterpreter.AllocateTensors(); status != tflite.OK {
 		return fmt.Errorf("tensor allocation failed")
 	}
-	
+
 	// Force garbage collection to reclaim memory from model loading
 	// The model data is no longer needed as TFLite has created its own internal copy
 	runtime.GC()
@@ -248,10 +249,10 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 	// Check if external model path is specified
 	if bn.Settings.BirdNET.RangeFilter.ModelPath != "" {
 		modelPath := bn.Settings.BirdNET.RangeFilter.ModelPath
-		
+
 		// Expand environment variables first
 		modelPath = os.ExpandEnv(modelPath)
-		
+
 		// Then expand ~ to home directory if needed
 		if strings.HasPrefix(modelPath, "~/") {
 			homeDir, err := os.UserHomeDir()
@@ -263,7 +264,7 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 			}
 			modelPath = filepath.Join(homeDir, modelPath[2:])
 		}
-		
+
 		// Load model from external file
 		data, err := os.ReadFile(modelPath)
 		if err != nil {
@@ -273,11 +274,11 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 				Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
 				Build()
 		}
-		
+
 		fmt.Printf("📁 Loaded range filter model from: %s\n", modelPath)
 		return data, nil
 	}
-	
+
 	// No model path specified, try standard paths first (for noembed builds)
 	if !hasEmbeddedModels {
 		// Determine which model file to look for based on the model version
@@ -286,7 +287,7 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 			modelFileName = DefaultRangeFilterV1ModelName
 			fmt.Printf("⚠️ Looking for legacy range filter model\n")
 		}
-		
+
 		data, path, err := tryLoadModelFromStandardPaths(modelFileName, "range filter")
 		if err != nil {
 			// Add extra context to the error
@@ -298,7 +299,7 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 		bn.Debug("Loaded range filter model from standard path: %s", path)
 		return data, nil
 	}
-	
+
 	// Fall back to embedded models
 	var data []byte
 	if bn.Settings.BirdNET.RangeFilter.Model == "legacy" {
@@ -307,7 +308,7 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 	} else {
 		data = metaModelDataV2
 	}
-	
+
 	if data == nil {
 		return nil, errors.Newf("range filter model not available: embedded model is nil").
 			Category(errors.CategoryModelLoad).
@@ -315,7 +316,7 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
 			Build()
 	}
-	
+
 	return data, nil
 }
 
@@ -341,7 +342,7 @@ func (bn *BirdNET) initializeMetaModel() error {
 	// Meta model requires only one CPU.
 	options := tflite.NewInterpreterOptions()
 	options.SetNumThread(1)
-	options.SetErrorReporter(func(msg string, user_data interface{}) {
+	options.SetErrorReporter(func(msg string, user_data any) {
 		fmt.Println(msg)
 	}, nil)
 
@@ -363,7 +364,7 @@ func (bn *BirdNET) initializeMetaModel() error {
 			Timing("meta-model-allocate", time.Since(start)).
 			Build()
 	}
-	
+
 	// Force garbage collection to reclaim memory from meta model loading
 	// The model data is no longer needed as TFLite has created its own internal copy
 	runtime.GC()
@@ -579,9 +580,7 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 	bn.speciesCacheMu.RLock()
 	if entry, ok := bn.speciesCache[cacheKey]; ok && entry.key == cacheKey {
 		out := make(map[string]float64, len(entry.scores))
-		for k, v := range entry.scores {
-			out[k] = v
-		}
+		maps.Copy(out, entry.scores)
 		bn.speciesCacheMu.RUnlock()
 		return out, nil
 	}
@@ -601,9 +600,7 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 	bn.speciesCacheMu.Lock()
 	if entry, ok := bn.speciesCache[cacheKey]; ok && entry.key == cacheKey {
 		out := make(map[string]float64, len(entry.scores))
-		for k, v := range entry.scores {
-			out[k] = v
-		}
+		maps.Copy(out, entry.scores)
 		bn.speciesCacheMu.Unlock()
 		return out, nil
 	}
@@ -614,9 +611,7 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 		scores: scores,
 	}
 	out := make(map[string]float64, len(scores))
-	for k, v := range scores {
-		out[k] = v
-	}
+	maps.Copy(out, scores)
 	bn.speciesCacheMu.Unlock()
 	return out, nil
 }
@@ -650,16 +645,15 @@ const DefaultRangeFilterV2ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP1
 // Callers can override model locations by setting explicit ModelPath or RangeFilter.ModelPath in configuration.
 const DefaultModelDirectory = "model"
 
-
 // getOSSpecificSystemPaths returns OS-appropriate system installation paths.
 func getOSSpecificSystemPaths(modelName string) []string {
 	var paths []string
-	
+
 	// Docker container paths (works on all OS in containers)
-	paths = append(paths, 
-		filepath.Join(string(filepath.Separator), "data", DefaultModelDirectory, modelName),        // User custom models in /data/model
-		filepath.Join(string(filepath.Separator), "models", modelName))                            // Built-in models in /models
-	
+	paths = append(paths,
+		filepath.Join(string(filepath.Separator), "data", DefaultModelDirectory, modelName), // User custom models in /data/model
+		filepath.Join(string(filepath.Separator), "models", modelName))                      // Built-in models in /models
+
 	// OS-specific system paths
 	switch runtime.GOOS {
 	case "windows":
@@ -671,7 +665,7 @@ func getOSSpecificSystemPaths(modelName string) []string {
 			// Fallback to default location if env var not set
 			paths = append(paths, filepath.Join("C:", string(filepath.Separator), "Program Files", "BirdNET-Go", DefaultModelDirectory, modelName))
 		}
-		
+
 		// Use PROGRAMDATA env var, fall back to C:\ProgramData if not set
 		if programData := os.Getenv("PROGRAMDATA"); programData != "" {
 			paths = append(paths, filepath.Join(programData, "BirdNET-Go", DefaultModelDirectory, modelName))
@@ -679,7 +673,7 @@ func getOSSpecificSystemPaths(modelName string) []string {
 			// Fallback to default location if env var not set
 			paths = append(paths, filepath.Join("C:", string(filepath.Separator), "ProgramData", "BirdNET-Go", DefaultModelDirectory, modelName))
 		}
-		
+
 		// Windows user-specific path using LOCALAPPDATA
 		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
 			paths = append(paths, filepath.Join(localAppData, "BirdNET-Go", DefaultModelDirectory, modelName))
@@ -687,7 +681,7 @@ func getOSSpecificSystemPaths(modelName string) []string {
 			// Fallback to constructing from USERPROFILE if LOCALAPPDATA not set
 			paths = append(paths, filepath.Join(userProfile, "AppData", "Local", "BirdNET-Go", DefaultModelDirectory, modelName))
 		}
-		
+
 	case "darwin": // macOS
 		// macOS system paths
 		paths = append(paths,
@@ -695,21 +689,21 @@ func getOSSpecificSystemPaths(modelName string) []string {
 			filepath.Join(string(filepath.Separator), "opt", "birdnet-go", DefaultModelDirectory, modelName),
 			filepath.Join(string(filepath.Separator), "Applications", "BirdNET-Go.app", "Contents", "Resources", DefaultModelDirectory, modelName),
 		)
-		
+
 		// macOS user-specific path
 		if home := os.Getenv("HOME"); home != "" {
 			paths = append(paths,
 				filepath.Join(home, "Library", "Application Support", "BirdNET-Go", DefaultModelDirectory, modelName),
 			)
 		}
-		
+
 	default: // Linux and other Unix-like systems
 		// Linux/Unix system paths
 		paths = append(paths,
 			filepath.Join(string(filepath.Separator), "usr", "share", "birdnet-go", DefaultModelDirectory, modelName),
 			filepath.Join(string(filepath.Separator), "opt", "birdnet-go", DefaultModelDirectory, modelName),
 		)
-		
+
 		// XDG Base Directory specification for user data
 		if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
 			paths = append(paths, filepath.Join(xdgDataHome, "birdnet-go", DefaultModelDirectory, modelName))
@@ -717,7 +711,7 @@ func getOSSpecificSystemPaths(modelName string) []string {
 			paths = append(paths, filepath.Join(home, ".local", "share", "birdnet-go", DefaultModelDirectory, modelName))
 		}
 	}
-	
+
 	return paths
 }
 
@@ -727,13 +721,13 @@ func getOSSpecificSystemPaths(modelName string) []string {
 func tryLoadModelFromStandardPaths(modelName, modelType string) (data []byte, path string, err error) {
 	// Build candidate paths using filepath.Join for all constructions
 	var candidatePaths []string
-	
+
 	// Relative paths (resolved against current working directory)
 	candidatePaths = append(candidatePaths,
-		filepath.Join(DefaultModelDirectory, modelName),           // model/<name>
-		filepath.Join("data", DefaultModelDirectory, modelName),   // Legacy: data/model/<name>
+		filepath.Join(DefaultModelDirectory, modelName),         // model/<name>
+		filepath.Join("data", DefaultModelDirectory, modelName), // Legacy: data/model/<name>
 	)
-	
+
 	// OS-specific system paths
 	candidatePaths = append(candidatePaths, getOSSpecificSystemPaths(modelName)...)
 
@@ -741,8 +735,8 @@ func tryLoadModelFromStandardPaths(modelName, modelType string) (data []byte, pa
 	if exePath, execErr := os.Executable(); execErr == nil {
 		exeDir := filepath.Dir(exePath)
 		candidatePaths = append(candidatePaths,
-			filepath.Join(exeDir, DefaultModelDirectory, modelName),                        // <exe-dir>/model/<name>
-			filepath.Join(exeDir, "..", DefaultModelDirectory, modelName),                  // <exe-dir>/../model/<name>
+			filepath.Join(exeDir, DefaultModelDirectory, modelName),                              // <exe-dir>/model/<name>
+			filepath.Join(exeDir, "..", DefaultModelDirectory, modelName),                        // <exe-dir>/../model/<name>
 			filepath.Join(exeDir, "..", "share", "birdnet-go", DefaultModelDirectory, modelName), // <exe-dir>/../share/birdnet-go/model/<name>
 		)
 	}
@@ -776,7 +770,7 @@ func (bn *BirdNET) loadModel() ([]byte, error) {
 		modelPath := bn.Settings.BirdNET.ModelPath
 		// Expand environment variables first
 		modelPath = os.ExpandEnv(modelPath)
-		
+
 		// Then expand ~ to home directory if needed
 		if strings.HasPrefix(modelPath, "~/") {
 			homeDir, err := os.UserHomeDir()
@@ -788,7 +782,7 @@ func (bn *BirdNET) loadModel() ([]byte, error) {
 			}
 			modelPath = filepath.Join(homeDir, modelPath[2:])
 		}
-		
+
 		data, err := os.ReadFile(modelPath)
 		if err != nil {
 			return nil, errors.New(err).
@@ -958,7 +952,7 @@ func (bn *BirdNET) ReloadModel() error {
 	if oldRangeInterpreter != nil {
 		oldRangeInterpreter.Delete()
 	}
-	
+
 	// Clear species cache as model/labels have changed
 	bn.clearSpeciesCache()
 
@@ -977,7 +971,7 @@ func (bn *BirdNET) GetSpeciesWithScientificAndCommonName(label string) (scientif
 }
 
 // Debug prints debug messages if debug mode is enabled
-func (bn *BirdNET) Debug(format string, v ...interface{}) {
+func (bn *BirdNET) Debug(format string, v ...any) {
 	if bn.Settings.BirdNET.Debug {
 		if len(v) == 0 {
 			log.Print("[birdnet] " + format)

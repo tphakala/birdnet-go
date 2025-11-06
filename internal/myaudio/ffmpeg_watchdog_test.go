@@ -335,7 +335,7 @@ func TestFFmpegManager_WatchdogMemoryLeakPrevention(t *testing.T) {
 
 	// Verify lastForceReset map doesn't grow unbounded
 	// Start and stop multiple streams
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		testURL := "rtsp://test.example.com/stream" + string(rune('0'+i))
 
 		err := manager.StartStream(testURL, "tcp", audioChan)

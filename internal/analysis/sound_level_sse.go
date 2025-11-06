@@ -27,9 +27,7 @@ func startSoundLevelSSEPublisher(wg *sync.WaitGroup, ctx context.Context, apiCon
 		return
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 
 		log.Println("📡 Started sound level SSE publisher")
 
@@ -60,5 +58,5 @@ func startSoundLevelSSEPublisher(wg *sync.WaitGroup, ctx context.Context, apiCon
 				}
 			}
 		}
-	}()
+	})
 }

@@ -52,7 +52,7 @@ func TestHealthCheck(t *testing.T) {
 		assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
 		// Parse response body
-		var response map[string]interface{}
+		var response map[string]any
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		require.NoError(t, err)
 
@@ -68,7 +68,7 @@ func TestHealthCheck(t *testing.T) {
 
 		// Check system metrics if present
 		if metrics, exists := response["system"]; exists {
-			metricsMap, ok := metrics.(map[string]interface{})
+			metricsMap, ok := metrics.(map[string]any)
 			assert.True(t, ok, "System metrics should be an object")
 
 			// Check for common system metrics
@@ -86,7 +86,7 @@ func TestHealthCheck(t *testing.T) {
 			}
 
 			if diskSpace, diskExists := metricsMap["disk_space"]; diskExists {
-				diskMap, ok := diskSpace.(map[string]interface{})
+				diskMap, ok := diskSpace.(map[string]any)
 				assert.True(t, ok, "Disk space should be an object")
 
 				if total, totalExists := diskMap["total"]; totalExists {

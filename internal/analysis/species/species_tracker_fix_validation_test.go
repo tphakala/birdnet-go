@@ -142,7 +142,7 @@ func TestConcurrentAccessFixValidation(t *testing.T) {
 
 	// Run sequential operations with varying times to test the fix
 	baseTime := time.Now()
-	for i := 0; i < numOperations; i++ {
+	for i := range numOperations {
 		// Create time variations that might trigger precision issues
 		offset := time.Duration(i) * time.Microsecond
 		if i%2 == 0 {

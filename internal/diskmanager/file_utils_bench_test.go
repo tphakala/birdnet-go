@@ -33,10 +33,9 @@ func BenchmarkGetAudioFiles(b *testing.B) {
 	// Create a mock database
 	mockDB := &MockDB{}
 
-	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, false)
 		if err != nil {
 			b.Fatal(err)
@@ -56,10 +55,9 @@ func BenchmarkParseFileInfo(b *testing.B) {
 
 	path := "/test/bubo_bubo_80p_20210102T150405Z.wav"
 
-	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := parseFileInfo(path, mockInfo, allowedFileTypes)
 		if err != nil {
 			b.Fatal(err)
@@ -153,7 +151,7 @@ func BenchmarkPoolEffectiveness(b *testing.B) {
 	tempDir := b.TempDir()
 
 	// Create test files
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		filename := filepath.Join(tempDir,
 			"species_80p_20210102T150405Z.wav")
 		err := os.WriteFile(filename, []byte("test"), 0o644)
@@ -212,10 +210,9 @@ func BenchmarkErrorHandling(b *testing.B) {
 
 	mockDB := &MockDB{}
 
-	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, false)
 		if err != nil {
 			b.Fatal(err)

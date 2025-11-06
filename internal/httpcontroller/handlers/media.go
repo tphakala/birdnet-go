@@ -124,8 +124,8 @@ func (h *Handlers) sanitizeClipName(clipName string) (string, error) {
 				return "", fmt.Errorf("invalid path: absolute path not under export directory")
 			}
 		} else {
-			if strings.HasPrefix(cleanPath, exportPath) {
-				cleanPath = strings.TrimPrefix(cleanPath, exportPath)
+			if after, ok := strings.CutPrefix(cleanPath, exportPath); ok {
+				cleanPath = after
 				cleanPath = strings.TrimPrefix(cleanPath, string(os.PathSeparator))
 			} else {
 				return "", fmt.Errorf("invalid path: absolute path not under export directory")
@@ -169,8 +169,8 @@ func getFullPath(relativePath string) string {
 func getWebPath(path string) string {
 	// Convert absolute path to relative path if it starts with the export path
 	exportPath := conf.Setting().Realtime.Audio.Export.Path
-	if strings.HasPrefix(path, exportPath) {
-		path = strings.TrimPrefix(path, exportPath)
+	if after, ok := strings.CutPrefix(path, exportPath); ok {
+		path = after
 		path = strings.TrimPrefix(path, string(os.PathSeparator))
 	}
 

@@ -38,16 +38,14 @@ func TestShouldUpdateRangeFilterToday_ConcurrentAccess(t *testing.T) {
 	var mu sync.Mutex
 
 	// Launch multiple goroutines that all check if update is needed
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numGoroutines {
+		wg.Go(func() {
 			if settings.ShouldUpdateRangeFilterToday() {
 				mu.Lock()
 				trueCount++
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -87,17 +85,15 @@ func TestGetLastRangeFilterUpdate(t *testing.T) {
 	var mu sync.Mutex
 	var errors []string
 
-	for i := 0; i < numReaders; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numReaders {
+		wg.Go(func() {
 			got := settings.GetLastRangeFilterUpdate()
 			if !got.Equal(expectedTime) {
 				mu.Lock()
 				errors = append(errors, "Expected time mismatch")
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -117,7 +113,7 @@ func TestUpdateIncludedSpecies_ThreadSafety(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Concurrently update species lists
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
@@ -151,30 +147,26 @@ func TestIsSpeciesIncluded_ThreadSafety(t *testing.T) {
 	var errors []string
 
 	// Start readers
-	for i := 0; i < numReaders; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numReaders {
+		wg.Go(func() {
 			// These should consistently return true
 			if !settings.IsSpeciesIncluded("Turdus merula") {
 				mu.Lock()
 				errors = append(errors, "Expected species to be included")
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 
 	// While reading, also update the list (keeping the original species)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		time.Sleep(1 * time.Millisecond) // Let some readers start
 		settings.UpdateIncludedSpecies([]string{
 			"Turdus merula_Eurasian Blackbird",
 			"Parus major_Great Tit",
 			"Corvus cornix_Hooded Crow",
 		})
-	}()
+	})
 
 	wg.Wait()
 
@@ -221,12 +213,10 @@ func TestResetRangeFilterUpdateFlag_ThreadSafety(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Concurrently reset the flag
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numGoroutines {
+		wg.Go(func() {
 			settings.ResetRangeFilterUpdateFlag()
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -288,16 +278,14 @@ func TestErrorRecoveryScenario_Concurrent(t *testing.T) {
 	var mu sync.Mutex
 
 	// Launch multiple goroutines that all check if retry is needed
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numGoroutines {
+		wg.Go(func() {
 			if settings.ShouldUpdateRangeFilterToday() {
 				mu.Lock()
 				trueCount++
 				mu.Unlock()
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -321,34 +309,28 @@ func TestResetAndCheckInterleaved(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Goroutine 1: Repeatedly resets
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < numIterations; i++ {
+	wg.Go(func() {
+		for range numIterations {
 			settings.ResetRangeFilterUpdateFlag()
 			time.Sleep(1 * time.Millisecond)
 		}
-	}()
+	})
 
 	// Goroutine 2: Repeatedly checks
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < numIterations; i++ {
+	wg.Go(func() {
+		for range numIterations {
 			settings.ShouldUpdateRangeFilterToday()
 			time.Sleep(1 * time.Millisecond)
 		}
-	}()
+	})
 
 	// Goroutine 3: Repeatedly reads
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < numIterations; i++ {
+	wg.Go(func() {
+		for range numIterations {
 			settings.GetLastRangeFilterUpdate()
 			time.Sleep(1 * time.Millisecond)
 		}
-	}()
+	})
 
 	wg.Wait()
 	// If we reach here without deadlock or panic, the test passes

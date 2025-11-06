@@ -102,7 +102,7 @@ func openFIFOWithRetries(ctx context.Context, fifoPath, pipePath string, openFla
 	maxRetries := 30
 	retryInterval := 200 * time.Millisecond
 
-	for i := 0; i < maxRetries; i++ {
+	for i := range maxRetries {
 		select {
 		case <-ctx.Done():
 			return nil, fmt.Errorf("context canceled while opening FIFO")

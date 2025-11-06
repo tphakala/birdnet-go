@@ -28,14 +28,14 @@ type ProviderHealth struct {
 
 // HealthChecker periodically checks the health of push providers.
 type HealthChecker struct {
-	providers         map[string]*healthCheckEntry
-	interval          time.Duration
-	timeout           time.Duration
-	log               *slog.Logger
-	metrics           *metrics.NotificationMetrics
-	mu                sync.RWMutex
-	cancel            context.CancelFunc
-	baseCtx           context.Context // Parent context for deriving check contexts
+	providers map[string]*healthCheckEntry
+	interval  time.Duration
+	timeout   time.Duration
+	log       *slog.Logger
+	metrics   *metrics.NotificationMetrics
+	mu        sync.RWMutex
+	cancel    context.CancelFunc
+	baseCtx   context.Context // Parent context for deriving check contexts
 }
 
 type healthCheckEntry struct {
@@ -303,7 +303,7 @@ func (hc *HealthChecker) IsHealthy() bool {
 }
 
 // GetHealthSummary returns a summary of overall health.
-func (hc *HealthChecker) GetHealthSummary() map[string]interface{} {
+func (hc *HealthChecker) GetHealthSummary() map[string]any {
 	health := hc.GetAllProviderHealth()
 
 	totalProviders := len(health)
@@ -319,7 +319,7 @@ func (hc *HealthChecker) GetHealthSummary() map[string]interface{} {
 		}
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"total_providers":   totalProviders,
 		"healthy_providers": healthyProviders,
 		"open_circuits":     openCircuits,

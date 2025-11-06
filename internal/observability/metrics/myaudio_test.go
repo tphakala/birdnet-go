@@ -89,8 +89,7 @@ func BenchmarkRecordAudioConversion_FmtSprintf(b *testing.B) {
 	m, err := NewMyAudioMetrics(registry)
 	require.NoError(b, err)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		m.RecordAudioConversion("wav", 16, "success")
 	}
 }
@@ -100,8 +99,7 @@ func BenchmarkRecordAudioConversionError_FmtSprintf(b *testing.B) {
 	m, err := NewMyAudioMetrics(registry)
 	require.NoError(b, err)
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		m.RecordAudioConversionError("wav", 16, "error")
 	}
 }
@@ -140,32 +138,32 @@ func TestRecordBufferAllocationAttempt(t *testing.T) {
 			assert.InDelta(t, tc.expected, count, 0.01)
 		})
 	}
-	
+
 	// Test repeated allocation scenario
 	t.Run("repeated allocation scenario", func(t *testing.T) {
 		source := "rtsp://test_camera"
-		
+
 		// Simulate multiple allocation attempts
 		m.RecordBufferAllocationAttempt("capture", source, "attempted")
 		m.RecordBufferAllocationAttempt("capture", source, "first_allocation")
-		
+
 		// Simulate repeated attempts
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			m.RecordBufferAllocationAttempt("capture", source, "attempted")
 			m.RecordBufferAllocationAttempt("capture", source, "repeated_blocked")
 		}
-		
+
 		// Verify counts
 		attemptedCount := testutil.ToFloat64(m.bufferAllocationAttempts.WithLabelValues(
 			"capture", source, "attempted",
 		))
 		assert.InDelta(t, float64(4), attemptedCount, 0.01, "Should have 4 attempted allocations")
-		
+
 		firstAllocCount := testutil.ToFloat64(m.bufferAllocationAttempts.WithLabelValues(
 			"capture", source, "first_allocation",
 		))
 		assert.InDelta(t, float64(1), firstAllocCount, 0.01, "Should have 1 successful first allocation")
-		
+
 		blockedCount := testutil.ToFloat64(m.bufferAllocationAttempts.WithLabelValues(
 			"capture", source, "repeated_blocked",
 		))

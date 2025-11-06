@@ -34,6 +34,7 @@ linters:
     - testifylint
     #- goconst
     - gocyclo
+    - modernize
     # Performance linters
     - prealloc
     - exhaustive
@@ -70,6 +71,6 @@ linters:
       default-signifies-exhaustive: true
 issues:
   max-issues-per-linter: 0
-  max-same-issues: 0
+  max-same-issues: 1
   uniq-by-line: true
   new: false

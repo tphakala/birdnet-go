@@ -359,7 +359,7 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 	// Write data to the ring buffer with retry logic
 	var lastErr error
 	var n int
-	for retry := 0; retry < maxRetries; retry++ {
+	for retry := range maxRetries {
 		// Use anonymous function with defer to ensure mutex is always unlocked
 		// This prevents deadlocks even if ab.Write panics
 		err := func() error {

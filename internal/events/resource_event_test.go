@@ -105,7 +105,7 @@ func TestNewResourceEvent(t *testing.T) {
 func TestNewResourceEventWithMetadata(t *testing.T) {
 	t.Parallel()
 
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"host":     "server01",
 		"location": "/var/log",
 		"pid":      12345,

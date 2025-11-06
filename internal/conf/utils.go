@@ -271,8 +271,8 @@ func GetBoardModel() string {
 
 // ParsePercentage converts a percentage string (e.g., "80%") to a float64
 func ParsePercentage(percentage string) (float64, error) {
-	if strings.HasSuffix(percentage, "%") {
-		value, err := strconv.ParseFloat(strings.TrimSuffix(percentage, "%"), 64)
+	if before, ok := strings.CutSuffix(percentage, "%"); ok {
+		value, err := strconv.ParseFloat(before, 64)
 		if err != nil {
 			return 0, err
 		}
@@ -492,8 +492,8 @@ func ParseFfmpegVersion(output string) (version string, major, minor int) {
 // libavutil 57.x = FFmpeg 5.x
 // libavutil 56.x = FFmpeg 4.x
 func parseLibavutilVersion(output string) (major, minor int) {
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(output, "\n")
+	for line := range lines {
 		// Look for libavutil version line like "libavutil      59.  8.100 / 59.  8.100"
 		// or "libavutil      60. 12.100 / 60. 12.100"
 		if strings.Contains(line, "libavutil") {

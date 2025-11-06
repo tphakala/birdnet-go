@@ -17,7 +17,7 @@ func TestErrorHandlingEnhancement(t *testing.T) {
 		name           string
 		testFunc       func() error
 		expectCategory errors.ErrorCategory
-		expectContext  map[string]interface{}
+		expectContext  map[string]any
 	}{
 		{
 			name: "ErrImageNotFound should be enhanced",
@@ -25,7 +25,7 @@ func TestErrorHandlingEnhancement(t *testing.T) {
 				return imageprovider.ErrImageNotFound
 			},
 			expectCategory: errors.CategoryImageFetch,
-			expectContext: map[string]interface{}{
+			expectContext: map[string]any{
 				"component": "imageprovider",
 			},
 		},
@@ -36,7 +36,7 @@ func TestErrorHandlingEnhancement(t *testing.T) {
 				return fmt.Errorf("test initialization error")
 			},
 			expectCategory: errors.CategoryNetwork,
-			expectContext: map[string]interface{}{
+			expectContext: map[string]any{
 				"component": "imageprovider",
 			},
 		},
@@ -61,7 +61,7 @@ func TestErrorHandlingEnhancement(t *testing.T) {
 				return err
 			},
 			expectCategory: errors.CategoryImageFetch,
-			expectContext: map[string]interface{}{
+			expectContext: map[string]any{
 				"component": "imageprovider",
 			},
 		},
