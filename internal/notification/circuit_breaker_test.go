@@ -22,7 +22,7 @@ func TestCircuitBreaker_ClosedState(t *testing.T) {
 	}
 
 	// Successful calls should keep circuit closed
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		err := cb.Call(context.Background(), func(ctx context.Context) error {
 			return nil
 		})
@@ -322,7 +322,7 @@ func TestCircuitBreaker_GetStats(t *testing.T) {
 	testErr := errors.New("test error")
 
 	// Make some failures
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		_ = cb.Call(context.Background(), func(ctx context.Context) error {
 			return testErr
 		})
@@ -354,7 +354,7 @@ func TestCircuitBreaker_ConcurrentCalls(t *testing.T) {
 	// Run concurrent successful calls
 	errChan := make(chan error, 100)
 	done := make(chan bool, 100)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		go func() {
 			err := cb.Call(context.Background(), func(ctx context.Context) error {
 				time.Sleep(1 * time.Millisecond)
@@ -368,7 +368,7 @@ func TestCircuitBreaker_ConcurrentCalls(t *testing.T) {
 	}
 
 	// Wait for all to complete
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		<-done
 	}
 	close(errChan)

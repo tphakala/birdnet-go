@@ -134,11 +134,9 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 	m.streams[url] = stream
 
 	// Start stream in goroutine
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
+	m.wg.Go(func() {
 		stream.Run(m.ctx)
-	}()
+	})
 
 	managerLogger.Info("started FFmpeg stream",
 		"url", privacy.SanitizeRTSPUrl(url),

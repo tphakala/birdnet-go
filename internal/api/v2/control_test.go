@@ -83,7 +83,7 @@ func runConcurrentControlRequestsTest(t *testing.T, e *echo.Echo, controller *Co
 	defer cancel()
 
 	// Launch multiple concurrent requests using Go 1.25's WaitGroup.Go()
-	for i := 0; i < numRequests; i++ {
+	for range numRequests {
 		// Use WaitGroup.Go() to eliminate manual Add/Done management (Go 1.25)
 		wg.Go(func() {
 
@@ -106,7 +106,7 @@ func runConcurrentControlRequestsTest(t *testing.T, e *echo.Echo, controller *Co
 	assert.Len(t, controller.controlChan, numRequests, "All signals should be received")
 
 	// Drain the channel
-	for i := 0; i < numRequests; i++ {
+	for range numRequests {
 		signal := <-controller.controlChan
 		assert.Equal(t, expectedSignal, signal, "Each signal should be the expected signal")
 	}
@@ -300,7 +300,7 @@ func TestControlActionsWithNilChannel(t *testing.T) {
 			assert.Equal(t, http.StatusInternalServerError, rec.Code, "Should return 500 Internal Server Error")
 
 			// Parse error response
-			var errorResp map[string]interface{}
+			var errorResp map[string]any
 			err = json.Unmarshal(rec.Body.Bytes(), &errorResp)
 			require.NoError(t, err)
 
@@ -360,7 +360,7 @@ func TestControlResultStructure(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify JSON structure
-	var jsonMap map[string]interface{}
+	var jsonMap map[string]any
 	err = json.Unmarshal(jsonData, &jsonMap)
 	require.NoError(t, err)
 
@@ -384,7 +384,7 @@ func TestControlActionStructure(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify JSON structure
-	var jsonMap map[string]interface{}
+	var jsonMap map[string]any
 	err = json.Unmarshal(jsonData, &jsonMap)
 	require.NoError(t, err)
 

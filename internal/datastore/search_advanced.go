@@ -12,23 +12,23 @@ import (
 
 // AdvancedSearchFilters represents all possible search filters from the frontend
 type AdvancedSearchFilters struct {
-	TextQuery      string
-	Confidence     *ConfidenceFilter
-	TimeOfDay      []string // ["dawn", "day", "dusk", "night"]
-	Hour           *HourFilter
-	DateRange      *DateRange
-	Verified       *bool
-	Species        []string
-	Location       []string // Maps to source field
-	Locked         *bool
-	SortAscending  bool
-	Limit          int
-	Offset         int
+	TextQuery     string
+	Confidence    *ConfidenceFilter
+	TimeOfDay     []string // ["dawn", "day", "dusk", "night"]
+	Hour          *HourFilter
+	DateRange     *DateRange
+	Verified      *bool
+	Species       []string
+	Location      []string // Maps to source field
+	Locked        *bool
+	SortAscending bool
+	Limit         int
+	Offset        int
 }
 
 // ConfidenceFilter represents a confidence level filter
 type ConfidenceFilter struct {
-	Operator string  // ">", "<", ">=", "<=", "="
+	Operator string // ">", "<", ">=", "<=", "="
 	Value    float64
 }
 
@@ -52,7 +52,7 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 	// ds.metricsMu.RLock()
 	// metrics := ds.metrics
 	// ds.metricsMu.RUnlock()
-	// 
+	//
 	// if metrics != nil {
 	// 	metrics.IncrementSearches("advanced")
 	// }
@@ -154,7 +154,7 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 // ParseDateShortcut converts date shortcuts like "today", "yesterday" to actual dates
 func ParseDateShortcut(shortcut string) (time.Time, error) {
 	now := time.Now()
-	
+
 	switch strings.ToLower(shortcut) {
 	case "today":
 		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()), nil
@@ -177,7 +177,7 @@ func applyConfidenceFilter(query *gorm.DB, filter *ConfidenceFilter) *gorm.DB {
 	if filter == nil {
 		return query
 	}
-	
+
 	switch filter.Operator {
 	case ">":
 		return query.Where("confidence > ?", filter.Value)
@@ -198,7 +198,7 @@ func applyDateRangeFilter(query *gorm.DB, dateRange *DateRange) *gorm.DB {
 	if dateRange == nil {
 		return query
 	}
-	
+
 	startDate := dateRange.Start.Format("2006-01-02")
 	endDate := dateRange.End.Format("2006-01-02")
 	return query.Where("date >= ? AND date <= ?", startDate, endDate)
@@ -209,23 +209,23 @@ func applyHourFilter(query *gorm.DB, hour *HourFilter) *gorm.DB {
 	if hour == nil {
 		return query
 	}
-	
+
 	if hour.Start == hour.End {
 		// Single hour
 		hourStr := fmt.Sprintf("%02d:00:00", hour.Start)
 		nextHourStr := fmt.Sprintf("%02d:00:00", (hour.Start+1)%24)
 		return query.Where("time >= ? AND time < ?", hourStr, nextHourStr)
 	}
-	
+
 	// Hour range
 	startHourStr := fmt.Sprintf("%02d:00:00", hour.Start)
 	endHourStr := fmt.Sprintf("%02d:00:00", hour.End+1) // Include the end hour
-	
+
 	if hour.Start < hour.End {
 		// Normal range (e.g., 6-9)
 		return query.Where("time >= ? AND time < ?", startHourStr, endHourStr)
 	}
-	
+
 	// Wraps around midnight (e.g., 22-2)
 	return query.Where("(time >= ? OR time < ?)", startHourStr, endHourStr)
 }
@@ -235,10 +235,10 @@ func applyTimeOfDayFilter(query *gorm.DB, timeOfDay []string) *gorm.DB {
 	if len(timeOfDay) == 0 {
 		return query
 	}
-	
+
 	var timeConditions []string
-	var args []interface{}
-	
+	var args []any
+
 	for _, tod := range timeOfDay {
 		switch strings.ToLower(tod) {
 		case "dawn":
@@ -259,11 +259,11 @@ func applyTimeOfDayFilter(query *gorm.DB, timeOfDay []string) *gorm.DB {
 			args = append(args, "20:00:00", "05:00:00")
 		}
 	}
-	
+
 	if len(timeConditions) > 0 {
 		return query.Where("("+strings.Join(timeConditions, " OR ")+")", args...)
 	}
-	
+
 	return query
 }
 
@@ -272,11 +272,11 @@ func applyVerifiedFilter(query *gorm.DB, verified *bool) *gorm.DB {
 	if verified == nil {
 		return query
 	}
-	
+
 	if *verified {
 		return query.Joins("INNER JOIN note_reviews ON note_reviews.note_id = notes.id AND note_reviews.verified != ''")
 	}
-	
+
 	return query.Joins("LEFT JOIN note_reviews ON note_reviews.note_id = notes.id").
 		Where("note_reviews.id IS NULL OR note_reviews.verified = ''")
 }
@@ -286,11 +286,11 @@ func applyLockedFilter(query *gorm.DB, locked *bool) *gorm.DB {
 	if locked == nil {
 		return query
 	}
-	
+
 	if *locked {
 		return query.Joins("INNER JOIN note_locks ON note_locks.note_id = notes.id")
 	}
-	
+
 	return query.Joins("LEFT JOIN note_locks ON note_locks.note_id = notes.id").
 		Where("note_locks.id IS NULL")
 }

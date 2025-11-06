@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -61,14 +62,9 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 		"getIncludedSpecies":    s.GetIncludedSpecies,
 		"isSpeciesExcluded": func(commonName string) bool {
 			settings := conf.Setting()
-			for _, s := range settings.Realtime.Species.Exclude {
-				if s == commonName {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(settings.Realtime.Species.Exclude, commonName)
 		},
-		"includeTemplate": func(name string, data interface{}) (template.HTML, error) {
+		"includeTemplate": func(name string, data any) (template.HTML, error) {
 			var buf bytes.Buffer
 			err := s.Echo.Renderer.(*TemplateRenderer).templates.ExecuteTemplate(&buf, name, data)
 			if err != nil {
@@ -86,7 +82,7 @@ func (s *Server) GetTemplateFunctions() template.FuncMap {
 // Returns:
 //
 //	The total sum of all input numbers
-func addFunc(numbers ...interface{}) int {
+func addFunc(numbers ...any) int {
 	sum := 0
 	for _, num := range numbers {
 		switch v := num.(type) {
@@ -111,11 +107,11 @@ func modFunc(a, b int) int { return a % b }
 // Returns:
 //   - map[string]interface{}: Dictionary with provided key-value pairs
 //   - error: Invalid dict call or non-string keys
-func dictFunc(values ...interface{}) (map[string]interface{}, error) {
+func dictFunc(values ...any) (map[string]any, error) {
 	if len(values)%2 != 0 {
 		return nil, errors.New("invalid dict call")
 	}
-	dict := make(map[string]interface{}, len(values)/2)
+	dict := make(map[string]any, len(values)/2)
 	for i := 0; i < len(values); i += 2 {
 		key, ok := values[i].(string)
 		if !ok {
@@ -127,7 +123,7 @@ func dictFunc(values ...interface{}) (map[string]interface{}, error) {
 }
 
 // toJSONFunc converts a value to a JSON string
-func toJSONFunc(v interface{}) string {
+func toJSONFunc(v any) string {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return "[]"
@@ -139,10 +135,9 @@ func toJSONFunc(v interface{}) string {
 // It normalizes the totalDetections based on a predefined maximum.
 func calcWidth(totalDetections int) int {
 	const maxDetections = 200 // Maximum number of detections expected
-	widthPercentage := (totalDetections * 100) / maxDetections
-	if widthPercentage > 100 {
-		widthPercentage = 100 // Limit width to 100% if exceeded
-	}
+	widthPercentage := min((totalDetections*100)/maxDetections,
+		// Limit width to 100% if exceeded
+		100)
 	return widthPercentage
 }
 
@@ -251,8 +246,8 @@ func seqFunc(start, end int) []int {
 //
 //	A map containing the hour metadata with keys:
 //	"Class", "Length", "HourIndex", "Date", "Sunrise", "Sunset"
-func getHourlyHeaderData(hourIndex int, class string, length int, date string, sunrise, sunset int) map[string]interface{} {
-	baseData := map[string]interface{}{
+func getHourlyHeaderData(hourIndex int, class string, length int, date string, sunrise, sunset int) map[string]any {
+	baseData := map[string]any{
 		"Class":     class,
 		"Length":    length,
 		"HourIndex": hourIndex,
@@ -271,8 +266,8 @@ func getHourlyHeaderData(hourIndex int, class string, length int, date string, s
 // Returns:
 //
 //	map[string]interface{} with HourIndex and species Name
-func getHourlyCounts(element *handlers.NoteWithIndex, hourIndex int) map[string]interface{} {
-	baseData := map[string]interface{}{
+func getHourlyCounts(element *handlers.NoteWithIndex, hourIndex int) map[string]any {
+	baseData := map[string]any{
 		"HourIndex": hourIndex,
 		"Name":      element.CommonName,
 	}
@@ -298,7 +293,7 @@ func sumHourlyCountsRange(counts *[24]int, start, length int) int {
 }
 
 // safeJSONFunc converts a value to a safely escaped JSON string for use in HTML templates
-func safeJSONFunc(v interface{}) template.JS {
+func safeJSONFunc(v any) template.JS {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return template.JS("null")
@@ -412,7 +407,7 @@ func (s *Server) GetAllSpecies() []string {
 }
 
 // Convert interface{} to float64 for numeric comparisons
-func toFloat64(v interface{}) (float64, error) {
+func toFloat64(v any) (float64, error) {
 	switch val := v.(type) {
 	case int:
 		return float64(val), nil
@@ -426,7 +421,7 @@ func toFloat64(v interface{}) (float64, error) {
 }
 
 // geFunc returns true if a >= b
-func geFunc(a, b interface{}) bool {
+func geFunc(a, b any) bool {
 	aFloat, err1 := toFloat64(a)
 	bFloat, err2 := toFloat64(b)
 	if err1 != nil || err2 != nil {
@@ -442,6 +437,6 @@ func roundToNearest(value, multiple int) int {
 
 // listFunc creates a list of interface values.
 // This is useful for creating ordered lists for templates.
-func listFunc(items ...interface{}) []interface{} {
+func listFunc(items ...any) []any {
 	return items
 }

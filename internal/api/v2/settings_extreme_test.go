@@ -20,14 +20,14 @@ func TestExtremeValues(t *testing.T) {
 	tests := []struct {
 		name          string
 		section       string
-		extremeData   interface{}
+		extremeData   any
 		expectedError bool
 		description   string
 	}{
 		{
 			name:    "Maximum integer values",
 			section: "dashboard",
-			extremeData: map[string]interface{}{
+			extremeData: map[string]any{
 				"summaryLimit": 2147483647, // Max int32
 			},
 			expectedError: false,
@@ -36,7 +36,7 @@ func TestExtremeValues(t *testing.T) {
 		{
 			name:    "Negative values where not allowed",
 			section: "dashboard",
-			extremeData: map[string]interface{}{
+			extremeData: map[string]any{
 				"summaryLimit": -100,
 			},
 			expectedError: false, // Might be accepted but should be validated in business logic
@@ -45,7 +45,7 @@ func TestExtremeValues(t *testing.T) {
 		{
 			name:    "Extreme coordinates",
 			section: "birdnet",
-			extremeData: map[string]interface{}{
+			extremeData: map[string]any{
 				"latitude":  91.0,  // Invalid latitude
 				"longitude": 181.0, // Invalid longitude
 			},
@@ -55,7 +55,7 @@ func TestExtremeValues(t *testing.T) {
 		{
 			name:    "Very small float values",
 			section: "birdnet",
-			extremeData: map[string]interface{}{
+			extremeData: map[string]any{
 				"threshold": 0.0000000001,
 			},
 			expectedError: false,
@@ -64,7 +64,7 @@ func TestExtremeValues(t *testing.T) {
 		{
 			name:    "Empty arrays",
 			section: "species",
-			extremeData: map[string]interface{}{
+			extremeData: map[string]any{
 				"include": []string{},
 				"exclude": []string{},
 			},
@@ -74,7 +74,7 @@ func TestExtremeValues(t *testing.T) {
 		{
 			name:    "Very large arrays",
 			section: "species",
-			extremeData: map[string]interface{}{
+			extremeData: map[string]any{
 				"include": generateLargeStringArray(1000),
 			},
 			expectedError: false,
@@ -83,7 +83,7 @@ func TestExtremeValues(t *testing.T) {
 		{
 			name:    "Zero values",
 			section: "birdnet",
-			extremeData: map[string]interface{}{
+			extremeData: map[string]any{
 				"sensitivity": 0.0,
 				"threshold":   0.0,
 				"overlap":     0.0,
@@ -94,7 +94,7 @@ func TestExtremeValues(t *testing.T) {
 		{
 			name:    "Maximum float values",
 			section: "birdnet",
-			extremeData: map[string]interface{}{
+			extremeData: map[string]any{
 				"sensitivity": 1.7976931348623157e+308, // Close to max float64
 			},
 			expectedError: false,
@@ -103,7 +103,7 @@ func TestExtremeValues(t *testing.T) {
 		{
 			name:    "Minimum positive float",
 			section: "birdnet",
-			extremeData: map[string]interface{}{
+			extremeData: map[string]any{
 				"threshold": 5e-324, // Smallest positive float64
 			},
 			expectedError: false,
@@ -112,7 +112,7 @@ func TestExtremeValues(t *testing.T) {
 		{
 			name:    "Negative zero",
 			section: "birdnet",
-			extremeData: map[string]interface{}{
+			extremeData: map[string]any{
 				"overlap": 0.0,
 			},
 			expectedError: false,
@@ -121,7 +121,7 @@ func TestExtremeValues(t *testing.T) {
 		{
 			name:    "Unicode in string fields",
 			section: "species",
-			extremeData: map[string]interface{}{
+			extremeData: map[string]any{
 				"include": []string{"🦅 Eagle", "🦉 Owl", "🦆 Duck"},
 			},
 			expectedError: false,
@@ -130,9 +130,9 @@ func TestExtremeValues(t *testing.T) {
 		{
 			name:    "Very long species names",
 			section: "species",
-			extremeData: map[string]interface{}{
-				"config": map[string]interface{}{
-					generateLongString(500): map[string]interface{}{
+			extremeData: map[string]any{
+				"config": map[string]any{
+					generateLongString(500): map[string]any{
 						"threshold": 0.8,
 					},
 				},
@@ -143,7 +143,7 @@ func TestExtremeValues(t *testing.T) {
 		{
 			name:    "Port number edge cases",
 			section: "webserver",
-			extremeData: map[string]interface{}{
+			extremeData: map[string]any{
 				"port": "65535", // Maximum valid port
 			},
 			expectedError: false,
@@ -152,7 +152,7 @@ func TestExtremeValues(t *testing.T) {
 		{
 			name:    "Invalid port number",
 			section: "webserver",
-			extremeData: map[string]interface{}{
+			extremeData: map[string]any{
 				"port": "65536", // One above maximum
 			},
 			expectedError: true, // Implementation rejects invalid port numbers
@@ -161,8 +161,8 @@ func TestExtremeValues(t *testing.T) {
 		{
 			name:    "Time duration extremes",
 			section: "mqtt",
-			extremeData: map[string]interface{}{
-				"retrySettings": map[string]interface{}{
+			extremeData: map[string]any{
+				"retrySettings": map[string]any{
 					"maxRetries":   2147483647,
 					"initialDelay": 2147483647,
 					"maxDelay":     2147483647,
@@ -215,33 +215,33 @@ func TestMemoryExhaustionAttempts(t *testing.T) {
 	tests := []struct {
 		name        string
 		section     string
-		largeData   func() interface{}
+		largeData   func() any
 		description string
 	}{
 		{
 			name:    "Very large nested object",
 			section: "species",
-			largeData: func() interface{} {
-				config := make(map[string]interface{})
-				for i := 0; i < 10000; i++ {
-					config[fmt.Sprintf("species_%d", i)] = map[string]interface{}{
+			largeData: func() any {
+				config := make(map[string]any)
+				for i := range 10000 {
+					config[fmt.Sprintf("species_%d", i)] = map[string]any{
 						"threshold": 0.8,
 						"interval":  30,
 					}
 				}
-				return map[string]interface{}{"config": config}
+				return map[string]any{"config": config}
 			},
 			description: "Should handle large number of species configs",
 		},
 		{
 			name:    "Deeply nested structure",
 			section: "dashboard",
-			largeData: func() interface{} {
+			largeData: func() any {
 				// Create a deeply nested structure
-				result := map[string]interface{}{}
+				result := map[string]any{}
 				current := result
-				for i := 0; i < 100; i++ {
-					next := map[string]interface{}{}
+				for range 100 {
+					next := map[string]any{}
 					current["nested"] = next
 					current = next
 				}
@@ -253,17 +253,17 @@ func TestMemoryExhaustionAttempts(t *testing.T) {
 		{
 			name:    "Large array of actions",
 			section: "species",
-			largeData: func() interface{} {
-				actions := make([]map[string]interface{}, 1000)
+			largeData: func() any {
+				actions := make([]map[string]any, 1000)
 				for i := range actions {
-					actions[i] = map[string]interface{}{
+					actions[i] = map[string]any{
 						"type":    "ExecuteCommand",
 						"command": fmt.Sprintf("/usr/bin/notify-%d", i),
 					}
 				}
-				return map[string]interface{}{
-					"config": map[string]interface{}{
-						"Test Bird": map[string]interface{}{
+				return map[string]any{
+					"config": map[string]any{
+						"Test Bird": map[string]any{
 							"actions": actions,
 						},
 					},
@@ -274,9 +274,9 @@ func TestMemoryExhaustionAttempts(t *testing.T) {
 		{
 			name:    "Wide flat object",
 			section: "dashboard",
-			largeData: func() interface{} {
-				data := make(map[string]interface{})
-				for i := 0; i < 5000; i++ {
+			largeData: func() any {
+				data := make(map[string]any)
+				for i := range 5000 {
 					data[fmt.Sprintf("field_%d", i)] = fmt.Sprintf("value_%d", i)
 				}
 				return data
@@ -286,20 +286,20 @@ func TestMemoryExhaustionAttempts(t *testing.T) {
 		{
 			name:    "Recursive-like structure",
 			section: "species",
-			largeData: func() interface{} {
+			largeData: func() any {
 				// Create a structure that looks recursive but isn't
-				config := make(map[string]interface{})
-				for i := 0; i < 50; i++ {
-					config[fmt.Sprintf("level_%d", i)] = map[string]interface{}{
+				config := make(map[string]any)
+				for i := range 50 {
+					config[fmt.Sprintf("level_%d", i)] = map[string]any{
 						"threshold": 0.8,
-						"config": map[string]interface{}{
-							fmt.Sprintf("sublevel_%d", i): map[string]interface{}{
+						"config": map[string]any{
+							fmt.Sprintf("sublevel_%d", i): map[string]any{
 								"threshold": 0.7,
 							},
 						},
 					}
 				}
-				return map[string]interface{}{"config": config}
+				return map[string]any{"config": config}
 			},
 			description: "Should handle pseudo-recursive structures",
 		},
@@ -343,7 +343,7 @@ func TestMemoryExhaustionAttempts(t *testing.T) {
 // generateLargeStringArray generates an array of strings for testing
 func generateLargeStringArray(size int) []string {
 	result := make([]string, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		result[i] = fmt.Sprintf("species_%d", i)
 	}
 	return result

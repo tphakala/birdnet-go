@@ -8,6 +8,7 @@ import (
 	"net"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"text/template"
@@ -495,8 +496,8 @@ func validateSecuritySettings(settings *Security) error {
 
 	// Validate the subnet bypass setting against the allowed pattern
 	if settings.AllowSubnetBypass.Enabled {
-		subnets := strings.Split(settings.AllowSubnetBypass.Subnet, ",")
-		for _, subnet := range subnets {
+		subnets := strings.SplitSeq(settings.AllowSubnetBypass.Subnet, ",")
+		for subnet := range subnets {
 			_, _, err := net.ParseCIDR(strings.TrimSpace(subnet))
 			if err != nil {
 				return errors.New(err).
@@ -794,13 +795,7 @@ func validateDashboardSettings(settings *Dashboard) error {
 	// Validate UI locale if provided
 	if settings.Locale != "" {
 		validLocales := []string{"en", "de", "fr", "es", "fi", "pt"}
-		isValid := false
-		for _, validLocale := range validLocales {
-			if settings.Locale == validLocale {
-				isValid = true
-				break
-			}
-		}
+		isValid := slices.Contains(validLocales, settings.Locale)
 		if !isValid {
 			// Log warning but don't fail - fallback to default
 			log.Printf("WARNING: Invalid UI locale '%s', will use default 'en'", settings.Locale)
@@ -811,13 +806,7 @@ func validateDashboardSettings(settings *Dashboard) error {
 	// Validate spectrogram settings
 	if settings.Spectrogram.Mode != "" {
 		validModes := []string{"auto", "prerender", "user-requested"}
-		isValid := false
-		for _, validMode := range validModes {
-			if settings.Spectrogram.Mode == validMode {
-				isValid = true
-				break
-			}
-		}
+		isValid := slices.Contains(validModes, settings.Spectrogram.Mode)
 		if !isValid {
 			// Log warning but don't fail - GetMode() will handle fallback
 			log.Printf("WARNING: Invalid spectrogram mode '%s', valid modes are: auto, prerender, user-requested. Using GetMode() fallback.", settings.Spectrogram.Mode)

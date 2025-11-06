@@ -241,7 +241,7 @@ func (c *Controller) parseBatchDailySummaryParams(ctx echo.Context) (dates []str
 
 	// Parse and validate dates
 	dateStrings := make([]string, 0)
-	for _, dateStr := range strings.Split(datesParam, ",") {
+	for dateStr := range strings.SplitSeq(datesParam, ",") {
 		trimmed := strings.TrimSpace(dateStr)
 		if trimmed != "" {
 			dateStrings = append(dateStrings, trimmed)

@@ -110,10 +110,7 @@ func createTestWAVFileWithSize(t *testing.T, path string, size int64) {
 	}
 
 	// Calculate data size
-	dataSize := size - int64(len(wavHeader))
-	if dataSize < 0 {
-		dataSize = 0
-	}
+	dataSize := max(size-int64(len(wavHeader)), 0)
 
 	// Update chunk sizes in header
 	chunkSize := uint32(36 + dataSize)

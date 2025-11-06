@@ -816,17 +816,17 @@ func (r *AudioSourceRegistry) parseWindowsDeviceName(deviceString string) string
 	}
 
 	// Windows WASAPI patterns
-	if strings.HasPrefix(deviceString, "wasapi:") {
+	if after, ok := strings.CutPrefix(deviceString, "wasapi:"); ok {
 		// Remove wasapi: prefix and return the device name
-		name := strings.TrimPrefix(deviceString, "wasapi:")
+		name := after
 		if name != "" {
 			return name
 		}
 	}
 
 	// Windows DirectSound patterns
-	if strings.HasPrefix(deviceString, "dsound:") {
-		name := strings.TrimPrefix(deviceString, "dsound:")
+	if after, ok := strings.CutPrefix(deviceString, "dsound:"); ok {
+		name := after
 		if name != "" {
 			return fmt.Sprintf("DirectSound: %s", name)
 		}
@@ -857,11 +857,11 @@ func (r *AudioSourceRegistry) parseLinuxDeviceParams(params, deviceString string
 
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
-		if strings.HasPrefix(part, "CARD=") {
-			cardName = strings.TrimPrefix(part, "CARD=")
+		if after, ok := strings.CutPrefix(part, "CARD="); ok {
+			cardName = after
 			hasCardFormat = true
-		} else if strings.HasPrefix(part, "DEV=") {
-			devNum = strings.TrimPrefix(part, "DEV=")
+		} else if after, ok := strings.CutPrefix(part, "DEV="); ok {
+			devNum = after
 			hasCardFormat = true
 		}
 	}

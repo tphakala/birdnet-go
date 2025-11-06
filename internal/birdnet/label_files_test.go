@@ -32,7 +32,7 @@ type testLogger struct {
 	logs []string
 }
 
-func (tl *testLogger) Debug(format string, v ...interface{}) {
+func (tl *testLogger) Debug(format string, v ...any) {
 	// Store debug messages for test verification if needed
 	tl.logs = append(tl.logs, fmt.Sprintf(format, v...))
 }

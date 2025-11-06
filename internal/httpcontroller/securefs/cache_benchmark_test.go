@@ -31,8 +31,7 @@ func BenchmarkValidateRelativePathWithoutCache(b *testing.B) {
 		"../blocked/traversal/attempt.txt",
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for _, path := range testPaths {
 			// Direct validation without cache
 			cleanedPath := filepath.Clean(path)
@@ -70,10 +69,9 @@ func BenchmarkValidateRelativePathWithCache(b *testing.B) {
 		"../blocked/traversal/attempt.txt",
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for _, path := range testPaths {
-			// Use cached validation 
+			// Use cached validation
 			_, _ = sfs.ValidateRelativePath(path)
 		}
 	}
@@ -96,8 +94,7 @@ func BenchmarkIsPathWithinBaseWithoutCache(b *testing.B) {
 		filepath.Join(tempDir, "deeply", "nested", "directory", "structure", "file4.wav"),
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for _, path := range testPaths {
 			// Direct check without cache
 			_, _ = IsPathWithinBase(baseDir, path)
@@ -123,8 +120,7 @@ func BenchmarkIsPathWithinBaseWithCache(b *testing.B) {
 		filepath.Join(tempDir, "deeply", "nested", "directory", "structure", "file4.wav"),
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for _, path := range testPaths {
 			// Use cached check
 			_, _ = IsPathWithinBaseWithCache(cache, baseDir, path)
@@ -135,12 +131,12 @@ func BenchmarkIsPathWithinBaseWithCache(b *testing.B) {
 // TestCacheExpiration tests that cache entries expire correctly
 func TestCacheExpiration(t *testing.T) {
 	cache := NewPathCache()
-	
+
 	// Set very short TTL for testing
 	cache.validateTTL = 100 * time.Millisecond
-	
+
 	testPath := "test/file.txt"
-	
+
 	// First call should compute and cache
 	result1, err1 := cache.GetValidatePath(testPath, func(path string) (string, error) {
 		return filepath.Clean(path), nil
@@ -148,7 +144,7 @@ func TestCacheExpiration(t *testing.T) {
 	if err1 != nil {
 		t.Fatal(err1)
 	}
-	
+
 	// Second call should use cache
 	result2, err2 := cache.GetValidatePath(testPath, func(path string) (string, error) {
 		t.Fatal("Should not be called - should use cache")
@@ -157,14 +153,14 @@ func TestCacheExpiration(t *testing.T) {
 	if err2 != nil {
 		t.Fatal(err2)
 	}
-	
+
 	if result1 != result2 {
 		t.Errorf("Expected cached result %s, got %s", result1, result2)
 	}
-	
+
 	// Wait for expiration
 	time.Sleep(150 * time.Millisecond)
-	
+
 	// Third call should recompute after expiration
 	result3, err3 := cache.GetValidatePath(testPath, func(path string) (string, error) {
 		return filepath.Clean(path), nil
@@ -172,7 +168,7 @@ func TestCacheExpiration(t *testing.T) {
 	if err3 != nil {
 		t.Fatal(err3)
 	}
-	
+
 	if result1 != result3 {
 		t.Errorf("Expected recomputed result %s, got %s", result1, result3)
 	}
@@ -181,7 +177,7 @@ func TestCacheExpiration(t *testing.T) {
 // TestCacheStats tests that cache statistics are collected correctly
 func TestCacheStats(t *testing.T) {
 	cache := NewPathCache()
-	
+
 	// Add some entries
 	testPaths := []string{"file1.txt", "file2.mp3", "file3.png"}
 	for _, path := range testPaths {
@@ -189,7 +185,7 @@ func TestCacheStats(t *testing.T) {
 			return filepath.Clean(p), nil
 		})
 	}
-	
+
 	stats := cache.GetCacheStats()
 	if stats.ValidateTotal != 3 {
 		t.Errorf("Expected 3 validate cache entries, got %d", stats.ValidateTotal)

@@ -618,11 +618,9 @@ func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, re
 
 // startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
 func startClipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}, dataStore datastore.Interface) {
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		clipCleanupMonitor(quitChan, dataStore)
-	}()
+	})
 }
 
 // startWeatherPolling initializes and starts the weather polling routine in a new goroutine.
@@ -638,11 +636,9 @@ func startWeatherPolling(wg *sync.WaitGroup, settings *conf.Settings, dataStore 
 		return
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		weatherService.StartPolling(quitChan)
-	}()
+	})
 }
 
 func startTelemetryEndpoint(wg *sync.WaitGroup, settings *conf.Settings, metrics *observability.Metrics, quitChan chan struct{}) {

@@ -14,24 +14,24 @@ func BenchmarkPairLabelsAndConfidence(b *testing.B) {
 	speciesCount := 6522
 	labels := make([]string, speciesCount)
 	confidence := make([]float32, speciesCount)
-	
+
 	// Generate realistic species names and confidence values
 	for i := range speciesCount {
 		labels[i] = generateSpeciesName(i)
 		confidence[i] = float32(i%100) / 100.0 // 0.00 to 0.99
 	}
-	
+
 	// Reset timer to exclude setup time
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	// Run benchmark
 	for b.Loop() {
 		results, err := pairLabelsAndConfidence(labels, confidence)
 		if err != nil {
 			b.Errorf("pairLabelsAndConfidence failed: %v", err)
 		}
-		
+
 		// Prevent compiler optimization by using the results
 		if len(results) != speciesCount {
 			b.Errorf("Expected %d results, got %d", speciesCount, len(results))
@@ -45,24 +45,24 @@ func BenchmarkPairLabelsAndConfidenceMemory(b *testing.B) {
 	speciesCount := 6522
 	labels := make([]string, speciesCount)
 	confidence := make([]float32, speciesCount)
-	
+
 	// Generate test data
 	for i := range speciesCount {
 		labels[i] = generateSpeciesName(i)
 		confidence[i] = float32(i%100) / 100.0
 	}
-	
+
 	// Reset timer and enable memory allocation tracking
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	// Benchmark with memory tracking
 	for b.Loop() {
 		results, err := pairLabelsAndConfidence(labels, confidence)
 		if err != nil {
 			b.Errorf("pairLabelsAndConfidence failed: %v", err)
 		}
-		
+
 		// Prevent compiler optimization
 		if results != nil {
 			_ = results[0].Species
@@ -77,13 +77,13 @@ func BenchmarkPairLabelsAndConfidenceMemory(b *testing.B) {
 func BenchmarkExtractPredictions(b *testing.B) {
 	// Create a mock tensor with realistic size
 	mockTensor := createMockTensor(6522)
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		predictions := extractPredictions(mockTensor)
-		
+
 		// Prevent compiler optimization
 		if len(predictions) != 6522 {
 			b.Errorf("Expected 6522 predictions, got %d", len(predictions))
@@ -100,15 +100,15 @@ func BenchmarkApplySigmoidToPredictions(b *testing.B) {
 	for i := range predictions {
 		predictions[i] = float32(i%200-100) / 100.0 // -1.0 to 1.0
 	}
-	
+
 	sensitivity := 1.0
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		confidence := applySigmoidToPredictions(predictions, sensitivity)
-		
+
 		// Prevent compiler optimization
 		if len(confidence) != 6522 {
 			b.Errorf("Expected 6522 confidence values, got %d", len(confidence))
@@ -126,17 +126,17 @@ func BenchmarkSortResults(b *testing.B) {
 			Confidence: float32(i%100) / 100.0,
 		}
 	}
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		// Make a copy to sort since sorting modifies the slice
 		testResults := make([]datastore.Results, len(results))
 		copy(testResults, results)
-		
+
 		sortResults(testResults)
-		
+
 		// Verify sorting worked (highest confidence first)
 		if len(testResults) > 1 && testResults[0].Confidence < testResults[1].Confidence {
 			b.Errorf("Results not sorted correctly")
@@ -154,13 +154,13 @@ func BenchmarkTrimResultsToMax(b *testing.B) {
 			Confidence: float32(i%100) / 100.0,
 		}
 	}
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		trimmed := trimResultsToMax(results, 10)
-		
+
 		// Verify trimming worked
 		if len(trimmed) != 10 {
 			b.Errorf("Expected 10 results, got %d", len(trimmed))
@@ -174,34 +174,34 @@ func BenchmarkFullPredictionPipeline(b *testing.B) {
 	speciesCount := 6522
 	labels := make([]string, speciesCount)
 	rawPredictions := make([]float32, speciesCount)
-	
+
 	// Generate realistic test data
 	for i := range speciesCount {
 		labels[i] = generateSpeciesName(i)
 		rawPredictions[i] = float32(i%200-100) / 100.0 // -1.0 to 1.0
 	}
-	
+
 	sensitivity := 1.0
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		// Step 1: Apply sigmoid to predictions
 		confidence := applySigmoidToPredictions(rawPredictions, sensitivity)
-		
+
 		// Step 2: Pair labels with confidence values
 		results, err := pairLabelsAndConfidence(labels, confidence)
 		if err != nil {
 			b.Errorf("pairLabelsAndConfidence failed: %v", err)
 		}
-		
+
 		// Step 3: Sort results by confidence
 		sortResults(results)
-		
+
 		// Step 4: Trim to top 10 results
 		finalResults := trimResultsToMax(results, 10)
-		
+
 		// Prevent compiler optimization
 		if len(finalResults) != 10 {
 			b.Errorf("Expected 10 final results, got %d", len(finalResults))
@@ -215,22 +215,22 @@ func BenchmarkPairLabelsAndConfidenceOptimized(b *testing.B) {
 	labels := make([]string, speciesCount)
 	confidence := make([]float32, speciesCount)
 	buffer := make([]datastore.Results, speciesCount) // Pre-allocated buffer
-	
+
 	// Generate realistic data
-	for i := 0; i < speciesCount; i++ {
+	for i := range speciesCount {
 		labels[i] = generateSpeciesName(i)
 		confidence[i] = float32(i%100) / 100.0
 	}
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		results, err := pairLabelsAndConfidenceReuse(labels, confidence, buffer)
 		if err != nil {
 			b.Errorf("pairLabelsAndConfidenceReuse failed: %v", err)
 		}
-		
+
 		// Prevent compiler optimization
 		if len(results) != speciesCount {
 			b.Errorf("Expected %d results, got %d", speciesCount, len(results))
@@ -242,15 +242,15 @@ func BenchmarkPairLabelsAndConfidenceOptimized(b *testing.B) {
 func BenchmarkMemoryGrowthPattern(b *testing.B) {
 	speciesCount := 6522
 	labels := make([]string, speciesCount)
-	
+
 	// Generate labels once
 	for i := range speciesCount {
 		labels[i] = generateSpeciesName(i)
 	}
-	
+
 	b.ResetTimer()
 	b.ReportAllocs()
-	
+
 	i := 0
 	for b.Loop() {
 		// Simulate varying confidence values each iteration
@@ -259,13 +259,13 @@ func BenchmarkMemoryGrowthPattern(b *testing.B) {
 			confidence[j] = float32((i+j)%100) / 100.0
 		}
 		i++
-		
+
 		// Run the memory-intensive pipeline
 		results, err := pairLabelsAndConfidence(labels, confidence)
 		if err != nil {
 			b.Errorf("pairLabelsAndConfidence failed: %v", err)
 		}
-		
+
 		// Sort and trim as in real usage
 		sortResults(results)
 		trimResultsToMax(results, 10)
@@ -284,7 +284,7 @@ func BenchmarkApplySigmoidOptimized(b *testing.B) {
 	for i := range predictions {
 		predictions[i] = float32(i%200-100) / 100.0 // -1.0 to 1.0
 	}
-	
+
 	sensitivity := 1.0
 	buffer := make([]float32, 6522) // Pre-allocated buffer
 
@@ -326,10 +326,10 @@ func BenchmarkTopKResultsOptimized(b *testing.B) {
 			// Make a copy to sort since sorting modifies the slice
 			testResults := make([]datastore.Results, len(results))
 			copy(testResults, results)
-			
+
 			sortResults(testResults)
 			trimmed := trimResultsToMax(testResults, 10)
-			
+
 			if len(trimmed) != 10 {
 				b.Errorf("Expected 10 results, got %d", len(trimmed))
 			}
@@ -342,9 +342,9 @@ func BenchmarkTopKResultsOptimized(b *testing.B) {
 			// Make a copy since getTopKResults modifies the slice
 			testResults := make([]datastore.Results, len(results))
 			copy(testResults, results)
-			
+
 			topResults := getTopKResults(testResults, 10)
-			
+
 			if len(topResults) != 10 {
 				b.Errorf("Expected 10 results, got %d", len(topResults))
 			}
@@ -357,15 +357,15 @@ func BenchmarkFullPipelineOptimized(b *testing.B) {
 	speciesCount := 6522
 	labels := make([]string, speciesCount)
 	rawPredictions := make([]float32, speciesCount)
-	buffer := make([]float32, speciesCount)           // Pre-allocated confidence buffer
+	buffer := make([]float32, speciesCount)                  // Pre-allocated confidence buffer
 	resultsBuffer := make([]datastore.Results, speciesCount) // Pre-allocated results buffer
-	
+
 	// Generate realistic test data
 	for i := range speciesCount {
 		labels[i] = generateSpeciesName(i)
 		rawPredictions[i] = float32(i%200-100) / 100.0 // -1.0 to 1.0
 	}
-	
+
 	sensitivity := 1.0
 
 	b.Run("Original", func(b *testing.B) {
@@ -373,19 +373,19 @@ func BenchmarkFullPipelineOptimized(b *testing.B) {
 		for b.Loop() {
 			// Step 1: Apply sigmoid to predictions
 			confidence := applySigmoidToPredictions(rawPredictions, sensitivity)
-			
+
 			// Step 2: Pair labels with confidence values
 			results, err := pairLabelsAndConfidence(labels, confidence)
 			if err != nil {
 				b.Errorf("pairLabelsAndConfidence failed: %v", err)
 			}
-			
+
 			// Step 3: Sort results by confidence
 			sortResults(results)
-			
+
 			// Step 4: Trim to top 10 results
 			finalResults := trimResultsToMax(results, 10)
-			
+
 			// Prevent compiler optimization
 			if len(finalResults) != 10 {
 				b.Errorf("Expected 10 final results, got %d", len(finalResults))
@@ -398,16 +398,16 @@ func BenchmarkFullPipelineOptimized(b *testing.B) {
 		for b.Loop() {
 			// Step 1: Apply sigmoid with buffer reuse
 			confidence := applySigmoidToPredictionsReuse(rawPredictions, sensitivity, buffer)
-			
+
 			// Step 2: Pair labels with confidence values using buffer reuse
 			results, err := pairLabelsAndConfidenceReuse(labels, confidence, resultsBuffer)
 			if err != nil {
 				b.Errorf("pairLabelsAndConfidenceReuse failed: %v", err)
 			}
-			
+
 			// Step 3: Get top 10 using optimized algorithm
 			finalResults := getTopKResults(results, 10)
-			
+
 			// Prevent compiler optimization
 			if len(finalResults) != 10 {
 				b.Errorf("Expected 10 final results, got %d", len(finalResults))
@@ -421,13 +421,13 @@ func BenchmarkMemoryUsageComparison(b *testing.B) {
 	speciesCount := 6522
 	labels := make([]string, speciesCount)
 	predictions := make([]float32, speciesCount)
-	
+
 	// Generate test data once
 	for i := range speciesCount {
 		labels[i] = generateSpeciesName(i)
 		predictions[i] = float32(i%100) / 100.0
 	}
-	
+
 	sensitivity := 1.0
 
 	b.Run("OriginalPipeline", func(b *testing.B) {
@@ -445,7 +445,7 @@ func BenchmarkMemoryUsageComparison(b *testing.B) {
 		// Pre-allocate buffers (would be done once in BirdNET struct)
 		confidenceBuffer := make([]float32, speciesCount)
 		resultsBuffer := make([]datastore.Results, speciesCount)
-		
+
 		b.ReportAllocs()
 		for b.Loop() {
 			// This simulates the optimized pipeline with buffer reuse

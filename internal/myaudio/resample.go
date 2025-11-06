@@ -14,7 +14,7 @@ func ResampleAudio(audio []float32, originalRate, targetRate int) ([]float32, er
 	audioLength := len(audio)
 	lastIndex := audioLength - 3
 
-	for i := 0; i < newLength; i++ {
+	for i := range newLength {
 		origPos := float64(i) / ratio
 		index := int(origPos)
 

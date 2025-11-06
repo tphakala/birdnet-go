@@ -24,7 +24,7 @@ import (
 
 // decodePaginated is a helper to unmarshal a response body into a PaginatedResponse
 // and extract the data as a map slice for easier testing.
-func decodePaginated(t *testing.T, body []byte) ([]map[string]interface{}, PaginatedResponse) {
+func decodePaginated(t *testing.T, body []byte) ([]map[string]any, PaginatedResponse) {
 	t.Helper()
 	var response PaginatedResponse
 	err := json.Unmarshal(body, &response)
@@ -36,15 +36,15 @@ func decodePaginated(t *testing.T, body []byte) ([]map[string]interface{}, Pagin
 	}
 
 	// Extract the detections data
-	detectionsIface, ok := response.Data.([]interface{})
+	detectionsIface, ok := response.Data.([]any)
 	if !ok {
 		t.Fatalf("Expected Data to be an array, got %T", response.Data)
 	}
 
 	// Convert to []map[string]interface{} for easier access
-	result := make([]map[string]interface{}, len(detectionsIface))
+	result := make([]map[string]any, len(detectionsIface))
 	for i, d := range detectionsIface {
-		if m, ok := d.(map[string]interface{}); ok {
+		if m, ok := d.(map[string]any); ok {
 			result[i] = m
 		} else {
 			t.Fatalf("Expected detection element to be object, got %T", d)
@@ -536,7 +536,7 @@ func TestGetRecentDetections(t *testing.T) {
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 
 				// Verify the error response structure
-				var errorResp map[string]interface{}
+				var errorResp map[string]any
 				err = json.Unmarshal(rec.Body.Bytes(), &errorResp)
 				require.NoError(t, err)
 				assert.Contains(t, errorResp, "error")
@@ -622,7 +622,7 @@ func TestDeleteDetection(t *testing.T) {
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 
 				// Verify the error response structure
-				var errorResp map[string]interface{}
+				var errorResp map[string]any
 				err = json.Unmarshal(rec.Body.Bytes(), &errorResp)
 				require.NoError(t, err)
 				assert.Contains(t, errorResp, "error")
@@ -749,7 +749,7 @@ func TestReviewDetection(t *testing.T) {
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 
 				// Verify the error response structure
-				var errorResp map[string]interface{}
+				var errorResp map[string]any
 				err = json.Unmarshal(rec.Body.Bytes(), &errorResp)
 				require.NoError(t, err)
 				assert.Contains(t, errorResp, "error")
@@ -836,7 +836,7 @@ func TestLockDetection(t *testing.T) {
 				assert.Equal(t, tc.expectedStatus, rec.Code)
 
 				// Verify the error response structure
-				var errorResp map[string]interface{}
+				var errorResp map[string]any
 				err = json.Unmarshal(rec.Body.Bytes(), &errorResp)
 				require.NoError(t, err)
 				assert.Contains(t, errorResp, "error")
@@ -1215,7 +1215,7 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 		}
 
 		// Create review request
-		reviewRequest := map[string]interface{}{
+		reviewRequest := map[string]any{
 			"verified": "correct",
 			"comment":  "This is a correct identification",
 		}
@@ -1261,7 +1261,7 @@ func TestReviewDetectionConcurrency(t *testing.T) {
 		assert.Equal(t, http.StatusConflict, rec2.Code, "Second request should fail with conflict due to note being locked")
 
 		// Parse second response to verify error message
-		var resp2 map[string]interface{}
+		var resp2 map[string]any
 		err2 := json.Unmarshal(rec2.Body.Bytes(), &resp2)
 		require.NoError(t, err2)
 
@@ -1297,7 +1297,7 @@ func TestTrueConcurrentReviewAccess(t *testing.T) {
 	e.POST("/api/v2/detections/:id/review", controller.ReviewDetection)
 
 	// Create a JSON review request that will be used by all goroutines
-	reviewRequest := map[string]interface{}{
+	reviewRequest := map[string]any{
 		"correct":  true,
 		"comment":  "This is a correct identification",
 		"verified": "correct",
@@ -1334,7 +1334,7 @@ func TestTrueConcurrentReviewAccess(t *testing.T) {
 	mockDS.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil).Maybe()
 
 	// Launch concurrent requests using Go 1.25 WaitGroup.Go() pattern
-	for i := 0; i < numConcurrent; i++ {
+	for range numConcurrent {
 		wg.Go(func() {
 			// Wait for the barrier to be lifted
 			barrier.Wait()
@@ -1406,7 +1406,7 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 	e.POST("/api/v2/detections/:id/review", controller.ReviewDetection)
 
 	// Create a JSON review request
-	reviewRequest := map[string]interface{}{
+	reviewRequest := map[string]any{
 		"correct":  true,
 		"comment":  "This is a correct identification",
 		"verified": "correct",

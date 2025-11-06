@@ -34,6 +34,7 @@ linters:
     - testifylint
     #- goconst
     - gocyclo
+    - modernize
     # Performance linters
     - prealloc
     - exhaustive

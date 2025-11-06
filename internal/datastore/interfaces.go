@@ -206,7 +206,7 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 	baseDelay := 500 * time.Millisecond
 
 	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		// Begin a transaction
 		tx := ds.DB.Begin()
 		if tx.Error != nil {
@@ -907,7 +907,7 @@ func (ds *DataStore) CountSearchResults(query string) (int64, error) {
 
 // UpdateNote updates specific fields of a note. It validates the input parameters
 // and returns appropriate errors if the note doesn't exist or if the update fails.
-func (ds *DataStore) UpdateNote(id string, updates map[string]interface{}) error {
+func (ds *DataStore) UpdateNote(id string, updates map[string]any) error {
 	if id == "" {
 		return errors.Newf("invalid id: must not be empty").
 			Component("datastore").
@@ -1080,7 +1080,7 @@ func (ds *DataStore) UpdateNoteComment(commentID, entry string) error {
 			Build()
 	}
 
-	result := ds.DB.Model(&NoteComment{}).Where("id = ?", id).Updates(map[string]interface{}{
+	result := ds.DB.Model(&NoteComment{}).Where("id = ?", id).Updates(map[string]any{
 		"entry":      entry,
 		"updated_at": time.Now(),
 	})
@@ -1225,7 +1225,7 @@ func (ds *DataStore) LockNote(noteID string) error {
 	baseDelay := 500 * time.Millisecond
 
 	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		// Use upsert operation to either create or update the lock
 		lock := &NoteLock{
 			NoteID:   uint(id),
@@ -1281,7 +1281,7 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 	baseDelay := 500 * time.Millisecond
 
 	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		// First check if the lock exists
 		exists, err := ds.IsNoteLocked(noteID)
 		if err != nil {

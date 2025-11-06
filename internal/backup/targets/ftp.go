@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -30,7 +31,7 @@ const (
 // FTPTarget implements the backup.Target interface for FTP storage
 type FTPTarget struct {
 	config      FTPTargetConfig
-	logger      backup.Logger
+	logger      *slog.Logger
 	connPool    chan *ftp.ServerConn
 	mu          sync.Mutex // Protects connPool operations
 	tempFiles   map[string]bool
@@ -55,7 +56,7 @@ type FTPTargetConfig struct {
 }
 
 // NewFTPTarget creates a new FTP target with the given configuration
-func NewFTPTarget(config *FTPTargetConfig, logger backup.Logger) (*FTPTarget, error) {
+func NewFTPTarget(config *FTPTargetConfig, logger *slog.Logger) (*FTPTarget, error) {
 	// Validate required fields
 	if config.Host == "" {
 		return nil, backup.NewError(backup.ErrConfig, "ftp: host is required", nil)
@@ -83,7 +84,7 @@ func NewFTPTarget(config *FTPTargetConfig, logger backup.Logger) (*FTPTarget, er
 	}
 
 	if logger == nil {
-		logger = backup.DefaultLogger()
+		logger = slog.Default()
 	}
 
 	target := &FTPTarget{
@@ -97,7 +98,7 @@ func NewFTPTarget(config *FTPTargetConfig, logger backup.Logger) (*FTPTarget, er
 }
 
 // NewFTPTargetFromMap creates a new FTP target from a map configuration (for backward compatibility)
-func NewFTPTargetFromMap(settings map[string]interface{}) (*FTPTarget, error) {
+func NewFTPTargetFromMap(settings map[string]any) (*FTPTarget, error) {
 	config := FTPTargetConfig{}
 
 	// Required settings
@@ -131,12 +132,7 @@ func NewFTPTargetFromMap(settings map[string]interface{}) (*FTPTarget, error) {
 		config.Debug = debug
 	}
 
-	var logger backup.Logger
-	if l, ok := settings["logger"].(backup.Logger); ok {
-		logger = l
-	}
-
-	return NewFTPTarget(&config, logger)
+	return NewFTPTarget(&config, nil)
 }
 
 // Name returns the name of this target
@@ -173,7 +169,7 @@ func (t *FTPTarget) returnConnection(conn *ftp.ServerConn) {
 	default:
 		// Pool is full, close the connection
 		if err := conn.Quit(); err != nil {
-			t.logger.Printf("Warning: failed to close FTP connection: %v", err)
+			t.logger.Info(fmt.Sprintf("Warning: failed to close FTP connection: %v", err))
 		}
 	}
 }
@@ -235,7 +231,7 @@ func (t *FTPTarget) withRetry(ctx context.Context, op func(*ftp.ServerConn) erro
 		}
 
 		if t.config.Debug {
-			t.logger.Printf("FTP: Retrying operation after error: %v (attempt %d/%d)", err, i+1, t.config.MaxRetries)
+			t.logger.Info(fmt.Sprintf("FTP: Retrying operation after error: %v (attempt %d/%d)", err, i+1, t.config.MaxRetries))
 		}
 		time.Sleep(t.config.RetryBackoff * time.Duration(i+1))
 	}
@@ -260,7 +256,7 @@ func (t *FTPTarget) connect(ctx context.Context) (*ftp.ServerConn, error) {
 		if t.config.Username != "" {
 			if err := conn.Login(t.config.Username, t.config.Password); err != nil {
 				if quitErr := conn.Quit(); quitErr != nil {
-					t.logger.Printf("Warning: failed to quit FTP connection after login error: %v", quitErr)
+					t.logger.Info(fmt.Sprintf("Warning: failed to quit FTP connection after login error: %v", quitErr))
 				}
 				errChan <- backup.NewError(backup.ErrValidation, "ftp: login failed", err)
 				return
@@ -271,7 +267,7 @@ func (t *FTPTarget) connect(ctx context.Context) (*ftp.ServerConn, error) {
 		pwd, err := conn.CurrentDir()
 		if err != nil {
 			if quitErr := conn.Quit(); quitErr != nil {
-				t.logger.Printf("Warning: failed to quit FTP connection after pwd error: %v", quitErr)
+				t.logger.Info(fmt.Sprintf("Warning: failed to quit FTP connection after pwd error: %v", quitErr))
 			}
 			errChan <- backup.NewError(backup.ErrIO, "ftp: failed to get working directory", err)
 			return
@@ -329,7 +325,7 @@ func (t *FTPTarget) uploadFile(ctx context.Context, conn *ftp.ServerConn, localP
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
-			t.logger.Printf("ftp: failed to close file %s: %v", cleanLocalPath, err)
+			t.logger.Info(fmt.Sprintf("ftp: failed to close file %s: %v", cleanLocalPath, err))
 		}
 	}()
 
@@ -341,7 +337,7 @@ func (t *FTPTarget) uploadFile(ctx context.Context, conn *ftp.ServerConn, localP
 	go func() {
 		defer func() {
 			if err := pw.Close(); err != nil {
-				t.logger.Printf("ftp: failed to close pipe writer: %v", err)
+				t.logger.Info(fmt.Sprintf("ftp: failed to close pipe writer: %v", err))
 			}
 		}()
 		_, err := io.Copy(pw, file)
@@ -356,7 +352,7 @@ func (t *FTPTarget) uploadFile(ctx context.Context, conn *ftp.ServerConn, localP
 	if err := conn.Stor(remotePath, pr); err != nil {
 		// Debug print failing file
 		if t.config.Debug {
-			t.logger.Printf("FTP: Failed to store file %s: %v", remotePath, err)
+			t.logger.Info(fmt.Sprintf("FTP: Failed to store file %s: %v", remotePath, err))
 		}
 		return backup.NewError(backup.ErrIO, "ftp: failed to store file", err)
 	}
@@ -373,7 +369,7 @@ func (t *FTPTarget) uploadFile(ctx context.Context, conn *ftp.ServerConn, localP
 // Store implements the backup.Target interface
 func (t *FTPTarget) Store(ctx context.Context, sourcePath string, metadata *backup.Metadata) error {
 	if t.config.Debug {
-		t.logger.Printf("🔄 FTP: Storing backup %s to %s", filepath.Base(sourcePath), t.config.Host)
+		t.logger.Info(fmt.Sprintf("🔄 FTP: Storing backup %s to %s", filepath.Base(sourcePath), t.config.Host))
 	}
 
 	// Marshal metadata
@@ -402,12 +398,12 @@ func (t *FTPTarget) Store(ctx context.Context, sourcePath string, metadata *back
 		}
 		defer func() {
 			if err := os.Remove(tempMetadataFile.Name()); err != nil {
-				t.logger.Printf("ftp: failed to remove temp metadata file: %v", err)
+				t.logger.Info(fmt.Sprintf("ftp: failed to remove temp metadata file: %v", err))
 			}
 		}()
 		defer func() {
 			if err := tempMetadataFile.Close(); err != nil {
-				t.logger.Printf("ftp: failed to close temp metadata file: %v", err)
+				t.logger.Info(fmt.Sprintf("ftp: failed to close temp metadata file: %v", err))
 			}
 		}()
 
@@ -427,7 +423,7 @@ func (t *FTPTarget) Store(ctx context.Context, sourcePath string, metadata *back
 		}
 
 		if t.config.Debug {
-			t.logger.Printf("✅ FTP: Successfully stored backup %s with metadata", filepath.Base(sourcePath))
+			t.logger.Info(fmt.Sprintf("✅ FTP: Successfully stored backup %s with metadata", filepath.Base(sourcePath)))
 		}
 
 		return nil
@@ -437,7 +433,7 @@ func (t *FTPTarget) Store(ctx context.Context, sourcePath string, metadata *back
 // List implements the backup.Target interface
 func (t *FTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	if t.config.Debug {
-		t.logger.Printf("🔄 FTP: Listing backups from %s", t.config.Host)
+		t.logger.Info(fmt.Sprintf("🔄 FTP: Listing backups from %s", t.config.Host))
 	}
 
 	var backups []backup.BackupInfo
@@ -485,7 +481,7 @@ func (t *FTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 // Delete implements the backup.Target interface
 func (t *FTPTarget) Delete(ctx context.Context, target string) error {
 	if t.config.Debug {
-		t.logger.Printf("🔄 FTP: Deleting backup %s from %s", target, t.config.Host)
+		t.logger.Info(fmt.Sprintf("🔄 FTP: Deleting backup %s from %s", target, t.config.Host))
 	}
 
 	return t.withRetry(ctx, func(conn *ftp.ServerConn) error {
@@ -495,7 +491,7 @@ func (t *FTPTarget) Delete(ctx context.Context, target string) error {
 		}
 
 		if t.config.Debug {
-			t.logger.Printf("✅ FTP: Successfully deleted backup %s", target)
+			t.logger.Info(fmt.Sprintf("✅ FTP: Successfully deleted backup %s", target))
 		}
 
 		return nil
@@ -531,7 +527,7 @@ func (t *FTPTarget) Validate() error {
 // checkServerFeatures checks if required server features are supported
 func (t *FTPTarget) checkServerFeatures() {
 	if len(t.config.Features) > 0 {
-		t.logger.Printf("Warning: feature checking is not supported with current FTP library version")
+		t.logger.Info("Warning: feature checking is not supported with current FTP library version")
 	}
 }
 
@@ -540,7 +536,7 @@ func (t *FTPTarget) validateBaseDirectory(ctx context.Context, conn *ftp.ServerC
 	// First ensure the base backup path exists
 	if err := t.createDirectory(ctx, conn, t.config.BasePath); err != nil {
 		if t.config.Debug {
-			t.logger.Printf("FTP: Failed to create base backup directory %s: %v", t.config.BasePath, err)
+			t.logger.Info(fmt.Sprintf("FTP: Failed to create base backup directory %s: %v", t.config.BasePath, err))
 		}
 		return backup.NewError(backup.ErrValidation, "ftp: failed to create base backup directory", err)
 	}
@@ -548,7 +544,7 @@ func (t *FTPTarget) validateBaseDirectory(ctx context.Context, conn *ftp.ServerC
 	// Change to the backup directory to ensure we have proper permissions
 	if err := conn.ChangeDir(t.config.BasePath); err != nil {
 		if t.config.Debug {
-			t.logger.Printf("FTP: Failed to change to backup directory %s: %v", t.config.BasePath, err)
+			t.logger.Info(fmt.Sprintf("FTP: Failed to change to backup directory %s: %v", t.config.BasePath, err))
 		}
 		return backup.NewError(backup.ErrValidation, "ftp: cannot access backup directory", err)
 	}
@@ -568,7 +564,7 @@ func (t *FTPTarget) testWritePermissions(ctx context.Context, conn *ftp.ServerCo
 	// Change into test directory
 	if err := conn.ChangeDir(testDirName); err != nil {
 		if t.config.Debug {
-			t.logger.Printf("FTP: Failed to change to test directory %s: %v", testDirName, err)
+			t.logger.Info(fmt.Sprintf("FTP: Failed to change to test directory %s: %v", testDirName, err))
 		}
 		return backup.NewError(backup.ErrValidation, "ftp: cannot access test directory", err)
 	}
@@ -587,7 +583,7 @@ func (t *FTPTarget) createTestDirectory(conn *ftp.ServerConn, dirName string) er
 		errStr := strings.ToLower(err.Error())
 		if !t.isDirectoryExistsError(errStr) {
 			if t.config.Debug {
-				t.logger.Printf("FTP: Failed to create test directory %s: %v", dirName, err)
+				t.logger.Info(fmt.Sprintf("FTP: Failed to create test directory %s: %v", dirName, err))
 			}
 			return backup.NewError(backup.ErrValidation, "ftp: failed to create test directory", err)
 		}
@@ -613,7 +609,7 @@ func (t *FTPTarget) testFileUpload(ctx context.Context, conn *ftp.ServerConn) er
 	}
 	defer func() {
 		if err := os.Remove(tempFile.Name()); err != nil {
-			t.logger.Printf("ftp: failed to remove temp file: %v", err)
+			t.logger.Info(fmt.Sprintf("ftp: failed to remove temp file: %v", err))
 		}
 	}()
 
@@ -627,7 +623,7 @@ func (t *FTPTarget) testFileUpload(ctx context.Context, conn *ftp.ServerConn) er
 	// Upload test file
 	if err := t.uploadFile(ctx, conn, tempFile.Name(), "test.txt"); err != nil {
 		if t.config.Debug {
-			t.logger.Printf("FTP: Failed to upload test file: %v", err)
+			t.logger.Info(fmt.Sprintf("FTP: Failed to upload test file: %v", err))
 		}
 		return backup.NewError(backup.ErrValidation, "ftp: failed to upload test file", err)
 	}
@@ -639,22 +635,22 @@ func (t *FTPTarget) testFileUpload(ctx context.Context, conn *ftp.ServerConn) er
 func (t *FTPTarget) cleanupTestArtifacts(conn *ftp.ServerConn) {
 	// Test file deletion - continue on error
 	if err := conn.Delete("test.txt"); err != nil && t.config.Debug {
-		t.logger.Printf("⚠️ FTP: Failed to delete test file: %v", err)
+		t.logger.Info(fmt.Sprintf("⚠️ FTP: Failed to delete test file: %v", err))
 	}
 
 	// Change back to parent directory
 	if err := conn.ChangeDirToParent(); err != nil && t.config.Debug {
-		t.logger.Printf("⚠️ FTP: Failed to change to parent directory: %v", err)
+		t.logger.Info(fmt.Sprintf("⚠️ FTP: Failed to change to parent directory: %v", err))
 	}
 
 	// Test directory deletion - continue on error
 	if err := conn.RemoveDir("write_test_dir"); err != nil && t.config.Debug {
-		t.logger.Printf("⚠️ FTP: Failed to remove test directory: %v", err)
+		t.logger.Info(fmt.Sprintf("⚠️ FTP: Failed to remove test directory: %v", err))
 	}
 
 	// Change back to initial directory
 	if err := conn.ChangeDir(t.initialDir); err != nil && t.config.Debug {
-		t.logger.Printf("⚠️ FTP: Failed to change back to initial directory %s: %v", t.initialDir, err)
+		t.logger.Info(fmt.Sprintf("⚠️ FTP: Failed to change back to initial directory %s: %v", t.initialDir, err))
 	}
 }
 
@@ -684,7 +680,7 @@ func (t *FTPTarget) cleanupTempFiles(conn *ftp.ServerConn) {
 	for _, path := range tempFiles {
 		if err := conn.Delete(path); err != nil {
 			if t.config.Debug {
-				t.logger.Printf("Warning: failed to clean up temporary file %s: %v", path, err)
+				t.logger.Info(fmt.Sprintf("Warning: failed to clean up temporary file %s: %v", path, err))
 			}
 		} else {
 			t.untrackTempFile(path)
@@ -714,7 +710,7 @@ func (t *FTPTarget) Close() error {
 		case conn := <-t.connPool:
 			if err := conn.Quit(); err != nil {
 				lastErr = err
-				t.logger.Printf("Warning: failed to close FTP connection: %v", err)
+				t.logger.Info(fmt.Sprintf("Warning: failed to close FTP connection: %v", err))
 			}
 		default:
 			return lastErr
@@ -757,7 +753,7 @@ func (t *FTPTarget) createDirectory(ctx context.Context, conn *ftp.ServerConn, d
 
 	// Change back to original directory
 	if err := conn.ChangeDir(currentDir); err != nil && t.config.Debug {
-		t.logger.Printf("⚠️ FTP: Failed to change back to original directory %s: %v", currentDir, err)
+		t.logger.Info(fmt.Sprintf("⚠️ FTP: Failed to change back to original directory %s: %v", currentDir, err))
 	}
 
 	return nil

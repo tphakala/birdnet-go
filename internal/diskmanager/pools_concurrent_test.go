@@ -24,11 +24,11 @@ func TestCurrentPoolSizeConcurrentDecrement(t *testing.T) {
 	// Track successful decrements
 	var successfulDecrements atomic.Uint64
 
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
 
-			for j := 0; j < opsPerGoroutine; j++ {
+			for range opsPerGoroutine {
 				// Simulate the decrement logic from getPooledSlice
 				for {
 					current := poolMetrics.CurrentPoolSize.Load()
@@ -89,12 +89,12 @@ func TestCurrentPoolSizeUnderflowPrevention(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
 
 			// Each tries to decrement multiple times
-			for j := 0; j < 10; j++ {
+			for range 10 {
 				// Use the actual logic from getPooledSlice
 				for {
 					current := poolMetrics.CurrentPoolSize.Load()
@@ -129,14 +129,14 @@ func TestPoolSizeIncrementDecrement(t *testing.T) {
 	opsPerGoroutine := 100
 
 	// Half the goroutines increment, half decrement
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		increment := i%2 == 0
 
 		go func(shouldIncrement bool) {
 			defer wg.Done()
 
-			for j := 0; j < opsPerGoroutine; j++ {
+			for range opsPerGoroutine {
 				if shouldIncrement {
 					// Simulate Put operation (increment)
 					poolMetrics.CurrentPoolSize.Add(1)

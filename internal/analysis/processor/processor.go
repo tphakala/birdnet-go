@@ -80,8 +80,8 @@ type Processor struct {
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
 
 	// Backup system fields (optional)
-	backupManager   interface{} // Use interface{} to avoid import cycle
-	backupScheduler interface{} // Use interface{} to avoid import cycle
+	backupManager   any // Use interface{} to avoid import cycle
+	backupScheduler any // Use interface{} to avoid import cycle
 	backupMutex     sync.RWMutex
 
 	// Log deduplication (extracted to separate type for SRP)
@@ -473,7 +473,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 	// Log processing results with deduplication to prevent spam
 	p.logDetectionResults(item.Source.ID, len(item.Results), len(detectionResults))
 
-	for i := 0; i < len(detectionResults); i++ {
+	for i := range detectionResults {
 		detection := detectionResults[i]
 		commonName := strings.ToLower(detection.Note.CommonName)
 		confidence := detection.Note.Confidence
@@ -959,16 +959,17 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 // while false positives (noise, wind) are random and won't repeat reliably.
 //
 // The function calculates:
-//   1. How many times audio can be analyzed within a 6-second bird vocalization window
-//   2. Requires a percentage of those analyses to detect the same species (based on level)
+//  1. How many times audio can be analyzed within a 6-second bird vocalization window
+//  2. Requires a percentage of those analyses to detect the same species (based on level)
 //
 // Filtering Levels (0-5):
-//   Level 0: Off (no filtering, 1 detection required)
-//   Level 1: Lenient (20% threshold, ~2 detections)
-//   Level 2: Moderate (30% threshold, ~3 detections)
-//   Level 3: Balanced (50% threshold, ~5 detections - original pre-Sept 2025 behavior)
-//   Level 4: Strict (60% threshold, ~12 detections - requires RPi 4+)
-//   Level 5: Maximum (70% threshold, ~21 detections - requires RPi 4+)
+//
+//	Level 0: Off (no filtering, 1 detection required)
+//	Level 1: Lenient (20% threshold, ~2 detections)
+//	Level 2: Moderate (30% threshold, ~3 detections)
+//	Level 3: Balanced (50% threshold, ~5 detections - original pre-Sept 2025 behavior)
+//	Level 4: Strict (60% threshold, ~12 detections - requires RPi 4+)
+//	Level 5: Maximum (70% threshold, ~21 detections - requires RPi 4+)
 //
 // Note: Audio clip length (captureLength/preCapture) does NOT affect this calculation.
 // Those settings control saved audio length, not detection sensitivity.
@@ -978,6 +979,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 //   - If overlap is 0 (no overlap): minDetections = 1 (no repeated confirmation possible)
 //   - Very high overlap (>2.9): may require many detections at higher levels
 //   - Floating-point precision: epsilon subtraction prevents values like 5.0000003 from ceiling to 6
+//
 // calculateMinDetectionsFromSettings computes minimum detections from settings alone.
 // This is a standalone function that doesn't require a Processor instance.
 func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
@@ -1187,8 +1189,8 @@ func (p *Processor) getActionsForItem(detection *Detections) []Action {
 }
 
 // Helper function to parse command parameters
-func parseCommandParams(params []string, detection *Detections) map[string]interface{} {
-	commandParams := make(map[string]interface{})
+func parseCommandParams(params []string, detection *Detections) map[string]any {
+	commandParams := make(map[string]any)
 	for _, param := range params {
 		value := getNoteValueByName(&detection.Note, param)
 		// Check if the parameter is confidence and normalize it
@@ -1408,6 +1410,7 @@ func (p *Processor) GetJobQueueStats() jobqueue.JobStatsSnapshot {
 }
 
 // GetBn returns the BirdNET instance
+//
 // Deprecated: Use GetBirdNET instead
 func (p *Processor) GetBn() *birdnet.BirdNET {
 	return p.Bn
@@ -1433,28 +1436,28 @@ func (p *Processor) GetSSEBroadcaster() func(note *datastore.Note, birdImage *im
 }
 
 // SetBackupManager safely sets the backup manager
-func (p *Processor) SetBackupManager(manager interface{}) {
+func (p *Processor) SetBackupManager(manager any) {
 	p.backupMutex.Lock()
 	defer p.backupMutex.Unlock()
 	p.backupManager = manager
 }
 
 // GetBackupManager safely returns the backup manager
-func (p *Processor) GetBackupManager() interface{} {
+func (p *Processor) GetBackupManager() any {
 	p.backupMutex.RLock()
 	defer p.backupMutex.RUnlock()
 	return p.backupManager
 }
 
 // SetBackupScheduler safely sets the backup scheduler
-func (p *Processor) SetBackupScheduler(scheduler interface{}) {
+func (p *Processor) SetBackupScheduler(scheduler any) {
 	p.backupMutex.Lock()
 	defer p.backupMutex.Unlock()
 	p.backupScheduler = scheduler
 }
 
 // GetBackupScheduler safely returns the backup scheduler
-func (p *Processor) GetBackupScheduler() interface{} {
+func (p *Processor) GetBackupScheduler() any {
 	p.backupMutex.RLock()
 	defer p.backupMutex.RUnlock()
 	return p.backupScheduler

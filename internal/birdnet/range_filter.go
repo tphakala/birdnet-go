@@ -61,13 +61,14 @@ func BuildRangeFilter(bn *BirdNET) error {
 	if conf.Setting().BirdNET.RangeFilter.Debug {
 		// Debug: Write included species to file
 		debugFile := "debug_included_species.txt"
-		content := fmt.Sprintf("Updated at: %s\nSpecies count: %d\n\nSpecies list:\n",
+		var content strings.Builder
+		content.WriteString(fmt.Sprintf("Updated at: %s\nSpecies count: %d\n\nSpecies list:\n",
 			time.Now().Format("2006-01-02 15:04:05"),
-			len(includedSpecies))
+			len(includedSpecies)))
 		for _, species := range includedSpecies {
-			content += species + "\n"
+			content.WriteString(species + "\n")
 		}
-		if err := os.WriteFile(debugFile, []byte(content), 0o600); err != nil {
+		if err := os.WriteFile(debugFile, []byte(content.String()), 0o600); err != nil {
 			// Don't fail the operation, just log the error
 			err = errors.New(err).
 				Category(errors.CategoryFileIO).
@@ -87,13 +88,13 @@ func BuildRangeFilter(bn *BirdNET) error {
 // It also updates the scores for species that have custom actions defined in the speciesConfigCSV.
 func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
 	bn.Debug("Applying range filter")
-	
+
 	// Skip filtering if range interpreter is not initialized
 	if bn.RangeInterpreter == nil {
 		bn.Debug("Range filter model not loaded, returning zero scores for all labels")
 		return zeroScoresForAllLabels(bn.Settings.BirdNET.Labels), nil
 	}
-	
+
 	// Skip filtering if location is not set
 	if bn.Settings.BirdNET.Latitude == 0 && bn.Settings.BirdNET.Longitude == 0 {
 		bn.Debug("Latitude and longitude not set, not using location based prediction filter")

@@ -126,7 +126,7 @@ func TestPrepareSettingsForSave_NorthernHemisphere(t *testing.T) {
 // TestPrepareSettingsForSave_SouthernHemisphere verifies default seasons for southern latitudes.
 func TestPrepareSettingsForSave_SouthernHemisphere(t *testing.T) {
 	t.Parallel()
-	tests := []struct{
+	tests := []struct {
 		name     string
 		latitude float64
 	}{
@@ -212,7 +212,7 @@ func TestPrepareSettingsForSave_DoesNotMutateInput(t *testing.T) {
 func TestPrepareSettingsForSave_DifferentLatitudes(t *testing.T) {
 	t.Parallel()
 	latitudes := []struct {
-		value             float64
+		value              float64
 		expectedHemisphere string
 	}{
 		{90.0, "northern"},
@@ -249,8 +249,8 @@ func BenchmarkPrepareSettingsForSave(b *testing.B) {
 	settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons = nil
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = prepareSettingsForSave(settings, 45.0)
 	}
 }
@@ -264,8 +264,8 @@ func BenchmarkPrepareSettingsForSave_WithExistingSeasons(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = prepareSettingsForSave(settings, 45.0)
 	}
 }

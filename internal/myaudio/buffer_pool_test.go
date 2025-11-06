@@ -37,7 +37,7 @@ func (s Float32PoolStatsAdapter) GetDiscarded() uint64 { return s.Discarded }
 
 // runPoolConcurrencyGeneric runs pool concurrency tests with generic operations
 func runPoolConcurrencyGeneric(t *testing.T, numWorkers, opsPerWorker int,
-	getOp func() interface{}, putOp func(interface{}), validateBuffer func(interface{})) {
+	getOp func() any, putOp func(any), validateBuffer func(any)) {
 	t.Helper()
 
 	var wg sync.WaitGroup
@@ -57,7 +57,7 @@ func runPoolConcurrencyGeneric(t *testing.T, numWorkers, opsPerWorker int,
 
 // runPoolConcurrencyWithStats runs pool concurrency tests and verifies stats
 func runPoolConcurrencyWithStats(t *testing.T, bufferSize, numWorkers, opsPerWorker int,
-	getOp func() interface{}, putOp func(interface{}), validateBuffer func(interface{}),
+	getOp func() any, putOp func(any), validateBuffer func(any),
 	getStats func() PoolStatsProvider) {
 	t.Helper()
 
@@ -189,9 +189,9 @@ func TestBufferPoolConcurrency(t *testing.T) {
 	require.NoError(t, err)
 
 	runPoolConcurrencyWithStats(t, bufferSize, numWorkers, opsPerWorker,
-		func() interface{} { return pool.Get() },
-		func(buf interface{}) { pool.Put(buf.([]byte)) },
-		func(buf interface{}) {
+		func() any { return pool.Get() },
+		func(buf any) { pool.Put(buf.([]byte)) },
+		func(buf any) {
 			buffer := buf.([]byte)
 			assert.Len(t, buffer, bufferSize)
 			// Simulate some work with the buffer
@@ -207,13 +207,13 @@ func TestBufferPoolMemoryReuse(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get and return multiple buffers to increase chance of reuse
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		buf := pool.Get()
 		pool.Put(buf)
 	}
 
 	// Get more buffers - some should be reused from pool
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		buf := pool.Get()
 		assert.Len(t, buf, bufferSize)
 		pool.Put(buf)

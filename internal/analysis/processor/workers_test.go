@@ -548,7 +548,7 @@ func TestEnqueueTask(t *testing.T) {
 							CommonName:     "Test Bird",
 							ScientificName: "Testus birdus",
 							Confidence:     0.95,
-							Source: testAudioSource(),
+							Source:         testAudioSource(),
 							BeginTime:      time.Now(),
 							EndTime:        time.Now().Add(15 * time.Second),
 						},
@@ -591,7 +591,7 @@ func TestEnqueueTask(t *testing.T) {
 					CommonName:     "Test Bird",
 					ScientificName: "Testus birdus",
 					Confidence:     0.95,
-					Source: testAudioSource(),
+					Source:         testAudioSource(),
 					BeginTime:      time.Now(),
 					EndTime:        time.Now().Add(15 * time.Second),
 				},
@@ -637,7 +637,7 @@ func TestEnqueueTask(t *testing.T) {
 						CommonName:     fmt.Sprintf("Test Bird %d", i),
 						ScientificName: "Testus birdus",
 						Confidence:     0.95,
-						Source: testAudioSource(),
+						Source:         testAudioSource(),
 						BeginTime:      time.Now(),
 						EndTime:        time.Now().Add(15 * time.Second),
 					},
@@ -691,7 +691,7 @@ func TestEnqueueTask(t *testing.T) {
 				CommonName:     "Test Bird",
 				ScientificName: "Testus birdus",
 				Confidence:     0.95,
-				Source: testAudioSource(),
+				Source:         testAudioSource(),
 				BeginTime:      time.Now(),
 				EndTime:        time.Now().Add(15 * time.Second),
 			},
@@ -857,7 +857,7 @@ func TestEnqueueMultipleTasks(t *testing.T) {
 						CommonName:     b.CommonName,
 						ScientificName: b.ScientificName,
 						Confidence:     b.Confidence,
-						Source: testAudioSource(),
+						Source:         testAudioSource(),
 						BeginTime:      time.Now(),
 						EndTime:        time.Now().Add(15 * time.Second),
 					},
@@ -954,7 +954,7 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 				CommonName:     "Test Bird",
 				ScientificName: "Testus birdus",
 				Confidence:     0.95,
-				Source: testAudioSource(),
+				Source:         testAudioSource(),
 				BeginTime:      time.Now(),
 				EndTime:        time.Now().Add(15 * time.Second),
 			},
@@ -1009,7 +1009,7 @@ func TestIntegrationWithJobQueue(t *testing.T) {
 				CommonName:     "Failing Bird",
 				ScientificName: "Failurus maximus",
 				Confidence:     0.90,
-				Source: testAudioSource(),
+				Source:         testAudioSource(),
 				BeginTime:      time.Now(),
 				EndTime:        time.Now().Add(15 * time.Second),
 			},
@@ -1054,8 +1054,7 @@ func TestRetryLogic(t *testing.T) {
 	}()
 
 	// Create a dedicated context for this test that won't be canceled prematurely
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel() // Ensure context gets canceled at the end of the test
+	ctx := t.Context() // Ensure context gets canceled at the end of the test
 
 	// Create a real job queue with a short processing interval for testing
 	realQueue := jobqueue.NewJobQueue()
@@ -1132,7 +1131,7 @@ func TestRetryLogic(t *testing.T) {
 				CommonName:     "Retry Bird",
 				ScientificName: "Retryus maximus",
 				Confidence:     0.95,
-				Source: testAudioSource(),
+				Source:         testAudioSource(),
 				BeginTime:      time.Now(),
 				EndTime:        time.Now().Add(15 * time.Second),
 			},
@@ -1239,7 +1238,7 @@ func TestRetryLogic(t *testing.T) {
 				CommonName:     "Exhausting Bird",
 				ScientificName: "Exhaustus maximus",
 				Confidence:     0.90,
-				Source: testAudioSource(),
+				Source:         testAudioSource(),
 				BeginTime:      time.Now(),
 				EndTime:        time.Now().Add(15 * time.Second),
 			},
@@ -1454,7 +1453,7 @@ func BenchmarkEnqueueTask(b *testing.B) {
 		// Get retry configuration for the action
 		retryConfig := getJobQueueRetryConfig(task.Action)
 
-		// Enqueue the task to our mock queue without locking  
+		// Enqueue the task to our mock queue without locking
 		_, err := mockQueue.Enqueue(context.Background(), &ActionAdapter{action: task.Action}, task.Detection, retryConfig)
 		return err
 	}

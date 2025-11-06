@@ -163,10 +163,10 @@ func TestValidateSoundLevelSettingsEdgeCases(t *testing.T) {
 				Enabled:  tt.enabled,
 				Interval: tt.interval,
 			}
-			
+
 			err := validateSoundLevelSettings(settings)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("validateSoundLevelSettings() for interval %d, enabled %v: error = %v, wantErr %v", 
+				t.Errorf("validateSoundLevelSettings() for interval %d, enabled %v: error = %v, wantErr %v",
 					tt.interval, tt.enabled, err, tt.wantErr)
 			}
 		})
@@ -179,12 +179,12 @@ func TestValidateSoundLevelSettingsErrorMessage(t *testing.T) {
 		Enabled:  true,
 		Interval: 3,
 	}
-	
+
 	err := validateSoundLevelSettings(settings)
 	if err == nil {
 		t.Fatal("expected error for interval < 5 seconds, got nil")
 	}
-	
+
 	// Check error message contains expected content
 	expectedMsg := "sound level interval must be at least 5 seconds to avoid excessive CPU usage, got 3"
 	if err.Error() != expectedMsg {
@@ -198,11 +198,9 @@ func BenchmarkValidateSoundLevelSettings(b *testing.B) {
 		Enabled:  true,
 		Interval: 10,
 	}
-	
-	b.ResetTimer()
-	
+
 	// Run validation N times
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = validateSoundLevelSettings(settings)
 	}
 }
@@ -213,11 +211,9 @@ func BenchmarkValidateSoundLevelSettingsWithError(b *testing.B) {
 		Enabled:  true,
 		Interval: 2,
 	}
-	
-	b.ResetTimer()
-	
+
 	// Run validation N times
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = validateSoundLevelSettings(settings)
 	}
 }

@@ -1,6 +1,7 @@
 package myaudio
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -185,13 +186,7 @@ func TestBuildFFmpegArgs(t *testing.T) {
 	args = buildFFmpegArgs(tempFile, settings)
 
 	// Ensure -af flag is NOT present when no filters are needed
-	hasAudioFilter := false
-	for _, arg := range args {
-		if arg == "-af" {
-			hasAudioFilter = true
-			break
-		}
-	}
+	hasAudioFilter := slices.Contains(args, "-af")
 
 	if hasAudioFilter {
 		t.Error("Expected no -af flag in FFmpeg arguments when no audio filters are needed")

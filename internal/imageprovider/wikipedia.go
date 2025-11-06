@@ -35,43 +35,43 @@ const (
 	userAgentLibrary = "Go-HTTP-Client"
 
 	// Circuit breaker timeout durations
-	circuitBreakerRateLimitDuration      = 60 * time.Second  // Rate limit circuit breaker duration
-	circuitBreakerBlockedDuration        = 5 * time.Minute   // Access blocked circuit breaker duration  
-	circuitBreakerUserAgentDuration      = 10 * time.Minute  // User-Agent violation circuit breaker duration
-	circuitBreakerServiceUnavailDuration = 30 * time.Second  // Service unavailable circuit breaker duration
+	circuitBreakerRateLimitDuration      = 60 * time.Second // Rate limit circuit breaker duration
+	circuitBreakerBlockedDuration        = 5 * time.Minute  // Access blocked circuit breaker duration
+	circuitBreakerUserAgentDuration      = 10 * time.Minute // User-Agent violation circuit breaker duration
+	circuitBreakerServiceUnavailDuration = 30 * time.Second // Service unavailable circuit breaker duration
 
 	// HTTP client configuration
-	httpClientTimeout           = 30 * time.Second
-	httpClientIdleConnTimeout   = 90 * time.Second
-	httpClientTLSTimeout        = 10 * time.Second
-	httpClientMaxIdleConns     = 10
-	diagnosticRequestTimeout    = 10 * time.Second
+	httpClientTimeout         = 30 * time.Second
+	httpClientIdleConnTimeout = 90 * time.Second
+	httpClientTLSTimeout      = 10 * time.Second
+	httpClientMaxIdleConns    = 10
+	diagnosticRequestTimeout  = 10 * time.Second
 
 	// Rate limiting configuration
 	globalRateLimitPerSecond     = 1 // Requests per second for global rate limiter
 	backgroundRateLimitPerSecond = 1 // Requests per second for background operations
 
 	// Retry and delay configuration
-	defaultMaxRetries     = 3
-	retryMinDelay         = 2 * time.Second
-	configWaitTimeout     = 10 * time.Second
-	configCheckInterval   = 100 * time.Millisecond
+	defaultMaxRetries   = 3
+	retryMinDelay       = 2 * time.Second
+	configWaitTimeout   = 10 * time.Second
+	configCheckInterval = 100 * time.Millisecond
 
 	// Response body size limits
 	responseBodyPreviewLimit = 200 // Bytes to show in error messages
 	responseBodyDebugLimit   = 500 // Bytes to show in debug logs
 
 	// Error detection strings (lowercase for case-insensitive comparison)
-	errorStringUserAgent    = "user-agent"
-	errorStringRobotPolicy  = "robot policy"
-	errorStringRate         = "rate"
-	errorStringLimit        = "limit"
-	errorStringThrottle     = "throttl"
-	errorStringBlocked      = "blocked"
-	errorStringBanned       = "banned"
-	errorStringDenied       = "denied"
-	errorStringHTMLDoctype  = "<!DOCTYPE"
-	errorStringHTMLTag      = "<html"
+	errorStringUserAgent   = "user-agent"
+	errorStringRobotPolicy = "robot policy"
+	errorStringRate        = "rate"
+	errorStringLimit       = "limit"
+	errorStringThrottle    = "throttl"
+	errorStringBlocked     = "blocked"
+	errorStringBanned      = "banned"
+	errorStringDenied      = "denied"
+	errorStringHTMLDoctype = "<!DOCTYPE"
+	errorStringHTMLTag     = "<html"
 )
 
 // wikiMediaProvider implements the ImageProvider interface for Wikipedia.
@@ -300,7 +300,7 @@ func (l *wikiMediaProvider) makeAPIRequest(ctx context.Context, params map[strin
 	}
 
 	// Parse JSON response into jason.Object for compatibility
-	var jsonData interface{}
+	var jsonData any
 	if err := json.Unmarshal(body, &jsonData); err != nil {
 		// Check if this might be an HTML error page
 		if bytes.Contains(body, []byte(errorStringHTMLDoctype)) || bytes.Contains(body, []byte(errorStringHTMLTag)) {
@@ -607,7 +607,7 @@ func (l *wikiMediaProvider) makeRateLimitedRequest(ctx context.Context, requestU
 			Build()
 	}
 	req.Header.Set("User-Agent", l.userAgent)
-	
+
 	httpClient := &http.Client{Timeout: diagnosticRequestTimeout}
 	return httpClient.Do(req)
 }
@@ -784,7 +784,7 @@ func getTroubleshootingHint(category apiErrorCategory) string {
 }
 
 // logAPISuccess logs successful API operations for baseline metrics
-func logAPISuccess(logger *slog.Logger, reqID, species, operation string, params map[string]string, responseMetadata map[string]interface{}) {
+func logAPISuccess(logger *slog.Logger, reqID, species, operation string, params map[string]string, responseMetadata map[string]any) {
 	logger.Info("Wikipedia API success - operation completed normally",
 		"success", true,
 		"request_id", reqID,
@@ -1119,7 +1119,7 @@ func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(ctx context.Context,
 	}
 
 	// Use success logging function
-	responseMetadata := map[string]interface{}{
+	responseMetadata := map[string]any{
 		"pages_found":              len(pages),
 		"response_has_query_field": true,
 		"pages_array_length":       len(pages),
@@ -1284,7 +1284,7 @@ func (l *wikiMediaProvider) fetchWithLimiter(ctx context.Context, scientificName
 	}
 
 	// Enhanced success logging with complete operation summary
-	successMetadata := map[string]interface{}{
+	successMetadata := map[string]any{
 		"thumbnail_url":   thumbnailURL,
 		"source_file":     thumbnailSourceFile,
 		"author_name":     authorInfo.name,

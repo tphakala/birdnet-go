@@ -12,12 +12,12 @@ func TestGetLogger(t *testing.T) {
 	// Get the logger multiple times to test thread-safety
 	logger1 := GetLogger()
 	logger2 := GetLogger()
-	
+
 	// Both should return the same instance
 	if logger1 != logger2 {
 		t.Error("GetLogger should return the same instance")
 	}
-	
+
 	// Logger should not be nil
 	if logger1 == nil {
 		t.Error("GetLogger returned nil")
@@ -28,27 +28,27 @@ func TestGetLogger(t *testing.T) {
 func TestLoggerOutput(t *testing.T) {
 	// Create a buffer to capture output
 	var buf bytes.Buffer
-	
+
 	// Create a test logger with JSON handler
 	testLogger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
-	
+
 	// Temporarily replace the package logger
 	oldLogger := logger
 	logger = testLogger
 	t.Cleanup(func() { logger = oldLogger })
-	
+
 	// Use GetLogger and write a log
 	l := GetLogger()
 	l.Info("test message", "key", "value", "number", 42)
-	
+
 	// Parse JSON output
 	var logEntry map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &logEntry); err != nil {
 		t.Fatalf("Failed to parse log JSON: %v", err)
 	}
-	
+
 	// Check output contains expected fields
 	if logEntry["msg"] != "test message" {
 		t.Errorf("Expected message 'test message', got %v", logEntry["msg"])
@@ -64,25 +64,25 @@ func TestLoggerOutput(t *testing.T) {
 // TestLoggerLevels tests that log levels work correctly
 func TestLoggerLevels(t *testing.T) {
 	var buf bytes.Buffer
-	
+
 	// Create logger with Info level
 	testLogger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
-	
+
 	oldLogger := logger
 	logger = testLogger
 	t.Cleanup(func() { logger = oldLogger })
-	
+
 	l := GetLogger()
-	
+
 	// Debug should not appear
 	buf.Reset()
 	l.Debug("debug message")
 	if buf.Len() > 0 {
 		t.Error("Debug message should not appear at Info level")
 	}
-	
+
 	// Info should appear
 	buf.Reset()
 	l.Info("info message")
@@ -96,7 +96,7 @@ func TestLoggerLevels(t *testing.T) {
 	if logEntry["msg"] != "info message" {
 		t.Error("Info message should appear at Info level")
 	}
-	
+
 	// Warn should appear
 	buf.Reset()
 	l.Warn("warn message")
@@ -109,7 +109,7 @@ func TestLoggerLevels(t *testing.T) {
 	if logEntry["msg"] != "warn message" {
 		t.Error("Warn message should appear at Info level")
 	}
-	
+
 	// Error should appear
 	buf.Reset()
 	l.Error("error message")
@@ -128,8 +128,8 @@ func TestLoggerLevels(t *testing.T) {
 func TestConcurrentLoggerAccess(t *testing.T) {
 	// Run multiple goroutines accessing the logger
 	done := make(chan struct{}, 10)
-	
-	for i := 0; i < 10; i++ {
+
+	for i := range 10 {
 		go func(id int) {
 			l := GetLogger()
 			if l == nil {
@@ -138,9 +138,9 @@ func TestConcurrentLoggerAccess(t *testing.T) {
 			done <- struct{}{}
 		}(i)
 	}
-	
+
 	// Wait for all goroutines
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-done
 	}
 }

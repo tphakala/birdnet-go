@@ -19,8 +19,8 @@ type TracingSpan struct {
 	operation      string
 	description    string
 	startTime      time.Time
-	tags           map[string]string      // Only allocated if needed
-	data           map[string]interface{} // Only allocated if needed
+	tags           map[string]string // Only allocated if needed
+	data           map[string]any    // Only allocated if needed
 	sentrySpan     *sentry.Span
 	metricsEnabled bool
 	model          string // For metrics labeling
@@ -105,7 +105,7 @@ func (s *TracingSpan) SetTag(key, value string) {
 }
 
 // SetData sets arbitrary data on the span (lazy allocation)
-func (s *TracingSpan) SetData(key string, value interface{}) {
+func (s *TracingSpan) SetData(key string, value any) {
 	if s == nil {
 		return
 	}
@@ -113,7 +113,7 @@ func (s *TracingSpan) SetData(key string, value interface{}) {
 	// Only allocate data map if Sentry is enabled
 	if s.sentrySpan != nil {
 		if s.data == nil {
-			s.data = make(map[string]interface{})
+			s.data = make(map[string]any)
 		}
 		s.data[key] = value
 		s.sentrySpan.SetData(key, value)
@@ -177,7 +177,7 @@ func TraceAnalysis(ctx context.Context, operation string, fn func() error) error
 }
 
 // TracePrediction traces prediction operations with additional metrics
-func TracePrediction(ctx context.Context, sampleSize int, fn func() (interface{}, error)) (interface{}, error) {
+func TracePrediction(ctx context.Context, sampleSize int, fn func() (any, error)) (any, error) {
 	span, _ := StartSpan(ctx, "birdnet.predict", "Audio prediction")
 	defer span.Finish()
 

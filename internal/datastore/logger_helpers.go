@@ -21,7 +21,7 @@ var (
 // parseSQLOperation extracts the operation type and table name from SQL query
 func parseSQLOperation(sql string) (operation, table string) {
 	sql = strings.TrimSpace(sql)
-	
+
 	// Try to match against known patterns
 	if matches := selectPattern.FindStringSubmatch(sql); len(matches) > 1 {
 		return "select", matches[1]
@@ -44,7 +44,7 @@ func parseSQLOperation(sql string) (operation, table string) {
 	if matches := alterPattern.FindStringSubmatch(sql); len(matches) > 1 {
 		return "alter", matches[1]
 	}
-	
+
 	// Default for unrecognized patterns
 	return "unknown", "unknown"
 }
@@ -54,15 +54,15 @@ func categorizeError(err error) string {
 	if err == nil {
 		return "none"
 	}
-	
+
 	// First, try to categorize based on known error types
 	// Check for PostgreSQL-specific errors using type assertions
 	// Note: pgconn.PgError would be used if this was a PostgreSQL setup
 	// For now, keeping the interface open for future database-specific error handling
-	
+
 	// Convert to string for pattern matching
 	errStr := strings.ToLower(err.Error())
-	
+
 	switch {
 	case strings.Contains(errStr, "unique constraint") || strings.Contains(errStr, "duplicate key"):
 		return "constraint_violation"
@@ -94,9 +94,9 @@ func calculateFilterComplexity(filters *SearchFilters) float64 {
 	if filters == nil {
 		return 0
 	}
-	
+
 	complexity := 0.0
-	
+
 	// Add complexity for each active filter
 	if filters.Species != "" {
 		complexity += 1
@@ -131,7 +131,7 @@ func calculateFilterComplexity(filters *SearchFilters) float64 {
 	if filters.TimeOfDay != "" && filters.TimeOfDay != "any" {
 		complexity += 2 // Time-based filters are more complex
 	}
-	
+
 	return complexity
 }
 
@@ -141,7 +141,7 @@ func calculateDateRangeComplexity(startDate, endDate string) float64 {
 	if startDate == "" || endDate == "" {
 		return 1.0
 	}
-	
+
 	// Parse start date
 	start, err := time.Parse("2006-01-02", startDate)
 	if err != nil {
@@ -153,7 +153,7 @@ func calculateDateRangeComplexity(startDate, endDate string) float64 {
 			return 1.0
 		}
 	}
-	
+
 	// Parse end date
 	end, err := time.Parse("2006-01-02", endDate)
 	if err != nil {
@@ -165,13 +165,13 @@ func calculateDateRangeComplexity(startDate, endDate string) float64 {
 			return 1.0
 		}
 	}
-	
+
 	// Calculate the difference in days
 	daysDiff := end.Sub(start).Hours() / 24
 	if daysDiff < 0 {
 		daysDiff = -daysDiff // Take absolute value
 	}
-	
+
 	// Calculate complexity based on range length
 	switch {
 	case daysDiff <= 1:
@@ -196,13 +196,13 @@ func isConstraintViolation(err error) bool {
 }
 
 // getAppliedFilters returns a summary of applied filters for logging
-func getAppliedFilters(filters *SearchFilters) map[string]interface{} {
+func getAppliedFilters(filters *SearchFilters) map[string]any {
 	if filters == nil {
-		return map[string]interface{}{"filters": "none"}
+		return map[string]any{"filters": "none"}
 	}
-	
-	applied := make(map[string]interface{})
-	
+
+	applied := make(map[string]any)
+
 	if filters.Species != "" {
 		applied["species"] = filters.Species
 	}
@@ -236,6 +236,6 @@ func getAppliedFilters(filters *SearchFilters) map[string]interface{} {
 	if filters.TimeOfDay != "" && filters.TimeOfDay != "any" {
 		applied["time_of_day"] = filters.TimeOfDay
 	}
-	
+
 	return applied
 }

@@ -110,7 +110,7 @@ func TestGetSpeciesCount_CriticalReliability(t *testing.T) {
 			"multiple_species",
 			func(tracker *SpeciesTracker) {
 				now := time.Now()
-				for i := 0; i < 100; i++ {
+				for i := range 100 {
 					speciesName := "Species_" + string(rune(i))
 					tracker.speciesFirstSeen[speciesName] = now.AddDate(0, 0, -i)
 				}
@@ -487,7 +487,7 @@ func TestUtilityFunctions_ConcurrentAccess(t *testing.T) {
 
 	// Add some initial data
 	now := time.Now()
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		speciesName := "Initial_Species_" + string(rune(i))
 		tracker.speciesFirstSeen[speciesName] = now.AddDate(0, 0, -i)
 	}
@@ -500,7 +500,7 @@ func TestUtilityFunctions_ConcurrentAccess(t *testing.T) {
 	done := make(chan bool, 500)
 
 	// 100 goroutines getting window days
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		go func() {
 			windowDays := tracker.GetWindowDays()
 			assert.Equal(t, 14, windowDays, "Window days should be consistent")
@@ -509,7 +509,7 @@ func TestUtilityFunctions_ConcurrentAccess(t *testing.T) {
 	}
 
 	// 100 goroutines getting species count
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		go func() {
 			count := tracker.GetSpeciesCount()
 			assert.GreaterOrEqual(t, count, 10, "Count should be at least initial count")
@@ -518,7 +518,7 @@ func TestUtilityFunctions_ConcurrentAccess(t *testing.T) {
 	}
 
 	// 100 goroutines checking season initialization
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		go func(id int) {
 			seasons := []string{"spring", "summer", "fall", "winter"}
 			season := seasons[id%4]
@@ -528,7 +528,7 @@ func TestUtilityFunctions_ConcurrentAccess(t *testing.T) {
 	}
 
 	// 100 goroutines getting season counts
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		go func(id int) {
 			seasons := []string{"spring", "summer", "fall", "winter"}
 			season := seasons[id%4]
@@ -541,7 +541,7 @@ func TestUtilityFunctions_ConcurrentAccess(t *testing.T) {
 	}
 
 	// 100 goroutines clearing/expiring cache
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		go func(id int) {
 			if id%2 == 0 {
 				tracker.ClearCacheForTesting()
@@ -554,7 +554,7 @@ func TestUtilityFunctions_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Wait for all goroutines
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		<-done
 	}
 

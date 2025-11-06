@@ -37,8 +37,8 @@ func TestDashboardPartialUpdate(t *testing.T) {
 	}
 
 	// Update only summary field
-	update := map[string]interface{}{
-		"thumbnails": map[string]interface{}{
+	update := map[string]any{
+		"thumbnails": map[string]any{
 			"summary": false,
 		},
 	}
@@ -59,7 +59,7 @@ func TestDashboardPartialUpdate(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Verify the response
-	var response map[string]interface{}
+	var response map[string]any
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Contains(t, response["message"], "dashboard settings updated successfully")
@@ -92,7 +92,7 @@ func TestWeatherPartialUpdate(t *testing.T) {
 	}
 
 	// Update only provider
-	update := map[string]interface{}{
+	update := map[string]any{
 		"provider": "openweather",
 	}
 
@@ -142,7 +142,7 @@ func TestMQTTPartialUpdate(t *testing.T) {
 	}
 
 	// Update only broker
-	update := map[string]interface{}{
+	update := map[string]any{
 		"broker": "tcp://newbroker:1883",
 	}
 
@@ -185,7 +185,7 @@ func TestBirdNETCoordinatesUpdate(t *testing.T) {
 	}
 
 	// Update only coordinates
-	update := map[string]interface{}{
+	update := map[string]any{
 		"latitude":  51.5074,
 		"longitude": -0.1278,
 	}
@@ -230,8 +230,8 @@ func TestNestedRangeFilterUpdate(t *testing.T) {
 	}
 
 	// Update only range filter threshold
-	update := map[string]interface{}{
-		"rangeFilter": map[string]interface{}{
+	update := map[string]any{
+		"rangeFilter": map[string]any{
 			"threshold": 0.05,
 		},
 	}
@@ -274,8 +274,8 @@ func TestAudioExportPartialUpdate(t *testing.T) {
 	}
 
 	// Update only export type
-	update := map[string]interface{}{
-		"export": map[string]interface{}{
+	update := map[string]any{
+		"export": map[string]any{
 			"type": "mp3",
 		},
 	}
@@ -328,9 +328,9 @@ func TestSpeciesConfigUpdate(t *testing.T) {
 	}
 
 	// Update only threshold
-	update := map[string]interface{}{
-		"config": map[string]interface{}{
-			"American Robin": map[string]interface{}{
+	update := map[string]any{
+		"config": map[string]any{
+			"American Robin": map[string]any{
 				"threshold": 0.9,
 			},
 		},
@@ -412,21 +412,21 @@ func TestValidationErrors(t *testing.T) {
 	tests := []struct {
 		name          string
 		section       string
-		update        interface{}
+		update        any
 		expectedError string
 		expectedCode  int
 	}{
 		{
 			name:          "Validate MQTT broker required when enabled",
 			section:       "mqtt",
-			update:        map[string]interface{}{"enabled": true, "broker": ""},
+			update:        map[string]any{"enabled": true, "broker": ""},
 			expectedError: "Failed to update mqtt settings",
 			expectedCode:  http.StatusBadRequest,
 		},
 		{
 			name:          "Handle unknown section",
 			section:       "nonexistent",
-			update:        map[string]interface{}{"foo": "bar"},
+			update:        map[string]any{"foo": "bar"},
 			expectedError: "Failed to update nonexistent settings",
 			expectedCode:  http.StatusBadRequest,
 		},
@@ -497,8 +497,8 @@ func TestDeepNestedUpdates(t *testing.T) {
 	}
 
 	// Update only one deeply nested field
-	update := map[string]interface{}{
-		"retrySettings": map[string]interface{}{
+	update := map[string]any{
+		"retrySettings": map[string]any{
 			"initialDelay": 30,
 		},
 	}

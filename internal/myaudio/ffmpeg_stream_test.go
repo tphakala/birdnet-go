@@ -2,6 +2,7 @@ package myaudio
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -91,7 +92,7 @@ func TestFFmpegStream_GetHealth(t *testing.T) {
 	assert.False(t, health.IsHealthy, "New stream should not be healthy without data")
 	assert.True(t, health.LastDataReceived.IsZero(), "Initial LastDataReceived should be zero time")
 	assert.Equal(t, 0, health.RestartCount)
-	
+
 	// Update data time to make stream healthy
 	stream.updateLastDataTime()
 	health = stream.GetHealth()
@@ -145,9 +146,9 @@ func TestFFmpegStream_BackoffCalculation(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name          string
-		restartCount  int
-		expectedWait  time.Duration
+		name         string
+		restartCount int
+		expectedWait time.Duration
 	}{
 		{"First restart", 1, 5 * time.Second},
 		{"Second restart", 2, 10 * time.Second},
@@ -164,23 +165,19 @@ func TestFFmpegStream_BackoffCalculation(t *testing.T) {
 			audioChan := make(chan UnifiedAudioData, 10)
 			defer close(audioChan)
 			stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
-			
+
 			// Set restart count
 			stream.restartCountMu.Lock()
 			stream.restartCount = tt.restartCount - 1 // Will be incremented in handleRestartBackoff
 			stream.restartCountMu.Unlock()
 
 			// Calculate expected backoff with the same logic as the implementation
-			exponent := tt.restartCount - 1
-			if exponent > 20 { // maxBackoffExponent constant
-				exponent = 20
-			}
-			
-			backoff := stream.backoffDuration * time.Duration(1<<uint(exponent))
-			if backoff > stream.maxBackoff {
-				backoff = stream.maxBackoff
-			}
-			
+			exponent := min(tt.restartCount-1,
+				// maxBackoffExponent constant
+				20)
+
+			backoff := min(stream.backoffDuration*time.Duration(1<<uint(exponent)), stream.maxBackoff)
+
 			assert.Equal(t, tt.expectedWait, backoff)
 		})
 	}
@@ -195,11 +192,11 @@ func TestFFmpegStream_ConcurrentHealthAccess(t *testing.T) {
 
 	// Run concurrent operations
 	done := make(chan bool)
-	
+
 	// Reader goroutines
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		go func() {
-			for j := 0; j < 100; j++ {
+			for range 100 {
 				health := stream.GetHealth()
 				_ = health.IsHealthy
 				// Use runtime.Gosched() instead of sleep for better concurrency testing
@@ -210,9 +207,9 @@ func TestFFmpegStream_ConcurrentHealthAccess(t *testing.T) {
 	}
 
 	// Writer goroutines
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		go func() {
-			for j := 0; j < 100; j++ {
+			for range 100 {
 				stream.updateLastDataTime()
 				// Use runtime.Gosched() instead of sleep for better concurrency testing
 				// runtime.Gosched()
@@ -223,7 +220,7 @@ func TestFFmpegStream_ConcurrentHealthAccess(t *testing.T) {
 
 	// Restart count updater
 	go func() {
-		for j := 0; j < 100; j++ {
+		for range 100 {
 			stream.restartCountMu.Lock()
 			stream.restartCount++
 			stream.restartCountMu.Unlock()
@@ -234,7 +231,7 @@ func TestFFmpegStream_ConcurrentHealthAccess(t *testing.T) {
 	}()
 
 	// Wait for all goroutines
-	for i := 0; i < 9; i++ {
+	for range 9 {
 		<-done
 	}
 
@@ -245,33 +242,33 @@ func TestFFmpegStream_ConcurrentHealthAccess(t *testing.T) {
 
 func TestFFmpegStream_ProcessLifecycle(t *testing.T) {
 	t.Skip("Requires actual FFmpeg binary to test full lifecycle")
-	
+
 	// This test would require FFmpeg to be installed
 	// It's kept as a template for integration testing
-	
+
 	// audioChan := make(chan UnifiedAudioData, 10)
 	// stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
-	
+
 	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	// defer cancel()
-	
+
 	// Would test actual process starting, data processing, and cleanup
 	// This requires mocking exec.Command or having FFmpeg available
 }
 
 func TestFFmpegStream_HandleAudioData(t *testing.T) {
 	// Do not use t.Parallel() - this test accesses global analysisBuffers and captureBuffers maps
-	
+
 	audioChan := make(chan UnifiedAudioData, 10)
 	defer close(audioChan)
-	
+
 	// Use a proper RTSP URL instead of a sourceID - this is what NewFFmpegStream expects
 	testURL := fmt.Sprintf("rtsp://test-%d.example.com/stream", time.Now().UnixNano())
 	stream := NewFFmpegStream(testURL, "tcp", audioChan)
-	
+
 	// Get the actual source ID that was created/registered by the stream
 	actualSourceID := stream.source.ID
-	
+
 	// Now allocate buffers for the actual source ID that was created
 	if err := AllocateAnalysisBuffer(conf.BufferSize*3, actualSourceID); err != nil {
 		t.Skip("Cannot allocate analysis buffer for test")
@@ -281,25 +278,25 @@ func TestFFmpegStream_HandleAudioData(t *testing.T) {
 			t.Logf("Failed to remove analysis buffer: %v", err)
 		}
 	}()
-	
+
 	if err := AllocateCaptureBufferIfNeeded(60, conf.SampleRate, conf.BitDepth/8, actualSourceID); err != nil {
-		t.Skip("Cannot allocate capture buffer for test") 
+		t.Skip("Cannot allocate capture buffer for test")
 	}
 	defer func() {
 		if err := RemoveCaptureBuffer(actualSourceID); err != nil {
 			t.Logf("Failed to remove capture buffer: %v", err)
 		}
 	}()
-	
+
 	// Test audio data handling
 	testData := make([]byte, 1024)
 	for i := range testData {
 		testData[i] = byte(i % 256)
 	}
-	
+
 	err := stream.handleAudioData(testData)
 	require.NoError(t, err)
-	
+
 	// Check if data was sent to audio channel
 	select {
 	case data := <-audioChan:
@@ -321,7 +318,7 @@ func TestFFmpegStream_CircuitBreakerBehavior(t *testing.T) {
 	assert.False(t, stream.isCircuitOpen())
 
 	// Simulate failures to trigger circuit breaker
-	for i := 0; i < 12; i++ { // More than circuitBreakerThreshold (10)
+	for range 12 { // More than circuitBreakerThreshold (10)
 		stream.recordFailure(2 * time.Second) // Simulate rapid failures
 	}
 
@@ -344,7 +341,7 @@ func TestFFmpegStream_DataRateCalculation(t *testing.T) {
 
 	// Test data rate calculator
 	calc := stream.dataRateCalc
-	
+
 	// Add some data samples
 	calc.addSample(1024)
 	calc.addSample(2048)
@@ -365,7 +362,7 @@ func TestFFmpegStream_HealthTracking(t *testing.T) {
 	// Test initial health - stream should not be healthy without data
 	health := stream.GetHealth()
 	assert.False(t, health.IsHealthy) // Changed: new streams are not healthy by default
-	
+
 	// Make stream healthy by simulating data reception
 	stream.updateLastDataTime()
 	health = stream.GetHealth()
@@ -403,10 +400,10 @@ func TestFFmpegStream_ConcurrentHealthAndDataUpdates(t *testing.T) {
 	done := make(chan bool, numGoroutines)
 
 	// Concurrent health checks
-	for i := 0; i < numGoroutines/2; i++ {
+	for range numGoroutines / 2 {
 		go func() {
 			defer func() { done <- true }()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				health := stream.GetHealth()
 				assert.NotNil(t, health)
 			}
@@ -414,10 +411,10 @@ func TestFFmpegStream_ConcurrentHealthAndDataUpdates(t *testing.T) {
 	}
 
 	// Concurrent data updates
-	for i := 0; i < numGoroutines/2; i++ {
+	for range numGoroutines / 2 {
 		go func() {
 			defer func() { done <- true }()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				stream.updateLastDataTime()
 				stream.bytesReceivedMu.Lock()
 				stream.totalBytesReceived += 100
@@ -427,7 +424,7 @@ func TestFFmpegStream_ConcurrentHealthAndDataUpdates(t *testing.T) {
 	}
 
 	// Wait for all goroutines to complete
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		select {
 		case <-done:
 			// Completed
@@ -455,19 +452,15 @@ func TestFFmpegStream_BackoffOverflowProtection(t *testing.T) {
 	stream.restartCountMu.Unlock()
 
 	// Calculate expected backoff with overflow protection
-	exponent := 100 - 1
-	if exponent > 20 { // maxBackoffExponent constant
-		exponent = 20
-	}
-	
-	expectedBackoff := stream.backoffDuration * time.Duration(1<<uint(exponent))
-	if expectedBackoff > stream.maxBackoff {
-		expectedBackoff = stream.maxBackoff
-	}
+	exponent := min(100-1,
+		// maxBackoffExponent constant
+		20)
+
+	expectedBackoff := min(stream.backoffDuration*time.Duration(1<<uint(exponent)), stream.maxBackoff)
 
 	// The expected backoff should be the maximum allowed (2 minutes)
 	assert.Equal(t, 2*time.Minute, expectedBackoff)
-	
+
 	// Verify the calculation doesn't panic or overflow
 	assert.NotPanics(t, func() {
 		// This should not panic due to overflow protection
@@ -494,11 +487,11 @@ func TestFFmpegStream_DroppedDataLogging(t *testing.T) {
 
 	// Test rate limiting - first call should log
 	stream.logDroppedData()
-	
+
 	// Second call immediately should not log (rate limited)
 	// We can't easily test the actual logging output, but we can test the rate limiting logic
 	firstLogTime := stream.lastDropLogTime
-	
+
 	// Call again immediately - should not update lastDropLogTime due to rate limiting
 	stream.logDroppedData()
 	assert.Equal(t, firstLogTime, stream.lastDropLogTime, "Log time should not change due to rate limiting")
@@ -525,7 +518,7 @@ func TestFFmpegStream_ValidateUserTimeout(t *testing.T) {
 		},
 		{
 			name:        "valid_5_seconds",
-			timeoutStr:  "5000000", 
+			timeoutStr:  "5000000",
 			expectError: false,
 		},
 		{
@@ -585,7 +578,7 @@ func TestFFmpegStream_ValidateUserTimeout(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := stream.validateUserTimeout(tt.timeoutStr)
-			
+
 			if tt.expectError {
 				require.Error(t, err, "Expected error for timeout: %s", tt.timeoutStr)
 				if tt.errorContains != "" {
@@ -601,53 +594,53 @@ func TestFFmpegStream_ValidateUserTimeout(t *testing.T) {
 // TestFFmpegStream_TimeoutDetectionLogic tests the logic for detecting user-provided timeouts
 func TestFFmpegStream_TimeoutDetectionLogic(t *testing.T) {
 	t.Parallel()
-	
+
 	tests := []struct {
-		name               string
-		ffmpegParameters   []string
-		expectedUserTimeout bool
+		name                 string
+		ffmpegParameters     []string
+		expectedUserTimeout  bool
 		expectedTimeoutValue string
 	}{
 		{
-			name:               "no_parameters",
-			ffmpegParameters:   []string{},
-			expectedUserTimeout: false,
+			name:                 "no_parameters",
+			ffmpegParameters:     []string{},
+			expectedUserTimeout:  false,
 			expectedTimeoutValue: "",
 		},
 		{
-			name:               "no_timeout_parameter",
-			ffmpegParameters:   []string{"-loglevel", "debug", "-rtsp_flags", "prefer_tcp"},
-			expectedUserTimeout: false,
+			name:                 "no_timeout_parameter",
+			ffmpegParameters:     []string{"-loglevel", "debug", "-rtsp_flags", "prefer_tcp"},
+			expectedUserTimeout:  false,
 			expectedTimeoutValue: "",
 		},
 		{
-			name:               "timeout_parameter_present",
-			ffmpegParameters:   []string{"-timeout", "5000000", "-loglevel", "debug"},
-			expectedUserTimeout: true,
+			name:                 "timeout_parameter_present",
+			ffmpegParameters:     []string{"-timeout", "5000000", "-loglevel", "debug"},
+			expectedUserTimeout:  true,
 			expectedTimeoutValue: "5000000",
 		},
 		{
-			name:               "timeout_parameter_middle",
-			ffmpegParameters:   []string{"-loglevel", "debug", "-timeout", "10000000", "-rtsp_flags", "prefer_tcp"},
-			expectedUserTimeout: true,
+			name:                 "timeout_parameter_middle",
+			ffmpegParameters:     []string{"-loglevel", "debug", "-timeout", "10000000", "-rtsp_flags", "prefer_tcp"},
+			expectedUserTimeout:  true,
 			expectedTimeoutValue: "10000000",
 		},
 		{
-			name:               "timeout_parameter_last_with_value",
-			ffmpegParameters:   []string{"-loglevel", "debug", "-timeout", "15000000"},
-			expectedUserTimeout: true,
+			name:                 "timeout_parameter_last_with_value",
+			ffmpegParameters:     []string{"-loglevel", "debug", "-timeout", "15000000"},
+			expectedUserTimeout:  true,
 			expectedTimeoutValue: "15000000",
 		},
 		{
-			name:               "timeout_parameter_without_value",
-			ffmpegParameters:   []string{"-loglevel", "debug", "-timeout"},
-			expectedUserTimeout: false, // No value provided
+			name:                 "timeout_parameter_without_value",
+			ffmpegParameters:     []string{"-loglevel", "debug", "-timeout"},
+			expectedUserTimeout:  false, // No value provided
 			expectedTimeoutValue: "",
 		},
 		{
-			name:               "multiple_timeout_parameters",
-			ffmpegParameters:   []string{"-timeout", "5000000", "-loglevel", "debug", "-timeout", "10000000"},
-			expectedUserTimeout: true,
+			name:                 "multiple_timeout_parameters",
+			ffmpegParameters:     []string{"-timeout", "5000000", "-loglevel", "debug", "-timeout", "10000000"},
+			expectedUserTimeout:  true,
 			expectedTimeoutValue: "5000000", // Should use first one found
 		},
 	}
@@ -655,10 +648,10 @@ func TestFFmpegStream_TimeoutDetectionLogic(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			// Test the timeout detection logic using the actual helper function
 			hasUserTimeout, userTimeoutValue := detectUserTimeout(tt.ffmpegParameters)
-			
+
 			assert.Equal(t, tt.expectedUserTimeout, hasUserTimeout, "User timeout detection should match expected")
 			assert.Equal(t, tt.expectedTimeoutValue, userTimeoutValue, "User timeout value should match expected")
 		})
@@ -668,31 +661,31 @@ func TestFFmpegStream_TimeoutDetectionLogic(t *testing.T) {
 // TestFFmpegStream_TimeoutBehaviorIntegration tests the integration of timeout logic
 func TestFFmpegStream_TimeoutBehaviorIntegration(t *testing.T) {
 	t.Parallel()
-	
+
 	// This test verifies the timeout behavior integration by checking
 	// what arguments would be generated for different scenarios
-	
+
 	tests := []struct {
-		name               string
-		ffmpegParameters   []string
+		name                    string
+		ffmpegParameters        []string
 		expectedContainsDefault bool
 		expectedValidationCall  bool
 	}{
 		{
-			name:               "no_user_timeout_adds_default",
-			ffmpegParameters:   []string{"-loglevel", "debug"},
+			name:                    "no_user_timeout_adds_default",
+			ffmpegParameters:        []string{"-loglevel", "debug"},
 			expectedContainsDefault: true,
 			expectedValidationCall:  false,
 		},
 		{
-			name:               "valid_user_timeout_no_default",
-			ffmpegParameters:   []string{"-timeout", "5000000", "-loglevel", "debug"},
+			name:                    "valid_user_timeout_no_default",
+			ffmpegParameters:        []string{"-timeout", "5000000", "-loglevel", "debug"},
 			expectedContainsDefault: false,
 			expectedValidationCall:  true,
 		},
 		{
-			name:               "empty_parameters_adds_default", 
-			ffmpegParameters:   []string{},
+			name:                    "empty_parameters_adds_default",
+			ffmpegParameters:        []string{},
 			expectedContainsDefault: true,
 			expectedValidationCall:  false,
 		},
@@ -701,18 +694,18 @@ func TestFFmpegStream_TimeoutBehaviorIntegration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			// Create base args like in the actual function
 			args := []string{"-rtsp_transport", "tcp"}
-			
+
 			// Use the actual helper function to detect timeout
 			hasUserTimeout, userTimeoutValue := detectUserTimeout(tt.ffmpegParameters)
-			
+
 			// Add default timeout if user hasn't provided one
 			if !hasUserTimeout {
 				args = append(args, "-timeout", "30000000")
 			}
-			
+
 			// Add user parameters
 			if len(tt.ffmpegParameters) > 0 {
 				// In real implementation, this is where validation would be called
@@ -722,7 +715,7 @@ func TestFFmpegStream_TimeoutBehaviorIntegration(t *testing.T) {
 				}
 				args = append(args, tt.ffmpegParameters...)
 			}
-			
+
 			// Check if default timeout was added
 			hasDefaultTimeout := false
 			for i, arg := range args {
@@ -731,22 +724,16 @@ func TestFFmpegStream_TimeoutBehaviorIntegration(t *testing.T) {
 					break
 				}
 			}
-			
-			assert.Equal(t, tt.expectedContainsDefault, hasDefaultTimeout, 
+
+			assert.Equal(t, tt.expectedContainsDefault, hasDefaultTimeout,
 				"Default timeout presence should match expected for test: %s", tt.name)
-			
+
 			// Verify the args contain expected elements
 			assert.Contains(t, args, "-rtsp_transport", "Should always contain transport parameter")
 			assert.Contains(t, args, "tcp", "Should always contain transport value")
-			
+
 			// Verify timeout is present in some form
-			hasAnyTimeout := false
-			for _, arg := range args {
-				if arg == "-timeout" {
-					hasAnyTimeout = true
-					break
-				}
-			}
+			hasAnyTimeout := slices.Contains(args, "-timeout")
 			assert.True(t, hasAnyTimeout, "Should always have a timeout parameter")
 		})
 	}
@@ -757,10 +744,10 @@ func TestDetectUserTimeout(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		params         []string
-		expectedFound  bool
-		expectedValue  string
+		name          string
+		params        []string
+		expectedFound bool
+		expectedValue string
 	}{
 		{
 			name:          "empty_params",
@@ -803,7 +790,7 @@ func TestDetectUserTimeout(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			found, value := detectUserTimeout(tt.params)
 			assert.Equal(t, tt.expectedFound, found, "Detection result should match expected")
 			assert.Equal(t, tt.expectedValue, value, "Timeout value should match expected")
@@ -983,7 +970,7 @@ func TestFFmpegStream_HealthWithZeroTime(t *testing.T) {
 	stream.lastDataMu.Unlock()
 
 	// Get health multiple times to ensure consistency
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		health := stream.GetHealth()
 		assert.True(t, health.LastDataReceived.IsZero(), "LastDataReceived should be zero on iteration %d", i)
 		assert.NotNil(t, health, "Health should not be nil on iteration %d", i)
@@ -1003,10 +990,10 @@ func TestFFmpegStream_ConcurrentLastDataTimeAccess(t *testing.T) {
 	done := make(chan bool, numGoroutines)
 
 	// Concurrent readers
-	for i := 0; i < numGoroutines/2; i++ {
+	for range numGoroutines / 2 {
 		go func() {
 			defer func() { done <- true }()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				stream.lastDataMu.RLock()
 				_ = stream.lastDataTime
 				stream.lastDataMu.RUnlock()
@@ -1015,17 +1002,17 @@ func TestFFmpegStream_ConcurrentLastDataTimeAccess(t *testing.T) {
 	}
 
 	// Concurrent writers
-	for i := 0; i < numGoroutines/2; i++ {
+	for range numGoroutines / 2 {
 		go func() {
 			defer func() { done <- true }()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				stream.updateLastDataTime()
 			}
 		}()
 	}
 
 	// Wait for all goroutines with timeout
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		select {
 		case <-done:
 			// Completed

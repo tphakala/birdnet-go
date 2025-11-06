@@ -12,7 +12,7 @@ type resourceEventImpl struct {
 	threshold    float64
 	severity     string
 	timestamp    time.Time
-	metadata     map[string]interface{}
+	metadata     map[string]any
 	path         string // Path for disk resources
 }
 
@@ -24,14 +24,14 @@ func NewResourceEvent(resourceType string, currentValue, threshold float64, seve
 		threshold:    threshold,
 		severity:     severity,
 		timestamp:    time.Now(),
-		metadata:     make(map[string]interface{}),
+		metadata:     make(map[string]any),
 	}
 }
 
 // NewResourceEventWithMetadata creates a new resource event with metadata
-func NewResourceEventWithMetadata(resourceType string, currentValue, threshold float64, severity string, metadata map[string]interface{}) ResourceEvent {
+func NewResourceEventWithMetadata(resourceType string, currentValue, threshold float64, severity string, metadata map[string]any) ResourceEvent {
 	if metadata == nil {
-		metadata = make(map[string]interface{})
+		metadata = make(map[string]any)
 	}
 	return &resourceEventImpl{
 		resourceType: resourceType,
@@ -51,7 +51,7 @@ func NewResourceEventWithPath(resourceType string, currentValue, threshold float
 		threshold:    threshold,
 		severity:     severity,
 		timestamp:    time.Now(),
-		metadata:     make(map[string]interface{}),
+		metadata:     make(map[string]any),
 		path:         path,
 	}
 	// Also store path in metadata for backward compatibility
@@ -87,7 +87,7 @@ func (e *resourceEventImpl) GetTimestamp() time.Time {
 }
 
 // GetMetadata returns additional context data
-func (e *resourceEventImpl) GetMetadata() map[string]interface{} {
+func (e *resourceEventImpl) GetMetadata() map[string]any {
 	return e.metadata
 }
 

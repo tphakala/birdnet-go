@@ -449,8 +449,8 @@ func (t *SFTPTarget) validatePath(pathToCheck string) error {
 	}
 
 	// Check for suspicious path components
-	components := strings.Split(clean, "/")
-	for _, component := range components {
+	components := strings.SplitSeq(clean, "/")
+	for component := range components {
 		// Skip empty components
 		if component == "" {
 			continue

@@ -133,7 +133,7 @@ func TestPairLabelsAndConfidence(t *testing.T) {
 			t.Parallel()
 
 			results, err := pairLabelsAndConfidence(tt.labels, tt.confidence)
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Expected error containing '%s', got nil", tt.errContains)
@@ -245,7 +245,7 @@ func TestPairLabelsAndConfidenceReuseBuffer(t *testing.T) {
 				if results[0].Species != "Robin" || results[0].Confidence != 0.9 {
 					t.Errorf("First use failed")
 				}
-				
+
 				// Reuse with different values
 				newLabels := []string{"Hawk", "Owl", "Crow"}
 				newConfidence := []float32{0.8, 0.6, 0.4}
@@ -253,12 +253,12 @@ func TestPairLabelsAndConfidenceReuseBuffer(t *testing.T) {
 				if err != nil {
 					t.Errorf("Second use failed: %v", err)
 				}
-				
+
 				// Check that buffer was updated
 				if results2[0].Species != "Hawk" || results2[0].Confidence != 0.8 {
 					t.Errorf("Buffer reuse failed: got %s/%f", results2[0].Species, results2[0].Confidence)
 				}
-				
+
 				// Original results slice should also be updated (same underlying array)
 				if results[0].Species != "Hawk" || results[0].Confidence != 0.8 {
 					t.Errorf("Buffer update not reflected in original slice")
@@ -266,17 +266,17 @@ func TestPairLabelsAndConfidenceReuseBuffer(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			// Create buffer
 			buffer := make([]datastore.Results, tt.bufferSize)
-			
+
 			// Call function
 			results, err := pairLabelsAndConfidenceReuse(tt.labels, tt.confidence, buffer)
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Expected error containing '%s', got nil", tt.errContains)
@@ -302,32 +302,32 @@ func TestPairLabelsAndConfidenceReuse(t *testing.T) {
 	labels := []string{"Robin", "Sparrow", "Eagle"}
 	confidence1 := []float32{0.9, 0.7, 0.5}
 	confidence2 := []float32{0.3, 0.6, 0.8}
-	
+
 	// First call
 	results1, err := pairLabelsAndConfidence(labels, confidence1)
 	if err != nil {
 		t.Fatalf("First call failed: %v", err)
 	}
-	
+
 	// Save first results
 	saved := make([]datastore.Results, len(results1))
 	for i, r := range results1 {
 		saved[i] = r.Copy()
 	}
-	
+
 	// Second call
 	results2, err := pairLabelsAndConfidence(labels, confidence2)
 	if err != nil {
 		t.Fatalf("Second call failed: %v", err)
 	}
-	
+
 	// Verify first results haven't changed
 	for i, r := range saved {
 		if results1[i].Species != r.Species || results1[i].Confidence != r.Confidence {
 			t.Errorf("First results were modified at index %d", i)
 		}
 	}
-	
+
 	// Verify second results are correct
 	expected2 := []float32{0.3, 0.6, 0.8}
 	for i, exp := range expected2 {
@@ -417,7 +417,7 @@ func TestSortResults(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -425,17 +425,17 @@ func TestSortResults(t *testing.T) {
 			// Make a copy to avoid modifying test data
 			results := make([]datastore.Results, len(tt.input))
 			copy(results, tt.input)
-			
+
 			sortResults(results)
-			
+
 			if len(results) != len(tt.expected) {
 				t.Fatalf("Length mismatch: expected %d, got %d", len(tt.expected), len(results))
 			}
-			
+
 			// For equal confidence values, we just check that they're sorted by confidence
-			for i := 0; i < len(results); i++ {
+			for i := range results {
 				if i > 0 && results[i].Confidence > results[i-1].Confidence {
-					t.Errorf("Results not sorted correctly at index %d: %f > %f", 
+					t.Errorf("Results not sorted correctly at index %d: %f > %f",
 						i, results[i].Confidence, results[i-1].Confidence)
 				}
 			}
@@ -500,21 +500,21 @@ func TestTrimResultsToMax(t *testing.T) {
 			wantCount: 3,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			result := trimResultsToMax(tt.input, tt.maxCount)
-			
+
 			if len(result) != tt.wantCount {
 				t.Errorf("Expected %d results, got %d", tt.wantCount, len(result))
 			}
-			
+
 			// Verify it returns the first N elements
-			for i := 0; i < len(result); i++ {
+			for i := range result {
 				if result[i].Species != tt.input[i].Species {
-					t.Errorf("Result %d mismatch: expected %s, got %s", 
+					t.Errorf("Result %d mismatch: expected %s, got %s",
 						i, tt.input[i].Species, result[i].Species)
 				}
 			}
@@ -592,17 +592,17 @@ func TestApplySigmoidToPredictions(t *testing.T) {
 			},
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
 			results := applySigmoidToPredictions(tt.predictions, tt.sensitivity)
-			
+
 			if len(results) != len(tt.predictions) {
 				t.Fatalf("Length mismatch: expected %d, got %d", len(tt.predictions), len(results))
 			}
-			
+
 			if tt.validate != nil {
 				tt.validate(t, results)
 			}
@@ -613,7 +613,7 @@ func TestApplySigmoidToPredictions(t *testing.T) {
 // Helper functions for testing
 func generateTestLabels(count int) []string {
 	labels := make([]string, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		labels[i] = fmt.Sprintf("Species_%06d", i+1)
 	}
 	return labels
@@ -621,7 +621,7 @@ func generateTestLabels(count int) []string {
 
 func generateTestConfidence(count int) []float32 {
 	confidence := make([]float32, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		confidence[i] = float32(i%100) / 100.0
 	}
 	return confidence
@@ -717,7 +717,7 @@ func TestApplySigmoidToPredictionsReuse(t *testing.T) {
 
 			// Get original results
 			original := applySigmoidToPredictions(tt.predictions, tt.sensitivity)
-			
+
 			// Create buffer and test reuse function
 			buffer := make([]float32, tt.bufferSize)
 			reuse := applySigmoidToPredictionsReuse(tt.predictions, tt.sensitivity, buffer)
@@ -757,7 +757,7 @@ func TestGetTopKResults(t *testing.T) {
 				// Should be sorted in descending order
 				for i := 1; i < len(results); i++ {
 					if results[i].Confidence > results[i-1].Confidence {
-						t.Errorf("Results not sorted: %f > %f at index %d", 
+						t.Errorf("Results not sorted: %f > %f at index %d",
 							results[i].Confidence, results[i-1].Confidence, i)
 					}
 				}
@@ -845,9 +845,9 @@ func TestGetTopKResults(t *testing.T) {
 			},
 		},
 		{
-			name: "Large dataset (realistic BirdNET size)",
+			name:  "Large dataset (realistic BirdNET size)",
 			input: generateLargeTestResults(6522),
-			k: 10,
+			k:     10,
 			validate: func(t *testing.T, results []datastore.Results, k int) {
 				t.Helper()
 				if len(results) != 10 {
@@ -888,7 +888,7 @@ func TestGetTopKResults(t *testing.T) {
 // generateLargeTestResults creates a large dataset for testing
 func generateLargeTestResults(count int) []datastore.Results {
 	results := make([]datastore.Results, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		results[i] = datastore.Results{
 			Species:    fmt.Sprintf("Species_%06d", i+1),
 			Confidence: float32(100-i%100) / 100.0, // Decreasing confidence pattern

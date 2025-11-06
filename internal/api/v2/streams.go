@@ -183,7 +183,7 @@ func (client *Client) writePump() {
 
 			// Add queued messages to the current WebSocket message
 			n := len(client.send)
-			for i := 0; i < n; i++ {
+			for range n {
 				if _, err := w.Write([]byte{'\n'}); err != nil {
 					client.logger.Printf("Error writing delimiter: %v", err)
 					return
@@ -257,7 +257,7 @@ func (client *Client) readPump(logger *log.Logger) {
 		// Process incoming message if needed
 		// For most stream cases, clients are read-only and don't send messages
 		// This could handle client subscription requests or filter updates
-		var msg map[string]interface{}
+		var msg map[string]any
 		if err := json.Unmarshal(message, &msg); err == nil {
 			// Handle message based on its content
 			logger.Printf("Received message from client: %v", msg)

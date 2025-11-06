@@ -345,8 +345,8 @@ func (m *Manager) ImportEncryptionKey(content []byte) error {
 	// Extract the key
 	var key string
 	for _, line := range lines {
-		if strings.HasPrefix(line, "Key: ") {
-			key = strings.TrimPrefix(line, "Key: ")
+		if after, ok := strings.CutPrefix(line, "Key: "); ok {
+			key = after
 			key = strings.TrimSpace(key)
 			break
 		}

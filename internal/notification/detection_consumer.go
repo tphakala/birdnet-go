@@ -160,11 +160,11 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 
 // RenderTemplate renders a Go template string with the provided data.
 // This is exported for use by the API when testing notifications.
-func RenderTemplate(name, tmplStr string, data interface{}) (string, error) {
+func RenderTemplate(name, tmplStr string, data any) (string, error) {
 	return renderTemplate(name, tmplStr, data)
 }
 
-func renderTemplate(name, tmplStr string, data interface{}) (string, error) {
+func renderTemplate(name, tmplStr string, data any) (string, error) {
 	tmpl, err := template.New(name).Parse(tmplStr)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse template: %w", err)

@@ -196,7 +196,7 @@ func TestGetAllDynamicThresholds(t *testing.T) {
 		ds := setupDynamicThresholdTestDB(t)
 
 		// Save 5 thresholds
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			threshold := &DynamicThreshold{
 				SpeciesName:   string(rune('a'+i)) + "-species",
 				Level:         1,

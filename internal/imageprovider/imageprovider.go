@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"maps"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -280,10 +281,7 @@ func (c *BirdImageCache) refreshStaleEntries() {
 	// Process stale entries in batches with rate limiting
 	logger.Debug("Processing stale entries", "batch_size", refreshBatchSize, "delay_between_entries", refreshDelay)
 	for i := 0; i < len(staleEntries); i += refreshBatchSize {
-		end := i + refreshBatchSize
-		if end > len(staleEntries) {
-			end = len(staleEntries)
-		}
+		end := min(i+refreshBatchSize, len(staleEntries))
 
 		batch := staleEntries[i:end]
 		logger.Debug("Processing batch of stale entries", "batch_start_index", i, "batch_end_index", end, "batch_size", len(batch))
@@ -296,7 +294,7 @@ func (c *BirdImageCache) refreshStaleEntries() {
 			default:
 				// Continue with refresh
 			}
-			
+
 			// Create a timer for the delay
 			timer := time.NewTimer(refreshDelay)
 			select {
@@ -355,7 +353,7 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 				Context("operation", "cache_refresh_fetch").
 				Build()
 		}
-		
+
 		// Use appropriate log levels based on error type:
 		// No logging: Provider not configured (normal operational state)
 		// WARN: "Not found" errors
@@ -369,7 +367,7 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 		default:
 			logger.Error("Failed to fetch image during refresh", "error", enhancedErr)
 		}
-		
+
 		if c.metrics != nil {
 			c.metrics.IncrementDownloadErrorsWithCategory("image-fetch", c.providerName, "cache_refresh_fetch")
 		}
@@ -1104,7 +1102,7 @@ func (img *BirdImage) EstimateSize() int {
 // MemoryUsage estimates the total memory usage of the cache map.
 func (c *BirdImageCache) MemoryUsage() int {
 	totalSize := 0
-	c.dataMap.Range(func(key, value interface{}) bool {
+	c.dataMap.Range(func(key, value any) bool {
 		if scientificName, ok := key.(string); ok {
 			totalSize += len(scientificName) // Add key size
 		}
@@ -1134,7 +1132,7 @@ func CreateDefaultCache(metricsCollector *observability.Metrics, store datastore
 	// Use the lazy-initialized provider to avoid race conditions during startup
 	// where conf.Setting() might not be fully initialized yet
 	provider := NewLazyWikiMediaProvider()
-	
+
 	// Using "wikimedia" as the provider name aligns with the constructor used
 	// The LazyWikiMediaProvider will handle actual provider creation when first used
 	return InitCache("wikimedia", provider, metricsCollector, store), nil
@@ -1271,9 +1269,7 @@ func (c *BirdImageCache) GetRegistry() *ImageProviderRegistry {
 func (r *ImageProviderRegistry) RangeProviders(cb func(name string, cache *BirdImageCache) bool) {
 	r.mu.RLock()
 	snapshot := make(map[string]*BirdImageCache, len(r.caches))
-	for k, v := range r.caches {
-		snapshot[k] = v
-	}
+	maps.Copy(snapshot, r.caches)
 	r.mu.RUnlock()
 
 	for name, cache := range snapshot {
@@ -1289,9 +1285,7 @@ func (r *ImageProviderRegistry) GetCaches() map[string]*BirdImageCache {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	cachesCopy := make(map[string]*BirdImageCache, len(r.caches))
-	for name, cache := range r.caches {
-		cachesCopy[name] = cache
-	}
+	maps.Copy(cachesCopy, r.caches)
 	return cachesCopy
 }
 
@@ -1486,7 +1480,7 @@ func (c *BirdImageCache) fetchSingleImage(scientificName string, sem chan struct
 
 // collectFetchResults collects results from parallel fetches
 func (c *BirdImageCache) collectFetchResults(count int, resultChan <-chan batchFetchResult, result map[string]BirdImage) {
-	for i := 0; i < count; i++ {
+	for i := range count {
 		res := <-resultChan
 		if res.err == nil {
 			result[res.name] = res.image

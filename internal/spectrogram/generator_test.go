@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -92,12 +93,12 @@ func TestGenerator_EnsureOutputDirectory_PathTraversal(t *testing.T) {
 // TestGenerator_GetSoxSpectrogramArgs tests Sox argument building
 func TestGenerator_GetSoxSpectrogramArgs(t *testing.T) {
 	tests := []struct {
-		name          string
-		width         int
-		raw           bool
-		ffmpegMajor   int
-		hasFfmpegVer  bool
-		wantDuration  bool // Whether we expect -d parameter
+		name         string
+		width        int
+		raw          bool
+		ffmpegMajor  int
+		hasFfmpegVer bool
+		wantDuration bool // Whether we expect -d parameter
 	}{
 		{
 			name:         "FFmpeg 7.x, no duration needed",
@@ -218,13 +219,7 @@ func TestGenerator_GetSoxArgs(t *testing.T) {
 	}
 
 	// Should contain spectrogram parameters
-	hasSpectrogram := false
-	for _, arg := range args {
-		if arg == "spectrogram" {
-			hasSpectrogram = true
-			break
-		}
-	}
+	hasSpectrogram := slices.Contains(args, "spectrogram")
 	if !hasSpectrogram {
 		t.Error("getSoxArgs() missing 'spectrogram' parameter")
 	}

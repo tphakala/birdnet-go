@@ -32,7 +32,7 @@ func safeMapAccessMap(t *testing.T, m map[string]any, key, description string) m
 // TestSpeciesConfigIntegration tests the full integration of species config with zero values
 func TestSpeciesConfigIntegration(t *testing.T) {
 	t.Parallel()
-	
+
 	// Create a temporary directory for the test
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "test_integration_config.yaml")
@@ -76,12 +76,12 @@ realtime:
 
 	// Verify initial values loaded correctly
 	assert.Len(t, settings.Realtime.Species.Config, 2, "Should have 2 species configs")
-	
+
 	rareBird, hasRareBird := settings.Realtime.Species.Config["Rare Bird"]
 	require.True(t, hasRareBird, "Rare Bird should exist in config")
 	assert.InDelta(t, 0.0, rareBird.Threshold, 0.0001, "Rare Bird threshold should be 0.0")
 	assert.Equal(t, 0, rareBird.Interval, "Rare Bird interval should be 0")
-	
+
 	commonBird, hasCommonBird := settings.Realtime.Species.Config["Common Bird"]
 	require.True(t, hasCommonBird, "Common Bird should exist in config")
 	assert.InDelta(t, 0.95, commonBird.Threshold, 0.0001, "Common Bird threshold should be 0.95")
@@ -127,7 +127,7 @@ realtime:
 	for birdName, configInterface := range configs {
 		config, ok := configInterface.(map[string]any)
 		require.True(t, ok, "Bird config %s should be a map", birdName)
-		
+
 		// Check that threshold exists and validate expected values
 		thresholdValue, hasThreshold := config["threshold"]
 		assert.True(t, hasThreshold, "%s should have threshold field", birdName)
@@ -142,7 +142,7 @@ realtime:
 			t.Errorf("%s threshold should be numeric, got %T: %v", birdName, thresholdValue, thresholdValue)
 			continue
 		}
-		
+
 		// Check that interval exists and validate expected values
 		intervalValue, hasInterval := config["interval"]
 		assert.True(t, hasInterval, "%s should have interval field even when zero", birdName)
@@ -157,7 +157,7 @@ realtime:
 			t.Errorf("%s interval should be numeric, got %T: %v", birdName, intervalValue, intervalValue)
 			continue
 		}
-		
+
 		// Validate concrete expected values based on bird name
 		switch birdName {
 		case "Rare Bird":
@@ -170,11 +170,11 @@ realtime:
 			assert.InDelta(t, 0.0, threshold, 0.0001, "Zero Bird should have 0.0 threshold")
 			assert.Equal(t, 0, interval, "Zero Bird should have 0 interval")
 		}
-		
+
 		// Check that actions field exists and has correct type/shape
 		actionsValue, hasActions := config["actions"]
 		assert.True(t, hasActions, "%s should have actions field", birdName)
-		actions, ok := actionsValue.([]interface{})
+		actions, ok := actionsValue.([]any)
 		require.True(t, ok, "%s actions should be a slice/list", birdName)
 		assert.Empty(t, actions, "%s actions should be empty", birdName)
 	}
@@ -185,7 +185,7 @@ realtime:
 
 	// Verify all birds have correct values after reload
 	assert.Len(t, reloadedSettings.Realtime.Species.Config, 3, "Should have 3 species configs after reload")
-	
+
 	// Check Rare Bird (unchanged)
 	rareBird, hasRareBirdReloaded := reloadedSettings.Realtime.Species.Config["Rare Bird"]
 	require.True(t, hasRareBirdReloaded, "Rare Bird should exist in reloaded config")
@@ -193,7 +193,7 @@ realtime:
 	assert.Equal(t, 0, rareBird.Interval, "Rare Bird interval should still be 0")
 	require.NotNil(t, rareBird.Actions, "Rare Bird actions should not be nil")
 	assert.Empty(t, rareBird.Actions, "Rare Bird actions should be empty")
-	
+
 	// Check Common Bird (updated to zeros)
 	commonBird, hasCommonBirdReloaded := reloadedSettings.Realtime.Species.Config["Common Bird"]
 	require.True(t, hasCommonBirdReloaded, "Common Bird should exist in reloaded config")
@@ -201,7 +201,7 @@ realtime:
 	assert.Equal(t, 0, commonBird.Interval, "Common Bird interval should now be 0")
 	require.NotNil(t, commonBird.Actions, "Common Bird actions should not be nil")
 	assert.Empty(t, commonBird.Actions, "Common Bird actions should be empty")
-	
+
 	// Check Zero Bird (new)
 	zeroBird, hasZeroBird := reloadedSettings.Realtime.Species.Config["Zero Bird"]
 	require.True(t, hasZeroBird, "Zero Bird should exist in reloaded config")

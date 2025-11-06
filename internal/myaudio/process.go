@@ -220,7 +220,7 @@ func convert16BitToFloat32(sample []byte) []float32 {
 
 	divisor := float32(32768.0)
 
-	for i := 0; i < length; i++ {
+	for i := range length {
 		sample := int16(sample[i*2]) | int16(sample[i*2+1])<<8
 		float32Data[i] = float32(sample) / divisor
 	}
@@ -234,7 +234,7 @@ func convert24BitToFloat32(sample []byte) []float32 {
 	float32Data := make([]float32, length)
 	divisor := float32(8388608.0)
 
-	for i := 0; i < length; i++ {
+	for i := range length {
 		sample := int32(sample[i*3]) | int32(sample[i*3+1])<<8 | int32(sample[i*3+2])<<16
 		if (sample & 0x00800000) > 0 {
 			sample |= ^0x00FFFFFF // Two's complement sign extension
@@ -251,7 +251,7 @@ func convert32BitToFloat32(sample []byte) []float32 {
 	float32Data := make([]float32, length)
 	divisor := float32(2147483648.0)
 
-	for i := 0; i < length; i++ {
+	for i := range length {
 		sample := int32(sample[i*4]) | int32(sample[i*4+1])<<8 | int32(sample[i*4+2])<<16 | int32(sample[i*4+3])<<24
 		float32Data[i] = float32(sample) / divisor
 	}

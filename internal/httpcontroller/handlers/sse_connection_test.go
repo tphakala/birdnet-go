@@ -52,10 +52,10 @@ func testSSEHandlerCleanup(t *testing.T) {
 		clients: make(map[chan Notification]bool),
 		debug:   true, // Enable debug for testing
 	}
-	
+
 	// Setup route
 	e.GET("/api/v1/sse", sseHandler.ServeSSE)
-	
+
 	server := httptest.NewServer(e)
 	defer server.Close()
 
@@ -66,12 +66,12 @@ func testSSEHandlerCleanup(t *testing.T) {
 	// Test connection in a goroutine to handle the long-running nature of SSE
 	connectionDone := make(chan error, 1)
 	respChan := make(chan *http.Response, 1)
-	
+
 	go func() {
 		// Test connection and disconnection
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		
+
 		req, err := http.NewRequestWithContext(ctx, "GET", server.URL+"/api/v1/sse", http.NoBody)
 		if err != nil {
 			connectionDone <- err
@@ -84,13 +84,13 @@ func testSSEHandlerCleanup(t *testing.T) {
 			connectionDone <- err
 			return
 		}
-		
+
 		respChan <- resp
-		
+
 		// Read for a short time to verify connection works
 		scanner := bufio.NewScanner(resp.Body)
 		scanner.Scan() // Try to read one line (will block until data or context cancellation)
-		
+
 		_ = resp.Body.Close() // Ignore close error in test
 		connectionDone <- nil
 	}()
@@ -123,7 +123,7 @@ func testAudioLevelSSECleanup(t *testing.T) {
 	t.Helper()
 	// Create Echo instance
 	e := echo.New()
-	
+
 	// Create mock handlers with required dependencies
 	handlers := &Handlers{
 		Settings: &conf.Settings{
@@ -131,14 +131,14 @@ func testAudioLevelSSECleanup(t *testing.T) {
 				Debug: true,
 			},
 		},
-		debug: true,
-		Server: &mockAccessServer{},
+		debug:          true,
+		Server:         &mockAccessServer{},
 		AudioLevelChan: make(chan myaudio.AudioLevelData, 10),
 	}
 
 	// Setup route
 	e.GET("/api/v1/audio-level", handlers.AudioLevelSSE)
-	
+
 	server := httptest.NewServer(e)
 	defer server.Close()
 
@@ -148,7 +148,7 @@ func testAudioLevelSSECleanup(t *testing.T) {
 
 	// Test connection with context cancellation
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	req, err := http.NewRequestWithContext(ctx, "GET", server.URL+"/api/v1/audio-level", http.NoBody)
 	require.NoError(t, err)
 	req.Header.Set("Accept", "text/event-stream")
@@ -227,10 +227,10 @@ func TestV1SSEConnectionRaceConditions(t *testing.T) {
 		clients: make(map[chan Notification]bool),
 		debug:   true, // Enable debug for testing
 	}
-	
+
 	// Setup route
 	e.GET("/api/v1/sse", sseHandler.ServeSSE)
-	
+
 	server := httptest.NewServer(e)
 	defer server.Close()
 
@@ -275,18 +275,18 @@ func TestV1AudioLevelSSEDuplicateConnections(t *testing.T) {
 
 	// Create Echo instance
 	e := echo.New()
-	
+
 	handlers := &Handlers{
 		Settings: &conf.Settings{
 			WebServer: conf.WebServerSettings{Debug: true},
 		},
-		debug: true,
-		Server: &mockAccessServer{},
+		debug:          true,
+		Server:         &mockAccessServer{},
 		AudioLevelChan: make(chan myaudio.AudioLevelData, 10),
 	}
 
 	e.GET("/api/v1/audio-level", handlers.AudioLevelSSE)
-	
+
 	server := httptest.NewServer(e)
 	defer server.Close()
 	defer close(handlers.AudioLevelChan)
@@ -351,7 +351,7 @@ func BenchmarkV1SSEConnection(b *testing.B) {
 		debug:   false, // Disable debug for benchmarking
 	}
 	e.GET("/api/v1/sse", sseHandler.ServeSSE)
-	
+
 	server := httptest.NewServer(e)
 	defer server.Close()
 
@@ -359,9 +359,7 @@ func BenchmarkV1SSEConnection(b *testing.B) {
 		Timeout: 1 * time.Second,
 	}
 
-	b.ResetTimer()
-
-	for range b.N {
+	for b.Loop() {
 		req, err := http.NewRequest("GET", server.URL+"/api/v1/sse", http.NoBody)
 		if err != nil {
 			b.Fatal(err)

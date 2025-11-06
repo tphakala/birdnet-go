@@ -55,16 +55,16 @@ type Controller struct {
 	// When set to true, all settings modifications remain in memory only.
 	// This is primarily used in testing but can be used in production for read-only mode.
 	// Thread-safe: should be set before controller initialization.
-	DisableSaveSettings bool         // disables disk persistence of settings
-	settingsMutex       sync.RWMutex // Mutex for settings operations
-	detectionCache      *cache.Cache // Cache for detection queries
-	startTime           *time.Time
-	SFS                    *securefs.SecureFS     // Add SecureFS instance
-	apiLogger              *slog.Logger           // Structured logger for API operations
-	apiLevelVar            *slog.LevelVar         // Dynamic level control (type declaration)
-	apiLoggerClose         func() error           // Function to close the log file
-	metrics                *observability.Metrics // Shared metrics instance
-	spectrogramGenerator   *spectrogram.Generator // Shared spectrogram generator (initialized after SFS)
+	DisableSaveSettings  bool         // disables disk persistence of settings
+	settingsMutex        sync.RWMutex // Mutex for settings operations
+	detectionCache       *cache.Cache // Cache for detection queries
+	startTime            *time.Time
+	SFS                  *securefs.SecureFS     // Add SecureFS instance
+	apiLogger            *slog.Logger           // Structured logger for API operations
+	apiLevelVar          *slog.LevelVar         // Dynamic level control (type declaration)
+	apiLoggerClose       func() error           // Function to close the log file
+	metrics              *observability.Metrics // Shared metrics instance
+	spectrogramGenerator *spectrogram.Generator // Shared spectrogram generator (initialized after SFS)
 
 	// Auth related fields
 	// AuthService stores the shared authentication service instance.
@@ -112,8 +112,8 @@ func ipExtractorFromCloudflareHeader(req *http.Request) string {
 	// 2. Check X-Forwarded-For (taking the first valid IP)
 	xff := req.Header.Get(echo.HeaderXForwardedFor)
 	if xff != "" {
-		parts := strings.Split(xff, ",")
-		for _, part := range parts {
+		parts := strings.SplitSeq(xff, ",")
+		for part := range parts {
 			ipStr := strings.TrimSpace(part)
 			ip := net.ParseIP(ipStr)
 			if ip != nil {
@@ -503,7 +503,7 @@ func (c *Controller) initRoutes() {
 // HealthCheck handles the API health check endpoint
 func (c *Controller) HealthCheck(ctx echo.Context) error {
 	// Create response structure
-	response := map[string]interface{}{
+	response := map[string]any{
 		"status":     "healthy",
 		"version":    c.Settings.Version,
 		"build_date": c.Settings.BuildDate,
@@ -543,13 +543,13 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 	}
 
 	// Add system metrics
-	systemMetrics := make(map[string]interface{})
+	systemMetrics := make(map[string]any)
 
 	// Add placeholder CPU usage (would be implemented with actual metrics in production)
 	systemMetrics["cpu_usage"] = 0.0
 
 	// Add placeholder memory usage
-	memoryMetrics := map[string]interface{}{
+	memoryMetrics := map[string]any{
 		"used_percent": 0.0,
 		"total_mb":     0.0,
 		"used_mb":      0.0,
@@ -557,7 +557,7 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 	systemMetrics["memory"] = memoryMetrics
 
 	// Add placeholder disk space
-	diskMetrics := map[string]interface{}{
+	diskMetrics := map[string]any{
 		"total_gb":     0.0,
 		"free_gb":      0.0,
 		"used_percent": 0.0,
@@ -697,7 +697,7 @@ func (c *Controller) HandleErrorForTest(ctx echo.Context, err error, message str
 }
 
 // Debug logs debug messages when debug mode is enabled
-func (c *Controller) Debug(format string, v ...interface{}) {
+func (c *Controller) Debug(format string, v ...any) {
 	if c.Settings.WebServer.Debug {
 		msg := fmt.Sprintf(format, v...)
 		c.logger.Printf("[DEBUG] %s", msg)
@@ -872,8 +872,8 @@ func (c *Controller) isAuthRequiredWithoutService(ctx echo.Context) bool {
 				// Check configured subnets
 				allowedSubnetsStr := c.Settings.Security.AllowSubnetBypass.Subnet
 				if allowedSubnetsStr != "" {
-					allowedSubnets := strings.Split(allowedSubnetsStr, ",")
-					for _, cidr := range allowedSubnets {
+					allowedSubnets := strings.SplitSeq(allowedSubnetsStr, ",")
+					for cidr := range allowedSubnets {
 						trimmedCIDR := strings.TrimSpace(cidr)
 						if trimmedCIDR == "" {
 							continue

@@ -60,7 +60,7 @@ func TestRaceConditionInTimeCalculation(t *testing.T) {
 	)
 
 	species := make([]string, speciesCount)
-	for i := 0; i < speciesCount; i++ {
+	for i := range speciesCount {
 		species[i] = "Race_Test_Species_" + string(rune('A'+i))
 	}
 
@@ -73,12 +73,12 @@ func TestRaceConditionInTimeCalculation(t *testing.T) {
 	baseTime := time.Now()
 
 	// Launch many goroutines targeting same species to force contention
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(grID int) {
 			defer wg.Done()
 
-			for op := 0; op < opsPerGR; op++ {
+			for op := range opsPerGR {
 				// Focus on a small set of species to maximize contention
 				speciesName := species[op%len(species)]
 
@@ -239,12 +239,12 @@ func TestHighContentionScenario(t *testing.T) {
 
 	baseTime := time.Now()
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(grID int) {
 			defer wg.Done()
 
-			for op := 0; op < opsPerGR; op++ {
+			for op := range opsPerGR {
 				// Use microsecond-level time differences to maximize race condition chances
 				detectionTime := baseTime.Add(time.Duration(grID*1000+op) * time.Microsecond)
 

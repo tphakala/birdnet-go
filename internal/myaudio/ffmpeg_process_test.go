@@ -138,7 +138,7 @@ func TestFFmpegStream_RapidRestartNoZombies(t *testing.T) {
 		pidMu := sync.Mutex{}
 
 		// Simulate rapid restarts with deterministic timing
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			stream := NewFFmpegStream(fmt.Sprintf("test://rapid-restart-%d", i), "tcp", audioChan)
 
 			// Go 1.25: Mock command duration uses fake time - 50ms advances instantly
@@ -257,7 +257,7 @@ func TestFFmpegStream_ConcurrentCleanup(t *testing.T) {
 
 	// Attempt concurrent cleanups
 	var wg sync.WaitGroup
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		wg.Go(func() {
 			stream.cleanupProcess()
 		})
@@ -376,7 +376,7 @@ func TestFFmpegStream_WaitGoroutineLeak(t *testing.T) {
 		defer close(audioChan)
 
 		// Run multiple cleanup cycles with deterministic timing
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			stream := NewFFmpegStream(fmt.Sprintf("test://leak-%d", i), "tcp", audioChan)
 
 			// Go 1.25: Mock command duration uses fake time - 50ms advances instantly
@@ -481,9 +481,7 @@ func BenchmarkFFmpegStream_ProcessCleanup(b *testing.B) {
 	audioChan := make(chan UnifiedAudioData, 10)
 	defer close(audioChan)
 
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		stream := NewFFmpegStream(fmt.Sprintf("test://bench-%d", i), "tcp", audioChan)
 
 		mockCmd := createMockFFmpegCommand(b, 50*time.Millisecond)

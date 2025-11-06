@@ -662,7 +662,7 @@ func TestDDoSProtection(t *testing.T) {
 	statusCodesChan := make(chan int, concurrentRequests)
 
 	// Launch concurrent requests using Go 1.25 WaitGroup.Go() pattern
-	for i := 0; i < concurrentRequests; i++ {
+	for range concurrentRequests {
 		wg.Go(func() {
 			// Create request with query parameters
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections?queryType=search&search=test", http.NoBody)

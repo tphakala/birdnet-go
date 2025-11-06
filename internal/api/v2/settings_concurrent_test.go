@@ -147,7 +147,7 @@ func runConcurrentScenario(t *testing.T, scenario string, goroutineID int, contr
 // runSameSectionScenario handles concurrent updates to the same section
 func runSameSectionScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error, successMutex *sync.Mutex, successCount *int) error {
 	t.Helper()
-	update := map[string]interface{}{
+	update := map[string]any{
 		"summaryLimit": 100 + goroutineID,
 	}
 	err := makeSettingsUpdate(t, controller, "dashboard", update)
@@ -167,12 +167,12 @@ func runDifferentSectionsScenario(t *testing.T, goroutineID int, controller *Con
 	sections := []string{"dashboard", "mqtt", "birdnet", "weather", "audio"}
 	section := sections[goroutineID%len(sections)]
 
-	updates := map[string]interface{}{
-		"dashboard": map[string]interface{}{"summaryLimit": 100 + goroutineID},
-		"mqtt":      map[string]interface{}{"topic": fmt.Sprintf("topic-%d", goroutineID)},
-		"birdnet":   map[string]interface{}{"threshold": 0.1 + float64(goroutineID)*0.01},
-		"weather":   map[string]interface{}{"pollInterval": 60 + goroutineID},
-		"audio":     map[string]interface{}{"export": map[string]interface{}{"bitrate": fmt.Sprintf("%dk", 96+goroutineID)}},
+	updates := map[string]any{
+		"dashboard": map[string]any{"summaryLimit": 100 + goroutineID},
+		"mqtt":      map[string]any{"topic": fmt.Sprintf("topic-%d", goroutineID)},
+		"birdnet":   map[string]any{"threshold": 0.1 + float64(goroutineID)*0.01},
+		"weather":   map[string]any{"pollInterval": 60 + goroutineID},
+		"audio":     map[string]any{"export": map[string]any{"bitrate": fmt.Sprintf("%dk", 96+goroutineID)}},
 	}
 
 	err := makeSettingsUpdate(t, controller, section, updates[section])
@@ -191,7 +191,7 @@ func runReadWriteScenario(t *testing.T, goroutineID int, controller *Controller,
 	t.Helper()
 	if goroutineID%2 == 0 {
 		// Write operation
-		update := map[string]interface{}{
+		update := map[string]any{
 			"summaryLimit": 100 + goroutineID,
 		}
 		err := makeSettingsUpdate(t, controller, "dashboard", update)
@@ -218,8 +218,8 @@ func runReadWriteScenario(t *testing.T, goroutineID int, controller *Controller,
 // runRapidSequentialScenario handles rapid sequential updates
 func runRapidSequentialScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error) error {
 	t.Helper()
-	for j := 0; j < 3; j++ {
-		update := map[string]interface{}{
+	for j := range 3 {
+		update := map[string]any{
 			"summaryLimit": 100 + goroutineID*10 + j,
 		}
 		err := makeSettingsUpdate(t, controller, "dashboard", update)
@@ -234,7 +234,7 @@ func runRapidSequentialScenario(t *testing.T, goroutineID int, controller *Contr
 // runSaveLogicScenario tests save logic without actual disk I/O (DisableSaveSettings prevents disk writes)
 func runSaveLogicScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error) error {
 	t.Helper()
-	update := map[string]interface{}{
+	update := map[string]any{
 		"summaryLimit": 100 + goroutineID,
 	}
 	err := makeSettingsUpdate(t, controller, "dashboard", update)
@@ -268,14 +268,14 @@ func TestRaceConditionScenarios(t *testing.T) {
 
 					// Start a write using WaitGroup.Go() (Go 1.25)
 					wg.Go(func() {
-						update := map[string]interface{}{
+						update := map[string]any{
 							"summaryLimit": 999,
 						}
 						_ = makeSettingsUpdate(t, controller, "dashboard", update)
 					})
 
 					// Perform multiple reads concurrently with the write
-					for i := 0; i < 10; i++ {
+					for range 10 {
 						wg.Go(func() {
 							req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/dashboard", http.NoBody)
 							rec := httptest.NewRecorder()
@@ -288,7 +288,7 @@ func TestRaceConditionScenarios(t *testing.T) {
 							assert.Equal(t, http.StatusOK, rec.Code)
 
 							// Parse response to verify it's valid JSON
-							var response map[string]interface{}
+							var response map[string]any
 							err = json.Unmarshal(rec.Body.Bytes(), &response)
 							require.NoError(t, err)
 						})
@@ -311,8 +311,8 @@ func TestRaceConditionScenarios(t *testing.T) {
 
 					// Update different nested fields concurrently using WaitGroup.Go() (Go 1.25)
 					wg.Go(func() {
-						update := map[string]interface{}{
-							"thumbnails": map[string]interface{}{
+						update := map[string]any{
+							"thumbnails": map[string]any{
 								"summary": true,
 							},
 						}
@@ -320,8 +320,8 @@ func TestRaceConditionScenarios(t *testing.T) {
 					})
 
 					wg.Go(func() {
-						update := map[string]interface{}{
-							"thumbnails": map[string]interface{}{
+						update := map[string]any{
+							"thumbnails": map[string]any{
 								"recent": false,
 							},
 						}
@@ -357,7 +357,7 @@ func TestRaceConditionScenarios(t *testing.T) {
 }
 
 // Helper function for making settings updates
-func makeSettingsUpdate(t *testing.T, controller *Controller, section string, update interface{}) error {
+func makeSettingsUpdate(t *testing.T, controller *Controller, section string, update any) error {
 	t.Helper()
 
 	body, err := json.Marshal(update)

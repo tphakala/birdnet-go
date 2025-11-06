@@ -258,7 +258,7 @@ func TestCacheEvictionUnderPressure(t *testing.T) {
 	currentTime := time.Now()
 
 	// Populate cache beyond target size
-	for i := 0; i < overflowSpecies; i++ {
+	for i := range overflowSpecies {
 		speciesName := fmt.Sprintf("Cache_Test_Species_%04d", i)
 
 		// Access species to populate cache

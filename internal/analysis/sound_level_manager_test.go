@@ -33,23 +33,19 @@ func TestSoundLevelManagerConcurrentState(t *testing.T) {
 	manager := NewSoundLevelManager(soundLevelChan, nil, nil, nil)
 
 	var wg sync.WaitGroup
-	
+
 	// Test concurrent IsRunning calls
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 100 {
+		wg.Go(func() {
 			_ = manager.IsRunning()
-		}()
+		})
 	}
 
 	// Test concurrent Stop calls
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 10 {
+		wg.Go(func() {
 			manager.Stop()
-		}()
+		})
 	}
 
 	// Wait with timeout
@@ -116,41 +112,39 @@ func TestSoundLevelManagerChannelCommunication(t *testing.T) {
 // TestHotReloadIntegrationBasic provides a basic integration test framework
 func TestHotReloadIntegrationBasic(t *testing.T) {
 	// This test demonstrates the hot reload pattern without dependencies
-	
+
 	// 1. Create components
 	soundLevelChan := make(chan myaudio.SoundLevelData, 100)
 	manager := NewSoundLevelManager(soundLevelChan, nil, nil, nil)
-	
+
 	// 2. Simulate configuration change and restart
 	var wg sync.WaitGroup
-	
+
 	// Simulate control monitor sending restart signal
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		
+	wg.Go(func() {
+
 		// Wait a bit then trigger restart
 		time.Sleep(50 * time.Millisecond)
-		
+
 		// In real implementation, this would be triggered by control monitor
 		err := manager.Restart()
 		assert.NoError(t, err, "Restart should not error")
-	}()
-	
+	})
+
 	// 3. Verify restart completes
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
 		close(done)
 	}()
-	
+
 	select {
 	case <-done:
 		// Success - restart completed
 	case <-time.After(2 * time.Second):
 		t.Fatal("Hot reload simulation timed out")
 	}
-	
+
 	// 4. Cleanup
 	manager.Stop()
 	close(soundLevelChan)
@@ -161,16 +155,16 @@ func TestSoundLevelManagerNilSafety(t *testing.T) {
 	// Test with all nil parameters
 	manager := NewSoundLevelManager(nil, nil, nil, nil)
 	require.NotNil(t, manager, "Manager should not be nil even with nil parameters")
-	
+
 	// These operations should not panic
 	assert.False(t, manager.IsRunning())
 	manager.Stop()
-	
+
 	// Start will fail but shouldn't panic
 	err := manager.Start()
 	// We expect this to fail gracefully without panic
 	// The actual error depends on implementation details
 	_ = err
-	
+
 	manager.Stop()
 }

@@ -4,18 +4,20 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
 
 func BenchmarkBuildFamilyTree(b *testing.B) {
 	// Create a large taxonomy response for realistic benchmarking
-	taxonomyJSON := `[`
-	for i := 0; i < 1000; i++ {
+	var taxonomyJSON strings.Builder
+	taxonomyJSON.WriteString(`[`)
+	for i := range 1000 {
 		if i > 0 {
-			taxonomyJSON += ","
+			taxonomyJSON.WriteString(",")
 		}
-		taxonomyJSON += `{
+		taxonomyJSON.WriteString(`{
 			"sciName": "Species` + string(rune('A'+i%26)) + `",
 			"comName": "Common Name",
 			"speciesCode": "spec` + string(rune('a'+i%26)) + `",
@@ -23,10 +25,10 @@ func BenchmarkBuildFamilyTree(b *testing.B) {
 			"order": "Passeriformes",
 			"familySciName": "Familidae",
 			"familyComName": "Family Name"
-		}`
+		}`)
 	}
 	// Add our target species
-	taxonomyJSON += `,{
+	taxonomyJSON.WriteString(`,{
 		"sciName": "Turdus migratorius",
 		"comName": "American Robin",
 		"speciesCode": "amerob",
@@ -34,12 +36,12 @@ func BenchmarkBuildFamilyTree(b *testing.B) {
 		"order": "Passeriformes",
 		"familySciName": "Turdidae",
 		"familyComName": "Thrushes and Allies"
-	}]`
+	}]`)
 
 	server := setupMockServer(b, map[string]mockResponse{
 		"/ref/taxonomy/ebird?fmt=json": {
 			status: http.StatusOK,
-			body:   taxonomyJSON,
+			body:   taxonomyJSON.String(),
 		},
 	})
 	defer server.Close()
@@ -104,7 +106,7 @@ func BenchmarkCacheLookup(b *testing.B) {
 	disableLogging(b)
 
 	// Pre-populate cache with various keys
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		key := "taxonomy:" + string(rune('a'+i%26))
 		client.cache.Set(key, []TaxonomyEntry{{ScientificName: "Test"}}, 1*time.Hour)
 	}

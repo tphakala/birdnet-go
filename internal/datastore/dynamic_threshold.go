@@ -137,7 +137,7 @@ func (ds *DataStore) UpdateDynamicThresholdExpiry(speciesName string, expiresAt 
 
 	result := ds.DB.Model(&DynamicThreshold{}).
 		Where("species_name = ?", speciesName).
-		Updates(map[string]interface{}{
+		Updates(map[string]any{
 			"expires_at": expiresAt,
 			"updated_at": time.Now(),
 		})
@@ -163,8 +163,8 @@ func (ds *DataStore) UpdateDynamicThresholdExpiry(speciesName string, expiresAt 
 
 // GetDynamicThresholdStats returns statistics about dynamic thresholds
 // This can be useful for monitoring and debugging
-func (ds *DataStore) GetDynamicThresholdStats() (map[string]interface{}, error) {
-	stats := make(map[string]interface{})
+func (ds *DataStore) GetDynamicThresholdStats() (map[string]any, error) {
+	stats := make(map[string]any)
 
 	// Total count
 	var totalCount int64

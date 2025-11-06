@@ -4,6 +4,7 @@ package errors
 import (
 	stderrors "errors"
 	"fmt"
+	"maps"
 	"runtime"
 	"strings"
 	"sync"
@@ -50,24 +51,24 @@ const (
 	CategoryState          ErrorCategory = "state"
 	CategoryLimit          ErrorCategory = "limit"
 	CategoryResource       ErrorCategory = "resource"
-	
+
 	// Analysis package specific categories
-	CategoryAudioAnalysis    ErrorCategory = "audio-analysis"      // BirdNET prediction/analysis errors
-	CategoryBuffer          ErrorCategory = "audio-buffer"        // Audio buffer management
-	CategoryWorker          ErrorCategory = "worker-pool"         // Worker pool operations
-	CategoryJobQueue        ErrorCategory = "job-queue"           // Job queue operations
-	CategoryThreshold       ErrorCategory = "threshold-mgmt"      // Dynamic threshold management
-	CategoryEventTracking   ErrorCategory = "event-tracking"      // Event tracking operations
-	CategorySpeciesTracking ErrorCategory = "species-tracking"    // Species tracking operations
-	CategorySoundLevel      ErrorCategory = "sound-level"         // Sound level monitoring
-	CategoryCommandExecution ErrorCategory = "command-execution"   // External command execution
-	
+	CategoryAudioAnalysis    ErrorCategory = "audio-analysis"    // BirdNET prediction/analysis errors
+	CategoryBuffer           ErrorCategory = "audio-buffer"      // Audio buffer management
+	CategoryWorker           ErrorCategory = "worker-pool"       // Worker pool operations
+	CategoryJobQueue         ErrorCategory = "job-queue"         // Job queue operations
+	CategoryThreshold        ErrorCategory = "threshold-mgmt"    // Dynamic threshold management
+	CategoryEventTracking    ErrorCategory = "event-tracking"    // Event tracking operations
+	CategorySpeciesTracking  ErrorCategory = "species-tracking"  // Species tracking operations
+	CategorySoundLevel       ErrorCategory = "sound-level"       // Sound level monitoring
+	CategoryCommandExecution ErrorCategory = "command-execution" // External command execution
+
 	// General categories useful across packages
-	CategoryTimeout         ErrorCategory = "timeout"             // Operation timeouts
-	CategoryCancellation    ErrorCategory = "cancellation"        // Cancelled operations
-	CategoryRetry          ErrorCategory = "retry"               // Retry-related errors
-	CategoryBroadcast      ErrorCategory = "broadcast"           // SSE/broadcast operations
-	CategoryIntegration    ErrorCategory = "integration"         // Third-party integrations
+	CategoryTimeout      ErrorCategory = "timeout"      // Operation timeouts
+	CategoryCancellation ErrorCategory = "cancellation" // Cancelled operations
+	CategoryRetry        ErrorCategory = "retry"        // Retry-related errors
+	CategoryBroadcast    ErrorCategory = "broadcast"    // SSE/broadcast operations
+	CategoryIntegration  ErrorCategory = "integration"  // Third-party integrations
 )
 
 // Priority constants for error prioritization
@@ -80,15 +81,15 @@ const (
 
 // EnhancedError wraps an error with additional context and metadata
 type EnhancedError struct {
-	Err       error                  // Original error
-	component string                 // Component where error occurred (lazily detected)
-	Category  ErrorCategory          // Error category for better grouping
-	Priority  string                 // Explicit priority override (optional)
-	Context   map[string]interface{} // Additional context data
-	Timestamp time.Time              // When the error occurred
-	reported  bool                   // Whether telemetry has been sent
-	mu        sync.RWMutex           // Mutex to protect concurrent access
-	detected  bool                   // Whether component has been auto-detected
+	Err       error          // Original error
+	component string         // Component where error occurred (lazily detected)
+	Category  ErrorCategory  // Error category for better grouping
+	Priority  string         // Explicit priority override (optional)
+	Context   map[string]any // Additional context data
+	Timestamp time.Time      // When the error occurred
+	reported  bool           // Whether telemetry has been sent
+	mu        sync.RWMutex   // Mutex to protect concurrent access
+	detected  bool           // Whether component has been auto-detected
 }
 
 // Error implements the error interface
@@ -119,11 +120,11 @@ func (ee *EnhancedError) GetComponent() string {
 		return component
 	}
 	ee.mu.RUnlock()
-	
+
 	// Slow path: need to detect component, use full lock
 	ee.mu.Lock()
 	defer ee.mu.Unlock()
-	
+
 	// Double-check in case another goroutine detected it while we were waiting
 	if ee.component == "" && !ee.detected {
 		ee.component = detectComponent()
@@ -133,7 +134,7 @@ func (ee *EnhancedError) GetComponent() string {
 			ee.component = "unknown"
 		}
 	}
-	
+
 	return ee.component
 }
 
@@ -148,19 +149,17 @@ func (ee *EnhancedError) GetPriority() string {
 }
 
 // GetContext returns the error context
-func (ee *EnhancedError) GetContext() map[string]interface{} {
+func (ee *EnhancedError) GetContext() map[string]any {
 	ee.mu.RLock()
 	defer ee.mu.RUnlock()
-	
+
 	// Return a copy to prevent external modification
 	if ee.Context == nil {
 		return nil
 	}
-	
-	contextCopy := make(map[string]interface{}, len(ee.Context))
-	for k, v := range ee.Context {
-		contextCopy[k] = v
-	}
+
+	contextCopy := make(map[string]any, len(ee.Context))
+	maps.Copy(contextCopy, ee.Context)
 	return contextCopy
 }
 
@@ -182,7 +181,6 @@ func (ee *EnhancedError) GetMessage() string {
 	return ""
 }
 
-
 // MarkReported marks this error as reported to telemetry
 func (ee *EnhancedError) MarkReported() {
 	ee.mu.Lock()
@@ -203,7 +201,7 @@ type ErrorBuilder struct {
 	component string
 	category  ErrorCategory
 	priority  string
-	context   map[string]interface{}
+	context   map[string]any
 }
 
 // New creates a new error with enhanced context
@@ -215,7 +213,7 @@ func New(err error) *ErrorBuilder {
 }
 
 // Newf creates a new formatted error with enhanced context
-func Newf(format string, args ...interface{}) *ErrorBuilder {
+func Newf(format string, args ...any) *ErrorBuilder {
 	return New(fmt.Errorf(format, args...))
 }
 
@@ -249,9 +247,9 @@ func (eb *ErrorBuilder) Priority(priority string) *ErrorBuilder {
 }
 
 // Context adds context data to the error
-func (eb *ErrorBuilder) Context(key string, value interface{}) *ErrorBuilder {
+func (eb *ErrorBuilder) Context(key string, value any) *ErrorBuilder {
 	if eb.context == nil {
-		eb.context = make(map[string]interface{})
+		eb.context = make(map[string]any)
 	}
 	eb.context[key] = value
 	return eb
@@ -261,13 +259,13 @@ func (eb *ErrorBuilder) Context(key string, value interface{}) *ErrorBuilder {
 func (eb *ErrorBuilder) ModelContext(modelPath, modelVersion string) *ErrorBuilder {
 	if modelPath != "" {
 		if eb.context == nil {
-			eb.context = make(map[string]interface{})
+			eb.context = make(map[string]any)
 		}
 		eb.context["model_path_type"] = categorizeModelPath(modelPath)
 	}
 	if modelVersion != "" {
 		if eb.context == nil {
-			eb.context = make(map[string]interface{})
+			eb.context = make(map[string]any)
 		}
 		eb.context["model_version"] = modelVersion
 	}
@@ -278,14 +276,14 @@ func (eb *ErrorBuilder) ModelContext(modelPath, modelVersion string) *ErrorBuild
 func (eb *ErrorBuilder) FileContext(filePath string, fileSize int64) *ErrorBuilder {
 	if filePath != "" {
 		if eb.context == nil {
-			eb.context = make(map[string]interface{})
+			eb.context = make(map[string]any)
 		}
 		eb.context["file_type"] = categorizeFilePath(filePath)
 		eb.context["file_extension"] = getFileExtension(filePath)
 	}
 	if fileSize > 0 {
 		if eb.context == nil {
-			eb.context = make(map[string]interface{})
+			eb.context = make(map[string]any)
 		}
 		eb.context["file_size_category"] = categorizeFileSize(fileSize)
 	}
@@ -296,13 +294,13 @@ func (eb *ErrorBuilder) FileContext(filePath string, fileSize int64) *ErrorBuild
 func (eb *ErrorBuilder) NetworkContext(url string, timeout time.Duration) *ErrorBuilder {
 	if url != "" {
 		if eb.context == nil {
-			eb.context = make(map[string]interface{})
+			eb.context = make(map[string]any)
 		}
 		eb.context["url_category"] = categorizeURL(url)
 	}
 	if timeout > 0 {
 		if eb.context == nil {
-			eb.context = make(map[string]interface{})
+			eb.context = make(map[string]any)
 		}
 		eb.context["timeout_seconds"] = timeout.Seconds()
 	}
@@ -312,7 +310,7 @@ func (eb *ErrorBuilder) NetworkContext(url string, timeout time.Duration) *Error
 // Timing adds performance timing context
 func (eb *ErrorBuilder) Timing(operation string, duration time.Duration) *ErrorBuilder {
 	if eb.context == nil {
-		eb.context = make(map[string]interface{})
+		eb.context = make(map[string]any)
 	}
 	eb.context["operation"] = operation
 	eb.context["duration_ms"] = duration.Milliseconds()
@@ -403,7 +401,7 @@ func init() {
 	RegisterComponent("backup", "backup")
 	RegisterComponent("audiocore", "audiocore")
 	RegisterComponent("api", "api")
-	
+
 	// Analysis package components - use slash-separated paths for subpackages
 	RegisterComponent("analysis", "analysis")
 	RegisterComponent("analysis/processor", "analysis.processor")
@@ -425,19 +423,19 @@ func quickComponentLookup(depth int) string {
 	if !ok {
 		return ""
 	}
-	
+
 	fn := runtime.FuncForPC(pc)
 	if fn == nil {
 		return ""
 	}
-	
+
 	funcName := fn.Name()
-	
+
 	// Skip if it's our own error package
 	if strings.Contains(funcName, "github.com/tphakala/birdnet-go/internal/errors") {
 		return ""
 	}
-	
+
 	return lookupComponent(funcName)
 }
 
@@ -450,7 +448,7 @@ func detectComponent() string {
 			return component
 		}
 	}
-	
+
 	// Fall back to full stack walk if quick lookup failed
 	return detectComponentFull()
 }
@@ -462,7 +460,7 @@ func detectComponentFull() string {
 	// Start with smaller buffer and grow if needed
 	pcs := make([]uintptr, 16)   // Start with 16 frames
 	n := runtime.Callers(2, pcs) // Skip runtime.Callers and detectComponentFull
-	
+
 	// If we filled the buffer, try again with larger size
 	if n == len(pcs) {
 		pcs = make([]uintptr, 32)
@@ -698,7 +696,7 @@ func Is(err, target error) bool {
 }
 
 // As finds the first error in err's tree that matches target (passthrough to standard library)
-func As(err error, target interface{}) bool {
+func As(err error, target any) bool {
 	return stderrors.As(err, target)
 }
 

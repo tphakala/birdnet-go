@@ -568,10 +568,10 @@ func TestValidateMQTTSettings_Valid(t *testing.T) {
 				Broker:  "ssl://broker.hivemq.com:8883",
 				Topic:   "birds",
 				RetrySettings: RetrySettings{
-					Enabled:          true,
-					MaxRetries:       5,
-					InitialDelay:     1000,
-					MaxDelay:         30000,
+					Enabled:           true,
+					MaxRetries:        5,
+					InitialDelay:      1000,
+					MaxDelay:          30000,
 					BackoffMultiplier: 2.0,
 				},
 			},
@@ -842,8 +842,8 @@ func BenchmarkValidateBirdNETSettings(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = ValidateBirdNETSettings(cfg)
 	}
 }
@@ -857,8 +857,8 @@ func BenchmarkValidateBirdweatherSettings(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = ValidateBirdweatherSettings(settings)
 	}
 }
@@ -872,8 +872,8 @@ func BenchmarkValidateMQTTSettings(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = ValidateMQTTSettings(settings)
 	}
 }

@@ -1,5 +1,4 @@
 //go:build metrics || debug
-// +build metrics debug
 
 // metrics_collector.go - Production metrics collection for tuning thresholds
 // This file is only compiled when the 'metrics' or 'debug' build tag is specified.

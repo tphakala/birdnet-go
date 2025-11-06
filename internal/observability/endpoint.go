@@ -64,14 +64,12 @@ func (e *Endpoint) Start(wg *sync.WaitGroup, quitChan <-chan struct{}) {
 		Handler: mux,
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		log.Printf("Telemetry endpoint starting at %s", e.listenAddress)
 		if err := e.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("Telemetry HTTP server error: %v", err)
 		}
-	}()
+	})
 
 	go e.gracefulShutdown(quitChan)
 }

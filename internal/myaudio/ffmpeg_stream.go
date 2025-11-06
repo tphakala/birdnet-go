@@ -82,8 +82,8 @@ const (
 	minTimeoutMicroseconds     = 1000000  // 1 second in microseconds
 
 	// FFmpeg error tracking settings
-	maxErrorHistorySize       = 100            // Maximum number of error contexts to store internally per stream
-	maxErrorHistoryExposed    = 10             // Number of most recent errors exposed via StreamHealth API
+	maxErrorHistorySize       = 100             // Maximum number of error contexts to store internally per stream
+	maxErrorHistoryExposed    = 10              // Number of most recent errors exposed via StreamHealth API
 	earlyErrorDetectionWindow = 5 * time.Second // Check stderr in first 5 seconds for early detection
 )
 
@@ -169,14 +169,14 @@ func (d *dataRateCalculator) getRate() float64 {
 		// rather an instantaneous rate estimate for display purposes.
 		sample := d.samples[0]
 		timeSinceSample := time.Since(sample.timestamp)
-		
+
 		// If sample is recent (within 5 seconds), show instantaneous rate
 		// This helps new streams show data rate immediately
 		if timeSinceSample < 5*time.Second {
 			// Return the burst size as bytes/second (instantaneous estimate)
 			return float64(sample.bytes)
 		}
-		
+
 		// Old single sample - no meaningful rate
 		return 0
 	}
@@ -268,13 +268,13 @@ type StateTransition struct {
 // validStateTransitions defines the allowed state transitions for validation.
 // This prevents invalid state transitions and makes the state machine behavior explicit.
 var validStateTransitions = map[ProcessState][]ProcessState{
-	StateIdle:        {StateStarting, StateStopped},                                    // Can start or be stopped
-	StateStarting:    {StateRunning, StateBackoff, StateCircuitOpen, StateStopped},     // Can succeed, fail, or be stopped
-	StateRunning:     {StateRestarting, StateBackoff, StateCircuitOpen, StateStopped},  // Can restart, fail, or be stopped
-	StateRestarting:  {StateStarting, StateBackoff, StateCircuitOpen, StateStopped},    // Can attempt start or enter waiting state
-	StateBackoff:     {StateStarting, StateCircuitOpen, StateStopped},                  // Can retry, open circuit, or be stopped
-	StateCircuitOpen: {StateStarting, StateStopped},                                    // Can retry after cooldown or be stopped
-	StateStopped:     {},                                                               // Terminal state - no transitions allowed
+	StateIdle:        {StateStarting, StateStopped},                                   // Can start or be stopped
+	StateStarting:    {StateRunning, StateBackoff, StateCircuitOpen, StateStopped},    // Can succeed, fail, or be stopped
+	StateRunning:     {StateRestarting, StateBackoff, StateCircuitOpen, StateStopped}, // Can restart, fail, or be stopped
+	StateRestarting:  {StateStarting, StateBackoff, StateCircuitOpen, StateStopped},   // Can attempt start or enter waiting state
+	StateBackoff:     {StateStarting, StateCircuitOpen, StateStopped},                 // Can retry, open circuit, or be stopped
+	StateCircuitOpen: {StateStarting, StateStopped},                                   // Can retry after cooldown or be stopped
+	StateStopped:     {},                                                              // Terminal state - no transitions allowed
 }
 
 // isValidTransition checks if a state transition is allowed
@@ -289,13 +289,7 @@ func isValidTransition(from, to ProcessState) bool {
 		return false
 	}
 
-	for _, allowed := range allowedTransitions {
-		if allowed == to {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(allowedTransitions, to)
 }
 
 // StreamHealth represents the health status of an FFmpeg stream.
@@ -414,14 +408,14 @@ func (w *threadSafeWriter) Write(p []byte) (n int, err error) {
 func generateUniqueFallbackID() string {
 	// Use timestamp + random component for uniqueness
 	timestamp := time.Now().Unix()
-	
+
 	// Generate random component
 	randomNum, err := rand.Int(rand.Reader, big.NewInt(10000))
 	if err != nil {
 		// Fallback to just timestamp if random fails
 		return fmt.Sprintf("fallback_rtsp_%d", timestamp)
 	}
-	
+
 	return fmt.Sprintf("fallback_rtsp_%d_%d", timestamp, randomNum.Int64())
 }
 
@@ -432,7 +426,7 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 	// Register or get existing source from registry
 	registry := GetRegistry()
 	var source *AudioSource
-	
+
 	if registry == nil {
 		log.Printf("⚠️ Registry not available during startup, creating fallback source: %s", privacy.SanitizeRTSPUrl(url))
 		// Create fallback source when registry is unavailable
@@ -475,10 +469,10 @@ func NewFFmpegStream(url, transport string, audioChan chan UnifiedAudioData) *FF
 		lastDataTime:                   time.Time{}, // Zero time - no data received yet
 		dataRateCalc:                   newDataRateCalculator(source.SafeString, dataRateWindowSize),
 		lastDropLogTime:                time.Now(),
-		lastSoundLevelNotRegisteredLog: time.Now().Add(-dropLogInterval), // Allow immediate first log
-		streamCreatedAt:                time.Now(),                       // Track when stream was created
-		processState:                   StateIdle,                        // Initial state is idle
-		stateTransitions:               make([]StateTransition, 0, 100),  // Pre-allocate for 100 transitions
+		lastSoundLevelNotRegisteredLog: time.Now().Add(-dropLogInterval),              // Allow immediate first log
+		streamCreatedAt:                time.Now(),                                    // Track when stream was created
+		processState:                   StateIdle,                                     // Initial state is idle
+		stateTransitions:               make([]StateTransition, 0, 100),               // Pre-allocate for 100 transitions
 		errorContexts:                  make([]*ErrorContext, 0, maxErrorHistorySize), // Pre-allocate error history
 		maxErrorHistory:                maxErrorHistorySize,
 	}
@@ -840,7 +834,7 @@ func (s *FFmpegStream) startProcess() error {
 			Context("operation", "start_process").
 			Build()
 	}
-	
+
 	// Get and validate connection string
 	connStr, err := s.source.GetConnectionString()
 	if err != nil {
@@ -852,7 +846,7 @@ func (s *FFmpegStream) startProcess() error {
 			Context("url", privacy.SanitizeRTSPUrl(s.source.SafeString)).
 			Build()
 	}
-	
+
 	// Prevent FFmpeg from starting with empty input which causes hard-to-debug restart loops
 	if connStr == "" {
 		return errors.Newf("connection string is empty for source %s, cannot start FFmpeg", s.source.ID).
@@ -1613,23 +1607,16 @@ func (s *FFmpegStream) handleRestartBackoff() {
 	currentRestartCount := s.restartCount
 
 	// Cap the exponent to prevent integer overflow
-	exponent := s.restartCount - 1
-	if exponent > maxBackoffExponent {
-		exponent = maxBackoffExponent
-	}
+	exponent := min(s.restartCount-1, maxBackoffExponent)
 
-	backoff := s.backoffDuration * time.Duration(1<<uint(exponent))
-	if backoff > s.maxBackoff {
-		backoff = s.maxBackoff
-	}
+	backoff := min(s.backoffDuration*time.Duration(1<<uint(exponent)), s.maxBackoff)
 
 	// Add rate limiting for very high restart counts to prevent runaway loops
 	if currentRestartCount > 50 {
 		// Additional delay proportional to restart count beyond 50
-		additionalDelay := time.Duration(currentRestartCount-50) * 10 * time.Second
-		if additionalDelay > 5*time.Minute {
-			additionalDelay = 5 * time.Minute // Cap at 5 minutes extra
-		}
+		additionalDelay := min(time.Duration(currentRestartCount-50)*10*time.Second,
+			// Cap at 5 minutes extra
+			5*time.Minute)
 		backoff += additionalDelay
 		streamLogger.Warn("high restart count detected - applying rate limiting",
 			"url", privacy.SanitizeRTSPUrl(s.source.SafeString),
@@ -1805,7 +1792,7 @@ func (s *FFmpegStream) IsRestarting() bool {
 func (s *FFmpegStream) GetProcessStartTime() time.Time {
 	s.cmdMu.Lock()
 	defer s.cmdMu.Unlock()
-	
+
 	// Only return start time if we have a truly running process (not exited)
 	// Check ProcessState to ensure the process hasn't exited
 	if s.cmd != nil && s.cmd.Process != nil && s.cmd.ProcessState == nil {
@@ -2021,7 +2008,7 @@ func (s *FFmpegStream) logStreamHealth() {
 func (s *FFmpegStream) isCircuitOpenSilent() bool {
 	s.circuitMu.Lock()
 	defer s.circuitMu.Unlock()
-	
+
 	// Check if circuit was opened and we're still in cooldown
 	return !s.circuitOpenTime.IsZero() && time.Since(s.circuitOpenTime) < circuitBreakerCooldown
 }
@@ -2031,16 +2018,16 @@ func (s *FFmpegStream) isCircuitOpenSilent() bool {
 func (s *FFmpegStream) circuitCooldownRemaining() (time.Duration, bool) {
 	s.circuitMu.Lock()
 	defer s.circuitMu.Unlock()
-	
+
 	if s.circuitOpenTime.IsZero() {
 		return 0, false
 	}
-	
+
 	elapsed := time.Since(s.circuitOpenTime)
 	if elapsed >= circuitBreakerCooldown {
 		return 0, false
 	}
-	
+
 	return circuitBreakerCooldown - elapsed, true
 }
 

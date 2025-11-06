@@ -120,7 +120,7 @@ func (m *MockClock) Set(t time.Time) {
 
 // MockAction implements the Action interface for testing
 type MockAction struct {
-	ExecuteFunc    func(data interface{}) error
+	ExecuteFunc    func(data any) error
 	ExecuteCount   int
 	ExecuteDelay   time.Duration
 	ExecuteTimeout bool
@@ -129,7 +129,7 @@ type MockAction struct {
 }
 
 // Execute implements the Action interface
-func (m *MockAction) Execute(data interface{}) error {
+func (m *MockAction) Execute(data any) error {
 	m.mu.Lock()
 	m.ExecuteCount++
 	m.mu.Unlock()
@@ -238,8 +238,7 @@ func TestBasicQueueFunctionality(t *testing.T) {
 func TestMultipleJobs(t *testing.T) {
 	t.Parallel()
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)
@@ -265,10 +264,10 @@ func TestMultipleJobs(t *testing.T) {
 	}
 
 	// Enqueue multiple jobs
-	for i := 0; i < numJobs; i++ {
+	for i := range numJobs {
 		// Create a mock action that decrements the wait group when executed
 		action := &MockAction{
-			ExecuteFunc: func(data interface{}) error {
+			ExecuteFunc: func(data any) error {
 				defer wg.Done()
 				completedJobs.Add(1)
 				return nil
@@ -284,7 +283,7 @@ func TestMultipleJobs(t *testing.T) {
 	}
 
 	// Force immediate processing to ensure all jobs are processed
-	for i := 0; i < numJobs; i++ {
+	for range numJobs {
 		queue.ProcessImmediately(ctx)
 		time.Sleep(5 * time.Millisecond)
 	}
@@ -322,8 +321,7 @@ func TestMultipleJobs(t *testing.T) {
 func TestRetryProcess(t *testing.T) {
 	t.Parallel()
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	queue := setupTestQueue(t, 100, 10, false)
 	defer teardownTestQueue(t, queue)
@@ -339,7 +337,7 @@ func TestRetryProcess(t *testing.T) {
 
 	// Create a mock action that fails a specified number of times before succeeding
 	action := &MockAction{
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			count := attemptCount.Add(1)
 			t.Logf("TestRetryProcess: Attempt %d of %d", count, failCount+1)
 			// Safely convert failCount to int32 to match atomic counter type
@@ -426,8 +424,7 @@ func TestRetryProcess(t *testing.T) {
 func TestRetryExhaustion(t *testing.T) {
 	t.Parallel()
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)
@@ -441,7 +438,7 @@ func TestRetryExhaustion(t *testing.T) {
 
 	// Create a mock action that always fails
 	action := &MockAction{
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			count := attemptCount.Add(1)
 			t.Logf("TestRetryExhaustion: Attempt %d of %d", count, maxRetries+1)
 			return errors.New("simulated failure")
@@ -524,8 +521,7 @@ func TestRetryBackoff(t *testing.T) {
 	// See the Clock interface and MockClock implementation for a potential approach.
 
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)
@@ -542,7 +538,7 @@ func TestRetryBackoff(t *testing.T) {
 
 	// Create a mock action that always fails and records execution times
 	action := &MockAction{
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			executionTimes <- time.Now()
 			count := attemptCount.Add(1)
 			t.Logf("TestRetryBackoff: Attempt %d of %d", count, maxRetries+1)
@@ -686,9 +682,9 @@ func TestJobExpiration(t *testing.T) {
 	}
 
 	// Enqueue 3 successful jobs
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		action := &MockAction{
-			ExecuteFunc: func(data interface{}) error {
+			ExecuteFunc: func(data any) error {
 				defer wg.Done()
 				return nil
 			},
@@ -699,9 +695,9 @@ func TestJobExpiration(t *testing.T) {
 	}
 
 	// Enqueue 2 failing jobs
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		action := &MockAction{
-			ExecuteFunc: func(data interface{}) error {
+			ExecuteFunc: func(data any) error {
 				return errors.New("simulated failure")
 			},
 		}
@@ -769,9 +765,9 @@ func TestArchiveLimit(t *testing.T) {
 	}
 
 	// Enqueue 6 jobs
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		action := &MockAction{
-			ExecuteFunc: func(data interface{}) error {
+			ExecuteFunc: func(data any) error {
 				defer wg.Done()
 				return nil
 			},
@@ -818,8 +814,7 @@ func TestQueueOverflow(t *testing.T) {
 	}()
 
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a job queue with a small capacity
 	queueCapacity := 3
@@ -835,7 +830,7 @@ func TestQueueOverflow(t *testing.T) {
 
 	// 1. Create a blocking job that will signal when it starts and wait for our signal to complete
 	blockingAction := &MockAction{
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			// Signal that the job has started
 			close(jobStarted)
 			// Wait for the signal to complete
@@ -847,7 +842,7 @@ func TestQueueOverflow(t *testing.T) {
 
 	// 2. Create regular jobs that will fill the rest of the queue
 	regularAction := &MockAction{
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			time.Sleep(10 * time.Millisecond) // Short delay
 			return nil
 		},
@@ -896,7 +891,7 @@ func TestQueueOverflow(t *testing.T) {
 	require.NoError(t, err, "Should be able to enqueue a job after making room")
 
 	// Process remaining jobs to clean up
-	for i := 0; i < queueCapacity; i++ {
+	for range queueCapacity {
 		queue.ProcessImmediately(ctx)
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -967,7 +962,7 @@ func TestDropOldestJob(t *testing.T) {
 	jobStarted := make(chan struct{})
 	jobBlock := make(chan struct{})
 	blockingAction := &MockAction{
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			// Signal that the job has started
 			close(jobStarted)
 			// Wait for the signal to complete
@@ -978,7 +973,7 @@ func TestDropOldestJob(t *testing.T) {
 
 	// Create a regular action for other jobs
 	regularAction := &MockAction{
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			return nil
 		},
 	}
@@ -1051,7 +1046,7 @@ func TestDropOldestJob(t *testing.T) {
 	close(jobBlock)
 
 	// Process all remaining jobs
-	for i := 0; i < queueCapacity; i++ {
+	for range queueCapacity {
 		queue.ProcessImmediately(ctx)
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -1131,7 +1126,7 @@ func TestContextCancellation(t *testing.T) {
 
 	// Create a mock action that blocks until cancelled
 	action := &MockAction{
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			// Signal that execution has started
 			close(executionStarted)
 
@@ -1195,8 +1190,7 @@ func TestStressTest(t *testing.T) {
 	}
 
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue with large capacity
 	maxJobs := 100
@@ -1224,7 +1218,7 @@ func TestStressTest(t *testing.T) {
 	}
 
 	// Create a mix of fast, slow, and failing jobs
-	for i := 0; i < numJobs; i++ {
+	for i := range numJobs {
 		var action *MockAction
 
 		// Create different types of actions based on the job index
@@ -1232,7 +1226,7 @@ func TestStressTest(t *testing.T) {
 		case 0:
 			// Fast job that succeeds immediately
 			action = &MockAction{
-				ExecuteFunc: func(data interface{}) error {
+				ExecuteFunc: func(data any) error {
 					defer wg.Done()
 					completedJobs.Add(1)
 					return nil
@@ -1241,7 +1235,7 @@ func TestStressTest(t *testing.T) {
 		case 1:
 			// Slow job that succeeds after a delay
 			action = &MockAction{
-				ExecuteFunc: func(data interface{}) error {
+				ExecuteFunc: func(data any) error {
 					defer wg.Done()
 					time.Sleep(10 * time.Millisecond) // Reduced delay
 					completedJobs.Add(1)
@@ -1252,7 +1246,7 @@ func TestStressTest(t *testing.T) {
 			// Job that fails once then succeeds
 			var attemptCount atomic.Int32
 			action = &MockAction{
-				ExecuteFunc: func(data interface{}) error {
+				ExecuteFunc: func(data any) error {
 					if attemptCount.Add(1) == 1 {
 						return errors.New("simulated failure")
 					}
@@ -1265,7 +1259,7 @@ func TestStressTest(t *testing.T) {
 			// Job that fails twice then succeeds
 			var attemptCount atomic.Int32
 			action = &MockAction{
-				ExecuteFunc: func(data interface{}) error {
+				ExecuteFunc: func(data any) error {
 					count := attemptCount.Add(1)
 					if count <= 2 {
 						return errors.New("simulated failure")
@@ -1279,15 +1273,13 @@ func TestStressTest(t *testing.T) {
 			// Job that always fails
 			var attemptCount atomic.Int32
 			action = &MockAction{
-				ExecuteFunc: func(data interface{}) error {
+				ExecuteFunc: func(data any) error {
 					// Only call wg.Done() and increment failedJobs once, on the final attempt
 					count := attemptCount.Add(1)
 					// Safely check if count reached max retries
-					maxRetries := config.MaxRetries + 1
-					if maxRetries > math.MaxInt32 {
+					maxRetries := min(config.MaxRetries+1,
 						// This should not happen in practice, but handle it
-						maxRetries = math.MaxInt32
-					}
+						math.MaxInt32)
 					if count >= int32(maxRetries) { //nolint:gosec // G115: test values small, safe conversion
 						defer wg.Done()
 						failedJobs.Add(1)
@@ -1307,7 +1299,7 @@ func TestStressTest(t *testing.T) {
 
 	// Force immediate processing to ensure all jobs are processed
 	// We need multiple processing cycles to handle retries
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		queue.ProcessImmediately(ctx)
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -1351,8 +1343,7 @@ func TestStressTest(t *testing.T) {
 // TestConcurrentJobSubmission tests that the job queue can handle concurrent job submissions
 func TestConcurrentJobSubmission(t *testing.T) {
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue with large capacity
 	queue := setupTestQueue(t, 1000, 50, false)
@@ -1365,10 +1356,10 @@ func TestConcurrentJobSubmission(t *testing.T) {
 	wg.Add(numGoroutines)
 
 	// Have multiple goroutines submit jobs concurrently
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(goroutineID int) {
 			defer wg.Done()
-			for j := 0; j < jobsPerGoroutine; j++ {
+			for j := range jobsPerGoroutine {
 				action := &MockAction{}
 				data := &TestData{ID: fmt.Sprintf("goroutine-%d-job-%d", goroutineID, j)}
 				config := RetryConfig{Enabled: false}
@@ -1382,7 +1373,7 @@ func TestConcurrentJobSubmission(t *testing.T) {
 	wg.Wait()
 
 	// Process all jobs
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		queue.ProcessImmediately(ctx)
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -1399,8 +1390,7 @@ func TestConcurrentJobSubmission(t *testing.T) {
 // TestRecoveryFromPanic tests that the job queue can recover from panics in job execution
 func TestRecoveryFromPanic(t *testing.T) {
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)
@@ -1409,7 +1399,7 @@ func TestRecoveryFromPanic(t *testing.T) {
 	// Create action that panics
 	panicAction := &MockAction{
 		Description: "Panic Action",
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			panic("simulated panic in job")
 		},
 	}
@@ -1428,7 +1418,7 @@ func TestRecoveryFromPanic(t *testing.T) {
 	require.NoError(t, err)
 
 	// Process the jobs
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		queue.ProcessImmediately(ctx)
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -1449,8 +1439,7 @@ func TestRecoveryFromPanic(t *testing.T) {
 // TestGracefulShutdownWithInProgressJobs tests that the job queue waits for in-progress jobs to complete during shutdown
 func TestGracefulShutdownWithInProgressJobs(t *testing.T) {
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)
@@ -1461,7 +1450,7 @@ func TestGracefulShutdownWithInProgressJobs(t *testing.T) {
 
 	// Create an action that signals when it starts and waits for notification to complete
 	action := &MockAction{
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			close(jobStarted)
 			<-jobCompleted
 			return nil
@@ -1523,7 +1512,7 @@ func TestRateLimiting(t *testing.T) {
 	var successCount, rejectionCount atomic.Int32
 
 	// Submit jobs at a high rate
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		action := &MockAction{}
 		data := &TestData{ID: fmt.Sprintf("job-%d", i)}
 		config := RetryConfig{Enabled: false}
@@ -1563,7 +1552,7 @@ func TestJobCancellation(t *testing.T) {
 
 	// Create a long-running job
 	action := &MockAction{
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			close(longJobStarted)
 			<-longJobBlocked // Block until channel is closed
 			return nil
@@ -1637,8 +1626,7 @@ func TestJobCancellation(t *testing.T) {
 // TestLongRunningJobs tests that short jobs can be processed while a long job is running
 func TestLongRunningJobs(t *testing.T) {
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	queue := setupTestQueue(t, 100, 10, false)
 	defer teardownTestQueue(t, queue)
@@ -1671,7 +1659,7 @@ func TestLongRunningJobs(t *testing.T) {
 	}
 
 	// Process the short jobs
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		queue.ProcessImmediately(ctx)
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -1694,8 +1682,7 @@ func TestLongRunningJobs(t *testing.T) {
 // TestJobTypeStatistics tests that job statistics are tracked correctly per action type
 func TestJobTypeStatistics(t *testing.T) {
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)
@@ -1716,7 +1703,7 @@ func TestJobTypeStatistics(t *testing.T) {
 	failAction := &FailActionType{
 		MockAction: MockAction{
 			Description: "Fail Action",
-			ExecuteFunc: func(data interface{}) error {
+			ExecuteFunc: func(data any) error {
 				return errors.New("simulated failure")
 			},
 		},
@@ -1727,7 +1714,7 @@ func TestJobTypeStatistics(t *testing.T) {
 	retryAction := &RetryActionType{
 		MockAction: MockAction{
 			Description: "Retry Action",
-			ExecuteFunc: func(data interface{}) error {
+			ExecuteFunc: func(data any) error {
 				// Increment counter and check
 				retryCounter++
 				// Fail on first attempt, succeed on retry
@@ -1857,9 +1844,9 @@ func TestMemoryManagementWithLargeJobLoads(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(jobCount)
 
-	for i := 0; i < jobCount; i++ {
+	for i := range jobCount {
 		action := &MockAction{
-			ExecuteFunc: func(data interface{}) error {
+			ExecuteFunc: func(data any) error {
 				defer wg.Done()
 				return nil
 			},
@@ -1906,8 +1893,7 @@ func TestMemoryManagementWithLargeJobLoads(t *testing.T) {
 // TestStatsToJSON tests the ToJSON method of JobStatsSnapshot
 func TestStatsToJSON(t *testing.T) {
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)
@@ -1920,7 +1906,7 @@ func TestStatsToJSON(t *testing.T) {
 
 	failAction := &MockAction{
 		Description: "Fail Action",
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			return errors.New("simulated failure for JSON test")
 		},
 	}
@@ -1962,7 +1948,7 @@ func TestStatsToJSON(t *testing.T) {
 	assert.Contains(t, jsonStr, `"lastError"`, "JSON should contain error information")
 
 	// Parse JSON to verify structure
-	var jsonData map[string]interface{}
+	var jsonData map[string]any
 	err = json.Unmarshal([]byte(jsonStr), &jsonData)
 	require.NoError(t, err, "JSON should be valid")
 
@@ -1972,7 +1958,7 @@ func TestStatsToJSON(t *testing.T) {
 	assert.Contains(t, jsonData, "timestamp", "JSON should have timestamp")
 
 	// Verify queue section
-	queueSection, ok := jsonData["queue"].(map[string]interface{})
+	queueSection, ok := jsonData["queue"].(map[string]any)
 	require.True(t, ok, "Queue section should be an object")
 	assert.Contains(t, queueSection, "total", "Queue section should have total")
 	assert.Contains(t, queueSection, "successful", "Queue section should have successful")
@@ -1982,7 +1968,7 @@ func TestStatsToJSON(t *testing.T) {
 	assert.Contains(t, queueSection, "utilization", "Queue section should have utilization")
 
 	// Verify actions section
-	actionsSection, ok := jsonData["actions"].(map[string]interface{})
+	actionsSection, ok := jsonData["actions"].(map[string]any)
 	require.True(t, ok, "Actions section should be an object")
 
 	// There should be at least two action types
@@ -1991,7 +1977,7 @@ func TestStatsToJSON(t *testing.T) {
 	// Find the fail action and verify its structure
 	var failActionFound bool
 	for _, actionData := range actionsSection {
-		actionObj, ok := actionData.(map[string]interface{})
+		actionObj, ok := actionData.(map[string]any)
 		require.True(t, ok, "Action data should be an object")
 
 		if desc, ok := actionObj["description"].(string); ok && desc == "Fail Action" {
@@ -2003,7 +1989,7 @@ func TestStatsToJSON(t *testing.T) {
 			assert.Contains(t, actionObj, "performance", "Action should have performance")
 
 			// Verify metrics
-			metrics, ok := actionObj["metrics"].(map[string]interface{})
+			metrics, ok := actionObj["metrics"].(map[string]any)
 			require.True(t, ok, "Metrics should be an object")
 			assert.Contains(t, metrics, "attempted", "Metrics should have attempted")
 			assert.Contains(t, metrics, "successful", "Metrics should have successful")
@@ -2012,7 +1998,7 @@ func TestStatsToJSON(t *testing.T) {
 			assert.Contains(t, metrics, "dropped", "Metrics should have dropped")
 
 			// Verify performance
-			performance, ok := actionObj["performance"].(map[string]interface{})
+			performance, ok := actionObj["performance"].(map[string]any)
 			require.True(t, ok, "Performance should be an object")
 			assert.Contains(t, performance, "totalDuration", "Performance should have totalDuration")
 			assert.Contains(t, performance, "averageDuration", "Performance should have averageDuration")

@@ -38,16 +38,16 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 						{ScientificName: "Lifetime_Species_1", FirstSeenDate: "2024-01-01"},
 						{ScientificName: "Lifetime_Species_2", FirstSeenDate: "2024-02-01"},
 					}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+				// BG-17: InitFromDatabase requires notification history
+				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+					Return([]datastore.NotificationHistory{}, nil).Maybe()
 				// Yearly data
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{
 						{ScientificName: "Yearly_Species_1", FirstSeenDate: "2024-03-01"},
 					}, nil).Once()
 				// Seasonal data (4 seasons)
-				for i := 0; i < 4; i++ {
+				for i := range 4 {
 					ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 						Return([]datastore.NewSpeciesData{
 							{ScientificName: fmt.Sprintf("Seasonal_Species_%d", i), FirstSeenDate: "2024-04-01"},
@@ -380,7 +380,7 @@ func TestCheckAndUpdateSpecies_Atomicity(t *testing.T) {
 	now := time.Now()
 
 	// Launch concurrent updates
-	for i := 0; i < goroutines; i++ {
+	for i := range goroutines {
 		wg.Add(1)
 		go func(offset int) {
 			defer wg.Done()
@@ -543,10 +543,8 @@ func TestIsNewSpecies_ThreadSafety(t *testing.T) {
 		"Unknown_Species":  true,
 	}
 
-	for i := 0; i < goroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range goroutines {
+		wg.Go(func() {
 
 			for _, species := range speciesToTest {
 				isNew := tracker.IsNewSpecies(species)
@@ -555,7 +553,7 @@ func TestIsNewSpecies_ThreadSafety(t *testing.T) {
 						species, expectedResults[species], isNew)
 				}
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

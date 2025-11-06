@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -144,10 +145,7 @@ func (h *Handlers) Detections(c echo.Context) error {
 	currentPage := (req.Offset / req.NumResults) + 1
 	totalPages := int(math.Ceil(float64(totalResults) / float64(req.NumResults)))
 	showingFrom := req.Offset + 1
-	showingTo := req.Offset + len(notes)
-	if showingTo > int(totalResults) {
-		showingTo = int(totalResults)
-	}
+	showingTo := min(req.Offset+len(notes), int(totalResults))
 
 	// Prepare data for rendering in the template
 	data := struct {
@@ -168,7 +166,7 @@ func (h *Handlers) Detections(c echo.Context) error {
 		ShowingTo         int
 		ItemsPerPage      int
 		WeatherEnabled    bool
-		Security          map[string]interface{}
+		Security          map[string]any
 	}{
 		Date:              req.Date,
 		Hour:              req.Hour,
@@ -187,7 +185,7 @@ func (h *Handlers) Detections(c echo.Context) error {
 		ShowingTo:         showingTo,
 		ItemsPerPage:      itemsPerPage,
 		WeatherEnabled:    weatherEnabled,
-		Security: map[string]interface{}{
+		Security: map[string]any{
 			"Enabled":       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
 			"AccessAllowed": h.Server.IsAccessAllowed(c),
 		},
@@ -386,11 +384,11 @@ func (h *Handlers) RecentDetections(c echo.Context) error {
 	data := struct {
 		Notes             []datastore.Note
 		DashboardSettings conf.Dashboard
-		Security          map[string]interface{}
+		Security          map[string]any
 	}{
 		Notes:             notes,
 		DashboardSettings: *h.DashboardSettings,
-		Security: map[string]interface{}{
+		Security: map[string]any{
 			"Enabled":       h.Settings.Security.BasicAuth.Enabled || h.Settings.Security.GoogleAuth.Enabled || h.Settings.Security.GithubAuth.Enabled,
 			"AccessAllowed": h.Server.IsAccessAllowed(c),
 		},
@@ -647,10 +645,8 @@ func (h *Handlers) handleSpeciesExclusion(note *datastore.Note, verified, ignore
 
 	if verified == "false_positive" && ignoreSpecies != "" {
 		// Check if species is already excluded
-		for _, s := range settings.Realtime.Species.Exclude {
-			if s == ignoreSpecies {
-				return nil
-			}
+		if slices.Contains(settings.Realtime.Species.Exclude, ignoreSpecies) {
+			return nil
 		}
 
 		// Add to excluded list
@@ -665,14 +661,11 @@ func (h *Handlers) handleSpeciesExclusion(note *datastore.Note, verified, ignore
 		})
 	} else if verified == "correct" {
 		// Check if species is in exclude list
-		for _, s := range settings.Realtime.Species.Exclude {
-			if s == note.CommonName {
-				h.SSE.SendNotification(Notification{
-					Message: fmt.Sprintf("%s is currently in ignore list. You may want to remove it from Settings.", note.CommonName),
-					Type:    "warning",
-				})
-				break
-			}
+		if slices.Contains(settings.Realtime.Species.Exclude, note.CommonName) {
+			h.SSE.SendNotification(Notification{
+				Message: fmt.Sprintf("%s is currently in ignore list. You may want to remove it from Settings.", note.CommonName),
+				Type:    "warning",
+			})
 		}
 	}
 	return nil
@@ -694,7 +687,7 @@ func (h *Handlers) processComment(noteID uint, comment string, maxRetries int, b
 	}
 
 	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		err := h.DS.Transaction(func(tx *gorm.DB) error {
 			// Get existing comments
 			var existingComments []datastore.NoteComment
@@ -755,7 +748,7 @@ func (h *Handlers) processReview(noteID uint, verified string, lockDetection boo
 	}
 
 	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		err := h.DS.Transaction(func(tx *gorm.DB) error {
 			// Get note and existing review in a transaction
 			note, err := h.DS.Get(strconv.FormatUint(uint64(noteID), 10))
@@ -961,7 +954,7 @@ func (h *Handlers) LockDetection(c echo.Context) error {
 	}
 
 	// Attempt the lock operation with retries
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		var err error
 		if isLocked {
 			err = h.DS.UnlockNote(id)

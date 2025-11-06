@@ -63,7 +63,7 @@ func (t *TemplateRenderer) validateErrorTemplates() error {
 }
 
 // Render renders a template with the given data.
-func (t *TemplateRenderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
+func (t *TemplateRenderer) Render(w io.Writer, name string, data any, c echo.Context) error {
 	// Create a buffer to capture any template execution errors
 	var buf bytes.Buffer
 	err := t.templates.ExecuteTemplate(&buf, name, data)
@@ -129,7 +129,7 @@ func (s *Server) setupTemplateRenderer() {
 }
 
 // RenderContent renders the content template with the given data
-func (s *Server) RenderContent(data interface{}) (template.HTML, error) {
+func (s *Server) RenderContent(data any) (template.HTML, error) {
 	// Assert that the data is of the expected type
 	d, ok := data.(RenderData)
 	if !ok {
@@ -238,7 +238,7 @@ func (s *Server) renderSettingsContent(c echo.Context) (template.HTML, error) {
 	}
 
 	// Prepare the data for the template
-	data := map[string]interface{}{
+	data := map[string]any{
 		"Settings":                   s.Settings,             // Application settings
 		"Locales":                    s.prepareLocalesData(), // Prepare locales data for the UI
 		"EqFilterConfig":             conf.EqFilterConfig,    // Equalizer filter configuration for the UI

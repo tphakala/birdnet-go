@@ -50,7 +50,7 @@ func (store *MySQLStore) Open() error {
 		store.Settings.Output.MySQL.Username, store.Settings.Output.MySQL.Password,
 		store.Settings.Output.MySQL.Host, store.Settings.Output.MySQL.Port,
 		store.Settings.Output.MySQL.Database)
-	
+
 	// Log database opening (with sanitized DSN)
 	sanitizedDSN := fmt.Sprintf("%s:***@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		store.Settings.Output.MySQL.Username,
@@ -78,17 +78,17 @@ func (store *MySQLStore) Open() error {
 	}
 
 	store.DB = db
-	
+
 	// Log successful connection
 	getLogger().Info("MySQL database opened successfully",
 		"host", store.Settings.Output.MySQL.Host,
 		"port", store.Settings.Output.MySQL.Port,
 		"database", store.Settings.Output.MySQL.Database)
-	
+
 	if err := performAutoMigration(db, store.Settings.Debug, "MySQL", dsn); err != nil {
 		return err
 	}
-	
+
 	// Start monitoring if metrics are available
 	if store.metrics != nil {
 		// Monitoring intervals:
@@ -98,7 +98,7 @@ func (store *MySQLStore) Open() error {
 		//   so a longer interval reduces overhead while still capturing growth trends
 		store.StartMonitoring(30*time.Second, 5*time.Minute)
 	}
-	
+
 	return nil
 }
 
@@ -112,10 +112,10 @@ func (store *MySQLStore) Close() error {
 			Context("operation", "close").
 			Build()
 	}
-	
+
 	// Stop monitoring before closing database
 	store.StopMonitoring()
-	
+
 	// Log database closing
 	getLogger().Info("Closing MySQL database connection",
 		"host", store.Settings.Output.MySQL.Host,
@@ -137,7 +137,7 @@ func (store *MySQLStore) Close() error {
 			"error", err)
 		return err
 	}
-	
+
 	// Log successful closure
 	getLogger().Info("MySQL database closed successfully",
 		"host", store.Settings.Output.MySQL.Host,
@@ -155,12 +155,12 @@ func (store *MySQLStore) Optimize(ctx context.Context) error {
 			Context("operation", "optimize").
 			Build()
 	}
-	
+
 	optimizeStart := time.Now()
 	optimizeLogger := getLogger().With("operation", "optimize", "db_type", "MySQL")
-	
+
 	optimizeLogger.Info("Starting database optimization")
-	
+
 	// Get list of tables in the database
 	var tables []string
 	if err := store.DB.Raw("SHOW TABLES").Pluck("Tables_in_"+store.Settings.Output.MySQL.Database, &tables).Error; err != nil {
@@ -172,9 +172,9 @@ func (store *MySQLStore) Optimize(ctx context.Context) error {
 		optimizeLogger.Error("Failed to get table list", "error", enhancedErr)
 		return enhancedErr
 	}
-	
+
 	optimizeLogger.Info("Found tables to optimize", "table_count", len(tables))
-	
+
 	// Optimize each table
 	optimizedCount := 0
 	for _, table := range tables {
@@ -185,10 +185,10 @@ func (store *MySQLStore) Optimize(ctx context.Context) error {
 				"reason", "contains unsafe characters or exceeds length limit")
 			continue
 		}
-		
+
 		tableStart := time.Now()
 		optimizeLogger.Debug("Optimizing table", "table", table)
-		
+
 		// Run OPTIMIZE TABLE
 		if err := store.DB.Exec(fmt.Sprintf("OPTIMIZE TABLE `%s`", table)).Error; err != nil {
 			// MySQL may return a note/warning for InnoDB tables, which is not an error
@@ -201,7 +201,7 @@ func (store *MySQLStore) Optimize(ctx context.Context) error {
 		} else {
 			optimizedCount++
 		}
-		
+
 		// Run ANALYZE TABLE to update statistics
 		if err := store.DB.Exec(fmt.Sprintf("ANALYZE TABLE `%s`", table)).Error; err != nil {
 			optimizeLogger.Warn("Failed to analyze table",
@@ -213,17 +213,17 @@ func (store *MySQLStore) Optimize(ctx context.Context) error {
 				"duration", time.Since(tableStart))
 		}
 	}
-	
+
 	optimizeLogger.Info("Database optimization completed",
 		"total_duration", time.Since(optimizeStart),
 		"tables_processed", len(tables),
 		"tables_optimized", optimizedCount)
-	
+
 	return nil
 }
 
 // UpdateNote updates specific fields of a note in MySQL
-func (m *MySQLStore) UpdateNote(id string, updates map[string]interface{}) error {
+func (m *MySQLStore) UpdateNote(id string, updates map[string]any) error {
 	return m.DB.Model(&Note{}).Where("id = ?", id).Updates(updates).Error
 }
 

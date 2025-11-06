@@ -114,7 +114,7 @@ func createTrackerForConcurrentTest(t *testing.T, enableYearly, enableSeasonal b
 // generateSpeciesNames creates a list of species names for testing
 func generateSpeciesNames(count int) []string {
 	species := make([]string, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		species[i] = fmt.Sprintf("Species_%d", i)
 	}
 	return species
@@ -127,7 +127,7 @@ func executeConcurrentOperations(tracker *SpeciesTracker, species []string,
 	var wg sync.WaitGroup
 
 	// Launch concurrent goroutines
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(grID int) {
 			defer wg.Done()
@@ -146,7 +146,7 @@ func runGoroutineOperations(tracker *SpeciesTracker, species []string,
 
 	rnd := rand.New(rand.NewSource(time.Now().UnixNano() + int64(grID)))
 
-	for op := 0; op < operationsPerGR; op++ {
+	for range operationsPerGR {
 		atomic.AddInt64(totalOps, 1)
 
 		speciesName := species[rnd.Intn(len(species))]
@@ -316,9 +316,9 @@ func TestDatabaseFailureRecovery(t *testing.T) {
 					Return([]datastore.NewSpeciesData{
 						{ScientificName: "Test_Species", FirstSeenDate: "2024-01-01"},
 					}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+				// BG-17: InitFromDatabase requires notification history
+				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+					Return([]datastore.NotificationHistory{}, nil).Maybe()
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
@@ -337,9 +337,9 @@ func TestDatabaseFailureRecovery(t *testing.T) {
 						{ScientificName: "", FirstSeenDate: "invalid-date"},            // Invalid data
 						{ScientificName: "Valid_Species", FirstSeenDate: "2024-01-01"}, // Valid data
 					}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+				// BG-17: InitFromDatabase requires notification history
+				ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+					Return([]datastore.NotificationHistory{}, nil).Maybe()
 				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]datastore.NewSpeciesData{}, nil).Maybe()
 			}

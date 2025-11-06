@@ -31,7 +31,7 @@ func parseURLOrFail(t *testing.T, rawURL string) *url.URL {
 // setupOAuth2ServerTest creates a test OAuth2 server with configurable client credentials
 func setupOAuth2ServerTest(t *testing.T, requestClientID, requestRedirectURI, expectedClientID, expectedRedirectURI string) (*OAuth2Server, echo.Context, *httptest.ResponseRecorder) {
 	t.Helper()
-	
+
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/?client_id="+requestClientID+"&redirect_uri="+requestRedirectURI, http.NoBody)
 	rec := httptest.NewRecorder()
@@ -187,7 +187,7 @@ func TestHandleBasicAuthTokenSuccess(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
 	}
 
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}

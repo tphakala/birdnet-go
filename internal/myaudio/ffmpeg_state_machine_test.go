@@ -196,7 +196,7 @@ func TestStateTransitionHistoryBounded(t *testing.T) {
 	stream := createTestStream(t, "rtsp://test.local/stream", "tcp")
 
 	// Create more than 100 transitions
-	for i := 0; i < 150; i++ {
+	for i := range 150 {
 		// Alternate between two states to avoid invalid transition warnings
 		if i%2 == 0 {
 			stream.transitionState(StateStarting, "test transition")
@@ -360,14 +360,12 @@ func TestStateTransitionConcurrency(t *testing.T) {
 
 	// Perform concurrent transitions using valid state transitions
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 10 {
+		wg.Go(func() {
 			// Valid transitions: Running → Restarting → Starting
 			stream.transitionState(StateRestarting, "concurrent test")
 			stream.transitionState(StateStarting, "concurrent test")
-		}()
+		})
 	}
 
 	// Wait for all goroutines to complete

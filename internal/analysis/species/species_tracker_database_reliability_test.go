@@ -481,7 +481,7 @@ func generateLargeDataset(count int) []datastore.NewSpeciesData {
 	// Use current time minus a few days to ensure data is recent
 	baseDate := time.Now().AddDate(0, 0, -10) // 10 days ago
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		// Generate species name and date
 		speciesName := fmt.Sprintf("Large_Dataset_Species_%06d", i)
 		// Spread across 10 days instead of full year to keep all data recent

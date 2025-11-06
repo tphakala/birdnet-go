@@ -12,11 +12,11 @@ import (
 
 var (
 	// Compiled regex patterns for performance
-	onceRegex sync.Once
-	diskFullPattern *regexp.Regexp
-	deadlockPattern *regexp.Regexp
+	onceRegex         sync.Once
+	diskFullPattern   *regexp.Regexp
+	deadlockPattern   *regexp.Regexp
 	corruptionPattern *regexp.Regexp
-	lockPattern *regexp.Regexp
+	lockPattern       *regexp.Regexp
 	constraintPattern *regexp.Regexp
 )
 
@@ -37,7 +37,7 @@ func initRegexPatterns() {
 }
 
 // dbError creates a properly categorized database error with context
-func dbError(err error, operation, priority string, context ...interface{}) error {
+func dbError(err error, operation, priority string, context ...any) error {
 	builder := errors.New(err).
 		Component("datastore").
 		Category(errors.CategoryDatabase).
@@ -67,7 +67,7 @@ func dbError(err error, operation, priority string, context ...interface{}) erro
 }
 
 // validationError creates a validation error (not sent to users by default)
-func validationError(message, field string, value interface{}) error {
+func validationError(message, field string, value any) error {
 	// Standardize validation error format
 	standardizedMessage := fmt.Sprintf("invalid %s: %v", field, message)
 	return errors.Newf("%s", standardizedMessage).
@@ -100,7 +100,7 @@ func resourceError(err error, operation, resourceType string) error {
 }
 
 // stateError creates a state management error (locks, transactions)
-func stateError(err error, operation, stateType string, context ...interface{}) error {
+func stateError(err error, operation, stateType string, context ...any) error {
 	priority := errors.PriorityMedium
 
 	// Escalate priority for critical state errors
@@ -136,7 +136,7 @@ func stateError(err error, operation, stateType string, context ...interface{}) 
 }
 
 // conflictError creates a conflict error for constraint violations
-func conflictError(err error, operation, conflictType string, context ...interface{}) error {
+func conflictError(err error, operation, conflictType string, context ...any) error {
 	builder := errors.New(err).
 		Component("datastore").
 		Category(errors.CategoryConflict).
@@ -174,7 +174,7 @@ func notFoundError(resource, identifier string) error {
 }
 
 // criticalError creates a critical system error
-func criticalError(err error, operation, reason string, context ...interface{}) error {
+func criticalError(err error, operation, reason string, context ...any) error {
 	builder := errors.New(err).
 		Component("datastore").
 		Category(errors.CategoryDatabase).

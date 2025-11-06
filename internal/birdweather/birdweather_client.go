@@ -233,14 +233,8 @@ func extractHTMLError(htmlContent string) string {
 		}
 		// Try to extract a reasonable snippet around the error
 		index := strings.Index(lowerHTML, pattern)
-		start := index - 50
-		if start < 0 {
-			start = 0
-		}
-		end := index + 100
-		if end > len(htmlContent) {
-			end = len(htmlContent)
-		}
+		start := max(index-50, 0)
+		end := min(index+100, len(htmlContent))
 		snippet := htmlContent[start:end]
 		// Remove HTML tags for cleaner output
 		snippet = strings.ReplaceAll(snippet, "<", " <")
@@ -252,10 +246,7 @@ func extractHTMLError(htmlContent string) string {
 	}
 
 	// If no specific error found, return generic message with beginning of content
-	maxLen := 200
-	if len(htmlContent) < maxLen {
-		maxLen = len(htmlContent)
-	}
+	maxLen := min(len(htmlContent), 200)
 	preview := strings.TrimSpace(htmlContent[:maxLen])
 	return fmt.Sprintf("Unexpected HTML response (first %d chars): %s", maxLen, preview)
 }
@@ -284,14 +275,14 @@ func handleHTTPResponse(resp *http.Response, expectedStatus int, operation, mask
 				"status_code", resp.StatusCode,
 				"html_error", htmlError,
 				"response_preview", string(responseBody[:min(len(responseBody), 500)]))
-			
+
 			// Determine category based on status code
 			category := errors.CategoryNetwork
 			if resp.StatusCode == 408 || resp.StatusCode == 504 || resp.StatusCode == 524 {
 				// 408 Request Timeout, 504 Gateway Timeout, 524 Timeout (Cloudflare)
 				category = errors.CategoryTimeout
 			}
-			
+
 			return nil, errors.New(fmt.Errorf("%s failed: %s (status %d)", operation, htmlError, resp.StatusCode)).
 				Component("birdweather").
 				Category(category).

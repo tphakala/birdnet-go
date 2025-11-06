@@ -170,11 +170,11 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 func (s *SQLiteStore) Open() error {
 	// Get database path from settings
 	dbPath := s.Settings.Output.SQLite.Path
-	
+
 	// Initialize telemetry integration
 	telemetryEnabled := s.Settings != nil && s.Settings.Sentry.Enabled
 	s.telemetry = NewDatastoreTelemetry(telemetryEnabled, dbPath)
-	
+
 	// Validate system resources before opening database
 	if err := ValidateResourceAvailability(dbPath, "open_database"); err != nil {
 		if s.telemetry != nil {
@@ -182,7 +182,7 @@ func (s *SQLiteStore) Open() error {
 		}
 		return err
 	}
-	
+
 	// Log database opening
 	getLogger().Info("Opening SQLite database",
 		"path", dbPath)
@@ -219,12 +219,12 @@ func (s *SQLiteStore) Open() error {
 			Context("operation", "open_sqlite_database").
 			Context("db_path", dbPath).
 			Build()
-		
+
 		// Send to telemetry with enhanced context
 		if s.telemetry != nil {
 			s.telemetry.CaptureEnhancedError(enhancedErr, "open_sqlite_database", s)
 		}
-		
+
 		return enhancedErr
 	}
 
@@ -256,7 +256,7 @@ func (s *SQLiteStore) Open() error {
 
 	// Store the database connection
 	s.DB = db
-	
+
 	// Log successful connection
 	getLogger().Info("SQLite database opened successfully",
 		"path", dbPath,
@@ -270,7 +270,7 @@ func (s *SQLiteStore) Open() error {
 		}
 		return err
 	}
-	
+
 	// Perform auto-migration
 	if err := performAutoMigration(db, s.Settings.Debug, "SQLite", dbPath); err != nil {
 		// Send migration error to telemetry with enhanced context
@@ -298,11 +298,11 @@ func (s *SQLiteStore) Close() error {
 	if s.DB != nil {
 		// Stop monitoring before closing database
 		s.StopMonitoring()
-		
+
 		// Log database closing
 		getLogger().Info("Closing SQLite database",
 			"path", s.Settings.Output.SQLite.Path)
-		
+
 		sqlDB, err := s.DB.DB()
 		if err != nil {
 			return errors.New(err).
@@ -311,14 +311,14 @@ func (s *SQLiteStore) Close() error {
 				Context("operation", "get_underlying_sqldb").
 				Build()
 		}
-		
+
 		if err := sqlDB.Close(); err != nil {
 			getLogger().Error("Failed to close SQLite database",
 				"path", s.Settings.Output.SQLite.Path,
 				"error", err)
 			return err
 		}
-		
+
 		// Log successful closure
 		getLogger().Info("SQLite database closed successfully",
 			"path", s.Settings.Output.SQLite.Path)
@@ -336,12 +336,12 @@ func (s *SQLiteStore) Optimize(ctx context.Context) error {
 			Context("operation", "optimize").
 			Build()
 	}
-	
+
 	optimizeStart := time.Now()
 	optimizeLogger := getLogger().With("operation", "optimize", "db_type", "SQLite")
-	
+
 	optimizeLogger.Info("Starting database optimization")
-	
+
 	// Check for context cancellation
 	select {
 	case <-ctx.Done():
@@ -354,7 +354,7 @@ func (s *SQLiteStore) Optimize(ctx context.Context) error {
 			Build()
 	default:
 	}
-	
+
 	// Get database size before optimization
 	var sizeBefore int64
 	if err := s.DB.WithContext(ctx).Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Row().Scan(&sizeBefore); err != nil {
@@ -365,11 +365,11 @@ func (s *SQLiteStore) Optimize(ctx context.Context) error {
 			Build()
 		optimizeLogger.Warn("Failed to get database size before optimization", "error", enhancedErr)
 	}
-	
+
 	// Run ANALYZE to update SQLite's internal statistics
 	analyzeStart := time.Now()
 	optimizeLogger.Debug("Running ANALYZE to update query planner statistics")
-	
+
 	// Check for context cancellation before ANALYZE
 	select {
 	case <-ctx.Done():
@@ -382,7 +382,7 @@ func (s *SQLiteStore) Optimize(ctx context.Context) error {
 			Build()
 	default:
 	}
-	
+
 	if err := s.DB.WithContext(ctx).Exec("ANALYZE").Error; err != nil {
 		enhancedErr := errors.New(err).
 			Component("datastore").
@@ -394,11 +394,11 @@ func (s *SQLiteStore) Optimize(ctx context.Context) error {
 		return enhancedErr
 	}
 	optimizeLogger.Info("ANALYZE completed", "duration", time.Since(analyzeStart))
-	
+
 	// Run VACUUM to reclaim unused space
 	vacuumStart := time.Now()
 	optimizeLogger.Debug("Running VACUUM to reclaim unused space")
-	
+
 	// Check for context cancellation before VACUUM
 	select {
 	case <-ctx.Done():
@@ -411,7 +411,7 @@ func (s *SQLiteStore) Optimize(ctx context.Context) error {
 			Build()
 	default:
 	}
-	
+
 	if err := s.DB.WithContext(ctx).Exec("VACUUM").Error; err != nil {
 		enhancedErr := errors.New(err).
 			Component("datastore").
@@ -422,7 +422,7 @@ func (s *SQLiteStore) Optimize(ctx context.Context) error {
 		optimizeLogger.Error("VACUUM failed", "error", enhancedErr)
 		return enhancedErr
 	}
-	
+
 	// Get database size after optimization
 	var sizeAfter int64
 	if err := s.DB.WithContext(ctx).Raw("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Row().Scan(&sizeAfter); err != nil {
@@ -433,14 +433,14 @@ func (s *SQLiteStore) Optimize(ctx context.Context) error {
 			Build()
 		optimizeLogger.Warn("Failed to get database size after optimization", "error", enhancedErr)
 	}
-	
+
 	// Calculate space saved
 	spaceSaved := sizeBefore - sizeAfter
 	percentSaved := float64(0)
 	if sizeBefore > 0 {
 		percentSaved = float64(spaceSaved) / float64(sizeBefore) * 100
 	}
-	
+
 	optimizeLogger.Info("Database optimization completed",
 		"total_duration", time.Since(optimizeStart),
 		"vacuum_duration", time.Since(vacuumStart),
@@ -448,12 +448,12 @@ func (s *SQLiteStore) Optimize(ctx context.Context) error {
 		"size_after_bytes", sizeAfter,
 		"space_saved_bytes", spaceSaved,
 		"space_saved_percent", fmt.Sprintf("%.2f%%", percentSaved))
-	
+
 	return nil
 }
 
 // UpdateNote updates specific fields of a note in SQLite
-func (s *SQLiteStore) UpdateNote(id string, updates map[string]interface{}) error {
+func (s *SQLiteStore) UpdateNote(id string, updates map[string]any) error {
 	return s.DB.Model(&Note{}).Where("id = ?", id).Updates(updates).Error
 }
 
@@ -477,7 +477,7 @@ func (s *SQLiteStore) CheckpointWAL() error {
 			Context("error_type", "nil_connection").
 			Build()
 	}
-	
+
 	// PRAGMA wal_checkpoint(TRUNCATE) will:
 	// 1. Copy all frames from WAL to the database file
 	// 2. Truncate the WAL file to zero bytes
@@ -491,7 +491,7 @@ func (s *SQLiteStore) CheckpointWAL() error {
 			Context("mode", "truncate").
 			Build()
 	}
-	
+
 	log.Println("✅ SQLite WAL checkpoint completed successfully")
 	return nil
 }

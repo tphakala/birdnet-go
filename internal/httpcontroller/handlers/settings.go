@@ -360,14 +360,14 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 		// Handle struct fields
 		if field.Kind() == reflect.Struct {
 			// Special handling for Audio Equalizer field
-			if fieldType.Type == reflect.TypeOf(conf.AudioSettings{}.Equalizer) { //nolint:gocritic // ignore gocritic warning for this if statement, maybe refactor later
+			if fieldType.Type == reflect.TypeFor[conf.EqualizerSettings]() { //nolint:gocritic // ignore gocritic warning for this if statement, maybe refactor later
 				// Only update equalizer if related form values exist
 				if hasEqualizerFormValues(formValues, fullName) {
 					if err := updateEqualizerFromForm(field, formValues, fullName); err != nil {
 						return err
 					}
 				}
-			} else if fieldType.Type == reflect.TypeOf(conf.SpeciesConfig{}) {
+			} else if fieldType.Type == reflect.TypeFor[conf.SpeciesConfig]() {
 				// Special handling for SpeciesConfig
 				if configJSON, exists := formValues[fullName]; exists && len(configJSON) > 0 {
 					var config conf.SpeciesConfig
@@ -454,7 +454,7 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 			}
 		case reflect.Struct:
 			// Handle struct fields
-			if fieldType.Type == reflect.TypeOf(conf.AudioSettings{}.Equalizer) {
+			if fieldType.Type == reflect.TypeFor[conf.EqualizerSettings]() {
 				// Special handling for Audio Equalizer field
 				if err := updateEqualizerFromForm(field, formValues, fullName); err != nil {
 					return err
@@ -467,7 +467,7 @@ func updateStructFromForm(v reflect.Value, formValues map[string][]string, prefi
 			}
 		case reflect.Map:
 			// Handle map fields
-			if fieldType.Type == reflect.TypeOf(map[string]conf.SpeciesConfig{}) {
+			if fieldType.Type == reflect.TypeFor[map[string]conf.SpeciesConfig]() {
 				// Special handling for species config map
 				if configJSON, exists := formValues[fullName]; exists && len(configJSON) > 0 {
 					var configs map[string]conf.SpeciesConfig
@@ -511,9 +511,9 @@ func hasEqualizerFormValues(formValues map[string][]string, prefix string) bool 
 	// Check for any filter-related fields
 	filterPrefix := prefix + ".filters["
 	for key := range formValues {
-		if strings.HasPrefix(key, filterPrefix) {
+		if after, ok := strings.CutPrefix(key, filterPrefix); ok {
 			// Extract the filter index and field name
-			parts := strings.SplitN(strings.TrimPrefix(key, filterPrefix), "].", 2)
+			parts := strings.SplitN(after, "].", 2)
 			if len(parts) == 2 {
 				fieldName := parts[1]
 				// Check if the field name is one of the EqualizerFilter fields

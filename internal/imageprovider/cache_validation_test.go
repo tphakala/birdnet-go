@@ -16,7 +16,7 @@ import (
 // setupTestCache creates a new cache instance with mock provider for testing
 func setupTestCache(t *testing.T) (*mockProviderWithAPICounter, *imageprovider.BirdImageCache) {
 	t.Helper()
-	
+
 	mockProvider := &mockProviderWithAPICounter{
 		mockImageProvider: mockImageProvider{
 			fetchDelay: 10 * time.Millisecond,
@@ -41,7 +41,7 @@ func setupTestCache(t *testing.T) (*mockProviderWithAPICounter, *imageprovider.B
 // setupTestCacheWithSharedStore creates a new cache instance with shared store for testing
 func setupTestCacheWithSharedStore(t *testing.T) (*mockProviderWithAPICounter, *imageprovider.BirdImageCache, datastore.Interface, *observability.Metrics) {
 	t.Helper()
-	
+
 	mockProvider := &mockProviderWithAPICounter{
 		mockImageProvider: mockImageProvider{
 			fetchDelay: 10 * time.Millisecond,
@@ -76,15 +76,13 @@ func TestCacheEffectiveness(t *testing.T) {
 
 		// Make 10 concurrent requests
 		var wg sync.WaitGroup
-		for i := 0; i < 10; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+		for range 10 {
+			wg.Go(func() {
 				_, err := cache.Get(species)
 				if err != nil {
 					t.Errorf("Failed to get image: %v", err)
 				}
-			}()
+			})
 		}
 		wg.Wait()
 
@@ -113,7 +111,7 @@ func TestCacheEffectiveness(t *testing.T) {
 		}
 
 		// Make 100 more requests - should all be cache hits
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			_, err := cache.Get(species)
 			if err != nil {
 				t.Errorf("Failed to get image on request %d: %v", i, err)
@@ -191,7 +189,7 @@ func TestNegativeCaching(t *testing.T) {
 		mockProvider.setNotFoundSpecies("Imaginary species")
 
 		// Make 5 requests for non-existent species
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			_, err := cache.Get("Imaginary species")
 			if !errors.Is(err, imageprovider.ErrImageNotFound) {
 				t.Errorf("Expected ErrImageNotFound, got %v", err)

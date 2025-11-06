@@ -16,18 +16,18 @@ type mockErrorEvent struct {
 	component string
 	category  string
 	message   string
-	context   map[string]interface{}
+	context   map[string]any
 	timestamp time.Time
 	reported  bool
 	mu        sync.RWMutex
 }
 
-func (m *mockErrorEvent) GetComponent() string                  { return m.component }
-func (m *mockErrorEvent) GetCategory() string                   { return m.category }
-func (m *mockErrorEvent) GetContext() map[string]interface{}    { return m.context }
-func (m *mockErrorEvent) GetTimestamp() time.Time                { return m.timestamp }
-func (m *mockErrorEvent) GetError() error                       { return errors.NewStd(m.message) }
-func (m *mockErrorEvent) GetMessage() string                     { return m.message }
+func (m *mockErrorEvent) GetComponent() string       { return m.component }
+func (m *mockErrorEvent) GetCategory() string        { return m.category }
+func (m *mockErrorEvent) GetContext() map[string]any { return m.context }
+func (m *mockErrorEvent) GetTimestamp() time.Time    { return m.timestamp }
+func (m *mockErrorEvent) GetError() error            { return errors.NewStd(m.message) }
+func (m *mockErrorEvent) GetMessage() string         { return m.message }
 func (m *mockErrorEvent) IsReported() bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -41,10 +41,10 @@ func (m *mockErrorEvent) MarkReported() {
 
 func TestNotificationWorker_ProcessEvent(t *testing.T) {
 	t.Parallel()
-	
+
 	// Initialize logging
 	logging.Init()
-	
+
 	tests := []struct {
 		name           string
 		event          events.ErrorEvent
@@ -95,11 +95,11 @@ func TestNotificationWorker_ProcessEvent(t *testing.T) {
 			expectNotif: false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			// Create service with small buffer
 			service := NewService(&ServiceConfig{
 				MaxNotifications:   100,
@@ -108,24 +108,24 @@ func TestNotificationWorker_ProcessEvent(t *testing.T) {
 				RateLimitMaxEvents: 100,
 			})
 			defer service.Stop()
-			
+
 			// Create worker
 			worker, err := NewNotificationWorker(service, nil)
 			if err != nil {
 				t.Fatalf("Failed to create worker: %v", err)
 			}
-			
+
 			// Process event
 			err = worker.ProcessEvent(tt.event)
 			if err != nil {
 				t.Errorf("ProcessEvent failed: %v", err)
 			}
-			
+
 			// Check worker stats
 			stats := worker.GetStats()
-			t.Logf("Worker stats: processed=%d, dropped=%d, failed=%d", 
+			t.Logf("Worker stats: processed=%d, dropped=%d, failed=%d",
 				stats.EventsProcessed, stats.EventsDropped, stats.EventsFailed)
-			
+
 			// Check notifications immediately - ProcessEvent is synchronous
 			notifications, err := service.List(&FilterOptions{
 				Types: []Type{TypeError},
@@ -133,13 +133,13 @@ func TestNotificationWorker_ProcessEvent(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to list notifications: %v", err)
 			}
-			
+
 			t.Logf("Found %d notifications for test %s", len(notifications), tt.name)
 			for i, n := range notifications {
-				t.Logf("  Notification %d: priority=%s, component=%s, title=%s", 
+				t.Logf("  Notification %d: priority=%s, component=%s, title=%s",
 					i, n.Priority, n.Component, n.Title)
 			}
-			
+
 			if tt.expectNotif {
 				if len(notifications) != 1 {
 					t.Errorf("Expected 1 notification, got %d", len(notifications))
@@ -163,10 +163,10 @@ func TestNotificationWorker_ProcessEvent(t *testing.T) {
 
 func TestNotificationWorker_CircuitBreaker(t *testing.T) {
 	t.Parallel()
-	
+
 	// Initialize logging
 	logging.Init()
-	
+
 	// Create service with very low rate limit to trigger failures
 	service := NewService(&ServiceConfig{
 		MaxNotifications:   10,
@@ -175,20 +175,20 @@ func TestNotificationWorker_CircuitBreaker(t *testing.T) {
 		RateLimitMaxEvents: 2, // Very low to trigger rate limiting
 	})
 	defer service.Stop()
-	
+
 	// Create worker with low failure threshold
 	config := &WorkerConfig{
-		BatchingEnabled:    false,
-		FailureThreshold:   3,
-		RecoveryTimeout:    100 * time.Millisecond,
-		HalfOpenMaxEvents:  2,
+		BatchingEnabled:   false,
+		FailureThreshold:  3,
+		RecoveryTimeout:   100 * time.Millisecond,
+		HalfOpenMaxEvents: 2,
 	}
-	
+
 	worker, err := NewNotificationWorker(service, config)
 	if err != nil {
 		t.Fatalf("Failed to create worker: %v", err)
 	}
-	
+
 	// Create high priority event that should create notifications
 	event := &mockErrorEvent{
 		component: "database",
@@ -196,7 +196,7 @@ func TestNotificationWorker_CircuitBreaker(t *testing.T) {
 		message:   "Critical database error",
 		timestamp: time.Now(),
 	}
-	
+
 	// Process events until circuit opens
 	// Need to exceed rate limit (2) and trigger failures
 	successCount := 0
@@ -207,19 +207,19 @@ func TestNotificationWorker_CircuitBreaker(t *testing.T) {
 			successCount++
 		}
 	}
-	
+
 	// Check circuit state
 	stats := worker.GetStats()
 	t.Logf("Circuit breaker stats: state=%s, processed=%d, dropped=%d, failed=%d, success=%d",
 		stats.CircuitState, stats.EventsProcessed, stats.EventsDropped, stats.EventsFailed, successCount)
-	t.Logf("Circuit breaker config: threshold=%d, recovery=%v", 
+	t.Logf("Circuit breaker config: threshold=%d, recovery=%v",
 		config.FailureThreshold, config.RecoveryTimeout)
-	
+
 	// Verify that rate limiting is working
 	if stats.EventsProcessed == 0 && stats.EventsDropped == 0 {
 		t.Errorf("Expected some events to be processed or dropped, got neither")
 	}
-	
+
 	// If circuit is open, test recovery behavior by checking state transitions
 	if stats.CircuitState == "open" {
 		// Create a test helper to wait for circuit recovery
@@ -228,7 +228,7 @@ func TestNotificationWorker_CircuitBreaker(t *testing.T) {
 			deadline := time.Now().Add(timeout)
 			ticker := time.NewTicker(10 * time.Millisecond)
 			defer ticker.Stop()
-			
+
 			for time.Now().Before(deadline) {
 				<-ticker.C
 				if cb.Allow() {
@@ -237,13 +237,13 @@ func TestNotificationWorker_CircuitBreaker(t *testing.T) {
 			}
 			return false
 		}
-		
+
 		// Wait for circuit to allow requests after recovery timeout
 		recovered := waitForCircuitRecovery(t, worker.circuitBreaker, 200*time.Millisecond)
 		newState := worker.circuitBreaker.State()
-		
+
 		t.Logf("After recovery wait: recovered=%v, state=%s", recovered, newState)
-		
+
 		if !recovered {
 			t.Errorf("Circuit breaker should allow request after recovery timeout")
 		}
@@ -254,18 +254,18 @@ func TestNotificationWorker_CircuitBreaker(t *testing.T) {
 
 func TestNotificationWorker_TemplateGeneration(t *testing.T) {
 	t.Parallel()
-	
+
 	// Initialize logging
 	logging.Init()
-	
+
 	service := NewService(nil)
 	defer service.Stop()
-	
+
 	worker, err := NewNotificationWorker(service, nil)
 	if err != nil {
 		t.Fatalf("Failed to create worker: %v", err)
 	}
-	
+
 	tests := []struct {
 		name            string
 		event           events.ErrorEvent
@@ -307,16 +307,16 @@ func TestNotificationWorker_TemplateGeneration(t *testing.T) {
 			expectedMessage: "audio reported: Buffer underrun",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			title := worker.generateTitle(tt.event, tt.priority)
 			if title != tt.expectedTitle {
 				t.Errorf("Expected title %q, got %q", tt.expectedTitle, title)
 			}
-			
+
 			// Test message generation with templates
 			message := worker.generateMessage(tt.event, tt.priority)
 			if message != tt.expectedMessage {
@@ -328,37 +328,37 @@ func TestNotificationWorker_TemplateGeneration(t *testing.T) {
 
 func TestNotificationWorker_MessageTruncation(t *testing.T) {
 	t.Parallel()
-	
+
 	// Initialize logging
 	logging.Init()
-	
+
 	service := NewService(nil)
 	defer service.Stop()
-	
+
 	worker, err := NewNotificationWorker(service, nil)
 	if err != nil {
 		t.Fatalf("Failed to create worker: %v", err)
 	}
-	
+
 	// Create event with very long message
 	longMessage := make([]byte, 1000)
 	for i := range longMessage {
 		longMessage[i] = 'a'
 	}
-	
+
 	event := &mockErrorEvent{
 		component: "test",
 		category:  string(errors.CategoryGeneric),
 		message:   string(longMessage),
 	}
-	
+
 	message := worker.generateMessage(event, PriorityHigh)
-	
+
 	// Check message was truncated
 	if len(message) > 500 {
 		t.Errorf("Expected message to be truncated to 500 chars, got %d", len(message))
 	}
-	
+
 	if message[len(message)-3:] != "..." {
 		t.Errorf("Expected truncated message to end with '...', got %q", message[len(message)-3:])
 	}
@@ -366,10 +366,10 @@ func TestNotificationWorker_MessageTruncation(t *testing.T) {
 
 func TestNotificationWorker_BatchProcessing(t *testing.T) {
 	t.Parallel()
-	
+
 	// Initialize logging
 	logging.Init()
-	
+
 	service := NewService(&ServiceConfig{
 		MaxNotifications:   100,
 		CleanupInterval:    5 * time.Minute,
@@ -377,18 +377,18 @@ func TestNotificationWorker_BatchProcessing(t *testing.T) {
 		RateLimitMaxEvents: 100,
 	})
 	defer service.Stop()
-	
+
 	config := &WorkerConfig{
 		BatchingEnabled: true,
 		BatchSize:       10,
 		BatchTimeout:    100 * time.Millisecond,
 	}
-	
+
 	worker, err := NewNotificationWorker(service, config)
 	if err != nil {
 		t.Fatalf("Failed to create worker: %v", err)
 	}
-	
+
 	// Create multiple events for batch processing
 	errorEvents := []events.ErrorEvent{
 		// Same component and category - should be grouped
@@ -425,13 +425,13 @@ func TestNotificationWorker_BatchProcessing(t *testing.T) {
 			timestamp: time.Now(),
 		},
 	}
-	
+
 	// Process batch
 	err = worker.ProcessBatch(errorEvents)
 	if err != nil {
 		t.Errorf("ProcessBatch failed: %v", err)
 	}
-	
+
 	// Check notifications created
 	notifications, err := service.List(&FilterOptions{
 		Types: []Type{TypeError},
@@ -439,12 +439,12 @@ func TestNotificationWorker_BatchProcessing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to list notifications: %v", err)
 	}
-	
+
 	// Should have 2 notifications (database group + system)
 	if len(notifications) != 2 {
 		t.Errorf("Expected 2 notifications (grouped), got %d", len(notifications))
 	}
-	
+
 	// Verify aggregation in titles
 	for _, notif := range notifications {
 		if notif.Component == "database" {
@@ -456,7 +456,7 @@ func TestNotificationWorker_BatchProcessing(t *testing.T) {
 			}
 		}
 	}
-	
+
 	// Check stats
 	stats := worker.GetStats()
 	// Should process 4 events (5 - 1 low priority)

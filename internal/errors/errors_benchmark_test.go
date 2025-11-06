@@ -12,8 +12,8 @@ func BenchmarkErrorCreationNoTelemetry(b *testing.B) {
 	ClearErrorHooks()
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
+
+	for b.Loop() {
 		err := fmt.Errorf("test error")
 		_ = New(err).
 			Component("test").
@@ -29,8 +29,8 @@ func BenchmarkErrorCreationNoTelemetryAutoDetect(b *testing.B) {
 	ClearErrorHooks()
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
+
+	for b.Loop() {
 		err := fmt.Errorf("test error")
 		_ = New(err).Build() // Let it auto-detect component and category
 	}
@@ -43,8 +43,8 @@ func BenchmarkErrorCreationWithContext(b *testing.B) {
 	ClearErrorHooks()
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
+
+	for b.Loop() {
 		err := fmt.Errorf("test error")
 		_ = New(err).
 			Component("test").
@@ -76,8 +76,8 @@ func BenchmarkErrorCreationWithTelemetry(b *testing.B) {
 	SetTelemetryReporter(reporter)
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
+
+	for b.Loop() {
 		err := fmt.Errorf("test error with URL https://example.com?api_key=secret123&token=abc")
 		_ = New(err).
 			Component("test").
@@ -92,8 +92,8 @@ func BenchmarkPrivacyScrubbing(b *testing.B) {
 	testMessage := "Error connecting to https://api.example.com?api_key=1234567890abcdef&station_id=test123&token=secret"
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
+
+	for b.Loop() {
 		_ = basicURLScrub(testMessage)
 	}
 }

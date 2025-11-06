@@ -66,7 +66,7 @@ func BenchmarkCacheMissWithDBHit(b *testing.B) {
 	}
 
 	// Pre-populate DB store
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		species := fmt.Sprintf("Species_%d", i)
 		if err := mockStore.SaveImageCache(&datastore.ImageCache{
 			ScientificName: species,
@@ -252,7 +252,7 @@ func BenchmarkGetBatch(b *testing.B) {
 	for _, size := range batchSizes {
 		b.Run(fmt.Sprintf("BatchSize_%d", size), func(b *testing.B) {
 			species := make([]string, size)
-			for i := 0; i < size; i++ {
+			for i := range size {
 				species[i] = fmt.Sprintf("Species_%d", i)
 			}
 
@@ -329,7 +329,7 @@ func BenchmarkCacheRefreshCycle(b *testing.B) {
 
 	// Add stale entries to trigger refresh
 	staleTime := time.Now().Add(-15 * 24 * time.Hour)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		species := fmt.Sprintf("StaleSpecies_%d", i)
 		if err := mockStore.SaveImageCache(&datastore.ImageCache{
 			ScientificName: species,
@@ -400,7 +400,7 @@ func BenchmarkProviderAccess(b *testing.B) {
 	b.Run("Sequential", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		i := 0
 		for b.Loop() {
 			// This will hit cache but still needs provider access check
@@ -415,7 +415,7 @@ func BenchmarkProviderAccess(b *testing.B) {
 	b.Run("Concurrent", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		b.RunParallel(func(pb *testing.PB) {
 			i := 0
 			for pb.Next() {
@@ -431,7 +431,7 @@ func BenchmarkProviderAccess(b *testing.B) {
 	b.Run("MixedReadWrite", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
-		
+
 		b.RunParallel(func(pb *testing.PB) {
 			i := 0
 			for pb.Next() {
@@ -486,7 +486,7 @@ func BenchmarkConcurrentInitialization(b *testing.B) {
 		wg.Add(numGoroutines)
 
 		start := time.Now()
-		for j := 0; j < numGoroutines; j++ {
+		for range numGoroutines {
 			go func() {
 				defer wg.Done()
 				_, err := cache.Get(species)

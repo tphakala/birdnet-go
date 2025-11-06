@@ -14,7 +14,7 @@ func BenchmarkReadFromAnalysisBuffer_WithPool(b *testing.B) {
 	const (
 		bufferCapacity = 1024 * 1024 * 10 // 10MB for benchmark
 		testStream     = "benchmark_stream_pool"
-		dataSize       = 48000 * 2        // 1 second of 16-bit audio at 48kHz
+		dataSize       = 48000 * 2 // 1 second of 16-bit audio at 48kHz
 	)
 
 	// Set up read size
@@ -36,7 +36,7 @@ func BenchmarkReadFromAnalysisBuffer_WithPool(b *testing.B) {
 	if prevData == nil {
 		prevData = make(map[string][]byte)
 	}
-	
+
 	ab := ringbuffer.New(bufferCapacity)
 	analysisBuffers[testStream] = ab
 	prevData[testStream] = nil
@@ -51,7 +51,7 @@ func BenchmarkReadFromAnalysisBuffer_WithPool(b *testing.B) {
 	// Fill buffer to have enough data
 	// We need to write enough data so that after reading readSize bytes,
 	// we still have enough for processing
-	totalNeeded := readSize * 2 + conf.BufferSize
+	totalNeeded := readSize*2 + conf.BufferSize
 	written := 0
 	for written < totalNeeded {
 		abMutex.Lock()
@@ -71,7 +71,7 @@ func BenchmarkReadFromAnalysisBuffer_WithPool(b *testing.B) {
 		// Read until we get data (might need multiple reads due to sliding window)
 		var data []byte
 		var err error
-		for j := 0; j < 10; j++ {
+		for range 10 {
 			data, err = ReadFromAnalysisBuffer(testStream)
 			if err != nil {
 				b.Fatalf("ReadFromAnalysisBuffer failed: %v", err)
@@ -87,7 +87,7 @@ func BenchmarkReadFromAnalysisBuffer_WithPool(b *testing.B) {
 				b.Fatalf("Failed to write test data: %v", err)
 			}
 		}
-		
+
 		if data == nil {
 			b.Fatalf("ReadFromAnalysisBuffer returned nil data at iteration %d after multiple attempts", i)
 		}
@@ -99,8 +99,8 @@ func BenchmarkReadFromAnalysisBuffer_WithPool(b *testing.B) {
 	// Get pool stats
 	if readBufferPool != nil {
 		stats := readBufferPool.GetStats()
-		b.Logf("Buffer pool stats - Hits: %d, Misses: %d, Hit Rate: %.2f%%", 
-			stats.Hits, stats.Misses, 
+		b.Logf("Buffer pool stats - Hits: %d, Misses: %d, Hit Rate: %.2f%%",
+			stats.Hits, stats.Misses,
 			float64(stats.Hits)/float64(stats.Hits+stats.Misses)*100)
 	}
 
@@ -119,7 +119,7 @@ func BenchmarkComparison(b *testing.B) {
 		readBufferPool = nil
 		BenchmarkReadFromAnalysisBuffer_Original(b)
 	})
-	
+
 	b.Run("WithPool", func(b *testing.B) {
 		BenchmarkReadFromAnalysisBuffer_WithPool(b)
 	})

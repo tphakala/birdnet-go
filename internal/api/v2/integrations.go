@@ -297,7 +297,7 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 			defer writeMu.Unlock()
 
 			// Format final response
-			finalResult := map[string]interface{}{
+			finalResult := map[string]any{
 				"elapsed_time_ms": elapsedTime,
 				"state":           "completed",
 			}
@@ -354,7 +354,7 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 
 	// Validate BirdWeather configuration from the request
 	if !request.Enabled {
-		return ctx.JSON(http.StatusOK, map[string]interface{}{
+		return ctx.JSON(http.StatusOK, map[string]any{
 			"success": false,
 			"message": "BirdWeather integration is not enabled",
 			"state":   "failed",
@@ -363,7 +363,7 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 
 	// Validate BirdWeather configuration
 	if request.ID == "" {
-		return ctx.JSON(http.StatusBadRequest, map[string]interface{}{
+		return ctx.JSON(http.StatusBadRequest, map[string]any{
 			"success": false,
 			"message": "BirdWeather station ID not configured",
 			"state":   "failed",
@@ -388,7 +388,7 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 	// Create test BirdWeather client with the test configuration
 	client, err := birdweather.New(testSettings)
 	if err != nil {
-		return ctx.JSON(http.StatusInternalServerError, map[string]interface{}{
+		return ctx.JSON(http.StatusInternalServerError, map[string]any{
 			"success": false,
 			"message": fmt.Sprintf("Failed to create BirdWeather client: %v", err),
 			"state":   "failed",
@@ -450,7 +450,7 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 			defer writeMu.Unlock()
 
 			// Format final response
-			finalResult := map[string]interface{}{
+			finalResult := map[string]any{
 				"elapsed_time_ms": elapsedTime,
 				"state":           "completed",
 			}
@@ -684,7 +684,7 @@ func (c *Controller) testWeatherAPIConnectivity(ctx context.Context, settings *c
 // testWeatherAuthentication tests authentication with the weather API
 func (c *Controller) testWeatherAuthentication(ctx context.Context, settings *conf.Settings) (string, error) {
 	provider := settings.Realtime.Weather.Provider
-	
+
 	switch provider {
 	case "openweather":
 		apiKey := settings.Realtime.Weather.OpenWeather.APIKey
@@ -717,12 +717,12 @@ func (c *Controller) testWeatherAuthentication(ctx context.Context, settings *co
 		}
 
 		return "Successfully authenticated with OpenWeather API", nil
-		
+
 	case "wunderground":
 		// For Weather Underground, authentication is tested in the data fetch stage
 		// since there's no separate auth endpoint
 		return "Authentication will be verified during data fetch", nil
-		
+
 	default:
 		return "Authentication not required for this provider", nil
 	}
@@ -782,7 +782,7 @@ func getProviderDisplayName(provider string) string {
 // writeJSONResponse writes a JSON response to the client
 // NOTE: For most cases, consider using Echo's built-in ctx.JSON(httpStatus, data) instead
 // This function is primarily useful for streaming or special encoding scenarios
-func (c *Controller) writeJSONResponse(ctx echo.Context, data interface{}) error {
+func (c *Controller) writeJSONResponse(ctx echo.Context, data any) error {
 	encoder := json.NewEncoder(ctx.Response())
 	return encoder.Encode(data)
 }

@@ -1,5 +1,4 @@
 //go:build !windows
-// +build !windows
 
 package securefs
 
@@ -29,7 +28,7 @@ func createFIFOPlatform(path string) (string, error) {
 
 	// Create FIFO with retry mechanism
 	var fifoErr error
-	for retry := 0; retry < 3; retry++ {
+	for retry := range 3 {
 		fifoErr = syscall.Mkfifo(path, 0o600)
 		if fifoErr == nil {
 			log.Printf("Successfully created FIFO pipe: %s", path)

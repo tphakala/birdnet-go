@@ -82,7 +82,7 @@ func isTestBrokerAvailable() bool {
 }
 
 // Add debug logging helper
-func debugLog(t *testing.T, format string, args ...interface{}) {
+func debugLog(t *testing.T, format string, args ...any) {
 	t.Helper()
 	msg := fmt.Sprintf(format, args...)
 	log.Printf("[DEBUG] %s", msg)

@@ -36,11 +36,11 @@ const (
 
 // SpeciesInfo represents extended information about a bird species
 type SpeciesInfo struct {
-	ScientificName string                 `json:"scientific_name"`
-	CommonName     string                 `json:"common_name"`
-	Rarity         *SpeciesRarityInfo     `json:"rarity,omitempty"`
-	Taxonomy       *ebird.TaxonomyTree    `json:"taxonomy,omitempty"`
-	Metadata       map[string]interface{} `json:"metadata,omitempty"`
+	ScientificName string              `json:"scientific_name"`
+	CommonName     string              `json:"common_name"`
+	Rarity         *SpeciesRarityInfo  `json:"rarity,omitempty"`
+	Taxonomy       *ebird.TaxonomyTree `json:"taxonomy,omitempty"`
+	Metadata       map[string]any      `json:"metadata,omitempty"`
 }
 
 // SpeciesRarityInfo contains rarity information for a species
@@ -141,7 +141,7 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 	info := &SpeciesInfo{
 		ScientificName: scientificName,
 		CommonName:     commonName,
-		Metadata:       make(map[string]interface{}),
+		Metadata:       make(map[string]any),
 	}
 
 	// Get rarity information
@@ -260,14 +260,14 @@ func calculateRarityStatus(score float64) RarityStatus {
 
 // TaxonomyInfo represents detailed taxonomy information for a species
 type TaxonomyInfo struct {
-	ScientificName     string                 `json:"scientific_name"`
-	SpeciesCode        string                 `json:"species_code,omitempty"`
-	Taxonomy           *TaxonomyHierarchy     `json:"taxonomy,omitempty"`
-	Subspecies         []SubspeciesInfo       `json:"subspecies,omitempty"`
-	Synonyms           []string               `json:"synonyms,omitempty"`
-	ConservationStatus string                 `json:"conservation_status,omitempty"`
-	NativeRegions      []string               `json:"native_regions,omitempty"`
-	Metadata           map[string]interface{} `json:"metadata,omitempty"`
+	ScientificName     string             `json:"scientific_name"`
+	SpeciesCode        string             `json:"species_code,omitempty"`
+	Taxonomy           *TaxonomyHierarchy `json:"taxonomy,omitempty"`
+	Subspecies         []SubspeciesInfo   `json:"subspecies,omitempty"`
+	Synonyms           []string           `json:"synonyms,omitempty"`
+	ConservationStatus string             `json:"conservation_status,omitempty"`
+	NativeRegions      []string           `json:"native_regions,omitempty"`
+	Metadata           map[string]any     `json:"metadata,omitempty"`
 }
 
 // TaxonomyHierarchy represents the full taxonomic classification
@@ -314,7 +314,7 @@ func (c *Controller) GetSpeciesTaxonomy(ctx echo.Context) error {
 	// Get optional parameters
 	locale := ctx.QueryParam("locale")
 	includeSubspecies := ctx.QueryParam("include_subspecies") != "false" // default true
-	includeHierarchy := ctx.QueryParam("include_hierarchy") != "false"  // default true
+	includeHierarchy := ctx.QueryParam("include_hierarchy") != "false"   // default true
 
 	// Get taxonomy info
 	taxonomyInfo, err := c.getDetailedTaxonomy(ctx.Request().Context(), scientificName, locale, includeSubspecies, includeHierarchy)
@@ -339,7 +339,7 @@ func (c *Controller) getDetailedTaxonomy(ctx context.Context, scientificName, lo
 			// Successfully retrieved from local database
 			info := &TaxonomyInfo{
 				ScientificName: scientificName,
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"source":     "local",
 					"updated_at": c.TaxonomyDB.UpdatedAt,
 				},
@@ -430,7 +430,7 @@ func (c *Controller) getEBirdTaxonomy(ctx context.Context, scientificName, local
 	info := &TaxonomyInfo{
 		ScientificName: speciesEntry.ScientificName,
 		SpeciesCode:    speciesEntry.SpeciesCode,
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"source":     "ebird",
 			"updated_at": time.Now().Format(time.RFC3339),
 			"locale":     locale,
@@ -475,7 +475,7 @@ func (c *Controller) findDetailedSubspecies(taxonomy []ebird.TaxonomyEntry, spec
 		// Check if this entry reports as our species and is a subspecies category
 		if taxonomy[i].ReportAs == speciesCode &&
 			(taxonomy[i].Category == "issf" || taxonomy[i].Category == "form") {
-			
+
 			// Extract region from common name if present (often in parentheses)
 			region := ""
 			commonName := taxonomy[i].CommonName
@@ -535,7 +535,7 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 	// Get species name from the taxonomy map using the species code
 	bn := c.Processor.Bn
 	speciesName, exists := birdnet.GetSpeciesNameFromCode(bn.TaxonomyMap, speciesCode)
-	
+
 	if !exists {
 		return c.HandleError(ctx, errors.Newf("species code '%s' not found in taxonomy", speciesCode).
 			Category(errors.CategoryNotFound).
@@ -546,7 +546,7 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 
 	// Split the species name to get scientific name
 	scientificName, _ := birdnet.SplitSpeciesName(speciesName)
-	
+
 	if scientificName == "" {
 		return c.HandleError(ctx, errors.Newf("invalid species name format for code '%s'", speciesCode).
 			Category(errors.CategoryValidation).

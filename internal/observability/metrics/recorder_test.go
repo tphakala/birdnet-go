@@ -2,6 +2,7 @@
 package metrics
 
 import (
+	"maps"
 	"sync"
 )
 
@@ -108,9 +109,7 @@ func (r *TestRecorder) GetAllOperations() map[string]map[string]int {
 	result := make(map[string]map[string]int)
 	for op, statusMap := range r.operations {
 		result[op] = make(map[string]int)
-		for status, count := range statusMap {
-			result[op][status] = count
-		}
+		maps.Copy(result[op], statusMap)
 	}
 	return result
 }
@@ -124,9 +123,7 @@ func (r *TestRecorder) GetAllErrors() map[string]map[string]int {
 	result := make(map[string]map[string]int)
 	for op, errorMap := range r.errors {
 		result[op] = make(map[string]int)
-		for errType, count := range errorMap {
-			result[op][errType] = count
-		}
+		maps.Copy(result[op], errorMap)
 	}
 	return result
 }

@@ -111,7 +111,7 @@ func TestManagerMaxSources(t *testing.T) {
 	manager := NewAudioManager(config)
 
 	// Add sources up to limit
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		source := newMockSource("source-"+strconv.Itoa(i), "Source")
 		err := manager.AddSource(source)
 		require.NoError(t, err)
@@ -293,11 +293,11 @@ func TestManagerAudioOutput(t *testing.T) {
 	receivedChan := make(chan AudioData, 1)
 	errChan := make(chan error, 1)
 	done := make(chan struct{})
-	
+
 	// Create a context with cancellation for the goroutine
 	goroutineCtx, goroutineCancel := context.WithCancel(context.Background())
 	defer goroutineCancel()
-	
+
 	// Start a goroutine to receive from manager output
 	go func() {
 		defer close(done)
@@ -315,7 +315,7 @@ func TestManagerAudioOutput(t *testing.T) {
 	// Wait for result with timeout
 	testCtx, testCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer testCancel()
-	
+
 	select {
 	case received := <-receivedChan:
 		assert.Equal(t, testData.SourceID, received.SourceID)
@@ -324,7 +324,7 @@ func TestManagerAudioOutput(t *testing.T) {
 		t.Fatal(err)
 	case <-testCtx.Done():
 		goroutineCancel() // Cancel the goroutine
-		<-done // Wait for goroutine to finish
+		<-done            // Wait for goroutine to finish
 		t.Fatal("timeout waiting for test to complete")
 	}
 

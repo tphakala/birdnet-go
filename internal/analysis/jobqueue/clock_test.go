@@ -1,7 +1,6 @@
 package jobqueue
 
 import (
-	"context"
 	"errors"
 	"testing"
 	"time"
@@ -17,8 +16,7 @@ func TestRetryBackoffWithMockClock(t *testing.T) {
 	t.Skip("This test is a demonstration of using MockClock and is not meant to be run regularly")
 
 	// Create a context for manual control
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Create a new job queue
 	queue := setupTestQueue(t, 100, 10, false)
@@ -39,7 +37,7 @@ func TestRetryBackoffWithMockClock(t *testing.T) {
 	// Create a mock action that always fails and records execution times
 	action := &MockAction{
 		Description: "Backoff Test Action",
-		ExecuteFunc: func(data interface{}) error {
+		ExecuteFunc: func(data any) error {
 			currentTime := mockClock.Now()
 			t.Logf("Execution at %v", currentTime)
 

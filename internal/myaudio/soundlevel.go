@@ -90,7 +90,7 @@ func newSoundLevelProcessor(source, name string) (*soundLevelProcessor, error) {
 	interval := configuredInterval
 	if interval < conf.MinSoundLevelInterval {
 		interval = conf.MinSoundLevelInterval
-		
+
 		// Log when interval is clamped to minimum
 		if logger := getSoundLevelLogger(); logger != nil {
 			logger.Info("sound level interval clamped to minimum",
@@ -146,7 +146,7 @@ func newSoundLevelProcessor(source, name string) (*soundLevelProcessor, error) {
 	// Warm up filters to avoid initial transients
 	// Process 100 samples of silence through each filter
 	for _, filter := range processor.filters {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			_ = filter.processAudioSample(0.0)
 		}
 	}
@@ -284,7 +284,7 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 	minSample, maxSample := 1.0, -1.0
 	var sumSquares float64
 
-	for i := 0; i < sampleCount; i++ {
+	for i := range sampleCount {
 		// Convert 16-bit little-endian to float64
 		sample := int16(samples[i*2]) | int16(samples[i*2+1])<<8
 		audioSamples[i] = float64(sample) / 32768.0 // Normalize to [-1, 1]
@@ -589,7 +589,7 @@ func RegisterSoundLevelProcessor(source, name string) error {
 	}
 
 	soundLevelProcessors[source] = processor
-	
+
 	// Log registration if debug is enabled
 	if logger := getSoundLevelLogger(); logger != nil && conf.Setting().Realtime.Audio.SoundLevel.Debug {
 		logger.Debug("registered sound level processor",
@@ -597,7 +597,7 @@ func RegisterSoundLevelProcessor(source, name string) error {
 			"name", name,
 			"total_processors", len(soundLevelProcessors))
 	}
-	
+
 	return nil
 }
 
@@ -614,7 +614,7 @@ func UnregisterSoundLevelProcessor(source string) {
 				"remaining_processors", len(soundLevelProcessors)-1)
 		}
 	}
-	
+
 	delete(soundLevelProcessors, source)
 }
 

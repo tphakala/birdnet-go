@@ -10,7 +10,7 @@ type ActionAdapter struct {
 }
 
 // Execute implements the jobqueue.Action interface
-func (a *ActionAdapter) Execute(data interface{}) error {
+func (a *ActionAdapter) Execute(data any) error {
 	return a.action.Execute(data)
 }
 

@@ -9,7 +9,7 @@ import (
 type Job struct {
 	ID                     string      // Unique ID for this job
 	Action                 Action      // The action to execute
-	Data                   interface{} // Data for the action
+	Data                   any // Data for the action
 	Attempts               int         // Number of attempts made so far
 	MaxAttempts            int         // Maximum number of attempts allowed
 	CreatedAt              time.Time   // When the job was created
@@ -115,8 +115,8 @@ func (s *JobStatsSnapshot) toJSON(prettyPrint bool) (string, error) {
 	formattedTime := snapshotTime.Format(time.RFC3339)
 
 	// Create a map to represent the JSON structure
-	statsMap := map[string]interface{}{
-		"queue": map[string]interface{}{
+	statsMap := map[string]any{
+		"queue": map[string]any{
 			"total":         s.TotalJobs,
 			"successful":    s.SuccessfulJobs,
 			"failed":        s.FailedJobs,
@@ -128,11 +128,11 @@ func (s *JobStatsSnapshot) toJSON(prettyPrint bool) (string, error) {
 			"maxSize":       s.MaxQueueSize,
 			"utilization":   s.QueueUtilization,
 		},
-		"actions":   make(map[string]interface{}),
+		"actions":   make(map[string]any),
 		"timestamp": formattedTime,
 	}
 	// Pre-allocate actions map with the right capacity
-	actionsMap := make(map[string]interface{}, len(s.ActionStats))
+	actionsMap := make(map[string]any, len(s.ActionStats))
 	statsMap["actions"] = actionsMap
 
 	// Add action stats to the map
@@ -147,17 +147,17 @@ func (s *JobStatsSnapshot) toJSON(prettyPrint bool) (string, error) {
 		}
 
 		// Create action stats map with metrics and performance data
-		actionStats := map[string]interface{}{
+		actionStats := map[string]any{
 			"typeName":    stats.TypeName,
 			"description": description,
-			"metrics": map[string]interface{}{
+			"metrics": map[string]any{
 				"attempted":  stats.Attempted,
 				"successful": stats.Successful,
 				"failed":     stats.Failed,
 				"retried":    stats.Retried,
 				"dropped":    stats.Dropped,
 			},
-			"performance": map[string]interface{}{
+			"performance": map[string]any{
 				"totalDuration":   stats.TotalDuration.String(),
 				"averageDuration": stats.AverageDuration.String(),
 				"minDuration":     stats.MinDuration.String(),

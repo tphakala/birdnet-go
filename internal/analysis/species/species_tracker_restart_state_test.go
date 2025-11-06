@@ -45,9 +45,9 @@ func TestEmptyTrackerMarksKnownSpeciesAsNew(t *testing.T) {
 		Return([]datastore.NewSpeciesData{
 			{ScientificName: "Branta canadensis", FirstSeenDate: "2024-10-25"},
 		}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+	// BG-17: InitFromDatabase requires notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
@@ -99,9 +99,9 @@ func TestCorrectBehaviorWithInitialization(t *testing.T) {
 		Return([]datastore.NewSpeciesData{
 			{ScientificName: "Branta canadensis", FirstSeenDate: "2024-10-01"}, // 20 days ago
 		}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+	// BG-17: InitFromDatabase requires notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
@@ -516,9 +516,9 @@ func TestRecovery_SyncAfterFailedInit(t *testing.T) {
 		Return([]datastore.NewSpeciesData{
 			{ScientificName: "Branta canadensis", FirstSeenDate: "2024-10-25"},
 		}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+	// BG-17: InitFromDatabase requires notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
@@ -548,7 +548,7 @@ func TestInitFromDatabase_LargeDatasetTimeout(t *testing.T) {
 
 	// Generate 10,000 species
 	largeDataset := make([]datastore.NewSpeciesData, 10000)
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		largeDataset[i] = datastore.NewSpeciesData{
 			ScientificName: fmt.Sprintf("Species%d", i),
 			FirstSeenDate:  "2024-01-01",
@@ -613,9 +613,9 @@ func TestInitFromDatabase_LogsSpeciesCount(t *testing.T) {
 			{ScientificName: "Species1", FirstSeenDate: "2024-01-01"},
 			{ScientificName: "Species2", FirstSeenDate: "2024-01-02"},
 		}, nil).Maybe()
-		// BG-17: InitFromDatabase requires notification history
-		ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-			Return([]datastore.NotificationHistory{}, nil).Maybe()
+	// BG-17: InitFromDatabase requires notification history
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 

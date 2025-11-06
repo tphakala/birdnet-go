@@ -21,15 +21,15 @@ import (
 
 const (
 	// Concurrency limits
-	defaultMaxConcurrentJobs = 100                // Default maximum concurrent notification dispatches
-	jobsPerProvider          = 20                 // Concurrent dispatches allocated per provider
+	defaultMaxConcurrentJobs = 100                    // Default maximum concurrent notification dispatches
+	jobsPerProvider          = 20                     // Concurrent dispatches allocated per provider
 	semaphoreAcquireTimeout  = 100 * time.Millisecond // Timeout for acquiring semaphore slot
 
 	// Exponential backoff constants
-	maxExponentialAttempts = 31                   // Maximum attempts before overflow (2^31 would overflow time.Duration)
-	jitterPercent          = 25                   // Jitter percentage: ±25% of delay
-	defaultRetryDelay      = 1 * time.Second      // Default base retry delay if not configured
-	defaultMaxRetryDelay   = 30 * time.Second     // Default maximum retry delay cap
+	maxExponentialAttempts = 31               // Maximum attempts before overflow (2^31 would overflow time.Duration)
+	jitterPercent          = 25               // Jitter percentage: ±25% of delay
+	defaultRetryDelay      = 1 * time.Second  // Default base retry delay if not configured
+	defaultMaxRetryDelay   = 30 * time.Second // Default maximum retry delay cap
 
 	// Filter rejection reasons - used for metrics and observability
 	filterReasonAll                 = "all"                  // Notification matched all filters
@@ -492,13 +492,7 @@ func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, 
 	}
 
 	// Apply jitter and ensure final delay stays within bounds
-	delay := exponential + jitter
-	if delay < baseDelay {
-		delay = baseDelay
-	}
-	if delay > maxDelay {
-		delay = maxDelay
-	}
+	delay := min(max(exponential+jitter, baseDelay), maxDelay)
 
 	if d.log != nil {
 		d.log.Debug("waiting for retry with exponential backoff",
@@ -800,11 +794,12 @@ func MatchesProviderFilter(f *conf.PushFilterConfig, n *Notification, log *slog.
 //   - Non-numeric strings (e.g., "abc", "")
 //
 // Examples:
-//   toFloat(0.85)      // (0.85, true)
-//   toFloat(int(42))   // (42.0, true)
-//   toFloat("3.14")    // (3.14, true)
-//   toFloat("invalid") // (0, false)
-//   toFloat(true)      // (0, false)
+//
+//	toFloat(0.85)      // (0.85, true)
+//	toFloat(int(42))   // (42.0, true)
+//	toFloat("3.14")    // (3.14, true)
+//	toFloat("invalid") // (0, false)
+//	toFloat(true)      // (0, false)
 func toFloat(v any) (float64, bool) {
 	switch t := v.(type) {
 	case float32:

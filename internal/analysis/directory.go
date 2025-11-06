@@ -112,7 +112,7 @@ func isFileLocked(path string) bool {
 // isFileSizeStable checks if a file size remains constant over multiple checks
 func isFileSizeStable(path string, ctx context.Context) (bool, error) {
 	var lastSize int64
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		info, err := os.Stat(path)
 		if err != nil {
 			return false, err

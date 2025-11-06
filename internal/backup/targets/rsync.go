@@ -79,7 +79,7 @@ func (r *RsyncProgressReader) Read(p []byte) (n int, err error) {
 }
 
 // NewRsyncTarget creates a new rsync target with the given configuration
-func NewRsyncTarget(settings map[string]interface{}) (*RsyncTarget, error) {
+func NewRsyncTarget(settings map[string]any) (*RsyncTarget, error) {
 	config := RsyncTargetConfig{}
 
 	// Required settings
@@ -245,8 +245,8 @@ func (t *RsyncTarget) sanitizePath(pathToCheck string) (string, error) {
 	}
 
 	// Check for suspicious path components
-	components := strings.Split(clean, "/")
-	for _, component := range components {
+	components := strings.SplitSeq(clean, "/")
+	for component := range components {
 		// Skip empty components
 		if component == "" {
 			continue

@@ -78,7 +78,7 @@ func TestGetCriticalPaths(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			settings := tt.setupConfig()
 			paths := GetCriticalPaths(settings)
 
@@ -139,7 +139,7 @@ func TestDeduplicatePaths(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			
+
 			result := deduplicatePaths(tt.input)
 			assert.Len(t, result, tt.want, "Unexpected number of deduplicated paths")
 
@@ -182,11 +182,11 @@ func TestSystemMonitorIntegration(t *testing.T) {
 	config.Realtime.Monitoring.Disk.Warning = 80.0
 	config.Realtime.Monitoring.Disk.Critical = 90.0
 	config.Realtime.Monitoring.Disk.Paths = []string{"/custom"}
-	
+
 	// Enable audio export
 	config.Realtime.Audio.Export.Enabled = true
 	config.Realtime.Audio.Export.Path = "clips/"
-	
+
 	// Enable SQLite
 	config.Output.SQLite.Enabled = true
 	config.Output.SQLite.Path = "birdnet.db"
@@ -194,7 +194,7 @@ func TestSystemMonitorIntegration(t *testing.T) {
 	// Create monitor (this will auto-append critical paths)
 	monitor := NewSystemMonitor(config)
 	require.NotNil(t, monitor)
-	
+
 	// Important: The monitor is not started, so no cleanup is needed
 	// NewSystemMonitor only creates the instance, it doesn't start goroutines
 
@@ -202,7 +202,7 @@ func TestSystemMonitorIntegration(t *testing.T) {
 	paths := config.Realtime.Monitoring.Disk.Paths
 	assert.Contains(t, paths, "/", "Should contain root")
 	assert.Contains(t, paths, "/custom", "Should contain user-configured path")
-	
+
 	// Should have at least 3 paths (/, /custom, and at least one critical path)
 	assert.GreaterOrEqual(t, len(paths), 3, "Should have user path plus critical paths")
 }
@@ -221,16 +221,16 @@ func TestGetMonitoringPathsInfo(t *testing.T) {
 
 	// Check configured paths
 	assert.Equal(t, []string{"/custom", "/data"}, configured)
-	
+
 	// Check auto-detected paths contain at least root
 	assert.Contains(t, autoDetected, "/")
 	assert.GreaterOrEqual(t, len(autoDetected), 2) // At least root + one critical path
-	
+
 	// Check merged paths contain both configured and auto-detected
 	assert.Contains(t, merged, "/custom")
 	assert.Contains(t, merged, "/data")
 	assert.Contains(t, merged, "/")
-	
+
 	// Verify no duplicates in merged
 	seen := make(map[string]bool)
 	for _, path := range merged {
@@ -245,15 +245,15 @@ func TestGetMonitoredPaths(t *testing.T) {
 	config := &conf.Settings{}
 	config.Realtime.Monitoring.Disk.Enabled = true
 	config.Realtime.Monitoring.Disk.Paths = []string{"/", "/home"}
-	
+
 	monitor := &SystemMonitor{
 		config: config,
 		logger: logger,
 	}
-	
+
 	paths := monitor.GetMonitoredPaths()
 	assert.Equal(t, []string{"/", "/home"}, paths)
-	
+
 	// Test with disk monitoring disabled
 	config.Realtime.Monitoring.Disk.Enabled = false
 	paths = monitor.GetMonitoredPaths()
@@ -389,7 +389,7 @@ func BenchmarkGetCriticalPaths(b *testing.B) {
 // Helper function to generate test paths
 func generatePaths(count int, withDuplicates bool) []string {
 	paths := make([]string, 0, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		if withDuplicates && i%3 == 0 && i > 0 {
 			// Add duplicate of a previous path
 			paths = append(paths, paths[i/3])

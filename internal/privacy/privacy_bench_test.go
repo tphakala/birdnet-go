@@ -15,7 +15,7 @@ var (
 		"Connection timeout for rtsp://camera1:8554/live/main and backup rtsp://camera2:8554/live/backup",
 		"Simple message without any URLs for baseline performance testing",
 	}
-	
+
 	benchmarkURLs = []string{
 		"rtsp://admin:password@192.168.1.100:554/stream1/channel1/main",
 		"http://api.example.com/v1/data/users/12345/profile",
@@ -23,7 +23,7 @@ var (
 		"rtsp://user:complexpassword123@camera.local:8554/live/stream",
 		"http://localhost:8080/api/health/check",
 	}
-	
+
 	benchmarkRTSPURLs = []string{
 		"rtsp://admin:password@192.168.1.100:554/stream1/channel1",
 		"rtsp://user:pass@camera.local:8554/live/main/stream",
@@ -36,7 +36,7 @@ var (
 // BenchmarkScrubMessage tests performance of message scrubbing
 func BenchmarkScrubMessage(b *testing.B) {
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, msg := range benchmarkMessages {
 			_ = ScrubMessage(msg)
@@ -52,10 +52,10 @@ func BenchmarkScrubMessageLarge(b *testing.B) {
 		strings.Repeat("some text between URLs ", 20) +
 		"https://api.example.com/v1/data " +
 		strings.Repeat("more text after URLs ", 15)
-	
+
 	b.ReportAllocs()
 	b.ResetTimer()
-	
+
 	for b.Loop() {
 		_ = ScrubMessage(largeMessage)
 	}
@@ -64,7 +64,7 @@ func BenchmarkScrubMessageLarge(b *testing.B) {
 // BenchmarkAnonymizeURL tests performance of URL anonymization
 func BenchmarkAnonymizeURL(b *testing.B) {
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, url := range benchmarkURLs {
 			_ = AnonymizeURL(url)
@@ -75,9 +75,9 @@ func BenchmarkAnonymizeURL(b *testing.B) {
 // BenchmarkAnonymizeURLSingle tests performance for a single typical URL
 func BenchmarkAnonymizeURLSingle(b *testing.B) {
 	url := "rtsp://admin:password@192.168.1.100:554/stream1/channel1"
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		_ = AnonymizeURL(url)
 	}
@@ -86,7 +86,7 @@ func BenchmarkAnonymizeURLSingle(b *testing.B) {
 // BenchmarkSanitizeRTSPUrl tests performance of RTSP URL sanitization
 func BenchmarkSanitizeRTSPUrl(b *testing.B) {
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, url := range benchmarkRTSPURLs {
 			_ = SanitizeRTSPUrl(url)
@@ -97,9 +97,9 @@ func BenchmarkSanitizeRTSPUrl(b *testing.B) {
 // BenchmarkSanitizeRTSPUrlSingle tests performance for a single RTSP URL
 func BenchmarkSanitizeRTSPUrlSingle(b *testing.B) {
 	url := "rtsp://admin:password@192.168.1.100:554/stream1/channel1"
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		_ = SanitizeRTSPUrl(url)
 	}
@@ -108,7 +108,7 @@ func BenchmarkSanitizeRTSPUrlSingle(b *testing.B) {
 // BenchmarkGenerateSystemID tests performance of system ID generation
 func BenchmarkGenerateSystemID(b *testing.B) {
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		_, err := GenerateSystemID()
 		if err != nil {
@@ -126,9 +126,9 @@ func BenchmarkIsValidSystemID(b *testing.B) {
 		"a1b2-c3d4-e5f6",
 		"9999-8888-7777",
 	}
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, id := range validIDs {
 			_ = IsValidSystemID(id)
@@ -145,9 +145,9 @@ func BenchmarkCategorizeHost(b *testing.B) {
 		"10.0.0.1",
 		"api.service.org",
 	}
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, host := range hosts {
 			_ = categorizeHost(host)
@@ -164,9 +164,9 @@ func BenchmarkIsPrivateIP(b *testing.B) {
 		"8.8.8.8",
 		"169.254.1.1",
 	}
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, ip := range ips {
 			_ = IsPrivateIP(ip)
@@ -183,9 +183,9 @@ func BenchmarkIsIPAddress(b *testing.B) {
 		"::1",
 		"localhost",
 	}
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, host := range hosts {
 			_ = isIPAddress(host)
@@ -202,9 +202,9 @@ func BenchmarkAnonymizePath(b *testing.B) {
 		"/axis-media/media.amp",
 		"/h264/ch1/main/av_stream",
 	}
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, path := range paths {
 			_ = anonymizePath(path)
@@ -216,21 +216,21 @@ func BenchmarkAnonymizePath(b *testing.B) {
 func BenchmarkPrivacyFunctionsComparison(b *testing.B) {
 	testURL := "rtsp://admin:password@192.168.1.100:554/stream1"
 	testMessage := "Failed to connect to " + testURL
-	
+
 	b.Run("ScrubMessage", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			_ = ScrubMessage(testMessage)
 		}
 	})
-	
+
 	b.Run("AnonymizeURL", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			_ = AnonymizeURL(testURL)
 		}
 	})
-	
+
 	b.Run("SanitizeRTSPUrl", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
@@ -238,7 +238,6 @@ func BenchmarkPrivacyFunctionsComparison(b *testing.B) {
 		}
 	})
 }
-
 
 // BenchmarkScrubCoordinates tests performance of GPS coordinate scrubbing
 func BenchmarkScrubCoordinates(b *testing.B) {
@@ -248,9 +247,9 @@ func BenchmarkScrubCoordinates(b *testing.B) {
 		"GPS position -33.8688,151.2093",
 		"Normal message without coordinates",
 	}
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, msg := range messages {
 			_ = ScrubCoordinates(msg)
@@ -266,9 +265,9 @@ func BenchmarkScrubAPITokens(b *testing.B) {
 		"secret: verylongbase64encodedtoken123+/==",
 		"Normal message without any tokens",
 	}
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, msg := range messages {
 			_ = ScrubAPITokens(msg)
@@ -279,9 +278,9 @@ func BenchmarkScrubAPITokens(b *testing.B) {
 // BenchmarkScrubMessage_Comprehensive tests performance of comprehensive scrubbing
 func BenchmarkScrubMessage_Comprehensive(b *testing.B) {
 	message := "Failed upload to rtsp://admin:pass@192.168.1.100:554 at location 60.1699,24.9384 using api_key: secret123token"
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		_ = ScrubMessage(message)
 	}
@@ -290,17 +289,17 @@ func BenchmarkScrubMessage_Comprehensive(b *testing.B) {
 // BenchmarkNewPrivacyFunctions compares performance of new privacy functions
 func BenchmarkNewPrivacyFunctions(b *testing.B) {
 	testData := map[string]string{
-		"Coordinates":   "Weather error for location 60.1699,24.9384",
-		"APIToken":      "Authentication failed with api_key: abc123XYZ789token",
+		"Coordinates": "Weather error for location 60.1699,24.9384",
+		"APIToken":    "Authentication failed with api_key: abc123XYZ789token",
 	}
-	
+
 	b.Run("ScrubCoordinates", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			_ = ScrubCoordinates(testData["Coordinates"])
 		}
 	})
-	
+
 	b.Run("ScrubAPITokens", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
@@ -312,14 +311,14 @@ func BenchmarkNewPrivacyFunctions(b *testing.B) {
 // BenchmarkRegexVsStringOperations compares regex vs string operations performance
 func BenchmarkRegexVsStringOperations(b *testing.B) {
 	rtspURL := "rtsp://admin:password@192.168.1.100:554/stream1"
-	
+
 	b.Run("RegexBased_ScrubMessage", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			_ = ScrubMessage("Error with " + rtspURL)
 		}
 	})
-	
+
 	b.Run("StringBased_SanitizeRTSP", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
@@ -337,9 +336,9 @@ func BenchmarkScrubEmails(b *testing.B) {
 		"Normal message without emails",
 		"Multiple contacts: alice@test.com, bob@test.com, charlie@test.com",
 	}
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, msg := range messages {
 			_ = ScrubEmails(msg)
@@ -356,9 +355,9 @@ func BenchmarkScrubUUIDs(b *testing.B) {
 		"Normal message without UUIDs",
 		"Mixed case UUID: 550E8400-E29B-41D4-A716-446655440000",
 	}
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, msg := range messages {
 			_ = ScrubUUIDs(msg)
@@ -375,9 +374,9 @@ func BenchmarkScrubStandaloneIPs(b *testing.B) {
 		"URL https://192.168.1.100:8080/api should not be scrubbed",
 		"Multiple IPs: 172.16.0.1, 172.16.0.2, 172.16.0.3",
 	}
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, msg := range messages {
 			_ = ScrubStandaloneIPs(msg)
@@ -394,9 +393,9 @@ func BenchmarkBearerTokenScrubbing(b *testing.B) {
 		"API call with token abc123XYZ789",
 		"Normal message without tokens",
 	}
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, msg := range messages {
 			_ = ScrubAPITokens(msg)
@@ -409,9 +408,9 @@ func BenchmarkComprehensiveScrubbing(b *testing.B) {
 	message := `Failed to connect to rtsp://admin:pass@192.168.1.100:554/stream from 10.0.1.50.
 	User john.doe@example.com reported issue with request ID 550e8400-e29b-41d4-a716-446655440000.
 	Location: 60.1699,24.9384. API token: Bearer abc123XYZ789token was used.`
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		_ = ScrubMessage(message)
 	}
@@ -421,15 +420,15 @@ func BenchmarkComprehensiveScrubbing(b *testing.B) {
 func BenchmarkMemoryAllocationPatterns(b *testing.B) {
 	// Test with increasing message sizes to detect memory issues
 	sizes := []int{10, 100, 1000, 10000}
-	
+
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("Size_%d", size), func(b *testing.B) {
 			// Create a message with repeated sensitive data
 			msg := strings.Repeat("IP: 192.168.1.100 ", size/18)
-			
+
 			b.ReportAllocs()
 			b.ResetTimer()
-			
+
 			for b.Loop() {
 				_ = ScrubStandaloneIPs(msg)
 			}
@@ -444,9 +443,9 @@ func BenchmarkRegexCompilationCheck(b *testing.B) {
 	for i := range messages {
 		messages[i] = fmt.Sprintf("Email: user%d@example.com", i)
 	}
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, msg := range messages {
 			_ = ScrubEmails(msg)
@@ -466,9 +465,9 @@ func BenchmarkAnonymizeIPConsistency(b *testing.B) {
 		"fe80::1",
 		"invalid-ip",
 	}
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, ip := range ips {
 			_ = AnonymizeIP(ip)
@@ -485,9 +484,9 @@ func BenchmarkRedactUserAgent(b *testing.B) {
 		"Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
 		"UnknownUserAgent/1.0",
 	}
-	
+
 	b.ReportAllocs()
-	
+
 	for b.Loop() {
 		for _, ua := range userAgents {
 			_ = RedactUserAgent(ua)
@@ -499,7 +498,7 @@ func BenchmarkRedactUserAgent(b *testing.B) {
 func BenchmarkPerformanceValidation(b *testing.B) {
 	// This benchmark validates that our privacy functions perform within expected bounds
 	// and don't have performance regressions
-	
+
 	b.Run("EmailScrubbing_SingleEmail", func(b *testing.B) {
 		msg := "Contact user@example.com for support"
 		b.ReportAllocs()
@@ -508,7 +507,7 @@ func BenchmarkPerformanceValidation(b *testing.B) {
 		}
 		// Expected: < 5000 ns/op, < 500 B/op, < 10 allocs/op
 	})
-	
+
 	b.Run("UUIDScrubbing_SingleUUID", func(b *testing.B) {
 		msg := "Request ID: 550e8400-e29b-41d4-a716-446655440000"
 		b.ReportAllocs()
@@ -517,7 +516,7 @@ func BenchmarkPerformanceValidation(b *testing.B) {
 		}
 		// Expected: < 2000 ns/op, < 200 B/op, < 5 allocs/op
 	})
-	
+
 	b.Run("IPScrubbing_SingleIP", func(b *testing.B) {
 		msg := "Server at 192.168.1.100 is down"
 		b.ReportAllocs()
@@ -526,7 +525,7 @@ func BenchmarkPerformanceValidation(b *testing.B) {
 		}
 		// Expected: < 10000 ns/op, < 1000 B/op, < 20 allocs/op
 	})
-	
+
 	b.Run("TokenScrubbing_BearerToken", func(b *testing.B) {
 		msg := "Authorization: Bearer abc123XYZ789token"
 		b.ReportAllocs()
@@ -535,7 +534,7 @@ func BenchmarkPerformanceValidation(b *testing.B) {
 		}
 		// Expected: < 5000 ns/op, < 500 B/op, < 10 allocs/op
 	})
-	
+
 	b.Run("FullScrubMessage_AllFeatures", func(b *testing.B) {
 		msg := "Error from 192.168.1.100: user@example.com with ID 550e8400-e29b-41d4-a716-446655440000 and token: abc123"
 		b.ReportAllocs()
@@ -550,12 +549,12 @@ func BenchmarkPerformanceValidation(b *testing.B) {
 func BenchmarkStressTest(b *testing.B) {
 	// Generate a large message with many instances of sensitive data
 	var builder strings.Builder
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		builder.WriteString(fmt.Sprintf("Entry %d: IP=%d.%d.%d.%d, Email=user%d@example.com, UUID=%08x-0000-0000-0000-000000000000\n",
 			i, i%256, (i+1)%256, (i+2)%256, (i+3)%256, i, i))
 	}
 	largeMessage := builder.String()
-	
+
 	b.Run("LargeMessage_ScrubAll", func(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
@@ -563,7 +562,7 @@ func BenchmarkStressTest(b *testing.B) {
 			_ = ScrubMessage(largeMessage)
 		}
 	})
-	
+
 	// Test concurrent access (though functions should be stateless)
 	b.Run("Concurrent_ScrubMessage", func(b *testing.B) {
 		msg := "IP: 192.168.1.100, Email: test@example.com"

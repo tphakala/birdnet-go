@@ -15,7 +15,7 @@ import (
 )
 
 // parseJSONResponse unmarshals JSON response body into target struct
-func parseJSONResponse(body []byte, target interface{}) error {
+func parseJSONResponse(body []byte, target any) error {
 	return json.Unmarshal(body, target)
 }
 
