@@ -32,7 +32,16 @@ func (p *Processor) addSpeciesToDynamicThresholds(speciesLowercase string, baseT
 }
 
 // getAdjustedConfidenceThreshold applies dynamic threshold logic to adjust the confidence threshold based on recent detections.
-func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, result datastore.Results, baseThreshold float32) float32 {
+// If isCustomThreshold is true (species has a user-configured threshold), the function returns it unchanged,
+// ensuring user intent is never overridden by automatic dynamic adjustments.
+func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, result datastore.Results, baseThreshold float32, isCustomThreshold bool) float32 {
+	// If this is a custom user-configured threshold, respect it and don't apply dynamic adjustments.
+	// Dynamic threshold is meant to learn from detections for species using the global threshold,
+	// not to override explicit user configuration.
+	if isCustomThreshold {
+		return baseThreshold
+	}
+
 	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
 	p.thresholdsMutex.Lock()
 	defer p.thresholdsMutex.Unlock()
