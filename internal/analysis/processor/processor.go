@@ -638,8 +638,10 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 
 	// Determine confidence threshold
 	if p.Settings.Realtime.DynamicThreshold.Enabled {
-		// Check if this species has a custom user-configured threshold
-		_, isCustomThreshold := p.Settings.Realtime.Species.Config[speciesLowercase]
+		// Check if this species has a custom user-configured threshold (> 0)
+		// Species may be in Config only for custom actions/interval without threshold set
+		config, exists := p.Settings.Realtime.Species.Config[speciesLowercase]
+		isCustomThreshold := exists && config.Threshold > 0
 		confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, result, baseThreshold, isCustomThreshold)
 	} else {
 		confidenceThreshold = baseThreshold
