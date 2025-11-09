@@ -110,14 +110,15 @@ func TestCustomThresholdZeroValue(t *testing.T) {
 		DynamicThresholds: make(map[string]*DynamicThreshold),
 	}
 
-	result := datastore.Results{Confidence: 0.85}
+	// Initialize and trigger dynamic adjustment to verify it works for zero-threshold species
+	p.addSpeciesToDynamicThresholds("test bird", 0.80)
+	highConfResult := datastore.Results{Confidence: 0.95}
+	adjusted := p.getAdjustedConfidenceThreshold("test bird", highConfResult, 0.80, false)
 
 	// With zero threshold, isCustomThreshold should be false (not truly custom)
-	// This test documents the expected behavior after fixing the edge case
-	adjusted := p.getAdjustedConfidenceThreshold("test bird", result, 0.80, false)
-
-	// Should be able to apply dynamic threshold since threshold wasn't really configured
-	assert.NotEqual(t, float32(0.0), adjusted, "Zero threshold should not be treated as custom")
+	// This test documents the expected behavior after fixing the edge case:
+	// Species with threshold=0 should allow dynamic adjustment (not be treated as custom)
+	assert.InDelta(t, 0.60, adjusted, 0.001, "Zero threshold should allow dynamic adjustment (0.80 * 0.75)")
 }
 
 // TestDynamicThresholdLevels verifies the three levels of dynamic threshold adjustment
