@@ -244,12 +244,12 @@ Source: BSD-3-Clause
 
 ### github.com/nicholas-fedor/shoutrrr
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.11.1/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.12.0/LICENSE.md
 Source: MIT
 
 ### github.com/nicholas-fedor/shoutrrr/pkg/color
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.11.1/pkg/color/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.12.0/pkg/color/LICENSE.md
 Source: MIT
 
 ### github.com/patrickmn/go-cache
@@ -454,17 +454,17 @@ Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
 
-License: https://cs.opensource.google/go/x/oauth2/+/v0.32.0:LICENSE
+License: https://cs.opensource.google/go/x/oauth2/+/v0.33.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sync
 
-License: https://cs.opensource.google/go/x/sync/+/v0.17.0:LICENSE
+License: https://cs.opensource.google/go/x/sync/+/v0.18.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sys
 
-License: https://cs.opensource.google/go/x/sys/+/v0.37.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.38.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term
@@ -484,12 +484,12 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.254.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.255.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/3a174f9686a8/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/ab9386a59fda/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
