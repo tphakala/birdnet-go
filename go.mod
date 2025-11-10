@@ -113,7 +113,7 @@ require (
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/oauth2 v0.32.0
-	golang.org/x/sync v0.17.0
+	golang.org/x/sync v0.18.0
 	golang.org/x/sys v0.37.0
 	golang.org/x/time v0.14.0
 	google.golang.org/protobuf v1.36.10 // indirect
