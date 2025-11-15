@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestNew(t *testing.T) {
@@ -18,9 +20,7 @@ func TestNew(t *testing.T) {
 		cfg := DefaultConfig()
 		client := New(&cfg)
 
-		if client == nil {
-			t.Fatal("expected non-nil client")
-		}
+		require.NotNil(t, client, "expected non-nil client")
 		if client.defaultTimeout != DefaultTimeout {
 			t.Errorf("expected timeout %v, got %v", DefaultTimeout, client.defaultTimeout)
 		}
