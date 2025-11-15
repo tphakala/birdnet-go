@@ -110,14 +110,12 @@ func TestSpeciesCache_ConcurrentAccess(t *testing.T) {
 
 	// Launch 100 concurrent goroutines
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 100 {
+		wg.Go(func() {
 			result, err := cache.GetByScientificName(ctx, "Corvus brachyrhynchos")
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, species.ScientificName, result.ScientificName)
-		}()
+		})
 	}
 	wg.Wait()
 

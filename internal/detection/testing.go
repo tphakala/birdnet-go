@@ -19,13 +19,13 @@ import (
 //	})
 //	cache := detection.NewSpeciesCache(mock, time.Hour)
 type MockSpeciesRepository struct {
-	species      map[string]*Species
-	byID         map[uint]*Species
-	byEbird      map[string]*Species
-	callCounts   map[string]int
-	mu           sync.Mutex
-	shouldFail   bool
-	listSpecies  []*Species
+	species     map[string]*Species
+	byID        map[uint]*Species
+	byEbird     map[string]*Species
+	callCounts  map[string]int
+	mu          sync.Mutex
+	shouldFail  bool
+	listSpecies []*Species
 }
 
 // NewMockSpeciesRepository creates a new mock species repository for testing.
@@ -138,10 +138,7 @@ func (m *MockSpeciesRepository) List(ctx context.Context, limit, offset int) ([]
 	if offset > total {
 		return []*Species{}, nil
 	}
-	end := offset + limit
-	if end > total {
-		end = total
-	}
+	end := min(offset+limit, total)
 
 	page := make([]*Species, end-offset)
 	copy(page, m.listSpecies[offset:end])

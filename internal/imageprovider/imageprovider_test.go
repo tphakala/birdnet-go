@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -684,9 +685,7 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get refreshed cache entry: %v", err)
 	}
-	if refreshed == nil {
-		t.Fatal("Refreshed image cache entry is nil")
-	}
+	require.NotNil(t, refreshed, "Refreshed image cache entry is nil")
 
 	// Check timestamp was updated
 	if refreshed.CachedAt.Equal(oldEntry.CachedAt) {

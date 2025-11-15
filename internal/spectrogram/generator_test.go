@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
@@ -26,9 +27,7 @@ func TestNewGenerator(t *testing.T) {
 	logger := slog.Default()
 
 	gen := NewGenerator(settings, sfs, logger)
-	if gen == nil {
-		t.Fatal("NewGenerator() returned nil")
-	}
+	require.NotNil(t, gen, "NewGenerator() returned nil")
 	if gen.settings != settings {
 		t.Error("NewGenerator() did not set settings correctly")
 	}

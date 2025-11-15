@@ -29,8 +29,8 @@ func BenchmarkSpeciesCache_Lookup(b *testing.B) {
 	_, _ = cache.GetByScientificName(ctx, "Corvus brachyrhynchos")
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_, _ = cache.GetByScientificName(ctx, "Corvus brachyrhynchos")
 	}
 }
@@ -55,8 +55,8 @@ func BenchmarkSpeciesCache_LookupByID(b *testing.B) {
 	_, _ = cache.GetByID(ctx, 42)
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_, _ = cache.GetByID(ctx, 42)
 	}
 }
@@ -81,8 +81,8 @@ func BenchmarkSpeciesCache_LookupByEbirdCode(b *testing.B) {
 	_, _ = cache.GetByEbirdCode(ctx, "rebwoo")
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_, _ = cache.GetByEbirdCode(ctx, "rebwoo")
 	}
 }
@@ -105,8 +105,8 @@ func BenchmarkSpeciesCache_Miss(b *testing.B) {
 	ctx := context.Background()
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		// Always miss (species not in mock repo)
 		_, _ = cache.GetByScientificName(ctx, "Nonexistent Species")
 	}
@@ -172,8 +172,8 @@ func BenchmarkMapper_ToDatastore(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = mapper.ToDatastore(detection)
 	}
 }
@@ -213,8 +213,8 @@ func BenchmarkMapper_FromDatastore(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = mapper.FromDatastore(note, source)
 	}
 }
@@ -250,8 +250,8 @@ func BenchmarkMapper_RoundTrip(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		note := mapper.ToDatastore(original)
 		_ = mapper.FromDatastore(&note, original.Source)
 	}
@@ -268,8 +268,8 @@ func BenchmarkNewDetection(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_, _ = NewDetection(
 			"test-node",
 			"2025-01-15",
