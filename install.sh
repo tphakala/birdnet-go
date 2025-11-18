@@ -3209,8 +3209,10 @@ configure_location() {
                     fi
                     
                     # Split input into city and country
-                    city=$(echo "$location" | cut -d',' -f1 | xargs)
-                    country=$(echo "$location" | cut -d',' -f2 | xargs)
+                    city_raw=$(echo "$location" | cut -d',' -f1 | xargs)
+                    country_raw=$(echo "$location" | cut -d',' -f2 | xargs)
+                    city=$(printf '%s' "$city_raw" | jq -Rs '@uri')
+                    country=$(printf '%s' "$country_raw" | jq -Rs '@uri')
                     
                     if [ -z "$city" ] || [ -z "$country" ]; then
                         print_message "❌ Invalid format. Please use format: 'City, Country'" "$RED"
