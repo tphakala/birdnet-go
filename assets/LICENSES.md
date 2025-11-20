@@ -444,12 +444,12 @@ Source: MIT
 
 ### golang.org/x/crypto
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.43.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.45.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.46.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.47.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -469,12 +469,12 @@ Source: BSD-3-Clause
 
 ### golang.org/x/term
 
-License: https://cs.opensource.google/go/x/term/+/v0.36.0:LICENSE
+License: https://cs.opensource.google/go/x/term/+/v0.37.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.30.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.31.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
