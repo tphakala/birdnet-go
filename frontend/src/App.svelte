@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import RootLayout from './lib/desktop/layouts/RootLayout.svelte';
+  import { MobileLayout } from './lib/mobile/layouts';
   import DashboardPage from './lib/desktop/features/dashboard/pages/DashboardPage.svelte'; // Keep dashboard for initial load
   import type { Component } from 'svelte';
   import type { BirdnetConfig } from './app.d.ts';
@@ -31,6 +32,14 @@
   let loadingComponent = $state<boolean>(false);
   let dynamicErrorCode = $state<string | null>(null);
   let detectionId = $state<string | null>(null);
+
+  // Mobile detection
+  let isMobile = $state(false);
+
+  // Check viewport width on mount and resize
+  function checkMobile() {
+    isMobile = window.innerWidth < 768;
+  }
 
   // Get configuration from server
   let config = $state<BirdnetConfig | null>(null);
@@ -332,6 +341,15 @@
     // Determine current route from URL path
     const path = window.location.pathname;
     handleRouting(path);
+
+    // Initialize mobile detection
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+
+    // Cleanup on unmount
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+    };
   });
 </script>
 
@@ -342,44 +360,71 @@
   {/if}
 {/snippet}
 
-<RootLayout title={pageTitle} {currentPage} {securityEnabled} {accessAllowed} {version}>
-  {#if currentRoute === 'dashboard'}
-    <DashboardPage />
-  {:else if currentRoute === 'notifications'}
-    {@render renderRoute(Notifications)}
-  {:else if currentRoute === 'analytics'}
-    {@render renderRoute(Analytics)}
-  {:else if currentRoute === 'advanced-analytics'}
-    {@render renderRoute(AdvancedAnalytics)}
-  {:else if currentRoute === 'species'}
-    {@render renderRoute(Species)}
-  {:else if currentRoute === 'search'}
-    {@render renderRoute(Search)}
-  {:else if currentRoute === 'about'}
-    {@render renderRoute(About)}
-  {:else if currentRoute === 'system'}
-    {@render renderRoute(System)}
-  {:else if currentRoute === 'settings'}
-    {@render renderRoute(Settings)}
-  {:else if currentRoute === 'detections'}
-    {@render renderRoute(Detections)}
-  {:else if currentRoute === 'detection-detail'}
-    {#if DetectionDetail}
-      {@const Component = DetectionDetail}
-      <Component {detectionId} />
+{#if isMobile}
+  <MobileLayout
+    title={pageTitle}
+    currentRoute={`/ui/${currentPage}`}
+    {securityEnabled}
+    {accessAllowed}
+    showBack={currentRoute !== 'dashboard'}
+  >
+    <!-- Mobile: Show placeholder for now, pages will be implemented next -->
+    <div class="p-4">
+      <div class="card bg-base-100 p-6 text-center">
+        <p class="text-base-content/60">
+          Mobile UI coming soon for: {pageTitle}
+        </p>
+        <button
+          class="btn btn-primary btn-sm mt-4"
+          onclick={() => {
+            isMobile = false;
+          }}
+        >
+          Switch to Desktop View
+        </button>
+      </div>
+    </div>
+  </MobileLayout>
+{:else}
+  <RootLayout title={pageTitle} {currentPage} {securityEnabled} {accessAllowed} {version}>
+    {#if currentRoute === 'dashboard'}
+      <DashboardPage />
+    {:else if currentRoute === 'notifications'}
+      {@render renderRoute(Notifications)}
+    {:else if currentRoute === 'analytics'}
+      {@render renderRoute(Analytics)}
+    {:else if currentRoute === 'advanced-analytics'}
+      {@render renderRoute(AdvancedAnalytics)}
+    {:else if currentRoute === 'species'}
+      {@render renderRoute(Species)}
+    {:else if currentRoute === 'search'}
+      {@render renderRoute(Search)}
+    {:else if currentRoute === 'about'}
+      {@render renderRoute(About)}
+    {:else if currentRoute === 'system'}
+      {@render renderRoute(System)}
+    {:else if currentRoute === 'settings'}
+      {@render renderRoute(Settings)}
+    {:else if currentRoute === 'detections'}
+      {@render renderRoute(Detections)}
+    {:else if currentRoute === 'detection-detail'}
+      {#if DetectionDetail}
+        {@const Component = DetectionDetail}
+        <Component {detectionId} />
+      {/if}
+    {:else if currentRoute === 'error-404'}
+      {@render renderRoute(ErrorPage)}
+    {:else if currentRoute === 'error-500'}
+      {@render renderRoute(ServerErrorPage)}
+    {:else if currentRoute === 'error-generic'}
+      {#if GenericErrorPage}
+        {@const ErrorComponent = GenericErrorPage}
+        <ErrorComponent
+          code={dynamicErrorCode || '500'}
+          title="Component Load Error"
+          message="Failed to load the requested component"
+        />
+      {/if}
     {/if}
-  {:else if currentRoute === 'error-404'}
-    {@render renderRoute(ErrorPage)}
-  {:else if currentRoute === 'error-500'}
-    {@render renderRoute(ServerErrorPage)}
-  {:else if currentRoute === 'error-generic'}
-    {#if GenericErrorPage}
-      {@const ErrorComponent = GenericErrorPage}
-      <ErrorComponent
-        code={dynamicErrorCode || '500'}
-        title="Component Load Error"
-        message="Failed to load the requested component"
-      />
-    {/if}
-  {/if}
-</RootLayout>
+  </RootLayout>
+{/if}
