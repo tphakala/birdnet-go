@@ -5,6 +5,8 @@
   import DashboardPage from './lib/desktop/features/dashboard/pages/DashboardPage.svelte'; // Keep dashboard for initial load
   import MobileDashboardPage from './lib/mobile/features/dashboard/MobileDashboardPage.svelte';
   import MobileDetectionsPage from './lib/mobile/features/detections/MobileDetectionsPage.svelte';
+  import MobileAnalyticsPage from './lib/mobile/features/analytics/MobileAnalyticsPage.svelte';
+  import MobileSpeciesDetailPage from './lib/mobile/features/analytics/MobileSpeciesDetailPage.svelte';
   import type { Component } from 'svelte';
   import type { BirdnetConfig } from './app.d.ts';
   import { getLogger } from './lib/utils/logger';
@@ -34,6 +36,7 @@
   let loadingComponent = $state<boolean>(false);
   let dynamicErrorCode = $state<string | null>(null);
   let detectionId = $state<string | null>(null);
+  let speciesName = $state<string | null>(null);
 
   // Mobile detection
   let isMobile = $state(false);
@@ -284,6 +287,18 @@
       return;
     }
 
+    // Handle mobile species detail page
+    if (path.startsWith('/ui/analytics/species') && window.location.search.includes('name=')) {
+      const params = new URLSearchParams(window.location.search);
+      speciesName = params.get('name');
+      if (speciesName) {
+        currentRoute = 'species-detail';
+        currentPage = 'analytics/species';
+        pageTitle = 'Species Detail';
+        return;
+      }
+    }
+
     // Normal route lookup - using Map.get() for safe access
     const routeConfig = pathToRouteMap.get(path);
     if (routeConfig) {
@@ -374,6 +389,10 @@
       <MobileDashboardPage />
     {:else if currentRoute === 'detections'}
       <MobileDetectionsPage />
+    {:else if currentRoute === 'analytics'}
+      <MobileAnalyticsPage />
+    {:else if currentRoute === 'species-detail'}
+      <MobileSpeciesDetailPage speciesName={speciesName ?? undefined} />
     {:else}
       <!-- Mobile: Show placeholder for other pages -->
       <div class="p-4">
