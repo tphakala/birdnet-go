@@ -30,11 +30,13 @@ mobile/
 ## Patterns
 
 ### Touch Gestures
+
 - Swipe actions on detection rows (verify/dismiss)
 - Pull-to-refresh on list pages
 - 44px minimum tap targets
 
 ### Navigation
+
 - Bottom tab bar (4 tabs)
 - Back button in header for sub-pages
 - Sticky audio player above tab bar
