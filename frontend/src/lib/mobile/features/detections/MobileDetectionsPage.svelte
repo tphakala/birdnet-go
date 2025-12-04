@@ -5,6 +5,8 @@
   import { actionIcons } from '$lib/utils/icons';
   import { getLogger } from '$lib/utils/logger';
   import DetectionRow from '../../components/detection/DetectionRow.svelte';
+  import FilterModal, { type FilterState } from '../../components/ui/FilterModal.svelte';
+  import FilterBadge from '../../components/ui/FilterBadge.svelte';
 
   const logger = getLogger('mobile-detections');
 
@@ -26,6 +28,44 @@
   let hasMore = $state(true);
   let loadingMore = $state(false);
 
+  // Filter state
+  let showFilters = $state(false);
+  let filters = $state<FilterState>({
+    species: '',
+    startDate: '',
+    endDate: '',
+    confidenceMin: 0,
+    timeOfDay: [],
+    hourStart: 0,
+    hourEnd: 23,
+    verified: '',
+  });
+
+  // Derive active filter count
+  let activeFilterCount = $derived.by(() => {
+    let count = 0;
+    if (filters.species) count++;
+    if (filters.startDate || filters.endDate) count++;
+    if (filters.confidenceMin > 0) count++;
+    if (filters.timeOfDay.length > 0) count++;
+    if (filters.hourStart > 0 || filters.hourEnd < 23) count++;
+    if (filters.verified) count++;
+    return count;
+  });
+
+  // Debounce utility
+  function debounce(fn: () => void, delay: number): () => void {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    return () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => fn(), delay);
+    };
+  }
+
+  const debouncedSearch = debounce(() => {
+    loadDetections();
+  }, 300);
+
   async function loadDetections(append = false) {
     try {
       error = null;
@@ -33,17 +73,44 @@
 
       const offset = append ? detections.length : 0;
       const queryParams = new URLSearchParams({
-        limit: '20',
+        numResults: '20',
         offset: String(offset),
       });
 
+      // Add search query
       if (searchQuery) {
         queryParams.set('search', searchQuery);
       }
 
-      const response = (await fetchWithCSRF(`/api/v2/detections?${queryParams.toString()}`)) as any;
+      // Add filter parameters
+      if (filters.species) {
+        queryParams.set('species', filters.species);
+      }
+      if (filters.startDate) {
+        queryParams.set('start_date', filters.startDate);
+      }
+      if (filters.endDate) {
+        queryParams.set('end_date', filters.endDate);
+      }
+      if (filters.confidenceMin > 0) {
+        queryParams.set('confidence', `>=${filters.confidenceMin}`);
+      }
+      if (filters.timeOfDay.length > 0) {
+        queryParams.set('timeOfDay', filters.timeOfDay.join(','));
+      }
+      if (filters.hourStart > 0 || filters.hourEnd < 23) {
+        queryParams.set('hourRange', `${filters.hourStart}-${filters.hourEnd}`);
+      }
+      if (filters.verified) {
+        queryParams.set('verified', filters.verified);
+      }
 
-      const newDetections = response.data || [];
+      const response = (await fetchWithCSRF(`/api/v2/detections?${queryParams.toString()}`)) as {
+        data?: Detection[];
+        total?: number;
+      };
+
+      const newDetections = response.data ?? [];
 
       if (append) {
         detections = [...detections, ...newDetections];
@@ -86,8 +153,31 @@
     logger.debug('Dismiss detection', { id: detection.id });
   }
 
+  function handleSearchInput() {
+    debouncedSearch();
+  }
+
   function handleSearch() {
     loadDetections();
+  }
+
+  function handleApplyFilters(newFilters: FilterState) {
+    filters = newFilters;
+    showFilters = false;
+    loadDetections();
+  }
+
+  function handleClearFilters() {
+    filters = {
+      species: '',
+      startDate: '',
+      endDate: '',
+      confidenceMin: 0,
+      timeOfDay: [],
+      hourStart: 0,
+      hourEnd: 23,
+      verified: '',
+    };
   }
 
   onMount(() => {
@@ -103,6 +193,7 @@
         <input
           type="search"
           bind:value={searchQuery}
+          oninput={handleSearchInput}
           onkeydown={e => e.key === 'Enter' && handleSearch()}
           placeholder={t('detections.searchPlaceholder')}
           class="input input-bordered w-full pl-10"
@@ -111,8 +202,13 @@
           {@html actionIcons.search}
         </span>
       </div>
-      <button class="btn btn-ghost" aria-label="Filters">
+      <button
+        class="btn btn-ghost relative"
+        aria-label="Filters"
+        onclick={() => (showFilters = true)}
+      >
         {@html actionIcons.filter}
+        <FilterBadge count={activeFilterCount} />
       </button>
     </div>
   </div>
@@ -165,3 +261,12 @@
     {/if}
   </div>
 </div>
+
+<!-- Filter Modal -->
+<FilterModal
+  open={showFilters}
+  bind:filters
+  onClose={() => (showFilters = false)}
+  onApply={handleApplyFilters}
+  onClear={handleClearFilters}
+/>
