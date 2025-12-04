@@ -7,6 +7,11 @@
   import MobileDetectionsPage from './lib/mobile/features/detections/MobileDetectionsPage.svelte';
   import MobileAnalyticsPage from './lib/mobile/features/analytics/MobileAnalyticsPage.svelte';
   import MobileSpeciesDetailPage from './lib/mobile/features/analytics/MobileSpeciesDetailPage.svelte';
+  import MobileSettingsHubPage from './lib/mobile/features/settings/MobileSettingsHubPage.svelte';
+  import MobileMainSettingsPage from './lib/mobile/features/settings/pages/MobileMainSettingsPage.svelte';
+  import MobileSystemPage from './lib/mobile/features/system/MobileSystemPage.svelte';
+  import MobileAboutPage from './lib/mobile/features/about/MobileAboutPage.svelte';
+  import MobileNotificationsPage from './lib/mobile/features/notifications/MobileNotificationsPage.svelte';
   import type { Component } from 'svelte';
   import type { BirdnetConfig } from './app.d.ts';
   import { getLogger } from './lib/utils/logger';
@@ -37,6 +42,7 @@
   let dynamicErrorCode = $state<string | null>(null);
   let detectionId = $state<string | null>(null);
   let speciesName = $state<string | null>(null);
+  let settingsSection = $state<string | null>(null);
 
   // Mobile detection
   let isMobile = $state(false);
@@ -260,10 +266,13 @@
 
     // Special handling for settings subpages
     if (path.startsWith('/ui/settings/')) {
+      const section = path.replace('/ui/settings/', '').replace('/', '');
+      settingsSection = section;
+
       const settingsConfig = findRouteConfig('settings');
       if (settingsConfig) {
-        currentRoute = settingsConfig.route;
-        currentPage = settingsConfig.page;
+        currentRoute = 'settings-section';
+        currentPage = `settings/${section}`;
         pageTitle = settingsConfig.title;
 
         // Update title based on specific settings page
@@ -393,6 +402,21 @@
       <MobileAnalyticsPage />
     {:else if currentRoute === 'species-detail'}
       <MobileSpeciesDetailPage speciesName={speciesName ?? undefined} />
+    {:else if currentRoute === 'settings'}
+      <MobileSettingsHubPage
+        onNavigate={section => {
+          settingsSection = section;
+          window.location.href = `/ui/settings/${section}`;
+        }}
+      />
+    {:else if currentRoute === 'settings-section' && settingsSection === 'main'}
+      <MobileMainSettingsPage />
+    {:else if currentRoute === 'system'}
+      <MobileSystemPage />
+    {:else if currentRoute === 'about'}
+      <MobileAboutPage />
+    {:else if currentRoute === 'notifications'}
+      <MobileNotificationsPage />
     {:else}
       <!-- Mobile: Show placeholder for other pages -->
       <div class="p-4">
