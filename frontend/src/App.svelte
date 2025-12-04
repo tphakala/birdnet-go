@@ -3,6 +3,8 @@
   import RootLayout from './lib/desktop/layouts/RootLayout.svelte';
   import { MobileLayout } from './lib/mobile/layouts';
   import DashboardPage from './lib/desktop/features/dashboard/pages/DashboardPage.svelte'; // Keep dashboard for initial load
+  import MobileDashboardPage from './lib/mobile/features/dashboard/MobileDashboardPage.svelte';
+  import MobileDetectionsPage from './lib/mobile/features/detections/MobileDetectionsPage.svelte';
   import type { Component } from 'svelte';
   import type { BirdnetConfig } from './app.d.ts';
   import { getLogger } from './lib/utils/logger';
@@ -368,22 +370,28 @@
     {accessAllowed}
     showBack={currentRoute !== 'dashboard'}
   >
-    <!-- Mobile: Show placeholder for now, pages will be implemented next -->
-    <div class="p-4">
-      <div class="card bg-base-100 p-6 text-center">
-        <p class="text-base-content/60">
-          Mobile UI coming soon for: {pageTitle}
-        </p>
-        <button
-          class="btn btn-primary btn-sm mt-4"
-          onclick={() => {
-            isMobile = false;
-          }}
-        >
-          Switch to Desktop View
-        </button>
+    {#if currentRoute === 'dashboard'}
+      <MobileDashboardPage />
+    {:else if currentRoute === 'detections'}
+      <MobileDetectionsPage />
+    {:else}
+      <!-- Mobile: Show placeholder for other pages -->
+      <div class="p-4">
+        <div class="card bg-base-100 p-6 text-center">
+          <p class="text-base-content/60">
+            Mobile UI coming soon for: {pageTitle}
+          </p>
+          <button
+            class="btn btn-primary btn-sm mt-4"
+            onclick={() => {
+              isMobile = false;
+            }}
+          >
+            Switch to Desktop View
+          </button>
+        </div>
       </div>
-    </div>
+    {/if}
   </MobileLayout>
 {:else}
   <RootLayout title={pageTitle} {currentPage} {securityEnabled} {accessAllowed} {version}>

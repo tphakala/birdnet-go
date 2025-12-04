@@ -7,7 +7,8 @@
     commonName: string;
     scientificName: string;
     confidence: number;
-    timestamp: string;
+    date: string;
+    time: string;
     thumbnailUrl?: string;
   }
 
@@ -31,9 +32,13 @@
     className = '',
   }: Props = $props();
 
-  function formatTime(timestamp: string): string {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  function formatTime(time: string): string {
+    // time is in HH:MM:SS format
+    const [hours, minutes] = time.split(':');
+    const hour = parseInt(hours, 10);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${minutes} ${ampm}`;
   }
 
   function formatConfidence(confidence: number): string {
@@ -77,7 +82,7 @@
 
     <!-- Time -->
     <div class="text-sm text-base-content/60">
-      {formatTime(detection.timestamp)}
+      {formatTime(detection.time)}
     </div>
 
     <!-- Play Button -->
