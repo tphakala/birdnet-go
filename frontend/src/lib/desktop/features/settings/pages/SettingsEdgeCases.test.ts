@@ -176,7 +176,11 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
         './UserInterfaceSettingsPage.svelte': UserInterfaceSettingsPage,
       };
       // eslint-disable-next-line security/detect-object-injection -- path is from trusted test data array, not user input
-      return pageMap[path] ?? UserInterfaceSettingsPage;
+      const component = pageMap[path];
+      if (!component) {
+        throw new Error(`Unknown page path: ${path}. Check the pages array for typos.`);
+      }
+      return component;
     };
 
     it.each(pages)('$name handles completely empty store', async ({ path }) => {

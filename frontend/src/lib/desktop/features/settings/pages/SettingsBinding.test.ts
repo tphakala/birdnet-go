@@ -553,11 +553,12 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
       }
     });
 
-    it('All settings pages handle rapid form interactions without errors', async () => {
+    it('Core settings pages handle rapid form interactions without errors', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       try {
+        // Test subset of pages to keep test execution time reasonable
         const pages = [MainSettingsPage, AudioSettingsPage, SecuritySettingsPage];
 
         for (const Page of pages) {
