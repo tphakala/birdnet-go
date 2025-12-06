@@ -71,7 +71,7 @@
       return crypto.randomUUID();
     }
     // Fallback for older browsers
-    return `${Math.random().toString(36).substr(2, 9)}-${Date.now()}`;
+    return `${Math.random().toString(36).slice(2, 11)}-${Date.now()}`;
   })();
 
   // Derived IDs - react to prop changes while maintaining stable suffix
