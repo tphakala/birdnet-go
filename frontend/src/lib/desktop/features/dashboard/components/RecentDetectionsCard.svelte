@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
@@ -51,13 +52,9 @@
     className = '',
   }: Props = $props();
 
-  // State for number of detections to show
-  let selectedLimit = $state(limit);
-
-  // Update selectedLimit when prop changes
-  $effect(() => {
-    selectedLimit = limit;
-  });
+  // State for number of detections to show - captures initial prop value without creating dependency
+  // Uses untrack() to explicitly capture initial value only (local state is independent after init)
+  let selectedLimit = $state(untrack(() => limit));
 
   // Updates the number of detections to display and persists the preference
   function handleLimitChange(newLimit: number) {

@@ -109,14 +109,16 @@
     }
   }
 
-  const tableClasses = cn(
-    'table',
-    {
-      'table-zebra': striped,
-      'table-compact': compact,
-      'w-full': fullWidth,
-    },
-    className
+  const tableClasses = $derived(
+    cn(
+      'table',
+      {
+        'table-zebra': striped,
+        'table-compact': compact,
+        'w-full': fullWidth,
+      },
+      className
+    )
   );
 </script>
 

@@ -35,8 +35,8 @@ Features:
 
   let { showSpinner = false, showThumbnails = true, speciesCount = 8 }: Props = $props();
 
-  // Generate skeleton data using $state.raw for performance
-  const skeletonSpecies = $state.raw(
+  // Generate skeleton data - derived to react to speciesCount prop changes
+  const skeletonSpecies = $derived(
     Array(speciesCount)
       .fill(null)
       .map((_, i) => ({

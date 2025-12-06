@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { cn } from '$lib/utils/cn';
   import {
     parseSearchQuery,
@@ -31,7 +32,8 @@
     currentPage = 'dashboard',
   }: Props = $props();
 
-  let searchQuery = $state(value);
+  // Use untrack to explicitly capture initial value without creating dependency
+  let searchQuery = $state(untrack(() => value));
   let isSearching = $state(false);
   let inputRef = $state<HTMLInputElement>();
   let showDropdown = $state(false);

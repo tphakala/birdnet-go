@@ -104,12 +104,15 @@
 
   // State
   let touched = $state(false);
-  let error = $state<string | { key: string; params?: Record<string, unknown> } | null>(
-    externalError || null
-  );
-  let fieldId = id || `field-${name || 'field'}-${++fieldCounter}`;
-  let helpTextId = helpText ? `${fieldId}-help` : undefined;
-  let errorId = `${fieldId}-error`;
+  let error = $state<string | { key: string; params?: Record<string, unknown> } | null>(null);
+
+  // Generate counter suffix once on component creation (not reactive)
+  const fieldIdSuffix = ++fieldCounter;
+
+  // Derived IDs - react to prop changes while maintaining stable suffix
+  const fieldId = $derived(id || `field-${name || 'field'}-${fieldIdSuffix}`);
+  const helpTextId = $derived(helpText ? `${fieldId}-help` : undefined);
+  const errorId = $derived(`${fieldId}-error`);
 
   // Compute aria-describedby based on what's visible
   let describedBy = $derived(

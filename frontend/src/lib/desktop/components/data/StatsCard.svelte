@@ -110,16 +110,18 @@
     neutral: 'text-base-content/70',
   };
 
-  const cardClasses = cn(
-    'card shadow-lg transition-all duration-200',
-    safeGet(variantClasses, variant, ''),
-    {
-      'hover:shadow-xl hover:scale-105 cursor-pointer': !!(href || onClick),
-    },
-    className
+  const cardClasses = $derived(
+    cn(
+      'card shadow-lg transition-all duration-200',
+      safeGet(variantClasses, variant, ''),
+      {
+        'hover:shadow-xl hover:scale-105 cursor-pointer': !!(href || onClick),
+      },
+      className
+    )
   );
 
-  const isInteractive = href || onClick;
+  const isInteractive = $derived(href || onClick);
 
   function handleClick() {
     if (onClick) {

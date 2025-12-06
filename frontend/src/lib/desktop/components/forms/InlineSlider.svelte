@@ -64,18 +64,19 @@
     helpText = '',
   }: Props = $props();
 
-  // Generate unique ID if not provided (browser-compatible)
-  const generateId = () => {
+  // Generate unique suffix once on component creation (not reactive)
+  const generatedIdSuffix = (() => {
     // Use crypto.randomUUID if available (modern browsers)
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return `inline-slider-${crypto.randomUUID()}`;
+      return crypto.randomUUID();
     }
     // Fallback for older browsers
-    return `inline-slider-${Math.random().toString(36).substr(2, 9)}-${Date.now()}`;
-  };
+    return `${Math.random().toString(36).slice(2, 11)}-${Date.now()}`;
+  })();
 
-  const inputId = id || generateId();
-  const helpTextId = helpText ? `${inputId}-help` : undefined;
+  // Derived IDs - react to prop changes while maintaining stable suffix
+  const inputId = $derived(id || `inline-slider-${generatedIdSuffix}`);
+  const helpTextId = $derived(helpText ? `${inputId}-help` : undefined);
 
   // Constants for clarity
   const DEFAULT_DECIMAL_PLACES = 2;

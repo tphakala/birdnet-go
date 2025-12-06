@@ -86,10 +86,12 @@
     error: 'bg-error',
   };
 
-  const containerClasses = cn(
-    'w-full bg-base-300 rounded-full overflow-hidden relative',
-    safeGet(sizeClasses, size, 'h-2'),
-    className
+  const containerClasses = $derived(
+    cn(
+      'w-full bg-base-300 rounded-full overflow-hidden relative',
+      safeGet(sizeClasses, size, 'h-2'),
+      className
+    )
   );
 
   let progressBarClasses = $derived(
