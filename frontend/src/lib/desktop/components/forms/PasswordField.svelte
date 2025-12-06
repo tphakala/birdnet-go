@@ -144,7 +144,7 @@
 
   <!-- Password strength indicator -->
   {#if showStrength && passwordStrength && value}
-    <div class="mt-2">
+    <div class="mt-2" role="status" aria-live="polite">
       <div class="flex items-center justify-between mb-1">
         <span class="text-sm font-medium">{t('forms.password.strength.label')}</span>
         <span class="text-sm font-medium {passwordStrength?.color || ''}">
@@ -174,7 +174,7 @@
             {t('forms.password.strength.suggestions.title')}
           </div>
           <ul class="text-xs text-base-content/70 space-y-1">
-            {#each passwordStrength.feedback as suggestion}
+            {#each passwordStrength.feedback as suggestion, index (index)}
               <li class="flex items-center gap-1">
                 <div class="shrink-0">
                   <TriangleAlert class="size-3" />

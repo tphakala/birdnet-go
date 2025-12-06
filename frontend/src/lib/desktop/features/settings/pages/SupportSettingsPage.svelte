@@ -520,6 +520,8 @@
                 class:alert-info={statusType === 'info'}
                 class:alert-success={statusType === 'success'}
                 class:alert-error={statusType === 'error'}
+                role="status"
+                aria-live="polite"
               >
                 {#if statusType === 'info'}
                   <Info class="size-4 shrink-0" />

@@ -344,6 +344,8 @@
                   class="alert py-2 px-3 text-sm"
                   class:alert-success={templateStatusType === 'success'}
                   class:alert-error={templateStatusType === 'error'}
+                  role="alert"
+                  aria-live="assertive"
                 >
                   <div class="shrink-0">
                     {#if templateStatusType === 'success'}
@@ -362,6 +364,8 @@
                   class:alert-info={statusType === 'info'}
                   class:alert-success={statusType === 'success'}
                   class:alert-error={statusType === 'error'}
+                  role="status"
+                  aria-live="polite"
                 >
                   <div class="shrink-0">
                     {#if statusType === 'info'}

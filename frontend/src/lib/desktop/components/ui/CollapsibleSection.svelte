@@ -27,6 +27,14 @@
   // Use untrack to explicitly capture initial value without creating dependency
   let isOpen = $state(untrack(() => defaultOpen));
 
+  // Slugify title for valid HTML id attribute
+  let slugifiedTitle = $derived(
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '')
+  );
+
   function toggleOpen() {
     isOpen = !isOpen;
   }
@@ -48,7 +56,7 @@
     onclick={toggleOpen}
     onkeydown={handleKeydown}
     aria-expanded={isOpen}
-    aria-controls="{title}-content"
+    aria-controls="{slugifiedTitle}-content"
   >
     <div class="flex items-center justify-between">
       <span>{title}</span>
@@ -57,7 +65,11 @@
       </div>
     </div>
   </button>
-  <div id="{title}-content" class={cn('collapse-content', contentClassName)} aria-hidden={!isOpen}>
+  <div
+    id="{slugifiedTitle}-content"
+    class={cn('collapse-content', contentClassName)}
+    aria-hidden={!isOpen}
+  >
     {#if children}
       {@render children()}
     {/if}

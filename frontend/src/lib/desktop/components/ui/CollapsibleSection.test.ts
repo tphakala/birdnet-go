@@ -220,10 +220,11 @@ describe('CollapsibleSection', () => {
     });
 
     const button = screen.getByRole('button');
-    const content = container.querySelector('#Test\\ Section-content');
+    // IDs are now slugified for valid HTML id attributes
+    const content = container.querySelector('#test-section-content');
 
-    expect(button).toHaveAttribute('aria-controls', 'Test Section-content');
-    expect(content).toHaveAttribute('id', 'Test Section-content');
+    expect(button).toHaveAttribute('aria-controls', 'test-section-content');
+    expect(content).toHaveAttribute('id', 'test-section-content');
   });
 
   it('has hidden checkbox for DaisyUI compatibility', () => {
