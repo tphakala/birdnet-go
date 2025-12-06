@@ -28,6 +28,7 @@
   - className?: string - Additional CSS classes
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { cn } from '$lib/utils/cn';
   import type { DetectionsListData } from '$lib/types/detection.types';
   import Pagination from '$lib/desktop/components/ui/Pagination.svelte';
@@ -107,12 +108,9 @@
     }
   }
 
-  let selectedNumResults = $state(String(data?.numResults || 25));
-
-  // Keep selectedNumResults in sync with data changes
-  $effect(() => {
-    selectedNumResults = String(data?.numResults || 25);
-  });
+  // State for number of results - captures initial value without creating dependency
+  // Uses untrack() to explicitly capture initial value only (local state is independent after init)
+  let selectedNumResults = $state(untrack(() => String(data?.numResults || 25)));
 </script>
 
 <div class={cn(className)}>

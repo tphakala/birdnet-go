@@ -53,9 +53,14 @@
   let svg: Selection<globalThis.SVGSVGElement, unknown, null, undefined>;
   let chartGroup: Selection<globalThis.SVGGElement, unknown, null, undefined>;
 
-  // Reactive dimensions
-  let containerWidth = $state(width);
-  let containerHeight = $state(height);
+  // Observed dimensions from ResizeObserver (null until observed)
+  let observedWidth = $state<number | null>(null);
+  let observedHeight = $state<number | null>(null);
+
+  // Final dimensions: use observed when available (responsive mode), otherwise use props
+  // This pattern avoids $effect for state sync - uses $derived instead
+  const containerWidth = $derived(responsive && observedWidth !== null ? observedWidth : width);
+  const containerHeight = $derived(responsive && observedHeight !== null ? observedHeight : height);
 
   // Theme management
   let themeStore: ThemeStore;
@@ -122,14 +127,14 @@
         const { width: newWidth, height: newHeight } = entry.contentRect;
 
         if (newWidth > 0 && newHeight > 0) {
-          containerWidth = newWidth;
-          containerHeight = newHeight;
+          observedWidth = newWidth;
+          observedHeight = newHeight;
 
-          // Update SVG dimensions
-          svg.attr('width', containerWidth).attr('height', containerHeight);
+          // Update SVG dimensions (using observed values directly since derived may not have updated yet)
+          svg.attr('width', newWidth).attr('height', newHeight);
 
           // Notify parent component
-          onResize?.(containerWidth, containerHeight);
+          onResize?.(newWidth, newHeight);
         }
       }
     });

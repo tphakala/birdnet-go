@@ -140,10 +140,6 @@
     height: 100%;
   }
 
-  .confidence-circle-text svg {
-    stroke-width: 3;
-  }
-
   /* Confidence level color schemes */
   .confidence-circle :global(.confidence-high) {
     color: #059669;

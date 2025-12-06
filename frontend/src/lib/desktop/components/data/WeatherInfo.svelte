@@ -78,9 +78,13 @@
     children,
   }: Props = $props();
 
-  let weather = $state<WeatherData | null>(weatherData || null);
+  // State for fetched weather data (when using detectionId)
+  let fetchedWeather = $state<WeatherData | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
+
+  // Display value: prefer prop over fetched data (no $effect needed)
+  const weather = $derived(weatherData ?? fetchedWeather);
 
   // Fetch weather data
   async function fetchWeatherInfo(id: string) {
@@ -91,7 +95,7 @@
 
     try {
       const data = await fetchWithCSRF<WeatherData>(`/api/v2/weather/detection/${id}`);
-      weather = data;
+      fetchedWeather = data;
       onLoad?.(data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load weather data';
@@ -136,7 +140,7 @@
   }
 
   export function setWeatherData(data: WeatherData) {
-    weather = data;
+    fetchedWeather = data;
     error = null;
     loading = false;
   }

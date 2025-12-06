@@ -55,7 +55,7 @@
 
   // Responsive width calculation
   let canvasWidth = $state(800); // Default fallback
-  let canvasHeight = height;
+  const canvasHeight = $derived(height);
 
   // Plot area dimensions (excluding margins) - now reactive
   let plotWidth = $derived(canvasWidth - margins.left - margins.right);

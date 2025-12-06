@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
@@ -23,7 +24,8 @@
     ...rest
   }: Props = $props();
 
-  let isOpen = $state(defaultOpen);
+  // Use untrack to explicitly capture initial value without creating dependency
+  let isOpen = $state(untrack(() => defaultOpen));
 
   function toggleOpen() {
     isOpen = !isOpen;
