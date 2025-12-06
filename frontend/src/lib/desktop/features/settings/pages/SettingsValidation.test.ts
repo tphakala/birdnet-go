@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any -- Test file intentionally uses 'any' for testing malformed data and edge cases */
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
 /**
  * Settings Validation and Boundary Conditions Test Suite
@@ -28,7 +28,21 @@ import {
 
 // Note: Common mocks are now defined in src/test/setup.ts and loaded globally via Vitest configuration
 
+// Pre-imported components for faster test execution
+let MainSettingsPage: any;
+let SecuritySettingsPage: any;
+let IntegrationSettingsPage: any;
+let SpeciesSettingsPage: any;
+
 describe('Settings Validation and Boundary Conditions', () => {
+  // Pre-import all components once before tests run
+  beforeAll(async () => {
+    MainSettingsPage = await import('./MainSettingsPage.svelte');
+    SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
+    IntegrationSettingsPage = await import('./IntegrationSettingsPage.svelte');
+    SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
+  }, 30000); // 30 second timeout for initial imports
+
   beforeEach(() => {
     vi.clearAllMocks();
     settingsActions.resetAllSettings();
@@ -37,7 +51,6 @@ describe('Settings Validation and Boundary Conditions', () => {
   describe('Numeric Input Validation', () => {
     describe('MainSettingsPage - Coordinate Validation', () => {
       it('validates latitude bounds (-90 to 90)', async () => {
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
         render(MainSettingsPage.default);
 
         // Query latitude input by label text - fails loudly if not found
@@ -66,7 +79,6 @@ describe('Settings Validation and Boundary Conditions', () => {
       });
 
       it('validates longitude bounds (-180 to 180)', async () => {
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
         render(MainSettingsPage.default);
 
         // Query longitude input by label text - fails loudly if not found
@@ -93,7 +105,6 @@ describe('Settings Validation and Boundary Conditions', () => {
       });
 
       it('handles coordinate precision correctly', async () => {
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
         render(MainSettingsPage.default);
 
         // Find coordinate inputs by accessible label instead of step attribute
@@ -123,7 +134,6 @@ describe('Settings Validation and Boundary Conditions', () => {
 
     describe('BirdNET Settings - Threshold and Sensitivity', () => {
       it('validates sensitivity range (0.5 to 1.5)', async () => {
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
         render(MainSettingsPage.default);
 
         // Update settings to test boundaries
@@ -206,7 +216,6 @@ describe('Settings Validation and Boundary Conditions', () => {
         },
       } as any);
 
-      const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
       const { component } = render(SecuritySettingsPage.default);
 
       // Should render without executing scripts
@@ -244,7 +253,6 @@ describe('Settings Validation and Boundary Conditions', () => {
           name: payload,
         } as any);
 
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
         const { component } = render(MainSettingsPage.default);
 
         expect(component).toBeTruthy();
@@ -282,7 +290,6 @@ describe('Settings Validation and Boundary Conditions', () => {
           },
         } as any);
 
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
         const { component } = render(MainSettingsPage.default);
 
         expect(component).toBeTruthy();
@@ -314,7 +321,6 @@ describe('Settings Validation and Boundary Conditions', () => {
           modelPath: payload,
         } as any);
 
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
         const { component } = render(MainSettingsPage.default);
 
         expect(component).toBeTruthy();
@@ -347,7 +353,6 @@ describe('Array Input Validation', () => {
       },
     });
 
-    const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
     const { component } = render(SpeciesSettingsPage.default);
 
     expect(component).toBeTruthy();
@@ -372,6 +377,18 @@ describe('Array Input Validation', () => {
 });
 
 describe('Cross-Field Dependencies', () => {
+  // Pre-import components for this describe block (separate from main describe)
+  beforeAll(async () => {
+    SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
+    IntegrationSettingsPage = await import('./IntegrationSettingsPage.svelte');
+    SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
+  }, 30000);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    settingsActions.resetAllSettings();
+  });
+
   it('validates OAuth settings dependencies', async () => {
     // First enable OAuth in the store before rendering
     settingsActions.updateSection('security', {
@@ -382,7 +399,6 @@ describe('Cross-Field Dependencies', () => {
       },
     } as any);
 
-    const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
     const { component } = render(SecuritySettingsPage.default);
 
     // Component should render without errors with OAuth enabled
@@ -404,7 +420,6 @@ describe('Cross-Field Dependencies', () => {
   });
 
   it('validates MQTT broker dependencies', async () => {
-    const IntegrationSettingsPage = await import('./IntegrationSettingsPage.svelte');
     const { component } = render(IntegrationSettingsPage.default);
 
     // Enable MQTT without broker - first update the store
@@ -437,7 +452,6 @@ describe('Cross-Field Dependencies', () => {
   });
 
   it('validates species configuration dependencies', async () => {
-    const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
     render(SpeciesSettingsPage.default);
 
     // Add configuration with action but no command
@@ -481,20 +495,19 @@ describe('Cross-Field Dependencies', () => {
         config.actions[0].command.trim().length > 0);
     expect(hasValidActionsOrEmpty).toBe(true);
   });
-});
 
-describe('Accessibility', () => {
-  it('SecuritySettingsPage should have no accessibility violations', async () => {
-    const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
-    const { container } = render(SecuritySettingsPage.default);
+  describe('Accessibility', () => {
+    it('SecuritySettingsPage should have no accessibility violations', async () => {
+      const { container } = render(SecuritySettingsPage.default);
 
-    await waitFor(() => {
-      // Wait for component to fully render
-      expect(container.firstChild).toBeInTheDocument();
+      await waitFor(() => {
+        // Wait for component to fully render
+        expect(container.firstChild).toBeInTheDocument();
+      });
+
+      // Run axe-core accessibility tests
+      await expectNoA11yViolations(container, A11Y_CONFIGS.forms);
     });
-
-    // Run axe-core accessibility tests
-    await expectNoA11yViolations(container, A11Y_CONFIGS.forms);
   });
 });
 

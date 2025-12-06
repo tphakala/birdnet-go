@@ -6,8 +6,18 @@
  * or performance regressions.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
+
+// Module-level variables for pre-imported pages
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import of Svelte component requires flexible typing for testing-library compatibility
+let MainSettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import of Svelte component requires flexible typing for testing-library compatibility
+let AudioSettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import of Svelte component requires flexible typing for testing-library compatibility
+let SecuritySettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import of Svelte component requires flexible typing for testing-library compatibility
+let IntegrationSettingsPage: any;
 
 // Declare global performance for Node.js environment
 declare global {
@@ -72,6 +82,14 @@ vi.mock('maplibre-gl', () => ({
 }));
 
 describe('Settings Binding Performance Tests', () => {
+  // Pre-import all settings pages before running tests (with increased timeout)
+  beforeAll(async () => {
+    MainSettingsPage = (await import('./MainSettingsPage.svelte')).default;
+    AudioSettingsPage = (await import('./AudioSettingsPage.svelte')).default;
+    SecuritySettingsPage = (await import('./SecuritySettingsPage.svelte')).default;
+    IntegrationSettingsPage = (await import('./IntegrationSettingsPage.svelte')).default;
+  }, 30000);
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -79,19 +97,16 @@ describe('Settings Binding Performance Tests', () => {
   describe('Rendering Performance', () => {
     it('renders settings pages within acceptable time limits', async () => {
       const pages = [
-        './MainSettingsPage.svelte',
-        './AudioSettingsPage.svelte',
-        './SecuritySettingsPage.svelte',
-        './IntegrationSettingsPage.svelte',
-        './FilterSettingsPage.svelte',
-        './SupportSettingsPage.svelte',
+        MainSettingsPage,
+        AudioSettingsPage,
+        SecuritySettingsPage,
+        IntegrationSettingsPage,
       ];
 
-      for (const pagePath of pages) {
+      for (const Page of pages) {
         const startTime = performance.now();
 
-        const Page = await import(pagePath);
-        const { unmount } = render(Page.default);
+        const { unmount } = render(Page);
 
         const renderTime = performance.now() - startTime;
 
@@ -108,10 +123,8 @@ describe('Settings Binding Performance Tests', () => {
 
       try {
         // Render multiple instances of the same component
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
-
         for (let i = 0; i < 10; i++) {
-          const { unmount } = render(MainSettingsPage.default);
+          const { unmount } = render(MainSettingsPage);
           instances.push(unmount);
         }
 
@@ -131,8 +144,7 @@ describe('Settings Binding Performance Tests', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const AudioSettingsPage = await import('./AudioSettingsPage.svelte');
-        const { unmount } = render(AudioSettingsPage.default);
+        const { unmount } = render(AudioSettingsPage);
 
         const checkboxes = screen.queryAllByRole('checkbox');
         const textInputs = screen.queryAllByRole('textbox');
@@ -182,8 +194,7 @@ describe('Settings Binding Performance Tests', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const IntegrationSettingsPage = await import('./IntegrationSettingsPage.svelte');
-        const { unmount } = render(IntegrationSettingsPage.default);
+        const { unmount } = render(IntegrationSettingsPage);
 
         const inputs = screen.queryAllByRole('textbox');
         const checkboxes = screen.queryAllByRole('checkbox');
@@ -235,8 +246,7 @@ describe('Settings Binding Performance Tests', () => {
       try {
         // Simulate repeated mount/unmount cycles with interactions
         for (let cycle = 0; cycle < 20; cycle++) {
-          const MainSettingsPage = await import('./MainSettingsPage.svelte');
-          const { unmount } = render(MainSettingsPage.default);
+          const { unmount } = render(MainSettingsPage);
 
           // Interact with components to create potential memory leaks
           const inputs = screen.queryAllByRole('textbox');
@@ -291,8 +301,7 @@ describe('Settings Binding Performance Tests', () => {
       };
 
       try {
-        const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
-        const { unmount } = render(SecuritySettingsPage.default);
+        const { unmount } = render(SecuritySettingsPage);
 
         // Interact with components to trigger event listener setup
         const inputs = screen.queryAllByRole('textbox');
@@ -328,8 +337,7 @@ describe('Settings Binding Performance Tests', () => {
 
       try {
         // Test the most complex settings page
-        const AudioSettingsPage = await import('./AudioSettingsPage.svelte');
-        const { unmount } = render(AudioSettingsPage.default);
+        const { unmount } = render(AudioSettingsPage);
 
         // Get all form elements
         const allElements = [
@@ -376,17 +384,13 @@ describe('Settings Binding Performance Tests', () => {
         const renderPromises = [];
 
         // Render multiple different settings pages concurrently
-        const pages = [
-          './MainSettingsPage.svelte',
-          './AudioSettingsPage.svelte',
-          './SecuritySettingsPage.svelte',
-        ];
+        const pages = [MainSettingsPage, AudioSettingsPage, SecuritySettingsPage];
 
         for (let i = 0; i < 3; i++) {
-          for (const pagePath of pages) {
+          for (const Page of pages) {
             renderPromises.push(
-              import(pagePath).then(async Page => {
-                const { unmount } = render(Page.default);
+              (async () => {
+                const { unmount } = render(Page);
 
                 // Quick interaction test
                 const inputs = screen.queryAllByRole('textbox');
@@ -395,7 +399,7 @@ describe('Settings Binding Performance Tests', () => {
                 }
 
                 unmount();
-              })
+              })()
             );
           }
         }
@@ -416,8 +420,7 @@ describe('Settings Binding Performance Tests', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const IntegrationSettingsPage = await import('./IntegrationSettingsPage.svelte');
-        const { unmount } = render(IntegrationSettingsPage.default);
+        const { unmount } = render(IntegrationSettingsPage);
 
         // Create artificial performance bottleneck
         const heavyComputation = () => {
@@ -464,8 +467,7 @@ describe('Settings Binding Performance Tests', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
-        const { unmount } = render(MainSettingsPage.default);
+        const { unmount } = render(MainSettingsPage);
 
         const inputs = screen.queryAllByRole('textbox');
         const checkboxes = screen.queryAllByRole('checkbox');

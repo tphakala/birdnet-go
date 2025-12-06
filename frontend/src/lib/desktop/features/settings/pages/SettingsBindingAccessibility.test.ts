@@ -67,14 +67,34 @@ vi.mock('maplibre-gl', () => ({
 // Next milestones: 25% → 40% → 60% → 80%
 const ACCESSIBILITY_LABELING_THRESHOLD = 0.15; // 15%
 
+// Pre-imported components for faster test execution
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let MainSettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let AudioSettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let SecuritySettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let FilterSettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let IntegrationSettingsPage: any;
+
 describe('Settings Binding Accessibility Tests', () => {
+  // Pre-import all components once before tests run
+  beforeAll(async () => {
+    MainSettingsPage = await import('./MainSettingsPage.svelte');
+    AudioSettingsPage = await import('./AudioSettingsPage.svelte');
+    SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
+    FilterSettingsPage = await import('./FilterSettingsPage.svelte');
+    IntegrationSettingsPage = await import('./IntegrationSettingsPage.svelte');
+  }, 30000); // 30 second timeout for initial imports
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   describe('ARIA Attributes', () => {
     it('maintains ARIA attributes during form interactions', async () => {
-      const MainSettingsPage = await import('./MainSettingsPage.svelte');
       const { unmount } = render(MainSettingsPage.default);
 
       const inputs = screen.queryAllByRole('textbox');
@@ -106,14 +126,9 @@ describe('Settings Binding Accessibility Tests', () => {
     });
 
     it('provides appropriate ARIA roles for form elements', async () => {
-      const pages = [
-        './MainSettingsPage.svelte',
-        './AudioSettingsPage.svelte',
-        './SecuritySettingsPage.svelte',
-      ];
+      const pages = [MainSettingsPage, AudioSettingsPage, SecuritySettingsPage];
 
-      for (const pagePath of pages) {
-        const Page = await import(pagePath);
+      for (const Page of pages) {
         const { unmount } = render(Page.default);
 
         // Check text inputs are accessible (implicit roles are sufficient)
@@ -135,7 +150,6 @@ describe('Settings Binding Accessibility Tests', () => {
 
   describe('Keyboard Navigation', () => {
     it('supports proper keyboard navigation patterns', async () => {
-      const MainSettingsPage = await import('./MainSettingsPage.svelte');
       const { unmount } = render(MainSettingsPage.default);
 
       const focusableElements = [
@@ -167,7 +181,6 @@ describe('Settings Binding Accessibility Tests', () => {
     });
 
     it('handles Enter and Space key activation correctly', async () => {
-      const FilterSettingsPage = await import('./FilterSettingsPage.svelte');
       const { unmount } = render(FilterSettingsPage.default);
 
       const checkboxes = screen.queryAllByRole('checkbox');
@@ -197,7 +210,6 @@ describe('Settings Binding Accessibility Tests', () => {
 
   describe('Screen Reader Support', () => {
     it('provides meaningful labels for form controls', async () => {
-      const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
       const { unmount } = render(SecuritySettingsPage.default);
 
       const inputs = screen.queryAllByRole('textbox');
@@ -251,7 +263,6 @@ describe('Settings Binding Accessibility Tests', () => {
     });
 
     it('announces state changes to screen readers', async () => {
-      const AudioSettingsPage = await import('./AudioSettingsPage.svelte');
       const { unmount } = render(AudioSettingsPage.default);
 
       // Look for live regions or aria-live attributes
@@ -272,7 +283,6 @@ describe('Settings Binding Accessibility Tests', () => {
 
   describe('Focus Management', () => {
     it('maintains logical focus order during interactions', async () => {
-      const IntegrationSettingsPage = await import('./IntegrationSettingsPage.svelte');
       const { unmount } = render(IntegrationSettingsPage.default);
 
       const focusableElements = [
@@ -306,7 +316,6 @@ describe('Settings Binding Accessibility Tests', () => {
     });
 
     it('handles focus trapping appropriately', async () => {
-      const MainSettingsPage = await import('./MainSettingsPage.svelte');
       const { unmount } = render(MainSettingsPage.default);
 
       // In a settings page, focus should not be trapped (no modals)
@@ -335,7 +344,6 @@ describe('Settings Binding Accessibility Tests', () => {
 
   describe('Visual Accessibility', () => {
     it('maintains focus indicators during interactions', async () => {
-      const MainSettingsPage = await import('./MainSettingsPage.svelte');
       const { unmount } = render(MainSettingsPage.default);
 
       const focusableElements = [
@@ -366,7 +374,6 @@ describe('Settings Binding Accessibility Tests', () => {
     });
 
     it('provides sufficient color contrast for interactive elements', async () => {
-      const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
       const { unmount } = render(SecuritySettingsPage.default);
 
       // This is a visual test that would need actual color analysis
@@ -390,7 +397,6 @@ describe('Settings Binding Accessibility Tests', () => {
 
   describe('Error Handling and Validation', () => {
     it('provides accessible error messages', async () => {
-      const MainSettingsPage = await import('./MainSettingsPage.svelte');
       const { unmount } = render(MainSettingsPage.default);
 
       const numberInputs = screen.queryAllByRole('spinbutton');
@@ -406,8 +412,7 @@ describe('Settings Binding Accessibility Tests', () => {
 
         // Validation errors should be accessible if present
         // If element is marked invalid AND references an error description, that description must exist
-        const shouldHaveErrorElement =
-          hasAriaInvalid === 'true' && Boolean(hasAriaDescribedBy);
+        const shouldHaveErrorElement = hasAriaInvalid === 'true' && Boolean(hasAriaDescribedBy);
         const errorElement = hasAriaDescribedBy
           ? document.getElementById(hasAriaDescribedBy)
           : null;
@@ -419,7 +424,6 @@ describe('Settings Binding Accessibility Tests', () => {
     });
 
     it('maintains accessibility during error states', async () => {
-      const AudioSettingsPage = await import('./AudioSettingsPage.svelte');
       const { unmount } = render(AudioSettingsPage.default);
 
       const inputs = screen.queryAllByRole('textbox');
@@ -451,8 +455,6 @@ describe('Settings Binding Accessibility Tests', () => {
 
   describe('Responsive Accessibility', () => {
     it('maintains accessibility across different viewport sizes', async () => {
-      const IntegrationSettingsPage = await import('./IntegrationSettingsPage.svelte');
-
       // Save original values to restore later
       const originalInnerWidth = window.innerWidth;
       const originalInnerHeight = window.innerHeight;

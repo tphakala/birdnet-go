@@ -313,8 +313,7 @@
                   type="text"
                   name="stream-name-{rtspUrl.id}"
                   label="Stream Name"
-                  bind:value={rtspUrl.name}
-                  onChange={value => updateUrl(rtspUrl.id, 'name', String(value))}
+                  value={rtspUrl.name}
                   onInput={value => updateUrl(rtspUrl.id, 'name', String(value))}
                   {disabled}
                   inputClassName={errors.get(`${rtspUrl.id}-name`) ? 'input-error' : ''}
@@ -330,8 +329,7 @@
                   type="text"
                   name="stream-url-{rtspUrl.id}"
                   label="RTSP URL"
-                  bind:value={rtspUrl.url}
-                  onChange={value => updateUrl(rtspUrl.id, 'url', String(value))}
+                  value={rtspUrl.url}
                   onInput={value => updateUrl(rtspUrl.id, 'url', String(value))}
                   {disabled}
                   inputClassName={errors.get(rtspUrl.id) ? 'input-error' : ''}

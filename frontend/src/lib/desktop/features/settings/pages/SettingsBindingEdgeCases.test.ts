@@ -5,8 +5,20 @@
  * correctly and maintain robustness under unusual conditions.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
+
+// Module-level variables for pre-imported pages
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import of Svelte component requires flexible typing for testing-library compatibility
+let MainSettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import of Svelte component requires flexible typing for testing-library compatibility
+let AudioSettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import of Svelte component requires flexible typing for testing-library compatibility
+let SecuritySettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import of Svelte component requires flexible typing for testing-library compatibility
+let IntegrationSettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import of Svelte component requires flexible typing for testing-library compatibility
+let FilterSettingsPage: any;
 
 // Mock external dependencies
 vi.mock('$lib/utils/api', () => ({
@@ -63,6 +75,15 @@ vi.mock('maplibre-gl', () => ({
 }));
 
 describe('Settings Binding Edge Cases', () => {
+  // Pre-import all settings pages before running tests (with increased timeout)
+  beforeAll(async () => {
+    MainSettingsPage = (await import('./MainSettingsPage.svelte')).default;
+    AudioSettingsPage = (await import('./AudioSettingsPage.svelte')).default;
+    SecuritySettingsPage = (await import('./SecuritySettingsPage.svelte')).default;
+    IntegrationSettingsPage = (await import('./IntegrationSettingsPage.svelte')).default;
+    FilterSettingsPage = (await import('./FilterSettingsPage.svelte')).default;
+  }, 30000);
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -72,8 +93,7 @@ describe('Settings Binding Edge Cases', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
-        const { unmount } = render(MainSettingsPage.default);
+        const { unmount } = render(MainSettingsPage);
 
         // Find numeric inputs
         const numberInputs = screen.queryAllByRole('spinbutton');
@@ -99,8 +119,7 @@ describe('Settings Binding Edge Cases', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
-        const { unmount } = render(MainSettingsPage.default);
+        const { unmount } = render(MainSettingsPage);
 
         const numberInputs = screen.queryAllByRole('spinbutton');
         const coordInputs = numberInputs.filter(
@@ -136,8 +155,7 @@ describe('Settings Binding Edge Cases', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
-        const { unmount } = render(SecuritySettingsPage.default);
+        const { unmount } = render(SecuritySettingsPage);
 
         const textInputs = screen.queryAllByRole('textbox');
         const longText = 'x'.repeat(10000); // Very long string
@@ -160,8 +178,7 @@ describe('Settings Binding Edge Cases', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const AudioSettingsPage = await import('./AudioSettingsPage.svelte');
-        const { unmount } = render(AudioSettingsPage.default);
+        const { unmount } = render(AudioSettingsPage);
 
         const checkboxes = screen.queryAllByRole('checkbox');
 
@@ -187,8 +204,7 @@ describe('Settings Binding Edge Cases', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const IntegrationSettingsPage = await import('./IntegrationSettingsPage.svelte');
-        const { unmount } = render(IntegrationSettingsPage.default);
+        const { unmount } = render(IntegrationSettingsPage);
 
         const textInputs = screen.queryAllByRole('textbox');
         const checkboxes = screen.queryAllByRole('checkbox');
@@ -223,8 +239,7 @@ describe('Settings Binding Edge Cases', () => {
       try {
         // Test multiple mount/unmount cycles
         for (let i = 0; i < 5; i++) {
-          const MainSettingsPage = await import('./MainSettingsPage.svelte');
-          const { unmount } = render(MainSettingsPage.default);
+          const { unmount } = render(MainSettingsPage);
 
           // Interact with components to trigger event listener setup
           const inputs = screen.queryAllByRole('textbox');
@@ -248,15 +263,10 @@ describe('Settings Binding Edge Cases', () => {
 
       try {
         // Test pages with many form fields
-        const pages = [
-          './AudioSettingsPage.svelte',
-          './SecuritySettingsPage.svelte',
-          './IntegrationSettingsPage.svelte',
-        ];
+        const pages = [AudioSettingsPage, SecuritySettingsPage, IntegrationSettingsPage];
 
-        for (const pagePath of pages) {
-          const Page = await import(pagePath);
-          const { unmount } = render(Page.default);
+        for (const Page of pages) {
+          const { unmount } = render(Page);
 
           // Interact with all form elements
           const allInputs = [
@@ -296,8 +306,7 @@ describe('Settings Binding Edge Cases', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
-        const { unmount } = render(MainSettingsPage.default);
+        const { unmount } = render(MainSettingsPage);
 
         const textInputs = screen.queryAllByRole('textbox');
 
@@ -321,8 +330,7 @@ describe('Settings Binding Edge Cases', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
-        const { unmount } = render(SecuritySettingsPage.default);
+        const { unmount } = render(SecuritySettingsPage);
 
         const textInputs = screen.queryAllByRole('textbox');
 
@@ -346,8 +354,7 @@ describe('Settings Binding Edge Cases', () => {
 
   describe('Accessibility Edge Cases', () => {
     it('maintains accessibility during rapid interactions', async () => {
-      const MainSettingsPage = await import('./MainSettingsPage.svelte');
-      const { unmount } = render(MainSettingsPage.default);
+      const { unmount } = render(MainSettingsPage);
 
       const inputs = screen.queryAllByRole('textbox');
       const checkboxes = screen.queryAllByRole('checkbox');
@@ -380,8 +387,7 @@ describe('Settings Binding Edge Cases', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const FilterSettingsPage = await import('./FilterSettingsPage.svelte');
-        const { unmount } = render(FilterSettingsPage.default);
+        const { unmount } = render(FilterSettingsPage);
 
         // Simulate screen reader navigation patterns
         const focusableElements = [
@@ -412,8 +418,7 @@ describe('Settings Binding Edge Cases', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
-        let { unmount } = render(MainSettingsPage.default);
+        let { unmount } = render(MainSettingsPage);
 
         // Set initial values
         const textInputs = screen.queryAllByRole('textbox');
@@ -426,7 +431,7 @@ describe('Settings Binding Edge Cases', () => {
 
         // Force re-render by unmounting and remounting
         unmount();
-        ({ unmount } = render(MainSettingsPage.default));
+        ({ unmount } = render(MainSettingsPage));
 
         // Values should be preserved (or reset to expected defaults)
         const newTextInputs = screen.queryAllByRole('textbox');
@@ -444,8 +449,7 @@ describe('Settings Binding Edge Cases', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const AudioSettingsPage = await import('./AudioSettingsPage.svelte');
-        const { unmount } = render(AudioSettingsPage.default);
+        const { unmount } = render(AudioSettingsPage);
 
         const checkboxes = screen.queryAllByRole('checkbox');
         const textInputs = screen.queryAllByRole('textbox');

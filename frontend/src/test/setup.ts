@@ -127,8 +127,197 @@ vi.mock('$lib/i18n', () => ({
   isValidLocale: vi.fn(() => true),
 }));
 
-// Note: settingsAPI is not mocked globally to allow settings store tests to work properly
-// Component tests that need settingsAPI mocks should mock them individually
+// Mock settingsAPI to prevent actual API calls during settings page imports
+// This prevents tests from timing out when importing settings pages
+vi.mock('$lib/utils/settingsApi.js', () => {
+  // Default empty settings structure that matches SettingsFormData interface
+  const defaultSettings = {
+    node: {
+      name: 'Test Node',
+      timeAs24h: true,
+      log: {
+        enabled: false,
+        path: '/tmp/logs',
+        rotation: 'daily',
+        maxSize: 10,
+        rotationDay: 'monday',
+      },
+    },
+    realtime: {
+      interval: 15,
+      processingTime: true,
+      dynamicThreshold: {
+        enabled: false,
+        debug: false,
+        trigger: 10,
+        min: 0.1,
+        validHours: 24,
+      },
+      species: {
+        include: [],
+        exclude: [],
+        config: {},
+      },
+      database: {
+        enabled: true,
+        path: '/tmp/test.db',
+      },
+      rangeFilter: {
+        threshold: 0.01,
+        speciesCount: null,
+        species: [],
+      },
+    },
+    audio: {
+      source: 'sysdefault',
+      export: {
+        enabled: false,
+        type: 'wav' as const,
+        path: '/tmp/clips',
+        bitrate: '128k',
+        retention: {
+          policy: 'usage',
+          maxAge: '7d',
+          maxUsage: '80%',
+          minClips: 100,
+          keepSpectrograms: false,
+        },
+        length: 15,
+        preCapture: 3,
+        gain: 0,
+        normalization: {
+          enabled: false,
+          targetLUFS: -23,
+          loudnessRange: 7,
+          truePeak: -2,
+        },
+      },
+      soundLevel: {
+        enabled: false,
+        interval: 60,
+      },
+      equalizer: {
+        enabled: false,
+        filters: [],
+      },
+    },
+    filters: {
+      privacy: {
+        enabled: false,
+        confidence: 0.9,
+        debug: false,
+      },
+      dogBark: {
+        enabled: false,
+        confidence: 0.7,
+        remember: 300,
+        debug: false,
+        species: [],
+      },
+    },
+    integration: {
+      birdweather: {
+        enabled: false,
+        id: '',
+        latitude: 0,
+        longitude: 0,
+        locationAccuracy: 500,
+        threshold: 0.8,
+        debug: false,
+      },
+      mqtt: {
+        enabled: false,
+        broker: 'localhost',
+        port: 1883,
+        topic: 'birdnet',
+        tls: {
+          enabled: false,
+          skipVerify: false,
+        },
+      },
+      observability: {
+        pprof: {
+          enabled: false,
+          port: 6060,
+        },
+        metrics: {
+          enabled: false,
+          port: 9090,
+        },
+      },
+      weather: {
+        enabled: false,
+        provider: 'openweathermap' as const,
+        apiKey: '',
+        units: 'metric' as const,
+        language: 'en',
+        updateInterval: 3600,
+        location: {
+          latitude: 0,
+          longitude: 0,
+        },
+      },
+    },
+    security: {
+      autoTLS: {
+        enabled: false,
+        host: '',
+      },
+      basicAuth: {
+        enabled: false,
+        username: '',
+        password: '',
+      },
+      googleAuth: {
+        enabled: false,
+        clientId: '',
+        clientSecret: '',
+        redirectURI: '',
+        userId: '',
+      },
+      githubAuth: {
+        enabled: false,
+        clientId: '',
+        clientSecret: '',
+        redirectURI: '',
+        userId: '',
+      },
+      allowSubnetBypass: {
+        enabled: false,
+        subnets: [],
+      },
+    },
+    sentry: {
+      enabled: false,
+      dsn: '',
+      environment: 'test',
+      debug: false,
+    },
+  };
+
+  return {
+    settingsAPI: {
+      load: vi.fn().mockResolvedValue(defaultSettings),
+      save: vi.fn().mockResolvedValue({ success: true }),
+      test: {
+        birdweather: vi.fn().mockResolvedValue({ success: true, message: 'Test successful' }),
+        mqtt: vi.fn().mockResolvedValue({ success: true, message: 'Test successful' }),
+        database: vi.fn().mockResolvedValue({ success: true, message: 'Test successful' }),
+        audio: vi.fn().mockResolvedValue({ success: true, message: 'Test successful' }),
+      },
+      species: {
+        search: vi.fn().mockResolvedValue([]),
+        rangeFilter: vi.fn().mockResolvedValue([]),
+        all: vi.fn().mockResolvedValue([]),
+      },
+      system: {
+        audioDevices: vi.fn().mockResolvedValue([]),
+        ffmpegVersion: vi.fn().mockResolvedValue({ version: '5.0.0', available: true }),
+        soxVersion: vi.fn().mockResolvedValue({ version: '14.4.2', available: true }),
+      },
+    },
+  };
+});
 
 // Mock SvelteKit navigation
 vi.mock('$app/navigation', () => ({
