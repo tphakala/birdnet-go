@@ -763,7 +763,7 @@
       <div class="card-body">
         <h2 id="tabs-heading" class="sr-only">Detection information tabs</h2>
         <!-- Tab Navigation -->
-        <div class="tabs tabs-boxed mb-6" role="tablist" aria-label="Detection details tabs">
+        <div class="tabs tabs-boxed mb-6 overflow-x-auto flex-nowrap" role="tablist" aria-label="Detection details tabs">
           <button
             id="tab-overview"
             role="tab"
