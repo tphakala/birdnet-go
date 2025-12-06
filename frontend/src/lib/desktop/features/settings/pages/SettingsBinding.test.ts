@@ -102,14 +102,15 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
           expect(component).toBeTruthy();
 
           // Check for form elements if required (MainSettingsPage specific)
-          if (checkFormElements) {
-            const inputs = screen.queryAllByRole('textbox');
-            const checkboxes = screen.queryAllByRole('checkbox');
-            const selects = screen.queryAllByRole('combobox');
+          // Move conditional logic outside expect to avoid linter warning
+          const inputs = screen.queryAllByRole('textbox');
+          const checkboxes = screen.queryAllByRole('checkbox');
+          const selects = screen.queryAllByRole('combobox');
+          const formElementCount = inputs.length + checkboxes.length + selects.length;
 
-            // At least one type of form element should exist
-            expect(inputs.length + checkboxes.length + selects.length).toBeGreaterThan(0);
-          }
+          // Only check form elements for pages that should have them
+          const expectedMinFormElements = checkFormElements ? 1 : 0;
+          expect(formElementCount).toBeGreaterThanOrEqual(expectedMinFormElements);
 
           // Check that no binding-related errors were logged
           const errorCalls = consoleSpy.mock.calls;

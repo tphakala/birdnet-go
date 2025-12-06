@@ -224,14 +224,15 @@ describe('RTSPUrlManager', () => {
     const toggles = screen.getAllByRole('checkbox');
     const activeToggle = toggles.find(toggle => (toggle as HTMLInputElement).checked);
 
-    if (activeToggle) {
-      await fireEvent.click(activeToggle);
+    // Assert toggle exists before testing interaction
+    expect(activeToggle).toBeDefined();
+    if (!activeToggle) throw new Error('Active toggle not found');
+    await fireEvent.click(activeToggle);
 
-      expect(onUpdate).toHaveBeenCalledWith([
-        { id: '1', url: 'rtsp://cam1.example.com/stream', name: 'Camera 1', active: false },
-        { id: '2', url: 'rtsp://cam2.example.com/stream', name: 'Camera 2', active: false },
-      ]);
-    }
+    expect(onUpdate).toHaveBeenCalledWith([
+      { id: '1', url: 'rtsp://cam1.example.com/stream', name: 'Camera 1', active: false },
+      { id: '2', url: 'rtsp://cam2.example.com/stream', name: 'Camera 2', active: false },
+    ]);
   });
 
   it('disables Add button when inputs are invalid', async () => {

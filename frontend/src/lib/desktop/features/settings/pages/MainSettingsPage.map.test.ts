@@ -557,19 +557,21 @@ describe('MainSettingsPage - Map Functionality', () => {
       // Simulate map click event that would trigger coordinate update
       const clickHandler = mockMap.on.mock.calls.find(call => call[0] === 'click')?.[1];
 
-      if (clickHandler) {
-        // Simulate click at new coordinates
-        clickHandler({
-          lngLat: { lat: 52.52, lng: 13.405 }, // Berlin
-        });
+      // Assert click handler was registered
+      expect(clickHandler).toBeDefined();
+      if (!clickHandler) throw new Error('Click handler not registered');
 
-        await new Promise(resolve => setTimeout(resolve, 200));
+      // Simulate click at new coordinates
+      clickHandler({
+        lngLat: { lat: 52.52, lng: 13.405 }, // Berlin
+      });
 
-        // Settings should be updated
-        const currentState = get(settingsStore);
-        expect(currentState.formData.birdnet.latitude).toBe(52.52); // Rounded to 3 decimals
-        expect(currentState.formData.birdnet.longitude).toBe(13.405);
-      }
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Settings should be updated
+      const currentState = get(settingsStore);
+      expect(currentState.formData.birdnet.latitude).toBe(52.52); // Rounded to 3 decimals
+      expect(currentState.formData.birdnet.longitude).toBe(13.405);
     });
   });
 

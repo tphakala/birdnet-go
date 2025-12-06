@@ -33,11 +33,9 @@ describe('Badge', () => {
       const { unmount } = badgeTest.render({ text: `${variant} badge`, variant });
 
       const badge = screen.getByText(`${variant} badge`);
-      if (variant === 'neutral') {
-        expect(badge).toHaveClass('badge');
-      } else {
-        expect(badge).toHaveClass(`badge-${variant}`);
-      }
+      // neutral variant has only 'badge' class, others have 'badge-{variant}'
+      const expectedClass = variant === 'neutral' ? 'badge' : `badge-${variant}`;
+      expect(badge).toHaveClass(expectedClass);
 
       unmount();
     });
@@ -50,13 +48,11 @@ describe('Badge', () => {
       const { unmount } = badgeTest.render({ text: `${size} size`, size });
 
       const badge = screen.getByText(`${size} size`);
-      if (size === 'md') {
-        // md size has no additional class
-        expect(badge).toHaveClass('badge');
-        expect(badge).not.toHaveClass('badge-md');
-      } else {
-        expect(badge).toHaveClass(`badge-${size}`);
-      }
+      // All sizes have 'badge' class
+      expect(badge).toHaveClass('badge');
+      // md size has no additional class, others have 'badge-{size}'
+      const hasSizeClass = size !== 'md';
+      expect(badge.classList.contains(`badge-${size}`)).toBe(hasSizeClass);
 
       unmount();
     });

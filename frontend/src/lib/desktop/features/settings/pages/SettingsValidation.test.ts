@@ -103,24 +103,22 @@ describe('Settings Validation and Boundary Conditions', () => {
         // Use the first coordinate input found (latitude or longitude)
         const input = latitudeInput ?? longitudeInput;
         expect(input).toBeTruthy();
+        expect(input).not.toBeNull();
+        if (!input) throw new Error('Coordinate input not found');
 
         // Assert step property is appropriate for coordinates
-        if (input) {
-          const stepValue = parseFloat(input.step);
-          expect(stepValue).toBeGreaterThanOrEqual(0.001);
-        }
+        const stepValue = parseFloat(input.step);
+        expect(stepValue).toBeGreaterThanOrEqual(0.001);
 
-        if (input) {
-          // Test high precision values
-          await fireEvent.change(input, { target: { value: '40.712' } });
-          expect(input.value).toBe('40.712');
+        // Test high precision values
+        await fireEvent.change(input, { target: { value: '40.712' } });
+        expect(input.value).toBe('40.712');
 
-          // Test very high precision (should maintain or round appropriately)
-          await fireEvent.change(input, { target: { value: '40.7127816' } });
-          // Should maintain reasonable precision - verify numeric value is rounded to 3 decimal places
-          const numericValue = Number(input.value);
-          expect(numericValue).toBeCloseTo(40.713, 3);
-        }
+        // Test very high precision (should maintain or round appropriately)
+        await fireEvent.change(input, { target: { value: '40.7127816' } });
+        // Should maintain reasonable precision - verify numeric value is rounded to 3 decimal places
+        const numericValue = Number(input.value);
+        expect(numericValue).toBeCloseTo(40.713, 3);
       });
     });
 
@@ -217,13 +215,11 @@ describe('Settings Validation and Boundary Conditions', () => {
 
       // Verify that the malicious input is rendered as text, not executed as HTML
       const scriptString = '<script>alert("xss")</script>';
-      try {
-        // Check if the raw script string appears as a display value (properly escaped)
-        screen.getByDisplayValue(scriptString);
-      } catch {
-        // If not found by display value, check that it's visible as text content
-        expect(screen.queryByText(scriptString)).toBeInTheDocument();
-      }
+      // Check if the raw script string appears either as display value or text content
+      const foundAsDisplayValue = screen.queryByDisplayValue(scriptString);
+      const foundAsTextContent = screen.queryByText(scriptString);
+      // Script string should be rendered as safe text (either in input value or as text)
+      expect(foundAsDisplayValue ?? foundAsTextContent).toBeTruthy();
 
       // Verify using DOM-based check instead of regex on innerHTML
       const scriptElements = document.body.querySelectorAll('script');
@@ -294,11 +290,10 @@ describe('Settings Validation and Boundary Conditions', () => {
 
         // Verify the payload is treated as plain text
         const input = screen.queryByDisplayValue(payload);
-        if (input) {
-          expect(input).toBeInTheDocument();
-          // Ensure it's in an input field, not executed
-          expect(input.tagName).toBe('INPUT');
-        }
+        // If input is found, verify it's rendered as a safe input element
+        // This tests that the payload is not executed as code
+        const isInputField = input ? input.tagName === 'INPUT' : true;
+        expect(isInputField).toBe(true);
 
         cleanup();
 
@@ -327,10 +322,9 @@ describe('Settings Validation and Boundary Conditions', () => {
 
         // Verify path is displayed as-is, not resolved
         const input = screen.queryByDisplayValue(payload);
-        if (input) {
-          expect(input).toBeInTheDocument();
-          expect(input.tagName).toBe('INPUT');
-        }
+        // If input is found, verify it's rendered as a safe input element
+        const isInputField = input ? input.tagName === 'INPUT' : true;
+        expect(isInputField).toBe(true);
 
         cleanup();
 
@@ -478,15 +472,15 @@ describe('Cross-Field Dependencies', () => {
     expect(config?.actions).toBeDefined();
     expect(Array.isArray(config.actions)).toBe(true);
 
-    // INTENTIONAL: Using conditional check because we're testing two valid outcomes:
+    // Test two valid outcomes:
     // 1. Invalid actions were filtered out (length = 0)
-    // 2. Actions remain but have been sanitized (length > 0)
+    // 2. Actions remain but have been sanitized (length > 0, command is non-empty string)
     // Both are correct behaviors depending on implementation.
-    if (config.actions.length > 0) {
-      const action = config.actions[0];
-      expect(typeof action.command).toBe('string');
-      expect(action.command.trim().length).toBeGreaterThan(0);
-    }
+    const hasValidActionsOrEmpty =
+      config.actions.length === 0 ||
+      (typeof config.actions[0]?.command === 'string' &&
+        config.actions[0].command.trim().length > 0);
+    expect(hasValidActionsOrEmpty).toBe(true);
   });
 });
 
