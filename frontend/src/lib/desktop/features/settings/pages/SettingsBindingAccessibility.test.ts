@@ -405,13 +405,14 @@ describe('Settings Binding Accessibility Tests', () => {
         const hasAriaDescribedBy = input.getAttribute('aria-describedby');
 
         // Validation errors should be accessible if present
-        // Move expect outside conditional - error element lookup is conditional on aria attributes
+        // If element is marked invalid AND references an error description, that description must exist
+        const shouldHaveErrorElement =
+          hasAriaInvalid === 'true' && Boolean(hasAriaDescribedBy);
         const errorElement = hasAriaDescribedBy
           ? document.getElementById(hasAriaDescribedBy)
           : null;
-        const isValidErrorState =
-          hasAriaInvalid !== 'true' || !hasAriaDescribedBy || errorElement !== null;
-        expect(isValidErrorState).toBe(true);
+        const hasValidErrorState = !shouldHaveErrorElement || errorElement !== null;
+        expect(hasValidErrorState).toBe(true);
       }
 
       unmount();

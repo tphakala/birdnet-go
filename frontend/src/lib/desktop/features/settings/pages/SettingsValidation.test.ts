@@ -103,7 +103,6 @@ describe('Settings Validation and Boundary Conditions', () => {
         // Use the first coordinate input found (latitude or longitude)
         const input = latitudeInput ?? longitudeInput;
         expect(input).toBeTruthy();
-        expect(input).not.toBeNull();
         if (!input) throw new Error('Coordinate input not found');
 
         // Assert step property is appropriate for coordinates

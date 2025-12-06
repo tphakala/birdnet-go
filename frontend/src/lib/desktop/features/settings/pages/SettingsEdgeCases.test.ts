@@ -486,9 +486,9 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           saveError = error;
         }
 
-        // If an error occurred, it should be defined (not undefined)
-        // This is expected behavior with corrupted data
-        expect(saveError === null || saveError !== undefined).toBe(true);
+        // Validate outcome: either succeeded (null) or failed with a proper Error
+        const isValidOutcome = saveError === null || saveError instanceof Error;
+        expect(isValidOutcome).toBe(true);
 
         // The important thing is no console errors were thrown
         expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('Cannot read'));

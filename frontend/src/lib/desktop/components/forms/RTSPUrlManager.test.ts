@@ -224,8 +224,7 @@ describe('RTSPUrlManager', () => {
     const toggles = screen.getAllByRole('checkbox');
     const activeToggle = toggles.find(toggle => (toggle as HTMLInputElement).checked);
 
-    // Assert toggle exists before testing interaction
-    expect(activeToggle).toBeDefined();
+    // Fail fast if toggle not found - also helps TypeScript narrow the type
     if (!activeToggle) throw new Error('Active toggle not found');
     await fireEvent.click(activeToggle);
 

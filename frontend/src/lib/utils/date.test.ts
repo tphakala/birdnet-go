@@ -101,8 +101,8 @@ describe('Date Utilities', () => {
       // When parsing 2025-08-25, it should always represent Aug 25 regardless of timezone
       const date = parseLocalDateString('2025-08-25');
       expect(date).not.toBeNull();
+      // Explicit guard to satisfy vitest/no-conditional-expect and narrow type for TypeScript
       if (!date) throw new Error('Date parsing failed');
-      // Assert date is not null before using it
       expect(getLocalDateString(date)).toBe('2025-08-25');
     });
 
@@ -125,8 +125,8 @@ describe('Date Utilities', () => {
       const dateString = '2025-08-25';
       const parsed = parseLocalDateString(dateString);
       expect(parsed).not.toBeNull();
+      // Explicit guard to satisfy vitest/no-conditional-expect and narrow type for TypeScript
       if (!parsed) throw new Error('Date parsing failed');
-      // Assert parsed is not null before using it
       const formatted = getLocalDateString(parsed);
       expect(formatted).toBe(dateString);
     });

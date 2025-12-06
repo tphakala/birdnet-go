@@ -11,11 +11,10 @@ describe('Button Accessibility Tests', () => {
     document.body.innerHTML = '<button>Click Me</button>';
     const button = document.querySelector('button');
     expect(button).toBeTruthy();
+    if (!button) throw new Error('Button not found');
 
     // Test with strict accessibility rules
-    if (button) {
-      await expectNoA11yViolations(button, A11Y_CONFIGS.strict);
-    }
+    await expectNoA11yViolations(button, A11Y_CONFIGS.strict);
 
     // Cleanup
     document.body.innerHTML = '';
@@ -26,7 +25,6 @@ describe('Button Accessibility Tests', () => {
     document.body.innerHTML = '<button></button>';
     const button = document.querySelector('button');
     expect(button).toBeTruthy();
-    expect(button).not.toBeNull();
     if (!button) throw new Error('Button not found');
 
     // This should throw due to missing button label
@@ -43,8 +41,9 @@ describe('Button Accessibility Tests', () => {
     document.body.innerHTML = '<button>Save Changes</button>';
     const button = document.querySelector('button');
     expect(button).toBeTruthy();
+    if (!button) throw new Error('Button not found');
 
-    const report = button ? await getA11yReport(button, A11Y_CONFIGS.lenient) : '';
+    const report = await getA11yReport(button, A11Y_CONFIGS.lenient);
 
     expect(report).toContain('Accessibility Test Results');
     expect(report).toContain('Rules Passed:');
@@ -59,10 +58,9 @@ describe('Button Accessibility Tests', () => {
     document.body.innerHTML = '<button type="submit">Submit Form</button>';
     const button = document.querySelector('button');
     expect(button).toBeTruthy();
+    if (!button) throw new Error('Button not found');
 
-    if (button) {
-      await expectNoA11yViolations(button, A11Y_CONFIGS.forms);
-    }
+    await expectNoA11yViolations(button, A11Y_CONFIGS.forms);
 
     // Cleanup
     document.body.innerHTML = '';
@@ -73,10 +71,9 @@ describe('Button Accessibility Tests', () => {
     document.body.innerHTML = '<button disabled>Disabled Button</button>';
     const button = document.querySelector('button');
     expect(button).toBeTruthy();
+    if (!button) throw new Error('Button not found');
 
-    if (button) {
-      await expectNoA11yViolations(button, A11Y_CONFIGS.strict);
-    }
+    await expectNoA11yViolations(button, A11Y_CONFIGS.strict);
 
     // Cleanup
     document.body.innerHTML = '';
