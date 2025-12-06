@@ -27,7 +27,7 @@
 <script lang="ts">
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import Portal from 'svelte-portal';
-  import { dataIcons } from '$lib/utils/icons';
+  import { Image } from '@lucide/svelte';
 
   interface Props {
     thumbnailUrl: string;
@@ -222,9 +222,7 @@
               <div
                 class="absolute inset-0 flex flex-col items-center justify-center text-base-content/50"
               >
-                <div class="mb-2">
-                  {@html dataIcons.imagePlaceholder}
-                </div>
+                <Image class="size-8 mb-2" />
                 <p class="text-xs text-center">Image not available</p>
               </div>
             {:else}

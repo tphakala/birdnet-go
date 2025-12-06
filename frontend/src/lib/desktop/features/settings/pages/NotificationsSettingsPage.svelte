@@ -22,7 +22,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
-  import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
+  import { TriangleAlert, Info, CircleCheck, XCircle, Bell } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
   let csrfToken = $derived(
@@ -258,8 +258,8 @@
   <div class="alert alert-warning">
     <div class="flex flex-col gap-2 w-full">
       <div class="flex items-start gap-3">
-        <div class="h-5 w-5 flex-shrink-0">
-          {@html alertIconsSvg.warning}
+        <div class="flex-shrink-0">
+          <TriangleAlert class="size-5" />
         </div>
         <div class="flex-1">
           <h3 class="font-semibold text-base mb-1">
@@ -345,11 +345,11 @@
                   class:alert-success={templateStatusType === 'success'}
                   class:alert-error={templateStatusType === 'error'}
                 >
-                  <div class="h-4 w-4 flex-shrink-0">
+                  <div class="flex-shrink-0">
                     {#if templateStatusType === 'success'}
-                      {@html alertIconsSvg.success}
+                      <CircleCheck class="size-4" />
                     {:else if templateStatusType === 'error'}
-                      {@html alertIconsSvg.error}
+                      <XCircle class="size-4" />
                     {/if}
                   </div>
                   <span>{templateStatusMessage}</span>
@@ -363,13 +363,13 @@
                   class:alert-success={statusType === 'success'}
                   class:alert-error={statusType === 'error'}
                 >
-                  <div class="h-4 w-4 flex-shrink-0">
+                  <div class="flex-shrink-0">
                     {#if statusType === 'info'}
-                      {@html alertIconsSvg.info}
+                      <Info class="size-4" />
                     {:else if statusType === 'success'}
-                      {@html alertIconsSvg.success}
+                      <CircleCheck class="size-4" />
                     {:else if statusType === 'error'}
-                      {@html alertIconsSvg.error}
+                      <XCircle class="size-4" />
                     {/if}
                   </div>
                   <span>{statusMessage}</span>
@@ -415,7 +415,7 @@
                     <span>{t('settings.notifications.templates.sendingButton')}</span>
                   {:else}
                     <span class="flex items-center gap-1">
-                      {@html systemIcons.bell}
+                      <Bell class="size-4" />
                       <span>{t('settings.notifications.templates.testButton')}</span>
                     </span>
                   {/if}

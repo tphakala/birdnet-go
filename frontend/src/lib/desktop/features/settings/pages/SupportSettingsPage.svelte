@@ -33,7 +33,17 @@
     type SupportSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import { actionIcons, alertIconsSvg, systemIcons, mediaIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import {
+    Copy,
+    Check,
+    Globe,
+    ShieldCheck,
+    Info,
+    Download,
+    TriangleAlert,
+    XCircle,
+    CircleCheck,
+  } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
 
@@ -329,9 +339,7 @@
             readonly
           />
           <button type="button" class="btn btn-sm join-item" onclick={copySystemId}>
-            <div class="h-5 w-5">
-              {@html actionIcons.copy}
-            </div>
+            <Copy class="size-5" />
             {t('settings.support.systemId.copyButton')}
           </button>
         </div>
@@ -363,7 +371,7 @@
             </p>
 
             <div class="alert alert-warning shadow-sm text-sm">
-              <div class="h-5 w-5 flex-shrink-0">{@html alertIconsSvg.warning}</div>
+              <TriangleAlert class="size-5 flex-shrink-0" />
               <div class="min-w-0">
                 <span class="font-semibold">
                   {t('settings.support.supportReport.githubRequired.title')}
@@ -380,31 +388,23 @@
               </h4>
               <ul class="text-xs space-y-1 text-base-content/70">
                 <li class="flex items-center gap-2">
-                  <div class="h-4 w-4 text-success flex-shrink-0">
-                    {@html alertIconsSvg.success}
-                  </div>
+                  <CircleCheck class="size-4 text-success flex-shrink-0" />
                   <span
                     >{@html t('settings.support.supportReport.whatsIncluded.applicationLogs')}</span
                   >
                 </li>
                 <li class="flex items-center gap-2">
-                  <div class="h-4 w-4 text-success flex-shrink-0">
-                    {@html alertIconsSvg.success}
-                  </div>
+                  <CircleCheck class="size-4 text-success flex-shrink-0" />
                   <span
                     >{@html t('settings.support.supportReport.whatsIncluded.configuration')}</span
                   >
                 </li>
                 <li class="flex items-center gap-2">
-                  <div class="h-4 w-4 text-success flex-shrink-0">
-                    {@html alertIconsSvg.success}
-                  </div>
+                  <CircleCheck class="size-4 text-success flex-shrink-0" />
                   <span>{@html t('settings.support.supportReport.whatsIncluded.systemInfo')}</span>
                 </li>
                 <li class="flex items-center gap-2">
-                  <div class="h-4 w-4 text-error flex-shrink-0">
-                    {@html alertIconsSvg.error}
-                  </div>
+                  <XCircle class="size-4 text-error flex-shrink-0" />
                   <span>{@html t('settings.support.supportReport.whatsIncluded.notIncluded')}</span>
                 </li>
               </ul>
@@ -492,20 +492,20 @@
               <div class="pl-6 mt-2 space-y-2">
                 <div class="text-xs text-base-content/60">
                   <p class="flex items-start gap-1">
-                    {@html actionIcons.check}
+                    <Check class="size-4 flex-shrink-0" />
                     {@html t('settings.support.supportReport.uploadOption.details.sentryUpload')}
                   </p>
                   <p class="flex items-start gap-1">
-                    {@html systemIcons.globe}
+                    <Globe class="size-4 flex-shrink-0" />
                     {t('settings.support.supportReport.uploadOption.details.euDataCenter')}
                   </p>
                   <p class="flex items-start gap-1">
-                    {@html systemIcons.shield}
+                    <ShieldCheck class="size-4 flex-shrink-0" />
                     {t('settings.support.supportReport.uploadOption.details.privacyCompliant')}
                   </p>
                 </div>
                 <div class="text-xs text-warning/80 flex items-center gap-1">
-                  {@html systemIcons.infoCircle}
+                  <Info class="size-4 flex-shrink-0" />
                   {t('settings.support.supportReport.uploadOption.details.manualWarning')}
                 </div>
               </div>
@@ -521,15 +521,13 @@
                 class:alert-success={statusType === 'success'}
                 class:alert-error={statusType === 'error'}
               >
-                <div class="h-4 w-4 flex-shrink-0">
-                  {#if statusType === 'info'}
-                    {@html alertIconsSvg.info}
-                  {:else if statusType === 'success'}
-                    {@html alertIconsSvg.success}
-                  {:else if statusType === 'error'}
-                    {@html alertIconsSvg.error}
-                  {/if}
-                </div>
+                {#if statusType === 'info'}
+                  <Info class="size-4 flex-shrink-0" />
+                {:else if statusType === 'success'}
+                  <CircleCheck class="size-4 flex-shrink-0" />
+                {:else if statusType === 'error'}
+                  <XCircle class="size-4 flex-shrink-0" />
+                {/if}
                 <span class="min-w-0 text-sm">{statusMessage}</span>
               </div>
 
@@ -565,7 +563,7 @@
             >
               {#if !generating}
                 <span class="flex items-center gap-2">
-                  {@html mediaIcons.download}
+                  <Download class="size-4" />
                   <span
                     >{supportDump.uploadToSentry
                       ? t('settings.support.supportReport.generateButton.upload')

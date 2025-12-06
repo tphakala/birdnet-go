@@ -1,7 +1,7 @@
 <script lang="ts">
   import { settingsStore, settingsActions, hasUnsavedChanges } from '$lib/stores/settings.js';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
-  import { actionIcons } from '$lib/utils/icons';
+  import { RefreshCw } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
 
@@ -46,7 +46,7 @@
       disabled={store.isSaving}
       aria-label={t('settings.actions.resetAriaLabel')}
     >
-      {@html actionIcons.refresh}
+      <RefreshCw class="size-4" />
       {t('settings.actions.reset')}
     </button>
   {/if}

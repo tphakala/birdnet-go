@@ -2,7 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
   import type { SelectOption } from './SelectDropdown.types';
-  import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { X, ChevronDown } from '@lucide/svelte';
   import {
     safeGet,
     safeArrayAccess,
@@ -338,12 +338,12 @@
             }}
             aria-label="Clear selection"
           >
-            {@html navigationIcons.close}
+            <X class="size-4" />
           </div>
         {/if}
 
-        <div class={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}>
-          {@html navigationIcons.chevronDown}
+        <div class={cn('transition-transform', isOpen && 'rotate-180')}>
+          <ChevronDown class="size-4" />
         </div>
       </div>
     </button>

@@ -45,7 +45,7 @@
     type SettingsFormData,
     type WeatherSettings,
   } from '$lib/stores/settings';
-  import { alertIconsSvg } from '$lib/utils/icons';
+  import { TriangleAlert, Info } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
@@ -816,7 +816,7 @@
       <!-- FFmpeg Warning -->
       {#if !ffmpegAvailable}
         <div class="alert alert-warning" role="alert">
-          {@html alertIconsSvg.warning}
+          <TriangleAlert class="size-5" />
           <div>
             <h3 class="font-bold">{t('settings.integration.birdweather.ffmpegWarning.title')}</h3>
             <p class="text-sm">
@@ -1003,7 +1003,7 @@
               />
 
               <div class="alert alert-info">
-                {@html alertIconsSvg.info}
+                <Info class="size-5" />
                 <div>
                   <span>{@html t('settings.integration.mqtt.tls.configNote')}</span>
                 </div>

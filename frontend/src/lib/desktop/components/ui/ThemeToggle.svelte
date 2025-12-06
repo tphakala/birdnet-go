@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { theme } from '$lib/stores/theme';
   import { cn } from '$lib/utils/cn';
-  import { systemIcons } from '$lib/utils/icons';
+  import { Sun, Moon } from '@lucide/svelte';
 
   interface Props {
     className?: string;
@@ -43,11 +43,11 @@
   const iconSizeClass = $derived(() => {
     switch (size) {
       case 'lg':
-        return 'w-8 h-8';
+        return 'size-8';
       case 'md':
-        return 'w-7 h-7';
+        return 'size-7';
       default:
-        return 'w-6 h-6';
+        return 'size-6';
     }
   });
 </script>
@@ -63,13 +63,13 @@
     />
 
     <!-- Sun icon (light mode) -->
-    <div class={cn('swap-on', iconSizeClass())}>
-      {@html systemIcons.sunIcon}
+    <div class="swap-on">
+      <Sun class={iconSizeClass()} />
     </div>
 
     <!-- Moon icon (dark mode) -->
-    <div class={cn('swap-off', iconSizeClass())}>
-      {@html systemIcons.moonIcon}
+    <div class="swap-off">
+      <Moon class={iconSizeClass()} />
     </div>
   </label>
 

@@ -42,7 +42,7 @@
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import { api, ApiError, getCsrfToken } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
-  import { alertIconsSvg, navigationIcons, mediaIcons } from '$lib/utils/icons';
+  import { XCircle, X, Maximize2, Download } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import {
@@ -1384,7 +1384,7 @@
                 disabled={!map || mapLibraryLoading}
                 onclick={openMapModal}
               >
-                {@html navigationIcons.expand}
+                <Maximize2 class="size-5" />
               </button>
             </div>
 
@@ -1476,7 +1476,7 @@
                 title={t('settings.main.sections.rangeFilter.downloadTitle')}
                 aria-label={t('common.aria.downloadCsv')}
               >
-                {@html mediaIcons.download}
+                <Download class="size-5" />
                 <span class="ml-1">{t('analytics.filters.exportCsv')}</span>
               </button>
             </div>
@@ -1488,7 +1488,7 @@
 
             {#if rangeFilterState.error}
               <div class="alert alert-error mt-2" role="alert">
-                {@html alertIconsSvg.error}
+                <XCircle class="size-5 shrink-0" />
                 <span>{rangeFilterState.error}</span>
                 <button
                   type="button"
@@ -1496,7 +1496,7 @@
                   aria-label="Dismiss error"
                   onclick={() => (rangeFilterState.error = null)}
                 >
-                  {@html navigationIcons.close}
+                  <X class="size-5" />
                 </button>
               </div>
             {/if}
@@ -1638,7 +1638,7 @@
           aria-label="Close modal"
           onclick={closeMapModal}
         >
-          {@html navigationIcons.close}
+          <X class="size-5" />
         </button>
       </div>
 
@@ -1741,7 +1741,7 @@
           aria-label="Close modal"
           onclick={() => (rangeFilterState.showModal = false)}
         >
-          {@html navigationIcons.close}
+          <X class="size-5" />
         </button>
       </div>
 
@@ -1775,7 +1775,7 @@
 
       {#if rangeFilterState.error}
         <div class="alert alert-error mb-4" role="alert">
-          {@html alertIconsSvg.error}
+          <XCircle class="size-5 shrink-0" />
           <span>{rangeFilterState.error}</span>
           <button
             type="button"
@@ -1783,7 +1783,7 @@
             aria-label="Dismiss error"
             onclick={() => (rangeFilterState.error = null)}
           >
-            {@html navigationIcons.close}
+            <X class="size-5" />
           </button>
         </div>
       {/if}
@@ -1820,7 +1820,7 @@
             !rangeFilterState.speciesCount}
           aria-label={t('common.aria.downloadCsv')}
         >
-          {@html mediaIcons.download}
+          <Download class="size-5" />
           <span class="ml-1">{t('analytics.filters.exportCsv')}</span>
         </button>
         <button

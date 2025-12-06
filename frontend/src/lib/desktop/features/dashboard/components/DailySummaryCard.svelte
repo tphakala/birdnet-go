@@ -50,7 +50,7 @@ Responsive Breakpoints:
   import { untrack } from 'svelte';
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
-  import { alertIconsSvg, navigationIcons, weatherIcons, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { XCircle, ChevronLeft, ChevronRight, Sunrise, Sunset, Star } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
   import SkeletonDailySummary from '$lib/desktop/components/ui/SkeletonDailySummary.svelte';
@@ -495,7 +495,7 @@ Responsive Breakpoints:
       class="btn btn-sm btn-ghost flex-shrink-0"
       aria-label={t('dashboard.dailySummary.navigation.previousDay')}
     >
-      {@html navigationIcons.arrowLeft}
+      <ChevronLeft class="size-5" />
     </button>
 
     <!-- Date picker with consistent width -->
@@ -513,7 +513,7 @@ Responsive Breakpoints:
       disabled={isToday}
       aria-label={t('dashboard.dailySummary.navigation.nextDay')}
     >
-      {@html navigationIcons.arrowRight}
+      <ChevronRight class="size-5" />
     </button>
   </div>
 {/snippet}
@@ -546,7 +546,7 @@ Responsive Breakpoints:
         {@render navigationControls()}
       </div>
       <div class="alert alert-error">
-        {@html alertIconsSvg.error}
+        <XCircle class="size-6" />
         <span>{error}</span>
       </div>
     </div>
@@ -609,7 +609,7 @@ Responsive Breakpoints:
                             })
                           : ''}"
                       >
-                        {@html weatherIcons.sunrise}
+                        <Sunrise class="size-3" />
                       </span>
                     {:else if hour === sunsetHour}
                       <span
@@ -628,7 +628,7 @@ Responsive Breakpoints:
                             })
                           : ''}"
                       >
-                        {@html weatherIcons.sunset}
+                        <Sunset class="size-3" />
                       </span>
                     {/if}
                     <!-- Hour number as direct child of th -->
@@ -760,10 +760,10 @@ Responsive Breakpoints:
                           <!-- Multi-period tracking badges -->
                           {#if item.is_new_species}
                             <span
-                              class="text-warning"
+                              class="text-warning inline-block"
                               title={`New species (first seen ${item.days_since_first_seen ?? 0} day${(item.days_since_first_seen ?? 0) === 1 ? '' : 's'} ago)`}
                             >
-                              {@html systemIcons.starAnimated}
+                              <Star class="size-4 fill-current" />
                             </span>
                           {/if}
                           {#if item.is_new_this_year && !item.is_new_species}

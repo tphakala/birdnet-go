@@ -3,7 +3,7 @@
   import { formatDateForInput, formatDate } from '$lib/utils/formatters';
   import { parseLocalDateString } from '$lib/utils/date';
   import FormField from './FormField.svelte';
-  import { alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { XCircle } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
   interface DatePreset {
@@ -253,9 +253,7 @@
 
   {#if error}
     <div class="alert alert-error mt-2">
-      <div class="w-4 h-4">
-        {@html alertIconsSvg.error}
-      </div>
+      <XCircle class="size-4" />
       <span class="text-sm">{error}</span>
     </div>
   {/if}

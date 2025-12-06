@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import ReconnectingEventSource from 'reconnecting-eventsource';
-  import { mediaIcons } from '$lib/utils/icons';
+  import { Mic, CirclePlay, CircleStop } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
   import Hls from 'hls.js';
   import type { ErrorData } from 'hls.js';
@@ -594,7 +594,7 @@
       />
     </svg>
     <div class="absolute inset-0 flex items-center justify-center">
-      {@html mediaIcons.microphone}
+      <Mic class="size-5" />
     </div>
     <!-- Screen reader announcement -->
     <div class="sr-only" aria-live="polite">
@@ -673,10 +673,10 @@
                 >
                   {#if playingSource !== source}
                     <!-- Play icon -->
-                    {@html mediaIcons.playCircle}
+                    <CirclePlay class="size-4" />
                   {:else}
                     <!-- Stop icon -->
-                    {@html mediaIcons.stopCircle}
+                    <CircleStop class="size-4" />
                   {/if}
                 </button>
               </div>

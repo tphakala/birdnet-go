@@ -30,7 +30,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
-  import { mediaIcons, alertIconsSvg } from '$lib/utils/icons.js';
+  import { Play, Pause, Volume2, Download, XCircle } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
@@ -970,8 +970,6 @@
       audioContext = null;
     }
   });
-
-  // Icons imported from centralized icon constants
 </script>
 
 <div
@@ -1009,9 +1007,7 @@
           : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
       >
         <div class="text-center p-2">
-          <div class="w-6 h-6 sm:w-8 sm:h-8 mx-auto mb-1 text-base-content/30" aria-hidden="true">
-            {@html alertIconsSvg.error}
-          </div>
+          <XCircle class="size-6 sm:size-8 mx-auto mb-1 text-base-content/30" aria-hidden="true" />
           <span class="text-xs sm:text-sm text-base-content/50">Spectrogram unavailable</span>
         </div>
       </div>
@@ -1090,7 +1086,7 @@
           ? audioContextError || 'Volume control unavailable'
           : 'Volume control'}
       >
-        {@html mediaIcons.volume}
+        <Volume2 class="size-4" />
         <span class="text-xs text-white">{gainValue > 0 ? '+' : ''}{gainValue} dB</span>
       </button>
 
@@ -1214,8 +1210,10 @@
           <div
             class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
           ></div>
+        {:else if isPlaying}
+          <Pause class="size-4" />
         {:else}
-          {@html isPlaying ? mediaIcons.pause : mediaIcons.play}
+          <Play class="size-4" />
         {/if}
       </button>
 
@@ -1258,7 +1256,7 @@
           class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0"
           aria-label={t('media.audio.download')}
         >
-          {@html mediaIcons.download}
+          <Download class="size-4" />
         </a>
       {/if}
     </div>

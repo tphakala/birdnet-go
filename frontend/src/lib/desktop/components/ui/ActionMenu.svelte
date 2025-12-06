@@ -17,7 +17,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Detection } from '$lib/types/detection.types';
-  import { actionIcons, systemIcons } from '$lib/utils/icons';
+  import { MoreVertical, SquarePen, Eye, EyeOff, Lock, LockOpen, Trash2 } from '@lucide/svelte';
 
   interface Props {
     /** The detection object containing data for this action menu */
@@ -183,7 +183,7 @@
     aria-haspopup="true"
     aria-expanded={isOpen}
   >
-    {@html actionIcons.more}
+    <MoreVertical class="size-5" />
   </button>
 
   {#if isOpen}
@@ -199,7 +199,7 @@
           role="menuitem"
         >
           <div class="flex items-center gap-2">
-            {@html actionIcons.edit}
+            <SquarePen class="size-4" />
             <span>Review detection</span>
             {#if detection.review?.verified === 'correct'}
               <span class="badge badge-success badge-sm">✓</span>
@@ -218,9 +218,9 @@
         >
           <div class="flex items-center gap-2">
             {#if isExcluded}
-              {@html systemIcons.eye}
+              <Eye class="size-4" />
             {:else}
-              {@html systemIcons.eyeOff}
+              <EyeOff class="size-4" />
             {/if}
             <span>{isExcluded ? 'Show species' : 'Ignore species'}</span>
           </div>
@@ -235,9 +235,9 @@
         >
           <div class="flex items-center gap-2">
             {#if detection.locked}
-              {@html actionIcons.lock}
+              <Lock class="size-4" />
             {:else}
-              {@html actionIcons.unlock}
+              <LockOpen class="size-4" />
             {/if}
             <span>{detection.locked ? 'Unlock detection' : 'Lock detection'}</span>
           </div>
@@ -252,7 +252,7 @@
             role="menuitem"
           >
             <div class="flex items-center gap-2">
-              {@html actionIcons.delete}
+              <Trash2 class="size-4" />
               <span>Delete detection</span>
             </div>
           </button>

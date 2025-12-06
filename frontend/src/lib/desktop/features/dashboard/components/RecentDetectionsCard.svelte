@@ -7,7 +7,7 @@
   import { fetchWithCSRF } from '$lib/utils/api';
   import type { Detection } from '$lib/types/detection.types';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
-  import { actionIcons, alertIconsSvg } from '$lib/utils/icons';
+  import { RefreshCw, XCircle } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { cn } from '$lib/utils/cn';
@@ -234,9 +234,7 @@
             : t('dashboard.recentDetections.controls.refresh')}
           aria-label={t('dashboard.recentDetections.controls.refresh')}
         >
-          <div class="h-4 w-4" class:animate-spin={loading}>
-            {@html actionIcons.refresh}
-          </div>
+          <RefreshCw class={loading ? 'size-4 animate-spin' : 'size-4'} />
         </button>
       </div>
     </div>
@@ -244,7 +242,7 @@
     <!-- Content -->
     {#if error}
       <div class="alert alert-error">
-        {@html alertIconsSvg.error}
+        <XCircle class="size-6" />
         <span>{error}</span>
       </div>
     {:else}

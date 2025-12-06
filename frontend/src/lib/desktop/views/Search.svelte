@@ -6,14 +6,7 @@
   import { t, getLocale } from '$lib/i18n';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { toastActions } from '$lib/stores/toast';
-  import {
-    actionIcons,
-    alertIconsSvg,
-    dataIcons,
-    mediaIcons,
-    systemIcons,
-    navigationIcons,
-  } from '$lib/utils/icons';
+  import { Search, ArrowDownUp, XCircle, Music, Eye, ChevronDown, FrownIcon } from '@lucide/svelte';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -375,7 +368,7 @@
               class:rotate-180={advancedFilters}
               aria-hidden="true"
             >
-              {@html navigationIcons.chevronDown}
+              <ChevronDown class="size-5" />
             </span>
           </button>
         </div>
@@ -515,7 +508,7 @@
               <span class="loading loading-spinner loading-sm mr-2" aria-hidden="true"></span>
             {:else}
               <span class="mr-2" aria-hidden="true">
-                {@html actionIcons.search}
+                <Search class="size-5" />
               </span>
             {/if}
             {t('common.search')}
@@ -548,7 +541,7 @@
                 aria-expanded="false"
                 aria-label={t('common.sort')}
               >
-                {@html actionIcons.sort}
+                <ArrowDownUp class="size-5" />
                 {t('common.sort')}
               </div>
               <ul
@@ -596,7 +589,7 @@
       <!-- Error message -->
       {#if errorMessage}
         <div class="alert alert-error mt-4" role="alert">
-          {@html alertIconsSvg.error}
+          <XCircle class="size-5" />
           <span>{errorMessage}</span>
         </div>
       {/if}
@@ -608,7 +601,7 @@
           aria-labelledby="search-results-heading"
         >
           <span class="text-base-content/30 text-[4rem]" aria-hidden="true">
-            {@html systemIcons.search}
+            <Search class="size-12" />
           </span>
           <p class="text-base-content/50 text-center mt-4">{t('search.noSearchPerformed')}</p>
           <p class="text-base-content/50 text-center text-sm">
@@ -770,7 +763,7 @@
                         })}
                         aria-pressed="false"
                       >
-                        {@html mediaIcons.music}
+                        <Music class="size-4" />
                       </button>
                       <button
                         class="btn btn-xs btn-square"
@@ -779,7 +772,7 @@
                           species: result.commonName || t('search.detailsPanel.unknownSpecies'),
                         })}
                       >
-                        {@html systemIcons.eye}
+                        <Eye class="size-4" />
                       </button>
                       <button
                         class="btn btn-xs btn-square expand-btn"
@@ -803,7 +796,7 @@
                           class:rotate-180={isExpanded(result.id)}
                           aria-hidden="true"
                         >
-                          {@html navigationIcons.chevronDown}
+                          <ChevronDown class="size-4" />
                         </span>
                       </button>
                     </div>
@@ -895,7 +888,7 @@
         <div
           class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]"
         >
-          {@html dataIcons.sadFace}
+          <FrownIcon class="size-12" />
           <p class="mt-2 text-base-content/70">{t('search.noResultsFound')}</p>
           <p class="text-sm text-base-content/50">{t('search.noResultsHint')}</p>
         </div>

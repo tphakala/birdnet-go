@@ -17,7 +17,7 @@
 -->
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import { alertIcons, navigationIcons } from '$lib/utils/icons';
+  import { CircleCheck, X } from '@lucide/svelte';
   import type { Detection } from '$lib/types/detection.types';
 
   interface Props {
@@ -91,20 +91,9 @@
     class={`badge ${badgeSize()} ${gapSize()} ${getStatusBadgeClass(detection.review?.verified)}`}
   >
     {#if detection.review?.verified === 'correct'}
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke-width="2"
-        stroke="currentColor"
-        class={iconSize()}
-      >
-        <path stroke-linecap="round" stroke-linejoin="round" d={alertIcons.success} />
-      </svg>
+      <CircleCheck class={iconSize()} />
     {:else if detection.review?.verified === 'false_positive'}
-      <div class={iconSize()}>
-        {@html navigationIcons.close}
-      </div>
+      <X class={iconSize()} />
     {/if}
     {getStatusText(detection.review?.verified)}
   </span>

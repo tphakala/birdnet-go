@@ -7,7 +7,7 @@
     formatSpeciesName,
     sortSpecies,
   } from '$lib/utils/speciesUtils';
-  import { actionIcons, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { SquarePen, X, GripHorizontal } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { safeArrayAccess } from '$lib/utils/security';
 
@@ -311,7 +311,7 @@
           onkeydown={editable && sortable ? e => handleItemKeyDown(e, index) : undefined}
         >
           {#if editable && sortable}
-            {@html navigationIcons.dragHandle}
+            <GripHorizontal class="size-5 cursor-move" />
           {/if}
 
           <div class="flex-1">
@@ -338,7 +338,7 @@
                   class="btn btn-ghost btn-xs"
                   aria-label={t('forms.species.aria.edit')}
                 >
-                  {@html actionIcons.edit}
+                  <SquarePen class="size-4" />
                 </button>
               {/if}
 
@@ -348,7 +348,7 @@
                 class="btn btn-ghost btn-xs text-error"
                 aria-label={t('forms.species.aria.remove')}
               >
-                {@html navigationIcons.close}
+                <X class="size-4" />
               </button>
             </div>
           {/if}

@@ -36,7 +36,7 @@ Performance Optimizations:
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { auth as authStore } from '$lib/stores/auth';
-  import { systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { Home, ChartPie, Search, Info, Cpu, Settings, LogOut, LogIn } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { resetDateToToday } from '$lib/utils/datePersistence';
   import LoginModal from '../components/modals/LoginModal.svelte';
@@ -192,7 +192,7 @@ Performance Optimizations:
             class={cn('flex items-center gap-2', { active: routeCache().dashboard })}
             role="menuitem"
           >
-            {@html systemIcons.home}
+            <Home class="size-5" />
             <span>{t('navigation.dashboard')}</span>
           </button>
         </li>
@@ -200,7 +200,7 @@ Performance Optimizations:
         <li role="none">
           <details bind:open={analyticsOpen}>
             <summary class="flex items-center gap-2" role="menuitem" aria-haspopup="true">
-              {@html systemIcons.analytics}
+              <ChartPie class="size-5" />
               <span>{t('navigation.analytics')}</span>
             </summary>
             <ul role="menu" aria-label={t('navigation.analyticsSubmenu')}>
@@ -232,7 +232,7 @@ Performance Optimizations:
             class={cn('flex items-center gap-2', { active: routeCache().search })}
             role="menuitem"
           >
-            {@html systemIcons.search}
+            <Search class="size-5" />
             <span>{t('navigation.search')}</span>
           </button>
         </li>
@@ -243,7 +243,7 @@ Performance Optimizations:
             class={cn('flex items-center gap-2', { active: routeCache().about })}
             role="menuitem"
           >
-            {@html systemIcons.about}
+            <Info class="size-5" />
             <span>{t('navigation.about')}</span>
           </button>
         </li>
@@ -257,7 +257,7 @@ Performance Optimizations:
               aria-label="System dashboard"
               aria-current={routeCache().system ? 'page' : undefined}
             >
-              {@html systemIcons.system}
+              <Cpu class="size-5" />
               <span>{t('navigation.system')}</span>
             </button>
           </li>
@@ -265,7 +265,7 @@ Performance Optimizations:
           <li role="none">
             <details bind:open={settingsOpen}>
               <summary class="flex items-center gap-2" role="menuitem" aria-haspopup="true">
-                {@html systemIcons.settingsGear}
+                <Settings class="size-5" />
                 <span>{t('navigation.settings')}</span>
               </summary>
               <ul role="menu" aria-label={t('navigation.settingsSubmenu')}>
@@ -369,7 +369,7 @@ Performance Optimizations:
                 class="btn btn-sm justify-center w-full"
                 aria-label={t('auth.logout')}
               >
-                {@html systemIcons.logout}
+                <LogOut class="size-5" />
                 <span>{t('auth.logout')}</span>
               </button>
             </div>
@@ -380,7 +380,7 @@ Performance Optimizations:
               class="btn btn-sm justify-center w-full"
               aria-label={t('auth.openLoginModal')}
             >
-              {@html systemIcons.login}
+              <LogIn class="size-5" />
               <span>{t('auth.login')}</span>
             </button>
           {/if}

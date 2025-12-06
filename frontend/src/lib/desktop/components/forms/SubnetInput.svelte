@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { actionIcons, alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { Plus, X, TriangleAlert } from '@lucide/svelte';
   import { validateCIDR, IndexMap, safeArrayAccess } from '$lib/utils/security';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
@@ -152,7 +152,7 @@
       disabled={disabled || !canAdd}
       aria-label="Add subnet"
     >
-      {@html actionIcons.add}
+      <Plus class="size-4" />
       Add
     </button>
   </div>
@@ -195,7 +195,7 @@
             {disabled}
             aria-label="Remove subnet"
           >
-            {@html navigationIcons.close}
+            <X class="size-4" />
           </button>
         </div>
 
@@ -214,7 +214,7 @@
   <!-- Max items warning -->
   {#if subnets.length >= maxItems}
     <div class="alert alert-warning mt-2">
-      {@html alertIconsSvg.warning}
+      <TriangleAlert class="size-4" />
       <span>Maximum number of subnets ({maxItems}) reached.</span>
     </div>
   {/if}

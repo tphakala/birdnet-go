@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
-  import { navigationIcons } from '$lib/utils/icons';
+  import { ChevronDown } from '@lucide/svelte';
 
   interface Props {
     title: string;
@@ -45,11 +45,11 @@
       {/if}
       <!-- Collapse indicator -->
       <div
-        class="ml-auto w-4 h-4 transition-transform duration-200"
+        class="ml-auto transition-transform duration-200"
         class:rotate-180={isOpen}
         aria-hidden="true"
       >
-        {@html navigationIcons.chevronDown}
+        <ChevronDown class="size-4" />
       </div>
     </div>
     {#if description}

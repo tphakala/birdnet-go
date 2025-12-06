@@ -22,7 +22,7 @@
 -->
 <script lang="ts">
   import Card from '$lib/desktop/components/ui/Card.svelte';
-  import { systemIcons, alertIconsSvg, dataIcons } from '$lib/utils/icons';
+  import { Star, Github, Globe, Info, Clock, FileText, CircleCheck, User } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
   // TypeScript interface for version settings
@@ -74,7 +74,7 @@
     <div class="mt-4 p-4 bg-base-200 rounded-lg">
       <p class="text-sm text-base-content/80 text-center flex items-center justify-center gap-2">
         <span class="text-yellow-500">
-          {@html systemIcons.star}
+          <Star class="size-5" />
         </span>
         If you find BirdNET-Go valuable, please consider starring the project on GitHub. Stars help others
         discover this project and support its continued development.
@@ -89,7 +89,7 @@
         rel="noopener noreferrer"
         aria-label="Visit BirdNET-Go GitHub repository"
       >
-        {@html systemIcons.github}
+        <Github class="size-5" />
         View Project on GitHub
       </a>
     </div>
@@ -107,21 +107,19 @@
     </p>
     <ul class="list-none pl-0 gap-2 mt-4 about-developers-grid">
       <li class="flex items-center gap-2">
-        <!-- PERFORMANCE OPTIMIZATION: Using centralized systemIcons.user instead of custom UserIcon component -->
-        <!-- Reduces bundle size and follows project's established icon pattern -->
-        {@html systemIcons.user}
+        <User class="size-5" />
         Stefan Kahl
       </li>
       <li class="flex items-center gap-2">
-        {@html systemIcons.user}
+        <User class="size-5" />
         Connor Wood
       </li>
       <li class="flex items-center gap-2">
-        {@html systemIcons.user}
+        <User class="size-5" />
         Maximilian Eibl
       </li>
       <li class="flex items-center gap-2">
-        {@html systemIcons.user}
+        <User class="size-5" />
         Holger Klinck
       </li>
     </ul>
@@ -134,7 +132,7 @@
         rel="noopener noreferrer"
         aria-label="Visit BirdNET-Analyzer GitHub repository"
       >
-        {@html systemIcons.github}
+        <Github class="size-5" />
         {t('about.visitBirdnetAnalyzer')}
       </a>
     </div>
@@ -148,7 +146,7 @@
 
     <p class="text-xl font-medium mt-6">{t('about.mainDeveloper')}</p>
     <p class="flex items-center gap-2 mt-2">
-      {@html systemIcons.user}
+      <User class="size-5" />
       <a href="https://github.com/tphakala" class="btn btn-ghost btn-sm justify-start normal-case"
         >Tomi P. Hakala</a
       >
@@ -216,25 +214,25 @@
       <ul class="mt-2 list-none pl-0 space-y-1">
         <li class="flex items-center gap-2">
           <div class="w-5 h-5 text-success">
-            {@html alertIconsSvg.success}
+            <CircleCheck class="size-5" />
           </div>
           {t('about.bugReports')}
         </li>
         <li class="flex items-center gap-2">
           <div class="w-5 h-5 text-success">
-            {@html alertIconsSvg.success}
+            <CircleCheck class="size-5" />
           </div>
           {t('about.featureSuggestions')}
         </li>
         <li class="flex items-center gap-2">
           <div class="w-5 h-5 text-success">
-            {@html alertIconsSvg.success}
+            <CircleCheck class="size-5" />
           </div>
           {t('about.testing')}
         </li>
         <li class="flex items-center gap-2">
           <div class="w-5 h-5 text-success">
-            {@html alertIconsSvg.success}
+            <CircleCheck class="size-5" />
           </div>
           {t('about.documentation')}
         </li>
@@ -256,7 +254,7 @@
         rel="noopener noreferrer"
         aria-label="Visit BirdNET-Pi GitHub repository"
       >
-        {@html systemIcons.github}
+        <Github class="size-5" />
         {t('about.visitBirdnetPi')}
       </a>
     </div>
@@ -271,7 +269,7 @@
         rel="noopener noreferrer"
         aria-label="Visit Patrick Levin's GitHub profile"
       >
-        {@html systemIcons.github}
+        <Github class="size-5" />
         {t('about.patrickLevinGithub')}
       </a>
     </div>
@@ -301,7 +299,7 @@
         rel="noopener noreferrer"
         aria-label={t('about.visitEbird')}
       >
-        {@html systemIcons.globe}
+        <Globe class="size-5" />
         {t('about.ebirdOrg')}
       </a>
       <a
@@ -311,7 +309,7 @@
         rel="noopener noreferrer"
         aria-label={t('about.learnEbirdTaxonomy')}
       >
-        {@html dataIcons.document}
+        <FileText class="size-5" />
         {t('common.buttons.learnMore')}
       </a>
     </div>
@@ -323,12 +321,12 @@
       <h2 class="card-title">{t('about.versionInformation')}</h2>
       <div class="space-y-4">
         <p class="flex items-center gap-2">
-          {@html systemIcons.infoCircle}
+          <Info class="size-5" />
           {t('about.currentVersion')}:
           <span class="font-mono">{settings.version || t('about.developmentBuild')}</span>
         </p>
         <p class="flex items-center gap-2">
-          {@html systemIcons.clock}
+          <Clock class="size-5" />
           {t('about.buildDate')}:
           <span class="font-mono">{settings.buildDate || t('about.unknown')}</span>
         </p>
@@ -351,11 +349,11 @@
           >.
         </p>
         <div class="flex items-center gap-2">
-          {@html dataIcons.document}
+          <FileText class="size-5" />
           <span>{t('about.licenseDescription')}</span>
         </div>
         <div class="flex items-center gap-2">
-          {@html dataIcons.document}
+          <FileText class="size-5" />
           <a
             href="/assets/LICENSES.md"
             class="link link-primary"

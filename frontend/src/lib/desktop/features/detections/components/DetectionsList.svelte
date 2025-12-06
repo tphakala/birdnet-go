@@ -34,7 +34,7 @@
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
   import DetectionRow from './DetectionRow.svelte';
-  import { alertIconsSvg } from '$lib/utils/icons';
+  import { XCircle } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
   interface Props {
@@ -167,7 +167,7 @@
     {:else if error}
       <div class="px-4 py-8">
         <div class="alert alert-error">
-          {@html alertIconsSvg.error}
+          <XCircle class="size-6" />
           <span>{error}</span>
         </div>
       </div>

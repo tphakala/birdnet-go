@@ -15,7 +15,7 @@
   - className?: string - Additional CSS classes
 -->
 <script lang="ts">
-  import { alertIcons } from '$lib/utils/icons';
+  import { Check } from '@lucide/svelte';
   import { safeGet } from '$lib/utils/security';
 
   interface Props {
@@ -83,16 +83,7 @@
   <div class="confidence-circle-progress"></div>
   <div class="confidence-circle-text" style:font-size={config.fontSize}>
     {#if isMaxConfidence}
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        style:width="{config.iconSize}px"
-        style:height="{config.iconSize}px"
-      >
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d={alertIcons.check}
-        ></path>
-      </svg>
+      <Check size={config.iconSize} strokeWidth={3} />
     {:else}
       {confidencePercent()}%
     {/if}
