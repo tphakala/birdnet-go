@@ -13,7 +13,7 @@
  * objects to value=/checked= with onchange handlers works correctly.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { INIT_TIMEOUT, STATE_UPDATE_TIMEOUT, wait } from '$lib/../test/constants';
@@ -72,7 +72,31 @@ vi.mock('maplibre-gl', () => ({
   },
 }));
 
+// Pre-imported components for faster test execution
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let MainSettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let AudioSettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let FilterSettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let IntegrationSettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let SecuritySettingsPage: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let SupportSettingsPage: any;
+
 describe('Settings Binding Validation - Svelte 5 Fixes', () => {
+  // Pre-import all components once before tests run
+  beforeAll(async () => {
+    MainSettingsPage = await import('./MainSettingsPage.svelte');
+    AudioSettingsPage = await import('./AudioSettingsPage.svelte');
+    FilterSettingsPage = await import('./FilterSettingsPage.svelte');
+    IntegrationSettingsPage = await import('./IntegrationSettingsPage.svelte');
+    SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
+    SupportSettingsPage = await import('./SupportSettingsPage.svelte');
+  }, 30000); // 30 second timeout for initial imports
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -95,7 +119,15 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
         const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         try {
-          const SettingsPageModule = await import(path);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic component map requires flexible typing for testing multiple page components
+          const componentMap: Record<string, any> = {
+            './MainSettingsPage.svelte': MainSettingsPage,
+            './AudioSettingsPage.svelte': AudioSettingsPage,
+            './FilterSettingsPage.svelte': FilterSettingsPage,
+            './SecuritySettingsPage.svelte': SecuritySettingsPage,
+          };
+          // eslint-disable-next-line security/detect-object-injection -- path comes from hardcoded settingsPages array, not user input
+          const SettingsPageModule = componentMap[path];
           const { component } = render(SettingsPageModule.default);
 
           // Component should render successfully
@@ -139,7 +171,6 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
         render(MainSettingsPage.default);
 
         // Find text inputs - getAllByRole will fail if none found
@@ -160,7 +191,6 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
         render(MainSettingsPage.default);
 
         // Find checkboxes - use getAllByRole to fail loudly if none found
@@ -180,7 +210,6 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
         render(MainSettingsPage.default);
 
         // Find select elements - getAllByRole will fail if none found
@@ -200,7 +229,6 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
         render(MainSettingsPage.default);
 
         // Wait for component to fully initialize
@@ -240,7 +268,6 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
     });
 
     it('Form elements maintain proper accessibility attributes', async () => {
-      const MainSettingsPage = await import('./MainSettingsPage.svelte');
       render(MainSettingsPage.default);
 
       // Check that form elements have proper labels
@@ -286,16 +313,15 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
       try {
         // Test all the pages we fixed
         const pages = [
-          './MainSettingsPage.svelte',
-          './AudioSettingsPage.svelte',
-          './FilterSettingsPage.svelte',
-          './IntegrationSettingsPage.svelte',
-          './SecuritySettingsPage.svelte',
-          './SupportSettingsPage.svelte',
+          MainSettingsPage,
+          AudioSettingsPage,
+          FilterSettingsPage,
+          IntegrationSettingsPage,
+          SecuritySettingsPage,
+          SupportSettingsPage,
         ];
 
-        for (const pagePath of pages) {
-          const Page = await import(pagePath);
+        for (const Page of pages) {
           const { component, unmount } = render(Page.default);
 
           // Component should render
@@ -351,7 +377,6 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       try {
-        const AudioSettingsPage = await import('./AudioSettingsPage.svelte');
         const { unmount } = render(AudioSettingsPage.default);
 
         // Find equalizer-related checkboxes and sliders
@@ -395,7 +420,6 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
         const { unmount } = render(SecuritySettingsPage.default);
 
         // Find OAuth-related inputs (Google/GitHub auth)
@@ -432,7 +456,6 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
         const { unmount } = render(MainSettingsPage.default);
 
         // Find latitude/longitude number inputs
@@ -470,7 +493,6 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const FilterSettingsPage = await import('./FilterSettingsPage.svelte');
         const { unmount } = render(FilterSettingsPage.default);
 
         // Find filter-related checkboxes
@@ -499,7 +521,6 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const IntegrationSettingsPage = await import('./IntegrationSettingsPage.svelte');
         const { unmount } = render(IntegrationSettingsPage.default);
 
         // Find various integration inputs (MQTT, BirdWeather, etc.)
@@ -537,14 +558,9 @@ describe('Settings Binding Validation - Svelte 5 Fixes', () => {
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       try {
-        const pages = [
-          './MainSettingsPage.svelte',
-          './AudioSettingsPage.svelte',
-          './SecuritySettingsPage.svelte',
-        ];
+        const pages = [MainSettingsPage, AudioSettingsPage, SecuritySettingsPage];
 
-        for (const pagePath of pages) {
-          const Page = await import(pagePath);
+        for (const Page of pages) {
           const { unmount } = render(Page.default);
 
           // Rapid fire interactions to test reactivity

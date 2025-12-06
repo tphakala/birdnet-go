@@ -18,10 +18,19 @@
  * malformed data and edge cases that require using 'any' types.
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions, speciesSettings } from '$lib/stores/settings';
+
+// Module-level variables for pre-imported pages
+let MainSettingsPage: any;
+let AudioSettingsPage: any;
+let FilterSettingsPage: any;
+let SpeciesSettingsPage: any;
+let SecuritySettingsPage: any;
+let IntegrationSettingsPage: any;
+let UserInterfaceSettingsPage: any;
 
 // Note: Common mocks are now defined in src/test/setup.ts and loaded globally via Vitest configuration
 
@@ -43,6 +52,17 @@ vi.mock('$lib/utils/api', () => ({
 }));
 
 describe('Settings Pages - Edge Cases and Corner Cases', () => {
+  // Pre-import all settings pages before running tests (with increased timeout)
+  beforeAll(async () => {
+    MainSettingsPage = (await import('./MainSettingsPage.svelte')).default;
+    AudioSettingsPage = (await import('./AudioSettingsPage.svelte')).default;
+    FilterSettingsPage = (await import('./FilterSettingsPage.svelte')).default;
+    SpeciesSettingsPage = (await import('./SpeciesSettingsPage.svelte')).default;
+    SecuritySettingsPage = (await import('./SecuritySettingsPage.svelte')).default;
+    IntegrationSettingsPage = (await import('./IntegrationSettingsPage.svelte')).default;
+    UserInterfaceSettingsPage = (await import('./UserInterfaceSettingsPage.svelte')).default;
+  }, 30000);
+
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset stores to default state
@@ -67,8 +87,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           },
         });
 
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component } = render(SpeciesSettingsPage.default);
+        const { component } = render(SpeciesSettingsPage);
 
         // Component should render without errors
         expect(component).toBeTruthy();
@@ -97,8 +116,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           },
         });
 
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component } = render(SpeciesSettingsPage.default);
+        const { component } = render(SpeciesSettingsPage);
 
         // Component should render without errors
         expect(component).toBeTruthy();
@@ -119,8 +137,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           species: undefined as any,
         });
 
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component } = render(SpeciesSettingsPage.default);
+        const { component } = render(SpeciesSettingsPage);
 
         // Component should render without errors
         expect(component).toBeTruthy();
@@ -159,8 +176,21 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
         settingsActions.updateSection('realtime', {} as any);
         settingsActions.updateSection('security', {} as any);
 
-        const Page = await import(path);
-        const { component, unmount } = render(Page.default);
+        const Page =
+          path === './MainSettingsPage.svelte'
+            ? MainSettingsPage
+            : path === './AudioSettingsPage.svelte'
+              ? AudioSettingsPage
+              : path === './FilterSettingsPage.svelte'
+                ? FilterSettingsPage
+                : path === './SpeciesSettingsPage.svelte'
+                  ? SpeciesSettingsPage
+                  : path === './SecuritySettingsPage.svelte'
+                    ? SecuritySettingsPage
+                    : path === './IntegrationSettingsPage.svelte'
+                      ? IntegrationSettingsPage
+                      : UserInterfaceSettingsPage;
+        const { component, unmount } = render(Page);
 
         // Page should render without errors
         expect(component).toBeTruthy();
@@ -189,8 +219,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           // Other properties missing
         } as any);
 
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
-        const { component } = render(MainSettingsPage.default);
+        const { component } = render(MainSettingsPage);
 
         expect(component).toBeTruthy();
 
@@ -227,8 +256,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           } as any,
         });
 
-        const SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
-        const { component } = render(SecuritySettingsPage.default);
+        const { component } = render(SecuritySettingsPage);
 
         expect(component).toBeTruthy();
 
@@ -257,8 +285,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           },
         });
 
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component } = render(SpeciesSettingsPage.default);
+        const { component } = render(SpeciesSettingsPage);
 
         expect(component).toBeTruthy();
         expect(consoleSpy).not.toHaveBeenCalled();
@@ -281,8 +308,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           },
         });
 
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component } = render(SpeciesSettingsPage.default);
+        const { component } = render(SpeciesSettingsPage);
 
         expect(component).toBeTruthy();
 
@@ -308,8 +334,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           },
         });
 
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component } = render(SpeciesSettingsPage.default);
+        const { component } = render(SpeciesSettingsPage);
 
         expect(component).toBeTruthy();
         expect(consoleSpy).not.toHaveBeenCalled();
@@ -330,8 +355,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           },
         });
 
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component } = render(SpeciesSettingsPage.default);
+        const { component } = render(SpeciesSettingsPage);
 
         expect(component).toBeTruthy();
         expect(consoleSpy).not.toHaveBeenCalled();
@@ -350,8 +374,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           overlap: 'string' as any, // String instead of number
         });
 
-        const MainSettingsPage = await import('./MainSettingsPage.svelte');
-        const { component } = render(MainSettingsPage.default);
+        const { component } = render(MainSettingsPage);
 
         expect(component).toBeTruthy();
         expect(consoleSpy).not.toHaveBeenCalled();
@@ -381,8 +404,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           },
         });
 
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component } = render(SpeciesSettingsPage.default);
+        const { component } = render(SpeciesSettingsPage);
 
         expect(component).toBeTruthy();
         // Component should handle invalid threshold values gracefully
@@ -413,8 +435,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           } as any,
         });
 
-        const IntegrationSettingsPage = await import('./IntegrationSettingsPage.svelte');
-        const { component } = render(IntegrationSettingsPage.default);
+        const { component } = render(IntegrationSettingsPage);
 
         expect(component).toBeTruthy();
         expect(consoleSpy).not.toHaveBeenCalled();
@@ -429,8 +450,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component } = render(SpeciesSettingsPage.default);
+        const { component } = render(SpeciesSettingsPage);
 
         expect(component).toBeTruthy();
 
@@ -503,8 +523,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
       // Mock API to fail initially
       vi.mocked(api.get).mockRejectedValueOnce(new Error('Network error'));
 
-      const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-      const { component } = render(SpeciesSettingsPage.default);
+      const { component } = render(SpeciesSettingsPage);
 
       // Component should still render with defaults
       expect(component).toBeTruthy();
@@ -523,8 +542,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component } = render(SpeciesSettingsPage.default);
+        const { component } = render(SpeciesSettingsPage);
 
         expect(component).toBeTruthy();
 
@@ -569,8 +587,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           },
         });
 
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component } = render(SpeciesSettingsPage.default);
+        const { component } = render(SpeciesSettingsPage);
 
         expect(component).toBeTruthy();
 
@@ -609,8 +626,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           },
         });
 
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component } = render(SpeciesSettingsPage.default);
+        const { component } = render(SpeciesSettingsPage);
 
         expect(component).toBeTruthy();
         expect(consoleSpy).not.toHaveBeenCalled();
@@ -626,13 +642,9 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
 
       try {
         // Render multiple pages at once
-        const SpeciesPage = await import('./SpeciesSettingsPage.svelte');
-        const AudioPage = await import('./AudioSettingsPage.svelte');
-        const SecurityPage = await import('./SecuritySettingsPage.svelte');
-
-        const { component: species } = render(SpeciesPage.default);
-        const { component: audio } = render(AudioPage.default);
-        const { component: security } = render(SecurityPage.default);
+        const { component: species } = render(SpeciesSettingsPage);
+        const { component: audio } = render(AudioSettingsPage);
+        const { component: security } = render(SecuritySettingsPage);
 
         // All should render without conflicts
         expect(species).toBeTruthy();
@@ -649,8 +661,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component } = render(SpeciesSettingsPage.default);
+        const { component } = render(SpeciesSettingsPage);
 
         expect(component).toBeTruthy();
 
@@ -687,11 +698,9 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-
         // Mount and unmount multiple times
         for (let i = 0; i < 5; i++) {
-          const { unmount } = render(SpeciesSettingsPage.default);
+          const { unmount } = render(SpeciesSettingsPage);
 
           // Add some data
           settingsActions.updateSection('realtime', {
@@ -716,8 +725,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       try {
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component, rerender } = render(SpeciesSettingsPage.default);
+        const { component, rerender } = render(SpeciesSettingsPage);
 
         // Trigger multiple re-renders rapidly
         for (let i = 0; i < 20; i++) {
@@ -743,8 +751,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
 
   describe('Accessibility Edge Cases', () => {
     it('maintains focus after settings update', async () => {
-      const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-      render(SpeciesSettingsPage.default);
+      render(SpeciesSettingsPage);
 
       const addButton = screen.queryByTestId('add-configuration-button');
 
@@ -781,8 +788,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
         },
       });
 
-      const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-      render(SpeciesSettingsPage.default);
+      render(SpeciesSettingsPage);
 
       // Try to tab through empty page
       const focusableElements = screen.queryAllByRole('button');
@@ -825,8 +831,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
           writable: true,
         });
 
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component } = render(SpeciesSettingsPage.default);
+        const { component } = render(SpeciesSettingsPage);
 
         expect(component).toBeTruthy();
       } finally {
@@ -844,8 +849,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
         // Simulate fetch not available
         global.fetch = undefined as any;
 
-        const SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
-        const { component } = render(SpeciesSettingsPage.default);
+        const { component } = render(SpeciesSettingsPage);
 
         expect(component).toBeTruthy();
       } finally {
