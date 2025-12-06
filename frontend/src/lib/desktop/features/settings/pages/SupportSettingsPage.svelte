@@ -1,32 +1,33 @@
 <!--
   Support Settings Page Component
-  
+
   Purpose: Configure error tracking, telemetry, and diagnostic support features for
   BirdNET-Go including Sentry integration and support dump generation.
-  
+
   Features:
+  - Tabbed interface with Telemetry and Diagnostics tabs
   - Error tracking and telemetry configuration with Sentry
-  - System ID display with copy functionality
   - Support dump generation with customizable options
   - Privacy-focused telemetry with clear data usage information
   - Upload to Sentry or download locally options
   - User message inclusion for context
-  
+
   Props: None - This is a page component that uses global settings stores
-  
+
   Performance Optimizations:
   - Removed page-level loading spinner to prevent flickering
   - Cached CSRF token to avoid repeated DOM queries
   - API state management for system ID loading
   - Reactive change detection with $derived
   - Progress tracking for support dump generation
-  
+
   @component
 -->
 <script lang="ts">
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
-  import SettingsPageActions from '$lib/desktop/features/settings/components/SettingsPageActions.svelte';
+  import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
+  import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -35,7 +36,6 @@
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import {
-    Copy,
     Check,
     Globe,
     ShieldCheck,
@@ -44,6 +44,8 @@
     TriangleAlert,
     XCircle,
     CircleCheck,
+    Activity,
+    Wrench,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -80,6 +82,27 @@
   let sentryHasChanges = $derived(
     hasSettingsChanged((store.originalData as any)?.sentry, (store.formData as any)?.sentry)
   );
+
+  // Tab state
+  let activeTab = $state('telemetry');
+
+  // Tab definitions
+  let tabs = $derived<TabDefinition[]>([
+    {
+      id: 'telemetry',
+      label: t('settings.support.sections.telemetry.title'),
+      icon: Activity,
+      content: telemetryTabContent,
+      hasChanges: sentryHasChanges,
+    },
+    {
+      id: 'diagnostics',
+      label: t('settings.support.sections.diagnostics.title'),
+      icon: Wrench,
+      content: diagnosticsTabContent,
+      hasChanges: false,
+    },
+  ]);
 
   // Support dump generation state
   let generating = $state(false);
@@ -155,16 +178,6 @@
       ...settings.sentry!,
       enabled,
     });
-  }
-
-  // Copy system ID to clipboard
-  async function copySystemId() {
-    try {
-      await navigator.clipboard.writeText(systemId);
-      // Could add temporary success feedback here
-    } catch (error) {
-      logger.error('Failed to copy system ID:', error);
-    }
   }
 
   // Support dump generation
@@ -295,8 +308,8 @@
   }
 </script>
 
-<main class="settings-page-content" aria-label="Support and diagnostics settings configuration">
-  <div class="space-y-4">
+{#snippet telemetryTabContent()}
+  <div class="space-y-6">
     <!-- Error Tracking & Telemetry Section -->
     <SettingsSection
       title={t('settings.support.sections.telemetry.title')}
@@ -326,35 +339,18 @@
           disabled={store.isLoading || store.isSaving}
           onchange={enabled => updateSentryEnabled(enabled)}
         />
-
-        <!-- System ID Display -->
-        <div class="form-control w-full mt-4">
-          <label class="label" for="systemID">
-            <span class="label-text">{t('settings.support.systemId.label')}</span>
-          </label>
-          <div class="join">
-            <input
-              type="text"
-              id="systemID"
-              value={systemId}
-              class="input input-sm join-item w-full font-mono text-base-content"
-              readonly
-            />
-            <button type="button" class="btn btn-sm join-item" onclick={copySystemId}>
-              <Copy class="size-5" />
-              {t('settings.support.systemId.copyButton')}
-            </button>
-          </div>
-          <span class="help-text mt-1">{t('settings.support.systemId.description')}</span>
-        </div>
       </div>
     </SettingsSection>
+  </div>
+{/snippet}
 
+{#snippet diagnosticsTabContent()}
+  <div class="space-y-6">
     <!-- Support & Diagnostics Section -->
     <SettingsSection
       title={t('settings.support.sections.diagnostics.title')}
       description={t('settings.support.sections.diagnostics.description')}
-      defaultOpen={false}
+      defaultOpen={true}
     >
       <div class="space-y-4">
         <!-- Support Dump Generation -->
@@ -581,7 +577,9 @@
       </div>
     </SettingsSection>
   </div>
+{/snippet}
 
-  <!-- Save/Reset Actions -->
-  <SettingsPageActions />
+<!-- Main Content -->
+<main class="settings-page-content" aria-label="Support and diagnostics settings configuration">
+  <SettingsTabs {tabs} bind:activeTab />
 </main>

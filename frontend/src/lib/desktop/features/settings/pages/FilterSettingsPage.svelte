@@ -26,6 +26,8 @@
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import SpeciesInput from '$lib/desktop/components/forms/SpeciesInput.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
+  import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -42,7 +44,7 @@
   interface SpeciesListResponse {
     species?: Array<{ label: string }>;
   }
-  import { X, Check, SquarePen, Trash2, Info } from '@lucide/svelte';
+  import { X, Check, SquarePen, Trash2, Info, Filter } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
 
   const logger = loggers.settings;
@@ -91,6 +93,20 @@
       (store.formData as any)?.realtime?.dogBarkFilter
     )
   );
+
+  // Tab state
+  let activeTab = $state('filters');
+
+  // Tab definitions
+  let tabs = $derived<TabDefinition[]>([
+    {
+      id: 'filters',
+      label: t('settings.filters.title'),
+      icon: Filter,
+      content: filtersTabContent,
+      hasChanges: privacyFilterHasChanges || dogBarkFilterHasChanges,
+    },
+  ]);
 
   // API State Management
   interface ApiState<T> {
@@ -246,8 +262,9 @@
   }
 </script>
 
-<div class="space-y-4 settings-page-content">
-  <!-- Privacy Filter Section -->
+{#snippet filtersTabContent()}
+  <div class="space-y-6">
+    <!-- Privacy Filter Section -->
   <SettingsSection
     title={t('settings.filters.privacyFiltering.title')}
     description={t('settings.filters.privacyFiltering.description')}
@@ -358,7 +375,7 @@
             <!-- Species List -->
             {#if (settings.dogBark as any).species.length > 0}
               <div class="space-y-2 mb-4">
-                {#each (settings.dogBark as any).species as species, index}
+                {#each (settings.dogBark as any).species as species, index (species)}
                   <div class="flex items-center gap-2 p-3 bg-base-200 rounded-lg">
                     {#if editIndex === index}
                       <input
@@ -440,4 +457,10 @@
       </fieldset>
     </div>
   </SettingsSection>
-</div>
+  </div>
+{/snippet}
+
+<!-- Main Content -->
+<main class="settings-page-content" aria-label="Filter settings configuration">
+  <SettingsTabs {tabs} bind:activeTab />
+</main>

@@ -1171,6 +1171,7 @@
       }
     },
     "filters": {
+      "title": "Filters",
       "privacyFiltering": {
         "title": "Privacy Filtering",
         "description": "Privacy filtering avoids saving audio clips when human vocals are detected",

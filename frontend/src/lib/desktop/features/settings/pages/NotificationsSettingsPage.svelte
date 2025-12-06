@@ -476,5 +476,5 @@
 {/snippet}
 
 <main class="settings-page-content" aria-label="Notifications settings configuration">
-  <SettingsTabs {tabs} bind:activeTab showActions={false} />
+  <SettingsTabs {tabs} bind:activeTab />
 </main>
