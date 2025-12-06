@@ -260,7 +260,7 @@
 
 <div class="col-span-12 space-y-4" role="region" aria-label={t('search.title')}>
   <!-- Search Form -->
-  <div class="card bg-base-100 shadow-sm">
+  <div class="card bg-base-100 shadow-xs">
     <div class="card-body card-padding">
       <h2 class="card-title" id="search-filters-heading">{t('search.title')}</h2>
 
@@ -296,7 +296,7 @@
               id="species"
               bind:value={speciesSearchTerm}
               placeholder={t('search.fields.speciesPlaceholder')}
-              class="input input-bordered w-full"
+              class="input w-full"
             />
             {#if showTooltip === 'species'}
               <div class="tooltip" id="speciesTooltip" role="tooltip">
@@ -440,11 +440,7 @@
                 <label class="label" for="verifiedStatusFilter">
                   <span class="label-text">{t('search.fields.verifiedStatus')}</span>
                 </label>
-                <select
-                  id="verifiedStatusFilter"
-                  bind:value={verifiedStatus}
-                  class="select select-bordered w-full"
-                >
+                <select id="verifiedStatusFilter" bind:value={verifiedStatus} class="select w-full">
                   <option value="any">{t('search.verifiedOptions.any')}</option>
                   <option value="verified">{t('search.verifiedOptions.verified')}</option>
                   <option value="unverified">{t('search.verifiedOptions.unverified')}</option>
@@ -456,11 +452,7 @@
                 <label class="label" for="lockedStatusFilter">
                   <span class="label-text">{t('search.fields.lockedStatus')}</span>
                 </label>
-                <select
-                  id="lockedStatusFilter"
-                  bind:value={lockedStatus}
-                  class="select select-bordered w-full"
-                >
+                <select id="lockedStatusFilter" bind:value={lockedStatus} class="select w-full">
                   <option value="any">{t('search.lockedOptions.any')}</option>
                   <option value="locked">{t('search.lockedOptions.locked')}</option>
                   <option value="unlocked">{t('search.lockedOptions.unlocked')}</option>
@@ -472,11 +464,7 @@
                 <label class="label" for="timeOfDayFilter">
                   <span class="label-text">{t('search.fields.timeOfDay')}</span>
                 </label>
-                <select
-                  id="timeOfDayFilter"
-                  bind:value={timeOfDayFilter}
-                  class="select select-bordered w-full"
-                >
+                <select id="timeOfDayFilter" bind:value={timeOfDayFilter} class="select w-full">
                   <option value="any">{t('search.timeOfDayOptions.any')}</option>
                   <option value="day">{t('search.timeOfDayOptions.day')}</option>
                   <option value="night">{t('search.timeOfDayOptions.night')}</option>
@@ -492,7 +480,7 @@
         <div class="flex flex-row gap-4 justify-end">
           <button
             type="button"
-            class="btn btn-ghost flex-shrink-0"
+            class="btn btn-ghost shrink-0"
             onclick={resetForm}
             aria-label={t('common.reset')}
           >
@@ -500,7 +488,7 @@
           </button>
           <button
             type="submit"
-            class="btn btn-primary flex-shrink-0"
+            class="btn btn-primary shrink-0"
             disabled={isLoading}
             aria-label={t('common.search')}
           >
@@ -519,7 +507,7 @@
   </div>
 
   <!-- Results Area -->
-  <div class="card bg-base-100 shadow-sm">
+  <div class="card bg-base-100 shadow-xs">
     <div class="card-body card-padding">
       <div class="flex items-center justify-between">
         <h2 class="card-title" id="search-results-heading">{t('search.results')}</h2>
@@ -546,7 +534,7 @@
               </div>
               <ul
                 tabindex="0"
-                class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52"
+                class="dropdown-content z-1 menu p-2 shadow-xs bg-base-100 rounded-box w-52"
                 role="menu"
               >
                 <li role="menuitem">
@@ -652,7 +640,7 @@
                     <div class="flex items-center gap-2">
                       <!-- Add bird image thumbnail -->
                       <div
-                        class="w-12 h-12 rounded-md overflow-hidden bg-gray-100 flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all focus:outline-none focus:ring-2 focus:ring-primary"
+                        class="w-12 h-12 rounded-md overflow-hidden bg-gray-100 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all focus:outline-hidden focus:ring-2 focus:ring-primary"
                         onclick={() => toggleExpand(result.id)}
                         onkeydown={e => {
                           if (e.key === 'Enter' || e.key === ' ') {
@@ -820,7 +808,7 @@
                             class="bg-base-200 rounded-box p-4 flex flex-col justify-center items-center"
                           >
                             <div
-                              class="w-full aspect-square rounded-md overflow-hidden bg-gray-100 cursor-pointer hover:brightness-90 transition-all focus:outline-none focus:ring-2 focus:ring-primary"
+                              class="w-full aspect-square rounded-md overflow-hidden bg-gray-100 cursor-pointer hover:brightness-90 transition-all focus:outline-hidden focus:ring-2 focus:ring-primary"
                               onclick={() => toggleExpand(result.id)}
                               onkeydown={e => {
                                 if (e.key === 'Enter' || e.key === ' ') {

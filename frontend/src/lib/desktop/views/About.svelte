@@ -44,10 +44,10 @@
 
 <div class="col-span-12 space-y-4">
   <!-- Header with Logo -->
-  <div class="card bg-base-100 shadow-sm">
+  <div class="card bg-base-100 shadow-xs">
     <div class="card-body items-center text-center">
       <div
-        class="w-36 h-36 rounded-full bg-gradient-to-b from-base-200 to-base-100 flex items-center justify-center p-1 ring-1 ring-base-content/10"
+        class="w-36 h-36 rounded-full bg-linear-to-b from-base-200 to-base-100 flex items-center justify-center p-1 ring-1 ring-base-content/10"
       >
         <img
           src="/assets/images/BirdNET-Go-logo.webp"
@@ -66,7 +66,7 @@
   </div>
 
   <!-- About BirdNET-Go Section -->
-  <Card title={t('about.overview')} className="bg-base-100 shadow-sm">
+  <Card title={t('about.overview')} className="bg-base-100 shadow-xs">
     <p>
       {t('about.overviewText')}
     </p>
@@ -96,7 +96,7 @@
   </Card>
 
   <!-- BirdNET Project Section -->
-  <Card title={t('about.birdnetProject')} className="bg-base-100 shadow-sm">
+  <Card title={t('about.birdnetProject')} className="bg-base-100 shadow-xs">
     <p>
       {t('about.birdnetDescription')}
     </p>
@@ -139,7 +139,7 @@
   </Card>
 
   <!-- Contributors Section -->
-  <Card title={t('about.contributors')} className="bg-base-100 shadow-sm">
+  <Card title={t('about.contributors')} className="bg-base-100 shadow-xs">
     <p>
       {t('about.contributorsText')}
     </p>
@@ -241,7 +241,7 @@
   </Card>
 
   <!-- Additional Credits Section -->
-  <Card title={t('about.additionalCredits')} className="bg-base-100 shadow-sm">
+  <Card title={t('about.additionalCredits')} className="bg-base-100 shadow-xs">
     <p class="text-xl font-medium">{t('about.birdnetPiProject')}</p>
     <p class="mt-2">
       {t('about.birdnetPiDescription')}
@@ -316,7 +316,7 @@
   </Card>
 
   <!-- Version Information -->
-  <div class="card bg-base-100 shadow-sm">
+  <div class="card bg-base-100 shadow-xs">
     <div class="card-body">
       <h2 class="card-title">{t('about.versionInformation')}</h2>
       <div class="space-y-4">
@@ -335,7 +335,7 @@
   </div>
 
   <!-- License Information -->
-  <div class="card bg-base-100 shadow-sm">
+  <div class="card bg-base-100 shadow-xs">
     <div class="card-body">
       <h2 class="card-title">{t('about.licenseInformation')}</h2>
       <div class="space-y-4">

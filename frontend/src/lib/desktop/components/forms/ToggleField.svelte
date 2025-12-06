@@ -56,7 +56,7 @@
       </label>
     </div>
 
-    <div class="flex-shrink-0 ml-4">
+    <div class="shrink-0 ml-4">
       <input
         id={fieldId}
         type="checkbox"

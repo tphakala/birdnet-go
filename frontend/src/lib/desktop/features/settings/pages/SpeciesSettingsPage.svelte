@@ -642,7 +642,7 @@
                 onchange={e => (newInterval = Number(e.currentTarget.value))}
                 min="0"
                 max="3600"
-                class="input input-bordered input-xs w-full"
+                class="input input-xs w-full"
                 placeholder="0"
               />
             </div>
@@ -710,7 +710,7 @@
                   type="text"
                   bind:value={actionCommand}
                   placeholder={t('settings.species.commandPathPlaceholder')}
-                  class="input input-bordered input-xs w-full"
+                  class="input input-xs w-full"
                 />
                 <div class="label">
                   <span class="label-text-alt text-xs"
@@ -734,7 +734,7 @@
                   type="text"
                   bind:value={actionParameters}
                   placeholder="Click buttons below to add parameters or type manually"
-                  class="input input-bordered input-xs w-full bg-base-200/50"
+                  class="input input-xs w-full bg-base-200/50"
                   title="Add parameters using the buttons below or type directly (comma-separated)"
                 />
                 <div class="label">

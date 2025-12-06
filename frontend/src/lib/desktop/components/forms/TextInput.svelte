@@ -126,11 +126,7 @@
     {pattern}
     {minlength}
     {maxlength}
-    class={cn(
-      'input input-bordered w-full',
-      safeGet(sizeClasses, size, ''),
-      !isValid && 'input-error'
-    )}
+    class={cn('input  w-full', safeGet(sizeClasses, size, ''), !isValid && 'input-error')}
     onchange={handleChange}
     oninput={handleInput}
     onblur={handleBlur}
@@ -152,7 +148,7 @@
   {#if tooltip && showTooltip}
     <div
       id={tooltipId}
-      class="absolute z-50 p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
+      class="absolute z-50 p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded-sm shadow-lg max-w-xs"
       role="tooltip"
     >
       {tooltip}

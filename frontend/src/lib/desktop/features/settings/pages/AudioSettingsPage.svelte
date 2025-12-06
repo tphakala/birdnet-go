@@ -805,7 +805,7 @@
                 <input
                   id="export-bitrate-disabled"
                   type="text"
-                  class="input input-bordered input-sm input-disabled w-full"
+                  class="input input-sm input-disabled w-full"
                   value="N/A - Lossless"
                   disabled
                   aria-describedby="lossless-note"

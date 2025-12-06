@@ -26,7 +26,7 @@
   }: Props = $props();
 </script>
 
-<div class={cn('card bg-base-100 shadow-sm', className)}>
+<div class={cn('card bg-base-100 shadow-xs', className)}>
   <div class="card-body p-4 md:p-6">
     <h2 class="card-title">{title}</h2>
 

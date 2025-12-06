@@ -77,8 +77,8 @@ describe('SettingsNote', () => {
       const flexContainer = icon.parentElement?.parentElement;
       expect(flexContainer).toHaveClass('flex', 'gap-3');
 
-      // Icon should be in flex-shrink-0 container
-      expect(icon.parentElement).toHaveClass('flex-shrink-0');
+      // Icon should be in shrink-0 container
+      expect(icon.parentElement).toHaveClass('shrink-0');
 
       // Content should be in flex-1 container
       expect(content.parentElement).toHaveClass('flex-1');
@@ -117,14 +117,14 @@ describe('SettingsNote', () => {
       wrapperFactory.render({
         childContent: `
           <p>Use this command:</p>
-          <code data-testid="code-block" class="bg-base-300 px-2 py-1 rounded">npm install</code>
+          <code data-testid="code-block" class="bg-base-300 px-2 py-1 rounded-sm">npm install</code>
         `,
       });
 
       const codeBlock = screen.getByTestId('code-block');
       expect(codeBlock).toBeInTheDocument();
       expect(codeBlock).toHaveTextContent('npm install');
-      expect(codeBlock).toHaveClass('bg-base-300', 'px-2', 'py-1', 'rounded');
+      expect(codeBlock).toHaveClass('bg-base-300', 'px-2', 'py-1', 'rounded-sm');
     });
 
     it('renders with lists', () => {
@@ -341,14 +341,14 @@ describe('SettingsNote', () => {
         childContent: `
           <p>
             <strong>Note:</strong> To fully enable authentication, ensure the 
-            <code class="bg-base-300 px-1 rounded">redirectURI</code> is correctly configured 
+            <code class="bg-base-300 px-1 rounded-sm">redirectURI</code> is correctly configured 
             in your OAuth provider settings.
           </p>
         `,
       });
 
       expect(screen.getByText('Note:')).toBeInTheDocument();
-      expect(screen.getByText('redirectURI')).toHaveClass('bg-base-300', 'px-1', 'rounded');
+      expect(screen.getByText('redirectURI')).toHaveClass('bg-base-300', 'px-1', 'rounded-sm');
     });
 
     it('renders system requirement note', () => {

@@ -217,7 +217,7 @@
         const button = document.createElement('button');
         button.type = 'button';
         button.className =
-          'species-prediction-item w-full text-left px-4 py-2 hover:bg-base-200 focus:bg-base-200 focus:outline-none border-none bg-transparent text-sm';
+          'species-prediction-item w-full text-left px-4 py-2 hover:bg-base-200 focus:bg-base-200 focus:outline-hidden border-none bg-transparent text-sm';
         // eslint-disable-next-line security/detect-object-injection
         button.textContent = filteredPredictions[i];
         button.setAttribute('role', 'option');
@@ -456,7 +456,7 @@
         {disabled}
         {required}
         class={cn(
-          'input input-bordered join-item flex-1',
+          'input  join-item flex-1',
           safeGet(inputSizeClasses, size, ''),
           !isValid && 'input-error'
         )}
@@ -513,7 +513,7 @@
   <!-- Tooltip -->
   {#if tooltip && showTooltip}
     <div
-      class="absolute p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
+      class="absolute p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded-sm shadow-lg max-w-xs"
       style:z-index={Z_INDEX.PORTAL_TOOLTIP}
       role="tooltip"
     >

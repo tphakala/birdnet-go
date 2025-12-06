@@ -14,7 +14,7 @@
 {#if show}
   <div class="mt-4 p-4 bg-success/10 border border-success/20 text-success rounded-lg {className}">
     <div class="flex items-start gap-3">
-      <div class="w-5 h-5 text-success flex-shrink-0 mt-0.5">
+      <div class="w-5 h-5 text-success shrink-0 mt-0.5">
         <CircleCheck class="size-5" />
       </div>
       <div class="flex-1">

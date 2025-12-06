@@ -431,7 +431,7 @@ Accessibility:
       sizeClass(),
       'flex items-center gap-2',
       'font-normal',
-      'min-w-[11rem]', // Consistent width to prevent layout shifts
+      'min-w-44', // Consistent width to prevent layout shifts
       'justify-start', // Left-align content within button
       disabled ? 'btn-disabled' : ''
     )}
@@ -527,7 +527,7 @@ Accessibility:
               type="button"
               role="gridcell"
               class={cn(
-                'relative h-8 w-8 rounded text-sm transition-colors',
+                'relative h-8 w-8 rounded-sm text-sm transition-colors',
                 'hover:bg-base-200 focus:ring-2 focus:ring-primary focus:ring-offset-1',
                 isDateSelected(date) ? 'bg-primary text-primary-content font-semibold' : '',
                 isToday(date) && !isDateSelected(date) ? 'bg-base-200 font-semibold' : '',

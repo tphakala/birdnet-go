@@ -336,7 +336,7 @@
 
 <!-- Snippets for better organization -->
 {#snippet heroSection(detection: Detection)}
-  <section class="card bg-base-100 shadow-sm" aria-labelledby="species-heading">
+  <section class="card bg-base-100 shadow-xs" aria-labelledby="species-heading">
     <div class="card-body">
       <!-- Species info container - similar to ReviewModal -->
       <div class="bg-base-200/50 rounded-lg p-4" role="region" aria-label="Species information">
@@ -368,7 +368,7 @@
 
           <!-- Section 2: Date & Time (fixed width) -->
           <div
-            class="flex-shrink-0 text-center"
+            class="shrink-0 text-center"
             style:min-width="120px"
             role="region"
             aria-labelledby="datetime-heading"
@@ -391,7 +391,7 @@
 
           <!-- Section 3: Weather Conditions (fixed width) -->
           <div
-            class="flex-shrink-0 text-center"
+            class="shrink-0 text-center"
             style:min-width="180px"
             role="region"
             aria-labelledby="weather-heading"
@@ -421,7 +421,7 @@
 
           <!-- Section 4: Confidence + Actions (fixed width) -->
           <div
-            class="flex-shrink-0 flex flex-col items-center"
+            class="shrink-0 flex flex-col items-center"
             style:min-width="120px"
             role="region"
             aria-labelledby="confidence-heading"
@@ -542,60 +542,60 @@
         <section aria-labelledby="taxonomy-skeleton-heading">
           <div class="animate-pulse">
             <!-- Skeleton heading -->
-            <div class="h-6 bg-base-300 rounded w-48 mb-4"></div>
+            <div class="h-6 bg-base-300 rounded-sm w-48 mb-4"></div>
 
             <!-- Skeleton taxonomy hierarchy container -->
             <div class="bg-base-200 rounded-lg p-6">
               <div class="space-y-3">
                 <!-- Kingdom skeleton -->
                 <div class="flex items-center gap-3">
-                  <div class="h-4 bg-base-300 rounded w-16"></div>
-                  <div class="h-4 bg-base-300 rounded w-24"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-16"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-24"></div>
                 </div>
                 <!-- Phylum skeleton -->
                 <div class="flex items-center gap-3 ml-6">
-                  <div class="h-4 bg-base-300 rounded w-14"></div>
-                  <div class="h-4 bg-base-300 rounded w-20"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-14"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-20"></div>
                 </div>
                 <!-- Class skeleton -->
                 <div class="flex items-center gap-3 ml-12">
-                  <div class="h-4 bg-base-300 rounded w-10"></div>
-                  <div class="h-4 bg-base-300 rounded w-16"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-10"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-16"></div>
                 </div>
                 <!-- Order skeleton -->
                 <div class="flex items-center gap-3 ml-18">
-                  <div class="h-4 bg-base-300 rounded w-12"></div>
-                  <div class="h-4 bg-base-300 rounded w-28"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-12"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-28"></div>
                 </div>
                 <!-- Family skeleton -->
                 <div class="flex items-center gap-3 ml-24">
-                  <div class="h-4 bg-base-300 rounded w-14"></div>
-                  <div class="h-4 bg-base-300 rounded w-32"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-14"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-32"></div>
                 </div>
                 <!-- Genus skeleton -->
                 <div class="flex items-center gap-3 ml-30">
-                  <div class="h-4 bg-base-300 rounded w-12"></div>
-                  <div class="h-4 bg-base-300 rounded w-20"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-12"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-20"></div>
                 </div>
                 <!-- Species skeleton -->
                 <div class="flex items-center gap-3 ml-36">
-                  <div class="h-4 bg-base-300 rounded w-16"></div>
-                  <div class="h-4 bg-base-300 rounded w-24"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-16"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-24"></div>
                 </div>
               </div>
             </div>
 
             <!-- Skeleton subspecies section -->
             <div class="mt-6">
-              <div class="h-6 bg-base-300 rounded w-32 mb-4"></div>
+              <div class="h-6 bg-base-300 rounded-sm w-32 mb-4"></div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div class="bg-base-200 rounded-lg p-3">
-                  <div class="h-4 bg-base-300 rounded w-full mb-2"></div>
-                  <div class="h-3 bg-base-300 rounded w-3/4"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-full mb-2"></div>
+                  <div class="h-3 bg-base-300 rounded-sm w-3/4"></div>
                 </div>
                 <div class="bg-base-200 rounded-lg p-3">
-                  <div class="h-4 bg-base-300 rounded w-full mb-2"></div>
-                  <div class="h-3 bg-base-300 rounded w-2/3"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-full mb-2"></div>
+                  <div class="h-3 bg-base-300 rounded-sm w-2/3"></div>
                 </div>
               </div>
             </div>
@@ -719,7 +719,7 @@
   </div>
 
   {#if isLoadingDetection}
-    <div class="card bg-base-100 shadow-sm">
+    <div class="card bg-base-100 shadow-xs">
       <div class="card-body">
         <div class="flex justify-center items-center h-64" aria-label="Loading detection details">
           <LoadingSpinner size="lg" />
@@ -727,7 +727,7 @@
       </div>
     </div>
   {:else if detectionError}
-    <div class="card bg-base-100 shadow-sm">
+    <div class="card bg-base-100 shadow-xs">
       <div class="card-body">
         <div role="alert" aria-live="assertive">
           <ErrorAlert message={detectionError} />
@@ -739,7 +739,7 @@
     {@render heroSection(detection)}
 
     <!-- Media Section -->
-    <section class="card bg-base-100 shadow-sm" aria-labelledby="media-heading">
+    <section class="card bg-base-100 shadow-xs" aria-labelledby="media-heading">
       <div class="card-body">
         <h2 id="media-heading" class="text-xl font-semibold mb-4">{t('detections.media.title')}</h2>
         <div role="region" aria-label="Audio recording and spectrogram for {detection.commonName}">
@@ -759,12 +759,12 @@
     </section>
 
     <!-- Tabbed Content -->
-    <section class="card bg-base-100 shadow-sm" aria-labelledby="tabs-heading">
+    <section class="card bg-base-100 shadow-xs" aria-labelledby="tabs-heading">
       <div class="card-body">
         <h2 id="tabs-heading" class="sr-only">Detection information tabs</h2>
         <!-- Tab Navigation -->
         <div
-          class="tabs tabs-boxed mb-6 overflow-x-auto flex-nowrap"
+          class="tabs tabs-box mb-6 overflow-x-auto flex-nowrap"
           role="tablist"
           aria-label="Detection details tabs"
         >

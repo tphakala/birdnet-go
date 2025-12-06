@@ -569,7 +569,7 @@
   <button
     bind:this={buttonRef}
     onclick={() => (dropdownOpen = !dropdownOpen)}
-    class="w-full h-full relative focus:outline-none group"
+    class="w-full h-full relative focus:outline-hidden group"
     aria-expanded={dropdownOpen}
     aria-haspopup="true"
     aria-label={`Audio level for ${selectedSource ? getSourceDisplayName(selectedSource) : 'No source'}`}
@@ -607,7 +607,7 @@
   {#if selectedSource && !dropdownOpen}
     <!-- Tooltip -->
     <div
-      class="invisible group-hover:visible absolute left-1/2 transform -translate-x-1/2 -translate-y-full mt-2 px-2 py-1 bg-gray-900 text-gray-50 text-sm rounded whitespace-nowrap z-50"
+      class="invisible group-hover:visible absolute left-1/2 transform -translate-x-1/2 -translate-y-full mt-2 px-2 py-1 bg-gray-900 text-gray-50 text-sm rounded-sm whitespace-nowrap z-50"
       style:top="-5px"
       aria-hidden="true"
     >
@@ -690,7 +690,7 @@
   <!-- Status message -->
   {#if showStatus}
     <div
-      class="fixed bottom-4 right-4 bg-primary text-primary-content p-2 rounded shadow-lg z-50"
+      class="fixed bottom-4 right-4 bg-primary text-primary-content p-2 rounded-sm shadow-lg z-50"
       role="status"
       aria-live="polite"
     >

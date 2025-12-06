@@ -339,7 +339,7 @@
         <div class="flex items-start flex-row">
           <div class="hidden xs:flex flex-initial">
             <div
-              class="mx-auto flex h-12 w-12 sm:w-12 sm:h-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 sm:mx-0 sm:h-10 sm:w-10"
+              class="mx-auto flex h-12 w-12 sm:w-12 sm:h-12 shrink-0 items-center justify-center rounded-full bg-blue-600 sm:mx-0 sm:h-10 sm:w-10"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -367,7 +367,7 @@
                   type="password"
                   id="loginPassword"
                   bind:value={password}
-                  class="input input-bordered"
+                  class="input"
                   required
                   disabled={isAnyLoading}
                   autocomplete="current-password"
@@ -392,7 +392,7 @@
         </div>
 
         {#if authConfig.basicEnabled}
-          <div class="modal-action px-8 xs:px-[4.5rem] flex-row gap-4 justify-between">
+          <div class="modal-action px-8 xs:px-18 flex-row gap-4 justify-between">
             <button
               type="button"
               onclick={onClose}

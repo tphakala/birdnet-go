@@ -89,7 +89,7 @@
           <!-- Icon -->
           <div
             class={cn(
-              'relative z-10 flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-colors',
+              'relative z-10 shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-colors',
               stage.status === 'completed'
                 ? 'bg-success/20'
                 : stage.status === 'error'
@@ -177,15 +177,15 @@
           )}
         >
           {#if stage.status === 'completed'}
-            <Check class={cn('size-5 flex-shrink-0', getStatusColor(stage.status))} />
+            <Check class={cn('size-5 shrink-0', getStatusColor(stage.status))} />
           {:else if stage.status === 'error'}
-            <X class={cn('size-5 flex-shrink-0', getStatusColor(stage.status))} />
+            <X class={cn('size-5 shrink-0', getStatusColor(stage.status))} />
           {:else if stage.status === 'in_progress'}
-            <Clock class={cn('size-5 flex-shrink-0', getStatusColor(stage.status))} />
+            <Clock class={cn('size-5 shrink-0', getStatusColor(stage.status))} />
           {:else if stage.status === 'skipped'}
-            <BookmarkMinus class={cn('size-5 flex-shrink-0', getStatusColor(stage.status))} />
+            <BookmarkMinus class={cn('size-5 shrink-0', getStatusColor(stage.status))} />
           {:else}
-            <Info class={cn('size-5 flex-shrink-0', getStatusColor(stage.status))} />
+            <Info class={cn('size-5 shrink-0', getStatusColor(stage.status))} />
           {/if}
 
           <div class="flex-1 text-left">
@@ -230,7 +230,7 @@
             <div class="flex items-start gap-4">
               <div
                 class={cn(
-                  'flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center',
+                  'shrink-0 w-10 h-10 rounded-full flex items-center justify-center',
                   stage.status === 'completed'
                     ? 'bg-success/20'
                     : stage.status === 'error'

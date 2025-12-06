@@ -258,7 +258,7 @@
   <div class="alert alert-warning">
     <div class="flex flex-col gap-2 w-full">
       <div class="flex items-start gap-3">
-        <div class="flex-shrink-0">
+        <div class="shrink-0">
           <TriangleAlert class="size-5" />
         </div>
         <div class="flex-1">
@@ -319,7 +319,7 @@
                   id="template-title"
                   type="text"
                   bind:value={editedTitle}
-                  class="input input-bordered w-full font-mono text-sm"
+                  class="input w-full font-mono text-sm"
                   placeholder={t('settings.notifications.templates.titlePlaceholder')}
                 />
               </div>
@@ -333,7 +333,7 @@
                 <textarea
                   id="template-message"
                   bind:value={editedMessage}
-                  class="textarea textarea-bordered w-full font-mono text-sm"
+                  class="textarea w-full font-mono text-sm"
                   rows="6"
                   placeholder={t('settings.notifications.templates.messagePlaceholder')}
                 ></textarea>
@@ -345,7 +345,7 @@
                   class:alert-success={templateStatusType === 'success'}
                   class:alert-error={templateStatusType === 'error'}
                 >
-                  <div class="flex-shrink-0">
+                  <div class="shrink-0">
                     {#if templateStatusType === 'success'}
                       <CircleCheck class="size-4" />
                     {:else if templateStatusType === 'error'}
@@ -363,7 +363,7 @@
                   class:alert-success={statusType === 'success'}
                   class:alert-error={statusType === 'error'}
                 >
-                  <div class="flex-shrink-0">
+                  <div class="shrink-0">
                     {#if statusType === 'info'}
                       <Info class="size-4" />
                     {:else if statusType === 'success'}
@@ -432,7 +432,7 @@
             </h3>
             <p class="text-sm text-base-content/80 mb-3">
               {t('settings.notifications.templates.variablesDescription')}
-              <code class="bg-base-300 px-1 rounded">&#123;&#123;.VariableName&#125;&#125;</code>
+              <code class="bg-base-300 px-1 rounded-sm">&#123;&#123;.VariableName&#125;&#125;</code>
             </p>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-xs">

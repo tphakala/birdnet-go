@@ -244,9 +244,7 @@
 
         <!-- Loading spinner overlay -->
         {#if thumbnailLoader.showSpinner}
-          <div
-            class="absolute inset-0 flex items-center justify-center bg-base-200 bg-opacity-75 rounded-md"
-          >
+          <div class="absolute inset-0 flex items-center justify-center bg-base-200/75 rounded-md">
             <div class="loading loading-spinner loading-sm text-primary"></div>
           </div>
         {/if}

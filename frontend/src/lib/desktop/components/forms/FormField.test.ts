@@ -52,7 +52,7 @@ describe('FormField', () => {
       expect(onChange).toHaveBeenLastCalledWith('testuser');
     });
 
-    it('shows validation errors after blur', async () => {
+    it('shows validation errors after blur-xs', async () => {
       const user = userEvent.setup();
 
       formFieldTest.render({

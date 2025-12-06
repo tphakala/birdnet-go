@@ -44,7 +44,7 @@
 </script>
 
 <div
-  class={`${sizeClasses()} relative overflow-hidden rounded-lg bg-base-100 shadow-md flex-shrink-0 ${className}`}
+  class={`${sizeClasses()} relative overflow-hidden rounded-lg bg-base-100 shadow-md shrink-0 ${className}`}
 >
   <img
     src="/api/v2/media/species-image?name={encodeURIComponent(scientificName)}"

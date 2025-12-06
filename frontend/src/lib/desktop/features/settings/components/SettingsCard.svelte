@@ -61,7 +61,7 @@
   // PERFORMANCE OPTIMIZATION: Memoize computed values with $derived
   let showHeader = $derived(!!title || !!description || !!header);
   let bodyClasses = $derived(cn(padding ? 'px-6 pb-6' : ''));
-  let cardClasses = $derived(cn('card bg-base-100 shadow-xs', className));
+  let cardClasses = $derived(cn('card bg-base-100 shadow-2xs', className));
 </script>
 
 <div class={cardClasses} data-testid="settings-card" {...rest}>

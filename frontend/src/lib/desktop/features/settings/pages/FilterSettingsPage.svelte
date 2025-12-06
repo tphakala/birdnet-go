@@ -338,7 +338,7 @@
                     <input
                       type="text"
                       bind:value={editSpecies}
-                      class="input input-sm input-bordered flex-1"
+                      class="input input-sm flex-1"
                       onkeydown={handleEditKeydown}
                       placeholder={t('settings.filters.speciesNamePlaceholder')}
                     />

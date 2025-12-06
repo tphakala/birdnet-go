@@ -15,7 +15,7 @@ describe('Card', () => {
 
     const card = container.querySelector('.card');
     expect(card).toBeInTheDocument();
-    expect(card).toHaveClass('card', 'bg-base-100', 'shadow-xs');
+    expect(card).toHaveClass('card', 'bg-base-100', 'shadow-2xs');
   });
 
   it('renders with title', () => {

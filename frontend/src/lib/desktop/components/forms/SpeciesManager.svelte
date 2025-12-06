@@ -261,7 +261,7 @@
           bind:value={input}
           onkeydown={handleKeyDown}
           {placeholder}
-          class="input input-bordered w-full"
+          class="input w-full"
           list={listId}
         />
 
@@ -273,7 +273,7 @@
               <button
                 type="button"
                 onclick={() => selectPrediction(prediction)}
-                class="w-full px-4 py-2 text-left hover:bg-base-200 focus:bg-base-200 focus:outline-none"
+                class="w-full px-4 py-2 text-left hover:bg-base-200 focus:bg-base-200 focus:outline-hidden"
               >
                 {formatSpeciesName(prediction)}
               </button>
@@ -321,7 +321,7 @@
                 bind:value={editingValue}
                 onkeydown={handleEditKeyDown}
                 onblur={saveEdit}
-                class="input input-sm input-bordered w-full"
+                class="input input-sm w-full"
                 data-edit-index={index}
               />
             {:else}

@@ -284,9 +284,7 @@
 >
   <!-- Chip Variant -->
   {#if variant === 'chip'}
-    <div
-      class="flex flex-wrap gap-2 p-3 bg-base-100 border border-base-300 rounded-lg min-h-[3rem]"
-    >
+    <div class="flex flex-wrap gap-2 p-3 bg-base-100 border border-base-300 rounded-lg min-h-12">
       <!-- Search Input -->
       {#if searchable}
         <div class="flex-1 min-w-[280px]">
@@ -443,7 +441,7 @@
                   <!-- Visual checkbox indicator -->
                   <span
                     class={cn(
-                      'checkbox checkbox-primary checkbox-sm flex-shrink-0',
+                      'checkbox checkbox-primary checkbox-sm shrink-0',
                       isSelected && 'checkbox-checked',
                       !canSelect && 'checkbox-disabled'
                     )}
@@ -473,7 +471,7 @@
                 {#if showFrequency && species.frequency}
                   {@const freqConfig = getFrequencyBadge(species.frequency)}
                   {#if freqConfig}
-                    <div class={cn('badge badge-sm ml-2 flex-shrink-0', freqConfig.color)}>
+                    <div class={cn('badge badge-sm ml-2 shrink-0', freqConfig.color)}>
                       {freqConfig.label}
                     </div>
                   {/if}
@@ -497,7 +495,7 @@
             {placeholder}
             aria-label="Search species"
             class={cn(
-              'input input-bordered w-full',
+              'input  w-full',
               /* eslint-disable-next-line security/detect-object-injection -- Safe: size prop is constrained to specific string literals */
               sizeConfig[size].input
             )}

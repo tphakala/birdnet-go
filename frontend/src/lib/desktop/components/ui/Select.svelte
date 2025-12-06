@@ -26,7 +26,7 @@
   }: Props = $props();
 </script>
 
-<select {id} bind:value class={cn('select select-bordered w-full', className)} {disabled} {...rest}>
+<select {id} bind:value class={cn('select  w-full', className)} {disabled} {...rest}>
   {#if placeholder}
     <option value="" disabled>{placeholder}</option>
   {/if}

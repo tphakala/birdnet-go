@@ -33,7 +33,7 @@
 </script>
 
 <select
-  class="select select-bordered select-sm {className}"
+  class="select select-sm {className}"
   value={currentLocale}
   onchange={handleLanguageChange}
   aria-label={t('common.aria.selectLanguage')}

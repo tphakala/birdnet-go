@@ -186,7 +186,7 @@ describe('FilterForm', () => {
     });
 
     const card = screen.getByText('Filter Data').closest('.card');
-    expect(card).toHaveClass('bg-base-100', 'shadow-sm');
+    expect(card).toHaveClass('bg-base-100', 'shadow-xs');
 
     const form = screen.getByRole('button', { name: 'Apply Filters' }).closest('form');
     expect(form).toHaveClass('space-y-4');

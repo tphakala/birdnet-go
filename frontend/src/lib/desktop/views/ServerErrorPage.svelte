@@ -36,12 +36,12 @@
     <div class="mt-8 text-left">
       <h3 class="text-2xl font-semibold text-base-content mb-2">Error Details</h3>
       <pre
-        class="bg-base-200 p-4 rounded overflow-x-auto text-sm text-base-content font-mono">{message}</pre>
+        class="bg-base-200 p-4 rounded-sm overflow-x-auto text-sm text-base-content font-mono">{message}</pre>
 
       {#if showDetails && stackTrace}
         <h3 class="text-2xl font-semibold text-base-content mt-4 mb-2">Stack Trace</h3>
         <pre
-          class="bg-base-200 p-4 rounded overflow-x-auto text-sm text-base-content font-mono">{stackTrace}</pre>
+          class="bg-base-200 p-4 rounded-sm overflow-x-auto text-sm text-base-content font-mono">{stackTrace}</pre>
       {/if}
     </div>
 

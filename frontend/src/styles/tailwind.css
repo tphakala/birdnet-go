@@ -1,9 +1,167 @@
 /* Import custom styles from legacy custom.css that are used by Svelte UI */
-@import url('./custom.css');
+@import url('./custom.css') layer(base);
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+/* DaisyUI plugin with themes */
+@plugin "daisyui" {
+  themes:
+    light --default,
+    dark --prefersdark;
+}
+
+/* Light theme configuration */
+@plugin "daisyui/theme" {
+  name: 'light';
+  default: true;
+  color-scheme: light;
+
+  /* Primary colors */
+  --color-primary: #2563eb;
+  --color-primary-content: #ffffff;
+
+  /* Secondary colors */
+  --color-secondary: #4b5563;
+  --color-secondary-content: #ffffff;
+
+  /* Accent colors */
+  --color-accent: #0284c7;
+  --color-accent-content: #ffffff;
+
+  /* Neutral colors */
+  --color-neutral: #1f2937;
+  --color-neutral-content: #ffffff;
+
+  /* Base colors */
+  --color-base-100: #ffffff;
+  --color-base-200: #f3f4f6;
+  --color-base-300: #e5e7eb;
+  --color-base-content: #1f2937;
+
+  /* Status colors */
+  --color-info: #0ea5e9;
+  --color-info-content: #ffffff;
+  --color-success: #22c55e;
+  --color-success-content: #ffffff;
+  --color-warning: #f59e0b;
+  --color-warning-content: #ffffff;
+  --color-error: #ef4444;
+  --color-error-content: #ffffff;
+
+  /* Border radius */
+  --radius-box: 0.5rem;
+  --radius-field: 0.3rem;
+  --radius-selector: 0.25rem;
+
+  /* Animation */
+  --animation-btn: 0.25s;
+  --animation-input: 0.2s;
+
+  /* Border */
+  --border: 1px;
+}
+
+/* Dark theme configuration */
+@plugin "daisyui/theme" {
+  name: 'dark';
+  prefersdark: true;
+  color-scheme: dark;
+
+  /* Primary colors */
+  --color-primary: #3b82f6;
+  --color-primary-content: #020617;
+
+  /* Secondary colors */
+  --color-secondary: #6b7280;
+  --color-secondary-content: #ffffff;
+
+  /* Accent colors */
+  --color-accent: #0369a1;
+  --color-accent-content: #ffffff;
+
+  /* Neutral colors */
+  --color-neutral: #d1d5db;
+  --color-neutral-content: #1f2937;
+
+  /* Base colors */
+  --color-base-100: #1f2937;
+  --color-base-200: #111827;
+  --color-base-300: #0f172a;
+  --color-base-content: #d1d5db;
+
+  /* Status colors */
+  --color-info: #0284c7;
+  --color-info-content: #ffffff;
+  --color-success: #16a34a;
+  --color-success-content: #ffffff;
+  --color-warning: #d97706;
+  --color-warning-content: #ffffff;
+  --color-error: #dc2626;
+  --color-error-content: #020617;
+
+  /* Border radius */
+  --radius-box: 0.5rem;
+  --radius-field: 0.3rem;
+  --radius-selector: 0.25rem;
+
+  /* Animation */
+  --animation-btn: 0.25s;
+  --animation-input: 0.2s;
+
+  /* Border */
+  --border: 1px;
+}
+
+/* Custom breakpoints */
+@theme {
+  --breakpoint-*: initial;
+  --breakpoint-xs: 400px;
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
+}
+
+/* Custom surface colors for both themes */
+:root,
+[data-theme='light'] {
+  --surface-100: #ffffff;
+  --surface-200: #f8fafc;
+  --surface-300: #f1f5f9;
+  --surface-400: #e2e8f0;
+  --border-100: #e2e8f0;
+  --border-200: #cbd5e1;
+  --hover-overlay: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme='dark'] {
+  --surface-100: #1f2937;
+  --surface-200: #262f3f;
+  --surface-300: #2d3748;
+  --surface-400: #374151;
+  --border-100: #334155;
+  --border-200: #475569;
+  --hover-overlay: rgba(255, 255, 255, 0.05);
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
 
 /* Remove when fixed in DaisyUI: https://github.com/saadeghi/daisyui/issues/3040 */
 html {

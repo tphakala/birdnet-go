@@ -455,7 +455,7 @@ describe('NumberField', () => {
     expect(onUpdate).toHaveBeenCalledWith(0);
   });
 
-  it('clamps values on blur event', async () => {
+  it('clamps values on blur-xs event', async () => {
     const onUpdate = vi.fn();
 
     render(NumberField, {

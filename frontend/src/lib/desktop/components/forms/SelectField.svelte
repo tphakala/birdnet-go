@@ -90,7 +90,7 @@
     bind:value
     {disabled}
     {required}
-    class={cn('select select-bordered w-full', safeGet(sizeClasses, size, ''))}
+    class={cn('select  w-full', safeGet(sizeClasses, size, ''))}
     onchange={handleChange}
   >
     {#if placeholder}
@@ -116,7 +116,7 @@
 
   {#if tooltip && showTooltip}
     <div
-      class="absolute top-full left-0 z-tooltip p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
+      class="absolute top-full left-0 z-tooltip p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded-sm shadow-lg max-w-xs"
       role="tooltip"
     >
       {tooltip}

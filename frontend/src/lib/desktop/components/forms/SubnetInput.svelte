@@ -140,7 +140,7 @@
       bind:value={newSubnet}
       {placeholder}
       {disabled}
-      class={cn('input input-bordered flex-1', newSubnetError ? 'input-error' : '')}
+      class={cn('input  flex-1', newSubnetError ? 'input-error' : '')}
       onkeydown={handleKeyDown}
       oninput={handleNewSubnetInput}
       aria-describedby={helpText ? `${fieldId}-help` : undefined}
@@ -183,10 +183,7 @@
             value={subnet}
             oninput={e => updateSubnet(index, (e.target as HTMLInputElement)?.value || '')}
             {disabled}
-            class={cn(
-              'input input-sm input-bordered flex-1',
-              errors.getByIndex(index) ? 'input-error' : ''
-            )}
+            class={cn('input input-sm  flex-1', errors.getByIndex(index) ? 'input-error' : '')}
           />
           <button
             type="button"

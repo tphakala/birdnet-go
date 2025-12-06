@@ -1344,7 +1344,7 @@
               <!-- Map will be initialized here -->
               {#if mapLibraryLoading}
                 <div
-                  class="absolute inset-0 flex items-center justify-center bg-base-100 bg-opacity-75 rounded-lg"
+                  class="absolute inset-0 flex items-center justify-center bg-base-100/75 rounded-lg"
                 >
                   <div class="flex flex-col items-center gap-2">
                     <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
@@ -1615,7 +1615,7 @@
 <!-- Map Modal -->
 {#if mapModalOpen}
   <div
-    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center"
+    class="fixed inset-0 bg-black/50 flex items-center justify-center"
     style:z-index="9999"
     role="dialog"
     aria-modal="true"
@@ -1668,7 +1668,7 @@
           <!-- Map will be initialized here when modal opens -->
           {#if mapLibraryLoading}
             <div
-              class="absolute inset-0 flex items-center justify-center bg-base-100 bg-opacity-75 rounded-lg"
+              class="absolute inset-0 flex items-center justify-center bg-base-100/75 rounded-lg"
             >
               <div class="flex flex-col items-center gap-2">
                 <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
@@ -1718,7 +1718,7 @@
 <!-- Range Filter Species Modal -->
 {#if rangeFilterState.showModal}
   <div
-    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center"
+    class="fixed inset-0 bg-black/50 flex items-center justify-center"
     style:z-index="9999"
     role="dialog"
     aria-modal="true"
@@ -1797,7 +1797,7 @@
         {:else if rangeFilterState.species.length > 0}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {#each rangeFilterState.species as species}
-              <div class="p-2 rounded hover:bg-base-200">
+              <div class="p-2 rounded-sm hover:bg-base-200">
                 <div class="font-medium">{species.commonName}</div>
                 <div class="text-sm text-base-content/70">{species.scientificName}</div>
               </div>
