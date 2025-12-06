@@ -495,7 +495,7 @@
             {placeholder}
             aria-label="Search species"
             class={cn(
-              'input  w-full',
+              'input w-full',
               /* eslint-disable-next-line security/detect-object-injection -- Safe: size prop is constrained to specific string literals */
               sizeConfig[size].input
             )}
