@@ -477,12 +477,18 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
         });
 
         // Attempt to save - it may fail but should not crash
+        // Use a flag to track if error occurred, avoid expect inside catch
+        let saveError: unknown = null;
         try {
           await settingsActions.saveSettings();
         } catch (error) {
           // Save might fail with corrupted data, but that's ok
-          expect(error).toBeDefined();
+          saveError = error;
         }
+
+        // If an error occurred, it should be defined (not undefined)
+        // This is expected behavior with corrupted data
+        expect(saveError === null || saveError !== undefined).toBe(true);
 
         // The important thing is no console errors were thrown
         expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('Cannot read'));
@@ -741,26 +747,29 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
       render(SpeciesSettingsPage.default);
 
       const addButton = screen.queryByTestId('add-configuration-button');
-      if (addButton) {
-        // Focus on button
-        addButton.focus();
-        expect(document.activeElement).toBe(addButton);
 
-        // Update settings
-        settingsActions.updateSection('realtime', {
-          species: {
-            include: ['NewBird'],
-            exclude: [],
-            config: {},
-          },
-        });
+      // Assert button exists before testing focus behavior
+      expect(addButton).toBeTruthy();
+      if (!addButton) throw new Error('Add button not found');
 
-        // Wait for update
-        await waitFor(() => {
-          // Focus should be maintained or properly managed
-          expect(document.activeElement).toBeTruthy();
-        });
-      }
+      // Focus on button
+      addButton.focus();
+      expect(document.activeElement).toBe(addButton);
+
+      // Update settings
+      settingsActions.updateSection('realtime', {
+        species: {
+          include: ['NewBird'],
+          exclude: [],
+          config: {},
+        },
+      });
+
+      // Wait for update
+      await waitFor(() => {
+        // Focus should be maintained or properly managed
+        expect(document.activeElement).toBeTruthy();
+      });
     });
 
     it('handles keyboard navigation with empty lists', async () => {

@@ -26,13 +26,13 @@ describe('Button Accessibility Tests', () => {
     document.body.innerHTML = '<button></button>';
     const button = document.querySelector('button');
     expect(button).toBeTruthy();
+    expect(button).not.toBeNull();
+    if (!button) throw new Error('Button not found');
 
     // This should throw due to missing button label
-    if (button) {
-      await expect(expectNoA11yViolations(button, A11Y_CONFIGS.strict)).rejects.toThrow(
-        /button-name/
-      );
-    }
+    await expect(expectNoA11yViolations(button, A11Y_CONFIGS.strict)).rejects.toThrow(
+      /button-name/
+    );
 
     // Cleanup
     document.body.innerHTML = '';

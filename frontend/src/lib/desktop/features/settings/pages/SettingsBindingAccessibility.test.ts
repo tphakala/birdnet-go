@@ -220,28 +220,31 @@ describe('Settings Binding Accessibility Tests', () => {
       });
 
       // Some elements should have accessible names (enforce meaningful standard)
-      if (totalElements > 0) {
-        const labelingPercentage = labeledElementsCount / totalElements;
-        const currentPercentage = Math.round(labelingPercentage * 100);
+      // Assert there are elements to test to avoid divide by zero
+      expect(totalElements).toBeGreaterThan(0);
 
-        // Log current accessibility metrics for tracking progress
+      const labelingPercentage = labeledElementsCount / totalElements;
+      const currentPercentage = Math.round(labelingPercentage * 100);
+
+      // Log current accessibility metrics for tracking progress
+      // eslint-disable-next-line no-console -- Intentional logging for accessibility tracking
+      console.log(
+        `📊 Accessibility Metrics: ${labeledElementsCount}/${totalElements} elements labeled (${currentPercentage}%)`
+      );
+      // eslint-disable-next-line no-console -- Intentional logging for accessibility tracking
+      console.log(`🎯 Current threshold: ${Math.round(ACCESSIBILITY_LABELING_THRESHOLD * 100)}%`);
+
+      // Enforce meaningful accessibility labeling standard
+      expect(labelingPercentage).toBeGreaterThanOrEqual(ACCESSIBILITY_LABELING_THRESHOLD);
+
+      // Track if we're significantly above threshold (ready for next milestone)
+      const isAboveThreshold = labelingPercentage >= ACCESSIBILITY_LABELING_THRESHOLD + 0.1;
+
+      if (isAboveThreshold) {
         // eslint-disable-next-line no-console -- Intentional logging for accessibility tracking
         console.log(
-          `📊 Accessibility Metrics: ${labeledElementsCount}/${totalElements} elements labeled (${currentPercentage}%)`
+          `🚀 Accessibility above threshold! Consider increasing to ${Math.round((ACCESSIBILITY_LABELING_THRESHOLD + 0.1) * 100)}%`
         );
-        // eslint-disable-next-line no-console -- Intentional logging for accessibility tracking
-        console.log(`🎯 Current threshold: ${Math.round(ACCESSIBILITY_LABELING_THRESHOLD * 100)}%`);
-
-        // Enforce meaningful accessibility labeling standard
-        expect(labelingPercentage).toBeGreaterThanOrEqual(ACCESSIBILITY_LABELING_THRESHOLD);
-
-        // Track if we're significantly above threshold (ready for next milestone)
-        if (labelingPercentage >= ACCESSIBILITY_LABELING_THRESHOLD + 0.1) {
-          // eslint-disable-next-line no-console -- Intentional logging for accessibility tracking
-          console.log(
-            `🚀 Accessibility above threshold! Consider increasing to ${Math.round((ACCESSIBILITY_LABELING_THRESHOLD + 0.1) * 100)}%`
-          );
-        }
       }
 
       unmount();
@@ -311,17 +314,17 @@ describe('Settings Binding Accessibility Tests', () => {
       const checkboxes = screen.queryAllByRole('checkbox');
       const allFocusable = [...textboxes, ...checkboxes];
 
-      if (textboxes.length > 0) {
-        const firstFocusable = textboxes[0];
-        firstFocusable.focus();
-        expect(document.activeElement).toBe(firstFocusable);
-      }
+      // Assert we have focusable elements to test
+      expect(textboxes.length).toBeGreaterThan(0);
+      expect(allFocusable.length).toBeGreaterThan(0);
 
-      if (allFocusable.length > 0) {
-        const lastFocusable = allFocusable[allFocusable.length - 1];
-        lastFocusable.focus();
-        expect(document.activeElement).toBe(lastFocusable);
-      }
+      const firstFocusable = textboxes[0];
+      firstFocusable.focus();
+      expect(document.activeElement).toBe(firstFocusable);
+
+      const lastFocusable = allFocusable[allFocusable.length - 1];
+      lastFocusable.focus();
+      expect(document.activeElement).toBe(lastFocusable);
 
       // Should be able to focus elements outside the page content
       // (no focus trapping in normal settings pages)
@@ -402,10 +405,13 @@ describe('Settings Binding Accessibility Tests', () => {
         const hasAriaDescribedBy = input.getAttribute('aria-describedby');
 
         // Validation errors should be accessible if present
-        if (hasAriaInvalid === 'true' && hasAriaDescribedBy) {
-          const errorElement = document.getElementById(hasAriaDescribedBy);
-          expect(errorElement).toBeTruthy();
-        }
+        // Move expect outside conditional - error element lookup is conditional on aria attributes
+        const errorElement = hasAriaDescribedBy
+          ? document.getElementById(hasAriaDescribedBy)
+          : null;
+        const isValidErrorState =
+          hasAriaInvalid !== 'true' || !hasAriaDescribedBy || errorElement !== null;
+        expect(isValidErrorState).toBe(true);
       }
 
       unmount();
