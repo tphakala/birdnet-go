@@ -98,15 +98,15 @@ func TestGenerator_GetSoxSpectrogramArgs(t *testing.T) {
 		raw          bool
 		ffmpegMajor  int
 		hasFfmpegVer bool
-		wantDuration bool // Whether we expect -d parameter
+		wantDuration bool // Whether we expect -d parameter (always true after #1484 fix)
 	}{
 		{
-			name:         "FFmpeg 7.x, no duration needed",
+			name:         "FFmpeg 7.x, duration always needed",
 			width:        800,
 			raw:          false,
 			ffmpegMajor:  7,
 			hasFfmpegVer: true,
-			wantDuration: false,
+			wantDuration: true, // Changed: duration now always required (fixes #1484)
 		},
 		{
 			name:         "FFmpeg 5.x, duration needed",
@@ -125,12 +125,12 @@ func TestGenerator_GetSoxSpectrogramArgs(t *testing.T) {
 			wantDuration: true,
 		},
 		{
-			name:         "Raw mode enabled",
+			name:         "Raw mode with duration",
 			width:        400,
 			raw:          true,
 			ffmpegMajor:  7,
 			hasFfmpegVer: true,
-			wantDuration: false,
+			wantDuration: true, // Changed: duration now always required (fixes #1484)
 		},
 	}
 

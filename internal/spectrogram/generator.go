@@ -592,13 +592,10 @@ func (g *Generator) getSoxArgs(ctx context.Context, audioPath, outputPath string
 }
 
 // getSoxSpectrogramArgs returns the common Sox arguments for spectrogram generation.
-// This implements FFmpeg version-aware optimization for duration handling.
 //
-// FFmpeg 5.x Bug: The sox protocol (-f sox) has a bug where duration information is not
-// correctly passed to SoX. This requires an explicit -d (duration) parameter via ffprobe.
-//
-// FFmpeg 7.x+ Fix: The sox protocol correctly passes duration metadata, eliminating the
-// need for the expensive ffprobe call and -d parameter.
+// The -d (duration) parameter must always be explicitly provided to Sox. Without it,
+// Sox interprets the -x (width in pixels) as seconds of audio time, causing spectrograms
+// to show truncated audio durations (see issue #1484).
 func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, outputPath string, width int, raw bool) []string {
 	heightStr := strconv.Itoa(width / 2)
 	widthStr := strconv.Itoa(width)
@@ -606,38 +603,23 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, output
 	// Build base args without duration parameter
 	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr}
 
-	// Check if we need to explicitly provide duration based on FFmpeg version
-	needsExplicitDuration := true
-	if g.settings.Realtime.Audio.HasFfmpegVersion() {
-		if g.settings.Realtime.Audio.FfmpegMajor >= 7 {
-			// FFmpeg 7.x+: sox protocol works correctly, skip expensive ffprobe call
-			needsExplicitDuration = false
-			g.logger.Debug("FFmpeg 7.x+ detected: skipping explicit duration parameter",
-				"ffmpeg_version", g.settings.Realtime.Audio.FfmpegVersion,
-				"optimization", "enabled")
-		}
+	// Always provide explicit duration via -d parameter to ensure spectrogram
+	// shows the full audio duration regardless of image width (fixes #1484)
+	duration := getCachedAudioDuration(ctx, audioPath)
+	if duration <= 0 {
+		// Fallback: Use configured capture length if ffprobe fails
+		captureLength := g.settings.Realtime.Audio.Export.Length
+		duration = float64(captureLength)
+		g.logger.Warn("FFprobe failed, using configured fallback duration",
+			"fallback_duration_seconds", duration,
+			"audio_path", audioPath)
 	}
 
-	// For FFmpeg <7.x, explicitly provide duration via -d parameter
-	if needsExplicitDuration {
-		// Get audio file duration via ffprobe (with caching)
-		duration := getCachedAudioDuration(ctx, audioPath)
-		if duration <= 0 {
-			// Fallback: Use configured capture length if ffprobe fails
-			captureLength := g.settings.Realtime.Audio.Export.Length
-			duration = float64(captureLength)
-			g.logger.Warn("FFprobe failed, using configured fallback duration",
-				"fallback_duration_seconds", duration,
-				"audio_path", audioPath)
-		}
+	// Convert duration to string, rounding to nearest integer
+	captureLengthStr := strconv.Itoa(int(duration + 0.5))
 
-		// Convert duration to string, rounding to nearest integer
-		captureLengthStr := strconv.Itoa(int(duration + 0.5))
-		args = append(args, "-d", captureLengthStr)
-	}
-
-	// Add remaining common parameters
-	args = append(args, "-z", dynamicRange, "-o", outputPath)
+	// Add duration and remaining common parameters
+	args = append(args, "-d", captureLengthStr, "-z", dynamicRange, "-o", outputPath)
 
 	// Add raw flag if requested (no axes/legends)
 	if raw {
