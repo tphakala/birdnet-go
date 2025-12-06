@@ -42,7 +42,7 @@
   interface SpeciesListResponse {
     species?: Array<{ label: string }>;
   }
-  import { navigationIcons, actionIcons, alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { X, Check, SquarePen, Trash2, Info } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
 
   const logger = loggers.settings;
@@ -348,7 +348,7 @@
                       onclick={saveEdit}
                       aria-label={t('common.aria.saveChanges')}
                     >
-                      {@html actionIcons.check}
+                      <Check class="size-4" />
                     </button>
                     <button
                       type="button"
@@ -356,7 +356,7 @@
                       onclick={cancelEdit}
                       aria-label={t('common.aria.cancelEdit')}
                     >
-                      {@html navigationIcons.close}
+                      <X class="size-4" />
                     </button>
                   {:else}
                     <span class="flex-1 text-sm">{species}</span>
@@ -367,7 +367,7 @@
                       disabled={store.isLoading || store.isSaving}
                       aria-label={t('common.aria.editSpecies')}
                     >
-                      {@html actionIcons.edit}
+                      <SquarePen class="size-4" />
                     </button>
                     <button
                       type="button"
@@ -376,7 +376,7 @@
                       disabled={store.isLoading || store.isSaving}
                       aria-label={t('common.aria.removeSpecies')}
                     >
-                      {@html actionIcons.delete}
+                      <Trash2 class="size-4" />
                     </button>
                   {/if}
                 </div>
@@ -402,9 +402,7 @@
           <!-- Unsaved Changes Indicator -->
           {#if dogBarkFilterHasChanges}
             <div class="mt-2 text-xs text-info flex items-center gap-1">
-              <div class="h-4 w-4">
-                {@html alertIconsSvg.info}
-              </div>
+              <Info class="size-4" />
               <span>{t('settings.actions.unsavedChanges')}</span>
             </div>
           {/if}

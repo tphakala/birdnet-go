@@ -2,7 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { navigationIcons } from '$lib/utils/icons';
+  import { ChevronDown } from '@lucide/svelte';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     title: string;
@@ -51,7 +51,7 @@
     <div class="flex items-center justify-between">
       <span>{title}</span>
       <div class={cn('transition-transform duration-200', isOpen ? 'rotate-180' : '')}>
-        {@html navigationIcons.chevronDown}
+        <ChevronDown class="size-5" />
       </div>
     </div>
   </button>

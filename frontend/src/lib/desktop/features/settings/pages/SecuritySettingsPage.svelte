@@ -36,7 +36,7 @@
     securitySettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import { alertIconsSvg, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { TriangleAlert, ExternalLink } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
 
@@ -356,10 +356,10 @@
                 href="https://console.cloud.google.com/apis/credentials"
                 target="_blank"
                 rel="noopener"
-                class="text-sm text-primary hover:text-primary-focus inline-flex items-center mt-2"
+                class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
               >
                 {t('settings.security.oauth.google.getCredentialsLabel')}
-                {@html systemIcons.externalLink}
+                <ExternalLink class="size-4" />
               </a>
             </div>
 
@@ -427,10 +427,10 @@
                 href="https://github.com/settings/developers"
                 target="_blank"
                 rel="noopener"
-                class="text-sm text-primary hover:text-primary-focus inline-flex items-center mt-2"
+                class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
               >
                 {t('settings.security.oauth.github.getCredentialsLabel')}
-                {@html systemIcons.externalLink}
+                <ExternalLink class="size-4" />
               </a>
             </div>
 
@@ -501,7 +501,7 @@
         </div>
 
         <div class="alert alert-warning">
-          {@html alertIconsSvg.warning}
+          <TriangleAlert class="size-5" />
           <span>
             <strong>{t('settings.security.securityWarningTitle')}</strong> {t('settings.security.subnetWarningText')}
           </span>

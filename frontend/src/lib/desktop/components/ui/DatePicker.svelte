@@ -45,7 +45,7 @@ Accessibility:
 <script lang="ts">
   import { onMount } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
-  import { navigationIcons, systemIcons } from '$lib/utils/icons.js'; // Centralized icons
+  import { Calendar, ChevronLeft, ChevronRight } from '@lucide/svelte';
   import { getLocalDateString } from '$lib/utils/date.js';
   import { t } from '$lib/i18n';
   import type { HTMLAttributes } from 'svelte/elements';
@@ -442,7 +442,7 @@ Accessibility:
     aria-expanded={showCalendar}
     aria-haspopup="true"
   >
-    {@html systemIcons.calendar}
+    <Calendar class="size-4" />
     <span class="truncate leading-normal">{displayText()}</span>
   </button>
 
@@ -488,7 +488,7 @@ Accessibility:
           onclick={goToPreviousMonth}
           aria-label={t('common.aria.previousMonth')}
         >
-          {@html navigationIcons.arrowLeft}
+          <ChevronLeft class="size-4" />
         </button>
 
         <h3 id="month-year-heading" class="text-sm font-semibold">
@@ -501,7 +501,7 @@ Accessibility:
           onclick={goToNextMonth}
           aria-label={t('common.aria.nextMonth')}
         >
-          {@html navigationIcons.arrowRight}
+          <ChevronRight class="size-4" />
         </button>
       </div>
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { dataIcons } from '$lib/utils/icons';
+  import { Terminal } from '@lucide/svelte';
   import { safeArrayAccess } from '$lib/utils/security';
 
   interface ProcessInfo {
@@ -154,7 +154,7 @@
                   <td>
                     <div class="flex items-start gap-2">
                       <div class="p-1.5 bg-primary/10 rounded-md text-primary">
-                        {@html dataIcons.terminal}
+                        <Terminal class="size-4" />
                       </div>
                       <div>
                         <div class="font-medium">

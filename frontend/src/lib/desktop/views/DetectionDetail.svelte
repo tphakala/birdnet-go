@@ -24,7 +24,7 @@
   import SpeciesBadges from '$lib/desktop/components/modals/SpeciesBadges.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
-  import { mediaIcons } from '$lib/utils/icons';
+  import { Download } from '@lucide/svelte';
   import type { Detection } from '$lib/types/detection.types';
   import { hasReviewPermission } from '$lib/utils/auth';
   import { formatLocalDateTime } from '$lib/utils/date';
@@ -442,7 +442,7 @@
                   class="btn btn-ghost btn-sm gap-2"
                   aria-label="Download audio clip for {detection.commonName} detection"
                 >
-                  {@html mediaIcons.download}
+                  <Download class="size-5" />
                   {t('common.actions.download')}
                 </a>
               {/if}
@@ -763,7 +763,11 @@
       <div class="card-body">
         <h2 id="tabs-heading" class="sr-only">Detection information tabs</h2>
         <!-- Tab Navigation -->
-        <div class="tabs tabs-boxed mb-6 overflow-x-auto flex-nowrap" role="tablist" aria-label="Detection details tabs">
+        <div
+          class="tabs tabs-boxed mb-6 overflow-x-auto flex-nowrap"
+          role="tablist"
+          aria-label="Detection details tabs"
+        >
           <button
             id="tab-overview"
             role="tab"

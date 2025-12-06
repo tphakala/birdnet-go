@@ -3,7 +3,7 @@
   import ProgressCard from '$lib/desktop/components/ui/ProgressCard.svelte';
   import ProcessTable from '$lib/desktop/components/ui/ProcessTable.svelte';
   import { t } from '$lib/i18n';
-  import { actionIcons } from '$lib/utils/icons';
+  import { RefreshCw } from '@lucide/svelte';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -369,7 +369,7 @@
         <span class="loading loading-spinner loading-sm mr-2" aria-hidden="true"></span>
       {:else}
         <span class="mr-2" aria-hidden="true">
-          {@html actionIcons.refresh}
+          <RefreshCw class="size-5" />
         </span>
       {/if}
       {t('system.refreshData')}

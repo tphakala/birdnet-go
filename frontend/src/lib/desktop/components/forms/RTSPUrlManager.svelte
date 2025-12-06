@@ -3,7 +3,7 @@
   import FormField from './FormField.svelte';
   import ToggleField from './ToggleField.svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { actionIcons, alertIconsSvg, mediaIcons, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { Plus, X, Video, TriangleAlert } from '@lucide/svelte';
   import { createSafeMap } from '$lib/utils/security';
 
   interface RTSPUrl {
@@ -251,7 +251,7 @@
             disabled={disabled || !canAdd}
             aria-label="Add RTSP URL"
           >
-            {@html actionIcons.add}
+            <Plus class="size-4" />
             Add
           </button>
         </div>
@@ -300,7 +300,7 @@
                   {disabled}
                   aria-label="Remove RTSP stream"
                 >
-                  {@html navigationIcons.close}
+                  <X class="size-4" />
                 </button>
               </div>
             </div>
@@ -362,8 +362,8 @@
     </div>
   {:else}
     <div class="text-center py-8 text-base-content/60 bg-base-200 rounded-lg">
-      <div class="mb-2">
-        {@html mediaIcons.videoCamera}
+      <div class="mb-2 flex justify-center">
+        <Video class="size-5" />
       </div>
       <div class="text-sm font-medium">No RTSP streams configured</div>
       <div class="text-xs">Add RTSP camera streams for audio capture</div>
@@ -373,7 +373,7 @@
   <!-- Max items warning -->
   {#if urls.length >= maxItems}
     <div class="alert alert-warning mt-3">
-      {@html alertIconsSvg.warning}
+      <TriangleAlert class="size-4" />
       <span>Maximum number of RTSP streams ({maxItems}) reached.</span>
     </div>
   {/if}

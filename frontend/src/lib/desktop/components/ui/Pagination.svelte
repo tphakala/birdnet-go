@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { ChevronLeft, ChevronRight } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
   interface Props extends HTMLAttributes<HTMLElement> {
@@ -71,7 +71,7 @@
       disabled={disabled || currentPage === 1}
       aria-label={t('dataDisplay.pagination.goToPreviousPage')}
     >
-      {@html navigationIcons.arrowLeft}
+      <ChevronLeft class="size-4" />
     </button>
 
     <!-- Page numbers -->
@@ -119,7 +119,7 @@
       disabled={disabled || currentPage === totalPages}
       aria-label={t('dataDisplay.pagination.goToNextPage')}
     >
-      {@html navigationIcons.arrowRight}
+      <ChevronRight class="size-4" />
     </button>
   </div>
 </nav>

@@ -2,7 +2,7 @@
   import FormField from './FormField.svelte';
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
+  import { Eye, EyeOff, TriangleAlert } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
@@ -134,9 +134,9 @@
         aria-label={showPassword ? t('forms.labels.hidePassword') : t('forms.labels.showPassword')}
       >
         {#if showPassword}
-          {@html systemIcons.eyeOff}
+          <EyeOff class="size-4" />
         {:else}
-          {@html systemIcons.eye}
+          <Eye class="size-4" />
         {/if}
       </button>
     </div>
@@ -176,8 +176,8 @@
           <ul class="text-xs text-base-content/70 space-y-1">
             {#each passwordStrength.feedback as suggestion}
               <li class="flex items-center gap-1">
-                <div class="h-3 w-3 flex-shrink-0">
-                  {@html alertIconsSvg.warningSmall}
+                <div class="flex-shrink-0">
+                  <TriangleAlert class="size-3" />
                 </div>
                 {suggestion}
               </li>

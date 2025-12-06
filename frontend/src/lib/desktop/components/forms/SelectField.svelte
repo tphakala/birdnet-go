@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
   import type { Snippet } from 'svelte';
-  import { systemIcons } from '$lib/utils/icons';
+  import { Info } from '@lucide/svelte';
   import { safeGet } from '$lib/utils/security';
 
   interface Option {
@@ -79,7 +79,7 @@
           onblur={() => (showTooltip = false)}
           aria-label="Help information"
         >
-          {@html systemIcons.help}
+          <Info class="size-4" />
         </button>
       {/if}
     </label>

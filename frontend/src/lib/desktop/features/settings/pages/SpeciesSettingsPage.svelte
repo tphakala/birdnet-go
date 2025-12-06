@@ -39,7 +39,7 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
-  import { navigationIcons, actionIcons } from '$lib/utils/icons';
+  import { ChevronRight, Plus, SquarePen, Trash2 } from '@lucide/svelte';
   import { toastActions } from '$lib/stores/toast';
 
   const logger = loggers.settings;
@@ -480,7 +480,7 @@
               aria-label="Remove {species}"
               title="Remove species"
             >
-              {@html actionIcons.delete}
+              <Trash2 class="size-4" />
             </button>
           </div>
         {/each}
@@ -527,7 +527,7 @@
               aria-label="Remove {species}"
               title="Remove species"
             >
-              {@html actionIcons.delete}
+              <Trash2 class="size-4" />
             </button>
           </div>
         {/each}
@@ -571,7 +571,7 @@
             onclick={() => (showAddForm = true)}
             disabled={store.isLoading || store.isSaving}
           >
-            {@html actionIcons.add}
+            <Plus class="size-4" />
             Add Configuration
           </button>
         {:else}
@@ -686,7 +686,7 @@
               aria-controls="actionsSection"
             >
               <span class="transition-transform duration-200" class:rotate-90={showActions}>
-                {@html navigationIcons.chevronRight}
+                <ChevronRight class="size-4" />
               </span>
               <span>Configure Actions</span>
               {#if actionCommand}
@@ -847,7 +847,7 @@
                 aria-label="Edit {species} configuration"
                 disabled={store.isLoading || store.isSaving}
               >
-                {@html actionIcons.edit}
+                <SquarePen class="size-4" />
               </button>
 
               <button
@@ -857,7 +857,7 @@
                 aria-label="Remove {species} configuration"
                 disabled={store.isLoading || store.isSaving}
               >
-                {@html actionIcons.delete}
+                <Trash2 class="size-4" />
               </button>
             </div>
           </div>

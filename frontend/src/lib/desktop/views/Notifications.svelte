@@ -1,6 +1,17 @@
 <script>
   import { onMount } from 'svelte';
-  import { actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons';
+  import {
+    RefreshCw,
+    Trash2,
+    Check,
+    Eye,
+    BellOff,
+    XCircle,
+    TriangleAlert,
+    Info,
+    Star,
+    Settings,
+  } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import { deduplicateNotifications, sanitizeNotificationMessage } from '$lib/utils/notifications';
@@ -342,7 +353,7 @@
             class="btn btn-sm btn-ghost"
             aria-label={t('notifications.actions.refresh')}
           >
-            {@html actionIcons.refresh}
+            <RefreshCw class="size-5" />
             Refresh
           </button>
         </div>
@@ -364,7 +375,7 @@
       <div class="card bg-base-100 shadow-sm">
         <div class="card-body text-center py-12">
           <span class="opacity-30 mb-4" aria-hidden="true">
-            {@html systemIcons.bellOff}
+            <BellOff class="size-12" />
           </span>
           <p class="text-lg text-base-content/60">{t('notifications.empty.title')}</p>
           <p class="text-sm text-base-content/40">{t('notifications.empty.subtitle')}</p>
@@ -396,15 +407,15 @@
               <div class="flex-shrink-0">
                 <div class={getNotificationIconClass(notification)}>
                   {#if notification.type === 'error'}
-                    {@html alertIconsSvg.error}
+                    <XCircle class="size-5" />
                   {:else if notification.type === 'warning'}
-                    {@html alertIconsSvg.warning}
+                    <TriangleAlert class="size-5" />
                   {:else if notification.type === 'info'}
-                    {@html alertIconsSvg.info}
+                    <Info class="size-5" />
                   {:else if notification.type === 'detection'}
-                    {@html systemIcons.star}
+                    <Star class="size-5" />
                   {:else}
-                    {@html systemIcons.settingsGear}
+                    <Settings class="size-5" />
                   {/if}
                 </div>
               </div>
@@ -440,7 +451,7 @@
                         class="btn btn-ghost btn-xs"
                         aria-label={t('notifications.actions.markAsRead')}
                       >
-                        {@html systemIcons.eye}
+                        <Eye class="size-4" />
                       </button>
                     {/if}
                     {#if notification.read && notification.status !== 'acknowledged'}
@@ -449,7 +460,7 @@
                         class="btn btn-ghost btn-xs"
                         aria-label={t('notifications.actions.acknowledge')}
                       >
-                        {@html actionIcons.check}
+                        <Check class="size-4" />
                       </button>
                     {/if}
                     <button
@@ -457,7 +468,7 @@
                       class="btn btn-ghost btn-xs text-error"
                       aria-label={t('notifications.actions.delete')}
                     >
-                      {@html actionIcons.delete}
+                      <Trash2 class="size-4" />
                     </button>
                   </div>
                 </div>

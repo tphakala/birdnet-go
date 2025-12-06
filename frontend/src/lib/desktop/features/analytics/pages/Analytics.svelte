@@ -5,7 +5,7 @@
   import StatCard from '../components/ui/StatCard.svelte';
   import ChartCard from '../components/ui/ChartCard.svelte';
   import FilterForm from '../components/forms/FilterForm.svelte';
-  import { alertIconsSvg } from '$lib/utils/icons';
+  import { XCircle } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { getLogger } from '$lib/utils/logger';
   import { safeArrayAccess, safeGet } from '$lib/utils/security';
@@ -1218,7 +1218,7 @@
 <div class="col-span-12 space-y-4" role="region" aria-label={t('analytics.title')}>
   {#if error}
     <div class="alert alert-error">
-      {@html alertIconsSvg.error}
+      <XCircle class="size-6" />
       <span>{error}</span>
     </div>
   {/if}

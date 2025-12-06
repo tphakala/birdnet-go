@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Stage } from './MultiStageOperation.types';
-  import { iconPaths } from '$lib/utils/icons';
+  import { Check, X, Clock, BookmarkMinus, Info } from '@lucide/svelte';
 
   interface Props {
     stages: Stage[];
@@ -25,21 +25,6 @@
     const total = stages.filter(s => s.status !== 'skipped').length;
     return total > 0 ? Math.round((completed / total) * 100) : 0;
   });
-
-  function getStageIcon(status: Stage['status']): string {
-    switch (status) {
-      case 'completed':
-        return iconPaths.completed;
-      case 'error':
-        return iconPaths.error;
-      case 'in_progress':
-        return iconPaths.inProgress;
-      case 'skipped':
-        return iconPaths.skipped;
-      default:
-        return iconPaths.info;
-    }
-  }
 
   function getStatusColor(status: Stage['status']): string {
     switch (status) {
@@ -114,15 +99,17 @@
                     : 'bg-base-200'
             )}
           >
-            <svg
-              class={cn('w-6 h-6', getStatusColor(stage.status))}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" d={getStageIcon(stage.status)} />
-            </svg>
+            {#if stage.status === 'completed'}
+              <Check class={cn('size-6', getStatusColor(stage.status))} />
+            {:else if stage.status === 'error'}
+              <X class={cn('size-6', getStatusColor(stage.status))} />
+            {:else if stage.status === 'in_progress'}
+              <Clock class={cn('size-6', getStatusColor(stage.status))} />
+            {:else if stage.status === 'skipped'}
+              <BookmarkMinus class={cn('size-6', getStatusColor(stage.status))} />
+            {:else}
+              <Info class={cn('size-6', getStatusColor(stage.status))} />
+            {/if}
           </div>
 
           <!-- Content -->
@@ -189,15 +176,17 @@
             onStageClick && 'hover:bg-base-200'
           )}
         >
-          <svg
-            class={cn('w-5 h-5 flex-shrink-0', getStatusColor(stage.status))}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" d={getStageIcon(stage.status)} />
-          </svg>
+          {#if stage.status === 'completed'}
+            <Check class={cn('size-5 flex-shrink-0', getStatusColor(stage.status))} />
+          {:else if stage.status === 'error'}
+            <X class={cn('size-5 flex-shrink-0', getStatusColor(stage.status))} />
+          {:else if stage.status === 'in_progress'}
+            <Clock class={cn('size-5 flex-shrink-0', getStatusColor(stage.status))} />
+          {:else if stage.status === 'skipped'}
+            <BookmarkMinus class={cn('size-5 flex-shrink-0', getStatusColor(stage.status))} />
+          {:else}
+            <Info class={cn('size-5 flex-shrink-0', getStatusColor(stage.status))} />
+          {/if}
 
           <div class="flex-1 text-left">
             <div class="font-medium text-sm">{stage.title}</div>
@@ -251,19 +240,17 @@
                         : 'bg-base-200'
                 )}
               >
-                <svg
-                  class={cn('w-5 h-5', getStatusColor(stage.status))}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="2"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d={getStageIcon(stage.status)}
-                  />
-                </svg>
+                {#if stage.status === 'completed'}
+                  <Check class={cn('size-5', getStatusColor(stage.status))} />
+                {:else if stage.status === 'error'}
+                  <X class={cn('size-5', getStatusColor(stage.status))} />
+                {:else if stage.status === 'in_progress'}
+                  <Clock class={cn('size-5', getStatusColor(stage.status))} />
+                {:else if stage.status === 'skipped'}
+                  <BookmarkMinus class={cn('size-5', getStatusColor(stage.status))} />
+                {:else}
+                  <Info class={cn('size-5', getStatusColor(stage.status))} />
+                {/if}
               </div>
 
               <div class="flex-1">
@@ -280,14 +267,7 @@
 
                 {#if stage.error}
                   <div class="alert alert-error mt-3">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
+                    <Info class="size-4" />
                     <span class="text-sm">{stage.error}</span>
                   </div>
                 {:else if stage.message}

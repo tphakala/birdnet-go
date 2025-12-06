@@ -2,7 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { dataIcons } from '$lib/utils/icons';
+  import { Inbox } from '@lucide/svelte';
 
   interface ActionConfig {
     label: string;
@@ -36,7 +36,7 @@
   {#if icon}
     {@render icon()}
   {:else}
-    {@html dataIcons.inbox}
+    <Inbox class="size-16 text-base-content/20" />
   {/if}
 
   {#if title}

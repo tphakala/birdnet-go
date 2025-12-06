@@ -3,7 +3,7 @@
   import { cn } from '$lib/utils/cn';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
-  import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
+  import { Bell, BellOff, XCircle, TriangleAlert, Info, Settings, Star } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
   import {
     type Notification,
@@ -471,8 +471,8 @@
     aria-controls="notification-dropdown"
   >
     <!-- Bell icon -->
-    <div class={cn('w-6 h-6', hasUnread && 'animate-wiggle')}>
-      {@html systemIcons.bell}
+    <div class={cn(hasUnread && 'animate-wiggle')}>
+      <Bell class="size-6" />
     </div>
 
     <!-- Unread badge -->
@@ -522,8 +522,8 @@
         {:else if formattedNotifications.length === 0}
           <!-- Empty state -->
           <div class="p-8 text-center text-base-content/60">
-            <div class="w-12 h-12 mx-auto mb-2 opacity-50" role="img" aria-label="No notifications">
-              {@html systemIcons.bellOff}
+            <div class="mx-auto mb-2 opacity-50" role="img" aria-label="No notifications">
+              <BellOff class="size-12" />
             </div>
             <p>No notifications</p>
           </div>
@@ -555,25 +555,15 @@
                     )}
                   >
                     {#if notification.type === 'error'}
-                      <div class="w-5 h-5">
-                        {@html alertIconsSvg.error}
-                      </div>
+                      <XCircle class="size-5" />
                     {:else if notification.type === 'warning'}
-                      <div class="w-5 h-5">
-                        {@html alertIconsSvg.warning}
-                      </div>
+                      <TriangleAlert class="size-5" />
                     {:else if notification.type === 'info'}
-                      <div class="w-5 h-5">
-                        {@html alertIconsSvg.info}
-                      </div>
+                      <Info class="size-5" />
                     {:else if notification.type === 'detection'}
-                      <div class="w-5 h-5">
-                        {@html systemIcons.star}
-                      </div>
+                      <Star class="size-5" />
                     {:else if notification.type === 'system'}
-                      <div class="w-5 h-5">
-                        {@html systemIcons.settingsGear}
-                      </div>
+                      <Settings class="size-5" />
                     {/if}
                   </div>
                 </div>

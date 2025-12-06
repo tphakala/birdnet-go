@@ -6,7 +6,7 @@
     getFilterSuggestions,
     formatFilterForDisplay,
   } from '$lib/utils/searchParser';
-  import { navigationIcons, actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { X, Search, Filter, Clock, TriangleAlert } from '@lucide/svelte';
   import { safeArrayAccess } from '$lib/utils/security';
 
   interface Props {
@@ -438,9 +438,7 @@
             class="absolute inset-y-0 right-8 sm:right-10 flex items-center pr-2 hover:bg-base-200 rounded-full"
             aria-label="Clear search"
           >
-            <div class="text-base-content/60">
-              {@html navigationIcons.close}
-            </div>
+            <X class="size-4 text-base-content/60" />
           </button>
         {/if}
 
@@ -452,9 +450,7 @@
           {#if isSearching}
             <span class="loading loading-spinner loading-sm"></span>
           {:else}
-            <div class={sizeClasses().icon}>
-              {@html actionIcons.search}
-            </div>
+            <Search class={sizeClasses().icon} />
           {/if}
         </div>
 
@@ -475,7 +471,7 @@
                       class="btn btn-ghost btn-xs btn-circle"
                       aria-label="Remove filter"
                     >
-                      {@html navigationIcons.close}
+                      <X class="size-3" />
                     </button>
                   </div>
                 {/each}
@@ -487,7 +483,7 @@
               <div class="space-y-1 mb-2">
                 {#each parsedSearch.errors as error}
                   <div class="alert alert-error alert-sm">
-                    {@html alertIconsSvg.warningSmall}
+                    <TriangleAlert class="size-4" />
                     <span class="text-xs">{error}</span>
                   </div>
                 {/each}
@@ -525,14 +521,10 @@
                   <!-- Icon - Filter or History -->
                   {#if showSyntaxHelp}
                     <!-- Filter icon for syntax suggestions -->
-                    <div class="w-4 h-4 text-primary/80 flex-shrink-0">
-                      {@html actionIcons.filter}
-                    </div>
+                    <Filter class="size-4 text-primary/80 flex-shrink-0" />
                   {:else}
                     <!-- History icon for search history -->
-                    <div class="w-4 h-4 text-base-content/60 flex-shrink-0">
-                      {@html systemIcons.clock}
-                    </div>
+                    <Clock class="size-4 text-base-content/60 flex-shrink-0" />
                   {/if}
                   <span class="flex-grow text-sm">{suggestion}</span>
                 </button>
@@ -548,7 +540,7 @@
                     class="opacity-0 group-hover:opacity-100 hover:opacity-100 p-2 mr-2 hover:bg-base-300 rounded"
                     aria-label="Remove from history"
                   >
-                    {@html navigationIcons.close}
+                    <X class="size-4" />
                   </button>
                 {/if}
               </div>

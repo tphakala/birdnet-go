@@ -1,8 +1,8 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { onMount } from 'svelte';
-  import type { Snippet } from 'svelte';
-  import { navigationIcons, alertIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import type { Snippet, Component } from 'svelte';
+  import { X, XCircle, TriangleAlert, Info, CircleCheck } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { safeGet } from '$lib/utils/security';
 
@@ -67,7 +67,13 @@
     'bottom-right': '',
   };
 
-  // Use centralized alert icons instead of duplicated paths
+  // Map toast types to Lucide icon components
+  const alertIcons: Record<ToastType, Component> = {
+    info: Info,
+    success: CircleCheck,
+    warning: TriangleAlert,
+    error: XCircle,
+  };
 
   function handleClose() {
     isVisible = false;
@@ -101,20 +107,8 @@
       aria-live={type === 'error' ? 'assertive' : 'polite'}
     >
       {#if showIcon}
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-6 w-6 shrink-0 stroke-current"
-          fill="none"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d={safeGet(alertIcons, type, '')}
-          />
-        </svg>
+        {@const IconComponent = safeGet(alertIcons, type, Info)}
+        <IconComponent class="size-6 shrink-0" aria-hidden="true" />
       {/if}
 
       <div class="flex-1">
@@ -126,7 +120,7 @@
 
       {#if actions.length > 0}
         <div class="flex gap-2">
-          {#each actions as action}
+          {#each actions as action, index (index)}
             <button type="button" class="btn btn-sm" onclick={action.onClick}>
               {action.label}
             </button>
@@ -140,7 +134,7 @@
         onclick={handleClose}
         aria-label={t('common.aria.closeNotification')}
       >
-        {@html navigationIcons.close}
+        <X class="size-4" />
       </button>
     </div>
   </div>

@@ -23,7 +23,7 @@
 -->
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
-  import { actionIcons } from '$lib/utils/icons';
+  import { Plus } from '@lucide/svelte';
   import { safeGet } from '$lib/utils/security';
   import { Z_INDEX } from '$lib/utils/z-index';
 
@@ -487,7 +487,7 @@
         aria-label="Add species"
       >
         {#if buttonIcon}
-          {@html actionIcons.add}
+          <Plus class="size-4" />
         {/if}
         {buttonText}
       </button>

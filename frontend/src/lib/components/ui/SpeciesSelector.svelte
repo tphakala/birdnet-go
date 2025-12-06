@@ -3,7 +3,7 @@
   import type { Snippet } from 'svelte';
   import { createEventDispatcher, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
-  import { navigationIcons, actionIcons } from '$lib/utils/icons';
+  import { X, Trash2, Plus, Search, TriangleAlert } from '@lucide/svelte';
   import type { Species } from '$lib/types/species';
 
   interface Props {
@@ -320,7 +320,7 @@
                 onclick={clearSearch}
                 aria-label="Clear search"
               >
-                {@html navigationIcons.close}
+                <X class="size-4" />
               </button>
             {/if}
           </div>
@@ -346,7 +346,7 @@
                   onclick={() => removeSpecies(species)}
                   aria-label="Remove {species.commonName}"
                 >
-                  {@html navigationIcons.close}
+                  <X class="size-3" />
                 </button>
               {/if}
             </div>
@@ -360,7 +360,7 @@
               onclick={clearAll}
               title="Clear all selections"
             >
-              {@html actionIcons.trash}
+              <Trash2 class="size-3" />
               Clear
             </button>
           {/if}
@@ -370,7 +370,7 @@
       <!-- Max Selections Warning -->
       {#if maxSelections && selected.length >= maxSelections}
         <div class="badge badge-warning gap-2" role="status" aria-live="polite" aria-atomic="true">
-          {@html actionIcons.warning}
+          <TriangleAlert class="size-3" />
           Max {maxSelections} species selected
         </div>
       {/if}
@@ -387,7 +387,7 @@
           onclick={() => (isExpanded = !isExpanded)}
           aria-label="Add species"
         >
-          {@html actionIcons.plus}
+          <Plus class="size-4" />
         </button>
       {/if}
     </div>
@@ -408,7 +408,7 @@
           </div>
         {:else if filteredSpecies()[0]?.items.length === 0}
           <div class="p-6 text-center text-base-content/60">
-            {@html actionIcons.search}
+            <Search class="size-6 mx-auto" />
             <p class="mt-2">{emptyText}</p>
           </div>
         {:else}
@@ -511,7 +511,7 @@
               onclick={clearSearch}
               aria-label="Clear search"
             >
-              {@html navigationIcons.close}
+              <X class="size-4" />
             </button>
           {/if}
         </div>
