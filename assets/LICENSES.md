@@ -392,6 +392,11 @@ Source: MIT
 License: https://github.com/tphakala/malgo/blob/v0.11.22/LICENSE
 Source: Unlicense
 
+### github.com/tphakala/simd
+
+License: https://github.com/tphakala/simd/blob/v1.0.18/LICENSE
+Source: MIT
+
 ### github.com/valyala/bytebufferpool
 
 License: https://github.com/valyala/bytebufferpool/blob/v1.0.0/LICENSE
