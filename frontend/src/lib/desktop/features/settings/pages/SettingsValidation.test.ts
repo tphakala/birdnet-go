@@ -487,19 +487,19 @@ describe('Cross-Field Dependencies', () => {
         config.actions[0].command.trim().length > 0);
     expect(hasValidActionsOrEmpty).toBe(true);
   });
-});
 
-describe('Accessibility', () => {
-  it('SecuritySettingsPage should have no accessibility violations', async () => {
-    const { container } = render(SecuritySettingsPage.default);
+  describe('Accessibility', () => {
+    it('SecuritySettingsPage should have no accessibility violations', async () => {
+      const { container } = render(SecuritySettingsPage.default);
 
-    await waitFor(() => {
-      // Wait for component to fully render
-      expect(container.firstChild).toBeInTheDocument();
+      await waitFor(() => {
+        // Wait for component to fully render
+        expect(container.firstChild).toBeInTheDocument();
+      });
+
+      // Run axe-core accessibility tests
+      await expectNoA11yViolations(container, A11Y_CONFIGS.forms);
     });
-
-    // Run axe-core accessibility tests
-    await expectNoA11yViolations(container, A11Y_CONFIGS.forms);
   });
 });
 
