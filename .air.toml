@@ -4,10 +4,11 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
 
 # Build configuration
 [build]
-  # Pre-build command: Compile Tailwind CSS and Svelte frontend
+  # Pre-build command: Compile Tailwind CSS only (frontend is built separately)
+  # For frontend development, run 'task frontend-watch' in a separate terminal
   pre_cmd = [
     """
-    # Build Tailwind CSS
+    # Build Tailwind CSS for legacy HTMX views
     if command -v tailwindcss >/dev/null 2>&1; then
       tailwindcss -i tailwind.input.css -o assets/tailwind.css
     elif command -v npx >/dev/null 2>&1; then
@@ -17,44 +18,43 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
       echo "Error: Neither 'tailwindcss' binary nor 'npx' found. Please install Tailwind CSS."
       exit 1
     fi
-    
-    # Build Svelte frontend if it exists
-    if [ -f "frontend/package.json" ]; then
-      echo "Building Svelte frontend..."
-      cd frontend && npm run build
-      cd ..
-    fi
+
+    # Note: Frontend is no longer built here.
+    # The Go server automatically serves from frontend/dist/ when it exists on disk.
+    # Run 'task frontend-watch' in a separate terminal for frontend development.
     """
   ]
-  
+
   # Main build command
   cmd = """
     # Enable CGO for TensorFlow Lite integration
     export CGO_ENABLED=1
     export CGO_CFLAGS="-I${HOME}/src/tensorflow"
     export CGO_LDFLAGS="-L/usr/lib -ltensorflowlite_c"
-    
+
     # Build the Go application with version and build date
     go build -v -x -ldflags "-s -w -r /usr/lib -r /usr/local/lib \
       -X 'main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)' \
       -X 'main.version=$(git describe --tags --always)'" \
       -o ./tmp/main .
   """
-  
+
   bin = "./tmp/main"  # Path to the compiled binary
   delay = 1000  # Delay (in milliseconds) before restarting the app after a change
   rerun_delay = 5000
-  
+
   # Directories to exclude from watching
-  exclude_dir = ["tmp", "vendor", "testdata", "bin", "frontend/node_modules", "frontend/dist", "frontend/.svelte-kit"]
+  # Frontend is excluded - use 'task frontend-watch' for frontend changes
+  exclude_dir = ["tmp", "vendor", "testdata", "bin", "frontend", "node_modules"]
   exclude_file = []  # Files to exclude from watching (none specified)
   exclude_regex = ["_test.go"]  # Exclude test files
   exclude_unchanged = false  # Watch even files that haven't changed
   follow_symlink = false  # Don't follow symlinks
   full_bin = ""  # Additional arguments when running the built binary
-  include_dir = ["views", "internal", "assets", "frontend/src"] # Directories to include (watches all if empty)
-  include_ext = ["go", "tpl", "tmpl", "html", "css", "js", "svelte", "ts"]  # File extensions to watch
-  include_file = ["tailwind.config.js", "tailwind.input.css", "main.go", "frontend/vite.config.js", "frontend/package.json"]  # Files to watch
+  # Only watch Go backend files - frontend is handled by 'task frontend-watch'
+  include_dir = ["views", "internal", "assets", "cmd", "pkg"]
+  include_ext = ["go", "tpl", "tmpl", "html", "css"]  # File extensions to watch
+  include_file = ["tailwind.config.js", "tailwind.input.css", "main.go"]  # Files to watch
   kill_delay = "0s"  # Delay before killing the app on a rebuild
   log = "build-errors.log"  # File to log build errors
   send_interrupt = false  # Send interrupt signal before killing the app
