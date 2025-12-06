@@ -96,7 +96,7 @@
   }
 </script>
 
-<div class="card bg-base-100 shadow-sm border border-base-300">
+<div class="card bg-base-100 shadow-xs border border-base-300">
   <div class="card-body">
     <h3 class="card-title text-lg font-semibold mb-4">
       {t('common.review.form.reviewDetectionTitle')}
@@ -231,7 +231,7 @@
               <textarea
                 id="comment-textarea"
                 bind:value={comment}
-                class="textarea textarea-bordered h-24 w-full"
+                class="textarea h-24 w-full"
                 placeholder={t('common.review.form.commentPlaceholder')}
               ></textarea>
             </div>

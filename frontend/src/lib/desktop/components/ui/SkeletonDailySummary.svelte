@@ -48,7 +48,7 @@ Features:
 </script>
 
 <section
-  class="card col-span-12 bg-base-100 shadow-sm"
+  class="card col-span-12 bg-base-100 shadow-xs"
   role="status"
   aria-live="polite"
   aria-label="Loading daily species summary data"
@@ -56,11 +56,11 @@ Features:
   <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
     <!-- Header skeleton -->
     <div class="flex items-center justify-between mb-4">
-      <div class="h-6 bg-base-300 rounded w-48 animate-pulse"></div>
+      <div class="h-6 bg-base-300 rounded-sm w-48 animate-pulse"></div>
       <div class="flex items-center gap-2">
-        <div class="h-8 w-8 bg-base-300 rounded animate-pulse"></div>
-        <div class="h-8 w-32 bg-base-300 rounded animate-pulse"></div>
-        <div class="h-8 w-8 bg-base-300 rounded animate-pulse"></div>
+        <div class="h-8 w-8 bg-base-300 rounded-sm animate-pulse"></div>
+        <div class="h-8 w-32 bg-base-300 rounded-sm animate-pulse"></div>
+        <div class="h-8 w-8 bg-base-300 rounded-sm animate-pulse"></div>
       </div>
     </div>
 
@@ -79,16 +79,16 @@ Features:
         <thead class="sticky-header text-xs">
           <tr>
             <th class="py-0 pl-2 pr-8 sm:pl-0 sm:pr-12" role="columnheader">
-              <div class="h-4 bg-base-300 rounded w-16 animate-pulse"></div>
+              <div class="h-4 bg-base-300 rounded-sm w-16 animate-pulse"></div>
             </th>
             <!-- Total detections header skeleton -->
             <th class="py-0 px-4 w-100 h-11 hidden 2xl:table-cell" role="columnheader">
-              <div class="h-4 bg-base-300 rounded w-20 animate-pulse"></div>
+              <div class="h-4 bg-base-300 rounded-sm w-20 animate-pulse"></div>
             </th>
             <!-- Hourly headers skeleton -->
             {#each Array(24) as _}
               <th class="px-0 hour-header hourly-count text-center" role="columnheader">
-                <div class="h-4 bg-base-300 rounded w-6 mx-auto animate-pulse"></div>
+                <div class="h-4 bg-base-300 rounded-sm w-6 mx-auto animate-pulse"></div>
               </th>
             {/each}
             <!-- Bi-hourly headers skeleton -->
@@ -97,7 +97,7 @@ Features:
                 class="px-0 hour-header bi-hourly-count bi-hourly text-center"
                 role="columnheader"
               >
-                <div class="h-4 bg-base-300 rounded w-6 mx-auto animate-pulse"></div>
+                <div class="h-4 bg-base-300 rounded-sm w-6 mx-auto animate-pulse"></div>
               </th>
             {/each}
             <!-- Six-hourly headers skeleton -->
@@ -106,7 +106,7 @@ Features:
                 class="px-0 hour-header six-hourly-count six-hourly text-center"
                 role="columnheader"
               >
-                <div class="h-4 bg-base-300 rounded w-6 mx-auto animate-pulse"></div>
+                <div class="h-4 bg-base-300 rounded-sm w-6 mx-auto animate-pulse"></div>
               </th>
             {/each}
           </tr>
@@ -118,10 +118,10 @@ Features:
               <td class="py-0 px-2 sm:px-4" role="cell">
                 <div class="flex items-center gap-2">
                   {#if showThumbnails}
-                    <div class="w-8 h-8 bg-base-300 rounded animate-pulse"></div>
+                    <div class="w-8 h-8 bg-base-300 rounded-sm animate-pulse"></div>
                   {/if}
                   <div
-                    class="h-4 bg-base-300 rounded animate-pulse"
+                    class="h-4 bg-base-300 rounded-sm animate-pulse"
                     style:width={species.nameWidth}
                   ></div>
                 </div>

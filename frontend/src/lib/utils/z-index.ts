@@ -56,9 +56,9 @@ export const Z_INDEX = {
  *
  * In Tailwind CSS classes:
  * ```svelte
- * <div class="z-[100]">  <!-- Use Z_INDEX.DROPDOWN value -->
- * <div class="z-[1000]"> <!-- Use Z_INDEX.PORTAL_DROPDOWN value -->
- * <div class="z-[1010]"> <!-- Use Z_INDEX.NOTIFICATION_DROPDOWN value -->
+ * <div class="z-100">  <!-- Use Z_INDEX.DROPDOWN value -->
+ * <div class="z-1000"> <!-- Use Z_INDEX.PORTAL_DROPDOWN value -->
+ * <div class="z-1010"> <!-- Use Z_INDEX.NOTIFICATION_DROPDOWN value -->
  * ```
  *
  * In inline styles:

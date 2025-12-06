@@ -182,15 +182,15 @@
     <div class="animate-pulse space-y-2">
       <div class="flex items-center gap-2">
         <div class={cn('rounded-full bg-base-300', safeGet(iconSizeClasses, size, ''))}></div>
-        <div class="h-4 bg-base-300 rounded w-24"></div>
+        <div class="h-4 bg-base-300 rounded-sm w-24"></div>
       </div>
       <div class="flex items-center gap-2">
-        <div class={cn('rounded bg-base-300', safeGet(iconSizeClasses, size, ''))}></div>
-        <div class="h-4 bg-base-300 rounded w-16"></div>
+        <div class={cn('rounded-sm bg-base-300', safeGet(iconSizeClasses, size, ''))}></div>
+        <div class="h-4 bg-base-300 rounded-sm w-16"></div>
       </div>
       <div class="flex items-center gap-2">
-        <div class={cn('rounded bg-base-300', safeGet(iconSizeClasses, size, ''))}></div>
-        <div class="h-4 bg-base-300 rounded w-20"></div>
+        <div class={cn('rounded-sm bg-base-300', safeGet(iconSizeClasses, size, ''))}></div>
+        <div class="h-4 bg-base-300 rounded-sm w-20"></div>
       </div>
     </div>
     <!-- Error State -->
@@ -217,7 +217,7 @@
   {#if temperature !== undefined}
     <div class="wd-temperature-row flex items-center gap-2">
       <Thermometer
-        class={cn(safeGet(iconSizeClasses, size, ''), 'flex-shrink-0')}
+        class={cn(safeGet(iconSizeClasses, size, ''), 'shrink-0')}
         aria-label={`Temperature: ${temperature.toFixed(1)}${temperatureUnit()}`}
       />
       <span class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content')}>
@@ -230,7 +230,7 @@
   {#if windSpeed !== undefined}
     <div class="wd-wind-row flex items-center gap-2">
       <Wind
-        class={cn(safeGet(iconSizeClasses, size, ''), getWindOpacity(), 'flex-shrink-0')}
+        class={cn(safeGet(iconSizeClasses, size, ''), getWindOpacity(), 'shrink-0')}
         aria-label={`Wind speed: ${windSpeed.toFixed(1)} ${windSpeedUnit()}`}
       />
       <span class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content')}>

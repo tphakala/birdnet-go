@@ -165,7 +165,7 @@ Performance Optimizations:
   <label for="my-drawer" class="drawer-overlay" aria-label={t('navigation.closeSidebar')}></label>
 
   <nav
-    class="flex flex-col h-[100dvh] w-64 bg-base-100 absolute inset-y-0 sm:static sm:h-full overflow-y-auto p-4"
+    class="flex flex-col h-dvh w-64 bg-base-100 absolute inset-y-0 sm:static sm:h-full overflow-y-auto p-4"
   >
     <!-- Header -->
     <div class="flex-none p-4">

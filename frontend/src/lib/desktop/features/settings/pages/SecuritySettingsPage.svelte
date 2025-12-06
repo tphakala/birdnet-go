@@ -350,7 +350,7 @@
             <div class="bg-base-200 p-3 rounded-lg">
               <div class="text-sm">
                 <p class="font-medium mb-1">{t('settings.security.oauth.google.redirectUriTitle')}</p>
-                <code class="text-xs bg-base-300 px-2 py-1 rounded">{googleRedirectURI}</code>
+                <code class="text-xs bg-base-300 px-2 py-1 rounded-sm">{googleRedirectURI}</code>
               </div>
               <a
                 href="https://console.cloud.google.com/apis/credentials"
@@ -421,7 +421,7 @@
             <div class="bg-base-200 p-3 rounded-lg">
               <div class="text-sm">
                 <p class="font-medium mb-1">{t('settings.security.oauth.github.redirectUriTitle')}</p>
-                <code class="text-xs bg-base-300 px-2 py-1 rounded">{githubRedirectURI}</code>
+                <code class="text-xs bg-base-300 px-2 py-1 rounded-sm">{githubRedirectURI}</code>
               </div>
               <a
                 href="https://github.com/settings/developers"

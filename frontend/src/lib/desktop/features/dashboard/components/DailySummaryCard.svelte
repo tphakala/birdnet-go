@@ -492,7 +492,7 @@ Responsive Breakpoints:
     <!-- Previous day button -->
     <button
       onclick={onPreviousDay}
-      class="btn btn-sm btn-ghost flex-shrink-0"
+      class="btn btn-sm btn-ghost shrink-0"
       aria-label={t('dashboard.dailySummary.navigation.previousDay')}
     >
       <ChevronLeft class="size-5" />
@@ -503,13 +503,13 @@ Responsive Breakpoints:
       value={selectedDate}
       onChange={onDateChange}
       onTodayClick={onGoToToday}
-      className="mx-2 flex-grow"
+      className="mx-2 grow"
     />
 
     <!-- Next day button -->
     <button
       onclick={onNextDay}
-      class="btn btn-sm btn-ghost flex-shrink-0"
+      class="btn btn-sm btn-ghost shrink-0"
       disabled={isToday}
       aria-label={t('dashboard.dailySummary.navigation.nextDay')}
     >
@@ -537,7 +537,7 @@ Responsive Breakpoints:
 {:else if loadingPhase === 'spinner'}
   <SkeletonDailySummary {showThumbnails} showSpinner={showDelayedIndicator} speciesCount={8} />
 {:else if loadingPhase === 'error'}
-  <section class="card col-span-12 bg-base-100 shadow-sm">
+  <section class="card col-span-12 bg-base-100 shadow-xs">
     <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
       <div class="flex items-center justify-between mb-4">
         <span class="card-title grow text-base sm:text-xl"
@@ -552,7 +552,7 @@ Responsive Breakpoints:
     </div>
   </section>
 {:else if loadingPhase === 'loaded'}
-  <section class="card col-span-12 bg-base-100 shadow-sm">
+  <section class="card col-span-12 bg-base-100 shadow-xs">
     <!-- Card Header with Date Navigation -->
     <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
       <div class="flex items-center justify-between mb-4">

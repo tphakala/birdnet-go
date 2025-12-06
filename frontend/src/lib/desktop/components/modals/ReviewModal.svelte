@@ -146,7 +146,7 @@
               </div>
 
               <!-- Section 2: Date & Time (fixed width) -->
-              <div class="flex-shrink-0 text-center" style:min-width="120px">
+              <div class="shrink-0 text-center" style:min-width="120px">
                 <div class="text-sm text-base-content/60 mb-2">
                   {t('detections.headers.dateTime')}
                 </div>
@@ -160,7 +160,7 @@
               </div>
 
               <!-- Section 3: Weather Conditions (fixed width) -->
-              <div class="flex-shrink-0 text-center" style:min-width="180px">
+              <div class="shrink-0 text-center" style:min-width="180px">
                 <div class="text-sm text-base-content/60 mb-2">
                   {t('detections.headers.weather')}
                 </div>
@@ -185,7 +185,7 @@
               </div>
 
               <!-- Section 4: Confidence (fixed width) -->
-              <div class="flex-shrink-0 flex flex-col items-center" style:min-width="100px">
+              <div class="shrink-0 flex flex-col items-center" style:min-width="100px">
                 <div class="text-sm text-base-content/60 mb-2">
                   {t('search.tableHeaders.confidence')}
                 </div>
@@ -328,7 +328,7 @@
                 <textarea
                   id="comment-textarea"
                   bind:value={comment}
-                  class="textarea textarea-bordered h-24 w-full"
+                  class="textarea h-24 w-full"
                   placeholder={t('common.review.form.commentPlaceholder')}
                 ></textarea>
               </div>

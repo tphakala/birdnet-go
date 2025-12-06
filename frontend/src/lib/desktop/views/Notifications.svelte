@@ -248,7 +248,7 @@
   // Get notification card class
   function getNotificationCardClass(notification) {
     let classes =
-      'card bg-base-100 shadow-sm hover:shadow-md transition-shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
+      'card bg-base-100 shadow-xs hover:shadow-md transition-shadow focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
     if (!notification.read) {
       classes += ' bg-base-200/30';
     }
@@ -298,7 +298,7 @@
 
 <div class="col-span-12 p-4">
   <!-- Filters and Actions -->
-  <div class="card bg-base-100 shadow-sm mb-6">
+  <div class="card bg-base-100 shadow-xs mb-6">
     <div class="card-body">
       <div class="flex flex-wrap gap-4 items-center justify-between">
         <!-- Filters -->
@@ -306,7 +306,7 @@
           <select
             bind:value={filters.status}
             onchange={applyFilters}
-            class="select select-sm select-bordered"
+            class="select select-sm"
             aria-label={t('notifications.aria.filterByStatus')}
           >
             <option value="">{t('notifications.filters.allStatus')}</option>
@@ -318,7 +318,7 @@
           <select
             bind:value={filters.type}
             onchange={applyFilters}
-            class="select select-sm select-bordered"
+            class="select select-sm"
             aria-label={t('notifications.aria.filterByType')}
           >
             <option value="">{t('notifications.filters.allTypes')}</option>
@@ -332,7 +332,7 @@
           <select
             bind:value={filters.priority}
             onchange={applyFilters}
-            class="select select-sm select-bordered"
+            class="select select-sm"
             aria-label={t('notifications.aria.filterByPriority')}
           >
             <option value="">{t('notifications.filters.allPriorities')}</option>
@@ -364,7 +364,7 @@
   <!-- Notifications List -->
   <div class="space-y-4" role="region" aria-label="Notifications list">
     {#if ENABLE_LOADING_SPINNERS && loading}
-      <div class="card bg-base-100 shadow-sm">
+      <div class="card bg-base-100 shadow-xs">
         <div class="card-body">
           <div class="flex justify-center">
             <div class="loading loading-spinner loading-lg"></div>
@@ -372,7 +372,7 @@
         </div>
       </div>
     {:else if notifications.length === 0}
-      <div class="card bg-base-100 shadow-sm">
+      <div class="card bg-base-100 shadow-xs">
         <div class="card-body text-center py-12">
           <span class="opacity-30 mb-4" aria-hidden="true">
             <BellOff class="size-12" />
@@ -404,7 +404,7 @@
           <div class="card-body">
             <div class="flex items-start gap-4">
               <!-- Icon -->
-              <div class="flex-shrink-0">
+              <div class="shrink-0">
                 <div class={getNotificationIconClass(notification)}>
                   {#if notification.type === 'error'}
                     <XCircle class="size-5" />

@@ -365,7 +365,7 @@
               bind:value={searchQuery}
               oninput={handleSearch}
               placeholder="Search..."
-              class="input input-sm input-bordered w-full"
+              class="input input-sm w-full"
               aria-label="Search options"
               role="searchbox"
               aria-controls="{fieldId}-listbox"
@@ -398,7 +398,7 @@
                 <button
                   type="button"
                   class={cn(
-                    'w-full px-3 py-2 text-left hover:bg-base-200 focus:bg-base-200 focus:outline-none flex items-center gap-2',
+                    'w-full px-3 py-2 text-left hover:bg-base-200 focus:bg-base-200 focus:outline-hidden flex items-center gap-2',
                     isSelected(option) && 'bg-primary/10 text-primary',
                     option.disabled && 'opacity-50 cursor-not-allowed',
                     highlightedIndex === flatIndex && 'bg-base-200'

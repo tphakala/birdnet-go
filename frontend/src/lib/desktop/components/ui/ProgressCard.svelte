@@ -72,7 +72,7 @@
   let headingId = $derived(`${title.toLowerCase().replace(/\s+/g, '-')}-heading`);
 </script>
 
-<div class={cn('card bg-base-100 shadow-sm', className)}>
+<div class={cn('card bg-base-100 shadow-xs', className)}>
   <div class="card-body card-padding">
     <h2 class="card-title" id={headingId}>{title}</h2>
     <div class="divider"></div>

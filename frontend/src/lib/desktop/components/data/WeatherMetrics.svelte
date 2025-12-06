@@ -202,13 +202,10 @@
 >
   <!-- Line 1: Weather Icon + Description -->
   {#if weatherIcon && showWeatherIcon}
-    <div class="wm-weather-group flex items-center gap-1 flex-shrink-0">
+    <div class="wm-weather-group flex items-center gap-1 shrink-0">
       <!-- Weather Icon - always visible when showWeatherIcon is true -->
       <span
-        class={cn(
-          'wm-weather-icon inline-block flex-shrink-0',
-          safeGet(emojiSizeClasses, size, '')
-        )}
+        class={cn('wm-weather-icon inline-block shrink-0', safeGet(emojiSizeClasses, size, ''))}
         aria-label={weatherDesc}
       >
         {weatherEmoji}
@@ -229,11 +226,11 @@
   <div class="flex items-center gap-2 overflow-hidden">
     <!-- Temperature Group -->
     {#if temperature !== undefined && showTemperatureGroup}
-      <div class="wm-temperature-group flex items-center gap-1 flex-shrink-0">
+      <div class="wm-temperature-group flex items-center gap-1 shrink-0">
         <!-- Temperature Icon -->
         {#if SHOW_TEMPERATURE_ICON}
           <Thermometer
-            class={cn(safeGet(sizeClasses, size, ''), 'flex-shrink-0')}
+            class={cn(safeGet(sizeClasses, size, ''), 'shrink-0')}
             aria-label={`Temperature: ${temperature.toFixed(1)}°C`}
           />
         {/if}
@@ -247,11 +244,11 @@
 
     <!-- Wind Speed Group -->
     {#if windSpeed !== undefined && showWindSpeedGroup}
-      <div class="wm-wind-group flex items-center gap-1 flex-shrink-0">
+      <div class="wm-wind-group flex items-center gap-1 shrink-0">
         <!-- Wind Speed Icon -->
         {#if SHOW_WINDSPEED_ICON}
           <Wind
-            class={cn(safeGet(sizeClasses, size, ''), getWindOpacity(), 'flex-shrink-0')}
+            class={cn(safeGet(sizeClasses, size, ''), getWindOpacity(), 'shrink-0')}
             aria-label={`Wind speed: ${windSpeed.toFixed(1)} m/s`}
           />
         {/if}

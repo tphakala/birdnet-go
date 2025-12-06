@@ -126,7 +126,7 @@
         <label for="num-results" class="text-sm font-medium">Results:</label>
         <select
           id="num-results"
-          class="select select-bordered select-sm w-20"
+          class="select select-sm w-20"
           bind:value={selectedNumResults}
           onchange={handleNumResultsChange}
         >

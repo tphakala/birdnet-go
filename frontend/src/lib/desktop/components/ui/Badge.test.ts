@@ -58,7 +58,7 @@ describe('Badge', () => {
     });
   });
 
-  it('renders with outline style', () => {
+  it('renders with outline-solid style', () => {
     badgeTest.render({
       text: 'Outlined',
       variant: 'primary',

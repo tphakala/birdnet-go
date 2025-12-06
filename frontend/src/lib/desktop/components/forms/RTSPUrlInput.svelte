@@ -119,7 +119,7 @@
         type="text"
         value={url}
         oninput={e => updateUrl(index, e.currentTarget.value)}
-        class="input input-bordered input-sm flex-1"
+        class="input input-sm flex-1"
         placeholder="rtsp://user:password@example.com/stream"
         {disabled}
       />
@@ -140,7 +140,7 @@
       type="text"
       bind:value={newUrl}
       onkeydown={handleKeydown}
-      class="input input-bordered input-sm flex-1"
+      class="input input-sm flex-1"
       placeholder="Enter RTSP URL (rtsp://user:password@example.com/stream1)"
       {disabled}
     />

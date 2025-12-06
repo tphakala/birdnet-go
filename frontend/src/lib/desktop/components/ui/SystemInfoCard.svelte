@@ -62,7 +62,7 @@
   );
 </script>
 
-<div class={cn('card bg-base-100 shadow-sm', className)}>
+<div class={cn('card bg-base-100 shadow-xs', className)}>
   <div class="card-body card-padding">
     <h2 class="card-title" id="system-info-heading">{title}</h2>
     <div class="divider"></div>

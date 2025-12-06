@@ -124,7 +124,7 @@
       {:else if currentSection === 'support'}
         <SupportSettingsSection />
       {:else}
-        <div class="card bg-base-100 shadow-sm p-6">
+        <div class="card bg-base-100 shadow-xs p-6">
           <div class="text-center py-12 text-base-content/70">
             <h2 class="text-xl font-semibold mb-2">Settings Not Found</h2>
             <p>The requested settings section "{currentSection}" could not be found.</p>
@@ -149,7 +149,7 @@
         <div class="col-span-12 container mx-auto">
           <!-- Background with transparency matching settings cards -->
           <div
-            class="bg-base-100/90 backdrop-blur-sm border-t border-base-300 rounded-lg shadow-sm"
+            class="bg-base-100/90 backdrop-blur-xs border-t border-base-300 rounded-lg shadow-xs"
           >
             <div class="px-4 py-3">
               <SettingsActions />

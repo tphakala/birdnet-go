@@ -114,7 +114,7 @@
   // Avoids repeated cn() calls and conditional logic on every render
   const inputClasses = $derived(
     cn(
-      'input focus:outline-none w-full font-normal transition-all',
+      'input focus:outline-hidden w-full font-normal transition-all',
       sizeClasses().input,
       sizeClasses().padding,
       isSearching && 'opacity-75',
@@ -411,7 +411,7 @@
 </script>
 
 {#if isVisible}
-  <div class={cn('flex-grow flex justify-center relative', className)} role="search">
+  <div class={cn('grow flex justify-center relative', className)} role="search">
     <form
       onsubmit={handleSubmit}
       class="relative w-full md:w-3/4 lg:w-4/5 xl:w-5/6 max-w-4xl mx-auto"
@@ -459,7 +459,7 @@
         <!-- Filter chips -->
         {#if showFilterChips}
           <div
-            class="absolute top-full left-0 right-0 bg-base-100 border border-base-300 border-t-0 rounded-b-lg shadow-sm z-40 p-3"
+            class="absolute top-full left-0 right-0 bg-base-100 border border-base-300 border-t-0 rounded-b-lg shadow-xs z-40 p-3"
           >
             <!-- Active filters -->
             {#if parsedSearch.filters.length > 0}
@@ -518,17 +518,17 @@
                 <button
                   type="button"
                   onclick={() => handleSuggestionClick(suggestion)}
-                  class="flex-grow flex items-center gap-3 px-4 py-2 text-left"
+                  class="grow flex items-center gap-3 px-4 py-2 text-left"
                 >
                   <!-- Icon - Filter or History -->
                   {#if showSyntaxHelp}
                     <!-- Filter icon for syntax suggestions -->
-                    <Filter class="size-4 text-primary/80 flex-shrink-0" />
+                    <Filter class="size-4 text-primary/80 shrink-0" />
                   {:else}
                     <!-- History icon for search history -->
-                    <Clock class="size-4 text-base-content/60 flex-shrink-0" />
+                    <Clock class="size-4 text-base-content/60 shrink-0" />
                   {/if}
-                  <span class="flex-grow text-sm">{suggestion}</span>
+                  <span class="grow text-sm">{suggestion}</span>
                 </button>
 
                 <!-- Remove from history button (only for history, not filter suggestions) -->
@@ -539,7 +539,7 @@
                       e.stopPropagation();
                       removeFromHistory(suggestion);
                     }}
-                    class="opacity-0 group-hover:opacity-100 hover:opacity-100 p-2 mr-2 hover:bg-base-300 rounded"
+                    class="opacity-0 group-hover:opacity-100 hover:opacity-100 p-2 mr-2 hover:bg-base-300 rounded-sm"
                     aria-label="Remove from history"
                   >
                     <X class="size-4" />

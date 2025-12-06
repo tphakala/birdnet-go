@@ -75,7 +75,7 @@
   }
 </script>
 
-<div class="card bg-base-100 shadow-sm">
+<div class="card bg-base-100 shadow-xs">
   <div class="card-body card-padding">
     <h2 class="card-title" id="species-filters-heading">{t('analytics.filters.title')}</h2>
 

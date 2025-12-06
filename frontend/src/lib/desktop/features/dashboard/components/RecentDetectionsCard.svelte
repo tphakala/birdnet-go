@@ -197,7 +197,7 @@
   }
 </script>
 
-<section class={cn('card col-span-12 bg-base-100 shadow-sm', className)}>
+<section class={cn('card col-span-12 bg-base-100 shadow-xs', className)}>
   <!-- Card Header -->
   <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
     <div class="flex items-center justify-between mb-4">
@@ -214,7 +214,7 @@
           id="numDetections"
           bind:value={selectedLimit}
           onchange={e => handleLimitChange(parseInt(e.currentTarget.value, 10))}
-          class="select select-sm focus-visible:outline-none"
+          class="select select-sm focus-visible:outline-hidden"
         >
           <option value={5}>5</option>
           <option value={10}>10</option>

@@ -36,7 +36,7 @@
 <div class="mt-4 p-4 bg-base-200 text-sm rounded-lg {className}">
   {#if icon}
     <div class="flex gap-3">
-      <div class="flex-shrink-0">
+      <div class="shrink-0">
         {@render icon()}
       </div>
       <div class="flex-1">

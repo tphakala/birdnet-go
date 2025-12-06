@@ -94,13 +94,13 @@
   }
 </script>
 
-<div class={cn('card bg-base-100 shadow-sm', className)}>
+<div class={cn('card bg-base-100 shadow-xs', className)}>
   <div class="card-body card-padding">
     <div class="flex justify-between items-center mb-2">
       <h2 class="card-title" id="process-info-heading">{title}</h2>
 
       <!-- Enhanced toggle for showing all processes -->
-      <div class="flex items-center gap-2 bg-base-200 px-3 py-1.5 rounded-lg shadow-sm">
+      <div class="flex items-center gap-2 bg-base-200 px-3 py-1.5 rounded-lg shadow-xs">
         <span class="text-sm font-medium">Show all processes</span>
         <input
           type="checkbox"

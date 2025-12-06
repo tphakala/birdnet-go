@@ -30,7 +30,7 @@ describe('SettingsCard', () => {
 
       const card = screen.getByTestId('settings-card');
       expect(card).toBeInTheDocument();
-      expect(card).toHaveClass('card', 'bg-base-100', 'shadow-xs');
+      expect(card).toHaveClass('card', 'bg-base-100', 'shadow-2xs');
     });
 
     it('renders with title and description', () => {
@@ -246,7 +246,7 @@ describe('SettingsCard', () => {
       // Get the card element again after rerender
       card = screen.getByTestId('settings-card');
       // The component should maintain base classes and update custom class
-      expect(card).toHaveClass('card', 'bg-base-100', 'shadow-xs', 'updated-class');
+      expect(card).toHaveClass('card', 'bg-base-100', 'shadow-2xs', 'updated-class');
     });
   });
 

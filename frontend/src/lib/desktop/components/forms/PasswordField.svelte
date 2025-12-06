@@ -176,7 +176,7 @@
           <ul class="text-xs text-base-content/70 space-y-1">
             {#each passwordStrength.feedback as suggestion}
               <li class="flex items-center gap-1">
-                <div class="flex-shrink-0">
+                <div class="shrink-0">
                   <TriangleAlert class="size-3" />
                 </div>
                 {suggestion}

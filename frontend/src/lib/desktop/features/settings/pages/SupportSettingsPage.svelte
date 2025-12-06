@@ -304,7 +304,7 @@
   >
     <div class="space-y-4">
       <!-- Privacy Notice -->
-      <div class="mt-4 p-4 bg-base-200 rounded-lg shadow-sm">
+      <div class="mt-4 p-4 bg-base-200 rounded-lg shadow-xs">
         <div>
           <h3 class="font-bold">{t('settings.support.telemetry.privacyNotice')}</h3>
           <div class="text-sm mt-1">
@@ -335,7 +335,7 @@
             type="text"
             id="systemID"
             value={systemId}
-            class="input input-sm input-bordered join-item w-full font-mono text-base-content"
+            class="input input-sm join-item w-full font-mono text-base-content"
             readonly
           />
           <button type="button" class="btn btn-sm join-item" onclick={copySystemId}>
@@ -370,8 +370,8 @@
               {@html t('settings.support.supportReport.description.intro')}
             </p>
 
-            <div class="alert alert-warning shadow-sm text-sm">
-              <TriangleAlert class="size-5 flex-shrink-0" />
+            <div class="alert alert-warning shadow-xs text-sm">
+              <TriangleAlert class="size-5 shrink-0" />
               <div class="min-w-0">
                 <span class="font-semibold">
                   {t('settings.support.supportReport.githubRequired.title')}
@@ -388,23 +388,23 @@
               </h4>
               <ul class="text-xs space-y-1 text-base-content/70">
                 <li class="flex items-center gap-2">
-                  <CircleCheck class="size-4 text-success flex-shrink-0" />
+                  <CircleCheck class="size-4 text-success shrink-0" />
                   <span
                     >{@html t('settings.support.supportReport.whatsIncluded.applicationLogs')}</span
                   >
                 </li>
                 <li class="flex items-center gap-2">
-                  <CircleCheck class="size-4 text-success flex-shrink-0" />
+                  <CircleCheck class="size-4 text-success shrink-0" />
                   <span
                     >{@html t('settings.support.supportReport.whatsIncluded.configuration')}</span
                   >
                 </li>
                 <li class="flex items-center gap-2">
-                  <CircleCheck class="size-4 text-success flex-shrink-0" />
+                  <CircleCheck class="size-4 text-success shrink-0" />
                   <span>{@html t('settings.support.supportReport.whatsIncluded.systemInfo')}</span>
                 </li>
                 <li class="flex items-center gap-2">
-                  <XCircle class="size-4 text-error flex-shrink-0" />
+                  <XCircle class="size-4 text-error shrink-0" />
                   <span>{@html t('settings.support.supportReport.whatsIncluded.notIncluded')}</span>
                 </li>
               </ul>
@@ -444,7 +444,7 @@
                   type="text"
                   id="githubIssueNumber"
                   bind:value={supportDump.githubIssueNumber}
-                  class="input input-bordered input-sm text-base-content"
+                  class="input input-sm text-base-content"
                   class:input-error={supportDump.uploadToSentry && !supportDump.githubIssueNumber}
                   placeholder={t('settings.support.supportReport.githubIssue.placeholder')}
                   pattern="#?[0-9]+"
@@ -468,7 +468,7 @@
               <textarea
                 id="userMessage"
                 bind:value={supportDump.userMessage}
-                class="textarea textarea-bordered textarea-sm h-24 text-base-content"
+                class="textarea textarea-sm h-24 text-base-content"
                 placeholder={t('settings.support.supportReport.userMessage.placeholderOptional')}
                 rows="4"
                 disabled={generating}
@@ -492,20 +492,20 @@
               <div class="pl-6 mt-2 space-y-2">
                 <div class="text-xs text-base-content/60">
                   <p class="flex items-start gap-1">
-                    <Check class="size-4 flex-shrink-0" />
+                    <Check class="size-4 shrink-0" />
                     {@html t('settings.support.supportReport.uploadOption.details.sentryUpload')}
                   </p>
                   <p class="flex items-start gap-1">
-                    <Globe class="size-4 flex-shrink-0" />
+                    <Globe class="size-4 shrink-0" />
                     {t('settings.support.supportReport.uploadOption.details.euDataCenter')}
                   </p>
                   <p class="flex items-start gap-1">
-                    <ShieldCheck class="size-4 flex-shrink-0" />
+                    <ShieldCheck class="size-4 shrink-0" />
                     {t('settings.support.supportReport.uploadOption.details.privacyCompliant')}
                   </p>
                 </div>
                 <div class="text-xs text-warning/80 flex items-center gap-1">
-                  <Info class="size-4 flex-shrink-0" />
+                  <Info class="size-4 shrink-0" />
                   {t('settings.support.supportReport.uploadOption.details.manualWarning')}
                 </div>
               </div>
@@ -522,11 +522,11 @@
                 class:alert-error={statusType === 'error'}
               >
                 {#if statusType === 'info'}
-                  <Info class="size-4 flex-shrink-0" />
+                  <Info class="size-4 shrink-0" />
                 {:else if statusType === 'success'}
-                  <CircleCheck class="size-4 flex-shrink-0" />
+                  <CircleCheck class="size-4 shrink-0" />
                 {:else if statusType === 'error'}
-                  <XCircle class="size-4 flex-shrink-0" />
+                  <XCircle class="size-4 shrink-0" />
                 {/if}
                 <span class="min-w-0 text-sm">{statusMessage}</span>
               </div>

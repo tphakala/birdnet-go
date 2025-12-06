@@ -364,7 +364,7 @@
 
 <div class="col-span-12 space-y-4" role="region" aria-label={t('analytics.species.title')}>
   <!-- Page Header -->
-  <div class="card bg-base-100 shadow-sm">
+  <div class="card bg-base-100 shadow-xs">
     <div class="card-body card-padding">
       <div class="flex justify-between items-start">
         <div>
@@ -432,12 +432,12 @@
   />
 
   <!-- Species Grid/List -->
-  <div class="card bg-base-100 shadow-sm">
+  <div class="card bg-base-100 shadow-xs">
     <div class="card-body card-padding">
       <!-- View Toggle -->
       <div class="flex justify-between items-center mb-4">
         <h2 class="card-title">{t('analytics.species.speciesList')}</h2>
-        <div class="btn-group">
+        <div class="join">
           <button
             class="btn btn-sm"
             class:btn-active={viewMode === 'grid'}

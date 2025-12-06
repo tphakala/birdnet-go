@@ -1370,7 +1370,7 @@
   />
 
   <!-- Data Table for Recent Detections -->
-  <div class="card bg-base-100 shadow-sm">
+  <div class="card bg-base-100 shadow-xs">
     <div class="card-body card-padding">
       <h2 class="card-title">{t('analytics.recentDetections.title')}</h2>
       {#if isLoading}

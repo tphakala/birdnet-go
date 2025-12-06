@@ -453,7 +453,7 @@ describe('SettingsSection', () => {
 
       const card = screen.getByTestId('settings-card');
       expect(card).toBeInTheDocument();
-      expect(card).toHaveClass('card', 'bg-base-100', 'shadow-xs', 'section-test');
+      expect(card).toHaveClass('card', 'bg-base-100', 'shadow-2xs', 'section-test');
     });
 
     it('properly computes derived change state', async () => {
