@@ -12,11 +12,13 @@
   - ARIA compliance for screen readers
   - Optional "default" star indicator for input source tabs
   - Lazy content rendering (only active tab content is mounted)
+  - Integrated save/reset actions bar
 
   Props:
   - tabs: Array of tab definitions
   - activeTab: Currently active tab ID (bindable)
   - onTabChange: Callback when tab changes
+  - showActions: Whether to show the save/reset actions bar (default: true)
   - class: Additional CSS classes
 
   @component
@@ -27,6 +29,7 @@
   import { Star } from '@lucide/svelte';
   import type { IconProps } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+  import SettingsPageActions from './SettingsPageActions.svelte';
 
   export interface TabDefinition {
     id: string;
@@ -42,10 +45,17 @@
     tabs: TabDefinition[];
     activeTab: string;
     onTabChange?: (_tabId: string) => void;
+    showActions?: boolean;
     class?: string;
   }
 
-  let { tabs, activeTab = $bindable(), onTabChange, class: className }: Props = $props();
+  let {
+    tabs,
+    activeTab = $bindable(),
+    onTabChange,
+    showActions = true,
+    class: className,
+  }: Props = $props();
 
   // Handle tab selection
   function selectTab(tabId: string) {
@@ -170,6 +180,11 @@
       {/if}
     </div>
   {/each}
+
+  <!-- Integrated Save/Reset Actions -->
+  {#if showActions}
+    <SettingsPageActions />
+  {/if}
 </div>
 
 <style>

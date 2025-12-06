@@ -35,7 +35,10 @@
   import SettingsButton from '$lib/desktop/features/settings/components/SettingsButton.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
+  import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import { t } from '$lib/i18n';
+  import { Bird, Radio, Activity, CloudSun } from '@lucide/svelte';
   import {
     integrationSettings,
     realtimeSettings,
@@ -140,6 +143,41 @@
 
   // FFmpeg availability check
   let ffmpegAvailable = $state(true);
+
+  // Tab state
+  let activeTab = $state('birdweather');
+
+  // Tab definitions
+  let tabs = $derived<TabDefinition[]>([
+    {
+      id: 'birdweather',
+      label: t('settings.integration.birdweather.title'),
+      icon: Bird,
+      content: birdweatherTabContent,
+      hasChanges: birdweatherHasChanges,
+    },
+    {
+      id: 'mqtt',
+      label: t('settings.integration.mqtt.title'),
+      icon: Radio,
+      content: mqttTabContent,
+      hasChanges: mqttHasChanges,
+    },
+    {
+      id: 'prometheus',
+      label: t('settings.integration.observability.title'),
+      icon: Activity,
+      content: prometheusTabContent,
+      hasChanges: observabilityHasChanges,
+    },
+    {
+      id: 'weather',
+      label: t('settings.integration.weather.title'),
+      icon: CloudSun,
+      content: weatherTabContent,
+      hasChanges: weatherHasChanges,
+    },
+  ]);
 
   // BirdWeather update handlers
   function updateBirdWeatherEnabled(enabled: boolean) {
@@ -804,502 +842,568 @@
   }
 </script>
 
-<div class="space-y-4 settings-page-content">
-  <!-- BirdWeather Settings -->
-  <SettingsSection
-    title={t('settings.integration.birdweather.title')}
-    description={t('settings.integration.birdweather.description')}
-    defaultOpen={true}
-    hasChanges={birdweatherHasChanges}
-  >
-    <div class="space-y-4">
-      <!-- FFmpeg Warning -->
-      {#if !ffmpegAvailable}
-        <div class="alert alert-warning" role="alert">
-          <TriangleAlert class="size-5" />
-          <div>
-            <h3 class="font-bold">{t('settings.integration.birdweather.ffmpegWarning.title')}</h3>
-            <p class="text-sm">
-              {t('settings.integration.birdweather.ffmpegWarning.message')}
-            </p>
-          </div>
-        </div>
-      {/if}
-
-      <Checkbox
-        checked={settings.birdweather!.enabled}
-        label={t('settings.integration.birdweather.enable')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={updateBirdWeatherEnabled}
-      />
-
-      {#if settings.birdweather?.enabled}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <PasswordField
-            label={t('settings.integration.birdweather.token.label')}
-            value={settings.birdweather!.id}
-            onUpdate={updateBirdWeatherId}
-            placeholder=""
-            helpText={t('settings.integration.birdweather.token.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            allowReveal={true}
-          />
-
-          <NumberField
-            label={t('settings.integration.birdweather.threshold.label')}
-            value={settings.birdweather!.threshold}
-            onUpdate={updateBirdWeatherThreshold}
-            min={0}
-            max={1}
-            step={0.01}
-            placeholder="0.7"
-            helpText={t('settings.integration.birdweather.threshold.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-        </div>
-
-        <!-- Test Connection -->
-        <div class="space-y-4">
-          <div class="flex items-center gap-3">
-            <SettingsButton
-              onclick={testBirdWeather}
-              loading={testStates.birdweather.isRunning}
-              loadingText={t('settings.integration.birdweather.test.loading')}
-              disabled={!(
-                store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled
-              ) ||
-                !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id) ||
-                testStates.birdweather.isRunning}
-            >
-              {t('settings.integration.birdweather.test.button')}
-            </SettingsButton>
-            <span class="text-sm text-base-content/70">
-              {#if !(store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled)}
-                {t('settings.integration.birdweather.test.enabledRequired')}
-              {:else if !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id)}
-                {t('settings.integration.birdweather.test.tokenRequired')}
-              {:else if testStates.birdweather.isRunning}
-                {t('settings.integration.birdweather.test.inProgress')}
-              {:else}
-                {t('settings.integration.birdweather.test.description')}
-              {/if}
-            </span>
-          </div>
-
-          {#if testStates.birdweather.stages.length > 0}
-            <MultiStageOperation
-              stages={testStates.birdweather.stages}
-              variant="compact"
-              showProgress={false}
-            />
-          {/if}
-
-          <TestSuccessNote show={testStates.birdweather.showSuccessNote} />
-        </div>
-      {/if}
-    </div>
-  </SettingsSection>
-
-  <!-- MQTT Settings -->
-  <SettingsSection
-    title={t('settings.integration.mqtt.title')}
-    description={t('settings.integration.mqtt.description')}
-    defaultOpen={false}
-    hasChanges={mqttHasChanges}
-  >
-    <div class="space-y-4">
-      <Checkbox
-        checked={settings.mqtt!.enabled}
-        label={t('settings.integration.mqtt.enable')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={updateMQTTEnabled}
-      />
-
-      {#if settings.mqtt?.enabled}
-        <div class="space-y-4">
-          <TextInput
-            id="mqtt-broker"
-            value={settings.mqtt!.broker}
-            label={t('settings.integration.mqtt.broker.label')}
-            placeholder={t('settings.integration.mqtt.broker.placeholder')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={updateMQTTBroker}
-          />
-
-          <TextInput
-            id="mqtt-topic"
-            value={settings.mqtt!.topic}
-            label={t('settings.integration.mqtt.topic.label')}
-            placeholder={t('settings.integration.mqtt.topic.placeholder')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={updateMQTTTopic}
-          />
-
-          <!-- Authentication Section -->
-          <div class="border-t border-base-300 pt-4 mt-2">
-            <h3 class="text-sm font-medium mb-3">
-              {t('settings.integration.mqtt.authentication.title')}
-            </h3>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <TextInput
-                id="mqtt-username"
-                value={settings.mqtt!.username || ''}
-                label={t('settings.integration.mqtt.authentication.username.label')}
-                placeholder=""
-                disabled={store.isLoading || store.isSaving}
-                onchange={value => updateMQTTUsername(value)}
-              />
-
-              <PasswordField
-                label={t('settings.integration.mqtt.authentication.password.label')}
-                value={settings.mqtt!.password || ''}
-                onUpdate={updateMQTTPassword}
-                placeholder=""
-                helpText={t('settings.integration.mqtt.authentication.password.helpText')}
-                disabled={store.isLoading || store.isSaving}
-                allowReveal={true}
-              />
+{#snippet birdweatherTabContent()}
+  <div class="space-y-6">
+    <!-- BirdWeather Settings Card -->
+    <SettingsSection
+      title={t('settings.integration.birdweather.title')}
+      description={t('settings.integration.birdweather.description')}
+      originalData={(store.originalData as SettingsFormData)?.realtime?.birdweather}
+      currentData={(store.formData as SettingsFormData)?.realtime?.birdweather}
+    >
+      <div class="space-y-4">
+        <!-- FFmpeg Warning -->
+        {#if !ffmpegAvailable}
+          <div class="alert alert-warning" role="alert">
+            <TriangleAlert class="size-5" />
+            <div>
+              <h3 class="font-bold">{t('settings.integration.birdweather.ffmpegWarning.title')}</h3>
+              <p class="text-sm">
+                {t('settings.integration.birdweather.ffmpegWarning.message')}
+              </p>
             </div>
           </div>
+        {/if}
 
-          <!-- Message Settings Section -->
-          <div class="border-t border-base-300 pt-4 mt-2">
-            <h3 class="text-sm font-medium mb-3">
-              {t('settings.integration.mqtt.messageSettings.title')}
-            </h3>
+        <Checkbox
+          checked={settings.birdweather!.enabled}
+          label={t('settings.integration.birdweather.enable')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={updateBirdWeatherEnabled}
+        />
 
-            <!-- prettier-ignore -->
-            <Checkbox
+        <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
+        <fieldset
+          disabled={!settings.birdweather?.enabled || store.isLoading || store.isSaving}
+          class="contents"
+          aria-describedby="birdweather-status"
+        >
+          <span id="birdweather-status" class="sr-only">
+            {settings.birdweather?.enabled
+              ? t('settings.integration.birdweather.enable')
+              : t('settings.integration.birdweather.test.enabledRequired')}
+          </span>
+          <div
+            class="transition-opacity duration-200"
+            class:opacity-50={!settings.birdweather?.enabled}
+          >
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <PasswordField
+                label={t('settings.integration.birdweather.token.label')}
+                value={settings.birdweather!.id}
+                onUpdate={updateBirdWeatherId}
+                placeholder=""
+                helpText={t('settings.integration.birdweather.token.helpText')}
+                disabled={!settings.birdweather?.enabled || store.isLoading || store.isSaving}
+                allowReveal={true}
+              />
+
+              <NumberField
+                label={t('settings.integration.birdweather.threshold.label')}
+                value={settings.birdweather!.threshold}
+                onUpdate={updateBirdWeatherThreshold}
+                min={0}
+                max={1}
+                step={0.01}
+                placeholder="0.7"
+                helpText={t('settings.integration.birdweather.threshold.helpText')}
+                disabled={!settings.birdweather?.enabled || store.isLoading || store.isSaving}
+              />
+            </div>
+
+            <!-- Test Connection -->
+            <div class="space-y-4 mt-4">
+              <div class="flex items-center gap-3">
+                <SettingsButton
+                  onclick={testBirdWeather}
+                  loading={testStates.birdweather.isRunning}
+                  loadingText={t('settings.integration.birdweather.test.loading')}
+                  disabled={!(
+                    store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled
+                  ) ||
+                    !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id) ||
+                    testStates.birdweather.isRunning}
+                >
+                  {t('settings.integration.birdweather.test.button')}
+                </SettingsButton>
+                <span class="text-sm text-base-content/70">
+                  {#if !(store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled)}
+                    {t('settings.integration.birdweather.test.enabledRequired')}
+                  {:else if !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id)}
+                    {t('settings.integration.birdweather.test.tokenRequired')}
+                  {:else if testStates.birdweather.isRunning}
+                    {t('settings.integration.birdweather.test.inProgress')}
+                  {:else}
+                    {t('settings.integration.birdweather.test.description')}
+                  {/if}
+                </span>
+              </div>
+
+              {#if testStates.birdweather.stages.length > 0}
+                <MultiStageOperation
+                  stages={testStates.birdweather.stages}
+                  variant="compact"
+                  showProgress={false}
+                />
+              {/if}
+
+              <TestSuccessNote show={testStates.birdweather.showSuccessNote} />
+            </div>
+          </div>
+        </fieldset>
+      </div>
+    </SettingsSection>
+  </div>
+{/snippet}
+
+{#snippet mqttTabContent()}
+  <div class="space-y-6">
+    <!-- MQTT Settings Card -->
+    <SettingsSection
+      title={t('settings.integration.mqtt.title')}
+      description={t('settings.integration.mqtt.description')}
+      originalData={(store.originalData as SettingsFormData)?.realtime?.mqtt}
+      currentData={(store.formData as SettingsFormData)?.realtime?.mqtt}
+    >
+      <div class="space-y-4">
+        <Checkbox
+          checked={settings.mqtt!.enabled}
+          label={t('settings.integration.mqtt.enable')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={updateMQTTEnabled}
+        />
+
+        <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
+        <fieldset
+          disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+          class="contents"
+          aria-describedby="mqtt-status"
+        >
+          <span id="mqtt-status" class="sr-only">
+            {settings.mqtt?.enabled
+              ? t('settings.integration.mqtt.enable')
+              : t('settings.integration.mqtt.test.enabledRequired')}
+          </span>
+          <div
+            class="space-y-4 transition-opacity duration-200"
+            class:opacity-50={!settings.mqtt?.enabled}
+          >
+            <TextInput
+              id="mqtt-broker"
+              value={settings.mqtt!.broker}
+              label={t('settings.integration.mqtt.broker.label')}
+              placeholder={t('settings.integration.mqtt.broker.placeholder')}
+              disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+              onchange={updateMQTTBroker}
+            />
+
+            <TextInput
+              id="mqtt-topic"
+              value={settings.mqtt!.topic}
+              label={t('settings.integration.mqtt.topic.label')}
+              placeholder={t('settings.integration.mqtt.topic.placeholder')}
+              disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+              onchange={updateMQTTTopic}
+            />
+
+            <!-- Authentication Section -->
+            <div class="border-t border-base-300 pt-4 mt-2">
+              <h3 class="text-sm font-medium mb-3">
+                {t('settings.integration.mqtt.authentication.title')}
+              </h3>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <TextInput
+                  id="mqtt-username"
+                  value={settings.mqtt!.username || ''}
+                  label={t('settings.integration.mqtt.authentication.username.label')}
+                  placeholder=""
+                  disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                  onchange={value => updateMQTTUsername(value)}
+                />
+
+                <PasswordField
+                  label={t('settings.integration.mqtt.authentication.password.label')}
+                  value={settings.mqtt!.password || ''}
+                  onUpdate={updateMQTTPassword}
+                  placeholder=""
+                  helpText={t('settings.integration.mqtt.authentication.password.helpText')}
+                  disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                  allowReveal={true}
+                />
+              </div>
+            </div>
+
+            <!-- Message Settings Section -->
+            <div class="border-t border-base-300 pt-4 mt-2">
+              <h3 class="text-sm font-medium mb-3">
+                {t('settings.integration.mqtt.messageSettings.title')}
+              </h3>
+
+              <!-- prettier-ignore -->
+              <Checkbox
                 checked={(settings.mqtt as MQTTSettings).retain ?? false}
                 onchange={(checked) => updateMQTTRetain(checked)}
                 label={t('settings.integration.mqtt.messageSettings.retain.label')}
-                disabled={store.isLoading || store.isSaving}
+                disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
               />
 
-            <!-- Note about MQTT Retain for HomeAssistant -->
-            <SettingsNote>
-              <span>{@html t('settings.integration.mqtt.messageSettings.retain.note')}</span>
-            </SettingsNote>
+              <!-- Note about MQTT Retain for HomeAssistant -->
+              <SettingsNote>
+                <span>{@html t('settings.integration.mqtt.messageSettings.retain.note')}</span>
+              </SettingsNote>
+            </div>
+
+            <!-- TLS/SSL Security Section -->
+            <div class="border-t border-base-300 pt-4 mt-2">
+              <h3 class="text-sm font-medium mb-3">{t('settings.integration.mqtt.tls.title')}</h3>
+
+              <Checkbox
+                checked={settings.mqtt?.tls?.enabled ?? false}
+                label={t('settings.integration.mqtt.tls.enable')}
+                disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                onchange={updateMQTTTLSEnabled}
+              />
+
+              {#if settings.mqtt?.tls?.enabled}
+                <Checkbox
+                  checked={settings.mqtt?.tls?.skipVerify ?? false}
+                  label={t('settings.integration.mqtt.tls.skipVerify')}
+                  disabled={!settings.mqtt?.enabled || store.isLoading || store.isSaving}
+                  onchange={updateMQTTTLSSkipVerify}
+                />
+
+                <div class="alert alert-info">
+                  <Info class="size-5" />
+                  <div>
+                    <span>{@html t('settings.integration.mqtt.tls.configNote')}</span>
+                  </div>
+                </div>
+              {/if}
+            </div>
+
+            <!-- Test Connection -->
+            <div class="space-y-4">
+              <div class="flex items-center gap-3">
+                <SettingsButton
+                  onclick={testMQTT}
+                  loading={testStates.mqtt.isRunning}
+                  loadingText={t('settings.integration.mqtt.test.loading')}
+                  disabled={!(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled) ||
+                    !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker) ||
+                    testStates.mqtt.isRunning}
+                >
+                  {t('settings.integration.mqtt.test.button')}
+                </SettingsButton>
+                <span class="text-sm text-base-content/70">
+                  {#if !(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled)}
+                    {t('settings.integration.mqtt.test.enabledRequired')}
+                  {:else if !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker)}
+                    {t('settings.integration.mqtt.test.brokerRequired')}
+                  {:else if testStates.mqtt.isRunning}
+                    {t('settings.integration.mqtt.test.inProgress')}
+                  {:else}
+                    {t('settings.integration.mqtt.test.description')}
+                  {/if}
+                </span>
+              </div>
+
+              {#if testStates.mqtt.stages.length > 0}
+                <MultiStageOperation
+                  stages={testStates.mqtt.stages}
+                  variant="compact"
+                  showProgress={false}
+                />
+              {/if}
+
+              <TestSuccessNote show={testStates.mqtt.showSuccessNote} />
+            </div>
           </div>
+        </fieldset>
+      </div>
+    </SettingsSection>
+  </div>
+{/snippet}
 
-          <!-- TLS/SSL Security Section -->
-          <div class="border-t border-base-300 pt-4 mt-2">
-            <h3 class="text-sm font-medium mb-3">{t('settings.integration.mqtt.tls.title')}</h3>
+{#snippet prometheusTabContent()}
+  <div class="space-y-6">
+    <!-- Observability Settings Card -->
+    <SettingsSection
+      title={t('settings.integration.observability.title')}
+      description={t('settings.integration.observability.description')}
+      originalData={(store.originalData as SettingsFormData)?.realtime?.telemetry}
+      currentData={(store.formData as SettingsFormData)?.realtime?.telemetry}
+    >
+      <div class="space-y-4">
+        <Checkbox
+          checked={settings.observability!.prometheus.enabled}
+          label={t('settings.integration.observability.enable')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={updateObservabilityEnabled}
+        />
 
-            <Checkbox
-              checked={settings.mqtt?.tls?.enabled ?? false}
-              label={t('settings.integration.mqtt.tls.enable')}
+        <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
+        <fieldset
+          disabled={!settings.observability?.prometheus.enabled ||
+            store.isLoading ||
+            store.isSaving}
+          class="contents"
+          aria-describedby="prometheus-status"
+        >
+          <span id="prometheus-status" class="sr-only">
+            {settings.observability?.prometheus.enabled
+              ? t('settings.integration.observability.enable')
+              : t('settings.integration.observability.disabled')}
+          </span>
+          <div
+            class="transition-opacity duration-200"
+            class:opacity-50={!settings.observability?.prometheus.enabled}
+          >
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <TextInput
+                id="observability-listen"
+                value={`0.0.0.0:${settings.observability!.prometheus.port}`}
+                label={t('settings.integration.observability.listenAddress.label')}
+                placeholder={t('settings.integration.observability.listenAddress.placeholder')}
+                disabled={!settings.observability?.prometheus.enabled ||
+                  store.isLoading ||
+                  store.isSaving}
+                onchange={updateObservabilityListen}
+              />
+            </div>
+          </div>
+        </fieldset>
+      </div>
+    </SettingsSection>
+  </div>
+{/snippet}
+
+{#snippet weatherTabContent()}
+  <div class="space-y-6">
+    <!-- Weather Settings Card -->
+    <SettingsSection
+      title={t('settings.integration.weather.title')}
+      description={t('settings.integration.weather.description')}
+      originalData={(store.originalData as SettingsFormData)?.realtime?.weather}
+      currentData={(store.formData as SettingsFormData)?.realtime?.weather}
+    >
+      <div class="space-y-4">
+        <SelectField
+          id="weather-provider"
+          value={settings.weather!.provider}
+          label={t('settings.integration.weather.provider.label')}
+          options={[
+            { value: 'none', label: t('settings.integration.weather.provider.options.none') },
+            { value: 'yrno', label: t('settings.integration.weather.provider.options.yrno') },
+            {
+              value: 'openweather',
+              label: t('settings.integration.weather.provider.options.openweather'),
+            },
+            {
+              value: 'wunderground',
+              label: t('settings.integration.weather.provider.options.wunderground'),
+            },
+          ]}
+          disabled={store.isLoading || store.isSaving}
+          onchange={updateWeatherProvider}
+        />
+
+        <!-- Provider-specific notes -->
+        {#if (settings.weather?.provider as WeatherSettings['provider']) === 'none'}
+          <SettingsNote>
+            <span>{t('settings.integration.weather.notes.none')}</span>
+          </SettingsNote>
+        {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'yrno'}
+          <SettingsNote>
+            <p>
+              {t('settings.integration.weather.notes.yrno.description')}
+            </p>
+            <p class="mt-2">
+              {@html t('settings.integration.weather.notes.yrno.freeService')}
+            </p>
+          </SettingsNote>
+        {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'openweather'}
+          <SettingsNote>
+            <span>{@html t('settings.integration.weather.notes.openweather')}</span>
+          </SettingsNote>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <PasswordField
+              label={t('settings.integration.weather.apiKey.label')}
+              value={settings.weather!.openWeather.apiKey || ''}
+              onUpdate={updateWeatherApiKey}
+              placeholder=""
+              helpText={t('settings.integration.weather.apiKey.helpText')}
               disabled={store.isLoading || store.isSaving}
-              onchange={updateMQTTTLSEnabled}
+              allowReveal={true}
             />
 
-            {#if settings.mqtt?.tls?.enabled}
-              <Checkbox
-                checked={settings.mqtt?.tls?.skipVerify ?? false}
-                label={t('settings.integration.mqtt.tls.skipVerify')}
-                disabled={store.isLoading || store.isSaving}
-                onchange={updateMQTTTLSSkipVerify}
-              />
-
-              <div class="alert alert-info">
-                <Info class="size-5" />
-                <div>
-                  <span>{@html t('settings.integration.mqtt.tls.configNote')}</span>
-                </div>
-              </div>
-            {/if}
+            <SelectField
+              id="weather-units"
+              value={settings.weather!.openWeather.units || 'metric'}
+              label={t('settings.integration.weather.units.label')}
+              options={[
+                {
+                  value: 'standard',
+                  label: t('settings.integration.weather.units.options.standard'),
+                },
+                { value: 'metric', label: t('settings.integration.weather.units.options.metric') },
+                {
+                  value: 'imperial',
+                  label: t('settings.integration.weather.units.options.imperial'),
+                },
+              ]}
+              disabled={store.isLoading || store.isSaving}
+              onchange={updateWeatherUnits}
+            />
           </div>
+        {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'wunderground'}
+          <SettingsNote>
+            <span>{@html t('settings.integration.weather.notes.wunderground')}</span>
+          </SettingsNote>
 
-          <!-- Test Connection -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <PasswordField
+              label={t('settings.integration.weather.wunderground.apiKey.label')}
+              value={settings.weather?.wunderground?.apiKey ?? ''}
+              onUpdate={apiKey =>
+                settingsActions.updateSection('realtime', {
+                  weather: {
+                    ...settings.weather!,
+                    wunderground: {
+                      ...(settings.weather?.wunderground ?? wundergroundDefaults),
+                      apiKey,
+                    },
+                  },
+                })}
+              placeholder=""
+              helpText={t('settings.integration.weather.wunderground.apiKey.helpText')}
+              disabled={store.isLoading || store.isSaving}
+              allowReveal={true}
+            />
+
+            <TextInput
+              label={t('settings.integration.weather.wunderground.stationId.label')}
+              value={settings.weather?.wunderground?.stationId ?? ''}
+              onchange={stationId =>
+                settingsActions.updateSection('realtime', {
+                  weather: {
+                    ...settings.weather!,
+                    wunderground: {
+                      ...(settings.weather?.wunderground ?? wundergroundDefaults),
+                      stationId,
+                    },
+                  },
+                })}
+              placeholder=""
+              helpText={t('settings.integration.weather.wunderground.stationId.helpText')}
+              disabled={store.isLoading || store.isSaving}
+            />
+
+            <TextInput
+              label={t('settings.integration.weather.wunderground.endpoint.label')}
+              value={settings.weather?.wunderground?.endpoint ?? ''}
+              onchange={endpoint =>
+                settingsActions.updateSection('realtime', {
+                  weather: {
+                    ...settings.weather!,
+                    wunderground: {
+                      ...(settings.weather?.wunderground ?? wundergroundDefaults),
+                      endpoint,
+                    },
+                  },
+                })}
+              placeholder="https://api.weather.com/v2/pws/observations/current"
+              helpText={t('settings.integration.weather.wunderground.endpoint.helpText')}
+              disabled={store.isLoading || store.isSaving}
+            />
+
+            <SelectField
+              id="wunderground-units"
+              value={settings.weather?.wunderground?.units ?? 'm'}
+              label={t('settings.integration.weather.wunderground.units.label')}
+              options={[
+                { value: 'e', label: t('settings.integration.weather.units.options.imperial') },
+                { value: 'm', label: t('settings.integration.weather.units.options.metric') },
+                { value: 'h', label: t('settings.integration.weather.units.options.ukhybrid') },
+              ]}
+              disabled={store.isLoading || store.isSaving}
+              onchange={units =>
+                settingsActions.updateSection('realtime', {
+                  weather: {
+                    ...settings.weather!,
+                    wunderground: {
+                      ...(settings.weather?.wunderground ?? wundergroundDefaults),
+                      units: units as 'm' | 'e' | 'h',
+                    },
+                  },
+                })}
+            />
+          </div>
+        {/if}
+
+        {#if (settings.weather?.provider as WeatherSettings['provider']) !== 'none'}
+          <!-- Test Weather Provider -->
           <div class="space-y-4">
             <div class="flex items-center gap-3">
               <SettingsButton
-                onclick={testMQTT}
-                loading={testStates.mqtt.isRunning}
-                loadingText={t('settings.integration.mqtt.test.loading')}
-                disabled={!(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled) ||
-                  !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker) ||
-                  testStates.mqtt.isRunning}
+                onclick={testWeather}
+                loading={testStates.weather.isRunning}
+                loadingText={t('settings.integration.weather.test.loading')}
+                disabled={(store.formData?.realtime?.weather?.provider ??
+                  settings.weather?.provider) === 'none' ||
+                  ((store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) ===
+                    'openweather' &&
+                    !(
+                      store.formData?.realtime?.weather?.openWeather?.apiKey ??
+                      settings.weather?.openWeather?.apiKey
+                    )) ||
+                  ((store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) ===
+                    'wunderground' &&
+                    (!(
+                      store.formData?.realtime?.weather?.wunderground?.apiKey ??
+                      settings.weather?.wunderground?.apiKey
+                    ) ||
+                      !(
+                        store.formData?.realtime?.weather?.wunderground?.stationId ??
+                        settings.weather?.wunderground?.stationId
+                      ))) ||
+                  testStates.weather.isRunning}
               >
-                {t('settings.integration.mqtt.test.button')}
+                {t('settings.integration.weather.test.button')}
               </SettingsButton>
               <span class="text-sm text-base-content/70">
-                {#if !(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled)}
-                  {t('settings.integration.mqtt.test.enabledRequired')}
-                {:else if !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker)}
-                  {t('settings.integration.mqtt.test.brokerRequired')}
-                {:else if testStates.mqtt.isRunning}
-                  {t('settings.integration.mqtt.test.inProgress')}
+                {#if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'none'}
+                  {t('settings.integration.weather.test.noProvider')}
+                {:else if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'openweather' && !(store.formData?.realtime?.weather?.openWeather?.apiKey ?? settings.weather?.openWeather?.apiKey)}
+                  {t('settings.integration.weather.test.apiKeyRequired')}
+                {:else if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'wunderground' && (!(store.formData?.realtime?.weather?.wunderground?.apiKey ?? settings.weather?.wunderground?.apiKey) || !(store.formData?.realtime?.weather?.wunderground?.stationId ?? settings.weather?.wunderground?.stationId))}
+                  {t('settings.integration.weather.test.apiKeyRequired')}
+                {:else if testStates.weather.isRunning}
+                  {t('settings.integration.weather.test.inProgress')}
                 {:else}
-                  {t('settings.integration.mqtt.test.description')}
+                  {t('settings.integration.weather.test.description')}
                 {/if}
               </span>
             </div>
 
-            {#if testStates.mqtt.stages.length > 0}
+            {#if testStates.weather.stages.length > 0}
               <MultiStageOperation
-                stages={testStates.mqtt.stages}
+                stages={testStates.weather.stages}
                 variant="compact"
                 showProgress={false}
               />
             {/if}
 
-            <TestSuccessNote show={testStates.mqtt.showSuccessNote} />
+            <TestSuccessNote show={testStates.weather.showSuccessNote} />
           </div>
-        </div>
-      {/if}
-    </div>
-  </SettingsSection>
+        {/if}
+      </div>
+    </SettingsSection>
+  </div>
+{/snippet}
 
-  <!-- Observability Settings -->
-  <SettingsSection
-    title={t('settings.integration.observability.title')}
-    description={t('settings.integration.observability.description')}
-    defaultOpen={false}
-    hasChanges={observabilityHasChanges}
-  >
-    <div class="space-y-4">
-      <Checkbox
-        checked={settings.observability!.prometheus.enabled}
-        label={t('settings.integration.observability.enable')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={updateObservabilityEnabled}
-      />
-
-      {#if settings.observability?.prometheus.enabled}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <TextInput
-            id="observability-listen"
-            value={`0.0.0.0:${settings.observability!.prometheus.port}`}
-            label={t('settings.integration.observability.listenAddress.label')}
-            placeholder={t('settings.integration.observability.listenAddress.placeholder')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={updateObservabilityListen}
-          />
-        </div>
-      {/if}
-    </div>
-  </SettingsSection>
-
-  <!-- Weather Settings -->
-  <SettingsSection
-    title={t('settings.integration.weather.title')}
-    description={t('settings.integration.weather.description')}
-    defaultOpen={false}
-    hasChanges={weatherHasChanges}
-  >
-    <div class="space-y-4">
-      <SelectField
-        id="weather-provider"
-        value={settings.weather!.provider}
-        label={t('settings.integration.weather.provider.label')}
-        options={[
-          { value: 'none', label: t('settings.integration.weather.provider.options.none') },
-          { value: 'yrno', label: t('settings.integration.weather.provider.options.yrno') },
-          {
-            value: 'openweather',
-            label: t('settings.integration.weather.provider.options.openweather'),
-          },
-          {
-            value: 'wunderground',
-            label: t('settings.integration.weather.provider.options.wunderground'),
-          },
-        ]}
-        disabled={store.isLoading || store.isSaving}
-        onchange={updateWeatherProvider}
-      />
-
-      <!-- Provider-specific notes -->
-      {#if (settings.weather?.provider as WeatherSettings['provider']) === 'none'}
-        <SettingsNote>
-          <span>{t('settings.integration.weather.notes.none')}</span>
-        </SettingsNote>
-      {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'yrno'}
-        <SettingsNote>
-          <p>
-            {t('settings.integration.weather.notes.yrno.description')}
-          </p>
-          <p class="mt-2">
-            {@html t('settings.integration.weather.notes.yrno.freeService')}
-          </p>
-        </SettingsNote>
-      {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'openweather'}
-        <SettingsNote>
-          <span>{@html t('settings.integration.weather.notes.openweather')}</span>
-        </SettingsNote>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <PasswordField
-            label={t('settings.integration.weather.apiKey.label')}
-            value={settings.weather!.openWeather.apiKey || ''}
-            onUpdate={updateWeatherApiKey}
-            placeholder=""
-            helpText={t('settings.integration.weather.apiKey.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            allowReveal={true}
-          />
-
-          <SelectField
-            id="weather-units"
-            value={settings.weather!.openWeather.units || 'metric'}
-            label={t('settings.integration.weather.units.label')}
-            options={[
-              {
-                value: 'standard',
-                label: t('settings.integration.weather.units.options.standard'),
-              },
-              { value: 'metric', label: t('settings.integration.weather.units.options.metric') },
-              {
-                value: 'imperial',
-                label: t('settings.integration.weather.units.options.imperial'),
-              },
-            ]}
-            disabled={store.isLoading || store.isSaving}
-            onchange={updateWeatherUnits}
-          />
-        </div>
-      {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'wunderground'}
-        <SettingsNote>
-          <span>{@html t('settings.integration.weather.notes.wunderground')}</span>
-        </SettingsNote>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <PasswordField
-            label={t('settings.integration.weather.wunderground.apiKey.label')}
-            value={settings.weather?.wunderground?.apiKey ?? ''}
-            onUpdate={apiKey =>
-              settingsActions.updateSection('realtime', {
-                weather: {
-                  ...settings.weather!,
-                  wunderground: {
-                    ...(settings.weather?.wunderground ?? wundergroundDefaults),
-                    apiKey,
-                  },
-                },
-              })}
-            placeholder=""
-            helpText={t('settings.integration.weather.wunderground.apiKey.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            allowReveal={true}
-          />
-
-          <TextInput
-            label={t('settings.integration.weather.wunderground.stationId.label')}
-            value={settings.weather?.wunderground?.stationId ?? ''}
-            onchange={stationId =>
-              settingsActions.updateSection('realtime', {
-                weather: {
-                  ...settings.weather!,
-                  wunderground: {
-                    ...(settings.weather?.wunderground ?? wundergroundDefaults),
-                    stationId,
-                  },
-                },
-              })}
-            placeholder=""
-            helpText={t('settings.integration.weather.wunderground.stationId.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-
-          <TextInput
-            label={t('settings.integration.weather.wunderground.endpoint.label')}
-            value={settings.weather?.wunderground?.endpoint ?? ''}
-            onchange={endpoint =>
-              settingsActions.updateSection('realtime', {
-                weather: {
-                  ...settings.weather!,
-                  wunderground: {
-                    ...(settings.weather?.wunderground ?? wundergroundDefaults),
-                    endpoint,
-                  },
-                },
-              })}
-            placeholder="https://api.weather.com/v2/pws/observations/current"
-            helpText={t('settings.integration.weather.wunderground.endpoint.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-
-          <SelectField
-            id="wunderground-units"
-            value={settings.weather?.wunderground?.units ?? 'm'}
-            label={t('settings.integration.weather.wunderground.units.label')}
-            options={[
-              { value: 'e', label: t('settings.integration.weather.units.options.imperial') },
-              { value: 'm', label: t('settings.integration.weather.units.options.metric') },
-              { value: 'h', label: t('settings.integration.weather.units.options.ukhybrid') },
-            ]}
-            disabled={store.isLoading || store.isSaving}
-            onchange={units =>
-              settingsActions.updateSection('realtime', {
-                weather: {
-                  ...settings.weather!,
-                  wunderground: {
-                    ...(settings.weather?.wunderground ?? wundergroundDefaults),
-                    units: units as 'm' | 'e' | 'h',
-                  },
-                },
-              })}
-          />
-        </div>
-      {/if}
-
-      {#if (settings.weather?.provider as WeatherSettings['provider']) !== 'none'}
-        <!-- Test Weather Provider -->
-        <div class="space-y-4">
-          <div class="flex items-center gap-3">
-            <SettingsButton
-              onclick={testWeather}
-              loading={testStates.weather.isRunning}
-              loadingText={t('settings.integration.weather.test.loading')}
-              disabled={(store.formData?.realtime?.weather?.provider ??
-                settings.weather?.provider) === 'none' ||
-                ((store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) ===
-                  'openweather' &&
-                  !(
-                    store.formData?.realtime?.weather?.openWeather?.apiKey ??
-                    settings.weather?.openWeather?.apiKey
-                  )) ||
-                ((store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) ===
-                  'wunderground' &&
-                  (!(
-                    store.formData?.realtime?.weather?.wunderground?.apiKey ??
-                    settings.weather?.wunderground?.apiKey
-                  ) ||
-                    !(
-                      store.formData?.realtime?.weather?.wunderground?.stationId ??
-                      settings.weather?.wunderground?.stationId
-                    ))) ||
-                testStates.weather.isRunning}
-            >
-              {t('settings.integration.weather.test.button')}
-            </SettingsButton>
-            <span class="text-sm text-base-content/70">
-              {#if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'none'}
-                {t('settings.integration.weather.test.noProvider')}
-              {:else if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'openweather' && !(store.formData?.realtime?.weather?.openWeather?.apiKey ?? settings.weather?.openWeather?.apiKey)}
-                {t('settings.integration.weather.test.apiKeyRequired')}
-              {:else if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'wunderground' && (!(store.formData?.realtime?.weather?.wunderground?.apiKey ?? settings.weather?.wunderground?.apiKey) || !(store.formData?.realtime?.weather?.wunderground?.stationId ?? settings.weather?.wunderground?.stationId))}
-                {t('settings.integration.weather.test.apiKeyRequired')}
-              {:else if testStates.weather.isRunning}
-                {t('settings.integration.weather.test.inProgress')}
-              {:else}
-                {t('settings.integration.weather.test.description')}
-              {/if}
-            </span>
-          </div>
-
-          {#if testStates.weather.stages.length > 0}
-            <MultiStageOperation
-              stages={testStates.weather.stages}
-              variant="compact"
-              showProgress={false}
-            />
-          {/if}
-
-          <TestSuccessNote show={testStates.weather.showSuccessNote} />
-        </div>
-      {/if}
-    </div>
-  </SettingsSection>
-</div>
+<!-- Main Content -->
+<main class="settings-page-content" aria-label="Integration settings configuration">
+  <SettingsTabs {tabs} bind:activeTab />
+</main>

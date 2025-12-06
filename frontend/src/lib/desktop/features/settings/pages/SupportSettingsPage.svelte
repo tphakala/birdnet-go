@@ -26,6 +26,7 @@
 <script lang="ts">
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import SettingsPageActions from '$lib/desktop/features/settings/components/SettingsPageActions.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -294,291 +295,293 @@
   }
 </script>
 
-<div class="space-y-4 settings-page-content">
-  <!-- Error Tracking & Telemetry Section -->
-  <SettingsSection
-    title={t('settings.support.sections.telemetry.title')}
-    description={t('settings.support.sections.telemetry.description')}
-    defaultOpen={true}
-    hasChanges={sentryHasChanges}
-  >
-    <div class="space-y-4">
-      <!-- Privacy Notice -->
-      <div class="mt-4 p-4 bg-base-200 rounded-lg shadow-xs">
-        <div>
-          <h3 class="font-bold">{t('settings.support.telemetry.privacyNotice')}</h3>
-          <div class="text-sm mt-1">
-            <ul class="list-disc list-inside mt-2 space-y-1">
-              <li>{t('settings.support.telemetry.privacyPoints.noPersonalData')}</li>
-              <li>{t('settings.support.telemetry.privacyPoints.anonymousData')}</li>
-              <li>{t('settings.support.telemetry.privacyPoints.helpImprove')}</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <!-- Enable Error Tracking -->
-      <Checkbox
-        checked={settings.sentry!.enabled}
-        label={t('settings.support.telemetry.enableTracking')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={enabled => updateSentryEnabled(enabled)}
-      />
-
-      <!-- System ID Display -->
-      <div class="form-control w-full mt-4">
-        <label class="label" for="systemID">
-          <span class="label-text">{t('settings.support.systemId.label')}</span>
-        </label>
-        <div class="join">
-          <input
-            type="text"
-            id="systemID"
-            value={systemId}
-            class="input input-sm join-item w-full font-mono text-base-content"
-            readonly
-          />
-          <button type="button" class="btn btn-sm join-item" onclick={copySystemId}>
-            <Copy class="size-5" />
-            {t('settings.support.systemId.copyButton')}
-          </button>
-        </div>
-        <div class="label">
-          <span class="label-text-alt text-base-content/60"
-            >{t('settings.support.systemId.description')}</span
-          >
-        </div>
-      </div>
-    </div>
-  </SettingsSection>
-
-  <!-- Support & Diagnostics Section -->
-  <SettingsSection
-    title={t('settings.support.sections.diagnostics.title')}
-    description={t('settings.support.sections.diagnostics.description')}
-    defaultOpen={false}
-  >
-    <div class="space-y-4">
-      <!-- Support Dump Generation -->
-      <div class="card bg-base-200">
-        <div class="card-body">
-          <h3 class="card-title text-lg">{t('settings.support.supportReport.title')}</h3>
-
-          <!-- Enhanced Description -->
-          <div class="space-y-3 mb-4">
-            <p class="text-sm text-base-content/80">
-              {@html t('settings.support.supportReport.description.intro')}
-            </p>
-
-            <div class="alert alert-warning shadow-xs text-sm">
-              <TriangleAlert class="size-5 shrink-0" />
-              <div class="min-w-0">
-                <span class="font-semibold">
-                  {t('settings.support.supportReport.githubRequired.title')}
-                </span>
-                <div class="mt-1">
-                  {@html t('settings.support.supportReport.githubRequired.description')}
-                </div>
-              </div>
-            </div>
-
-            <div class="bg-base-100 rounded-lg p-3 border border-base-300">
-              <h4 class="font-semibold text-sm mb-2">
-                {t('settings.support.supportReport.whatsIncluded.title')}
-              </h4>
-              <ul class="text-xs space-y-1 text-base-content/70">
-                <li class="flex items-center gap-2">
-                  <CircleCheck class="size-4 text-success shrink-0" />
-                  <span
-                    >{@html t('settings.support.supportReport.whatsIncluded.applicationLogs')}</span
-                  >
-                </li>
-                <li class="flex items-center gap-2">
-                  <CircleCheck class="size-4 text-success shrink-0" />
-                  <span
-                    >{@html t('settings.support.supportReport.whatsIncluded.configuration')}</span
-                  >
-                </li>
-                <li class="flex items-center gap-2">
-                  <CircleCheck class="size-4 text-success shrink-0" />
-                  <span>{@html t('settings.support.supportReport.whatsIncluded.systemInfo')}</span>
-                </li>
-                <li class="flex items-center gap-2">
-                  <XCircle class="size-4 text-error shrink-0" />
-                  <span>{@html t('settings.support.supportReport.whatsIncluded.notIncluded')}</span>
-                </li>
+<main class="settings-page-content" aria-label="Support and diagnostics settings configuration">
+  <div class="space-y-4">
+    <!-- Error Tracking & Telemetry Section -->
+    <SettingsSection
+      title={t('settings.support.sections.telemetry.title')}
+      description={t('settings.support.sections.telemetry.description')}
+      defaultOpen={true}
+      hasChanges={sentryHasChanges}
+    >
+      <div class="space-y-4">
+        <!-- Privacy Notice -->
+        <div class="mt-4 p-4 bg-base-200 rounded-lg shadow-xs">
+          <div>
+            <h3 class="font-bold">{t('settings.support.telemetry.privacyNotice')}</h3>
+            <div class="text-sm mt-1">
+              <ul class="list-disc list-inside mt-2 space-y-1">
+                <li>{t('settings.support.telemetry.privacyPoints.noPersonalData')}</li>
+                <li>{t('settings.support.telemetry.privacyPoints.anonymousData')}</li>
+                <li>{t('settings.support.telemetry.privacyPoints.helpImprove')}</li>
               </ul>
             </div>
           </div>
+        </div>
 
-          <!-- Options -->
-          <div class="space-y-2">
-            <Checkbox
-              bind:checked={supportDump.includeLogs}
-              label={t('settings.support.diagnostics.includeRecentLogs')}
-              disabled={generating}
+        <!-- Enable Error Tracking -->
+        <Checkbox
+          checked={settings.sentry!.enabled}
+          label={t('settings.support.telemetry.enableTracking')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={enabled => updateSentryEnabled(enabled)}
+        />
+
+        <!-- System ID Display -->
+        <div class="form-control w-full mt-4">
+          <label class="label" for="systemID">
+            <span class="label-text">{t('settings.support.systemId.label')}</span>
+          </label>
+          <div class="join">
+            <input
+              type="text"
+              id="systemID"
+              value={systemId}
+              class="input input-sm join-item w-full font-mono text-base-content"
+              readonly
             />
+            <button type="button" class="btn btn-sm join-item" onclick={copySystemId}>
+              <Copy class="size-5" />
+              {t('settings.support.systemId.copyButton')}
+            </button>
+          </div>
+          <span class="help-text mt-1">{t('settings.support.systemId.description')}</span>
+        </div>
+      </div>
+    </SettingsSection>
 
-            <Checkbox
-              bind:checked={supportDump.includeConfig}
-              label={t('settings.support.diagnostics.includeConfiguration')}
-              disabled={generating}
-            />
+    <!-- Support & Diagnostics Section -->
+    <SettingsSection
+      title={t('settings.support.sections.diagnostics.title')}
+      description={t('settings.support.sections.diagnostics.description')}
+      defaultOpen={false}
+    >
+      <div class="space-y-4">
+        <!-- Support Dump Generation -->
+        <div class="card bg-base-200">
+          <div class="card-body">
+            <h3 class="card-title text-lg">{t('settings.support.supportReport.title')}</h3>
 
-            <Checkbox
-              bind:checked={supportDump.includeSystemInfo}
-              label={t('settings.support.diagnostics.includeSystemInfo')}
-              disabled={generating}
-            />
+            <!-- Enhanced Description -->
+            <div class="space-y-3 mb-4">
+              <p class="text-sm text-base-content/80">
+                {@html t('settings.support.supportReport.description.intro')}
+              </p>
 
-            <!-- GitHub Issue Number (Required for Upload) -->
-            {#if supportDump.uploadToSentry}
-              <div class="form-control mt-4">
-                <label class="label" for="githubIssueNumber">
-                  <span class="label-text">
-                    {t('settings.support.supportReport.githubIssue.label')}
-                    <span class="text-error">*</span>
+              <div class="alert alert-warning shadow-xs text-sm">
+                <TriangleAlert class="size-5 shrink-0" />
+                <div class="min-w-0">
+                  <span class="font-semibold">
+                    {t('settings.support.supportReport.githubRequired.title')}
                   </span>
-                </label>
-                <input
-                  type="text"
-                  id="githubIssueNumber"
-                  bind:value={supportDump.githubIssueNumber}
-                  class="input input-sm text-base-content"
-                  class:input-error={supportDump.uploadToSentry && !supportDump.githubIssueNumber}
-                  placeholder={t('settings.support.supportReport.githubIssue.placeholder')}
-                  pattern="#?[0-9]+"
-                  disabled={generating}
-                />
-                <div class="label">
-                  <span class="label-text-alt text-base-content/60">
+                  <div class="mt-1">
+                    {@html t('settings.support.supportReport.githubRequired.description')}
+                  </div>
+                </div>
+              </div>
+
+              <div class="bg-base-100 rounded-lg p-3 border border-base-300">
+                <h4 class="font-semibold text-sm mb-2">
+                  {t('settings.support.supportReport.whatsIncluded.title')}
+                </h4>
+                <ul class="text-xs space-y-1 text-base-content/70">
+                  <li class="flex items-center gap-2">
+                    <CircleCheck class="size-4 text-success shrink-0" />
+                    <span
+                      >{@html t(
+                        'settings.support.supportReport.whatsIncluded.applicationLogs'
+                      )}</span
+                    >
+                  </li>
+                  <li class="flex items-center gap-2">
+                    <CircleCheck class="size-4 text-success shrink-0" />
+                    <span
+                      >{@html t('settings.support.supportReport.whatsIncluded.configuration')}</span
+                    >
+                  </li>
+                  <li class="flex items-center gap-2">
+                    <CircleCheck class="size-4 text-success shrink-0" />
+                    <span>{@html t('settings.support.supportReport.whatsIncluded.systemInfo')}</span
+                    >
+                  </li>
+                  <li class="flex items-center gap-2">
+                    <XCircle class="size-4 text-error shrink-0" />
+                    <span
+                      >{@html t('settings.support.supportReport.whatsIncluded.notIncluded')}</span
+                    >
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Options -->
+            <div class="space-y-2">
+              <Checkbox
+                bind:checked={supportDump.includeLogs}
+                label={t('settings.support.diagnostics.includeRecentLogs')}
+                disabled={generating}
+              />
+
+              <Checkbox
+                bind:checked={supportDump.includeConfig}
+                label={t('settings.support.diagnostics.includeConfiguration')}
+                disabled={generating}
+              />
+
+              <Checkbox
+                bind:checked={supportDump.includeSystemInfo}
+                label={t('settings.support.diagnostics.includeSystemInfo')}
+                disabled={generating}
+              />
+
+              <!-- GitHub Issue Number (Required for Upload) -->
+              {#if supportDump.uploadToSentry}
+                <div class="form-control mt-4">
+                  <label class="label" for="githubIssueNumber">
+                    <span class="label-text">
+                      {t('settings.support.supportReport.githubIssue.label')}
+                      <span class="text-error">*</span>
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    id="githubIssueNumber"
+                    bind:value={supportDump.githubIssueNumber}
+                    class="input input-sm text-base-content"
+                    class:input-error={supportDump.uploadToSentry && !supportDump.githubIssueNumber}
+                    placeholder={t('settings.support.supportReport.githubIssue.placeholder')}
+                    pattern="#?[0-9]+"
+                    disabled={generating}
+                  />
+                  <span class="help-text mt-1">
                     {@html t('settings.support.supportReport.githubIssue.helper')}
                   </span>
                 </div>
-              </div>
-            {/if}
+              {/if}
 
-            <!-- User Message -->
-            <div class="form-control mt-4">
-              <label class="label" for="userMessage">
-                <span class="label-text"
-                  >{t('settings.support.supportReport.userMessage.labelOptional')}</span
-                >
-              </label>
-              <textarea
-                id="userMessage"
-                bind:value={supportDump.userMessage}
-                class="textarea textarea-sm h-24 text-base-content"
-                placeholder={t('settings.support.supportReport.userMessage.placeholderOptional')}
-                rows="4"
-                disabled={generating}
-              ></textarea>
+              <!-- User Message -->
+              <div class="form-control mt-4">
+                <label class="label" for="userMessage">
+                  <span class="label-text"
+                    >{t('settings.support.supportReport.userMessage.labelOptional')}</span
+                  >
+                </label>
+                <textarea
+                  id="userMessage"
+                  bind:value={supportDump.userMessage}
+                  class="textarea textarea-sm h-24 text-base-content"
+                  placeholder={t('settings.support.supportReport.userMessage.placeholderOptional')}
+                  rows="4"
+                  disabled={generating}
+                ></textarea>
 
-              <!-- System ID Note -->
-              <div class="label">
-                <span class="label-text-alt text-base-content/60">
+                <!-- System ID Note -->
+                <span class="help-text mt-1">
                   {t('settings.support.supportReport.userMessage.systemIdNote', { systemId })}
                 </span>
               </div>
-            </div>
 
-            <!-- Upload Option (always available) -->
-            <div class="mt-4">
-              <Checkbox
-                bind:checked={supportDump.uploadToSentry}
-                label={t('settings.support.supportReport.uploadOption.labelWithRequirement')}
-                disabled={generating}
-              />
-              <div class="pl-6 mt-2 space-y-2">
-                <div class="text-xs text-base-content/60">
-                  <p class="flex items-start gap-1">
-                    <Check class="size-4 shrink-0" />
-                    {@html t('settings.support.supportReport.uploadOption.details.sentryUpload')}
-                  </p>
-                  <p class="flex items-start gap-1">
-                    <Globe class="size-4 shrink-0" />
-                    {t('settings.support.supportReport.uploadOption.details.euDataCenter')}
-                  </p>
-                  <p class="flex items-start gap-1">
-                    <ShieldCheck class="size-4 shrink-0" />
-                    {t('settings.support.supportReport.uploadOption.details.privacyCompliant')}
-                  </p>
-                </div>
-                <div class="text-xs text-warning/80 flex items-center gap-1">
-                  <Info class="size-4 shrink-0" />
-                  {t('settings.support.supportReport.uploadOption.details.manualWarning')}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Status Message -->
-          {#if statusMessage}
-            <div class="mt-3 max-w-2xl">
-              <div
-                class="alert py-2 px-3 text-sm"
-                class:alert-info={statusType === 'info'}
-                class:alert-success={statusType === 'success'}
-                class:alert-error={statusType === 'error'}
-                role="status"
-                aria-live="polite"
-              >
-                {#if statusType === 'info'}
-                  <Info class="size-4 shrink-0" />
-                {:else if statusType === 'success'}
-                  <CircleCheck class="size-4 shrink-0" />
-                {:else if statusType === 'error'}
-                  <XCircle class="size-4 shrink-0" />
-                {/if}
-                <span class="min-w-0 text-sm">{statusMessage}</span>
-              </div>
-
-              <!-- Progress Bar -->
-              {#if generating && progressPercent > 0}
-                <div class="mt-1">
-                  <div class="w-full bg-base-300 rounded-full h-1.5">
-                    <div
-                      class="bg-primary h-1.5 rounded-full transition-all duration-500"
-                      style:width="{progressPercent}%"
-                    ></div>
+              <!-- Upload Option (always available) -->
+              <div class="mt-4">
+                <Checkbox
+                  bind:checked={supportDump.uploadToSentry}
+                  label={t('settings.support.supportReport.uploadOption.labelWithRequirement')}
+                  disabled={generating}
+                />
+                <div class="pl-6 mt-2 space-y-2">
+                  <div class="text-xs text-base-content/60">
+                    <p class="flex items-start gap-1">
+                      <Check class="size-4 shrink-0" />
+                      {@html t('settings.support.supportReport.uploadOption.details.sentryUpload')}
+                    </p>
+                    <p class="flex items-start gap-1">
+                      <Globe class="size-4 shrink-0" />
+                      {t('settings.support.supportReport.uploadOption.details.euDataCenter')}
+                    </p>
+                    <p class="flex items-start gap-1">
+                      <ShieldCheck class="size-4 shrink-0" />
+                      {t('settings.support.supportReport.uploadOption.details.privacyCompliant')}
+                    </p>
+                  </div>
+                  <div class="text-xs text-warning/80 flex items-center gap-1">
+                    <Info class="size-4 shrink-0" />
+                    {t('settings.support.supportReport.uploadOption.details.manualWarning')}
                   </div>
                 </div>
-              {/if}
+              </div>
             </div>
-          {/if}
 
-          <!-- Generate Button -->
-          <div class="card-actions justify-end mt-6">
-            <button
-              onclick={generateSupportDump}
-              disabled={generating ||
-                (!supportDump.includeLogs &&
-                  !supportDump.includeConfig &&
-                  !supportDump.includeSystemInfo) ||
-                (supportDump.uploadToSentry && !supportDump.githubIssueNumber)}
-              class="btn btn-primary"
-              class:btn-disabled={generating ||
-                (!supportDump.includeLogs &&
-                  !supportDump.includeConfig &&
-                  !supportDump.includeSystemInfo) ||
-                (supportDump.uploadToSentry && !supportDump.githubIssueNumber)}
-            >
-              {#if !generating}
-                <span class="flex items-center gap-2">
-                  <Download class="size-4" />
-                  <span
-                    >{supportDump.uploadToSentry
-                      ? t('settings.support.supportReport.generateButton.upload')
-                      : t('settings.support.supportReport.generateButton.download')}</span
-                  >
-                </span>
-              {:else}
-                <span class="loading loading-spinner loading-sm"></span>
-              {/if}
-            </button>
+            <!-- Status Message -->
+            {#if statusMessage}
+              <div class="mt-3 max-w-2xl">
+                <div
+                  class="alert py-2 px-3 text-sm"
+                  class:alert-info={statusType === 'info'}
+                  class:alert-success={statusType === 'success'}
+                  class:alert-error={statusType === 'error'}
+                  role="status"
+                  aria-live="polite"
+                >
+                  {#if statusType === 'info'}
+                    <Info class="size-4 shrink-0" />
+                  {:else if statusType === 'success'}
+                    <CircleCheck class="size-4 shrink-0" />
+                  {:else if statusType === 'error'}
+                    <XCircle class="size-4 shrink-0" />
+                  {/if}
+                  <span class="min-w-0 text-sm">{statusMessage}</span>
+                </div>
+
+                <!-- Progress Bar -->
+                {#if generating && progressPercent > 0}
+                  <div class="mt-1">
+                    <div class="w-full bg-base-300 rounded-full h-1.5">
+                      <div
+                        class="bg-primary h-1.5 rounded-full transition-all duration-500"
+                        style:width="{progressPercent}%"
+                      ></div>
+                    </div>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+
+            <!-- Generate Button -->
+            <div class="card-actions justify-end mt-6">
+              <button
+                onclick={generateSupportDump}
+                disabled={generating ||
+                  (!supportDump.includeLogs &&
+                    !supportDump.includeConfig &&
+                    !supportDump.includeSystemInfo) ||
+                  (supportDump.uploadToSentry && !supportDump.githubIssueNumber)}
+                class="btn btn-primary"
+                class:btn-disabled={generating ||
+                  (!supportDump.includeLogs &&
+                    !supportDump.includeConfig &&
+                    !supportDump.includeSystemInfo) ||
+                  (supportDump.uploadToSentry && !supportDump.githubIssueNumber)}
+              >
+                {#if !generating}
+                  <span class="flex items-center gap-2">
+                    <Download class="size-4" />
+                    <span
+                      >{supportDump.uploadToSentry
+                        ? t('settings.support.supportReport.generateButton.upload')
+                        : t('settings.support.supportReport.generateButton.download')}</span
+                    >
+                  </span>
+                {:else}
+                  <span class="loading loading-spinner loading-sm"></span>
+                {/if}
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  </SettingsSection>
-</div>
+    </SettingsSection>
+  </div>
+
+  <!-- Save/Reset Actions -->
+  <SettingsPageActions />
+</main>

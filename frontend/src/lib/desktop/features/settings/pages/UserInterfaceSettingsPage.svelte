@@ -31,7 +31,10 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
+  import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
+  import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import { api, ApiError } from '$lib/utils/api';
+  import { Languages, LayoutDashboard } from '@lucide/svelte';
   import { toastActions } from '$lib/stores/toast';
   import { t, getLocale } from '$lib/i18n';
   import { LOCALES } from '$lib/i18n/config';
@@ -178,15 +181,43 @@
       dashboard: { ...settings.dashboard, locale },
     });
   }
+
+  // Tab state
+  let activeTab = $state('interface');
+
+  // Tab definitions
+  let tabs = $derived<TabDefinition[]>([
+    {
+      id: 'interface',
+      label: t('settings.main.sections.userInterface.interface.title'),
+      icon: Languages,
+      content: interfaceTabContent,
+      hasChanges: interfaceSettingsHasChanges,
+    },
+    {
+      id: 'dashboard',
+      label: t('settings.main.sections.userInterface.dashboard.title'),
+      icon: LayoutDashboard,
+      content: dashboardTabContent,
+      hasChanges: dashboardDisplayHasChanges,
+    },
+  ]);
 </script>
 
-<main class="space-y-4 settings-page-content" aria-label="User interface settings configuration">
-  <!-- Interface Settings Section -->
+<!-- Interface Settings Tab Content -->
+{#snippet interfaceTabContent()}
   <SettingsSection
     title={t('settings.main.sections.userInterface.interface.title')}
     description={t('settings.main.sections.userInterface.interface.description')}
     defaultOpen={true}
-    hasChanges={interfaceSettingsHasChanges}
+    originalData={{
+      locale: (store.originalData as any)?.realtime?.dashboard?.locale,
+      newUI: (store.originalData as any)?.realtime?.dashboard?.newUI,
+    }}
+    currentData={{
+      locale: (store.formData as any)?.realtime?.dashboard?.locale,
+      newUI: (store.formData as any)?.realtime?.dashboard?.newUI,
+    }}
   >
     <div class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
@@ -210,13 +241,22 @@
       />
     </div>
   </SettingsSection>
+{/snippet}
 
-  <!-- Dashboard Display Settings Section -->
+<!-- Dashboard Display Settings Tab Content -->
+{#snippet dashboardTabContent()}
   <SettingsSection
     title={t('settings.main.sections.userInterface.dashboard.title')}
     description={t('settings.main.sections.userInterface.dashboard.description')}
     defaultOpen={true}
-    hasChanges={dashboardDisplayHasChanges}
+    originalData={{
+      summaryLimit: (store.originalData as any)?.realtime?.dashboard?.summaryLimit,
+      thumbnails: (store.originalData as any)?.realtime?.dashboard?.thumbnails,
+    }}
+    currentData={{
+      summaryLimit: (store.formData as any)?.realtime?.dashboard?.summaryLimit,
+      thumbnails: (store.formData as any)?.realtime?.dashboard?.thumbnails,
+    }}
   >
     <div class="space-y-6">
       <!-- Summary Settings -->
@@ -378,4 +418,8 @@
       </div>
     </div>
   </SettingsSection>
+{/snippet}
+
+<main class="settings-page-content" aria-label="User interface settings configuration">
+  <SettingsTabs {tabs} bind:activeTab />
 </main>

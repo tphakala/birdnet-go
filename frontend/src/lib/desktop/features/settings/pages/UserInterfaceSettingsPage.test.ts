@@ -93,6 +93,43 @@ vi.mock('$lib/i18n/config', () => ({
   },
 }));
 
+// Mock settings store
+vi.mock('$lib/stores/settings', async () => {
+  const { writable, derived } = await import('svelte/store');
+
+  const settingsStore = writable({
+    formData: {},
+    originalData: {},
+    isLoading: false,
+    isSaving: false,
+    activeSection: 'userInterface',
+    error: null,
+  });
+
+  const dashboardSettings = derived(settingsStore, $store => {
+    return ($store.formData as any)?.realtime?.dashboard;
+  });
+
+  const hasUnsavedChanges = writable(false);
+
+  const settingsActions = {
+    updateSection: vi.fn(),
+  };
+
+  const DEFAULT_SPECTROGRAM_SETTINGS = {
+    enabled: false,
+    preRender: 'none' as const,
+  };
+
+  return {
+    settingsStore,
+    dashboardSettings,
+    hasUnsavedChanges,
+    settingsActions,
+    DEFAULT_SPECTROGRAM_SETTINGS,
+  };
+});
+
 // Mock hasSettingsChanged
 vi.mock('$lib/utils/settingsChanges', () => ({
   hasSettingsChanged: vi.fn(),

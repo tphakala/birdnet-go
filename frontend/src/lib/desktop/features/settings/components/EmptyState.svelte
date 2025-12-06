@@ -86,7 +86,7 @@
         </span>
       </div>
       <ul class="space-y-1.5 text-sm text-base-content/70">
-        {#each hints as hint}
+        {#each hints as hint, index (index)}
           <li class="flex items-start gap-2">
             <span class="text-base-content/40 mt-0.5">•</span>
             <span>{hint}</span>

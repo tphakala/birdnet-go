@@ -76,11 +76,14 @@ vi.mock('$lib/stores/settings', async () => {
     updateSection: vi.fn(),
   };
 
+  const hasUnsavedChanges = writable(false);
+
   return {
     audioSettings: mockAudioSettings,
     rtspSettings: mockRtspSettings,
     settingsActions: mockSettingsActions,
     settingsStore: mockSettingsStore,
+    hasUnsavedChanges,
   };
 });
 

@@ -263,21 +263,33 @@
         onchange={enabled => updatePrivacyEnabled(enabled)}
       />
 
-      {#if settings.privacy.enabled}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-          <!-- Confidence Threshold -->
-          <NumberField
-            label={t('settings.filters.privacyFiltering.confidenceLabel')}
-            value={(settings.privacy as any).confidence}
-            onUpdate={updatePrivacyConfidence}
-            min={0}
-            max={1}
-            step={0.01}
-            disabled={store.isLoading || store.isSaving}
-            helpText={t('settings.filters.privacyFiltering.confidenceHelp')}
-          />
+      <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
+      <fieldset
+        disabled={!settings.privacy.enabled || store.isLoading || store.isSaving}
+        class="contents"
+        aria-describedby="privacy-filter-status"
+      >
+        <span id="privacy-filter-status" class="sr-only">
+          {settings.privacy.enabled
+            ? t('settings.filters.privacyFiltering.enable')
+            : t('settings.filters.privacyFiltering.disabled')}
+        </span>
+        <div class="transition-opacity duration-200" class:opacity-50={!settings.privacy.enabled}>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            <!-- Confidence Threshold -->
+            <NumberField
+              label={t('settings.filters.privacyFiltering.confidenceLabel')}
+              value={(settings.privacy as any).confidence}
+              onUpdate={updatePrivacyConfidence}
+              min={0}
+              max={1}
+              step={0.01}
+              disabled={!settings.privacy.enabled || store.isLoading || store.isSaving}
+              helpText={t('settings.filters.privacyFiltering.confidenceHelp')}
+            />
+          </div>
         </div>
-      {/if}
+      </fieldset>
     </div>
   </SettingsSection>
 
@@ -297,117 +309,135 @@
         onchange={enabled => updateDogBarkEnabled(enabled)}
       />
 
-      {#if settings.dogBark.enabled}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-          <!-- Confidence Threshold -->
-          <NumberField
-            label={t('settings.filters.falsePositivePrevention.confidenceLabel')}
-            value={(settings.dogBark as any).confidence}
-            onUpdate={updateDogBarkConfidence}
-            min={0}
-            max={1}
-            step={0.01}
-            disabled={store.isLoading || store.isSaving}
-            helpText={t('settings.filters.falsePositivePrevention.confidenceHelp')}
-          />
+      <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
+      <fieldset
+        disabled={!settings.dogBark.enabled || store.isLoading || store.isSaving}
+        class="contents"
+        aria-describedby="dogbark-filter-status"
+      >
+        <span id="dogbark-filter-status" class="sr-only">
+          {settings.dogBark.enabled
+            ? t('settings.filters.falsePositivePrevention.enableDogBark')
+            : t('settings.filters.falsePositivePrevention.disabled')}
+        </span>
+        <div
+          class="space-y-4 transition-opacity duration-200"
+          class:opacity-50={!settings.dogBark.enabled}
+        >
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            <!-- Confidence Threshold -->
+            <NumberField
+              label={t('settings.filters.falsePositivePrevention.confidenceLabel')}
+              value={(settings.dogBark as any).confidence}
+              onUpdate={updateDogBarkConfidence}
+              min={0}
+              max={1}
+              step={0.01}
+              disabled={!settings.dogBark.enabled || store.isLoading || store.isSaving}
+              helpText={t('settings.filters.falsePositivePrevention.confidenceHelp')}
+            />
 
-          <!-- Dog Bark Expire Time -->
-          <NumberField
-            label={t('settings.filters.falsePositivePrevention.expireTimeLabel')}
-            value={(settings.dogBark as any).remember}
-            onUpdate={updateDogBarkRemember}
-            min={0}
-            step={1}
-            disabled={store.isLoading || store.isSaving}
-            helpText={t('settings.filters.falsePositivePrevention.expireTimeHelp')}
-          />
-        </div>
-
-        <!-- Dog Bark Species List -->
-        <div class="form-control mt-6">
-          <div class="label justify-start">
-            <span class="label-text">{t('settings.filters.dogBarkSpeciesList')}</span>
+            <!-- Dog Bark Expire Time -->
+            <NumberField
+              label={t('settings.filters.falsePositivePrevention.expireTimeLabel')}
+              value={(settings.dogBark as any).remember}
+              onUpdate={updateDogBarkRemember}
+              min={0}
+              step={1}
+              disabled={!settings.dogBark.enabled || store.isLoading || store.isSaving}
+              helpText={t('settings.filters.falsePositivePrevention.expireTimeHelp')}
+            />
           </div>
 
-          <!-- Species List -->
-          {#if (settings.dogBark as any).species.length > 0}
-            <div class="space-y-2 mb-4">
-              {#each (settings.dogBark as any).species as species, index}
-                <div class="flex items-center gap-2 p-3 bg-base-200 rounded-lg">
-                  {#if editIndex === index}
-                    <input
-                      type="text"
-                      bind:value={editSpecies}
-                      class="input input-sm flex-1"
-                      onkeydown={handleEditKeydown}
-                      placeholder={t('settings.filters.speciesNamePlaceholder')}
-                    />
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-success"
-                      onclick={saveEdit}
-                      aria-label={t('common.aria.saveChanges')}
-                    >
-                      <Check class="size-4" />
-                    </button>
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-ghost"
-                      onclick={cancelEdit}
-                      aria-label={t('common.aria.cancelEdit')}
-                    >
-                      <X class="size-4" />
-                    </button>
-                  {:else}
-                    <span class="flex-1 text-sm">{species}</span>
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-ghost"
-                      onclick={() => startEdit(index)}
-                      disabled={store.isLoading || store.isSaving}
-                      aria-label={t('common.aria.editSpecies')}
-                    >
-                      <SquarePen class="size-4" />
-                    </button>
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-error"
-                      onclick={() => removeSpecies(index)}
-                      disabled={store.isLoading || store.isSaving}
-                      aria-label={t('common.aria.removeSpecies')}
-                    >
-                      <Trash2 class="size-4" />
-                    </button>
-                  {/if}
-                </div>
-              {/each}
+          <!-- Dog Bark Species List -->
+          <div class="form-control mt-6">
+            <div class="label justify-start">
+              <span class="label-text">{t('settings.filters.dogBarkSpeciesList')}</span>
             </div>
-          {/if}
 
-          <!-- Add New Species -->
-          <SpeciesInput
-            bind:value={newSpecies}
-            label={t('settings.filters.falsePositivePrevention.addDogBarkSpeciesLabel')}
-            placeholder={t('settings.filters.typeSpeciesName')}
-            helpText={t('settings.filters.falsePositivePrevention.addDogBarkSpeciesHelp')}
-            disabled={store.isLoading || store.isSaving || speciesListState.loading}
-            predictions={speciesListState.data}
-            size="sm"
-            buttonText={t('settings.filters.falsePositivePrevention.addSpeciesButton')}
-            buttonIcon={true}
-            onInput={handleSpeciesInput}
-            onAdd={addSpecies}
-          />
+            <!-- Species List -->
+            {#if (settings.dogBark as any).species.length > 0}
+              <div class="space-y-2 mb-4">
+                {#each (settings.dogBark as any).species as species, index}
+                  <div class="flex items-center gap-2 p-3 bg-base-200 rounded-lg">
+                    {#if editIndex === index}
+                      <input
+                        type="text"
+                        bind:value={editSpecies}
+                        class="input input-sm flex-1"
+                        onkeydown={handleEditKeydown}
+                        placeholder={t('settings.filters.speciesNamePlaceholder')}
+                      />
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-success"
+                        onclick={saveEdit}
+                        aria-label={t('common.aria.saveChanges')}
+                      >
+                        <Check class="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-ghost"
+                        onclick={cancelEdit}
+                        aria-label={t('common.aria.cancelEdit')}
+                      >
+                        <X class="size-4" />
+                      </button>
+                    {:else}
+                      <span class="flex-1 text-sm">{species}</span>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-ghost"
+                        onclick={() => startEdit(index)}
+                        disabled={!settings.dogBark.enabled || store.isLoading || store.isSaving}
+                        aria-label={t('common.aria.editSpecies')}
+                      >
+                        <SquarePen class="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-error"
+                        onclick={() => removeSpecies(index)}
+                        disabled={!settings.dogBark.enabled || store.isLoading || store.isSaving}
+                        aria-label={t('common.aria.removeSpecies')}
+                      >
+                        <Trash2 class="size-4" />
+                      </button>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
 
-          <!-- Unsaved Changes Indicator -->
-          {#if dogBarkFilterHasChanges}
-            <div class="mt-2 text-xs text-info flex items-center gap-1">
-              <Info class="size-4" />
-              <span>{t('settings.actions.unsavedChanges')}</span>
-            </div>
-          {/if}
+            <!-- Add New Species -->
+            <SpeciesInput
+              bind:value={newSpecies}
+              label={t('settings.filters.falsePositivePrevention.addDogBarkSpeciesLabel')}
+              placeholder={t('settings.filters.typeSpeciesName')}
+              helpText={t('settings.filters.falsePositivePrevention.addDogBarkSpeciesHelp')}
+              disabled={!settings.dogBark.enabled ||
+                store.isLoading ||
+                store.isSaving ||
+                speciesListState.loading}
+              predictions={speciesListState.data}
+              size="sm"
+              buttonText={t('settings.filters.falsePositivePrevention.addSpeciesButton')}
+              buttonIcon={true}
+              onInput={handleSpeciesInput}
+              onAdd={addSpecies}
+            />
+
+            <!-- Unsaved Changes Indicator -->
+            {#if dogBarkFilterHasChanges}
+              <div class="mt-2 text-xs text-info flex items-center gap-1">
+                <Info class="size-4" />
+                <span>{t('settings.actions.unsavedChanges')}</span>
+              </div>
+            {/if}
+          </div>
         </div>
-      {/if}
+      </fieldset>
     </div>
   </SettingsSection>
 </div>

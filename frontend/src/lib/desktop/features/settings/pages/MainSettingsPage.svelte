@@ -1263,23 +1263,22 @@
       originalData={(store.originalData as any)?.birdnet?.rangeFilter}
       currentData={settings.birdnet.rangeFilter}
     >
-      <div class="space-y-6">
+      <!-- Threshold and Species Count on same row -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- Threshold Setting -->
-        <div class="max-w-md">
-          <NumberField
-            label={t('settings.main.sections.rangeFilter.threshold.label')}
-            value={settings.birdnet.rangeFilter.threshold}
-            onUpdate={value =>
-              settingsActions.updateSection('birdnet', {
-                rangeFilter: { ...settings.birdnet.rangeFilter, threshold: value },
-              })}
-            min={0.0}
-            max={0.99}
-            step={0.01}
-            helpText={t('settings.main.sections.rangeFilter.threshold.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-        </div>
+        <NumberField
+          label={t('settings.main.sections.rangeFilter.threshold.label')}
+          value={settings.birdnet.rangeFilter.threshold}
+          onUpdate={value =>
+            settingsActions.updateSection('birdnet', {
+              rangeFilter: { ...settings.birdnet.rangeFilter, threshold: value },
+            })}
+          min={0.0}
+          max={0.99}
+          step={0.01}
+          helpText={t('settings.main.sections.rangeFilter.threshold.helpText')}
+          disabled={store.isLoading || store.isSaving}
+        />
 
         <!-- Species Count Display -->
         <div class="form-control">
@@ -1324,25 +1323,25 @@
               {t('analytics.filters.exportCsv')}
             </button>
           </div>
-          <p class="text-sm text-base-content mt-2">
+          <span class="help-text mt-1">
             {t('settings.main.sections.rangeFilter.speciesCount.helpText')}
-          </p>
-
-          {#if rangeFilterState.error}
-            <div class="alert alert-error mt-3" role="alert">
-              <XCircle class="size-5 shrink-0" />
-              <span>{rangeFilterState.error}</span>
-              <button
-                type="button"
-                class="btn btn-sm btn-ghost ml-auto"
-                onclick={() => (rangeFilterState.error = null)}
-              >
-                <X class="size-4" />
-              </button>
-            </div>
-          {/if}
+          </span>
         </div>
       </div>
+
+      {#if rangeFilterState.error}
+        <div class="alert alert-error mt-4" role="alert">
+          <XCircle class="size-5 shrink-0" />
+          <span>{rangeFilterState.error}</span>
+          <button
+            type="button"
+            class="btn btn-sm btn-ghost ml-auto"
+            onclick={() => (rangeFilterState.error = null)}
+          >
+            <X class="size-4" />
+          </button>
+        </div>
+      {/if}
     </SettingsSection>
   </div>
 {/snippet}
@@ -1638,7 +1637,7 @@
           </div>
         {:else if rangeFilterState.species.length > 0}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            {#each rangeFilterState.species as species}
+            {#each rangeFilterState.species as species (species.scientificName)}
               <div class="p-3 rounded-lg hover:bg-base-200/50 transition-colors">
                 <div class="font-medium">{species.commonName}</div>
                 <div class="text-sm text-base-content/60 italic">{species.scientificName}</div>

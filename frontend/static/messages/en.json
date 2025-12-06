@@ -1162,6 +1162,12 @@
         "species": "Species Data",
         "speciesDetails": "What birds were detected and when",
         "recommendation": "Only enable external webhooks if you trust the receiving service or use self-hosted/local services."
+      },
+      "push": {
+        "title": "Push Notifications",
+        "description": "Configure push notification settings and providers",
+        "comingSoon": "Push notification settings coming soon",
+        "comingSoonDescription": "Configuration for push notification providers will be available in a future update."
       }
     },
     "filters": {
@@ -1169,6 +1175,7 @@
         "title": "Privacy Filtering",
         "description": "Privacy filtering avoids saving audio clips when human vocals are detected",
         "enable": "Enable Privacy Filtering",
+        "disabled": "Privacy filtering is disabled",
         "confidenceLabel": "Confidence Threshold for Human Detection",
         "confidenceHelp": "Set the confidence level for human voice detection, lower value makes filter more sensitive"
       },
@@ -1176,6 +1183,7 @@
         "title": "False Positive Prevention",
         "description": "Configure false detection filters",
         "enableDogBark": "Enable Dog Bark Filter",
+        "disabled": "Dog bark filter is disabled",
         "confidenceLabel": "Confidence Threshold",
         "confidenceHelp": "Set the confidence level for dog bark detection, lower value makes filter more sensitive",
         "expireTimeLabel": "Dog Bark Expire Time (Minutes)",
@@ -1402,12 +1410,14 @@
         "description": "BirdNET-Go needs an audio input to detect birds. Please configure at least one source in the Sound Card or Streams tab."
       },
       "audioCapture": {
-        "title": "Audio Capture",
-        "description": "Set audio capture source, sound card or RTSP stream",
+        "title": "Sound Card Configuration",
+        "description": "Select the audio input device for bird sound detection. Changes require application restart.",
         "soundCardSource": "Sound Card Source",
         "audioSourceLabel": "Audio Source (requires application restart to take effect)",
         "audioSourceHelp": "Select the audio input device for bird sound detection. Changes require application restart to take effect.",
         "noSoundCardCapture": "No sound card capture",
+        "noDeviceSelected": "No audio device selected",
+        "refreshDevices": "Refresh",
         "rtspSource": "RTSP Source",
         "rtspTransportLabel": "RTSP Transport Protocol",
         "rtspTransportHelp": "TCP is more reliable but may have higher latency. UDP is faster but may experience packet loss on poor networks.",
@@ -1417,6 +1427,11 @@
         "availableDevices": "Available Audio Devices",
         "active": "Active",
         "streamsConfigured": "{count} stream(s) configured"
+      },
+      "rtspStreams": {
+        "title": "RTSP Stream Configuration",
+        "description": "Configure network audio streams for remote audio capture via RTSP protocol.",
+        "noStreamsConfigured": "No streams configured"
       },
       "audioFilters": {
         "title": "Audio Filters",
@@ -1451,6 +1466,7 @@
         "description": "Monitor and report environmental sound levels",
         "enable": "Enable Sound Level Monitoring",
         "enableHelp": "Track ambient noise levels to understand your recording environment and correlate with bird activity patterns.",
+        "disabled": "Sound level monitoring is disabled",
         "intervalLabel": "Measurement Interval (seconds)",
         "intervalHelp": "How often to measure and report sound levels. Lower values provide more granular data but use more resources. Minimum 5 seconds, recommended 60 seconds.",
         "dataOutputTitle": "Sound Level Data Output",
@@ -1464,8 +1480,11 @@
         "description": "Configure audio clip capture and processing for identified bird calls"
       },
       "audioExport": {
+        "title": "Audio Export Settings",
+        "description": "Configure audio clip capture, format, and export options for detected bird calls.",
         "enable": "Enable Audio Capture",
         "enableHelp": "Save audio clips of detected bird calls for review, sharing, or building custom datasets.",
+        "disabled": "Audio export is disabled",
         "captureSettings": "Capture Settings",
         "lengthLabel": "Capture Length",
         "lengthHelp": "Duration of audio to capture for each detection (10-60 seconds). Longer clips provide more context but use more storage.",
@@ -1476,6 +1495,7 @@
         "normalization": "Audio Normalization",
         "normalizationEnable": "Enable Loudness Normalization",
         "normalizationHelp": "Automatically adjust audio levels to EBU R128 broadcast standard for consistent playback volume across all clips.",
+        "normalizationDisabled": "Audio normalization is disabled",
         "targetLUFSLabel": "Target Loudness (LUFS)",
         "targetLUFSHelp": "Integrated loudness target in LUFS (Loudness Units relative to Full Scale). -23 LUFS is the EBU R128 broadcast standard. Range: -40 to -10 LUFS.",
         "loudnessRangeLabel": "Loudness Range (LU)",
@@ -1568,6 +1588,7 @@
         "title": "Basic Authentication",
         "description": "Secure access with a simple password",
         "enableLabel": "Enable Password Authentication",
+        "disabled": "Password authentication is disabled",
         "passwordLabel": "Password",
         "passwordHelpText": "Limit access to settings with a password."
       },
@@ -1599,7 +1620,8 @@
       },
       "bypassAuthentication": {
         "title": "Bypass Authentication",
-        "description": "Allow access to settings without authentication"
+        "description": "Allow access to settings without authentication",
+        "disabled": "Subnet bypass is disabled"
       },
       "placeholders": {
         "host": "For example, localhost:8080 or example.domain.com",

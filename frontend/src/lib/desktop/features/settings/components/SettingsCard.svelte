@@ -60,12 +60,12 @@
   // Memoized class names for performance
   let cardClasses = $derived(cn('card bg-base-100 shadow-2xs', className));
   let headerClasses = $derived(cn('px-6 py-4'));
-  let bodyClasses = $derived(padding ? 'px-6 pb-6' : '');
+  let bodyClasses = $derived(padding ? 'px-6 pb-7' : '');
 </script>
 
 <div class={cardClasses} data-testid="settings-card" {...rest}>
   {#if header}
-    <div class="px-6 py-4">
+    <div class="px-6 py-5">
       {@render header()}
     </div>
   {:else if title || description || hasChanges}
@@ -76,7 +76,7 @@
             <h3 class="text-lg font-semibold">{title}</h3>
           {/if}
           {#if description}
-            <p class="text-sm text-base-content/90 mt-1">{description}</p>
+            <p class="text-sm text-base-content/80 mt-1">{description}</p>
           {/if}
         </div>
         {#if hasChanges}

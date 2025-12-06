@@ -339,7 +339,7 @@
 
     <div class="space-y-4">
       <!-- Existing filters -->
-      {#each equalizerSettings.filters || [] as filter, index}
+      {#each equalizerSettings.filters || [] as filter, index (index)}
         {@const filterParams = getEqFilterParameters(filter.type)}
         <div
           class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end p-4 bg-base-200 rounded-lg border border-base-300"
@@ -355,7 +355,7 @@
           </div>
 
           <!-- Dynamic parameters based on filter type -->
-          {#each filterParams as param}
+          {#each filterParams as param (param.Name)}
             <!-- Skip Q factor for HP/LP filters - always use Butterworth (Q=0.707) -->
             {#if !(param.Name === 'Q' && (filter.type === 'HighPass' || filter.type === 'LowPass'))}
               <div class="flex flex-col">
@@ -452,7 +452,7 @@
             {disabled}
           >
             <option value="">{t('settings.audio.audioFilters.selectFilterType')}</option>
-            {#each Object.keys(eqFilterConfig) as filterType}
+            {#each Object.keys(eqFilterConfig) as filterType (filterType)}
               <option value={filterType}>{filterType}</option>
             {/each}
           </select>
@@ -460,7 +460,7 @@
 
         <!-- New Audio Filter Parameters -->
         {#if newFilter.type}
-          {#each getEqFilterParameters(newFilter.type) as param}
+          {#each getEqFilterParameters(newFilter.type) as param (param.Name)}
             <!-- Skip Q factor for HP/LP filters - always use Butterworth (Q=0.707) -->
             {#if !(param.Name === 'Q' && (newFilter.type === 'HighPass' || newFilter.type === 'LowPass'))}
               <div class="flex flex-col">

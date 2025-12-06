@@ -43,7 +43,6 @@
     type TabDefinition,
   } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
-  import SettingsCard from '$lib/desktop/features/settings/components/SettingsCard.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
@@ -63,12 +62,6 @@
 
   // Default tab preference (persisted to localStorage)
   let defaultTab = $state(localStorage.getItem(STORAGE_KEY) || 'soundcard');
-
-  // Save default tab preference
-  function setAsDefaultTab(tabId: string) {
-    defaultTab = tabId;
-    localStorage.setItem(STORAGE_KEY, tabId);
-  }
 
   // Check if a tab is the default
   function isDefaultTab(tabId: string): boolean {
@@ -474,19 +467,6 @@
 <!-- Tab Content Snippets -->
 {#snippet soundCardTabContent()}
   <div class="space-y-6">
-    <!-- Default Tab Toggle for Sound Card/Streams tabs -->
-    {#if !isDefaultTab('soundcard')}
-      <div class="flex justify-end">
-        <button
-          type="button"
-          class="btn btn-ghost btn-xs gap-1.5 text-base-content/60 hover:text-base-content"
-          onclick={() => setAsDefaultTab('soundcard')}
-        >
-          {t('settings.tabs.setAsDefault')}
-        </button>
-      </div>
-    {/if}
-
     {#if audioDevices.loading}
       <!-- Loading State -->
       <div class="flex items-center justify-center py-12">
@@ -525,143 +505,120 @@
       />
     {:else}
       <!-- Sound Card Selection -->
-      <SettingsCard>
-        <SelectField
-          id="audio-source"
-          value={settings.audio.source}
-          label={t('settings.audio.audioCapture.audioSourceLabel')}
-          placeholder={t('settings.audio.audioCapture.noSoundCardCapture')}
-          helpText={t('settings.audio.audioCapture.audioSourceHelp')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={updateAudioSource}
-          options={[]}
-        >
-          <option value="">{t('settings.audio.audioCapture.noSoundCardCapture')}</option>
-          {#each audioDevices.data as device}
-            <option value={device.Name}>{device.Name}</option>
-          {/each}
-        </SelectField>
+      <SettingsSection
+        title={t('settings.audio.audioCapture.title')}
+        description={t('settings.audio.audioCapture.description')}
+        originalData={{ source: (store.originalData as any)?.realtime?.audio?.source }}
+        currentData={{ source: (store.formData as any)?.realtime?.audio?.source }}
+      >
+        <div class="space-y-4">
+          <SelectField
+            id="audio-source"
+            value={settings.audio.source}
+            label={t('settings.audio.audioCapture.audioSourceLabel')}
+            placeholder={t('settings.audio.audioCapture.noSoundCardCapture')}
+            helpText={t('settings.audio.audioCapture.audioSourceHelp')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={updateAudioSource}
+            options={[]}
+          >
+            <option value="">{t('settings.audio.audioCapture.noSoundCardCapture')}</option>
+            {#each audioDevices.data as device (device.Index)}
+              <option value={device.Name}>{device.Name}</option>
+            {/each}
+          </SelectField>
 
-        {#if hasSelectedSoundCard}
-          <div class="mt-4 flex items-center gap-2 text-sm text-success">
-            <Volume2 class="size-4" />
-            <span>{t('settings.audio.audioCapture.deviceSelected')}</span>
-          </div>
-        {/if}
-      </SettingsCard>
-
-      <!-- Device List -->
-      <SettingsCard>
-        <h4 class="text-sm font-medium text-base-content/90 mb-3">
-          {t('settings.audio.audioCapture.availableDevices')}
-        </h4>
-        <div class="space-y-2">
-          {#each audioDevices.data as device (device.Index)}
-            <div
-              class="flex items-center gap-3 p-3 rounded-lg bg-base-100/50 {settings.audio
-                .source === device.Name
-                ? 'ring-2 ring-primary/50'
-                : ''}"
-            >
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium truncate">{device.Name}</p>
-                <p class="text-xs text-base-content/50">Index: {device.Index}</p>
+          <!-- Status indicator -->
+          <div class="flex items-center justify-between">
+            {#if hasSelectedSoundCard}
+              <div class="flex items-center gap-2 text-sm text-success">
+                <Volume2 class="size-4" />
+                <span>{t('settings.audio.audioCapture.deviceSelected')}</span>
               </div>
-              {#if settings.audio.source === device.Name}
-                <span class="badge badge-primary badge-sm"
-                  >{t('settings.audio.audioCapture.active')}</span
-                >
-              {/if}
-            </div>
-          {/each}
+            {:else}
+              <div class="flex items-center gap-2 text-sm text-base-content/60">
+                <Volume2 class="size-4" />
+                <span>{t('settings.audio.audioCapture.noDeviceSelected')}</span>
+              </div>
+            {/if}
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs gap-1.5"
+              onclick={loadAudioDevices}
+              disabled={audioDevices.loading}
+            >
+              <RefreshCw class={`size-3.5 ${audioDevices.loading ? 'animate-spin' : ''}`} />
+              {t('settings.audio.audioCapture.refreshDevices')}
+            </button>
+          </div>
         </div>
-      </SettingsCard>
+      </SettingsSection>
     {/if}
   </div>
 {/snippet}
 
 {#snippet streamsTabContent()}
   <div class="space-y-6">
-    <!-- Default Tab Toggle for Sound Card/Streams tabs -->
-    {#if !isDefaultTab('streams')}
-      <div class="flex justify-end">
-        <button
-          type="button"
-          class="btn btn-ghost btn-xs gap-1.5 text-base-content/60 hover:text-base-content"
-          onclick={() => setAsDefaultTab('streams')}
-        >
-          {t('settings.tabs.setAsDefault')}
-        </button>
-      </div>
-    {/if}
-
-    {#if !hasStreams}
-      <!-- Empty State: No Streams Configured -->
-      <EmptyState
-        icon={Radio}
-        title={t('settings.audio.emptyStates.streams.title')}
-        description={t('settings.audio.emptyStates.streams.description')}
-        hints={[
-          t('settings.audio.emptyStates.streams.hints.rtsp'),
-          t('settings.audio.emptyStates.streams.hints.multiple'),
-          t('settings.audio.emptyStates.streams.hints.protocol'),
-        ]}
-        hintsTitle={t('settings.audio.emptyStates.streams.hintsTitle')}
-      />
-    {/if}
-
-    <!-- Transport Protocol -->
-    <SettingsCard>
-      <SelectField
-        id="rtsp-transport"
-        value={settings.rtsp.transport}
-        label={t('settings.audio.audioCapture.rtspTransportLabel')}
-        helpText={t('settings.audio.audioCapture.rtspTransportHelp')}
-        options={[
-          { value: 'tcp', label: t('settings.audio.transport.tcp') },
-          { value: 'udp', label: t('settings.audio.transport.udp') },
-        ]}
-        disabled={store.isLoading || store.isSaving}
-        onchange={updateRTSPTransport}
-      />
-    </SettingsCard>
-
-    <!-- RTSP URLs -->
-    <SettingsCard>
-      <div class="form-control">
-        <label class="label" for="rtsp-urls">
-          <span class="label-text font-medium"
-            >{t('settings.audio.audioCapture.rtspUrlsLabel')}</span
-          >
-        </label>
-        <div id="rtsp-urls">
-          <RTSPUrlInput
-            urls={settings.rtsp.urls}
-            onUpdate={updateRTSPUrls}
+    <!-- RTSP Stream Configuration -->
+    <SettingsSection
+      title={t('settings.audio.rtspStreams.title')}
+      description={t('settings.audio.rtspStreams.description')}
+      originalData={(store.originalData as any)?.realtime?.rtsp}
+      currentData={(store.formData as any)?.realtime?.rtsp}
+    >
+      <div class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Transport Protocol -->
+          <SelectField
+            id="rtsp-transport"
+            value={settings.rtsp.transport}
+            label={t('settings.audio.audioCapture.rtspTransportLabel')}
+            helpText={t('settings.audio.audioCapture.rtspTransportHelp')}
+            options={[
+              { value: 'tcp', label: t('settings.audio.transport.tcp') },
+              { value: 'udp', label: t('settings.audio.transport.udp') },
+            ]}
             disabled={store.isLoading || store.isSaving}
+            onchange={updateRTSPTransport}
           />
         </div>
-        <div class="label">
-          <span class="label-text-alt text-base-content/90">
+
+        <!-- RTSP URLs -->
+        <div class="form-control">
+          <label class="label" for="rtsp-urls">
+            <span class="label-text font-medium"
+              >{t('settings.audio.audioCapture.rtspUrlsLabel')}</span
+            >
+          </label>
+          <div id="rtsp-urls">
+            <RTSPUrlInput
+              urls={settings.rtsp.urls}
+              onUpdate={updateRTSPUrls}
+              disabled={store.isLoading || store.isSaving}
+            />
+          </div>
+          <span class="help-text mt-1">
             {t('settings.audio.audioCapture.rtspUrlsHelp')}
           </span>
         </div>
-      </div>
-    </SettingsCard>
 
-    <!-- Stream Status Summary -->
-    {#if hasStreams}
-      <SettingsCard>
-        <div class="flex items-center gap-2 text-sm text-success">
-          <Radio class="size-4" />
-          <span>
-            {t('settings.audio.audioCapture.streamsConfigured', {
-              count: settings.rtsp.urls.length,
-            })}
-          </span>
+        <!-- Stream Status -->
+        <div class="flex items-center gap-2 text-sm">
+          <Radio class={`size-4 ${hasStreams ? 'text-success' : 'text-base-content/60'}`} />
+          {#if hasStreams}
+            <span class="text-success">
+              {t('settings.audio.audioCapture.streamsConfigured', {
+                count: settings.rtsp.urls.length,
+              })}
+            </span>
+          {:else}
+            <span class="text-base-content/60">
+              {t('settings.audio.rtspStreams.noStreamsConfigured')}
+            </span>
+          {/if}
         </div>
-      </SettingsCard>
-    {/if}
+      </div>
+    </SettingsSection>
   </div>
 {/snippet}
 
@@ -706,50 +663,65 @@
             })}
         />
 
-        {#if settings.audio.soundLevel.enabled}
-          <div class="mt-4 pl-6">
-            <NumberField
-              label={t('settings.audio.soundLevelMonitoring.intervalLabel')}
-              value={settings.audio.soundLevel.interval}
-              onUpdate={value =>
-                settingsActions.updateSection('realtime', {
-                  audio: {
-                    ...$audioSettings!,
-                    soundLevel: { ...settings.audio.soundLevel, interval: value },
-                  },
-                })}
-              min={5}
-              max={300}
-              step={1}
-              placeholder="60"
-              helpText={t('settings.audio.soundLevelMonitoring.intervalHelp')}
-              disabled={store.isLoading || store.isSaving}
-            />
-          </div>
+        <!-- Fieldset for accessible disabled state -->
+        <fieldset
+          disabled={!settings.audio.soundLevel.enabled || store.isLoading || store.isSaving}
+          class="contents"
+          aria-describedby="sound-level-status"
+        >
+          <span id="sound-level-status" class="sr-only">
+            {settings.audio.soundLevel.enabled
+              ? t('settings.audio.soundLevelMonitoring.enable')
+              : t('settings.audio.soundLevelMonitoring.disabled')}
+          </span>
+          <div
+            class="space-y-4 transition-opacity duration-200"
+            class:opacity-50={!settings.audio.soundLevel.enabled}
+          >
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <NumberField
+                label={t('settings.audio.soundLevelMonitoring.intervalLabel')}
+                value={settings.audio.soundLevel.interval}
+                onUpdate={value =>
+                  settingsActions.updateSection('realtime', {
+                    audio: {
+                      ...$audioSettings!,
+                      soundLevel: { ...settings.audio.soundLevel, interval: value },
+                    },
+                  })}
+                min={5}
+                max={300}
+                step={1}
+                placeholder="60"
+                helpText={t('settings.audio.soundLevelMonitoring.intervalHelp')}
+                disabled={!settings.audio.soundLevel.enabled || store.isLoading || store.isSaving}
+              />
+            </div>
 
-          <SettingsNote>
-            <p class="font-semibold">
-              {t('settings.audio.soundLevelMonitoring.dataOutputTitle')}
-            </p>
-            <p class="text-base-content/90 text-sm">
-              {t('settings.audio.soundLevelMonitoring.dataOutputDescription')}
-            </p>
-            <ul class="text-base-content/90 text-sm list-disc list-inside mt-1">
-              <li>
-                {t('settings.audio.soundLevelMonitoring.mqttTopic')}
-                <code>{'{base_topic}'}/soundlevel</code>
-              </li>
-              <li>
-                {t('settings.audio.soundLevelMonitoring.sseEndpoint')}
-                <code>/api/v2/soundlevels/stream</code>
-              </li>
-              <li>
-                {t('settings.audio.soundLevelMonitoring.prometheusMetrics')}
-                <code>birdnet_sound_level_db</code>
-              </li>
-            </ul>
-          </SettingsNote>
-        {/if}
+            <SettingsNote>
+              <p class="font-semibold">
+                {t('settings.audio.soundLevelMonitoring.dataOutputTitle')}
+              </p>
+              <p class="text-base-content/90 text-sm">
+                {t('settings.audio.soundLevelMonitoring.dataOutputDescription')}
+              </p>
+              <ul class="text-base-content/90 text-sm list-disc list-inside mt-1">
+                <li>
+                  {t('settings.audio.soundLevelMonitoring.mqttTopic')}
+                  <code>{'{base_topic}'}/soundlevel</code>
+                </li>
+                <li>
+                  {t('settings.audio.soundLevelMonitoring.sseEndpoint')}
+                  <code>/api/v2/soundlevels/stream</code>
+                </li>
+                <li>
+                  {t('settings.audio.soundLevelMonitoring.prometheusMetrics')}
+                  <code>birdnet_sound_level_db</code>
+                </li>
+              </ul>
+            </SettingsNote>
+          </div>
+        </fieldset>
       </div>
     </SettingsSection>
   </div>
@@ -757,318 +729,344 @@
 
 {#snippet exportTabContent()}
   <div class="space-y-6">
-    <!-- Enable Export -->
-    <SettingsCard>
-      <Checkbox
-        checked={settings.audio.export.enabled}
-        label={t('settings.audio.audioExport.enable')}
-        helpText={t('settings.audio.audioExport.enableHelp')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={updateExportEnabled}
-      />
-    </SettingsCard>
-
-    {#if settings.audio.export.enabled}
-      <!-- Capture Settings -->
-      <SettingsSection
-        title={t('settings.audio.audioExport.captureSettings')}
-        originalData={{
-          length: (store.originalData as any)?.realtime?.audio?.export?.length,
-          preCapture: (store.originalData as any)?.realtime?.audio?.export?.preCapture,
-          gain: (store.originalData as any)?.realtime?.audio?.export?.gain,
-        }}
-        currentData={{
-          length: settings.audio.export.length,
-          preCapture: settings.audio.export.preCapture,
-          gain: settings.audio.export.gain,
-        }}
-      >
-        <div class="settings-form-grid">
-          <!-- Capture Length -->
-          <InlineSlider
-            label={t('settings.audio.audioExport.lengthLabel')}
-            value={settings.audio.export.length}
-            onUpdate={value => {
-              // If reducing capture length, also adjust pre-detection buffer if needed
-              const maxPreCapture = Math.floor(value / 2);
-              if (settings.audio.export.preCapture > maxPreCapture) {
-                settingsActions.updateSection('realtime', {
-                  audio: {
-                    ...$audioSettings!,
-                    export: {
-                      ...settings.audio.export,
-                      length: value,
-                      preCapture: maxPreCapture,
-                    },
-                  },
-                });
-              } else {
-                settingsActions.updateSection('realtime', {
-                  audio: {
-                    ...$audioSettings!,
-                    export: { ...settings.audio.export, length: value },
-                  },
-                });
-              }
-            }}
-            min={10}
-            max={60}
-            step={1}
-            size="sm"
-            unit="s"
-            disabled={store.isLoading || store.isSaving}
-            formatValue={(v: number) => `${v}s`}
-            helpText={t('settings.audio.audioExport.lengthHelp')}
-          />
-
-          <!-- Pre-Detection Buffer -->
-          <InlineSlider
-            label={t('settings.audio.audioExport.preCaptureLabel')}
-            value={settings.audio.export.preCapture}
-            onUpdate={value =>
-              settingsActions.updateSection('realtime', {
-                audio: {
-                  ...$audioSettings!,
-                  export: { ...settings.audio.export, preCapture: value },
-                },
-              })}
-            min={0}
-            max={Math.floor(settings.audio.export.length / 2)}
-            step={1}
-            size="sm"
-            unit="s"
-            disabled={store.isLoading || store.isSaving}
-            formatValue={(v: number) => `${v}s`}
-            helpText={t('settings.audio.audioExport.preCaptureHelp', {
-              max: Math.floor(settings.audio.export.length / 2),
-            })}
-          />
-
-          <!-- Gain -->
-          <InlineSlider
-            label={t('settings.audio.audioExport.gainLabel')}
-            value={settings.audio.export.gain}
-            onUpdate={value =>
-              settingsActions.updateSection('realtime', {
-                audio: {
-                  ...$audioSettings!,
-                  export: { ...settings.audio.export, gain: value },
-                },
-              })}
-            min={0}
-            max={20}
-            step={1}
-            size="sm"
-            unit="dB"
-            disabled={store.isLoading || store.isSaving}
-            formatValue={(v: number) => `${v} dB`}
-            helpText={t('settings.audio.audioExport.gainHelp')}
-          />
-        </div>
-      </SettingsSection>
-
-      <!-- Audio Normalization -->
-      <SettingsSection
-        title={t('settings.audio.audioExport.normalization')}
-        originalData={(store.originalData as any)?.realtime?.audio?.export?.normalization}
-        currentData={settings.audio.export.normalization}
-      >
+    <!-- Audio Export Settings -->
+    <SettingsSection
+      title={t('settings.audio.audioExport.title')}
+      description={t('settings.audio.audioExport.description')}
+      originalData={(store.originalData as any)?.realtime?.audio?.export}
+      currentData={(store.formData as any)?.realtime?.audio?.export}
+    >
+      <div class="space-y-4">
         <Checkbox
-          bind:checked={settings.audio.export.normalization.enabled}
-          label={t('settings.audio.audioExport.normalizationEnable')}
-          helpText={t('settings.audio.audioExport.normalizationHelp')}
+          checked={settings.audio.export.enabled}
+          label={t('settings.audio.audioExport.enable')}
+          helpText={t('settings.audio.audioExport.enableHelp')}
           disabled={store.isLoading || store.isSaving}
-          onchange={() =>
-            settingsActions.updateSection('realtime', {
-              audio: {
-                ...$audioSettings!,
-                export: {
-                  ...settings.audio.export,
-                  normalization: {
-                    ...settings.audio.export.normalization,
-                    enabled: settings.audio.export.normalization.enabled,
-                  },
-                },
-              },
-            })}
+          onchange={updateExportEnabled}
         />
 
-        {#if settings.audio.export.normalization.enabled}
-          <div class="settings-form-grid mt-4 pl-6">
-            <!-- Target LUFS -->
-            <NumberField
-              label={t('settings.audio.audioExport.targetLUFSLabel')}
-              value={settings.audio.export.normalization.targetLUFS}
-              onUpdate={value =>
-                settingsActions.updateSection('realtime', {
-                  audio: {
-                    ...$audioSettings!,
-                    export: {
-                      ...settings.audio.export,
-                      normalization: {
-                        ...settings.audio.export.normalization,
-                        targetLUFS: value,
+        <!-- Fieldset for accessible disabled state -->
+        <fieldset
+          disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
+          class="contents"
+          aria-describedby="export-status"
+        >
+          <span id="export-status" class="sr-only">
+            {settings.audio.export.enabled
+              ? t('settings.audio.audioExport.enable')
+              : t('settings.audio.audioExport.disabled')}
+          </span>
+          <div
+            class="space-y-6 transition-opacity duration-200"
+            class:opacity-50={!settings.audio.export.enabled}
+          >
+            <!-- Capture Settings -->
+            <div class="space-y-4">
+              <h4 class="text-sm font-medium text-base-content">
+                {t('settings.audio.audioExport.captureSettings')}
+              </h4>
+              <div class="settings-form-grid">
+                <!-- Capture Length -->
+                <InlineSlider
+                  label={t('settings.audio.audioExport.lengthLabel')}
+                  value={settings.audio.export.length}
+                  onUpdate={value => {
+                    const maxPreCapture = Math.floor(value / 2);
+                    if (settings.audio.export.preCapture > maxPreCapture) {
+                      settingsActions.updateSection('realtime', {
+                        audio: {
+                          ...$audioSettings!,
+                          export: {
+                            ...settings.audio.export,
+                            length: value,
+                            preCapture: maxPreCapture,
+                          },
+                        },
+                      });
+                    } else {
+                      settingsActions.updateSection('realtime', {
+                        audio: {
+                          ...$audioSettings!,
+                          export: { ...settings.audio.export, length: value },
+                        },
+                      });
+                    }
+                  }}
+                  min={10}
+                  max={60}
+                  step={1}
+                  size="sm"
+                  unit="s"
+                  disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
+                  formatValue={(v: number) => `${v}s`}
+                  helpText={t('settings.audio.audioExport.lengthHelp')}
+                />
+
+                <!-- Pre-Detection Buffer -->
+                <InlineSlider
+                  label={t('settings.audio.audioExport.preCaptureLabel')}
+                  value={settings.audio.export.preCapture}
+                  onUpdate={value =>
+                    settingsActions.updateSection('realtime', {
+                      audio: {
+                        ...$audioSettings!,
+                        export: { ...settings.audio.export, preCapture: value },
                       },
-                    },
-                  },
-                })}
-              min={-40}
-              max={-10}
-              step={0.5}
-              placeholder="-23"
-              helpText={t('settings.audio.audioExport.targetLUFSHelp')}
-              disabled={store.isLoading || store.isSaving}
-            />
+                    })}
+                  min={0}
+                  max={Math.floor(settings.audio.export.length / 2)}
+                  step={1}
+                  size="sm"
+                  unit="s"
+                  disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
+                  formatValue={(v: number) => `${v}s`}
+                  helpText={t('settings.audio.audioExport.preCaptureHelp', {
+                    max: Math.floor(settings.audio.export.length / 2),
+                  })}
+                />
 
-            <!-- Loudness Range -->
-            <NumberField
-              label={t('settings.audio.audioExport.loudnessRangeLabel')}
-              value={settings.audio.export.normalization.loudnessRange}
-              onUpdate={value =>
-                settingsActions.updateSection('realtime', {
-                  audio: {
-                    ...$audioSettings!,
-                    export: {
-                      ...settings.audio.export,
-                      normalization: {
-                        ...settings.audio.export.normalization,
-                        loudnessRange: value,
+                <!-- Gain -->
+                <InlineSlider
+                  label={t('settings.audio.audioExport.gainLabel')}
+                  value={settings.audio.export.gain}
+                  onUpdate={value =>
+                    settingsActions.updateSection('realtime', {
+                      audio: {
+                        ...$audioSettings!,
+                        export: { ...settings.audio.export, gain: value },
                       },
-                    },
-                  },
-                })}
-              min={0}
-              max={20}
-              step={0.5}
-              placeholder="7"
-              helpText={t('settings.audio.audioExport.loudnessRangeHelp')}
-              disabled={store.isLoading || store.isSaving}
-            />
-
-            <!-- True Peak -->
-            <NumberField
-              label={t('settings.audio.audioExport.truePeakLabel')}
-              value={settings.audio.export.normalization.truePeak}
-              onUpdate={value =>
-                settingsActions.updateSection('realtime', {
-                  audio: {
-                    ...$audioSettings!,
-                    export: {
-                      ...settings.audio.export,
-                      normalization: { ...settings.audio.export.normalization, truePeak: value },
-                    },
-                  },
-                })}
-              min={-10}
-              max={0}
-              step={0.1}
-              placeholder="-2"
-              helpText={t('settings.audio.audioExport.truePeakHelp')}
-              disabled={store.isLoading || store.isSaving}
-            />
-          </div>
-
-          <SettingsNote className="mt-4">
-            <p class="font-semibold">{t('settings.audio.audioExport.normalizationNote')}</p>
-            <p class="text-base-content/90 text-sm">
-              {t('settings.audio.audioExport.normalizationNoteDescription')}
-            </p>
-          </SettingsNote>
-        {/if}
-      </SettingsSection>
-
-      <!-- File Settings -->
-      <SettingsSection
-        title={t('settings.audio.audioExport.fileSettings')}
-        originalData={{
-          path: (store.originalData as any)?.realtime?.audio?.export?.path,
-          type: (store.originalData as any)?.realtime?.audio?.export?.type,
-          bitrate: (store.originalData as any)?.realtime?.audio?.export?.bitrate,
-        }}
-        currentData={{
-          path: settings.audio.export.path,
-          type: settings.audio.export.type,
-          bitrate: settings.audio.export.bitrate,
-        }}
-      >
-        <div class="settings-form-grid">
-          <!-- Export Path -->
-          <TextInput
-            id="export-path"
-            bind:value={settings.audio.export.path}
-            label={t('settings.audio.audioExport.pathLabel')}
-            placeholder="clips/"
-            helpText={t('settings.audio.audioExport.pathHelp')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={() =>
-              settingsActions.updateSection('realtime', {
-                audio: {
-                  ...$audioSettings!,
-                  export: { ...settings.audio.export, path: settings.audio.export.path },
-                },
-              })}
-          />
-
-          <!-- Export Type -->
-          <SelectField
-            id="export-type"
-            value={settings.audio.export.type}
-            label={t('settings.audio.audioExport.typeLabel')}
-            helpText={t('settings.audio.audioExport.typeHelp')}
-            options={exportFormatOptions}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateExportFormat(value as 'wav' | 'mp3' | 'flac' | 'aac' | 'opus')}
-          />
-
-          <!-- Bitrate -->
-          {#if bitrateConfig}
-            <InlineSlider
-              label={t('settings.audio.audioExport.bitrateLabel')}
-              value={numericBitrate}
-              onUpdate={updateExportBitrate}
-              min={bitrateConfig.min}
-              max={bitrateConfig.max}
-              step={bitrateConfig.step}
-              size="sm"
-              unit="k"
-              disabled={store.isLoading || store.isSaving || !ffmpegAvailable}
-              formatValue={(v: number) => `${v}k`}
-              helpText={t('settings.audio.audioExport.bitrateHelp', {
-                min: bitrateConfig.min,
-                max: bitrateConfig.max,
-              })}
-            />
-          {:else}
-            <!-- Show disabled field for lossless formats -->
-            <div class="form-control">
-              <label class="label" for="export-bitrate-disabled">
-                <span class="label-text">{t('settings.audio.audioExport.bitrateLabel')}</span>
-              </label>
-              <input
-                id="export-bitrate-disabled"
-                type="text"
-                class="input input-sm input-disabled w-full"
-                value="N/A - Lossless"
-                disabled
-                aria-describedby="lossless-note"
-              />
-              <div class="label" id="lossless-note">
-                <span class="label-text-alt text-base-content/90">
-                  {t('settings.audio.audioExport.losslessNote')}
-                </span>
+                    })}
+                  min={0}
+                  max={20}
+                  step={1}
+                  size="sm"
+                  unit="dB"
+                  disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
+                  formatValue={(v: number) => `${v} dB`}
+                  helpText={t('settings.audio.audioExport.gainHelp')}
+                />
               </div>
             </div>
-          {/if}
-        </div>
-      </SettingsSection>
-    {:else}
-      <!-- Export Disabled Info -->
-      <SettingsCard>
-        <p class="text-sm text-base-content/90">
-          {t('settings.audio.audioExport.disabledInfo')}
-        </p>
-      </SettingsCard>
-    {/if}
+
+            <!-- File Settings -->
+            <div class="space-y-4">
+              <h4 class="text-sm font-medium text-base-content">
+                {t('settings.audio.audioExport.fileSettings')}
+              </h4>
+              <div class="settings-form-grid">
+                <!-- Export Path -->
+                <TextInput
+                  id="export-path"
+                  bind:value={settings.audio.export.path}
+                  label={t('settings.audio.audioExport.pathLabel')}
+                  placeholder="clips/"
+                  helpText={t('settings.audio.audioExport.pathHelp')}
+                  disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
+                  onchange={() =>
+                    settingsActions.updateSection('realtime', {
+                      audio: {
+                        ...$audioSettings!,
+                        export: { ...settings.audio.export, path: settings.audio.export.path },
+                      },
+                    })}
+                />
+
+                <!-- Export Type -->
+                <SelectField
+                  id="export-type"
+                  value={settings.audio.export.type}
+                  label={t('settings.audio.audioExport.typeLabel')}
+                  helpText={t('settings.audio.audioExport.typeHelp')}
+                  options={exportFormatOptions}
+                  disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
+                  onchange={value =>
+                    updateExportFormat(value as 'wav' | 'mp3' | 'flac' | 'aac' | 'opus')}
+                />
+
+                <!-- Bitrate -->
+                {#if bitrateConfig}
+                  <InlineSlider
+                    label={t('settings.audio.audioExport.bitrateLabel')}
+                    value={numericBitrate}
+                    onUpdate={updateExportBitrate}
+                    min={bitrateConfig.min}
+                    max={bitrateConfig.max}
+                    step={bitrateConfig.step}
+                    size="sm"
+                    unit="k"
+                    disabled={!settings.audio.export.enabled ||
+                      store.isLoading ||
+                      store.isSaving ||
+                      !ffmpegAvailable}
+                    formatValue={(v: number) => `${v}k`}
+                    helpText={t('settings.audio.audioExport.bitrateHelp', {
+                      min: bitrateConfig.min,
+                      max: bitrateConfig.max,
+                    })}
+                  />
+                {:else}
+                  <div class="form-control">
+                    <label class="label" for="export-bitrate-disabled">
+                      <span class="label-text">{t('settings.audio.audioExport.bitrateLabel')}</span>
+                    </label>
+                    <input
+                      id="export-bitrate-disabled"
+                      type="text"
+                      class="input input-sm input-disabled w-full"
+                      value="N/A - Lossless"
+                      disabled
+                      aria-describedby="lossless-note"
+                    />
+                    <span class="help-text mt-1" id="lossless-note">
+                      {t('settings.audio.audioExport.losslessNote')}
+                    </span>
+                  </div>
+                {/if}
+              </div>
+            </div>
+
+            <!-- Audio Normalization -->
+            <div class="space-y-4">
+              <h4 class="text-sm font-medium text-base-content">
+                {t('settings.audio.audioExport.normalization')}
+              </h4>
+              <Checkbox
+                bind:checked={settings.audio.export.normalization.enabled}
+                label={t('settings.audio.audioExport.normalizationEnable')}
+                helpText={t('settings.audio.audioExport.normalizationHelp')}
+                disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
+                onchange={() =>
+                  settingsActions.updateSection('realtime', {
+                    audio: {
+                      ...$audioSettings!,
+                      export: {
+                        ...settings.audio.export,
+                        normalization: {
+                          ...settings.audio.export.normalization,
+                          enabled: settings.audio.export.normalization.enabled,
+                        },
+                      },
+                    },
+                  })}
+              />
+
+              <!-- Nested fieldset for normalization settings -->
+              <fieldset
+                disabled={!settings.audio.export.normalization.enabled ||
+                  !settings.audio.export.enabled ||
+                  store.isLoading ||
+                  store.isSaving}
+                class="contents"
+                aria-describedby="normalization-status"
+              >
+                <span id="normalization-status" class="sr-only">
+                  {settings.audio.export.normalization.enabled
+                    ? t('settings.audio.audioExport.normalizationEnable')
+                    : t('settings.audio.audioExport.normalizationDisabled')}
+                </span>
+                <div
+                  class="space-y-4 transition-opacity duration-200"
+                  class:opacity-50={!settings.audio.export.normalization.enabled}
+                >
+                  <div class="settings-form-grid">
+                    <!-- Target LUFS -->
+                    <NumberField
+                      label={t('settings.audio.audioExport.targetLUFSLabel')}
+                      value={settings.audio.export.normalization.targetLUFS}
+                      onUpdate={value =>
+                        settingsActions.updateSection('realtime', {
+                          audio: {
+                            ...$audioSettings!,
+                            export: {
+                              ...settings.audio.export,
+                              normalization: {
+                                ...settings.audio.export.normalization,
+                                targetLUFS: value,
+                              },
+                            },
+                          },
+                        })}
+                      min={-40}
+                      max={-10}
+                      step={0.5}
+                      placeholder="-23"
+                      helpText={t('settings.audio.audioExport.targetLUFSHelp')}
+                      disabled={!settings.audio.export.normalization.enabled ||
+                        !settings.audio.export.enabled ||
+                        store.isLoading ||
+                        store.isSaving}
+                    />
+
+                    <!-- Loudness Range -->
+                    <NumberField
+                      label={t('settings.audio.audioExport.loudnessRangeLabel')}
+                      value={settings.audio.export.normalization.loudnessRange}
+                      onUpdate={value =>
+                        settingsActions.updateSection('realtime', {
+                          audio: {
+                            ...$audioSettings!,
+                            export: {
+                              ...settings.audio.export,
+                              normalization: {
+                                ...settings.audio.export.normalization,
+                                loudnessRange: value,
+                              },
+                            },
+                          },
+                        })}
+                      min={0}
+                      max={20}
+                      step={0.5}
+                      placeholder="7"
+                      helpText={t('settings.audio.audioExport.loudnessRangeHelp')}
+                      disabled={!settings.audio.export.normalization.enabled ||
+                        !settings.audio.export.enabled ||
+                        store.isLoading ||
+                        store.isSaving}
+                    />
+
+                    <!-- True Peak -->
+                    <NumberField
+                      label={t('settings.audio.audioExport.truePeakLabel')}
+                      value={settings.audio.export.normalization.truePeak}
+                      onUpdate={value =>
+                        settingsActions.updateSection('realtime', {
+                          audio: {
+                            ...$audioSettings!,
+                            export: {
+                              ...settings.audio.export,
+                              normalization: {
+                                ...settings.audio.export.normalization,
+                                truePeak: value,
+                              },
+                            },
+                          },
+                        })}
+                      min={-10}
+                      max={0}
+                      step={0.1}
+                      placeholder="-2"
+                      helpText={t('settings.audio.audioExport.truePeakHelp')}
+                      disabled={!settings.audio.export.normalization.enabled ||
+                        !settings.audio.export.enabled ||
+                        store.isLoading ||
+                        store.isSaving}
+                    />
+                  </div>
+
+                  <SettingsNote>
+                    <p class="font-semibold">{t('settings.audio.audioExport.normalizationNote')}</p>
+                    <p class="text-base-content/90 text-sm">
+                      {t('settings.audio.audioExport.normalizationNoteDescription')}
+                    </p>
+                  </SettingsNote>
+                </div>
+              </fieldset>
+            </div>
+          </div>
+        </fieldset>
+      </div>
+    </SettingsSection>
   </div>
 {/snippet}
 

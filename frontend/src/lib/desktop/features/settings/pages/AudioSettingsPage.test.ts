@@ -131,11 +131,15 @@ vi.mock('$lib/stores/settings', async () => {
     }),
   };
 
+  // Create hasUnsavedChanges store for SettingsPageActions
+  const hasUnsavedChanges = writable(false);
+
   return {
     settingsStore,
     audioSettings,
     rtspSettings,
     settingsActions,
+    hasUnsavedChanges,
   };
 });
 

@@ -36,10 +36,20 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { SpeciesConfig, SpeciesSettings } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
+  import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
-  import { ChevronRight, Plus, SquarePen, Trash2 } from '@lucide/svelte';
+  import {
+    ChevronRight,
+    Plus,
+    SquarePen,
+    Trash2,
+    CirclePlus,
+    CircleMinus,
+    Settings2,
+  } from '@lucide/svelte';
   import { toastActions } from '$lib/stores/toast';
 
   const logger = loggers.settings;
@@ -456,20 +466,49 @@
     actionParameters = '';
     actionExecuteDefaults = true;
   }
+
+  // Tab state
+  let activeTab = $state('include');
+
+  // Tab definitions for the species settings page
+  let tabs = $derived<TabDefinition[]>([
+    {
+      id: 'include',
+      label: t('settings.species.alwaysInclude.title'),
+      icon: CirclePlus,
+      content: includeTabContent,
+      hasChanges: includeHasChanges,
+    },
+    {
+      id: 'exclude',
+      label: t('settings.species.alwaysExclude.title'),
+      icon: CircleMinus,
+      content: excludeTabContent,
+      hasChanges: excludeHasChanges,
+    },
+    {
+      id: 'config',
+      label: t('settings.species.customConfiguration.title'),
+      icon: Settings2,
+      content: configTabContent,
+      hasChanges: configHasChanges,
+    },
+  ]);
 </script>
 
-<main class="space-y-4 settings-page-content" aria-label="Species settings configuration">
-  <!-- Include Species Section -->
+<!-- Include Species Tab Content -->
+{#snippet includeTabContent()}
   <SettingsSection
     title={t('settings.species.alwaysInclude.title')}
     description={t('settings.species.alwaysInclude.description')}
     defaultOpen={true}
-    hasChanges={includeHasChanges}
+    originalData={(store.originalData as any)?.realtime?.species?.include}
+    currentData={(store.formData as any)?.realtime?.species?.include}
   >
     <div class="space-y-4">
       <!-- Species list -->
       <div class="space-y-2">
-        {#each settings.include as species}
+        {#each settings.include as species (species)}
           <div class="flex items-center justify-between p-2 rounded-md bg-base-200">
             <span class="text-sm">{species}</span>
             <button
@@ -505,18 +544,21 @@
       />
     </div>
   </SettingsSection>
+{/snippet}
 
-  <!-- Exclude Species Section -->
+<!-- Exclude Species Tab Content -->
+{#snippet excludeTabContent()}
   <SettingsSection
     title={t('settings.species.alwaysExclude.title')}
     description={t('settings.species.alwaysExclude.description')}
     defaultOpen={true}
-    hasChanges={excludeHasChanges}
+    originalData={(store.originalData as any)?.realtime?.species?.exclude}
+    currentData={(store.formData as any)?.realtime?.species?.exclude}
   >
     <div class="space-y-4">
       <!-- Species list -->
       <div class="space-y-2">
-        {#each settings.exclude as species}
+        {#each settings.exclude as species (species)}
           <div class="flex items-center justify-between p-2 rounded-md bg-base-200">
             <span class="text-sm">{species}</span>
             <button
@@ -552,13 +594,16 @@
       />
     </div>
   </SettingsSection>
+{/snippet}
 
-  <!-- Custom Configuration Section -->
+<!-- Custom Configuration Tab Content -->
+{#snippet configTabContent()}
   <SettingsSection
     title={t('settings.species.customConfiguration.title')}
     description={t('settings.species.customConfiguration.description')}
     defaultOpen={true}
-    hasChanges={configHasChanges}
+    originalData={(store.originalData as any)?.realtime?.species?.config}
+    currentData={(store.formData as any)?.realtime?.species?.config}
   >
     <div class="space-y-4">
       <!-- Header with Add Button -->
@@ -712,11 +757,9 @@
                   placeholder={t('settings.species.commandPathPlaceholder')}
                   class="input input-xs w-full"
                 />
-                <div class="label">
-                  <span class="label-text-alt text-xs"
-                    >{t('settings.species.actionsModal.command.helpText')}</span
-                  >
-                </div>
+                <span class="help-text mt-1"
+                  >{t('settings.species.actionsModal.command.helpText')}</span
+                >
               </div>
 
               <!-- Parameters -->
@@ -737,11 +780,9 @@
                   class="input input-xs w-full bg-base-200/50"
                   title="Add parameters using the buttons below or type directly (comma-separated)"
                 />
-                <div class="label">
-                  <span class="label-text-alt text-xs"
-                    >{t('settings.species.actionsModal.parameters.helpText')}</span
-                  >
-                </div>
+                <span class="help-text mt-1"
+                  >{t('settings.species.actionsModal.parameters.helpText')}</span
+                >
               </div>
 
               <!-- Parameter Buttons -->
@@ -796,11 +837,9 @@
                     >{t('settings.species.actionsModal.executeDefaults.label')}</span
                   >
                 </label>
-                <div class="label">
-                  <span class="label-text-alt text-xs"
-                    >{t('settings.species.actionsModal.executeDefaults.helpText')}</span
-                  >
-                </div>
+                <span class="help-text mt-1"
+                  >{t('settings.species.actionsModal.executeDefaults.helpText')}</span
+                >
               </div>
             </div>
           {/if}
@@ -809,7 +848,7 @@
 
       <!-- Compact Configuration List -->
       <div class="space-y-2">
-        {#each Object.entries(settings.config) as [species, config]}
+        {#each Object.entries(settings.config) as [species, config] (species)}
           <div
             class="flex items-center gap-3 p-2 rounded-lg bg-base-100 border border-base-300 hover:border-base-content/20 transition-colors"
           >
@@ -875,4 +914,8 @@
       {/if}
     </div>
   </SettingsSection>
+{/snippet}
+
+<main class="settings-page-content" aria-label="Species settings configuration">
+  <SettingsTabs {tabs} bind:activeTab />
 </main>
