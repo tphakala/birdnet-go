@@ -1,7 +1,6 @@
 package myaudio
 
 import (
-	"encoding/binary"
 	"sync"
 	"time"
 
@@ -343,25 +342,26 @@ func ApplyFilters(samples []byte) error {
 	}
 
 	// Convert byte slice to float64 slice
-	sampleCount := len(samples) / 2
-	floatSamples := make([]float64, sampleCount)
-	for i := 0; i < len(samples); i += 2 {
-		floatSamples[i/2] = float64(int16(binary.LittleEndian.Uint16(samples[i:]))) / 32768.0 //nolint:gosec // G115: audio sample conversion within 16-bit range
-	}
+	floatSamples := BytesToFloat64PCM16(samples)
+	sampleCount := len(floatSamples)
 
 	// Apply filters to the float samples in batch
 	filterChain.ApplyBatch(floatSamples)
 
-	// Convert back to byte slice
-	for i, sample := range floatSamples {
-		// Clamp the sample to valid range
-		if sample > 1.0 {
-			sample = 1.0
-		} else if sample < -1.0 {
-			sample = -1.0
+	// Convert back to byte slice with SIMD-accelerated clamping
+	if err := Float64ToBytesPCM16(floatSamples, samples); err != nil {
+		enhancedErr := errors.New(err).
+			Component("myaudio").
+			Category(errors.CategorySystem).
+			Context("operation", "apply_filters").
+			Context("sample_count", sampleCount).
+			Build()
+
+		if m := getFilterMetrics(); m != nil {
+			m.RecordAudioProcessing("apply_filters", "filter", "error")
+			m.RecordAudioProcessingError("apply_filters", "filter", "pcm16_conversion_failed")
 		}
-		intSample := int16(sample * 32767.0)
-		binary.LittleEndian.PutUint16(samples[i*2:], uint16(intSample)) //nolint:gosec // G115: audio sample conversion within 16-bit range
+		return enhancedErr
 	}
 
 	// Record successful filter application

@@ -422,18 +422,10 @@ func (p *soundLevelProcessor) ProcessAudioData(samples []byte) (*SoundLevelData,
 	return nil, ErrIntervalIncomplete // interval window not yet complete
 }
 
-// calculateRMS calculates Root Mean Square of audio samples
+// calculateRMS calculates Root Mean Square of audio samples using SIMD-accelerated operations.
+// This delegates to CalculateRMSFloat64 in audio_utils.go which uses f64.DotProduct for the sum of squares.
 func calculateRMS(samples []float64) float64 {
-	if len(samples) == 0 {
-		return 0.0
-	}
-
-	sum := 0.0
-	for _, sample := range samples {
-		sum += sample * sample
-	}
-
-	return math.Sqrt(sum / float64(len(samples)))
+	return CalculateRMSFloat64(samples)
 }
 
 // generateSoundLevelData creates SoundLevelData from interval aggregated measurements

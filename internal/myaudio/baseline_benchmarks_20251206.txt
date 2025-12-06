@@ -1,0 +1,76 @@
+# Baseline Benchmarks for SIMD Optimization
+# Date: 2025-12-06
+# Platform: linux/amd64
+# CPU: 12th Gen Intel(R) Core(TM) i7-1260P
+
+## Summary
+
+### calculateRMS (soundlevel.go:426) - HIGH PRIORITY
+Current: ~18.7 GB/s, 20.5μs for 48000 samples (1 second)
+Expected SIMD speedup: ~3.2x with f64.DotProduct
+
+BenchmarkCalculateRMS_Sizes/48000_samples_1sec:     ~20,500 ns/op, 18,700 MB/s
+BenchmarkCalculateRMS_Sizes/144000_samples_3sec:   ~61,800 ns/op, 18,630 MB/s
+BenchmarkCalculateRMS_ThroughputPerSecond:         ~566,000 ns/op (27 bands × 48k samples)
+
+### Clamp (audio_filters.go:357) - MEDIUM PRIORITY
+Current: ~14.5 GB/s, 26μs for 48000 samples
+Expected SIMD speedup: ~7.9x with f64.Clamp
+
+BenchmarkClampFloat64Slice_Sizes/48000_samples_1sec_in_range:  ~26,200 ns/op, 14,600 MB/s
+BenchmarkClampFloat64Slice_Sizes/144000_samples_3sec_in_range: ~79,300 ns/op, 14,500 MB/s
+
+### ResampleAudio (resample.go) - MEDIUM PRIORITY
+Current: ~700 MB/s for 44100→48000
+Cubic interpolation - limited SIMD opportunity due to non-uniform access
+
+BenchmarkResampleAudio_CommonRates/44100_to_48000:  ~300,000 ns/op, 580 MB/s
+BenchmarkResampleAudio_Sizes/3s_standard:           ~740,000 ns/op, 700 MB/s
+
+### Bytes-to-Float64 Conversion - LOW PRIORITY (already fast)
+Current: ~500 MB/s (includes allocation)
+
+BenchmarkBytesToFloat64_Sizes/48000_samples_1sec:   ~190,000 ns/op, 500 MB/s
+BenchmarkFloat64ToBytes_Sizes/48000_samples_1sec:   ~47,000 ns/op, 2,030 MB/s
+
+### Filter ApplyBatch (equalizer) - NOT SUITABLE FOR SIMD
+IIR filters have sequential data dependencies
+
+BenchmarkFilter_ApplyBatch_Sizes/48000_samples_1sec:  ~144,000 ns/op, 2,660 MB/s
+BenchmarkFilter_ApplyBatch_Passes/passes_4:           ~575,000 ns/op, 665 MB/s
+
+---
+
+## Raw Benchmark Data
+
+### calculateRMS
+BenchmarkCalculateRMS_Sizes/1000_samples-16                       	       402 ns/op	19,890 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCalculateRMS_Sizes/48000_samples_1sec-16                 	    20,510 ns/op	18,720 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCalculateRMS_Sizes/144000_samples_3sec-16                	    61,830 ns/op	18,630 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCalculateRMS_Sizes/288000_samples_6sec-16                	   123,300 ns/op	18,680 MB/s	       0 B/op	       0 allocs/op
+BenchmarkCalculateRMS_Concurrent-16                               	   567,000 ns/op	       -	       0 B/op	       0 allocs/op
+BenchmarkCalculateRMS_ThroughputPerSecond-16                      	   566,000 ns/op	18,300 MB/s	       0 B/op	       0 allocs/op
+
+### Clamping
+BenchmarkClampFloat64Slice_Sizes/1000_samples_in_range-16         	       558 ns/op	14,310 MB/s	       0 B/op	       0 allocs/op
+BenchmarkClampFloat64Slice_Sizes/48000_samples_1sec_in_range-16   	    26,380 ns/op	14,560 MB/s	       0 B/op	       0 allocs/op
+BenchmarkClampFloat64Slice_Sizes/144000_samples_3sec_in_range-16  	    79,350 ns/op	14,510 MB/s	       0 B/op	       0 allocs/op
+
+### Byte/Float Conversion
+BenchmarkBytesToFloat64_Sizes/48000_samples_1sec-16               	   194,600 ns/op	   493 MB/s	  385,024 B/op	       1 allocs/op
+BenchmarkBytesToFloat64_Sizes/144000_samples_3sec-16              	   488,200 ns/op	   590 MB/s	1,155,076 B/op	       1 allocs/op
+BenchmarkFloat64ToBytes_Sizes/48000_samples_1sec-16               	    47,230 ns/op	 2,033 MB/s	       0 B/op	       0 allocs/op
+BenchmarkFloat64ToBytes_Sizes/144000_samples_3sec-16              	   141,660 ns/op	 2,033 MB/s	       0 B/op	       0 allocs/op
+
+### Resampling
+BenchmarkResampleAudio_CommonRates/44100_to_48000-16         	   298,500 ns/op	   593 MB/s	  196,609 B/op	       1 allocs/op
+BenchmarkResampleAudio_CommonRates/16000_to_48000-16         	   301,700 ns/op	   213 MB/s	  196,609 B/op	       1 allocs/op
+BenchmarkResampleAudio_Sizes/3s_standard-16                  	   745,500 ns/op	   710 MB/s	  581,632 B/op	       1 allocs/op
+BenchmarkResampleAudio_SameRate-16                           	     1.287 ns/op	(fast path)	       0 B/op	       0 allocs/op
+
+### Filter ApplyBatch
+BenchmarkFilter_ApplyBatch_Sizes/48000_samples_1sec-16            	   151,130 ns/op	 2,552 MB/s	       0 B/op	       0 allocs/op
+BenchmarkFilter_ApplyBatch_Sizes/144000_samples_3sec-16           	   470,650 ns/op	 2,450 MB/s	       0 B/op	       0 allocs/op
+BenchmarkFilter_ApplyBatch_Passes/passes_1-16                     	   152,330 ns/op	 2,529 MB/s	       0 B/op	       0 allocs/op
+BenchmarkFilter_ApplyBatch_Passes/passes_2-16                     	   301,800 ns/op	 1,277 MB/s	       0 B/op	       0 allocs/op
+BenchmarkFilter_ApplyBatch_Passes/passes_4-16                     	   607,630 ns/op	   635 MB/s	       0 B/op	       0 allocs/op
