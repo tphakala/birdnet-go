@@ -66,6 +66,6 @@
   {step}
   {pattern}
   {maxlength}
-  class={cn('input  w-full', className)}
+  class={cn('input w-full', className)}
   {...rest}
 />

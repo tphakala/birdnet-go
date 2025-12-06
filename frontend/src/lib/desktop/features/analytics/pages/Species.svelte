@@ -439,7 +439,7 @@
         <h2 class="card-title">{t('analytics.species.speciesList')}</h2>
         <div class="join">
           <button
-            class="btn btn-sm"
+            class="btn btn-sm join-item"
             class:btn-active={viewMode === 'grid'}
             onclick={() => (viewMode = 'grid')}
             aria-label={t('analytics.species.switchToGrid')}
@@ -456,7 +456,7 @@
             </svg>
           </button>
           <button
-            class="btn btn-sm"
+            class="btn btn-sm join-item"
             class:btn-active={viewMode === 'list'}
             onclick={() => (viewMode = 'list')}
             aria-label={t('analytics.species.switchToList')}
