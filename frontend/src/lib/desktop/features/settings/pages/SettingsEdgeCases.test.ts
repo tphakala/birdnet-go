@@ -164,6 +164,21 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
       { name: 'UserInterfaceSettingsPage', path: './UserInterfaceSettingsPage.svelte' },
     ];
 
+    // Lookup map for path-to-component resolution (avoids nested ternary)
+    const getPageComponent = (path: string) => {
+      const pageMap: Record<string, any> = {
+        './MainSettingsPage.svelte': MainSettingsPage,
+        './AudioSettingsPage.svelte': AudioSettingsPage,
+        './FilterSettingsPage.svelte': FilterSettingsPage,
+        './SpeciesSettingsPage.svelte': SpeciesSettingsPage,
+        './SecuritySettingsPage.svelte': SecuritySettingsPage,
+        './IntegrationSettingsPage.svelte': IntegrationSettingsPage,
+        './UserInterfaceSettingsPage.svelte': UserInterfaceSettingsPage,
+      };
+      // eslint-disable-next-line security/detect-object-injection -- path is from trusted test data array, not user input
+      return pageMap[path] ?? UserInterfaceSettingsPage;
+    };
+
     it.each(pages)('$name handles completely empty store', async ({ path }) => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -176,20 +191,7 @@ describe('Settings Pages - Edge Cases and Corner Cases', () => {
         settingsActions.updateSection('realtime', {} as any);
         settingsActions.updateSection('security', {} as any);
 
-        const Page =
-          path === './MainSettingsPage.svelte'
-            ? MainSettingsPage
-            : path === './AudioSettingsPage.svelte'
-              ? AudioSettingsPage
-              : path === './FilterSettingsPage.svelte'
-                ? FilterSettingsPage
-                : path === './SpeciesSettingsPage.svelte'
-                  ? SpeciesSettingsPage
-                  : path === './SecuritySettingsPage.svelte'
-                    ? SecuritySettingsPage
-                    : path === './IntegrationSettingsPage.svelte'
-                      ? IntegrationSettingsPage
-                      : UserInterfaceSettingsPage;
+        const Page = getPageComponent(path);
         const { component, unmount } = render(Page);
 
         // Page should render without errors

@@ -73,17 +73,17 @@ vi.mock('maplibre-gl', () => ({
 }));
 
 // Pre-imported components for faster test execution
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import of Svelte component requires flexible typing for testing-library compatibility
 let MainSettingsPage: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import of Svelte component requires flexible typing for testing-library compatibility
 let AudioSettingsPage: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import of Svelte component requires flexible typing for testing-library compatibility
 let FilterSettingsPage: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import of Svelte component requires flexible typing for testing-library compatibility
 let IntegrationSettingsPage: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import of Svelte component requires flexible typing for testing-library compatibility
 let SecuritySettingsPage: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import of Svelte component requires flexible typing for testing-library compatibility
 let SupportSettingsPage: any;
 
 describe('Settings Binding Validation - Svelte 5 Fixes', () => {

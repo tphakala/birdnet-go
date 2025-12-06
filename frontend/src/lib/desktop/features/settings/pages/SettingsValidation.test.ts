@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any -- Test file intentionally uses 'any' for testing malformed data and edge cases */
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
 /**
  * Settings Validation and Boundary Conditions Test Suite
@@ -29,13 +29,9 @@ import {
 // Note: Common mocks are now defined in src/test/setup.ts and loaded globally via Vitest configuration
 
 // Pre-imported components for faster test execution
-
 let MainSettingsPage: any;
-
 let SecuritySettingsPage: any;
-
 let IntegrationSettingsPage: any;
-
 let SpeciesSettingsPage: any;
 
 describe('Settings Validation and Boundary Conditions', () => {
@@ -381,6 +377,18 @@ describe('Array Input Validation', () => {
 });
 
 describe('Cross-Field Dependencies', () => {
+  // Pre-import components for this describe block (separate from main describe)
+  beforeAll(async () => {
+    SecuritySettingsPage = await import('./SecuritySettingsPage.svelte');
+    IntegrationSettingsPage = await import('./IntegrationSettingsPage.svelte');
+    SpeciesSettingsPage = await import('./SpeciesSettingsPage.svelte');
+  }, 30000);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    settingsActions.resetAllSettings();
+  });
+
   it('validates OAuth settings dependencies', async () => {
     // First enable OAuth in the store before rendering
     settingsActions.updateSection('security', {
