@@ -200,7 +200,7 @@
   );
 </script>
 
-<div class={cn('form-control', className)} {...rest}>
+<div class={cn('form-control min-w-0', className)} {...rest}>
   <label for={fieldId} class="label">
     <span class="label-text font-medium">
       {label}

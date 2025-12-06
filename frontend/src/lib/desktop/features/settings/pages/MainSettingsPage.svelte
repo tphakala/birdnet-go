@@ -1,26 +1,25 @@
 <!--
   Main Settings Page Component
-  
+
   Purpose: Main configuration settings for BirdNET-Go including node settings,
-  BirdNET parameters, database configuration, and user interface options.
-  
+  BirdNET parameters, database configuration, and location-based filtering.
+
   Features:
+  - Tabbed interface: General, Detection, Location, Database
   - Node identification and settings
   - BirdNET analysis parameters (sensitivity, threshold, overlap)
   - Dynamic threshold configuration
-  - Range filter with interactive map
+  - Range filter with interactive map (lazy loaded)
   - Database type selection (SQLite/MySQL)
-  - User interface preferences (language, thumbnails)
-  
+
   Props: None - This is a page component that uses global settings stores
-  
+
   Performance Optimizations:
+  - Map lazy loading - only initialized when Location tab is active
   - Cached CSRF token with $derived to avoid repeated DOM queries
   - Reactive computed properties for change detection
   - Async API loading for non-critical data
-  - Map lazy loading and conditional initialization
-  - Removed page-level spinner to prevent flickering
-  
+
   @component
 -->
 <script lang="ts">
@@ -38,11 +37,22 @@
     outputSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+  import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
+  import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import { api, ApiError, getCsrfToken } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
-  import { XCircle, X, Maximize2, Download } from '@lucide/svelte';
+  import {
+    Settings,
+    Radar,
+    MapPin,
+    Database,
+    XCircle,
+    X,
+    Maximize2,
+    Download,
+  } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import {
@@ -50,12 +60,13 @@
     createMapStyle as createMapStyleFromConfig,
     getInitialZoom,
   } from '../utils/mapConfig';
-  // MapLibre will be dynamically imported when needed to reduce bundle size
 
   const logger = loggers.settings;
 
+  // Tab state
+  let activeTab = $state('general');
+
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
-  // Using $derived ensures settings update when stores change without manual subscriptions
   let settings = $derived({
     main: $mainSettings || { name: '' },
     birdnet: $birdnetSettings || {
@@ -97,35 +108,73 @@
 
   let store = $derived($settingsStore);
 
-  // Database type selection - determine which database is currently enabled
+  // Database type selection
   let selectedDatabaseType = $state('sqlite');
 
-  // Update selectedDatabaseType when settings change
   $effect(() => {
     if (settings.output.mysql.enabled) {
       selectedDatabaseType = 'mysql';
     } else if (settings.output.sqlite.enabled) {
       selectedDatabaseType = 'sqlite';
     } else {
-      selectedDatabaseType = 'sqlite'; // Default to sqlite
+      selectedDatabaseType = 'sqlite';
     }
   });
 
-  // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
-  // Each section tracks its own changes independently for granular updates
-  let mainSettingsHasChanges = $derived(
-    hasSettingsChanged((store.originalData as any)?.main, (store.formData as any)?.main)
+  // Change detection per tab
+  let generalTabHasChanges = $derived(
+    hasSettingsChanged((store.originalData as any)?.main, (store.formData as any)?.main) ||
+      hasSettingsChanged(
+        {
+          sensitivity: (store.originalData as any)?.birdnet?.sensitivity,
+          threshold: (store.originalData as any)?.birdnet?.threshold,
+          overlap: (store.originalData as any)?.birdnet?.overlap,
+          locale: (store.originalData as any)?.birdnet?.locale,
+          threads: (store.originalData as any)?.birdnet?.threads,
+        },
+        {
+          sensitivity: (store.formData as any)?.birdnet?.sensitivity,
+          threshold: (store.formData as any)?.birdnet?.threshold,
+          overlap: (store.formData as any)?.birdnet?.overlap,
+          locale: (store.formData as any)?.birdnet?.locale,
+          threads: (store.formData as any)?.birdnet?.threads,
+        }
+      )
   );
 
-  let birdnetSettingsHasChanges = $derived(
-    hasSettingsChanged((store.originalData as any)?.birdnet, (store.formData as any)?.birdnet) ||
+  let detectionTabHasChanges = $derived(
+    hasSettingsChanged(
+      {
+        modelPath: (store.originalData as any)?.birdnet?.modelPath,
+        labelPath: (store.originalData as any)?.birdnet?.labelPath,
+      },
+      {
+        modelPath: (store.formData as any)?.birdnet?.modelPath,
+        labelPath: (store.formData as any)?.birdnet?.labelPath,
+      }
+    ) ||
       hasSettingsChanged(
         (store.originalData as any)?.realtime?.dynamicThreshold,
         (store.formData as any)?.realtime?.dynamicThreshold
       )
   );
 
-  let outputSettingsHasChanges = $derived(
+  let locationTabHasChanges = $derived(
+    hasSettingsChanged(
+      {
+        latitude: (store.originalData as any)?.birdnet?.latitude,
+        longitude: (store.originalData as any)?.birdnet?.longitude,
+        rangeFilter: (store.originalData as any)?.birdnet?.rangeFilter,
+      },
+      {
+        latitude: (store.formData as any)?.birdnet?.latitude,
+        longitude: (store.formData as any)?.birdnet?.longitude,
+        rangeFilter: (store.formData as any)?.birdnet?.rangeFilter,
+      }
+    )
+  );
+
+  let databaseTabHasChanges = $derived(
     hasSettingsChanged((store.originalData as any)?.output, (store.formData as any)?.output)
   );
 
@@ -136,14 +185,13 @@
     data: T;
   }
 
-  // Locale options for BirdNET
   let birdnetLocales = $state<ApiState<Array<{ value: string; label: string }>>>({
     loading: true,
     error: null,
     data: [],
   });
 
-  // Range filter state with proper structure
+  // Range filter state
   let rangeFilterState = $state<{
     speciesCount: number | null;
     loading: boolean;
@@ -165,7 +213,6 @@
   // Focus management for modal accessibility
   let previouslyFocusedElement: HTMLElement | null = null;
 
-  // Helper function to get all focusable elements within a container
   function getFocusableElements(container: HTMLElement): HTMLElement[] {
     const focusableSelectors = [
       'button:not([disabled])',
@@ -183,7 +230,6 @@
     }) as HTMLElement[];
   }
 
-  // Focus trap handler for modal keyboard navigation
   function handleFocusTrap(event: KeyboardEvent, modal: HTMLElement) {
     if (event.key !== 'Tab') return;
 
@@ -194,13 +240,11 @@
     const lastElement = focusableElements[focusableElements.length - 1];
 
     if (event.shiftKey) {
-      // Shift + Tab - moving backwards
       if (document.activeElement === firstElement) {
         event.preventDefault();
         lastElement.focus();
       }
     } else {
-      // Tab - moving forwards
       if (document.activeElement === lastElement) {
         event.preventDefault();
         firstElement.focus();
@@ -208,19 +252,15 @@
     }
   }
 
-  // Focus trapping effect for range filter modal
   $effect(() => {
     if (rangeFilterState.showModal) {
-      // Store previously focused element
       previouslyFocusedElement = document.activeElement as HTMLElement;
 
-      // Set focus to the modal after a microtask to ensure it's in the DOM
       setTimeout(() => {
         const modal = document.querySelector(
           '[role="dialog"][aria-labelledby="modal-title"]'
         ) as HTMLElement;
         if (modal) {
-          // Focus the first focusable element or the modal itself
           const focusableElements = getFocusableElements(modal);
           if (focusableElements.length > 0) {
             focusableElements[0].focus();
@@ -228,24 +268,21 @@
             modal.focus();
           }
 
-          // Add focus trap event listener
           const trapHandler = (event: KeyboardEvent) => handleFocusTrap(event, modal);
           modal.addEventListener('keydown', trapHandler);
 
-          // Cleanup function
           return () => {
             modal.removeEventListener('keydown', trapHandler);
           };
         }
       }, 0);
     } else if (previouslyFocusedElement) {
-      // Restore focus to previously focused element
       previouslyFocusedElement.focus();
       previouslyFocusedElement = null;
     }
   });
 
-  // Map state
+  // Map state - LAZY LOADED when Location tab is active
   let mapElement: HTMLElement | undefined = $state();
   let modalMapElement: HTMLElement | undefined = $state();
   let maplibregl: typeof import('maplibre-gl') | null = null;
@@ -257,100 +294,71 @@
   let mapInitialized = $state(false);
   let mapLibraryLoading = $state(false);
 
-  // Note: getCsrfToken is called dynamically to ensure fresh token retrieval
-
-  // PERFORMANCE OPTIMIZATION: Load API data concurrently
-  // Use $effect instead of onMount for Svelte 5 pattern
+  // Load initial data
   $effect(() => {
     loadInitialData();
   });
 
-  // Initialize map when settings are actually loaded from server
+  // LAZY LOADING: Initialize map only when Location tab becomes active
   $effect(() => {
-    logger.debug('Map initialization effect triggered:', {
-      storeLoading: store.isLoading,
-      mapElementExists: !!mapElement,
-      mapInitialized,
-      birdnetSettings: $birdnetSettings,
-      derivedSettings: settings.birdnet,
-      hasActualCoordinates:
-        $birdnetSettings &&
-        $birdnetSettings.latitude !== undefined &&
-        $birdnetSettings.longitude !== undefined,
-    });
-
-    // Wait for actual coordinates to be loaded (not just fallbacks)
+    const isLocationTab = activeTab === 'location';
     const hasActualCoordinates =
       $birdnetSettings &&
       $birdnetSettings.latitude !== undefined &&
       $birdnetSettings.longitude !== undefined;
 
-    if (!store.isLoading && mapElement && !mapInitialized && hasActualCoordinates) {
-      logger.debug('Initializing map with actual coordinates:', {
-        latitude: $birdnetSettings.latitude,
-        longitude: $birdnetSettings.longitude,
-        loadingComplete: !store.isLoading,
-        hasActualSettings: !!$birdnetSettings,
-      });
+    if (
+      isLocationTab &&
+      !store.isLoading &&
+      mapElement &&
+      !mapInitialized &&
+      hasActualCoordinates
+    ) {
+      logger.debug('Location tab active - initializing map lazily');
       initializeMap();
       mapInitialized = true;
     }
   });
 
-  // Track if initial load is complete to prevent map jumps on page load
   let initialLoadComplete = $state(false);
 
-  // Mark initial load as complete after map initialization
   $effect(() => {
     if (!store.isLoading && mapInitialized && !initialLoadComplete) {
-      logger.debug('Map initial load complete, enabling coordinate reactive updates');
       initialLoadComplete = true;
     }
   });
 
-  // Update map when coordinates change via input fields (after initial load)
+  // Update map when coordinates change via input fields
   let coordinateUpdateTimer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {
-    // Only update if:
-    // 1. Initial load is complete (prevents jumps on page load)
-    // 2. Map is initialized
-    // 3. Modal is not open (don't interfere with modal interaction)
     if (initialLoadComplete && map && !mapModalOpen) {
       const lat = settings.birdnet.latitude;
       const lng = settings.birdnet.longitude;
 
-      // Debounce updates to avoid too many map movements while typing
       clearTimeout(coordinateUpdateTimer);
       coordinateUpdateTimer = setTimeout(() => {
         if (lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng)) {
-          logger.debug('Updating map from coordinate inputs', { lat, lng });
-
-          // Preserve current zoom level
           const currentZoom = map!.getZoom();
           map!.easeTo({
             center: [lng, lat],
             zoom: currentZoom,
-            duration: 300, // Smooth transition
+            duration: 300,
           });
 
-          // Update or create marker
           if (marker) {
             marker.setLngLat([lng, lat]);
           } else if (maplibregl && (lat !== 0 || lng !== 0)) {
-            // Create marker if it doesn't exist and coords are non-zero
             marker = new maplibregl.Marker({ draggable: true }).setLngLat([lng, lat]).addTo(map!);
-
             marker.on('dragend', () => {
               const lngLat = marker!.getLngLat();
               updateMarker(lngLat.lat, lngLat.lng);
             });
           }
         }
-      }, 500); // 500ms debounce for typing
+      }, 500);
     }
 
-    // Cleanup timer on effect re-run or unmount
     return () => {
       clearTimeout(coordinateUpdateTimer);
     };
@@ -368,12 +376,25 @@
     };
   });
 
-  // Manage modal map lifecycle with proper Svelte 5 pattern
+  // Clean up map when switching away from Location tab
+  // This ensures the map reinitializes when returning to the tab
+  $effect(() => {
+    const isLocationTab = activeTab === 'location';
+
+    if (!isLocationTab && map) {
+      logger.debug('Leaving Location tab - cleaning up map');
+      map.remove();
+      map = null;
+      marker = null;
+      mapInitialized = false;
+    }
+  });
+
+  // Modal map lifecycle
   $effect(() => {
     let cleanup: (() => void) | undefined;
 
     if (mapModalOpen && modalMapElement && initialLoadComplete) {
-      logger.debug('Opening map modal, initializing modal map');
       initializeModalMap().then(cleanupFn => {
         cleanup = cleanupFn;
       });
@@ -383,9 +404,7 @@
       if (cleanup) {
         cleanup();
       }
-      // Ensure reactive state is properly reset when effect cleanup runs
       if (!mapModalOpen && modalMap) {
-        logger.debug('Cleaning up modal map reactive state');
         modalMap = null;
         modalMarker = null;
       }
@@ -393,7 +412,6 @@
   });
 
   async function loadInitialData() {
-    // Load all API data in parallel for better performance
     await Promise.all([loadBirdnetLocales(), loadRangeFilterCount()]);
   }
 
@@ -412,23 +430,18 @@
         toastActions.warning(t('settings.main.errors.localesLoadFailed'));
       }
       birdnetLocales.error = t('settings.main.errors.localesLoadFailed');
-      // Fallback to basic locales so form still works
       birdnetLocales.data = [{ value: 'en', label: 'English' }];
     } finally {
       birdnetLocales.loading = false;
     }
   }
 
-  // Create map style configuration
-  // Use imported map style configuration
   const createMapStyle = createMapStyleFromConfig;
 
-  // Initialize MapLibre GL JS map
   async function initializeMap() {
     if (!mapElement || mapInitialized) return;
 
     try {
-      // Dynamically import MapLibre GL JS and CSS when needed
       if (!maplibregl) {
         mapLibraryLoading = true;
         try {
@@ -440,90 +453,47 @@
           mapLibraryLoading = false;
         } catch (importError) {
           mapLibraryLoading = false;
-          logger.error('Failed to load MapLibre GL JS:', importError, {
-            component: 'MainSettingsPage',
-            action: 'dynamic import',
-          });
-
-          // Provide user-friendly error message
-          if (importError instanceof Error) {
-            if (
-              importError.message.includes('Network') ||
-              importError.message.includes('Failed to fetch')
-            ) {
-              toastActions.error(
-                'Failed to load map library. Please check your internet connection and try again.'
-              );
-            } else {
-              toastActions.error(
-                'Failed to load map library. Your browser may not support this feature.'
-              );
-            }
-          } else {
-            toastActions.error(
-              'Failed to load map library. Please refresh the page and try again.'
-            );
-          }
-
-          // Reset state and exit early
+          logger.error('Failed to load MapLibre GL JS:', importError);
+          toastActions.error('Failed to load map library. Please refresh the page.');
           mapInitialized = false;
           return;
         }
       }
 
-      // Use actual coordinates from $birdnetSettings, not derived fallbacks
       const initialLat = $birdnetSettings?.latitude ?? 0;
       const initialLng = $birdnetSettings?.longitude ?? 0;
       const initialZoom = getInitialZoom(initialLat, initialLng);
 
-      logger.debug('Map initialization values:', {
-        initialLat,
-        initialLng,
-        initialZoom,
-        actualBirdnetSettings: $birdnetSettings,
-        derivedBirdnetSettings: settings.birdnet,
-        mapElementSize: mapElement
-          ? { width: mapElement.offsetWidth, height: mapElement.offsetHeight }
-          : null,
-      });
-
       map = new maplibregl.Map({
         container: mapElement,
         style: createMapStyle(),
-        center: [initialLng, initialLat], // MapLibre uses [lng, lat] order
+        center: [initialLng, initialLat],
         zoom: initialZoom,
         scrollZoom: MAP_CONFIG.SCROLL_ZOOM,
         keyboard: MAP_CONFIG.KEYBOARD_NAV,
-        // Disable animations during initialization
         fadeDuration: MAP_CONFIG.FADE_DURATION,
         pitchWithRotate: MAP_CONFIG.PITCH_WITH_ROTATE,
         touchZoomRotate: MAP_CONFIG.TOUCH_ZOOM_ROTATE,
       });
 
-      // Force MapLibre to recalculate container size after initialization
-      // This prevents coordinate calculation issues like 2x drag distance
       map.on('load', () => {
         if (map) {
           map.resize();
         }
       });
 
-      // Enable zoom only when Ctrl/Cmd is pressed
       const handleWheel = (e: globalThis.WheelEvent) => {
         if ((e.ctrlKey || e.metaKey) && map) {
           e.preventDefault();
           if (e.deltaY > 0) {
-            map.zoomOut({ duration: 300 }); // Smooth zoom
+            map.zoomOut({ duration: 300 });
           } else {
-            map.zoomIn({ duration: 300 }); // Smooth zoom
+            map.zoomIn({ duration: 300 });
           }
         }
       };
-      // Use passive: false since we need to preventDefault conditionally
-      // This is intentional for map zoom control with Ctrl/Cmd key
       mapElement.addEventListener('wheel', handleWheel as globalThis.EventListener, false);
 
-      // Add marker if coordinates exist (direct creation to avoid reactive loops)
       if ((initialLat !== 0 || initialLng !== 0) && maplibregl) {
         marker = new maplibregl.Marker({ draggable: true })
           .setLngLat([initialLng, initialLat])
@@ -535,98 +505,65 @@
         });
       }
 
-      // Handle map clicks
       if (map) {
         map.on('click', (e: import('maplibre-gl').MapMouseEvent) => {
           const lngLat = e.lngLat;
           updateMarker(lngLat.lat, lngLat.lng);
-          // Preserve zoom level when centering on clicked location
           const currentZoom = map?.getZoom();
           map?.easeTo({
             center: [lngLat.lng, lngLat.lat],
-            zoom: currentZoom, // Preserve current zoom level
+            zoom: currentZoom,
             duration: MAP_CONFIG.ANIMATION_DURATION,
           });
         });
       }
     } catch (error) {
-      logger.error('Failed to initialize map:', error, {
-        component: 'MainSettingsPage',
-        action: 'initializeMap',
-        mapElement: !!mapElement,
-        maplibregl: !!maplibregl,
-      });
-
-      // Provide specific error messages based on error type
-      if (error instanceof Error) {
-        if (error.message.includes('WebGL')) {
-          toastActions.error(
-            'Map requires WebGL support. Please ensure your browser supports WebGL and hardware acceleration is enabled.'
-          );
-        } else if (error.message.includes('container')) {
-          toastActions.error('Map container not found. Please refresh the page and try again.');
-        } else {
-          toastActions.error(`Failed to load map: ${error.message}`);
-        }
-      } else {
-        toastActions.error('Failed to load map. Please try refreshing the page.');
-      }
-
-      // Reset map initialization state so user can retry
+      logger.error('Failed to initialize map:', error);
+      toastActions.error('Failed to load map. Please try refreshing the page.');
       mapInitialized = false;
     }
   }
 
-  // Update marker position and settings (called when coordinates change)
   function updateMarker(lat: number, lng: number) {
     if (!map) return;
 
     const roundedLat = parseFloat(lat.toFixed(3));
     const roundedLng = parseFloat(lng.toFixed(3));
 
-    // Update settings
     settingsActions.updateSection('birdnet', {
       latitude: roundedLat,
       longitude: roundedLng,
     });
 
-    // Update both maps
     updateMapView(roundedLat, roundedLng);
-
-    // Test range filter with new coordinates
     debouncedTestRangeFilter();
   }
 
-  // Update map view and marker position (visual only, no settings update)
   function updateMapView(lat: number, lng: number) {
     if (!map) return;
 
-    // Update map center while preserving current zoom level
     const currentZoom = map.getZoom();
     map.easeTo({
       center: [lng, lat],
-      zoom: currentZoom, // Preserve current zoom level
+      zoom: currentZoom,
       duration: MAP_CONFIG.ANIMATION_DURATION,
-    }); // MapLibre uses [lng, lat] order
+    });
 
-    // Update or create marker
     if (marker) {
       marker.setLngLat([lng, lat]);
     } else if (maplibregl) {
       marker = new maplibregl.Marker({ draggable: true }).setLngLat([lng, lat]).addTo(map);
-
       marker.on('dragend', () => {
         const lngLat = marker!.getLngLat();
         updateMarker(lngLat.lat, lngLat.lng);
       });
     }
 
-    // Sync modal map if it exists
     if (modalMap) {
       const modalCurrentZoom = modalMap.getZoom();
       modalMap.easeTo({
         center: [lng, lat],
-        zoom: modalCurrentZoom, // Preserve current zoom level
+        zoom: modalCurrentZoom,
         duration: MAP_CONFIG.ANIMATION_DURATION,
       });
       if (modalMarker) {
@@ -638,7 +575,6 @@
 
         modalMarker.on('dragend', () => {
           const lngLat = modalMarker!.getLngLat();
-          // Update settings only, don't trigger map view updates that could change zoom
           const roundedLat = parseFloat(lngLat.lat.toFixed(3));
           const roundedLng = parseFloat(lngLat.lng.toFixed(3));
 
@@ -647,12 +583,11 @@
             longitude: roundedLng,
           });
 
-          // Sync main map position without zoom changes
           if (map) {
             const mainCurrentZoom = map.getZoom();
             map.easeTo({
               center: [roundedLng, roundedLat],
-              zoom: mainCurrentZoom, // Preserve current zoom level
+              zoom: mainCurrentZoom,
               duration: MAP_CONFIG.ANIMATION_DURATION,
             });
             if (marker) {
@@ -660,29 +595,22 @@
             }
           }
 
-          // Test range filter with new coordinates
           debouncedTestRangeFilter();
         });
       }
     }
   }
 
-  // Initialize modal map when modal is opened
-  // Note: This implementation includes full bidirectional sync:
-  // - Modal map inherits current coordinates and zoom from main map when opened
-  // - User interactions (click/drag) in modal update settings and sync back to main map
-  // - Both maps stay synchronized through the shared settings state
   async function initializeModalMap() {
     if (!modalMapElement || modalMap || !maplibregl) return;
 
-    // Define handleModalWheel outside try block so it's accessible in cleanup
     const handleModalWheel = (e: globalThis.WheelEvent) => {
       if (modalMap) {
         e.preventDefault();
         if (e.deltaY > 0) {
-          modalMap.zoomOut({ duration: 300 }); // Smooth zoom
+          modalMap.zoomOut({ duration: 300 });
         } else {
-          modalMap.zoomIn({ duration: 300 }); // Smooth zoom
+          modalMap.zoomIn({ duration: 300 });
         }
       }
     };
@@ -691,13 +619,6 @@
       const currentLat = $birdnetSettings?.latitude ?? 0;
       const currentLng = $birdnetSettings?.longitude ?? 0;
       const currentZoom = map?.getZoom() || getInitialZoom(currentLat, currentLng);
-
-      logger.debug('Modal map initialization values:', {
-        currentLat,
-        currentLng,
-        currentZoom,
-        actualBirdnetSettings: $birdnetSettings,
-      });
 
       modalMap = new maplibregl.Map({
         container: modalMapElement,
@@ -711,19 +632,15 @@
         touchZoomRotate: MAP_CONFIG.TOUCH_ZOOM_ROTATE,
       });
 
-      // Enable mouse wheel zooming in modal (no Ctrl requirement - already handled by handleModalWheel)
       if (modalMap) {
         modalMap.scrollZoom.enable();
       }
-      // Use passive: false since handleModalWheel needs to preventDefault for zoom control
-      // This is intentional for map interaction in the modal
       modalMapElement.addEventListener(
         'wheel',
         handleModalWheel as globalThis.EventListener,
         false
       );
 
-      // Add marker if coordinates exist
       if (currentLat !== 0 || currentLng !== 0) {
         modalMarker = new maplibregl!.Marker({ draggable: true })
           .setLngLat([currentLng, currentLat])
@@ -731,7 +648,6 @@
 
         modalMarker.on('dragend', () => {
           const lngLat = modalMarker!.getLngLat();
-          // Update settings only, don't trigger map view updates that could change zoom
           const roundedLat = parseFloat(lngLat.lat.toFixed(3));
           const roundedLng = parseFloat(lngLat.lng.toFixed(3));
 
@@ -740,12 +656,11 @@
             longitude: roundedLng,
           });
 
-          // Sync main map position without zoom changes
           if (map) {
             const mainCurrentZoom = map.getZoom();
             map.easeTo({
               center: [roundedLng, roundedLat],
-              zoom: mainCurrentZoom, // Preserve current zoom level
+              zoom: mainCurrentZoom,
               duration: MAP_CONFIG.ANIMATION_DURATION,
             });
             if (marker) {
@@ -753,16 +668,13 @@
             }
           }
 
-          // Test range filter with new coordinates
           debouncedTestRangeFilter();
         });
       }
 
-      // Handle modal map clicks
       if (modalMap) {
         modalMap.on('click', (e: import('maplibre-gl').MapMouseEvent) => {
           const lngLat = e.lngLat;
-          // Update settings only, don't trigger map view updates that could change zoom
           const roundedLat = parseFloat(lngLat.lat.toFixed(3));
           const roundedLng = parseFloat(lngLat.lng.toFixed(3));
 
@@ -771,17 +683,15 @@
             longitude: roundedLng,
           });
 
-          // Update modal marker position
           if (modalMarker) {
             modalMarker.setLngLat([roundedLng, roundedLat]);
           }
 
-          // Sync main map position without zoom changes
           if (map) {
             const mainCurrentZoom = map.getZoom();
             map.easeTo({
               center: [roundedLng, roundedLat],
-              zoom: mainCurrentZoom, // Preserve current zoom level
+              zoom: mainCurrentZoom,
               duration: MAP_CONFIG.ANIMATION_DURATION,
             });
             if (marker) {
@@ -789,44 +699,16 @@
             }
           }
 
-          // Test range filter with new coordinates
           debouncedTestRangeFilter();
         });
       }
     } catch (error) {
-      logger.error('Failed to initialize modal map:', error, {
-        component: 'MainSettingsPage',
-        action: 'initializeModalMap',
-        modalMapElement: !!modalMapElement,
-        maplibregl: !!maplibregl,
-        modalMap: !!modalMap,
-      });
-
-      // Provide specific error messages based on error type
-      if (error instanceof Error) {
-        if (error.message.includes('WebGL')) {
-          toastActions.error(
-            'Modal map requires WebGL support. Please ensure your browser supports WebGL and hardware acceleration is enabled.'
-          );
-        } else if (error.message.includes('container')) {
-          toastActions.error(
-            'Modal map container not found. Please close and reopen the map modal.'
-          );
-        } else {
-          toastActions.error(`Failed to load modal map: ${error.message}`);
-        }
-      } else {
-        toastActions.error('Failed to load modal map. Please try closing and reopening the modal.');
-      }
-
-      // Close modal on error
+      logger.error('Failed to initialize modal map:', error);
+      toastActions.error('Failed to load modal map. Please try closing and reopening the modal.');
       mapModalOpen = false;
-
-      // Return empty cleanup function
       return () => {};
     }
 
-    // Return cleanup function
     return () => {
       modalMapElement?.removeEventListener(
         'wheel',
@@ -835,72 +717,16 @@
       );
       if (modalMap) {
         modalMap.remove();
-        // Don't set modalMap = null here, it's handled by the reactive state in the effect
       }
     };
   }
 
-  // Map modal functions
   function openMapModal() {
     mapModalOpen = true;
   }
 
   function closeMapModal() {
     mapModalOpen = false;
-    // Cleanup will happen in the effect
-  }
-
-  // Public method for programmatic map centering
-  export function centerMapOnCoordinates(lat: number, lng: number) {
-    // Validate inputs
-    if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
-      logger.warn('Invalid coordinates provided to centerMapOnCoordinates', {
-        lat,
-        lng,
-        component: 'MainSettingsPage',
-      });
-      return;
-    }
-
-    // Only update if map is initialized and not in modal view
-    if (map && !mapModalOpen) {
-      const currentZoom = map.getZoom();
-
-      logger.debug('Centering map programmatically', {
-        lat,
-        lng,
-        currentZoom,
-        component: 'MainSettingsPage',
-      });
-
-      map.easeTo({
-        center: [lng, lat],
-        zoom: currentZoom, // Preserve current zoom level
-        duration: MAP_CONFIG.ANIMATION_DURATION || 500, // Fallback to 500ms if config not set
-      });
-
-      // Update marker position if it exists
-      if (marker) {
-        marker.setLngLat([lng, lat]);
-      }
-
-      // Update settings with rounded coordinates
-      const roundedLat = parseFloat(lat.toFixed(3));
-      const roundedLng = parseFloat(lng.toFixed(3));
-
-      settingsActions.updateSection('birdnet', {
-        latitude: roundedLat,
-        longitude: roundedLng,
-      });
-    } else if (!map) {
-      logger.warn('Map not initialized, cannot center on coordinates', {
-        component: 'MainSettingsPage',
-      });
-    } else if (mapModalOpen) {
-      logger.debug('Map modal is open, skipping programmatic centering', {
-        component: 'MainSettingsPage',
-      });
-    }
   }
 
   // Range filter functions
@@ -911,7 +737,7 @@
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       testCurrentRangeFilter();
-    }, 150); // Reduced from 500ms to 150ms for faster response
+    }, 150);
   }
 
   async function loadRangeFilterCount() {
@@ -930,11 +756,8 @@
     if (rangeFilterState.testing || !settings.birdnet.latitude || !settings.birdnet.longitude)
       return;
 
-    // Clear any existing loading delay timer
     clearTimeout(loadingDelayTimer);
 
-    // Only show loading state if the request takes longer than 100ms
-    // This prevents flicker for fast responses
     loadingDelayTimer = setTimeout(() => {
       rangeFilterState.testing = true;
     }, 100);
@@ -959,10 +782,8 @@
     } catch (error) {
       logger.error('Failed to test range filter:', error);
       rangeFilterState.error = t('settings.main.errors.rangeFilterTestFailed');
-      // Set count to null on error to show loading state next time
       rangeFilterState.speciesCount = null;
     } finally {
-      // Clear the loading delay timer and testing state
       clearTimeout(loadingDelayTimer);
       rangeFilterState.testing = false;
     }
@@ -994,14 +815,10 @@
     }
   }
 
-  // Watch for changes that affect range filter
   $effect(() => {
-    // Track the specific values that should trigger a range filter update
-    // These variables are used by Svelte's reactivity system to track changes
     const lat = settings.birdnet.latitude;
     const lng = settings.birdnet.longitude;
 
-    // Only test if we have valid coordinates
     if (lat && lng) {
       debouncedTestRangeFilter();
     }
@@ -1053,15 +870,12 @@
     });
   }
 
-  // Download range filter species list as CSV
   async function downloadSpeciesCSV() {
-    // Prevent duplicate requests
     if (rangeFilterState.downloading) return;
 
     try {
       rangeFilterState.downloading = true;
 
-      // Construct URL with current parameters
       const params = new URLSearchParams({
         latitude: settings.birdnet.latitude.toString(),
         longitude: settings.birdnet.longitude.toString(),
@@ -1076,24 +890,21 @@
       });
 
       if (!response.ok) {
-        // Try to surface API error message if available
         let msg = 'Failed to download CSV';
         try {
           const data = await response.clone().json();
           if (data?.message) msg = data.message;
         } catch {
-          // ignore parse errors; fall back to generic
+          // ignore
         }
         throw new Error(msg);
       }
 
-      // Get the filename from Content-Disposition header or use default
       const cd =
         response.headers.get('Content-Disposition') ||
         response.headers.get('content-disposition') ||
         '';
       let filename = 'birdnet_species.csv';
-      // RFC 5987: filename*=utf-8''<urlencoded>
       const fnStar = cd.match(/filename\*\s*=\s*([^']*)''([^;]+)/i);
       if (fnStar && fnStar[2]) {
         try {
@@ -1106,10 +917,7 @@
         if (fn && fn[1]) filename = fn[1].trim();
       }
 
-      // Get the CSV content
       const blob = await response.blob();
-
-      // Create a download link and trigger it
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1127,17 +935,50 @@
       rangeFilterState.downloading = false;
     }
   }
+
+  // Tab definitions with content snippets
+  let tabs: TabDefinition[] = $derived([
+    {
+      id: 'general',
+      label: t('settings.main.tabs.general'),
+      icon: Settings,
+      hasChanges: generalTabHasChanges,
+      content: generalTabContent,
+    },
+    {
+      id: 'detection',
+      label: t('settings.main.tabs.detection'),
+      icon: Radar,
+      hasChanges: detectionTabHasChanges,
+      content: detectionTabContent,
+    },
+    {
+      id: 'location',
+      label: t('settings.main.tabs.location'),
+      icon: MapPin,
+      hasChanges: locationTabHasChanges,
+      content: locationTabContent,
+    },
+    {
+      id: 'database',
+      label: t('settings.main.tabs.database'),
+      icon: Database,
+      hasChanges: databaseTabHasChanges,
+      content: databaseTabContent,
+    },
+  ]);
 </script>
 
-<main class="space-y-4 settings-page-content" aria-label="Main settings configuration">
-  <!-- Main Settings Section -->
-  <SettingsSection
-    title={t('settings.main.sections.main.title')}
-    description={t('settings.main.sections.main.description')}
-    defaultOpen={true}
-    hasChanges={mainSettingsHasChanges}
-  >
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
+<!-- Tab Content Snippets -->
+{#snippet generalTabContent()}
+  <div class="space-y-6">
+    <!-- Node Name Card -->
+    <SettingsSection
+      title={t('settings.main.sections.main.title')}
+      description={t('settings.main.sections.main.description')}
+      originalData={(store.originalData as any)?.main}
+      currentData={(store.formData as any)?.main}
+    >
       <TextInput
         id="node-name"
         value={settings.main.name}
@@ -1147,19 +988,28 @@
         disabled={store.isLoading || store.isSaving}
         onchange={updateMainName}
       />
-    </div>
-  </SettingsSection>
+    </SettingsSection>
 
-  <!-- BirdNET Settings Section -->
-  <SettingsSection
-    title={t('settings.main.sections.birdnet.title')}
-    description={t('settings.main.sections.birdnet.description')}
-    defaultOpen={true}
-    hasChanges={birdnetSettingsHasChanges}
-  >
-    <div class="space-y-6">
-      <!-- Basic BirdNET Settings -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
+    <!-- BirdNET Parameters Card -->
+    <SettingsSection
+      title={t('settings.main.sections.birdnet.title')}
+      description={t('settings.main.sections.birdnet.description')}
+      originalData={{
+        sensitivity: (store.originalData as any)?.birdnet?.sensitivity,
+        threshold: (store.originalData as any)?.birdnet?.threshold,
+        overlap: (store.originalData as any)?.birdnet?.overlap,
+        locale: (store.originalData as any)?.birdnet?.locale,
+        threads: (store.originalData as any)?.birdnet?.threads,
+      }}
+      currentData={{
+        sensitivity: settings.birdnet.sensitivity,
+        threshold: settings.birdnet.threshold,
+        overlap: settings.birdnet.overlap,
+        locale: settings.birdnet.locale,
+        threads: settings.birdnet.threads,
+      }}
+    >
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <NumberField
           label={t('settings.main.fields.sensitivity.label')}
           value={settings.birdnet.sensitivity}
@@ -1214,204 +1064,208 @@
           disabled={store.isLoading || store.isSaving}
         />
       </div>
+    </SettingsSection>
+  </div>
+{/snippet}
 
-      <!-- Custom BirdNET Classifier -->
-      <div>
-        <h4 class="text-lg font-medium mt-6 pb-2">
-          {t('settings.main.sections.customClassifier.title')}
-        </h4>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
-          <TextInput
-            id="model-path"
-            value={settings.birdnet.modelPath ?? ''}
-            label={t('settings.main.sections.customClassifier.modelPath.label')}
-            placeholder={t('settings.main.sections.customClassifier.modelPath.placeholder')}
-            helpText={t('settings.main.sections.customClassifier.modelPath.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateBirdnetSetting('modelPath', value)}
-          />
-
-          <TextInput
-            id="label-path"
-            value={settings.birdnet.labelPath ?? ''}
-            label={t('settings.main.sections.customClassifier.labelPath.label')}
-            placeholder={t('settings.main.sections.customClassifier.labelPath.placeholder')}
-            helpText={t('settings.main.sections.customClassifier.labelPath.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateBirdnetSetting('labelPath', value)}
-          />
-        </div>
-      </div>
-
-      <!-- Dynamic Threshold -->
-      <div>
-        <h4 class="text-lg font-medium mt-6 pb-2">
-          {t('settings.main.sections.dynamicThreshold.title')}
-        </h4>
-        <Checkbox
-          checked={settings.dynamicThreshold.enabled}
-          label={t('settings.main.sections.dynamicThreshold.enable.label')}
-          helpText={t('settings.main.sections.dynamicThreshold.enable.helpText')}
+{#snippet detectionTabContent()}
+  <div class="space-y-6">
+    <!-- Custom BirdNET Classifier Card -->
+    <SettingsSection
+      title={t('settings.main.sections.customClassifier.title')}
+      description={t('settings.main.sections.customClassifier.description')}
+      originalData={{
+        modelPath: (store.originalData as any)?.birdnet?.modelPath,
+        labelPath: (store.originalData as any)?.birdnet?.labelPath,
+      }}
+      currentData={{
+        modelPath: settings.birdnet.modelPath,
+        labelPath: settings.birdnet.labelPath,
+      }}
+    >
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <TextInput
+          id="model-path"
+          value={settings.birdnet.modelPath ?? ''}
+          label={t('settings.main.sections.customClassifier.modelPath.label')}
+          placeholder={t('settings.main.sections.customClassifier.modelPath.placeholder')}
+          helpText={t('settings.main.sections.customClassifier.modelPath.helpText')}
           disabled={store.isLoading || store.isSaving}
-          onchange={value => updateDynamicThreshold('enabled', value)}
+          onchange={value => updateBirdnetSetting('modelPath', value)}
         />
 
-        {#if settings.dynamicThreshold.enabled}
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 mt-4">
-            <NumberField
-              label={t('settings.main.sections.dynamicThreshold.trigger.label')}
-              value={settings.dynamicThreshold.trigger}
-              onUpdate={value => updateDynamicThreshold('trigger', value)}
-              min={0.0}
-              max={1.0}
-              step={0.01}
-              helpText={t('settings.main.sections.dynamicThreshold.trigger.helpText')}
-              disabled={store.isLoading || store.isSaving}
-            />
+        <TextInput
+          id="label-path"
+          value={settings.birdnet.labelPath ?? ''}
+          label={t('settings.main.sections.customClassifier.labelPath.label')}
+          placeholder={t('settings.main.sections.customClassifier.labelPath.placeholder')}
+          helpText={t('settings.main.sections.customClassifier.labelPath.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateBirdnetSetting('labelPath', value)}
+        />
+      </div>
+    </SettingsSection>
 
-            <NumberField
-              label={t('settings.main.sections.dynamicThreshold.minimum.label')}
-              value={settings.dynamicThreshold.min}
-              onUpdate={value => updateDynamicThreshold('min', value)}
-              min={0.0}
-              max={0.99}
-              step={0.01}
-              helpText={t('settings.main.sections.dynamicThreshold.minimum.helpText')}
-              disabled={store.isLoading || store.isSaving}
-            />
+    <!-- Dynamic Threshold Card -->
+    <SettingsSection
+      title={t('settings.main.sections.dynamicThreshold.title')}
+      description={t('settings.main.sections.dynamicThreshold.description')}
+      originalData={(store.originalData as any)?.realtime?.dynamicThreshold}
+      currentData={(store.formData as any)?.realtime?.dynamicThreshold}
+    >
+      <Checkbox
+        checked={settings.dynamicThreshold.enabled}
+        label={t('settings.main.sections.dynamicThreshold.enable.label')}
+        helpText={t('settings.main.sections.dynamicThreshold.enable.helpText')}
+        disabled={store.isLoading || store.isSaving}
+        onchange={value => updateDynamicThreshold('enabled', value)}
+      />
 
-            <NumberField
-              label={t('settings.main.sections.dynamicThreshold.expireTime.label')}
-              value={settings.dynamicThreshold.validHours}
-              onUpdate={value => updateDynamicThreshold('validHours', value)}
-              min={0}
-              max={1000}
-              step={1}
-              helpText={t('settings.main.sections.dynamicThreshold.expireTime.helpText')}
-              disabled={store.isLoading || store.isSaving}
-            />
-          </div>
-        {/if}
+      {#if settings.dynamicThreshold.enabled}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+          <NumberField
+            label={t('settings.main.sections.dynamicThreshold.trigger.label')}
+            value={settings.dynamicThreshold.trigger}
+            onUpdate={value => updateDynamicThreshold('trigger', value)}
+            min={0.0}
+            max={1.0}
+            step={0.01}
+            helpText={t('settings.main.sections.dynamicThreshold.trigger.helpText')}
+            disabled={store.isLoading || store.isSaving}
+          />
+
+          <NumberField
+            label={t('settings.main.sections.dynamicThreshold.minimum.label')}
+            value={settings.dynamicThreshold.min}
+            onUpdate={value => updateDynamicThreshold('min', value)}
+            min={0.0}
+            max={0.99}
+            step={0.01}
+            helpText={t('settings.main.sections.dynamicThreshold.minimum.helpText')}
+            disabled={store.isLoading || store.isSaving}
+          />
+
+          <NumberField
+            label={t('settings.main.sections.dynamicThreshold.expireTime.label')}
+            value={settings.dynamicThreshold.validHours}
+            onUpdate={value => updateDynamicThreshold('validHours', value)}
+            min={0}
+            max={1000}
+            step={1}
+            helpText={t('settings.main.sections.dynamicThreshold.expireTime.helpText')}
+            disabled={store.isLoading || store.isSaving}
+          />
+        </div>
+      {/if}
+    </SettingsSection>
+  </div>
+{/snippet}
+
+{#snippet locationTabContent()}
+  <div class="space-y-6">
+    <!-- Station Location Card -->
+    <SettingsSection
+      title={t('settings.main.sections.rangeFilter.stationLocation.label')}
+      description={t('settings.main.sections.rangeFilter.stationLocation.helpText')}
+      originalData={{
+        latitude: (store.originalData as any)?.birdnet?.latitude,
+        longitude: (store.originalData as any)?.birdnet?.longitude,
+      }}
+      currentData={{
+        latitude: settings.birdnet.latitude,
+        longitude: settings.birdnet.longitude,
+      }}
+    >
+      <!-- Coordinates -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+        <NumberField
+          label={t('settings.main.sections.rangeFilter.latitude.label')}
+          value={settings.birdnet.latitude}
+          onUpdate={value => updateBirdnetSetting('latitude', value)}
+          min={-90.0}
+          max={90.0}
+          step={0.001}
+          helpText={t('settings.main.sections.rangeFilter.latitude.helpText')}
+          disabled={store.isLoading || store.isSaving}
+        />
+
+        <NumberField
+          label={t('settings.main.sections.rangeFilter.longitude.label')}
+          value={settings.birdnet.longitude}
+          onUpdate={value => updateBirdnetSetting('longitude', value)}
+          min={-180.0}
+          max={180.0}
+          step={0.001}
+          helpText={t('settings.main.sections.rangeFilter.longitude.helpText')}
+          disabled={store.isLoading || store.isSaving}
+        />
       </div>
 
-      <!-- Range Filter -->
-      <div>
-        <h4 class="text-lg font-medium mt-6 pb-2">
-          {t('settings.main.sections.rangeFilter.title')}
-        </h4>
-
-        <!-- Coordinates row - 2 columns -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 mb-6">
-          <NumberField
-            label={t('settings.main.sections.rangeFilter.latitude.label')}
-            value={settings.birdnet.latitude}
-            onUpdate={value => updateBirdnetSetting('latitude', value)}
-            min={-90.0}
-            max={90.0}
-            step={0.001}
-            helpText={t('settings.main.sections.rangeFilter.latitude.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-
-          <NumberField
-            label={t('settings.main.sections.rangeFilter.longitude.label')}
-            value={settings.birdnet.longitude}
-            onUpdate={value => updateBirdnetSetting('longitude', value)}
-            min={-180.0}
-            max={180.0}
-            step={0.001}
-            helpText={t('settings.main.sections.rangeFilter.longitude.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-        </div>
-
-        <!-- Map container - full width -->
-        <div class="mb-6">
-          <label class="label justify-start" for="location-map">
-            <span class="label-text"
-              >{t('settings.main.sections.rangeFilter.stationLocation.label')}</span
-            >
-          </label>
-          <div class="form-control">
+      <!-- Map -->
+      <div class="form-control">
+        <div
+          bind:this={mapElement}
+          id="location-map"
+          class="h-[350px] rounded-xl border border-base-300 relative overflow-hidden"
+          role="application"
+          aria-label="Map for selecting station location"
+        >
+          {#if mapLibraryLoading}
             <div
-              bind:this={mapElement}
-              id="location-map"
-              class="h-[300px] rounded-lg border border-base-300 relative"
-              role="application"
-              aria-label="Map for selecting station location"
-              aria-describedby="map-help-text"
+              class="absolute inset-0 flex items-center justify-center bg-base-100/75 rounded-xl"
             >
-              <!-- Map will be initialized here -->
-              {#if mapLibraryLoading}
-                <div
-                  class="absolute inset-0 flex items-center justify-center bg-base-100/75 rounded-lg"
-                >
-                  <div class="flex flex-col items-center gap-2">
-                    <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
-                    <span class="text-sm text-base-content" role="status" aria-live="assertive"
-                      >Loading map...</span
-                    >
-                  </div>
-                </div>
-              {/if}
+              <div class="flex flex-col items-center gap-2">
+                <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
+                <span class="text-sm text-base-content">Loading map...</span>
+              </div>
             </div>
-            <div class="flex gap-2 mt-2">
-              <button
-                type="button"
-                class="btn btn-sm btn-circle"
-                aria-label="Zoom in"
-                aria-disabled={!map || mapLibraryLoading}
-                disabled={!map || mapLibraryLoading}
-                onclick={() => map?.zoomIn({ duration: 300 })}
-              >
-                +
-              </button>
-              <button
-                type="button"
-                class="btn btn-sm btn-circle"
-                aria-label="Zoom out"
-                aria-disabled={!map || mapLibraryLoading}
-                disabled={!map || mapLibraryLoading}
-                onclick={() => map?.zoomOut({ duration: 300 })}
-              >
-                -
-              </button>
-              <button
-                type="button"
-                class="btn btn-sm btn-circle"
-                aria-label="Expand map to full screen"
-                aria-disabled={!map || mapLibraryLoading}
-                disabled={!map || mapLibraryLoading}
-                onclick={openMapModal}
-              >
-                <Maximize2 class="size-5" />
-              </button>
-            </div>
-
-            <!-- Screen reader announcements for coordinate changes -->
-            <div class="sr-only" aria-live="polite" aria-atomic="true" role="status">
-              {#if settings.birdnet.latitude && settings.birdnet.longitude}
-                Current location: Latitude {settings.birdnet.latitude.toFixed(3)}, Longitude {settings.birdnet.longitude.toFixed(
-                  3
-                )}
-              {/if}
-            </div>
-            <div class="label">
-              <span id="map-help-text" class="label-text-alt"
-                >{t('settings.main.sections.rangeFilter.stationLocation.helpText')}</span
-              >
-            </div>
-            <div class="label">
-              <span class="label-text-alt text-info"
-                >💡 Hold Ctrl (or Cmd on Mac) + scroll to zoom the map. Use arrow keys to pan, +/-
-                keys to zoom.</span
-              >
-            </div>
-          </div>
+          {/if}
         </div>
+        <div class="flex gap-2 mt-3">
+          <button
+            type="button"
+            class="btn btn-sm btn-circle btn-ghost bg-base-300"
+            aria-label="Zoom in"
+            disabled={!map || mapLibraryLoading}
+            onclick={() => map?.zoomIn({ duration: 300 })}
+          >
+            +
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-circle btn-ghost bg-base-300"
+            aria-label="Zoom out"
+            disabled={!map || mapLibraryLoading}
+            onclick={() => map?.zoomOut({ duration: 300 })}
+          >
+            -
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-circle btn-ghost bg-base-300"
+            aria-label="Expand map to full screen"
+            disabled={!map || mapLibraryLoading}
+            onclick={openMapModal}
+          >
+            <Maximize2 class="size-4" />
+          </button>
+        </div>
+        <p class="text-xs text-info mt-2">
+          Hold Ctrl (or Cmd on Mac) + scroll to zoom. Click to set location.
+        </p>
+      </div>
+    </SettingsSection>
 
-        <!-- Threshold and Species row - 2 columns -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+    <!-- Range Filter Card -->
+    <SettingsSection
+      title={t('settings.main.sections.rangeFilter.title')}
+      description={t('settings.main.sections.rangeFilter.description')}
+      originalData={(store.originalData as any)?.birdnet?.rangeFilter}
+      currentData={settings.birdnet.rangeFilter}
+    >
+      <div class="space-y-6">
+        <!-- Threshold Setting -->
+        <div class="max-w-md">
           <NumberField
             label={t('settings.main.sections.rangeFilter.threshold.label')}
             value={settings.birdnet.rangeFilter.threshold}
@@ -1425,120 +1279,107 @@
             helpText={t('settings.main.sections.rangeFilter.threshold.helpText')}
             disabled={store.isLoading || store.isSaving}
           />
+        </div>
 
-          <!-- Range Filter Species Count Display -->
-          <div class="form-control">
-            <div class="label justify-start">
-              <span class="label-text"
-                >{t('settings.main.sections.rangeFilter.speciesCount.label')}</span
-              >
+        <!-- Species Count Display -->
+        <div class="form-control">
+          <div class="label justify-start">
+            <span class="label-text"
+              >{t('settings.main.sections.rangeFilter.speciesCount.label')}</span
+            >
+          </div>
+          <div class="flex items-center gap-3">
+            <div
+              class="text-2xl font-bold text-primary tabular-nums"
+              class:opacity-60={rangeFilterState.testing}
+            >
+              {rangeFilterState.speciesCount !== null
+                ? rangeFilterState.speciesCount.toLocaleString()
+                : '—'}
             </div>
-            <div class="flex items-center space-x-2">
-              <div class="flex items-center space-x-2">
-                <div
-                  class="text-lg font-bold text-primary"
-                  class:opacity-60={rangeFilterState.testing}
-                >
-                  {rangeFilterState.speciesCount !== null
-                    ? rangeFilterState.speciesCount
-                    : t('settings.main.sections.rangeFilter.speciesCount.loading')}
-                </div>
-                {#if rangeFilterState.testing}
-                  <span
-                    class="loading loading-spinner loading-xs text-primary opacity-60"
-                    aria-label={t('common.loading')}
-                  ></span>
-                {/if}
-              </div>
-              <button
-                type="button"
-                class="btn btn-sm btn-outline"
-                disabled={!rangeFilterState.speciesCount || rangeFilterState.loading}
-                onclick={() => {
-                  rangeFilterState.showModal = true;
-                  loadRangeFilterSpecies();
-                }}
-              >
-                {#if rangeFilterState.loading}
-                  <span class="loading loading-spinner loading-xs mr-1"></span>
-                  {t('settings.main.sections.rangeFilter.speciesCount.loading')}
-                {:else}
-                  {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
-                {/if}
-              </button>
-              <button
-                type="button"
-                class="btn btn-sm btn-primary"
-                disabled={!rangeFilterState.speciesCount ||
-                  rangeFilterState.loading ||
-                  rangeFilterState.downloading}
-                onclick={downloadSpeciesCSV}
-                title={t('settings.main.sections.rangeFilter.downloadTitle')}
-                aria-label={t('common.aria.downloadCsv')}
-              >
-                <Download class="size-5" />
-                <span class="ml-1">{t('analytics.filters.exportCsv')}</span>
-              </button>
-            </div>
-            <div class="label">
-              <span class="label-text-alt"
-                >{t('settings.main.sections.rangeFilter.speciesCount.helpText')}</span
-              >
-            </div>
-
-            {#if rangeFilterState.error}
-              <div class="alert alert-error mt-2" role="alert">
-                <XCircle class="size-5 shrink-0" />
-                <span>{rangeFilterState.error}</span>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-ghost ml-auto"
-                  aria-label="Dismiss error"
-                  onclick={() => (rangeFilterState.error = null)}
-                >
-                  <X class="size-5" />
-                </button>
-              </div>
+            {#if rangeFilterState.testing}
+              <span class="loading loading-spinner loading-sm text-primary"></span>
             {/if}
           </div>
+          <div class="flex gap-2 mt-2">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline"
+              disabled={!rangeFilterState.speciesCount || rangeFilterState.loading}
+              onclick={() => {
+                rangeFilterState.showModal = true;
+                loadRangeFilterSpecies();
+              }}
+            >
+              {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm btn-primary"
+              disabled={!rangeFilterState.speciesCount || rangeFilterState.downloading}
+              onclick={downloadSpeciesCSV}
+              aria-label={t('common.aria.downloadCsv')}
+            >
+              <Download class="size-4" />
+              {t('analytics.filters.exportCsv')}
+            </button>
+          </div>
+          <p class="text-sm text-base-content mt-2">
+            {t('settings.main.sections.rangeFilter.speciesCount.helpText')}
+          </p>
+
+          {#if rangeFilterState.error}
+            <div class="alert alert-error mt-3" role="alert">
+              <XCircle class="size-5 shrink-0" />
+              <span>{rangeFilterState.error}</span>
+              <button
+                type="button"
+                class="btn btn-sm btn-ghost ml-auto"
+                onclick={() => (rangeFilterState.error = null)}
+              >
+                <X class="size-4" />
+              </button>
+            </div>
+          {/if}
         </div>
       </div>
-    </div>
-  </SettingsSection>
+    </SettingsSection>
+  </div>
+{/snippet}
 
-  <!-- Database Output Settings Section -->
-  <SettingsSection
-    title={t('settings.main.sections.database.title')}
-    description={t('settings.main.sections.database.description')}
-    defaultOpen={true}
-    hasChanges={outputSettingsHasChanges}
-  >
-    <div class="space-y-6">
-      <!-- Database Type Selection -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
-        <SelectField
-          id="database-type"
-          bind:value={selectedDatabaseType}
-          label={t('settings.main.sections.database.type.label')}
-          options={[
-            // Database names are technical terms that don't need translation
-            { value: 'sqlite', label: 'SQLite' },
-            { value: 'mysql', label: 'MySQL' },
-          ]}
-          helpText={t('settings.main.sections.database.type.helpText')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={value => updateDatabaseType(value as 'sqlite' | 'mysql')}
-        />
-      </div>
+{#snippet databaseTabContent()}
+  <div class="space-y-6">
+    <!-- Database Settings Card -->
+    <SettingsSection
+      title={t('settings.main.sections.database.title')}
+      description={t('settings.main.sections.database.description')}
+      originalData={(store.originalData as any)?.output}
+      currentData={(store.formData as any)?.output}
+    >
+      <div class="space-y-6">
+        <!-- Database Type Selector -->
+        <div class="max-w-md">
+          <SelectField
+            id="database-type"
+            bind:value={selectedDatabaseType}
+            label={t('settings.main.sections.database.type.label')}
+            options={[
+              { value: 'sqlite', label: 'SQLite' },
+              { value: 'mysql', label: 'MySQL' },
+            ]}
+            helpText={t('settings.main.sections.database.type.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={value => updateDatabaseType(value as 'sqlite' | 'mysql')}
+          />
+        </div>
 
-      <!-- SQLite Settings -->
-      {#if selectedDatabaseType === 'sqlite'}
-        <div class="space-y-4">
+        <!-- SQLite Settings -->
+        {#if selectedDatabaseType === 'sqlite'}
           <SettingsNote>
-            <span>{t('settings.main.sections.database.sqlite.note')}</span>
+            {t('settings.main.sections.database.sqlite.note')}
           </SettingsNote>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6">
+          <div class="max-w-md">
             <TextInput
               id="sqlite-path"
               value={settings.output.sqlite.path}
@@ -1549,12 +1390,10 @@
               onchange={path => updateSQLiteSettings({ path })}
             />
           </div>
-        </div>
-      {/if}
+        {/if}
 
-      <!-- MySQL Settings -->
-      {#if selectedDatabaseType === 'mysql'}
-        <div class="space-y-4">
+        <!-- MySQL Settings -->
+        {#if selectedDatabaseType === 'mysql'}
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <TextInput
               id="mysql-host"
@@ -1606,16 +1445,21 @@
               onchange={database => updateMySQLSettings({ database })}
             />
           </div>
-        </div>
-      {/if}
-    </div>
-  </SettingsSection>
+        {/if}
+      </div>
+    </SettingsSection>
+  </div>
+{/snippet}
+
+<!-- Main Content -->
+<main class="settings-page-content" aria-label="Main settings configuration">
+  <SettingsTabs {tabs} bind:activeTab />
 </main>
 
 <!-- Map Modal -->
 {#if mapModalOpen}
   <div
-    class="fixed inset-0 bg-black/50 flex items-center justify-center"
+    class="fixed inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm"
     style:z-index="9999"
     role="dialog"
     aria-modal="true"
@@ -1625,11 +1469,11 @@
     onkeydown={e => e.key === 'Escape' && closeMapModal()}
   >
     <div
-      class="bg-base-100 rounded-lg p-4 max-w-[95vw] max-h-[95vh] w-full h-full md:max-w-[90vw] md:max-h-[90vh] overflow-hidden flex flex-col"
+      class="bg-base-100 rounded-2xl p-6 max-w-[95vw] max-h-[95vh] w-full h-full md:max-w-[90vw] md:max-h-[90vh] overflow-hidden flex flex-col shadow-2xl"
       role="document"
     >
       <div class="flex justify-between items-center mb-4">
-        <h3 id="map-modal-title" class="text-lg font-bold">
+        <h3 id="map-modal-title" class="text-xl font-semibold">
           {t('settings.main.sections.rangeFilter.stationLocation.label')}
         </h3>
         <button
@@ -1642,18 +1486,19 @@
         </button>
       </div>
 
-      <div class="mb-3 text-sm text-base-content/70">
-        <div class="grid grid-cols-2 gap-4">
+      <div class="mb-4 p-3 bg-base-200/50 rounded-lg">
+        <div class="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <span class="font-medium">{t('settings.main.sections.rangeFilter.latitude.label')}</span
+            <span class="text-base-content/60"
+              >{t('settings.main.sections.rangeFilter.latitude.label')}</span
             >
-            <span> {settings.birdnet.latitude}</span>
+            <span class="font-medium ml-2">{settings.birdnet.latitude}</span>
           </div>
           <div>
-            <span class="font-medium"
+            <span class="text-base-content/60"
               >{t('settings.main.sections.rangeFilter.longitude.label')}</span
             >
-            <span> {settings.birdnet.longitude}</span>
+            <span class="font-medium ml-2">{settings.birdnet.longitude}</span>
           </div>
         </div>
       </div>
@@ -1661,33 +1506,29 @@
       <div class="flex-1 min-h-0">
         <div
           bind:this={modalMapElement}
-          class="w-full h-full rounded-lg border border-base-300 relative"
+          class="w-full h-full rounded-xl border border-base-300 relative overflow-hidden"
           role="application"
           aria-label="Full screen map for selecting station location"
         >
-          <!-- Map will be initialized here when modal opens -->
           {#if mapLibraryLoading}
             <div
-              class="absolute inset-0 flex items-center justify-center bg-base-100/75 rounded-lg"
+              class="absolute inset-0 flex items-center justify-center bg-base-100/75 rounded-xl"
             >
               <div class="flex flex-col items-center gap-2">
                 <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
-                <span class="text-sm text-base-content" role="status" aria-live="assertive"
-                  >Loading map...</span
-                >
+                <span class="text-sm text-base-content">Loading map...</span>
               </div>
             </div>
           {/if}
         </div>
       </div>
 
-      <div class="flex justify-between items-center mt-4 pt-4 border-t">
+      <div class="flex justify-between items-center mt-4 pt-4 border-t border-base-200">
         <div class="flex gap-2">
           <button
             type="button"
-            class="btn btn-sm btn-circle"
+            class="btn btn-sm btn-circle btn-ghost bg-base-200"
             aria-label="Zoom in"
-            aria-disabled={!modalMap || mapLibraryLoading}
             disabled={!modalMap || mapLibraryLoading}
             onclick={() => modalMap?.zoomIn({ duration: 300 })}
           >
@@ -1695,18 +1536,17 @@
           </button>
           <button
             type="button"
-            class="btn btn-sm btn-circle"
+            class="btn btn-sm btn-circle btn-ghost bg-base-200"
             aria-label="Zoom out"
-            aria-disabled={!modalMap || mapLibraryLoading}
             disabled={!modalMap || mapLibraryLoading}
             onclick={() => modalMap?.zoomOut({ duration: 300 })}
           >
             -
           </button>
         </div>
-        <div class="text-sm text-base-content/60">
-          💡 {t('settings.main.sections.rangeFilter.stationLocation.helpText')}
-        </div>
+        <p class="text-sm text-base-content/60">
+          Click on the map or drag the marker to set location
+        </p>
         <button type="button" class="btn btn-primary" onclick={closeMapModal}>
           {t('common.done')}
         </button>
@@ -1718,7 +1558,7 @@
 <!-- Range Filter Species Modal -->
 {#if rangeFilterState.showModal}
   <div
-    class="fixed inset-0 bg-black/50 flex items-center justify-center"
+    class="fixed inset-0 bg-black/50 flex items-center justify-center backdrop-blur-sm"
     style:z-index="9999"
     role="dialog"
     aria-modal="true"
@@ -1728,11 +1568,11 @@
     onkeydown={e => e.key === 'Escape' && (rangeFilterState.showModal = false)}
   >
     <div
-      class="bg-base-100 rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-hidden flex flex-col"
+      class="bg-base-100 rounded-2xl p-6 max-w-4xl max-h-[80vh] overflow-hidden flex flex-col shadow-2xl"
       role="document"
     >
       <div class="flex justify-between items-center mb-4">
-        <h3 id="modal-title" class="text-lg font-bold">
+        <h3 id="modal-title" class="text-xl font-semibold">
           {t('settings.main.sections.rangeFilter.modal.title')}
         </h3>
         <button
@@ -1745,30 +1585,31 @@
         </button>
       </div>
 
-      <div class="mb-4 text-sm text-base-content/70">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="mb-4 p-3 bg-base-200/50 rounded-lg">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
-            <span class="font-medium"
+            <span class="text-base-content/60"
               >{t('settings.main.sections.rangeFilter.modal.speciesCount')}</span
             >
-            <span> {rangeFilterState.speciesCount}</span>
+            <span class="font-medium ml-1">{rangeFilterState.speciesCount}</span>
           </div>
           <div>
-            <span class="font-medium"
+            <span class="text-base-content/60"
               >{t('settings.main.sections.rangeFilter.modal.threshold')}</span
             >
-            <span> {settings.birdnet.rangeFilter.threshold}</span>
+            <span class="font-medium ml-1">{settings.birdnet.rangeFilter.threshold}</span>
           </div>
           <div>
-            <span class="font-medium">{t('settings.main.sections.rangeFilter.modal.latitude')}</span
+            <span class="text-base-content/60"
+              >{t('settings.main.sections.rangeFilter.modal.latitude')}</span
             >
-            <span> {settings.birdnet.latitude}</span>
+            <span class="font-medium ml-1">{settings.birdnet.latitude}</span>
           </div>
           <div>
-            <span class="font-medium"
+            <span class="text-base-content/60"
               >{t('settings.main.sections.rangeFilter.modal.longitude')}</span
             >
-            <span> {settings.birdnet.longitude}</span>
+            <span class="font-medium ml-1">{settings.birdnet.longitude}</span>
           </div>
         </div>
       </div>
@@ -1780,37 +1621,38 @@
           <button
             type="button"
             class="btn btn-sm btn-ghost ml-auto"
-            aria-label="Dismiss error"
             onclick={() => (rangeFilterState.error = null)}
           >
-            <X class="size-5" />
+            <X class="size-4" />
           </button>
         </div>
       {/if}
 
       <div class="flex-1 overflow-auto">
         {#if rangeFilterState.loading}
-          <div class="text-center py-8">
-            <div class="loading loading-spinner loading-lg"></div>
-            <p class="mt-2">{t('settings.main.sections.rangeFilter.modal.loadingSpecies')}</p>
+          <div class="text-center py-12">
+            <span class="loading loading-spinner loading-lg"></span>
+            <p class="mt-3 text-base-content/90">
+              {t('settings.main.sections.rangeFilter.modal.loadingSpecies')}
+            </p>
           </div>
         {:else if rangeFilterState.species.length > 0}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             {#each rangeFilterState.species as species}
-              <div class="p-2 rounded-sm hover:bg-base-200">
+              <div class="p-3 rounded-lg hover:bg-base-200/50 transition-colors">
                 <div class="font-medium">{species.commonName}</div>
-                <div class="text-sm text-base-content/70">{species.scientificName}</div>
+                <div class="text-sm text-base-content/60 italic">{species.scientificName}</div>
               </div>
             {/each}
           </div>
         {:else}
-          <div class="text-center py-8 text-base-content/60">
+          <div class="text-center py-12 text-base-content/60">
             {t('settings.main.sections.rangeFilter.modal.noSpeciesFound')}
           </div>
         {/if}
       </div>
 
-      <div class="flex justify-between items-center mt-4 pt-4 border-t">
+      <div class="flex justify-between items-center mt-4 pt-4 border-t border-base-200">
         <button
           type="button"
           class="btn btn-sm btn-primary"
@@ -1820,8 +1662,8 @@
             !rangeFilterState.speciesCount}
           aria-label={t('common.aria.downloadCsv')}
         >
-          <Download class="size-5" />
-          <span class="ml-1">{t('analytics.filters.exportCsv')}</span>
+          <Download class="size-4" />
+          {t('analytics.filters.exportCsv')}
         </button>
         <button
           type="button"
@@ -1834,5 +1676,3 @@
     </div>
   </div>
 {/if}
-
-<!-- MapLibre GL JS is imported via npm package in script section -->

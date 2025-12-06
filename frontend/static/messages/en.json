@@ -739,7 +739,19 @@
       "changed": "changed",
       "changedAriaLabel": "Settings changed"
     },
+    "tabs": {
+      "navigation": "Settings navigation tabs",
+      "hasChanges": "This tab has unsaved changes",
+      "setAsDefault": "Set as default",
+      "defaultIndicator": "Default input source"
+    },
     "main": {
+      "tabs": {
+        "general": "General",
+        "detection": "Detection",
+        "location": "Location",
+        "database": "Database"
+      },
       "sections": {
         "main": {
           "title": "Main Settings",
@@ -755,6 +767,7 @@
         },
         "customClassifier": {
           "title": "Custom BirdNET Classifier",
+          "description": "Configure custom BirdNET model and label files for specialized detection",
           "modelPath": {
             "label": "Model Path (Requires restart to apply)",
             "placeholder": "Path to model file",
@@ -768,6 +781,7 @@
         },
         "dynamicThreshold": {
           "title": "Dynamic Threshold",
+          "description": "Automatically adjust detection sensitivity based on prior observations",
           "enable": {
             "label": "Enable Dynamic Threshold (BirdNET-Go specific feature)",
             "helpText": "Enables dynamic confidence threshold feature for more adaptive bird call detection."
@@ -787,6 +801,7 @@
         },
         "rangeFilter": {
           "title": "Range Filter",
+          "description": "Limit detection to species probable in your geographic region",
           "stationLocation": {
             "label": "Station Location",
             "helpText": "Station location, used to limit bird species to those probable in the region."
@@ -835,6 +850,8 @@
             "helpText": "Select the database type to use for storing detections."
           },
           "sqlite": {
+            "title": "SQLite Configuration",
+            "description": "Configure the SQLite database file location",
             "note": "SQLite is recommended database type for most users.",
             "path": {
               "label": "SQLite Database Path",
@@ -843,6 +860,8 @@
             }
           },
           "mysql": {
+            "title": "MySQL Configuration",
+            "description": "Configure connection settings for MySQL database server",
             "host": {
               "label": "MySQL Host",
               "placeholder": "Enter MySQL host",
@@ -1314,6 +1333,74 @@
       }
     },
     "audio": {
+      "loading": "Loading audio devices...",
+      "tabs": {
+        "soundCard": "Sound Card",
+        "streams": "Streams",
+        "processing": "Processing",
+        "export": "Export",
+        "retention": "Retention"
+      },
+      "emptyStates": {
+        "soundCard": {
+          "title": "No Sound Cards Detected",
+          "description": "No local audio input devices were found on this system. This is normal for container or headless server deployments.",
+          "errorTitle": "Error Loading Devices",
+          "hintsTitle": "You can:",
+          "hints": {
+            "container": "This is normal for container/headless deployments",
+            "streams": "Configure network streams in the Streams tab instead",
+            "usb": "Connect a USB microphone and refresh the list"
+          },
+          "refresh": "Refresh Devices",
+          "retry": "Retry"
+        },
+        "streams": {
+          "title": "No Streams Configured",
+          "description": "Add RTSP or network audio streams from IP cameras, microphone servers, or other streaming sources.",
+          "hintsTitle": "Getting started:",
+          "hints": {
+            "rtsp": "Enter RTSP URLs in the format: rtsp://ip:port/stream",
+            "multiple": "You can add multiple streams for different locations",
+            "protocol": "Choose TCP for reliability or UDP for lower latency"
+          }
+        }
+      },
+      "soundCard": {
+        "title": "Sound Card",
+        "description": "Configure local audio input device",
+        "audioSourceLabel": "Audio Source (requires application restart to take effect)",
+        "audioSourceHelp": "Select the audio input device for bird sound detection. Changes require application restart to take effect.",
+        "noSoundCardCapture": "No sound card capture",
+        "empty": {
+          "title": "No Sound Cards Detected",
+          "description": "No local audio input devices were found on this system. This is normal for container or headless server deployments.",
+          "hintsTitle": "You can:",
+          "hintStream": "Configure network streams in the Streams tab",
+          "hintUsb": "Connect a USB microphone and refresh the list",
+          "goToStreams": "Go to Streams",
+          "refresh": "Refresh Devices"
+        }
+      },
+      "streams": {
+        "title": "Streams",
+        "description": "Configure network audio streams (RTSP, etc.)",
+        "rtspTransportLabel": "RTSP Transport Protocol",
+        "rtspTransportHelp": "TCP is more reliable but may have higher latency. UDP is faster but may experience packet loss on poor networks.",
+        "rtspUrlsLabel": "RTSP Stream URLs",
+        "rtspUrlsHelp": "Enter one or more RTSP stream URLs for network audio sources. Format: rtsp://ip:port/stream. Note: Authentication credentials should be configured separately in your RTSP server settings for security.",
+        "empty": {
+          "title": "No Streams Configured",
+          "description": "Add RTSP or network audio streams from IP cameras, microphone servers, or other streaming sources.",
+          "formatHint": "Stream URL format:",
+          "formatExample": "rtsp://username:password@192.168.1.100:554/stream",
+          "addFirst": "Add First Stream"
+        }
+      },
+      "noSources": {
+        "warning": "No Audio Sources Configured",
+        "description": "BirdNET-Go needs an audio input to detect birds. Please configure at least one source in the Sound Card or Streams tab."
+      },
       "audioCapture": {
         "title": "Audio Capture",
         "description": "Set audio capture source, sound card or RTSP stream",
@@ -1325,7 +1412,11 @@
         "rtspTransportLabel": "RTSP Transport Protocol",
         "rtspTransportHelp": "TCP is more reliable but may have higher latency. UDP is faster but may experience packet loss on poor networks.",
         "rtspUrlsLabel": "RTSP Stream URLs",
-        "rtspUrlsHelp": "Enter one or more RTSP stream URLs for network audio sources. Format: rtsp://ip:port/stream. Note: Authentication credentials should be configured separately in your RTSP server settings for security."
+        "rtspUrlsHelp": "Enter one or more RTSP stream URLs for network audio sources. Format: rtsp://ip:port/stream. Note: Authentication credentials should be configured separately in your RTSP server settings for security.",
+        "deviceSelected": "Sound card selected and ready for capture",
+        "availableDevices": "Available Audio Devices",
+        "active": "Active",
+        "streamsConfigured": "{count} stream(s) configured"
       },
       "audioFilters": {
         "title": "Audio Filters",
@@ -1400,7 +1491,8 @@
         "typeHelp": "Audio format for saved clips. WAV and FLAC are lossless (best quality, larger files). MP3, AAC, and Opus are lossy (smaller files, slight quality loss).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio compression bitrate for lossy formats. Range: {min}-{max} kbps. Higher values provide better quality but larger files.",
-        "losslessNote": "Lossless formats preserve original audio quality without compression artifacts."
+        "losslessNote": "Lossless formats preserve original audio quality without compression artifacts.",
+        "disabledInfo": "Enable audio capture above to configure clip settings, file format, and export options."
       },
       "audioClipRetention": {
         "title": "Audio Clip Retention",
@@ -1419,7 +1511,13 @@
           "none": "None - Keep All",
           "age": "Age-Based",
           "usage": "Disk Usage-Based"
-        }
+        },
+        "noRetentionTitle": "All Clips Retained",
+        "noRetentionDescription": "Audio clips will be kept indefinitely. Monitor disk usage to prevent storage issues.",
+        "ageRetentionTitle": "Age-Based Cleanup",
+        "ageRetentionDescription": "Clips older than the specified age will be automatically deleted, while preserving the minimum number per species.",
+        "usageRetentionTitle": "Usage-Based Cleanup",
+        "usageRetentionDescription": "When disk usage exceeds the threshold, oldest clips will be deleted until usage is within limits."
       },
       "formats": {
         "wav": "WAV",

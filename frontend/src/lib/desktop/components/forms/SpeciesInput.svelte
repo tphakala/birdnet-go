@@ -418,7 +418,7 @@
   });
 </script>
 
-<div class={cn('form-control relative species-input-container', className)} {...rest}>
+<div class={cn('form-control relative min-w-0 species-input-container', className)} {...rest}>
   {#if label}
     <label class="label justify-start" for={id}>
       <span class="label-text capitalize">
