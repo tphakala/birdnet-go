@@ -165,7 +165,7 @@
 @layer base {
   /* Inter Variable Font */
   @font-face {
-    font-family: 'Inter';
+    font-family: Inter;
     font-style: normal;
     font-weight: 100 900;
     font-display: swap;
@@ -173,7 +173,7 @@
   }
 
   @font-face {
-    font-family: 'Inter';
+    font-family: Inter;
     font-style: italic;
     font-weight: 100 900;
     font-display: swap;
