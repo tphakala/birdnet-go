@@ -15,6 +15,7 @@
 -->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
   import { Plus, Radio, RefreshCw } from '@lucide/svelte';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { t } from '$lib/i18n';
@@ -55,12 +56,12 @@
     transport = 'tcp',
     disabled = false,
     onUpdateUrls,
-    // eslint-disable-next-line no-unused-vars -- Reserved for future per-stream transport support
+    // Reserved for future per-stream transport support
     onUpdateTransport: _onUpdateTransport,
   }: Props = $props();
 
-  // Stream health state
-  let streamHealth = $state<Map<string, StreamHealthResponse>>(new Map());
+  // Stream health state - using SvelteMap for automatic reactivity
+  let streamHealth = $state(new SvelteMap<string, StreamHealthResponse>());
   let healthLoading = $state(true);
 
   // Add new stream state
@@ -75,7 +76,8 @@
 
   // Per-stream transport settings (local state until backend supports it)
   // For now, we use the global transport but store per-stream for future
-  let streamTransports = $state<Map<string, string>>(new Map());
+  // Using SvelteMap for automatic reactivity
+  let streamTransports = $state(new SvelteMap<string, string>());
 
   // Summary stats
   let healthySummary = $derived.by(() => {
@@ -145,7 +147,7 @@
 
     try {
       const response = await api.get<StreamHealthResponse[]>('/api/v2/streams/health');
-      const newHealthMap = new Map<string, StreamHealthResponse>();
+      const newHealthMap = new SvelteMap<string, StreamHealthResponse>();
 
       if (Array.isArray(response)) {
         response.forEach(health => {
@@ -198,7 +200,6 @@
 
       eventSource.addEventListener('stream_health', (event: Event) => {
         try {
-          // eslint-disable-next-line no-undef
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data) as StreamHealthResponse & {
             event_type: string;
@@ -206,8 +207,8 @@
           const matchingUrl = urls.find(u => sanitizeUrl(u) === data.url || u === data.url);
 
           if (matchingUrl) {
+            // SvelteMap automatically triggers reactivity on set()
             streamHealth.set(matchingUrl, data);
-            streamHealth = new Map(streamHealth); // Trigger reactivity
           }
         } catch (e) {
           logger.warn('Failed to parse stream health event', e, {
@@ -269,34 +270,33 @@
     setTimeout(() => loadHealthStatus(), 1000);
   }
 
-  // Update stream
   // Update stream - streamType reserved for future use when multiple stream types are supported
   function updateStream(index: number, url: string, streamTransport: string, _streamType: string) {
     const updatedUrls = [...urls];
     if (index >= 0 && index < updatedUrls.length) {
-      // eslint-disable-next-line security/detect-object-injection -- index is validated number
-      const oldUrl = updatedUrls[index];
-      // eslint-disable-next-line security/detect-object-injection -- index is validated above
+      const oldUrl = updatedUrls.at(index);
       updatedUrls[index] = url;
       onUpdateUrls(updatedUrls);
 
       // Update per-stream transport
-      streamTransports.delete(oldUrl);
+      if (oldUrl) {
+        streamTransports.delete(oldUrl);
+      }
       streamTransports.set(url, streamTransport);
     }
   }
 
   // Delete stream
   function deleteStream(index: number) {
-    // eslint-disable-next-line security/detect-object-injection -- index is validated number from iteration
-    const urlToDelete = urls[index];
+    const urlToDelete = urls.at(index);
     const updatedUrls = urls.filter((_, i) => i !== index);
     onUpdateUrls(updatedUrls);
 
-    // Clean up per-stream data
-    streamTransports.delete(urlToDelete);
-    streamHealth.delete(urlToDelete);
-    streamHealth = new Map(streamHealth);
+    // Clean up per-stream data - SvelteMap handles reactivity automatically
+    if (urlToDelete) {
+      streamTransports.delete(urlToDelete);
+      streamHealth.delete(urlToDelete);
+    }
   }
 
   // Handle keydown in add form

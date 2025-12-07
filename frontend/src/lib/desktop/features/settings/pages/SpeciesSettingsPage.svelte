@@ -416,12 +416,10 @@
         return;
       }
       // Rename: delete old entry and create new
-      // eslint-disable-next-line security/detect-object-injection
       delete updatedConfig[editingSpecies];
     }
 
     // Add/update species configuration
-    // eslint-disable-next-line security/detect-object-injection
     updatedConfig[species] = {
       threshold,
       interval,
