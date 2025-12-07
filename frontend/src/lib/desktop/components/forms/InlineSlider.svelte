@@ -125,7 +125,7 @@
   }
 </script>
 
-<div class={cn('form-control', className)}>
+<div class={cn('form-control min-w-0', className)}>
   <label class="label" for={inputId}>
     <span class="label-text">
       {label}
@@ -162,8 +162,6 @@
     aria-describedby={helpTextId}
   />
   {#if helpText}
-    <div class="label">
-      <span id={helpTextId} class="label-text-alt text-base-content/70">{helpText}</span>
-    </div>
+    <span id={helpTextId} class="help-text">{helpText}</span>
   {/if}
 </div>

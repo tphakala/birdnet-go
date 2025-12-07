@@ -733,7 +733,8 @@
       "resetAriaLabel": "Alle wijzigingen vergeten",
       "saveAriaLabel": "Wijzigingen bewaren",
       "savingAriaLabel": "Bewaren ...",
-      "unsavedChanges": "Niet opgeslagen wijzigingen"
+      "unsavedChanges": "Niet opgeslagen wijzigingen",
+      "toolbar": "Instellingenacties"
     },
     "card": {
       "changed": "gewijzigd",
@@ -789,15 +790,15 @@
           "title": "Bereik Filter",
           "stationLocation": {
             "label": "Station Locatie",
-            "helpText": "Station locatie, gebruikt om vogelsoorten te beperken tot diegenen die waarschijnlijk voorkomen in de regio."
+            "helpText": "Station locatie, gebruikt voor weersgegevens en om vogelsoorten te beperken tot diegenen die waarschijnlijk voorkomen in de regio."
           },
           "latitude": {
             "label": "Breedtegraad",
-            "helpText": "Station locatie breedtegraad, gebruikt om vogelsoorten te beperken tot diegenen die waarschijnlijk voorkomen in de regio."
+            "helpText": "Station breedtegraad, gebruikt voor weersgegevens en om vogelsoorten naar bereik te filteren."
           },
           "longitude": {
             "label": "Lengtegraad",
-            "helpText": "Station locatie lengtegraad, gebruikt om vogelsoorten te beperken tot diegenen die waarschijnlijk voorkomen in de regio."
+            "helpText": "Station lengtegraad, gebruikt voor weersgegevens en om vogelsoorten naar bereik te filteren."
           },
           "model": {
             "label": "Bereik Filter Model",
@@ -877,7 +878,8 @@
             "description": "Kies de weergave taal en de presentatie versie",
             "locale": {
               "label": "Weergave taal",
-              "helpText": "Selecteer de taal voor de presentatie"
+              "helpText": "Selecteer de taal voor de presentatie",
+              "requiresModernUI": "Taalselectie is alleen beschikbaar bij gebruik van de moderne interface."
             },
             "newUI": {
               "label": "Gebruik de moderne versie",
@@ -895,6 +897,18 @@
           "dashboard": {
             "title": "Overzicht weergave",
             "description": "Kies hoe herkenningen worden weergegeven in het Overzicht",
+            "displaySettings": {
+              "title": "Weergave-instellingen",
+              "description": "Configureer algemene dashboard-weergaveopties zoals soortenlimieten."
+            },
+            "birdImages": {
+              "title": "Vogelafbeeldingen",
+              "description": "Configureer miniatuurafbeeldingen van vogelsoorten voor detectielijsten."
+            },
+            "spectrogramGeneration": {
+              "title": "Spectrogram generatie",
+              "description": "Configureer wanneer en hoe audiospectrogrammen worden gegenereerd voor detecties."
+            },
             "general": {
               "title": "Algemene instellingen"
             },
@@ -1246,6 +1260,7 @@
         "title": "Observeerbaar",
         "description": "Monitor BirdNET-Go's prestaties en vogel detectie metrieken via Prometheus-compatible endpoint",
         "enable": "Schakel Observeerbaar Integratie in",
+        "disabled": "Observeerbaar integratie is niet ingeschakeld",
         "listenAddress": {
           "label": "Luister Adres",
           "placeholder": "0.0.0.0:8090"
@@ -1314,6 +1329,14 @@
       }
     },
     "audio": {
+      "loading": "Audio apparaten laden...",
+      "tabs": {
+        "soundCard": "Geluidskaart",
+        "streams": "Streams",
+        "processing": "Verwerking",
+        "recording": "Opname",
+        "retention": "Bewaring"
+      },
       "audioCapture": {
         "title": "Audio Opname",
         "description": "Stel audio opname bron in, geluidskaart of RTSP stream",
@@ -1372,8 +1395,11 @@
         "title": "Clip Instellingen",
         "description": "Configureer audio clip opname en verwerking voor geïdentificeerde vogelroepen"
       },
-      "audioExport": {
-        "enable": "Schakel Audio Opname in",
+      "clipRecording": {
+        "title": "Clip Opname Instellingen",
+        "description": "Configureer audio clip opname, formaat en opslag opties voor gedetecteerde vogelroepen.",
+        "enable": "Schakel clip opname in",
+        "disabled": "Clip opname is uitgeschakeld",
         "enableHelp": "Bewaar audio clips van gedetecteerde vogelroepen voor beoordeling, delen, of bouwen van aangepaste datasets.",
         "captureSettings": "Opname Instellingen",
         "lengthLabel": "Opname Lengte",
@@ -1394,13 +1420,40 @@
         "normalizationNote": "EBU R128 Standaard",
         "normalizationNoteDescription": "Audio normalisatie volgt de EBU R128 uitzend standaard, zorgt voor consistent afspeel niveaus over verschillende apparaten en voorkomt clipping.",
         "fileSettings": "Bestand Instellingen",
-        "pathLabel": "Export Pad",
+        "pathLabel": "Clips Map",
         "pathHelp": "Map waar audio clips worden opgeslagen. Relatieve paden zijn vanaf de applicatie map. Voorbeeld: 'clips/' of '/var/audio/birds/'",
-        "typeLabel": "Export Formaat",
+        "typeLabel": "Audio Formaat",
         "typeHelp": "Audio formaat voor opgeslagen clips. WAV en FLAC zijn lossless (beste kwaliteit, grotere bestanden). MP3, AAC, en Opus zijn lossy (kleinere bestanden, lichte kwaliteitsverlies).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio compressie bitrate voor lossy formaten. Bereik: {min}-{max} kbps. Hogere waarden geven betere kwaliteit maar grotere bestanden.",
         "losslessNote": "Lossless formaten behouden originele audio kwaliteit zonder compressie artefacten."
+      },
+      "fileSettings": {
+        "title": "Bestand Instellingen",
+        "description": "Configureer opslaglocatie en audio formaat voor opgeslagen clips.",
+        "pathLabel": "Clips Map",
+        "pathHelp": "Map waar audio clips worden opgeslagen. Relatieve paden zijn vanaf de applicatie map. Voorbeeld: 'clips/' of '/var/audio/birds/'",
+        "typeLabel": "Audio Formaat",
+        "typeHelp": "Audio formaat voor opgeslagen clips. WAV en FLAC zijn lossless (beste kwaliteit, grotere bestanden). MP3, AAC, en Opus zijn lossy (kleinere bestanden, lichte kwaliteitsverlies).",
+        "bitrateLabel": "Bitrate",
+        "bitrateHelp": "Audio compressie bitrate voor lossy formaten. Bereik: {min}-{max} kbps. Hogere waarden geven betere kwaliteit maar grotere bestanden.",
+        "losslessNote": "Lossless formaten behouden originele audio kwaliteit zonder compressie artefacten."
+      },
+      "audioNormalization": {
+        "title": "Audio Normalisatie",
+        "description": "Pas audio niveaus aan voor consistent afspeel volume over alle clips.",
+        "enable": "Luidheid Normalisatie Inschakelen",
+        "enableHelp": "Pas audio niveaus automatisch aan naar EBU R128 uitzend standaard voor consistent afspeel volume over alle clips.",
+        "disabled": "Audio normalisatie is uitgeschakeld",
+        "requiresRecording": "Schakel clip opname in op het Opname tabblad om audio normalisatie te gebruiken.",
+        "targetLUFSLabel": "Doel Luidheid (LUFS)",
+        "targetLUFSHelp": "Geïntegreerd luidheid doel in LUFS (Loudness Units relative to Full Scale). -23 LUFS is de EBU R128 uitzend standaard. Bereik: -40 tot -10 LUFS.",
+        "loudnessRangeLabel": "Luidheid Bereik (LU)",
+        "loudnessRangeHelp": "Maximum variatie in luidheid binnen de clip (0-20 LU). Lagere waarden creëren meer consistent volume maar kunnen dynamiek verminderen.",
+        "truePeakLabel": "Ware Piek Limiet (dBTP)",
+        "truePeakHelp": "Maximum ware piek niveau om digitale clipping te voorkomen (-10 tot 0 dBTP). -2 dBTP geeft veilige headroom voor de meeste afspeel systemen.",
+        "noteTitle": "EBU R128 Standaard",
+        "noteDescription": "Audio normalisatie volgt de EBU R128 uitzend standaard, zorgt voor consistent afspeel niveaus over verschillende apparaten en voorkomt clipping."
       },
       "audioClipRetention": {
         "title": "Audio Clip Bewaring",

@@ -254,7 +254,7 @@
   }
 </script>
 
-<div class={cn('form-control', className)}>
+<div class={cn('form-control min-w-0', className)}>
   {#if label}
     <label for={fieldId} class={cn('label', labelClassName)}>
       <span class="label-text">
@@ -438,13 +438,9 @@
 
   {#if error && (touched || externalError)}
     <div class="label">
-      <span id={errorId} class={cn('label-text-alt text-error', errorClassName)}
-        >{displayError()}</span
-      >
+      <span id={errorId} class={cn('text-xs text-error', errorClassName)}>{displayError()}</span>
     </div>
   {:else if helpText}
-    <div class="label">
-      <span id={helpTextId} class="label-text-alt text-base-content/70">{helpText}</span>
-    </div>
+    <span id={helpTextId} class="help-text">{helpText}</span>
   {/if}
 </div>

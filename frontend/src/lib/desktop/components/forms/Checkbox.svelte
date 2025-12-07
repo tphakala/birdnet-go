@@ -59,7 +59,7 @@
   };
 </script>
 
-<div class={cn('form-control relative', className)} {...rest}>
+<div class={cn('form-control relative min-w-0', className)} {...rest}>
   <label class="label cursor-pointer justify-start" for={id}>
     <input
       type="checkbox"
@@ -98,9 +98,7 @@
   </label>
 
   {#if helpText}
-    <div class="label">
-      <span id={helpTextId} class="label-text-alt text-base-content/70">{helpText}</span>
-    </div>
+    <span id={helpTextId} class="help-text">{helpText}</span>
   {/if}
 
   {#if tooltip && showTooltip}

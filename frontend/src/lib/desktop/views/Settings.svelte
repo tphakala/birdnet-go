@@ -7,7 +7,6 @@
   // Change back to true to re-enable spinners for testing
   const ENABLE_LOADING_SPINNERS = false;
   import MainSettingsSection from '$lib/desktop/features/settings/pages/MainSettingsPage.svelte';
-  import UserInterfaceSettingsSection from '$lib/desktop/features/settings/pages/UserInterfaceSettingsPage.svelte';
   import AudioSettingsSection from '$lib/desktop/features/settings/pages/AudioSettingsPage.svelte';
   import FilterSettingsSection from '$lib/desktop/features/settings/pages/FilterSettingsPage.svelte';
   import IntegrationSettingsSection from '$lib/desktop/features/settings/pages/IntegrationSettingsPage.svelte';
@@ -15,7 +14,6 @@
   import SupportSettingsSection from '$lib/desktop/features/settings/pages/SupportSettingsPage.svelte';
   import SpeciesSettingsSection from '$lib/desktop/features/settings/pages/SpeciesSettingsPage.svelte';
   import NotificationsSettingsSection from '$lib/desktop/features/settings/pages/NotificationsSettingsPage.svelte';
-  import SettingsActions from '$lib/desktop/features/settings/components/SettingsActions.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
 
@@ -28,9 +26,9 @@
     const lastPart = parts[parts.length - 1];
 
     // Map URL paths to section names
+    // Note: userinterface has been consolidated into main settings
     const sectionMap: Record<string, string> = {
       main: 'node',
-      userinterface: 'userinterface',
       audio: 'audio',
       detectionfilters: 'filters',
       integrations: 'integration',
@@ -48,9 +46,6 @@
 
   // Get store values
   let store = $derived($settingsStore);
-
-  // Extract loading state logic to computed property
-  let showFloatingBar = $derived(!ENABLE_LOADING_SPINNERS || !store.isLoading);
 
   // Load settings data on mount
   onMount(() => {
@@ -107,8 +102,6 @@
     <div class="space-y-6">
       {#if currentSection === 'node'}
         <MainSettingsSection />
-      {:else if currentSection === 'userinterface'}
-        <UserInterfaceSettingsSection />
       {:else if currentSection === 'audio'}
         <AudioSettingsSection />
       {:else if currentSection === 'filters'}
@@ -134,29 +127,3 @@
     </div>
   {/if}
 </main>
-
-<!-- Floating Settings Actions Bar -->
-{#if showFloatingBar}
-  <!-- Fixed positioning for floating behavior, but constrained to main content area -->
-  <div
-    class="fixed bottom-0 left-0 right-0 z-50 lg:left-64"
-    role="toolbar"
-    aria-label="Settings actions"
-  >
-    <!-- Replicate the exact same container structure as main content -->
-    <div class="mx-auto max-w-7xl">
-      <div class="grid grid-cols-12 p-3 lg:px-8">
-        <div class="col-span-12 container mx-auto">
-          <!-- Background with transparency matching settings cards -->
-          <div
-            class="bg-base-100/90 backdrop-blur-xs border-t border-base-300 rounded-lg shadow-xs"
-          >
-            <div class="px-4 py-3">
-              <SettingsActions />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-{/if}

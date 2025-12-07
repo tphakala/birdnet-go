@@ -36,10 +36,20 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { SpeciesConfig, SpeciesSettings } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
+  import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
-  import { ChevronRight, Plus, SquarePen, Trash2 } from '@lucide/svelte';
+  import {
+    ChevronRight,
+    Plus,
+    SquarePen,
+    Trash2,
+    CirclePlus,
+    CircleMinus,
+    Settings2,
+  } from '@lucide/svelte';
   import { toastActions } from '$lib/stores/toast';
 
   const logger = loggers.settings;
@@ -145,22 +155,22 @@
   // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
   let includeHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.realtime?.species?.include,
-      (store.formData as any)?.realtime?.species?.include
+      store.originalData.realtime?.species?.include,
+      store.formData.realtime?.species?.include
     )
   );
 
   let excludeHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.realtime?.species?.exclude,
-      (store.formData as any)?.realtime?.species?.exclude
+      store.originalData.realtime?.species?.exclude,
+      store.formData.realtime?.species?.exclude
     )
   );
 
   let configHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.realtime?.species?.config,
-      (store.formData as any)?.realtime?.species?.config
+      store.originalData.realtime?.species?.config,
+      store.formData.realtime?.species?.config
     )
   );
 
@@ -205,7 +215,9 @@
       }
 
       const data = await response.json();
-      speciesListState.data = data.species?.map((s: any) => s.commonName || s.label) || [];
+      speciesListState.data =
+        data.species?.map((s: { commonName?: string; label: string }) => s.commonName || s.label) ||
+        [];
     } catch (error) {
       logger.error('Failed to load species data:', error);
       speciesListState.error = t('settings.species.errors.speciesLoadFailed');
@@ -404,12 +416,12 @@
         return;
       }
       // Rename: delete old entry and create new
-      // eslint-disable-next-line security/detect-object-injection
+      // eslint-disable-next-line security/detect-object-injection -- editingSpecies is controlled component state
       delete updatedConfig[editingSpecies];
     }
 
     // Add/update species configuration
-    // eslint-disable-next-line security/detect-object-injection
+    // eslint-disable-next-line security/detect-object-injection -- species is controlled component state
     updatedConfig[species] = {
       threshold,
       interval,
@@ -456,20 +468,49 @@
     actionParameters = '';
     actionExecuteDefaults = true;
   }
+
+  // Tab state
+  let activeTab = $state('include');
+
+  // Tab definitions for the species settings page
+  let tabs = $derived<TabDefinition[]>([
+    {
+      id: 'include',
+      label: t('settings.species.alwaysInclude.title'),
+      icon: CirclePlus,
+      content: includeTabContent,
+      hasChanges: includeHasChanges,
+    },
+    {
+      id: 'exclude',
+      label: t('settings.species.alwaysExclude.title'),
+      icon: CircleMinus,
+      content: excludeTabContent,
+      hasChanges: excludeHasChanges,
+    },
+    {
+      id: 'config',
+      label: t('settings.species.customConfiguration.title'),
+      icon: Settings2,
+      content: configTabContent,
+      hasChanges: configHasChanges,
+    },
+  ]);
 </script>
 
-<main class="space-y-4 settings-page-content" aria-label="Species settings configuration">
-  <!-- Include Species Section -->
+<!-- Include Species Tab Content -->
+{#snippet includeTabContent()}
   <SettingsSection
     title={t('settings.species.alwaysInclude.title')}
     description={t('settings.species.alwaysInclude.description')}
     defaultOpen={true}
-    hasChanges={includeHasChanges}
+    originalData={store.originalData.realtime?.species?.include}
+    currentData={store.formData.realtime?.species?.include}
   >
     <div class="space-y-4">
       <!-- Species list -->
       <div class="space-y-2">
-        {#each settings.include as species}
+        {#each settings.include as species (species)}
           <div class="flex items-center justify-between p-2 rounded-md bg-base-200">
             <span class="text-sm">{species}</span>
             <button
@@ -505,18 +546,21 @@
       />
     </div>
   </SettingsSection>
+{/snippet}
 
-  <!-- Exclude Species Section -->
+<!-- Exclude Species Tab Content -->
+{#snippet excludeTabContent()}
   <SettingsSection
     title={t('settings.species.alwaysExclude.title')}
     description={t('settings.species.alwaysExclude.description')}
     defaultOpen={true}
-    hasChanges={excludeHasChanges}
+    originalData={store.originalData.realtime?.species?.exclude}
+    currentData={store.formData.realtime?.species?.exclude}
   >
     <div class="space-y-4">
       <!-- Species list -->
       <div class="space-y-2">
-        {#each settings.exclude as species}
+        {#each settings.exclude as species (species)}
           <div class="flex items-center justify-between p-2 rounded-md bg-base-200">
             <span class="text-sm">{species}</span>
             <button
@@ -552,13 +596,16 @@
       />
     </div>
   </SettingsSection>
+{/snippet}
 
-  <!-- Custom Configuration Section -->
+<!-- Custom Configuration Tab Content -->
+{#snippet configTabContent()}
   <SettingsSection
     title={t('settings.species.customConfiguration.title')}
     description={t('settings.species.customConfiguration.description')}
     defaultOpen={true}
-    hasChanges={configHasChanges}
+    originalData={store.originalData.realtime?.species?.config}
+    currentData={store.formData.realtime?.species?.config}
   >
     <div class="space-y-4">
       <!-- Header with Add Button -->
@@ -572,17 +619,21 @@
             disabled={store.isLoading || store.isSaving}
           >
             <Plus class="size-4" />
-            Add Configuration
+            {t('settings.species.customConfiguration.addConfiguration')}
           </button>
         {:else}
           <span class="text-sm font-medium">
-            {editingSpecies ? `Editing: ${editingSpecies}` : 'New Configuration'}
+            {editingSpecies
+              ? t('settings.species.customConfiguration.editing', { species: editingSpecies })
+              : t('settings.species.customConfiguration.newConfiguration')}
           </span>
         {/if}
 
         {#if Object.keys(settings.config).length > 0}
           <span class="text-xs text-base-content/60">
-            {Object.keys(settings.config).length} configured
+            {t('settings.species.customConfiguration.configuredCount', {
+              count: Object.keys(settings.config).length,
+            })}
           </span>
         {/if}
       </div>
@@ -595,12 +646,14 @@
             <!-- Species Input -->
             <div class="col-span-4">
               <label class="label py-1" for="config-species">
-                <span class="label-text text-xs">Species</span>
+                <span class="label-text text-xs"
+                  >{t('settings.species.customConfiguration.columnHeaders.species')}</span
+                >
               </label>
               <SpeciesInput
                 id="config-species"
                 bind:value={configInputValue}
-                placeholder="Type to search..."
+                placeholder={t('settings.species.customConfiguration.searchPlaceholder')}
                 predictions={configPredictions}
                 onInput={updateConfigPredictions}
                 onPredictionSelect={handleSpeciesPicked}
@@ -615,7 +668,9 @@
             <!-- Threshold -->
             <div class="col-span-3">
               <label class="label py-1" for="config-threshold">
-                <span class="label-text text-xs">Threshold</span>
+                <span class="label-text text-xs"
+                  >{t('settings.species.customConfiguration.labels.threshold')}</span
+                >
                 <span class="label-text-alt text-xs">{newThreshold.toFixed(2)}</span>
               </label>
               <input
@@ -633,7 +688,9 @@
             <!-- Interval -->
             <div class="col-span-3">
               <label class="label py-1" for="config-interval">
-                <span class="label-text text-xs">Interval (s)</span>
+                <span class="label-text text-xs"
+                  >{t('settings.species.customConfiguration.labels.intervalSeconds')}</span
+                >
               </label>
               <input
                 id="config-interval"
@@ -661,9 +718,11 @@
                   store.isSaving}
               >
                 {#if store.isSaving}
-                  Saving...
+                  {t('settings.species.customConfiguration.saving')}
                 {:else}
-                  {editingSpecies ? 'Save' : 'Add'}
+                  {editingSpecies
+                    ? t('settings.species.customConfiguration.save')
+                    : t('settings.species.customConfiguration.labels.addButton')}
                 {/if}
               </button>
               <button
@@ -671,7 +730,7 @@
                 onclick={cancelEdit}
                 disabled={store.isSaving}
               >
-                Cancel
+                {t('settings.species.customConfiguration.cancel')}
               </button>
             </div>
           </div>
@@ -688,9 +747,11 @@
               <span class="transition-transform duration-200" class:rotate-90={showActions}>
                 <ChevronRight class="size-4" />
               </span>
-              <span>Configure Actions</span>
+              <span>{t('settings.species.customConfiguration.configureActions')}</span>
               {#if actionCommand}
-                <span class="badge badge-xs badge-accent">Configured</span>
+                <span class="badge badge-xs badge-accent"
+                  >{t('settings.species.customConfiguration.actionsConfigured')}</span
+                >
               {/if}
             </button>
           </div>
@@ -712,11 +773,9 @@
                   placeholder={t('settings.species.commandPathPlaceholder')}
                   class="input input-xs w-full"
                 />
-                <div class="label">
-                  <span class="label-text-alt text-xs"
-                    >{t('settings.species.actionsModal.command.helpText')}</span
-                  >
-                </div>
+                <span class="help-text mt-1"
+                  >{t('settings.species.actionsModal.command.helpText')}</span
+                >
               </div>
 
               <!-- Parameters -->
@@ -737,11 +796,9 @@
                   class="input input-xs w-full bg-base-200/50"
                   title="Add parameters using the buttons below or type directly (comma-separated)"
                 />
-                <div class="label">
-                  <span class="label-text-alt text-xs"
-                    >{t('settings.species.actionsModal.parameters.helpText')}</span
-                  >
-                </div>
+                <span class="help-text mt-1"
+                  >{t('settings.species.actionsModal.parameters.helpText')}</span
+                >
               </div>
 
               <!-- Parameter Buttons -->
@@ -796,11 +853,9 @@
                     >{t('settings.species.actionsModal.executeDefaults.label')}</span
                   >
                 </label>
-                <div class="label">
-                  <span class="label-text-alt text-xs"
-                    >{t('settings.species.actionsModal.executeDefaults.helpText')}</span
-                  >
-                </div>
+                <span class="help-text mt-1"
+                  >{t('settings.species.actionsModal.executeDefaults.helpText')}</span
+                >
               </div>
             </div>
           {/if}
@@ -809,7 +864,7 @@
 
       <!-- Compact Configuration List -->
       <div class="space-y-2">
-        {#each Object.entries(settings.config) as [species, config]}
+        {#each Object.entries(settings.config) as [species, config] (species)}
           <div
             class="flex items-center gap-3 p-2 rounded-lg bg-base-100 border border-base-300 hover:border-base-content/20 transition-colors"
           >
@@ -820,22 +875,30 @@
 
             <!-- Threshold -->
             <div class="flex items-center gap-2">
-              <span class="text-xs text-base-content/60">Threshold:</span>
+              <span class="text-xs text-base-content/60"
+                >{t('settings.species.customConfiguration.list.threshold')}</span
+              >
               <span class="font-mono text-xs font-medium">{(config.threshold ?? 0).toFixed(2)}</span
               >
             </div>
 
             <!-- Interval -->
             <div class="flex items-center gap-2">
-              <span class="text-xs text-base-content/60">Interval:</span>
+              <span class="text-xs text-base-content/60"
+                >{t('settings.species.customConfiguration.list.interval')}</span
+              >
               <span class="font-mono text-xs font-medium">
-                {config.interval > 0 ? `${config.interval}s` : 'None'}
+                {config.interval > 0
+                  ? `${config.interval}s`
+                  : t('settings.species.customConfiguration.list.intervalNone')}
               </span>
             </div>
 
             <!-- Action Badge -->
             {#if config.actions?.length > 0}
-              <span class="badge badge-xs badge-accent">Action</span>
+              <span class="badge badge-xs badge-accent"
+                >{t('settings.species.customConfiguration.list.actionBadge')}</span
+              >
             {/if}
 
             <!-- Actions -->
@@ -843,8 +906,8 @@
               <button
                 class="btn btn-ghost btn-xs"
                 onclick={() => startEdit(species)}
-                title="Edit configuration"
-                aria-label="Edit {species} configuration"
+                title={t('settings.species.customConfiguration.list.editTitle')}
+                aria-label={t('settings.species.customConfiguration.list.editTitle')}
                 disabled={store.isLoading || store.isSaving}
               >
                 <SquarePen class="size-4" />
@@ -853,8 +916,8 @@
               <button
                 class="btn btn-ghost btn-xs text-error"
                 onclick={() => removeConfig(species)}
-                title="Remove configuration"
-                aria-label="Remove {species} configuration"
+                title={t('settings.species.customConfiguration.list.removeTitle')}
+                aria-label={t('settings.species.customConfiguration.list.removeTitle')}
                 disabled={store.isLoading || store.isSaving}
               >
                 <Trash2 class="size-4" />
@@ -867,12 +930,16 @@
       <!-- Empty State -->
       {#if Object.keys(settings.config).length === 0 && !showAddForm}
         <div class="text-center py-8 text-base-content/60">
-          <p class="text-sm">No configurations yet.</p>
+          <p class="text-sm">{t('settings.species.customConfiguration.emptyState.title')}</p>
           <p class="text-xs mt-1">
-            Click "Add Configuration" to customize species detection settings.
+            {t('settings.species.customConfiguration.emptyState.description')}
           </p>
         </div>
       {/if}
     </div>
   </SettingsSection>
+{/snippet}
+
+<main class="settings-page-content" aria-label="Species settings configuration">
+  <SettingsTabs {tabs} bind:activeTab />
 </main>

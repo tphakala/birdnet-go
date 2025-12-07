@@ -312,3 +312,15 @@
 .text-2xs {
   font-size: 0.6rem;
 }
+
+/* ========================================================================
+   Form Help Text
+   Replaces DaisyUI .label for help text which has white-space:nowrap in v5
+   ======================================================================== */
+
+.help-text {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--color-base-content, currentColor);
+  overflow-wrap: anywhere;
+}

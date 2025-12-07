@@ -118,7 +118,7 @@ describe('SettingsCard', () => {
         childContent: 'Content',
       });
 
-      const bodyContainer = screen.getByTestId('settings-card').querySelector('.px-6.pb-6');
+      const bodyContainer = screen.getByTestId('settings-card').querySelector('.px-6.pb-7');
       expect(bodyContainer).toBeInTheDocument();
     });
 
@@ -133,11 +133,14 @@ describe('SettingsCard', () => {
       const bodyDivs = card.querySelectorAll('div');
 
       // Find the body div (contains our content)
-      const bodyDiv = Array.from(bodyDivs).find(div => div.textContent.includes('Content'));
+      const bodyDiv = Array.from(bodyDivs).find(
+        // eslint-disable-next-line @typescript-eslint/prefer-optional-chain -- textContent can be null per DOM spec
+        div => div.textContent && div.textContent.includes('Content')
+      );
 
       expect(bodyDiv).toBeInTheDocument();
       // When padding is false, bodyClasses is empty string
-      expect(bodyDiv).not.toHaveClass('px-6', 'pb-6');
+      expect(bodyDiv).not.toHaveClass('px-6', 'pb-7');
     });
   });
 
@@ -175,8 +178,8 @@ describe('SettingsCard', () => {
         title: 'Test Card',
       });
 
-      // Body container should still exist but be empty
-      const bodyContainer = screen.getByTestId('settings-card').querySelector('.px-6.pb-6');
+      // Body container should still exist but be empty (uses pb-7 for body)
+      const bodyContainer = screen.getByTestId('settings-card').querySelector('.px-6.pb-7');
       expect(bodyContainer).toBeInTheDocument();
       expect(bodyContainer).toBeEmptyDOMElement();
     });
@@ -186,10 +189,11 @@ describe('SettingsCard', () => {
         title: 'Test Card',
       });
 
-      // Check that footer container doesn't exist
-      const footerContainers = screen.getByTestId('settings-card').querySelectorAll('.px-6.pb-6');
-      // Should only have one .px-6.pb-6 (the body), not two
-      expect(footerContainers).toHaveLength(1);
+      // Check that footer container doesn't exist (footer uses border-t class)
+      const footerContainer = screen
+        .getByTestId('settings-card')
+        .querySelector('.border-t.border-base-200');
+      expect(footerContainer).not.toBeInTheDocument();
     });
   });
 

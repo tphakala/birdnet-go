@@ -733,13 +733,26 @@
       "resetAriaLabel": "Reset all changes",
       "saveAriaLabel": "Save Changes",
       "savingAriaLabel": "Saving changes...",
-      "unsavedChanges": "Unsaved changes"
+      "unsavedChanges": "Unsaved changes",
+      "toolbar": "Settings actions"
     },
     "card": {
       "changed": "changed",
       "changedAriaLabel": "Settings changed"
     },
+    "tabs": {
+      "navigation": "Settings navigation tabs",
+      "hasChanges": "This tab has unsaved changes",
+      "setAsDefault": "Set as default",
+      "defaultIndicator": "Default input source"
+    },
     "main": {
+      "tabs": {
+        "general": "General",
+        "detection": "Detection",
+        "location": "Location",
+        "database": "Database"
+      },
       "sections": {
         "main": {
           "title": "Main Settings",
@@ -755,6 +768,7 @@
         },
         "customClassifier": {
           "title": "Custom BirdNET Classifier",
+          "description": "Configure custom BirdNET model and label files for specialized detection",
           "modelPath": {
             "label": "Model Path (Requires restart to apply)",
             "placeholder": "Path to model file",
@@ -768,6 +782,7 @@
         },
         "dynamicThreshold": {
           "title": "Dynamic Threshold",
+          "description": "Automatically adjust detection sensitivity based on prior observations",
           "enable": {
             "label": "Enable Dynamic Threshold (BirdNET-Go specific feature)",
             "helpText": "Enables dynamic confidence threshold feature for more adaptive bird call detection."
@@ -787,17 +802,18 @@
         },
         "rangeFilter": {
           "title": "Range Filter",
+          "description": "Limit detection to species probable in your geographic region",
           "stationLocation": {
             "label": "Station Location",
-            "helpText": "Station location, used to limit bird species to those probable in the region."
+            "helpText": "Station location, used for weather data and to limit bird species to those probable in the region."
           },
           "latitude": {
             "label": "Latitude",
-            "helpText": "Station location latitude, used to limit bird species to those probable in the region."
+            "helpText": "Station latitude, used for weather data and species range filtering."
           },
           "longitude": {
             "label": "Longitude",
-            "helpText": "Station location longitude, used to limit bird species to those probable in the region."
+            "helpText": "Station longitude, used for weather data and species range filtering."
           },
           "model": {
             "label": "Range Filter Model",
@@ -835,6 +851,8 @@
             "helpText": "Select the database type to use for storing detections."
           },
           "sqlite": {
+            "title": "SQLite Configuration",
+            "description": "Configure the SQLite database file location",
             "note": "SQLite is recommended database type for most users.",
             "path": {
               "label": "SQLite Database Path",
@@ -843,6 +861,8 @@
             }
           },
           "mysql": {
+            "title": "MySQL Configuration",
+            "description": "Configure connection settings for MySQL database server",
             "host": {
               "label": "MySQL Host",
               "placeholder": "Enter MySQL host",
@@ -877,7 +897,8 @@
             "description": "Choose your preferred language and interface version",
             "locale": {
               "label": "Display Language",
-              "helpText": "Select the language for the user interface"
+              "helpText": "Select the language for the user interface",
+              "requiresModernUI": "Language selection is only available when using the Modern Interface."
             },
             "newUI": {
               "label": "Use Modern Interface",
@@ -895,6 +916,18 @@
           "dashboard": {
             "title": "Dashboard Display",
             "description": "Configure how detections are displayed on the dashboard",
+            "displaySettings": {
+              "title": "Display Settings",
+              "description": "Configure general dashboard display options like species limits."
+            },
+            "birdImages": {
+              "title": "Bird Images",
+              "description": "Configure bird species thumbnail images for detection lists."
+            },
+            "spectrogramGeneration": {
+              "title": "Spectrogram Generation",
+              "description": "Configure when and how audio spectrograms are generated for detections."
+            },
             "general": {
               "title": "General Settings"
             },
@@ -1143,13 +1176,21 @@
         "species": "Species Data",
         "speciesDetails": "What birds were detected and when",
         "recommendation": "Only enable external webhooks if you trust the receiving service or use self-hosted/local services."
+      },
+      "push": {
+        "title": "Push Notifications",
+        "description": "Configure push notification settings and providers",
+        "comingSoon": "Push notification settings coming soon",
+        "comingSoonDescription": "Configuration for push notification providers will be available in a future update."
       }
     },
     "filters": {
+      "title": "Filters",
       "privacyFiltering": {
         "title": "Privacy Filtering",
         "description": "Privacy filtering avoids saving audio clips when human vocals are detected",
         "enable": "Enable Privacy Filtering",
+        "disabled": "Privacy filtering is disabled",
         "confidenceLabel": "Confidence Threshold for Human Detection",
         "confidenceHelp": "Set the confidence level for human voice detection, lower value makes filter more sensitive"
       },
@@ -1157,6 +1198,7 @@
         "title": "False Positive Prevention",
         "description": "Configure false detection filters",
         "enableDogBark": "Enable Dog Bark Filter",
+        "disabled": "Dog bark filter is disabled",
         "confidenceLabel": "Confidence Threshold",
         "confidenceHelp": "Set the confidence level for dog bark detection, lower value makes filter more sensitive",
         "expireTimeLabel": "Dog Bark Expire Time (Minutes)",
@@ -1246,6 +1288,7 @@
         "title": "Observability",
         "description": "Monitor BirdNET-Go's performance and bird detection metrics through Prometheus-compatible endpoint",
         "enable": "Enable Observability Integration",
+        "disabled": "Observability integration is not enabled",
         "listenAddress": {
           "label": "Listen Address",
           "placeholder": "0.0.0.0:8090"
@@ -1314,18 +1357,121 @@
       }
     },
     "audio": {
+      "loading": "Loading audio devices...",
+      "tabs": {
+        "soundCard": "Sound Card",
+        "streams": "Streams",
+        "processing": "Processing",
+        "recording": "Recording",
+        "retention": "Retention"
+      },
+      "emptyStates": {
+        "soundCard": {
+          "title": "No Sound Cards Detected",
+          "description": "No local audio input devices were found on this system. This is normal for container or headless server deployments.",
+          "errorTitle": "Error Loading Devices",
+          "hintsTitle": "You can:",
+          "hints": {
+            "container": "This is normal for container/headless deployments",
+            "streams": "Configure network streams in the Streams tab instead",
+            "usb": "Connect a USB microphone and refresh the list"
+          },
+          "refresh": "Refresh Devices",
+          "retry": "Retry"
+        },
+        "streams": {
+          "title": "No Streams Configured",
+          "description": "Add RTSP or network audio streams from IP cameras, microphone servers, or other streaming sources.",
+          "hintsTitle": "Getting started:",
+          "hints": {
+            "rtsp": "Enter RTSP URLs in the format: rtsp://ip:port/stream",
+            "multiple": "You can add multiple streams for different locations",
+            "protocol": "Choose TCP for reliability or UDP for lower latency"
+          }
+        }
+      },
+      "soundCard": {
+        "title": "Sound Card",
+        "description": "Configure local audio input device",
+        "audioSourceLabel": "Audio Source (requires application restart to take effect)",
+        "audioSourceHelp": "Select the audio input device for bird sound detection. Changes require application restart to take effect.",
+        "noSoundCardCapture": "No sound card capture",
+        "empty": {
+          "title": "No Sound Cards Detected",
+          "description": "No local audio input devices were found on this system. This is normal for container or headless server deployments.",
+          "hintsTitle": "You can:",
+          "hintStream": "Configure network streams in the Streams tab",
+          "hintUsb": "Connect a USB microphone and refresh the list",
+          "goToStreams": "Go to Streams",
+          "refresh": "Refresh Devices"
+        }
+      },
+      "noSources": {
+        "warning": "No Audio Sources Configured",
+        "description": "BirdNET-Go needs an audio input to detect birds. Please configure at least one source in the Sound Card or Streams tab."
+      },
       "audioCapture": {
-        "title": "Audio Capture",
-        "description": "Set audio capture source, sound card or RTSP stream",
+        "title": "Sound Card Configuration",
+        "description": "Select the audio input device for bird sound detection. Changes require application restart.",
         "soundCardSource": "Sound Card Source",
         "audioSourceLabel": "Audio Source (requires application restart to take effect)",
         "audioSourceHelp": "Select the audio input device for bird sound detection. Changes require application restart to take effect.",
         "noSoundCardCapture": "No sound card capture",
+        "noDeviceSelected": "No audio device selected",
+        "refreshDevices": "Refresh",
         "rtspSource": "RTSP Source",
         "rtspTransportLabel": "RTSP Transport Protocol",
         "rtspTransportHelp": "TCP is more reliable but may have higher latency. UDP is faster but may experience packet loss on poor networks.",
         "rtspUrlsLabel": "RTSP Stream URLs",
-        "rtspUrlsHelp": "Enter one or more RTSP stream URLs for network audio sources. Format: rtsp://ip:port/stream. Note: Authentication credentials should be configured separately in your RTSP server settings for security."
+        "rtspUrlsHelp": "Enter one or more RTSP stream URLs for network audio sources. Format: rtsp://ip:port/stream. Note: Authentication credentials should be configured separately in your RTSP server settings for security.",
+        "deviceSelected": "Sound card selected and ready for capture",
+        "availableDevices": "Available Audio Devices",
+        "active": "Active",
+        "streamsConfigured": "{count} stream(s) configured"
+      },
+      "rtspStreams": {
+        "title": "RTSP Stream Configuration",
+        "description": "Configure network audio streams for remote audio capture via RTSP protocol.",
+        "noStreamsConfigured": "No streams configured"
+      },
+      "streams": {
+        "streamLabel": "Stream",
+        "urlLabel": "Stream URL",
+        "urlHelp": "Enter RTSP URL with optional credentials (rtsp://user:password@host:port/path)",
+        "typeLabel": "Stream Type",
+        "typeLockedNote": "Only RTSP is supported currently",
+        "transportLabel": "Protocol",
+        "summary": "{count} stream(s) configured",
+        "healthy": "healthy",
+        "unhealthy": "unhealthy",
+        "unknown": "unknown",
+        "refresh": "Refresh",
+        "addStream": "Add Stream",
+        "deleteConfirm": "Remove this stream?",
+        "restartCount": "Restarted {count} time(s)",
+        "healthLoadError": "Failed to load stream health status",
+        "status": {
+          "connected": "Connected",
+          "connecting": "Connecting",
+          "error": "Error",
+          "idle": "Idle",
+          "unknown": "Unknown"
+        },
+        "emptyState": {
+          "title": "No Streams Configured",
+          "description": "Add RTSP streams to capture audio from network cameras or other RTSP sources.",
+          "hintsTitle": "Getting Started",
+          "hints": {
+            "rtsp": "Use RTSP URLs from IP cameras (e.g., rtsp://192.168.1.100:554/stream)",
+            "credentials": "Include credentials in URL if required (rtsp://user:pass@host/stream)",
+            "protocol": "TCP is more reliable, UDP has lower latency"
+          }
+        },
+        "errors": {
+          "urlRequired": "Stream URL is required",
+          "invalidUrl": "Invalid RTSP URL format",
+          "duplicate": "This stream URL already exists"
+        }
       },
       "audioFilters": {
         "title": "Audio Filters",
@@ -1360,6 +1506,7 @@
         "description": "Monitor and report environmental sound levels",
         "enable": "Enable Sound Level Monitoring",
         "enableHelp": "Track ambient noise levels to understand your recording environment and correlate with bird activity patterns.",
+        "disabled": "Sound level monitoring is disabled",
         "intervalLabel": "Measurement Interval (seconds)",
         "intervalHelp": "How often to measure and report sound levels. Lower values provide more granular data but use more resources. Minimum 5 seconds, recommended 60 seconds.",
         "dataOutputTitle": "Sound Level Data Output",
@@ -1372,9 +1519,12 @@
         "title": "Clip Settings",
         "description": "Configure audio clip capture and processing for identified bird calls"
       },
-      "audioExport": {
-        "enable": "Enable Audio Capture",
+      "clipRecording": {
+        "title": "Clip Recording",
+        "description": "Configure when and how audio clips are captured for detected bird calls.",
+        "enable": "Enable Clip Recording",
         "enableHelp": "Save audio clips of detected bird calls for review, sharing, or building custom datasets.",
+        "disabled": "Clip recording is disabled",
         "captureSettings": "Capture Settings",
         "lengthLabel": "Capture Length",
         "lengthHelp": "Duration of audio to capture for each detection (10-60 seconds). Longer clips provide more context but use more storage.",
@@ -1385,6 +1535,7 @@
         "normalization": "Audio Normalization",
         "normalizationEnable": "Enable Loudness Normalization",
         "normalizationHelp": "Automatically adjust audio levels to EBU R128 broadcast standard for consistent playback volume across all clips.",
+        "normalizationDisabled": "Audio normalization is disabled",
         "targetLUFSLabel": "Target Loudness (LUFS)",
         "targetLUFSHelp": "Integrated loudness target in LUFS (Loudness Units relative to Full Scale). -23 LUFS is the EBU R128 broadcast standard. Range: -40 to -10 LUFS.",
         "loudnessRangeLabel": "Loudness Range (LU)",
@@ -1394,13 +1545,41 @@
         "normalizationNote": "EBU R128 Standard",
         "normalizationNoteDescription": "Audio normalization follows the EBU R128 broadcast standard, ensuring consistent playback levels across different devices and preventing clipping.",
         "fileSettings": "File Settings",
-        "pathLabel": "Export Path",
+        "pathLabel": "Clips Folder",
         "pathHelp": "Directory where audio clips will be saved. Relative paths are from the application directory. Example: 'clips/' or '/var/audio/birds/'",
-        "typeLabel": "Export Format",
+        "typeLabel": "Audio Format",
+        "typeHelp": "Audio format for saved clips. WAV and FLAC are lossless (best quality, larger files). MP3, AAC, and Opus are lossy (smaller files, slight quality loss).",
+        "bitrateLabel": "Bitrate",
+        "bitrateHelp": "Audio compression bitrate for lossy formats. Range: {min}-{max} kbps. Higher values provide better quality but larger files.",
+        "losslessNote": "Lossless formats preserve original audio quality without compression artifacts.",
+        "disabledInfo": "Enable clip recording above to configure clip settings, file format, and storage options."
+      },
+      "fileSettings": {
+        "title": "File Settings",
+        "description": "Configure storage location and audio format for saved clips.",
+        "pathLabel": "Clips Folder",
+        "pathHelp": "Directory where audio clips will be saved. Relative paths are from the application directory. Example: 'clips/' or '/var/audio/birds/'",
+        "typeLabel": "Audio Format",
         "typeHelp": "Audio format for saved clips. WAV and FLAC are lossless (best quality, larger files). MP3, AAC, and Opus are lossy (smaller files, slight quality loss).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio compression bitrate for lossy formats. Range: {min}-{max} kbps. Higher values provide better quality but larger files.",
         "losslessNote": "Lossless formats preserve original audio quality without compression artifacts."
+      },
+      "audioNormalization": {
+        "title": "Audio Normalization",
+        "description": "Adjust audio levels for consistent playback volume across all clips.",
+        "enable": "Enable Loudness Normalization",
+        "enableHelp": "Automatically adjust audio levels to EBU R128 broadcast standard for consistent playback volume across all clips.",
+        "disabled": "Audio normalization is disabled",
+        "requiresRecording": "Enable clip recording in the Recording tab to use audio normalization.",
+        "targetLUFSLabel": "Target Loudness (LUFS)",
+        "targetLUFSHelp": "Integrated loudness target in LUFS (Loudness Units relative to Full Scale). -23 LUFS is the EBU R128 broadcast standard. Range: -40 to -10 LUFS.",
+        "loudnessRangeLabel": "Loudness Range (LU)",
+        "loudnessRangeHelp": "Maximum variation in loudness within the clip (0-20 LU). Lower values create more consistent volume but may reduce dynamics.",
+        "truePeakLabel": "True Peak Limit (dBTP)",
+        "truePeakHelp": "Maximum true peak level to prevent digital clipping (-10 to 0 dBTP). -2 dBTP provides safe headroom for most playback systems.",
+        "noteTitle": "EBU R128 Standard",
+        "noteDescription": "Audio normalization follows the EBU R128 broadcast standard, ensuring consistent playback levels across different devices and preventing clipping."
       },
       "audioClipRetention": {
         "title": "Audio Clip Retention",
@@ -1419,7 +1598,13 @@
           "none": "None - Keep All",
           "age": "Age-Based",
           "usage": "Disk Usage-Based"
-        }
+        },
+        "noRetentionTitle": "All Clips Retained",
+        "noRetentionDescription": "Audio clips will be kept indefinitely. Monitor disk usage to prevent storage issues.",
+        "ageRetentionTitle": "Age-Based Cleanup",
+        "ageRetentionDescription": "Clips older than the specified age will be automatically deleted, while preserving the minimum number per species.",
+        "usageRetentionTitle": "Usage-Based Cleanup",
+        "usageRetentionDescription": "When disk usage exceeds the threshold, oldest clips will be deleted until usage is within limits."
       },
       "formats": {
         "wav": "WAV",
@@ -1470,6 +1655,7 @@
         "title": "Basic Authentication",
         "description": "Secure access with a simple password",
         "enableLabel": "Enable Password Authentication",
+        "disabled": "Password authentication is disabled",
         "passwordLabel": "Password",
         "passwordHelpText": "Limit access to settings with a password."
       },
@@ -1501,7 +1687,8 @@
       },
       "bypassAuthentication": {
         "title": "Bypass Authentication",
-        "description": "Allow access to settings without authentication"
+        "description": "Allow access to settings without authentication",
+        "disabled": "Subnet bypass is disabled"
       },
       "placeholders": {
         "host": "For example, localhost:8080 or example.domain.com",
@@ -1548,7 +1735,7 @@
         "labels": {
           "threshold": "Threshold",
           "interval": "Interval",
-          "intervalSeconds": "Interval (sec)",
+          "intervalSeconds": "Interval (s)",
           "addButton": "Add"
         },
         "noConfigurationsMessage": "No custom species configurations added",
@@ -1556,6 +1743,28 @@
           "speciesPlaceholder": "Species name",
           "thresholdPlaceholder": "0.5",
           "intervalPlaceholder": "0"
+        },
+        "addConfiguration": "Add Configuration",
+        "newConfiguration": "New Configuration",
+        "editing": "Editing: {species}",
+        "configuredCount": "{count} configured",
+        "searchPlaceholder": "Type to search...",
+        "saving": "Saving...",
+        "save": "Save",
+        "cancel": "Cancel",
+        "configureActions": "Configure Actions",
+        "actionsConfigured": "Configured",
+        "list": {
+          "threshold": "Threshold:",
+          "interval": "Interval:",
+          "intervalNone": "None",
+          "actionBadge": "Action",
+          "editTitle": "Edit configuration",
+          "removeTitle": "Remove configuration"
+        },
+        "emptyState": {
+          "title": "No configurations yet.",
+          "description": "Click \"Add Configuration\" to customize species detection settings."
         }
       },
       "actionsModal": {

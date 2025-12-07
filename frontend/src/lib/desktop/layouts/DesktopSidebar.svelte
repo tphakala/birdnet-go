@@ -89,7 +89,6 @@ Performance Optimizations:
       settingsSpecies: currentRoute === '/ui/settings/species',
       settingsNotifications: currentRoute === '/ui/settings/notifications',
       settingsSupport: currentRoute === '/ui/settings/support',
-      settingsUserInterface: currentRoute === '/ui/settings/userinterface',
     };
     return routes;
   });
@@ -119,7 +118,6 @@ Performance Optimizations:
     settingsSpecies: onNavigate ? '/settings/species' : '/ui/settings/species',
     settingsNotifications: onNavigate ? '/settings/notifications' : '/ui/settings/notifications',
     settingsSupport: onNavigate ? '/settings/support' : '/ui/settings/support',
-    settingsUserInterface: onNavigate ? '/settings/userinterface' : '/ui/settings/userinterface',
   });
 
   /**
@@ -276,15 +274,6 @@ Performance Optimizations:
                     role="menuitem"
                   >
                     {t('settings.sections.node')}
-                  </button>
-                </li>
-                <li role="none">
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsUserInterface)}
-                    class={cn({ active: routeCache().settingsUserInterface })}
-                    role="menuitem"
-                  >
-                    {t('settings.sections.userinterface')}
                   </button>
                 </li>
                 <li role="none">
