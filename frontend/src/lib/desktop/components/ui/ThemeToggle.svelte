@@ -40,7 +40,7 @@
   }
 
   // Get icon size classes
-  const iconSizeClass = $derived(() => {
+  const iconSizeClass = $derived.by(() => {
     switch (size) {
       case 'lg':
         return 'size-8';
@@ -53,29 +53,23 @@
 </script>
 
 <div class={cn('relative group', !showTooltip && 'md:block', className)}>
-  <label class={cn('swap swap-rotate btn btn-ghost p-1', `btn-${size}`)}>
-    <input
-      type="checkbox"
-      class="theme-controller"
-      checked={currentTheme === 'dark'}
-      onchange={handleToggle}
-      aria-label="Toggle dark mode"
-    />
-
-    <!-- Sun icon (light mode) -->
-    <div class="swap-on">
-      <Sun class={iconSizeClass()} />
+  <button
+    onclick={handleToggle}
+    class={cn('btn btn-ghost p-1', `btn-${size}`)}
+    aria-label={currentTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+  >
+    <div class="theme-icon-container">
+      {#if currentTheme === 'dark'}
+        <Sun class={iconSizeClass} />
+      {:else}
+        <Moon class={iconSizeClass} />
+      {/if}
     </div>
-
-    <!-- Moon icon (dark mode) -->
-    <div class="swap-off">
-      <Moon class={iconSizeClass()} />
-    </div>
-  </label>
+  </button>
 
   {#if showTooltip && mounted}
     <div
-      class="invisible group-hover:visible absolute left-1/2 transform -translate-x-1/2 mt-2 w-auto whitespace-nowrap bg-gray-900 text-gray-50 text-sm rounded-sm px-2 py-1 z-50 shadow-md"
+      class="invisible group-hover:visible absolute left-1/2 transform -translate-x-1/2 mt-2 w-auto whitespace-nowrap bg-neutral text-neutral-content text-sm rounded-md px-2 py-1 z-50 shadow-md"
       role="tooltip"
       aria-hidden="true"
     >
@@ -85,11 +79,15 @@
 </div>
 
 <style>
-  /* Ensure smooth transition between icons */
-  .swap-rotate .swap-on,
-  .swap-rotate .swap-off {
-    transition:
-      transform 0.3s ease-in-out,
-      opacity 0.3s ease-in-out;
+  /* Smooth transition for theme icon */
+  .theme-icon-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s ease-in-out;
+  }
+
+  .theme-icon-container:hover {
+    transform: rotate(15deg);
   }
 </style>
