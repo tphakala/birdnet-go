@@ -130,8 +130,7 @@
   // 1. Consistency with other settings pages
   // 2. Future direct API calls that might be needed
   // 3. Avoiding repeated DOM queries
-  // eslint-disable-next-line no-unused-vars
-  let csrfToken = $derived(
+  let _csrfToken = $derived(
     (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
       ''
   );

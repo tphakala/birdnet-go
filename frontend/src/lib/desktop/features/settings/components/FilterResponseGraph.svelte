@@ -535,10 +535,8 @@
     });
 
     // Listen for window resize - with proper browser support check
-    // eslint-disable-next-line no-undef -- ResizeObserver checked via globalThis
     let resizeObserver: ResizeObserver | undefined;
     if (typeof globalThis.ResizeObserver !== 'undefined' && containerElement) {
-      // eslint-disable-next-line no-undef -- ResizeObserver available via globalThis
       const RO = globalThis.ResizeObserver as typeof ResizeObserver;
       resizeObserver = new RO(() => {
         updateCanvasDimensions();
