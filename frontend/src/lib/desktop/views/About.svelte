@@ -58,7 +58,7 @@
       </div>
       <div class="mt-4">
         <h1 class="text-4xl font-bold">{t('about.title')}</h1>
-        <p class="text-base-content/70 text-lg mt-2">
+        <p class="text-base-content opacity-70 text-lg mt-2">
           {t('about.subtitle')}
         </p>
       </div>
@@ -72,7 +72,9 @@
     </p>
 
     <div class="mt-4 p-4 bg-base-200 rounded-lg">
-      <p class="text-sm text-base-content/80 text-center flex items-center justify-center gap-2">
+      <p
+        class="text-sm text-base-content opacity-80 text-center flex items-center justify-center gap-2"
+      >
         <span class="text-yellow-500">
           <Star class="size-5" />
         </span>
@@ -153,7 +155,7 @@
     </p>
 
     <p class="text-xl font-medium mt-6">{t('about.githubContributors')}</p>
-    <p class="mt-2 text-base-content/70">
+    <p class="mt-2 text-base-content opacity-70">
       {t('about.contributorsNote')}
     </p>
     <div class="gap-2 mt-4 about-contributors-grid">

@@ -537,7 +537,7 @@ Responsive Breakpoints:
 {:else if loadingPhase === 'spinner'}
   <SkeletonDailySummary {showThumbnails} showSpinner={showDelayedIndicator} speciesCount={8} />
 {:else if loadingPhase === 'error'}
-  <section class="card col-span-12 bg-base-100 shadow-xs">
+  <section class="card col-span-12 bg-base-100 shadow-sm">
     <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
       <div class="flex items-center justify-between mb-4">
         <span class="card-title grow text-base sm:text-xl"
@@ -552,7 +552,7 @@ Responsive Breakpoints:
     </div>
   </section>
 {:else if loadingPhase === 'loaded'}
-  <section class="card col-span-12 bg-base-100 shadow-xs">
+  <section class="card col-span-12 bg-base-100 shadow-sm">
     <!-- Card Header with Date Navigation -->
     <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
       <div class="flex items-center justify-between mb-4">
@@ -805,9 +805,10 @@ Responsive Breakpoints:
                         {#if width < WIDTH_THRESHOLDS.minTextDisplay || width > WIDTH_THRESHOLDS.maxTextDisplay}
                           <!-- Total detections count for small bars -->
                           <span
-                            class="text-2xs {width > WIDTH_THRESHOLDS.maxTextDisplay
-                              ? 'text-primary-content'
-                              : 'text-base-content/60'} absolute w-full text-center top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
+                            class="text-2xs absolute w-full text-center top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
+                            style:color={width > WIDTH_THRESHOLDS.maxTextDisplay
+                              ? 'var(--color-primary-content)'
+                              : 'color-mix(in srgb, var(--color-base-content) 60%, transparent)'}
                             >{item.count}</span
                           >
                         {/if}
@@ -883,7 +884,10 @@ Responsive Breakpoints:
           </tbody>
         </table>
         {#if sortedData.length === 0}
-          <div class="text-center py-8 text-base-content/60">
+          <div
+            class="text-center py-8"
+            style:color="color-mix(in srgb, var(--color-base-content) 60%, transparent)"
+          >
             {t('dashboard.dailySummary.noSpecies')}
           </div>
         {/if}

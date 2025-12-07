@@ -495,7 +495,9 @@
       <!-- Loading State -->
       <div class="flex items-center justify-center py-12">
         <span class="loading loading-spinner loading-lg text-primary"></span>
-        <span class="ml-3 text-base-content/90">{t('settings.audio.loading')}</span>
+        <span class="ml-3 text-[color:var(--color-base-content)] opacity-90"
+          >{t('settings.audio.loading')}</span
+        >
       </div>
     {:else if audioDevices.error}
       <!-- Error State -->
@@ -560,7 +562,9 @@
                 <span>{t('settings.audio.audioCapture.deviceSelected')}</span>
               </div>
             {:else}
-              <div class="flex items-center gap-2 text-sm text-base-content/60">
+              <div
+                class="flex items-center gap-2 text-sm text-[color:var(--color-base-content)] opacity-60"
+              >
                 <Volume2 class="size-4" />
                 <span>{t('settings.audio.audioCapture.noDeviceSelected')}</span>
               </div>
@@ -771,7 +775,7 @@
                 <p class="font-semibold">
                   {t('settings.audio.audioNormalization.noteTitle')}
                 </p>
-                <p class="text-base-content/90 text-sm">
+                <p class="text-[color:var(--color-base-content)] opacity-90 text-sm">
                   {t('settings.audio.audioNormalization.noteDescription')}
                 </p>
               </SettingsNote>
@@ -859,10 +863,12 @@
               <p class="font-semibold">
                 {t('settings.audio.soundLevelMonitoring.dataOutputTitle')}
               </p>
-              <p class="text-base-content/90 text-sm">
+              <p class="text-[color:var(--color-base-content)] opacity-90 text-sm">
                 {t('settings.audio.soundLevelMonitoring.dataOutputDescription')}
               </p>
-              <ul class="text-base-content/90 text-sm list-disc list-inside mt-1">
+              <ul
+                class="text-[color:var(--color-base-content)] opacity-90 text-sm list-disc list-inside mt-1"
+              >
                 <li>
                   {t('settings.audio.soundLevelMonitoring.mqttTopic')}
                   <code>{'{base_topic}'}/soundlevel</code>
@@ -1199,14 +1205,14 @@
         {#if retentionSettings.policy === 'none'}
           <SettingsNote>
             <p class="font-semibold">{t('settings.audio.audioClipRetention.noRetentionTitle')}</p>
-            <p class="text-base-content/90 text-sm">
+            <p class="text-[color:var(--color-base-content)] opacity-90 text-sm">
               {t('settings.audio.audioClipRetention.noRetentionDescription')}
             </p>
           </SettingsNote>
         {:else if retentionSettings.policy === 'age'}
           <SettingsNote>
             <p class="font-semibold">{t('settings.audio.audioClipRetention.ageRetentionTitle')}</p>
-            <p class="text-base-content/90 text-sm">
+            <p class="text-[color:var(--color-base-content)] opacity-90 text-sm">
               {t('settings.audio.audioClipRetention.ageRetentionDescription')}
             </p>
           </SettingsNote>
@@ -1215,7 +1221,7 @@
             <p class="font-semibold">
               {t('settings.audio.audioClipRetention.usageRetentionTitle')}
             </p>
-            <p class="text-base-content/90 text-sm">
+            <p class="text-[color:var(--color-base-content)] opacity-90 text-sm">
               {t('settings.audio.audioClipRetention.usageRetentionDescription')}
             </p>
           </SettingsNote>

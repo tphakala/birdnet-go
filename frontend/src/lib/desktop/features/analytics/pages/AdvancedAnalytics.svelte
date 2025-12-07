@@ -529,7 +529,7 @@
           <span class="label-text font-medium"
             >Species Selection ({selectedSpecies.length}/{maxSpecies})</span
           >
-          <span class="label-text-alt text-xs text-base-content/60">
+          <span class="label-text-alt text-xs text-base-content opacity-60">
             Search or click chips below
           </span>
         </div>
@@ -566,7 +566,7 @@
                 <div class="flex items-center justify-between gap-2">
                   <div class="flex-1 min-w-0">
                     <div class="font-medium truncate">{species.commonName}</div>
-                    <div class="text-xs text-base-content/60 truncate italic">
+                    <div class="text-xs text-base-content opacity-60 truncate italic">
                       {species.scientificName}
                     </div>
                   </div>
@@ -590,7 +590,7 @@
     <div class="card bg-base-100 shadow-xs">
       <div class="card-body">
         <h2 class="card-title">Detection Patterns by Time of Day</h2>
-        <p class="text-sm text-base-content/70 mb-4">
+        <p class="text-sm text-base-content opacity-70 mb-4">
           Shows average detection counts throughout the day for selected species
         </p>
 
@@ -609,7 +609,7 @@
             </div>
           {:else if timeOfDayData.length === 0}
             <div
-              class="absolute inset-0 flex items-center justify-center text-base-content/60 rounded-lg"
+              class="absolute inset-0 flex items-center justify-center text-base-content opacity-60 rounded-lg"
               role="status"
               aria-label="No time-of-day data available"
             >
@@ -627,7 +627,7 @@
     <div class="card bg-base-100 shadow-xs">
       <div class="card-body">
         <h2 class="card-title">Species Detection Trends</h2>
-        <p class="text-sm text-base-content/70 mb-4">
+        <p class="text-sm text-base-content opacity-70 mb-4">
           Shows detection trends over time for selected species
         </p>
 
@@ -656,7 +656,7 @@
             </div>
           {:else if dailyTrendData.length === 0}
             <div
-              class="absolute inset-0 flex items-center justify-center text-base-content/60 rounded-lg"
+              class="absolute inset-0 flex items-center justify-center text-base-content opacity-60 rounded-lg"
               role="status"
               aria-label="No trend data available"
             >

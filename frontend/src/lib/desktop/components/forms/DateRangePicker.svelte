@@ -288,7 +288,7 @@
   {/if}
 
   {#if startDateObj && endDateObj}
-    <div class="mt-2 text-sm text-base-content/70">
+    <div class="mt-2 text-sm text-base-content opacity-70">
       {t('forms.dateRange.labels.selected', {
         startDate: formatDate(startDateObj),
         endDate: formatDate(endDateObj),

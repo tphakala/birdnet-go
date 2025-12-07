@@ -421,7 +421,7 @@
               <h3 class="card-title text-base">
                 {t('settings.notifications.templates.availableVariables')}
               </h3>
-              <p class="text-sm text-base-content/80 mb-3">
+              <p class="text-sm text-[color:var(--color-base-content)] opacity-80 mb-3">
                 {t('settings.notifications.templates.variablesDescription')}
                 <code class="bg-base-300 px-1 rounded-sm"
                   >&#123;&#123;.VariableName&#125;&#125;</code
@@ -434,7 +434,9 @@
                     <code class="font-mono text-primary shrink-0"
                       >&#123;&#123;.{field.name}&#125;&#125;</code
                     >
-                    <span class="text-base-content/70">{field.description}</span>
+                    <span class="text-[color:var(--color-base-content)] opacity-70"
+                      >{field.description}</span
+                    >
                   </div>
                 {/each}
               </div>
@@ -442,12 +444,12 @@
               <!-- Privacy Note - Collapsible -->
               <details class="mt-4 text-xs">
                 <summary
-                  class="cursor-pointer text-base-content/60 hover:text-base-content/80 flex items-center gap-1"
+                  class="cursor-pointer text-[color:var(--color-base-content)] opacity-60 hover:text-[color:var(--color-base-content)] hover:opacity-80 flex items-center gap-1"
                 >
                   <Info class="size-3.5" />
                   {t('settings.notifications.privacy.title')}
                 </summary>
-                <div class="mt-2 pl-5 text-base-content/60 space-y-1">
+                <div class="mt-2 pl-5 text-[color:var(--color-base-content)] opacity-60 space-y-1">
                   <p>{t('settings.notifications.privacy.description')}</p>
                   <p>{t('settings.notifications.privacy.recommendation')}</p>
                 </div>
@@ -467,7 +469,7 @@
     description={t('settings.notifications.push.description')}
     defaultOpen={true}
   >
-    <div class="text-center py-8 text-base-content/60">
+    <div class="text-center py-8 text-[color:var(--color-base-content)] opacity-60">
       <Send class="size-12 mx-auto mb-4 opacity-50" />
       <p class="text-sm">{t('settings.notifications.push.comingSoon')}</p>
       <p class="text-xs mt-2">{t('settings.notifications.push.comingSoonDescription')}</p>

@@ -68,37 +68,32 @@ Performance Optimizations:
   // State for login modal
   let showLoginModal = $state(false);
 
-  // PERFORMANCE OPTIMIZATION: Cache route calculations with $derived
+  // PERFORMANCE OPTIMIZATION: Cache route calculations with $derived.by
   // Avoids repeated string processing and condition checks in templates
-  let routeCache = $derived(() => {
-    const routes = {
-      dashboard: currentRoute === '/ui/dashboard' || currentRoute === '/ui/',
-      analytics: currentRoute.startsWith('/ui/analytics'),
-      analyticsExact: currentRoute === '/ui/analytics',
-      analyticsAdvanced: currentRoute === '/ui/analytics/advanced',
-      analyticsSpecies: currentRoute === '/ui/analytics/species',
-      search: currentRoute.startsWith('/ui/search'),
-      about: currentRoute.startsWith('/ui/about'),
-      system: currentRoute.startsWith('/ui/system'),
-      settings: currentRoute.startsWith('/ui/settings'),
-      settingsMain: currentRoute === '/ui/settings/main',
-      settingsAudio: currentRoute === '/ui/settings/audio',
-      settingsFilters: currentRoute.startsWith('/ui/settings/detectionfilters'),
-      settingsIntegrations: currentRoute === '/ui/settings/integrations',
-      settingsSecurity: currentRoute === '/ui/settings/security',
-      settingsSpecies: currentRoute === '/ui/settings/species',
-      settingsNotifications: currentRoute === '/ui/settings/notifications',
-      settingsSupport: currentRoute === '/ui/settings/support',
-    };
-    return routes;
-  });
-
-  // PERFORMANCE OPTIMIZATION: Legacy helper functions removed - now using cached routeCache
+  let routeCache = $derived.by(() => ({
+    dashboard: currentRoute === '/ui/dashboard' || currentRoute === '/ui/',
+    analytics: currentRoute.startsWith('/ui/analytics'),
+    analyticsExact: currentRoute === '/ui/analytics',
+    analyticsAdvanced: currentRoute === '/ui/analytics/advanced',
+    analyticsSpecies: currentRoute === '/ui/analytics/species',
+    search: currentRoute.startsWith('/ui/search'),
+    about: currentRoute.startsWith('/ui/about'),
+    system: currentRoute.startsWith('/ui/system'),
+    settings: currentRoute.startsWith('/ui/settings'),
+    settingsMain: currentRoute === '/ui/settings/main',
+    settingsAudio: currentRoute === '/ui/settings/audio',
+    settingsFilters: currentRoute.startsWith('/ui/settings/detectionfilters'),
+    settingsIntegrations: currentRoute === '/ui/settings/integrations',
+    settingsSecurity: currentRoute === '/ui/settings/security',
+    settingsSpecies: currentRoute === '/ui/settings/species',
+    settingsNotifications: currentRoute === '/ui/settings/notifications',
+    settingsSupport: currentRoute === '/ui/settings/support',
+  }));
 
   // PERFORMANCE OPTIMIZATION: Use $derived for navigation section states
   // Automatically updates when currentRoute changes, eliminating manual $effect
-  let analyticsOpen = $derived(routeCache().analytics);
-  let settingsOpen = $derived(routeCache().settings);
+  let analyticsOpen = $derived(routeCache.analytics);
+  let settingsOpen = $derived(routeCache.settings);
 
   // PERFORMANCE OPTIMIZATION: Cache navigation URL transformations with $derived
   // Pre-compute all navigation URLs to avoid repeated string processing
@@ -187,7 +182,7 @@ Performance Optimizations:
         <li role="none">
           <button
             onclick={() => navigate(navigationUrls.dashboard)}
-            class={cn('flex items-center gap-2', { active: routeCache().dashboard })}
+            class={cn('flex items-center gap-2', { active: routeCache.dashboard })}
             role="menuitem"
           >
             <Home class="size-5" />
@@ -205,7 +200,7 @@ Performance Optimizations:
               <li role="none">
                 <button
                   onclick={() => navigate(navigationUrls.analytics)}
-                  class={cn({ active: routeCache().analyticsExact })}
+                  class={cn({ active: routeCache.analyticsExact })}
                   role="menuitem"
                 >
                   {t('analytics.title')}
@@ -214,7 +209,7 @@ Performance Optimizations:
               <li role="none">
                 <button
                   onclick={() => navigate(navigationUrls.analyticsSpecies)}
-                  class={cn({ active: routeCache().analyticsSpecies })}
+                  class={cn({ active: routeCache.analyticsSpecies })}
                   role="menuitem"
                 >
                   {t('analytics.species.title')}
@@ -227,7 +222,7 @@ Performance Optimizations:
         <li role="none">
           <button
             onclick={() => navigate(navigationUrls.search)}
-            class={cn('flex items-center gap-2', { active: routeCache().search })}
+            class={cn('flex items-center gap-2', { active: routeCache.search })}
             role="menuitem"
           >
             <Search class="size-5" />
@@ -238,7 +233,7 @@ Performance Optimizations:
         <li role="none">
           <button
             onclick={() => navigate(navigationUrls.about)}
-            class={cn('flex items-center gap-2', { active: routeCache().about })}
+            class={cn('flex items-center gap-2', { active: routeCache.about })}
             role="menuitem"
           >
             <Info class="size-5" />
@@ -250,10 +245,10 @@ Performance Optimizations:
           <li role="none">
             <button
               onclick={() => navigate(navigationUrls.system)}
-              class={cn('flex items-center gap-2', { active: routeCache().system })}
+              class={cn('flex items-center gap-2', { active: routeCache.system })}
               role="menuitem"
               aria-label="System dashboard"
-              aria-current={routeCache().system ? 'page' : undefined}
+              aria-current={routeCache.system ? 'page' : undefined}
             >
               <Cpu class="size-5" />
               <span>{t('navigation.system')}</span>
@@ -270,7 +265,7 @@ Performance Optimizations:
                 <li role="none">
                   <button
                     onclick={() => navigate(navigationUrls.settingsMain)}
-                    class={cn({ active: routeCache().settingsMain })}
+                    class={cn({ active: routeCache.settingsMain })}
                     role="menuitem"
                   >
                     {t('settings.sections.node')}
@@ -279,7 +274,7 @@ Performance Optimizations:
                 <li role="none">
                   <button
                     onclick={() => navigate(navigationUrls.settingsAudio)}
-                    class={cn({ active: routeCache().settingsAudio })}
+                    class={cn({ active: routeCache.settingsAudio })}
                     role="menuitem"
                   >
                     {t('settings.sections.audio')}
@@ -288,7 +283,7 @@ Performance Optimizations:
                 <li role="none">
                   <button
                     onclick={() => navigate(navigationUrls.settingsFilters)}
-                    class={cn({ active: routeCache().settingsFilters })}
+                    class={cn({ active: routeCache.settingsFilters })}
                     role="menuitem"
                   >
                     {t('settings.sections.filters')}
@@ -297,7 +292,7 @@ Performance Optimizations:
                 <li role="none">
                   <button
                     onclick={() => navigate(navigationUrls.settingsIntegrations)}
-                    class={cn({ active: routeCache().settingsIntegrations })}
+                    class={cn({ active: routeCache.settingsIntegrations })}
                     role="menuitem"
                   >
                     {t('settings.sections.integration')}
@@ -306,7 +301,7 @@ Performance Optimizations:
                 <li role="none">
                   <button
                     onclick={() => navigate(navigationUrls.settingsSecurity)}
-                    class={cn({ active: routeCache().settingsSecurity })}
+                    class={cn({ active: routeCache.settingsSecurity })}
                     role="menuitem"
                   >
                     {t('settings.sections.security')}
@@ -315,7 +310,7 @@ Performance Optimizations:
                 <li role="none">
                   <button
                     onclick={() => navigate(navigationUrls.settingsSpecies)}
-                    class={cn({ active: routeCache().settingsSpecies })}
+                    class={cn({ active: routeCache.settingsSpecies })}
                     role="menuitem"
                   >
                     {t('settings.sections.species')}
@@ -324,7 +319,7 @@ Performance Optimizations:
                 <li role="none">
                   <button
                     onclick={() => navigate(navigationUrls.settingsNotifications)}
-                    class={cn({ active: routeCache().settingsNotifications })}
+                    class={cn({ active: routeCache.settingsNotifications })}
                     role="menuitem"
                   >
                     {t('settings.sections.notifications')}
@@ -333,7 +328,7 @@ Performance Optimizations:
                 <li role="none">
                   <button
                     onclick={() => navigate(navigationUrls.settingsSupport)}
-                    class={cn({ active: routeCache().settingsSupport })}
+                    class={cn({ active: routeCache.settingsSupport })}
                     role="menuitem"
                   >
                     {t('settings.sections.support')}
@@ -376,12 +371,15 @@ Performance Optimizations:
         {/if}
 
         <!-- Version number -->
-        <div class="text-center text-xs text-base-content/60 text-gray-500" role="contentinfo">
+        <div
+          class="text-center text-xs text-[color:var(--color-base-content)] opacity-60 text-gray-500"
+          role="contentinfo"
+        >
           <a
             href="https://github.com/tphakala/birdnet-go"
             target="_blank"
             rel="noopener noreferrer"
-            class="inline-flex items-center gap-1 hover:text-base-content/80 transition-colors duration-200"
+            class="inline-flex items-center gap-1 hover:text-[color:var(--color-base-content)] hover:opacity-80 transition-colors duration-200"
             aria-label="View BirdNET-Go repository on GitHub (opens in new window)"
           >
             {version}

@@ -745,7 +745,7 @@
                 >
                   {t('settings.integration.birdweather.test.button')}
                 </SettingsButton>
-                <span class="text-sm text-base-content/70">
+                <span class="text-sm text-base-content opacity-70">
                   {#if !(store.formData?.realtime?.birdweather?.enabled ?? settings.birdweather?.enabled)}
                     {t('settings.integration.birdweather.test.enabledRequired')}
                   {:else if !(store.formData?.realtime?.birdweather?.id ?? settings.birdweather?.id)}
@@ -914,7 +914,7 @@
                 >
                   {t('settings.integration.mqtt.test.button')}
                 </SettingsButton>
-                <span class="text-sm text-base-content/70">
+                <span class="text-sm text-base-content opacity-70">
                   {#if !(store.formData?.realtime?.mqtt?.enabled ?? settings.mqtt?.enabled)}
                     {t('settings.integration.mqtt.test.enabledRequired')}
                   {:else if !(store.formData?.realtime?.mqtt?.broker ?? settings.mqtt?.broker)}

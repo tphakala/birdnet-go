@@ -356,7 +356,7 @@
       {/each}
     </div>
   {:else if !editable}
-    <p class="text-base-content/60 italic">{t('forms.species.empty')}</p>
+    <p class="text-base-content opacity-60 italic">{t('forms.species.empty')}</p>
   {/if}
 
   {#if maxItems && species.length >= maxItems}

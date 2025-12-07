@@ -144,7 +144,11 @@
           <tbody>
             {#if processes.length === 0}
               <tr>
-                <td colspan="5" class="text-center py-6 text-base-content/70">
+                <td
+                  colspan="5"
+                  class="text-center py-6 opacity-70"
+                  style:color="var(--color-base-content)"
+                >
                   No process information available
                 </td>
               </tr>
@@ -160,7 +164,9 @@
                         <div class="font-medium">
                           {processDisplayNames[process.pid]}
                         </div>
-                        <div class="text-xs text-base-content/60">PID: {process.pid}</div>
+                        <div class="text-xs opacity-60" style:color="var(--color-base-content)">
+                          PID: {process.pid}
+                        </div>
                       </div>
                     </div>
                   </td>

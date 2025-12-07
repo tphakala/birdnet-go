@@ -382,13 +382,13 @@
           aria-labelledby={label ? `${fieldId}-label` : undefined}
         >
           {#if filteredOptions().length === 0}
-            <div class="p-4 text-center text-base-content/60">No options found</div>
+            <div class="p-4 text-center text-base-content opacity-60">No options found</div>
           {:else}
             {@const flatOptions = filteredOptions()}
             {@const optionIndexMap = new Map(flatOptions.map((option, index) => [option, index]))}
             {#each Object.entries(groupedOptions()) as [group, groupOptions]}
               {#if group && groupBy}
-                <div class="px-3 py-2 text-xs font-semibold text-base-content/60 uppercase">
+                <div class="px-3 py-2 text-xs font-semibold text-base-content opacity-60 uppercase">
                   {group}
                 </div>
               {/if}
@@ -428,7 +428,7 @@
                     {:else}
                       <div class="font-medium">{option.label}</div>
                       {#if option.description}
-                        <div class="text-xs text-base-content/60">{option.description}</div>
+                        <div class="text-xs text-base-content opacity-60">{option.description}</div>
                       {/if}
                     {/if}
                   </div>
@@ -439,7 +439,7 @@
         </div>
 
         {#if multiple && maxSelections}
-          <div class="p-2 border-t border-base-300 text-xs text-base-content/60">
+          <div class="p-2 border-t border-base-300 text-xs text-base-content opacity-60">
             {selectedOptions.length} / {maxSelections} selected
           </div>
         {/if}

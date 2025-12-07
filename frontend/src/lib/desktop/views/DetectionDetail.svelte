@@ -339,7 +339,11 @@
   <section class="card bg-base-100 shadow-xs" aria-labelledby="species-heading">
     <div class="card-body">
       <!-- Species info container - similar to ReviewModal -->
-      <div class="bg-base-200/50 rounded-lg p-4" role="region" aria-label="Species information">
+      <div
+        class="bg-base-200 opacity-50 rounded-lg p-4"
+        role="region"
+        aria-label="Species information"
+      >
         <!-- Single Row Layout: All 4 segments in one row using flex -->
         <div class="flex gap-4 items-start">
           <!-- Section 1: Thumbnail + Species Names (flex-grow for more space) -->
@@ -357,7 +361,10 @@
                 {detection.commonName}
                 <span class="sr-only">detection details</span>
               </h1>
-              <p class="text-lg text-base-content/60 italic truncate" aria-label="Scientific name">
+              <p
+                class="text-lg text-base-content opacity-60 italic truncate"
+                aria-label="Scientific name"
+              >
                 {detection.scientificName}
               </p>
               <div class="mt-3" aria-label="Species classification badges">
@@ -373,7 +380,7 @@
             role="region"
             aria-labelledby="datetime-heading"
           >
-            <h2 id="datetime-heading" class="text-sm text-base-content/60 mb-2">
+            <h2 id="datetime-heading" class="text-sm text-base-content opacity-60 mb-2">
               {t('detections.headers.dateTime')}
             </h2>
             <div class="text-base text-base-content" aria-label="Detection date">
@@ -383,7 +390,10 @@
               {detection.time}
             </div>
             {#if detection.timeOfDay}
-              <div class="text-sm text-base-content/60 mt-1 capitalize" aria-label="Time of day">
+              <div
+                class="text-sm text-base-content opacity-60 mt-1 capitalize"
+                aria-label="Time of day"
+              >
                 {detection.timeOfDay}
               </div>
             {/if}
@@ -396,7 +406,7 @@
             role="region"
             aria-labelledby="weather-heading"
           >
-            <h2 id="weather-heading" class="text-sm text-base-content/60 mb-2">
+            <h2 id="weather-heading" class="text-sm text-base-content opacity-60 mb-2">
               {t('detections.headers.weather')}
             </h2>
             {#if detection.weather}
@@ -413,7 +423,7 @@
                 />
               </div>
             {:else}
-              <div class="text-sm text-base-content/40 italic" role="status">
+              <div class="text-sm text-base-content opacity-40 italic" role="status">
                 {t('detections.weather.noData')}
               </div>
             {/if}
@@ -426,7 +436,7 @@
             role="region"
             aria-labelledby="confidence-heading"
           >
-            <h2 id="confidence-heading" class="text-sm text-base-content/60 mb-2">
+            <h2 id="confidence-heading" class="text-sm text-base-content opacity-60 mb-2">
               {t('common.labels.confidence')}
             </h2>
             <div aria-label="Detection confidence {detection.confidence}%">
@@ -473,7 +483,7 @@
           className="bg-base-200 rounded-lg p-4"
         />
       {:else}
-        <p class="text-base-content/60 italic">{t('detections.weather.noData')}</p>
+        <p class="text-base-content opacity-60 italic">{t('detections.weather.noData')}</p>
       {/if}
     </section>
 
@@ -488,22 +498,22 @@
         aria-label="Detection metadata"
       >
         <div class="flex justify-between">
-          <span class="text-base-content/60">{t('detections.metadata.source')}:</span>
+          <span class="text-base-content opacity-60">{t('detections.metadata.source')}:</span>
           <span>{detection.source ?? 'Unknown'}</span>
         </div>
         <div class="flex justify-between">
-          <span class="text-base-content/60">{t('detections.metadata.duration')}:</span>
+          <span class="text-base-content opacity-60">{t('detections.metadata.duration')}:</span>
           <span>{parseFloat(detection.endTime) - parseFloat(detection.beginTime)}s</span>
         </div>
         {#if detection.verified !== 'unverified'}
           <div class="flex justify-between">
-            <span class="text-base-content/60">{t('detections.metadata.status')}:</span>
+            <span class="text-base-content opacity-60">{t('detections.metadata.status')}:</span>
             <span class="capitalize">{detection.verified}</span>
           </div>
         {/if}
         {#if detection.locked}
           <div class="flex justify-between">
-            <span class="text-base-content/60">{t('detections.metadata.locked')}:</span>
+            <span class="text-base-content opacity-60">{t('detections.metadata.locked')}:</span>
             <span>{t('common.values.yes')}</span>
           </div>
         {/if}
@@ -517,12 +527,12 @@
         <div class="bg-base-200 rounded-lg p-4">
           <div class="flex items-center justify-between mb-2">
             <span class="text-lg font-medium capitalize">{speciesInfo.rarity.status}</span>
-            <span class="text-sm text-base-content/60">
+            <span class="text-sm text-base-content opacity-60">
               Score: {(speciesInfo.rarity.score * 100).toFixed(1)}%
             </span>
           </div>
           {#if speciesInfo.rarity.location_based}
-            <p class="text-sm text-base-content/60">
+            <p class="text-sm text-base-content opacity-60">
               Based on location: {speciesInfo.rarity.latitude.toFixed(2)}, {speciesInfo.rarity.longitude.toFixed(
                 2
               )}
@@ -611,36 +621,38 @@
           <!-- Visual Family Tree -->
           <div class="space-y-3">
             <div class="flex items-center gap-3">
-              <span class="text-sm text-base-content/60 w-24">Kingdom:</span>
+              <span class="text-sm text-base-content opacity-60 w-24">Kingdom:</span>
               <span class="font-medium">{taxonomyInfo.taxonomy.kingdom}</span>
             </div>
             <div class="flex items-center gap-3 ml-6">
-              <span class="text-sm text-base-content/60 w-24">Phylum:</span>
+              <span class="text-sm text-base-content opacity-60 w-24">Phylum:</span>
               <span class="font-medium">{taxonomyInfo.taxonomy.phylum}</span>
             </div>
             <div class="flex items-center gap-3 ml-12">
-              <span class="text-sm text-base-content/60 w-24">Class:</span>
+              <span class="text-sm text-base-content opacity-60 w-24">Class:</span>
               <span class="font-medium">{taxonomyInfo.taxonomy.class}</span>
             </div>
             <div class="flex items-center gap-3 ml-18">
-              <span class="text-sm text-base-content/60 w-24">Order:</span>
+              <span class="text-sm text-base-content opacity-60 w-24">Order:</span>
               <span class="font-medium">{taxonomyInfo.taxonomy.order}</span>
             </div>
             <div class="flex items-center gap-3 ml-24">
-              <span class="text-sm text-base-content/60 w-24">Family:</span>
+              <span class="text-sm text-base-content opacity-60 w-24">Family:</span>
               <span class="font-medium">
                 {taxonomyInfo.taxonomy.family}
                 {#if taxonomyInfo.taxonomy.family_common}
-                  <span class="text-base-content/60"> ({taxonomyInfo.taxonomy.family_common})</span>
+                  <span class="text-base-content opacity-60">
+                    ({taxonomyInfo.taxonomy.family_common})</span
+                  >
                 {/if}
               </span>
             </div>
             <div class="flex items-center gap-3 ml-30">
-              <span class="text-sm text-base-content/60 w-24">Genus:</span>
+              <span class="text-sm text-base-content opacity-60 w-24">Genus:</span>
               <span class="font-medium">{taxonomyInfo.taxonomy.genus}</span>
             </div>
             <div class="flex items-center gap-3 ml-36">
-              <span class="text-sm text-base-content/60 w-24">Species:</span>
+              <span class="text-sm text-base-content opacity-60 w-24">Species:</span>
               <span class="font-medium italic">{taxonomyInfo.taxonomy.species}</span>
             </div>
           </div>
@@ -663,7 +675,7 @@
                   {subspecies.scientific_name}
                 </p>
                 {#if subspecies.common_name}
-                  <p class="text-sm text-base-content/60" aria-label="Common name">
+                  <p class="text-sm text-base-content opacity-60" aria-label="Common name">
                     {subspecies.common_name}
                   </p>
                 {/if}
@@ -673,7 +685,7 @@
         </section>
       {/if}
     {:else}
-      <p class="text-base-content/60 italic">{t('species.taxonomy.noData')}</p>
+      <p class="text-base-content opacity-60 italic">{t('species.taxonomy.noData')}</p>
     {/if}
   </div>
 {/snippet}
@@ -681,7 +693,9 @@
 {#snippet historyTab()}
   <section aria-labelledby="history-heading">
     <h3 id="history-heading" class="text-lg font-semibold mb-4">{t('detections.history.title')}</h3>
-    <p class="text-base-content/60 italic" role="status">{t('detections.history.comingSoon')}</p>
+    <p class="text-base-content opacity-60 italic" role="status">
+      {t('detections.history.comingSoon')}
+    </p>
   </section>
 {/snippet}
 
@@ -693,14 +707,16 @@
         {#each detection.comments as comment}
           <article class="bg-base-200 rounded-lg p-4" role="listitem">
             <p aria-label="Comment text">{comment.entry}</p>
-            <p class="text-sm text-base-content/60 mt-2" aria-label="Comment timestamp">
+            <p class="text-sm text-base-content opacity-60 mt-2" aria-label="Comment timestamp">
               {formatLocalDateTime(new Date(comment.createdAt))}
             </p>
           </article>
         {/each}
       </div>
     {:else}
-      <p class="text-base-content/60 italic" role="status">{t('detections.notes.noComments')}</p>
+      <p class="text-base-content opacity-60 italic" role="status">
+        {t('detections.notes.noComments')}
+      </p>
     {/if}
   </section>
 {/snippet}
@@ -764,7 +780,7 @@
         <h2 id="tabs-heading" class="sr-only">Detection information tabs</h2>
         <!-- Tab Navigation -->
         <div
-          class="tabs tabs-box mb-6 overflow-x-auto flex-nowrap"
+          class="tabs tabs-boxed mb-6 overflow-x-auto flex-nowrap"
           role="tablist"
           aria-label="Detection details tabs"
         >

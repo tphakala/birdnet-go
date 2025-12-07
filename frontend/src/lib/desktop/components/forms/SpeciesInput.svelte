@@ -506,14 +506,14 @@
   <!-- Help Text -->
   {#if helpText}
     <div class="label">
-      <span class="label-text-alt text-base-content/70">{helpText}</span>
+      <span class="label-text-alt text-base-content opacity-70">{helpText}</span>
     </div>
   {/if}
 
   <!-- Tooltip -->
   {#if tooltip && showTooltip}
     <div
-      class="absolute p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded-sm shadow-lg max-w-xs"
+      class="absolute p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded-sm shadow-lg max-w-xs text-base-content"
       style:z-index={Z_INDEX.PORTAL_TOOLTIP}
       role="tooltip"
     >

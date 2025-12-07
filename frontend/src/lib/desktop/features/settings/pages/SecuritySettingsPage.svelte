@@ -295,7 +295,9 @@
 
       <div class="border-t border-base-300 pt-4 mt-4">
         <h4 class="text-lg font-medium mb-2">{t('settings.security.httpsSettingsTitle')}</h4>
-        <p class="text-sm text-base-content/70 mb-4">{t('settings.security.httpsSettingsDescription')}</p>
+        <p class="text-sm text-[color:var(--color-base-content)] opacity-70 mb-4">
+          {t('settings.security.httpsSettingsDescription')}
+        </p>
 
         <Checkbox
           checked={settings.autoTls}

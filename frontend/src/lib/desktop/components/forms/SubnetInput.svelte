@@ -172,7 +172,7 @@
   <!-- Subnet list -->
   {#if subnets.length > 0}
     <div class="space-y-2 mt-2">
-      <div class="text-sm font-medium text-base-content/70">
+      <div class="text-sm font-medium text-base-content opacity-70">
         Allowed Subnets ({subnets.length}/{maxItems}):
       </div>
 
@@ -202,7 +202,7 @@
       {/each}
     </div>
   {:else}
-    <div class="text-center py-4 text-base-content/60 bg-base-200 rounded-lg mt-2">
+    <div class="text-center py-4 text-base-content opacity-60 bg-base-200 rounded-lg mt-2">
       <div class="text-sm">No subnets configured</div>
       <div class="text-xs">{emptyStateMessage}</div>
     </div>

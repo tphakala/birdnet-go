@@ -36,7 +36,7 @@
   {#if icon}
     {@render icon()}
   {:else}
-    <Inbox class="size-16 text-base-content/20" />
+    <Inbox class="size-16 opacity-20" style="color: var(--color-base-content)" />
   {/if}
 
   {#if title}
@@ -44,7 +44,9 @@
   {/if}
 
   {#if description}
-    <p class="mt-2 text-sm text-base-content/70 max-w-md">{description}</p>
+    <p class="mt-2 text-sm opacity-70 max-w-md" style:color="var(--color-base-content)">
+      {description}
+    </p>
   {/if}
 
   {#if children}

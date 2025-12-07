@@ -120,7 +120,7 @@
       </div>
 
       <div class="flex justify-between items-center">
-        <div class="text-sm text-base-content/60">
+        <div class="text-sm text-base-content opacity-60">
           <span>{filteredCount}</span>
           {t('analytics.filters.species')}
           {#if filters.searchTerm}

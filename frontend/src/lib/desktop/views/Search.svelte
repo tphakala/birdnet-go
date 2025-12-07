@@ -515,7 +515,7 @@
         <!-- Results Count & Sorting -->
         {#if formSubmitted}
           <div class="flex items-center gap-4">
-            <span class="text-sm text-base-content/70" aria-live="polite"
+            <span class="text-sm text-base-content opacity-70" aria-live="polite"
               >{t('search.resultsCount', {
                 count: totalResults,
               })}</span
@@ -588,11 +588,13 @@
           class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]"
           aria-labelledby="search-results-heading"
         >
-          <span class="text-base-content/30 text-[4rem]" aria-hidden="true">
+          <span class="text-base-content opacity-30 text-[4rem]" aria-hidden="true">
             <Search class="size-12" />
           </span>
-          <p class="text-base-content/50 text-center mt-4">{t('search.noSearchPerformed')}</p>
-          <p class="text-base-content/50 text-center text-sm">
+          <p class="text-base-content opacity-50 text-center mt-4">
+            {t('search.noSearchPerformed')}
+          </p>
+          <p class="text-base-content opacity-50 text-center text-sm">
             {t('search.noSearchPerformedHint')}
           </p>
         </div>
@@ -606,7 +608,7 @@
           aria-busy="true"
         >
           <span class="loading loading-spinner loading-lg text-primary" aria-hidden="true"></span>
-          <p class="text-base-content/50 text-center mt-4">{t('search.loadingResults')}</p>
+          <p class="text-base-content opacity-50 text-center mt-4">{t('search.loadingResults')}</p>
         </div>
       {/if}
 
@@ -877,8 +879,8 @@
           class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]"
         >
           <FrownIcon class="size-12" />
-          <p class="mt-2 text-base-content/70">{t('search.noResultsFound')}</p>
-          <p class="text-sm text-base-content/50">{t('search.noResultsHint')}</p>
+          <p class="mt-2 text-base-content opacity-70">{t('search.noResultsFound')}</p>
+          <p class="text-sm text-base-content opacity-50">{t('search.noResultsHint')}</p>
         </div>
       {/if}
 

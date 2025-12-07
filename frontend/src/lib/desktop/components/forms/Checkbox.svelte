@@ -104,7 +104,7 @@
   {#if tooltip && showTooltip}
     <div
       id={tooltipId}
-      class="absolute z-50 p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded-sm shadow-lg max-w-xs"
+      class="absolute z-50 p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded-sm shadow-lg max-w-xs text-base-content"
       role="tooltip"
       aria-live="polite"
       style:left="0"

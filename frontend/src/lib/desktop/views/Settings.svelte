@@ -118,7 +118,7 @@
         <SupportSettingsSection />
       {:else}
         <div class="card bg-base-100 shadow-xs p-6">
-          <div class="text-center py-12 text-base-content/70">
+          <div class="text-center py-12 text-base-content opacity-70">
             <h2 class="text-xl font-semibold mb-2">Settings Not Found</h2>
             <p>The requested settings section "{currentSection}" could not be found.</p>
           </div>

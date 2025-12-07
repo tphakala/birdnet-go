@@ -39,7 +39,7 @@
           {isLoading ? '...' : value}
         </div>
         {#if subtitle}
-          <div class="text-xs text-base-content/60">{subtitle}</div>
+          <div class="text-xs text-base-content opacity-60">{subtitle}</div>
         {/if}
       </div>
     </div>

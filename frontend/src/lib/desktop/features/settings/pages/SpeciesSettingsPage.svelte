@@ -527,7 +527,9 @@
         {/each}
 
         {#if settings.include.length === 0}
-          <div class="text-sm text-base-content/60 italic p-2 text-center">
+          <div
+            class="text-sm text-[color:var(--color-base-content)] opacity-60 italic p-2 text-center"
+          >
             {t('settings.species.alwaysInclude.noSpeciesMessage')}
           </div>
         {/if}
@@ -577,7 +579,9 @@
         {/each}
 
         {#if settings.exclude.length === 0}
-          <div class="text-sm text-base-content/60 italic p-2 text-center">
+          <div
+            class="text-sm text-[color:var(--color-base-content)] opacity-60 italic p-2 text-center"
+          >
             {t('settings.species.alwaysExclude.noSpeciesMessage')}
           </div>
         {/if}
@@ -630,7 +634,7 @@
         {/if}
 
         {#if Object.keys(settings.config).length > 0}
-          <span class="text-xs text-base-content/60">
+          <span class="text-xs text-[color:var(--color-base-content)] opacity-60">
             {t('settings.species.customConfiguration.configuredCount', {
               count: Object.keys(settings.config).length,
             })}
@@ -783,7 +787,10 @@
                 <label class="label py-1" for="action-parameters">
                   <span class="label-text text-xs flex items-center gap-1">
                     {t('settings.species.actionsModal.parameters.label')}
-                    <span class="text-base-content/60" title="Use buttons below or type directly">
+                    <span
+                      class="text-base-content opacity-60"
+                      title="Use buttons below or type directly"
+                    >
                       ⓘ
                     </span>
                   </span>
@@ -875,7 +882,7 @@
 
             <!-- Threshold -->
             <div class="flex items-center gap-2">
-              <span class="text-xs text-base-content/60"
+              <span class="text-xs text-base-content opacity-60"
                 >{t('settings.species.customConfiguration.list.threshold')}</span
               >
               <span class="font-mono text-xs font-medium">{(config.threshold ?? 0).toFixed(2)}</span
@@ -884,7 +891,7 @@
 
             <!-- Interval -->
             <div class="flex items-center gap-2">
-              <span class="text-xs text-base-content/60"
+              <span class="text-xs text-base-content opacity-60"
                 >{t('settings.species.customConfiguration.list.interval')}</span
               >
               <span class="font-mono text-xs font-medium">
@@ -929,7 +936,7 @@
 
       <!-- Empty State -->
       {#if Object.keys(settings.config).length === 0 && !showAddForm}
-        <div class="text-center py-8 text-base-content/60">
+        <div class="text-center py-8 text-base-content opacity-60">
           <p class="text-sm">{t('settings.species.customConfiguration.emptyState.title')}</p>
           <p class="text-xs mt-1">
             {t('settings.species.customConfiguration.emptyState.description')}
