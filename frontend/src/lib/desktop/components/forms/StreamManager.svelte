@@ -276,6 +276,16 @@
     const updatedUrls = [...urls];
     if (index >= 0 && index < updatedUrls.length) {
       const oldUrl = updatedUrls.at(index);
+
+      // Prevent duplicate URLs (skip check if URL unchanged)
+      if (url !== oldUrl && updatedUrls.some((existing, i) => i !== index && existing === url)) {
+        logger.warn('Attempted to update stream to a duplicate URL', null, {
+          component: 'StreamManager',
+          action: 'updateStream',
+        });
+        return;
+      }
+
       updatedUrls.splice(index, 1, url);
       onUpdateUrls(updatedUrls);
 
