@@ -21,6 +21,7 @@
   @component
 -->
 <script lang="ts">
+  /* global ResizeObserver */
   import { onMount } from 'svelte';
   interface Filter {
     type: string;

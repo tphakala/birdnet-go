@@ -125,16 +125,6 @@
     displaySettingsHasChanges || birdImagesHasChanges || spectrogramHasChanges
   );
 
-  // PERFORMANCE OPTIMIZATION: Cache CSRF token with $derived
-  // Even though api utility handles CSRF internally, we cache it for:
-  // 1. Consistency with other settings pages
-  // 2. Future direct API calls that might be needed
-  // 3. Avoiding repeated DOM queries
-  let _csrfToken = $derived(
-    (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
-      ''
-  );
-
   // Load API data on component mount
   $effect(() => {
     loadImageProviders();

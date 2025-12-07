@@ -136,8 +136,22 @@ vi.mock('$lib/stores/settings', async () => {
 
   const hasUnsavedChanges = writable(false);
 
+  // Mock updateSection to actually update the store
   const settingsActions = {
-    updateSection: vi.fn(),
+    updateSection: vi.fn((section: string, data: Record<string, unknown>) => {
+      settingsStore.update(state => ({
+        ...state,
+        formData: {
+          ...state.formData,
+
+          [section]: {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any, security/detect-object-injection -- test mock
+            ...(state.formData as any)?.[section],
+            ...data,
+          },
+        },
+      }));
+    }),
   };
 
   const DEFAULT_SPECTROGRAM_SETTINGS = {
