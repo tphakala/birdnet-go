@@ -1406,21 +1406,6 @@
           "refresh": "Refresh Devices"
         }
       },
-      "streams": {
-        "title": "Streams",
-        "description": "Configure network audio streams (RTSP, etc.)",
-        "rtspTransportLabel": "RTSP Transport Protocol",
-        "rtspTransportHelp": "TCP is more reliable but may have higher latency. UDP is faster but may experience packet loss on poor networks.",
-        "rtspUrlsLabel": "RTSP Stream URLs",
-        "rtspUrlsHelp": "Enter one or more RTSP stream URLs for network audio sources. Format: rtsp://ip:port/stream. Note: Authentication credentials should be configured separately in your RTSP server settings for security.",
-        "empty": {
-          "title": "No Streams Configured",
-          "description": "Add RTSP or network audio streams from IP cameras, microphone servers, or other streaming sources.",
-          "formatHint": "Stream URL format:",
-          "formatExample": "rtsp://username:password@192.168.1.100:554/stream",
-          "addFirst": "Add First Stream"
-        }
-      },
       "noSources": {
         "warning": "No Audio Sources Configured",
         "description": "BirdNET-Go needs an audio input to detect birds. Please configure at least one source in the Sound Card or Streams tab."

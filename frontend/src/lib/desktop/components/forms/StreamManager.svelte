@@ -16,6 +16,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { Plus, Radio, RefreshCw } from '@lucide/svelte';
+  import ReconnectingEventSource from 'reconnecting-eventsource';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import { api } from '$lib/utils/api';
@@ -70,15 +71,14 @@
   let urlError = $state<string | null>(null);
 
   // SSE connection for real-time health updates
-  // eslint-disable-next-line no-undef -- EventSource is a browser global
-  let eventSource: EventSource | null = null;
+  let eventSource: ReconnectingEventSource | null = null;
 
   // Per-stream transport settings (local state until backend supports it)
   // For now, we use the global transport but store per-stream for future
   let streamTransports = $state<Map<string, string>>(new Map());
 
   // Summary stats
-  let healthySummary = $derived(() => {
+  let healthySummary = $derived.by(() => {
     let healthy = 0;
     let unhealthy = 0;
     let unknown = 0;
@@ -183,20 +183,26 @@
     }
   }
 
-  // Connect to SSE for real-time updates
+  // Connect to SSE for real-time updates using ReconnectingEventSource
   function connectSSE() {
     if (eventSource) {
       eventSource.close();
     }
 
     try {
-      // eslint-disable-next-line no-undef -- EventSource is a browser global
-      eventSource = new EventSource('/api/v2/streams/health/stream');
+      // ReconnectingEventSource with configuration for automatic reconnection
+      eventSource = new ReconnectingEventSource('/api/v2/streams/health/stream', {
+        withCredentials: false,
+        max_retry_time: 30000,
+      });
 
-      // eslint-disable-next-line no-undef -- MessageEvent is a browser global
-      eventSource.addEventListener('stream_health', (event: MessageEvent) => {
+      eventSource.addEventListener('stream_health', (event: Event) => {
         try {
-          const data = JSON.parse(event.data) as StreamHealthResponse & { event_type: string };
+          // eslint-disable-next-line no-undef
+          const messageEvent = event as MessageEvent;
+          const data = JSON.parse(messageEvent.data) as StreamHealthResponse & {
+            event_type: string;
+          };
           const matchingUrl = urls.find(u => sanitizeUrl(u) === data.url || u === data.url);
 
           if (matchingUrl) {
@@ -211,15 +217,13 @@
       });
 
       eventSource.onerror = () => {
-        logger.warn('Stream health SSE connection error, will retry', null, {
+        logger.warn('Stream health SSE connection error', null, {
           component: 'StreamManager',
         });
-        // EventSource automatically reconnects
+        // ReconnectingEventSource handles reconnection automatically
       };
     } catch (error) {
-      logger.warn('Failed to establish SSE connection', error, {
-        component: 'StreamManager',
-      });
+      logger.error('Failed to create ReconnectingEventSource:', error);
     }
   }
 
@@ -352,24 +356,24 @@
 
         {#if !healthLoading}
           <div class="flex items-center gap-2">
-            {#if healthySummary().healthy > 0}
+            {#if healthySummary.healthy > 0}
               <StatusPill
                 variant="success"
-                label="{healthySummary().healthy} {t('settings.audio.streams.healthy')}"
+                label="{healthySummary.healthy} {t('settings.audio.streams.healthy')}"
                 size="sm"
               />
             {/if}
-            {#if healthySummary().unhealthy > 0}
+            {#if healthySummary.unhealthy > 0}
               <StatusPill
                 variant="error"
-                label="{healthySummary().unhealthy} {t('settings.audio.streams.unhealthy')}"
+                label="{healthySummary.unhealthy} {t('settings.audio.streams.unhealthy')}"
                 size="sm"
               />
             {/if}
-            {#if healthySummary().unknown > 0}
+            {#if healthySummary.unknown > 0}
               <StatusPill
                 variant="neutral"
-                label="{healthySummary().unknown} {t('settings.audio.streams.unknown')}"
+                label="{healthySummary.unknown} {t('settings.audio.streams.unknown')}"
                 size="sm"
               />
             {/if}
