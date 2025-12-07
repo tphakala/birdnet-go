@@ -11,12 +11,12 @@ Features:
 - Progressive loading states (skeleton → spinner → loaded/error)
 - Responsive hourly/bi-hourly/six-hourly column grouping based on viewport
 - Color-coded heatmap cells showing detection intensity
+- Daylight visualization row showing sunrise/sunset times
+- Species badges with colored initials (GitHub-style heatmap design)
 - Real-time animation for new species and count increases
-- Interactive species thumbnails with hover tooltips
 - URL memoization with LRU cache for performance optimization
-- Sun time indicators (sunrise/sunset) in column headers
+- Heatmap legend showing intensity scale (Less → More)
 - Date picker navigation with keyboard shortcuts
-- Progress bars showing relative detection counts
 - Clickable cells linking to detailed detection views
 
 Props:
@@ -24,7 +24,7 @@ Props:
 - loading?: boolean - Loading state indicator (default: false)
 - error?: string | null - Error message to display (default: null)
 - selectedDate: string - Currently selected date in YYYY-MM-DD format
-- showThumbnails?: boolean - Show/hide species thumbnail images (default: true)
+- showThumbnails?: boolean - Show thumbnails or colored badge placeholders (default: true)
 - onPreviousDay: () => void - Callback for previous day navigation
 - onNextDay: () => void - Callback for next day navigation
 - onGoToToday: () => void - Callback for "today" button click
@@ -67,13 +67,6 @@ Responsive Breakpoints:
     spinner: 650, // 650ms - show spinner if still loading
   });
 
-  // Layout constants - use $state.raw for static values
-  const PROGRESS_BAR_ROUNDING = 5; // Round to nearest 5%
-  const WIDTH_THRESHOLDS = $state.raw({
-    minTextDisplay: 45,
-    maxTextDisplay: 59,
-  });
-
   interface SunTimes {
     sunrise: string; // ISO date string
     sunset: string; // ISO date string
@@ -90,11 +83,6 @@ Responsive Breakpoints:
   interface SpeciesColumn extends BaseColumn {
     type: 'species';
     sortable: boolean;
-  }
-
-  interface ProgressColumn extends BaseColumn {
-    type: 'progress';
-    align: string;
   }
 
   interface HourlyColumn extends BaseColumn {
@@ -115,12 +103,7 @@ Responsive Breakpoints:
     align: string;
   }
 
-  type ColumnDefinition =
-    | SpeciesColumn
-    | ProgressColumn
-    | HourlyColumn
-    | BiHourlyColumn
-    | SixHourlyColumn;
+  type ColumnDefinition = SpeciesColumn | HourlyColumn | BiHourlyColumn | SixHourlyColumn;
 
   // URL builder types
   interface URLBuilders {
@@ -239,20 +222,58 @@ Responsive Breakpoints:
     }
   };
 
+  // Check if an hour is during daylight
+  const isDaylightHour = (hour: number): boolean => {
+    if (!sunTimes) return false;
+    const sunriseHour = getSunHourFromTime(sunTimes.sunrise);
+    const sunsetHour = getSunHourFromTime(sunTimes.sunset);
+    if (sunriseHour === null || sunsetHour === null) return false;
+    return hour >= sunriseHour && hour < sunsetHour;
+  };
+
+  // Species badge color palette - 12 distinct, visually appealing colors
+  const BADGE_COLORS = $state.raw([
+    '#10b981', // emerald
+    '#f59e0b', // amber
+    '#ef4444', // red
+    '#8b5cf6', // violet
+    '#06b6d4', // cyan
+    '#ec4899', // pink
+    '#84cc16', // lime
+    '#f97316', // orange
+    '#6366f1', // indigo
+    '#14b8a6', // teal
+    '#a855f7', // purple
+    '#eab308', // yellow
+  ]);
+
+  // Generate a consistent color for a species based on its name
+  const getSpeciesBadgeColor = (speciesName: string): string => {
+    let hash = 0;
+    for (let i = 0; i < speciesName.length; i++) {
+      hash = speciesName.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return BADGE_COLORS[Math.abs(hash) % BADGE_COLORS.length];
+  };
+
+  // Get initials from species common name (first letter of first two words)
+  const getSpeciesInitials = (commonName: string): string => {
+    const words = commonName.trim().split(/\s+/);
+    if (words.length === 1) {
+      return words[0].substring(0, 2).toUpperCase();
+    }
+    return (words[0][0] + words[1][0]).toUpperCase();
+  };
+
   // Static column metadata - use $state.raw() for performance (no deep reactivity needed)
   const staticColumnDefs = $state.raw<ColumnDefinition[]>([
     {
       key: 'common_name',
       type: 'species' as const,
       sortable: true,
-      className: 'font-medium w-0 whitespace-nowrap',
+      className: 'font-medium whitespace-nowrap species-column',
     },
-    {
-      key: 'total_detections',
-      type: 'progress' as const,
-      align: 'center',
-      className: 'hidden 2xl:table-cell px-2 sm:px-4 w-100',
-    },
+    // Progress bar column removed to save horizontal space - see mockup design
     ...Array.from({ length: 24 }, (_, hour) => ({
       key: `hour_${hour}`,
       type: 'hourly' as const,
@@ -293,11 +314,7 @@ Responsive Breakpoints:
     return staticColumnDefs.map(colDef => ({
       ...colDef,
       header:
-        colDef.type === 'species'
-          ? t('dashboard.dailySummary.columns.species')
-          : colDef.type === 'progress'
-            ? t('dashboard.dailySummary.columns.detections')
-            : colDef.header,
+        colDef.type === 'species' ? t('dashboard.dailySummary.columns.species') : colDef.header,
     }));
   });
 
@@ -305,7 +322,7 @@ Responsive Breakpoints:
   const loggedUnexpectedColumns = new Set<string>();
   $effect(() => {
     if (import.meta.env.DEV) {
-      const expectedTypes = new Set(['species', 'progress', 'hourly', 'bi-hourly', 'six-hourly']);
+      const expectedTypes = new Set(['species', 'hourly', 'bi-hourly', 'six-hourly']);
 
       columns.forEach(column => {
         if (!expectedTypes.has(column.type) && !loggedUnexpectedColumns.has(column.key)) {
@@ -335,7 +352,6 @@ Responsive Breakpoints:
       }
       return sum;
     },
-    progress: (item: DailySpeciesSummary) => item.count,
   });
 
   // Phase 4: Optimized URL building with memoization for 90%+ performance improvement
@@ -480,11 +496,6 @@ Responsive Breakpoints:
     }
     return maxCount || 1;
   });
-
-  // Maximum total detections count for progress bar calculations
-  const maxTotalDetections = $derived(
-    sortedData.length === 0 ? 1 : Math.max(...sortedData.map((d: DailySpeciesSummary) => d.count))
-  );
 </script>
 
 {#snippet navigationControls()}
@@ -537,12 +548,13 @@ Responsive Breakpoints:
 {:else if loadingPhase === 'spinner'}
   <SkeletonDailySummary {showThumbnails} showSpinner={showDelayedIndicator} speciesCount={8} />
 {:else if loadingPhase === 'error'}
-  <section class="card col-span-12 bg-base-100 shadow-sm">
+  <section class="card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100">
     <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
       <div class="flex items-center justify-between mb-4">
-        <span class="card-title grow text-base sm:text-xl"
-          >{t('dashboard.dailySummary.title')}
-        </span>
+        <div class="flex flex-col">
+          <span class="card-title text-base sm:text-xl">{t('dashboard.dailySummary.title')}</span>
+          <span class="text-xs text-base-content/60">{t('dashboard.dailySummary.subtitle')}</span>
+        </div>
         {@render navigationControls()}
       </div>
       <div class="alert alert-error">
@@ -552,23 +564,115 @@ Responsive Breakpoints:
     </div>
   </section>
 {:else if loadingPhase === 'loaded'}
-  <section class="card col-span-12 bg-base-100 shadow-sm">
+  <section class="card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100">
     <!-- Card Header with Date Navigation -->
     <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
       <div class="flex items-center justify-between mb-4">
-        <span class="card-title grow text-base sm:text-xl"
-          >{t('dashboard.dailySummary.title')}
-        </span>
+        <div class="flex flex-col">
+          <span class="card-title text-base sm:text-xl">{t('dashboard.dailySummary.title')}</span>
+          <span class="text-xs text-base-content/60">{t('dashboard.dailySummary.subtitle')}</span>
+        </div>
         {@render navigationControls()}
       </div>
 
       <!-- Table Content -->
       <div class="overflow-x-auto">
-        <table class="table table-zebra h-full w-full table-auto daily-summary-table">
+        <table class="table h-full w-full table-auto daily-summary-table">
           <thead class="sticky-header text-xs">
+            <!-- Daylight visualization row (sub-header) -->
+            <tr class="daylight-row">
+              <th
+                class="py-0 px-2 sm:px-0 text-xs text-base-content/60 font-normal whitespace-nowrap"
+                >{t('dashboard.dailySummary.daylight.label')}</th
+              >
+              {#each columns as column}
+                {#if column.type === 'hourly'}
+                  {@const hour = (column as HourlyColumn).hour}
+                  {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
+                  {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
+                  <th
+                    class="py-0 px-0 text-center daylight-cell hourly-daylight"
+                    class:daylight-day={isDaylightHour(hour)}
+                    class:daylight-night={!isDaylightHour(hour)}
+                  >
+                    {#if hour === sunriseHour}
+                      <span
+                        class="daylight-sun-icon"
+                        title={t('dashboard.dailySummary.daylight.sunrise', {
+                          time: sunTimes
+                            ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : '',
+                        })}
+                      >
+                        <Sunrise class="size-4" />
+                      </span>
+                    {:else if hour === sunsetHour}
+                      <span
+                        class="daylight-sun-icon"
+                        title={t('dashboard.dailySummary.daylight.sunset', {
+                          time: sunTimes
+                            ? new Date(sunTimes.sunset).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : '',
+                        })}
+                      >
+                        <Sunset class="size-4" />
+                      </span>
+                    {/if}
+                  </th>
+                {:else if column.type === 'bi-hourly'}
+                  {@const hour = (column as BiHourlyColumn).hour}
+                  {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
+                  {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
+                  {@const hasDaylight = isDaylightHour(hour) || isDaylightHour(hour + 1)}
+                  <th
+                    class="py-0 px-0 text-center daylight-cell bi-hourly-daylight"
+                    class:daylight-day={hasDaylight}
+                    class:daylight-night={!hasDaylight}
+                  >
+                    {#if sunriseHour !== null && hour <= sunriseHour && sunriseHour < hour + 2}
+                      <span class="daylight-sun-icon">
+                        <Sunrise class="size-4" />
+                      </span>
+                    {:else if sunsetHour !== null && hour <= sunsetHour && sunsetHour < hour + 2}
+                      <span class="daylight-sun-icon">
+                        <Sunset class="size-4" />
+                      </span>
+                    {/if}
+                  </th>
+                {:else if column.type === 'six-hourly'}
+                  {@const hour = (column as SixHourlyColumn).hour}
+                  {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
+                  {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
+                  {@const hasDaylight = Array.from({ length: 6 }, (_, i) => hour + i).some(h =>
+                    isDaylightHour(h)
+                  )}
+                  <th
+                    class="py-0 px-0 text-center daylight-cell six-hourly-daylight"
+                    class:daylight-day={hasDaylight}
+                    class:daylight-night={!hasDaylight}
+                  >
+                    {#if sunriseHour !== null && hour <= sunriseHour && sunriseHour < hour + 6}
+                      <span class="daylight-sun-icon">
+                        <Sunrise class="size-4" />
+                      </span>
+                    {:else if sunsetHour !== null && hour <= sunsetHour && sunsetHour < hour + 6}
+                      <span class="daylight-sun-icon">
+                        <Sunset class="size-4" />
+                      </span>
+                    {/if}
+                  </th>
+                {/if}
+              {/each}
+            </tr>
+            <!-- Hour headers row -->
             <tr>
               {#each columns as column}
-                <!-- Hourly, bi-hourly, and six-hourly headers -->
                 <th
                   class="py-0 {column.key === 'common_name'
                     ? 'pl-2 pr-8 sm:pl-0 sm:pr-12'
@@ -587,54 +691,10 @@ Responsive Breakpoints:
                       >
                     {/if}
                   {:else if column.type === 'hourly'}
-                    <!-- Hourly columns -->
                     {@const hour = (column as HourlyColumn).hour}
-                    {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
-                    {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
-                    <!-- Sun icon positioned absolutely above hour number -->
-                    {#if hour === sunriseHour}
-                      <span
-                        class="sun-icon sun-icon-sunrise"
-                        role="img"
-                        aria-label="Sunrise at {sunTimes
-                          ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : 'unknown time'}"
-                        title="Sunrise: {sunTimes
-                          ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : ''}"
-                      >
-                        <Sunrise class="size-3" />
-                      </span>
-                    {:else if hour === sunsetHour}
-                      <span
-                        class="sun-icon sun-icon-sunset"
-                        role="img"
-                        aria-label="Sunset at {sunTimes
-                          ? new Date(sunTimes.sunset).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : 'unknown time'}"
-                        title="Sunset: {sunTimes
-                          ? new Date(sunTimes.sunset).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          : ''}"
-                      >
-                        <Sunset class="size-3" />
-                      </span>
-                    {/if}
-                    <!-- Hour number as direct child of th -->
                     <a
                       href={urlBuilders.hourly(hour, 1)}
-                      class="hour-link"
+                      class="hover:text-primary cursor-pointer"
                       title={t('dashboard.dailySummary.tooltips.viewHourly', {
                         hour: hour.toString().padStart(2, '0'),
                       })}
@@ -642,7 +702,6 @@ Responsive Breakpoints:
                       {column.header}
                     </a>
                   {:else if column.type === 'bi-hourly'}
-                    <!-- Bi-hourly columns -->
                     {@const hour = (column as BiHourlyColumn).hour}
                     <a
                       href={urlBuilders.hourly(hour, 2)}
@@ -655,7 +714,6 @@ Responsive Breakpoints:
                       {column.header}
                     </a>
                   {:else if column.type === 'six-hourly'}
-                    <!-- Six-hourly columns -->
                     {@const hour = (column as SixHourlyColumn).hour}
                     <a
                       href={urlBuilders.hourly(hour, 6)}
@@ -740,9 +798,10 @@ Responsive Breakpoints:
                     style:text-align={column.align || 'left'}
                   >
                     {#if column.key === 'common_name'}
-                      <!-- Species thumbnail and name -->
+                      <!-- Species thumbnail/badge and name -->
                       <div class="flex items-center gap-2">
                         {#if showThumbnails}
+                          <!-- Bird thumbnail with popup -->
                           <BirdThumbnailPopup
                             thumbnailUrl={item.thumbnail_url ||
                               `/api/v2/media/species-image?name=${encodeURIComponent(item.scientific_name)}`}
@@ -750,25 +809,36 @@ Responsive Breakpoints:
                             scientificName={item.scientific_name}
                             detectionUrl={urlBuilders.species(item)}
                           />
+                        {:else}
+                          <!-- Colored species badge with initials (placeholder when thumbnails disabled) -->
+                          <a
+                            href={urlBuilders.species(item)}
+                            class="species-badge shrink-0"
+                            style:background-color={getSpeciesBadgeColor(item.common_name)}
+                            title={item.scientific_name}
+                          >
+                            {getSpeciesInitials(item.common_name)}
+                          </a>
                         {/if}
-                        <!-- Species name -->
+                        <!-- Species name (truncated) -->
                         <a
                           href={urlBuilders.species(item)}
-                          class="text-sm hover:text-primary cursor-pointer font-medium flex-1 min-w-0 leading-tight flex items-center gap-1"
+                          class="text-sm hover:text-primary cursor-pointer font-medium min-w-0 leading-tight flex items-center gap-1 truncate max-w-[120px] sm:max-w-[160px]"
+                          title={item.common_name}
                         >
-                          {item.common_name}
+                          <span class="truncate">{item.common_name}</span>
                           <!-- Multi-period tracking badges -->
                           {#if item.is_new_species}
                             <span
-                              class="text-warning inline-block"
+                              class="text-warning inline-block shrink-0"
                               title={`New species (first seen ${item.days_since_first_seen ?? 0} day${(item.days_since_first_seen ?? 0) === 1 ? '' : 's'} ago)`}
                             >
-                              <Star class="size-4 fill-current" />
+                              <Star class="size-3 fill-current" />
                             </span>
                           {/if}
                           {#if item.is_new_this_year && !item.is_new_species}
                             <span
-                              class="text-info"
+                              class="text-info shrink-0"
                               title={`First time this year (${item.days_this_year ?? 0} day${(item.days_this_year ?? 0) === 1 ? '' : 's'} ago)`}
                             >
                               📅
@@ -776,42 +846,13 @@ Responsive Breakpoints:
                           {/if}
                           {#if item.is_new_this_season && !item.is_new_species && !item.is_new_this_year}
                             <span
-                              class="text-success"
+                              class="text-success shrink-0"
                               title={`First time this ${item.current_season || 'season'} (${item.days_this_season ?? 0} day${(item.days_this_season ?? 0) === 1 ? '' : 's'} ago)`}
                             >
                               🌿
                             </span>
                           {/if}
                         </a>
-                      </div>
-                    {:else if column.key === 'total_detections'}
-                      <!-- Total detections bar -->
-                      {@const width = (item.count / maxTotalDetections) * 100}
-                      {@const roundedWidth =
-                        Math.round(width / PROGRESS_BAR_ROUNDING) * PROGRESS_BAR_ROUNDING}
-                      <div class="w-full bg-base-300 rounded-full overflow-hidden relative">
-                        <div
-                          class="progress progress-primary bg-primary"
-                          style:width="{roundedWidth}%"
-                        >
-                          {#if width >= WIDTH_THRESHOLDS.minTextDisplay && width <= WIDTH_THRESHOLDS.maxTextDisplay}
-                            <!-- Total detections count for large bars -->
-                            <span
-                              class="text-2xs text-primary-content absolute right-1 top-1/2 transform -translate-y-1/2"
-                              >{item.count}</span
-                            >
-                          {/if}
-                        </div>
-                        {#if width < WIDTH_THRESHOLDS.minTextDisplay || width > WIDTH_THRESHOLDS.maxTextDisplay}
-                          <!-- Total detections count for small bars -->
-                          <span
-                            class="text-2xs absolute w-full text-center top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
-                            style:color={width > WIDTH_THRESHOLDS.maxTextDisplay
-                              ? 'var(--color-primary-content)'
-                              : 'color-mix(in srgb, var(--color-base-content) 60%, transparent)'}
-                            >{item.count}</span
-                          >
-                        {/if}
                       </div>
                     {:else if column.type === 'hourly'}
                       <!-- Hourly detections count -->
@@ -830,8 +871,6 @@ Responsive Breakpoints:
                         >
                           {count}
                         </a>
-                      {:else}
-                        -
                       {/if}
                     {:else if column.type === 'bi-hourly'}
                       <!-- Bi-hourly detections count -->
@@ -850,8 +889,6 @@ Responsive Breakpoints:
                         >
                           {count}
                         </a>
-                      {:else}
-                        -
                       {/if}
                     {:else if column.type === 'six-hourly'}
                       <!-- Six-hourly detections count -->
@@ -870,12 +907,7 @@ Responsive Breakpoints:
                         >
                           {count}
                         </a>
-                      {:else}
-                        -
                       {/if}
-                    {:else}
-                      <!-- Default column rendering -->
-                      <span class="text-sm">-</span>
                     {/if}
                   </td>
                 {/each}
@@ -891,6 +923,22 @@ Responsive Breakpoints:
             {t('dashboard.dailySummary.noSpecies')}
           </div>
         {/if}
+
+        <!-- Heatmap Legend -->
+        {#if sortedData.length > 0}
+          <div class="flex justify-end items-center gap-1.5 mt-3 text-xs text-base-content/60">
+            <span>{t('dashboard.dailySummary.legend.less')}</span>
+            <div class="flex gap-0.5">
+              {#each [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as intensity}
+                <div
+                  class="w-3 h-3 rounded-sm heatmap-color-{intensity}"
+                  title="Intensity {intensity}"
+                ></div>
+              {/each}
+            </div>
+            <span>{t('dashboard.dailySummary.legend.more')}</span>
+          </div>
+        {/if}
       </div>
     </div>
   </section>
@@ -904,6 +952,8 @@ Responsive Breakpoints:
   /* Performance optimization: CSS containment */
   :global(.daily-summary-table) {
     contain: layout style paint;
+    border-collapse: separate;
+    border-spacing: 3px 2px; /* horizontal 3px, vertical 2px for tighter rows */
   }
 
   /* Sticky header for tables */
@@ -927,43 +977,39 @@ Responsive Breakpoints:
     display: none;
   }
 
-  /* Theme-specific borders for hour data cells */
-  :global([data-theme='light'] .hour-data:not(.heatmap-color-0)) {
-    position: relative;
-    z-index: 1;
-    padding: 0;
-    border: 1px solid var(--theme-border-light);
-    background-clip: padding-box;
-    border-collapse: collapse;
+  /* Empty cells should have visible background - contrasting with card */
+  :global(.heatmap-color-0) {
+    background-color: var(--color-base-300); /* Uses theme variable for consistency */
+    border-radius: 4px;
   }
 
-  :global([data-theme='dark'] .hour-data:not(.heatmap-color-0)) {
-    position: relative;
-    z-index: 1;
-    padding: 0;
-    border: 1px solid var(--theme-border-dark);
-    background-clip: padding-box;
-    border-collapse: collapse;
+  :global([data-theme='light'] .heatmap-color-0) {
+    background-color: #e2e8f0; /* slate-200 - subtle in light mode */
+  }
+
+  :global([data-theme='dark'] .heatmap-color-0) {
+    background-color: #1e293b; /* slate-800 - matches mockup empty cells */
   }
 
   /* Flex alignment for links inside hour cells */
   :global(.hour-data a) {
-    height: 2rem;
-    min-height: 2rem;
-    max-height: 2rem;
+    height: 1.75rem;
+    min-height: 1.75rem;
+    max-height: 1.75rem;
     box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  /* Remove extra borders in specific table rows */
-  :global(.table :where(thead tr, tbody tr:not(:last-child), tbody tr:first-child:last-child)) {
-    border-bottom-width: 0;
+  /* Remove all row borders for clean grid look */
+  :global(.daily-summary-table tr) {
+    border-bottom: none !important;
   }
 
-  :global(.table :where(thead td, thead th)) {
-    border-bottom: 1px solid var(--fallback-b2, oklch(var(--b2) / var(--tw-border-opacity)));
+  :global(.daily-summary-table td),
+  :global(.daily-summary-table th) {
+    border-bottom: none !important;
   }
 
   /* Responsive table adjustments */
@@ -1073,36 +1119,37 @@ Responsive Breakpoints:
     }
   }
 
-  /* Consistent table cell sizing */
+  /* Consistent table cell sizing - reduced for more square cells */
   :global(.hour-data) {
-    height: 2rem;
-    min-height: 2rem;
-    max-height: 2rem;
-    line-height: 2rem;
+    height: 1.75rem;
+    min-height: 1.75rem;
+    max-height: 1.75rem;
+    line-height: 1.75rem;
     box-sizing: border-box;
     vertical-align: middle;
+    border-radius: 4px;
+    padding-left: 0.1rem;
+    padding-right: 0.1rem;
+  }
+
+  :global(.hour-header) {
+    padding-left: 0.1rem;
+    padding-right: 0.1rem;
   }
 
   :global(.table tr) {
-    height: 2rem;
-    min-height: 2rem;
-    max-height: 2rem;
+    height: 1.75rem;
+    min-height: 1.75rem;
+    max-height: 1.75rem;
   }
 
   :global(.table td),
   :global(.table th) {
     box-sizing: border-box;
-    height: 2rem;
-    min-height: 2rem;
-    max-height: 2rem;
+    height: 1.75rem;
+    min-height: 1.75rem;
+    max-height: 1.75rem;
     vertical-align: middle;
-  }
-
-  /* Make hour cells more compact by default */
-  :global(.hour-header),
-  :global(.hour-data) {
-    padding-left: 0.1rem;
-    padding-right: 0.1rem;
   }
 
   /* ========================================================================
@@ -1132,119 +1179,101 @@ Responsive Breakpoints:
     --anim-new-species: 800ms;
   }
 
-  /* Dark theme heatmap colors and text colors */
+  /* Dark theme heatmap colors - more vibrant and saturated */
   :global([data-theme='dark']) {
-    --heatmap-color-0: #001a20;
-    --heatmap-color-1: #002933;
-    --heatmap-color-2: #046;
-    --heatmap-color-3: #005c80;
-    --heatmap-color-4: #007399;
-    --heatmap-color-5: #008bb3;
-    --heatmap-color-6: #33a3cc;
-    --heatmap-color-7: #66b8e2;
-    --heatmap-color-8: #99cde9;
-    --heatmap-color-9: #cce3f1;
+    --heatmap-color-0: #1e293b;
+    --heatmap-color-1: #164e63;
+    --heatmap-color-2: #0e7490;
+    --heatmap-color-3: #0891b2;
+    --heatmap-color-4: #06b6d4;
+    --heatmap-color-5: #22d3ee;
+    --heatmap-color-6: #38bdf8;
+    --heatmap-color-7: #60a5fa;
+    --heatmap-color-8: #93c5fd;
+    --heatmap-color-9: #bfdbfe;
     --heatmap-text-1: #fff;
     --heatmap-text-2: #fff;
     --heatmap-text-3: #fff;
-    --heatmap-text-4: #fff;
-    --heatmap-text-5: #fff;
+    --heatmap-text-4: #000;
+    --heatmap-text-5: #000;
     --heatmap-text-6: #000;
     --heatmap-text-7: #000;
     --heatmap-text-8: #000;
     --heatmap-text-9: #000;
   }
 
-  /* Light theme heatmap cell styles */
-  :global([data-theme='light'] .heatmap-color-1) {
-    background: linear-gradient(-45deg, var(--heatmap-color-1) 45%, var(--heatmap-color-0) 95%);
+  /* Heatmap cell styles - solid colors with rounded corners */
+  :global(.heatmap-color-1),
+  :global(.heatmap-color-2),
+  :global(.heatmap-color-3),
+  :global(.heatmap-color-4),
+  :global(.heatmap-color-5),
+  :global(.heatmap-color-6),
+  :global(.heatmap-color-7),
+  :global(.heatmap-color-8),
+  :global(.heatmap-color-9) {
+    border-radius: 4px;
+  }
+
+  :global(.heatmap-color-1) {
+    background-color: var(--heatmap-color-1);
     color: var(--heatmap-text-1, #000);
   }
 
-  :global([data-theme='light'] .heatmap-color-2) {
-    background: linear-gradient(-45deg, var(--heatmap-color-2) 45%, var(--heatmap-color-1) 95%);
+  :global(.heatmap-color-2) {
+    background-color: var(--heatmap-color-2);
     color: var(--heatmap-text-2, #000);
   }
 
-  :global([data-theme='light'] .heatmap-color-3) {
-    background: linear-gradient(-45deg, var(--heatmap-color-3) 45%, var(--heatmap-color-2) 95%);
+  :global(.heatmap-color-3) {
+    background-color: var(--heatmap-color-3);
     color: var(--heatmap-text-3, #000);
   }
 
-  :global([data-theme='light'] .heatmap-color-4) {
-    background: linear-gradient(-45deg, var(--heatmap-color-4) 45%, var(--heatmap-color-3) 95%);
+  :global(.heatmap-color-4) {
+    background-color: var(--heatmap-color-4);
     color: var(--heatmap-text-4, #000);
   }
 
-  :global([data-theme='light'] .heatmap-color-5) {
-    background: linear-gradient(-45deg, var(--heatmap-color-5) 45%, var(--heatmap-color-4) 95%);
+  :global(.heatmap-color-5) {
+    background-color: var(--heatmap-color-5);
     color: var(--heatmap-text-5, #fff);
   }
 
-  :global([data-theme='light'] .heatmap-color-6) {
-    background: linear-gradient(-45deg, var(--heatmap-color-6) 45%, var(--heatmap-color-5) 95%);
+  :global(.heatmap-color-6) {
+    background-color: var(--heatmap-color-6);
     color: var(--heatmap-text-6, #fff);
   }
 
-  :global([data-theme='light'] .heatmap-color-7) {
-    background: linear-gradient(-45deg, var(--heatmap-color-7) 45%, var(--heatmap-color-6) 95%);
+  :global(.heatmap-color-7) {
+    background-color: var(--heatmap-color-7);
     color: var(--heatmap-text-7, #fff);
   }
 
-  :global([data-theme='light'] .heatmap-color-8) {
-    background: linear-gradient(-45deg, var(--heatmap-color-8) 45%, var(--heatmap-color-7) 95%);
+  :global(.heatmap-color-8) {
+    background-color: var(--heatmap-color-8);
     color: var(--heatmap-text-8, #fff);
   }
 
-  :global([data-theme='light'] .heatmap-color-9) {
-    background: linear-gradient(-45deg, var(--heatmap-color-9) 45%, var(--heatmap-color-8) 95%);
+  :global(.heatmap-color-9) {
+    background-color: var(--heatmap-color-9);
     color: var(--heatmap-text-9, #fff);
   }
 
-  /* Dark theme heatmap cell styles - FIXED to use same gradient direction */
-  :global([data-theme='dark'] .heatmap-color-1) {
-    background: linear-gradient(-45deg, var(--heatmap-color-1) 45%, var(--heatmap-color-0) 95%);
-    color: var(--heatmap-text-1, #000);
-  }
-
-  :global([data-theme='dark'] .heatmap-color-2) {
-    background: linear-gradient(-45deg, var(--heatmap-color-2) 45%, var(--heatmap-color-1) 95%);
-    color: var(--heatmap-text-2, #000);
-  }
-
+  /* Dark theme text color overrides */
+  :global([data-theme='dark'] .heatmap-color-1),
+  :global([data-theme='dark'] .heatmap-color-2),
   :global([data-theme='dark'] .heatmap-color-3) {
-    background: linear-gradient(-45deg, var(--heatmap-color-3) 45%, var(--heatmap-color-2) 95%);
-    color: var(--heatmap-text-3, #000);
+    color: #fff;
   }
 
-  :global([data-theme='dark'] .heatmap-color-4) {
-    background: linear-gradient(-45deg, var(--heatmap-color-4) 45%, var(--heatmap-color-3) 95%);
-    color: var(--heatmap-text-4, #000);
-  }
-
-  :global([data-theme='dark'] .heatmap-color-5) {
-    background: linear-gradient(-45deg, var(--heatmap-color-5) 45%, var(--heatmap-color-4) 95%);
-    color: var(--heatmap-text-5, #fff);
-  }
-
-  :global([data-theme='dark'] .heatmap-color-6) {
-    background: linear-gradient(-45deg, var(--heatmap-color-6) 45%, var(--heatmap-color-5) 95%);
-    color: var(--heatmap-text-6, #fff);
-  }
-
-  :global([data-theme='dark'] .heatmap-color-7) {
-    background: linear-gradient(-45deg, var(--heatmap-color-7) 45%, var(--heatmap-color-6) 95%);
-    color: var(--heatmap-text-7, #fff);
-  }
-
-  :global([data-theme='dark'] .heatmap-color-8) {
-    background: linear-gradient(-45deg, var(--heatmap-color-8) 45%, var(--heatmap-color-7) 95%);
-    color: var(--heatmap-text-8, #fff);
-  }
-
+  :global([data-theme='dark'] .heatmap-color-4),
+  :global([data-theme='dark'] .heatmap-color-5),
+  :global([data-theme='dark'] .heatmap-color-6),
+  :global([data-theme='dark'] .heatmap-color-7),
+  :global([data-theme='dark'] .heatmap-color-8),
   :global([data-theme='dark'] .heatmap-color-9) {
-    background: linear-gradient(-45deg, var(--heatmap-color-9) 45%, var(--heatmap-color-8) 95%);
-    color: var(--heatmap-text-9, #fff);
+    color: #000;
   }
 
   /* Dynamic Update Animations - not in custom.css */
@@ -1343,9 +1372,9 @@ Responsive Breakpoints:
 
   /* Link styling to match the original .hour-data a styles */
   .hour-data a {
-    height: 2rem;
-    min-height: 2rem;
-    max-height: 2rem;
+    height: 1.75rem;
+    min-height: 1.75rem;
+    max-height: 1.75rem;
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -1367,56 +1396,151 @@ Responsive Breakpoints:
   .hour-header {
     position: relative;
     text-align: center;
-    vertical-align: bottom;
+    vertical-align: middle;
   }
 
-  /* Sun icon positioning */
-  .sun-icon {
-    position: absolute;
-    top: 2px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1;
-    font-size: 0.75rem;
-    line-height: 1;
-    pointer-events: none;
+  /* Species column styling */
+  :global(.species-column) {
+    width: auto;
+    min-width: 0;
+    max-width: 100px;
+    padding-left: 0.5rem !important;
+    padding-right: 0.75rem !important;
   }
 
-  .sun-icon-sunrise {
-    color: #fb923c; /* text-orange-400 */
+  /* ========================================================================
+     Species Badge Styles
+     ======================================================================== */
+
+  .species-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.625rem;
+    font-weight: 700;
+    color: white;
+    text-decoration: none;
+    text-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+    transition:
+      transform 0.15s ease,
+      box-shadow 0.15s ease;
   }
 
-  .sun-icon-sunset {
-    color: #ea580c; /* text-orange-600 */
+  .species-badge:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
   }
 
-  /* Hour link styling */
-  .hour-link {
-    display: block;
+  /* ========================================================================
+     Daylight Row Styles
+     ======================================================================== */
+
+  .daylight-row {
+    height: 1.25rem;
+    min-height: 1.25rem;
+    max-height: 1.25rem;
+  }
+
+  .daylight-row th {
+    height: 1.25rem !important;
+    min-height: 1.25rem !important;
+    max-height: 1.25rem !important;
+    border-bottom: none !important;
+    vertical-align: middle;
+  }
+
+  /* Daylight row label cell */
+  .daylight-row th:first-child {
+    padding-left: 0.5rem;
+    padding-right: 1rem;
+    text-align: left;
+  }
+
+  .daylight-cell {
+    position: relative;
+    transition: background-color 0.2s ease;
+  }
+
+  /* Daylight cell responsive visibility - separate from hour-header/hour-data */
+  .hourly-daylight,
+  .bi-hourly-daylight,
+  .six-hourly-daylight {
+    display: none;
+  }
+
+  /* Extra large screens (≥1400px): show hourly daylight */
+  @media (min-width: 1400px) {
+    .hourly-daylight {
+      display: table-cell;
+    }
+  }
+
+  /* Large screens (1200px-1399px): show hourly daylight */
+  @media (min-width: 1200px) and (max-width: 1399px) {
+    .hourly-daylight {
+      display: table-cell;
+    }
+  }
+
+  /* Medium-large screens (1024px-1199px): show hourly daylight */
+  @media (min-width: 1024px) and (max-width: 1199px) {
+    .hourly-daylight {
+      display: table-cell;
+    }
+  }
+
+  /* Medium screens (768px-1023px): show bi-hourly daylight */
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .bi-hourly-daylight {
+      display: table-cell;
+    }
+  }
+
+  /* Small screens (480px-767px): show bi-hourly daylight */
+  @media (min-width: 480px) and (max-width: 767px) {
+    .bi-hourly-daylight {
+      display: table-cell;
+    }
+  }
+
+  /* Extra small screens (<480px): show six-hourly daylight */
+  @media (max-width: 479px) {
+    .six-hourly-daylight {
+      display: table-cell;
+    }
+  }
+
+  .daylight-day {
+    background-color: #fbbf24; /* amber-400 */
+    border-radius: 4px;
+  }
+
+  .daylight-night {
+    background-color: #4b5563; /* gray-600 - more visible */
+    border-radius: 4px;
+  }
+
+  :global([data-theme='light']) .daylight-day {
+    background-color: #fcd34d; /* amber-300 */
+  }
+
+  :global([data-theme='light']) .daylight-night {
+    background-color: #9ca3af; /* gray-400 - more visible in light mode */
+  }
+
+  .daylight-sun-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 100%;
     height: 100%;
-    min-height: 1.5rem;
-    color: inherit;
-    text-decoration: none;
-    font-size: 0.75rem;
-    padding-top: 1rem; /* Space for sun icon */
-    box-sizing: border-box;
-    text-align: center;
-    cursor: pointer;
-    transition: color 0.15s ease;
+    color: #1f2937; /* dark gray for visibility against amber */
   }
 
-  .hour-link:hover {
-    color: oklch(var(--p));
-    text-decoration: none;
-  }
-
-  /* Dark theme adjustments */
-  :global([data-theme='dark']) .sun-icon-sunrise {
-    color: #fdba74; /* Slightly lighter orange for dark theme */
-  }
-
-  :global([data-theme='dark']) .sun-icon-sunset {
-    color: #f97316; /* Slightly lighter orange for dark theme */
+  :global([data-theme='dark']) .daylight-sun-icon {
+    color: #1f2937; /* dark gray for visibility against amber in dark mode */
   }
 </style>
