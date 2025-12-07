@@ -17,6 +17,11 @@
   --font-sans:
     'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
     'Segoe UI Symbol', 'Noto Color Emoji';
+
+  /* Custom grid templates for daily activity heatmap */
+  --grid-template-columns-24: repeat(24, minmax(0, 1fr));
+  --grid-template-columns-12: repeat(12, minmax(0, 1fr));
+  --grid-template-columns-4: repeat(4, minmax(0, 1fr));
 }
 
 /* ============================================
