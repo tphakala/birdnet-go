@@ -52,6 +52,16 @@ vi.mock('$lib/i18n', () => ({
     'settings.main.sections.userInterface.dashboard.title': 'Dashboard Display',
     'settings.main.sections.userInterface.dashboard.description':
       'Configure how information is displayed on the dashboard',
+    'settings.main.sections.userInterface.dashboard.displaySettings.title': 'Display Settings',
+    'settings.main.sections.userInterface.dashboard.displaySettings.description':
+      'Configure general dashboard display options',
+    'settings.main.sections.userInterface.dashboard.birdImages.title': 'Bird Images',
+    'settings.main.sections.userInterface.dashboard.birdImages.description':
+      'Configure bird species thumbnail images',
+    'settings.main.sections.userInterface.dashboard.spectrogramGeneration.title':
+      'Spectrogram Generation',
+    'settings.main.sections.userInterface.dashboard.spectrogramGeneration.description':
+      'Configure when and how spectrograms are generated',
     'settings.main.sections.userInterface.dashboard.summaryLimit.label': 'Summary Limit',
     'settings.main.sections.userInterface.dashboard.summaryLimit.helpText':
       'Maximum number of items to show in summaries',
@@ -74,9 +84,22 @@ vi.mock('$lib/i18n', () => ({
       'Try all providers',
     'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.options.none':
       'No fallback',
+    'settings.main.sections.userInterface.dashboard.spectrogram.mode.label': 'Mode',
+    'settings.main.sections.userInterface.dashboard.spectrogram.mode.auto.label': 'Auto',
+    'settings.main.sections.userInterface.dashboard.spectrogram.mode.auto.helpText':
+      'Automatically generate spectrograms',
+    'settings.main.sections.userInterface.dashboard.spectrogram.mode.prerender.label': 'Pre-render',
+    'settings.main.sections.userInterface.dashboard.spectrogram.mode.prerender.helpText':
+      'Pre-render spectrograms',
+    'settings.main.sections.userInterface.dashboard.spectrogram.mode.userRequested.label':
+      'On Demand',
+    'settings.main.sections.userInterface.dashboard.spectrogram.mode.userRequested.helpText':
+      'Generate spectrograms on user request',
     'settings.main.errors.providersLoadFailed': 'Failed to load image providers',
     'settings.card.changed': 'Changed',
     'settings.card.changedAriaLabel': 'Settings changed',
+    'settings.tabs.navigation': 'Settings navigation',
+    'settings.tabs.hasChanges': 'Tab has unsaved changes',
   }),
   getLocale: vi.fn(() => 'en'),
 }));
@@ -107,6 +130,7 @@ vi.mock('$lib/stores/settings', async () => {
   });
 
   const dashboardSettings = derived(settingsStore, $store => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return ($store.formData as any)?.realtime?.dashboard;
   });
 
@@ -140,6 +164,23 @@ mockDOMAPIs();
 
 // Create test factory
 const testFactory = createComponentTestFactory(UserInterfaceSettingsPage);
+
+// Escape special regex characters to safely use user input in RegExp
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Helper to switch to a specific tab
+async function switchToTab(tabName: string) {
+  // Input is escaped to prevent ReDoS, safe to use in RegExp
+  const escapedName = escapeRegExp(tabName);
+  // eslint-disable-next-line security/detect-non-literal-regexp -- input is sanitized by escapeRegExp
+  const tab = screen.getByRole('tab', { name: new RegExp(escapedName, 'i') });
+  tab.click();
+  await waitFor(() => {
+    expect(tab.getAttribute('aria-selected')).toBe('true');
+  });
+}
 
 describe('UserInterfaceSettingsPage', () => {
   let mockApi: {
@@ -209,18 +250,20 @@ describe('UserInterfaceSettingsPage', () => {
   });
 
   describe('Rendering', () => {
-    it('renders all main sections', async () => {
+    it('renders tab navigation with both tabs', async () => {
       testFactory.render();
 
       await waitFor(() => {
-        expect(screen.getByRole('heading', { name: 'Interface Settings' })).toBeInTheDocument();
-        expect(screen.getByRole('heading', { name: 'Dashboard Display' })).toBeInTheDocument();
+        // Check that both tabs are present
+        expect(screen.getByRole('tab', { name: /Interface Settings/i })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: /Dashboard Display/i })).toBeInTheDocument();
       });
     });
 
-    it('renders interface settings controls', async () => {
+    it('renders interface settings controls on Interface tab', async () => {
       testFactory.render();
 
+      // Interface tab is active by default
       await waitFor(() => {
         // Language selector
         expect(screen.getByLabelText('Language')).toBeInTheDocument();
@@ -230,14 +273,17 @@ describe('UserInterfaceSettingsPage', () => {
       });
     });
 
-    it('renders dashboard display controls', async () => {
+    it('renders dashboard display controls on Dashboard tab', async () => {
       testFactory.render();
 
+      // Switch to Dashboard tab
+      await switchToTab('Dashboard Display');
+
       await waitFor(() => {
-        // Summary limit
+        // Summary limit (in Display Settings section)
         expect(screen.getByLabelText('Summary Limit')).toBeInTheDocument();
 
-        // Thumbnail checkboxes
+        // Thumbnail checkboxes (in Bird Images section)
         expect(screen.getByLabelText('Show in Summary')).toBeInTheDocument();
         expect(screen.getByLabelText('Show in Recent')).toBeInTheDocument();
 
@@ -316,6 +362,9 @@ describe('UserInterfaceSettingsPage', () => {
     it('updates summary limit', async () => {
       testFactory.render();
 
+      // Switch to Dashboard tab
+      await switchToTab('Dashboard Display');
+
       await waitFor(() => {
         const input = screen.getByLabelText('Summary Limit') as HTMLInputElement;
         expect(input).toBeInTheDocument();
@@ -338,6 +387,9 @@ describe('UserInterfaceSettingsPage', () => {
 
     it('updates thumbnail settings', async () => {
       testFactory.render();
+
+      // Switch to Dashboard tab
+      await switchToTab('Dashboard Display');
 
       await waitFor(() => {
         const summaryCheckbox = screen.getByLabelText('Show in Summary') as HTMLInputElement;
@@ -366,6 +418,9 @@ describe('UserInterfaceSettingsPage', () => {
     it('updates image provider selection', async () => {
       testFactory.render();
 
+      // Switch to Dashboard tab
+      await switchToTab('Dashboard Display');
+
       await waitFor(() => {
         const select = screen.getByLabelText('Image Provider') as HTMLSelectElement;
         expect(select).toBeInTheDocument();
@@ -388,6 +443,9 @@ describe('UserInterfaceSettingsPage', () => {
 
     it('shows fallback policy when multiple providers available', async () => {
       testFactory.render();
+
+      // Switch to Dashboard tab
+      await switchToTab('Dashboard Display');
 
       await waitFor(() => {
         const fallbackSelect = screen.getByLabelText('Fallback Policy');
@@ -412,6 +470,9 @@ describe('UserInterfaceSettingsPage', () => {
 
       testFactory.render();
 
+      // Switch to Dashboard tab
+      await switchToTab('Dashboard Display');
+
       await waitFor(() => {
         const imageProvider = screen.getByLabelText('Image Provider');
         expect(imageProvider).toBeInTheDocument();
@@ -423,9 +484,9 @@ describe('UserInterfaceSettingsPage', () => {
   });
 
   describe('Change Tracking', () => {
-    it('tracks interface settings changes separately', async () => {
-      // Mock to return true only for interface settings
-      mockHasSettingsChanged.mockImplementation((original, current) => {
+    it('tracks interface tab changes', async () => {
+      // Mock to return true for interface settings
+      mockHasSettingsChanged.mockImplementation((_original, current) => {
         // Check if this is the interface settings comparison
         if (current?.locale !== undefined || current?.newUI !== undefined) {
           return true;
@@ -436,37 +497,23 @@ describe('UserInterfaceSettingsPage', () => {
       testFactory.render();
 
       await waitFor(() => {
-        // Interface section should show changes
-        const interfaceSection = screen
-          .getByRole('heading', { name: 'Interface Settings' })
-          .closest('[data-testid="settings-card"]');
-        expect(interfaceSection).toBeInTheDocument();
-        const interfaceChangeBadge = interfaceSection
-          ? within(interfaceSection as HTMLElement).queryByRole('status', {
-              name: 'Settings changed',
-            })
-          : null;
-        expect(interfaceChangeBadge).toBeInTheDocument();
-
-        // Dashboard section should not show changes
-        const dashboardSection = screen
-          .getByRole('heading', { name: 'Dashboard Display' })
-          .closest('[data-testid="settings-card"]');
-        expect(dashboardSection).toBeInTheDocument();
-        const dashboardChangeBadge = dashboardSection
-          ? within(dashboardSection as HTMLElement).queryByRole('status', {
-              name: 'Settings changed',
-            })
-          : null;
-        expect(dashboardChangeBadge).not.toBeInTheDocument();
+        // Interface tab should show change indicator badge
+        const interfaceTab = screen.getByRole('tab', { name: /Interface Settings/i });
+        expect(interfaceTab).toBeInTheDocument();
+        const changeBadge = within(interfaceTab).queryByRole('status');
+        expect(changeBadge).toBeInTheDocument();
       });
     });
 
-    it('tracks dashboard display changes separately', async () => {
-      // Mock to return true only for dashboard display settings
-      mockHasSettingsChanged.mockImplementation((original, current) => {
+    it('tracks dashboard tab changes', async () => {
+      // Mock to return true for dashboard display settings
+      mockHasSettingsChanged.mockImplementation((_original, current) => {
         // Check if this is the dashboard display comparison
-        if (current?.summaryLimit !== undefined || current?.thumbnails !== undefined) {
+        if (
+          current?.summaryLimit !== undefined ||
+          current?.summary !== undefined ||
+          current?.mode !== undefined
+        ) {
           return true;
         }
         return false;
@@ -475,29 +522,11 @@ describe('UserInterfaceSettingsPage', () => {
       testFactory.render();
 
       await waitFor(() => {
-        // Interface section should not show changes
-        const interfaceSection = screen
-          .getByRole('heading', { name: 'Interface Settings' })
-          .closest('[data-testid="settings-card"]');
-        expect(interfaceSection).toBeInTheDocument();
-        const interfaceChangeBadge = interfaceSection
-          ? within(interfaceSection as HTMLElement).queryByRole('status', {
-              name: 'Settings changed',
-            })
-          : null;
-        expect(interfaceChangeBadge).not.toBeInTheDocument();
-
-        // Dashboard section should show changes
-        const dashboardSection = screen
-          .getByRole('heading', { name: 'Dashboard Display' })
-          .closest('[data-testid="settings-card"]');
-        expect(dashboardSection).toBeInTheDocument();
-        const dashboardChangeBadge = dashboardSection
-          ? within(dashboardSection as HTMLElement).queryByRole('status', {
-              name: 'Settings changed',
-            })
-          : null;
-        expect(dashboardChangeBadge).toBeInTheDocument();
+        // Dashboard tab should show change indicator badge
+        const dashboardTab = screen.getByRole('tab', { name: /Dashboard Display/i });
+        expect(dashboardTab).toBeInTheDocument();
+        const changeBadge = within(dashboardTab).queryByRole('status');
+        expect(changeBadge).toBeInTheDocument();
       });
     });
 
@@ -507,8 +536,11 @@ describe('UserInterfaceSettingsPage', () => {
       testFactory.render();
 
       await waitFor(() => {
-        const changeBadges = screen.queryAllByRole('status', { name: 'Settings changed' });
-        expect(changeBadges).toHaveLength(0);
+        // No change badges should be present on tabs
+        const interfaceTab = screen.getByRole('tab', { name: /Interface Settings/i });
+        const dashboardTab = screen.getByRole('tab', { name: /Dashboard Display/i });
+        expect(within(interfaceTab).queryByRole('status')).not.toBeInTheDocument();
+        expect(within(dashboardTab).queryByRole('status')).not.toBeInTheDocument();
       });
     });
   });
@@ -520,6 +552,9 @@ describe('UserInterfaceSettingsPage', () => {
       await waitFor(() => {
         expect(mockApi.get).toHaveBeenCalledWith('/api/v2/settings/imageproviders');
       });
+
+      // Switch to Dashboard tab to see providers
+      await switchToTab('Dashboard Display');
 
       // Check that providers are populated
       const imageProviderSelect = screen.getByLabelText('Image Provider') as HTMLSelectElement;
@@ -540,6 +575,9 @@ describe('UserInterfaceSettingsPage', () => {
         expect(mockToastActions.warning).toHaveBeenCalledWith('Failed to load image providers');
       });
 
+      // Switch to Dashboard tab
+      await switchToTab('Dashboard Display');
+
       // Should have fallback provider
       const imageProviderSelect = screen.getByLabelText('Image Provider') as HTMLSelectElement;
       const options = within(imageProviderSelect).getAllByRole('option');
@@ -547,11 +585,14 @@ describe('UserInterfaceSettingsPage', () => {
       expect(options[0]).toHaveTextContent('Wikipedia');
     });
 
-    it('disables provider selection when loading', () => {
+    it('disables provider selection when loading', async () => {
       // Keep the promise pending to simulate loading state
       mockApi.get.mockImplementation(() => new Promise(() => {}));
 
       testFactory.render();
+
+      // Switch to Dashboard tab
+      await switchToTab('Dashboard Display');
 
       const imageProviderSelect = screen.getByLabelText('Image Provider') as HTMLSelectElement;
       expect(imageProviderSelect).toBeDisabled();
@@ -559,16 +600,30 @@ describe('UserInterfaceSettingsPage', () => {
   });
 
   describe('Disabled States', () => {
-    it('disables all controls when store is loading', async () => {
+    it('disables interface controls when store is loading', async () => {
       // Set loading state
       settingsStore.update(state => ({ ...state, isLoading: true }));
 
       testFactory.render();
 
       await waitFor(() => {
-        // Check all form controls are disabled
+        // Check interface form controls are disabled
         expect(screen.getByLabelText('Language')).toBeDisabled();
         expect(screen.getByLabelText('Use New User Interface')).toBeDisabled();
+      });
+    });
+
+    it('disables dashboard controls when store is loading', async () => {
+      // Set loading state
+      settingsStore.update(state => ({ ...state, isLoading: true }));
+
+      testFactory.render();
+
+      // Switch to Dashboard tab
+      await switchToTab('Dashboard Display');
+
+      await waitFor(() => {
+        // Check dashboard form controls are disabled
         expect(screen.getByLabelText('Summary Limit')).toBeDisabled();
         expect(screen.getByLabelText('Show in Summary')).toBeDisabled();
         expect(screen.getByLabelText('Show in Recent')).toBeDisabled();
@@ -583,9 +638,16 @@ describe('UserInterfaceSettingsPage', () => {
       testFactory.render();
 
       await waitFor(() => {
-        // Check all form controls are disabled
+        // Check interface form controls are disabled
         expect(screen.getByLabelText('Language')).toBeDisabled();
         expect(screen.getByLabelText('Use New User Interface')).toBeDisabled();
+      });
+
+      // Switch to Dashboard tab
+      await switchToTab('Dashboard Display');
+
+      await waitFor(() => {
+        // Check dashboard form controls are disabled
         expect(screen.getByLabelText('Summary Limit')).toBeDisabled();
         expect(screen.getByLabelText('Show in Summary')).toBeDisabled();
         expect(screen.getByLabelText('Show in Recent')).toBeDisabled();
@@ -601,6 +663,9 @@ describe('UserInterfaceSettingsPage', () => {
 
       testFactory.render();
 
+      // Switch to Dashboard tab
+      await switchToTab('Dashboard Display');
+
       await waitFor(() => {
         const imageProviderSelect = screen.getByLabelText('Image Provider') as HTMLSelectElement;
         expect(imageProviderSelect).toBeDisabled();
@@ -609,7 +674,7 @@ describe('UserInterfaceSettingsPage', () => {
   });
 
   describe('Default Values', () => {
-    it('uses default values when settings are not loaded', async () => {
+    it('uses default values for interface tab when settings are not loaded', async () => {
       // Clear dashboard settings
       settingsStore.update(state => ({
         ...state,
@@ -627,13 +692,37 @@ describe('UserInterfaceSettingsPage', () => {
       testFactory.render();
 
       await waitFor(() => {
-        // Check default values
+        // Check default values on Interface tab
         const languageSelect = screen.getByLabelText('Language') as HTMLSelectElement;
         expect(languageSelect.value).toBe('en');
 
         const newUICheckbox = screen.getByLabelText('Use New User Interface') as HTMLInputElement;
         expect(newUICheckbox.checked).toBe(false);
+      });
+    });
 
+    it('uses default values for dashboard tab when settings are not loaded', async () => {
+      // Clear dashboard settings
+      settingsStore.update(state => ({
+        ...state,
+        formData: {
+          ...state.formData,
+
+          realtime: {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...(state.formData as any)?.realtime,
+            dashboard: undefined,
+          },
+        },
+      }));
+
+      testFactory.render();
+
+      // Switch to Dashboard tab
+      await switchToTab('Dashboard Display');
+
+      await waitFor(() => {
+        // Check default values on Dashboard tab
         const summaryLimit = screen.getByLabelText('Summary Limit') as HTMLInputElement;
         expect(summaryLimit.value).toBe('100');
 
@@ -676,6 +765,9 @@ describe('UserInterfaceSettingsPage', () => {
   describe('Update Handlers', () => {
     it('correctly updates nested thumbnail settings', async () => {
       testFactory.render();
+
+      // Switch to Dashboard tab
+      await switchToTab('Dashboard Display');
 
       await waitFor(() => {
         const fallbackSelect = screen.getByLabelText('Fallback Policy') as HTMLSelectElement;

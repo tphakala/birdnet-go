@@ -895,6 +895,18 @@
           "dashboard": {
             "title": "Visualización del panel",
             "description": "Configure cómo se muestran las detecciones en el panel",
+            "displaySettings": {
+              "title": "Configuración de Visualización",
+              "description": "Configure las opciones generales de visualización del panel como límites de especies."
+            },
+            "birdImages": {
+              "title": "Imágenes de Aves",
+              "description": "Configure las imágenes en miniatura de especies de aves para las listas de detecciones."
+            },
+            "spectrogramGeneration": {
+              "title": "Generación de Espectrogramas",
+              "description": "Configure cuándo y cómo se generan los espectrogramas de audio para las detecciones."
+            },
             "general": {
               "title": "Configuración general"
             },
@@ -974,7 +986,8 @@
         },
         "locale": {
           "label": "Idioma",
-          "helpText": "Idioma para nombres comunes de especies traducidos."
+          "helpText": "Idioma para nombres comunes de especies traducidos.",
+          "requiresModernUI": "La selección de idioma solo está disponible cuando se usa la Interfaz Moderna."
         },
         "tensorflowThreads": {
           "label": "Hilos de CPU TensorFlow",
@@ -1173,6 +1186,14 @@
       }
     },
     "audio": {
+      "loading": "Cargando dispositivos de audio...",
+      "tabs": {
+        "soundCard": "Tarjeta de Sonido",
+        "streams": "Streams",
+        "processing": "Procesamiento",
+        "recording": "Grabación",
+        "retention": "Retención"
+      },
       "audioCapture": {
         "title": "Captura de audio",
         "description": "Establecer fuente de captura de audio, tarjeta de sonido o flujo RTSP",
@@ -1231,8 +1252,11 @@
         "title": "Configuración de clips",
         "description": "Configurar la captura y procesamiento de clips de audio para llamadas de aves identificadas"
       },
-      "audioExport": {
-        "enable": "Habilitar captura de audio",
+      "clipRecording": {
+        "title": "Configuración de Grabación de Clips",
+        "description": "Configurar captura, formato y opciones de almacenamiento de clips de audio para cantos detectados.",
+        "enable": "Habilitar grabación de clips",
+        "disabled": "La grabación de clips está deshabilitada",
         "enableHelp": "Guardar clips de audio de cantos de aves detectados para revisión, compartir o construir conjuntos de datos personalizados.",
         "captureSettings": "Configuración de captura",
         "lengthLabel": "Duración de captura",
@@ -1253,13 +1277,40 @@
         "normalizationNote": "Estándar EBU R128",
         "normalizationNoteDescription": "La normalización de audio sigue el estándar de transmisión EBU R128, asegurando niveles de reproducción consistentes en diferentes dispositivos y evitando recortes.",
         "fileSettings": "Configuración de archivo",
-        "pathLabel": "Ruta de exportación",
+        "pathLabel": "Carpeta de clips",
         "pathHelp": "Directorio donde se guardarán los clips de audio. Las rutas relativas son desde el directorio de la aplicación. Ejemplo: 'clips/' o '/var/audio/birds/'",
-        "typeLabel": "Formato de exportación",
+        "typeLabel": "Formato de audio",
         "typeHelp": "Formato de audio para clips guardados. WAV y FLAC son sin pérdida (mejor calidad, archivos más grandes). MP3, AAC y Opus son con pérdida (archivos más pequeños, ligera pérdida de calidad).",
         "bitrateLabel": "Tasa de bits",
         "bitrateHelp": "Tasa de bits de compresión de audio para formatos con pérdida. Rango: {min}-{max} kbps. Valores más altos proporcionan mejor calidad pero archivos más grandes.",
         "losslessNote": "Los formatos sin pérdida preservan la calidad de audio original sin artefactos de compresión."
+      },
+      "fileSettings": {
+        "title": "Configuración de archivo",
+        "description": "Configurar la ubicación de almacenamiento y el formato de audio para los clips guardados.",
+        "pathLabel": "Carpeta de clips",
+        "pathHelp": "Directorio donde se guardarán los clips de audio. Las rutas relativas son desde el directorio de la aplicación. Ejemplo: 'clips/' o '/var/audio/birds/'",
+        "typeLabel": "Formato de audio",
+        "typeHelp": "Formato de audio para clips guardados. WAV y FLAC son sin pérdida (mejor calidad, archivos más grandes). MP3, AAC y Opus son con pérdida (archivos más pequeños, ligera pérdida de calidad).",
+        "bitrateLabel": "Tasa de bits",
+        "bitrateHelp": "Tasa de bits de compresión de audio para formatos con pérdida. Rango: {min}-{max} kbps. Valores más altos proporcionan mejor calidad pero archivos más grandes.",
+        "losslessNote": "Los formatos sin pérdida preservan la calidad de audio original sin artefactos de compresión."
+      },
+      "audioNormalization": {
+        "title": "Normalización de audio",
+        "description": "Ajustar los niveles de audio para un volumen de reproducción consistente en todos los clips.",
+        "enable": "Habilitar normalización de volumen",
+        "enableHelp": "Ajustar automáticamente los niveles de audio al estándar de transmisión EBU R128 para un volumen de reproducción consistente en todos los clips.",
+        "disabled": "La normalización de audio está deshabilitada",
+        "requiresRecording": "Habilite la grabación de clips en la pestaña Grabación para usar la normalización de audio.",
+        "targetLUFSLabel": "Volumen objetivo (LUFS)",
+        "targetLUFSHelp": "Objetivo de volumen integrado en LUFS (Unidades de volumen relativas a escala completa). -23 LUFS es el estándar de transmisión EBU R128. Rango: -40 a -10 LUFS.",
+        "loudnessRangeLabel": "Rango de volumen (LU)",
+        "loudnessRangeHelp": "Variación máxima de volumen dentro del clip (0-20 LU). Valores más bajos crean volumen más consistente pero pueden reducir la dinámica.",
+        "truePeakLabel": "Límite de pico verdadero (dBTP)",
+        "truePeakHelp": "Nivel máximo de pico verdadero para evitar recorte digital (-10 a 0 dBTP). -2 dBTP proporciona margen seguro para la mayoría de sistemas de reproducción.",
+        "noteTitle": "Estándar EBU R128",
+        "noteDescription": "La normalización de audio sigue el estándar de transmisión EBU R128, asegurando niveles de reproducción consistentes en diferentes dispositivos y evitando recortes."
       },
       "audioClipRetention": {
         "title": "Retención de clips de audio",

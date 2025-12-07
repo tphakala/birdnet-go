@@ -5,12 +5,11 @@
   consistent styling, keyboard navigation, change indicators, and accessibility.
 
   Features:
-  - DaisyUI 5 tabs styling with modern appearance
+  - Underline-style tabs with colored indicator for active tab
   - Icon + label display for each tab
   - Per-tab change indicator badges
   - Full keyboard navigation (Arrow keys, Home, End)
   - ARIA compliance for screen readers
-  - Optional "default" star indicator for input source tabs
   - Lazy content rendering (only active tab content is mounted)
   - Integrated save/reset actions bar
 
@@ -26,7 +25,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Snippet, Component } from 'svelte';
-  import { Star } from '@lucide/svelte';
   import type { IconProps } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import SettingsPageActions from './SettingsPageActions.svelte';
@@ -36,8 +34,6 @@
     label: string;
     icon?: Component<IconProps>;
     hasChanges?: boolean;
-    isDefault?: boolean;
-    showDefaultStar?: boolean;
     content: Snippet;
   }
 
@@ -63,6 +59,14 @@
     onTabChange?.(tabId);
   }
 
+  // Safe array access using Array.prototype.at() to avoid object injection warnings
+  function getTabAt(index: number): TabDefinition | undefined {
+    if (index >= 0 && index < tabs.length) {
+      return tabs.at(index);
+    }
+    return undefined;
+  }
+
   // Keyboard navigation handler
   function handleKeyDown(event: KeyboardEvent, currentIndex: number) {
     const tabCount = tabs.length;
@@ -86,16 +90,20 @@
         newIndex = tabCount - 1;
         break;
       case 'Enter':
-      case ' ':
+      case ' ': {
         event.preventDefault();
-        selectTab(tabs[currentIndex].id);
+        const currentTab = getTabAt(currentIndex);
+        if (currentTab) {
+          selectTab(currentTab.id);
+        }
         return;
+      }
       default:
         return;
     }
 
     // Focus and select the new tab
-    const newTab = tabs[newIndex];
+    const newTab = getTabAt(newIndex);
     if (newTab) {
       selectTab(newTab.id);
       // Focus the tab button
@@ -108,7 +116,7 @@
 <div class={cn('settings-tabs', className)}>
   <!-- Tab Navigation -->
   <div
-    class="tabs tabs-box bg-base-200/50 mb-6 p-1 rounded-xl"
+    class="tabs border-b border-base-300 mb-6"
     role="tablist"
     aria-label={t('settings.tabs.navigation')}
   >
@@ -119,11 +127,9 @@
         type="button"
         role="tab"
         class={cn(
-          'tab gap-2 transition-all duration-200 font-medium',
-          'hover:bg-base-300/50',
-          isActive
-            ? 'tab-active bg-base-100 shadow-sm rounded-lg text-base-content'
-            : 'text-base-content/90 hover:text-base-content'
+          'tab gap-2 transition-all duration-200 font-medium -mb-px',
+          'hover:text-primary/80',
+          isActive ? 'text-primary border-b-2 border-primary' : 'text-base-content/60'
         )}
         aria-selected={isActive}
         aria-controls="settings-tabpanel-{tab.id}"
@@ -131,17 +137,6 @@
         onclick={() => selectTab(tab.id)}
         onkeydown={e => handleKeyDown(e, index)}
       >
-        <!-- Default star indicator -->
-        {#if tab.showDefaultStar}
-          <Star
-            class={cn(
-              'size-3.5 transition-colors',
-              tab.isDefault ? 'fill-warning text-warning' : 'text-base-content/30'
-            )}
-            aria-hidden="true"
-          />
-        {/if}
-
         <!-- Tab icon -->
         {#if tab.icon}
           {@const TabIcon = tab.icon}
@@ -189,17 +184,17 @@
 
 <style>
   .settings-tabs {
-    /* Ensure smooth transitions */
+    /* Configurable tab font size */
+    --tab-font-size: 0.9rem;
+
+    /* Tab styling for underline variant */
     & .tab {
       min-height: 2.5rem;
       padding-inline: 1rem;
-    }
-
-    & .tab-active {
-      /* Subtle elevation for active tab */
-      box-shadow:
-        0 1px 2px rgba(0, 0, 0, 0.05),
-        0 1px 3px rgba(0, 0, 0, 0.1);
+      padding-block: 0.75rem;
+      border-radius: 0;
+      background: transparent;
+      font-size: var(--tab-font-size);
     }
 
     /* Tab panel animation */

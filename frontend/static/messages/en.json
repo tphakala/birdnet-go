@@ -896,7 +896,8 @@
             "description": "Choose your preferred language and interface version",
             "locale": {
               "label": "Display Language",
-              "helpText": "Select the language for the user interface"
+              "helpText": "Select the language for the user interface",
+              "requiresModernUI": "Language selection is only available when using the Modern Interface."
             },
             "newUI": {
               "label": "Use Modern Interface",
@@ -914,6 +915,18 @@
           "dashboard": {
             "title": "Dashboard Display",
             "description": "Configure how detections are displayed on the dashboard",
+            "displaySettings": {
+              "title": "Display Settings",
+              "description": "Configure general dashboard display options like species limits."
+            },
+            "birdImages": {
+              "title": "Bird Images",
+              "description": "Configure bird species thumbnail images for detection lists."
+            },
+            "spectrogramGeneration": {
+              "title": "Spectrogram Generation",
+              "description": "Configure when and how audio spectrograms are generated for detections."
+            },
             "general": {
               "title": "General Settings"
             },
@@ -1347,7 +1360,7 @@
         "soundCard": "Sound Card",
         "streams": "Streams",
         "processing": "Processing",
-        "export": "Export",
+        "recording": "Recording",
         "retention": "Retention"
       },
       "emptyStates": {
@@ -1434,6 +1447,45 @@
         "description": "Configure network audio streams for remote audio capture via RTSP protocol.",
         "noStreamsConfigured": "No streams configured"
       },
+      "streams": {
+        "streamLabel": "Stream",
+        "urlLabel": "Stream URL",
+        "urlHelp": "Enter RTSP URL with optional credentials (rtsp://user:password@host:port/path)",
+        "typeLabel": "Stream Type",
+        "typeLockedNote": "Only RTSP is supported currently",
+        "transportLabel": "Protocol",
+        "summary": "{count} stream(s) configured",
+        "healthy": "healthy",
+        "unhealthy": "unhealthy",
+        "unknown": "unknown",
+        "refresh": "Refresh",
+        "addStream": "Add Stream",
+        "deleteConfirm": "Remove this stream?",
+        "restartCount": "Restarted {count} time(s)",
+        "healthLoadError": "Failed to load stream health status",
+        "status": {
+          "connected": "Connected",
+          "connecting": "Connecting",
+          "error": "Error",
+          "idle": "Idle",
+          "unknown": "Unknown"
+        },
+        "emptyState": {
+          "title": "No Streams Configured",
+          "description": "Add RTSP streams to capture audio from network cameras or other RTSP sources.",
+          "hintsTitle": "Getting Started",
+          "hints": {
+            "rtsp": "Use RTSP URLs from IP cameras (e.g., rtsp://192.168.1.100:554/stream)",
+            "credentials": "Include credentials in URL if required (rtsp://user:pass@host/stream)",
+            "protocol": "TCP is more reliable, UDP has lower latency"
+          }
+        },
+        "errors": {
+          "urlRequired": "Stream URL is required",
+          "invalidUrl": "Invalid RTSP URL format",
+          "duplicate": "This stream URL already exists"
+        }
+      },
       "audioFilters": {
         "title": "Audio Filters",
         "description": "Configure audio processing filters",
@@ -1480,12 +1532,12 @@
         "title": "Clip Settings",
         "description": "Configure audio clip capture and processing for identified bird calls"
       },
-      "audioExport": {
-        "title": "Audio Export Settings",
-        "description": "Configure audio clip capture, format, and export options for detected bird calls.",
-        "enable": "Enable Audio Capture",
+      "clipRecording": {
+        "title": "Clip Recording",
+        "description": "Configure when and how audio clips are captured for detected bird calls.",
+        "enable": "Enable Clip Recording",
         "enableHelp": "Save audio clips of detected bird calls for review, sharing, or building custom datasets.",
-        "disabled": "Audio export is disabled",
+        "disabled": "Clip recording is disabled",
         "captureSettings": "Capture Settings",
         "lengthLabel": "Capture Length",
         "lengthHelp": "Duration of audio to capture for each detection (10-60 seconds). Longer clips provide more context but use more storage.",
@@ -1506,14 +1558,41 @@
         "normalizationNote": "EBU R128 Standard",
         "normalizationNoteDescription": "Audio normalization follows the EBU R128 broadcast standard, ensuring consistent playback levels across different devices and preventing clipping.",
         "fileSettings": "File Settings",
-        "pathLabel": "Export Path",
+        "pathLabel": "Clips Folder",
         "pathHelp": "Directory where audio clips will be saved. Relative paths are from the application directory. Example: 'clips/' or '/var/audio/birds/'",
-        "typeLabel": "Export Format",
+        "typeLabel": "Audio Format",
         "typeHelp": "Audio format for saved clips. WAV and FLAC are lossless (best quality, larger files). MP3, AAC, and Opus are lossy (smaller files, slight quality loss).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio compression bitrate for lossy formats. Range: {min}-{max} kbps. Higher values provide better quality but larger files.",
         "losslessNote": "Lossless formats preserve original audio quality without compression artifacts.",
-        "disabledInfo": "Enable audio capture above to configure clip settings, file format, and export options."
+        "disabledInfo": "Enable clip recording above to configure clip settings, file format, and storage options."
+      },
+      "fileSettings": {
+        "title": "File Settings",
+        "description": "Configure storage location and audio format for saved clips.",
+        "pathLabel": "Clips Folder",
+        "pathHelp": "Directory where audio clips will be saved. Relative paths are from the application directory. Example: 'clips/' or '/var/audio/birds/'",
+        "typeLabel": "Audio Format",
+        "typeHelp": "Audio format for saved clips. WAV and FLAC are lossless (best quality, larger files). MP3, AAC, and Opus are lossy (smaller files, slight quality loss).",
+        "bitrateLabel": "Bitrate",
+        "bitrateHelp": "Audio compression bitrate for lossy formats. Range: {min}-{max} kbps. Higher values provide better quality but larger files.",
+        "losslessNote": "Lossless formats preserve original audio quality without compression artifacts."
+      },
+      "audioNormalization": {
+        "title": "Audio Normalization",
+        "description": "Adjust audio levels for consistent playback volume across all clips.",
+        "enable": "Enable Loudness Normalization",
+        "enableHelp": "Automatically adjust audio levels to EBU R128 broadcast standard for consistent playback volume across all clips.",
+        "disabled": "Audio normalization is disabled",
+        "requiresRecording": "Enable clip recording in the Recording tab to use audio normalization.",
+        "targetLUFSLabel": "Target Loudness (LUFS)",
+        "targetLUFSHelp": "Integrated loudness target in LUFS (Loudness Units relative to Full Scale). -23 LUFS is the EBU R128 broadcast standard. Range: -40 to -10 LUFS.",
+        "loudnessRangeLabel": "Loudness Range (LU)",
+        "loudnessRangeHelp": "Maximum variation in loudness within the clip (0-20 LU). Lower values create more consistent volume but may reduce dynamics.",
+        "truePeakLabel": "True Peak Limit (dBTP)",
+        "truePeakHelp": "Maximum true peak level to prevent digital clipping (-10 to 0 dBTP). -2 dBTP provides safe headroom for most playback systems.",
+        "noteTitle": "EBU R128 Standard",
+        "noteDescription": "Audio normalization follows the EBU R128 broadcast standard, ensuring consistent playback levels across different devices and preventing clipping."
       },
       "audioClipRetention": {
         "title": "Audio Clip Retention",

@@ -895,6 +895,18 @@
           "dashboard": {
             "title": "Wyświetlanie Panelu",
             "description": "Konfiguruj sposób wyświetlania detekcji na panelu",
+            "displaySettings": {
+              "title": "Ustawienia wyświetlania",
+              "description": "Skonfiguruj ogólne opcje wyświetlania pulpitu, takie jak limity gatunków."
+            },
+            "birdImages": {
+              "title": "Obrazy ptaków",
+              "description": "Skonfiguruj miniatury gatunków ptaków dla list wykryć."
+            },
+            "spectrogramGeneration": {
+              "title": "Generowanie spektrogramów",
+              "description": "Skonfiguruj kiedy i jak spektrogramy audio są generowane dla wykryć."
+            },
             "general": {
               "title": "Ustawienia Ogólne"
             },
@@ -974,7 +986,8 @@
         },
         "locale": {
           "label": "Lokalizacja",
-          "helpText": "Lokalizacja dla przetłumaczonych nazw pospolitych gatunków."
+          "helpText": "Lokalizacja dla przetłumaczonych nazw pospolitych gatunków.",
+          "requiresModernUI": "Wybór języka jest dostępny tylko przy użyciu nowoczesnego interfejsu."
         },
         "tensorflowThreads": {
           "label": "Wątki CPU TensorFlow",
@@ -1314,6 +1327,14 @@
       }
     },
     "audio": {
+      "loading": "Ładowanie urządzeń audio...",
+      "tabs": {
+        "soundCard": "Karta Dźwiękowa",
+        "streams": "Strumienie",
+        "processing": "Przetwarzanie",
+        "recording": "Nagrywanie",
+        "retention": "Przechowywanie"
+      },
       "audioCapture": {
         "title": "Przechwytywanie Audio",
         "description": "Ustaw źródło przechwytywania audio, kartę dźwiękową lub strumień RTSP",
@@ -1372,8 +1393,11 @@
         "title": "Ustawienia Klipów",
         "description": "Konfiguruj przechwytywanie i przetwarzanie klipów audio dla zidentyfikowanych odgłosów ptaków"
       },
-      "audioExport": {
-        "enable": "Włącz Przechwytywanie Audio",
+      "clipRecording": {
+        "title": "Ustawienia Nagrywania Klipów",
+        "description": "Konfiguruj przechwytywanie, format i opcje przechowywania klipów audio dla wykrytych odgłosów ptaków.",
+        "enable": "Włącz nagrywanie klipów",
+        "disabled": "Nagrywanie klipów jest wyłączone",
         "enableHelp": "Zapisuj klipy audio wykrytych odgłosów ptaków do przeglądu, udostępniania lub budowania niestandardowych zbiorów danych.",
         "captureSettings": "Ustawienia Przechwytywania",
         "lengthLabel": "Długość Przechwytywania",
@@ -1394,13 +1418,40 @@
         "normalizationNote": "Standard EBU R128",
         "normalizationNoteDescription": "Normalizacja audio przestrzega standardu nadawczego EBU R128, zapewniając spójne poziomy odtwarzania na różnych urządzeniach i zapobiegając kompresji.",
         "fileSettings": "Ustawienia Pliku",
-        "pathLabel": "Ścieżka Eksportu",
+        "pathLabel": "Folder Klipów",
         "pathHelp": "Katalog, w którym będą zapisywane klipy audio. Ścieżki względne są od katalogu aplikacji. Przykład: 'clips/' lub '/var/audio/birds/'",
-        "typeLabel": "Format Eksportu",
+        "typeLabel": "Format Audio",
         "typeHelp": "Format audio dla zapisanych klipów. WAV i FLAC są bezstratne (najlepsza jakość, większe pliki). MP3, AAC i Opus są stratne (mniejsze pliki, niewielka utrata jakości).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Bitrate kompresji audio dla formatów stratnych. Zakres: {min}-{max} kbps. Wyższe wartości zapewniają lepszą jakość, ale większe pliki.",
         "losslessNote": "Formaty bezstratne zachowują oryginalną jakość audio bez artefaktów kompresji."
+      },
+      "fileSettings": {
+        "title": "Ustawienia Pliku",
+        "description": "Konfiguruj lokalizację przechowywania i format audio dla zapisanych klipów.",
+        "pathLabel": "Folder Klipów",
+        "pathHelp": "Katalog, w którym będą zapisywane klipy audio. Ścieżki względne są od katalogu aplikacji. Przykład: 'clips/' lub '/var/audio/birds/'",
+        "typeLabel": "Format Audio",
+        "typeHelp": "Format audio dla zapisanych klipów. WAV i FLAC są bezstratne (najlepsza jakość, większe pliki). MP3, AAC i Opus są stratne (mniejsze pliki, niewielka utrata jakości).",
+        "bitrateLabel": "Bitrate",
+        "bitrateHelp": "Bitrate kompresji audio dla formatów stratnych. Zakres: {min}-{max} kbps. Wyższe wartości zapewniają lepszą jakość, ale większe pliki.",
+        "losslessNote": "Formaty bezstratne zachowują oryginalną jakość audio bez artefaktów kompresji."
+      },
+      "audioNormalization": {
+        "title": "Normalizacja Audio",
+        "description": "Dostosuj poziomy audio dla spójnej głośności odtwarzania wszystkich klipów.",
+        "enable": "Włącz Normalizację Głośności",
+        "enableHelp": "Automatycznie dostosowuj poziomy audio do standardu nadawczego EBU R128 dla spójnej głośności odtwarzania wszystkich klipów.",
+        "disabled": "Normalizacja audio jest wyłączona",
+        "requiresRecording": "Włącz nagrywanie klipów na karcie Nagrywanie, aby używać normalizacji audio.",
+        "targetLUFSLabel": "Docelowa Głośność (LUFS)",
+        "targetLUFSHelp": "Docelowa zintegrowana głośność w LUFS (Jednostki Głośności Względem Pełnej Skali). -23 LUFS jest standardem nadawczym EBU R128. Zakres: -40 do -10 LUFS.",
+        "loudnessRangeLabel": "Zakres Głośności (LU)",
+        "loudnessRangeHelp": "Maksymalna zmienność głośności w klipie (0-20 LU). Niższe wartości tworzą bardziej spójną głośność, ale mogą zmniejszyć dynamikę.",
+        "truePeakLabel": "Limit True Peak (dBTP)",
+        "truePeakHelp": "Maksymalny poziom true peak, aby zapobiec cyfrowej kompresji (-10 do 0 dBTP). -2 dBTP zapewnia bezpieczną rezerwę dla większości systemów odtwarzania.",
+        "noteTitle": "Standard EBU R128",
+        "noteDescription": "Normalizacja audio przestrzega standardu nadawczego EBU R128, zapewniając spójne poziomy odtwarzania na różnych urządzeniach i zapobiegając kompresji."
       },
       "audioClipRetention": {
         "title": "Retencja Klipów Audio",
