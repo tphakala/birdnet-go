@@ -157,7 +157,7 @@ Performance Optimizations:
   // Shared styles for menu items - inspired by modern sidebar designs
   const menuItemBase =
     'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 w-full text-left';
-  const menuItemDefault = 'text-base-content opacity-70 hover:opacity-100 hover:menu-hover';
+  const menuItemDefault = 'text-base-content/80 hover:text-base-content hover:menu-hover';
   const menuItemActive = 'menu-item-active';
 </script>
 
@@ -201,8 +201,8 @@ Performance Optimizations:
             onclick={() => (analyticsExpanded = !analyticsExpanded)}
             class={cn(
               menuItemBase,
-              routeCache.analytics ? 'text-primary' : 'text-base-content opacity-70',
-              'hover:opacity-100 hover:menu-hover'
+              routeCache.analytics ? 'text-primary' : 'text-base-content/80',
+              'hover:text-base-content hover:menu-hover'
             )}
             aria-expanded={analyticsExpanded}
           >
@@ -216,14 +216,17 @@ Performance Optimizations:
           </button>
 
           {#if analyticsExpanded}
-            <div class="ml-4 pl-4 border-l-2 border-primary mt-1 flex flex-col gap-0.5" style="border-color: color-mix(in oklch, var(--color-primary) 30%, transparent)">
+            <div
+              class="ml-4 pl-4 border-l-2 border-primary mt-1 flex flex-col gap-0.5"
+              style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
+            >
               <button
                 onclick={() => navigate(navigationUrls.analytics)}
                 class={cn(
                   'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
                   routeCache.analyticsExact
                     ? 'menu-subitem-active'
-                    : 'text-base-content opacity-70 hover:opacity-100 hover:menu-hover'
+                    : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                 )}
               >
                 {t('analytics.title')}
@@ -234,7 +237,7 @@ Performance Optimizations:
                   'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
                   routeCache.analyticsSpecies
                     ? 'menu-subitem-active'
-                    : 'text-base-content opacity-70 hover:opacity-100 hover:menu-hover'
+                    : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                 )}
               >
                 {t('analytics.species.title')}
@@ -284,8 +287,8 @@ Performance Optimizations:
               onclick={() => (settingsExpanded = !settingsExpanded)}
               class={cn(
                 menuItemBase,
-                routeCache.settings ? 'text-primary' : 'text-base-content opacity-70',
-                'hover:opacity-100 hover:menu-hover'
+                routeCache.settings ? 'text-primary' : 'text-base-content/80',
+                'hover:text-base-content hover:menu-hover'
               )}
               aria-expanded={settingsExpanded}
             >
@@ -299,14 +302,17 @@ Performance Optimizations:
             </button>
 
             {#if settingsExpanded}
-              <div class="ml-4 pl-4 border-l-2 mt-1 flex flex-col gap-0.5" style="border-color: color-mix(in oklch, var(--color-primary) 30%, transparent)">
+              <div
+                class="ml-4 pl-4 border-l-2 mt-1 flex flex-col gap-0.5"
+                style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
+              >
                 <button
                   onclick={() => navigate(navigationUrls.settingsMain)}
                   class={cn(
                     'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
                     routeCache.settingsMain
                       ? 'menu-subitem-active'
-                      : 'text-base-content opacity-70 hover:opacity-100 hover:menu-hover'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                   )}
                 >
                   {t('settings.sections.node')}
@@ -317,7 +323,7 @@ Performance Optimizations:
                     'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
                     routeCache.settingsAudio
                       ? 'menu-subitem-active'
-                      : 'text-base-content opacity-70 hover:opacity-100 hover:menu-hover'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                   )}
                 >
                   {t('settings.sections.audio')}
@@ -328,7 +334,7 @@ Performance Optimizations:
                     'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
                     routeCache.settingsFilters
                       ? 'menu-subitem-active'
-                      : 'text-base-content opacity-70 hover:opacity-100 hover:menu-hover'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                   )}
                 >
                   {t('settings.sections.filters')}
@@ -339,7 +345,7 @@ Performance Optimizations:
                     'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
                     routeCache.settingsIntegrations
                       ? 'menu-subitem-active'
-                      : 'text-base-content opacity-70 hover:opacity-100 hover:menu-hover'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                   )}
                 >
                   {t('settings.sections.integration')}
@@ -350,7 +356,7 @@ Performance Optimizations:
                     'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
                     routeCache.settingsSecurity
                       ? 'menu-subitem-active'
-                      : 'text-base-content opacity-70 hover:opacity-100 hover:menu-hover'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                   )}
                 >
                   {t('settings.sections.security')}
@@ -361,7 +367,7 @@ Performance Optimizations:
                     'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
                     routeCache.settingsSpecies
                       ? 'menu-subitem-active'
-                      : 'text-base-content opacity-70 hover:opacity-100 hover:menu-hover'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                   )}
                 >
                   {t('settings.sections.species')}
@@ -372,7 +378,7 @@ Performance Optimizations:
                     'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
                     routeCache.settingsNotifications
                       ? 'menu-subitem-active'
-                      : 'text-base-content opacity-70 hover:opacity-100 hover:menu-hover'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                   )}
                 >
                   {t('settings.sections.notifications')}
@@ -383,7 +389,7 @@ Performance Optimizations:
                     'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
                     routeCache.settingsSupport
                       ? 'menu-subitem-active'
-                      : 'text-base-content opacity-70 hover:opacity-100 hover:menu-hover'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
                   )}
                 >
                   {t('settings.sections.support')}
@@ -401,7 +407,7 @@ Performance Optimizations:
         {#if accessAllowed}
           <button
             onclick={handleLogout}
-            class="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-base-content/80 hover:text-base-content hover:bg-base-content/5 transition-colors duration-150"
+            class="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-base-content/90 hover:text-base-content hover:bg-base-content/5 transition-colors duration-150"
             aria-label={t('auth.logout')}
           >
             <LogOut class="size-4" />
@@ -425,7 +431,7 @@ Performance Optimizations:
           href="https://github.com/tphakala/birdnet-go"
           target="_blank"
           rel="noopener noreferrer"
-          class="text-xs text-base-content/50 hover:text-base-content/70 transition-colors duration-150"
+          class="text-xs text-base-content/60 hover:text-base-content/80 transition-colors duration-150"
           aria-label="View BirdNET-Go repository on GitHub (opens in new window)"
         >
           {version}

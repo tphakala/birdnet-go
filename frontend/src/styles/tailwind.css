@@ -3,7 +3,7 @@
 
 @import 'tailwindcss';
 
-/* Custom breakpoints */
+/* Custom breakpoints and fonts */
 @theme {
   --breakpoint-*: initial;
   --breakpoint-xs: 400px;
@@ -12,6 +12,11 @@
   --breakpoint-lg: 1024px;
   --breakpoint-xl: 1280px;
   --breakpoint-2xl: 1536px;
+
+  /* Font family */
+  --font-sans:
+    'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
 /* ============================================
@@ -158,6 +163,23 @@
    ============================================ */
 
 @layer base {
+  /* Inter Variable Font */
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url('/fonts/Inter-Variable.woff2') format('woff2');
+  }
+
+  @font-face {
+    font-family: 'Inter';
+    font-style: italic;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url('/fonts/Inter-Variable-Italic.woff2') format('woff2');
+  }
+
   *,
   ::after,
   ::before,
@@ -169,6 +191,7 @@
   body {
     background-color: var(--color-base-200);
     color: var(--color-base-content);
+    font-family: var(--font-sans);
   }
 }
 
@@ -1101,6 +1124,10 @@
 
   .alert-warning {
     background-color: color-mix(in srgb, var(--color-warning) 15%, transparent);
+    color: #92400e; /* amber-800 for better contrast */
+  }
+
+  [data-theme='dark'] .alert-warning {
     color: var(--color-warning);
   }
 
@@ -1491,6 +1518,7 @@
     opacity: 1;
     border-bottom-color: var(--color-primary);
     color: var(--color-primary);
+    background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
   }
 
   .tab:focus-visible {
