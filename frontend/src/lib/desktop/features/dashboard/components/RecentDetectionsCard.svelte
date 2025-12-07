@@ -273,11 +273,11 @@
         </div>
 
         <!-- Detection Rows -->
-        <div class="divide-y divide-base-200">
+        <div>
           {#each data.slice(0, selectedLimit) as detection (detection.id)}
             {@const isNew = ENABLE_NEW_DETECTION_ANIMATIONS && newDetectionIds.has(detection.id)}
             <div
-              class="detection-grid-dashboard detection-row"
+              class="detection-grid-dashboard detection-row border-b border-base-200 last:border-b-0"
               class:cursor-pointer={onRowClick}
               class:new-detection={isNew}
               role="button"
@@ -522,7 +522,6 @@
 
   /* Detection row theme-aware styling with hover effects */
   .detection-row {
-    border-bottom: 1px solid oklch(var(--bc) / 0.1);
     transition: background-color 0.15s ease-in-out;
   }
 
