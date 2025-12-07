@@ -789,15 +789,15 @@
           "title": "Filtr Zasięgu",
           "stationLocation": {
             "label": "Lokalizacja Stacji",
-            "helpText": "Lokalizacja stacji, używana do ograniczenia gatunków ptaków do tych prawdopodobnych w regionie."
+            "helpText": "Lokalizacja stacji, używana do danych pogodowych i ograniczenia gatunków ptaków do tych prawdopodobnych w regionie."
           },
           "latitude": {
             "label": "Szerokość Geograficzna",
-            "helpText": "Szerokość geograficzna lokalizacji stacji, używana do ograniczenia gatunków ptaków do tych prawdopodobnych w regionie."
+            "helpText": "Szerokość geograficzna stacji, używana do danych pogodowych i filtrowania gatunków ptaków według zakresu geograficznego."
           },
           "longitude": {
             "label": "Długość Geograficzna",
-            "helpText": "Długość geograficzna lokalizacji stacji, używana do ograniczenia gatunków ptaków do tych prawdopodobnych w regionie."
+            "helpText": "Długość geograficzna stacji, używana do danych pogodowych i filtrowania gatunków ptaków według zakresu geograficznego."
           },
           "model": {
             "label": "Model Filtra Zasięgu",

@@ -27,7 +27,6 @@
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
-  import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import MultiStageOperation from '$lib/desktop/components/ui/MultiStageOperation.svelte';
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
@@ -38,7 +37,7 @@
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import { t } from '$lib/i18n';
-  import { Bird, Radio, Activity, CloudSun } from '@lucide/svelte';
+  import { Bird, Radio, Activity } from '@lucide/svelte';
   import {
     integrationSettings,
     realtimeSettings,
@@ -46,13 +45,11 @@
     settingsStore,
     type MQTTSettings,
     type SettingsFormData,
-    type WeatherSettings,
   } from '$lib/stores/settings';
   import { TriangleAlert, Info } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import { wundergroundDefaults, weatherDefaults } from '$lib/utils/weatherDefaults';
 
   const logger = loggers.settings;
 
@@ -94,7 +91,6 @@
           path: '/metrics',
         },
       },
-      weather: weatherDefaults,
     }
   );
 
@@ -123,22 +119,13 @@
     )
   );
 
-  let weatherHasChanges = $derived(
-    hasSettingsChanged(
-      (store.originalData as SettingsFormData)?.realtime?.weather,
-      (store.formData as SettingsFormData)?.realtime?.weather
-    )
-  );
-
   // Test states for multi-stage operations
   let testStates = $state<{
     birdweather: { stages: Stage[]; isRunning: boolean; showSuccessNote: boolean };
     mqtt: { stages: Stage[]; isRunning: boolean; showSuccessNote: boolean };
-    weather: { stages: Stage[]; isRunning: boolean; showSuccessNote: boolean };
   }>({
     birdweather: { stages: [], isRunning: false, showSuccessNote: false },
     mqtt: { stages: [], isRunning: false, showSuccessNote: false },
-    weather: { stages: [], isRunning: false, showSuccessNote: false },
   });
 
   // FFmpeg availability check
@@ -169,13 +156,6 @@
       icon: Activity,
       content: prometheusTabContent,
       hasChanges: observabilityHasChanges,
-    },
-    {
-      id: 'weather',
-      label: t('settings.integration.weather.title'),
-      icon: CloudSun,
-      content: weatherTabContent,
-      hasChanges: weatherHasChanges,
     },
   ]);
 
@@ -263,28 +243,6 @@
         enabled: $realtimeSettings?.telemetry?.enabled || false,
         listen,
       },
-    });
-  }
-
-  // Weather update handlers
-  function updateWeatherProvider(provider: string) {
-    settingsActions.updateSection('realtime', {
-      weather: {
-        ...settings.weather!,
-        provider: provider as 'none' | 'yrno' | 'openweather' | 'wunderground',
-      },
-    });
-  }
-
-  function updateWeatherApiKey(apiKey: string) {
-    settingsActions.updateSection('realtime', {
-      weather: { ...settings.weather!, openWeather: { ...settings.weather!.openWeather, apiKey } },
-    });
-  }
-
-  function updateWeatherUnits(units: string) {
-    settingsActions.updateSection('realtime', {
-      weather: { ...settings.weather!, openWeather: { ...settings.weather!.openWeather, units } },
     });
   }
 
@@ -701,145 +659,6 @@
       }, 30000);
     }
   }
-
-  async function testWeather() {
-    testStates.weather.isRunning = true;
-    testStates.weather.stages = [];
-
-    try {
-      // Get current form values (unsaved changes) instead of saved settings
-      const currentWeather = store.formData?.realtime?.weather || settings.weather!;
-
-      // Prepare test payload
-      const testPayload = {
-        provider: currentWeather.provider || 'none',
-        pollInterval: currentWeather.pollInterval || 60,
-        debug: currentWeather.debug || false,
-        openWeather: {
-          apiKey: currentWeather.openWeather?.apiKey || '',
-          endpoint: currentWeather.openWeather?.endpoint || '',
-          units: currentWeather.openWeather?.units || 'metric',
-          language: currentWeather.openWeather?.language || 'en',
-        },
-        wunderground: {
-          apiKey: currentWeather.wunderground?.apiKey ?? '',
-          stationId: currentWeather.wunderground?.stationId ?? '',
-          endpoint: currentWeather.wunderground?.endpoint ?? '',
-          units: currentWeather.wunderground?.units ?? 'm',
-        },
-      };
-
-      // Make request to the real API with CSRF token
-      const headers = new Headers({
-        'Content-Type': 'application/json',
-      });
-
-      if (csrfToken) {
-        headers.set('X-CSRF-Token', csrfToken);
-      }
-
-      const response = await fetch('/api/v2/integrations/weather/test', {
-        method: 'POST',
-        headers,
-        credentials: 'same-origin',
-        body: JSON.stringify(testPayload),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      // Read the streaming response
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-
-      if (!reader) {
-        throw new Error('Failed to read response stream');
-      }
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        // Parse each line as JSON
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n').filter(line => line.trim());
-
-        for (const line of lines) {
-          try {
-            const stageResult = JSON.parse(line);
-
-            // Find existing stage or create new one
-            let existingIndex = testStates.weather.stages.findIndex(s => s.id === stageResult.id);
-            if (existingIndex === -1) {
-              // Add new stage
-              testStates.weather.stages.push({
-                id: stageResult.id,
-                title: stageResult.title,
-                status: stageResult.status,
-                message: stageResult.message,
-                error: stageResult.error,
-              });
-            } else {
-              // Update existing stage safely
-              const existingStage = safeArrayAccess(testStates.weather.stages, existingIndex);
-              if (
-                existingStage &&
-                existingIndex >= 0 &&
-                existingIndex < testStates.weather.stages.length
-              ) {
-                testStates.weather.stages.splice(existingIndex, 1, {
-                  ...existingStage,
-                  status: stageResult.status,
-                  message: stageResult.message,
-                  error: stageResult.error,
-                });
-              }
-            }
-          } catch (parseError) {
-            logger.error('Failed to parse stage result:', parseError, line);
-          }
-        }
-      }
-    } catch (error) {
-      logger.error('Weather test failed:', error);
-
-      // Add error stage if no stages exist
-      if (testStates.weather.stages.length === 0) {
-        testStates.weather.stages.push({
-          id: 'error',
-          title: 'Connection Error',
-          status: 'error',
-          error: error instanceof Error ? error.message : 'Unknown error occurred',
-        });
-      } else {
-        // Mark current stage as failed
-        const lastIndex = testStates.weather.stages.length - 1;
-        const lastStage = safeArrayAccess(testStates.weather.stages, lastIndex);
-        if (lastStage && lastStage.status === 'in_progress') {
-          const updatedStage = {
-            ...lastStage,
-            status: 'error' as const,
-            error: error instanceof Error ? error.message : 'Unknown error occurred',
-          };
-          testStates.weather.stages.splice(lastIndex, 1, updatedStage);
-        }
-      }
-    } finally {
-      testStates.weather.isRunning = false;
-
-      // Check if all stages completed successfully and there are unsaved changes
-      const allStagesCompleted =
-        testStates.weather.stages.length > 0 &&
-        testStates.weather.stages.every(stage => stage.status === 'completed');
-      testStates.weather.showSuccessNote = allStagesCompleted && weatherHasChanges;
-
-      setTimeout(() => {
-        testStates.weather.stages = [];
-        testStates.weather.showSuccessNote = false;
-      }, 15000);
-    }
-  }
 </script>
 
 {#snippet birdweatherTabContent()}
@@ -1173,231 +992,6 @@
             </div>
           </div>
         </fieldset>
-      </div>
-    </SettingsSection>
-  </div>
-{/snippet}
-
-{#snippet weatherTabContent()}
-  <div class="space-y-6">
-    <!-- Weather Settings Card -->
-    <SettingsSection
-      title={t('settings.integration.weather.title')}
-      description={t('settings.integration.weather.description')}
-      originalData={(store.originalData as SettingsFormData)?.realtime?.weather}
-      currentData={(store.formData as SettingsFormData)?.realtime?.weather}
-    >
-      <div class="space-y-4">
-        <SelectField
-          id="weather-provider"
-          value={settings.weather!.provider}
-          label={t('settings.integration.weather.provider.label')}
-          options={[
-            { value: 'none', label: t('settings.integration.weather.provider.options.none') },
-            { value: 'yrno', label: t('settings.integration.weather.provider.options.yrno') },
-            {
-              value: 'openweather',
-              label: t('settings.integration.weather.provider.options.openweather'),
-            },
-            {
-              value: 'wunderground',
-              label: t('settings.integration.weather.provider.options.wunderground'),
-            },
-          ]}
-          disabled={store.isLoading || store.isSaving}
-          onchange={updateWeatherProvider}
-        />
-
-        <!-- Provider-specific notes -->
-        {#if (settings.weather?.provider as WeatherSettings['provider']) === 'none'}
-          <SettingsNote>
-            <span>{t('settings.integration.weather.notes.none')}</span>
-          </SettingsNote>
-        {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'yrno'}
-          <SettingsNote>
-            <p>
-              {t('settings.integration.weather.notes.yrno.description')}
-            </p>
-            <p class="mt-2">
-              {@html t('settings.integration.weather.notes.yrno.freeService')}
-            </p>
-          </SettingsNote>
-        {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'openweather'}
-          <SettingsNote>
-            <span>{@html t('settings.integration.weather.notes.openweather')}</span>
-          </SettingsNote>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <PasswordField
-              label={t('settings.integration.weather.apiKey.label')}
-              value={settings.weather!.openWeather.apiKey || ''}
-              onUpdate={updateWeatherApiKey}
-              placeholder=""
-              helpText={t('settings.integration.weather.apiKey.helpText')}
-              disabled={store.isLoading || store.isSaving}
-              allowReveal={true}
-            />
-
-            <SelectField
-              id="weather-units"
-              value={settings.weather!.openWeather.units || 'metric'}
-              label={t('settings.integration.weather.units.label')}
-              options={[
-                {
-                  value: 'standard',
-                  label: t('settings.integration.weather.units.options.standard'),
-                },
-                { value: 'metric', label: t('settings.integration.weather.units.options.metric') },
-                {
-                  value: 'imperial',
-                  label: t('settings.integration.weather.units.options.imperial'),
-                },
-              ]}
-              disabled={store.isLoading || store.isSaving}
-              onchange={updateWeatherUnits}
-            />
-          </div>
-        {:else if (settings.weather?.provider as WeatherSettings['provider']) === 'wunderground'}
-          <SettingsNote>
-            <span>{@html t('settings.integration.weather.notes.wunderground')}</span>
-          </SettingsNote>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <PasswordField
-              label={t('settings.integration.weather.wunderground.apiKey.label')}
-              value={settings.weather?.wunderground?.apiKey ?? ''}
-              onUpdate={apiKey =>
-                settingsActions.updateSection('realtime', {
-                  weather: {
-                    ...settings.weather!,
-                    wunderground: {
-                      ...(settings.weather?.wunderground ?? wundergroundDefaults),
-                      apiKey,
-                    },
-                  },
-                })}
-              placeholder=""
-              helpText={t('settings.integration.weather.wunderground.apiKey.helpText')}
-              disabled={store.isLoading || store.isSaving}
-              allowReveal={true}
-            />
-
-            <TextInput
-              label={t('settings.integration.weather.wunderground.stationId.label')}
-              value={settings.weather?.wunderground?.stationId ?? ''}
-              onchange={stationId =>
-                settingsActions.updateSection('realtime', {
-                  weather: {
-                    ...settings.weather!,
-                    wunderground: {
-                      ...(settings.weather?.wunderground ?? wundergroundDefaults),
-                      stationId,
-                    },
-                  },
-                })}
-              placeholder=""
-              helpText={t('settings.integration.weather.wunderground.stationId.helpText')}
-              disabled={store.isLoading || store.isSaving}
-            />
-
-            <TextInput
-              label={t('settings.integration.weather.wunderground.endpoint.label')}
-              value={settings.weather?.wunderground?.endpoint ?? ''}
-              onchange={endpoint =>
-                settingsActions.updateSection('realtime', {
-                  weather: {
-                    ...settings.weather!,
-                    wunderground: {
-                      ...(settings.weather?.wunderground ?? wundergroundDefaults),
-                      endpoint,
-                    },
-                  },
-                })}
-              placeholder="https://api.weather.com/v2/pws/observations/current"
-              helpText={t('settings.integration.weather.wunderground.endpoint.helpText')}
-              disabled={store.isLoading || store.isSaving}
-            />
-
-            <SelectField
-              id="wunderground-units"
-              value={settings.weather?.wunderground?.units ?? 'm'}
-              label={t('settings.integration.weather.wunderground.units.label')}
-              options={[
-                { value: 'e', label: t('settings.integration.weather.units.options.imperial') },
-                { value: 'm', label: t('settings.integration.weather.units.options.metric') },
-                { value: 'h', label: t('settings.integration.weather.units.options.ukhybrid') },
-              ]}
-              disabled={store.isLoading || store.isSaving}
-              onchange={units =>
-                settingsActions.updateSection('realtime', {
-                  weather: {
-                    ...settings.weather!,
-                    wunderground: {
-                      ...(settings.weather?.wunderground ?? wundergroundDefaults),
-                      units: units as 'm' | 'e' | 'h',
-                    },
-                  },
-                })}
-            />
-          </div>
-        {/if}
-
-        {#if (settings.weather?.provider as WeatherSettings['provider']) !== 'none'}
-          <!-- Test Weather Provider -->
-          <div class="space-y-4">
-            <div class="flex items-center gap-3">
-              <SettingsButton
-                onclick={testWeather}
-                loading={testStates.weather.isRunning}
-                loadingText={t('settings.integration.weather.test.loading')}
-                disabled={(store.formData?.realtime?.weather?.provider ??
-                  settings.weather?.provider) === 'none' ||
-                  ((store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) ===
-                    'openweather' &&
-                    !(
-                      store.formData?.realtime?.weather?.openWeather?.apiKey ??
-                      settings.weather?.openWeather?.apiKey
-                    )) ||
-                  ((store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) ===
-                    'wunderground' &&
-                    (!(
-                      store.formData?.realtime?.weather?.wunderground?.apiKey ??
-                      settings.weather?.wunderground?.apiKey
-                    ) ||
-                      !(
-                        store.formData?.realtime?.weather?.wunderground?.stationId ??
-                        settings.weather?.wunderground?.stationId
-                      ))) ||
-                  testStates.weather.isRunning}
-              >
-                {t('settings.integration.weather.test.button')}
-              </SettingsButton>
-              <span class="text-sm text-base-content/70">
-                {#if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'none'}
-                  {t('settings.integration.weather.test.noProvider')}
-                {:else if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'openweather' && !(store.formData?.realtime?.weather?.openWeather?.apiKey ?? settings.weather?.openWeather?.apiKey)}
-                  {t('settings.integration.weather.test.apiKeyRequired')}
-                {:else if (store.formData?.realtime?.weather?.provider ?? settings.weather?.provider) === 'wunderground' && (!(store.formData?.realtime?.weather?.wunderground?.apiKey ?? settings.weather?.wunderground?.apiKey) || !(store.formData?.realtime?.weather?.wunderground?.stationId ?? settings.weather?.wunderground?.stationId))}
-                  {t('settings.integration.weather.test.apiKeyRequired')}
-                {:else if testStates.weather.isRunning}
-                  {t('settings.integration.weather.test.inProgress')}
-                {:else}
-                  {t('settings.integration.weather.test.description')}
-                {/if}
-              </span>
-            </div>
-
-            {#if testStates.weather.stages.length > 0}
-              <MultiStageOperation
-                stages={testStates.weather.stages}
-                variant="compact"
-                showProgress={false}
-              />
-            {/if}
-
-            <TestSuccessNote show={testStates.weather.showSuccessNote} />
-          </div>
-        {/if}
       </div>
     </SettingsSection>
   </div>

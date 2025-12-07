@@ -789,15 +789,15 @@
           "title": "Bereik Filter",
           "stationLocation": {
             "label": "Station Locatie",
-            "helpText": "Station locatie, gebruikt om vogelsoorten te beperken tot diegenen die waarschijnlijk voorkomen in de regio."
+            "helpText": "Station locatie, gebruikt voor weersgegevens en om vogelsoorten te beperken tot diegenen die waarschijnlijk voorkomen in de regio."
           },
           "latitude": {
             "label": "Breedtegraad",
-            "helpText": "Station locatie breedtegraad, gebruikt om vogelsoorten te beperken tot diegenen die waarschijnlijk voorkomen in de regio."
+            "helpText": "Station breedtegraad, gebruikt voor weersgegevens en om vogelsoorten naar bereik te filteren."
           },
           "longitude": {
             "label": "Lengtegraad",
-            "helpText": "Station locatie lengtegraad, gebruikt om vogelsoorten te beperken tot diegenen die waarschijnlijk voorkomen in de regio."
+            "helpText": "Station lengtegraad, gebruikt voor weersgegevens en om vogelsoorten naar bereik te filteren."
           },
           "model": {
             "label": "Bereik Filter Model",

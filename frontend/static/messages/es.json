@@ -789,15 +789,15 @@
           "title": "Filtro de rango",
           "stationLocation": {
             "label": "Ubicación de la estación",
-            "helpText": "Ubicación de la estación, utilizada para limitar las especies de aves a las probables en la región."
+            "helpText": "Ubicación de la estación, utilizada para obtener datos meteorológicos y limitar las especies de aves a las probables en la región."
           },
           "latitude": {
             "label": "Latitud",
-            "helpText": "Latitud de la ubicación de la estación, utilizada para limitar las especies de aves a las probables en la región."
+            "helpText": "Latitud de la ubicación de la estación, utilizada para obtener datos meteorológicos y filtrar especies por su rango de distribución."
           },
           "longitude": {
             "label": "Longitud",
-            "helpText": "Longitud de la ubicación de la estación, utilizada para limitar las especies de aves a las probables en la región."
+            "helpText": "Longitud de la ubicación de la estación, utilizada para obtener datos meteorológicos y filtrar especies por su rango de distribución."
           },
           "model": {
             "label": "Modelo de filtro de rango",

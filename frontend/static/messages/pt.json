@@ -789,15 +789,15 @@
           "title": "Filtro de alcance",
           "stationLocation": {
             "label": "Localização da estação",
-            "helpText": "Localização da estação, usada para limitar as espécies de pássaros àquelas prováveis na região."
+            "helpText": "Localização da estação, usada para dados meteorológicos e para limitar as espécies de pássaros àquelas prováveis na região."
           },
           "latitude": {
             "label": "Latitude",
-            "helpText": "Latitude da localização da estação, usada para limitar as espécies de pássaros àquelas prováveis na região."
+            "helpText": "Latitude da localização da estação, usada para dados meteorológicos e filtragem de alcance de espécies."
           },
           "longitude": {
             "label": "Longitude",
-            "helpText": "Longitude da localização da estação, usada para limitar as espécies de pássaros àquelas prováveis na região."
+            "helpText": "Longitude da localização da estação, usada para dados meteorológicos e filtragem de alcance de espécies."
           },
           "model": {
             "label": "Modelo de filtro de alcance",

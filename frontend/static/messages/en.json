@@ -804,15 +804,15 @@
           "description": "Limit detection to species probable in your geographic region",
           "stationLocation": {
             "label": "Station Location",
-            "helpText": "Station location, used to limit bird species to those probable in the region."
+            "helpText": "Station location, used for weather data and to limit bird species to those probable in the region."
           },
           "latitude": {
             "label": "Latitude",
-            "helpText": "Station location latitude, used to limit bird species to those probable in the region."
+            "helpText": "Station latitude, used for weather data and species range filtering."
           },
           "longitude": {
             "label": "Longitude",
-            "helpText": "Station location longitude, used to limit bird species to those probable in the region."
+            "helpText": "Station longitude, used for weather data and species range filtering."
           },
           "model": {
             "label": "Range Filter Model",

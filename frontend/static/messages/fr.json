@@ -789,15 +789,15 @@
           "title": "Filtre de portée",
           "stationLocation": {
             "label": "Emplacement de la station",
-            "helpText": "Emplacement de la station, utilisé pour limiter les espèces d'oiseaux à celles probables dans la région."
+            "helpText": "Emplacement de la station, utilisé pour les données météorologiques et pour limiter les espèces d'oiseaux à celles probables dans la région."
           },
           "latitude": {
             "label": "Latitude",
-            "helpText": "Latitude de l'emplacement de la station, utilisée pour limiter les espèces d'oiseaux à celles probables dans la région."
+            "helpText": "Latitude de la station, utilisée pour les données météorologiques et le filtrage de la portée des espèces."
           },
           "longitude": {
             "label": "Longitude",
-            "helpText": "Longitude de l'emplacement de la station, utilisée pour limiter les espèces d'oiseaux à celles probables dans la région."
+            "helpText": "Longitude de la station, utilisée pour les données météorologiques et le filtrage de la portée des espèces."
           },
           "model": {
             "label": "Modèle de filtre de portée",

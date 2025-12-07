@@ -1,14 +1,11 @@
 <!--
   Support Settings Page Component
 
-  Purpose: Configure error tracking, telemetry, and diagnostic support features for
-  BirdNET-Go including Sentry integration and support dump generation.
+  Purpose: Support dump generation and diagnostic features for BirdNET-Go.
+  Note: Telemetry settings have been moved to the Main Settings General tab.
 
   Features:
-  - Tabbed interface with Telemetry and Diagnostics tabs
-  - Error tracking and telemetry configuration with Sentry
   - Support dump generation with customizable options
-  - Privacy-focused telemetry with clear data usage information
   - Upload to Sentry or download locally options
   - User message inclusion for context
 
@@ -18,7 +15,6 @@
   - Removed page-level loading spinner to prevent flickering
   - Cached CSRF token to avoid repeated DOM queries
   - API state management for system ID loading
-  - Reactive change detection with $derived
   - Progress tracking for support dump generation
 
   @component
@@ -29,13 +25,6 @@
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import {
-    settingsStore,
-    settingsActions,
-    supportSettings,
-    type SupportSettings,
-  } from '$lib/stores/settings';
-  import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import {
     Check,
     Globe,
     ShieldCheck,
@@ -44,7 +33,6 @@
     TriangleAlert,
     XCircle,
     CircleCheck,
-    Activity,
     Wrench,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
@@ -58,43 +46,11 @@
       ''
   );
 
-  // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
-  let settings = $derived(
-    $supportSettings ||
-      ({
-        sentry: {
-          enabled: false,
-          dsn: '',
-          environment: 'production',
-          includePrivateInfo: false,
-        },
-        telemetry: {
-          enabled: true,
-          includeSystemInfo: true,
-          includeAudioInfo: false,
-        },
-      } as SupportSettings)
-  );
-
-  let store = $derived($settingsStore);
-
-  // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
-  let sentryHasChanges = $derived(
-    hasSettingsChanged(store.originalData.sentry, store.formData.sentry)
-  );
-
   // Tab state
-  let activeTab = $state('telemetry');
+  let activeTab = $state('diagnostics');
 
-  // Tab definitions
+  // Tab definitions - only Diagnostics tab (Telemetry moved to Main Settings)
   let tabs = $derived<TabDefinition[]>([
-    {
-      id: 'telemetry',
-      label: t('settings.support.sections.telemetry.title'),
-      icon: Activity,
-      content: telemetryTabContent,
-      hasChanges: sentryHasChanges,
-    },
     {
       id: 'diagnostics',
       label: t('settings.support.sections.diagnostics.title'),
@@ -170,14 +126,6 @@
     } finally {
       systemIdState.loading = false;
     }
-  }
-
-  // Sentry update handlers
-  function updateSentryEnabled(enabled: boolean) {
-    settingsActions.updateSection('sentry', {
-      ...settings.sentry!,
-      enabled,
-    });
   }
 
   // Support dump generation
@@ -307,42 +255,6 @@
     }
   }
 </script>
-
-{#snippet telemetryTabContent()}
-  <div class="space-y-6">
-    <!-- Error Tracking & Telemetry Section -->
-    <SettingsSection
-      title={t('settings.support.sections.telemetry.title')}
-      description={t('settings.support.sections.telemetry.description')}
-      defaultOpen={true}
-      hasChanges={sentryHasChanges}
-    >
-      <div class="space-y-4">
-        <!-- Privacy Notice -->
-        <div class="mt-4 p-4 bg-base-200 rounded-lg shadow-xs">
-          <div>
-            <h3 class="font-bold">{t('settings.support.telemetry.privacyNotice')}</h3>
-            <div class="text-sm mt-1">
-              <ul class="list-disc list-inside mt-2 space-y-1">
-                <li>{t('settings.support.telemetry.privacyPoints.noPersonalData')}</li>
-                <li>{t('settings.support.telemetry.privacyPoints.anonymousData')}</li>
-                <li>{t('settings.support.telemetry.privacyPoints.helpImprove')}</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        <!-- Enable Error Tracking -->
-        <Checkbox
-          checked={settings.sentry!.enabled}
-          label={t('settings.support.telemetry.enableTracking')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={enabled => updateSentryEnabled(enabled)}
-        />
-      </div>
-    </SettingsSection>
-  </div>
-{/snippet}
 
 {#snippet diagnosticsTabContent()}
   <div class="space-y-6">

@@ -789,15 +789,15 @@
           "title": "Reichweitenfilter",
           "stationLocation": {
             "label": "Stationsstandort",
-            "helpText": "Stationsstandort, verwendet um Vogelarten auf die in der Region wahrscheinlichen zu begrenzen."
+            "helpText": "Stationsstandort, wird zur Abrufung von Wetterdaten und zur Begrenzung von Vogelarten auf die in der Region wahrscheinlichen verwendet."
           },
           "latitude": {
             "label": "Breitengrad",
-            "helpText": "Breitengrad des Stationsstandorts, verwendet um Vogelarten auf die in der Region wahrscheinlichen zu begrenzen."
+            "helpText": "Breitengrad des Stationsstandorts, wird für Wetterdaten und zur Filterung von Vogelarten nach Verbreitungsgebiet verwendet."
           },
           "longitude": {
             "label": "Längengrad",
-            "helpText": "Längengrad des Stationsstandorts, verwendet um Vogelarten auf die in der Region wahrscheinlichen zu begrenzen."
+            "helpText": "Längengrad des Stationsstandorts, wird für Wetterdaten und zur Filterung von Vogelarten nach Verbreitungsgebiet verwendet."
           },
           "model": {
             "label": "Reichweitenfilter-Modell",

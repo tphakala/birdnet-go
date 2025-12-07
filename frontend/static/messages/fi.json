@@ -789,15 +789,15 @@
           "title": "Aluesuodatin",
           "stationLocation": {
             "label": "Aseman sijainti",
-            "helpText": "Aseman sijainti, käytetään rajoittamaan lintulajit alueella todennäköisiin."
+            "helpText": "Aseman sijainti, jota käytetään säätietoihin ja lintulajien rajoittamiseen alueella todennäköisiin lajeihin."
           },
           "latitude": {
             "label": "Leveysaste",
-            "helpText": "Aseman sijainnin leveysaste, käytetään rajoittamaan lintulajit alueella todennäköisiin."
+            "helpText": "Aseman sijainnin leveysaste, jota käytetään säätietoihin ja lintulajien aluesuodatukseen."
           },
           "longitude": {
             "label": "Pituusaste",
-            "helpText": "Aseman sijainnin pituusaste, käytetään rajoittamaan lintulajit alueella todennäköisiin."
+            "helpText": "Aseman sijainnin pituusaste, jota käytetään säätietoihin ja lintulajien aluesuodatukseen."
           },
           "model": {
             "label": "Aluesuodatinmalli",
