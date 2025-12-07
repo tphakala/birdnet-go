@@ -18,7 +18,7 @@
   @component
 -->
 <script lang="ts">
-  import { Pencil, Trash2, Check, X, AlertCircle, Radio } from '@lucide/svelte';
+  import { Settings, Trash2, Check, X, AlertCircle, Radio } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
@@ -209,17 +209,17 @@
         <p class="text-sm font-medium mb-3">{t('settings.audio.streams.deleteConfirm')}</p>
         <div class="flex gap-2 justify-center">
           <button type="button" class="btn btn-sm btn-ghost" onclick={cancelDelete}>
-            {t('common.actions.cancel')}
+            {t('common.cancel')}
           </button>
           <button type="button" class="btn btn-sm btn-error" onclick={executeDelete}>
-            {t('common.actions.delete')}
+            {t('common.delete')}
           </button>
         </div>
       </div>
     </div>
   {/if}
 
-  <div class="p-4">
+  <div class="p-3">
     {#if isEditing}
       <!-- Edit Mode -->
       <div class="space-y-4">
@@ -285,7 +285,7 @@
         <div class="flex justify-end gap-2 pt-2 border-t border-base-300">
           <button type="button" class="btn btn-sm btn-ghost gap-1.5" onclick={cancelEdit}>
             <X class="size-4" />
-            {t('common.actions.cancel')}
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -294,29 +294,29 @@
             disabled={!editUrl.trim()}
           >
             <Check class="size-4" />
-            {t('common.actions.save')}
+            {t('common.save')}
           </button>
         </div>
       </div>
     {:else}
-      <!-- View Mode -->
-      <div class="flex items-start gap-4">
+      <!-- View Mode - Compact Layout -->
+      <div class="flex items-center gap-3">
         <!-- Stream Icon -->
         <div
           class={cn(
-            'flex-shrink-0 size-12 rounded-xl flex items-center justify-center border',
+            'flex-shrink-0 size-10 rounded-lg flex items-center justify-center border',
             status === 'error' ? 'bg-error/20 text-error border-error/30' : iconColor.bg,
             status === 'error' ? '' : iconColor.text,
             status === 'error' ? '' : iconColor.border
           )}
         >
-          <Radio class="size-6" />
+          <Radio class="size-5" />
         </div>
 
         <!-- Stream Info -->
         <div class="flex-1 min-w-0">
-          <!-- Stream Name and Status Row -->
-          <div class="flex items-center gap-2 mb-1">
+          <!-- Stream Name, Status, and URL on same line where possible -->
+          <div class="flex items-center gap-2 flex-wrap">
             <span class="text-sm font-semibold text-base-content">
               {t('settings.audio.streams.streamLabel')}
               {index + 1}
@@ -324,57 +324,53 @@
             <StatusPill
               variant={getStatusVariant(status)}
               label={getStatusText(status)}
-              size="xs"
+              size="sm"
               pulse={status === 'connecting'}
             />
           </div>
 
-          <!-- URL -->
-          <p class="font-mono text-sm text-base-content/80 break-all leading-relaxed">
+          <!-- URL and Error Message -->
+          <p class="font-mono text-xs text-base-content/70 break-all leading-snug mt-0.5">
             {displayUrl}
           </p>
-
-          <!-- Error Message (if present) -->
           {#if status === 'error' && statusMessage}
-            <p class="text-xs text-error mt-1.5">{statusMessage}</p>
+            <p class="text-xs text-error mt-1">{statusMessage}</p>
           {/if}
-
-          <!-- Stream Settings Tags -->
-          <div class="flex items-center gap-2 mt-2">
-            <span class="badge badge-sm badge-outline font-medium">
-              {streamType.toUpperCase()}
-            </span>
-            <span class="badge badge-sm badge-outline font-medium">
-              {transport.toUpperCase()}
-            </span>
-            {#if statusMessage && status !== 'error'}
-              <span class="text-xs text-base-content/60 truncate" title={statusMessage}>
-                {statusMessage}
-              </span>
-            {/if}
-          </div>
         </div>
 
-        <!-- Action Buttons - Always Visible for Accessibility -->
-        <div class="flex-shrink-0 flex gap-1">
-          <button
-            type="button"
-            class="btn btn-sm btn-ghost btn-square"
-            onclick={startEdit}
-            {disabled}
-            aria-label={t('common.actions.edit')}
-          >
-            <Pencil class="size-4" />
-          </button>
-          <button
-            type="button"
-            class="btn btn-sm btn-ghost btn-square text-error hover:bg-error/10"
-            onclick={confirmDelete}
-            {disabled}
-            aria-label={t('common.actions.delete')}
-          >
-            <Trash2 class="size-4" />
-          </button>
+        <!-- Right Side: Protocol Tags + Actions -->
+        <div class="flex-shrink-0 flex items-center gap-2">
+          <!-- Colored Protocol Tags -->
+          <div class="hidden sm:flex items-center gap-1.5">
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-info/15 text-info">
+              {streamType.toUpperCase()}
+            </span>
+            <span class="px-2 py-0.5 rounded text-xs font-semibold bg-secondary/15 text-secondary">
+              {transport.toUpperCase()}
+            </span>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex items-center gap-0.5">
+            <button
+              type="button"
+              class="btn btn-sm btn-ghost btn-square"
+              onclick={startEdit}
+              {disabled}
+              aria-label={t('common.edit')}
+            >
+              <Settings class="size-4" />
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm btn-ghost btn-square"
+              onclick={confirmDelete}
+              {disabled}
+              aria-label={t('common.delete')}
+            >
+              <Trash2 class="size-4" />
+            </button>
+          </div>
         </div>
       </div>
     {/if}

@@ -504,7 +504,7 @@
                 urlError = null;
               }}
             >
-              {t('common.actions.cancel')}
+              {t('common.cancel')}
             </button>
             <button
               type="button"

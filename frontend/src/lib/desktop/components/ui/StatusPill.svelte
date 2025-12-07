@@ -68,8 +68,8 @@
   // Size styles for the pill
   const sizeStyles: Record<StatusSize, string> = {
     xs: 'text-[10px] px-1.5 py-0.5 gap-1',
-    sm: 'text-xs px-2 py-0.5 gap-1.5',
-    md: 'text-sm px-2.5 py-1 gap-2',
+    sm: 'text-xs px-2 py-1 gap-1.5',
+    md: 'text-sm px-2.5 py-1.5 gap-2',
   };
 
   // Dot sizes
