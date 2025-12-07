@@ -122,11 +122,11 @@
   --color-neutral-hover: #e5e7eb;
   --color-neutral-content: #1f2937;
 
-  /* Base/Surface colors */
-  --color-base-100: #1f2937;
-  --color-base-200: #111827;
-  --color-base-300: #0f172a;
-  --color-base-content: #d1d5db;
+  /* Base/Surface colors - matching Birdsong mockup dark theme */
+  --color-base-100: #0f172a; /* slate-900 - cards/panels */
+  --color-base-200: #020617; /* slate-950 - page background (darkest) */
+  --color-base-300: #1e293b; /* slate-800 - nested sections, inputs */
+  --color-base-content: #f1f5f9; /* slate-100 - primary text */
 
   /* Status colors */
   --color-info: #0284c7;
@@ -142,13 +142,13 @@
   --color-error-hover: #ef4444;
   --color-error-content: #020617;
 
-  /* Surface colors */
-  --surface-100: #1f2937;
-  --surface-200: #262f3f;
-  --surface-300: #2d3748;
-  --surface-400: #374151;
-  --border-100: #334155;
-  --border-200: #475569;
+  /* Surface colors - matching mockup hierarchy */
+  --surface-100: #0f172a; /* slate-900 - card surfaces */
+  --surface-200: #1e293b; /* slate-800 - elevated/nested elements */
+  --surface-300: #334155; /* slate-700 - hover states */
+  --surface-400: #475569; /* slate-600 - active states */
+  --border-100: #1e293b; /* slate-800 - subtle borders */
+  --border-200: #334155; /* slate-700 - prominent borders */
   --hover-overlay: rgba(255, 255, 255, 0.05);
 
   /* Shadows (darker for dark mode) */
@@ -2388,5 +2388,14 @@
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border-width: 0;
+  }
+
+  /* Border color utilities using CSS variables */
+  .border-border-100 {
+    border-color: var(--border-100);
+  }
+
+  .border-border-200 {
+    border-color: var(--border-200);
   }
 }

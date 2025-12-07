@@ -387,10 +387,20 @@
   },
   "dashboard": {
     "dailySummary": {
-      "title": "Dagelijks overzicht",
+      "title": "Dagactiviteit",
+      "subtitle": "Detecties per uur",
       "columns": {
         "species": "Soorten",
         "detections": "Aantal herkend"
+      },
+      "daylight": {
+        "label": "Daglicht",
+        "sunrise": "Zonsopgang om {time}",
+        "sunset": "Zonsondergang om {time}"
+      },
+      "legend": {
+        "less": "Minder",
+        "more": "Meer"
       },
       "navigation": {
         "previousDay": "Vorige dag",

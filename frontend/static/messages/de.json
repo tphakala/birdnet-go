@@ -387,10 +387,20 @@
   },
   "dashboard": {
     "dailySummary": {
-      "title": "Tageszusammenfassung",
+      "title": "Tagesaktivität",
+      "subtitle": "Artnachweise pro Stunde",
       "columns": {
         "species": "Art",
         "detections": "Erkennungen"
+      },
+      "daylight": {
+        "label": "Tageslicht",
+        "sunrise": "Sonnenaufgang um {time}",
+        "sunset": "Sonnenuntergang um {time}"
+      },
+      "legend": {
+        "less": "Weniger",
+        "more": "Mehr"
       },
       "navigation": {
         "previousDay": "Vorheriger Tag",

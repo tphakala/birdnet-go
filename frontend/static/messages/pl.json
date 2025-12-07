@@ -387,10 +387,20 @@
   },
   "dashboard": {
     "dailySummary": {
-      "title": "Podsumowanie Dzienne",
+      "title": "Dzienna Aktywność",
+      "subtitle": "Wykrycia według godziny",
       "columns": {
         "species": "Gatunek",
         "detections": "Detekcje"
+      },
+      "daylight": {
+        "label": "Światło dzienne",
+        "sunrise": "Wschód słońca o {time}",
+        "sunset": "Zachód słońca o {time}"
+      },
+      "legend": {
+        "less": "Mniej",
+        "more": "Więcej"
       },
       "navigation": {
         "previousDay": "Poprzedni dzień",

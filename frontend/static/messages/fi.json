@@ -387,10 +387,20 @@
   },
   "dashboard": {
     "dailySummary": {
-      "title": "Päivittäinen yhteenveto",
+      "title": "Päivän aktiivisuus",
+      "subtitle": "Havaintoja tunneittain",
       "columns": {
         "species": "Laji",
         "detections": "Havainnot"
+      },
+      "daylight": {
+        "label": "Päivänvalo",
+        "sunrise": "Auringonnousu kello {time}",
+        "sunset": "Auringonlasku kello {time}"
+      },
+      "legend": {
+        "less": "Vähemmän",
+        "more": "Enemmän"
       },
       "navigation": {
         "previousDay": "Edellinen päivä",

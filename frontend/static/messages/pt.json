@@ -387,10 +387,20 @@
   },
   "dashboard": {
     "dailySummary": {
-      "title": "Resumo diário",
+      "title": "Atividade Diária",
+      "subtitle": "Detecções por hora",
       "columns": {
         "species": "Espécie",
         "detections": "Detecções"
+      },
+      "daylight": {
+        "label": "Luz do dia",
+        "sunrise": "Nascer do sol às {time}",
+        "sunset": "Pôr do sol às {time}"
+      },
+      "legend": {
+        "less": "Menos",
+        "more": "Mais"
       },
       "navigation": {
         "previousDay": "Dia anterior",
