@@ -425,6 +425,7 @@
     },
     "recentDetections": {
       "title": "Recent Detections",
+      "subtitle": "Latest identified species",
       "controls": {
         "show": "Show:",
         "refresh": "Refresh detections"

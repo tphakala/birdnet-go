@@ -222,13 +222,42 @@ Responsive Breakpoints:
     }
   };
 
-  // Check if an hour is during daylight
-  const isDaylightHour = (hour: number): boolean => {
-    if (!sunTimes) return false;
+  // Get daylight class for an hour based on its position relative to sunrise/sunset
+  // Returns: 'deep-night', 'night', 'pre-dawn', 'sunrise', 'early-day', 'mid-day', 'late-day', 'sunset', 'dusk', 'evening'
+  const getDaylightClass = (hour: number): string => {
+    if (!sunTimes) return 'night';
     const sunriseHour = getSunHourFromTime(sunTimes.sunrise);
     const sunsetHour = getSunHourFromTime(sunTimes.sunset);
-    if (sunriseHour === null || sunsetHour === null) return false;
-    return hour >= sunriseHour && hour < sunsetHour;
+    if (sunriseHour === null || sunsetHour === null) return 'night';
+
+    // Sunrise hour - special gradient
+    if (hour === sunriseHour) return 'sunrise';
+    // Sunset hour - special gradient
+    if (hour === sunsetHour) return 'sunset';
+
+    // Pre-dawn (1-2 hours before sunrise)
+    if (hour >= sunriseHour - 2 && hour < sunriseHour) return 'pre-dawn';
+
+    // Dusk (1-2 hours after sunset)
+    if (hour > sunsetHour && hour <= sunsetHour + 2) return 'dusk';
+
+    // Daylight hours
+    if (hour > sunriseHour && hour < sunsetHour) {
+      const midday = (sunriseHour + sunsetHour) / 2;
+      const distanceFromMidday = Math.abs(hour - midday);
+      const daylightDuration = (sunsetHour - sunriseHour) / 2;
+
+      // Categorize daylight intensity
+      if (distanceFromMidday < daylightDuration * 0.3) return 'mid-day';
+      if (distanceFromMidday < daylightDuration * 0.7) return 'day';
+      return hour < midday ? 'early-day' : 'late-day';
+    }
+
+    // Night hours - vary by distance from midnight
+    if (hour >= 0 && hour <= 4) return 'deep-night';
+    if (hour >= 21 && hour <= 23) return 'deep-night';
+    if (hour === 5 || hour === 20) return 'night';
+    return 'evening';
   };
 
   // Species badge color palette - 12 distinct, visually appealing colors
@@ -548,15 +577,19 @@ Responsive Breakpoints:
 {:else if loadingPhase === 'spinner'}
   <SkeletonDailySummary {showThumbnails} showSpinner={showDelayedIndicator} speciesCount={8} />
 {:else if loadingPhase === 'error'}
-  <section class="card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100">
-    <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
-      <div class="flex items-center justify-between mb-4">
+  <section
+    class="card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100 overflow-hidden"
+  >
+    <div class="px-6 py-4 border-b border-base-200">
+      <div class="flex items-center justify-between">
         <div class="flex flex-col">
-          <span class="card-title text-base sm:text-xl">{t('dashboard.dailySummary.title')}</span>
-          <span class="text-xs text-base-content/60">{t('dashboard.dailySummary.subtitle')}</span>
+          <h3 class="font-semibold">{t('dashboard.dailySummary.title')}</h3>
+          <p class="text-sm" style:color="#94a3b8">{t('dashboard.dailySummary.subtitle')}</p>
         </div>
         {@render navigationControls()}
       </div>
+    </div>
+    <div class="p-6">
       <div class="alert alert-error">
         <XCircle class="size-6" />
         <span>{error}</span>
@@ -564,19 +597,23 @@ Responsive Breakpoints:
     </div>
   </section>
 {:else if loadingPhase === 'loaded'}
-  <section class="card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100">
+  <section
+    class="card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100"
+  >
     <!-- Card Header with Date Navigation -->
-    <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
-      <div class="flex items-center justify-between mb-4">
+    <div class="px-6 py-4 border-b border-base-200">
+      <div class="flex items-center justify-between">
         <div class="flex flex-col">
-          <span class="card-title text-base sm:text-xl">{t('dashboard.dailySummary.title')}</span>
-          <span class="text-xs text-base-content/60">{t('dashboard.dailySummary.subtitle')}</span>
+          <h3 class="font-semibold">{t('dashboard.dailySummary.title')}</h3>
+          <p class="text-sm" style:color="#94a3b8">{t('dashboard.dailySummary.subtitle')}</p>
         </div>
         {@render navigationControls()}
       </div>
+    </div>
 
-      <!-- Table Content -->
-      <div class="overflow-x-auto">
+    <!-- Table Content -->
+    <div class="p-6 pt-8">
+      <div class="overflow-x-auto overflow-y-visible">
         <table class="table h-full w-full table-auto daily-summary-table">
           <thead class="sticky-header text-xs">
             <!-- Daylight visualization row (sub-header) -->
@@ -590,81 +627,123 @@ Responsive Breakpoints:
                   {@const hour = (column as HourlyColumn).hour}
                   {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
                   {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
+                  {@const daylightClass = getDaylightClass(hour)}
                   <th
-                    class="py-0 px-0 text-center daylight-cell hourly-daylight"
-                    class:daylight-day={isDaylightHour(hour)}
-                    class:daylight-night={!isDaylightHour(hour)}
+                    class="py-0 px-0 text-center daylight-cell hourly-daylight daylight-{daylightClass} relative overflow-visible"
+                    style:overflow="visible"
                   >
                     {#if hour === sunriseHour}
-                      <span
-                        class="daylight-sun-icon"
-                        title={t('dashboard.dailySummary.daylight.sunrise', {
-                          time: sunTimes
-                            ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                            : '',
-                        })}
+                      {@const sunriseTime = sunTimes
+                        ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : ''}
+                      <div
+                        class="sun-icon-wrapper"
+                        title={t('dashboard.dailySummary.daylight.sunrise', { time: sunriseTime })}
+                        data-time={sunriseTime}
                       >
-                        <Sunrise class="size-4" />
-                      </span>
+                        <Sunrise class="size-4 text-orange-700" />
+                        <span class="sun-tooltip sun-tooltip-sunrise">{sunriseTime}</span>
+                      </div>
                     {:else if hour === sunsetHour}
-                      <span
-                        class="daylight-sun-icon"
-                        title={t('dashboard.dailySummary.daylight.sunset', {
-                          time: sunTimes
-                            ? new Date(sunTimes.sunset).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                            : '',
-                        })}
+                      {@const sunsetTime = sunTimes
+                        ? new Date(sunTimes.sunset).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : ''}
+                      <div
+                        class="sun-icon-wrapper"
+                        title={t('dashboard.dailySummary.daylight.sunset', { time: sunsetTime })}
+                        data-time={sunsetTime}
                       >
-                        <Sunset class="size-4" />
-                      </span>
+                        <Sunset class="size-4 text-rose-700" />
+                        <span class="sun-tooltip sun-tooltip-sunset">{sunsetTime}</span>
+                      </div>
                     {/if}
                   </th>
                 {:else if column.type === 'bi-hourly'}
                   {@const hour = (column as BiHourlyColumn).hour}
                   {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
                   {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
-                  {@const hasDaylight = isDaylightHour(hour) || isDaylightHour(hour + 1)}
+                  {@const daylightClass = getDaylightClass(hour)}
                   <th
-                    class="py-0 px-0 text-center daylight-cell bi-hourly-daylight"
-                    class:daylight-day={hasDaylight}
-                    class:daylight-night={!hasDaylight}
+                    class="py-0 px-0 text-center daylight-cell bi-hourly-daylight daylight-{daylightClass} relative overflow-visible"
+                    style:overflow="visible"
                   >
                     {#if sunriseHour !== null && hour <= sunriseHour && sunriseHour < hour + 2}
-                      <span class="daylight-sun-icon">
-                        <Sunrise class="size-4" />
-                      </span>
+                      {@const sunriseTime = sunTimes
+                        ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : ''}
+                      <div
+                        class="sun-icon-wrapper"
+                        title={t('dashboard.dailySummary.daylight.sunrise', { time: sunriseTime })}
+                        data-time={sunriseTime}
+                      >
+                        <Sunrise class="size-4 text-orange-700" />
+                        <span class="sun-tooltip sun-tooltip-sunrise">{sunriseTime}</span>
+                      </div>
                     {:else if sunsetHour !== null && hour <= sunsetHour && sunsetHour < hour + 2}
-                      <span class="daylight-sun-icon">
-                        <Sunset class="size-4" />
-                      </span>
+                      {@const sunsetTime = sunTimes
+                        ? new Date(sunTimes.sunset).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : ''}
+                      <div
+                        class="sun-icon-wrapper"
+                        title={t('dashboard.dailySummary.daylight.sunset', { time: sunsetTime })}
+                        data-time={sunsetTime}
+                      >
+                        <Sunset class="size-4 text-rose-700" />
+                        <span class="sun-tooltip sun-tooltip-sunset">{sunsetTime}</span>
+                      </div>
                     {/if}
                   </th>
                 {:else if column.type === 'six-hourly'}
                   {@const hour = (column as SixHourlyColumn).hour}
                   {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
                   {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
-                  {@const hasDaylight = Array.from({ length: 6 }, (_, i) => hour + i).some(h =>
-                    isDaylightHour(h)
-                  )}
+                  {@const daylightClass = getDaylightClass(hour)}
                   <th
-                    class="py-0 px-0 text-center daylight-cell six-hourly-daylight"
-                    class:daylight-day={hasDaylight}
-                    class:daylight-night={!hasDaylight}
+                    class="py-0 px-0 text-center daylight-cell six-hourly-daylight daylight-{daylightClass} relative overflow-visible"
+                    style:overflow="visible"
                   >
                     {#if sunriseHour !== null && hour <= sunriseHour && sunriseHour < hour + 6}
-                      <span class="daylight-sun-icon">
-                        <Sunrise class="size-4" />
-                      </span>
+                      {@const sunriseTime = sunTimes
+                        ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : ''}
+                      <div
+                        class="sun-icon-wrapper"
+                        title={t('dashboard.dailySummary.daylight.sunrise', { time: sunriseTime })}
+                        data-time={sunriseTime}
+                      >
+                        <Sunrise class="size-4 text-orange-700" />
+                        <span class="sun-tooltip sun-tooltip-sunrise">{sunriseTime}</span>
+                      </div>
                     {:else if sunsetHour !== null && hour <= sunsetHour && sunsetHour < hour + 6}
-                      <span class="daylight-sun-icon">
-                        <Sunset class="size-4" />
-                      </span>
+                      {@const sunsetTime = sunTimes
+                        ? new Date(sunTimes.sunset).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : ''}
+                      <div
+                        class="sun-icon-wrapper"
+                        title={t('dashboard.dailySummary.daylight.sunset', { time: sunsetTime })}
+                        data-time={sunsetTime}
+                      >
+                        <Sunset class="size-4 text-rose-700" />
+                        <span class="sun-tooltip sun-tooltip-sunset">{sunsetTime}</span>
+                      </div>
                     {/if}
                   </th>
                 {/if}
@@ -946,218 +1025,17 @@ Responsive Breakpoints:
 
 <style>
   /* ========================================================================
-     Table & Heatmap Styles (moved from custom.css)
+     CSS Custom Properties for Daily Summary Grid
      ======================================================================== */
-
-  /* Performance optimization: CSS containment */
-  :global(.daily-summary-table) {
-    contain: layout style paint;
-    border-collapse: separate;
-    border-spacing: 3px 2px; /* horizontal 3px, vertical 2px for tighter rows */
-  }
-
-  /* Sticky header for tables */
-  :global(thead.sticky-header) {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    height: 2rem;
-    background-color: var(--fallback-b1, oklch(var(--b1) / 1));
-  }
-
-  /* Table cell display settings */
-  :global(.hour-header),
-  :global(.hour-data),
-  :global(.hourly-count) {
-    display: none;
-  }
-
-  :global(.bi-hourly-count),
-  :global(.six-hourly-count) {
-    display: none;
-  }
-
-  /* Empty cells should have visible background - contrasting with card */
-  :global(.heatmap-color-0) {
-    background-color: var(--color-base-300); /* Uses theme variable for consistency */
-    border-radius: 4px;
-  }
-
-  :global([data-theme='light'] .heatmap-color-0) {
-    background-color: #e2e8f0; /* slate-200 - subtle in light mode */
-  }
-
-  :global([data-theme='dark'] .heatmap-color-0) {
-    background-color: #1e293b; /* slate-800 - matches mockup empty cells */
-  }
-
-  /* Flex alignment for links inside hour cells */
-  :global(.hour-data a) {
-    height: 1.75rem;
-    min-height: 1.75rem;
-    max-height: 1.75rem;
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  /* Remove all row borders for clean grid look */
-  :global(.daily-summary-table tr) {
-    border-bottom: none !important;
-  }
-
-  :global(.daily-summary-table td),
-  :global(.daily-summary-table th) {
-    border-bottom: none !important;
-  }
-
-  /* Responsive table adjustments */
-  /* Extra large screens (≥1400px): show hourly view and total detections */
-  @media (min-width: 1400px) {
-    :global(.hour-header.hourly-count),
-    :global(.hour-data.hourly-count),
-    :global(.hourly-count) {
-      display: table-cell;
-    }
-
-    :global([class*='hidden'][class*='2xl:table-cell']) {
-      display: table-cell;
-    }
-  }
-
-  /* Large screens (1200px-1399px): show hourly view, hide total detections */
-  @media (min-width: 1200px) and (max-width: 1399px) {
-    :global(.hour-header.hourly-count),
-    :global(.hour-data.hourly-count),
-    :global(.hourly-count) {
-      display: table-cell;
-    }
-
-    :global([class*='hidden'][class*='2xl:table-cell']) {
-      display: none !important;
-    }
-  }
-
-  /* Medium-large screens (1024px-1199px): show hourly view, hide total detections */
-  @media (min-width: 1024px) and (max-width: 1199px) {
-    :global(.hour-header.hourly-count),
-    :global(.hour-data.hourly-count),
-    :global(.hourly-count) {
-      display: table-cell;
-    }
-
-    :global(.hour-header.hourly-count),
-    :global(.hour-data.hourly-count) {
-      padding-left: 0;
-      padding-right: 0;
-      font-size: 0.7rem;
-    }
-
-    :global([class*='hidden'][class*='2xl:table-cell']) {
-      display: none !important;
-    }
-  }
-
-  /* Medium screens (768px-1023px): show bi-hourly */
-  @media (min-width: 768px) and (max-width: 1023px) {
-    :global(.hour-header.bi-hourly),
-    :global(.hour-data.bi-hourly),
-    :global(.bi-hourly-count) {
-      display: table-cell;
-    }
-
-    :global(.hour-header.hourly-count),
-    :global(.hour-data.hourly-count),
-    :global(.hourly-count) {
-      display: none;
-    }
-
-    :global([class*='hidden'][class*='2xl:table-cell']) {
-      display: none !important;
-    }
-
-    :global(.hour-header.bi-hourly),
-    :global(.hour-data.bi-hourly) {
-      padding-left: 0;
-      padding-right: 0;
-      font-size: 0.7rem;
-    }
-  }
-
-  /* Small screens (mobile, <768px): show bi-hourly */
-  @media (max-width: 767px) {
-    :global(.hour-header.bi-hourly),
-    :global(.hour-data.bi-hourly),
-    :global(.bi-hourly-count) {
-      display: table-cell;
-    }
-
-    :global([class*='hidden'][class*='2xl:table-cell']) {
-      display: none !important;
-    }
-
-    :global(.hour-header.bi-hourly),
-    :global(.hour-data.bi-hourly) {
-      padding-left: 0;
-      padding-right: 0;
-    }
-  }
-
-  /* Extra small screens (<480px): show six-hourly */
-  @media (max-width: 479px) {
-    :global(.hour-header.bi-hourly),
-    :global(.hour-data.bi-hourly),
-    :global(.bi-hourly-count) {
-      display: none;
-    }
-
-    :global(.hour-header.six-hourly),
-    :global(.hour-data.six-hourly),
-    :global(.six-hourly-count) {
-      display: table-cell;
-    }
-  }
-
-  /* Consistent table cell sizing - reduced for more square cells */
-  :global(.hour-data) {
-    height: 1.75rem;
-    min-height: 1.75rem;
-    max-height: 1.75rem;
-    line-height: 1.75rem;
-    box-sizing: border-box;
-    vertical-align: middle;
-    border-radius: 4px;
-    padding-left: 0.1rem;
-    padding-right: 0.1rem;
-  }
-
-  :global(.hour-header) {
-    padding-left: 0.1rem;
-    padding-right: 0.1rem;
-  }
-
-  :global(.table tr) {
-    height: 1.75rem;
-    min-height: 1.75rem;
-    max-height: 1.75rem;
-  }
-
-  :global(.table td),
-  :global(.table th) {
-    box-sizing: border-box;
-    height: 1.75rem;
-    min-height: 1.75rem;
-    max-height: 1.75rem;
-    vertical-align: middle;
-  }
-
-  /* ========================================================================
-     Heatmap Colors (moved from custom.css)
-     ======================================================================== */
-
-  /* Light theme heatmap colors and theme-aware variables */
   :root {
+    /* Grid layout properties */
+    --grid-cell-height: 1.25rem;
+    --grid-daylight-height: 1.25rem;
+    --grid-spacing-h: 4px;
+    --grid-spacing-v: 4px;
+    --grid-cell-radius: 4px;
+
+    /* Light theme heatmap colors */
     --heatmap-color-0: #f0f9fc;
     --heatmap-color-1: #e0f3f8;
     --heatmap-color-2: #ccebf6;
@@ -1173,11 +1051,180 @@ Responsive Breakpoints:
     --theme-border-light: rgb(255 255 255 / 0.1);
     --theme-border-dark: rgb(0 0 0 / 0.1);
 
-    /* Animation durations (for CSS animations) */
+    /* Animation durations */
     --anim-count-pop: 600ms;
     --anim-heart-pulse: 1000ms;
     --anim-new-species: 800ms;
   }
+
+  /* ========================================================================
+     Table & Heatmap Styles
+     ======================================================================== */
+
+  /* Table base styling */
+  :global(.daily-summary-table) {
+    contain: layout style paint;
+    border-collapse: separate;
+    border-spacing: var(--grid-spacing-h) var(--grid-spacing-v);
+  }
+
+  /* Remove all borders for clean grid */
+  :global(.daily-summary-table tr),
+  :global(.daily-summary-table td),
+  :global(.daily-summary-table th) {
+    border-bottom: none !important;
+  }
+
+  /* Sticky header */
+  :global(thead.sticky-header) {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: var(--fallback-b1, oklch(var(--b1) / 1));
+  }
+
+  /* Cell sizing - single source of truth */
+  :global(.daily-summary-table .hour-data),
+  :global(.daily-summary-table .hour-header),
+  :global(.table tr),
+  :global(.table td),
+  :global(.table th) {
+    height: var(--grid-cell-height);
+    box-sizing: border-box;
+    vertical-align: middle;
+  }
+
+  :global(.hour-data) {
+    line-height: var(--grid-cell-height);
+    border-radius: var(--grid-cell-radius);
+    padding: 0 0.1rem;
+  }
+
+  :global(.hour-header) {
+    padding: 0 0.1rem;
+    text-align: center;
+  }
+
+  /* Links inside hour cells */
+  :global(.hour-data a) {
+    height: var(--grid-cell-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /* Empty cells background */
+  :global(.heatmap-color-0) {
+    background-color: var(--color-base-300);
+    border-radius: var(--grid-cell-radius);
+  }
+
+  :global([data-theme='light'] .heatmap-color-0) {
+    background-color: #e2e8f0;
+  }
+
+  :global([data-theme='dark'] .heatmap-color-0) {
+    background-color: #1e293b;
+  }
+
+  /* ========================================================================
+     Responsive Column Display
+     ======================================================================== */
+
+  /* Default: hide all hour columns */
+  :global(.hour-header),
+  :global(.hour-data),
+  :global(.hourly-count),
+  :global(.bi-hourly-count),
+  :global(.six-hourly-count) {
+    display: none;
+  }
+
+  /* Desktop (≥1024px): show hourly */
+  @media (min-width: 1024px) {
+    :global(.hour-header.hourly-count),
+    :global(.hour-data.hourly-count),
+    :global(.hourly-count) {
+      display: table-cell;
+    }
+
+    :global([class*='hidden'][class*='2xl:table-cell']) {
+      display: table-cell;
+    }
+  }
+
+  /* Medium-large (1024-1199px): smaller font */
+  @media (min-width: 1024px) and (max-width: 1199px) {
+    :global(.hour-header.hourly-count),
+    :global(.hour-data.hourly-count) {
+      font-size: 0.7rem;
+    }
+
+    :global([class*='hidden'][class*='2xl:table-cell']) {
+      display: none !important;
+    }
+  }
+
+  /* Large (1200-1399px): hide 2xl columns */
+  @media (min-width: 1200px) and (max-width: 1399px) {
+    :global([class*='hidden'][class*='2xl:table-cell']) {
+      display: none !important;
+    }
+  }
+
+  /* Tablet (768-1023px): show bi-hourly */
+  @media (min-width: 768px) and (max-width: 1023px) {
+    :global(.hour-header.hourly-count),
+    :global(.hour-data.hourly-count),
+    :global(.hourly-count) {
+      display: none;
+    }
+
+    :global(.hour-header.bi-hourly),
+    :global(.hour-data.bi-hourly),
+    :global(.bi-hourly-count) {
+      display: table-cell;
+      font-size: 0.7rem;
+    }
+
+    :global([class*='hidden'][class*='2xl:table-cell']) {
+      display: none !important;
+    }
+  }
+
+  /* Mobile (<768px): show bi-hourly */
+  @media (max-width: 767px) {
+    :global(.hour-header.bi-hourly),
+    :global(.hour-data.bi-hourly),
+    :global(.bi-hourly-count) {
+      display: table-cell;
+    }
+
+    :global([class*='hidden'][class*='2xl:table-cell']) {
+      display: none !important;
+    }
+  }
+
+  /* Small mobile (<480px): show six-hourly */
+  @media (max-width: 479px) {
+    :global(.hour-header.bi-hourly),
+    :global(.hour-data.bi-hourly),
+    :global(.bi-hourly-count) {
+      display: none;
+    }
+
+    :global(.hour-header.six-hourly),
+    :global(.hour-data.six-hourly),
+    :global(.six-hourly-count) {
+      display: table-cell;
+    }
+  }
+
+  /* ========================================================================
+     Heatmap Colors
+     ======================================================================== */
 
   /* Dark theme heatmap colors - more vibrant and saturated */
   :global([data-theme='dark']) {
@@ -1212,7 +1259,7 @@ Responsive Breakpoints:
   :global(.heatmap-color-7),
   :global(.heatmap-color-8),
   :global(.heatmap-color-9) {
-    border-radius: 4px;
+    border-radius: var(--grid-cell-radius);
   }
 
   :global(.heatmap-color-1) {
@@ -1368,56 +1415,23 @@ Responsive Breakpoints:
     }
   }
 
-  /* All responsive display and heatmap styles are handled by custom.css */
+  /* ========================================================================
+     Species Column & Badge Styles
+     ======================================================================== */
 
-  /* Link styling to match the original .hour-data a styles */
-  .hour-data a {
-    height: 1.75rem;
-    min-height: 1.75rem;
-    max-height: 1.75rem;
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    color: inherit;
-    font-size: inherit;
-    font-family: inherit;
-    text-decoration: none;
-  }
-
-  .hour-data a:hover {
-    text-decoration: none;
-  }
-
-  /* Hour header styling - ensure proper table layout */
-  .hour-header {
-    position: relative;
-    text-align: center;
-    vertical-align: middle;
-  }
-
-  /* Species column styling */
   :global(.species-column) {
     width: auto;
     min-width: 0;
     max-width: 100px;
-    padding-left: 0.5rem !important;
-    padding-right: 0.75rem !important;
+    padding: 0 0.75rem 0 0.5rem !important;
   }
-
-  /* ========================================================================
-     Species Badge Styles
-     ======================================================================== */
 
   .species-badge {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
+    width: var(--grid-cell-height);
+    height: var(--grid-cell-height);
     border-radius: 0.375rem;
     font-size: 0.625rem;
     font-weight: 700;
@@ -1438,109 +1452,246 @@ Responsive Breakpoints:
      Daylight Row Styles
      ======================================================================== */
 
-  .daylight-row {
-    height: 1.25rem;
-    min-height: 1.25rem;
-    max-height: 1.25rem;
-  }
-
+  .daylight-row,
   .daylight-row th {
-    height: 1.25rem !important;
-    min-height: 1.25rem !important;
-    max-height: 1.25rem !important;
+    height: var(--grid-daylight-height) !important;
     border-bottom: none !important;
     vertical-align: middle;
   }
 
-  /* Daylight row label cell */
   .daylight-row th:first-child {
-    padding-left: 0.5rem;
-    padding-right: 1rem;
+    padding: 0 1rem 0 0.5rem;
     text-align: left;
   }
 
   .daylight-cell {
     position: relative;
     transition: background-color 0.2s ease;
+    overflow: visible;
   }
 
-  /* Daylight cell responsive visibility - separate from hour-header/hour-data */
+  /* Allow tooltip overflow */
+  .daylight-row {
+    overflow: visible;
+  }
+
+  :global(.daily-summary-table thead) {
+    overflow: visible;
+  }
+
+  :global(.daily-summary-table) {
+    overflow: visible;
+  }
+
+  :global(.overflow-y-visible) {
+    overflow-y: visible !important;
+  }
+
+  /* Daylight cell responsive visibility */
   .hourly-daylight,
   .bi-hourly-daylight,
   .six-hourly-daylight {
     display: none;
   }
 
-  /* Extra large screens (≥1400px): show hourly daylight */
-  @media (min-width: 1400px) {
+  /* Desktop (≥1024px): show hourly daylight */
+  @media (min-width: 1024px) {
     .hourly-daylight {
       display: table-cell;
     }
   }
 
-  /* Large screens (1200px-1399px): show hourly daylight */
-  @media (min-width: 1200px) and (max-width: 1399px) {
-    .hourly-daylight {
-      display: table-cell;
-    }
-  }
-
-  /* Medium-large screens (1024px-1199px): show hourly daylight */
-  @media (min-width: 1024px) and (max-width: 1199px) {
-    .hourly-daylight {
-      display: table-cell;
-    }
-  }
-
-  /* Medium screens (768px-1023px): show bi-hourly daylight */
-  @media (min-width: 768px) and (max-width: 1023px) {
+  /* Tablet (768-1023px): show bi-hourly daylight */
+  @media (min-width: 480px) and (max-width: 1023px) {
     .bi-hourly-daylight {
       display: table-cell;
     }
   }
 
-  /* Small screens (480px-767px): show bi-hourly daylight */
-  @media (min-width: 480px) and (max-width: 767px) {
-    .bi-hourly-daylight {
-      display: table-cell;
-    }
-  }
-
-  /* Extra small screens (<480px): show six-hourly daylight */
+  /* Small mobile (<480px): show six-hourly daylight */
   @media (max-width: 479px) {
     .six-hourly-daylight {
       display: table-cell;
     }
   }
 
-  .daylight-day {
-    background-color: #fbbf24; /* amber-400 */
-    border-radius: 4px;
+  /* ========================================================================
+     Daylight Color Classes - Gradual shading from night to day
+     ======================================================================== */
+
+  /* Deep night (midnight - 4am, 9pm - midnight) - darkest indigo */
+  .daylight-deep-night {
+    background-color: rgb(30 27 75 / 0.5); /* indigo-950/50 */
+    border-radius: var(--grid-cell-radius);
   }
 
+  :global([data-theme='light']) .daylight-deep-night {
+    background-color: rgb(30 27 75 / 0.3); /* indigo-950/30 */
+  }
+
+  /* Night (5am, 8pm) - lighter indigo */
   .daylight-night {
-    background-color: #4b5563; /* gray-600 - more visible */
-    border-radius: 4px;
-  }
-
-  :global([data-theme='light']) .daylight-day {
-    background-color: #fcd34d; /* amber-300 */
+    background-color: rgb(49 46 129 / 0.4); /* indigo-900/40 */
+    border-radius: var(--grid-cell-radius);
   }
 
   :global([data-theme='light']) .daylight-night {
-    background-color: #9ca3af; /* gray-400 - more visible in light mode */
+    background-color: rgb(49 46 129 / 0.2); /* indigo-900/20 */
   }
 
-  .daylight-sun-icon {
+  /* Evening (6-7pm) - transition indigo */
+  .daylight-evening {
+    background-color: rgb(67 56 202 / 0.3); /* indigo-700/30 */
+    border-radius: var(--grid-cell-radius);
+  }
+
+  :global([data-theme='light']) .daylight-evening {
+    background-color: rgb(67 56 202 / 0.15); /* indigo-700/15 */
+  }
+
+  /* Pre-dawn (1-2 hours before sunrise) - transitional purple/indigo */
+  .daylight-pre-dawn {
+    background-color: rgb(99 102 241 / 0.3); /* indigo-500/30 */
+    border-radius: var(--grid-cell-radius);
+  }
+
+  :global([data-theme='light']) .daylight-pre-dawn {
+    background-color: rgb(99 102 241 / 0.2); /* indigo-500/20 */
+  }
+
+  /* Sunrise - gradient from orange to amber */
+  .daylight-sunrise {
+    background: linear-gradient(to right, #fb923c, #fbbf24); /* orange-400 to amber-400 */
+    border-radius: var(--grid-cell-radius);
+  }
+
+  :global([data-theme='light']) .daylight-sunrise {
+    background: linear-gradient(to right, #f97316, #fcd34d); /* orange-500 to amber-300 */
+  }
+
+  /* Early day (just after sunrise) - soft warm amber */
+  .daylight-early-day {
+    background-color: rgb(251 191 36 / 0.4); /* amber-400/40 */
+    border-radius: var(--grid-cell-radius);
+  }
+
+  :global([data-theme='light']) .daylight-early-day {
+    background-color: rgb(252 211 77 / 0.6); /* amber-300/60 */
+  }
+
+  /* Day (mid-morning, mid-afternoon) - medium amber */
+  .daylight-day {
+    background-color: rgb(251 191 36 / 0.5); /* amber-400/50 */
+    border-radius: var(--grid-cell-radius);
+  }
+
+  :global([data-theme='light']) .daylight-day {
+    background-color: rgb(252 211 77 / 0.7); /* amber-300/70 */
+  }
+
+  /* Mid-day (peak daylight) - brightest amber/yellow */
+  .daylight-mid-day {
+    background-color: rgb(253 224 71 / 0.6); /* yellow-300/60 */
+    border-radius: var(--grid-cell-radius);
+  }
+
+  :global([data-theme='light']) .daylight-mid-day {
+    background-color: rgb(254 240 138 / 0.8); /* yellow-200/80 */
+  }
+
+  /* Late day (before sunset) - soft warm amber */
+  .daylight-late-day {
+    background-color: rgb(251 191 36 / 0.4); /* amber-400/40 */
+    border-radius: var(--grid-cell-radius);
+  }
+
+  :global([data-theme='light']) .daylight-late-day {
+    background-color: rgb(252 211 77 / 0.6); /* amber-300/60 */
+  }
+
+  /* Sunset - gradient from rose to purple */
+  .daylight-sunset {
+    background: linear-gradient(to right, #fda4af, #c084fc); /* rose-300 to purple-400 */
+    border-radius: var(--grid-cell-radius);
+  }
+
+  :global([data-theme='light']) .daylight-sunset {
+    background: linear-gradient(to right, #fb7185, #a855f7); /* rose-400 to purple-500 */
+  }
+
+  /* Dusk (1-2 hours after sunset) - transitional purple */
+  .daylight-dusk {
+    background-color: rgb(139 92 246 / 0.25); /* violet-500/25 */
+    border-radius: var(--grid-cell-radius);
+  }
+
+  :global([data-theme='light']) .daylight-dusk {
+    background-color: rgb(139 92 246 / 0.15); /* violet-500/15 */
+  }
+
+  /* Sun icon wrapper and tooltip styles */
+  .sun-icon-wrapper {
     display: flex;
     align-items: center;
     justify-content: center;
     width: 100%;
-    height: 100%;
-    color: #1f2937; /* dark gray for visibility against amber */
+    height: 1.25rem; /* 20px - matches grid-daylight-height */
+    position: relative;
+    cursor: pointer;
   }
 
-  :global([data-theme='dark']) .daylight-sun-icon {
-    color: #1f2937; /* dark gray for visibility against amber in dark mode */
+  .sun-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 4px;
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+    border-radius: 4px;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity 0.15s ease-in-out,
+      visibility 0.15s ease-in-out;
+    pointer-events: none;
+    /* Force a new stacking context to escape sticky header */
+    isolation: isolate;
+    z-index: 9999;
+  }
+
+  .sun-icon-wrapper:hover .sun-tooltip {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  /* Sunrise tooltip - orange theme */
+  .sun-tooltip-sunrise {
+    background-color: #fff7ed; /* orange-50 */
+    color: #c2410c; /* orange-700 */
+    border: 1px solid #fed7aa; /* orange-200 */
+    box-shadow: 0 2px 8px rgb(251 146 60 / 0.25);
+  }
+
+  :global([data-theme='dark']) .sun-tooltip-sunrise {
+    background-color: #431407; /* orange-950 */
+    color: #fdba74; /* orange-300 */
+    border: 1px solid #7c2d12; /* orange-900 */
+  }
+
+  /* Sunset tooltip - rose/pink theme */
+  .sun-tooltip-sunset {
+    background-color: #fff1f2; /* rose-50 */
+    color: #be123c; /* rose-700 */
+    border: 1px solid #fecdd3; /* rose-200 */
+    box-shadow: 0 2px 8px rgb(251 113 133 / 0.25);
+  }
+
+  :global([data-theme='dark']) .sun-tooltip-sunset {
+    background-color: #4c0519; /* rose-950 */
+    color: #fda4af; /* rose-300 */
+    border: 1px solid #881337; /* rose-900 */
   }
 </style>

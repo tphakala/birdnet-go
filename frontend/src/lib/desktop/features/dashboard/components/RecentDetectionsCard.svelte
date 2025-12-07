@@ -197,14 +197,18 @@
   }
 </script>
 
-<section class={cn('card col-span-12 bg-base-100 shadow-sm', className)}>
+<section
+  class={cn(
+    'card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100 overflow-hidden',
+    className
+  )}
+>
   <!-- Card Header -->
-  <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
-    <div class="flex items-center justify-between mb-4">
-      <div class="flex items-center gap-3">
-        <span class="card-title grow text-base sm:text-xl"
-          >{t('dashboard.recentDetections.title')}</span
-        >
+  <div class="px-6 py-4 border-b border-base-200">
+    <div class="flex items-center justify-between">
+      <div class="flex flex-col">
+        <h3 class="font-semibold">{t('dashboard.recentDetections.title')}</h3>
+        <p class="text-sm" style:color="#94a3b8">{t('dashboard.recentDetections.subtitle')}</p>
       </div>
       <div class="flex items-center gap-2">
         <label for="numDetections" class="label-text text-sm"
@@ -235,8 +239,10 @@
         </button>
       </div>
     </div>
+  </div>
 
-    <!-- Content -->
+  <!-- Content -->
+  <div class="p-6">
     {#if error}
       <div class="alert alert-error">
         <XCircle class="size-6" />
