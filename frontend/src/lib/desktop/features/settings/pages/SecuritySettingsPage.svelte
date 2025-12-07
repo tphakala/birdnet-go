@@ -77,40 +77,40 @@
   let serverConfigHasChanges = $derived(
     hasSettingsChanged(
       {
-        host: (store.originalData as any)?.security?.host,
-        autoTls: (store.originalData as any)?.security?.autoTls,
+        host: store.originalData.security?.host,
+        autoTls: store.originalData.security?.autoTls,
       },
       {
-        host: (store.formData as any)?.security?.host,
-        autoTls: (store.formData as any)?.security?.autoTls,
+        host: store.formData.security?.host,
+        autoTls: store.formData.security?.autoTls,
       }
     )
   );
 
   let basicAuthHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.security?.basicAuth,
-      (store.formData as any)?.security?.basicAuth
+      store.originalData.security?.basicAuth,
+      store.formData.security?.basicAuth
     )
   );
 
   let oauthHasChanges = $derived(
     hasSettingsChanged(
       {
-        googleAuth: (store.originalData as any)?.security?.googleAuth,
-        githubAuth: (store.originalData as any)?.security?.githubAuth,
+        googleAuth: store.originalData.security?.googleAuth,
+        githubAuth: store.originalData.security?.githubAuth,
       },
       {
-        googleAuth: (store.formData as any)?.security?.googleAuth,
-        githubAuth: (store.formData as any)?.security?.githubAuth,
+        googleAuth: store.formData.security?.googleAuth,
+        githubAuth: store.formData.security?.githubAuth,
       }
     )
   );
 
   let subnetBypassHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.security?.allowSubnetBypass,
-      (store.formData as any)?.security?.allowSubnetBypass
+      store.originalData.security?.allowSubnetBypass,
+      store.formData.security?.allowSubnetBypass
     )
   );
 
@@ -183,7 +183,7 @@
   function updateGoogleUserId(userId: string) {
     settingsActions.updateSection('security', {
       ...settings,
-      googleAuth: { ...(settings.googleAuth as any), userId },
+      googleAuth: { ...settings.googleAuth, userId },
     });
   }
 
@@ -212,7 +212,7 @@
   function updateGithubUserId(userId: string) {
     settingsActions.updateSection('security', {
       ...settings,
-      githubAuth: { ...(settings.githubAuth as any), userId },
+      githubAuth: { ...settings.githubAuth, userId },
     });
   }
 
@@ -274,12 +274,12 @@
       title={t('settings.security.serverConfiguration.title')}
       description={t('settings.security.serverConfiguration.description')}
       originalData={{
-        host: (store.originalData as any)?.security?.host,
-        autoTls: (store.originalData as any)?.security?.autoTls,
+        host: store.originalData.security?.host,
+        autoTls: store.originalData.security?.autoTls,
       }}
       currentData={{
-        host: (store.formData as any)?.security?.host,
-        autoTls: (store.formData as any)?.security?.autoTls,
+        host: store.formData.security?.host,
+        autoTls: store.formData.security?.autoTls,
       }}
     >
     <div class="space-y-4">
@@ -325,8 +325,8 @@
     <SettingsSection
       title={t('settings.security.basicAuthentication.title')}
       description={t('settings.security.basicAuthentication.description')}
-      originalData={(store.originalData as any)?.security?.basicAuth}
-      currentData={(store.formData as any)?.security?.basicAuth}
+      originalData={store.originalData.security?.basicAuth}
+      currentData={store.formData.security?.basicAuth}
     >
       <div class="space-y-4">
         <Checkbox
@@ -376,12 +376,12 @@
       title={t('settings.security.oauth.title')}
       description={t('settings.security.oauth.description')}
       originalData={{
-        googleAuth: (store.originalData as any)?.security?.googleAuth,
-        githubAuth: (store.originalData as any)?.security?.githubAuth,
+        googleAuth: store.originalData.security?.googleAuth,
+        githubAuth: store.originalData.security?.githubAuth,
       }}
       currentData={{
-        googleAuth: (store.formData as any)?.security?.googleAuth,
-        githubAuth: (store.formData as any)?.security?.githubAuth,
+        googleAuth: store.formData.security?.googleAuth,
+        githubAuth: store.formData.security?.githubAuth,
       }}
     >
     <div class="space-y-6">
@@ -459,7 +459,7 @@
 
             <TextInput
               id="google-user-id"
-              value={(settings.googleAuth as any).userId}
+              value={settings.googleAuth.userId ?? ''}
               label={t('settings.security.oauth.google.userIdLabel')}
               placeholder={t('settings.security.placeholders.allowedUsers')}
               disabled={store.isLoading || store.isSaving}
@@ -530,7 +530,7 @@
 
             <TextInput
               id="github-user-id"
-              value={(settings.githubAuth as any).userId}
+              value={settings.githubAuth.userId ?? ''}
               label={t('settings.security.oauth.github.userIdLabel')}
               placeholder={t('settings.security.placeholders.allowedUsers')}
               disabled={store.isLoading || store.isSaving}
@@ -550,8 +550,8 @@
     <SettingsSection
       title={t('settings.security.bypassAuthentication.title')}
       description={t('settings.security.bypassAuthentication.description')}
-      originalData={(store.originalData as any)?.security?.allowSubnetBypass}
-      currentData={(store.formData as any)?.security?.allowSubnetBypass}
+      originalData={store.originalData.security?.allowSubnetBypass}
+      currentData={store.formData.security?.allowSubnetBypass}
     >
       <div class="space-y-4">
         <Checkbox

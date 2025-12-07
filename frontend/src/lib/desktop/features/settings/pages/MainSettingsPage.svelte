@@ -123,21 +123,21 @@
 
   // Change detection per tab
   let generalTabHasChanges = $derived(
-    hasSettingsChanged((store.originalData as any)?.main, (store.formData as any)?.main) ||
+    hasSettingsChanged(store.originalData.main, store.formData.main) ||
       hasSettingsChanged(
         {
-          sensitivity: (store.originalData as any)?.birdnet?.sensitivity,
-          threshold: (store.originalData as any)?.birdnet?.threshold,
-          overlap: (store.originalData as any)?.birdnet?.overlap,
-          locale: (store.originalData as any)?.birdnet?.locale,
-          threads: (store.originalData as any)?.birdnet?.threads,
+          sensitivity: store.originalData.birdnet?.sensitivity,
+          threshold: store.originalData.birdnet?.threshold,
+          overlap: store.originalData.birdnet?.overlap,
+          locale: store.originalData.birdnet?.locale,
+          threads: store.originalData.birdnet?.threads,
         },
         {
-          sensitivity: (store.formData as any)?.birdnet?.sensitivity,
-          threshold: (store.formData as any)?.birdnet?.threshold,
-          overlap: (store.formData as any)?.birdnet?.overlap,
-          locale: (store.formData as any)?.birdnet?.locale,
-          threads: (store.formData as any)?.birdnet?.threads,
+          sensitivity: store.formData.birdnet?.sensitivity,
+          threshold: store.formData.birdnet?.threshold,
+          overlap: store.formData.birdnet?.overlap,
+          locale: store.formData.birdnet?.locale,
+          threads: store.formData.birdnet?.threads,
         }
       )
   );
@@ -145,37 +145,37 @@
   let detectionTabHasChanges = $derived(
     hasSettingsChanged(
       {
-        modelPath: (store.originalData as any)?.birdnet?.modelPath,
-        labelPath: (store.originalData as any)?.birdnet?.labelPath,
+        modelPath: store.originalData.birdnet?.modelPath,
+        labelPath: store.originalData.birdnet?.labelPath,
       },
       {
-        modelPath: (store.formData as any)?.birdnet?.modelPath,
-        labelPath: (store.formData as any)?.birdnet?.labelPath,
+        modelPath: store.formData.birdnet?.modelPath,
+        labelPath: store.formData.birdnet?.labelPath,
       }
     ) ||
       hasSettingsChanged(
-        (store.originalData as any)?.realtime?.dynamicThreshold,
-        (store.formData as any)?.realtime?.dynamicThreshold
+        store.originalData.realtime?.dynamicThreshold,
+        store.formData.realtime?.dynamicThreshold
       )
   );
 
   let locationTabHasChanges = $derived(
     hasSettingsChanged(
       {
-        latitude: (store.originalData as any)?.birdnet?.latitude,
-        longitude: (store.originalData as any)?.birdnet?.longitude,
-        rangeFilter: (store.originalData as any)?.birdnet?.rangeFilter,
+        latitude: store.originalData.birdnet?.latitude,
+        longitude: store.originalData.birdnet?.longitude,
+        rangeFilter: store.originalData.birdnet?.rangeFilter,
       },
       {
-        latitude: (store.formData as any)?.birdnet?.latitude,
-        longitude: (store.formData as any)?.birdnet?.longitude,
-        rangeFilter: (store.formData as any)?.birdnet?.rangeFilter,
+        latitude: store.formData.birdnet?.latitude,
+        longitude: store.formData.birdnet?.longitude,
+        rangeFilter: store.formData.birdnet?.rangeFilter,
       }
     )
   );
 
   let databaseTabHasChanges = $derived(
-    hasSettingsChanged((store.originalData as any)?.output, (store.formData as any)?.output)
+    hasSettingsChanged(store.originalData.output, store.formData.output)
   );
 
   // API State Management
@@ -191,6 +191,13 @@
     data: [],
   });
 
+  // Species type for range filter API responses
+  interface RangeFilterSpecies {
+    commonName?: string;
+    scientificName?: string;
+    label?: string;
+  }
+
   // Range filter state
   let rangeFilterState = $state<{
     speciesCount: number | null;
@@ -199,7 +206,7 @@
     downloading: boolean;
     error: string | null;
     showModal: boolean;
-    species: any[];
+    species: RangeFilterSpecies[];
   }>({
     speciesCount: null,
     loading: false,
@@ -730,8 +737,8 @@
   }
 
   // Range filter functions
-  let debounceTimer: any;
-  let loadingDelayTimer: any;
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  let loadingDelayTimer: ReturnType<typeof setTimeout> | undefined;
 
   function debouncedTestRangeFilter() {
     clearTimeout(debounceTimer);
@@ -765,7 +772,7 @@
     rangeFilterState.error = null;
 
     try {
-      const data = await api.post<{ count: number; species?: any[] }>(
+      const data = await api.post<{ count: number; species?: RangeFilterSpecies[] }>(
         '/api/v2/range/species/test',
         {
           latitude: settings.birdnet.latitude,
@@ -802,7 +809,7 @@
         threshold: settings.birdnet.rangeFilter.threshold.toString(),
       });
 
-      const data = await api.get<{ count: number; species: any[] }>(
+      const data = await api.get<{ count: number; species: RangeFilterSpecies[] }>(
         `/api/v2/range/species/list?${params}`
       );
       rangeFilterState.species = data.species || [];
@@ -829,11 +836,11 @@
     settingsActions.updateSection('main', { name });
   }
 
-  function updateBirdnetSetting(key: string, value: any) {
+  function updateBirdnetSetting(key: string, value: string | number | boolean | null) {
     settingsActions.updateSection('birdnet', { [key]: value });
   }
 
-  function updateDynamicThreshold(key: string, value: any) {
+  function updateDynamicThreshold(key: string, value: number | boolean) {
     settingsActions.updateSection('realtime', {
       dynamicThreshold: { ...settings.dynamicThreshold, [key]: value },
     });
@@ -976,8 +983,8 @@
     <SettingsSection
       title={t('settings.main.sections.main.title')}
       description={t('settings.main.sections.main.description')}
-      originalData={(store.originalData as any)?.main}
-      currentData={(store.formData as any)?.main}
+      originalData={store.originalData.main}
+      currentData={store.formData.main}
     >
       <TextInput
         id="node-name"
@@ -995,11 +1002,11 @@
       title={t('settings.main.sections.birdnet.title')}
       description={t('settings.main.sections.birdnet.description')}
       originalData={{
-        sensitivity: (store.originalData as any)?.birdnet?.sensitivity,
-        threshold: (store.originalData as any)?.birdnet?.threshold,
-        overlap: (store.originalData as any)?.birdnet?.overlap,
-        locale: (store.originalData as any)?.birdnet?.locale,
-        threads: (store.originalData as any)?.birdnet?.threads,
+        sensitivity: store.originalData.birdnet?.sensitivity,
+        threshold: store.originalData.birdnet?.threshold,
+        overlap: store.originalData.birdnet?.overlap,
+        locale: store.originalData.birdnet?.locale,
+        threads: store.originalData.birdnet?.threads,
       }}
       currentData={{
         sensitivity: settings.birdnet.sensitivity,
@@ -1075,8 +1082,8 @@
       title={t('settings.main.sections.customClassifier.title')}
       description={t('settings.main.sections.customClassifier.description')}
       originalData={{
-        modelPath: (store.originalData as any)?.birdnet?.modelPath,
-        labelPath: (store.originalData as any)?.birdnet?.labelPath,
+        modelPath: store.originalData.birdnet?.modelPath,
+        labelPath: store.originalData.birdnet?.labelPath,
       }}
       currentData={{
         modelPath: settings.birdnet.modelPath,
@@ -1110,8 +1117,8 @@
     <SettingsSection
       title={t('settings.main.sections.dynamicThreshold.title')}
       description={t('settings.main.sections.dynamicThreshold.description')}
-      originalData={(store.originalData as any)?.realtime?.dynamicThreshold}
-      currentData={(store.formData as any)?.realtime?.dynamicThreshold}
+      originalData={store.originalData.realtime?.dynamicThreshold}
+      currentData={store.formData.realtime?.dynamicThreshold}
     >
       <Checkbox
         checked={settings.dynamicThreshold.enabled}
@@ -1168,8 +1175,8 @@
       title={t('settings.main.sections.rangeFilter.stationLocation.label')}
       description={t('settings.main.sections.rangeFilter.stationLocation.helpText')}
       originalData={{
-        latitude: (store.originalData as any)?.birdnet?.latitude,
-        longitude: (store.originalData as any)?.birdnet?.longitude,
+        latitude: store.originalData.birdnet?.latitude,
+        longitude: store.originalData.birdnet?.longitude,
       }}
       currentData={{
         latitude: settings.birdnet.latitude,
@@ -1260,7 +1267,7 @@
     <SettingsSection
       title={t('settings.main.sections.rangeFilter.title')}
       description={t('settings.main.sections.rangeFilter.description')}
-      originalData={(store.originalData as any)?.birdnet?.rangeFilter}
+      originalData={store.originalData.birdnet?.rangeFilter}
       currentData={settings.birdnet.rangeFilter}
     >
       <!-- Threshold and Species Count on same row -->
@@ -1352,8 +1359,8 @@
     <SettingsSection
       title={t('settings.main.sections.database.title')}
       description={t('settings.main.sections.database.description')}
-      originalData={(store.originalData as any)?.output}
-      currentData={(store.formData as any)?.output}
+      originalData={store.originalData.output}
+      currentData={store.formData.output}
     >
       <div class="space-y-6">
         <!-- Database Type Selector -->

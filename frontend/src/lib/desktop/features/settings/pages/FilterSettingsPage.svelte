@@ -82,15 +82,15 @@
   // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
   let privacyFilterHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.realtime?.privacyFilter,
-      (store.formData as any)?.realtime?.privacyFilter
+      store.originalData.realtime?.privacyFilter,
+      store.formData.realtime?.privacyFilter
     )
   );
 
   let dogBarkFilterHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.realtime?.dogBarkFilter,
-      (store.formData as any)?.realtime?.dogBarkFilter
+      store.originalData.realtime?.dogBarkFilter,
+      store.formData.realtime?.dogBarkFilter
     )
   );
 
@@ -139,7 +139,7 @@
     try {
       const data = await api.get<SpeciesListResponse>('/api/v2/range/species/list');
       if (data?.species && Array.isArray(data.species)) {
-        speciesListState.data = data.species.map((species: any) => species.label);
+        speciesListState.data = data.species.map((species: { label: string }) => species.label);
       } else {
         speciesListState.data = [];
       }
@@ -164,14 +164,14 @@
   function updatePrivacyEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
-      privacyFilter: { ...(settings.privacy as any), enabled },
+      privacyFilter: { ...settings.privacy, enabled },
     });
   }
 
   function updatePrivacyConfidence(confidence: number) {
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
-      privacyFilter: { ...(settings.privacy as any), confidence },
+      privacyFilter: { ...settings.privacy, confidence },
     });
   }
 
@@ -179,21 +179,21 @@
   function updateDogBarkEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
-      dogBarkFilter: { ...(settings.dogBark as any), enabled },
+      dogBarkFilter: { ...settings.dogBark, enabled },
     });
   }
 
   function updateDogBarkConfidence(confidence: number) {
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
-      dogBarkFilter: { ...(settings.dogBark as any), confidence },
+      dogBarkFilter: { ...settings.dogBark, confidence },
     });
   }
 
   function updateDogBarkRemember(remember: number) {
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
-      dogBarkFilter: { ...(settings.dogBark as any), remember },
+      dogBarkFilter: { ...settings.dogBark, remember },
     });
   }
 
@@ -206,41 +206,39 @@
     if (!species.trim()) return;
 
     const trimmedSpecies = species.trim();
-    if ((settings.dogBark as any).species.includes(trimmedSpecies)) return; // Already exists
+    if (settings.dogBark.species.includes(trimmedSpecies)) return; // Already exists
 
-    const updatedSpecies = [...(settings.dogBark as any).species, trimmedSpecies];
+    const updatedSpecies = [...settings.dogBark.species, trimmedSpecies];
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
-      dogBarkFilter: { ...(settings.dogBark as any), species: updatedSpecies },
+      dogBarkFilter: { ...settings.dogBark, species: updatedSpecies },
     });
   }
 
   function removeSpecies(index: number) {
-    const updatedSpecies = (settings.dogBark as any).species.filter(
-      (_: string, i: number) => i !== index
-    );
+    const updatedSpecies = settings.dogBark.species.filter((_: string, i: number) => i !== index);
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
-      dogBarkFilter: { ...(settings.dogBark as any), species: updatedSpecies },
+      dogBarkFilter: { ...settings.dogBark, species: updatedSpecies },
     });
   }
 
   function startEdit(index: number) {
     editIndex = index;
-    editSpecies = safeArrayAccess((settings.dogBark as any).species, index) || '';
+    editSpecies = safeArrayAccess(settings.dogBark.species, index) || '';
   }
 
   function saveEdit() {
     if (editIndex === null || !editSpecies.trim()) return;
 
-    const updatedSpecies = [...(settings.dogBark as any).species];
+    const updatedSpecies = [...settings.dogBark.species];
     if (editIndex >= 0 && editIndex < updatedSpecies.length) {
       updatedSpecies.splice(editIndex, 1, editSpecies.trim());
     }
 
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
-      dogBarkFilter: { ...(settings.dogBark as any), species: updatedSpecies },
+      dogBarkFilter: { ...settings.dogBark, species: updatedSpecies },
     });
 
     cancelEdit();
@@ -296,7 +294,7 @@
               <!-- Confidence Threshold -->
               <NumberField
                 label={t('settings.filters.privacyFiltering.confidenceLabel')}
-                value={(settings.privacy as any).confidence}
+                value={settings.privacy.confidence}
                 onUpdate={updatePrivacyConfidence}
                 min={0}
                 max={1}
@@ -345,7 +343,7 @@
               <!-- Confidence Threshold -->
               <NumberField
                 label={t('settings.filters.falsePositivePrevention.confidenceLabel')}
-                value={(settings.dogBark as any).confidence}
+                value={settings.dogBark.confidence}
                 onUpdate={updateDogBarkConfidence}
                 min={0}
                 max={1}
@@ -357,7 +355,7 @@
               <!-- Dog Bark Expire Time -->
               <NumberField
                 label={t('settings.filters.falsePositivePrevention.expireTimeLabel')}
-                value={(settings.dogBark as any).remember}
+                value={settings.dogBark.remember}
                 onUpdate={updateDogBarkRemember}
                 min={0}
                 step={1}
@@ -373,9 +371,9 @@
               </div>
 
               <!-- Species List -->
-              {#if (settings.dogBark as any).species.length > 0}
+              {#if settings.dogBark.species.length > 0}
                 <div class="space-y-2 mb-4">
-                  {#each (settings.dogBark as any).species as species, index (species)}
+                  {#each settings.dogBark.species as species, index (species)}
                     <div class="flex items-center gap-2 p-3 bg-base-200 rounded-lg">
                       {#if editIndex === index}
                         <input

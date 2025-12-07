@@ -27,7 +27,6 @@
     frequency: number;
     q?: number;
     passes?: number;
-    [key: string]: any;
   }
 
   interface Props {
@@ -313,8 +312,7 @@
       'lineTo',
       'createLinearGradient',
     ] as const;
-    // eslint-disable-next-line security/detect-object-injection -- safe method name validation from const array
-    if (requiredMethods.some(method => typeof (ctx as any)[method] !== 'function')) {
+    if (requiredMethods.some(method => typeof ctx[method as keyof typeof ctx] !== 'function')) {
       return;
     }
 

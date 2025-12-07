@@ -15,13 +15,14 @@
 -->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { Plus, Radio, RefreshCw, WifiOff, AlertTriangle, CheckCircle2 } from '@lucide/svelte';
+  import { Plus, Radio, RefreshCw } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import { api } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
   import { validateProtocolURL } from '$lib/utils/security';
   import StreamCard, { type StreamStatus } from './StreamCard.svelte';
+  import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
 
   const logger = loggers.audio;
@@ -350,27 +351,27 @@
         </div>
 
         {#if !healthLoading}
-          <div class="flex items-center gap-3 text-sm">
+          <div class="flex items-center gap-2">
             {#if healthySummary().healthy > 0}
-              <span class="flex items-center gap-1.5 text-success">
-                <CheckCircle2 class="size-4" />
-                {healthySummary().healthy}
-                {t('settings.audio.streams.healthy')}
-              </span>
+              <StatusPill
+                variant="success"
+                label="{healthySummary().healthy} {t('settings.audio.streams.healthy')}"
+                size="sm"
+              />
             {/if}
             {#if healthySummary().unhealthy > 0}
-              <span class="flex items-center gap-1.5 text-error">
-                <AlertTriangle class="size-4" />
-                {healthySummary().unhealthy}
-                {t('settings.audio.streams.unhealthy')}
-              </span>
+              <StatusPill
+                variant="error"
+                label="{healthySummary().unhealthy} {t('settings.audio.streams.unhealthy')}"
+                size="sm"
+              />
             {/if}
             {#if healthySummary().unknown > 0}
-              <span class="flex items-center gap-1.5 text-base-content/50">
-                <WifiOff class="size-4" />
-                {healthySummary().unknown}
-                {t('settings.audio.streams.unknown')}
-              </span>
+              <StatusPill
+                variant="neutral"
+                label="{healthySummary().unknown} {t('settings.audio.streams.unknown')}"
+                size="sm"
+              />
             {/if}
           </div>
         {/if}

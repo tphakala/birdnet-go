@@ -5,19 +5,23 @@
   URL editing, stream type, and protocol settings.
 
   Features:
-  - Traffic light health indicator (green/yellow/red/gray)
+  - Card background styling based on connection state
+  - Colored stream icon (auto-assigned based on index)
+  - Status pill with semantic coloring
   - Editable stream URL with credential masking
   - Stream type selector (RTSP only for now, prepared for HTTP, HLS, RTMP)
   - Protocol selector (TCP/UDP) per stream
   - Inline editing mode
   - Delete confirmation
+  - Always-visible action buttons for accessibility
 
   @component
 -->
 <script lang="ts">
-  import { Pencil, Trash2, Check, X, AlertCircle } from '@lucide/svelte';
+  import { Pencil, Trash2, Check, X, AlertCircle, Radio } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
+  import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
 
   // Stream health status type
   export type StreamStatus = 'connected' | 'connecting' | 'error' | 'idle' | 'unknown';
@@ -46,11 +50,11 @@
     onDelete,
   }: Props = $props();
 
-  // Local editing state
+  // Local editing state - initialized with defaults, synced from props in startEdit()
   let isEditing = $state(false);
-  let editUrl = $state(url);
-  let editTransport = $state(transport);
-  let editStreamType = $state(streamType);
+  let editUrl = $state('');
+  let editTransport = $state('tcp');
+  let editStreamType = $state('rtsp');
   let showDeleteConfirm = $state(false);
 
   // Stream type options (RTSP only for now)
@@ -68,6 +72,19 @@
     { value: 'udp', label: 'UDP' },
   ];
 
+  // Color palette for stream icons (cycles through)
+  const iconColors = [
+    { bg: 'bg-cyan-500/20', text: 'text-cyan-500', border: 'border-cyan-500/30' },
+    { bg: 'bg-violet-500/20', text: 'text-violet-500', border: 'border-violet-500/30' },
+    { bg: 'bg-emerald-500/20', text: 'text-emerald-500', border: 'border-emerald-500/30' },
+    { bg: 'bg-amber-500/20', text: 'text-amber-500', border: 'border-amber-500/30' },
+    { bg: 'bg-rose-500/20', text: 'text-rose-500', border: 'border-rose-500/30' },
+    { bg: 'bg-blue-500/20', text: 'text-blue-500', border: 'border-blue-500/30' },
+  ];
+
+  // Get color for this stream based on index
+  let iconColor = $derived(iconColors[index % iconColors.length]);
+
   // Mask credentials in URL for display
   function maskCredentials(urlStr: string): string {
     try {
@@ -81,39 +98,19 @@
     }
   }
 
-  // Get status indicator color and styles
-  function getStatusStyles(s: StreamStatus): { color: string; bgColor: string; ringColor: string } {
+  // Map stream status to StatusPill variant
+  function getStatusVariant(s: StreamStatus): StatusVariant {
     switch (s) {
       case 'connected':
-        return {
-          color: 'text-success',
-          bgColor: 'bg-success',
-          ringColor: 'ring-success/30',
-        };
+        return 'success';
       case 'connecting':
-        return {
-          color: 'text-warning',
-          bgColor: 'bg-warning',
-          ringColor: 'ring-warning/30',
-        };
+        return 'warning';
       case 'error':
-        return {
-          color: 'text-error',
-          bgColor: 'bg-error',
-          ringColor: 'ring-error/30',
-        };
+        return 'error';
       case 'idle':
-        return {
-          color: 'text-base-content/40',
-          bgColor: 'bg-base-content/40',
-          ringColor: 'ring-base-content/10',
-        };
+        return 'neutral';
       default:
-        return {
-          color: 'text-base-content/20',
-          bgColor: 'bg-base-content/20',
-          ringColor: 'ring-base-content/5',
-        };
+        return 'neutral';
     }
   }
 
@@ -133,8 +130,24 @@
     }
   }
 
-  let statusStyles = $derived(getStatusStyles(status));
+  // Get card background styles based on status
+  function getCardStyles(s: StreamStatus): string {
+    switch (s) {
+      case 'connected':
+        return 'border-success/20 bg-success/5';
+      case 'connecting':
+        return 'border-warning/20 bg-warning/5';
+      case 'error':
+        return 'border-error/30 bg-error/10';
+      case 'idle':
+        return 'border-base-300 bg-base-200/50';
+      default:
+        return 'border-base-300 bg-base-200/50';
+    }
+  }
+
   let displayUrl = $derived(maskCredentials(url));
+  let cardStyles = $derived(getCardStyles(status));
 
   function startEdit() {
     editUrl = url;
@@ -181,10 +194,8 @@
 
 <div
   class={cn(
-    'group relative rounded-lg border transition-all duration-200',
-    isEditing
-      ? 'border-primary/50 bg-base-100 shadow-md'
-      : 'border-base-300 bg-base-200/50 hover:border-base-content/20 hover:bg-base-200',
+    'relative rounded-lg border transition-all duration-200',
+    isEditing ? 'border-primary/50 bg-base-100 shadow-md' : cardStyles,
     disabled && 'opacity-60 pointer-events-none'
   )}
 >
@@ -289,56 +300,54 @@
       </div>
     {:else}
       <!-- View Mode -->
-      <div class="flex items-start gap-3">
-        <!-- Status Indicator -->
-        <div class="flex-shrink-0 pt-1">
-          <div
-            class={cn(
-              'size-3 rounded-full ring-4 transition-all',
-              statusStyles.bgColor,
-              statusStyles.ringColor,
-              status === 'connecting' && 'animate-pulse'
-            )}
-            title={getStatusText(status)}
-          ></div>
+      <div class="flex items-start gap-4">
+        <!-- Stream Icon -->
+        <div
+          class={cn(
+            'flex-shrink-0 size-12 rounded-xl flex items-center justify-center border',
+            status === 'error' ? 'bg-error/20 text-error border-error/30' : iconColor.bg,
+            status === 'error' ? '' : iconColor.text,
+            status === 'error' ? '' : iconColor.border
+          )}
+        >
+          <Radio class="size-6" />
         </div>
 
         <!-- Stream Info -->
         <div class="flex-1 min-w-0">
-          <!-- Stream Name/Number -->
+          <!-- Stream Name and Status Row -->
           <div class="flex items-center gap-2 mb-1">
-            <span class="text-xs font-semibold text-base-content/70 uppercase tracking-wide">
+            <span class="text-sm font-semibold text-base-content">
               {t('settings.audio.streams.streamLabel')}
               {index + 1}
             </span>
-            <span
-              class={cn(
-                'text-xs px-1.5 py-0.5 rounded font-medium',
-                status === 'connected' && 'bg-success/10 text-success',
-                status === 'connecting' && 'bg-warning/10 text-warning',
-                status === 'error' && 'bg-error/10 text-error',
-                status === 'idle' && 'bg-base-content/10 text-base-content/60',
-                status === 'unknown' && 'bg-base-content/5 text-base-content/40'
-              )}
-            >
-              {getStatusText(status)}
-            </span>
+            <StatusPill
+              variant={getStatusVariant(status)}
+              label={getStatusText(status)}
+              size="xs"
+              pulse={status === 'connecting'}
+            />
           </div>
 
           <!-- URL -->
-          <p class="font-mono text-sm text-base-content break-all leading-relaxed">
+          <p class="font-mono text-sm text-base-content/80 break-all leading-relaxed">
             {displayUrl}
           </p>
 
+          <!-- Error Message (if present) -->
+          {#if status === 'error' && statusMessage}
+            <p class="text-xs text-error mt-1.5">{statusMessage}</p>
+          {/if}
+
           <!-- Stream Settings Tags -->
           <div class="flex items-center gap-2 mt-2">
-            <span class="badge badge-sm badge-outline">
+            <span class="badge badge-sm badge-outline font-medium">
               {streamType.toUpperCase()}
             </span>
-            <span class="badge badge-sm badge-outline">
+            <span class="badge badge-sm badge-outline font-medium">
               {transport.toUpperCase()}
             </span>
-            {#if statusMessage}
+            {#if statusMessage && status !== 'error'}
               <span class="text-xs text-base-content/60 truncate" title={statusMessage}>
                 {statusMessage}
               </span>
@@ -346,8 +355,8 @@
           </div>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="flex-shrink-0 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <!-- Action Buttons - Always Visible for Accessibility -->
+        <div class="flex-shrink-0 flex gap-1">
           <button
             type="button"
             class="btn btn-sm btn-ghost btn-square"

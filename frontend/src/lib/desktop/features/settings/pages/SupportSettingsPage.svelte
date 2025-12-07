@@ -80,7 +80,7 @@
 
   // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
   let sentryHasChanges = $derived(
-    hasSettingsChanged((store.originalData as any)?.sentry, (store.formData as any)?.sentry)
+    hasSettingsChanged(store.originalData.sentry, store.formData.sentry)
   );
 
   // Tab state

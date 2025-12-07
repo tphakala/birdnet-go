@@ -86,12 +86,12 @@
   let interfaceSettingsHasChanges = $derived(
     hasSettingsChanged(
       {
-        locale: (store.originalData as any)?.realtime?.dashboard?.locale,
-        newUI: (store.originalData as any)?.realtime?.dashboard?.newUI,
+        locale: store.originalData.realtime?.dashboard?.locale,
+        newUI: store.originalData.realtime?.dashboard?.newUI,
       },
       {
-        locale: (store.formData as any)?.realtime?.dashboard?.locale,
-        newUI: (store.formData as any)?.realtime?.dashboard?.newUI,
+        locale: store.formData.realtime?.dashboard?.locale,
+        newUI: store.formData.realtime?.dashboard?.newUI,
       }
     )
   );
@@ -99,24 +99,24 @@
   // Display settings change detection (summaryLimit)
   let displaySettingsHasChanges = $derived(
     hasSettingsChanged(
-      { summaryLimit: (store.originalData as any)?.realtime?.dashboard?.summaryLimit },
-      { summaryLimit: (store.formData as any)?.realtime?.dashboard?.summaryLimit }
+      { summaryLimit: store.originalData.realtime?.dashboard?.summaryLimit },
+      { summaryLimit: store.formData.realtime?.dashboard?.summaryLimit }
     )
   );
 
   // Bird images change detection (thumbnails)
   let birdImagesHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.realtime?.dashboard?.thumbnails,
-      (store.formData as any)?.realtime?.dashboard?.thumbnails
+      store.originalData.realtime?.dashboard?.thumbnails,
+      store.formData.realtime?.dashboard?.thumbnails
     )
   );
 
   // Spectrogram change detection
   let spectrogramHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.realtime?.dashboard?.spectrogram,
-      (store.formData as any)?.realtime?.dashboard?.spectrogram
+      store.originalData.realtime?.dashboard?.spectrogram,
+      store.formData.realtime?.dashboard?.spectrogram
     )
   );
 
@@ -151,10 +151,12 @@
       }>('/api/v2/settings/imageproviders');
 
       // Map v2 API response format to client format
-      providerOptions.data = (providersData?.providers || []).map((provider: any) => ({
-        value: provider.value,
-        label: provider.display,
-      }));
+      providerOptions.data = (providersData?.providers || []).map(
+        (provider: { value: string; display: string }) => ({
+          value: provider.value,
+          label: provider.display,
+        })
+      );
     } catch (error) {
       if (error instanceof ApiError) {
         toastActions.warning(t('settings.main.errors.providersLoadFailed'));
@@ -168,13 +170,13 @@
   }
 
   // Update handlers
-  function updateDashboardSetting(key: string, value: any) {
+  function updateDashboardSetting(key: string, value: string | number | boolean) {
     settingsActions.updateSection('realtime', {
       dashboard: { ...settings.dashboard, [key]: value },
     });
   }
 
-  function updateThumbnailSetting(key: string, value: any) {
+  function updateThumbnailSetting(key: string, value: string | boolean) {
     settingsActions.updateSection('realtime', {
       dashboard: {
         ...settings.dashboard,
@@ -227,12 +229,12 @@
     description={t('settings.main.sections.userInterface.interface.description')}
     defaultOpen={true}
     originalData={{
-      locale: (store.originalData as any)?.realtime?.dashboard?.locale,
-      newUI: (store.originalData as any)?.realtime?.dashboard?.newUI,
+      locale: store.originalData.realtime?.dashboard?.locale,
+      newUI: store.originalData.realtime?.dashboard?.newUI,
     }}
     currentData={{
-      locale: (store.formData as any)?.realtime?.dashboard?.locale,
-      newUI: (store.formData as any)?.realtime?.dashboard?.newUI,
+      locale: store.formData.realtime?.dashboard?.locale,
+      newUI: store.formData.realtime?.dashboard?.newUI,
     }}
   >
     <div class="space-y-4">
@@ -293,9 +295,9 @@
       title={t('settings.main.sections.userInterface.dashboard.displaySettings.title')}
       description={t('settings.main.sections.userInterface.dashboard.displaySettings.description')}
       originalData={{
-        summaryLimit: (store.originalData as any)?.realtime?.dashboard?.summaryLimit,
+        summaryLimit: store.originalData.realtime?.dashboard?.summaryLimit,
       }}
-      currentData={{ summaryLimit: (store.formData as any)?.realtime?.dashboard?.summaryLimit }}
+      currentData={{ summaryLimit: store.formData.realtime?.dashboard?.summaryLimit }}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
         <NumberField
@@ -314,8 +316,8 @@
     <SettingsSection
       title={t('settings.main.sections.userInterface.dashboard.birdImages.title')}
       description={t('settings.main.sections.userInterface.dashboard.birdImages.description')}
-      originalData={(store.originalData as any)?.realtime?.dashboard?.thumbnails}
-      currentData={(store.formData as any)?.realtime?.dashboard?.thumbnails}
+      originalData={store.originalData.realtime?.dashboard?.thumbnails}
+      currentData={store.formData.realtime?.dashboard?.thumbnails}
     >
       <div class="space-y-4">
         <Checkbox
@@ -392,8 +394,8 @@
       description={t(
         'settings.main.sections.userInterface.dashboard.spectrogramGeneration.description'
       )}
-      originalData={(store.originalData as any)?.realtime?.dashboard?.spectrogram}
-      currentData={(store.formData as any)?.realtime?.dashboard?.spectrogram}
+      originalData={store.originalData.realtime?.dashboard?.spectrogram}
+      currentData={store.formData.realtime?.dashboard?.spectrogram}
     >
       <div class="space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">

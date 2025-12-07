@@ -155,22 +155,22 @@
   // PERFORMANCE OPTIMIZATION: Reactive change detection with $derived
   let includeHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.realtime?.species?.include,
-      (store.formData as any)?.realtime?.species?.include
+      store.originalData.realtime?.species?.include,
+      store.formData.realtime?.species?.include
     )
   );
 
   let excludeHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.realtime?.species?.exclude,
-      (store.formData as any)?.realtime?.species?.exclude
+      store.originalData.realtime?.species?.exclude,
+      store.formData.realtime?.species?.exclude
     )
   );
 
   let configHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.realtime?.species?.config,
-      (store.formData as any)?.realtime?.species?.config
+      store.originalData.realtime?.species?.config,
+      store.formData.realtime?.species?.config
     )
   );
 
@@ -215,7 +215,9 @@
       }
 
       const data = await response.json();
-      speciesListState.data = data.species?.map((s: any) => s.commonName || s.label) || [];
+      speciesListState.data =
+        data.species?.map((s: { commonName?: string; label: string }) => s.commonName || s.label) ||
+        [];
     } catch (error) {
       logger.error('Failed to load species data:', error);
       speciesListState.error = t('settings.species.errors.speciesLoadFailed');
@@ -502,8 +504,8 @@
     title={t('settings.species.alwaysInclude.title')}
     description={t('settings.species.alwaysInclude.description')}
     defaultOpen={true}
-    originalData={(store.originalData as any)?.realtime?.species?.include}
-    currentData={(store.formData as any)?.realtime?.species?.include}
+    originalData={store.originalData.realtime?.species?.include}
+    currentData={store.formData.realtime?.species?.include}
   >
     <div class="space-y-4">
       <!-- Species list -->
@@ -552,8 +554,8 @@
     title={t('settings.species.alwaysExclude.title')}
     description={t('settings.species.alwaysExclude.description')}
     defaultOpen={true}
-    originalData={(store.originalData as any)?.realtime?.species?.exclude}
-    currentData={(store.formData as any)?.realtime?.species?.exclude}
+    originalData={store.originalData.realtime?.species?.exclude}
+    currentData={store.formData.realtime?.species?.exclude}
   >
     <div class="space-y-4">
       <!-- Species list -->
@@ -602,8 +604,8 @@
     title={t('settings.species.customConfiguration.title')}
     description={t('settings.species.customConfiguration.description')}
     defaultOpen={true}
-    originalData={(store.originalData as any)?.realtime?.species?.config}
-    currentData={(store.formData as any)?.realtime?.species?.config}
+    originalData={store.originalData.realtime?.species?.config}
+    currentData={store.formData.realtime?.species?.config}
   >
     <div class="space-y-4">
       <!-- Header with Add Button -->

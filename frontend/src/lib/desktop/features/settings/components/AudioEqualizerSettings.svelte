@@ -83,7 +83,6 @@
     q?: number;
     gain?: number;
     passes?: number;
-    [key: string]: any;
   }
 
   interface EqualizerSettings {

@@ -159,24 +159,21 @@
   // Sound Card tab changes
   let soundCardTabHasChanges = $derived(
     hasSettingsChanged(
-      { source: (store.originalData as any)?.realtime?.audio?.source },
-      { source: (store.formData as any)?.realtime?.audio?.source }
+      { source: store.originalData.realtime?.audio?.source },
+      { source: store.formData.realtime?.audio?.source }
     )
   );
 
   // Streams tab changes
   let streamsTabHasChanges = $derived(
-    hasSettingsChanged(
-      (store.originalData as any)?.realtime?.rtsp,
-      (store.formData as any)?.realtime?.rtsp
-    )
+    hasSettingsChanged(store.originalData.realtime?.rtsp, store.formData.realtime?.rtsp)
   );
 
   // Audio Normalization section changes (moved here for dependency order)
   let normalizationHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.realtime?.audio?.export?.normalization,
-      (store.formData as any)?.realtime?.audio?.export?.normalization
+      store.originalData.realtime?.audio?.export?.normalization,
+      store.formData.realtime?.audio?.export?.normalization
     )
   );
 
@@ -184,12 +181,12 @@
   let processingTabHasChanges = $derived(
     hasSettingsChanged(
       {
-        equalizer: (store.originalData as any)?.realtime?.audio?.equalizer,
-        soundLevel: (store.originalData as any)?.realtime?.audio?.soundLevel,
+        equalizer: store.originalData.realtime?.audio?.equalizer,
+        soundLevel: store.originalData.realtime?.audio?.soundLevel,
       },
       {
-        equalizer: (store.formData as any)?.realtime?.audio?.equalizer,
-        soundLevel: (store.formData as any)?.realtime?.audio?.soundLevel,
+        equalizer: store.formData.realtime?.audio?.equalizer,
+        soundLevel: store.formData.realtime?.audio?.soundLevel,
       }
     ) || normalizationHasChanges
   );
@@ -198,16 +195,16 @@
   let clipRecordingHasChanges = $derived(
     hasSettingsChanged(
       {
-        enabled: (store.originalData as any)?.realtime?.audio?.export?.enabled,
-        length: (store.originalData as any)?.realtime?.audio?.export?.length,
-        preCapture: (store.originalData as any)?.realtime?.audio?.export?.preCapture,
-        gain: (store.originalData as any)?.realtime?.audio?.export?.gain,
+        enabled: store.originalData.realtime?.audio?.export?.enabled,
+        length: store.originalData.realtime?.audio?.export?.length,
+        preCapture: store.originalData.realtime?.audio?.export?.preCapture,
+        gain: store.originalData.realtime?.audio?.export?.gain,
       },
       {
-        enabled: (store.formData as any)?.realtime?.audio?.export?.enabled,
-        length: (store.formData as any)?.realtime?.audio?.export?.length,
-        preCapture: (store.formData as any)?.realtime?.audio?.export?.preCapture,
-        gain: (store.formData as any)?.realtime?.audio?.export?.gain,
+        enabled: store.formData.realtime?.audio?.export?.enabled,
+        length: store.formData.realtime?.audio?.export?.length,
+        preCapture: store.formData.realtime?.audio?.export?.preCapture,
+        gain: store.formData.realtime?.audio?.export?.gain,
       }
     )
   );
@@ -216,14 +213,14 @@
   let fileSettingsHasChanges = $derived(
     hasSettingsChanged(
       {
-        path: (store.originalData as any)?.realtime?.audio?.export?.path,
-        type: (store.originalData as any)?.realtime?.audio?.export?.type,
-        bitrate: (store.originalData as any)?.realtime?.audio?.export?.bitrate,
+        path: store.originalData.realtime?.audio?.export?.path,
+        type: store.originalData.realtime?.audio?.export?.type,
+        bitrate: store.originalData.realtime?.audio?.export?.bitrate,
       },
       {
-        path: (store.formData as any)?.realtime?.audio?.export?.path,
-        type: (store.formData as any)?.realtime?.audio?.export?.type,
-        bitrate: (store.formData as any)?.realtime?.audio?.export?.bitrate,
+        path: store.formData.realtime?.audio?.export?.path,
+        type: store.formData.realtime?.audio?.export?.type,
+        bitrate: store.formData.realtime?.audio?.export?.bitrate,
       }
     )
   );
@@ -234,8 +231,8 @@
   // Retention tab changes
   let retentionTabHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.realtime?.audio?.export?.retention,
-      (store.formData as any)?.realtime?.audio?.export?.retention
+      store.originalData.realtime?.audio?.export?.retention,
+      store.formData.realtime?.audio?.export?.retention
     )
   );
 
@@ -417,11 +414,32 @@
   }
 
   // Handle equalizer updates from the AudioEqualizerSettings component
-  function handleEqualizerUpdate(equalizerSettings: { enabled: boolean; filters: any[] }) {
+  // Note: Filter type matches component's local interface with optional id
+  function handleEqualizerUpdate(equalizerSettings: {
+    enabled: boolean;
+    filters: Array<{
+      id?: string;
+      type: string;
+      frequency: number;
+      q?: number;
+      gain?: number;
+      passes?: number;
+    }>;
+  }) {
+    // Transform filters to ensure all have an id (required by store type)
+    const transformedSettings = {
+      enabled: equalizerSettings.enabled,
+      filters: equalizerSettings.filters.map((filter, index) => ({
+        ...filter,
+        id: filter.id || `filter-${Date.now()}-${index}`,
+        type: filter.type as 'highpass' | 'lowpass' | 'bandpass' | 'bandstop',
+      })),
+    };
+
     settingsActions.updateSection('realtime', {
       audio: {
         ...$audioSettings!,
-        equalizer: equalizerSettings,
+        equalizer: transformedSettings,
       },
     });
   }
@@ -514,8 +532,8 @@
       <SettingsSection
         title={t('settings.audio.audioCapture.title')}
         description={t('settings.audio.audioCapture.description')}
-        originalData={{ source: (store.originalData as any)?.realtime?.audio?.source }}
-        currentData={{ source: (store.formData as any)?.realtime?.audio?.source }}
+        originalData={{ source: store.originalData.realtime?.audio?.source }}
+        currentData={{ source: store.formData.realtime?.audio?.source }}
       >
         <div class="space-y-4">
           <SelectField
@@ -569,8 +587,8 @@
     <SettingsSection
       title={t('settings.audio.rtspStreams.title')}
       description={t('settings.audio.rtspStreams.description')}
-      originalData={(store.originalData as any)?.realtime?.rtsp}
-      currentData={(store.formData as any)?.realtime?.rtsp}
+      originalData={store.originalData.realtime?.rtsp}
+      currentData={store.formData.realtime?.rtsp}
     >
       <StreamManager
         urls={settings.rtsp.urls}
@@ -589,8 +607,8 @@
     <SettingsSection
       title={t('settings.audio.audioNormalization.title')}
       description={t('settings.audio.audioNormalization.description')}
-      originalData={(store.originalData as any)?.realtime?.audio?.export?.normalization}
-      currentData={(store.formData as any)?.realtime?.audio?.export?.normalization}
+      originalData={store.originalData.realtime?.audio?.export?.normalization}
+      currentData={store.formData.realtime?.audio?.export?.normalization}
     >
       {#if !settings.audio.export.enabled}
         <!-- Dependency notice when recording is disabled -->
@@ -767,8 +785,8 @@
     <SettingsSection
       title={t('settings.audio.audioFilters.title')}
       description={t('settings.audio.audioFilters.description')}
-      originalData={(store.originalData as any)?.realtime?.audio?.equalizer}
-      currentData={(store.formData as any)?.realtime?.audio?.equalizer}
+      originalData={store.originalData.realtime?.audio?.equalizer}
+      currentData={store.formData.realtime?.audio?.equalizer}
     >
       <AudioEqualizerSettings
         equalizerSettings={settings.audio.equalizer}
@@ -781,8 +799,8 @@
     <SettingsSection
       title={t('settings.audio.soundLevelMonitoring.title')}
       description={t('settings.audio.soundLevelMonitoring.description')}
-      originalData={(store.originalData as any)?.realtime?.audio?.soundLevel}
-      currentData={(store.formData as any)?.realtime?.audio?.soundLevel}
+      originalData={store.originalData.realtime?.audio?.soundLevel}
+      currentData={store.formData.realtime?.audio?.soundLevel}
     >
       <div class="space-y-4">
         <Checkbox
@@ -873,16 +891,16 @@
       title={t('settings.audio.clipRecording.title')}
       description={t('settings.audio.clipRecording.description')}
       originalData={{
-        enabled: (store.originalData as any)?.realtime?.audio?.export?.enabled,
-        length: (store.originalData as any)?.realtime?.audio?.export?.length,
-        preCapture: (store.originalData as any)?.realtime?.audio?.export?.preCapture,
-        gain: (store.originalData as any)?.realtime?.audio?.export?.gain,
+        enabled: store.originalData.realtime?.audio?.export?.enabled,
+        length: store.originalData.realtime?.audio?.export?.length,
+        preCapture: store.originalData.realtime?.audio?.export?.preCapture,
+        gain: store.originalData.realtime?.audio?.export?.gain,
       }}
       currentData={{
-        enabled: (store.formData as any)?.realtime?.audio?.export?.enabled,
-        length: (store.formData as any)?.realtime?.audio?.export?.length,
-        preCapture: (store.formData as any)?.realtime?.audio?.export?.preCapture,
-        gain: (store.formData as any)?.realtime?.audio?.export?.gain,
+        enabled: store.formData.realtime?.audio?.export?.enabled,
+        length: store.formData.realtime?.audio?.export?.length,
+        preCapture: store.formData.realtime?.audio?.export?.preCapture,
+        gain: store.formData.realtime?.audio?.export?.gain,
       }}
     >
       <div class="space-y-4">
@@ -1003,14 +1021,14 @@
       title={t('settings.audio.fileSettings.title')}
       description={t('settings.audio.fileSettings.description')}
       originalData={{
-        path: (store.originalData as any)?.realtime?.audio?.export?.path,
-        type: (store.originalData as any)?.realtime?.audio?.export?.type,
-        bitrate: (store.originalData as any)?.realtime?.audio?.export?.bitrate,
+        path: store.originalData.realtime?.audio?.export?.path,
+        type: store.originalData.realtime?.audio?.export?.type,
+        bitrate: store.originalData.realtime?.audio?.export?.bitrate,
       }}
       currentData={{
-        path: (store.formData as any)?.realtime?.audio?.export?.path,
-        type: (store.formData as any)?.realtime?.audio?.export?.type,
-        bitrate: (store.formData as any)?.realtime?.audio?.export?.bitrate,
+        path: store.formData.realtime?.audio?.export?.path,
+        type: store.formData.realtime?.audio?.export?.type,
+        bitrate: store.formData.realtime?.audio?.export?.bitrate,
       }}
     >
       <fieldset
@@ -1108,8 +1126,8 @@
     <SettingsSection
       title={t('settings.audio.audioClipRetention.title')}
       description={t('settings.audio.audioClipRetention.description')}
-      originalData={(store.originalData as any)?.realtime?.audio?.export?.retention}
-      currentData={(store.formData as any)?.realtime?.audio?.export?.retention}
+      originalData={store.originalData.realtime?.audio?.export?.retention}
+      currentData={store.formData.realtime?.audio?.export?.retention}
     >
       <div class="space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
