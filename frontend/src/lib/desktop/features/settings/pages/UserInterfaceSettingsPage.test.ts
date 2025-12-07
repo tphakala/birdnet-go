@@ -211,6 +211,9 @@ describe('UserInterfaceSettingsPage', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
 
+    // Clear localStorage to reset tab persistence state
+    localStorage.clear();
+
     // Get mocked modules
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mockApi = (await import('$lib/utils/api')).api as any;

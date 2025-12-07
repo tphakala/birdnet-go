@@ -176,7 +176,7 @@
         Allowed Subnets ({subnets.length}/{maxItems}):
       </div>
 
-      {#each subnets as subnet, index}
+      {#each subnets as subnet, index (subnet)}
         <div class="flex items-center gap-2 p-2 bg-base-200 rounded-lg">
           <input
             type="text"

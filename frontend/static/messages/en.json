@@ -1735,7 +1735,7 @@
         "labels": {
           "threshold": "Threshold",
           "interval": "Interval",
-          "intervalSeconds": "Interval (sec)",
+          "intervalSeconds": "Interval (s)",
           "addButton": "Add"
         },
         "noConfigurationsMessage": "No custom species configurations added",
@@ -1743,6 +1743,28 @@
           "speciesPlaceholder": "Species name",
           "thresholdPlaceholder": "0.5",
           "intervalPlaceholder": "0"
+        },
+        "addConfiguration": "Add Configuration",
+        "newConfiguration": "New Configuration",
+        "editing": "Editing: {species}",
+        "configuredCount": "{count} configured",
+        "searchPlaceholder": "Type to search...",
+        "saving": "Saving...",
+        "save": "Save",
+        "cancel": "Cancel",
+        "configureActions": "Configure Actions",
+        "actionsConfigured": "Configured",
+        "list": {
+          "threshold": "Threshold:",
+          "interval": "Interval:",
+          "intervalNone": "None",
+          "actionBadge": "Action",
+          "editTitle": "Edit configuration",
+          "removeTitle": "Remove configuration"
+        },
+        "emptyState": {
+          "title": "No configurations yet.",
+          "description": "Click \"Add Configuration\" to customize species detection settings."
         }
       },
       "actionsModal": {

@@ -76,6 +76,13 @@
     uploadToSentry: true,
   });
 
+  // Derived state for generate button disabled logic
+  let generateButtonDisabled = $derived(
+    generating ||
+      (!supportDump.includeLogs && !supportDump.includeConfig && !supportDump.includeSystemInfo) ||
+      (supportDump.uploadToSentry && !supportDump.githubIssueNumber)
+  );
+
   // API State Management
   interface ApiState<T> {
     loading: boolean;
@@ -458,17 +465,9 @@
             <div class="card-actions justify-end mt-6">
               <button
                 onclick={generateSupportDump}
-                disabled={generating ||
-                  (!supportDump.includeLogs &&
-                    !supportDump.includeConfig &&
-                    !supportDump.includeSystemInfo) ||
-                  (supportDump.uploadToSentry && !supportDump.githubIssueNumber)}
+                disabled={generateButtonDisabled}
                 class="btn btn-primary"
-                class:btn-disabled={generating ||
-                  (!supportDump.includeLogs &&
-                    !supportDump.includeConfig &&
-                    !supportDump.includeSystemInfo) ||
-                  (supportDump.uploadToSentry && !supportDump.githubIssueNumber)}
+                class:btn-disabled={generateButtonDisabled}
               >
                 {#if !generating}
                   <span class="flex items-center gap-2">

@@ -619,17 +619,21 @@
             disabled={store.isLoading || store.isSaving}
           >
             <Plus class="size-4" />
-            Add Configuration
+            {t('settings.species.customConfiguration.addConfiguration')}
           </button>
         {:else}
           <span class="text-sm font-medium">
-            {editingSpecies ? `Editing: ${editingSpecies}` : 'New Configuration'}
+            {editingSpecies
+              ? t('settings.species.customConfiguration.editing', { species: editingSpecies })
+              : t('settings.species.customConfiguration.newConfiguration')}
           </span>
         {/if}
 
         {#if Object.keys(settings.config).length > 0}
           <span class="text-xs text-base-content/60">
-            {Object.keys(settings.config).length} configured
+            {t('settings.species.customConfiguration.configuredCount', {
+              count: Object.keys(settings.config).length,
+            })}
           </span>
         {/if}
       </div>
@@ -642,12 +646,14 @@
             <!-- Species Input -->
             <div class="col-span-4">
               <label class="label py-1" for="config-species">
-                <span class="label-text text-xs">Species</span>
+                <span class="label-text text-xs"
+                  >{t('settings.species.customConfiguration.columnHeaders.species')}</span
+                >
               </label>
               <SpeciesInput
                 id="config-species"
                 bind:value={configInputValue}
-                placeholder="Type to search..."
+                placeholder={t('settings.species.customConfiguration.searchPlaceholder')}
                 predictions={configPredictions}
                 onInput={updateConfigPredictions}
                 onPredictionSelect={handleSpeciesPicked}
@@ -662,7 +668,9 @@
             <!-- Threshold -->
             <div class="col-span-3">
               <label class="label py-1" for="config-threshold">
-                <span class="label-text text-xs">Threshold</span>
+                <span class="label-text text-xs"
+                  >{t('settings.species.customConfiguration.labels.threshold')}</span
+                >
                 <span class="label-text-alt text-xs">{newThreshold.toFixed(2)}</span>
               </label>
               <input
@@ -680,7 +688,9 @@
             <!-- Interval -->
             <div class="col-span-3">
               <label class="label py-1" for="config-interval">
-                <span class="label-text text-xs">Interval (s)</span>
+                <span class="label-text text-xs"
+                  >{t('settings.species.customConfiguration.labels.intervalSeconds')}</span
+                >
               </label>
               <input
                 id="config-interval"
@@ -708,9 +718,11 @@
                   store.isSaving}
               >
                 {#if store.isSaving}
-                  Saving...
+                  {t('settings.species.customConfiguration.saving')}
                 {:else}
-                  {editingSpecies ? 'Save' : 'Add'}
+                  {editingSpecies
+                    ? t('settings.species.customConfiguration.save')
+                    : t('settings.species.customConfiguration.labels.addButton')}
                 {/if}
               </button>
               <button
@@ -718,7 +730,7 @@
                 onclick={cancelEdit}
                 disabled={store.isSaving}
               >
-                Cancel
+                {t('settings.species.customConfiguration.cancel')}
               </button>
             </div>
           </div>
@@ -735,9 +747,11 @@
               <span class="transition-transform duration-200" class:rotate-90={showActions}>
                 <ChevronRight class="size-4" />
               </span>
-              <span>Configure Actions</span>
+              <span>{t('settings.species.customConfiguration.configureActions')}</span>
               {#if actionCommand}
-                <span class="badge badge-xs badge-accent">Configured</span>
+                <span class="badge badge-xs badge-accent"
+                  >{t('settings.species.customConfiguration.actionsConfigured')}</span
+                >
               {/if}
             </button>
           </div>
@@ -861,22 +875,30 @@
 
             <!-- Threshold -->
             <div class="flex items-center gap-2">
-              <span class="text-xs text-base-content/60">Threshold:</span>
+              <span class="text-xs text-base-content/60"
+                >{t('settings.species.customConfiguration.list.threshold')}</span
+              >
               <span class="font-mono text-xs font-medium">{(config.threshold ?? 0).toFixed(2)}</span
               >
             </div>
 
             <!-- Interval -->
             <div class="flex items-center gap-2">
-              <span class="text-xs text-base-content/60">Interval:</span>
+              <span class="text-xs text-base-content/60"
+                >{t('settings.species.customConfiguration.list.interval')}</span
+              >
               <span class="font-mono text-xs font-medium">
-                {config.interval > 0 ? `${config.interval}s` : 'None'}
+                {config.interval > 0
+                  ? `${config.interval}s`
+                  : t('settings.species.customConfiguration.list.intervalNone')}
               </span>
             </div>
 
             <!-- Action Badge -->
             {#if config.actions?.length > 0}
-              <span class="badge badge-xs badge-accent">Action</span>
+              <span class="badge badge-xs badge-accent"
+                >{t('settings.species.customConfiguration.list.actionBadge')}</span
+              >
             {/if}
 
             <!-- Actions -->
@@ -884,8 +906,8 @@
               <button
                 class="btn btn-ghost btn-xs"
                 onclick={() => startEdit(species)}
-                title="Edit configuration"
-                aria-label="Edit {species} configuration"
+                title={t('settings.species.customConfiguration.list.editTitle')}
+                aria-label={t('settings.species.customConfiguration.list.editTitle')}
                 disabled={store.isLoading || store.isSaving}
               >
                 <SquarePen class="size-4" />
@@ -894,8 +916,8 @@
               <button
                 class="btn btn-ghost btn-xs text-error"
                 onclick={() => removeConfig(species)}
-                title="Remove configuration"
-                aria-label="Remove {species} configuration"
+                title={t('settings.species.customConfiguration.list.removeTitle')}
+                aria-label={t('settings.species.customConfiguration.list.removeTitle')}
                 disabled={store.isLoading || store.isSaving}
               >
                 <Trash2 class="size-4" />
@@ -908,9 +930,9 @@
       <!-- Empty State -->
       {#if Object.keys(settings.config).length === 0 && !showAddForm}
         <div class="text-center py-8 text-base-content/60">
-          <p class="text-sm">No configurations yet.</p>
+          <p class="text-sm">{t('settings.species.customConfiguration.emptyState.title')}</p>
           <p class="text-xs mt-1">
-            Click "Add Configuration" to customize species detection settings.
+            {t('settings.species.customConfiguration.emptyState.description')}
           </p>
         </div>
       {/if}

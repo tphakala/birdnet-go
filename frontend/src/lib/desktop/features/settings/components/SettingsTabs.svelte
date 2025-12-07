@@ -166,7 +166,7 @@
       id="settings-tabpanel-{tab.id}"
       role="tabpanel"
       aria-labelledby="settings-tab-{tab.id}"
-      class={cn('tab-panel', !isActive && 'hidden')}
+      class="tab-panel"
       tabindex={isActive ? 0 : -1}
       hidden={!isActive}
     >

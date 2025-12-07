@@ -189,8 +189,16 @@
     });
   }
 
-  // Tab state
-  let activeTab = $state('interface');
+  // Storage key for remembering last active tab
+  const STORAGE_KEY = 'birdnet-ui-settings-active-tab';
+
+  // Tab state with persistence
+  let activeTab = $state(localStorage.getItem(STORAGE_KEY) || 'interface');
+
+  // Persist tab selection
+  $effect(() => {
+    localStorage.setItem(STORAGE_KEY, activeTab);
+  });
 
   // Tab definitions
   let tabs = $derived<TabDefinition[]>([
