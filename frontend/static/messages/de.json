@@ -733,7 +733,8 @@
       "resetAriaLabel": "Alle Änderungen zurücksetzen",
       "saveAriaLabel": "Änderungen speichern",
       "savingAriaLabel": "Änderungen werden gespeichert...",
-      "unsavedChanges": "Ungespeicherte Änderungen"
+      "unsavedChanges": "Ungespeicherte Änderungen",
+      "toolbar": "Einstellungsaktionen"
     },
     "card": {
       "changed": "geändert",
@@ -1259,6 +1260,7 @@
         "title": "Observability",
         "description": "BirdNET-Go's Leistung und Vogelerkennungsmetriken über Prometheus-kompatiblen Endpunkt überwachen",
         "enable": "Observability-Integration aktivieren",
+        "disabled": "Observability-Integration ist nicht aktiviert",
         "listenAddress": {
           "label": "Listen-Adresse",
           "placeholder": "0.0.0.0:8090"

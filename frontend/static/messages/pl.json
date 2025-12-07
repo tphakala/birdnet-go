@@ -733,7 +733,8 @@
       "resetAriaLabel": "Resetuj wszystkie zmiany",
       "saveAriaLabel": "Zapisz Zmiany",
       "savingAriaLabel": "Zapisywanie zmian...",
-      "unsavedChanges": "Niezapisane zmiany"
+      "unsavedChanges": "Niezapisane zmiany",
+      "toolbar": "Działania ustawień"
     },
     "card": {
       "changed": "zmieniono",
@@ -1259,6 +1260,7 @@
         "title": "Obserwowalność",
         "description": "Monitoruj wydajność BirdNET-Go i metryki detekcji ptaków poprzez punkt końcowy kompatybilny z Prometheus",
         "enable": "Włącz Integrację Obserwowalności",
+        "disabled": "Integracja obserwowalności nie jest włączona",
         "listenAddress": {
           "label": "Adres Nasłuchiwania",
           "placeholder": "0.0.0.0:8090"

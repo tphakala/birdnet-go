@@ -733,7 +733,8 @@
       "resetAriaLabel": "Redefinir todas as alterações",
       "saveAriaLabel": "Salvar alterações",
       "savingAriaLabel": "Salvando alterações...",
-      "unsavedChanges": "Alterações não salvas"
+      "unsavedChanges": "Alterações não salvas",
+      "toolbar": "Ações de configurações"
     },
     "card": {
       "changed": "alterado",
@@ -1428,6 +1429,7 @@
         "title": "Observabilidade",
         "description": "Monitore o desempenho do BirdNET-Go e métricas de detecção de aves através de endpoint compatível com Prometheus",
         "enable": "Ativar integração de observabilidade",
+        "disabled": "A integração de observabilidade não está ativada",
         "listenAddress": {
           "label": "Endereço de escuta",
           "placeholder": "0.0.0.0:8090"

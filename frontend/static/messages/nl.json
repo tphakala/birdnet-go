@@ -733,7 +733,8 @@
       "resetAriaLabel": "Alle wijzigingen vergeten",
       "saveAriaLabel": "Wijzigingen bewaren",
       "savingAriaLabel": "Bewaren ...",
-      "unsavedChanges": "Niet opgeslagen wijzigingen"
+      "unsavedChanges": "Niet opgeslagen wijzigingen",
+      "toolbar": "Instellingenacties"
     },
     "card": {
       "changed": "gewijzigd",
@@ -1259,6 +1260,7 @@
         "title": "Observeerbaar",
         "description": "Monitor BirdNET-Go's prestaties en vogel detectie metrieken via Prometheus-compatible endpoint",
         "enable": "Schakel Observeerbaar Integratie in",
+        "disabled": "Observeerbaar integratie is niet ingeschakeld",
         "listenAddress": {
           "label": "Luister Adres",
           "placeholder": "0.0.0.0:8090"

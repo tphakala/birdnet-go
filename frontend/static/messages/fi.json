@@ -733,7 +733,8 @@
       "resetAriaLabel": "Palauta kaikki muutokset",
       "saveAriaLabel": "Tallenna muutokset",
       "savingAriaLabel": "Tallennetaan muutoksia...",
-      "unsavedChanges": "Tallentamattomat muutokset"
+      "unsavedChanges": "Tallentamattomat muutokset",
+      "toolbar": "Asetusten toiminnot"
     },
     "card": {
       "changed": "muutettu",
@@ -1428,6 +1429,7 @@
         "title": "Havainnointi",
         "description": "Seuraa BirdNET-Go:n suorituskykyä ja lintuhavaintomittareita Prometheus-yhteensopivan päätepisteen kautta",
         "enable": "Ota käyttöön havainnointi-integraatio",
+        "disabled": "Havainnointi-integraatio ei ole käytössä",
         "listenAddress": {
           "label": "Kuunteluosoite",
           "placeholder": "0.0.0.0:8090"
