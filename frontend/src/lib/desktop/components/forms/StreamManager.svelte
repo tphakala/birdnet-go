@@ -56,7 +56,7 @@
     transport = 'tcp',
     disabled = false,
     onUpdateUrls,
-    // Reserved for future per-stream transport support
+    // eslint-disable-next-line no-unused-vars -- Reserved for future per-stream transport support
     onUpdateTransport: _onUpdateTransport,
   }: Props = $props();
 
@@ -200,6 +200,7 @@
 
       eventSource.addEventListener('stream_health', (event: Event) => {
         try {
+          // eslint-disable-next-line no-undef -- MessageEvent is a browser global
           const messageEvent = event as MessageEvent;
           const data = JSON.parse(messageEvent.data) as StreamHealthResponse & {
             event_type: string;
@@ -275,7 +276,7 @@
     const updatedUrls = [...urls];
     if (index >= 0 && index < updatedUrls.length) {
       const oldUrl = updatedUrls.at(index);
-      updatedUrls[index] = url;
+      updatedUrls.splice(index, 1, url);
       onUpdateUrls(updatedUrls);
 
       // Update per-stream transport
