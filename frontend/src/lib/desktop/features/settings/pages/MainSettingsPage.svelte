@@ -2071,7 +2071,7 @@
               >
                 {t('settings.integration.weather.test.button')}
               </SettingsButton>
-              <span class="text-sm text-base-content/70">
+              <span class="text-sm text-[color:var(--color-base-content)] opacity-70">
                 {#if settings.weather.provider === 'openweather' && !settings.weather.openWeather?.apiKey}
                   {t('settings.integration.weather.test.apiKeyRequired')}
                 {:else if settings.weather.provider === 'wunderground' && (!settings.weather.wunderground?.apiKey || !settings.weather.wunderground?.stationId)}
@@ -2242,13 +2242,13 @@
       <div class="mb-4 p-3 bg-base-200/50 rounded-lg">
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <span class="text-base-content/60"
+            <span class="text-[color:var(--color-base-content)] opacity-60"
               >{t('settings.main.sections.rangeFilter.latitude.label')}</span
             >
             <span class="font-medium ml-2">{settings.birdnet.latitude}</span>
           </div>
           <div>
-            <span class="text-base-content/60"
+            <span class="text-[color:var(--color-base-content)] opacity-60"
               >{t('settings.main.sections.rangeFilter.longitude.label')}</span
             >
             <span class="font-medium ml-2">{settings.birdnet.longitude}</span>
@@ -2297,7 +2297,7 @@
             -
           </button>
         </div>
-        <p class="text-sm text-base-content/60">
+        <p class="text-sm text-[color:var(--color-base-content)] opacity-60">
           Click on the map or drag the marker to set location
         </p>
         <button type="button" class="btn btn-primary" onclick={closeMapModal}>
@@ -2341,25 +2341,25 @@
       <div class="mb-4 p-3 bg-base-200/50 rounded-lg">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
-            <span class="text-base-content/60"
+            <span class="text-base-content opacity-60"
               >{t('settings.main.sections.rangeFilter.modal.speciesCount')}</span
             >
             <span class="font-medium ml-1">{rangeFilterState.speciesCount}</span>
           </div>
           <div>
-            <span class="text-base-content/60"
+            <span class="text-base-content opacity-60"
               >{t('settings.main.sections.rangeFilter.modal.threshold')}</span
             >
             <span class="font-medium ml-1">{settings.birdnet.rangeFilter.threshold}</span>
           </div>
           <div>
-            <span class="text-base-content/60"
+            <span class="text-base-content opacity-60"
               >{t('settings.main.sections.rangeFilter.modal.latitude')}</span
             >
             <span class="font-medium ml-1">{settings.birdnet.latitude}</span>
           </div>
           <div>
-            <span class="text-base-content/60"
+            <span class="text-base-content opacity-60"
               >{t('settings.main.sections.rangeFilter.modal.longitude')}</span
             >
             <span class="font-medium ml-1">{settings.birdnet.longitude}</span>
@@ -2385,7 +2385,7 @@
         {#if rangeFilterState.loading}
           <div class="text-center py-12">
             <span class="loading loading-spinner loading-lg"></span>
-            <p class="mt-3 text-base-content/90">
+            <p class="mt-3 text-[color:var(--color-base-content)] opacity-90">
               {t('settings.main.sections.rangeFilter.modal.loadingSpecies')}
             </p>
           </div>
@@ -2394,12 +2394,14 @@
             {#each rangeFilterState.species as species (species.scientificName)}
               <div class="p-3 rounded-lg hover:bg-base-200/50 transition-colors">
                 <div class="font-medium">{species.commonName}</div>
-                <div class="text-sm text-base-content/60 italic">{species.scientificName}</div>
+                <div class="text-sm text-[color:var(--color-base-content)] opacity-60 italic">
+                  {species.scientificName}
+                </div>
               </div>
             {/each}
           </div>
         {:else}
-          <div class="text-center py-12 text-base-content/60">
+          <div class="text-center py-12 text-[color:var(--color-base-content)] opacity-60">
             {t('settings.main.sections.rangeFilter.modal.noSpeciesFound')}
           </div>
         {/if}

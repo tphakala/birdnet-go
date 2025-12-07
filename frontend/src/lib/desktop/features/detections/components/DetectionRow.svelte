@@ -223,7 +223,7 @@
       />
     </div>
   {:else}
-    <div class="text-base-content/50 text-xs">
+    <div class="text-base-content opacity-50 text-xs">
       {t('detections.weather.noData')}
     </div>
   {/if}
@@ -253,7 +253,7 @@
           <!-- Error placeholder -->
           <div class="absolute inset-0 flex items-center justify-center bg-base-200 rounded-md">
             <svg
-              class="w-8 h-8 text-base-content/30"
+              class="w-8 h-8 text-base-content opacity-30"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"

@@ -369,7 +369,7 @@
       <div class="flex justify-between items-start">
         <div>
           <h1 class="card-title text-2xl">{t('analytics.species.title')}</h1>
-          <p class="text-base-content/60">
+          <p class="text-base-content opacity-60">
             {t('analytics.species.subtitle')}
           </p>
         </div>
@@ -565,7 +565,7 @@
 
       <!-- Empty State -->
       {#if !isLoading && filteredSpecies.length === 0}
-        <div class="text-center py-8 text-base-content/50">
+        <div class="text-center py-8 text-base-content opacity-50">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             class="h-16 w-16 mx-auto mb-4 opacity-20"

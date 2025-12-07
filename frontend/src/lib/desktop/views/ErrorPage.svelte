@@ -469,13 +469,10 @@
         tabindex="0">0</span
       >4
     </h1>
-    <h2 class="text-3xl font-semibold text-base-content/70 mb-8">Page Not Found</h2>
+    <h2 class="text-3xl font-semibold text-base-content opacity-70 mb-8">Page Not Found</h2>
 
     <!-- Link Button -->
-    <a
-      href="/"
-      class="btn btn-primary normal-case text-base font-semibold hover:bg-primary-focus transition duration-300"
-    >
+    <a href="/" class="btn btn-primary normal-case text-base font-semibold transition duration-300">
       Go to Dashboard
     </a>
   </div>

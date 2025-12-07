@@ -128,8 +128,10 @@
         role="tab"
         class={cn(
           'tab gap-2 transition-all duration-200 font-medium -mb-px',
-          'hover:text-primary/80',
-          isActive ? 'text-primary border-b-2 border-primary' : 'text-base-content/60'
+          'hover:text-[color:var(--color-primary)]',
+          isActive
+            ? 'tab-active text-primary border-b-2 border-primary'
+            : 'text-base-content/75 hover:text-base-content'
         )}
         aria-selected={isActive}
         aria-controls="settings-tabpanel-{tab.id}"

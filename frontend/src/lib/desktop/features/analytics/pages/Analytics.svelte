@@ -1440,7 +1440,7 @@
                 </tr>
               {:else}
                 <tr>
-                  <td colspan="4" class="text-center py-4 text-base-content/50"
+                  <td colspan="4" class="text-center py-4 text-base-content opacity-50"
                     >{t('analytics.recentDetections.noRecentDetections')}</td
                   >
                 </tr>

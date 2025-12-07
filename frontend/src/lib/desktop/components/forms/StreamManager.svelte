@@ -359,7 +359,7 @@
     <div class="flex items-center justify-between p-3 bg-base-200 rounded-lg">
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-2">
-          <Radio class="size-4 text-base-content/70" />
+          <Radio class="size-4 text-base-content opacity-70" />
           <span class="text-sm font-medium">
             {t('settings.audio.streams.summary', { count: urls.length })}
           </span>
@@ -463,7 +463,7 @@
             {#if urlError}
               <span class="text-xs text-error mt-1">{urlError}</span>
             {:else}
-              <span class="text-xs text-base-content/60 mt-1">
+              <span class="text-xs text-base-content opacity-60 mt-1">
                 {t('settings.audio.streams.urlHelp')}
               </span>
             {/if}
@@ -485,7 +485,7 @@
               >
                 <option value="rtsp">RTSP</option>
               </select>
-              <span class="text-xs text-base-content/50 mt-1">
+              <span class="text-xs text-base-content opacity-50 mt-1">
                 {t('settings.audio.streams.typeLockedNote')}
               </span>
             </div>

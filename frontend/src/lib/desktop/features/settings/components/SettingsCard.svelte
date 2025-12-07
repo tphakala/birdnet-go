@@ -76,7 +76,9 @@
             <h3 class="text-lg font-semibold">{title}</h3>
           {/if}
           {#if description}
-            <p class="text-sm text-base-content/80 mt-1">{description}</p>
+            <p class="text-sm text-[color:var(--color-base-content)] opacity-80 mt-1">
+              {description}
+            </p>
           {/if}
         </div>
         {#if hasChanges}

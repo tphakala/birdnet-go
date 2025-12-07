@@ -47,22 +47,33 @@
     className = '',
   }: Props = $props();
 
-  // Variant styles for the pill container
-  const variantStyles: Record<StatusVariant, string> = {
-    success: 'bg-success/10 text-success border-success/20',
-    warning: 'bg-warning/10 text-warning border-warning/20',
-    error: 'bg-error/10 text-error border-error/20',
-    info: 'bg-info/10 text-info border-info/20',
-    neutral: 'bg-base-content/5 text-base-content/60 border-base-content/10',
+  // CSS variable names for each variant
+  const cssVarNames: Record<StatusVariant, string> = {
+    success: '--color-success',
+    warning: '--color-warning',
+    error: '--color-error',
+    info: '--color-info',
+    neutral: '--color-base-content',
   };
 
-  // Dot color styles
-  const dotStyles: Record<StatusVariant, string> = {
-    success: 'bg-success',
-    warning: 'bg-warning',
-    error: 'bg-error',
-    info: 'bg-info',
-    neutral: 'bg-base-content/40',
+  // Get inline styles for the pill using CSS color-mix
+  const getPillStyles = (variant: StatusVariant) => {
+    const varName = safeGet(cssVarNames, variant, '--color-base-content');
+    return variant === 'neutral'
+      ? `background-color: color-mix(in srgb, var(${varName}) 5%, transparent); ` +
+          `color: color-mix(in srgb, var(${varName}) 60%, transparent); ` +
+          `border-color: color-mix(in srgb, var(${varName}) 10%, transparent);`
+      : `background-color: color-mix(in srgb, var(${varName}) 10%, transparent); ` +
+          `color: var(${varName}); ` +
+          `border-color: color-mix(in srgb, var(${varName}) 20%, transparent);`;
+  };
+
+  // Dot color styles using CSS variables
+  const getDotStyles = (variant: StatusVariant) => {
+    const varName = safeGet(cssVarNames, variant, '--color-base-content');
+    return variant === 'neutral'
+      ? `background-color: color-mix(in srgb, var(${varName}) 40%, transparent);`
+      : `background-color: var(${varName});`;
   };
 
   // Size styles for the pill
@@ -83,19 +94,19 @@
 <span
   class={cn(
     'inline-flex items-center font-medium rounded-full border',
-    safeGet(variantStyles, variant, variantStyles.neutral),
     safeGet(sizeStyles, size, sizeStyles.sm),
     className
   )}
+  style={getPillStyles(variant)}
 >
   {#if showDot}
     <span
       class={cn(
         'rounded-full flex-shrink-0',
-        safeGet(dotStyles, variant, dotStyles.neutral),
         safeGet(dotSizeStyles, size, dotSizeStyles.sm),
         pulse && 'animate-pulse'
       )}
+      style={getDotStyles(variant)}
       aria-hidden="true"
     ></span>
   {/if}

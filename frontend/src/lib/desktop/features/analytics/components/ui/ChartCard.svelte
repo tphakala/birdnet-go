@@ -31,7 +31,7 @@
     <h2 class="card-title">{title}</h2>
 
     {#if showEmpty && !isLoading}
-      <div class="text-center py-4 text-base-content/50">
+      <div class="text-center py-4 text-base-content opacity-50">
         {emptyMessage}
       </div>
     {:else}

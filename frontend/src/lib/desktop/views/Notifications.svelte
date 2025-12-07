@@ -250,7 +250,7 @@
     let classes =
       'card bg-base-100 shadow-xs hover:shadow-md transition-shadow focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
     if (!notification.read) {
-      classes += ' bg-base-200/30';
+      classes += ' bg-base-200 opacity-30';
     }
     if (isClickable(notification)) {
       classes += ' cursor-pointer';
@@ -377,8 +377,8 @@
           <span class="opacity-30 mb-4" aria-hidden="true">
             <BellOff class="size-12" />
           </span>
-          <p class="text-lg text-base-content/60">{t('notifications.empty.title')}</p>
-          <p class="text-sm text-base-content/40">{t('notifications.empty.subtitle')}</p>
+          <p class="text-lg text-base-content opacity-60">{t('notifications.empty.title')}</p>
+          <p class="text-sm text-base-content opacity-40">{t('notifications.empty.subtitle')}</p>
         </div>
       </div>
     {:else}
@@ -425,7 +425,7 @@
                 <div class="flex items-start justify-between gap-4">
                   <div>
                     <h3 class="font-semibold text-lg">{notification.title}</h3>
-                    <p class="text-base-content/80 mt-1">
+                    <p class="text-base-content opacity-80 mt-1">
                       {sanitizeNotificationMessage(notification.message)}
                     </p>
 
@@ -437,7 +437,10 @@
                       <span class="badge badge-sm {getPriorityBadgeClass(notification.priority)}">
                         {notification.priority}
                       </span>
-                      <time class="text-xs text-base-content/60" datetime={notification.timestamp}>
+                      <time
+                        class="text-xs text-base-content opacity-60"
+                        datetime={notification.timestamp}
+                      >
                         {formatTime(notification.timestamp)}
                       </time>
                     </div>

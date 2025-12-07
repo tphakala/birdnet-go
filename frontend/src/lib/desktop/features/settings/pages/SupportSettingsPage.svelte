@@ -279,7 +279,7 @@
 
             <!-- Enhanced Description -->
             <div class="space-y-3 mb-4">
-              <p class="text-sm text-base-content/80">
+              <p class="text-sm text-base-content opacity-80">
                 {@html t('settings.support.supportReport.description.intro')}
               </p>
 
@@ -299,7 +299,7 @@
                 <h4 class="font-semibold text-sm mb-2">
                   {t('settings.support.supportReport.whatsIncluded.title')}
                 </h4>
-                <ul class="text-xs space-y-1 text-base-content/70">
+                <ul class="text-xs space-y-1 text-base-content opacity-70">
                   <li class="flex items-center gap-2">
                     <CircleCheck class="size-4 text-success shrink-0" />
                     <span
@@ -404,7 +404,7 @@
                   disabled={generating}
                 />
                 <div class="pl-6 mt-2 space-y-2">
-                  <div class="text-xs text-base-content/60">
+                  <div class="text-xs text-base-content opacity-60">
                     <p class="flex items-start gap-1">
                       <Check class="size-4 shrink-0" />
                       {@html t('settings.support.supportReport.uploadOption.details.sentryUpload')}

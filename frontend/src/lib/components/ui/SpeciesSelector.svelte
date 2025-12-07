@@ -340,7 +340,7 @@
               {#if !disabled}
                 <button
                   type="button"
-                  class="hover:text-base-100/70"
+                  class="hover:opacity-70 transition-opacity"
                   onclick={() => removeSpecies(species)}
                   aria-label="Remove {species.commonName}"
                 >

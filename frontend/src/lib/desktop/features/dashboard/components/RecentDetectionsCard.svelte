@@ -197,7 +197,7 @@
   }
 </script>
 
-<section class={cn('card col-span-12 bg-base-100 shadow-xs', className)}>
+<section class={cn('card col-span-12 bg-base-100 shadow-sm', className)}>
   <!-- Card Header -->
   <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
     <div class="flex items-center justify-between mb-4">
@@ -364,7 +364,10 @@
       </div>
 
       {#if data.length === 0}
-        <div class="text-center py-8 text-base-content/60">
+        <div
+          class="text-center py-8"
+          style:color="color-mix(in srgb, var(--color-base-content) 60%, transparent)"
+        >
           {t('dashboard.recentDetections.noDetections')}
         </div>
       {/if}

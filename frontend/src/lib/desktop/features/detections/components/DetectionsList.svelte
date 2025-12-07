@@ -204,7 +204,7 @@
   {#if data && data.totalResults > data.itemsPerPage}
     <div class="border-t border-base-200">
       <div class="flex flex-col sm:flex-row justify-between items-center p-4 gap-4">
-        <div class="text-sm text-base-content/70 order-2 sm:order-1">
+        <div class="text-sm text-base-content opacity-70 order-2 sm:order-1">
           {t('detections.pagination.showing', {
             from: data.showingFrom,
             to: data.showingTo,

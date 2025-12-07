@@ -63,7 +63,7 @@
 >
   <!-- Icon -->
   <div class="mb-4 p-4 rounded-full bg-base-200/50">
-    <Icon class="size-10 text-base-content/40" aria-hidden="true" />
+    <Icon class="size-10 text-base-content opacity-40" aria-hidden="true" />
   </div>
 
   <!-- Title -->
@@ -72,7 +72,7 @@
   </h3>
 
   <!-- Description -->
-  <p class="text-base-content/70 max-w-md mb-6">
+  <p class="text-base-content opacity-70 max-w-md mb-6">
     {description}
   </p>
 
@@ -81,14 +81,14 @@
     <div class="bg-base-200/50 rounded-lg p-4 mb-6 max-w-md text-left">
       <div class="flex items-center gap-2 mb-2">
         <Lightbulb class="size-4 text-info" aria-hidden="true" />
-        <span class="text-sm font-medium text-base-content/80">
+        <span class="text-sm font-medium text-base-content opacity-80">
           {hintsTitle || 'Tips'}
         </span>
       </div>
-      <ul class="space-y-1.5 text-sm text-base-content/70">
+      <ul class="space-y-1.5 text-sm text-base-content opacity-70">
         {#each hints as hint, index (index)}
           <li class="flex items-start gap-2">
-            <span class="text-base-content/40 mt-0.5">•</span>
+            <span class="text-base-content opacity-40 mt-0.5">•</span>
             <span>{hint}</span>
           </li>
         {/each}

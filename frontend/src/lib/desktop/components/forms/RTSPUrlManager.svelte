@@ -273,7 +273,7 @@
   {#if urls.length > 0}
     <div class="space-y-3">
       <div class="flex items-center justify-between">
-        <div class="text-sm font-medium text-base-content/70">
+        <div class="text-sm font-medium text-base-content opacity-70">
           Configured RTSP Streams ({urls.length}/{maxItems}):
         </div>
         {#if urls.length > 1}
@@ -350,7 +350,7 @@
                 {disabled}
               />
 
-              <div class="text-xs text-base-content/60">
+              <div class="text-xs text-base-content opacity-60">
                 Stream {index + 1} of {urls.length}
               </div>
             </div>
@@ -359,7 +359,7 @@
       {/each}
     </div>
   {:else}
-    <div class="text-center py-8 text-base-content/60 bg-base-200 rounded-lg">
+    <div class="text-center py-8 text-base-content opacity-60 bg-base-200 rounded-lg">
       <div class="mb-2 flex justify-center">
         <Video class="size-5" />
       </div>

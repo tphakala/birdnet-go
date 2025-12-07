@@ -258,7 +258,7 @@
                 <option value={opt.value}>{opt.label}</option>
               {/each}
             </select>
-            <span class="text-xs text-base-content/50 mt-1">
+            <span class="text-xs text-base-content opacity-50 mt-1">
               {t('settings.audio.streams.typeLockedNote')}
             </span>
           </div>
@@ -330,7 +330,7 @@
           </div>
 
           <!-- URL and Error Message -->
-          <p class="font-mono text-xs text-base-content/70 break-all leading-snug mt-0.5">
+          <p class="font-mono text-xs text-base-content opacity-70 break-all leading-snug mt-0.5">
             {displayUrl}
           </p>
           {#if status === 'error' && statusMessage}
