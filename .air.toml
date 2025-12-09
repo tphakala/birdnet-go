@@ -30,13 +30,32 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
     # Enable CGO for TensorFlow Lite integration
     export CGO_ENABLED=1
     export CGO_CFLAGS="-I${HOME}/src/tensorflow"
-    export CGO_LDFLAGS="-L/usr/lib -ltensorflowlite_c"
+
+    # Set library paths based on OS
+    if [ "$(uname)" = "Darwin" ]; then
+      # macOS: use Homebrew lib path (works for both ARM64 and Intel)
+      TFLITE_LIB_DIR="/opt/homebrew/lib"
+      if [ ! -d "$TFLITE_LIB_DIR" ]; then
+        TFLITE_LIB_DIR="/usr/local/lib"
+      fi
+    else
+      # Linux
+      TFLITE_LIB_DIR="/usr/lib"
+    fi
+
+    export CGO_LDFLAGS="-L${TFLITE_LIB_DIR} -ltensorflowlite_c"
 
     # Build the Go application with version and build date
-    go build -v -x -ldflags "-s -w -r /usr/lib -r /usr/local/lib \
+    go build -ldflags "-s -w -r /usr/local/lib \
       -X 'main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)' \
       -X 'main.version=$(git describe --tags --always)'" \
       -o ./tmp/main .
+
+    # On macOS, add the Homebrew library path to rpath since Go's -r flag
+    # doesn't properly handle multiple rpaths
+    if [ "$(uname)" = "Darwin" ]; then
+      install_name_tool -add_rpath "${TFLITE_LIB_DIR}" ./tmp/main 2>/dev/null || true
+    fi
   """
 
   bin = "./tmp/main"  # Path to the compiled binary
