@@ -49,7 +49,8 @@
       "clear": "Tyhjennä",
       "edit-config": "Muokkaa asetuksia",
       "add-action": "Lisää toiminto",
-      "learnMore": "Lue lisää"
+      "learnMore": "Lue lisää",
+      "viewAll": "Näytä kaikki"
     },
     "ui": {
       "loading": "Ladataan...",

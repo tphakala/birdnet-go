@@ -49,7 +49,8 @@
       "clear": "Wyczyść",
       "edit-config": "Edytuj Konfigurację",
       "add-action": "Dodaj Akcję",
-      "learnMore": "Dowiedz się Więcej"
+      "learnMore": "Dowiedz się Więcej",
+      "viewAll": "Pokaż wszystko"
     },
     "ui": {
       "loading": "Ładowanie...",

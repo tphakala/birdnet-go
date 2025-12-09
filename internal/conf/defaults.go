@@ -92,7 +92,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dashboard.thumbnails.fallbackpolicy", "none")
 	viper.SetDefault("realtime.dashboard.summarylimit", 30)
 	viper.SetDefault("realtime.dashboard.locale", "en") // Default UI locale
-	viper.SetDefault("realtime.dashboard.newui", false) // Enable redirect from old HTMX UI to new Svelte UI
+	viper.SetDefault("realtime.dashboard.newui", true) // Enable redirect from old HTMX UI to new Svelte UI
 
 	// Spectrogram pre-rendering configuration
 	viper.SetDefault("realtime.dashboard.spectrogram.enabled", false) // Opt-in for safety

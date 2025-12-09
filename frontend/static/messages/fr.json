@@ -49,7 +49,8 @@
       "clear": "Effacer",
       "edit-config": "Modifier la configuration",
       "add-action": "Ajouter une action",
-      "learnMore": "En savoir plus"
+      "learnMore": "En savoir plus",
+      "viewAll": "Voir tout"
     },
     "ui": {
       "loading": "Chargement...",

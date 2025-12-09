@@ -1,19 +1,20 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { systemIcons, mediaIcons, navigationIcons, actionIcons } from '$lib/utils/icons';
+  import { mediaIcons, navigationIcons, actionIcons } from '$lib/utils/icons';
+  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
 
-  interface Detection {
+  // Minimal detection interface for mobile - only fields actually used by this component
+  interface MobileDetection {
     id: number;
     commonName: string;
     scientificName: string;
     confidence: number;
     date: string;
     time: string;
-    thumbnailUrl?: string;
   }
 
   interface Props {
-    detection: Detection;
+    detection: MobileDetection;
     expanded?: boolean;
     onToggle?: () => void;
     onPlay?: () => void;
@@ -31,6 +32,14 @@
     onDismiss,
     className = '',
   }: Props = $props();
+
+  // Compute species image URL from scientificName
+  let speciesImageUrl = $derived(
+    `/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName)}`
+  );
+
+  // Compute spectrogram URL from detection ID
+  let spectrogramUrl = $derived(`/api/v2/spectrogram/${detection.id}`);
 
   function formatTime(time: string): string {
     // time is in HH:MM:SS format
@@ -59,17 +68,13 @@
   >
     <!-- Thumbnail -->
     <div class="w-12 h-12 rounded-lg bg-base-200 flex-shrink-0 overflow-hidden">
-      {#if detection.thumbnailUrl}
-        <img
-          src={detection.thumbnailUrl}
-          alt={detection.commonName}
-          class="w-full h-full object-cover"
-        />
-      {:else}
-        <div class="w-full h-full flex items-center justify-center text-base-content/30">
-          {@html systemIcons.bird}
-        </div>
-      {/if}
+      <img
+        src={speciesImageUrl}
+        alt={detection.commonName}
+        class="w-full h-full object-cover"
+        onerror={handleBirdImageError}
+        loading="lazy"
+      />
     </div>
 
     <!-- Info -->
@@ -106,11 +111,14 @@
   <!-- Expanded Content -->
   {#if expanded}
     <div class="px-3 pb-3 border-t border-base-200">
-      <!-- Spectrogram placeholder -->
-      <div
-        class="mt-3 h-24 bg-base-200 rounded-lg flex items-center justify-center text-base-content/30"
-      >
-        Spectrogram
+      <!-- Spectrogram -->
+      <div class="mt-3 h-24 bg-base-200 rounded-lg overflow-hidden">
+        <img
+          src={spectrogramUrl}
+          alt="Spectrogram for {detection.commonName}"
+          class="w-full h-full object-cover"
+          loading="lazy"
+        />
       </div>
 
       <!-- Action Buttons -->

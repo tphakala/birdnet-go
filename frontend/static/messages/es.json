@@ -49,7 +49,8 @@
       "clear": "Limpiar",
       "edit-config": "Editar configuración",
       "add-action": "Añadir acción",
-      "learnMore": "Más información"
+      "learnMore": "Más información",
+      "viewAll": "Ver todo"
     },
     "ui": {
       "loading": "Cargando...",

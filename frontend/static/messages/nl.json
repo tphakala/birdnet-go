@@ -49,7 +49,8 @@
       "clear": "Wis",
       "edit-config": "Instelling wijzigen",
       "add-action": "Aktie toevoegen",
-      "learnMore": "Meer bekijken"
+      "learnMore": "Meer bekijken",
+      "viewAll": "Alles bekijken"
     },
     "ui": {
       "loading": "Inlezen ...",
