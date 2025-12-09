@@ -460,6 +460,8 @@
   },
   "detections": {
     "title": "Herkend",
+    "searchPlaceholder": "Zoek soorten...",
+    "noResults": "Geen detecties gevonden",
     "titles": {
       "hourly": "Herkend om {hour}:00 uur op {date}",
       "hourlyRange": "Herkend tussen {startHour}:00 en {endHour}:00 uur op {date}",

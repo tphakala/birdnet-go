@@ -187,7 +187,7 @@
 
 <div class="flex flex-col h-full">
   <!-- Search Header -->
-  <div class="sticky top-14 z-10 bg-base-200 p-3 border-b border-base-300">
+  <div class="sticky top-0 z-10 bg-base-200 p-3 border-b border-base-300">
     <div class="flex gap-2">
       <div class="relative flex-1">
         <input

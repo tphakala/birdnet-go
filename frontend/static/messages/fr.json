@@ -460,6 +460,8 @@
   },
   "detections": {
     "title": "Détections",
+    "searchPlaceholder": "Rechercher des espèces...",
+    "noResults": "Aucune détection trouvée",
     "titles": {
       "hourly": "Résultats horaires pour {hour}h00 le {date}",
       "hourlyRange": "Résultats horaires de {startHour}h00 à {endHour}h00 le {date}",

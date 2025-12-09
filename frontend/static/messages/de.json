@@ -460,6 +460,8 @@
   },
   "detections": {
     "title": "Erkennungen",
+    "searchPlaceholder": "Arten suchen...",
+    "noResults": "Keine Erkennungen gefunden",
     "titles": {
       "hourly": "Stündliche Ergebnisse für {hour}:00 Uhr am {date}",
       "hourlyRange": "Stündliche Ergebnisse von {startHour}:00 bis {endHour}:00 Uhr am {date}",

@@ -74,13 +74,15 @@ func (s *Server) SetupSvelteRoutes() {
 }
 
 // serveFrontendFromDisk serves frontend assets from the local filesystem (dev mode)
+// Falls back to embedded filesystem if the file doesn't exist on disk (e.g., during Vite rebuild)
 func (s *Server) serveFrontendFromDisk(c echo.Context, path string) error {
 	// Use os.OpenRoot for secure filesystem sandboxing (Go 1.24+)
 	// This automatically prevents path traversal, symlink escapes, and TOCTOU races
 	root, err := os.OpenRoot(frontendDevModePath)
 	if err != nil {
-		log.Printf("Error opening frontend dist directory: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to open dist directory")
+		// Dist directory doesn't exist - fall back to embedded
+		log.Printf("Dev mode fallback: dist directory unavailable, serving from embedded: %v", err)
+		return s.serveFrontendFromEmbed(c, path)
 	}
 	defer func() {
 		if err := root.Close(); err != nil {
@@ -92,7 +94,9 @@ func (s *Server) serveFrontendFromDisk(c echo.Context, path string) error {
 	file, err := root.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return echo.NewHTTPError(http.StatusNotFound, "File not found")
+			// File doesn't exist on disk (likely during Vite rebuild) - fall back to embedded
+			// This prevents 404s during hot reload when dist is being rebuilt
+			return s.serveFrontendFromEmbed(c, path)
 		}
 		// Path traversal attempts will return an error here
 		if os.IsPermission(err) {

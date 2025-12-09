@@ -460,6 +460,8 @@
   },
   "detections": {
     "title": "Havainnot",
+    "searchPlaceholder": "Etsi lajeja...",
+    "noResults": "Havaintoja ei löytynyt",
     "titles": {
       "hourly": "Tunnittaiset tulokset klo {hour}.00 päivänä {date}",
       "hourlyRange": "Tunnittaiset tulokset välillä {startHour}.00-{endHour}.00 päivänä {date}",
