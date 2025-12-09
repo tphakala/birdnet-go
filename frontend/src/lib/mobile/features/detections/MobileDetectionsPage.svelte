@@ -28,6 +28,10 @@
   let hasMore = $state(true);
   let loadingMore = $state(false);
 
+  // Audio playback
+  let audioElement: HTMLAudioElement | null = $state(null);
+  let playingId = $state<number | null>(null);
+
   // Filter state
   let showFilters = $state(false);
   let filters = $state<FilterState>({
@@ -139,8 +143,29 @@
   }
 
   function handlePlay(detection: Detection) {
-    // TODO: Implement audio playback with sticky player
-    logger.debug('Play detection', { id: detection.id });
+    if (!audioElement) return;
+
+    // If same detection is playing, toggle pause/play
+    if (playingId === detection.id) {
+      if (audioElement.paused) {
+        audioElement.play().catch(err => logger.error('Audio play failed', err));
+      } else {
+        audioElement.pause();
+      }
+      return;
+    }
+
+    // Play new detection
+    playingId = detection.id;
+    audioElement.src = `/api/v2/audio/${detection.id}`;
+    audioElement.play().catch(err => {
+      logger.error('Audio play failed', err);
+      playingId = null;
+    });
+  }
+
+  function handleAudioEnded() {
+    playingId = null;
   }
 
   function handleVerify(detection: Detection) {
@@ -270,3 +295,6 @@
   onApply={handleApplyFilters}
   onClear={handleClearFilters}
 />
+
+<!-- Hidden audio element for playback -->
+<audio bind:this={audioElement} onended={handleAudioEnded} hidden></audio>
