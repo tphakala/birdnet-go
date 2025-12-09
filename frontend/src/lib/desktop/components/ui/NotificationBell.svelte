@@ -3,7 +3,7 @@
   import { cn } from '$lib/utils/cn';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
-  import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
+  import { Bell, BellOff, XCircle, TriangleAlert, Info, Settings, Star } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
   import {
     type Notification,
@@ -471,14 +471,14 @@
     aria-controls="notification-dropdown"
   >
     <!-- Bell icon -->
-    <div class={cn('w-6 h-6', hasUnread && 'animate-wiggle')}>
-      {@html systemIcons.bell}
+    <div class={cn(hasUnread && 'animate-wiggle')}>
+      <Bell class="size-6" />
     </div>
 
     <!-- Unread badge -->
     {#if !loading && unreadCount > 0}
       <span
-        class="absolute -top-1 -right-1 bg-error text-error-content text-xs rounded-full px-1 min-w-[1.25rem] h-5 flex items-center justify-center font-bold"
+        class="absolute -top-1 -right-1 bg-error text-error-content text-xs rounded-full px-1 min-w-5 h-5 flex items-center justify-center font-bold"
         aria-live="polite"
         aria-atomic="true"
       >
@@ -493,7 +493,7 @@
       bind:this={dropdownRef}
       id="notification-dropdown"
       role={!loading && formattedNotifications.length > 0 ? 'menu' : undefined}
-      class="absolute right-0 top-full mt-2 min-w-[28rem] max-w-[calc(100vw-1rem)] max-h-[32rem] bg-base-100 rounded-lg shadow-xl border border-base-300 overflow-hidden flex flex-col"
+      class="absolute right-0 top-full mt-2 min-w-md max-w-[calc(100vw-1rem)] max-h-128 bg-base-100 rounded-lg shadow-xl border border-base-300 overflow-hidden flex flex-col"
       style:z-index={1010}
     >
       <!-- Header -->
@@ -522,8 +522,8 @@
         {:else if formattedNotifications.length === 0}
           <!-- Empty state -->
           <div class="p-8 text-center text-base-content/60">
-            <div class="w-12 h-12 mx-auto mb-2 opacity-50" role="img" aria-label="No notifications">
-              {@html systemIcons.bellOff}
+            <div class="mx-auto mb-2 opacity-50" role="img" aria-label="No notifications">
+              <BellOff class="size-12" />
             </div>
             <p>No notifications</p>
           </div>
@@ -547,7 +547,7 @@
             >
               <!-- Notification icon based on type -->
               <div class="flex items-start gap-3">
-                <div class="flex-shrink-0 mt-1">
+                <div class="shrink-0 mt-1">
                   <div
                     class={cn(
                       'w-8 h-8 rounded-full flex items-center justify-center',
@@ -555,25 +555,15 @@
                     )}
                   >
                     {#if notification.type === 'error'}
-                      <div class="w-5 h-5">
-                        {@html alertIconsSvg.error}
-                      </div>
+                      <XCircle class="size-5" />
                     {:else if notification.type === 'warning'}
-                      <div class="w-5 h-5">
-                        {@html alertIconsSvg.warning}
-                      </div>
+                      <TriangleAlert class="size-5" />
                     {:else if notification.type === 'info'}
-                      <div class="w-5 h-5">
-                        {@html alertIconsSvg.info}
-                      </div>
+                      <Info class="size-5" />
                     {:else if notification.type === 'detection'}
-                      <div class="w-5 h-5">
-                        {@html systemIcons.star}
-                      </div>
+                      <Star class="size-5" />
                     {:else if notification.type === 'system'}
-                      <div class="w-5 h-5">
-                        {@html systemIcons.settingsGear}
-                      </div>
+                      <Settings class="size-5" />
                     {/if}
                   </div>
                 </div>

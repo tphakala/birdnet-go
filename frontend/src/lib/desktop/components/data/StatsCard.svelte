@@ -32,7 +32,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
-  import { iconPaths } from '$lib/utils/icons';
+  import { TrendingUp, TrendingDown, Minus } from '@lucide/svelte';
   import { safeGet } from '$lib/utils/security';
 
   type TrendDirection = 'up' | 'down' | 'neutral';
@@ -110,31 +110,22 @@
     neutral: 'text-base-content/70',
   };
 
-  const cardClasses = cn(
-    'card shadow-lg transition-all duration-200',
-    safeGet(variantClasses, variant, ''),
-    {
-      'hover:shadow-xl hover:scale-105 cursor-pointer': !!(href || onClick),
-    },
-    className
+  const cardClasses = $derived(
+    cn(
+      'card shadow-lg transition-all duration-200',
+      safeGet(variantClasses, variant, ''),
+      {
+        'hover:shadow-xl hover:scale-105 cursor-pointer': !!(href || onClick),
+      },
+      className
+    )
   );
 
-  const isInteractive = href || onClick;
+  const isInteractive = $derived(href || onClick);
 
   function handleClick() {
     if (onClick) {
       onClick();
-    }
-  }
-
-  function renderTrendIcon(direction: TrendDirection) {
-    switch (direction) {
-      case 'up':
-        return iconPaths.trendUp;
-      case 'down':
-        return iconPaths.trendDown;
-      default:
-        return iconPaths.trendNeutral;
     }
   }
 </script>
@@ -159,19 +150,13 @@
           {/if}
           {#if trend}
             <div class="flex items-center gap-1 mt-2">
-              <svg
-                class={cn('w-4 h-4', trendClasses[trend.direction])}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d={renderTrendIcon(trend.direction)}
-                />
-              </svg>
+              {#if trend.direction === 'up'}
+                <TrendingUp class={cn('size-4', trendClasses[trend.direction])} />
+              {:else if trend.direction === 'down'}
+                <TrendingDown class={cn('size-4', trendClasses[trend.direction])} />
+              {:else}
+                <Minus class={cn('size-4', trendClasses[trend.direction])} />
+              {/if}
               <span class={cn('text-sm font-medium', trendClasses[trend.direction])}>
                 {trend.value}{trend.label ? ` ${trend.label}` : ''}
               </span>

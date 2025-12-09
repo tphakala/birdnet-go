@@ -633,11 +633,57 @@ tasks:
       - dist/**/*
 
   frontend-dev:
-    desc: Start frontend development server
+    desc: Start Vite dev server with HMR (access via localhost:5173)
     dir: frontend
     deps: [frontend-install]
     cmds:
       - npm run dev
+
+  frontend-watch:
+    desc: Build frontend in watch mode (auto-rebuild on changes)
+    dir: frontend
+    deps: [frontend-install]
+    cmds:
+      - |
+        echo "🔧 Starting frontend watch mode..."
+        echo "   Files will be rebuilt automatically when changed"
+        echo "   The Go server will serve these files from disk"
+        echo ""
+      - npm run build -- --watch
+
+  dev:
+    desc: Show instructions for frontend development workflow
+    cmds:
+      - |
+        echo ""
+        echo "🚀 BirdNET-Go Frontend Development Workflow"
+        echo ""
+        echo "The Go server automatically detects and serves frontend files from disk"
+        echo "when frontend/dist/ exists, enabling fast frontend iteration without"
+        echo "rebuilding the Go binary."
+        echo ""
+        echo "Option 1: Watch Mode (recommended for most development)"
+        echo "==========================================================="
+        echo "Terminal 1: task frontend-watch    # Auto-rebuilds on file changes"
+        echo "Terminal 2: ./bin/birdnet-go realtime  # Or: air realtime (for Go changes)"
+        echo "Access: http://localhost:8080"
+        echo ""
+        echo "Option 2: Vite Dev Server (for HMR - instant updates)"
+        echo "==========================================================="
+        echo "Terminal 1: task frontend-dev      # Vite dev server with HMR"
+        echo "Terminal 2: ./bin/birdnet-go realtime  # Backend for API calls"
+        echo "Access: http://localhost:5173      # Note: different port!"
+        echo ""
+        echo "Option 3: Backend-only development (Go changes)"
+        echo "==========================================================="
+        echo "Terminal 1: task frontend-watch    # Keep frontend fresh"
+        echo "Terminal 2: air realtime           # Auto-rebuilds Go on changes"
+        echo "Access: http://localhost:8080"
+        echo ""
+        echo "Quick Start:"
+        echo "  task frontend-watch  # In one terminal"
+        echo "  air realtime         # In another terminal"
+        echo ""
 
   frontend-lint:
     desc: Lint frontend code

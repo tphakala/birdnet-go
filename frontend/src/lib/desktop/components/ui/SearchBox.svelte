@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { cn } from '$lib/utils/cn';
   import {
     parseSearchQuery,
@@ -6,7 +7,7 @@
     getFilterSuggestions,
     formatFilterForDisplay,
   } from '$lib/utils/searchParser';
-  import { navigationIcons, actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { X, Search, Filter, Clock, TriangleAlert } from '@lucide/svelte';
   import { safeArrayAccess } from '$lib/utils/security';
 
   interface Props {
@@ -31,7 +32,8 @@
     currentPage = 'dashboard',
   }: Props = $props();
 
-  let searchQuery = $state(value);
+  // Use untrack to explicitly capture initial value without creating dependency
+  let searchQuery = $state(untrack(() => value));
   let isSearching = $state(false);
   let inputRef = $state<HTMLInputElement>();
   let showDropdown = $state(false);
@@ -112,7 +114,7 @@
   // Avoids repeated cn() calls and conditional logic on every render
   const inputClasses = $derived(
     cn(
-      'input focus:outline-none w-full font-normal transition-all',
+      'input focus:outline-hidden w-full font-normal transition-all',
       sizeClasses().input,
       sizeClasses().padding,
       isSearching && 'opacity-75',
@@ -409,7 +411,7 @@
 </script>
 
 {#if isVisible}
-  <div class={cn('flex-grow flex justify-center relative', className)} role="search">
+  <div class={cn('grow flex justify-center relative', className)} role="search">
     <form
       onsubmit={handleSubmit}
       class="relative w-full md:w-3/4 lg:w-4/5 xl:w-5/6 max-w-4xl mx-auto"
@@ -438,9 +440,7 @@
             class="absolute inset-y-0 right-8 sm:right-10 flex items-center pr-2 hover:bg-base-200 rounded-full"
             aria-label="Clear search"
           >
-            <div class="text-base-content/60">
-              {@html navigationIcons.close}
-            </div>
+            <X class="size-4 text-base-content/60" />
           </button>
         {/if}
 
@@ -452,16 +452,14 @@
           {#if isSearching}
             <span class="loading loading-spinner loading-sm"></span>
           {:else}
-            <div class={sizeClasses().icon}>
-              {@html actionIcons.search}
-            </div>
+            <Search class={sizeClasses().icon} />
           {/if}
         </div>
 
         <!-- Filter chips -->
         {#if showFilterChips}
           <div
-            class="absolute top-full left-0 right-0 bg-base-100 border border-base-300 border-t-0 rounded-b-lg shadow-sm z-40 p-3"
+            class="absolute top-full left-0 right-0 bg-base-100 border border-base-300 border-t-0 rounded-b-lg shadow-xs z-40 p-3"
           >
             <!-- Active filters -->
             {#if parsedSearch.filters.length > 0}
@@ -475,7 +473,7 @@
                       class="btn btn-ghost btn-xs btn-circle"
                       aria-label="Remove filter"
                     >
-                      {@html navigationIcons.close}
+                      <X class="size-3" />
                     </button>
                   </div>
                 {/each}
@@ -487,7 +485,7 @@
               <div class="space-y-1 mb-2">
                 {#each parsedSearch.errors as error}
                   <div class="alert alert-error alert-sm">
-                    {@html alertIconsSvg.warningSmall}
+                    <TriangleAlert class="size-4" />
                     <span class="text-xs">{error}</span>
                   </div>
                 {/each}
@@ -520,21 +518,17 @@
                 <button
                   type="button"
                   onclick={() => handleSuggestionClick(suggestion)}
-                  class="flex-grow flex items-center gap-3 px-4 py-2 text-left"
+                  class="grow flex items-center gap-3 px-4 py-2 text-left"
                 >
                   <!-- Icon - Filter or History -->
                   {#if showSyntaxHelp}
                     <!-- Filter icon for syntax suggestions -->
-                    <div class="w-4 h-4 text-primary/80 flex-shrink-0">
-                      {@html actionIcons.filter}
-                    </div>
+                    <Filter class="size-4 text-primary/80 shrink-0" />
                   {:else}
                     <!-- History icon for search history -->
-                    <div class="w-4 h-4 text-base-content/60 flex-shrink-0">
-                      {@html systemIcons.clock}
-                    </div>
+                    <Clock class="size-4 text-base-content/60 shrink-0" />
                   {/if}
-                  <span class="flex-grow text-sm">{suggestion}</span>
+                  <span class="grow text-sm">{suggestion}</span>
                 </button>
 
                 <!-- Remove from history button (only for history, not filter suggestions) -->
@@ -545,10 +539,10 @@
                       e.stopPropagation();
                       removeFromHistory(suggestion);
                     }}
-                    class="opacity-0 group-hover:opacity-100 hover:opacity-100 p-2 mr-2 hover:bg-base-300 rounded"
+                    class="opacity-0 group-hover:opacity-100 hover:opacity-100 p-2 mr-2 hover:bg-base-300 rounded-sm"
                     aria-label="Remove from history"
                   >
-                    {@html navigationIcons.close}
+                    <X class="size-4" />
                   </button>
                 {/if}
               </div>

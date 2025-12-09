@@ -1,6 +1,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { dataIcons } from '$lib/utils/icons';
+  import { Terminal } from '@lucide/svelte';
   import { safeArrayAccess } from '$lib/utils/security';
 
   interface ProcessInfo {
@@ -94,13 +94,13 @@
   }
 </script>
 
-<div class={cn('card bg-base-100 shadow-sm', className)}>
+<div class={cn('card bg-base-100 shadow-xs', className)}>
   <div class="card-body card-padding">
     <div class="flex justify-between items-center mb-2">
       <h2 class="card-title" id="process-info-heading">{title}</h2>
 
       <!-- Enhanced toggle for showing all processes -->
-      <div class="flex items-center gap-2 bg-base-200 px-3 py-1.5 rounded-lg shadow-sm">
+      <div class="flex items-center gap-2 bg-base-200 px-3 py-1.5 rounded-lg shadow-xs">
         <span class="text-sm font-medium">Show all processes</span>
         <input
           type="checkbox"
@@ -144,7 +144,11 @@
           <tbody>
             {#if processes.length === 0}
               <tr>
-                <td colspan="5" class="text-center py-6 text-base-content/70">
+                <td
+                  colspan="5"
+                  class="text-center py-6 opacity-70"
+                  style:color="var(--color-base-content)"
+                >
                   No process information available
                 </td>
               </tr>
@@ -154,13 +158,15 @@
                   <td>
                     <div class="flex items-start gap-2">
                       <div class="p-1.5 bg-primary/10 rounded-md text-primary">
-                        {@html dataIcons.terminal}
+                        <Terminal class="size-4" />
                       </div>
                       <div>
                         <div class="font-medium">
                           {processDisplayNames[process.pid]}
                         </div>
-                        <div class="text-xs text-base-content/60">PID: {process.pid}</div>
+                        <div class="text-xs opacity-60" style:color="var(--color-base-content)">
+                          PID: {process.pid}
+                        </div>
                       </div>
                     </div>
                   </td>

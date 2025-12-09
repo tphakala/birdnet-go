@@ -30,7 +30,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
-  import { mediaIcons, alertIconsSvg } from '$lib/utils/icons.js';
+  import { Play, Pause, Volume2, Download, XCircle } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
@@ -970,8 +970,6 @@
       audioContext = null;
     }
   });
-
-  // Icons imported from centralized icon constants
 </script>
 
 <div
@@ -990,7 +988,7 @@
     <!-- Loading spinner overlay -->
     {#if spectrogramLoader.showSpinner}
       <div
-        class="absolute inset-0 flex items-center justify-center bg-base-200 bg-opacity-75 rounded-md border border-base-300"
+        class="absolute inset-0 flex items-center justify-center bg-base-200/75 rounded-md border border-base-300"
       >
         <div
           class="loading loading-spinner loading-sm md:loading-md text-primary"
@@ -1009,16 +1007,14 @@
           : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
       >
         <div class="text-center p-2">
-          <div class="w-6 h-6 sm:w-8 sm:h-8 mx-auto mb-1 text-base-content/30" aria-hidden="true">
-            {@html alertIconsSvg.error}
-          </div>
+          <XCircle class="size-6 sm:size-8 mx-auto mb-1 text-base-content/30" aria-hidden="true" />
           <span class="text-xs sm:text-sm text-base-content/50">Spectrogram unavailable</span>
         </div>
       </div>
     {:else if spectrogramStatus?.status === 'queued' || spectrogramStatus?.status === 'generating'}
       <!-- Show generation status -->
       <div
-        class="absolute inset-0 flex flex-col items-center justify-center bg-base-200 bg-opacity-90 rounded-md border border-base-300 p-2"
+        class="absolute inset-0 flex flex-col items-center justify-center bg-base-200/90 rounded-md border border-base-300 p-2"
       >
         <div
           class="loading loading-spinner loading-xs sm:loading-sm md:loading-md"
@@ -1075,7 +1071,7 @@
       class:group-hover:opacity-100={!isMobile}
     >
       <button
-        class="flex items-center justify-center gap-1 text-white px-2 py-1 rounded-full bg-black bg-opacity-50 hover:bg-opacity-75 transition-all duration-200"
+        class="flex items-center justify-center gap-1 text-white px-2 py-1 rounded-full bg-black/50 hover:bg-black/75 transition-all duration-200"
         class:cursor-not-allowed={!audioContextAvailable}
         class:opacity-50={!audioContextAvailable}
         disabled={!audioContextAvailable}
@@ -1090,14 +1086,14 @@
           ? audioContextError || 'Volume control unavailable'
           : 'Volume control'}
       >
-        {@html mediaIcons.volume}
+        <Volume2 class="size-4" />
         <span class="text-xs text-white">{gainValue > 0 ? '+' : ''}{gainValue} dB</span>
       </button>
 
       {#if showVolumeSlider}
         <div
           bind:this={volumeSlider}
-          class="absolute top-0 w-8 bg-black bg-opacity-20 backdrop-blur-sm rounded p-2 volume-slider z-50"
+          class="absolute top-0 w-8 bg-black/20 backdrop-blur-xs rounded-sm p-2 volume-slider z-50"
           style:left="calc(100% + 4px)"
           style:height="{height}px"
           role="button"
@@ -1114,7 +1110,7 @@
             }
           }}
         >
-          <div class="relative h-full w-2 bg-white bg-opacity-50 rounded-full mx-auto">
+          <div class="relative h-full w-2 bg-white/50 rounded-full mx-auto">
             <div
               class="absolute bottom-0 w-full bg-blue-500 rounded-full transition-all duration-100"
               style:height="{(gainValue / GAIN_MAX_DB) * 100}%"
@@ -1134,7 +1130,7 @@
       class:group-hover:opacity-100={!isMobile}
     >
       <button
-        class="flex items-center justify-center gap-1 text-white px-2 py-1 rounded-full bg-black bg-opacity-50 hover:bg-opacity-75 transition-all duration-200"
+        class="flex items-center justify-center gap-1 text-white px-2 py-1 rounded-full bg-black/50 hover:bg-black/75 transition-all duration-200"
         class:cursor-not-allowed={!audioContextAvailable}
         class:opacity-50={!audioContextAvailable}
         disabled={!audioContextAvailable}
@@ -1155,7 +1151,7 @@
       {#if showFilterSlider}
         <div
           bind:this={filterSlider}
-          class="absolute top-0 w-8 bg-black bg-opacity-20 backdrop-blur-sm rounded p-2 filter-slider z-50"
+          class="absolute top-0 w-8 bg-black/20 backdrop-blur-xs rounded-sm p-2 filter-slider z-50"
           style:right="calc(100% + 4px)"
           style:height="{height}px"
           role="button"
@@ -1172,7 +1168,7 @@
             }
           }}
         >
-          <div class="relative h-full w-2 bg-white bg-opacity-50 rounded-full mx-auto">
+          <div class="relative h-full w-2 bg-white/50 rounded-full mx-auto">
             <div
               class="absolute bottom-0 w-full bg-blue-500 rounded-full transition-all duration-100"
               style:height="{(Math.log(filterFreq / FILTER_HP_MIN_FREQ) /
@@ -1195,7 +1191,7 @@
 
   <!-- Bottom overlay controls -->
   <div
-    class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-25 p-1 rounded-b-md transition-opacity duration-300"
+    class="absolute bottom-0 left-0 right-0 bg-black/25 p-1 rounded-b-md transition-opacity duration-300"
     class:opacity-0={!isMobile}
     class:group-hover:opacity-100={!isMobile}
     class:opacity-100={isMobile}
@@ -1205,7 +1201,7 @@
       <button
         bind:this={playPauseButton}
         id={playPauseId}
-        class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 flex-shrink-0"
+        class="text-white p-1 rounded-full hover:bg-white/20 shrink-0"
         onclick={handlePlayPause}
         disabled={isLoading}
         aria-label={isPlaying ? t('media.audio.pause') : t('media.audio.play')}
@@ -1214,8 +1210,10 @@
           <div
             class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
           ></div>
+        {:else if isPlaying}
+          <Pause class="size-4" />
         {:else}
-          {@html isPlaying ? mediaIcons.pause : mediaIcons.play}
+          <Play class="size-4" />
         {/if}
       </button>
 
@@ -1223,7 +1221,7 @@
       <div
         bind:this={progressBar}
         id={progressId}
-        class="flex-grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer"
+        class="grow bg-gray-200 rounded-full h-1.5 mx-2 cursor-pointer"
         role="button"
         tabindex="0"
         aria-label={t('media.audio.seekProgress', {
@@ -1248,17 +1246,17 @@
       </div>
 
       <!-- Current time -->
-      <span class="text-xs font-medium text-white flex-shrink-0">{formatTime(currentTime)}</span>
+      <span class="text-xs font-medium text-white shrink-0">{formatTime(currentTime)}</span>
 
       <!-- Download button -->
       {#if showDownload}
         <a
           href={audioUrl}
           download
-          class="text-white p-1 rounded-full hover:bg-white hover:bg-opacity-20 ml-2 flex-shrink-0"
+          class="text-white p-1 rounded-full hover:bg-white/20 ml-2 shrink-0"
           aria-label={t('media.audio.download')}
         >
-          {@html mediaIcons.download}
+          <Download class="size-4" />
         </a>
       {/if}
     </div>

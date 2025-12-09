@@ -2,7 +2,7 @@
   import FormField from './FormField.svelte';
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { alertIconsSvg, systemIcons } from '$lib/utils/icons';
+  import { Eye, EyeOff, TriangleAlert } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
@@ -105,7 +105,7 @@
   }
 </script>
 
-<div class={cn('form-control', className)} {...rest}>
+<div class={cn('form-control min-w-0', className)} {...rest}>
   <FormField
     type={showPassword ? 'text' : 'password'}
     name={name || 'password-field'}
@@ -134,9 +134,9 @@
         aria-label={showPassword ? t('forms.labels.hidePassword') : t('forms.labels.showPassword')}
       >
         {#if showPassword}
-          {@html systemIcons.eyeOff}
+          <EyeOff class="size-4" />
         {:else}
-          {@html systemIcons.eye}
+          <Eye class="size-4" />
         {/if}
       </button>
     </div>
@@ -144,7 +144,7 @@
 
   <!-- Password strength indicator -->
   {#if showStrength && passwordStrength && value}
-    <div class="mt-2">
+    <div class="mt-2" role="status" aria-live="polite">
       <div class="flex items-center justify-between mb-1">
         <span class="text-sm font-medium">{t('forms.password.strength.label')}</span>
         <span class="text-sm font-medium {passwordStrength?.color || ''}">
@@ -170,14 +170,14 @@
       <!-- Feedback -->
       {#if passwordStrength?.feedback && passwordStrength.feedback.length > 0}
         <div class="mt-2">
-          <div class="text-xs text-base-content/70 mb-1">
+          <div class="text-xs text-base-content opacity-70 mb-1">
             {t('forms.password.strength.suggestions.title')}
           </div>
-          <ul class="text-xs text-base-content/70 space-y-1">
-            {#each passwordStrength.feedback as suggestion}
+          <ul class="text-xs text-base-content opacity-70 space-y-1">
+            {#each passwordStrength.feedback as suggestion, index (index)}
               <li class="flex items-center gap-1">
-                <div class="h-3 w-3 flex-shrink-0">
-                  {@html alertIconsSvg.warningSmall}
+                <div class="shrink-0">
+                  <TriangleAlert class="size-3" />
                 </div>
                 {suggestion}
               </li>

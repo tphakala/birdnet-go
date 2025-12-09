@@ -30,13 +30,15 @@
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
+  import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
+  import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import {
     settingsStore,
     settingsActions,
     securitySettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import { alertIconsSvg, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { TriangleAlert, ExternalLink, Server, KeyRound, Users, Network } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
 
@@ -75,40 +77,40 @@
   let serverConfigHasChanges = $derived(
     hasSettingsChanged(
       {
-        host: (store.originalData as any)?.security?.host,
-        autoTls: (store.originalData as any)?.security?.autoTls,
+        host: store.originalData.security?.host,
+        autoTls: store.originalData.security?.autoTls,
       },
       {
-        host: (store.formData as any)?.security?.host,
-        autoTls: (store.formData as any)?.security?.autoTls,
+        host: store.formData.security?.host,
+        autoTls: store.formData.security?.autoTls,
       }
     )
   );
 
   let basicAuthHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.security?.basicAuth,
-      (store.formData as any)?.security?.basicAuth
+      store.originalData.security?.basicAuth,
+      store.formData.security?.basicAuth
     )
   );
 
   let oauthHasChanges = $derived(
     hasSettingsChanged(
       {
-        googleAuth: (store.originalData as any)?.security?.googleAuth,
-        githubAuth: (store.originalData as any)?.security?.githubAuth,
+        googleAuth: store.originalData.security?.googleAuth,
+        githubAuth: store.originalData.security?.githubAuth,
       },
       {
-        googleAuth: (store.formData as any)?.security?.googleAuth,
-        githubAuth: (store.formData as any)?.security?.githubAuth,
+        googleAuth: store.formData.security?.googleAuth,
+        githubAuth: store.formData.security?.githubAuth,
       }
     )
   );
 
   let subnetBypassHasChanges = $derived(
     hasSettingsChanged(
-      (store.originalData as any)?.security?.allowSubnetBypass,
-      (store.formData as any)?.security?.allowSubnetBypass
+      store.originalData.security?.allowSubnetBypass,
+      store.formData.security?.allowSubnetBypass
     )
   );
 
@@ -181,7 +183,7 @@
   function updateGoogleUserId(userId: string) {
     settingsActions.updateSection('security', {
       ...settings,
-      googleAuth: { ...(settings.googleAuth as any), userId },
+      googleAuth: { ...settings.googleAuth, userId },
     });
   }
 
@@ -210,7 +212,7 @@
   function updateGithubUserId(userId: string) {
     settingsActions.updateSection('security', {
       ...settings,
-      githubAuth: { ...(settings.githubAuth as any), userId },
+      githubAuth: { ...settings.githubAuth, userId },
     });
   }
 
@@ -228,16 +230,58 @@
       allowSubnetBypass: { ...settings.allowSubnetBypass, subnet },
     });
   }
+
+  // Tab state
+  let activeTab = $state('server');
+
+  // Tab definitions
+  let tabs = $derived<TabDefinition[]>([
+    {
+      id: 'server',
+      label: t('settings.security.serverConfiguration.title'),
+      icon: Server,
+      content: serverTabContent,
+      hasChanges: serverConfigHasChanges,
+    },
+    {
+      id: 'basic-auth',
+      label: t('settings.security.basicAuthentication.title'),
+      icon: KeyRound,
+      content: basicAuthTabContent,
+      hasChanges: basicAuthHasChanges,
+    },
+    {
+      id: 'oauth',
+      label: t('settings.security.oauth.title'),
+      icon: Users,
+      content: oauthTabContent,
+      hasChanges: oauthHasChanges,
+    },
+    {
+      id: 'subnet',
+      label: t('settings.security.bypassAuthentication.title'),
+      icon: Network,
+      content: subnetTabContent,
+      hasChanges: subnetBypassHasChanges,
+    },
+  ]);
 </script>
 
-<div class="space-y-4 settings-page-content">
-    <!-- Server Configuration -->
+{#snippet serverTabContent()}
+  <div class="space-y-6">
+    <!-- Server Configuration Card -->
     <SettingsSection
       title={t('settings.security.serverConfiguration.title')}
-    description={t('settings.security.serverConfiguration.description')}
-    defaultOpen={true}
-    hasChanges={serverConfigHasChanges}
-  >
+      description={t('settings.security.serverConfiguration.description')}
+      originalData={{
+        host: store.originalData.security?.host,
+        autoTls: store.originalData.security?.autoTls,
+      }}
+      currentData={{
+        host: store.formData.security?.host,
+        autoTls: store.formData.security?.autoTls,
+      }}
+    >
     <div class="space-y-4">
       <!-- Host Address -->
       <TextInput
@@ -251,7 +295,9 @@
 
       <div class="border-t border-base-300 pt-4 mt-4">
         <h4 class="text-lg font-medium mb-2">{t('settings.security.httpsSettingsTitle')}</h4>
-        <p class="text-sm text-base-content/70 mb-4">{t('settings.security.httpsSettingsDescription')}</p>
+        <p class="text-sm text-[color:var(--color-base-content)] opacity-70 mb-4">
+          {t('settings.security.httpsSettingsDescription')}
+        </p>
 
         <Checkbox
           checked={settings.autoTls}
@@ -260,58 +306,86 @@
           onchange={updateAutoTLSEnabled}
         />
 
-        {#if settings.autoTls}
-          <SettingsNote>
-            <p><strong>{t('settings.security.serverConfiguration.autoTlsRequirements.title')}</strong></p>
-            <ul class="list-disc list-inside mt-1">
-              <li>{t('settings.security.serverConfiguration.autoTlsRequirements.domainRequired')}</li>
-              <li>{t('settings.security.serverConfiguration.autoTlsRequirements.domainPointing')}</li>
-              <li>{t('settings.security.serverConfiguration.autoTlsRequirements.portsAccessible')}</li>
-            </ul>
-          </SettingsNote>
-        {/if}
+        <SettingsNote>
+          <p><strong>{t('settings.security.serverConfiguration.autoTlsRequirements.title')}</strong></p>
+          <ul class="list-disc list-inside mt-1">
+            <li>{t('settings.security.serverConfiguration.autoTlsRequirements.domainRequired')}</li>
+            <li>{t('settings.security.serverConfiguration.autoTlsRequirements.domainPointing')}</li>
+            <li>{t('settings.security.serverConfiguration.autoTlsRequirements.portsAccessible')}</li>
+          </ul>
+        </SettingsNote>
+        
       </div>
     </div>
-  </SettingsSection>
+    </SettingsSection>
+  </div>
+{/snippet}
 
-  <!-- Basic Authentication -->
-  <SettingsSection
-    title={t('settings.security.basicAuthentication.title')}
-    description={t('settings.security.basicAuthentication.description')}
-    defaultOpen={false}
-    hasChanges={basicAuthHasChanges}
-  >
-    <div class="space-y-4">
-      <Checkbox
-        checked={settings.basicAuth.enabled}
-        label={t('settings.security.basicAuthentication.enableLabel')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={updateBasicAuthEnabled}
-      />
+{#snippet basicAuthTabContent()}
+  <div class="space-y-6">
+    <!-- Basic Authentication Card -->
+    <SettingsSection
+      title={t('settings.security.basicAuthentication.title')}
+      description={t('settings.security.basicAuthentication.description')}
+      originalData={store.originalData.security?.basicAuth}
+      currentData={store.formData.security?.basicAuth}
+    >
+      <div class="space-y-4">
+        <Checkbox
+          checked={settings.basicAuth.enabled}
+          label={t('settings.security.basicAuthentication.enableLabel')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={updateBasicAuthEnabled}
+        />
 
-      {#if settings.basicAuth?.enabled}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <PasswordField
-            label={t('settings.security.basicAuthentication.passwordLabel')}
-            value={settings.basicAuth.password}
-            onUpdate={updateBasicAuthPassword}
-            placeholder=""
-            helpText={t('settings.security.basicAuthentication.passwordHelpText')}
-            disabled={store.isLoading || store.isSaving}
-            allowReveal={true}
-          />
-        </div>
-      {/if}
-    </div>
-  </SettingsSection>
+        <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
+        <fieldset
+          disabled={!settings.basicAuth?.enabled || store.isLoading || store.isSaving}
+          class="contents"
+          aria-describedby="basic-auth-status"
+        >
+          <span id="basic-auth-status" class="sr-only">
+            {settings.basicAuth?.enabled
+              ? t('settings.security.basicAuthentication.enableLabel')
+              : t('settings.security.basicAuthentication.disabled')}
+          </span>
+          <div
+            class="transition-opacity duration-200"
+            class:opacity-50={!settings.basicAuth?.enabled}
+          >
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <PasswordField
+                label={t('settings.security.basicAuthentication.passwordLabel')}
+                value={settings.basicAuth.password}
+                onUpdate={updateBasicAuthPassword}
+                placeholder=""
+                helpText={t('settings.security.basicAuthentication.passwordHelpText')}
+                disabled={!settings.basicAuth?.enabled || store.isLoading || store.isSaving}
+                allowReveal={true}
+              />
+            </div>
+          </div>
+        </fieldset>
+      </div>
+    </SettingsSection>
+  </div>
+{/snippet}
 
-  <!-- OAuth2 Social Authentication -->
-  <SettingsSection
-    title={t('settings.security.oauth.title')}
-    description={t('settings.security.oauth.description')}
-    defaultOpen={false}
-    hasChanges={oauthHasChanges}
-  >
+{#snippet oauthTabContent()}
+  <div class="space-y-6">
+    <!-- OAuth2 Social Authentication Card -->
+    <SettingsSection
+      title={t('settings.security.oauth.title')}
+      description={t('settings.security.oauth.description')}
+      originalData={{
+        googleAuth: store.originalData.security?.googleAuth,
+        githubAuth: store.originalData.security?.githubAuth,
+      }}
+      currentData={{
+        googleAuth: store.formData.security?.googleAuth,
+        githubAuth: store.formData.security?.githubAuth,
+      }}
+    >
     <div class="space-y-6">
       <!-- Google Auth -->
       <div class="border border-base-300 rounded-lg p-4">
@@ -350,16 +424,16 @@
             <div class="bg-base-200 p-3 rounded-lg">
               <div class="text-sm">
                 <p class="font-medium mb-1">{t('settings.security.oauth.google.redirectUriTitle')}</p>
-                <code class="text-xs bg-base-300 px-2 py-1 rounded">{googleRedirectURI}</code>
+                <code class="text-xs bg-base-300 px-2 py-1 rounded-sm">{googleRedirectURI}</code>
               </div>
               <a
                 href="https://console.cloud.google.com/apis/credentials"
                 target="_blank"
                 rel="noopener"
-                class="text-sm text-primary hover:text-primary-focus inline-flex items-center mt-2"
+                class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
               >
                 {t('settings.security.oauth.google.getCredentialsLabel')}
-                {@html systemIcons.externalLink}
+                <ExternalLink class="size-4" />
               </a>
             </div>
 
@@ -387,7 +461,7 @@
 
             <TextInput
               id="google-user-id"
-              value={(settings.googleAuth as any).userId}
+              value={settings.googleAuth.userId ?? ''}
               label={t('settings.security.oauth.google.userIdLabel')}
               placeholder={t('settings.security.placeholders.allowedUsers')}
               disabled={store.isLoading || store.isSaving}
@@ -421,16 +495,16 @@
             <div class="bg-base-200 p-3 rounded-lg">
               <div class="text-sm">
                 <p class="font-medium mb-1">{t('settings.security.oauth.github.redirectUriTitle')}</p>
-                <code class="text-xs bg-base-300 px-2 py-1 rounded">{githubRedirectURI}</code>
+                <code class="text-xs bg-base-300 px-2 py-1 rounded-sm">{githubRedirectURI}</code>
               </div>
               <a
                 href="https://github.com/settings/developers"
                 target="_blank"
                 rel="noopener"
-                class="text-sm text-primary hover:text-primary-focus inline-flex items-center mt-2"
+                class="text-sm text-primary hover:text-primary-focus inline-flex items-center gap-1 mt-2"
               >
                 {t('settings.security.oauth.github.getCredentialsLabel')}
-                {@html systemIcons.externalLink}
+                <ExternalLink class="size-4" />
               </a>
             </div>
 
@@ -458,7 +532,7 @@
 
             <TextInput
               id="github-user-id"
-              value={(settings.githubAuth as any).userId}
+              value={settings.githubAuth.userId ?? ''}
               label={t('settings.security.oauth.github.userIdLabel')}
               placeholder={t('settings.security.placeholders.allowedUsers')}
               disabled={store.isLoading || store.isSaving}
@@ -468,45 +542,69 @@
         {/if}
       </div>
     </div>
-  </SettingsSection>
-
-  <!-- Bypass Authentication -->
-  <SettingsSection
-    title={t('settings.security.bypassAuthentication.title')}
-    description={t('settings.security.bypassAuthentication.description')}
-    defaultOpen={false}
-    hasChanges={subnetBypassHasChanges}
-  >
-    <div class="space-y-4">
-      <Checkbox
-        checked={settings.allowSubnetBypass.enabled}
-        label={t('settings.security.allowSubnetBypassLabel')}
-        disabled={store.isLoading || store.isSaving}
-        onchange={updateSubnetBypassEnabled}
-      />
-
-      {#if settings.allowSubnetBypass?.enabled}
-        <div class="ml-7">
-          <TextInput
-            id="allowed-subnet"
-            value={settings.allowSubnetBypass.subnet}
-            label={t('settings.security.allowedSubnetsLabel')}
-            placeholder={t('settings.security.placeholders.subnet')}
-            disabled={store.isLoading || store.isSaving}
-            onchange={updateSubnetBypassSubnet}
-          />
-          <div class="text-sm text-base-content/70 mt-1">
-            {t('settings.security.allowedSubnetsHelp')}
-          </div>
-        </div>
-
-        <div class="alert alert-warning">
-          {@html alertIconsSvg.warning}
-          <span>
-            <strong>{t('settings.security.securityWarningTitle')}</strong> {t('settings.security.subnetWarningText')}
-          </span>
-        </div>
-      {/if}
-    </div>
-  </SettingsSection>
+    </SettingsSection>
   </div>
+{/snippet}
+
+{#snippet subnetTabContent()}
+  <div class="space-y-6">
+    <!-- Bypass Authentication Card -->
+    <SettingsSection
+      title={t('settings.security.bypassAuthentication.title')}
+      description={t('settings.security.bypassAuthentication.description')}
+      originalData={store.originalData.security?.allowSubnetBypass}
+      currentData={store.formData.security?.allowSubnetBypass}
+    >
+      <div class="space-y-4">
+        <Checkbox
+          checked={settings.allowSubnetBypass.enabled}
+          label={t('settings.security.allowSubnetBypassLabel')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={updateSubnetBypassEnabled}
+        />
+
+        <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
+        <fieldset
+          disabled={!settings.allowSubnetBypass?.enabled || store.isLoading || store.isSaving}
+          class="contents"
+          aria-describedby="subnet-bypass-status"
+        >
+          <span id="subnet-bypass-status" class="sr-only">
+            {settings.allowSubnetBypass?.enabled
+              ? t('settings.security.allowSubnetBypassLabel')
+              : t('settings.security.bypassAuthentication.disabled')}
+          </span>
+          <div
+            class="space-y-4 transition-opacity duration-200"
+            class:opacity-50={!settings.allowSubnetBypass?.enabled}
+          >
+            <TextInput
+              id="allowed-subnet"
+              value={settings.allowSubnetBypass.subnet}
+              label={t('settings.security.allowedSubnetsLabel')}
+              placeholder={t('settings.security.placeholders.subnet')}
+              helpText={t('settings.security.allowedSubnetsHelp')}
+              disabled={!settings.allowSubnetBypass?.enabled ||
+                store.isLoading ||
+                store.isSaving}
+              onchange={updateSubnetBypassSubnet}
+            />
+
+            <div class="alert alert-warning">
+              <TriangleAlert class="size-5" />
+              <span>
+                <strong>{t('settings.security.securityWarningTitle')}</strong>
+                {t('settings.security.subnetWarningText')}
+              </span>
+            </div>
+          </div>
+        </fieldset>
+      </div>
+    </SettingsSection>
+  </div>
+{/snippet}
+
+<!-- Main Content -->
+<main class="settings-page-content" aria-label="Security settings configuration">
+  <SettingsTabs {tabs} bind:activeTab />
+</main>

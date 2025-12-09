@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
   import type { Snippet } from 'svelte';
-  import { systemIcons } from '$lib/utils/icons';
+  import { Info } from '@lucide/svelte';
   import { safeGet } from '$lib/utils/security';
 
   interface Option {
@@ -59,7 +59,7 @@
   };
 </script>
 
-<div class={cn('form-control relative', className)} {...rest}>
+<div class={cn('form-control relative min-w-0', className)} {...rest}>
   {#if label}
     <label class="label justify-start" for={id}>
       <span class="label-text">
@@ -79,7 +79,7 @@
           onblur={() => (showTooltip = false)}
           aria-label="Help information"
         >
-          {@html systemIcons.help}
+          <Info class="size-4" />
         </button>
       {/if}
     </label>
@@ -90,7 +90,7 @@
     bind:value
     {disabled}
     {required}
-    class={cn('select select-bordered w-full', safeGet(sizeClasses, size, ''))}
+    class={cn('select  w-full', safeGet(sizeClasses, size, ''))}
     onchange={handleChange}
   >
     {#if placeholder}
@@ -109,14 +109,12 @@
   </select>
 
   {#if helpText}
-    <div class="label">
-      <span class="label-text-alt text-base-content/70">{helpText}</span>
-    </div>
+    <span class="help-text">{helpText}</span>
   {/if}
 
   {#if tooltip && showTooltip}
     <div
-      class="absolute top-full left-0 z-tooltip p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
+      class="absolute top-full left-0 z-tooltip p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded-sm shadow-lg max-w-xs text-base-content"
       role="tooltip"
     >
       {tooltip}

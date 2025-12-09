@@ -19,7 +19,7 @@
  * - SSR-safe initialization
  *
  * Theme Integration:
- * - Works with DaisyUI theme system
+ * - Works with custom CSS theme system
  * - Updates CSS custom properties
  * - Manages data-theme attributes
  * - Coordinates with Tailwind dark mode

@@ -3,7 +3,7 @@
   import FormField from './FormField.svelte';
   import ToggleField from './ToggleField.svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { actionIcons, alertIconsSvg, mediaIcons, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { Plus, X, Video, TriangleAlert } from '@lucide/svelte';
   import { createSafeMap } from '$lib/utils/security';
 
   interface RTSPUrl {
@@ -200,7 +200,7 @@
   );
 </script>
 
-<div class={cn('form-control', className)} {...rest}>
+<div class={cn('form-control min-w-0', className)} {...rest}>
   <label for={fieldId} class="label">
     <span class="label-text font-medium">
       {label}
@@ -251,7 +251,7 @@
             disabled={disabled || !canAdd}
             aria-label="Add RTSP URL"
           >
-            {@html actionIcons.add}
+            <Plus class="size-4" />
             Add
           </button>
         </div>
@@ -273,7 +273,7 @@
   {#if urls.length > 0}
     <div class="space-y-3">
       <div class="flex items-center justify-between">
-        <div class="text-sm font-medium text-base-content/70">
+        <div class="text-sm font-medium text-base-content opacity-70">
           Configured RTSP Streams ({urls.length}/{maxItems}):
         </div>
         {#if urls.length > 1}
@@ -300,7 +300,7 @@
                   {disabled}
                   aria-label="Remove RTSP stream"
                 >
-                  {@html navigationIcons.close}
+                  <X class="size-4" />
                 </button>
               </div>
             </div>
@@ -313,8 +313,7 @@
                   type="text"
                   name="stream-name-{rtspUrl.id}"
                   label="Stream Name"
-                  bind:value={rtspUrl.name}
-                  onChange={value => updateUrl(rtspUrl.id, 'name', String(value))}
+                  value={rtspUrl.name}
                   onInput={value => updateUrl(rtspUrl.id, 'name', String(value))}
                   {disabled}
                   inputClassName={errors.get(`${rtspUrl.id}-name`) ? 'input-error' : ''}
@@ -330,8 +329,7 @@
                   type="text"
                   name="stream-url-{rtspUrl.id}"
                   label="RTSP URL"
-                  bind:value={rtspUrl.url}
-                  onChange={value => updateUrl(rtspUrl.id, 'url', String(value))}
+                  value={rtspUrl.url}
                   onInput={value => updateUrl(rtspUrl.id, 'url', String(value))}
                   {disabled}
                   inputClassName={errors.get(rtspUrl.id) ? 'input-error' : ''}
@@ -352,7 +350,7 @@
                 {disabled}
               />
 
-              <div class="text-xs text-base-content/60">
+              <div class="text-xs text-base-content opacity-60">
                 Stream {index + 1} of {urls.length}
               </div>
             </div>
@@ -361,9 +359,9 @@
       {/each}
     </div>
   {:else}
-    <div class="text-center py-8 text-base-content/60 bg-base-200 rounded-lg">
-      <div class="mb-2">
-        {@html mediaIcons.videoCamera}
+    <div class="text-center py-8 text-base-content opacity-60 bg-base-200 rounded-lg">
+      <div class="mb-2 flex justify-center">
+        <Video class="size-5" />
       </div>
       <div class="text-sm font-medium">No RTSP streams configured</div>
       <div class="text-xs">Add RTSP camera streams for audio capture</div>
@@ -373,7 +371,7 @@
   <!-- Max items warning -->
   {#if urls.length >= maxItems}
     <div class="alert alert-warning mt-3">
-      {@html alertIconsSvg.warning}
+      <TriangleAlert class="size-4" />
       <span>Maximum number of RTSP streams ({maxItems}) reached.</span>
     </div>
   {/if}

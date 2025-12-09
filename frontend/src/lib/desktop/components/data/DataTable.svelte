@@ -31,7 +31,7 @@
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
   import type { Column, SortDirection } from './DataTable.types';
-  import { alertIconsSvg, navigationIcons } from '$lib/utils/icons';
+  import { XCircle, ChevronUp, ChevronDown } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
   interface Props<T extends Record<string, any>> extends Omit<HTMLAttributes<HTMLElement>, 'data'> {
@@ -109,14 +109,16 @@
     }
   }
 
-  const tableClasses = cn(
-    'table',
-    {
-      'table-zebra': striped,
-      'table-compact': compact,
-      'w-full': fullWidth,
-    },
-    className
+  const tableClasses = $derived(
+    cn(
+      'table',
+      {
+        'table-zebra': striped,
+        'table-compact': compact,
+        'w-full': fullWidth,
+      },
+      className
+    )
   );
 </script>
 
@@ -134,7 +136,7 @@
       {@render renderError({ error })}
     {:else}
       <div class="alert alert-error">
-        {@html alertIconsSvg.errorCircle}
+        <XCircle class="size-6" />
         <span>{error}</span>
       </div>
     {/if}
@@ -172,9 +174,9 @@
                   <span class="inline-block w-4" aria-hidden="true">
                     {#if sortColumn === column.key}
                       {#if sortDirection === 'asc'}
-                        {@html navigationIcons.sortUp}
+                        <ChevronUp class="size-4" />
                       {:else if sortDirection === 'desc'}
-                        {@html navigationIcons.sortDown}
+                        <ChevronDown class="size-4" />
                       {/if}
                     {/if}
                   </span>

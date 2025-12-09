@@ -2,7 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
   import type { SelectOption } from './SelectDropdown.types';
-  import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { X, ChevronDown } from '@lucide/svelte';
   import {
     safeGet,
     safeArrayAccess,
@@ -338,12 +338,12 @@
             }}
             aria-label="Clear selection"
           >
-            {@html navigationIcons.close}
+            <X class="size-4" />
           </div>
         {/if}
 
-        <div class={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}>
-          {@html navigationIcons.chevronDown}
+        <div class={cn('transition-transform', isOpen && 'rotate-180')}>
+          <ChevronDown class="size-4" />
         </div>
       </div>
     </button>
@@ -365,7 +365,7 @@
               bind:value={searchQuery}
               oninput={handleSearch}
               placeholder="Search..."
-              class="input input-sm input-bordered w-full"
+              class="input input-sm w-full"
               aria-label="Search options"
               role="searchbox"
               aria-controls="{fieldId}-listbox"
@@ -382,13 +382,13 @@
           aria-labelledby={label ? `${fieldId}-label` : undefined}
         >
           {#if filteredOptions().length === 0}
-            <div class="p-4 text-center text-base-content/60">No options found</div>
+            <div class="p-4 text-center text-base-content opacity-60">No options found</div>
           {:else}
             {@const flatOptions = filteredOptions()}
             {@const optionIndexMap = new Map(flatOptions.map((option, index) => [option, index]))}
             {#each Object.entries(groupedOptions()) as [group, groupOptions]}
               {#if group && groupBy}
-                <div class="px-3 py-2 text-xs font-semibold text-base-content/60 uppercase">
+                <div class="px-3 py-2 text-xs font-semibold text-base-content opacity-60 uppercase">
                   {group}
                 </div>
               {/if}
@@ -398,7 +398,7 @@
                 <button
                   type="button"
                   class={cn(
-                    'w-full px-3 py-2 text-left hover:bg-base-200 focus:bg-base-200 focus:outline-none flex items-center gap-2',
+                    'w-full px-3 py-2 text-left hover:bg-base-200 focus:bg-base-200 focus:outline-hidden flex items-center gap-2',
                     isSelected(option) && 'bg-primary/10 text-primary',
                     option.disabled && 'opacity-50 cursor-not-allowed',
                     highlightedIndex === flatIndex && 'bg-base-200'
@@ -428,7 +428,7 @@
                     {:else}
                       <div class="font-medium">{option.label}</div>
                       {#if option.description}
-                        <div class="text-xs text-base-content/60">{option.description}</div>
+                        <div class="text-xs text-base-content opacity-60">{option.description}</div>
                       {/if}
                     {/if}
                   </div>
@@ -439,7 +439,7 @@
         </div>
 
         {#if multiple && maxSelections}
-          <div class="p-2 border-t border-base-300 text-xs text-base-content/60">
+          <div class="p-2 border-t border-base-300 text-xs text-base-content opacity-60">
             {selectedOptions.length} / {maxSelections} selected
           </div>
         {/if}

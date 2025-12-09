@@ -53,12 +53,12 @@ describe('StatsCard', () => {
 
   it('renders different trend directions', () => {
     const trends = [
-      { direction: 'up' as const, expectedClass: 'text-success', path: 'M5 15l7-7 7 7' },
-      { direction: 'down' as const, expectedClass: 'text-error', path: 'M19 9l-7 7-7-7' },
-      { direction: 'neutral' as const, expectedClass: 'text-base-content/70', path: 'M4 12h16' },
+      { direction: 'up' as const, expectedClass: 'text-success' },
+      { direction: 'down' as const, expectedClass: 'text-error' },
+      { direction: 'neutral' as const, expectedClass: 'text-base-content/70' },
     ];
 
-    trends.forEach(({ direction, expectedClass, path }) => {
+    trends.forEach(({ direction, expectedClass }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { container, unmount } = render(StatsCard as any, {
         props: {
@@ -70,7 +70,8 @@ describe('StatsCard', () => {
 
       const svg = container.querySelector('svg');
       expect(svg).toHaveClass(expectedClass);
-      expect(svg?.querySelector('path')).toHaveAttribute('d', path);
+      // Verify SVG exists with correct class (lucide icons have different path data)
+      expect(svg).toBeTruthy();
       unmount();
     });
   });

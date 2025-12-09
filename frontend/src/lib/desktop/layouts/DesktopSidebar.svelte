@@ -21,7 +21,7 @@ Special Behaviors:
 
 Props:
 - securityEnabled?: boolean - Whether security/auth is enabled
-- accessAllowed?: boolean - Whether user has access to protected routes  
+- accessAllowed?: boolean - Whether user has access to protected routes
 - version?: string - Version string to display
 - currentRoute?: string - Current active route for highlighting
 - onNavigate?: (url: string) => void - Custom navigation handler
@@ -36,7 +36,17 @@ Performance Optimizations:
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { auth as authStore } from '$lib/stores/auth';
-  import { systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import {
+    LayoutDashboard,
+    BarChart3,
+    Search,
+    Info,
+    Cpu,
+    Settings,
+    LogOut,
+    LogIn,
+    ChevronDown,
+  } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { resetDateToToday } from '$lib/utils/datePersistence';
   import LoginModal from '../components/modals/LoginModal.svelte';
@@ -65,48 +75,52 @@ Performance Optimizations:
     authConfig = { basicEnabled: true, googleEnabled: false, githubEnabled: false },
   }: Props = $props();
 
-  // State for login modal
+  // State for login modal and collapsible sections
   let showLoginModal = $state(false);
+  let analyticsExpanded = $state(false);
+  let settingsExpanded = $state(false);
 
-  // PERFORMANCE OPTIMIZATION: Cache route calculations with $derived
-  // Avoids repeated string processing and condition checks in templates
-  let routeCache = $derived(() => {
-    const routes = {
-      dashboard: currentRoute === '/ui/dashboard' || currentRoute === '/ui/',
-      analytics: currentRoute.startsWith('/ui/analytics'),
-      analyticsExact: currentRoute === '/ui/analytics',
-      analyticsAdvanced: currentRoute === '/ui/analytics/advanced',
-      analyticsSpecies: currentRoute === '/ui/analytics/species',
-      search: currentRoute.startsWith('/ui/search'),
-      about: currentRoute.startsWith('/ui/about'),
-      system: currentRoute.startsWith('/ui/system'),
-      settings: currentRoute.startsWith('/ui/settings'),
-      settingsMain: currentRoute === '/ui/settings/main',
-      settingsAudio: currentRoute === '/ui/settings/audio',
-      settingsFilters: currentRoute.startsWith('/ui/settings/detectionfilters'),
-      settingsIntegrations: currentRoute === '/ui/settings/integrations',
-      settingsSecurity: currentRoute === '/ui/settings/security',
-      settingsSpecies: currentRoute === '/ui/settings/species',
-      settingsNotifications: currentRoute === '/ui/settings/notifications',
-      settingsSupport: currentRoute === '/ui/settings/support',
-      settingsUserInterface: currentRoute === '/ui/settings/userinterface',
-    };
-    return routes;
+  // Get actual route from window.location for accurate highlighting
+  // Falls back to currentRoute prop if window is not available
+  let actualRoute = $derived.by(() => {
+    if (typeof window !== 'undefined') {
+      return window.location.pathname;
+    }
+    return currentRoute;
   });
 
-  // PERFORMANCE OPTIMIZATION: Legacy helper functions removed - now using cached routeCache
+  // PERFORMANCE OPTIMIZATION: Cache route calculations with $derived.by
+  let routeCache = $derived.by(() => ({
+    dashboard: actualRoute === '/ui/dashboard' || actualRoute === '/ui/',
+    analytics: actualRoute.startsWith('/ui/analytics'),
+    analyticsExact: actualRoute === '/ui/analytics',
+    analyticsAdvanced: actualRoute === '/ui/analytics/advanced',
+    analyticsSpecies: actualRoute === '/ui/analytics/species',
+    search: actualRoute.startsWith('/ui/search'),
+    about: actualRoute.startsWith('/ui/about'),
+    system: actualRoute.startsWith('/ui/system'),
+    settings: actualRoute.startsWith('/ui/settings'),
+    settingsMain: actualRoute === '/ui/settings/main',
+    settingsAudio: actualRoute === '/ui/settings/audio',
+    settingsFilters: actualRoute.startsWith('/ui/settings/detectionfilters'),
+    settingsIntegrations: actualRoute === '/ui/settings/integrations',
+    settingsSecurity: actualRoute === '/ui/settings/security',
+    settingsSpecies: actualRoute === '/ui/settings/species',
+    settingsNotifications: actualRoute === '/ui/settings/notifications',
+    settingsSupport: actualRoute === '/ui/settings/support',
+  }));
 
-  // PERFORMANCE OPTIMIZATION: Use $derived for navigation section states
-  // Automatically updates when currentRoute changes, eliminating manual $effect
-  let analyticsOpen = $derived(routeCache().analytics);
-  let settingsOpen = $derived(routeCache().settings);
+  // Auto-expand sections when route matches
+  $effect(() => {
+    if (routeCache.analytics) analyticsExpanded = true;
+    if (routeCache.settings) settingsExpanded = true;
+  });
 
-  // PERFORMANCE OPTIMIZATION: Cache navigation URL transformations with $derived
-  // Pre-compute all navigation URLs to avoid repeated string processing
+  // PERFORMANCE OPTIMIZATION: Cache navigation URL transformations
   let navigationUrls = $derived({
     dashboard: onNavigate ? '/' : '/ui/dashboard',
     analytics: onNavigate ? '/analytics' : '/ui/analytics',
-    analyticsAdvanced: '/ui/analytics/advanced', // Always use new UI - no legacy equivalent
+    analyticsAdvanced: '/ui/analytics/advanced',
     analyticsSpecies: onNavigate ? '/analytics/species' : '/ui/analytics/species',
     search: onNavigate ? '/search' : '/ui/search',
     about: onNavigate ? '/about' : '/ui/about',
@@ -119,285 +133,309 @@ Performance Optimizations:
     settingsSpecies: onNavigate ? '/settings/species' : '/ui/settings/species',
     settingsNotifications: onNavigate ? '/settings/notifications' : '/ui/settings/notifications',
     settingsSupport: onNavigate ? '/settings/support' : '/ui/settings/support',
-    settingsUserInterface: onNavigate ? '/settings/userinterface' : '/ui/settings/userinterface',
   });
 
-  /**
-   * Navigate to a route with special handling for dashboard
-   *
-   * When navigating to the dashboard, automatically resets the date persistence
-   * to show the current date. This ensures users always see today's data when
-   * explicitly clicking the dashboard link, rather than returning to a previously
-   * viewed historical date.
-   *
-   * @param url - The navigation URL from the pre-computed navigationUrls cache
-   */
   function navigate(url: string) {
-    // Special handling for dashboard navigation - reset date to today
     if (url === navigationUrls.dashboard) {
       resetDateToToday();
     }
-
     if (onNavigate) {
       onNavigate(url);
     } else {
-      // All URLs are pre-computed in navigationUrls cache
-      // Direct assignment without string processing since we always pass proper URLs
       window.location.href = url;
     }
   }
 
-  // PERFORMANCE OPTIMIZATION: All navigation now uses cached URLs from navigationUrls
-  // Eliminates repeated string processing and URL transformations in templates
-
-  // Handle logout
   async function handleLogout() {
     await authStore.logout();
   }
 
-  // Handle login
   function handleLogin() {
     showLoginModal = true;
   }
+
+  // Shared styles for menu items - inspired by modern sidebar designs
+  const menuItemBase =
+    'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 w-full text-left';
+  const menuItemDefault = 'text-base-content/80 hover:text-base-content hover:menu-hover';
+  const menuItemActive = 'menu-item-active';
 </script>
 
 <aside class={cn('drawer-side z-10', className)} aria-label={t('navigation.mainNavigation')}>
   <label for="my-drawer" class="drawer-overlay" aria-label={t('navigation.closeSidebar')}></label>
 
-  <nav
-    class="flex flex-col h-[100dvh] w-64 bg-base-100 absolute inset-y-0 sm:static sm:h-full overflow-y-auto p-4"
-  >
-    <!-- Header -->
-    <div class="flex-none p-4">
+  <nav class="flex flex-col h-dvh w-64 bg-base-100 border-r border-base-200/50">
+    <!-- Logo Header -->
+    <div class="flex-none px-4 py-5 border-b border-base-200/50">
       <button
         onclick={() => navigate(navigationUrls.dashboard)}
-        class="flex items-center gap-2 font-black text-2xl"
+        class="flex items-center gap-3 group"
         aria-label="BirdNET-Go Home"
       >
-        BirdNET-Go
         <img
           src="/assets/images/logo.png"
           alt="BirdNET-Go Logo"
-          class="absolute h-10 w-10 right-5 mr-2"
+          class="h-9 w-9 rounded-lg shadow-sm"
         />
+        <span class="text-xl font-bold tracking-tight text-base-content">BirdNET-Go</span>
       </button>
     </div>
 
-    <!-- Scrollable menu section -->
-    <div class="flex-1 overflow-y-auto px-4">
-      <ul class="menu menu-md" role="menubar">
-        <li role="none">
+    <!-- Navigation Menu -->
+    <div class="flex-1 overflow-y-auto px-3 py-4">
+      <div class="flex flex-col gap-1" role="navigation">
+        <!-- Dashboard -->
+        <button
+          onclick={() => navigate(navigationUrls.dashboard)}
+          class={cn(menuItemBase, routeCache.dashboard ? menuItemActive : menuItemDefault)}
+          role="menuitem"
+          aria-current={routeCache.dashboard ? 'page' : undefined}
+        >
+          <LayoutDashboard class="size-5 shrink-0" />
+          <span>{t('navigation.dashboard')}</span>
+        </button>
+
+        <!-- Analytics (Collapsible) -->
+        <div class="flex flex-col">
           <button
-            onclick={() => navigate(navigationUrls.dashboard)}
-            class={cn('flex items-center gap-2', { active: routeCache().dashboard })}
-            role="menuitem"
+            onclick={() => (analyticsExpanded = !analyticsExpanded)}
+            class={cn(
+              menuItemBase,
+              routeCache.analytics ? 'text-primary' : 'text-base-content/80',
+              'hover:text-base-content hover:menu-hover'
+            )}
+            aria-expanded={analyticsExpanded}
           >
-            {@html systemIcons.home}
-            <span>{t('navigation.dashboard')}</span>
+            <BarChart3 class="size-5 shrink-0" />
+            <span class="flex-1">{t('navigation.analytics')}</span>
+            <ChevronDown
+              class={cn('size-4 shrink-0 transition-transform duration-200', {
+                'rotate-180': analyticsExpanded,
+              })}
+            />
           </button>
-        </li>
 
-        <li role="none">
-          <details bind:open={analyticsOpen}>
-            <summary class="flex items-center gap-2" role="menuitem" aria-haspopup="true">
-              {@html systemIcons.analytics}
-              <span>{t('navigation.analytics')}</span>
-            </summary>
-            <ul role="menu" aria-label={t('navigation.analyticsSubmenu')}>
-              <li role="none">
-                <button
-                  onclick={() => navigate(navigationUrls.analytics)}
-                  class={cn({ active: routeCache().analyticsExact })}
-                  role="menuitem"
-                >
-                  {t('analytics.title')}
-                </button>
-              </li>
-              <li role="none">
-                <button
-                  onclick={() => navigate(navigationUrls.analyticsSpecies)}
-                  class={cn({ active: routeCache().analyticsSpecies })}
-                  role="menuitem"
-                >
-                  {t('analytics.species.title')}
-                </button>
-              </li>
-            </ul>
-          </details>
-        </li>
-
-        <li role="none">
-          <button
-            onclick={() => navigate(navigationUrls.search)}
-            class={cn('flex items-center gap-2', { active: routeCache().search })}
-            role="menuitem"
-          >
-            {@html systemIcons.search}
-            <span>{t('navigation.search')}</span>
-          </button>
-        </li>
-
-        <li role="none">
-          <button
-            onclick={() => navigate(navigationUrls.about)}
-            class={cn('flex items-center gap-2', { active: routeCache().about })}
-            role="menuitem"
-          >
-            {@html systemIcons.about}
-            <span>{t('navigation.about')}</span>
-          </button>
-        </li>
-
-        {#if !securityEnabled || accessAllowed}
-          <li role="none">
-            <button
-              onclick={() => navigate(navigationUrls.system)}
-              class={cn('flex items-center gap-2', { active: routeCache().system })}
-              role="menuitem"
-              aria-label="System dashboard"
-              aria-current={routeCache().system ? 'page' : undefined}
+          {#if analyticsExpanded}
+            <div
+              class="ml-4 pl-4 border-l-2 border-primary mt-1 flex flex-col gap-0.5"
+              style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
             >
-              {@html systemIcons.system}
-              <span>{t('navigation.system')}</span>
-            </button>
-          </li>
-
-          <li role="none">
-            <details bind:open={settingsOpen}>
-              <summary class="flex items-center gap-2" role="menuitem" aria-haspopup="true">
-                {@html systemIcons.settingsGear}
-                <span>{t('navigation.settings')}</span>
-              </summary>
-              <ul role="menu" aria-label={t('navigation.settingsSubmenu')}>
-                <li role="none">
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsMain)}
-                    class={cn({ active: routeCache().settingsMain })}
-                    role="menuitem"
-                  >
-                    {t('settings.sections.node')}
-                  </button>
-                </li>
-                <li role="none">
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsUserInterface)}
-                    class={cn({ active: routeCache().settingsUserInterface })}
-                    role="menuitem"
-                  >
-                    {t('settings.sections.userinterface')}
-                  </button>
-                </li>
-                <li role="none">
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsAudio)}
-                    class={cn({ active: routeCache().settingsAudio })}
-                    role="menuitem"
-                  >
-                    {t('settings.sections.audio')}
-                  </button>
-                </li>
-                <li role="none">
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsFilters)}
-                    class={cn({ active: routeCache().settingsFilters })}
-                    role="menuitem"
-                  >
-                    {t('settings.sections.filters')}
-                  </button>
-                </li>
-                <li role="none">
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsIntegrations)}
-                    class={cn({ active: routeCache().settingsIntegrations })}
-                    role="menuitem"
-                  >
-                    {t('settings.sections.integration')}
-                  </button>
-                </li>
-                <li role="none">
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsSecurity)}
-                    class={cn({ active: routeCache().settingsSecurity })}
-                    role="menuitem"
-                  >
-                    {t('settings.sections.security')}
-                  </button>
-                </li>
-                <li role="none">
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsSpecies)}
-                    class={cn({ active: routeCache().settingsSpecies })}
-                    role="menuitem"
-                  >
-                    {t('settings.sections.species')}
-                  </button>
-                </li>
-                <li role="none">
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsNotifications)}
-                    class={cn({ active: routeCache().settingsNotifications })}
-                    role="menuitem"
-                  >
-                    {t('settings.sections.notifications')}
-                  </button>
-                </li>
-                <li role="none">
-                  <button
-                    onclick={() => navigate(navigationUrls.settingsSupport)}
-                    class={cn({ active: routeCache().settingsSupport })}
-                    role="menuitem"
-                  >
-                    {t('settings.sections.support')}
-                  </button>
-                </li>
-              </ul>
-            </details>
-          </li>
-        {/if}
-      </ul>
-    </div>
-
-    <!-- Footer section -->
-    <div class="flex-none border-base-200">
-      <div class="p-4 flex flex-col gap-4">
-        {#if securityEnabled}
-          {#if accessAllowed}
-            <!-- Logout section -->
-            <div class="flex flex-col gap-2">
               <button
-                onclick={handleLogout}
-                class="btn btn-sm justify-center w-full"
-                aria-label={t('auth.logout')}
+                onclick={() => navigate(navigationUrls.analytics)}
+                class={cn(
+                  'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                  routeCache.analyticsExact
+                    ? 'menu-subitem-active'
+                    : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                )}
               >
-                {@html systemIcons.logout}
-                <span>{t('auth.logout')}</span>
+                {t('analytics.title')}
+              </button>
+              <button
+                onclick={() => navigate(navigationUrls.analyticsSpecies)}
+                class={cn(
+                  'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                  routeCache.analyticsSpecies
+                    ? 'menu-subitem-active'
+                    : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                )}
+              >
+                {t('analytics.species.title')}
               </button>
             </div>
-          {:else}
-            <!-- Login section -->
-            <button
-              onclick={handleLogin}
-              class="btn btn-sm justify-center w-full"
-              aria-label={t('auth.openLoginModal')}
-            >
-              {@html systemIcons.login}
-              <span>{t('auth.login')}</span>
-            </button>
           {/if}
-        {/if}
-
-        <!-- Version number -->
-        <div class="text-center text-xs text-base-content/60 text-gray-500" role="contentinfo">
-          <a
-            href="https://github.com/tphakala/birdnet-go"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center gap-1 hover:text-base-content/80 transition-colors duration-200"
-            aria-label="View BirdNET-Go repository on GitHub (opens in new window)"
-          >
-            {version}
-          </a>
         </div>
+
+        <!-- Search -->
+        <button
+          onclick={() => navigate(navigationUrls.search)}
+          class={cn(menuItemBase, routeCache.search ? menuItemActive : menuItemDefault)}
+          role="menuitem"
+        >
+          <Search class="size-5 shrink-0" />
+          <span>{t('navigation.search')}</span>
+        </button>
+
+        <!-- About -->
+        <button
+          onclick={() => navigate(navigationUrls.about)}
+          class={cn(menuItemBase, routeCache.about ? menuItemActive : menuItemDefault)}
+          role="menuitem"
+        >
+          <Info class="size-5 shrink-0" />
+          <span>{t('navigation.about')}</span>
+        </button>
+
+        {#if !securityEnabled || accessAllowed}
+          <!-- Divider -->
+          <div class="my-2 border-t border-base-200/50"></div>
+
+          <!-- System -->
+          <button
+            onclick={() => navigate(navigationUrls.system)}
+            class={cn(menuItemBase, routeCache.system ? menuItemActive : menuItemDefault)}
+            role="menuitem"
+            aria-current={routeCache.system ? 'page' : undefined}
+          >
+            <Cpu class="size-5 shrink-0" />
+            <span>{t('navigation.system')}</span>
+          </button>
+
+          <!-- Settings (Collapsible) -->
+          <div class="flex flex-col">
+            <button
+              onclick={() => (settingsExpanded = !settingsExpanded)}
+              class={cn(
+                menuItemBase,
+                routeCache.settings ? 'text-primary' : 'text-base-content/80',
+                'hover:text-base-content hover:menu-hover'
+              )}
+              aria-expanded={settingsExpanded}
+            >
+              <Settings class="size-5 shrink-0" />
+              <span class="flex-1">{t('navigation.settings')}</span>
+              <ChevronDown
+                class={cn('size-4 shrink-0 transition-transform duration-200', {
+                  'rotate-180': settingsExpanded,
+                })}
+              />
+            </button>
+
+            {#if settingsExpanded}
+              <div
+                class="ml-4 pl-4 border-l-2 mt-1 flex flex-col gap-0.5"
+                style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
+              >
+                <button
+                  onclick={() => navigate(navigationUrls.settingsMain)}
+                  class={cn(
+                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                    routeCache.settingsMain
+                      ? 'menu-subitem-active'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                  )}
+                >
+                  {t('settings.sections.node')}
+                </button>
+                <button
+                  onclick={() => navigate(navigationUrls.settingsAudio)}
+                  class={cn(
+                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                    routeCache.settingsAudio
+                      ? 'menu-subitem-active'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                  )}
+                >
+                  {t('settings.sections.audio')}
+                </button>
+                <button
+                  onclick={() => navigate(navigationUrls.settingsFilters)}
+                  class={cn(
+                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                    routeCache.settingsFilters
+                      ? 'menu-subitem-active'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                  )}
+                >
+                  {t('settings.sections.filters')}
+                </button>
+                <button
+                  onclick={() => navigate(navigationUrls.settingsIntegrations)}
+                  class={cn(
+                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                    routeCache.settingsIntegrations
+                      ? 'menu-subitem-active'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                  )}
+                >
+                  {t('settings.sections.integration')}
+                </button>
+                <button
+                  onclick={() => navigate(navigationUrls.settingsSecurity)}
+                  class={cn(
+                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                    routeCache.settingsSecurity
+                      ? 'menu-subitem-active'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                  )}
+                >
+                  {t('settings.sections.security')}
+                </button>
+                <button
+                  onclick={() => navigate(navigationUrls.settingsSpecies)}
+                  class={cn(
+                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                    routeCache.settingsSpecies
+                      ? 'menu-subitem-active'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                  )}
+                >
+                  {t('settings.sections.species')}
+                </button>
+                <button
+                  onclick={() => navigate(navigationUrls.settingsNotifications)}
+                  class={cn(
+                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                    routeCache.settingsNotifications
+                      ? 'menu-subitem-active'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                  )}
+                >
+                  {t('settings.sections.notifications')}
+                </button>
+                <button
+                  onclick={() => navigate(navigationUrls.settingsSupport)}
+                  class={cn(
+                    'flex items-center px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                    routeCache.settingsSupport
+                      ? 'menu-subitem-active'
+                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                  )}
+                >
+                  {t('settings.sections.support')}
+                </button>
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="flex-none px-3 py-4 border-t border-base-200/50">
+      {#if securityEnabled}
+        {#if accessAllowed}
+          <button
+            onclick={handleLogout}
+            class="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-base-content/90 hover:text-base-content hover:bg-base-content/5 transition-colors duration-150"
+            aria-label={t('auth.logout')}
+          >
+            <LogOut class="size-4" />
+            <span>{t('auth.logout')}</span>
+          </button>
+        {:else}
+          <button
+            onclick={handleLogin}
+            class="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium bg-primary text-primary-content hover:bg-primary/90 transition-colors duration-150"
+            aria-label={t('auth.openLoginModal')}
+          >
+            <LogIn class="size-4" />
+            <span>{t('auth.login')}</span>
+          </button>
+        {/if}
+      {/if}
+
+      <!-- Version -->
+      <div class="mt-3 text-center">
+        <a
+          href="https://github.com/tphakala/birdnet-go"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-xs text-base-content/60 hover:text-base-content/80 transition-colors duration-150"
+          aria-label="View BirdNET-Go repository on GitHub (opens in new window)"
+        >
+          {version}
+        </a>
       </div>
     </div>
   </nav>

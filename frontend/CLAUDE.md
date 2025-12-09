@@ -4,7 +4,7 @@
 
 - **Svelte 5** with Runes (`$state`, `$derived`, `$effect`)
 - **TypeScript** - NO `any` types without justification
-- **Tailwind 3** + **daisyUI 4** components
+- **Tailwind v4** + **daisyUI 5** components
 - **Vite** build, **Vitest** testing
 - **i18n** - Custom implementation in `@i18n`
 
@@ -403,9 +403,36 @@ sed -i 's/export let/let/g' file.svelte
 sg scan --pattern "export let $PROP = $DEFAULT" --rewrite "let { $PROP = $DEFAULT } = $props()" src/
 ```
 
+## Svelte MCP (REQUIRED)
+
+The Svelte MCP server provides official documentation and code validation tools. **You MUST use this for all Svelte development.**
+
+### Required Usage
+
+1. **When writing/modifying Svelte components**: Always run the Svelte autofixer (`mcp__svelte__svelte-autofixer`) on the component code before committing
+2. **When unsure about Svelte 5 syntax**: Use `mcp__svelte__list-sections` and `mcp__svelte__get-documentation` to fetch official docs
+3. **For code examples**: Use `mcp__svelte__playground-link` to generate shareable playground links
+
+### Svelte Autofixer Workflow
+
+```
+1. Write/modify Svelte component
+2. Run svelte-autofixer with the component code
+3. Fix any issues reported
+4. Re-run autofixer until no issues remain
+5. Commit the code
+```
+
+### Common Issues Caught by Autofixer
+
+- Missing keys in `{#each}` blocks
+- Incorrect rune usage
+- Svelte 4 patterns that should be migrated
+- Accessibility issues
+
 ## Resources
 
-- Svelte 5 docs available via MCP tool
+- **Svelte MCP** - Use `mcp__svelte__*` tools for official Svelte 5/SvelteKit documentation
 - WCAG: https://www.w3.org/WAI/WCAG21/quickref/
 - axe DevTools browser extension for testing
 - ast-grep docs: https://ast-grep.github.io/

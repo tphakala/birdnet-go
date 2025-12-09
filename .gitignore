@@ -8,6 +8,7 @@ plans/
 spectrograms/
 .task/*
 .vscode/*
+.mcp.json
 tmp
 *.log
 *.log.*

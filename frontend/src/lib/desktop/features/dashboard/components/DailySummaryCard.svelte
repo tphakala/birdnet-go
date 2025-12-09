@@ -50,7 +50,7 @@ Responsive Breakpoints:
   import { untrack } from 'svelte';
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
-  import { alertIconsSvg, navigationIcons, weatherIcons, systemIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { XCircle, ChevronLeft, ChevronRight, Sunrise, Sunset, Star } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
   import SkeletonDailySummary from '$lib/desktop/components/ui/SkeletonDailySummary.svelte';
@@ -492,10 +492,10 @@ Responsive Breakpoints:
     <!-- Previous day button -->
     <button
       onclick={onPreviousDay}
-      class="btn btn-sm btn-ghost flex-shrink-0"
+      class="btn btn-sm btn-ghost shrink-0"
       aria-label={t('dashboard.dailySummary.navigation.previousDay')}
     >
-      {@html navigationIcons.arrowLeft}
+      <ChevronLeft class="size-5" />
     </button>
 
     <!-- Date picker with consistent width -->
@@ -503,17 +503,17 @@ Responsive Breakpoints:
       value={selectedDate}
       onChange={onDateChange}
       onTodayClick={onGoToToday}
-      className="mx-2 flex-grow"
+      className="mx-2 grow"
     />
 
     <!-- Next day button -->
     <button
       onclick={onNextDay}
-      class="btn btn-sm btn-ghost flex-shrink-0"
+      class="btn btn-sm btn-ghost shrink-0"
       disabled={isToday}
       aria-label={t('dashboard.dailySummary.navigation.nextDay')}
     >
-      {@html navigationIcons.arrowRight}
+      <ChevronRight class="size-5" />
     </button>
   </div>
 {/snippet}
@@ -546,7 +546,7 @@ Responsive Breakpoints:
         {@render navigationControls()}
       </div>
       <div class="alert alert-error">
-        {@html alertIconsSvg.error}
+        <XCircle class="size-6" />
         <span>{error}</span>
       </div>
     </div>
@@ -609,7 +609,7 @@ Responsive Breakpoints:
                             })
                           : ''}"
                       >
-                        {@html weatherIcons.sunrise}
+                        <Sunrise class="size-3" />
                       </span>
                     {:else if hour === sunsetHour}
                       <span
@@ -628,7 +628,7 @@ Responsive Breakpoints:
                             })
                           : ''}"
                       >
-                        {@html weatherIcons.sunset}
+                        <Sunset class="size-3" />
                       </span>
                     {/if}
                     <!-- Hour number as direct child of th -->
@@ -760,10 +760,10 @@ Responsive Breakpoints:
                           <!-- Multi-period tracking badges -->
                           {#if item.is_new_species}
                             <span
-                              class="text-warning"
+                              class="text-warning inline-block"
                               title={`New species (first seen ${item.days_since_first_seen ?? 0} day${(item.days_since_first_seen ?? 0) === 1 ? '' : 's'} ago)`}
                             >
-                              {@html systemIcons.starAnimated}
+                              <Star class="size-4 fill-current" />
                             </span>
                           {/if}
                           {#if item.is_new_this_year && !item.is_new_species}
@@ -805,9 +805,10 @@ Responsive Breakpoints:
                         {#if width < WIDTH_THRESHOLDS.minTextDisplay || width > WIDTH_THRESHOLDS.maxTextDisplay}
                           <!-- Total detections count for small bars -->
                           <span
-                            class="text-2xs {width > WIDTH_THRESHOLDS.maxTextDisplay
-                              ? 'text-primary-content'
-                              : 'text-base-content/60'} absolute w-full text-center top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
+                            class="text-2xs absolute w-full text-center top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"
+                            style:color={width > WIDTH_THRESHOLDS.maxTextDisplay
+                              ? 'var(--color-primary-content)'
+                              : 'color-mix(in srgb, var(--color-base-content) 60%, transparent)'}
                             >{item.count}</span
                           >
                         {/if}
@@ -883,7 +884,10 @@ Responsive Breakpoints:
           </tbody>
         </table>
         {#if sortedData.length === 0}
-          <div class="text-center py-8 text-base-content/60">
+          <div
+            class="text-center py-8"
+            style:color="color-mix(in srgb, var(--color-base-content) 60%, transparent)"
+          >
             {t('dashboard.dailySummary.noSpecies')}
           </div>
         {/if}

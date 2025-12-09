@@ -451,7 +451,7 @@
   {/if}
 
   <!-- Controls Section -->
-  <div class="card bg-base-100 shadow-sm">
+  <div class="card bg-base-100 shadow-xs">
     <div class="card-body overflow-visible">
       <h2 class="card-title text-lg mb-4">Chart Controls</h2>
 
@@ -462,11 +462,7 @@
           <label class="label" for="date-range-select">
             <span class="label-text font-medium">Date Range</span>
           </label>
-          <select
-            bind:value={dateRange}
-            class="select select-bordered w-full"
-            id="date-range-select"
-          >
+          <select bind:value={dateRange} class="select w-full" id="date-range-select">
             <option value="week">Last Week</option>
             <option value="month">Last Month</option>
             <option value="quarter">Last Quarter</option>
@@ -481,7 +477,7 @@
                 id="startDateInput"
                 type="date"
                 bind:value={startDate}
-                class="input input-bordered input-sm"
+                class="input input-sm"
                 max={endDate}
                 aria-label="Start date"
               />
@@ -490,7 +486,7 @@
                 id="endDateInput"
                 type="date"
                 bind:value={endDate}
-                class="input input-bordered input-sm"
+                class="input input-sm"
                 min={startDate}
                 aria-label="End date"
               />
@@ -533,7 +529,7 @@
           <span class="label-text font-medium"
             >Species Selection ({selectedSpecies.length}/{maxSpecies})</span
           >
-          <span class="label-text-alt text-xs text-base-content/60">
+          <span class="label-text-alt text-xs text-base-content opacity-60">
             Search or click chips below
           </span>
         </div>
@@ -570,7 +566,7 @@
                 <div class="flex items-center justify-between gap-2">
                   <div class="flex-1 min-w-0">
                     <div class="font-medium truncate">{species.commonName}</div>
-                    <div class="text-xs text-base-content/60 truncate italic">
+                    <div class="text-xs text-base-content opacity-60 truncate italic">
                       {species.scientificName}
                     </div>
                   </div>
@@ -591,10 +587,10 @@
   <!-- Charts Section -->
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
     <!-- Time of Day Chart -->
-    <div class="card bg-base-100 shadow-sm">
+    <div class="card bg-base-100 shadow-xs">
       <div class="card-body">
         <h2 class="card-title">Detection Patterns by Time of Day</h2>
-        <p class="text-sm text-base-content/70 mb-4">
+        <p class="text-sm text-base-content opacity-70 mb-4">
           Shows average detection counts throughout the day for selected species
         </p>
 
@@ -603,7 +599,7 @@
 
           {#if isLoading}
             <div
-              class="absolute inset-0 bg-base-100/80 backdrop-blur-sm flex items-center justify-center rounded-lg"
+              class="absolute inset-0 bg-base-100/80 backdrop-blur-xs flex items-center justify-center rounded-lg"
               role="status"
               aria-busy="true"
               aria-label="Loading analytics data"
@@ -613,7 +609,7 @@
             </div>
           {:else if timeOfDayData.length === 0}
             <div
-              class="absolute inset-0 flex items-center justify-center text-base-content/60 rounded-lg"
+              class="absolute inset-0 flex items-center justify-center text-base-content opacity-60 rounded-lg"
               role="status"
               aria-label="No time-of-day data available"
             >
@@ -628,10 +624,10 @@
     </div>
 
     <!-- Daily Trend Chart -->
-    <div class="card bg-base-100 shadow-sm">
+    <div class="card bg-base-100 shadow-xs">
       <div class="card-body">
         <h2 class="card-title">Species Detection Trends</h2>
-        <p class="text-sm text-base-content/70 mb-4">
+        <p class="text-sm text-base-content opacity-70 mb-4">
           Shows detection trends over time for selected species
         </p>
 
@@ -650,7 +646,7 @@
 
           {#if isLoading}
             <div
-              class="absolute inset-0 bg-base-100/80 backdrop-blur-sm flex items-center justify-center rounded-lg"
+              class="absolute inset-0 bg-base-100/80 backdrop-blur-xs flex items-center justify-center rounded-lg"
               role="status"
               aria-busy="true"
               aria-label="Loading trend data"
@@ -660,7 +656,7 @@
             </div>
           {:else if dailyTrendData.length === 0}
             <div
-              class="absolute inset-0 flex items-center justify-center text-base-content/60 rounded-lg"
+              class="absolute inset-0 flex items-center justify-center text-base-content opacity-60 rounded-lg"
               role="status"
               aria-label="No trend data available"
             >

@@ -21,13 +21,13 @@
   @component
 -->
 <script lang="ts">
+  /* global ResizeObserver */
   import { onMount } from 'svelte';
   interface Filter {
     type: string;
     frequency: number;
     q?: number;
     passes?: number;
-    [key: string]: any;
   }
 
   interface Props {
@@ -55,7 +55,7 @@
 
   // Responsive width calculation
   let canvasWidth = $state(800); // Default fallback
-  let canvasHeight = height;
+  const canvasHeight = $derived(height);
 
   // Plot area dimensions (excluding margins) - now reactive
   let plotWidth = $derived(canvasWidth - margins.left - margins.right);
@@ -313,8 +313,7 @@
       'lineTo',
       'createLinearGradient',
     ] as const;
-    // eslint-disable-next-line security/detect-object-injection -- safe method name validation from const array
-    if (requiredMethods.some(method => typeof (ctx as any)[method] !== 'function')) {
+    if (requiredMethods.some(method => typeof ctx[method as keyof typeof ctx] !== 'function')) {
       return;
     }
 
@@ -537,10 +536,8 @@
     });
 
     // Listen for window resize - with proper browser support check
-    // eslint-disable-next-line no-undef -- ResizeObserver checked via globalThis
     let resizeObserver: ResizeObserver | undefined;
     if (typeof globalThis.ResizeObserver !== 'undefined' && containerElement) {
-      // eslint-disable-next-line no-undef -- ResizeObserver available via globalThis
       const RO = globalThis.ResizeObserver as typeof ResizeObserver;
       resizeObserver = new RO(() => {
         updateCanvasDimensions();

@@ -23,7 +23,7 @@
 -->
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
-  import { actionIcons } from '$lib/utils/icons';
+  import { Plus } from '@lucide/svelte';
   import { safeGet } from '$lib/utils/security';
   import { Z_INDEX } from '$lib/utils/z-index';
 
@@ -217,7 +217,7 @@
         const button = document.createElement('button');
         button.type = 'button';
         button.className =
-          'species-prediction-item w-full text-left px-4 py-2 hover:bg-base-200 focus:bg-base-200 focus:outline-none border-none bg-transparent text-sm';
+          'species-prediction-item w-full text-left px-4 py-2 hover:bg-base-200 focus:bg-base-200 focus:outline-hidden border-none bg-transparent text-sm';
         // eslint-disable-next-line security/detect-object-injection
         button.textContent = filteredPredictions[i];
         button.setAttribute('role', 'option');
@@ -418,7 +418,7 @@
   });
 </script>
 
-<div class={cn('form-control relative species-input-container', className)} {...rest}>
+<div class={cn('form-control relative min-w-0 species-input-container', className)} {...rest}>
   {#if label}
     <label class="label justify-start" for={id}>
       <span class="label-text capitalize">
@@ -456,7 +456,7 @@
         {disabled}
         {required}
         class={cn(
-          'input input-bordered join-item flex-1',
+          'input  join-item flex-1',
           safeGet(inputSizeClasses, size, ''),
           !isValid && 'input-error'
         )}
@@ -487,7 +487,7 @@
         aria-label="Add species"
       >
         {#if buttonIcon}
-          {@html actionIcons.add}
+          <Plus class="size-4" />
         {/if}
         {buttonText}
       </button>
@@ -506,14 +506,14 @@
   <!-- Help Text -->
   {#if helpText}
     <div class="label">
-      <span class="label-text-alt text-base-content/70">{helpText}</span>
+      <span class="label-text-alt text-base-content opacity-70">{helpText}</span>
     </div>
   {/if}
 
   <!-- Tooltip -->
   {#if tooltip && showTooltip}
     <div
-      class="absolute p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
+      class="absolute p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded-sm shadow-lg max-w-xs text-base-content"
       style:z-index={Z_INDEX.PORTAL_TOOLTIP}
       role="tooltip"
     >

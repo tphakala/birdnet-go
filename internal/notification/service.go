@@ -367,7 +367,9 @@ func (s *Service) CreateErrorNotification(err error) (*Notification, error) {
 	return s.CreateWithComponent(TypeError, priority, title, message, component)
 }
 
-// broadcast sends a notification to all subscribers
+// broadcast sends a notification to all subscribers.
+// Each subscriber receives a clone of the notification to prevent race conditions
+// if the original notification is modified after broadcast (e.g., adding metadata).
 func (s *Service) broadcast(notification *Notification) {
 	s.subscribersMu.Lock()
 	defer s.subscribersMu.Unlock()
@@ -393,9 +395,15 @@ func (s *Service) broadcast(notification *Notification) {
 			// Subscriber is still active
 			activeSubscribers = append(activeSubscribers, sub)
 
-			// Try to send notification
+			// Clone the notification for each subscriber to prevent race conditions.
+			// This ensures that if the caller modifies the notification after broadcast
+			// (e.g., adding metadata in NotificationWorker.ProcessEvent), the subscribers
+			// have their own isolated copy of the Metadata map.
+			clone := notification.Clone()
+
+			// Try to send notification clone
 			select {
-			case sub.ch <- notification:
+			case sub.ch <- clone:
 				// Successfully sent
 				successCount++
 			default:

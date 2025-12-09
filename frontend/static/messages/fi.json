@@ -733,7 +733,8 @@
       "resetAriaLabel": "Palauta kaikki muutokset",
       "saveAriaLabel": "Tallenna muutokset",
       "savingAriaLabel": "Tallennetaan muutoksia...",
-      "unsavedChanges": "Tallentamattomat muutokset"
+      "unsavedChanges": "Tallentamattomat muutokset",
+      "toolbar": "Asetusten toiminnot"
     },
     "card": {
       "changed": "muutettu",
@@ -789,15 +790,15 @@
           "title": "Aluesuodatin",
           "stationLocation": {
             "label": "Aseman sijainti",
-            "helpText": "Aseman sijainti, käytetään rajoittamaan lintulajit alueella todennäköisiin."
+            "helpText": "Aseman sijainti, jota käytetään säätietoihin ja lintulajien rajoittamiseen alueella todennäköisiin lajeihin."
           },
           "latitude": {
             "label": "Leveysaste",
-            "helpText": "Aseman sijainnin leveysaste, käytetään rajoittamaan lintulajit alueella todennäköisiin."
+            "helpText": "Aseman sijainnin leveysaste, jota käytetään säätietoihin ja lintulajien aluesuodatukseen."
           },
           "longitude": {
             "label": "Pituusaste",
-            "helpText": "Aseman sijainnin pituusaste, käytetään rajoittamaan lintulajit alueella todennäköisiin."
+            "helpText": "Aseman sijainnin pituusaste, jota käytetään säätietoihin ja lintulajien aluesuodatukseen."
           },
           "model": {
             "label": "Aluesuodatinmalli",
@@ -895,6 +896,18 @@
           "dashboard": {
             "title": "Kojelaudan näyttö",
             "description": "Määritä, miten havainnot näytetään kojelaudalla",
+            "displaySettings": {
+              "title": "Näyttöasetukset",
+              "description": "Määritä yleiset kojelaudan näyttöasetukset, kuten lajirajat."
+            },
+            "birdImages": {
+              "title": "Lintukuvat",
+              "description": "Määritä lintulajien pikkukuvat havaintolistoille."
+            },
+            "spectrogramGeneration": {
+              "title": "Spektrogrammien luonti",
+              "description": "Määritä milloin ja miten äänispektrogrammit luodaan havainnoille."
+            },
             "general": {
               "title": "Yleiset asetukset"
             },
@@ -974,7 +987,8 @@
         },
         "locale": {
           "label": "Kieli",
-          "helpText": "Kieli käännetyille lajien nimille."
+          "helpText": "Kieli käännetyille lajien nimille.",
+          "requiresModernUI": "Kielivalinta on käytettävissä vain modernin käyttöliittymän kanssa."
         },
         "tensorflowThreads": {
           "label": "TensorFlow CPU-säikeet",
@@ -1173,6 +1187,14 @@
       }
     },
     "audio": {
+      "loading": "Ladataan äänilaitteita...",
+      "tabs": {
+        "soundCard": "Äänikortti",
+        "streams": "Virrat",
+        "processing": "Käsittely",
+        "recording": "Tallennus",
+        "retention": "Säilytys"
+      },
       "audioCapture": {
         "title": "Äänen tallennus",
         "description": "Aseta äänen tallennuslähde, äänikortti tai RTSP-virta",
@@ -1231,8 +1253,11 @@
         "title": "Leikeasetukset",
         "description": "Määritä äänileikkeiden tallennus ja käsittely tunnistetuille lintuäänille"
       },
-      "audioExport": {
-        "enable": "Ota äänen tallennus käyttöön",
+      "clipRecording": {
+        "title": "Leikkeen tallennusasetukset",
+        "description": "Määritä äänileikkeiden tallennus, muoto ja tallennusvaihtoehdot havaituille lintuäänille.",
+        "enable": "Ota leikkeiden tallennus käyttöön",
+        "disabled": "Leikkeiden tallennus on poistettu käytöstä",
         "enableHelp": "Tallenna havaittujen lintuäänten äänileikkeitä tarkastelua, jakamista tai mukautettujen tietojoukkojen rakentamista varten.",
         "captureSettings": "Tallennusasetukset",
         "lengthLabel": "Tallennuspituus",
@@ -1253,13 +1278,40 @@
         "normalizationNote": "EBU R128 -standardi",
         "normalizationNoteDescription": "Äänen normalisointi noudattaa EBU R128 -lähetysstandardia varmistaen tasaiset toistotasot eri laitteilla ja estäen leikkauksen.",
         "fileSettings": "Tiedostoasetukset",
-        "pathLabel": "Vientipolku",
+        "pathLabel": "Leikkeiden kansio",
         "pathHelp": "Hakemisto, johon äänileikkeet tallennetaan. Suhteelliset polut ovat sovellushakemistosta. Esimerkki: 'clips/' tai '/var/audio/birds/'",
-        "typeLabel": "Vientimuoto",
+        "typeLabel": "Äänimuoto",
         "typeHelp": "Tallennettujen leikkeiden äänimuoto. WAV ja FLAC ovat häviöttömiä (paras laatu, suuremmat tiedostot). MP3, AAC ja Opus ovat häviöllisiä (pienemmät tiedostot, pieni laatutappio).",
         "bitrateLabel": "Bittinopeus",
         "bitrateHelp": "Äänen pakkauksen bittinopeus häviöllisille muodoille. Alue: {min}-{max} kbps. Korkeammat arvot tarjoavat parempaa laatua mutta suurempia tiedostoja.",
         "losslessNote": "Häviöttömät muodot säilyttävät alkuperäisen äänenlaadun ilman pakkaushäiriöitä."
+      },
+      "fileSettings": {
+        "title": "Tiedostoasetukset",
+        "description": "Määritä tallennuspaikka ja äänimuoto tallennetuille leikkeille.",
+        "pathLabel": "Leikkeiden kansio",
+        "pathHelp": "Hakemisto, johon äänileikkeet tallennetaan. Suhteelliset polut ovat sovellushakemistosta. Esimerkki: 'clips/' tai '/var/audio/birds/'",
+        "typeLabel": "Äänimuoto",
+        "typeHelp": "Tallennettujen leikkeiden äänimuoto. WAV ja FLAC ovat häviöttömiä (paras laatu, suuremmat tiedostot). MP3, AAC ja Opus ovat häviöllisiä (pienemmät tiedostot, pieni laatutappio).",
+        "bitrateLabel": "Bittinopeus",
+        "bitrateHelp": "Äänen pakkauksen bittinopeus häviöllisille muodoille. Alue: {min}-{max} kbps. Korkeammat arvot tarjoavat parempaa laatua mutta suurempia tiedostoja.",
+        "losslessNote": "Häviöttömät muodot säilyttävät alkuperäisen äänenlaadun ilman pakkaushäiriöitä."
+      },
+      "audioNormalization": {
+        "title": "Äänen normalisointi",
+        "description": "Säädä äänitasoja tasaista toistoäänenvoimakkuutta varten kaikissa leikkeissä.",
+        "enable": "Ota käyttöön äänenvoimakkuuden normalisointi",
+        "enableHelp": "Säädä äänitasot automaattisesti EBU R128 -lähetysstandardiin tasaista toistoäänenvoimakkuutta varten kaikissa leikkeissä.",
+        "disabled": "Äänen normalisointi on pois käytöstä",
+        "requiresRecording": "Ota käyttöön leikkeiden tallennus Tallennus-välilehdellä käyttääksesi äänen normalisointia.",
+        "targetLUFSLabel": "Tavoiteäänenvoimakkuus (LUFS)",
+        "targetLUFSHelp": "Integroitu äänenvoimakkuustavoite LUFS-yksiköissä (Loudness Units relative to Full Scale). -23 LUFS on EBU R128 -lähetysstandardi. Alue: -40 - -10 LUFS.",
+        "loudnessRangeLabel": "Äänenvoimakkuusalue (LU)",
+        "loudnessRangeHelp": "Enimmäisvaihtelu äänenvoimakkuudessa leikkeen sisällä (0-20 LU). Matalammat arvot luovat tasaisemman äänenvoimakkuuden mutta saattavat vähentää dynamiikkaa.",
+        "truePeakLabel": "Todellinen huippuraja (dBTP)",
+        "truePeakHelp": "Enimmäinen todellinen huipputaso digitaalisen leikkauksen estämiseksi (-10 - 0 dBTP). -2 dBTP tarjoaa turvallisen marginaalin useimmille toistoalgoille.",
+        "noteTitle": "EBU R128 -standardi",
+        "noteDescription": "Äänen normalisointi noudattaa EBU R128 -lähetysstandardia varmistaen tasaiset toistotasot eri laitteilla ja estäen leikkauksen."
       },
       "audioClipRetention": {
         "title": "Äänileikkeiden säilytys",
@@ -1377,6 +1429,7 @@
         "title": "Havainnointi",
         "description": "Seuraa BirdNET-Go:n suorituskykyä ja lintuhavaintomittareita Prometheus-yhteensopivan päätepisteen kautta",
         "enable": "Ota käyttöön havainnointi-integraatio",
+        "disabled": "Havainnointi-integraatio ei ole käytössä",
         "listenAddress": {
           "label": "Kuunteluosoite",
           "placeholder": "0.0.0.0:8090"

@@ -28,7 +28,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
-  import { weatherIcons } from '$lib/utils/icons';
+  import { Thermometer, Wind } from '@lucide/svelte';
   import { safeGet } from '$lib/utils/security';
 
   interface Props {
@@ -167,12 +167,12 @@
     translateWeatherCondition(weatherDescription || weatherInfo.description)
   );
 
-  // Get appropriate wind icon based on wind speed
-  const getWindIcon = $derived(() => {
-    if (windSpeed === undefined) return safeGet(weatherIcons, 'wind', '');
-    if (windSpeed < 3) return safeGet(weatherIcons, 'windLight', ''); // Light wind: 0-3 m/s
-    if (windSpeed < 8) return safeGet(weatherIcons, 'windModerate', ''); // Moderate wind: 3-8 m/s
-    return safeGet(weatherIcons, 'windStrong', ''); // Strong wind: 8+ m/s
+  // Get appropriate wind icon opacity based on wind speed
+  const getWindOpacity = $derived(() => {
+    if (windSpeed === undefined) return '';
+    if (windSpeed < 3) return 'opacity-50'; // Light wind: 0-3 m/s
+    if (windSpeed < 8) return 'opacity-75'; // Moderate wind: 3-8 m/s
+    return ''; // Strong wind: 8+ m/s - full opacity
   });
 
   // Size classes
@@ -202,13 +202,10 @@
 >
   <!-- Line 1: Weather Icon + Description -->
   {#if weatherIcon && showWeatherIcon}
-    <div class="wm-weather-group flex items-center gap-1 flex-shrink-0">
+    <div class="wm-weather-group flex items-center gap-1 shrink-0">
       <!-- Weather Icon - always visible when showWeatherIcon is true -->
       <span
-        class={cn(
-          'wm-weather-icon inline-block flex-shrink-0',
-          safeGet(emojiSizeClasses, size, '')
-        )}
+        class={cn('wm-weather-icon inline-block shrink-0', safeGet(emojiSizeClasses, size, ''))}
         aria-label={weatherDesc}
       >
         {weatherEmoji}
@@ -229,15 +226,13 @@
   <div class="flex items-center gap-2 overflow-hidden">
     <!-- Temperature Group -->
     {#if temperature !== undefined && showTemperatureGroup}
-      <div class="wm-temperature-group flex items-center gap-1 flex-shrink-0">
+      <div class="wm-temperature-group flex items-center gap-1 shrink-0">
         <!-- Temperature Icon -->
         {#if SHOW_TEMPERATURE_ICON}
-          <div
-            class={cn(safeGet(sizeClasses, size, ''), 'flex-shrink-0')}
+          <Thermometer
+            class={cn(safeGet(sizeClasses, size, ''), 'shrink-0')}
             aria-label={`Temperature: ${temperature.toFixed(1)}°C`}
-          >
-            {@html safeGet(weatherIcons, 'temperature', '')}
-          </div>
+          />
         {/if}
         <span
           class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content/70 whitespace-nowrap')}
@@ -249,15 +244,13 @@
 
     <!-- Wind Speed Group -->
     {#if windSpeed !== undefined && showWindSpeedGroup}
-      <div class="wm-wind-group flex items-center gap-1 flex-shrink-0">
+      <div class="wm-wind-group flex items-center gap-1 shrink-0">
         <!-- Wind Speed Icon -->
         {#if SHOW_WINDSPEED_ICON}
-          <div
-            class={cn(safeGet(sizeClasses, size, ''), 'flex-shrink-0')}
+          <Wind
+            class={cn(safeGet(sizeClasses, size, ''), getWindOpacity(), 'shrink-0')}
             aria-label={`Wind speed: ${windSpeed.toFixed(1)} m/s`}
-          >
-            {@html getWindIcon()}
-          </div>
+          />
         {/if}
         <span
           class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content/70 whitespace-nowrap')}
@@ -302,22 +295,5 @@
     }
   }
 
-  /* Override the centralized icon sizing to match our component needs */
-  /* Use more specific selectors to override without !important */
-  .wm-temperature-group > div :global(svg.h-5.w-5),
-  .wm-wind-group > div :global(svg.h-5.w-5) {
-    height: inherit;
-    width: inherit;
-    margin-right: 0;
-  }
-
-  /* Ensure our size classes take precedence */
-  .wm-temperature-group > .h-5.w-5,
-  .wm-temperature-group > .h-6.w-6,
-  .wm-temperature-group > .h-8.w-8,
-  .wm-wind-group > .h-5.w-5,
-  .wm-wind-group > .h-6.w-6,
-  .wm-wind-group > .h-8.w-8 {
-    display: block;
-  }
+  /* No icon sizing overrides needed - Lucide icons accept classes directly */
 </style>

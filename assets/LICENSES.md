@@ -74,12 +74,12 @@ Source: BSD-3-Clause
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.38.0/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.40.0/LICENSE
 Source: MIT
 
 ### github.com/getsentry/sentry-go/echo
 
-License: https://github.com/getsentry/sentry-go/blob/echo/v0.36.2/echo/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/echo/v0.40.0/echo/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -244,12 +244,12 @@ Source: BSD-3-Clause
 
 ### github.com/nicholas-fedor/shoutrrr
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.12.0/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.12.1/LICENSE.md
 Source: MIT
 
 ### github.com/nicholas-fedor/shoutrrr/pkg/color
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.12.0/pkg/color/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.12.1/pkg/color/LICENSE.md
 Source: MIT
 
 ### github.com/patrickmn/go-cache
@@ -391,6 +391,11 @@ Source: MIT
 
 License: https://github.com/tphakala/malgo/blob/v0.11.22/LICENSE
 Source: Unlicense
+
+### github.com/tphakala/simd
+
+License: https://github.com/tphakala/simd/blob/v1.0.18/LICENSE
+Source: MIT
 
 ### github.com/valyala/bytebufferpool
 

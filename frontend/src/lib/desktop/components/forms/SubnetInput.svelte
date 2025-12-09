@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { actionIcons, alertIconsSvg, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { Plus, X, TriangleAlert } from '@lucide/svelte';
   import { validateCIDR, IndexMap, safeArrayAccess } from '$lib/utils/security';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
@@ -125,7 +125,7 @@
   );
 </script>
 
-<div class={cn('form-control', className)} {...rest}>
+<div class={cn('form-control min-w-0', className)} {...rest}>
   <label for={fieldId} class="label">
     <span class="label-text font-medium">
       {label}
@@ -140,7 +140,7 @@
       bind:value={newSubnet}
       {placeholder}
       {disabled}
-      class={cn('input input-bordered flex-1', newSubnetError ? 'input-error' : '')}
+      class={cn('input  flex-1', newSubnetError ? 'input-error' : '')}
       onkeydown={handleKeyDown}
       oninput={handleNewSubnetInput}
       aria-describedby={helpText ? `${fieldId}-help` : undefined}
@@ -152,7 +152,7 @@
       disabled={disabled || !canAdd}
       aria-label="Add subnet"
     >
-      {@html actionIcons.add}
+      <Plus class="size-4" />
       Add
     </button>
   </div>
@@ -172,21 +172,18 @@
   <!-- Subnet list -->
   {#if subnets.length > 0}
     <div class="space-y-2 mt-2">
-      <div class="text-sm font-medium text-base-content/70">
+      <div class="text-sm font-medium text-base-content opacity-70">
         Allowed Subnets ({subnets.length}/{maxItems}):
       </div>
 
-      {#each subnets as subnet, index}
+      {#each subnets as subnet, index (subnet)}
         <div class="flex items-center gap-2 p-2 bg-base-200 rounded-lg">
           <input
             type="text"
             value={subnet}
             oninput={e => updateSubnet(index, (e.target as HTMLInputElement)?.value || '')}
             {disabled}
-            class={cn(
-              'input input-sm input-bordered flex-1',
-              errors.getByIndex(index) ? 'input-error' : ''
-            )}
+            class={cn('input input-sm  flex-1', errors.getByIndex(index) ? 'input-error' : '')}
           />
           <button
             type="button"
@@ -195,7 +192,7 @@
             {disabled}
             aria-label="Remove subnet"
           >
-            {@html navigationIcons.close}
+            <X class="size-4" />
           </button>
         </div>
 
@@ -205,7 +202,7 @@
       {/each}
     </div>
   {:else}
-    <div class="text-center py-4 text-base-content/60 bg-base-200 rounded-lg mt-2">
+    <div class="text-center py-4 text-base-content opacity-60 bg-base-200 rounded-lg mt-2">
       <div class="text-sm">No subnets configured</div>
       <div class="text-xs">{emptyStateMessage}</div>
     </div>
@@ -214,7 +211,7 @@
   <!-- Max items warning -->
   {#if subnets.length >= maxItems}
     <div class="alert alert-warning mt-2">
-      {@html alertIconsSvg.warning}
+      <TriangleAlert class="size-4" />
       <span>Maximum number of subnets ({maxItems}) reached.</span>
     </div>
   {/if}

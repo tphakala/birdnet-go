@@ -2,7 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { X } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
@@ -222,7 +222,7 @@
         disabled={loading || isConfirming}
         aria-label={t('common.aria.closeModal')}
       >
-        {@html navigationIcons.close}
+        <X class="size-4" />
       </button>
     {/if}
 

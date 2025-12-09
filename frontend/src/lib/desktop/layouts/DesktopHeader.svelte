@@ -4,7 +4,7 @@
   import AudioLevelIndicator from '$lib/desktop/components/ui/AudioLevelIndicator.svelte';
   import NotificationBell from '$lib/desktop/components/ui/NotificationBell.svelte';
   import ThemeToggle from '$lib/desktop/components/ui/ThemeToggle.svelte';
-  import { navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { Menu } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
   interface Props {
@@ -86,7 +86,7 @@
         class="btn btn-ghost btn-sm p-0 sm:p-1 lg:hidden"
         aria-label={t('navigation.toggleSidebar')}
       >
-        {@html navigationIcons.menu}
+        <Menu class="size-6" />
       </button>
     {/if}
 
@@ -101,7 +101,7 @@
   {:else}
     <!-- Spacer to maintain layout when search is hidden -->
     <!-- Match SearchBox height: input-sm (32px) on mobile, input-md (40px) on sm+ screens -->
-    <div class="flex-grow flex items-center">
+    <div class="grow flex items-center">
       <div class="w-full md:w-3/4 lg:w-4/5 xl:w-5/6 max-w-4xl mx-auto h-12"></div>
     </div>
   {/if}

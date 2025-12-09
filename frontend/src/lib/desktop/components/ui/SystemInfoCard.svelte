@@ -62,7 +62,7 @@
   );
 </script>
 
-<div class={cn('card bg-base-100 shadow-sm', className)}>
+<div class={cn('card bg-base-100 shadow-xs', className)}>
   <div class="card-body card-padding">
     <h2 class="card-title" id="system-info-heading">{title}</h2>
     <div class="divider"></div>
@@ -87,26 +87,26 @@
     {#if !isLoading && !error}
       <div class="space-y-2" aria-labelledby="system-info-heading">
         <div class="flex justify-between">
-          <span class="text-base-content/70">Operating System:</span>
+          <span class="opacity-70" style:color="var(--color-base-content)">Operating System:</span>
           <span class="font-medium">{systemInfo.os_display || 'N/A'}</span>
         </div>
         <div class="flex justify-between">
-          <span class="text-base-content/70">Hostname:</span>
+          <span class="opacity-70" style:color="var(--color-base-content)">Hostname:</span>
           <span class="font-medium">{systemInfo.hostname || 'N/A'}</span>
         </div>
         <div class="flex justify-between">
-          <span class="text-base-content/70">Uptime:</span>
+          <span class="opacity-70" style:color="var(--color-base-content)">Uptime:</span>
           <span class="font-medium">{formatUptime(systemInfo.uptime_seconds) || 'N/A'}</span>
         </div>
         <div class="flex justify-between">
-          <span class="text-base-content/70">CPU Count:</span>
+          <span class="opacity-70" style:color="var(--color-base-content)">CPU Count:</span>
           <span class="font-medium">{systemInfo.num_cpu || 'N/A'}</span>
         </div>
 
         <!-- CPU Temperature Row (conditional) -->
         {#if temperatureInfo?.is_available && !temperatureLoading && !temperatureError}
           <div class="flex justify-between">
-            <span class="text-base-content/70">CPU Temperature:</span>
+            <span class="opacity-70" style:color="var(--color-base-content)">CPU Temperature:</span>
             <span class="font-medium">{formattedTemperature}</span>
           </div>
         {/if}
@@ -126,7 +126,7 @@
         <!-- System Model Row -->
         {#if systemInfo.system_model}
           <div class="flex justify-between">
-            <span class="text-base-content/70">System Model:</span>
+            <span class="opacity-70" style:color="var(--color-base-content)">System Model:</span>
             <span class="font-medium">{systemInfo.system_model || 'N/A'}</span>
           </div>
         {/if}
@@ -134,7 +134,7 @@
         <!-- Time Zone Row -->
         {#if systemInfo.time_zone}
           <div class="flex justify-between">
-            <span class="text-base-content/70">Time Zone:</span>
+            <span class="opacity-70" style:color="var(--color-base-content)">Time Zone:</span>
             <span class="font-medium">{systemInfo.time_zone || 'N/A'}</span>
           </div>
         {/if}

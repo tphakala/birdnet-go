@@ -32,7 +32,7 @@
   import { cn } from '$lib/utils/cn';
   import { fetchWithCSRF } from '$lib/utils/api';
   import type { Snippet } from 'svelte';
-  import { weatherIcons, alertIconsSvg } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { Thermometer, Sun, Wind, Droplets, Gauge, Cloud, XCircle } from '@lucide/svelte';
 
   interface WeatherData {
     hourly?: {
@@ -78,9 +78,13 @@
     children,
   }: Props = $props();
 
-  let weather = $state<WeatherData | null>(weatherData || null);
+  // State for fetched weather data (when using detectionId)
+  let fetchedWeather = $state<WeatherData | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
+
+  // Display value: prefer prop over fetched data (no $effect needed)
+  const weather = $derived(weatherData ?? fetchedWeather);
 
   // Fetch weather data
   async function fetchWeatherInfo(id: string) {
@@ -91,7 +95,7 @@
 
     try {
       const data = await fetchWithCSRF<WeatherData>(`/api/v2/weather/detection/${id}`);
-      weather = data;
+      fetchedWeather = data;
       onLoad?.(data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load weather data';
@@ -136,7 +140,7 @@
   }
 
   export function setWeatherData(data: WeatherData) {
-    weather = data;
+    fetchedWeather = data;
     error = null;
     loading = false;
   }
@@ -159,9 +163,7 @@
     <!-- Error state -->
     <div class="py-4" role="alert">
       <div class="text-error flex items-center">
-        <div class="h-5 w-5 mr-2">
-          {@html alertIconsSvg.error}
-        </div>
+        <XCircle class="size-5 mr-2" />
         <span>{error}</span>
       </div>
     </div>
@@ -180,7 +182,7 @@
       >
         <!-- Temperature -->
         <div class="flex items-center">
-          {@html weatherIcons.temperature}
+          <Thermometer class="size-5 mr-2" />
           <div>
             <div class="text-base-content/70">Temperature</div>
             <div class="font-medium">{formatTemperature(weather.hourly?.temperature)}</div>
@@ -189,7 +191,7 @@
 
         <!-- Weather condition -->
         <div class="flex items-center">
-          {@html weatherIcons.sun}
+          <Sun class="size-5 mr-2" />
           <div>
             <div class="text-base-content/70">Weather</div>
             <div class="font-medium">{weather.hourly?.weatherMain || 'N/A'}</div>
@@ -198,7 +200,7 @@
 
         <!-- Wind speed -->
         <div class="flex items-center">
-          {@html weatherIcons.wind}
+          <Wind class="size-5 mr-2" />
           <div>
             <div class="text-base-content/70">Wind</div>
             <div class="font-medium">{formatWindSpeed(weather.hourly?.windSpeed)}</div>
@@ -207,7 +209,7 @@
 
         <!-- Humidity -->
         <div class="flex items-center">
-          {@html weatherIcons.humidity}
+          <Droplets class="size-5 mr-2" />
           <div>
             <div class="text-base-content/70">Humidity</div>
             <div class="font-medium">{formatPercentage(weather.hourly?.humidity)}</div>
@@ -217,7 +219,7 @@
         {#if !compact && weather.hourly?.pressure !== undefined}
           <!-- Pressure (non-compact mode) -->
           <div class="flex items-center">
-            {@html weatherIcons.pressure}
+            <Gauge class="size-5 mr-2" />
             <div>
               <div class="text-base-content/70">Pressure</div>
               <div class="font-medium">{weather.hourly.pressure} hPa</div>
@@ -228,7 +230,7 @@
         {#if !compact && weather.hourly?.clouds !== undefined}
           <!-- Cloud cover (non-compact mode) -->
           <div class="flex items-center">
-            {@html weatherIcons.cloudCover}
+            <Cloud class="size-5 mr-2" />
             <div>
               <div class="text-base-content/70">Cloud Cover</div>
               <div class="font-medium">{formatPercentage(weather.hourly.clouds)}</div>

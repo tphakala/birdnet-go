@@ -24,7 +24,7 @@
   import SpeciesBadges from '$lib/desktop/components/modals/SpeciesBadges.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
-  import { mediaIcons } from '$lib/utils/icons';
+  import { Download } from '@lucide/svelte';
   import type { Detection } from '$lib/types/detection.types';
   import { hasReviewPermission } from '$lib/utils/auth';
   import { formatLocalDateTime } from '$lib/utils/date';
@@ -336,10 +336,14 @@
 
 <!-- Snippets for better organization -->
 {#snippet heroSection(detection: Detection)}
-  <section class="card bg-base-100 shadow-sm" aria-labelledby="species-heading">
+  <section class="card bg-base-100 shadow-xs" aria-labelledby="species-heading">
     <div class="card-body">
       <!-- Species info container - similar to ReviewModal -->
-      <div class="bg-base-200/50 rounded-lg p-4" role="region" aria-label="Species information">
+      <div
+        class="bg-base-200 opacity-50 rounded-lg p-4"
+        role="region"
+        aria-label="Species information"
+      >
         <!-- Single Row Layout: All 4 segments in one row using flex -->
         <div class="flex gap-4 items-start">
           <!-- Section 1: Thumbnail + Species Names (flex-grow for more space) -->
@@ -357,7 +361,10 @@
                 {detection.commonName}
                 <span class="sr-only">detection details</span>
               </h1>
-              <p class="text-lg text-base-content/60 italic truncate" aria-label="Scientific name">
+              <p
+                class="text-lg text-base-content opacity-60 italic truncate"
+                aria-label="Scientific name"
+              >
                 {detection.scientificName}
               </p>
               <div class="mt-3" aria-label="Species classification badges">
@@ -368,12 +375,12 @@
 
           <!-- Section 2: Date & Time (fixed width) -->
           <div
-            class="flex-shrink-0 text-center"
+            class="shrink-0 text-center"
             style:min-width="120px"
             role="region"
             aria-labelledby="datetime-heading"
           >
-            <h2 id="datetime-heading" class="text-sm text-base-content/60 mb-2">
+            <h2 id="datetime-heading" class="text-sm text-base-content opacity-60 mb-2">
               {t('detections.headers.dateTime')}
             </h2>
             <div class="text-base text-base-content" aria-label="Detection date">
@@ -383,7 +390,10 @@
               {detection.time}
             </div>
             {#if detection.timeOfDay}
-              <div class="text-sm text-base-content/60 mt-1 capitalize" aria-label="Time of day">
+              <div
+                class="text-sm text-base-content opacity-60 mt-1 capitalize"
+                aria-label="Time of day"
+              >
                 {detection.timeOfDay}
               </div>
             {/if}
@@ -391,12 +401,12 @@
 
           <!-- Section 3: Weather Conditions (fixed width) -->
           <div
-            class="flex-shrink-0 text-center"
+            class="shrink-0 text-center"
             style:min-width="180px"
             role="region"
             aria-labelledby="weather-heading"
           >
-            <h2 id="weather-heading" class="text-sm text-base-content/60 mb-2">
+            <h2 id="weather-heading" class="text-sm text-base-content opacity-60 mb-2">
               {t('detections.headers.weather')}
             </h2>
             {#if detection.weather}
@@ -413,7 +423,7 @@
                 />
               </div>
             {:else}
-              <div class="text-sm text-base-content/40 italic" role="status">
+              <div class="text-sm text-base-content opacity-40 italic" role="status">
                 {t('detections.weather.noData')}
               </div>
             {/if}
@@ -421,12 +431,12 @@
 
           <!-- Section 4: Confidence + Actions (fixed width) -->
           <div
-            class="flex-shrink-0 flex flex-col items-center"
+            class="shrink-0 flex flex-col items-center"
             style:min-width="120px"
             role="region"
             aria-labelledby="confidence-heading"
           >
-            <h2 id="confidence-heading" class="text-sm text-base-content/60 mb-2">
+            <h2 id="confidence-heading" class="text-sm text-base-content opacity-60 mb-2">
               {t('common.labels.confidence')}
             </h2>
             <div aria-label="Detection confidence {detection.confidence}%">
@@ -442,7 +452,7 @@
                   class="btn btn-ghost btn-sm gap-2"
                   aria-label="Download audio clip for {detection.commonName} detection"
                 >
-                  {@html mediaIcons.download}
+                  <Download class="size-5" />
                   {t('common.actions.download')}
                 </a>
               {/if}
@@ -473,7 +483,7 @@
           className="bg-base-200 rounded-lg p-4"
         />
       {:else}
-        <p class="text-base-content/60 italic">{t('detections.weather.noData')}</p>
+        <p class="text-base-content opacity-60 italic">{t('detections.weather.noData')}</p>
       {/if}
     </section>
 
@@ -488,22 +498,22 @@
         aria-label="Detection metadata"
       >
         <div class="flex justify-between">
-          <span class="text-base-content/60">{t('detections.metadata.source')}:</span>
+          <span class="text-base-content opacity-60">{t('detections.metadata.source')}:</span>
           <span>{detection.source ?? 'Unknown'}</span>
         </div>
         <div class="flex justify-between">
-          <span class="text-base-content/60">{t('detections.metadata.duration')}:</span>
+          <span class="text-base-content opacity-60">{t('detections.metadata.duration')}:</span>
           <span>{parseFloat(detection.endTime) - parseFloat(detection.beginTime)}s</span>
         </div>
         {#if detection.verified !== 'unverified'}
           <div class="flex justify-between">
-            <span class="text-base-content/60">{t('detections.metadata.status')}:</span>
+            <span class="text-base-content opacity-60">{t('detections.metadata.status')}:</span>
             <span class="capitalize">{detection.verified}</span>
           </div>
         {/if}
         {#if detection.locked}
           <div class="flex justify-between">
-            <span class="text-base-content/60">{t('detections.metadata.locked')}:</span>
+            <span class="text-base-content opacity-60">{t('detections.metadata.locked')}:</span>
             <span>{t('common.values.yes')}</span>
           </div>
         {/if}
@@ -517,12 +527,12 @@
         <div class="bg-base-200 rounded-lg p-4">
           <div class="flex items-center justify-between mb-2">
             <span class="text-lg font-medium capitalize">{speciesInfo.rarity.status}</span>
-            <span class="text-sm text-base-content/60">
+            <span class="text-sm text-base-content opacity-60">
               Score: {(speciesInfo.rarity.score * 100).toFixed(1)}%
             </span>
           </div>
           {#if speciesInfo.rarity.location_based}
-            <p class="text-sm text-base-content/60">
+            <p class="text-sm text-base-content opacity-60">
               Based on location: {speciesInfo.rarity.latitude.toFixed(2)}, {speciesInfo.rarity.longitude.toFixed(
                 2
               )}
@@ -542,60 +552,60 @@
         <section aria-labelledby="taxonomy-skeleton-heading">
           <div class="animate-pulse">
             <!-- Skeleton heading -->
-            <div class="h-6 bg-base-300 rounded w-48 mb-4"></div>
+            <div class="h-6 bg-base-300 rounded-sm w-48 mb-4"></div>
 
             <!-- Skeleton taxonomy hierarchy container -->
             <div class="bg-base-200 rounded-lg p-6">
               <div class="space-y-3">
                 <!-- Kingdom skeleton -->
                 <div class="flex items-center gap-3">
-                  <div class="h-4 bg-base-300 rounded w-16"></div>
-                  <div class="h-4 bg-base-300 rounded w-24"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-16"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-24"></div>
                 </div>
                 <!-- Phylum skeleton -->
                 <div class="flex items-center gap-3 ml-6">
-                  <div class="h-4 bg-base-300 rounded w-14"></div>
-                  <div class="h-4 bg-base-300 rounded w-20"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-14"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-20"></div>
                 </div>
                 <!-- Class skeleton -->
                 <div class="flex items-center gap-3 ml-12">
-                  <div class="h-4 bg-base-300 rounded w-10"></div>
-                  <div class="h-4 bg-base-300 rounded w-16"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-10"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-16"></div>
                 </div>
                 <!-- Order skeleton -->
                 <div class="flex items-center gap-3 ml-18">
-                  <div class="h-4 bg-base-300 rounded w-12"></div>
-                  <div class="h-4 bg-base-300 rounded w-28"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-12"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-28"></div>
                 </div>
                 <!-- Family skeleton -->
                 <div class="flex items-center gap-3 ml-24">
-                  <div class="h-4 bg-base-300 rounded w-14"></div>
-                  <div class="h-4 bg-base-300 rounded w-32"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-14"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-32"></div>
                 </div>
                 <!-- Genus skeleton -->
                 <div class="flex items-center gap-3 ml-30">
-                  <div class="h-4 bg-base-300 rounded w-12"></div>
-                  <div class="h-4 bg-base-300 rounded w-20"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-12"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-20"></div>
                 </div>
                 <!-- Species skeleton -->
                 <div class="flex items-center gap-3 ml-36">
-                  <div class="h-4 bg-base-300 rounded w-16"></div>
-                  <div class="h-4 bg-base-300 rounded w-24"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-16"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-24"></div>
                 </div>
               </div>
             </div>
 
             <!-- Skeleton subspecies section -->
             <div class="mt-6">
-              <div class="h-6 bg-base-300 rounded w-32 mb-4"></div>
+              <div class="h-6 bg-base-300 rounded-sm w-32 mb-4"></div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div class="bg-base-200 rounded-lg p-3">
-                  <div class="h-4 bg-base-300 rounded w-full mb-2"></div>
-                  <div class="h-3 bg-base-300 rounded w-3/4"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-full mb-2"></div>
+                  <div class="h-3 bg-base-300 rounded-sm w-3/4"></div>
                 </div>
                 <div class="bg-base-200 rounded-lg p-3">
-                  <div class="h-4 bg-base-300 rounded w-full mb-2"></div>
-                  <div class="h-3 bg-base-300 rounded w-2/3"></div>
+                  <div class="h-4 bg-base-300 rounded-sm w-full mb-2"></div>
+                  <div class="h-3 bg-base-300 rounded-sm w-2/3"></div>
                 </div>
               </div>
             </div>
@@ -611,36 +621,38 @@
           <!-- Visual Family Tree -->
           <div class="space-y-3">
             <div class="flex items-center gap-3">
-              <span class="text-sm text-base-content/60 w-24">Kingdom:</span>
+              <span class="text-sm text-base-content opacity-60 w-24">Kingdom:</span>
               <span class="font-medium">{taxonomyInfo.taxonomy.kingdom}</span>
             </div>
             <div class="flex items-center gap-3 ml-6">
-              <span class="text-sm text-base-content/60 w-24">Phylum:</span>
+              <span class="text-sm text-base-content opacity-60 w-24">Phylum:</span>
               <span class="font-medium">{taxonomyInfo.taxonomy.phylum}</span>
             </div>
             <div class="flex items-center gap-3 ml-12">
-              <span class="text-sm text-base-content/60 w-24">Class:</span>
+              <span class="text-sm text-base-content opacity-60 w-24">Class:</span>
               <span class="font-medium">{taxonomyInfo.taxonomy.class}</span>
             </div>
             <div class="flex items-center gap-3 ml-18">
-              <span class="text-sm text-base-content/60 w-24">Order:</span>
+              <span class="text-sm text-base-content opacity-60 w-24">Order:</span>
               <span class="font-medium">{taxonomyInfo.taxonomy.order}</span>
             </div>
             <div class="flex items-center gap-3 ml-24">
-              <span class="text-sm text-base-content/60 w-24">Family:</span>
+              <span class="text-sm text-base-content opacity-60 w-24">Family:</span>
               <span class="font-medium">
                 {taxonomyInfo.taxonomy.family}
                 {#if taxonomyInfo.taxonomy.family_common}
-                  <span class="text-base-content/60"> ({taxonomyInfo.taxonomy.family_common})</span>
+                  <span class="text-base-content opacity-60">
+                    ({taxonomyInfo.taxonomy.family_common})</span
+                  >
                 {/if}
               </span>
             </div>
             <div class="flex items-center gap-3 ml-30">
-              <span class="text-sm text-base-content/60 w-24">Genus:</span>
+              <span class="text-sm text-base-content opacity-60 w-24">Genus:</span>
               <span class="font-medium">{taxonomyInfo.taxonomy.genus}</span>
             </div>
             <div class="flex items-center gap-3 ml-36">
-              <span class="text-sm text-base-content/60 w-24">Species:</span>
+              <span class="text-sm text-base-content opacity-60 w-24">Species:</span>
               <span class="font-medium italic">{taxonomyInfo.taxonomy.species}</span>
             </div>
           </div>
@@ -663,7 +675,7 @@
                   {subspecies.scientific_name}
                 </p>
                 {#if subspecies.common_name}
-                  <p class="text-sm text-base-content/60" aria-label="Common name">
+                  <p class="text-sm text-base-content opacity-60" aria-label="Common name">
                     {subspecies.common_name}
                   </p>
                 {/if}
@@ -673,7 +685,7 @@
         </section>
       {/if}
     {:else}
-      <p class="text-base-content/60 italic">{t('species.taxonomy.noData')}</p>
+      <p class="text-base-content opacity-60 italic">{t('species.taxonomy.noData')}</p>
     {/if}
   </div>
 {/snippet}
@@ -681,7 +693,9 @@
 {#snippet historyTab()}
   <section aria-labelledby="history-heading">
     <h3 id="history-heading" class="text-lg font-semibold mb-4">{t('detections.history.title')}</h3>
-    <p class="text-base-content/60 italic" role="status">{t('detections.history.comingSoon')}</p>
+    <p class="text-base-content opacity-60 italic" role="status">
+      {t('detections.history.comingSoon')}
+    </p>
   </section>
 {/snippet}
 
@@ -693,14 +707,16 @@
         {#each detection.comments as comment}
           <article class="bg-base-200 rounded-lg p-4" role="listitem">
             <p aria-label="Comment text">{comment.entry}</p>
-            <p class="text-sm text-base-content/60 mt-2" aria-label="Comment timestamp">
+            <p class="text-sm text-base-content opacity-60 mt-2" aria-label="Comment timestamp">
               {formatLocalDateTime(new Date(comment.createdAt))}
             </p>
           </article>
         {/each}
       </div>
     {:else}
-      <p class="text-base-content/60 italic" role="status">{t('detections.notes.noComments')}</p>
+      <p class="text-base-content opacity-60 italic" role="status">
+        {t('detections.notes.noComments')}
+      </p>
     {/if}
   </section>
 {/snippet}
@@ -719,7 +735,7 @@
   </div>
 
   {#if isLoadingDetection}
-    <div class="card bg-base-100 shadow-sm">
+    <div class="card bg-base-100 shadow-xs">
       <div class="card-body">
         <div class="flex justify-center items-center h-64" aria-label="Loading detection details">
           <LoadingSpinner size="lg" />
@@ -727,7 +743,7 @@
       </div>
     </div>
   {:else if detectionError}
-    <div class="card bg-base-100 shadow-sm">
+    <div class="card bg-base-100 shadow-xs">
       <div class="card-body">
         <div role="alert" aria-live="assertive">
           <ErrorAlert message={detectionError} />
@@ -739,7 +755,7 @@
     {@render heroSection(detection)}
 
     <!-- Media Section -->
-    <section class="card bg-base-100 shadow-sm" aria-labelledby="media-heading">
+    <section class="card bg-base-100 shadow-xs" aria-labelledby="media-heading">
       <div class="card-body">
         <h2 id="media-heading" class="text-xl font-semibold mb-4">{t('detections.media.title')}</h2>
         <div role="region" aria-label="Audio recording and spectrogram for {detection.commonName}">
@@ -759,11 +775,15 @@
     </section>
 
     <!-- Tabbed Content -->
-    <section class="card bg-base-100 shadow-sm" aria-labelledby="tabs-heading">
+    <section class="card bg-base-100 shadow-xs" aria-labelledby="tabs-heading">
       <div class="card-body">
         <h2 id="tabs-heading" class="sr-only">Detection information tabs</h2>
         <!-- Tab Navigation -->
-        <div class="tabs tabs-boxed mb-6" role="tablist" aria-label="Detection details tabs">
+        <div
+          class="tabs tabs-boxed mb-6 overflow-x-auto flex-nowrap"
+          role="tablist"
+          aria-label="Detection details tabs"
+        >
           <button
             id="tab-overview"
             role="tab"

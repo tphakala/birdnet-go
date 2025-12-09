@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
   import StatusBadges from '$lib/desktop/components/data/StatusBadges.svelte';
@@ -7,7 +8,7 @@
   import { fetchWithCSRF } from '$lib/utils/api';
   import type { Detection } from '$lib/types/detection.types';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
-  import { actionIcons, alertIconsSvg } from '$lib/utils/icons';
+  import { RefreshCw, XCircle } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { cn } from '$lib/utils/cn';
@@ -51,13 +52,9 @@
     className = '',
   }: Props = $props();
 
-  // State for number of detections to show
-  let selectedLimit = $state(limit);
-
-  // Update selectedLimit when prop changes
-  $effect(() => {
-    selectedLimit = limit;
-  });
+  // State for number of detections to show - captures initial prop value without creating dependency
+  // Uses untrack() to explicitly capture initial value only (local state is independent after init)
+  let selectedLimit = $state(untrack(() => limit));
 
   // Updates the number of detections to display and persists the preference
   function handleLimitChange(newLimit: number) {
@@ -217,7 +214,7 @@
           id="numDetections"
           bind:value={selectedLimit}
           onchange={e => handleLimitChange(parseInt(e.currentTarget.value, 10))}
-          class="select select-sm focus-visible:outline-none"
+          class="select select-sm focus-visible:outline-hidden"
         >
           <option value={5}>5</option>
           <option value={10}>10</option>
@@ -234,9 +231,7 @@
             : t('dashboard.recentDetections.controls.refresh')}
           aria-label={t('dashboard.recentDetections.controls.refresh')}
         >
-          <div class="h-4 w-4" class:animate-spin={loading}>
-            {@html actionIcons.refresh}
-          </div>
+          <RefreshCw class={loading ? 'size-4 animate-spin' : 'size-4'} />
         </button>
       </div>
     </div>
@@ -244,7 +239,7 @@
     <!-- Content -->
     {#if error}
       <div class="alert alert-error">
-        {@html alertIconsSvg.error}
+        <XCircle class="size-6" />
         <span>{error}</span>
       </div>
     {:else}
@@ -369,7 +364,10 @@
       </div>
 
       {#if data.length === 0}
-        <div class="text-center py-8 text-base-content/60">
+        <div
+          class="text-center py-8"
+          style:color="color-mix(in srgb, var(--color-base-content) 60%, transparent)"
+        >
           {t('dashboard.recentDetections.noDetections')}
         </div>
       {/if}

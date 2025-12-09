@@ -87,7 +87,7 @@
   };
 </script>
 
-<div class={cn('form-control relative', className)} {...rest}>
+<div class={cn('form-control relative min-w-0', className)} {...rest}>
   {#if label}
     <label class="label justify-start" for={id}>
       <span class="label-text capitalize">
@@ -126,11 +126,7 @@
     {pattern}
     {minlength}
     {maxlength}
-    class={cn(
-      'input input-bordered w-full',
-      safeGet(sizeClasses, size, ''),
-      !isValid && 'input-error'
-    )}
+    class={cn('input  w-full', safeGet(sizeClasses, size, ''), !isValid && 'input-error')}
     onchange={handleChange}
     oninput={handleInput}
     onblur={handleBlur}
@@ -144,15 +140,13 @@
   {/if}
 
   {#if helpText}
-    <div class="label">
-      <span class="label-text-alt text-base-content/70">{helpText}</span>
-    </div>
+    <span class="help-text">{helpText}</span>
   {/if}
 
   {#if tooltip && showTooltip}
     <div
       id={tooltipId}
-      class="absolute z-50 p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded shadow-lg max-w-xs"
+      class="absolute z-50 p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded-sm shadow-lg max-w-xs text-base-content"
       role="tooltip"
     >
       {tooltip}

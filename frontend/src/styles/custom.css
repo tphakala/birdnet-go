@@ -159,6 +159,43 @@
 }
 
 /* ========================================================================
+   DaisyUI 5 Compatibility - Removed Form Classes
+   These classes were removed in DaisyUI 5 but are still used in the codebase
+   ======================================================================== */
+
+/* form-control: wrapper for form fields */
+.form-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* label: form label wrapper with flex layout */
+.label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  user-select: none;
+}
+
+/* label-text: primary label text styling */
+.label-text {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+  color: var(--color-base-content, currentColor);
+}
+
+/* label-text-alt: secondary/helper text styling */
+.label-text-alt {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--color-base-content, currentColor);
+  opacity: 0.7;
+}
+
+/* ========================================================================
    Form Field Helpers
    ======================================================================== */
 
@@ -177,7 +214,7 @@
    This ensures all input fields in the same row start at the same vertical position. */
 .settings-form-grid .form-control > label:first-child,
 .settings-form-grid .form-control > .label:first-child {
-  @apply min-h-[2rem] items-start;
+  @apply min-h-8 items-start;
 }
 
 /* ========================================================================
@@ -283,4 +320,16 @@
 /* Extra small text size */
 .text-2xs {
   font-size: 0.6rem;
+}
+
+/* ========================================================================
+   Form Help Text
+   Replaces DaisyUI .label for help text which has white-space:nowrap in v5
+   ======================================================================== */
+
+.help-text {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--color-base-content, currentColor);
+  overflow-wrap: anywhere;
 }

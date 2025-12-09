@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import ReconnectingEventSource from 'reconnecting-eventsource';
-  import { mediaIcons } from '$lib/utils/icons';
+  import { Mic, CirclePlay, CircleStop } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
   import Hls from 'hls.js';
   import type { ErrorData } from 'hls.js';
@@ -569,7 +569,7 @@
   <button
     bind:this={buttonRef}
     onclick={() => (dropdownOpen = !dropdownOpen)}
-    class="w-full h-full relative focus:outline-none group"
+    class="w-full h-full relative focus:outline-hidden group"
     aria-expanded={dropdownOpen}
     aria-haspopup="true"
     aria-label={`Audio level for ${selectedSource ? getSourceDisplayName(selectedSource) : 'No source'}`}
@@ -594,7 +594,7 @@
       />
     </svg>
     <div class="absolute inset-0 flex items-center justify-center">
-      {@html mediaIcons.microphone}
+      <Mic class="size-5" />
     </div>
     <!-- Screen reader announcement -->
     <div class="sr-only" aria-live="polite">
@@ -607,7 +607,7 @@
   {#if selectedSource && !dropdownOpen}
     <!-- Tooltip -->
     <div
-      class="invisible group-hover:visible absolute left-1/2 transform -translate-x-1/2 -translate-y-full mt-2 px-2 py-1 bg-gray-900 text-gray-50 text-sm rounded whitespace-nowrap z-50"
+      class="invisible group-hover:visible absolute left-1/2 transform -translate-x-1/2 -translate-y-full mt-2 px-2 py-1 bg-gray-900 text-gray-50 text-sm rounded-sm whitespace-nowrap z-50"
       style:top="-5px"
       aria-hidden="true"
     >
@@ -622,63 +622,92 @@
         bind:this={dropdownRef}
         role="menu"
         aria-label="Audio Source Selection"
-        class="absolute p-1 right-0 mt-2 w-auto min-w-[16rem] max-w-[90vw] overflow-hidden rounded-md shadow-lg bg-base-100 ring-1 ring-black ring-opacity-5 z-50"
+        class="absolute right-0 top-full mt-2 min-w-[18rem] max-w-[calc(100vw-1rem)] bg-base-100 rounded-lg shadow-xl border border-base-300 overflow-hidden flex flex-col z-50"
       >
-        <div class="py-1" role="menu" aria-orientation="vertical">
+        <!-- Header -->
+        <div class="flex items-center justify-between p-4 border-b border-base-300">
+          <h3 class="text-lg font-semibold">Audio Sources</h3>
+        </div>
+
+        <!-- Source list -->
+        <div class="overflow-y-auto flex-1" role="menu" aria-orientation="vertical">
           {#if Object.keys(levels).length === 0}
-            <div class="px-4 py-2 text-sm text-base-content/60" role="menuitem">
-              No audio sources available
+            <div class="p-8 text-center text-base-content/60">
+              <div class="mx-auto mb-2 opacity-50">
+                <Mic class="size-12 mx-auto" />
+              </div>
+              <p>No audio sources available</p>
             </div>
           {:else}
             {#each Object.entries(levels) as [source, _data]}
               <div
                 class={cn(
-                  'flex flex-row items-center w-full p-2 text-sm hover:bg-base-200 rounded-md',
-                  selectedSource === source && 'bg-base-200',
-                  isInactive(source) ? 'text-base-content/60' : 'text-base-content'
+                  'border-b border-base-300 p-4 hover:bg-base-200 transition-colors',
+                  selectedSource === source && 'bg-base-200/50'
                 )}
                 role="menuitem"
               >
-                <!-- Source name (clickable to select) -->
-                <button
-                  onclick={() => {
-                    selectedSource = source;
-                    dropdownOpen = false;
-                  }}
-                  class="flex-1 text-left flex items-center justify-between"
-                  role="menuitemradio"
-                  aria-checked={selectedSource === source}
-                >
-                  <span class="flex-1 whitespace-nowrap">{getSourceDisplayName(source)}</span>
-                  {#if isInactive(source)}
-                    <span class="text-xs text-base-content/60 shrink-0 ml-2" aria-hidden="true">
-                      (silent)
-                    </span>
-                  {/if}
-                </button>
+                <div class="flex items-center gap-3">
+                  <!-- Status indicator -->
+                  <div class="shrink-0">
+                    <div
+                      class={cn(
+                        'w-8 h-8 rounded-full flex items-center justify-center',
+                        isInactive(source)
+                          ? 'bg-base-300 text-base-content/60'
+                          : 'bg-success/20 text-success'
+                      )}
+                    >
+                      <Mic class="size-4" />
+                    </div>
+                  </div>
 
-                <!-- Play/Stop controls -->
-                <button
-                  onclick={() => {
-                    toggleSourcePlayback(source);
-                    dropdownOpen = false;
-                  }}
-                  class={cn(
-                    'btn btn-xs btn-circle btn-ghost ml-2',
-                    playingSource === source ? 'text-error' : 'text-success'
-                  )}
-                  aria-label={playingSource === source
-                    ? 'Stop audio playback'
-                    : 'Start audio playback'}
-                >
-                  {#if playingSource !== source}
-                    <!-- Play icon -->
-                    {@html mediaIcons.playCircle}
-                  {:else}
-                    <!-- Stop icon -->
-                    {@html mediaIcons.stopCircle}
-                  {/if}
-                </button>
+                  <!-- Source info (clickable to select) -->
+                  <button
+                    onclick={() => {
+                      selectedSource = source;
+                      dropdownOpen = false;
+                    }}
+                    class="flex-1 text-left min-w-0"
+                    role="menuitemradio"
+                    aria-checked={selectedSource === source}
+                  >
+                    <div class="flex items-start justify-between gap-2">
+                      <span
+                        class={cn(
+                          'font-medium text-sm truncate',
+                          isInactive(source) ? 'text-base-content/60' : 'text-base-content'
+                        )}
+                      >
+                        {getSourceDisplayName(source)}
+                      </span>
+                    </div>
+                    {#if isInactive(source)}
+                      <span class="text-xs text-base-content/60">(silent)</span>
+                    {/if}
+                  </button>
+
+                  <!-- Play/Stop controls -->
+                  <button
+                    onclick={() => {
+                      toggleSourcePlayback(source);
+                      dropdownOpen = false;
+                    }}
+                    class={cn(
+                      'btn btn-sm btn-circle btn-ghost shrink-0',
+                      playingSource === source ? 'text-error' : 'text-success'
+                    )}
+                    aria-label={playingSource === source
+                      ? 'Stop audio playback'
+                      : 'Start audio playback'}
+                  >
+                    {#if playingSource !== source}
+                      <CirclePlay class="size-5" />
+                    {:else}
+                      <CircleStop class="size-5" />
+                    {/if}
+                  </button>
+                </div>
               </div>
             {/each}
           {/if}
@@ -690,7 +719,7 @@
   <!-- Status message -->
   {#if showStatus}
     <div
-      class="fixed bottom-4 right-4 bg-primary text-primary-content p-2 rounded shadow-lg z-50"
+      class="fixed bottom-4 right-4 bg-primary text-primary-content p-2 rounded-sm shadow-lg z-50"
       role="status"
       aria-live="polite"
     >

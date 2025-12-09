@@ -1,8 +1,9 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { navigationIcons } from '$lib/utils/icons';
+  import { ChevronDown } from '@lucide/svelte';
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     title: string;
@@ -23,7 +24,16 @@
     ...rest
   }: Props = $props();
 
-  let isOpen = $state(defaultOpen);
+  // Use untrack to explicitly capture initial value without creating dependency
+  let isOpen = $state(untrack(() => defaultOpen));
+
+  // Slugify title for valid HTML id attribute
+  let slugifiedTitle = $derived(
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '')
+  );
 
   function toggleOpen() {
     isOpen = !isOpen;
@@ -37,7 +47,7 @@
   }
 </script>
 
-<div class={cn('collapse bg-base-100 shadow-sm', className)} {...rest}>
+<div class={cn('collapse bg-base-100 shadow-xs', className)} {...rest}>
   <!-- Hidden checkbox for DaisyUI compatibility -->
   <input type="checkbox" class="sr-only" aria-hidden="true" tabindex="-1" bind:checked={isOpen} />
   <button
@@ -46,16 +56,20 @@
     onclick={toggleOpen}
     onkeydown={handleKeydown}
     aria-expanded={isOpen}
-    aria-controls="{title}-content"
+    aria-controls="{slugifiedTitle}-content"
   >
     <div class="flex items-center justify-between">
       <span>{title}</span>
       <div class={cn('transition-transform duration-200', isOpen ? 'rotate-180' : '')}>
-        {@html navigationIcons.chevronDown}
+        <ChevronDown class="size-5" />
       </div>
     </div>
   </button>
-  <div id="{title}-content" class={cn('collapse-content', contentClassName)} aria-hidden={!isOpen}>
+  <div
+    id="{slugifiedTitle}-content"
+    class={cn('collapse-content', contentClassName)}
+    aria-hidden={!isOpen}
+  >
     {#if children}
       {@render children()}
     {/if}

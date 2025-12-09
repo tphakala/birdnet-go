@@ -36,7 +36,7 @@
     ...rest
   }: Props = $props();
 
-  const variantClasses: Record<BadgeVariant, string> = {
+  const variantClasses = $derived<Record<BadgeVariant, string>>({
     primary: outline ? 'badge-primary badge-outline' : 'badge-primary',
     secondary: outline ? 'badge-secondary badge-outline' : 'badge-secondary',
     accent: outline ? 'badge-accent badge-outline' : 'badge-accent',
@@ -46,7 +46,7 @@
     warning: outline ? 'badge-warning badge-outline' : 'badge-warning',
     error: outline ? 'badge-error badge-outline' : 'badge-error',
     ghost: 'badge-ghost',
-  };
+  });
 
   const sizeClasses: Record<BadgeSize, string> = {
     xs: 'badge-xs',

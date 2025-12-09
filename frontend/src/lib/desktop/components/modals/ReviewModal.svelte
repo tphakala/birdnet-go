@@ -7,7 +7,7 @@
   import SpeciesThumbnail from './SpeciesThumbnail.svelte';
   import type { Detection } from '$lib/types/detection.types';
   import { fetchWithCSRF } from '$lib/utils/api';
-  import { alertIcons } from '$lib/utils/icons';
+  import { XCircle, TriangleAlert, ChevronRight } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { safeArrayAccess } from '$lib/utils/security';
 
@@ -62,13 +62,12 @@
         const desiredLockState = detection.locked ? !lockDetection : lockDetection;
 
         // Default save implementation
-        await fetchWithCSRF('/api/v2/detections/review', {
+        await fetchWithCSRF(`/api/v2/detections/${detection.id}/review`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            id: detection.id,
             verified: reviewStatus,
             lock_detection: desiredLockState,
             ignore_species: ignoreSpecies ? detection.commonName : null,
@@ -113,19 +112,7 @@
       <!-- Error message display -->
       {#if errorMessage}
         <div class="alert alert-error mb-4">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="stroke-current shrink-0 h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d={alertIcons.error}
-            />
-          </svg>
+          <XCircle class="size-6" />
           <span>{errorMessage}</span>
         </div>
       {/if}
@@ -159,7 +146,7 @@
               </div>
 
               <!-- Section 2: Date & Time (fixed width) -->
-              <div class="flex-shrink-0 text-center" style:min-width="120px">
+              <div class="shrink-0 text-center" style:min-width="120px">
                 <div class="text-sm text-base-content/60 mb-2">
                   {t('detections.headers.dateTime')}
                 </div>
@@ -173,7 +160,7 @@
               </div>
 
               <!-- Section 3: Weather Conditions (fixed width) -->
-              <div class="flex-shrink-0 text-center" style:min-width="180px">
+              <div class="shrink-0 text-center" style:min-width="180px">
                 <div class="text-sm text-base-content/60 mb-2">
                   {t('detections.headers.weather')}
                 </div>
@@ -198,7 +185,7 @@
               </div>
 
               <!-- Section 4: Confidence (fixed width) -->
-              <div class="flex-shrink-0 flex flex-col items-center" style:min-width="100px">
+              <div class="shrink-0 flex flex-col items-center" style:min-width="100px">
                 <div class="text-sm text-base-content/60 mb-2">
                   {t('search.tableHeaders.confidence')}
                 </div>
@@ -252,20 +239,7 @@
 
             {#if detection.locked}
               <div class="text-sm text-base-content/70 mt-2">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="inline-block w-4 h-4 mr-1"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d={alertIcons.warning}
-                  />
-                </svg>
+                <TriangleAlert class="inline-block size-4 mr-1" />
                 {t('common.review.form.detectionLocked')}
               </div>
             {/if}
@@ -330,21 +304,9 @@
               class="btn btn-ghost btn-sm justify-start gap-2 p-2"
               onclick={() => (showCommentSection = !showCommentSection)}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width="2"
-                stroke="currentColor"
-                class="w-4 h-4 transition-transform duration-200"
-                class:rotate-90={showCommentSection}
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M8.25 4.5l7.5 7.5-7.5 7.5"
-                />
-              </svg>
+              <div class="transition-transform duration-200" class:rotate-90={showCommentSection}>
+                <ChevronRight class="size-4" />
+              </div>
               <span class="text-sm">
                 {showCommentSection
                   ? t('common.review.form.hideComment')
@@ -366,7 +328,7 @@
                 <textarea
                   id="comment-textarea"
                   bind:value={comment}
-                  class="textarea textarea-bordered h-24 w-full"
+                  class="textarea h-24 w-full"
                   placeholder={t('common.review.form.commentPlaceholder')}
                 ></textarea>
               </div>

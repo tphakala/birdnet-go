@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import { safeGet } from '$lib/utils/security';
-  import { systemIcons } from '$lib/utils/icons';
+  import { Clock } from '@lucide/svelte';
   import { parseLocalDateString } from '$lib/utils/date';
 
   type TimeOfDay = 'day' | 'night' | 'sunrise' | 'sunset' | 'dawn' | 'dusk';
@@ -204,11 +204,9 @@
     </svg>
   {:else}
     <!-- Default clock icon for unknown time -->
-    <div
-      class={cn(safeGet(sizeClasses, size, 'h-6 w-6'), 'text-gray-400', className)}
+    <Clock
+      class={cn(safeGet(sizeClasses, size, 'size-6'), 'text-gray-400', className)}
       {...commonAttrs}
-    >
-      {@html systemIcons.clock}
-    </div>
+    />
   {/if}
 </div>

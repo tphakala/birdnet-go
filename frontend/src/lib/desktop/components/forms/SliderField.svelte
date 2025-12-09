@@ -61,7 +61,7 @@
   }
 </script>
 
-<div class={cn('form-control', className)} {...rest}>
+<div class={cn('form-control min-w-0', className)} {...rest}>
   {#if showValue}
     <!-- Custom label with proper association and value badge -->
     <label for={fieldId} class="label">

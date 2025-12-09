@@ -37,7 +37,7 @@ describe('SettingsButton', () => {
       const button = screen.getByRole('button');
       expect(button).toBeInTheDocument();
       expect(button).toHaveTextContent('Click Me');
-      expect(button).toHaveClass('settings-button');
+      expect(button).toHaveClass('btn', 'btn-primary', 'btn-sm');
       expect(button).not.toBeDisabled();
     });
 
@@ -48,7 +48,7 @@ describe('SettingsButton', () => {
       });
 
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('settings-button', 'custom-button', 'test-class');
+      expect(button).toHaveClass('btn', 'btn-primary', 'btn-sm', 'custom-button', 'test-class');
     });
 
     it('renders loading state with default text', () => {
@@ -92,7 +92,6 @@ describe('SettingsButton', () => {
 
       const button = screen.getByRole('button');
       expect(button).toBeDisabled();
-      expect(button).toHaveClass('settings-button--disabled');
     });
 
     it('is disabled when loading', () => {
@@ -102,7 +101,6 @@ describe('SettingsButton', () => {
 
       const button = screen.getByRole('button');
       expect(button).toBeDisabled();
-      expect(button).toHaveClass('settings-button--disabled');
     });
 
     it('is disabled when both loading and disabled are true', () => {
@@ -113,7 +111,6 @@ describe('SettingsButton', () => {
 
       const button = screen.getByRole('button');
       expect(button).toBeDisabled();
-      expect(button).toHaveClass('settings-button--disabled');
     });
 
     it('prevents click events when disabled', () => {
@@ -197,19 +194,18 @@ describe('SettingsButton', () => {
 
       const button = screen.getByRole('button');
 
-      // Check for required style classes
-      expect(button).toHaveClass('settings-button');
-      expect(button).not.toHaveClass('settings-button--disabled');
+      // Check for required DaisyUI style classes
+      expect(button).toHaveClass('btn', 'btn-primary', 'btn-sm');
     });
 
-    it('applies disabled styles when disabled', () => {
+    it('is properly disabled when disabled prop is true', () => {
       wrapperFactory.render({
         disabled: true,
         childContent: 'Disabled',
       });
 
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('settings-button--disabled');
+      expect(button).toBeDisabled();
     });
 
     it('has proper type attribute', () => {
@@ -230,7 +226,7 @@ describe('SettingsButton', () => {
 
       const spinner = screen.getByRole('button').querySelector('.loading');
       expect(spinner).toBeInTheDocument();
-      expect(spinner).toHaveClass('loading', 'loading-spinner', 'loading-sm');
+      expect(spinner).toHaveClass('loading', 'loading-spinner', 'loading-xs');
     });
 
     it('removes spinner when loading completes', async () => {

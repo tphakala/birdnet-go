@@ -2,6 +2,7 @@
   import { getLocale, setLocale } from '$lib/i18n/store.svelte.js';
   import { LOCALES, type Locale } from '$lib/i18n/config.js';
   import { t } from '$lib/i18n';
+  import { cn } from '$lib/utils/cn';
 
   // Props
   interface Props {
@@ -33,12 +34,12 @@
 </script>
 
 <select
-  class="select select-bordered select-sm {className}"
+  class={cn('select select-sm', className)}
   value={currentLocale}
   onchange={handleLanguageChange}
   aria-label={t('common.aria.selectLanguage')}
 >
-  {#each Object.entries(LOCALES) as [code, { name, flag }]}
+  {#each Object.entries(LOCALES) as [code, { name, flag }] (code)}
     <option value={code}>
       {flag}
       {name}

@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
   import SettingsNote from '../SettingsNote.svelte';
-  import { alertIconsSvg } from '$lib/utils/icons';
+  import { Info } from '@lucide/svelte';
 
   export let className: string = '';
   export let showIcon: boolean = false;
@@ -20,9 +20,7 @@
 
   {#snippet icon()}
     {#if showIcon}
-      <div data-testid="note-icon" class="w-5 h-5">
-        {@html alertIconsSvg.info}
-      </div>
+      <Info data-testid="note-icon" class="size-5" />
     {/if}
   {/snippet}
 </SettingsNote>

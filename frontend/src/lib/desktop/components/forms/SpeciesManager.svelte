@@ -7,7 +7,7 @@
     formatSpeciesName,
     sortSpecies,
   } from '$lib/utils/speciesUtils';
-  import { actionIcons, navigationIcons } from '$lib/utils/icons'; // Centralized icons - see icons.ts
+  import { SquarePen, X, GripHorizontal } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { safeArrayAccess } from '$lib/utils/security';
 
@@ -261,7 +261,7 @@
           bind:value={input}
           onkeydown={handleKeyDown}
           {placeholder}
-          class="input input-bordered w-full"
+          class="input w-full"
           list={listId}
         />
 
@@ -273,7 +273,7 @@
               <button
                 type="button"
                 onclick={() => selectPrediction(prediction)}
-                class="w-full px-4 py-2 text-left hover:bg-base-200 focus:bg-base-200 focus:outline-none"
+                class="w-full px-4 py-2 text-left hover:bg-base-200 focus:bg-base-200 focus:outline-hidden"
               >
                 {formatSpeciesName(prediction)}
               </button>
@@ -311,7 +311,7 @@
           onkeydown={editable && sortable ? e => handleItemKeyDown(e, index) : undefined}
         >
           {#if editable && sortable}
-            {@html navigationIcons.dragHandle}
+            <GripHorizontal class="size-5 cursor-move" />
           {/if}
 
           <div class="flex-1">
@@ -321,7 +321,7 @@
                 bind:value={editingValue}
                 onkeydown={handleEditKeyDown}
                 onblur={saveEdit}
-                class="input input-sm input-bordered w-full"
+                class="input input-sm w-full"
                 data-edit-index={index}
               />
             {:else}
@@ -338,7 +338,7 @@
                   class="btn btn-ghost btn-xs"
                   aria-label={t('forms.species.aria.edit')}
                 >
-                  {@html actionIcons.edit}
+                  <SquarePen class="size-4" />
                 </button>
               {/if}
 
@@ -348,7 +348,7 @@
                 class="btn btn-ghost btn-xs text-error"
                 aria-label={t('forms.species.aria.remove')}
               >
-                {@html navigationIcons.close}
+                <X class="size-4" />
               </button>
             </div>
           {/if}
@@ -356,7 +356,7 @@
       {/each}
     </div>
   {:else if !editable}
-    <p class="text-base-content/60 italic">{t('forms.species.empty')}</p>
+    <p class="text-base-content opacity-60 italic">{t('forms.species.empty')}</p>
   {/if}
 
   {#if maxItems && species.length >= maxItems}

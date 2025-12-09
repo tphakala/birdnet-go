@@ -36,7 +36,7 @@
   }
 </script>
 
-<div class={cn('form-control', className)} {...rest}>
+<div class={cn('form-control min-w-0', className)} {...rest}>
   <div class="flex items-center justify-between">
     <div class="flex-1">
       <label for={fieldId} class="label cursor-pointer justify-start gap-0 p-0">
@@ -48,7 +48,7 @@
             {/if}
           </div>
           {#if description}
-            <div class="label-text-alt text-base-content/70 mt-1">
+            <div class="text-xs text-base-content mt-1">
               {description}
             </div>
           {/if}
@@ -56,7 +56,7 @@
       </label>
     </div>
 
-    <div class="flex-shrink-0 ml-4">
+    <div class="shrink-0 ml-4">
       <input
         id={fieldId}
         type="checkbox"

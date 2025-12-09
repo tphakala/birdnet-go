@@ -25,7 +25,7 @@
   }: Props = $props();
 </script>
 
-<div class={cn('card bg-base-100 shadow-xs', className)} {...rest}>
+<div class={cn('card bg-base-100 shadow-2xs', className)} {...rest}>
   {#if title || description || header}
     <div class="px-6 py-4">
       {#if header}
@@ -37,7 +37,9 @@
           {/if}
         </div>
         {#if description}
-          <p class="text-sm text-base-content/70 mt-1">{description}</p>
+          <p class="text-sm opacity-70 mt-1" style:color="var(--color-base-content)">
+            {description}
+          </p>
         {/if}
       {/if}
     </div>

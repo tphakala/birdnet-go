@@ -202,12 +202,10 @@ describe('TimeOfDayIcon', () => {
       },
     });
 
-    // Clock icon is rendered in an inner div wrapper with the text-gray-400 class
-    const clockDiv = container.querySelector('div.text-gray-400');
-    expect(clockDiv).toBeTruthy();
-    expect(clockDiv).toHaveClass('text-gray-400');
-    // Check that it contains the centralized clock icon
-    expect(clockDiv?.innerHTML).toContain('M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z');
+    // Clock icon from lucide renders as SVG with text-gray-400 class
+    const clockSvg = container.querySelector('svg.text-gray-400');
+    expect(clockSvg).toBeTruthy();
+    expect(clockSvg).toHaveClass('text-gray-400');
   });
 
   describe('Edge Cases and Security', () => {

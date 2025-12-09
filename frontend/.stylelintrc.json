@@ -4,9 +4,30 @@
     "at-rule-no-unknown": [
       true,
       {
-        "ignoreAtRules": ["tailwind", "apply", "variants", "responsive", "screen", "layer"]
+        "ignoreAtRules": [
+          "tailwind",
+          "apply",
+          "variants",
+          "responsive",
+          "screen",
+          "layer",
+          "plugin",
+          "theme",
+          "property",
+          "utility",
+          "config"
+        ]
       }
     ],
+    "at-rule-empty-line-before": [
+      "always",
+      {
+        "except": ["blockless-after-same-name-blockless", "first-nested"],
+        "ignore": ["after-comment"],
+        "ignoreAtRules": ["import", "plugin", "theme"]
+      }
+    ],
+    "import-notation": null,
     "no-descending-specificity": null,
     "selector-class-pattern": null,
     "selector-pseudo-class-no-unknown": [
@@ -18,7 +39,7 @@
     "function-no-unknown": [
       true,
       {
-        "ignoreFunctions": ["theme"]
+        "ignoreFunctions": ["theme", "oklch"]
       }
     ],
     "keyframes-name-pattern": null,
@@ -37,7 +58,11 @@
       }
     ],
     "media-feature-range-notation": null,
-    "alpha-value-notation": "number"
+    "alpha-value-notation": "number",
+    "color-hex-length": null,
+    "color-function-notation": null,
+    "color-function-alias-notation": null,
+    "custom-property-pattern": null
   },
   "overrides": [
     {

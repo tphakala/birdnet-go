@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { cn } from '$lib/utils/cn';
   import type { Snippet } from 'svelte';
-  import { navigationIcons } from '$lib/utils/icons';
+  import { ChevronDown } from '@lucide/svelte';
 
   interface Props {
     title: string;
@@ -21,14 +22,15 @@
     children,
   }: Props = $props();
 
-  let isOpen = $state(defaultOpen);
+  // Use untrack to explicitly capture initial value without creating dependency
+  let isOpen = $state(untrack(() => defaultOpen));
 
   function toggleOpen() {
     isOpen = !isOpen;
   }
 </script>
 
-<div class={cn('collapse bg-base-100 shadow-xs', { 'collapse-open': isOpen }, className)}>
+<div class={cn('collapse bg-base-100 shadow-2xs', { 'collapse-open': isOpen }, className)}>
   <button
     type="button"
     class="collapse-title px-6 py-4 min-h-0 text-left w-full cursor-pointer hover:bg-base-200/50 transition-colors"
@@ -45,15 +47,15 @@
       {/if}
       <!-- Collapse indicator -->
       <div
-        class="ml-auto w-4 h-4 transition-transform duration-200"
+        class="ml-auto transition-transform duration-200"
         class:rotate-180={isOpen}
         aria-hidden="true"
       >
-        {@html navigationIcons.chevronDown}
+        <ChevronDown class="size-4" />
       </div>
     </div>
     {#if description}
-      <p class="text-sm text-base-content/70 mt-1">{description}</p>
+      <p class="text-sm opacity-70 mt-1" style:color="var(--color-base-content)">{description}</p>
     {/if}
   </button>
 

@@ -6,8 +6,8 @@ require (
 	github.com/antonholmquist/jason v1.0.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/fatih/color v1.18.0
-	github.com/getsentry/sentry-go v0.38.0
-	github.com/getsentry/sentry-go/echo v0.38.0
+	github.com/getsentry/sentry-go v0.40.0
+	github.com/getsentry/sentry-go/echo v0.40.0
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0
 	github.com/google/uuid v1.6.0
@@ -15,7 +15,7 @@ require (
 	github.com/k3a/html2text v1.2.1
 	github.com/klauspost/cpuid/v2 v2.3.0
 	github.com/labstack/echo/v4 v4.13.4
-	github.com/nicholas-fedor/shoutrrr v0.12.0
+	github.com/nicholas-fedor/shoutrrr v0.13.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/sftp v1.13.10
 	github.com/prometheus/client_golang v1.23.2
@@ -23,18 +23,19 @@ require (
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/sj14/astral v0.2.2
 	github.com/smallnest/ringbuffer v0.0.0-20250317021400-0da97b586904
-	github.com/spf13/cobra v1.10.1
+	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3
 	github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e
 	github.com/tphakala/malgo v0.11.22
+	github.com/tphakala/simd v1.0.18
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.45.0
 	golang.org/x/net v0.47.0
 	golang.org/x/term v0.37.0
 	golang.org/x/text v0.31.0
-	google.golang.org/api v0.256.0
+	google.golang.org/api v0.257.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.6.0
@@ -63,15 +64,15 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
-	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
+	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect
-	go.opentelemetry.io/otel v1.37.0 // indirect
-	go.opentelemetry.io/otel/metric v1.37.0 // indirect
-	go.opentelemetry.io/otel/trace v1.37.0 // indirect
+	go.opentelemetry.io/otel v1.38.0 // indirect
+	go.opentelemetry.io/otel/metric v1.38.0 // indirect
+	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251103181224-f26f9409b101 // indirect
-	google.golang.org/grpc v1.76.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251124214823-79d6a2a48846 // indirect
+	google.golang.org/grpc v1.77.0 // indirect
 )
 
 require (

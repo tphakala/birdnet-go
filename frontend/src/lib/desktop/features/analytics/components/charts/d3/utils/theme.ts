@@ -57,7 +57,7 @@ export function getCurrentTheme(): ChartTheme {
       axis: {
         color: textColor,
         fontSize: '12px',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
+        fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
         strokeWidth: 1,
         gridColor,
       },

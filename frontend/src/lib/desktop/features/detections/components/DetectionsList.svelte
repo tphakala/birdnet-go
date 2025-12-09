@@ -28,13 +28,14 @@
   - className?: string - Additional CSS classes
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { cn } from '$lib/utils/cn';
   import type { DetectionsListData } from '$lib/types/detection.types';
   import Pagination from '$lib/desktop/components/ui/Pagination.svelte';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
   import DetectionRow from './DetectionRow.svelte';
-  import { alertIconsSvg } from '$lib/utils/icons';
+  import { XCircle } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
   interface Props {
@@ -107,12 +108,9 @@
     }
   }
 
-  let selectedNumResults = $state(String(data?.numResults || 25));
-
-  // Keep selectedNumResults in sync with data changes
-  $effect(() => {
-    selectedNumResults = String(data?.numResults || 25);
-  });
+  // State for number of results - captures initial value without creating dependency
+  // Uses untrack() to explicitly capture initial value only (local state is independent after init)
+  let selectedNumResults = $state(untrack(() => String(data?.numResults || 25)));
 </script>
 
 <div class={cn(className)}>
@@ -128,7 +126,7 @@
         <label for="num-results" class="text-sm font-medium">Results:</label>
         <select
           id="num-results"
-          class="select select-bordered select-sm w-20"
+          class="select select-sm w-20"
           bind:value={selectedNumResults}
           onchange={handleNumResultsChange}
         >
@@ -167,7 +165,7 @@
     {:else if error}
       <div class="px-4 py-8">
         <div class="alert alert-error">
-          {@html alertIconsSvg.error}
+          <XCircle class="size-6" />
           <span>{error}</span>
         </div>
       </div>
@@ -206,7 +204,7 @@
   {#if data && data.totalResults > data.itemsPerPage}
     <div class="border-t border-base-200">
       <div class="flex flex-col sm:flex-row justify-between items-center p-4 gap-4">
-        <div class="text-sm text-base-content/70 order-2 sm:order-1">
+        <div class="text-sm text-base-content opacity-70 order-2 sm:order-1">
           {t('detections.pagination.showing', {
             from: data.showingFrom,
             to: data.showingTo,

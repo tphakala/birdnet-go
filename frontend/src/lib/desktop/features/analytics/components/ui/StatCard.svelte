@@ -25,7 +25,7 @@
   }: Props = $props();
 </script>
 
-<div class={cn('card bg-base-100 shadow-sm', className)}>
+<div class={cn('card bg-base-100 shadow-xs', className)}>
   <div class="card-body p-4 md:p-6">
     <h2 class="card-title text-lg">{title}</h2>
     <div class="flex items-center gap-3">
@@ -39,7 +39,7 @@
           {isLoading ? '...' : value}
         </div>
         {#if subtitle}
-          <div class="text-xs text-base-content/60">{subtitle}</div>
+          <div class="text-xs text-base-content opacity-60">{subtitle}</div>
         {/if}
       </div>
     </div>

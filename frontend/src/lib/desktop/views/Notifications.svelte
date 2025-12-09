@@ -1,6 +1,17 @@
 <script>
   import { onMount } from 'svelte';
-  import { actionIcons, alertIconsSvg, systemIcons } from '$lib/utils/icons';
+  import {
+    RefreshCw,
+    Trash2,
+    Check,
+    Eye,
+    BellOff,
+    XCircle,
+    TriangleAlert,
+    Info,
+    Star,
+    Settings,
+  } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import { deduplicateNotifications, sanitizeNotificationMessage } from '$lib/utils/notifications';
@@ -237,9 +248,9 @@
   // Get notification card class
   function getNotificationCardClass(notification) {
     let classes =
-      'card bg-base-100 shadow-sm hover:shadow-md transition-shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
+      'card bg-base-100 shadow-xs hover:shadow-md transition-shadow focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
     if (!notification.read) {
-      classes += ' bg-base-200/30';
+      classes += ' bg-base-200 opacity-30';
     }
     if (isClickable(notification)) {
       classes += ' cursor-pointer';
@@ -287,7 +298,7 @@
 
 <div class="col-span-12 p-4">
   <!-- Filters and Actions -->
-  <div class="card bg-base-100 shadow-sm mb-6">
+  <div class="card bg-base-100 shadow-xs mb-6">
     <div class="card-body">
       <div class="flex flex-wrap gap-4 items-center justify-between">
         <!-- Filters -->
@@ -295,7 +306,7 @@
           <select
             bind:value={filters.status}
             onchange={applyFilters}
-            class="select select-sm select-bordered"
+            class="select select-sm"
             aria-label={t('notifications.aria.filterByStatus')}
           >
             <option value="">{t('notifications.filters.allStatus')}</option>
@@ -307,7 +318,7 @@
           <select
             bind:value={filters.type}
             onchange={applyFilters}
-            class="select select-sm select-bordered"
+            class="select select-sm"
             aria-label={t('notifications.aria.filterByType')}
           >
             <option value="">{t('notifications.filters.allTypes')}</option>
@@ -321,7 +332,7 @@
           <select
             bind:value={filters.priority}
             onchange={applyFilters}
-            class="select select-sm select-bordered"
+            class="select select-sm"
             aria-label={t('notifications.aria.filterByPriority')}
           >
             <option value="">{t('notifications.filters.allPriorities')}</option>
@@ -342,7 +353,7 @@
             class="btn btn-sm btn-ghost"
             aria-label={t('notifications.actions.refresh')}
           >
-            {@html actionIcons.refresh}
+            <RefreshCw class="size-5" />
             Refresh
           </button>
         </div>
@@ -353,7 +364,7 @@
   <!-- Notifications List -->
   <div class="space-y-4" role="region" aria-label="Notifications list">
     {#if ENABLE_LOADING_SPINNERS && loading}
-      <div class="card bg-base-100 shadow-sm">
+      <div class="card bg-base-100 shadow-xs">
         <div class="card-body">
           <div class="flex justify-center">
             <div class="loading loading-spinner loading-lg"></div>
@@ -361,13 +372,13 @@
         </div>
       </div>
     {:else if notifications.length === 0}
-      <div class="card bg-base-100 shadow-sm">
+      <div class="card bg-base-100 shadow-xs">
         <div class="card-body text-center py-12">
           <span class="opacity-30 mb-4" aria-hidden="true">
-            {@html systemIcons.bellOff}
+            <BellOff class="size-12" />
           </span>
-          <p class="text-lg text-base-content/60">{t('notifications.empty.title')}</p>
-          <p class="text-sm text-base-content/40">{t('notifications.empty.subtitle')}</p>
+          <p class="text-lg text-base-content opacity-60">{t('notifications.empty.title')}</p>
+          <p class="text-sm text-base-content opacity-40">{t('notifications.empty.subtitle')}</p>
         </div>
       </div>
     {:else}
@@ -393,18 +404,18 @@
           <div class="card-body">
             <div class="flex items-start gap-4">
               <!-- Icon -->
-              <div class="flex-shrink-0">
+              <div class="shrink-0">
                 <div class={getNotificationIconClass(notification)}>
                   {#if notification.type === 'error'}
-                    {@html alertIconsSvg.error}
+                    <XCircle class="size-5" />
                   {:else if notification.type === 'warning'}
-                    {@html alertIconsSvg.warning}
+                    <TriangleAlert class="size-5" />
                   {:else if notification.type === 'info'}
-                    {@html alertIconsSvg.info}
+                    <Info class="size-5" />
                   {:else if notification.type === 'detection'}
-                    {@html systemIcons.star}
+                    <Star class="size-5" />
                   {:else}
-                    {@html systemIcons.settingsGear}
+                    <Settings class="size-5" />
                   {/if}
                 </div>
               </div>
@@ -414,7 +425,7 @@
                 <div class="flex items-start justify-between gap-4">
                   <div>
                     <h3 class="font-semibold text-lg">{notification.title}</h3>
-                    <p class="text-base-content/80 mt-1">
+                    <p class="text-base-content opacity-80 mt-1">
                       {sanitizeNotificationMessage(notification.message)}
                     </p>
 
@@ -426,7 +437,10 @@
                       <span class="badge badge-sm {getPriorityBadgeClass(notification.priority)}">
                         {notification.priority}
                       </span>
-                      <time class="text-xs text-base-content/60" datetime={notification.timestamp}>
+                      <time
+                        class="text-xs text-base-content opacity-60"
+                        datetime={notification.timestamp}
+                      >
                         {formatTime(notification.timestamp)}
                       </time>
                     </div>
@@ -440,7 +454,7 @@
                         class="btn btn-ghost btn-xs"
                         aria-label={t('notifications.actions.markAsRead')}
                       >
-                        {@html systemIcons.eye}
+                        <Eye class="size-4" />
                       </button>
                     {/if}
                     {#if notification.read && notification.status !== 'acknowledged'}
@@ -449,7 +463,7 @@
                         class="btn btn-ghost btn-xs"
                         aria-label={t('notifications.actions.acknowledge')}
                       >
-                        {@html actionIcons.check}
+                        <Check class="size-4" />
                       </button>
                     {/if}
                     <button
@@ -457,7 +471,7 @@
                       class="btn btn-ghost btn-xs text-error"
                       aria-label={t('notifications.actions.delete')}
                     >
-                      {@html actionIcons.delete}
+                      <Trash2 class="size-4" />
                     </button>
                   </div>
                 </div>

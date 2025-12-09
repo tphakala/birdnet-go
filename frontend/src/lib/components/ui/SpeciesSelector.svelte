@@ -3,7 +3,7 @@
   import type { Snippet } from 'svelte';
   import { createEventDispatcher, onDestroy } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
-  import { navigationIcons, actionIcons } from '$lib/utils/icons';
+  import { X, Trash2, Plus, Search, TriangleAlert } from '@lucide/svelte';
   import type { Species } from '$lib/types/species';
 
   interface Props {
@@ -284,9 +284,7 @@
 >
   <!-- Chip Variant -->
   {#if variant === 'chip'}
-    <div
-      class="flex flex-wrap gap-2 p-3 bg-base-100 border border-base-300 rounded-lg min-h-[3rem]"
-    >
+    <div class="flex flex-wrap gap-2 p-3 bg-base-100 border border-base-300 rounded-lg min-h-12">
       <!-- Search Input -->
       {#if searchable}
         <div class="flex-1 min-w-[280px]">
@@ -320,7 +318,7 @@
                 onclick={clearSearch}
                 aria-label="Clear search"
               >
-                {@html navigationIcons.close}
+                <X class="size-4" />
               </button>
             {/if}
           </div>
@@ -342,11 +340,11 @@
               {#if !disabled}
                 <button
                   type="button"
-                  class="hover:text-base-100/70"
+                  class="hover:opacity-70 transition-opacity"
                   onclick={() => removeSpecies(species)}
                   aria-label="Remove {species.commonName}"
                 >
-                  {@html navigationIcons.close}
+                  <X class="size-3" />
                 </button>
               {/if}
             </div>
@@ -360,7 +358,7 @@
               onclick={clearAll}
               title="Clear all selections"
             >
-              {@html actionIcons.trash}
+              <Trash2 class="size-3" />
               Clear
             </button>
           {/if}
@@ -370,7 +368,7 @@
       <!-- Max Selections Warning -->
       {#if maxSelections && selected.length >= maxSelections}
         <div class="badge badge-warning gap-2" role="status" aria-live="polite" aria-atomic="true">
-          {@html actionIcons.warning}
+          <TriangleAlert class="size-3" />
           Max {maxSelections} species selected
         </div>
       {/if}
@@ -387,7 +385,7 @@
           onclick={() => (isExpanded = !isExpanded)}
           aria-label="Add species"
         >
-          {@html actionIcons.plus}
+          <Plus class="size-4" />
         </button>
       {/if}
     </div>
@@ -408,7 +406,7 @@
           </div>
         {:else if filteredSpecies()[0]?.items.length === 0}
           <div class="p-6 text-center text-base-content/60">
-            {@html actionIcons.search}
+            <Search class="size-6 mx-auto" />
             <p class="mt-2">{emptyText}</p>
           </div>
         {:else}
@@ -443,7 +441,7 @@
                   <!-- Visual checkbox indicator -->
                   <span
                     class={cn(
-                      'checkbox checkbox-primary checkbox-sm flex-shrink-0',
+                      'checkbox checkbox-primary checkbox-sm shrink-0',
                       isSelected && 'checkbox-checked',
                       !canSelect && 'checkbox-disabled'
                     )}
@@ -473,7 +471,7 @@
                 {#if showFrequency && species.frequency}
                   {@const freqConfig = getFrequencyBadge(species.frequency)}
                   {#if freqConfig}
-                    <div class={cn('badge badge-sm ml-2 flex-shrink-0', freqConfig.color)}>
+                    <div class={cn('badge badge-sm ml-2 shrink-0', freqConfig.color)}>
                       {freqConfig.label}
                     </div>
                   {/if}
@@ -497,7 +495,7 @@
             {placeholder}
             aria-label="Search species"
             class={cn(
-              'input input-bordered w-full',
+              'input w-full',
               /* eslint-disable-next-line security/detect-object-injection -- Safe: size prop is constrained to specific string literals */
               sizeConfig[size].input
             )}
@@ -511,7 +509,7 @@
               onclick={clearSearch}
               aria-label="Clear search"
             >
-              {@html navigationIcons.close}
+              <X class="size-4" />
             </button>
           {/if}
         </div>

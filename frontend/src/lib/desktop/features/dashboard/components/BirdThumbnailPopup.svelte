@@ -27,7 +27,7 @@
 <script lang="ts">
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import Portal from 'svelte-portal';
-  import { dataIcons } from '$lib/utils/icons';
+  import { Image } from '@lucide/svelte';
 
   interface Props {
     thumbnailUrl: string;
@@ -173,11 +173,11 @@
     aria-describedby={showPopup ? 'bird-popup' : undefined}
   >
     <!-- Thumbnail placeholder -->
-    <div class="thumbnail-placeholder w-8 h-8 rounded bg-base-200"></div>
+    <div class="thumbnail-placeholder w-8 h-8 rounded-sm bg-base-200"></div>
     <img
       src={thumbnailUrl}
       alt={commonName}
-      class="thumbnail-image w-8 h-8 rounded object-cover cursor-pointer hover:opacity-80 transition-opacity"
+      class="thumbnail-image w-8 h-8 rounded-sm object-cover cursor-pointer hover:opacity-80 transition-opacity"
       onerror={handleImageError}
       loading="lazy"
     />
@@ -203,7 +203,10 @@
             <h3 class="font-semibold text-base-content text-sm leading-tight">
               {commonName}
             </h3>
-            <p class="text-base-content/70 text-xs italic">
+            <p
+              class="text-xs italic"
+              style:color="color-mix(in srgb, var(--color-base-content) 70%, transparent)"
+            >
               {scientificName}
             </p>
           </div>
@@ -220,11 +223,10 @@
             {#if imageError}
               <!-- Error state -->
               <div
-                class="absolute inset-0 flex flex-col items-center justify-center text-base-content/50"
+                class="absolute inset-0 flex flex-col items-center justify-center"
+                style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
               >
-                <div class="mb-2">
-                  {@html dataIcons.imagePlaceholder}
-                </div>
+                <Image class="size-8 mb-2" />
                 <p class="text-xs text-center">Image not available</p>
               </div>
             {:else}
@@ -243,7 +245,12 @@
 
           <!-- Action hint -->
           <div class="text-center">
-            <p class="text-xs text-base-content/50">Click to view detections</p>
+            <p
+              class="text-xs"
+              style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
+            >
+              Click to view detections
+            </p>
           </div>
         </div>
 

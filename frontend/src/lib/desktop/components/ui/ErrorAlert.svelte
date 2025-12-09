@@ -1,11 +1,13 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { alertIconsSvg, navigationIcons, type AlertIconType } from '$lib/utils/icons';
+  import { X, XCircle, TriangleAlert, Info, CircleCheck } from '@lucide/svelte';
   import type { Snippet } from 'svelte';
   import type { HTMLAttributes } from 'svelte/elements';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
+
+  type AlertIconType = 'error' | 'warning' | 'info' | 'success' | 'check';
 
   const logger = loggers.ui;
 
@@ -40,9 +42,6 @@
     check: 'alert-success', // Use success styling for check type
   };
 
-  // Use centralized complete SVG icons
-  const iconSvgs = alertIconsSvg;
-
   function handleDismiss() {
     isVisible = false;
     try {
@@ -59,7 +58,15 @@
     role="alert"
     {...rest}
   >
-    {@html safeGet(iconSvgs, type, '')}
+    {#if type === 'error'}
+      <XCircle class="size-6" />
+    {:else if type === 'warning'}
+      <TriangleAlert class="size-6" />
+    {:else if type === 'info'}
+      <Info class="size-6" />
+    {:else if type === 'success' || type === 'check'}
+      <CircleCheck class="size-6" />
+    {/if}
 
     <span>
       {#if children}
@@ -76,7 +83,7 @@
         onclick={handleDismiss}
         aria-label={t('common.aria.dismissAlert')}
       >
-        {@html navigationIcons.close}
+        <X class="size-4" />
       </button>
     {/if}
   </div>

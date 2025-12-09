@@ -5,6 +5,7 @@ package notification
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"sync"
@@ -153,6 +154,40 @@ func (n *Notification) MarkAsRead() {
 // MarkAsAcknowledged updates the notification status to acknowledged
 func (n *Notification) MarkAsAcknowledged() {
 	n.Status = StatusAcknowledged
+}
+
+// Clone creates a deep copy of the notification, including the Metadata map.
+// This is used to safely broadcast notifications to multiple subscribers
+// without risk of concurrent map access if the original is modified.
+func (n *Notification) Clone() *Notification {
+	if n == nil {
+		return nil
+	}
+
+	clone := &Notification{
+		ID:        n.ID,
+		Type:      n.Type,
+		Priority:  n.Priority,
+		Status:    n.Status,
+		Title:     n.Title,
+		Message:   n.Message,
+		Component: n.Component,
+		Timestamp: n.Timestamp,
+	}
+
+	// Deep copy ExpiresAt
+	if n.ExpiresAt != nil {
+		expiresAt := *n.ExpiresAt
+		clone.ExpiresAt = &expiresAt
+	}
+
+	// Deep copy Metadata map
+	if n.Metadata != nil {
+		clone.Metadata = make(map[string]any, len(n.Metadata))
+		maps.Copy(clone.Metadata, n.Metadata)
+	}
+
+	return clone
 }
 
 // NotificationStore interface defines methods for persisting notifications

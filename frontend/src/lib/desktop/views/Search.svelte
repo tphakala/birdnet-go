@@ -6,14 +6,7 @@
   import { t, getLocale } from '$lib/i18n';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import { toastActions } from '$lib/stores/toast';
-  import {
-    actionIcons,
-    alertIconsSvg,
-    dataIcons,
-    mediaIcons,
-    systemIcons,
-    navigationIcons,
-  } from '$lib/utils/icons';
+  import { Search, ArrowDownUp, XCircle, Music, Eye, ChevronDown, FrownIcon } from '@lucide/svelte';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -267,7 +260,7 @@
 
 <div class="col-span-12 space-y-4" role="region" aria-label={t('search.title')}>
   <!-- Search Form -->
-  <div class="card bg-base-100 shadow-sm">
+  <div class="card bg-base-100 shadow-xs">
     <div class="card-body card-padding">
       <h2 class="card-title" id="search-filters-heading">{t('search.title')}</h2>
 
@@ -303,7 +296,7 @@
               id="species"
               bind:value={speciesSearchTerm}
               placeholder={t('search.fields.speciesPlaceholder')}
-              class="input input-bordered w-full"
+              class="input w-full"
             />
             {#if showTooltip === 'species'}
               <div class="tooltip" id="speciesTooltip" role="tooltip">
@@ -375,7 +368,7 @@
               class:rotate-180={advancedFilters}
               aria-hidden="true"
             >
-              {@html navigationIcons.chevronDown}
+              <ChevronDown class="size-5" />
             </span>
           </button>
         </div>
@@ -447,11 +440,7 @@
                 <label class="label" for="verifiedStatusFilter">
                   <span class="label-text">{t('search.fields.verifiedStatus')}</span>
                 </label>
-                <select
-                  id="verifiedStatusFilter"
-                  bind:value={verifiedStatus}
-                  class="select select-bordered w-full"
-                >
+                <select id="verifiedStatusFilter" bind:value={verifiedStatus} class="select w-full">
                   <option value="any">{t('search.verifiedOptions.any')}</option>
                   <option value="verified">{t('search.verifiedOptions.verified')}</option>
                   <option value="unverified">{t('search.verifiedOptions.unverified')}</option>
@@ -463,11 +452,7 @@
                 <label class="label" for="lockedStatusFilter">
                   <span class="label-text">{t('search.fields.lockedStatus')}</span>
                 </label>
-                <select
-                  id="lockedStatusFilter"
-                  bind:value={lockedStatus}
-                  class="select select-bordered w-full"
-                >
+                <select id="lockedStatusFilter" bind:value={lockedStatus} class="select w-full">
                   <option value="any">{t('search.lockedOptions.any')}</option>
                   <option value="locked">{t('search.lockedOptions.locked')}</option>
                   <option value="unlocked">{t('search.lockedOptions.unlocked')}</option>
@@ -479,11 +464,7 @@
                 <label class="label" for="timeOfDayFilter">
                   <span class="label-text">{t('search.fields.timeOfDay')}</span>
                 </label>
-                <select
-                  id="timeOfDayFilter"
-                  bind:value={timeOfDayFilter}
-                  class="select select-bordered w-full"
-                >
+                <select id="timeOfDayFilter" bind:value={timeOfDayFilter} class="select w-full">
                   <option value="any">{t('search.timeOfDayOptions.any')}</option>
                   <option value="day">{t('search.timeOfDayOptions.day')}</option>
                   <option value="night">{t('search.timeOfDayOptions.night')}</option>
@@ -499,7 +480,7 @@
         <div class="flex flex-row gap-4 justify-end">
           <button
             type="button"
-            class="btn btn-ghost flex-shrink-0"
+            class="btn btn-ghost shrink-0"
             onclick={resetForm}
             aria-label={t('common.reset')}
           >
@@ -507,7 +488,7 @@
           </button>
           <button
             type="submit"
-            class="btn btn-primary flex-shrink-0"
+            class="btn btn-primary shrink-0"
             disabled={isLoading}
             aria-label={t('common.search')}
           >
@@ -515,7 +496,7 @@
               <span class="loading loading-spinner loading-sm mr-2" aria-hidden="true"></span>
             {:else}
               <span class="mr-2" aria-hidden="true">
-                {@html actionIcons.search}
+                <Search class="size-5" />
               </span>
             {/if}
             {t('common.search')}
@@ -526,7 +507,7 @@
   </div>
 
   <!-- Results Area -->
-  <div class="card bg-base-100 shadow-sm">
+  <div class="card bg-base-100 shadow-xs">
     <div class="card-body card-padding">
       <div class="flex items-center justify-between">
         <h2 class="card-title" id="search-results-heading">{t('search.results')}</h2>
@@ -534,7 +515,7 @@
         <!-- Results Count & Sorting -->
         {#if formSubmitted}
           <div class="flex items-center gap-4">
-            <span class="text-sm text-base-content/70" aria-live="polite"
+            <span class="text-sm text-base-content opacity-70" aria-live="polite"
               >{t('search.resultsCount', {
                 count: totalResults,
               })}</span
@@ -548,12 +529,12 @@
                 aria-expanded="false"
                 aria-label={t('common.sort')}
               >
-                {@html actionIcons.sort}
+                <ArrowDownUp class="size-5" />
                 {t('common.sort')}
               </div>
               <ul
                 tabindex="0"
-                class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52"
+                class="dropdown-content z-1 menu p-2 shadow-xs bg-base-100 rounded-box w-52"
                 role="menu"
               >
                 <li role="menuitem">
@@ -596,7 +577,7 @@
       <!-- Error message -->
       {#if errorMessage}
         <div class="alert alert-error mt-4" role="alert">
-          {@html alertIconsSvg.error}
+          <XCircle class="size-5" />
           <span>{errorMessage}</span>
         </div>
       {/if}
@@ -607,11 +588,13 @@
           class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]"
           aria-labelledby="search-results-heading"
         >
-          <span class="text-base-content/30 text-[4rem]" aria-hidden="true">
-            {@html systemIcons.search}
+          <span class="text-base-content opacity-30 text-[4rem]" aria-hidden="true">
+            <Search class="size-12" />
           </span>
-          <p class="text-base-content/50 text-center mt-4">{t('search.noSearchPerformed')}</p>
-          <p class="text-base-content/50 text-center text-sm">
+          <p class="text-base-content opacity-50 text-center mt-4">
+            {t('search.noSearchPerformed')}
+          </p>
+          <p class="text-base-content opacity-50 text-center text-sm">
             {t('search.noSearchPerformedHint')}
           </p>
         </div>
@@ -625,7 +608,7 @@
           aria-busy="true"
         >
           <span class="loading loading-spinner loading-lg text-primary" aria-hidden="true"></span>
-          <p class="text-base-content/50 text-center mt-4">{t('search.loadingResults')}</p>
+          <p class="text-base-content opacity-50 text-center mt-4">{t('search.loadingResults')}</p>
         </div>
       {/if}
 
@@ -659,7 +642,7 @@
                     <div class="flex items-center gap-2">
                       <!-- Add bird image thumbnail -->
                       <div
-                        class="w-12 h-12 rounded-md overflow-hidden bg-gray-100 flex-shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all focus:outline-none focus:ring-2 focus:ring-primary"
+                        class="w-12 h-12 rounded-md overflow-hidden bg-gray-100 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all focus:outline-hidden focus:ring-2 focus:ring-primary"
                         onclick={() => toggleExpand(result.id)}
                         onkeydown={e => {
                           if (e.key === 'Enter' || e.key === ' ') {
@@ -770,7 +753,7 @@
                         })}
                         aria-pressed="false"
                       >
-                        {@html mediaIcons.music}
+                        <Music class="size-4" />
                       </button>
                       <button
                         class="btn btn-xs btn-square"
@@ -779,7 +762,7 @@
                           species: result.commonName || t('search.detailsPanel.unknownSpecies'),
                         })}
                       >
-                        {@html systemIcons.eye}
+                        <Eye class="size-4" />
                       </button>
                       <button
                         class="btn btn-xs btn-square expand-btn"
@@ -803,7 +786,7 @@
                           class:rotate-180={isExpanded(result.id)}
                           aria-hidden="true"
                         >
-                          {@html navigationIcons.chevronDown}
+                          <ChevronDown class="size-4" />
                         </span>
                       </button>
                     </div>
@@ -827,7 +810,7 @@
                             class="bg-base-200 rounded-box p-4 flex flex-col justify-center items-center"
                           >
                             <div
-                              class="w-full aspect-square rounded-md overflow-hidden bg-gray-100 cursor-pointer hover:brightness-90 transition-all focus:outline-none focus:ring-2 focus:ring-primary"
+                              class="w-full aspect-square rounded-md overflow-hidden bg-gray-100 cursor-pointer hover:brightness-90 transition-all focus:outline-hidden focus:ring-2 focus:ring-primary"
                               onclick={() => toggleExpand(result.id)}
                               onkeydown={e => {
                                 if (e.key === 'Enter' || e.key === ' ') {
@@ -895,9 +878,9 @@
         <div
           class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]"
         >
-          {@html dataIcons.sadFace}
-          <p class="mt-2 text-base-content/70">{t('search.noResultsFound')}</p>
-          <p class="text-sm text-base-content/50">{t('search.noResultsHint')}</p>
+          <FrownIcon class="size-12" />
+          <p class="mt-2 text-base-content opacity-70">{t('search.noResultsFound')}</p>
+          <p class="text-sm text-base-content opacity-50">{t('search.noResultsHint')}</p>
         </div>
       {/if}
 

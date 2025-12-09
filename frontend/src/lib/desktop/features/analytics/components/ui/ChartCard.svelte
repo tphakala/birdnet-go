@@ -26,12 +26,12 @@
   }: Props = $props();
 </script>
 
-<div class={cn('card bg-base-100 shadow-sm', className)}>
+<div class={cn('card bg-base-100 shadow-xs', className)}>
   <div class="card-body p-4 md:p-6">
     <h2 class="card-title">{title}</h2>
 
     {#if showEmpty && !isLoading}
-      <div class="text-center py-4 text-base-content/50">
+      <div class="text-center py-4 text-base-content opacity-50">
         {emptyMessage}
       </div>
     {:else}

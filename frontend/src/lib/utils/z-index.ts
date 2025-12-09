@@ -54,7 +54,7 @@ export const Z_INDEX = {
  * element.style.zIndex = Z_INDEX.MODAL.toString();
  * ```
  *
- * In Tailwind CSS classes:
+ * In Tailwind CSS classes (use arbitrary value syntax for non-standard values):
  * ```svelte
  * <div class="z-[100]">  <!-- Use Z_INDEX.DROPDOWN value -->
  * <div class="z-[1000]"> <!-- Use Z_INDEX.PORTAL_DROPDOWN value -->

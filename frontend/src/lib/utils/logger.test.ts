@@ -36,18 +36,20 @@ describe('Logger', () => {
     it('should prefix log messages with category', () => {
       const logger = getLogger('test-category');
 
-      // In dev mode, these should log
-      if (import.meta.env.DEV) {
-        logger.debug('debug message');
-        expect(consoleLogSpy).toHaveBeenCalledWith('[test-category]', 'debug message');
-
-        logger.info('info message');
-        expect(consoleInfoSpy).toHaveBeenCalledWith('[test-category]', 'info message');
-      }
-
       // Warnings and errors always log
       logger.warn('warning message');
       expect(consoleWarnSpy).toHaveBeenCalledWith('[test-category]', 'warning message', undefined);
+    });
+
+    // Dev-only logging tests - skip in production
+    it.runIf(import.meta.env.DEV)('should log debug and info messages in dev mode', () => {
+      const logger = getLogger('test-category');
+
+      logger.debug('debug message');
+      expect(consoleLogSpy).toHaveBeenCalledWith('[test-category]', 'debug message');
+
+      logger.info('info message');
+      expect(consoleInfoSpy).toHaveBeenCalledWith('[test-category]', 'info message');
     });
   });
 
@@ -99,32 +101,29 @@ describe('Logger', () => {
     });
   });
 
-  describe('development-only methods', () => {
+  // Dev-only methods - skip entire describe block in production
+  describe.runIf(import.meta.env.DEV)('development-only methods', () => {
     it('should handle group/groupEnd in dev mode', () => {
       const logger = getLogger('test');
 
-      if (import.meta.env.DEV) {
-        logger.group('Test Group');
-        expect(consoleGroupSpy).toHaveBeenCalledWith('[test] Test Group');
+      logger.group('Test Group');
+      expect(consoleGroupSpy).toHaveBeenCalledWith('[test] Test Group');
 
-        logger.groupEnd();
-        expect(consoleGroupEndSpy).toHaveBeenCalled();
-      }
+      logger.groupEnd();
+      expect(consoleGroupEndSpy).toHaveBeenCalled();
     });
 
     it('should handle timing in dev mode', () => {
       const logger = getLogger('test');
 
-      if (import.meta.env.DEV) {
-        logger.time('operation');
-        // Simulate some delay
-        logger.timeEnd('operation');
+      logger.time('operation');
+      // Simulate some delay
+      logger.timeEnd('operation');
 
-        expect(consoleLogSpy).toHaveBeenCalled();
-        const callArgs = consoleLogSpy.mock.calls[0];
-        expect(callArgs[0]).toContain('[test] operation:');
-        expect(callArgs[0]).toContain('ms');
-      }
+      expect(consoleLogSpy).toHaveBeenCalled();
+      const callArgs = consoleLogSpy.mock.calls[0];
+      expect(callArgs[0]).toContain('[test] operation:');
+      expect(callArgs[0]).toContain('ms');
     });
   });
 
@@ -141,18 +140,21 @@ describe('Logger', () => {
   });
 
   describe('multiple arguments', () => {
-    it('should support multiple arguments in log methods', () => {
+    it('should support multiple arguments in warn methods', () => {
+      const logger = getLogger('test');
+
+      logger.warn('Warning with', 'multiple args', 123);
+      expect(consoleWarnSpy).toHaveBeenCalledWith('[test]', 'Warning with', 'multiple args', 123);
+    });
+
+    // Dev-only debug logging test
+    it.runIf(import.meta.env.DEV)('should support multiple arguments in debug methods', () => {
       const logger = getLogger('test');
       const obj = { foo: 'bar' };
       const arr = [1, 2, 3];
 
-      if (import.meta.env.DEV) {
-        logger.debug('Multiple', 'arguments', obj, arr);
-        expect(consoleLogSpy).toHaveBeenCalledWith('[test]', 'Multiple', 'arguments', obj, arr);
-      }
-
-      logger.warn('Warning with', 'multiple args', 123);
-      expect(consoleWarnSpy).toHaveBeenCalledWith('[test]', 'Warning with', 'multiple args', 123);
+      logger.debug('Multiple', 'arguments', obj, arr);
+      expect(consoleLogSpy).toHaveBeenCalledWith('[test]', 'Multiple', 'arguments', obj, arr);
     });
   });
 });

@@ -104,12 +104,15 @@
 
   // State
   let touched = $state(false);
-  let error = $state<string | { key: string; params?: Record<string, unknown> } | null>(
-    externalError || null
-  );
-  let fieldId = id || `field-${name || 'field'}-${++fieldCounter}`;
-  let helpTextId = helpText ? `${fieldId}-help` : undefined;
-  let errorId = `${fieldId}-error`;
+  let error = $state<string | { key: string; params?: Record<string, unknown> } | null>(null);
+
+  // Generate counter suffix once on component creation (not reactive)
+  const fieldIdSuffix = ++fieldCounter;
+
+  // Derived IDs - react to prop changes while maintaining stable suffix
+  const fieldId = $derived(id || `field-${name || 'field'}-${fieldIdSuffix}`);
+  const helpTextId = $derived(helpText ? `${fieldId}-help` : undefined);
+  const errorId = $derived(`${fieldId}-error`);
 
   // Compute aria-describedby based on what's visible
   let describedBy = $derived(
@@ -244,14 +247,14 @@
 
   // Get input base classes
   function getInputClasses(): string {
-    const baseClasses = 'input input-bordered input-sm w-full';
+    const baseClasses = 'input  input-sm w-full';
     const errorClasses = error ? 'input-error' : '';
 
     return cn(baseClasses, errorClasses, inputClassName);
   }
 </script>
 
-<div class={cn('form-control', className)}>
+<div class={cn('form-control min-w-0', className)}>
   {#if label}
     <label for={fieldId} class={cn('label', labelClassName)}>
       <span class="label-text">
@@ -279,11 +282,7 @@
         {rows}
         {cols}
         aria-describedby={describedBy}
-        class={cn(
-          'textarea textarea-bordered textarea-sm w-full',
-          error && 'textarea-error',
-          inputClassName
-        )}
+        class={cn('textarea  textarea-sm w-full', error && 'textarea-error', inputClassName)}
         onchange={handleChange}
         oninput={handleInput}
         onblur={handleBlur}
@@ -300,11 +299,7 @@
           {disabled}
           multiple
           aria-describedby={describedBy}
-          class={cn(
-            'select select-bordered select-sm w-full',
-            error && 'select-error',
-            inputClassName
-          )}
+          class={cn('select  select-sm w-full', error && 'select-error', inputClassName)}
           onchange={handleChange}
           onblur={handleBlur}
           onfocus={handleFocus}
@@ -324,11 +319,7 @@
           {required}
           {disabled}
           aria-describedby={describedBy}
-          class={cn(
-            'select select-bordered select-sm w-full',
-            error && 'select-error',
-            inputClassName
-          )}
+          class={cn('select  select-sm w-full', error && 'select-error', inputClassName)}
           onchange={handleChange}
           onblur={handleBlur}
           onfocus={handleFocus}
@@ -447,13 +438,9 @@
 
   {#if error && (touched || externalError)}
     <div class="label">
-      <span id={errorId} class={cn('label-text-alt text-error', errorClassName)}
-        >{displayError()}</span
-      >
+      <span id={errorId} class={cn('text-xs text-error', errorClassName)}>{displayError()}</span>
     </div>
   {:else if helpText}
-    <div class="label">
-      <span id={helpTextId} class="label-text-alt text-base-content/70">{helpText}</span>
-    </div>
+    <span id={helpTextId} class="help-text">{helpText}</span>
   {/if}
 </div>

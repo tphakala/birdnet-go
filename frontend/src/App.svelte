@@ -127,9 +127,8 @@
           break;
         case 'advanced-analytics':
           if (!AdvancedAnalytics) {
-            const module = await import(
-              './lib/desktop/features/analytics/pages/AdvancedAnalytics.svelte'
-            );
+            const module =
+              await import('./lib/desktop/features/analytics/pages/AdvancedAnalytics.svelte');
             AdvancedAnalytics = module.default;
           }
           break;
