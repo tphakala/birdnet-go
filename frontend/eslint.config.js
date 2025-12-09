@@ -39,6 +39,7 @@ const browserGlobals = {
   SVGSVGElement: 'readonly',
   SVGElement: 'readonly',
   MutationObserver: 'readonly',
+  IntersectionObserver: 'readonly',
   Node: 'readonly',
   setTimeout: 'readonly',
   setInterval: 'readonly',

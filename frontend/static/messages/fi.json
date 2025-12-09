@@ -414,6 +414,12 @@
       },
       "noSpecies": "Ei havaintoja tänä päivänä"
     },
+    "todaysDetections": {
+      "title": "Tämän päivän havainnot",
+      "noDetections": "Ei havaintoja vielä tänään",
+      "checkBackLater": "Palaa myöhemmin nähdäksesi lintuhavaintoja",
+      "allLoaded": "Kaikki ladattu!"
+    },
     "recentDetections": {
       "title": "Viimeisimmät havainnot",
       "controls": {

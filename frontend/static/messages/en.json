@@ -414,6 +414,12 @@
       },
       "noSpecies": "No species detected on this date"
     },
+    "todaysDetections": {
+      "title": "Today's Detections",
+      "noDetections": "No detections yet today",
+      "checkBackLater": "Check back later for bird sightings",
+      "allLoaded": "All caught up!"
+    },
     "recentDetections": {
       "title": "Recent Detections",
       "controls": {

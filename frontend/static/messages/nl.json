@@ -414,6 +414,12 @@
       },
       "noSpecies": "Geen soorten herkend op deze datum"
     },
+    "todaysDetections": {
+      "title": "Detecties van vandaag",
+      "noDetections": "Nog geen detecties vandaag",
+      "checkBackLater": "Kom later terug voor waarnemingen",
+      "allLoaded": "Alles bijgewerkt!"
+    },
     "recentDetections": {
       "title": "Recent herkend",
       "controls": {

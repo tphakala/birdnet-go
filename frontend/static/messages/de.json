@@ -414,6 +414,12 @@
       },
       "noSpecies": "Keine Arten an diesem Datum erkannt"
     },
+    "todaysDetections": {
+      "title": "Erkennungen heute",
+      "noDetections": "Heute noch keine Erkennungen",
+      "checkBackLater": "Schauen Sie später nochmal vorbei",
+      "allLoaded": "Alles auf dem neuesten Stand!"
+    },
     "recentDetections": {
       "title": "Aktuelle Erkennungen",
       "controls": {

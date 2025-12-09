@@ -414,6 +414,12 @@
       },
       "noSpecies": "Aucune espèce détectée à cette date"
     },
+    "todaysDetections": {
+      "title": "Détections d'aujourd'hui",
+      "noDetections": "Pas encore de détections aujourd'hui",
+      "checkBackLater": "Revenez plus tard pour voir les observations",
+      "allLoaded": "Tout est à jour !"
+    },
     "recentDetections": {
       "title": "Détections récentes",
       "controls": {
