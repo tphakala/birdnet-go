@@ -495,8 +495,9 @@ func selectCaptureSource(settings *conf.Settings) (captureSource, error) {
 
 // matchesDeviceSettings checks if the device matches the settings specified by the user.
 func matchesDeviceSettings(decodedID string, info *malgo.DeviceInfo, audioSource string) bool {
-	if runtime.GOOS == "windows" && audioSource == "sysdefault" {
-		// On Windows, there is no "sysdefault" device. Use miniaudio's default device instead.
+	// Handle "default" and "sysdefault" on Windows and macOS by selecting the system default device
+	if (runtime.GOOS == "windows" || runtime.GOOS == "darwin") &&
+		(audioSource == "sysdefault" || audioSource == "default") {
 		return info.IsDefault == 1
 	}
 	// Check if the decoded ID or device name matches the user's setting.
