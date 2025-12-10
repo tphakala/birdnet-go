@@ -59,6 +59,32 @@ tasks:
     vars:
       TEST_FLAGS: '{{default "" .CLI_ARGS}}'
 
+  # Go linting with CGO support for TensorFlow
+  lint:
+    desc: Run golangci-lint with TensorFlow CGO flags
+    cmds:
+      - |
+        # Determine library path based on OS
+        if [ "{{.UNAME_S}}" = "Darwin" ]; then
+          if [ "{{.UNAME_M}}" = "arm64" ]; then
+            LIB_DIR="/opt/homebrew/lib"
+          else
+            LIB_DIR="/usr/local/lib"
+          fi
+        else
+          LIB_DIR="/usr/lib"
+        fi
+        {{.CGO_FLAGS}} CGO_LDFLAGS="-L${LIB_DIR} -ltensorflowlite_c" \
+        golangci-lint run {{.CLI_ARGS}}
+    vars:
+      CLI_ARGS: '{{default "-v" .CLI_ARGS}}'
+
+  lint-fix:
+    desc: Run golangci-lint with auto-fix enabled
+    cmds:
+      - task: lint
+        vars: {CLI_ARGS: "--fix -v"}
+
   # New Task: Download Avicommons Data
   download-avicommons-data:
     desc: Download the Avicommons latest.json data file if it doesn't exist
