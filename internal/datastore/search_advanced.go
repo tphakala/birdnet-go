@@ -65,6 +65,10 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 			return db.Order("created_at DESC")
 		})
 
+	// Add base joins for filtering (required before applying verified/locked filters)
+	query = query.Joins("LEFT JOIN note_reviews ON notes.id = note_reviews.note_id")
+	query = query.Joins("LEFT JOIN note_locks ON notes.id = note_locks.note_id")
+
 	// Apply text search if provided
 	if filters.TextQuery != "" {
 		query = query.Where("common_name LIKE ? OR scientific_name LIKE ?",
@@ -268,29 +272,31 @@ func applyTimeOfDayFilter(query *gorm.DB, timeOfDay []string) *gorm.DB {
 }
 
 // applyVerifiedFilter applies verified filtering to the query
+// Assumes base LEFT JOIN on note_reviews already exists in the query
 func applyVerifiedFilter(query *gorm.DB, verified *bool) *gorm.DB {
 	if verified == nil {
 		return query
 	}
 
 	if *verified {
-		return query.Joins("INNER JOIN note_reviews ON note_reviews.note_id = notes.id AND note_reviews.verified != ''")
+		// Verified only: has a "correct" review
+		return query.Where("note_reviews.verified = ?", "correct")
 	}
 
-	return query.Joins("LEFT JOIN note_reviews ON note_reviews.note_id = notes.id").
-		Where("note_reviews.id IS NULL OR note_reviews.verified = ''")
+	// Unverified only: no review OR review is not "correct" or "false_positive"
+	return query.Where("(note_reviews.verified IS NULL OR (note_reviews.verified != ? AND note_reviews.verified != ?))", "correct", "false_positive")
 }
 
 // applyLockedFilter applies locked filtering to the query
+// Assumes base LEFT JOIN on note_locks already exists in the query
 func applyLockedFilter(query *gorm.DB, locked *bool) *gorm.DB {
 	if locked == nil {
 		return query
 	}
 
 	if *locked {
-		return query.Joins("INNER JOIN note_locks ON note_locks.note_id = notes.id")
+		return query.Where("note_locks.id IS NOT NULL")
 	}
 
-	return query.Joins("LEFT JOIN note_locks ON note_locks.note_id = notes.id").
-		Where("note_locks.id IS NULL")
+	return query.Where("note_locks.id IS NULL")
 }
