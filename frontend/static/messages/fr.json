@@ -12,6 +12,7 @@
     "filter": "Filtrer",
     "sort": "Trier",
     "done": "Terminé",
+    "loadMore": "Charger plus",
     "actions": {
       "download": "Télécharger",
       "review": "Réviser"
@@ -552,6 +553,29 @@
     "notes": {
       "title": "Notes et commentaires",
       "noComments": "Aucun commentaire ou note pour cette détection."
+    },
+    "filters": {
+      "title": "Filtres",
+      "species": "Espèce",
+      "speciesPlaceholder": "Rechercher une espèce...",
+      "dateRange": "Plage de dates",
+      "from": "De",
+      "to": "À",
+      "confidence": "Confiance",
+      "timeOfDay": "Moment de la journée",
+      "hourRange": "Plage horaire",
+      "verified": "Statut de vérification",
+      "verifiedAll": "Tous",
+      "verifiedOnly": "Vérifiés uniquement",
+      "unverifiedOnly": "Non vérifiés uniquement",
+      "apply": "Appliquer",
+      "clearAll": "Tout effacer"
+    },
+    "timeOfDay": {
+      "sunrise": "Lever du soleil",
+      "day": "Jour",
+      "sunset": "Coucher du soleil",
+      "night": "Nuit"
     }
   },
   "species": {

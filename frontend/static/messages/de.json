@@ -26,6 +26,7 @@
     "apply": "Anwenden",
     "clear": "Löschen",
     "done": "Fertig",
+    "loadMore": "Mehr laden",
     "goToDashboard": "Zur Übersicht",
     "reportIssue": "Problem melden",
     "loginToViewDetails": "Anmelden um Details anzuzeigen",
@@ -552,6 +553,29 @@
     },
     "row": {
       "viewDetails": "Details für {species} anzeigen"
+    },
+    "filters": {
+      "title": "Filter",
+      "species": "Art",
+      "speciesPlaceholder": "Art suchen...",
+      "dateRange": "Datumsbereich",
+      "from": "Von",
+      "to": "Bis",
+      "confidence": "Zuverlässigkeit",
+      "timeOfDay": "Tageszeit",
+      "hourRange": "Stundenbereich",
+      "verified": "Verifizierungsstatus",
+      "verifiedAll": "Alle",
+      "verifiedOnly": "Nur Verifizierte",
+      "unverifiedOnly": "Nur Unverifizierte",
+      "apply": "Anwenden",
+      "clearAll": "Alle löschen"
+    },
+    "timeOfDay": {
+      "sunrise": "Sonnenaufgang",
+      "day": "Tag",
+      "sunset": "Sonnenuntergang",
+      "night": "Nacht"
     }
   },
   "species": {

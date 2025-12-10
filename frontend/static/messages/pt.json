@@ -26,6 +26,7 @@
     "apply": "Aplicar",
     "clear": "Limpar",
     "done": "Concluído",
+    "loadMore": "Carregar mais",
     "goToDashboard": "Ir para o painel",
     "reportIssue": "Relatar problema",
     "loginToViewDetails": "Faça login para ver detalhes",
@@ -552,6 +553,29 @@
     "notes": {
       "title": "Notas e comentários",
       "noComments": "Sem comentários ou notas para esta detecção."
+    },
+    "filters": {
+      "title": "Filtros",
+      "species": "Espécie",
+      "speciesPlaceholder": "Buscar espécie...",
+      "dateRange": "Intervalo de datas",
+      "from": "De",
+      "to": "Até",
+      "confidence": "Confiança",
+      "timeOfDay": "Período do dia",
+      "hourRange": "Intervalo de horas",
+      "verified": "Status de verificação",
+      "verifiedAll": "Todos",
+      "verifiedOnly": "Apenas verificados",
+      "unverifiedOnly": "Apenas não verificados",
+      "apply": "Aplicar",
+      "clearAll": "Limpar tudo"
+    },
+    "timeOfDay": {
+      "sunrise": "Nascer do sol",
+      "day": "Dia",
+      "sunset": "Pôr do sol",
+      "night": "Noite"
     }
   },
   "species": {

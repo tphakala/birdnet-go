@@ -22,6 +22,7 @@
     "apply": "Toepassen",
     "clear": "Wissen",
     "done": "Gereed",
+    "loadMore": "Meer laden",
     "goToDashboard": "Ga naar het Overzicht",
     "reportIssue": "Probleem melden",
     "loginToViewDetails": "Aanmelden voor details",
@@ -552,6 +553,29 @@
     "notes": {
       "title": "Notities & Aantekeningen",
       "noComments": "Geen notities of aantekeningen voor deze herkenning."
+    },
+    "filters": {
+      "title": "Filters",
+      "species": "Soort",
+      "speciesPlaceholder": "Zoek soort...",
+      "dateRange": "Datumbereik",
+      "from": "Van",
+      "to": "Tot",
+      "confidence": "Zekerheid",
+      "timeOfDay": "Tijd van de dag",
+      "hourRange": "Uurbereik",
+      "verified": "Verificatiestatus",
+      "verifiedAll": "Alle",
+      "verifiedOnly": "Alleen geverifieerd",
+      "unverifiedOnly": "Alleen niet-geverifieerd",
+      "apply": "Toepassen",
+      "clearAll": "Alles wissen"
+    },
+    "timeOfDay": {
+      "sunrise": "Zonsopgang",
+      "day": "Dag",
+      "sunset": "Zonsondergang",
+      "night": "Nacht"
     }
   },
   "species": {
