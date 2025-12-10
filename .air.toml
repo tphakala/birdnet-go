@@ -39,18 +39,18 @@ tmp_dir = "tmp"  # Temporary directory for build artifacts
       -o ./tmp/main .
   """
 
-  bin = "./tmp/main"  # Path to the compiled binary
+  entrypoint = ["./tmp/main"]  # Path to the compiled binary
   delay = 1000  # Delay (in milliseconds) before restarting the app after a change
   rerun_delay = 5000
 
   # Directories to exclude from watching
   # Frontend is excluded - use 'task frontend-watch' for frontend changes
-  exclude_dir = ["tmp", "vendor", "testdata", "bin", "frontend", "node_modules"]
+  exclude_dir = ["tmp", "vendor", "testdata", "bin", "frontend", "node_modules", "dist", ".git"]
   exclude_file = []  # Files to exclude from watching (none specified)
   exclude_regex = ["_test.go"]  # Exclude test files
   exclude_unchanged = false  # Watch even files that haven't changed
   follow_symlink = false  # Don't follow symlinks
-  full_bin = ""  # Additional arguments when running the built binary
+  args_bin = []  # Additional arguments when running the built binary
   # Only watch Go backend files - frontend is handled by 'task frontend-watch'
   include_dir = ["views", "internal", "assets", "cmd", "pkg"]
   include_ext = ["go", "tpl", "tmpl", "html", "css"]  # File extensions to watch
