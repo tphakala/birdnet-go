@@ -26,6 +26,7 @@
     "apply": "Käytä",
     "clear": "Tyhjennä",
     "done": "Valmis",
+    "loadMore": "Lataa lisää",
     "goToDashboard": "Siirry kojelauttaan",
     "reportIssue": "Ilmoita ongelmasta",
     "loginToViewDetails": "Kirjaudu nähdäksesi lisätiedot",
@@ -546,6 +547,29 @@
     "notes": {
       "title": "Huomiot ja kommentit",
       "noComments": "Ei kommentteja tai huomioita tälle havainnolle."
+    },
+    "filters": {
+      "title": "Suodattimet",
+      "species": "Laji",
+      "speciesPlaceholder": "Hae lajia...",
+      "dateRange": "Päivämääräväli",
+      "from": "Alkaen",
+      "to": "Päättyen",
+      "confidence": "Luotettavuus",
+      "timeOfDay": "Vuorokaudenaika",
+      "hourRange": "Tuntiväli",
+      "verified": "Vahvistustila",
+      "verifiedAll": "Kaikki",
+      "verifiedOnly": "Vain vahvistetut",
+      "unverifiedOnly": "Vain vahvistamattomat",
+      "apply": "Käytä",
+      "clearAll": "Tyhjennä kaikki"
+    },
+    "timeOfDay": {
+      "sunrise": "Auringonnousu",
+      "day": "Päivä",
+      "sunset": "Auringonlasku",
+      "night": "Yö"
     }
   },
   "species": {

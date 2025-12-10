@@ -22,6 +22,7 @@
     "apply": "Apply",
     "clear": "Clear",
     "done": "Done",
+    "loadMore": "Load More",
     "goToDashboard": "Go to Dashboard",
     "reportIssue": "Report Issue",
     "loginToViewDetails": "Login to View Details",
@@ -546,6 +547,29 @@
     "notes": {
       "title": "Notes & Comments",
       "noComments": "No comments or notes for this detection."
+    },
+    "filters": {
+      "title": "Filters",
+      "species": "Species",
+      "speciesPlaceholder": "Search species...",
+      "dateRange": "Date Range",
+      "from": "From",
+      "to": "To",
+      "confidence": "Confidence",
+      "timeOfDay": "Time of Day",
+      "hourRange": "Hour Range",
+      "verified": "Verified Status",
+      "verifiedAll": "All",
+      "verifiedOnly": "Verified Only",
+      "unverifiedOnly": "Unverified Only",
+      "apply": "Apply",
+      "clearAll": "Clear All"
+    },
+    "timeOfDay": {
+      "sunrise": "Sunrise",
+      "day": "Day",
+      "sunset": "Sunset",
+      "night": "Night"
     }
   },
   "species": {

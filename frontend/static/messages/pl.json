@@ -22,6 +22,7 @@
     "apply": "Zastosuj",
     "clear": "Wyczyść",
     "done": "Gotowe",
+    "loadMore": "Załaduj więcej",
     "goToDashboard": "Przejdź do Panelu",
     "reportIssue": "Zgłoś Problem",
     "loginToViewDetails": "Zaloguj się, aby Zobaczyć Szczegóły",
@@ -546,6 +547,29 @@
     "notes": {
       "title": "Notatki i Komentarze",
       "noComments": "Brak komentarzy lub notatek dla tej detekcji."
+    },
+    "filters": {
+      "title": "Filtry",
+      "species": "Gatunek",
+      "speciesPlaceholder": "Szukaj gatunku...",
+      "dateRange": "Zakres dat",
+      "from": "Od",
+      "to": "Do",
+      "confidence": "Pewność",
+      "timeOfDay": "Pora dnia",
+      "hourRange": "Zakres godzin",
+      "verified": "Status weryfikacji",
+      "verifiedAll": "Wszystkie",
+      "verifiedOnly": "Tylko zweryfikowane",
+      "unverifiedOnly": "Tylko niezweryfikowane",
+      "apply": "Zastosuj",
+      "clearAll": "Wyczyść wszystko"
+    },
+    "timeOfDay": {
+      "sunrise": "Wschód słońca",
+      "day": "Dzień",
+      "sunset": "Zachód słońca",
+      "night": "Noc"
     }
   },
   "species": {
