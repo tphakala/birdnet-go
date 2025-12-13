@@ -152,11 +152,15 @@ export interface EqualizerSettings {
   filters: EqualizerFilter[];
 }
 
+/** Supported equalizer filter types (must match backend eqfilter_config.go) */
+export type EqualizerFilterType = 'HighPass' | 'LowPass' | 'BandReject';
+
 export interface EqualizerFilter {
   id: string;
-  type: 'highpass' | 'lowpass' | 'bandpass' | 'bandstop';
+  type: EqualizerFilterType;
   frequency: number;
   q?: number;
+  width?: number; // Bandwidth in Hz (for BandReject)
   gain?: number;
   passes?: number; // Number of filter passes (1=12dB, 2=24dB, 3=36dB, 4=48dB)
 }

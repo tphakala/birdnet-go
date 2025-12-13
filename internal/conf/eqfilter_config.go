@@ -18,6 +18,14 @@ var EqFilterConfig = map[string]EqFilterTypeConfig{
 		},
 		Tooltip: "High-pass filter attenuates frequencies below the cutoff frequency.",
 	},
+	"BandReject": {
+		Parameters: []EqFilterParameter{
+			{Name: "Frequency", Label: "Center Frequency", Type: "number", Unit: "Hz", Min: 20, Max: 20000, Default: 1000, Tooltip: "Center frequency of the reject band (notch)"},
+			{Name: "Width", Label: "Bandwidth", Type: "number", Unit: "Hz", Min: 1, Max: 10000, Default: 100, Tooltip: "Width of the frequency band that is attenuated"},
+			{Name: "Passes", Label: "Attenuation", Type: "number", Min: 1, Max: 4, Default: 1, Tooltip: "Number of passes to apply the filter — 1=12dB, 2=24dB, 3=36dB, 4=48dB"},
+		},
+		Tooltip: "Band-reject (notch) filter attenuates a narrow range of frequencies, useful for removing interference or hum.",
+	},
 	/*
 		"BandPass": {
 			Parameters: []EqFilterParameter{
@@ -25,13 +33,6 @@ var EqFilterConfig = map[string]EqFilterTypeConfig{
 				{Name: "Width", Label: "Bandwidth", Type: "number", Unit: "Hz", Min: 1, Max: 10000, Default: 0, Tooltip: "Width of the frequency band that is allowed to pass"},
 			},
 			Tooltip: "Band-pass filter allows a range of frequencies to pass while attenuating others.",
-		},
-		"BandReject": {
-			Parameters: []EqFilterParameter{
-				{Name: "Frequency", Label: "Center Frequency", Type: "number", Unit: "Hz", Min: 20, Max: 20000, Default: 0, Tooltip: "Center frequency of the reject band"},
-				{Name: "Width", Label: "Bandwidth", Type: "number", Unit: "Hz", Min: 1, Max: 10000, Default: 0, Tooltip: "Width of the frequency band that is attenuated"},
-			},
-			Tooltip: "Band-reject filter attenuates a range of frequencies while allowing others to pass.",
 		},
 		"LowShelf": {
 			Parameters: []EqFilterParameter{

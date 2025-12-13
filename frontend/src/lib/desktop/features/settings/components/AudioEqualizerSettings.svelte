@@ -23,6 +23,7 @@
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import type { EqualizerFilterType } from '$lib/stores/settings';
 
   const logger = loggers.settings;
 
@@ -58,6 +59,29 @@
         { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
       ],
     },
+    BandReject: {
+      Parameters: [
+        {
+          Name: 'Frequency',
+          Label: 'Center Frequency',
+          Type: 'number',
+          Unit: 'Hz',
+          Min: 20,
+          Max: 20000,
+          Default: 1000,
+        },
+        {
+          Name: 'Width',
+          Label: 'Bandwidth',
+          Type: 'number',
+          Unit: 'Hz',
+          Min: 1,
+          Max: 10000,
+          Default: 100,
+        },
+        { Name: 'Passes', Label: 'Attenuation', Type: 'number', Min: 1, Max: 4, Default: 1 },
+      ],
+    },
   };
 
   interface FilterParameter {
@@ -78,9 +102,20 @@
 
   interface Filter {
     id?: string;
-    type: string;
+    type: EqualizerFilterType;
     frequency: number;
     q?: number;
+    width?: number;
+    gain?: number;
+    passes?: number;
+  }
+
+  // Separate type for the new filter form which can have empty type before selection
+  interface NewFilterForm {
+    type: EqualizerFilterType | '';
+    frequency: number;
+    q?: number;
+    width?: number;
     gain?: number;
     passes?: number;
   }
@@ -102,11 +137,12 @@
   let eqFilterConfig = $state<Record<string, FilterTypeConfig>>({});
   let loadingConfig = $state(true);
 
-  // New filter state for adding filters
-  let newFilter = $state<Filter>({
+  // New filter state for adding filters (uses NewFilterForm to allow empty type)
+  let newFilter = $state<NewFilterForm>({
     type: '',
     frequency: 0,
     q: 0.707,
+    width: 100,
     gain: 0,
     passes: 1, // Default to 12dB attenuation
   });
@@ -182,9 +218,15 @@
   function addNewFilter() {
     if (!newFilter.type) return;
 
-    const filterToAdd = { ...newFilter };
-    // Remove empty id if it exists
-    if (!filterToAdd.id) delete filterToAdd.id;
+    // After the type check above, we know type is not empty - create a proper Filter
+    const filterToAdd: Filter = {
+      type: newFilter.type as EqualizerFilterType,
+      frequency: newFilter.frequency,
+      q: newFilter.q,
+      width: newFilter.width,
+      gain: newFilter.gain,
+      passes: newFilter.passes,
+    };
 
     // Ensure HP/LP filters use Butterworth Q factor
     if (filterToAdd.type === 'HighPass' || filterToAdd.type === 'LowPass') {
@@ -195,7 +237,7 @@
     onUpdate({ ...equalizerSettings, filters });
 
     // Reset new filter form
-    newFilter = { type: '', frequency: 0, q: 0.707, gain: 0, passes: 1 };
+    newFilter = { type: '', frequency: 0, q: 0.707, width: 100, gain: 0, passes: 1 };
   }
 
   // Remove a filter by index
@@ -214,7 +256,7 @@
     const normalizedParamName = paramName.toLowerCase();
 
     // Safe property assignment - whitelist allowed parameters
-    const allowedParams = ['frequency', 'q', 'gain', 'passes'];
+    const allowedParams = ['frequency', 'q', 'width', 'gain', 'passes'];
     if (!allowedParams.includes(normalizedParamName)) return;
 
     // Get parameter configuration for validation
@@ -227,6 +269,7 @@
     if (
       normalizedParamName === 'frequency' ||
       normalizedParamName === 'q' ||
+      normalizedParamName === 'width' ||
       normalizedParamName === 'gain' ||
       normalizedParamName === 'passes'
     ) {
@@ -257,6 +300,9 @@
       case 'q':
         updatedFilter.q = validatedValue as number;
         break;
+      case 'width':
+        updatedFilter.width = validatedValue as number;
+        break;
       case 'gain':
         updatedFilter.gain = validatedValue as number;
         break;
@@ -270,17 +316,18 @@
   }
 
   // Set default values when filter type is selected
-  function getFilterDefaults(filterType: string) {
+  function getFilterDefaults(filterType: EqualizerFilterType | '') {
     if (!filterType) {
-      newFilter = { type: '', frequency: 0, q: 0.707, gain: 0, passes: 1 };
+      newFilter = { type: '', frequency: 0, q: 0.707, width: 100, gain: 0, passes: 1 };
       return;
     }
 
     const parameters = getEqFilterParameters(filterType);
-    const updatedFilter: Filter = {
+    const updatedFilter: NewFilterForm = {
       type: filterType,
       frequency: 0,
       q: 0.707,
+      width: 100,
       gain: 0,
       passes: 1, // Default to 12dB attenuation
     };
@@ -294,6 +341,9 @@
           break;
         case 'q':
           updatedFilter.q = param.Default;
+          break;
+        case 'width':
+          updatedFilter.width = param.Default;
           break;
         case 'gain':
           updatedFilter.gain = param.Default;
@@ -404,6 +454,19 @@
                     class="input input-sm w-full"
                     {disabled}
                   />
+                {:else if param.Name.toLowerCase() === 'width'}
+                  <!-- Width (Bandwidth) input -->
+                  <input
+                    value={filter.width ?? param.Default}
+                    oninput={e =>
+                      updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
+                    type="number"
+                    min={param.Min}
+                    max={param.Max}
+                    step="1"
+                    class="input input-sm w-full"
+                    {disabled}
+                  />
                 {:else if param.Name.toLowerCase() === 'gain'}
                   <!-- Gain input -->
                   <input
@@ -510,6 +573,21 @@
                     }}
                     type="number"
                     step="0.1"
+                    min={param.Min}
+                    max={param.Max}
+                    class="input input-sm w-full"
+                    {disabled}
+                  />
+                {:else if param.Name.toLowerCase() === 'width'}
+                  <!-- Width (Bandwidth) input -->
+                  <input
+                    value={newFilter.width ?? 100}
+                    oninput={e => {
+                      const value = parseFloat(e.currentTarget.value) || 100;
+                      newFilter = { ...newFilter, width: value };
+                    }}
+                    type="number"
+                    step="1"
                     min={param.Min}
                     max={param.Max}
                     class="input input-sm w-full"

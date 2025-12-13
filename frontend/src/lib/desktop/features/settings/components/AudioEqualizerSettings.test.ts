@@ -178,7 +178,7 @@ describe('AudioEqualizerSettings', () => {
 
   it('should display existing HighPass filter with correct attenuation value', async () => {
     const existingFilter = {
-      type: 'HighPass',
+      type: 'HighPass' as const,
       frequency: 100,
       passes: 2, // 24dB attenuation
       q: 0.707,
@@ -208,7 +208,7 @@ describe('AudioEqualizerSettings', () => {
 
   it('should handle missing passes property gracefully', async () => {
     const filterWithoutPasses = {
-      type: 'HighPass',
+      type: 'HighPass' as const,
       frequency: 100,
       // passes property missing - should default to 1 (12dB)
       q: 0.707,

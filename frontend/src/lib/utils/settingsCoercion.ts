@@ -258,15 +258,26 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
           const f = filter as UnknownSettings;
 
           // Normalize and validate filter type - backend expects proper case
+          // BandStop and Notch are aliases for BandReject (DSP module treats as synonyms)
           const allowedTypesMap = {
             lowpass: 'LowPass',
             highpass: 'HighPass',
             bandpass: 'BandPass',
-            bandstop: 'BandStop',
+            bandstop: 'BandReject',
+            bandreject: 'BandReject',
+            notch: 'BandReject',
           };
           const rawType = coerceString(f.type, 'LowPass').toLowerCase();
           const normalizedType =
             allowedTypesMap[rawType as keyof typeof allowedTypesMap] || 'LowPass';
+
+          // Determine default frequency based on filter type
+          let defaultFrequency = 15000; // Default for LowPass
+          if (normalizedType === 'HighPass') {
+            defaultFrequency = 100;
+          } else if (normalizedType === 'BandReject' || normalizedType === 'BandPass') {
+            defaultFrequency = 1000;
+          }
 
           const coercedFilter: EqualizerFilter = {
             id: coerceString(
@@ -274,13 +285,9 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
               `filter_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
             ),
             type: normalizedType as EqualizerFilter['type'],
-            frequency: coerceNumber(
-              f.frequency,
-              20,
-              20000,
-              normalizedType === 'HighPass' ? 100 : 15000
-            ),
+            frequency: coerceNumber(f.frequency, 20, 20000, defaultFrequency),
             q: coerceNumber(f.q, 0.1, 10, 0.707),
+            width: coerceNumber(f.width, 1, 10000, 100), // Bandwidth in Hz
             gain: coerceNumber(f.gain, -48, 12, 0),
             passes: 1, // Default passes
           };
@@ -289,8 +296,12 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
           if (typeof f.passes === 'number') {
             coercedFilter.passes = coerceNumber(f.passes, 0, 4, 1);
           } else {
-            // Default to 1 pass (12dB) for HighPass/LowPass filters
-            if (normalizedType === 'HighPass' || normalizedType === 'LowPass') {
+            // Default to 1 pass (12dB) for HighPass/LowPass/BandReject filters
+            if (
+              normalizedType === 'HighPass' ||
+              normalizedType === 'LowPass' ||
+              normalizedType === 'BandReject'
+            ) {
               coercedFilter.passes = 1;
             } else {
               coercedFilter.passes = 0; // 0dB for other filter types initially

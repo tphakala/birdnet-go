@@ -37,6 +37,7 @@
     settingsActions,
     audioSettings,
     rtspSettings,
+    type EqualizerFilterType,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsTabs, {
@@ -419,9 +420,10 @@
     enabled: boolean;
     filters: Array<{
       id?: string;
-      type: string;
+      type: EqualizerFilterType;
       frequency: number;
       q?: number;
+      width?: number;
       gain?: number;
       passes?: number;
     }>;
@@ -432,7 +434,6 @@
       filters: equalizerSettings.filters.map((filter, index) => ({
         ...filter,
         id: filter.id || `filter-${Date.now()}-${index}`,
-        type: filter.type as 'highpass' | 'lowpass' | 'bandpass' | 'bandstop',
       })),
     };
 
