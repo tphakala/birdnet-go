@@ -258,12 +258,14 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
           const f = filter as UnknownSettings;
 
           // Normalize and validate filter type - backend expects proper case
+          // BandStop and Notch are aliases for BandReject (DSP module treats as synonyms)
           const allowedTypesMap = {
             lowpass: 'LowPass',
             highpass: 'HighPass',
             bandpass: 'BandPass',
-            bandstop: 'BandStop',
+            bandstop: 'BandReject',
             bandreject: 'BandReject',
+            notch: 'BandReject',
           };
           const rawType = coerceString(f.type, 'LowPass').toLowerCase();
           const normalizedType =

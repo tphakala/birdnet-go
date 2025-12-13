@@ -294,7 +294,8 @@ describe('DSP Utilities', () => {
       };
 
       const response = calculateFilterResponse(filter, 1000);
-      // Notch should have significant attenuation at center
+      // Notch with Q=10 (1000Hz center / 100Hz width) should have significant attenuation
+      // Expect at least -20dB for a reasonably narrow notch at center frequency
       expect(response).toBeLessThan(-20);
     });
 

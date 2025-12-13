@@ -30,9 +30,10 @@
     MIN_DB,
     MAX_DB,
   } from '$lib/utils/audio/dsp';
+  import type { EqualizerFilterType } from '$lib/stores/settings';
 
   interface Filter {
-    type: string;
+    type: EqualizerFilterType;
     frequency: number;
     q?: number;
     width?: number;
