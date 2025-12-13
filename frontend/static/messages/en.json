@@ -912,6 +912,14 @@
             }
           }
         },
+        "interface": {
+          "title": "Interface",
+          "description": "Configure language, display preferences, and dashboard limits"
+        },
+        "visualContent": {
+          "title": "Visual Content",
+          "description": "Configure bird images and spectrogram display options"
+        },
         "userInterface": {
           "title": "User Interface Settings",
           "description": "Customize user interface",

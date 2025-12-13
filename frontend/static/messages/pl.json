@@ -893,6 +893,14 @@
             }
           }
         },
+        "interface": {
+          "title": "Interfejs",
+          "description": "Skonfiguruj język, preferencje wyświetlania i limity panelu"
+        },
+        "visualContent": {
+          "title": "Zawartość Wizualna",
+          "description": "Skonfiguruj obrazy ptaków i opcje wyświetlania spektrogramów"
+        },
         "userInterface": {
           "title": "Ustawienia Interfejsu Użytkownika",
           "description": "Dostosuj interfejs użytkownika",

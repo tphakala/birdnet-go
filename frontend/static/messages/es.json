@@ -893,6 +893,14 @@
             }
           }
         },
+        "interface": {
+          "title": "Interfaz",
+          "description": "Configurar idioma, preferencias de visualización y límites del panel"
+        },
+        "visualContent": {
+          "title": "Contenido Visual",
+          "description": "Configurar imágenes de aves y opciones de visualización de espectrogramas"
+        },
         "userInterface": {
           "title": "Configuración de interfaz de usuario",
           "description": "Personalizar la interfaz de usuario",

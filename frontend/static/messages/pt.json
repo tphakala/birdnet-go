@@ -893,6 +893,14 @@
             }
           }
         },
+        "interface": {
+          "title": "Interface",
+          "description": "Configurar idioma, preferências de exibição e limites do painel"
+        },
+        "visualContent": {
+          "title": "Conteúdo Visual",
+          "description": "Configurar imagens de pássaros e opções de exibição de espectrograma"
+        },
         "userInterface": {
           "title": "Configurações da interface do usuário",
           "description": "Personalizar a interface do usuário",

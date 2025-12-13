@@ -893,6 +893,14 @@
             }
           }
         },
+        "interface": {
+          "title": "Interface",
+          "description": "Configureer taal, weergavevoorkeuren en dashboard-limieten"
+        },
+        "visualContent": {
+          "title": "Visuele Inhoud",
+          "description": "Configureer vogelafbeeldingen en spectrogramweergave-opties"
+        },
         "userInterface": {
           "title": "Gebruikers beleving",
           "description": "Pas de gebruikers beleving aan",

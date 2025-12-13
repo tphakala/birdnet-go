@@ -1297,7 +1297,7 @@
 <!-- Tab Content Snippets -->
 {#snippet generalTabContent()}
   <div class="space-y-6">
-    <!-- Node Name Card -->
+    <!-- Node Identity Card -->
     <SettingsSection
       title={t('settings.main.sections.main.title')}
       description={t('settings.main.sections.main.description')}
@@ -1315,21 +1315,23 @@
       />
     </SettingsSection>
 
-    <!-- User Interface Settings Card -->
+    <!-- Interface Card (combines UI settings + display settings) -->
     <SettingsSection
-      title={t('settings.main.sections.userInterface.interface.title')}
-      description={t('settings.main.sections.userInterface.interface.description')}
+      title={t('settings.main.sections.interface.title')}
+      description={t('settings.main.sections.interface.description')}
       originalData={{
         locale: store.originalData.realtime?.dashboard?.locale,
         newUI: store.originalData.realtime?.dashboard?.newUI,
+        summaryLimit: store.originalData.realtime?.dashboard?.summaryLimit,
       }}
       currentData={{
         locale: store.formData.realtime?.dashboard?.locale,
         newUI: store.formData.realtime?.dashboard?.newUI,
+        summaryLimit: store.formData.realtime?.dashboard?.summaryLimit,
       }}
     >
-      <div class="space-y-4">
-        <!-- Modern UI Toggle - Primary setting -->
+      <div class="space-y-6">
+        <!-- Modern UI Toggle -->
         <Checkbox
           checked={settings.dashboard.newUI}
           label={t('settings.main.sections.userInterface.interface.newUI.label')}
@@ -1349,10 +1351,7 @@
               ? t('settings.main.sections.userInterface.interface.locale.label')
               : t('settings.main.sections.userInterface.interface.locale.requiresModernUI')}
           </span>
-          <div
-            class="space-y-4 transition-opacity duration-200"
-            class:opacity-50={!settings.dashboard.newUI}
-          >
+          <div class="transition-opacity duration-200" class:opacity-50={!settings.dashboard.newUI}>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
               <SelectField
                 id="ui-locale"
@@ -1374,175 +1373,181 @@
             {/if}
           </div>
         </fieldset>
-      </div>
-    </SettingsSection>
 
-    <!-- Dashboard Display Settings Card -->
-    <SettingsSection
-      title={t('settings.main.sections.userInterface.dashboard.displaySettings.title')}
-      description={t('settings.main.sections.userInterface.dashboard.displaySettings.description')}
-      originalData={{
-        summaryLimit: store.originalData.realtime?.dashboard?.summaryLimit,
-      }}
-      currentData={{ summaryLimit: store.formData.realtime?.dashboard?.summaryLimit }}
-    >
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-        <NumberField
-          label={t('settings.main.sections.userInterface.dashboard.summaryLimit.label')}
-          value={settings.dashboard.summaryLimit}
-          onUpdate={value => updateDashboardSetting('summaryLimit', value)}
-          min={10}
-          max={1000}
-          helpText={t('settings.main.sections.userInterface.dashboard.summaryLimit.helpText')}
-          disabled={store.isLoading || store.isSaving}
-        />
-      </div>
-    </SettingsSection>
-
-    <!-- Bird Images Card -->
-    <SettingsSection
-      title={t('settings.main.sections.userInterface.dashboard.birdImages.title')}
-      description={t('settings.main.sections.userInterface.dashboard.birdImages.description')}
-      originalData={store.originalData.realtime?.dashboard?.thumbnails}
-      currentData={store.formData.realtime?.dashboard?.thumbnails}
-    >
-      <div class="space-y-4">
-        <Checkbox
-          checked={settings.dashboard.thumbnails.summary}
-          label={t('settings.main.sections.userInterface.dashboard.thumbnails.summary.label')}
-          helpText={t('settings.main.sections.userInterface.dashboard.thumbnails.summary.helpText')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={value => updateThumbnailSetting('summary', value)}
-        />
-
-        <Checkbox
-          checked={settings.dashboard.thumbnails.recent}
-          label={t('settings.main.sections.userInterface.dashboard.thumbnails.recent.label')}
-          helpText={t('settings.main.sections.userInterface.dashboard.thumbnails.recent.helpText')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={value => updateThumbnailSetting('recent', value)}
-        />
-
+        <!-- Summary Limit -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-          <div class:opacity-50={!multipleProvidersAvailable}>
-            <SelectField
-              id="image-provider"
-              value={settings.dashboard.thumbnails.imageProvider}
-              label={t(
-                'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.label'
-              )}
-              options={providerOptions.data}
-              helpText={t(
-                'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.helpText'
-              )}
-              disabled={store.isLoading ||
-                store.isSaving ||
-                !multipleProvidersAvailable ||
-                providerOptions.loading}
-              onchange={value => updateThumbnailSetting('imageProvider', value)}
-            />
-          </div>
+          <NumberField
+            label={t('settings.main.sections.userInterface.dashboard.summaryLimit.label')}
+            value={settings.dashboard.summaryLimit}
+            onUpdate={value => updateDashboardSetting('summaryLimit', value)}
+            min={10}
+            max={1000}
+            helpText={t('settings.main.sections.userInterface.dashboard.summaryLimit.helpText')}
+            disabled={store.isLoading || store.isSaving}
+          />
+        </div>
+      </div>
+    </SettingsSection>
 
-          {#if multipleProvidersAvailable}
+    <!-- Visual Content Card (combines bird images + spectrograms) -->
+    <SettingsSection
+      title={t('settings.main.sections.visualContent.title')}
+      description={t('settings.main.sections.visualContent.description')}
+      originalData={{
+        thumbnails: store.originalData.realtime?.dashboard?.thumbnails,
+        spectrogram: store.originalData.realtime?.dashboard?.spectrogram,
+      }}
+      currentData={{
+        thumbnails: store.formData.realtime?.dashboard?.thumbnails,
+        spectrogram: store.formData.realtime?.dashboard?.spectrogram,
+      }}
+    >
+      <div class="space-y-6">
+        <!-- Bird Images Section -->
+        <div class="space-y-4">
+          <h4 class="text-sm font-medium text-base-content/70">
+            {t('settings.main.sections.userInterface.dashboard.birdImages.title')}
+          </h4>
+
+          <Checkbox
+            checked={settings.dashboard.thumbnails.summary}
+            label={t('settings.main.sections.userInterface.dashboard.thumbnails.summary.label')}
+            helpText={t(
+              'settings.main.sections.userInterface.dashboard.thumbnails.summary.helpText'
+            )}
+            disabled={store.isLoading || store.isSaving}
+            onchange={value => updateThumbnailSetting('summary', value)}
+          />
+
+          <Checkbox
+            checked={settings.dashboard.thumbnails.recent}
+            label={t('settings.main.sections.userInterface.dashboard.thumbnails.recent.label')}
+            helpText={t(
+              'settings.main.sections.userInterface.dashboard.thumbnails.recent.helpText'
+            )}
+            disabled={store.isLoading || store.isSaving}
+            onchange={value => updateThumbnailSetting('recent', value)}
+          />
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            <div class:opacity-50={!multipleProvidersAvailable}>
+              <SelectField
+                id="image-provider"
+                value={settings.dashboard.thumbnails.imageProvider}
+                label={t(
+                  'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.label'
+                )}
+                options={providerOptions.data}
+                helpText={t(
+                  'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.helpText'
+                )}
+                disabled={store.isLoading ||
+                  store.isSaving ||
+                  !multipleProvidersAvailable ||
+                  providerOptions.loading}
+                onchange={value => updateThumbnailSetting('imageProvider', value)}
+              />
+            </div>
+
+            {#if multipleProvidersAvailable}
+              <SelectField
+                id="fallback-policy"
+                value={settings.dashboard.thumbnails.fallbackPolicy}
+                label={t(
+                  'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.label'
+                )}
+                options={[
+                  {
+                    value: 'all',
+                    label: t(
+                      'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.options.all'
+                    ),
+                  },
+                  {
+                    value: 'none',
+                    label: t(
+                      'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.options.none'
+                    ),
+                  },
+                ]}
+                helpText={t(
+                  'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.helpText'
+                )}
+                disabled={store.isLoading || store.isSaving}
+                onchange={value => updateThumbnailSetting('fallbackPolicy', value)}
+              />
+            {/if}
+          </div>
+        </div>
+
+        <!-- Divider -->
+        <div class="border-t border-base-200"></div>
+
+        <!-- Spectrograms Section -->
+        <div class="space-y-4">
+          <h4 class="text-sm font-medium text-base-content/70">
+            {t('settings.main.sections.userInterface.dashboard.spectrogram.title')}
+          </h4>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
             <SelectField
-              id="fallback-policy"
-              value={settings.dashboard.thumbnails.fallbackPolicy}
-              label={t(
-                'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.label'
-              )}
+              id="spectrogram-mode"
+              value={settings.dashboard.spectrogram?.mode ?? 'auto'}
+              label={t('settings.main.sections.userInterface.dashboard.spectrogram.mode.label')}
               options={[
                 {
-                  value: 'all',
+                  value: 'auto',
                   label: t(
-                    'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.options.all'
+                    'settings.main.sections.userInterface.dashboard.spectrogram.mode.auto.label'
                   ),
                 },
                 {
-                  value: 'none',
+                  value: 'prerender',
                   label: t(
-                    'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.options.none'
+                    'settings.main.sections.userInterface.dashboard.spectrogram.mode.prerender.label'
+                  ),
+                },
+                {
+                  value: 'user-requested',
+                  label: t(
+                    'settings.main.sections.userInterface.dashboard.spectrogram.mode.userRequested.label'
                   ),
                 },
               ]}
-              helpText={t(
-                'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.helpText'
-              )}
               disabled={store.isLoading || store.isSaving}
-              onchange={value => updateThumbnailSetting('fallbackPolicy', value)}
+              onchange={value => updateSpectrogramSetting('mode', value)}
             />
+          </div>
+
+          <!-- Mode-specific notes -->
+          {#if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'auto'}
+            <SettingsNote>
+              <span>
+                {t('settings.main.sections.userInterface.dashboard.spectrogram.mode.auto.helpText')}
+              </span>
+            </SettingsNote>
+          {:else if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'prerender'}
+            <SettingsNote>
+              <span>
+                {t(
+                  'settings.main.sections.userInterface.dashboard.spectrogram.mode.prerender.helpText'
+                )}
+              </span>
+            </SettingsNote>
+          {:else if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'user-requested'}
+            <SettingsNote>
+              <span>
+                {t(
+                  'settings.main.sections.userInterface.dashboard.spectrogram.mode.userRequested.helpText'
+                )}
+              </span>
+            </SettingsNote>
           {/if}
         </div>
       </div>
     </SettingsSection>
 
-    <!-- Spectrogram Generation Card -->
-    <SettingsSection
-      title={t('settings.main.sections.userInterface.dashboard.spectrogramGeneration.title')}
-      description={t(
-        'settings.main.sections.userInterface.dashboard.spectrogramGeneration.description'
-      )}
-      originalData={store.originalData.realtime?.dashboard?.spectrogram}
-      currentData={store.formData.realtime?.dashboard?.spectrogram}
-    >
-      <div class="space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-          <SelectField
-            id="spectrogram-mode"
-            value={settings.dashboard.spectrogram?.mode ?? 'auto'}
-            label={t('settings.main.sections.userInterface.dashboard.spectrogram.mode.label')}
-            options={[
-              {
-                value: 'auto',
-                label: t(
-                  'settings.main.sections.userInterface.dashboard.spectrogram.mode.auto.label'
-                ),
-              },
-              {
-                value: 'prerender',
-                label: t(
-                  'settings.main.sections.userInterface.dashboard.spectrogram.mode.prerender.label'
-                ),
-              },
-              {
-                value: 'user-requested',
-                label: t(
-                  'settings.main.sections.userInterface.dashboard.spectrogram.mode.userRequested.label'
-                ),
-              },
-            ]}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateSpectrogramSetting('mode', value)}
-          />
-        </div>
-
-        <!-- Mode-specific notes -->
-        {#if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'auto'}
-          <SettingsNote>
-            <span>
-              {t('settings.main.sections.userInterface.dashboard.spectrogram.mode.auto.helpText')}
-            </span>
-          </SettingsNote>
-        {:else if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'prerender'}
-          <SettingsNote>
-            <span>
-              {t(
-                'settings.main.sections.userInterface.dashboard.spectrogram.mode.prerender.helpText'
-              )}
-            </span>
-          </SettingsNote>
-        {:else if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'user-requested'}
-          <SettingsNote>
-            <span>
-              {t(
-                'settings.main.sections.userInterface.dashboard.spectrogram.mode.userRequested.helpText'
-              )}
-            </span>
-          </SettingsNote>
-        {/if}
-      </div>
-    </SettingsSection>
-
-    <!-- Error Tracking & Telemetry Card -->
+    <!-- Privacy & Telemetry Card -->
     <SettingsSection
       title={t('settings.support.sections.telemetry.title')}
       description={t('settings.support.sections.telemetry.description')}
@@ -1551,9 +1556,9 @@
     >
       <div class="space-y-4">
         <!-- Privacy Notice -->
-        <div class="mt-4 p-4 bg-base-200 rounded-lg shadow-xs">
+        <div class="p-4 bg-base-200 rounded-lg shadow-xs">
           <div>
-            <h3 class="font-bold">{t('settings.support.telemetry.privacyNotice')}</h3>
+            <h4 class="font-bold">{t('settings.support.telemetry.privacyNotice')}</h4>
             <div class="text-sm mt-1">
               <ul class="list-disc list-inside mt-2 space-y-1">
                 <li>{t('settings.support.telemetry.privacyPoints.noPersonalData')}</li>

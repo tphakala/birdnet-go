@@ -893,6 +893,14 @@
             }
           }
         },
+        "interface": {
+          "title": "Oberfläche",
+          "description": "Sprache, Anzeigeeinstellungen und Dashboard-Limits konfigurieren"
+        },
+        "visualContent": {
+          "title": "Visuelle Inhalte",
+          "description": "Vogelbilder und Spektrogramm-Anzeigeoptionen konfigurieren"
+        },
         "userInterface": {
           "title": "Benutzeroberflächeneinstellungen",
           "description": "Benutzeroberfläche anpassen",

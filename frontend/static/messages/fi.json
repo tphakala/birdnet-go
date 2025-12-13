@@ -893,6 +893,14 @@
             }
           }
         },
+        "interface": {
+          "title": "Käyttöliittymä",
+          "description": "Määritä kieli, näyttöasetukset ja kojelaudan rajat"
+        },
+        "visualContent": {
+          "title": "Visuaalinen sisältö",
+          "description": "Määritä lintukuvien ja spektrogrammin näyttöasetukset"
+        },
         "userInterface": {
           "title": "Käyttöliittymäasetukset",
           "description": "Mukauta käyttöliittymää",

@@ -893,6 +893,14 @@
             }
           }
         },
+        "interface": {
+          "title": "Interface",
+          "description": "Configurer la langue, les préférences d'affichage et les limites du tableau de bord"
+        },
+        "visualContent": {
+          "title": "Contenu visuel",
+          "description": "Configurer les images d'oiseaux et les options d'affichage des spectrogrammes"
+        },
         "userInterface": {
           "title": "Paramètres de l'interface utilisateur",
           "description": "Personnaliser l'interface utilisateur",
