@@ -1823,6 +1823,7 @@
       "currentTime": "{current} / {total}",
       "loading": "Opname inlezen ...",
       "error": "Inlezen opname is mislukt",
+      "errorShort": "Fout",
       "playError": "Afspelen opname is mislukt",
       "volumeGain": "Volume versterking: {value} dB",
       "filterControl": "Filter bediening",

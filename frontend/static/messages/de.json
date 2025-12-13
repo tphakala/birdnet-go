@@ -1823,6 +1823,7 @@
       "currentTime": "{current} / {total}",
       "loading": "Audio wird geladen...",
       "error": "Fehler beim Laden des Audios",
+      "errorShort": "Fehler",
       "playError": "Fehler beim Abspielen des Audios",
       "volumeGain": "Lautstärkeverstärkung: {value} dB",
       "filterControl": "Filtersteuerung",

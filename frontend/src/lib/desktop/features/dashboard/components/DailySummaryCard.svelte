@@ -558,6 +558,26 @@ Responsive Breakpoints:
   </div>
 {/snippet}
 
+{#snippet sunIcon(sunType: 'sunrise' | 'sunset', sunTime: string | undefined, shouldShow: boolean)}
+  {#if shouldShow && sunTime}
+    {@const formattedTime = new Date(sunTime).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    })}
+    <div
+      class="sun-icon-wrapper"
+      title={t(`dashboard.dailySummary.daylight.${sunType}`, { time: formattedTime })}
+    >
+      {#if sunType === 'sunrise'}
+        <Sunrise class="size-3.5 text-orange-700" />
+      {:else}
+        <Sunset class="size-3.5 text-rose-700" />
+      {/if}
+      <span class="sun-tooltip sun-tooltip-{sunType}">{formattedTime}</span>
+    </div>
+  {/if}
+{/snippet}
+
 <!-- Live region for screen reader announcements of loading state changes -->
 <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
   {#if loadingPhase === 'skeleton'}
@@ -631,35 +651,8 @@ Responsive Breakpoints:
                 <div
                   class="h-5 rounded-sm daylight-cell daylight-{daylightClass} relative flex items-center justify-center"
                 >
-                  {#if hour === sunriseHour}
-                    {@const sunriseTime = sunTimes
-                      ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : ''}
-                    <div
-                      class="sun-icon-wrapper"
-                      title={t('dashboard.dailySummary.daylight.sunrise', { time: sunriseTime })}
-                    >
-                      <Sunrise class="size-3.5 text-orange-700" />
-                      <span class="sun-tooltip sun-tooltip-sunrise">{sunriseTime}</span>
-                    </div>
-                  {:else if hour === sunsetHour}
-                    {@const sunsetTime = sunTimes
-                      ? new Date(sunTimes.sunset).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : ''}
-                    <div
-                      class="sun-icon-wrapper"
-                      title={t('dashboard.dailySummary.daylight.sunset', { time: sunsetTime })}
-                    >
-                      <Sunset class="size-3.5 text-rose-700" />
-                      <span class="sun-tooltip sun-tooltip-sunset">{sunsetTime}</span>
-                    </div>
-                  {/if}
+                  {@render sunIcon('sunrise', sunTimes?.sunrise, hour === sunriseHour)}
+                  {@render sunIcon('sunset', sunTimes?.sunset, hour === sunsetHour)}
                 </div>
               {/each}
             </div>
@@ -670,38 +663,13 @@ Responsive Breakpoints:
                 {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
                 {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
                 {@const daylightClass = getDaylightClass(hour)}
+                {@const showSunrise = sunriseHour !== null && hour <= sunriseHour && sunriseHour < hour + 2}
+                {@const showSunset = sunsetHour !== null && hour <= sunsetHour && sunsetHour < hour + 2 && !showSunrise}
                 <div
                   class="h-5 rounded-sm daylight-cell daylight-{daylightClass} relative flex items-center justify-center"
                 >
-                  {#if sunriseHour !== null && hour <= sunriseHour && sunriseHour < hour + 2}
-                    {@const sunriseTime = sunTimes
-                      ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : ''}
-                    <div
-                      class="sun-icon-wrapper"
-                      title={t('dashboard.dailySummary.daylight.sunrise', { time: sunriseTime })}
-                    >
-                      <Sunrise class="size-3.5 text-orange-700" />
-                      <span class="sun-tooltip sun-tooltip-sunrise">{sunriseTime}</span>
-                    </div>
-                  {:else if sunsetHour !== null && hour <= sunsetHour && sunsetHour < hour + 2}
-                    {@const sunsetTime = sunTimes
-                      ? new Date(sunTimes.sunset).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : ''}
-                    <div
-                      class="sun-icon-wrapper"
-                      title={t('dashboard.dailySummary.daylight.sunset', { time: sunsetTime })}
-                    >
-                      <Sunset class="size-3.5 text-rose-700" />
-                      <span class="sun-tooltip sun-tooltip-sunset">{sunsetTime}</span>
-                    </div>
-                  {/if}
+                  {@render sunIcon('sunrise', sunTimes?.sunrise, showSunrise)}
+                  {@render sunIcon('sunset', sunTimes?.sunset, showSunset)}
                 </div>
               {/each}
             </div>
@@ -712,38 +680,13 @@ Responsive Breakpoints:
                 {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
                 {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
                 {@const daylightClass = getDaylightClass(hour)}
+                {@const showSunrise = sunriseHour !== null && hour <= sunriseHour && sunriseHour < hour + 6}
+                {@const showSunset = sunsetHour !== null && hour <= sunsetHour && sunsetHour < hour + 6 && !showSunrise}
                 <div
                   class="h-5 rounded-sm daylight-cell daylight-{daylightClass} relative flex items-center justify-center"
                 >
-                  {#if sunriseHour !== null && hour <= sunriseHour && sunriseHour < hour + 6}
-                    {@const sunriseTime = sunTimes
-                      ? new Date(sunTimes.sunrise).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : ''}
-                    <div
-                      class="sun-icon-wrapper"
-                      title={t('dashboard.dailySummary.daylight.sunrise', { time: sunriseTime })}
-                    >
-                      <Sunrise class="size-3.5 text-orange-700" />
-                      <span class="sun-tooltip sun-tooltip-sunrise">{sunriseTime}</span>
-                    </div>
-                  {:else if sunsetHour !== null && hour <= sunsetHour && sunsetHour < hour + 6}
-                    {@const sunsetTime = sunTimes
-                      ? new Date(sunTimes.sunset).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : ''}
-                    <div
-                      class="sun-icon-wrapper"
-                      title={t('dashboard.dailySummary.daylight.sunset', { time: sunsetTime })}
-                    >
-                      <Sunset class="size-3.5 text-rose-700" />
-                      <span class="sun-tooltip sun-tooltip-sunset">{sunsetTime}</span>
-                    </div>
-                  {/if}
+                  {@render sunIcon('sunrise', sunTimes?.sunrise, showSunrise)}
+                  {@render sunIcon('sunset', sunTimes?.sunset, showSunset)}
                 </div>
               {/each}
             </div>

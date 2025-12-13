@@ -42,6 +42,9 @@
 
     if (!audioElement) return;
 
+    // Clear any previous error when retrying
+    error = null;
+
     try {
       if (isPlaying) {
         audioElement.pause();
@@ -172,6 +175,18 @@
       />
     </svg>
   {/if}
+
+  <!-- Error indicator -->
+  {#if error}
+    <span
+      class="error-indicator pointer-events-auto"
+      aria-live="polite"
+      role="alert"
+      title={error}
+    >
+      {t('media.audio.errorShort')}
+    </span>
+  {/if}
 </div>
 
 <style>
@@ -238,5 +253,25 @@
     stroke: rgb(59 130 246);
     stroke-linecap: round;
     transition: stroke-dashoffset 0.1s linear;
+  }
+
+  /* Error indicator */
+  .error-indicator {
+    position: absolute;
+    bottom: -1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.75rem;
+    color: rgb(239 68 68);
+    background-color: rgb(254 242 242 / 0.95);
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.25rem;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
+  }
+
+  :global(.dark) .error-indicator {
+    background-color: rgb(127 29 29 / 0.9);
+    color: rgb(254 202 202);
   }
 </style>

@@ -79,8 +79,8 @@
 
   // Custom dropdown state
   let showLimitDropdown = $state(false);
-  let dropdownRef = $state<HTMLDivElement>();
-  let dropdownButtonRef = $state<HTMLButtonElement>();
+  let dropdownRef: HTMLDivElement;
+  let dropdownButtonRef: HTMLButtonElement;
   const limitOptions = [6, 12, 24, 48];
 
   // Toggle dropdown

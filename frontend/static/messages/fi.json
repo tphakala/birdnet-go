@@ -395,8 +395,8 @@
       },
       "daylight": {
         "label": "Päivänvalo",
-        "sunrise": "Auringonnousu kello {time}",
-        "sunset": "Auringonlasku kello {time}"
+        "sunrise": "Auringonnousu klo {time}",
+        "sunset": "Auringonlasku klo {time}"
       },
       "legend": {
         "less": "Vähemmän",
@@ -467,14 +467,14 @@
         "showSpecies": "Näytä laji",
         "ignoreSpecies": "Ohita laji",
         "lockDetection": "Lukitse havainto",
-        "unlockDetection": "Avaa havainnon lukitus",
+        "unlockDetection": "Poista lukitus",
         "deleteDetection": "Poista havainto"
       },
       "noDetections": "Ei viimeaikaisia havaintoja"
     },
     "errors": {
-      "dailySummaryFetch": "Päivittäisen yhteenvedon haku epäonnistui: {status}",
-      "dailySummaryLoad": "Päivittäisen yhteenvedon lataus epäonnistui",
+      "dailySummaryFetch": "Päivän aktiivisuuden haku epäonnistui: {status}",
+      "dailySummaryLoad": "Päivän aktiivisuuden lataus epäonnistui",
       "recentDetectionsFetch": "Viimeaikaisten havaintojen haku epäonnistui: {status}",
       "recentDetectionsLoad": "Viimeaikaisten havaintojen lataus epäonnistui",
       "configFetch": "Kojelaudan asetusten haku epäonnistui: {status}"
@@ -1823,6 +1823,7 @@
       "currentTime": "{current} / {total}",
       "loading": "Ladataan ääntä...",
       "error": "Äänen lataus epäonnistui",
+      "errorShort": "Virhe",
       "playError": "Äänen toisto epäonnistui",
       "volumeGain": "Äänenvoimakkuuden vahvistus: {value} dB",
       "filterControl": "Suodattimen hallinta",
