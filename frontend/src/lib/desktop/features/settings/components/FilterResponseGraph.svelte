@@ -1,8 +1,8 @@
 <!--
   Filter Response Graph Component
-  
+
   Purpose: Visualizes frequency response curves for audio filters
-  
+
   Features:
   - Real-time frequency response visualization
   - Modified logarithmic frequency scale optimized for high frequencies (20Hz - 20kHz)
@@ -11,22 +11,31 @@
   - Combined response curve (single line representing filter chain)
   - Shows flat 0dB response when no filters are applied
   - Responsive width with professional margins
-  
+  - Supports BandReject (notch) filters with width parameter
+
   Props:
   - filters: Array of filter configurations (can be empty)
   - height: Canvas height (optional, defaults to 400px)
-  
+
   Width is auto-calculated based on container size for responsive behavior.
-  
+
   @component
 -->
 <script lang="ts">
   /* global ResizeObserver */
   import { onMount } from 'svelte';
+  import {
+    calculateCombinedResponse,
+    type FilterConfig,
+    MIN_DB,
+    MAX_DB,
+  } from '$lib/utils/audio/dsp';
+
   interface Filter {
     type: string;
     frequency: number;
     q?: number;
+    width?: number;
     passes?: number;
   }
 
@@ -64,8 +73,7 @@
   // Frequency range - standard audio range up to 20kHz (human hearing limit)
   const MIN_FREQ = 20;
   const MAX_FREQ = 20000;
-  const MIN_DB = -48;
-  const MAX_DB = 12;
+  // MIN_DB and MAX_DB imported from DSP utilities
 
   // Grid lines optimized for audio engineering work - more detail in bird frequency range
   const freqGridLines = [
@@ -88,140 +96,24 @@
     // This function kept for compatibility with existing effect calls
   }
 
-  // Calculate frequency response for a filter using proper digital biquad formulas
-  function calculateFilterResponse(filter: Filter, frequency: number): number {
-    const sampleRate = 48000; // 48kHz sample rate
-
-    // For HP/LP filters, always use Butterworth response (Q=0.707)
-    // For band-pass/band-stop, use the specified Q factor
-    let q = 0.707; // Default to Butterworth
-
-    if (filter.type === 'BandPass' || filter.type === 'BandStop' || filter.type === 'Notch') {
-      q = Math.max(0.1, Math.min(10, filter.q || 0.707));
-    } else if (filter.type === 'HighPass' || filter.type === 'LowPass') {
-      // Force Butterworth response for HP/LP filters
-      q = 0.707;
-    }
-
-    const passes = filter.passes || 0;
-
-    // If no passes (0dB attenuation), return flat response
-    if (passes === 0) {
-      return 0;
-    }
-
-    // Calculate filter coefficients using Robert Bristow-Johnson's cookbook formulas
-    const fc = filter.frequency;
-    const omega = (2 * Math.PI * fc) / sampleRate;
-    const sin_omega = Math.sin(omega);
-    const cos_omega = Math.cos(omega);
-    const alpha = sin_omega / (2 * q);
-
-    let b0 = 0,
-      b1 = 0,
-      b2 = 0;
-    let a0 = 1,
-      a1 = 0,
-      a2 = 0;
-
-    if (filter.type === 'LowPass') {
-      // Low-pass filter coefficients
-      b0 = (1 - cos_omega) / 2;
-      b1 = 1 - cos_omega;
-      b2 = (1 - cos_omega) / 2;
-      a0 = 1 + alpha;
-      a1 = -2 * cos_omega;
-      a2 = 1 - alpha;
-    } else if (filter.type === 'HighPass') {
-      // High-pass filter coefficients
-      b0 = (1 + cos_omega) / 2;
-      b1 = -(1 + cos_omega);
-      b2 = (1 + cos_omega) / 2;
-      a0 = 1 + alpha;
-      a1 = -2 * cos_omega;
-      a2 = 1 - alpha;
-    } else if (filter.type === 'BandPass') {
-      // Band-pass filter coefficients (constant 0 dB peak gain)
-      b0 = alpha;
-      b1 = 0;
-      b2 = -alpha;
-      a0 = 1 + alpha;
-      a1 = -2 * cos_omega;
-      a2 = 1 - alpha;
-    } else if (filter.type === 'BandStop' || filter.type === 'Notch') {
-      // Band-stop/notch filter coefficients
-      b0 = 1;
-      b1 = -2 * cos_omega;
-      b2 = 1;
-      a0 = 1 + alpha;
-      a1 = -2 * cos_omega;
-      a2 = 1 - alpha;
-    } else {
-      return 0; // Unknown filter type
-    }
-
-    // Normalize coefficients
-    b0 /= a0;
-    b1 /= a0;
-    b2 /= a0;
-    a1 /= a0;
-    a2 /= a0;
-
-    // Calculate frequency response at the given frequency
-    // H(e^jω) = (b0 + b1*e^-jω + b2*e^-j2ω) / (1 + a1*e^-jω + a2*e^-j2ω)
-    const w = (2 * Math.PI * frequency) / sampleRate;
-
-    // For numerical stability, use pre-computed trig values
-    const cos_w = Math.cos(w);
-    const sin_w = Math.sin(w);
-    const cos_2w = Math.cos(2 * w);
-    const sin_2w = Math.sin(2 * w);
-
-    // Complex numerator: b0 + b1*e^-jω + b2*e^-j2ω
-    // e^-jω = cos(ω) - j*sin(ω)
-    const num_real = b0 + b1 * cos_w + b2 * cos_2w;
-    const num_imag = -b1 * sin_w - b2 * sin_2w;
-
-    // Complex denominator: 1 + a1*e^-jω + a2*e^-j2ω
-    const den_real = 1 + a1 * cos_w + a2 * cos_2w;
-    const den_imag = -a1 * sin_w - a2 * sin_2w;
-
-    // Calculate magnitude |H| = |numerator| / |denominator|
-    const num_magnitude = Math.sqrt(num_real * num_real + num_imag * num_imag);
-    const den_magnitude = Math.sqrt(den_real * den_real + den_imag * den_imag);
-
-    // Avoid division by zero and ensure stability
-    let magnitude = num_magnitude / Math.max(1e-10, den_magnitude);
-
-    // For high-pass filters, ensure the response doesn't exceed unity gain at high frequencies
-    // This is a physical constraint - passive filters can't amplify
-    if (filter.type === 'HighPass') {
-      // At frequencies much higher than cutoff, response should approach 1 (0 dB)
-      const freq_ratio = frequency / fc;
-      if (freq_ratio > 10) {
-        // Far above cutoff, response should be very close to 1
-        magnitude = Math.min(magnitude, 1.0);
-      }
-    }
-
-    // Apply cascaded filter response for multiple passes
-    // Each pass is a 2nd order filter (biquad)
-    const cascaded_magnitude = Math.pow(magnitude, passes);
-
-    // Convert to dB
-    const db = 20 * Math.log10(Math.max(1e-10, cascaded_magnitude));
-
-    // Clamp to reasonable range
-    return Math.max(-96, Math.min(12, db));
+  // Convert local Filter type to FilterConfig for DSP utilities
+  function toFilterConfig(filter: Filter): FilterConfig {
+    return {
+      type: filter.type as FilterConfig['type'],
+      frequency: filter.frequency,
+      q: filter.q,
+      width: filter.width,
+      passes: filter.passes,
+    };
   }
 
-  // Calculate combined response of all filters (returns 0dB flat response when no filters)
-  function calculateCombinedResponse(frequency: number): number {
-    let totalGain = 0;
-    for (const filter of filters) {
-      totalGain += calculateFilterResponse(filter, frequency);
+  // Calculate combined response of all filters using DSP utilities
+  function getCombinedResponse(frequency: number): number {
+    if (filters.length === 0) {
+      return 0; // Flat response when no filters
     }
-    return Math.max(MIN_DB, Math.min(MAX_DB, totalGain));
+    const filterConfigs = filters.map(toFilterConfig);
+    return calculateCombinedResponse(filterConfigs, frequency);
   }
 
   // Convert frequency to x position using modified log scale optimized for audio work
@@ -397,35 +289,25 @@
 
     // Draw curve in segments to handle alpha transparency changes
     let lastCanvasX = margins.left;
-    let lastY = dbToY(calculateCombinedResponse(xToFreq(margins.left)));
+    let lastY = dbToY(getCombinedResponse(xToFreq(margins.left)));
 
     for (let step = 1; step <= steps; step++) {
       const plotX = (step / steps) * plotWidth;
       const canvasX = margins.left + plotX;
       const freq = xToFreq(canvasX);
-      const gain = calculateCombinedResponse(freq);
+      const gain = getCombinedResponse(freq);
 
-      // Hard cutoff at minimum dB to eliminate horizontal line at bottom
-      const shouldDraw = gain > MIN_DB;
+      // Clamp Y to plot bounds - this ensures continuous line even for deep notches
+      const y = Math.max(margins.top, Math.min(margins.top + plotHeight, dbToY(gain)));
 
-      // Only draw if above minimum threshold
-      if (shouldDraw) {
-        const y = Math.max(margins.top, Math.min(margins.top + plotHeight, dbToY(gain)));
+      // Draw line segment (always draw for continuous curve)
+      ctx.beginPath();
+      ctx.moveTo(lastCanvasX, lastY);
+      ctx.lineTo(canvasX, y);
+      ctx.stroke();
 
-        // Draw line segment
-        ctx.beginPath();
-        ctx.moveTo(lastCanvasX, lastY);
-        ctx.lineTo(canvasX, y);
-        ctx.stroke();
-
-        lastCanvasX = canvasX;
-        lastY = y;
-      } else {
-        // Skip drawing but update position for next segment
-        const y = Math.max(margins.top, Math.min(margins.top + plotHeight, dbToY(gain)));
-        lastCanvasX = canvasX;
-        lastY = y;
-      }
+      lastCanvasX = canvasX;
+      lastY = y;
     }
 
     // Add subtle text when no filters are present - professional styling
@@ -500,7 +382,7 @@
       y <= margins.top + plotHeight
     ) {
       const freq = Math.round(xToFreq(x));
-      const gain = calculateCombinedResponse(freq);
+      const gain = getCombinedResponse(freq);
 
       tooltip = {
         visible: true,

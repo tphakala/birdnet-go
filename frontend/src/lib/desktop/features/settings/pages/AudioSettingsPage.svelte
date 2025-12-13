@@ -422,6 +422,7 @@
       type: string;
       frequency: number;
       q?: number;
+      width?: number;
       gain?: number;
       passes?: number;
     }>;
@@ -432,7 +433,7 @@
       filters: equalizerSettings.filters.map((filter, index) => ({
         ...filter,
         id: filter.id || `filter-${Date.now()}-${index}`,
-        type: filter.type as 'highpass' | 'lowpass' | 'bandpass' | 'bandstop',
+        type: filter.type as 'HighPass' | 'LowPass' | 'BandPass' | 'BandStop' | 'BandReject',
       })),
     };
 
