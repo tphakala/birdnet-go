@@ -22,6 +22,7 @@
   import PlayOverlay from './PlayOverlay.svelte';
   import SpeciesInfoBar from './SpeciesInfoBar.svelte';
   import CardActionMenu from './CardActionMenu.svelte';
+  import AudioSettingsButton from './AudioSettingsButton.svelte';
   import { cn } from '$lib/utils/cn';
   import { loggers } from '$lib/utils/logger';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
@@ -71,6 +72,23 @@
 
   // Menu state for z-index management
   let isMenuOpen = $state(false);
+
+  // Audio settings state (per-card, not shared)
+  let audioGainValue = $state(0);
+  let audioFilterFreq = $state(20);
+  let audioContextAvailable = $state(true);
+
+  function handleGainChange(value: number) {
+    audioGainValue = value;
+  }
+
+  function handleFilterChange(value: number) {
+    audioFilterFreq = value;
+  }
+
+  function handleAudioContextAvailable(available: boolean) {
+    audioContextAvailable = available;
+  }
 
   // Spectrogram URL
   const spectrogramUrl = $derived(`/api/v2/spectrogram/${detection.id}?size=md&raw=true`);
@@ -221,14 +239,28 @@
     </div>
 
     <!-- Center Play Button -->
-    <PlayOverlay detectionId={detection.id} {onFreezeStart} {onFreezeEnd} />
+    <PlayOverlay
+      detectionId={detection.id}
+      {onFreezeStart}
+      {onFreezeEnd}
+      gainValue={audioGainValue}
+      filterFreq={audioFilterFreq}
+      onAudioContextAvailable={handleAudioContextAvailable}
+    />
 
     <!-- Bottom Species Info Bar -->
     <SpeciesInfoBar {detection} />
   </div>
 
-  <!-- Top-Right Action Menu - OUTSIDE overflow-hidden container -->
-  <div class="absolute top-2 right-2 z-50">
+  <!-- Top-Right Controls - OUTSIDE overflow-hidden container -->
+  <div class="absolute top-2 right-2 z-50 flex items-center gap-1.5">
+    <AudioSettingsButton
+      gainValue={audioGainValue}
+      filterFreq={audioFilterFreq}
+      onGainChange={handleGainChange}
+      onFilterChange={handleFilterChange}
+      disabled={!audioContextAvailable}
+    />
     <CardActionMenu
       {detection}
       {isExcluded}

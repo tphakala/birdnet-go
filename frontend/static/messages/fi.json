@@ -1813,6 +1813,7 @@
   },
   "media": {
     "audio": {
+      "settings": "Ääniasetukset",
       "play": "Toista",
       "pause": "Keskeytä",
       "stop": "Pysäytä",

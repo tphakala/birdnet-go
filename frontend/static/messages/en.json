@@ -1969,6 +1969,7 @@
   },
   "media": {
     "audio": {
+      "settings": "Audio Settings",
       "play": "Play",
       "pause": "Pause",
       "stop": "Stop",
