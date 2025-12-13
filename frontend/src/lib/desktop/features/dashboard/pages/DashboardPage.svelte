@@ -110,6 +110,7 @@ Performance Optimizations:
   let summaryError = $state<string | null>(null);
   let detectionsError = $state<string | null>(null);
   let showThumbnails = $state(true); // Default to true for backward compatibility
+  let summaryLimit = $state(30); // Default from backend (conf/defaults.go) - species count limit for daily summary
 
   // SSE throttling timer
   let sseFetchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -206,7 +207,9 @@ Performance Optimizations:
 
       // Cache miss or expired - fetch from API
       logger.debug(`Daily summary cache miss for ${selectedDate}, fetching from API`);
-      const response = await fetch(`/api/v2/analytics/species/daily?date=${selectedDate}`);
+      const response = await fetch(
+        `/api/v2/analytics/species/daily?date=${selectedDate}&limit=${summaryLimit}`
+      );
       if (!response.ok) {
         throw new Error(t('dashboard.errors.dailySummaryFetch', { status: response.statusText }));
       }
@@ -328,13 +331,16 @@ Performance Optimizations:
       const config = await response.json();
       // API returns uppercase field names (e.g., "Summary" not "summary")
       showThumbnails = config.Thumbnails?.Summary ?? true;
+      // Extract summaryLimit from config (lowercase in JSON response)
+      summaryLimit = config.summaryLimit ?? 30;
       logger.debug('Dashboard config loaded:', {
         Summary: config.Thumbnails?.Summary,
         showThumbnails,
+        summaryLimit,
       });
     } catch (error) {
       logger.error('Error fetching dashboard config:', error);
-      // Keep default value (true) on error
+      // Keep default values on error
     }
   }
 
@@ -914,6 +920,11 @@ Performance Optimizations:
         ];
       }
 
+      // Enforce species count limit to prevent grid from growing indefinitely
+      if (summaryLimit > 0 && dailySummary.length > summaryLimit) {
+        dailySummary = dailySummary.slice(0, summaryLimit);
+      }
+
       logger.debug(
         `Added new species: ${detection.commonName} (count: 1, hour: ${hour}) at position ${insertPosition === -1 ? dailySummary.length - 1 : insertPosition}`
       );
@@ -996,7 +1007,7 @@ Performance Optimizations:
     // Fire-and-forget operation for performance optimization
     void untrack(() => {
       const datesParam = datesToPreload.join(',');
-      return fetch(`/api/v2/analytics/species/daily/batch?dates=${datesParam}`)
+      return fetch(`/api/v2/analytics/species/daily/batch?dates=${datesParam}&limit=${summaryLimit}`)
         .then(response => {
           if (!response.ok) {
             throw new Error(`Batch preload failed: ${response.statusText}`);
@@ -1030,7 +1041,7 @@ Performance Optimizations:
           // Fall back to individual requests if batch fails
           logger.debug('Falling back to individual preload requests');
           datesToPreload.forEach(dateString => {
-            fetch(`/api/v2/analytics/species/daily?date=${dateString}`)
+            fetch(`/api/v2/analytics/species/daily?date=${dateString}&limit=${summaryLimit}`)
               .then(response => (response.ok ? response.json() : null))
               .then(data => {
                 if (data) {

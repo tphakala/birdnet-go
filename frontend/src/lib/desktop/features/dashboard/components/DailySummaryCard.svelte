@@ -298,6 +298,26 @@ Responsive Breakpoints:
     return (words[0][0] + words[1][0]).toUpperCase();
   };
 
+  /**
+   * Calculate heatmap intensity using simple fixed-range scaling.
+   * Maps detection counts 1-100 evenly across intensity levels 1-9.
+   * - 0 detections → intensity 0 (empty cell)
+   * - 1-11 detections → intensity 1
+   * - 12-22 detections → intensity 2
+   * - ...
+   * - 89-99 detections → intensity 8
+   * - 100+ detections → intensity 9
+   *
+   * @param count - The detection count for this cell
+   * @returns Intensity value from 0-9
+   */
+  const getHeatmapIntensity = (count: number): number => {
+    if (count <= 0) return 0;
+    // Simple linear mapping: 1-100 spread across 1-9
+    // Each step covers ~11 detections (100/9 ≈ 11.1)
+    return Math.min(9, Math.max(1, Math.ceil(count / 11)));
+  };
+
   // Static column metadata - use $state.raw() for performance (no deep reactivity needed)
   const staticColumnDefs = $state.raw<ColumnDefinition[]>([
     {
@@ -482,52 +502,6 @@ Responsive Breakpoints:
       // This ensures stable ordering when counts are equal
       return (b.latest_heard ?? '').localeCompare(a.latest_heard ?? '');
     });
-  });
-
-  // Optimized max count calculations using $derived.by for better performance
-  const globalMaxHourlyCount = $derived.by(() => {
-    if (sortedData.length === 0) return 1;
-
-    let maxCount = 1;
-    for (const species of sortedData) {
-      for (const count of species.hourly_counts) {
-        if (count > maxCount) {
-          maxCount = count;
-        }
-      }
-    }
-    return maxCount;
-  });
-
-  const globalMaxBiHourlyCount = $derived.by(() => {
-    if (sortedData.length === 0) return 1;
-
-    let maxCount = 0;
-    for (const species of sortedData) {
-      for (let hour = 0; hour < 24; hour += 2) {
-        const sum =
-          (safeArrayAccess(species.hourly_counts, hour, 0) ?? 0) +
-          (safeArrayAccess(species.hourly_counts, hour + 1, 0) ?? 0);
-        maxCount = Math.max(maxCount, sum);
-      }
-    }
-    return maxCount || 1;
-  });
-
-  const globalMaxSixHourlyCount = $derived.by(() => {
-    if (sortedData.length === 0) return 1;
-
-    let maxCount = 0;
-    for (const species of sortedData) {
-      for (let hour = 0; hour < 24; hour += 6) {
-        let sum = 0;
-        for (let h = hour; h < hour + 6 && h < 24; h++) {
-          sum += safeArrayAccess(species.hourly_counts, h, 0) ?? 0;
-        }
-        maxCount = Math.max(maxCount, sum);
-      }
-    }
-    return maxCount || 1;
   });
 </script>
 
@@ -818,8 +792,7 @@ Responsive Breakpoints:
                 <div class="hourly-grid flex-1 grid">
                   {#each Array(24) as _, hour (hour)}
                     {@const count = safeArrayAccess(item.hourly_counts, hour, 0) ?? 0}
-                    {@const intensity =
-                      count > 0 ? Math.min(9, Math.floor((count / globalMaxHourlyCount) * 9)) : 0}
+                    {@const intensity = getHeatmapIntensity(count)}
                     <div
                       class="heatmap-cell h-8 rounded-sm heatmap-color-{intensity} flex items-center justify-center text-xs font-medium"
                       class:hour-updated={item.hourlyUpdated?.includes(hour) &&
@@ -846,8 +819,7 @@ Responsive Breakpoints:
                   {#each Array(12) as _, i (i)}
                     {@const hour = i * 2}
                     {@const count = renderFunctions['bi-hourly'](item, hour)}
-                    {@const intensity =
-                      count > 0 ? Math.min(9, Math.floor((count / globalMaxBiHourlyCount) * 9)) : 0}
+                    {@const intensity = getHeatmapIntensity(count)}
                     <div
                       class="heatmap-cell h-8 rounded-sm heatmap-color-{intensity} flex items-center justify-center text-xs font-medium"
                     >
@@ -873,10 +845,7 @@ Responsive Breakpoints:
                   {#each Array(4) as _, i (i)}
                     {@const hour = i * 6}
                     {@const count = renderFunctions['six-hourly'](item, hour)}
-                    {@const intensity =
-                      count > 0
-                        ? Math.min(9, Math.floor((count / globalMaxSixHourlyCount) * 9))
-                        : 0}
+                    {@const intensity = getHeatmapIntensity(count)}
                     <div
                       class="heatmap-cell h-8 rounded-sm heatmap-color-{intensity} flex items-center justify-center text-xs font-medium"
                     >
@@ -1075,7 +1044,8 @@ Responsive Breakpoints:
      ======================================================================== */
 
   /* Dark theme heatmap colors - more vibrant and saturated */
-  :global([data-theme='dark']) {
+  /* Must use .daily-summary-card scope to override the light theme vars defined above */
+  :global([data-theme='dark']) .daily-summary-card {
     --heatmap-color-0: #1e293b;
     --heatmap-color-1: #164e63;
     --heatmap-color-2: #0e7490;
