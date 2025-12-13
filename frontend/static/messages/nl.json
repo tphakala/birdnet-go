@@ -431,8 +431,10 @@
       },
       "headers": {
         "dateTime": "Datum/Tijd",
+        "time": "Tijd",
         "commonName": "NL naam",
         "species": "Soort",
+        "weather": "Weer",
         "confidence": "Betrouwbaarheid",
         "thumbnail": "Afbeelding",
         "status": "Status",

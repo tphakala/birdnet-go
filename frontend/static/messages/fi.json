@@ -431,8 +431,10 @@
       },
       "headers": {
         "dateTime": "Päivä ja aika",
+        "time": "Aika",
         "commonName": "Suomenkielinen nimi",
         "species": "Laji",
+        "weather": "Sää",
         "confidence": "Luottamus",
         "thumbnail": "Pienoiskuva",
         "status": "Tila",

@@ -431,8 +431,10 @@
       },
       "headers": {
         "dateTime": "Data i Czas",
+        "time": "Czas",
         "commonName": "Nazwa Pospolita",
         "species": "Gatunek",
+        "weather": "Pogoda",
         "confidence": "Pewność",
         "thumbnail": "Miniatura",
         "status": "Status",

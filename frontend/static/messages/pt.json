@@ -431,8 +431,10 @@
       },
       "headers": {
         "dateTime": "Data e hora",
+        "time": "Hora",
         "commonName": "Nome comum",
         "species": "Espécie",
+        "weather": "Clima",
         "confidence": "Confiança",
         "thumbnail": "Miniatura",
         "status": "Status",

@@ -431,8 +431,10 @@
       },
       "headers": {
         "dateTime": "Datum & Zeit",
+        "time": "Zeit",
         "commonName": "Deutscher Name",
         "species": "Art",
+        "weather": "Wetter",
         "confidence": "Konfidenz",
         "thumbnail": "Vorschau",
         "status": "Status",

@@ -432,8 +432,10 @@
       },
       "headers": {
         "dateTime": "Date & Time",
+        "time": "Time",
         "commonName": "Common Name",
         "species": "Species",
+        "weather": "Weather",
         "confidence": "Confidence",
         "thumbnail": "Thumbnail",
         "status": "Status",
