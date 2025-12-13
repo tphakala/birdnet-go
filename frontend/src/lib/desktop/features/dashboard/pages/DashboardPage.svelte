@@ -713,7 +713,7 @@ Performance Optimizations:
     fetchDailySummary();
   }
 
-  // Handle detection limit change from RecentDetectionsCard
+  // Handle detection limit change from DetectionCardGrid
   function handleDetectionLimitChange(newLimit: number) {
     detectionLimit = newLimit;
     // Trim existing detections to new limit

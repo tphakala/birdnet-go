@@ -29,7 +29,7 @@
 - `DataTable.svelte` - Generic data table with sorting and pagination
 - `DetectionRow.svelte` - Single detection row for lists
 - `DetectionsList.svelte` - List of detection rows
-- `RecentDetectionsCard.svelte` - Recent detections card display
+- `DetectionCardGrid.svelte` - Card grid view of recent detections (in features/dashboard/components/)
 - `RecentDetectionsTable.svelte` - Table view of recent detections
 - `StatsCard.svelte` - Statistical information card
 - `StatusBadges.svelte` - Status indicators (verified, locked, etc.)

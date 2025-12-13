@@ -10,12 +10,23 @@
   - onToggleSpecies?: () => void - Toggle species action callback
   - onToggleLock?: () => void - Toggle lock action callback
   - onDelete?: () => void - Delete action callback
+  - onDownload?: () => void - Download audio action callback
   - onMenuOpen?: () => void - Menu open callback
   - onMenuClose?: () => void - Menu close callback
 -->
 <script lang="ts">
   import type { Detection } from '$lib/types/detection.types';
-  import { MoreVertical, SquarePen, Eye, EyeOff, Lock, LockOpen, Trash2 } from '@lucide/svelte';
+  import {
+    MoreVertical,
+    SquarePen,
+    Eye,
+    EyeOff,
+    Lock,
+    LockOpen,
+    Trash2,
+    Download,
+  } from '@lucide/svelte';
+  import { t } from '$lib/i18n';
 
   interface Props {
     detection: Detection;
@@ -24,6 +35,7 @@
     onToggleSpecies?: () => void;
     onToggleLock?: () => void;
     onDelete?: () => void;
+    onDownload?: () => void;
     onMenuOpen?: () => void;
     onMenuClose?: () => void;
   }
@@ -35,6 +47,7 @@
     onToggleSpecies,
     onToggleLock,
     onDelete,
+    onDownload,
     onMenuOpen,
     onMenuClose,
   }: Props = $props();
@@ -182,6 +195,13 @@
             <LockOpen class="size-4" />
             <span>Lock detection</span>
           {/if}
+        </button>
+      </li>
+
+      <li>
+        <button onclick={() => handleAction(onDownload)} class="menu-item" role="menuitem">
+          <Download class="size-4" />
+          <span>{t('media.audio.download')}</span>
         </button>
       </li>
 

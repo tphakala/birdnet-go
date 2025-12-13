@@ -94,7 +94,8 @@
   }
 
   function handleLoadStart() {
-    isLoading = true;
+    // With preload="none", the browser shouldn't be loading, but some browsers (Edge)
+    // fire this event anyway. Only set loading in handlePlayPause when user clicks play.
     error = null;
   }
 

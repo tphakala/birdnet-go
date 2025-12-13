@@ -27,7 +27,8 @@
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
   import type { Detection } from '$lib/types/detection.types';
-  import { RefreshCw, XCircle } from '@lucide/svelte';
+  import { RefreshCw, XCircle, ChevronDown, Check } from '@lucide/svelte';
+  import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { cn } from '$lib/utils/cn';
@@ -66,6 +67,73 @@
   // State for number of detections to show - captures initial prop value without creating dependency
   // Uses untrack() to explicitly capture initial value only (local state is independent after init)
   let selectedLimit = $state(untrack(() => limit));
+
+  // Custom dropdown state
+  let showLimitDropdown = $state(false);
+  let dropdownRef = $state<HTMLDivElement>();
+  let dropdownButtonRef = $state<HTMLButtonElement>();
+  const limitOptions = [6, 12, 24, 48];
+
+  // Toggle dropdown
+  function toggleLimitDropdown() {
+    showLimitDropdown = !showLimitDropdown;
+  }
+
+  // Select a limit option
+  function selectLimit(value: number) {
+    handleLimitChange(value);
+    showLimitDropdown = false;
+  }
+
+  // Handle click outside to close dropdown
+  function handleDropdownClickOutside(event: MouseEvent) {
+    if (!showLimitDropdown) return;
+    const target = event.target as Node;
+    if (!dropdownRef?.contains(target) && !dropdownButtonRef?.contains(target)) {
+      showLimitDropdown = false;
+    }
+  }
+
+  // Handle keyboard navigation for dropdown
+  function handleDropdownKeyDown(event: KeyboardEvent) {
+    if (!showLimitDropdown) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        showLimitDropdown = true;
+      }
+      return;
+    }
+
+    switch (event.key) {
+      case 'Escape':
+        showLimitDropdown = false;
+        dropdownButtonRef?.focus();
+        break;
+      case 'ArrowDown':
+        event.preventDefault();
+        {
+          const currentIndex = limitOptions.indexOf(selectedLimit);
+          const nextIndex = Math.min(currentIndex + 1, limitOptions.length - 1);
+          selectLimit(limitOptions[nextIndex]);
+        }
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        {
+          const currentIndex = limitOptions.indexOf(selectedLimit);
+          const prevIndex = Math.max(currentIndex - 1, 0);
+          selectLimit(limitOptions[prevIndex]);
+        }
+        break;
+    }
+  }
+
+  onMount(() => {
+    document.addEventListener('click', handleDropdownClickOutside);
+    return () => {
+      document.removeEventListener('click', handleDropdownClickOutside);
+    };
+  });
 
   // Updates the number of detections to display and persists the preference
   function handleLimitChange(newLimit: number) {
@@ -198,21 +266,53 @@
         <h3 class="font-semibold">{t('dashboard.recentDetections.title')}</h3>
         <p class="text-sm text-base-content/60">{t('dashboard.recentDetections.subtitle')}</p>
       </div>
-      <div class="flex items-center gap-2">
-        <label for="numDetectionsGrid" class="label-text text-sm"
-          >{t('dashboard.recentDetections.controls.show')}</label
-        >
-        <select
-          id="numDetectionsGrid"
-          bind:value={selectedLimit}
-          onchange={e => handleLimitChange(parseInt(e.currentTarget.value, 10))}
-          class="select select-sm focus-visible:outline-hidden"
-        >
-          <option value={6}>6</option>
-          <option value={12}>12</option>
-          <option value={24}>24</option>
-          <option value={48}>48</option>
-        </select>
+      <div class="flex items-center gap-3">
+        <!-- Custom Show Limit Dropdown -->
+        <div class="limit-dropdown-container">
+          <button
+            bind:this={dropdownButtonRef}
+            type="button"
+            class="limit-dropdown-trigger"
+            onclick={toggleLimitDropdown}
+            onkeydown={handleDropdownKeyDown}
+            aria-expanded={showLimitDropdown}
+            aria-haspopup="listbox"
+            aria-label={t('dashboard.recentDetections.controls.show') + ' ' + selectedLimit}
+          >
+            <span class="limit-dropdown-value">{selectedLimit}</span>
+            <ChevronDown
+              class={cn('limit-dropdown-icon', showLimitDropdown && 'limit-dropdown-icon-open')}
+            />
+          </button>
+
+          {#if showLimitDropdown}
+            <div
+              bind:this={dropdownRef}
+              class="limit-dropdown-menu"
+              role="listbox"
+              aria-label={t('dashboard.recentDetections.controls.show')}
+            >
+              {#each limitOptions as option (option)}
+                <button
+                  type="button"
+                  class={cn(
+                    'limit-dropdown-option',
+                    selectedLimit === option && 'limit-dropdown-option-selected'
+                  )}
+                  role="option"
+                  aria-selected={selectedLimit === option}
+                  onclick={() => selectLimit(option)}
+                >
+                  <span class="limit-dropdown-option-text">{option}</span>
+                  {#if selectedLimit === option}
+                    <Check class="limit-dropdown-check" />
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
         <button
           onclick={onRefresh}
           class="btn btn-sm btn-ghost"
@@ -291,3 +391,167 @@
     }}
   />
 {/if}
+
+<style>
+  /* ========================================================================
+     Custom Limit Dropdown Styling
+     ======================================================================== */
+
+  .limit-dropdown-container {
+    position: relative;
+  }
+
+  .limit-dropdown-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-width: 4.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border-radius: 0.5rem;
+    border: 1px solid rgb(226 232 240); /* slate-200 */
+    background-color: rgb(255 255 255);
+    color: rgb(15 23 42); /* slate-900 */
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .limit-dropdown-trigger:hover {
+    background-color: rgb(248 250 252); /* slate-50 */
+    border-color: rgb(203 213 225); /* slate-300 */
+  }
+
+  .limit-dropdown-trigger:focus {
+    outline: none;
+  }
+
+  :global([data-theme='dark']) .limit-dropdown-trigger {
+    background-color: rgb(30 41 59); /* slate-800 */
+    border-color: rgb(71 85 105); /* slate-600 */
+    color: rgb(241 245 249); /* slate-100 */
+  }
+
+  :global([data-theme='dark']) .limit-dropdown-trigger:hover {
+    background-color: rgb(51 65 85); /* slate-700 */
+    border-color: rgb(100 116 139); /* slate-500 */
+  }
+
+  .limit-dropdown-value {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .limit-dropdown-icon {
+    width: 1rem;
+    height: 1rem;
+    color: rgb(148 163 184); /* slate-400 */
+    transition: transform 200ms ease;
+  }
+
+  .limit-dropdown-icon-open {
+    transform: rotate(180deg);
+  }
+
+  :global([data-theme='dark']) .limit-dropdown-icon {
+    color: rgb(100 116 139); /* slate-500 */
+  }
+
+  .limit-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 0.25rem);
+    right: 0;
+    z-index: 50;
+    min-width: 5rem;
+    padding: 0.25rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgb(226 232 240); /* slate-200 */
+    background-color: rgb(255 255 255);
+    box-shadow:
+      0 10px 15px -3px rgba(0, 0, 0, 0.1),
+      0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    animation: dropdown-enter 150ms ease-out;
+  }
+
+  @keyframes dropdown-enter {
+    from {
+      opacity: 0;
+      transform: translateY(-0.25rem);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  :global([data-theme='dark']) .limit-dropdown-menu {
+    background-color: rgb(30 41 59); /* slate-800 */
+    border-color: rgb(51 65 85); /* slate-700 */
+    box-shadow:
+      0 10px 15px -3px rgba(0, 0, 0, 0.3),
+      0 4px 6px -2px rgba(0, 0, 0, 0.2);
+  }
+
+  .limit-dropdown-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: 0.375rem;
+    background-color: transparent;
+    color: rgb(51 65 85); /* slate-700 */
+    cursor: pointer;
+    transition: all 100ms ease;
+  }
+
+  .limit-dropdown-option:hover {
+    background-color: rgb(241 245 249); /* slate-100 */
+    color: rgb(15 23 42); /* slate-900 */
+  }
+
+  :global([data-theme='dark']) .limit-dropdown-option {
+    color: rgb(203 213 225); /* slate-300 */
+  }
+
+  :global([data-theme='dark']) .limit-dropdown-option:hover {
+    background-color: rgb(51 65 85); /* slate-700 */
+    color: rgb(241 245 249); /* slate-100 */
+  }
+
+  .limit-dropdown-option-selected {
+    background-color: rgb(240 249 255); /* sky-50 */
+    color: rgb(2 132 199); /* sky-600 */
+  }
+
+  .limit-dropdown-option-selected:hover {
+    background-color: rgb(224 242 254); /* sky-100 */
+  }
+
+  :global([data-theme='dark']) .limit-dropdown-option-selected {
+    background-color: rgb(12 74 110); /* sky-900 */
+    color: rgb(125 211 252); /* sky-300 */
+  }
+
+  :global([data-theme='dark']) .limit-dropdown-option-selected:hover {
+    background-color: rgb(7 89 133); /* sky-800 */
+    color: rgb(186 230 253); /* sky-200 */
+  }
+
+  .limit-dropdown-option-text {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .limit-dropdown-check {
+    width: 1rem;
+    height: 1rem;
+    color: rgb(2 132 199); /* sky-600 */
+  }
+
+  :global([data-theme='dark']) .limit-dropdown-check {
+    color: rgb(125 211 252); /* sky-300 */
+  }
+</style>

@@ -122,6 +122,21 @@
     onFreezeEnd?.();
   }
 
+  function handleDownload() {
+    // Create a temporary anchor element to trigger download
+    const link = document.createElement('a');
+    link.href = `/api/v2/audio/${detection.id}`;
+    // Use species name and date/time for filename
+    const dateTime =
+      detection.date && detection.time
+        ? `${detection.date}_${detection.time.replace(/:/g, '-')}`
+        : String(detection.id);
+    link.download = `${detection.commonName || 'detection'}_${dateTime}.wav`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   onMount(() => {
     spectrogramLoader.setLoading(true);
   });
@@ -162,7 +177,6 @@
           alt="Spectrogram for {detection.commonName}"
           class="spectrogram-image"
           class:opacity-0={spectrogramLoader.loading}
-          loading="lazy"
           decoding="async"
           onload={handleSpectrogramLoad}
           onerror={handleSpectrogramError}
@@ -201,6 +215,7 @@
       {onToggleSpecies}
       {onToggleLock}
       {onDelete}
+      onDownload={handleDownload}
       onMenuOpen={handleMenuOpen}
       onMenuClose={handleMenuClose}
     />
@@ -214,7 +229,7 @@
 
   .detection-card-inner {
     position: relative;
-    height: 11rem; /* h-44 = 176px */
+    height: 13.2rem; /* 11rem * 1.2 = ~211px (20% taller for better spectrogram visibility) */
     border-radius: 0.75rem;
     overflow: hidden;
   }

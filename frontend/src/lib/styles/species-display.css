@@ -5,7 +5,7 @@
    features. Uses 'sp-' prefix to avoid conflicts with existing custom.css.
    
    Used by:
-   - RecentDetectionsCard.svelte (dashboard)
+   - DetectionCardGrid.svelte (dashboard)
    - DetectionRow.svelte (detections)
    - DetectionsCard.svelte (detections)
    

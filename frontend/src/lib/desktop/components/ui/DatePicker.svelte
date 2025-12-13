@@ -403,19 +403,19 @@ Accessibility:
     new Date(1970, 0, 4 + i).toLocaleDateString(undefined, { weekday: 'short' })
   );
 
-  // Map size prop to CSS class
+  // Map size prop to padding/text size classes
   const sizeClass = $derived(() => {
     switch (size) {
       case 'xs':
-        return 'btn-xs';
+        return 'px-2 py-1 text-xs';
       case 'sm':
-        return 'btn-sm';
+        return 'px-3 py-1.5 text-sm';
       case 'md':
-        return 'btn';
+        return 'px-4 py-2 text-base';
       case 'lg':
-        return 'btn-lg';
+        return 'px-5 py-2.5 text-lg';
       default:
-        return 'btn-sm';
+        return 'px-3 py-1.5 text-sm';
     }
   });
 </script>
@@ -426,15 +426,7 @@ Accessibility:
     bind:this={buttonRef}
     type="button"
     {...restProps}
-    class={cn(
-      'btn',
-      sizeClass(),
-      'flex items-center gap-2',
-      'font-normal',
-      'min-w-44', // Consistent width to prevent layout shifts
-      'justify-start', // Left-align content within button
-      disabled ? 'btn-disabled' : ''
-    )}
+    class={cn('datepicker-trigger', sizeClass(), disabled && 'opacity-50 cursor-not-allowed')}
     onclick={toggleCalendar}
     onkeydown={handleKeyDown}
     {disabled}
@@ -448,7 +440,7 @@ Accessibility:
 
   <!-- Validation Error Display -->
   {#if validationError()}
-    <div class="text-error text-xs mt-1" role="alert">
+    <div class="datepicker-error" role="alert">
       {validationError()}
     </div>
   {/if}
@@ -476,7 +468,7 @@ Accessibility:
   {#if showCalendar}
     <div
       bind:this={calendarRef}
-      class="absolute right-0 z-50 mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg p-4 min-w-[280px]"
+      class="datepicker-calendar"
       role="dialog"
       aria-label={t('common.aria.datePickerCalendar')}
     >
@@ -484,7 +476,7 @@ Accessibility:
       <div class="flex items-center justify-between mb-4">
         <button
           type="button"
-          class="btn btn-ghost btn-sm btn-circle"
+          class="datepicker-nav-btn"
           onclick={goToPreviousMonth}
           aria-label={t('common.aria.previousMonth')}
         >
@@ -497,7 +489,7 @@ Accessibility:
 
         <button
           type="button"
-          class="btn btn-ghost btn-sm btn-circle"
+          class="datepicker-nav-btn"
           onclick={goToNextMonth}
           aria-label={t('common.aria.nextMonth')}
         >
@@ -508,7 +500,7 @@ Accessibility:
       <!-- Week Days -->
       <div class="grid grid-cols-7 gap-1 mb-2">
         {#each weekDays as day}
-          <div class="text-center text-xs font-medium text-base-content/60 py-1">
+          <div class="datepicker-weekday">
             {day}
           </div>
         {/each}
@@ -527,17 +519,13 @@ Accessibility:
               type="button"
               role="gridcell"
               class={cn(
-                'relative h-8 w-8 rounded-sm text-sm transition-colors',
-                'hover:bg-base-200 focus:ring-2 focus:ring-primary focus:ring-offset-1',
-                isDateSelected(date) ? 'bg-primary text-primary-content font-semibold' : '',
-                isToday(date) && !isDateSelected(date) ? 'bg-base-200 font-semibold' : '',
-                !isDateSelectable(date)
-                  ? 'text-base-content/30 cursor-not-allowed hover:bg-transparent'
-                  : 'cursor-pointer',
-                // Focus indicator for keyboard navigation
-                focusedDate && focusedDate.toDateString() === date.toDateString()
-                  ? 'ring-2 ring-primary ring-offset-1'
-                  : ''
+                'datepicker-day',
+                isDateSelected(date) && 'datepicker-day-selected',
+                isToday(date) && !isDateSelected(date) && 'datepicker-day-today',
+                !isDateSelectable(date) && 'datepicker-day-disabled',
+                focusedDate &&
+                  focusedDate.toDateString() === date.toDateString() &&
+                  'datepicker-day-focused'
               )}
               tabindex={// Only the focused date (or selected date, or today if no focus) should be tabbable
               (focusedDate && focusedDate.toDateString() === date.toDateString()) ||
@@ -567,9 +555,7 @@ Accessibility:
             >
               {date.getDate()}
               {#if isToday(date)}
-                <div
-                  class="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-primary rounded-full"
-                ></div>
+                <div class="datepicker-today-dot"></div>
               {/if}
             </button>
           {:else}
@@ -579,10 +565,10 @@ Accessibility:
       </div>
 
       <!-- Today Button -->
-      <div class="mt-4 pt-4 border-t border-base-200">
+      <div class="datepicker-today-separator">
         <button
           type="button"
-          class="btn btn-primary btn-sm btn-block"
+          class="datepicker-today-btn"
           onclick={() => {
             if (onTodayClick) {
               // Use custom handler if provided
@@ -610,5 +596,222 @@ Accessibility:
   /* Ensure dropdown doesn't get cut off - scoped to this component */
   .datepicker-wrapper :global(.overflow-x-auto) {
     overflow: visible;
+  }
+
+  /* Trigger button - centered content */
+  .datepicker-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-width: 11rem;
+    font-weight: 400;
+    border-radius: 0.5rem;
+    border: 1px solid rgb(209 213 219); /* neutral-300 */
+    background-color: rgb(255 255 255);
+    color: rgb(17 24 39); /* neutral-900 */
+    transition: all 150ms ease;
+  }
+
+  .datepicker-trigger:hover:not(:disabled) {
+    background-color: rgb(249 250 251); /* neutral-50 */
+    border-color: rgb(156 163 175); /* neutral-400 */
+  }
+
+  .datepicker-trigger:focus {
+    outline: none;
+  }
+
+  /* Validation error */
+  .datepicker-error {
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+    color: rgb(239 68 68); /* red-500 */
+  }
+
+  :global([data-theme='dark']) .datepicker-error {
+    color: rgb(248 113 113); /* red-400 */
+  }
+
+  :global([data-theme='dark']) .datepicker-trigger {
+    background-color: rgb(30 41 59); /* slate-800 */
+    border-color: rgb(71 85 105); /* slate-600 */
+    color: rgb(241 245 249); /* slate-100 */
+  }
+
+  :global([data-theme='dark']) .datepicker-trigger:hover:not(:disabled) {
+    background-color: rgb(51 65 85); /* slate-700 */
+    border-color: rgb(100 116 139); /* slate-500 */
+  }
+
+  /* Calendar dropdown */
+  .datepicker-calendar {
+    position: absolute;
+    right: 0;
+    z-index: 50;
+    margin-top: 0.25rem;
+    min-width: 280px;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgb(229 231 235); /* neutral-200 */
+    background-color: rgb(255 255 255);
+    box-shadow:
+      0 10px 15px -3px rgba(0, 0, 0, 0.1),
+      0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+
+  :global([data-theme='dark']) .datepicker-calendar {
+    background-color: rgb(30 41 59); /* slate-800 */
+    border-color: rgb(51 65 85); /* slate-700 */
+    box-shadow:
+      0 10px 15px -3px rgba(0, 0, 0, 0.3),
+      0 4px 6px -2px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Navigation buttons */
+  .datepicker-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 9999px;
+    background-color: transparent;
+    color: rgb(75 85 99); /* neutral-600 */
+    transition: all 150ms ease;
+  }
+
+  .datepicker-nav-btn:hover {
+    background-color: rgb(243 244 246); /* neutral-100 */
+    color: rgb(17 24 39); /* neutral-900 */
+  }
+
+  :global([data-theme='dark']) .datepicker-nav-btn {
+    color: rgb(148 163 184); /* slate-400 */
+  }
+
+  :global([data-theme='dark']) .datepicker-nav-btn:hover {
+    background-color: rgb(51 65 85); /* slate-700 */
+    color: rgb(241 245 249); /* slate-100 */
+  }
+
+  /* Weekday headers */
+  .datepicker-weekday {
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.25rem 0;
+    color: rgb(107 114 128); /* neutral-500 */
+  }
+
+  :global([data-theme='dark']) .datepicker-weekday {
+    color: rgb(148 163 184); /* slate-400 */
+  }
+
+  /* Calendar day buttons */
+  .datepicker-day {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 150ms ease;
+    color: rgb(17 24 39); /* neutral-900 */
+  }
+
+  .datepicker-day:hover:not(.datepicker-day-disabled) {
+    background-color: rgb(243 244 246); /* neutral-100 */
+  }
+
+  :global([data-theme='dark']) .datepicker-day {
+    color: rgb(241 245 249); /* slate-100 */
+  }
+
+  :global([data-theme='dark']) .datepicker-day:hover:not(.datepicker-day-disabled) {
+    background-color: rgb(51 65 85); /* slate-700 */
+  }
+
+  .datepicker-day-selected {
+    background-color: rgb(2 132 199) !important; /* sky-600 */
+    color: rgb(255 255 255) !important;
+    font-weight: 600;
+  }
+
+  .datepicker-day-today {
+    background-color: rgb(229 231 235); /* neutral-200 */
+    font-weight: 600;
+  }
+
+  :global([data-theme='dark']) .datepicker-day-today {
+    background-color: rgb(51 65 85); /* slate-700 */
+  }
+
+  .datepicker-day-disabled {
+    color: rgb(209 213 219); /* neutral-300 */
+    cursor: not-allowed;
+  }
+
+  .datepicker-day-disabled:hover {
+    background-color: transparent !important;
+  }
+
+  :global([data-theme='dark']) .datepicker-day-disabled {
+    color: rgb(71 85 105); /* slate-600 */
+  }
+
+  .datepicker-day-focused {
+    outline: 2px solid rgb(14 165 233); /* sky-500 */
+    outline-offset: 1px;
+  }
+
+  /* Today indicator dot */
+  .datepicker-today-dot {
+    position: absolute;
+    bottom: 0.125rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0.25rem;
+    height: 0.25rem;
+    border-radius: 9999px;
+    background-color: rgb(2 132 199); /* sky-600 */
+  }
+
+  /* Today button separator */
+  .datepicker-today-separator {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgb(229 231 235); /* neutral-200 */
+  }
+
+  :global([data-theme='dark']) .datepicker-today-separator {
+    border-top-color: rgb(51 65 85); /* slate-700 */
+  }
+
+  /* Today button */
+  .datepicker-today-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: 0.375rem;
+    background-color: rgb(2 132 199); /* sky-600 */
+    color: rgb(255 255 255);
+    transition: all 150ms ease;
+  }
+
+  .datepicker-today-btn:hover:not(:disabled) {
+    background-color: rgb(3 105 161); /* sky-700 */
+  }
+
+  .datepicker-today-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 </style>
