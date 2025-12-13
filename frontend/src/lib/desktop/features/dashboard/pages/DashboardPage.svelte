@@ -1007,7 +1007,9 @@ Performance Optimizations:
     // Fire-and-forget operation for performance optimization
     void untrack(() => {
       const datesParam = datesToPreload.join(',');
-      return fetch(`/api/v2/analytics/species/daily/batch?dates=${datesParam}&limit=${summaryLimit}`)
+      return fetch(
+        `/api/v2/analytics/species/daily/batch?dates=${datesParam}&limit=${summaryLimit}`
+      )
         .then(response => {
           if (!response.ok) {
             throw new Error(`Batch preload failed: ${response.statusText}`);
