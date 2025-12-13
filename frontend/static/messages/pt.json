@@ -1155,6 +1155,240 @@
         "variablesDescription": "Use essas variáveis em seus modelos com a sintaxe",
         "loading": "Carregando..."
       },
+      "push": {
+        "title": "Push Notifications",
+        "description": "Send notifications to external services like Discord, Telegram, Slack, and more",
+        "enable": "Enable Push Notifications",
+        "disabled": "Push notifications are disabled",
+        "enabledDescription": "Push notifications will be sent to all enabled providers below",
+        "noProviders": "No providers configured",
+        "noProvidersDescription": "Add a provider to start receiving push notifications",
+        "providers": {
+          "title": "Notification Providers",
+          "addButton": "Add Provider",
+          "editButton": "Edit",
+          "deleteButton": "Delete",
+          "enableToggle": "Enable provider",
+          "urlsPreview": "{count} URL(s) configured",
+          "deleteConfirm": "Delete provider \"{name}\"? This action cannot be undone.",
+          "typeBadge": {
+            "shoutrrr": "Shoutrrr",
+            "webhook": "Webhook"
+          }
+        },
+        "form": {
+          "addTitle": "Add Notification Provider",
+          "editTitle": "Edit Notification Provider",
+          "name": {
+            "label": "Provider Name",
+            "placeholder": "e.g., Discord Alerts",
+            "helpText": "A friendly name to identify this provider"
+          },
+          "urls": {
+            "label": "Service URL(s)",
+            "placeholder": "discord://token@webhookid",
+            "helpText": "Enter one Shoutrrr URL per line. Multiple URLs send to multiple services.",
+            "validation": {
+              "required": "At least one URL is required",
+              "invalidFormat": "Invalid URL format. URLs should start with a service prefix (e.g., discord://, telegram://)"
+            }
+          },
+          "notificationTypes": {
+            "label": "Notification Types",
+            "helpText": "Select which types of notifications to send to this provider",
+            "detection": "Bird detections",
+            "error": "Errors",
+            "warning": "Warnings",
+            "info": "Information",
+            "system": "System events"
+          },
+          "urlFormats": {
+            "title": "Common URL Formats",
+            "discord": "Discord",
+            "discordFormat": "discord://token@webhookid",
+            "telegram": "Telegram",
+            "telegramFormat": "telegram://token@telegram?chats=@channel",
+            "slack": "Slack",
+            "slackFormat": "slack://token-a/token-b/token-c",
+            "pushover": "Pushover",
+            "pushoverFormat": "pushover://shoutrrr:apiToken@userKey",
+            "gotify": "Gotify",
+            "gotifyFormat": "gotify://hostname/token",
+            "ntfy": "ntfy",
+            "ntfyFormat": "ntfy://ntfy.sh/mytopic",
+            "moreServices": "View all supported services",
+            "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
+          },
+          "saveButton": "Save Provider",
+          "savingButton": "Saving...",
+          "cancelButton": "Cancel",
+          "testButton": "Test",
+          "testingButton": "Testing..."
+        },
+        "test": {
+          "button": "Test Provider",
+          "description": "Send a test notification to verify this provider is working",
+          "success": "Test notification sent successfully!",
+          "error": "Test failed: {message}",
+          "requiresUrl": "Enter a URL to test",
+          "requiresEnabled": "Enable the provider to test"
+        },
+        "validation": {
+          "nameRequired": "Provider name is required",
+          "urlRequired": "At least one URL is required",
+          "invalidUrl": "Invalid URL format"
+        },
+        "autoName": {
+          "discord": "Discord",
+          "telegram": "Telegram",
+          "slack": "Slack",
+          "pushover": "Pushover",
+          "gotify": "Gotify",
+          "ntfy": "ntfy",
+          "email": "Email",
+          "generic": "Shoutrrr",
+          "numbered": "{service} #{number}"
+        },
+        "services": {
+          "selectLabel": "Service",
+          "selectHelpText": "Choose a notification service to configure",
+          "discord": {
+            "name": "Discord",
+            "webhookUrl": {
+              "label": "Discord Webhook URL",
+              "placeholder": "https://discord.com/api/webhooks/...",
+              "helpText": "Paste your full Discord webhook URL"
+            },
+            "invalidUrl": "Invalid Discord webhook URL. URL should contain discord.com/api/webhooks/"
+          },
+          "telegram": {
+            "name": "Telegram",
+            "botToken": {
+              "label": "Bot Token",
+              "placeholder": "123456789:ABCdef...",
+              "helpText": "Token from @BotFather"
+            },
+            "chatId": {
+              "label": "Chat ID",
+              "placeholder": "-1001234567890 or @channel",
+              "helpText": "Chat ID, group ID, or @username"
+            },
+            "incomplete": "Both bot token and chat ID are required"
+          },
+          "ntfy": {
+            "name": "ntfy",
+            "server": {
+              "label": "Server",
+              "placeholder": "ntfy.sh",
+              "helpText": "Leave as ntfy.sh for public server or enter your self-hosted server"
+            },
+            "topic": {
+              "label": "Topic",
+              "placeholder": "my-bird-alerts",
+              "helpText": "Topic name for your notifications"
+            },
+            "incomplete": "Topic is required"
+          },
+          "gotify": {
+            "name": "Gotify",
+            "server": {
+              "label": "Server URL",
+              "placeholder": "gotify.example.com",
+              "helpText": "Your Gotify server hostname (without https://)"
+            },
+            "token": {
+              "label": "Application Token",
+              "placeholder": "A...",
+              "helpText": "Token from Gotify Apps page"
+            },
+            "incomplete": "Server and token are required"
+          },
+          "pushover": {
+            "name": "Pushover",
+            "apiToken": {
+              "label": "API Token",
+              "placeholder": "az...",
+              "helpText": "Application API token"
+            },
+            "userKey": {
+              "label": "User Key",
+              "placeholder": "u...",
+              "helpText": "Your user or group key"
+            },
+            "incomplete": "API token and user key are required"
+          },
+          "slack": {
+            "name": "Slack",
+            "webhookUrl": {
+              "label": "Slack Webhook URL",
+              "placeholder": "https://hooks.slack.com/services/...",
+              "helpText": "Paste your full Slack webhook URL"
+            },
+            "invalidUrl": "Invalid Slack webhook URL. URL should contain hooks.slack.com/services/"
+          },
+          "ifttt": {
+            "name": "IFTTT",
+            "webhookKey": {
+              "label": "Webhook Key",
+              "placeholder": "abc123xyz...",
+              "helpText": "Your IFTTT Webhook key from Maker Webhooks settings"
+            },
+            "eventName": {
+              "label": "Event Name",
+              "placeholder": "bird_detected",
+              "helpText": "The event name to trigger in your IFTTT applet"
+            },
+            "incomplete": "Webhook key and event name are required"
+          },
+          "webhook": {
+            "name": "Webhook",
+            "url": {
+              "label": "Webhook URL",
+              "placeholder": "https://api.example.com/webhook",
+              "helpText": "The HTTP(S) endpoint to send notifications to"
+            },
+            "method": {
+              "label": "HTTP Method",
+              "helpText": "HTTP method to use for the request (default: POST)"
+            },
+            "auth": {
+              "label": "Authentication",
+              "none": "None",
+              "bearer": "Bearer Token",
+              "basic": "Basic Auth",
+              "helpText": "Optional authentication for the webhook endpoint"
+            },
+            "bearerToken": {
+              "label": "Bearer Token",
+              "placeholder": "your-api-token",
+              "helpText": "Token sent in Authorization: Bearer header"
+            },
+            "basicUser": {
+              "label": "Username",
+              "placeholder": "username"
+            },
+            "basicPass": {
+              "label": "Password",
+              "placeholder": "password"
+            },
+            "basicAuth": {
+              "helpText": "Credentials sent using HTTP Basic Authentication"
+            },
+            "invalidUrl": "Invalid URL. Must start with http:// or https://",
+            "tokenRequired": "Bearer token is required when using Bearer authentication",
+            "credentialsRequired": "Username and password are required when using Basic authentication"
+          },
+          "custom": {
+            "name": "Custom URL",
+            "url": {
+              "label": "Shoutrrr URL",
+              "placeholder": "service://credentials@host",
+              "helpText": "Enter a raw Shoutrrr URL for any supported service"
+            },
+            "invalidUrl": "Invalid URL format. URL should start with service://"
+          }
+        }
+      },
       "testNotification": {
         "title": "Enviar notificação de teste de nova espécie",
         "description": "Gere uma notificação de teste para uma detecção de nova espécie para verificar se seu sistema de notificações está funcionando",

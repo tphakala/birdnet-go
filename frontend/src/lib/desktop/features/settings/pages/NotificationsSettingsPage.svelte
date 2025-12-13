@@ -1184,13 +1184,14 @@
               <div class="space-y-4">
                 <!-- Service Selector with Icons -->
                 <div class="form-control">
-                  <label class="label">
+                  <label class="label" for="service-selector">
                     <span class="label-text font-semibold"
                       >{t('settings.notifications.push.services.selectLabel')}</span
                     >
                   </label>
                   <div class="dropdown w-full">
                     <button
+                      id="service-selector"
                       type="button"
                       class="select select-bordered w-full flex items-center justify-between text-left"
                       onclick={() => (serviceDropdownOpen = !serviceDropdownOpen)}
