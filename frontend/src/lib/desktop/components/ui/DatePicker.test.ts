@@ -32,7 +32,7 @@ describe('DatePicker Component', () => {
 
       const button = screen.getByLabelText('Select date');
       expect(button).toBeInTheDocument();
-      expect(button).toHaveClass('btn', 'btn-sm');
+      expect(button).toHaveClass('datepicker-trigger', 'text-sm');
       expect(screen.getByText('Select date')).toBeInTheDocument();
     });
 
@@ -61,7 +61,7 @@ describe('DatePicker Component', () => {
 
       const button = screen.getByLabelText('Select date');
       expect(button).toBeDisabled();
-      expect(button).toHaveClass('btn-disabled');
+      expect(button).toHaveClass('opacity-50', 'cursor-not-allowed');
     });
 
     it('applies custom className to root wrapper', () => {
@@ -79,10 +79,10 @@ describe('DatePicker Component', () => {
 
   describe('Size Prop', () => {
     it.each([
-      ['xs', 'btn-xs'],
-      ['sm', 'btn-sm'],
-      ['md', 'btn'],
-      ['lg', 'btn-lg'],
+      ['xs', 'text-xs'],
+      ['sm', 'text-sm'],
+      ['md', 'text-base'],
+      ['lg', 'text-lg'],
     ])('renders with size "%s" as class "%s"', (size, expectedClass) => {
       const onChange = vi.fn();
       render(DatePicker, {
@@ -92,7 +92,7 @@ describe('DatePicker Component', () => {
       });
 
       const button = screen.getByLabelText('Select date');
-      expect(button).toHaveClass(expectedClass);
+      expect(button).toHaveClass('datepicker-trigger', expectedClass);
     });
 
     it('defaults to sm size when no size specified', () => {
@@ -100,7 +100,7 @@ describe('DatePicker Component', () => {
       render(DatePicker, { value: '', onChange });
 
       const button = screen.getByLabelText('Select date');
-      expect(button).toHaveClass('btn-sm');
+      expect(button).toHaveClass('datepicker-trigger', 'text-sm');
     });
   });
 
@@ -265,14 +265,14 @@ describe('DatePicker Component', () => {
       const day10Button = screen.getByRole('gridcell', { name: '3/10/2024' });
       expect(day10Button).toBeInTheDocument();
       expect(day10Button).not.toBeDisabled();
-      expect(day10Button).toHaveClass('cursor-pointer');
+      expect(day10Button).toHaveClass('datepicker-day');
 
       // Verify future dates are disabled (day 20 is after today - March 15)
       // Note: Disabled dates have different aria-labels that include unavailable text
       const day20Button = screen.getByText('20'); // Find by text content instead
       expect(day20Button).toBeInTheDocument();
       expect(day20Button).toBeDisabled();
-      expect(day20Button).toHaveClass('cursor-not-allowed');
+      expect(day20Button).toHaveClass('datepicker-day-disabled');
     });
 
     it('highlights selected date', async () => {
@@ -284,7 +284,7 @@ describe('DatePicker Component', () => {
 
       // Day 15 should be highlighted as selected
       const day15 = screen.getByText('15');
-      expect(day15).toHaveClass('bg-primary');
+      expect(day15).toHaveClass('datepicker-day-selected');
     });
 
     it('highlights today', async () => {
@@ -296,7 +296,7 @@ describe('DatePicker Component', () => {
 
       // Day 15 should be highlighted as today (but not selected)
       const day15 = screen.getByText('15');
-      expect(day15).toHaveClass('bg-base-200', 'font-semibold');
+      expect(day15).toHaveClass('datepicker-day-today');
     });
 
     it('uses Today button to select current date', async () => {
@@ -336,7 +336,7 @@ describe('DatePicker Component', () => {
       // Days after March 10 should be disabled
       const day15 = screen.getByText('15');
       expect(day15).toBeDisabled();
-      expect(day15).toHaveClass('cursor-not-allowed');
+      expect(day15).toHaveClass('datepicker-day-disabled');
 
       // Try clicking disabled date - should not call onChange
       await user.click(day15);
@@ -357,7 +357,7 @@ describe('DatePicker Component', () => {
       // Days before March 20 should be disabled
       const day15 = screen.getByText('15');
       expect(day15).toBeDisabled();
-      expect(day15).toHaveClass('cursor-not-allowed');
+      expect(day15).toHaveClass('datepicker-day-disabled');
     });
 
     it('allows selection within date range', async () => {

@@ -138,8 +138,10 @@ Performance Optimizations:
             return parsed;
           }
           // Migrate old values to new ones
-          const migrated = LIMIT_MIGRATION_MAP[parsed];
-          if (migrated) {
+          const migrated = Object.hasOwn(LIMIT_MIGRATION_MAP, parsed)
+            ? LIMIT_MIGRATION_MAP[parsed as keyof typeof LIMIT_MIGRATION_MAP]
+            : undefined;
+          if (migrated !== undefined) {
             // Update localStorage with migrated value
             localStorage.setItem('recentDetectionLimit', migrated.toString());
             return migrated;

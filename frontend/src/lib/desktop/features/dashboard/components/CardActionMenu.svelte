@@ -153,7 +153,9 @@
     bind:this={buttonElement}
     onclick={handleOpen}
     class="menu-trigger"
-    aria-label={t('dashboard.recentDetections.actions.menuLabel', { species: detection.commonName })}
+    aria-label={t('dashboard.recentDetections.actions.menuLabel', {
+      species: detection.commonName,
+    })}
     aria-haspopup="true"
     aria-expanded={isOpen}
   >

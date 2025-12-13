@@ -114,7 +114,8 @@
         {
           const currentIndex = limitOptions.indexOf(selectedLimit);
           const nextIndex = Math.min(currentIndex + 1, limitOptions.length - 1);
-          selectLimit(limitOptions[nextIndex]);
+          const nextOption = limitOptions.at(nextIndex);
+          if (nextOption !== undefined) selectLimit(nextOption);
         }
         break;
       case 'ArrowUp':
@@ -122,7 +123,8 @@
         {
           const currentIndex = limitOptions.indexOf(selectedLimit);
           const prevIndex = Math.max(currentIndex - 1, 0);
-          selectLimit(limitOptions[prevIndex]);
+          const prevOption = limitOptions.at(prevIndex);
+          if (prevOption !== undefined) selectLimit(prevOption);
         }
         break;
     }
