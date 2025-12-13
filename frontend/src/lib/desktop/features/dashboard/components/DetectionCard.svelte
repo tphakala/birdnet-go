@@ -96,7 +96,7 @@
   // Track previous detection ID for cleanup
   let previousDetectionId: number | undefined;
 
-  // Reset retry state when detection changes
+  // Reset state when detection changes (component reuse)
   $effect(() => {
     const currentId = detection.id;
     if (previousDetectionId !== undefined && previousDetectionId !== currentId) {
@@ -107,6 +107,11 @@
       }
       retryCount = 0;
       spectrogramLoader.reset();
+
+      // Reset audio settings to defaults for new detection
+      audioGainValue = 0;
+      audioFilterFreq = 20;
+      audioContextAvailable = true;
     }
     previousDetectionId = currentId;
   });

@@ -355,15 +355,38 @@
   aria-valuemin={0}
   aria-valuemax={100}
   aria-valuenow={Math.round(progress)}
+  aria-valuetext={`${formatTime(currentTime)} of ${formatTime(duration)}`}
   onmousedown={handleMouseDown}
   onkeydown={e => {
     if (!audioElement || duration === 0) return;
-    if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      audioElement.currentTime = Math.min(duration, currentTime + 5);
-    } else if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      audioElement.currentTime = Math.max(0, currentTime - 5);
+    const SMALL_SKIP = 5;
+    const LARGE_SKIP = 10;
+
+    switch (e.key) {
+      case 'ArrowRight':
+        e.preventDefault();
+        audioElement.currentTime = Math.min(duration, currentTime + SMALL_SKIP);
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        audioElement.currentTime = Math.max(0, currentTime - SMALL_SKIP);
+        break;
+      case 'PageUp':
+        e.preventDefault();
+        audioElement.currentTime = Math.min(duration, currentTime + LARGE_SKIP);
+        break;
+      case 'PageDown':
+        e.preventDefault();
+        audioElement.currentTime = Math.max(0, currentTime - LARGE_SKIP);
+        break;
+      case 'Home':
+        e.preventDefault();
+        audioElement.currentTime = 0;
+        break;
+      case 'End':
+        e.preventDefault();
+        audioElement.currentTime = duration;
+        break;
     }
   }}
 >
@@ -371,8 +394,8 @@
   {#if progress > 0 || isPlaying}
     <div
       class="playhead"
-      style:left="{progress}%"
-      style:opacity={progress > 0 && progress < 100 ? '1' : '0'}
+      style:left={`${progress}%`}
+      style:opacity={progress > 0 && progress < 100 ? 1 : 0}
     ></div>
   {/if}
 </div>

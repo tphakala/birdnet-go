@@ -31,10 +31,17 @@
   const FILTER_HP_MIN_FREQ = 20;
   const FILTER_HP_MAX_FREQ = 5000;
 
+  // Generate unique ID for this component instance
+  const instanceId = Math.random().toString(36).slice(2, 9);
+  const gainSliderId = `gain-slider-${instanceId}`;
+  const filterSliderId = `filter-slider-${instanceId}`;
+
   let showSettings = $state(false);
   let buttonElement: HTMLButtonElement;
   // svelte-ignore non_reactive_update
   let menuElement: HTMLDivElement;
+  // svelte-ignore non_reactive_update
+  let gainSliderElement: HTMLInputElement;
 
   // Check if settings have been modified from defaults
   const hasModifiedSettings = $derived(gainValue !== 0 || filterFreq > FILTER_HP_MIN_FREQ);
@@ -69,7 +76,11 @@
     showSettings = !showSettings;
 
     if (showSettings) {
-      globalThis.requestAnimationFrame(updateMenuPosition);
+      globalThis.requestAnimationFrame(() => {
+        updateMenuPosition();
+        // Focus first slider when dialog opens
+        gainSliderElement?.focus();
+      });
     }
   }
 
@@ -163,12 +174,13 @@
 
       <!-- Gain control -->
       <div class="setting-item">
-        <label class="setting-label" for="gain-slider">
+        <label class="setting-label" for={gainSliderId}>
           {t('media.audio.volumeGain', { value: gainValue })}
         </label>
         <div class="slider-container">
           <input
-            id="gain-slider"
+            bind:this={gainSliderElement}
+            id={gainSliderId}
             type="range"
             min={GAIN_MIN_DB}
             max={GAIN_MAX_DB}
@@ -183,12 +195,12 @@
 
       <!-- High-pass filter control -->
       <div class="setting-item">
-        <label class="setting-label" for="filter-slider">
+        <label class="setting-label" for={filterSliderId}>
           {t('media.audio.highPassFilter', { freq: Math.round(filterFreq) })}
         </label>
         <div class="slider-container">
           <input
-            id="filter-slider"
+            id={filterSliderId}
             type="range"
             min={FILTER_HP_MIN_FREQ}
             max={FILTER_HP_MAX_FREQ}
