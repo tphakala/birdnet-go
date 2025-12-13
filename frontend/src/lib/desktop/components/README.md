@@ -1,5 +1,7 @@
 # Component Inventory
 
+This folder contains **shared components** used across the application. Feature-specific components are located in their respective feature folders (e.g., `features/dashboard/components/`, `features/settings/components/`).
+
 ## Weather Components Guide
 
 ### WeatherDetails vs WeatherMetrics
@@ -18,19 +20,10 @@
   - Icons can be toggled on/off via constants
   - Best for: DetectionRow, tables, lists
 
-## Charts
-
-- `ChartWrapper.svelte` - Wrapper for chart components with common styling
-
 ## Data
 
 - `ConfidenceCircle.svelte` - Circular confidence indicator with progress ring
-- `DailySummaryCard.svelte` - Daily species summary with hourly heatmap
 - `DataTable.svelte` - Generic data table with sorting and pagination
-- `DetectionRow.svelte` - Single detection row for lists
-- `DetectionsList.svelte` - List of detection rows
-- `DetectionCardGrid.svelte` - Card grid view of recent detections (in features/dashboard/components/)
-- `RecentDetectionsTable.svelte` - Table view of recent detections
 - `StatsCard.svelte` - Statistical information card
 - `StatusBadges.svelte` - Status indicators (verified, locked, etc.)
 - `WeatherDetails.svelte` - Detailed weather display for modals (vertical layout, icons always visible)
@@ -66,8 +59,8 @@
 
 - `Checkbox.svelte` - Checkbox input with label
 - `DateRangePicker.svelte` - Date range selection
-- `FilterForm.svelte` - Generic filtering form
 - `FormField.svelte` - Form field wrapper with validation
+- `InlineSlider.svelte` - Inline slider input for compact layouts
 - `NumberField.svelte` - Number input field
 - `PasswordField.svelte` - Password input with show/hide
 - `RTSPUrlInput.svelte` - RTSP URL input with validation
@@ -75,18 +68,13 @@
 - `SelectDropdown.svelte` - Dropdown selection component
 - `SelectField.svelte` - Select field wrapper
 - `SliderField.svelte` - Slider input field
-- `SpeciesFilterForm.svelte` - Species-specific filtering
 - `SpeciesInput.svelte` - Species selection input
 - `SpeciesManager.svelte` - Species management interface
+- `StreamCard.svelte` - Individual stream card for stream management
+- `StreamManager.svelte` - Manage multiple video/audio streams
 - `SubnetInput.svelte` - Subnet input with validation
 - `TextInput.svelte` - Text input field
 - `ToggleField.svelte` - Toggle/switch field
-
-## Layout
-
-- `Header.svelte` - Application header
-- `RootLayout.svelte` - Root layout wrapper
-- `Sidebar.svelte` - Navigation sidebar
 
 ## Media
 
@@ -95,9 +83,14 @@
 ## Modals
 
 - `ConfirmModal.svelte` - Confirmation dialog
+- `LoginModal.svelte` - User login modal
 - `ReviewModal.svelte` - Detection review modal
 - `SpeciesBadges.svelte` - Reusable species status and lock badges for modals
 - `SpeciesThumbnail.svelte` - Reusable species thumbnail image component
+
+## Review
+
+- `ReviewCard.svelte` - Detection review card component
 
 ## UI
 
@@ -105,13 +98,13 @@
 - `AudioLevelIndicator.svelte` - Audio level visualization
 - `Badge.svelte` - Status/count badges
 - `Card.svelte` - Generic card container
-- `ChartCard.svelte` - Card wrapper for charts
 - `CollapsibleCard.svelte` - Collapsible card container
 - `CollapsibleSection.svelte` - Collapsible content section
 - `DatePicker.svelte` - Date picker input
 - `EmptyState.svelte` - Empty state display
 - `ErrorAlert.svelte` - Error message display
 - `Input.svelte` - Generic input field
+- `LanguageSelector.svelte` - Language selection dropdown
 - `LoadingSpinner.svelte` - Loading animation
 - `Modal.svelte` - Generic modal container
 - `MultiStageOperation.svelte` - Multi-step operation UI
@@ -123,20 +116,58 @@
 - `ProgressCard.svelte` - Progress display card
 - `SearchBox.svelte` - Search input box
 - `Select.svelte` - Select dropdown
-- `SettingsCard.svelte` - Settings display card
-- `SettingsSection.svelte` - Settings section wrapper
-- `SpeciesCard.svelte` - Species information card
-- `StatCard.svelte` - Statistics card
+- `SkeletonDailySummary.svelte` - Loading skeleton for daily summary cards
+- `StatusPill.svelte` - Status pill indicator
 - `SystemInfoCard.svelte` - System information display
+- `TestSuccessNote.svelte` - Test success notification component
 - `ThemeToggle.svelte` - Theme switching toggle
 - `TimeOfDayIcon.svelte` - Time-based icons (day/night)
-
-## Test Files
-
-Each component has corresponding `.test.ts` or `.test.svelte` files for unit testing.
+- `ToastContainer.svelte` - Container for toast notifications
 
 ## Type Files
 
 - `DataTable.types.ts` - Data table type definitions
 - `MultiStageOperation.types.ts` - Multi-stage operation types
 - `SelectDropdown.types.ts` - Select dropdown types
+
+## Utility Files
+
+- `hls-config.ts` - HLS video streaming configuration
+- `image-utils.ts` - Image utility functions
+
+## Test Files
+
+Each component has corresponding `.test.ts` or `.test.svelte` files for unit testing.
+
+## Feature-Specific Components
+
+The following components are located in their feature directories:
+
+### Dashboard (`features/dashboard/components/`)
+
+- `DailySummaryCard.svelte` - Daily species summary with hourly heatmap
+- `DetectionCardGrid.svelte` - Card grid view of recent detections
+
+### Detections (`features/detections/components/`)
+
+- `DetectionRow.svelte` - Single detection row for lists
+- `DetectionsList.svelte` - List of detection rows
+- `DetectionsCard.svelte` - Detection card component
+
+### Analytics (`features/analytics/components/`)
+
+- `FilterForm.svelte` - Generic filtering form
+- `SpeciesFilterForm.svelte` - Species-specific filtering
+- `ChartCard.svelte` - Card wrapper for charts
+- `SpeciesCard.svelte` - Species information card
+- `StatCard.svelte` - Statistics card
+
+### Settings (`features/settings/components/`)
+
+- `SettingsCard.svelte` - Settings display card
+- `SettingsSection.svelte` - Settings section wrapper
+
+### Layouts (`layouts/`)
+
+- `RootLayout.svelte` - Root layout wrapper
+- `DesktopSidebar.svelte` - Navigation sidebar
