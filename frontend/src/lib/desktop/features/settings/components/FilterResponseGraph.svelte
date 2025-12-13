@@ -113,8 +113,13 @@
     if (filters.length === 0) {
       return 0; // Flat response when no filters
     }
-    const filterConfigs = filters.map(toFilterConfig);
-    return calculateCombinedResponse(filterConfigs, frequency);
+    try {
+      const filterConfigs = filters.map(toFilterConfig);
+      return calculateCombinedResponse(filterConfigs, frequency);
+    } catch {
+      // Fallback to flat response on calculation error
+      return 0;
+    }
   }
 
   // Convert frequency to x position using modified log scale optimized for audio work
