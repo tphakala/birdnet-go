@@ -83,7 +83,7 @@
   // PERFORMANCE OPTIMIZATION: Cache theme colors with $derived to prevent repeated DOM calculations
   // In Svelte 5, $derived creates a reactive computed value that only recalculates when dependencies change
   // This avoids expensive getComputedStyle() and DOM attribute queries on every chart render
-  let cachedTheme = $derived(() => {
+  let cachedTheme = $derived.by(() => {
     const currentTheme = document.documentElement.getAttribute('data-theme');
     let textColor, gridColor, tooltipBgColor, tooltipBorderColor;
 
@@ -736,7 +736,7 @@
             display: false,
           },
           tooltip: {
-            ...theme().tooltip,
+            ...theme.tooltip,
             callbacks: {
               label: context => `Detections: ${formatNumber(context.raw as number)}`,
             },
@@ -748,21 +748,21 @@
             title: {
               display: true,
               text: t('analytics.charts.numberOfDetections'),
-              color: theme().color.text,
+              color: theme.color.text,
             },
             ticks: {
-              color: theme().color.text,
+              color: theme.color.text,
             },
             grid: {
-              color: theme().color.grid,
+              color: theme.color.grid,
             },
           },
           y: {
             ticks: {
-              color: theme().color.text,
+              color: theme.color.text,
             },
             grid: {
-              color: theme().color.grid,
+              color: theme.color.grid,
             },
           },
         },
@@ -851,7 +851,7 @@
             display: false,
           },
           tooltip: {
-            ...theme().tooltip,
+            ...theme.tooltip,
             callbacks: {
               label: context => `Detections: ${formatNumber(context.raw as number)}`,
             },
@@ -863,26 +863,26 @@
             title: {
               display: true,
               text: t('analytics.charts.numberOfDetections'),
-              color: theme().color.text,
+              color: theme.color.text,
             },
             ticks: {
-              color: theme().color.text,
+              color: theme.color.text,
             },
             grid: {
-              color: theme().color.grid,
+              color: theme.color.grid,
             },
           },
           x: {
             title: {
               display: true,
               text: t('analytics.charts.timePeriod'),
-              color: theme().color.text,
+              color: theme.color.text,
             },
             ticks: {
-              color: theme().color.text,
+              color: theme.color.text,
             },
             grid: {
-              color: theme().color.grid,
+              color: theme.color.grid,
             },
           },
         },
@@ -961,11 +961,11 @@
             display: true,
             position: 'top',
             labels: {
-              color: theme().color.text,
+              color: theme.color.text,
             },
           },
           tooltip: {
-            ...theme().tooltip,
+            ...theme.tooltip,
             callbacks: {
               label: context => `Detections: ${formatNumber(context.raw as number)}`,
             },
@@ -977,26 +977,26 @@
             title: {
               display: true,
               text: t('analytics.charts.numberOfDetections'),
-              color: theme().color.text,
+              color: theme.color.text,
             },
             ticks: {
-              color: theme().color.text,
+              color: theme.color.text,
             },
             grid: {
-              color: theme().color.grid,
+              color: theme.color.grid,
             },
           },
           x: {
             title: {
               display: true,
               text: t('analytics.charts.date'),
-              color: theme().color.text,
+              color: theme.color.text,
             },
             ticks: {
-              color: theme().color.text,
+              color: theme.color.text,
             },
             grid: {
-              color: theme().color.grid,
+              color: theme.color.grid,
             },
           },
         },
@@ -1126,7 +1126,7 @@
         plugins: {
           legend: { display: false },
           tooltip: {
-            ...theme().tooltip,
+            ...theme.tooltip,
             callbacks: {
               title: tooltipItems => tooltipItems[0].label,
               label: context => {
@@ -1153,14 +1153,14 @@
             title: {
               display: true,
               text: t('analytics.charts.firstHeardDate'),
-              color: theme().color.text,
+              color: theme.color.text,
             },
-            ticks: { color: theme().color.text },
-            grid: { color: theme().color.grid },
+            ticks: { color: theme.color.text },
+            grid: { color: theme.color.grid },
           },
           y: {
             type: 'category',
-            ticks: { color: theme().color.text },
+            ticks: { color: theme.color.text },
             grid: { display: false },
           },
         },
@@ -1389,7 +1389,7 @@
               </tr>
             </thead>
             <tbody>
-              {#each recentDetections as detection, index}
+              {#each recentDetections as detection, index (detection.id ?? index)}
                 <tr class={index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'}>
                   <td>{formatDateTime(detection.timestamp)}</td>
                   <td>

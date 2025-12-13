@@ -87,7 +87,7 @@
 
   // PERFORMANCE OPTIMIZATION: Cache size classes and input classes with $derived
   // Prevents repeated string concatenation and conditional logic in template
-  const sizeClasses = $derived(() => {
+  const sizeClasses = $derived.by(() => {
     switch (size) {
       case 'lg':
         return {
@@ -115,8 +115,8 @@
   const inputClasses = $derived(
     cn(
       'input focus:outline-hidden w-full font-normal transition-all',
-      sizeClasses().input,
-      sizeClasses().padding,
+      sizeClasses.input,
+      sizeClasses.padding,
       isSearching && 'opacity-75',
       showDropdown ? 'rounded-t-lg' : 'rounded-lg'
     )
@@ -452,7 +452,7 @@
           {#if isSearching}
             <span class="loading loading-spinner loading-sm"></span>
           {:else}
-            <Search class={sizeClasses().icon} />
+            <Search class={sizeClasses.icon} />
           {/if}
         </div>
 
@@ -464,7 +464,7 @@
             <!-- Active filters -->
             {#if parsedSearch.filters.length > 0}
               <div class="flex flex-wrap gap-2 mb-2">
-                {#each parsedSearch.filters as filter, index}
+                {#each parsedSearch.filters as filter, index (`filter-${index}`)}
                   <div class="badge badge-primary gap-2">
                     <span class="text-xs">{formatFilterForDisplay(filter)}</span>
                     <button
@@ -483,7 +483,7 @@
             <!-- Errors -->
             {#if parsedSearch.errors.length > 0}
               <div class="space-y-1 mb-2">
-                {#each parsedSearch.errors as error}
+                {#each parsedSearch.errors as error, index (`error-${index}`)}
                   <div class="alert alert-error alert-sm">
                     <TriangleAlert class="size-4" />
                     <span class="text-xs">{error}</span>
@@ -507,7 +507,7 @@
           <div
             class="absolute top-full left-0 right-0 bg-base-100 border border-base-300 border-t-0 rounded-b-lg shadow-lg z-50 max-h-80 overflow-y-auto"
           >
-            {#each suggestions as suggestion, index}
+            {#each suggestions as suggestion, index (`suggestion-${index}`)}
               <div
                 class={cn(
                   'w-full flex items-center gap-3 border-b border-base-200 last:border-b-0 group hover:bg-base-200',

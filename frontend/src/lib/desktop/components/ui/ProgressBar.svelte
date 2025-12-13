@@ -51,7 +51,7 @@
   let percentage = $derived(Math.min(Math.max((value / max) * 100, 0), 100));
 
   // Determine variant based on thresholds
-  let currentVariant = $derived(() => {
+  let currentVariant = $derived.by(() => {
     if (colorThresholds.length === 0) return variant;
 
     const percentValue = (value / max) * 100;
@@ -97,7 +97,7 @@
   let progressBarClasses = $derived(
     cn(
       'h-full transition-all duration-300 ease-out',
-      variantClasses[currentVariant()],
+      safeGet(variantClasses, currentVariant, 'bg-primary'),
       {
         'bg-stripes': striped,
         'animate-stripes': striped && animated,

@@ -262,7 +262,7 @@
     <div class="mt-4">
       <div class="text-sm font-medium mb-2">{t('forms.dateRange.labels.quickSelect')}</div>
       <div class="flex flex-wrap gap-2">
-        {#each presets as preset}
+        {#each presets as preset (preset.key)}
           <button
             type="button"
             class={cn('btn btn-sm', isPresetActive(preset) ? 'btn-primary' : 'btn-ghost')}

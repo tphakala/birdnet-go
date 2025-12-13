@@ -704,7 +704,7 @@
     <h3 id="notes-heading" class="text-lg font-semibold mb-4">{t('detections.notes.title')}</h3>
     {#if detection.comments && detection.comments.length > 0}
       <div class="space-y-3" role="list" aria-label="Detection comments">
-        {#each detection.comments as comment}
+        {#each detection.comments as comment (comment.id ?? comment.createdAt)}
           <article class="bg-base-200 rounded-lg p-4" role="listitem">
             <p aria-label="Comment text">{comment.entry}</p>
             <p class="text-sm text-base-content opacity-60 mt-2" aria-label="Comment timestamp">

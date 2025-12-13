@@ -105,7 +105,7 @@
   };
 
   // Filtered and categorized species
-  const filteredSpecies = $derived(() => {
+  const filteredSpecies = $derived.by(() => {
     // Cache trimmed and lowercased query once to avoid repeated string transforms
     const trimmedLowerQuery = searchQuery.trim().toLowerCase();
     let filtered = species.filter(
@@ -139,7 +139,7 @@
   const isSpecies = (s: Species | undefined): s is Species => s != null;
 
   // Selected species objects
-  const selectedSpecies = $derived(() =>
+  const selectedSpecies = $derived.by(() =>
     selected.map(id => species.find(s => s.id === id)).filter(isSpecies)
   );
 
@@ -293,7 +293,7 @@
               type="text"
               bind:this={inputRef}
               bind:value={searchQuery}
-              placeholder={selectedSpecies().length ? 'Add more species...' : placeholder}
+              placeholder={selectedSpecies.length ? 'Add more species...' : placeholder}
               class={cn(
                 'input input-ghost w-full pr-8',
                 /* eslint-disable-next-line security/detect-object-injection -- Safe: size prop is constrained to specific string literals */
@@ -326,9 +326,9 @@
       {/if}
 
       <!-- Selected Species Chips -->
-      {#if selectedSpecies().length > 0}
+      {#if selectedSpecies.length > 0}
         <div class="flex flex-wrap gap-2">
-          {#each selectedSpecies() as species (species.id)}
+          {#each selectedSpecies as species (species.id)}
             <div
               class={cn(
                 'badge badge-primary gap-2 cursor-pointer hover:badge-primary-focus transition-colors',
@@ -351,7 +351,7 @@
           {/each}
 
           <!-- Clear All Button -->
-          {#if selectedSpecies().length > 1 && !disabled}
+          {#if selectedSpecies.length > 1 && !disabled}
             <button
               type="button"
               class="badge badge-ghost hover:badge-error gap-1 transition-colors"
@@ -404,13 +404,13 @@
             <span class="loading loading-spinner loading-md"></span>
             <p class="mt-2 text-sm text-base-content/60">Loading species...</p>
           </div>
-        {:else if filteredSpecies()[0]?.items.length === 0}
+        {:else if filteredSpecies[0]?.items.length === 0}
           <div class="p-6 text-center text-base-content/60">
             <Search class="size-6 mx-auto" />
             <p class="mt-2">{emptyText}</p>
           </div>
         {:else}
-          {#each filteredSpecies() as group}
+          {#each filteredSpecies as group (group.category)}
             {#if group.category && categorized}
               <div class="px-4 py-2 bg-base-200 text-sm font-medium capitalize">
                 {group.category.replaceAll('-', ' ')}
@@ -520,12 +520,12 @@
           <div class="p-4 text-center">
             <span class="loading loading-spinner loading-sm"></span>
           </div>
-        {:else if filteredSpecies()[0]?.items.length === 0}
+        {:else if filteredSpecies[0]?.items.length === 0}
           <div class="p-4 text-center text-base-content/60 text-sm">
             {emptyText}
           </div>
         {:else}
-          {#each filteredSpecies() as group}
+          {#each filteredSpecies as group (group.category)}
             {#each group.items as species (species.id)}
               {@const isSelected = selected.includes(species.id)}
               {@const canSelect = !maxSelections || selected.length < maxSelections || isSelected}

@@ -639,7 +639,7 @@
               <p>No audio sources available</p>
             </div>
           {:else}
-            {#each Object.entries(levels) as [source, _data]}
+            {#each Object.entries(levels) as [source, _data] (source)}
               <div
                 class={cn(
                   'border-b border-base-300 p-4 hover:bg-base-200 transition-colors',

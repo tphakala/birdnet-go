@@ -79,7 +79,7 @@
 
   {#if variant === 'timeline'}
     <div class="relative">
-      {#each stages as stage, index}
+      {#each stages as stage, index (stage.id)}
         <div class="flex gap-4 pb-8 last:pb-0">
           <!-- Timeline line -->
           {#if index < stages.length - 1}
@@ -165,7 +165,7 @@
     </div>
   {:else if variant === 'compact'}
     <div class="space-y-2">
-      {#each stages as stage}
+      {#each stages as stage (stage.id)}
         <button
           type="button"
           onclick={() => handleStageClick(stage.id)}
@@ -216,7 +216,7 @@
   {:else}
     <!-- Default variant -->
     <div class="space-y-4">
-      {#each stages as stage, index}
+      {#each stages as stage, index (stage.id)}
         <div class={cn('card', stage.status === 'in_progress' ? 'ring-2 ring-primary' : '')}>
           <button
             type="button"

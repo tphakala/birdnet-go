@@ -67,7 +67,7 @@
   // let brushSelection: [Date, Date] | null = null;
 
   // Prepare data with colors
-  const chartData = $derived(() => {
+  const chartData = $derived.by(() => {
     if (!data.length) return [];
 
     const currentTheme = getCurrentTheme();
@@ -83,16 +83,16 @@
   });
 
   // Get visible species data
-  const visibleData = $derived(() => chartData().filter(s => s.visible));
+  const visibleData = $derived.by(() => chartData.filter(s => s.visible));
 
   // Process data for relative display
-  const processedData = $derived(() => {
-    if (!visibleData().length || !showRelative) return visibleData();
+  const processedData = $derived.by(() => {
+    if (!visibleData.length || !showRelative) return visibleData;
 
     // Calculate total counts per day
     const dailyTotals = new Map<string, number>();
 
-    visibleData().forEach(species => {
+    visibleData.forEach(species => {
       species.data.forEach(point => {
         const dateStr = getLocalDateString(point.date);
         const currentTotal = dailyTotals.get(dateStr) ?? 0;
@@ -101,7 +101,7 @@
     });
 
     // Convert to percentages
-    return visibleData().map(species => ({
+    return visibleData.map(species => ({
       ...species,
       data: species.data.map(point => {
         const dateStr = getLocalDateString(point.date);
@@ -115,8 +115,8 @@
   });
 
   // Calculate scales
-  const scales = $derived(() => {
-    const processed: SpeciesTrendData[] = processedData();
+  const scales = $derived.by(() => {
+    const processed = processedData;
     if (!processed.length) return null;
 
     const allDates: Date[] = processed.flatMap(species => species.data.map(point => point.date));
@@ -164,9 +164,9 @@
     // Store context for later use
     chartContext = context;
 
-    const processed = processedData();
+    const processed = processedData;
 
-    if (!scales() || !processed.length) {
+    if (!scales || !processed.length) {
       // Clear existing content
       if (context.chartGroup) {
         context.chartGroup.selectAll('*').remove();
@@ -177,7 +177,7 @@
     const { svg, chartGroup, innerWidth, innerHeight, theme } = context;
 
     // Get scales safely
-    const s = scales();
+    const s = scales;
     if (!s) {
       throw new Error('Scales not available for chart rendering');
     }
@@ -420,7 +420,7 @@
     }
 
     // Create legend
-    const processedForLegend = processedData();
+    const processedForLegend = processedData;
     const legendItems = processedForLegend.map((species: SpeciesTrendData) => ({
       id: species.id || species.species,
       label: species.commonName,
@@ -456,8 +456,8 @@
     // Force evaluation of reactive dependencies by accessing them
     // These assignments are CRITICAL - they make the effect track these values
     const currentData = data; // Track the data prop changes
-    const processed = processedData(); // Track computed processed data
-    const chartScales = scales(); // Track scale changes
+    const processed = processedData; // Track computed processed data
+    const chartScales = scales; // Track scale changes
     const ctx = chartContext; // Get the D3 context from snippet
 
     // CRITICAL: Force reactive dependency tracking without logging

@@ -53,7 +53,7 @@
   let tooltipCounter = 0;
   let tooltipId = $derived(id ? `${id}-tooltip` : `tooltip-${++tooltipCounter}`);
 
-  let isValid = $derived(() => {
+  let isValid = $derived.by(() => {
     if (!inputElement || !touched) return true;
     return inputElement.validity.valid;
   });

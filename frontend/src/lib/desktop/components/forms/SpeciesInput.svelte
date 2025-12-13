@@ -95,10 +95,10 @@
   const instanceId = `species-predictions-${Date.now()}-${idCounter}`;
 
   // Auto-derive button size from input size if not specified
-  let effectiveButtonSize = $derived(buttonSize || size);
+  let effectiveButtonSize = $derived(buttonSize ?? size);
 
   // Validation state
-  let isValid = $derived(() => {
+  let isValid = $derived.by(() => {
     if (!inputElement || !touched) return true;
     return inputElement.validity.valid;
   });

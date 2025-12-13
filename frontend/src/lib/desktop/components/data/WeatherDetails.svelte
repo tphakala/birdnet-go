@@ -63,7 +63,7 @@
   }: Props = $props();
 
   // Get the appropriate unit labels based on the units setting
-  const temperatureUnit = $derived(() => {
+  const temperatureUnit = $derived.by(() => {
     switch (units) {
       case 'imperial':
         return '°F';
@@ -74,7 +74,7 @@
     }
   });
 
-  const windSpeedUnit = $derived(() => {
+  const windSpeedUnit = $derived.by(() => {
     return units === 'imperial' ? 'mph' : 'm/s';
   });
 
@@ -92,7 +92,7 @@
   };
 
   // Extract base weather code
-  const weatherCode = $derived(() => {
+  const weatherCode = $derived.by(() => {
     if (!weatherIcon || typeof weatherIcon !== 'string') return '';
     const match = weatherIcon.match(/^(\d{2})[dn]?$/);
     return match ? match[1] : '';
@@ -103,7 +103,7 @@
 
   // Get weather emoji and description
   const weatherInfo = $derived(
-    safeGet(weatherIconMap, weatherCode(), {
+    safeGet(weatherIconMap, weatherCode, {
       day: '❓',
       night: '❓',
       description: weatherDescription || 'Unknown',
@@ -143,7 +143,7 @@
   );
 
   // Get appropriate wind icon opacity based on wind speed
-  const getWindOpacity = $derived(() => {
+  const getWindOpacity = $derived.by(() => {
     if (windSpeed === undefined) return '';
     if (windSpeed < 3) return 'opacity-50'; // Light wind: 0-3 m/s
     if (windSpeed < 8) return 'opacity-75'; // Moderate wind: 3-8 m/s
@@ -218,10 +218,10 @@
     <div class="wd-temperature-row flex items-center gap-2">
       <Thermometer
         class={cn(safeGet(iconSizeClasses, size, ''), 'shrink-0')}
-        aria-label={`Temperature: ${temperature.toFixed(1)}${temperatureUnit()}`}
+        aria-label={`Temperature: ${temperature.toFixed(1)}${temperatureUnit}`}
       />
       <span class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content')}>
-        {temperature.toFixed(1)}{temperatureUnit()}
+        {temperature.toFixed(1)}{temperatureUnit}
       </span>
     </div>
   {/if}
@@ -230,14 +230,14 @@
   {#if windSpeed !== undefined}
     <div class="wd-wind-row flex items-center gap-2">
       <Wind
-        class={cn(safeGet(iconSizeClasses, size, ''), getWindOpacity(), 'shrink-0')}
-        aria-label={`Wind speed: ${windSpeed.toFixed(1)} ${windSpeedUnit()}`}
+        class={cn(safeGet(iconSizeClasses, size, ''), getWindOpacity, 'shrink-0')}
+        aria-label={`Wind speed: ${windSpeed.toFixed(1)} ${windSpeedUnit}`}
       />
       <span class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content')}>
         {windSpeed.toFixed(0)}{windGust !== undefined && windGust > windSpeed
           ? `(${windGust.toFixed(0)})`
           : ''}
-        {windSpeedUnit()}
+        {windSpeedUnit}
       </span>
     </div>
   {:else}
