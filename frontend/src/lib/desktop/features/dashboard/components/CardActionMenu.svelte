@@ -148,7 +148,7 @@
   });
 </script>
 
-<div class="relative">
+<div>
   <button
     bind:this={buttonElement}
     onclick={handleOpen}

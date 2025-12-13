@@ -1813,6 +1813,7 @@
   },
   "media": {
     "audio": {
+      "settings": "Audioeinstellungen",
       "play": "Abspielen",
       "pause": "Pause",
       "stop": "Stopp",
