@@ -287,7 +287,7 @@
 
   .detection-card-inner {
     position: relative;
-    height: 13.2rem; /* 11rem * 1.2 = ~211px (20% taller for better spectrogram visibility) */
+    height: 15rem; /* ~240px - taller for better spectrogram visibility, especially low frequencies */
     border-radius: 0.75rem;
     overflow: hidden;
   }
@@ -296,12 +296,17 @@
   .spectrogram-container {
     position: absolute;
     inset: 0;
+    overflow: hidden;
   }
 
   .spectrogram-image {
+    position: absolute;
+    left: 0;
+    bottom: 0; /* Anchor to bottom of container */
     width: 100%;
-    height: 100%;
+    min-height: 100%; /* At least fill container height */
     object-fit: cover;
+    object-position: center bottom;
     image-rendering: pixelated;
     transition: opacity 0.3s ease;
   }
@@ -326,27 +331,9 @@
     background: linear-gradient(135deg, rgb(30 41 59 / 0.9) 0%, rgb(15 23 42 / 0.95) 100%);
   }
 
-  /* Gradient overlay for text readability */
+  /* Gradient overlay - disabled, using backdrop on SpeciesInfoBar instead */
   .gradient-overlay {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      to top,
-      rgb(15 23 42 / 0.95) 0%,
-      rgb(15 23 42 / 0.6) 40%,
-      transparent 70%
-    );
-    pointer-events: none;
-  }
-
-  /* Light theme gradient */
-  :global([data-theme='light']) .gradient-overlay {
-    background: linear-gradient(
-      to top,
-      rgb(30 41 59 / 0.9) 0%,
-      rgb(30 41 59 / 0.5) 40%,
-      transparent 70%
-    );
+    display: none;
   }
 
   /* New detection animation */

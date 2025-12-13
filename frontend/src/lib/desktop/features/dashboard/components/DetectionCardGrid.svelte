@@ -484,7 +484,7 @@
     position: absolute;
     top: calc(100% + 0.25rem);
     right: 0;
-    z-index: 50;
+    z-index: 100;
     min-width: 5rem;
     padding: 0.25rem;
     border-radius: 0.5rem;

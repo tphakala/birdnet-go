@@ -108,7 +108,7 @@
     display: flex;
     align-items: flex-end;
     gap: 0.75rem;
-    padding: 1rem;
+    padding: 0.75rem 1rem;
     z-index: 10;
   }
 
