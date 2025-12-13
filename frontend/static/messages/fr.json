@@ -387,10 +387,20 @@
   },
   "dashboard": {
     "dailySummary": {
-      "title": "Résumé quotidien",
+      "title": "Activité Quotidienne",
+      "subtitle": "Détections par heure",
       "columns": {
         "species": "Espèces",
         "detections": "Détections"
+      },
+      "daylight": {
+        "label": "Lumière du jour",
+        "sunrise": "Lever du soleil à {time}",
+        "sunset": "Coucher du soleil à {time}"
+      },
+      "legend": {
+        "less": "Moins",
+        "more": "Plus"
       },
       "navigation": {
         "previousDay": "Jour précédent",
@@ -415,14 +425,18 @@
     },
     "recentDetections": {
       "title": "Détections récentes",
+      "subtitle": "Dernières espèces identifiées",
       "controls": {
         "show": "Afficher :",
-        "refresh": "Actualiser les détections"
+        "refresh": "Actualiser les détections",
+        "refreshPaused": "Actualisation en pause pendant l'interaction"
       },
       "headers": {
         "dateTime": "Date et heure",
+        "time": "Heure",
         "commonName": "Nom commun",
         "species": "Espèce",
+        "weather": "Météo",
         "confidence": "Confiance",
         "thumbnail": "Miniature",
         "status": "Statut",
@@ -446,6 +460,15 @@
         "lockDetectionConfirm": "Êtes-vous sûr de vouloir verrouiller cette détection de {species} ? Cela empêchera sa suppression lors du nettoyage régulier.",
         "deleteDetection": "Supprimer la détection de {species}",
         "deleteDetectionConfirm": "Êtes-vous sûr de vouloir supprimer la détection de {species} ? Cette action est irréversible."
+      },
+      "actions": {
+        "menuLabel": "Actions pour {species}",
+        "review": "Examiner la détection",
+        "showSpecies": "Afficher l'espèce",
+        "ignoreSpecies": "Ignorer l'espèce",
+        "lockDetection": "Verrouiller la détection",
+        "unlockDetection": "Déverrouiller la détection",
+        "deleteDetection": "Supprimer la détection"
       },
       "noDetections": "Aucune détection récente"
     },
@@ -1800,6 +1823,8 @@
       "currentTime": "{current} / {total}",
       "loading": "Chargement de l'audio...",
       "error": "Échec du chargement de l'audio",
+      "errorShort": "Erreur",
+      "playError": "Échec de la lecture de l'audio",
       "volumeGain": "Contrôle du gain de volume : {value} dB",
       "filterControl": "Contrôle du filtre",
       "highPassFilter": "Contrôle du filtre passe-haut : {freq} Hz",

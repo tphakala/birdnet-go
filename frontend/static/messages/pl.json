@@ -387,10 +387,20 @@
   },
   "dashboard": {
     "dailySummary": {
-      "title": "Podsumowanie Dzienne",
+      "title": "Dzienna Aktywność",
+      "subtitle": "Wykrycia według godziny",
       "columns": {
         "species": "Gatunek",
         "detections": "Detekcje"
+      },
+      "daylight": {
+        "label": "Światło dzienne",
+        "sunrise": "Wschód słońca o {time}",
+        "sunset": "Zachód słońca o {time}"
+      },
+      "legend": {
+        "less": "Mniej",
+        "more": "Więcej"
       },
       "navigation": {
         "previousDay": "Poprzedni dzień",
@@ -415,14 +425,18 @@
     },
     "recentDetections": {
       "title": "Ostatnie Detekcje",
+      "subtitle": "Ostatnio zidentyfikowane gatunki",
       "controls": {
         "show": "Pokaż:",
-        "refresh": "Odśwież detekcje"
+        "refresh": "Odśwież detekcje",
+        "refreshPaused": "Odświeżanie wstrzymane podczas interakcji"
       },
       "headers": {
         "dateTime": "Data i Czas",
+        "time": "Czas",
         "commonName": "Nazwa Pospolita",
         "species": "Gatunek",
+        "weather": "Pogoda",
         "confidence": "Pewność",
         "thumbnail": "Miniatura",
         "status": "Status",
@@ -446,6 +460,15 @@
         "lockDetectionConfirm": "Czy na pewno chcesz zablokować tę detekcję {species}? Uniemożliwi to jej usunięcie podczas regularnego czyszczenia.",
         "deleteDetection": "Usuń Detekcję {species}",
         "deleteDetectionConfirm": "Czy na pewno chcesz usunąć detekcję {species}? Ta akcja nie może być cofnięta."
+      },
+      "actions": {
+        "menuLabel": "Akcje dla {species}",
+        "review": "Przegląd detekcji",
+        "showSpecies": "Pokaż gatunek",
+        "ignoreSpecies": "Ignoruj gatunek",
+        "lockDetection": "Zablokuj detekcję",
+        "unlockDetection": "Odblokuj detekcję",
+        "deleteDetection": "Usuń detekcję"
       },
       "noDetections": "Brak ostatnich detekcji"
     },
@@ -1800,6 +1823,8 @@
       "currentTime": "{current} / {total}",
       "loading": "Ładowanie audio...",
       "error": "Nie udało się załadować audio",
+      "errorShort": "Błąd",
+      "playError": "Nie udało się odtworzyć audio",
       "volumeGain": "Kontrola wzmocnienia głośności: {value} dB",
       "filterControl": "Kontrola filtra",
       "highPassFilter": "Kontrola filtra górnoprzepustowego: {freq} Hz",

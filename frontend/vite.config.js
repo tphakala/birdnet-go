@@ -77,13 +77,16 @@ export default defineConfig({
     outDir: 'dist',
     chunkSizeWarningLimit: 1000,
     emptyOutDir: true,
-    // Watch mode configuration for reliable file change detection
-    watch: {
-      chokidar: {
-        usePolling: true,
-        interval: 300,
-      },
-    },
+    // Watch mode disabled by default for CI/CD compatibility
+    // When using --watch flag, chokidar options are applied for reliable file change detection
+    watch: process.argv.includes('--watch')
+      ? {
+          chokidar: {
+            usePolling: true,
+            interval: 300,
+          },
+        }
+      : null,
     rollupOptions: {
       output: {
         entryFileNames: '[name].js',

@@ -387,10 +387,20 @@
   },
   "dashboard": {
     "dailySummary": {
-      "title": "Daily Summary",
+      "title": "Daily Activity",
+      "subtitle": "Species detections by hour",
       "columns": {
         "species": "Species",
         "detections": "Detections"
+      },
+      "daylight": {
+        "label": "Daylight",
+        "sunrise": "Sunrise at {time}",
+        "sunset": "Sunset at {time}"
+      },
+      "legend": {
+        "less": "Less",
+        "more": "More"
       },
       "navigation": {
         "previousDay": "Previous day",
@@ -415,14 +425,18 @@
     },
     "recentDetections": {
       "title": "Recent Detections",
+      "subtitle": "Latest identified species",
       "controls": {
         "show": "Show:",
-        "refresh": "Refresh detections"
+        "refresh": "Refresh detections",
+        "refreshPaused": "Refresh paused while interaction is active"
       },
       "headers": {
         "dateTime": "Date & Time",
+        "time": "Time",
         "commonName": "Common Name",
         "species": "Species",
+        "weather": "Weather",
         "confidence": "Confidence",
         "thumbnail": "Thumbnail",
         "status": "Status",
@@ -446,6 +460,15 @@
         "lockDetectionConfirm": "Are you sure you want to lock this detection of {species}? This will prevent it from being deleted during regular cleanup.",
         "deleteDetection": "Delete Detection of {species}",
         "deleteDetectionConfirm": "Are you sure you want to delete detection of {species}? This action cannot be undone."
+      },
+      "actions": {
+        "menuLabel": "Actions for {species}",
+        "review": "Review detection",
+        "showSpecies": "Show species",
+        "ignoreSpecies": "Ignore species",
+        "lockDetection": "Lock detection",
+        "unlockDetection": "Unlock detection",
+        "deleteDetection": "Delete detection"
       },
       "noDetections": "No recent detections"
     },
@@ -1956,6 +1979,8 @@
       "currentTime": "{current} / {total}",
       "loading": "Loading audio...",
       "error": "Failed to load audio",
+      "errorShort": "Error",
+      "playError": "Failed to play audio",
       "volumeGain": "Volume gain control: {value} dB",
       "filterControl": "Filter control",
       "highPassFilter": "High-pass filter control: {freq} Hz",

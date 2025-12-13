@@ -387,10 +387,20 @@
   },
   "dashboard": {
     "dailySummary": {
-      "title": "Dagelijks overzicht",
+      "title": "Dagactiviteit",
+      "subtitle": "Detecties per uur",
       "columns": {
         "species": "Soorten",
         "detections": "Aantal herkend"
+      },
+      "daylight": {
+        "label": "Daglicht",
+        "sunrise": "Zonsopgang om {time}",
+        "sunset": "Zonsondergang om {time}"
+      },
+      "legend": {
+        "less": "Minder",
+        "more": "Meer"
       },
       "navigation": {
         "previousDay": "Vorige dag",
@@ -415,14 +425,18 @@
     },
     "recentDetections": {
       "title": "Recent herkend",
+      "subtitle": "Laatst geïdentificeerde soorten",
       "controls": {
         "show": "Toon",
-        "refresh": "Ververs herkeningen"
+        "refresh": "Ververs herkeningen",
+        "refreshPaused": "Ververs gepauzeerd tijdens interactie"
       },
       "headers": {
         "dateTime": "Datum/Tijd",
+        "time": "Tijd",
         "commonName": "NL naam",
         "species": "Soort",
+        "weather": "Weer",
         "confidence": "Betrouwbaarheid",
         "thumbnail": "Afbeelding",
         "status": "Status",
@@ -446,6 +460,15 @@
         "lockDetectionConfirm": "Weet je zeker dat je deze herkenning van {species} wilt vergrendelen? Dit voorkomt verwijdering door automatische schoning.",
         "deleteDetection": "Verwijder de herkenning van {species}",
         "deleteDetectionConfirm": "Weet je zeker dat je de herkenning van {species} wilt verwijderen? Deze aktie kan niet worden terug gedraaid!!!"
+      },
+      "actions": {
+        "menuLabel": "Acties voor {species}",
+        "review": "Herkenning beoordelen",
+        "showSpecies": "Soort tonen",
+        "ignoreSpecies": "Soort negeren",
+        "lockDetection": "Herkenning vergrendelen",
+        "unlockDetection": "Herkenning ontgrendelen",
+        "deleteDetection": "Herkenning verwijderen"
       },
       "noDetections": "Geen recente herkenning"
     },
@@ -1800,6 +1823,8 @@
       "currentTime": "{current} / {total}",
       "loading": "Opname inlezen ...",
       "error": "Inlezen opname is mislukt",
+      "errorShort": "Fout",
+      "playError": "Afspelen opname is mislukt",
       "volumeGain": "Volume versterking: {value} dB",
       "filterControl": "Filter bediening",
       "highPassFilter": "Hoog-doorlaat filter: {freq} Hz",

@@ -387,10 +387,20 @@
   },
   "dashboard": {
     "dailySummary": {
-      "title": "Resumo diário",
+      "title": "Atividade Diária",
+      "subtitle": "Detecções por hora",
       "columns": {
         "species": "Espécie",
         "detections": "Detecções"
+      },
+      "daylight": {
+        "label": "Luz do dia",
+        "sunrise": "Nascer do sol às {time}",
+        "sunset": "Pôr do sol às {time}"
+      },
+      "legend": {
+        "less": "Menos",
+        "more": "Mais"
       },
       "navigation": {
         "previousDay": "Dia anterior",
@@ -415,14 +425,18 @@
     },
     "recentDetections": {
       "title": "Detecções recentes",
+      "subtitle": "Últimas espécies identificadas",
       "controls": {
         "show": "Mostrar:",
-        "refresh": "Atualizar detecções"
+        "refresh": "Atualizar detecções",
+        "refreshPaused": "Atualização pausada durante a interação"
       },
       "headers": {
         "dateTime": "Data e hora",
+        "time": "Hora",
         "commonName": "Nome comum",
         "species": "Espécie",
+        "weather": "Clima",
         "confidence": "Confiança",
         "thumbnail": "Miniatura",
         "status": "Status",
@@ -446,6 +460,15 @@
         "lockDetectionConfirm": "Tem certeza de que deseja bloquear esta detecção de {species}? Isso impedirá que seja excluída durante a limpeza regular.",
         "deleteDetection": "Excluir detecção de {species}",
         "deleteDetectionConfirm": "Tem certeza de que deseja excluir a detecção de {species}? Esta ação não pode ser desfeita."
+      },
+      "actions": {
+        "menuLabel": "Ações para {species}",
+        "review": "Revisar detecção",
+        "showSpecies": "Mostrar espécie",
+        "ignoreSpecies": "Ignorar espécie",
+        "lockDetection": "Bloquear detecção",
+        "unlockDetection": "Desbloquear detecção",
+        "deleteDetection": "Excluir detecção"
       },
       "noDetections": "Nenhuma detecção recente"
     },
@@ -1800,6 +1823,8 @@
       "currentTime": "{current} / {total}",
       "loading": "Carregando áudio...",
       "error": "Falha ao carregar áudio",
+      "errorShort": "Erro",
+      "playError": "Falha ao reproduzir áudio",
       "volumeGain": "Controle de ganho de volume: {value} dB",
       "filterControl": "Controle de filtro",
       "highPassFilter": "Controle de filtro passa-alta: {freq} Hz",

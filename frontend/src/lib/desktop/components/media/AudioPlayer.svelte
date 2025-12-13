@@ -419,6 +419,7 @@
   // The current approach is acceptable as it eliminates the previous double-request
   // pattern where BOTH the <img> load AND a subsequent fetch() would fail before
   // showing the generate button.
+  // eslint-disable-next-line no-unused-vars
   const checkSpectrogramMode = async () => {
     if (!spectrogramUrl) {
       spectrogramMode = 'auto';
@@ -785,15 +786,13 @@
   $effect(() => {
     // Only reset loading state if URL actually changed
     if (spectrogramUrl && spectrogramUrl !== previousSpectrogramUrl && !spectrogramLoader.error) {
-      debugLog('$effect: spectrogramUrl changed', {
+      debugLog('spectrogramUrl changed', {
         from: previousSpectrogramUrl,
         to: spectrogramUrl,
       });
+
       previousSpectrogramUrl = spectrogramUrl;
-      // Check mode first to avoid double-request pattern
-      checkSpectrogramMode();
-      // Start loading when URL changes
-      spectrogramLoader.setLoading(true);
+
       // Reset retry count and clear any pending retry timer for new spectrogram
       spectrogramRetryCount = 0;
       clearSpectrogramRetryTimer();
@@ -877,6 +876,20 @@
       if (!audioElement.paused) {
         startInterval();
       }
+    }
+
+    // Check if spectrogram image is already loaded from cache on mount
+    // This handles the race condition where image loads before effects run
+    debugLog('onMount: checking spectrogram state', {
+      spectrogramUrl,
+      spectrogramImageExists: !!spectrogramImage,
+      imageComplete: spectrogramImage?.complete,
+      imageNaturalHeight: spectrogramImage?.naturalHeight,
+    });
+
+    if (spectrogramImage?.complete && spectrogramImage?.naturalHeight !== 0) {
+      debugLog('onMount: spectrogram already loaded from cache');
+      spectrogramLoader.setLoading(false);
     }
   });
 

@@ -387,10 +387,20 @@
   },
   "dashboard": {
     "dailySummary": {
-      "title": "Tageszusammenfassung",
+      "title": "Tagesaktivität",
+      "subtitle": "Artnachweise pro Stunde",
       "columns": {
         "species": "Art",
         "detections": "Erkennungen"
+      },
+      "daylight": {
+        "label": "Tageslicht",
+        "sunrise": "Sonnenaufgang um {time}",
+        "sunset": "Sonnenuntergang um {time}"
+      },
+      "legend": {
+        "less": "Weniger",
+        "more": "Mehr"
       },
       "navigation": {
         "previousDay": "Vorheriger Tag",
@@ -415,14 +425,18 @@
     },
     "recentDetections": {
       "title": "Aktuelle Erkennungen",
+      "subtitle": "Zuletzt identifizierte Arten",
       "controls": {
         "show": "Anzeigen:",
-        "refresh": "Erkennungen aktualisieren"
+        "refresh": "Erkennungen aktualisieren",
+        "refreshPaused": "Aktualisierung während Interaktion pausiert"
       },
       "headers": {
         "dateTime": "Datum & Zeit",
+        "time": "Zeit",
         "commonName": "Deutscher Name",
         "species": "Art",
+        "weather": "Wetter",
         "confidence": "Konfidenz",
         "thumbnail": "Vorschau",
         "status": "Status",
@@ -446,6 +460,15 @@
         "lockDetectionConfirm": "Sind Sie sicher, dass Sie diese Erkennung von {species} sperren möchten? Dies verhindert die Löschung bei der regulären Bereinigung.",
         "deleteDetection": "Erkennung von {species} löschen",
         "deleteDetectionConfirm": "Sind Sie sicher, dass Sie die Erkennung von {species} löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden."
+      },
+      "actions": {
+        "menuLabel": "Aktionen für {species}",
+        "review": "Erkennung überprüfen",
+        "showSpecies": "Art anzeigen",
+        "ignoreSpecies": "Art ignorieren",
+        "lockDetection": "Erkennung sperren",
+        "unlockDetection": "Erkennung entsperren",
+        "deleteDetection": "Erkennung löschen"
       },
       "noDetections": "Keine aktuellen Erkennungen"
     },
@@ -1800,6 +1823,8 @@
       "currentTime": "{current} / {total}",
       "loading": "Audio wird geladen...",
       "error": "Fehler beim Laden des Audios",
+      "errorShort": "Fehler",
+      "playError": "Fehler beim Abspielen des Audios",
       "volumeGain": "Lautstärkeverstärkung: {value} dB",
       "filterControl": "Filtersteuerung",
       "highPassFilter": "Hochpassfilter-Steuerung: {freq} Hz",

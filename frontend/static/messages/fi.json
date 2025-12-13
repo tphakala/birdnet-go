@@ -387,10 +387,20 @@
   },
   "dashboard": {
     "dailySummary": {
-      "title": "Päivittäinen yhteenveto",
+      "title": "Päivän aktiivisuus",
+      "subtitle": "Havaintoja tunneittain",
       "columns": {
         "species": "Laji",
         "detections": "Havainnot"
+      },
+      "daylight": {
+        "label": "Päivänvalo",
+        "sunrise": "Auringonnousu klo {time}",
+        "sunset": "Auringonlasku klo {time}"
+      },
+      "legend": {
+        "less": "Vähemmän",
+        "more": "Enemmän"
       },
       "navigation": {
         "previousDay": "Edellinen päivä",
@@ -415,14 +425,18 @@
     },
     "recentDetections": {
       "title": "Viimeisimmät havainnot",
+      "subtitle": "Viimeksi tunnistetut lajit",
       "controls": {
         "show": "Näytä:",
-        "refresh": "Päivitä havainnot"
+        "refresh": "Päivitä havainnot",
+        "refreshPaused": "Päivitys keskeytetty vuorovaikutuksen ajaksi"
       },
       "headers": {
         "dateTime": "Päivä ja aika",
+        "time": "Aika",
         "commonName": "Suomenkielinen nimi",
         "species": "Laji",
+        "weather": "Sää",
         "confidence": "Luottamus",
         "thumbnail": "Pienoiskuva",
         "status": "Tila",
@@ -447,11 +461,20 @@
         "deleteDetection": "Poista {species} havainto",
         "deleteDetectionConfirm": "Haluatko varmasti poistaa {species} havainnon? Tätä toimintoa ei voi peruuttaa."
       },
+      "actions": {
+        "menuLabel": "Toiminnot: {species}",
+        "review": "Tarkista havainto",
+        "showSpecies": "Näytä laji",
+        "ignoreSpecies": "Ohita laji",
+        "lockDetection": "Lukitse havainto",
+        "unlockDetection": "Avaa lukitus",
+        "deleteDetection": "Poista havainto"
+      },
       "noDetections": "Ei viimeaikaisia havaintoja"
     },
     "errors": {
-      "dailySummaryFetch": "Päivittäisen yhteenvedon haku epäonnistui: {status}",
-      "dailySummaryLoad": "Päivittäisen yhteenvedon lataus epäonnistui",
+      "dailySummaryFetch": "Päivän aktiivisuuden haku epäonnistui: {status}",
+      "dailySummaryLoad": "Päivän aktiivisuuden lataus epäonnistui",
       "recentDetectionsFetch": "Viimeaikaisten havaintojen haku epäonnistui: {status}",
       "recentDetectionsLoad": "Viimeaikaisten havaintojen lataus epäonnistui",
       "configFetch": "Kojelaudan asetusten haku epäonnistui: {status}"
@@ -1800,6 +1823,8 @@
       "currentTime": "{current} / {total}",
       "loading": "Ladataan ääntä...",
       "error": "Äänen lataus epäonnistui",
+      "errorShort": "Virhe",
+      "playError": "Äänen toisto epäonnistui",
       "volumeGain": "Äänenvoimakkuuden vahvistus: {value} dB",
       "filterControl": "Suodattimen hallinta",
       "highPassFilter": "Ylipäästösuodattimen hallinta: {freq} Hz",
