@@ -10,12 +10,14 @@
   - Loading state support with spinner
   - Disabled state handling
   - Theme-compatible colors
+  - Multiple style variants (primary, secondary, ghost)
 
   Props:
   - onclick: Click handler function
   - disabled: Whether button is disabled
   - loading: Whether to show loading spinner
   - loadingText: Text to show when loading (default: from translation)
+  - variant: Button style variant (primary, secondary, ghost)
   - className: Additional CSS classes
   - children: Button content snippet
 
@@ -25,11 +27,14 @@
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
 
+  type ButtonVariant = 'primary' | 'secondary' | 'ghost';
+
   interface Props {
     onclick?: () => void;
     disabled?: boolean;
     loading?: boolean;
     loadingText?: string;
+    variant?: ButtonVariant;
     className?: string;
     children?: import('svelte').Snippet;
   }
@@ -39,6 +44,7 @@
     disabled = false,
     loading = false,
     loadingText,
+    variant = 'primary',
     className = '',
     children,
   }: Props = $props();
@@ -48,11 +54,20 @@
 
   // Combined disabled state for both loading and disabled
   let isDisabled = $derived(disabled || loading);
+
+  // Map variant to DaisyUI class
+  const variantClasses: Record<ButtonVariant, string> = {
+    primary: 'btn-primary',
+    secondary: 'btn-secondary',
+    ghost: 'btn-ghost',
+  };
+
+  let variantClass = $derived(variantClasses[variant]);
 </script>
 
 <button
   type="button"
-  class={cn('btn btn-primary btn-sm gap-2', className)}
+  class={cn('btn btn-sm gap-2', variantClass, className)}
   onclick={() => !isDisabled && onclick?.()}
   disabled={isDisabled}
   aria-busy={loading}
