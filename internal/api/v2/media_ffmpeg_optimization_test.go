@@ -36,9 +36,11 @@ func getSoxSpectrogramArgsBenchHelper(b *testing.B, ctx context.Context, audioPa
 	return gen.GetSoxSpectrogramArgsForTest(ctx, audioPath, outputPath, width, raw)
 }
 
-// TestGetSoxSpectrogramArgs_FFmpegVersionOptimization verifies the FFmpeg 7.x optimization
-// that skips the expensive ffprobe call by omitting the -d (duration) parameter.
-func TestGetSoxSpectrogramArgs_FFmpegVersionOptimization(t *testing.T) {
+// TestGetSoxSpectrogramArgs_DurationParameterRequired verifies that the -d (duration)
+// parameter is always included in Sox spectrogram arguments regardless of FFmpeg version.
+// This ensures correct spectrogram generation where Sox shows the full audio duration
+// rather than misinterpreting -x (width in pixels) as seconds (fixes issue #1484).
+func TestGetSoxSpectrogramArgs_DurationParameterRequired(t *testing.T) {
 	ctx := context.Background()
 	absSpectrogramPath := "/tmp/test.png"
 	audioPath := "/tmp/test.flac"
@@ -53,44 +55,44 @@ func TestGetSoxSpectrogramArgs_FFmpegVersionOptimization(t *testing.T) {
 		description        string
 	}{
 		{
-			name:               "FFmpeg 5.x needs duration parameter",
+			name:               "FFmpeg 5.x includes duration parameter",
 			ffmpegVersion:      "5.1.7-0+deb12u1+rpt1",
 			ffmpegMajor:        5,
 			ffmpegMinor:        1,
 			expectDurationFlag: true,
-			description:        "FFmpeg 5.x has sox protocol bug, requires explicit -d parameter",
+			description:        "FFmpeg 5.x requires explicit -d parameter for correct spectrogram",
 		},
 		{
-			name:               "FFmpeg 6.x needs duration parameter (conservative)",
+			name:               "FFmpeg 6.x includes duration parameter",
 			ffmpegVersion:      "6.0",
 			ffmpegMajor:        6,
 			ffmpegMinor:        0,
 			expectDurationFlag: true,
-			description:        "FFmpeg 6.x treated conservatively, requires explicit -d parameter",
+			description:        "FFmpeg 6.x requires explicit -d parameter for correct spectrogram",
 		},
 		{
-			name:               "FFmpeg 7.x skips duration parameter (optimization)",
+			name:               "FFmpeg 7.x includes duration parameter",
 			ffmpegVersion:      "7.1.2-0+deb13u1",
 			ffmpegMajor:        7,
 			ffmpegMinor:        1,
-			expectDurationFlag: false,
-			description:        "FFmpeg 7.x has sox protocol fix, -d parameter omitted for performance",
+			expectDurationFlag: true,
+			description:        "FFmpeg 7.x requires explicit -d parameter for correct spectrogram (fixes #1484)",
 		},
 		{
-			name:               "FFmpeg 8.x skips duration parameter",
+			name:               "FFmpeg 8.x includes duration parameter",
 			ffmpegVersion:      "8.0-essentials_build-www.gyan.dev",
 			ffmpegMajor:        8,
 			ffmpegMinor:        0,
-			expectDurationFlag: false,
-			description:        "FFmpeg 8.x and later benefit from optimization",
+			expectDurationFlag: true,
+			description:        "FFmpeg 8.x requires explicit -d parameter for correct spectrogram",
 		},
 		{
-			name:               "Unknown version uses duration parameter (safety fallback)",
+			name:               "Unknown version includes duration parameter",
 			ffmpegVersion:      "",
 			ffmpegMajor:        0,
 			ffmpegMinor:        0,
 			expectDurationFlag: true,
-			description:        "Unknown FFmpeg version requires ffprobe for safety (cannot verify sox protocol fix)",
+			description:        "Unknown FFmpeg version uses -d parameter as safety fallback",
 		},
 	}
 
