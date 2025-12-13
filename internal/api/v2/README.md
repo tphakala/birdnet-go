@@ -107,7 +107,8 @@ routeInitializers := []struct {
 | DELETE | `/detections/:id`             | `DeleteDetection`       | ✅   | Delete detection record     |
 | POST   | `/detections/:id/review`      | `ReviewDetection`       | ✅   | Review/verify detection     |
 | POST   | `/detections/:id/lock`        | `LockDetection`         | ✅   | Lock detection from changes |
-| POST   | `/detections/ignore`          | `IgnoreSpecies`         | ✅   | Add species to ignore list  |
+| POST   | `/detections/ignore`          | `IgnoreSpecies`         | ✅   | Toggle species in ignore list (add/remove) |
+| GET    | `/detections/ignored`         | `GetExcludedSpecies`    | ✅   | Get list of excluded species |
 
 ### Integrations (`integrations.go`)
 
