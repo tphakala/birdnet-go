@@ -23,6 +23,7 @@
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
+  import type { EqualizerFilterType } from '$lib/stores/settings';
 
   const logger = loggers.settings;
 
@@ -101,7 +102,17 @@
 
   interface Filter {
     id?: string;
-    type: string;
+    type: EqualizerFilterType;
+    frequency: number;
+    q?: number;
+    width?: number;
+    gain?: number;
+    passes?: number;
+  }
+
+  // Separate type for the new filter form which can have empty type before selection
+  interface NewFilterForm {
+    type: EqualizerFilterType | '';
     frequency: number;
     q?: number;
     width?: number;
@@ -126,8 +137,8 @@
   let eqFilterConfig = $state<Record<string, FilterTypeConfig>>({});
   let loadingConfig = $state(true);
 
-  // New filter state for adding filters
-  let newFilter = $state<Filter>({
+  // New filter state for adding filters (uses NewFilterForm to allow empty type)
+  let newFilter = $state<NewFilterForm>({
     type: '',
     frequency: 0,
     q: 0.707,
@@ -207,9 +218,15 @@
   function addNewFilter() {
     if (!newFilter.type) return;
 
-    const filterToAdd = { ...newFilter };
-    // Remove empty id if it exists
-    if (!filterToAdd.id) delete filterToAdd.id;
+    // After the type check above, we know type is not empty - create a proper Filter
+    const filterToAdd: Filter = {
+      type: newFilter.type as EqualizerFilterType,
+      frequency: newFilter.frequency,
+      q: newFilter.q,
+      width: newFilter.width,
+      gain: newFilter.gain,
+      passes: newFilter.passes,
+    };
 
     // Ensure HP/LP filters use Butterworth Q factor
     if (filterToAdd.type === 'HighPass' || filterToAdd.type === 'LowPass') {
@@ -299,14 +316,14 @@
   }
 
   // Set default values when filter type is selected
-  function getFilterDefaults(filterType: string) {
+  function getFilterDefaults(filterType: EqualizerFilterType | '') {
     if (!filterType) {
       newFilter = { type: '', frequency: 0, q: 0.707, width: 100, gain: 0, passes: 1 };
       return;
     }
 
     const parameters = getEqFilterParameters(filterType);
-    const updatedFilter: Filter = {
+    const updatedFilter: NewFilterForm = {
       type: filterType,
       frequency: 0,
       q: 0.707,
