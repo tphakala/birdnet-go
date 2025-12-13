@@ -24,7 +24,7 @@ Source: Apache-2.0
 
 ### filippo.io/edwards25519
 
-License: https://github.com/FiloSottile/edwards25519/blob/v1.1.0/LICENSE
+License: Unknown
 Source: BSD-3-Clause
 
 ### github.com/antonholmquist/jason
@@ -244,12 +244,12 @@ Source: BSD-3-Clause
 
 ### github.com/nicholas-fedor/shoutrrr
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.12.1/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.13.0/LICENSE.md
 Source: MIT
 
 ### github.com/nicholas-fedor/shoutrrr/pkg/color
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.12.1/pkg/color/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.13.0/pkg/color/LICENSE.md
 Source: MIT
 
 ### github.com/patrickmn/go-cache
@@ -324,7 +324,7 @@ Source: MIT
 
 ### github.com/spf13/cobra
 
-License: https://github.com/spf13/cobra/blob/v1.10.1/LICENSE.txt
+License: https://github.com/spf13/cobra/blob/v1.10.2/LICENSE.txt
 Source: Apache-2.0
 
 ### github.com/spf13/pflag
@@ -409,7 +409,7 @@ Source: MIT
 
 ### go.opentelemetry.io/auto/sdk
 
-License: https://github.com/open-telemetry/opentelemetry-go-instrumentation/blob/sdk/v1.1.0/sdk/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go-instrumentation/blob/sdk/v1.2.1/sdk/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
@@ -419,17 +419,17 @@ Source: Apache-2.0
 
 ### go.opentelemetry.io/otel
 
-License: https://github.com/open-telemetry/opentelemetry-go/blob/v1.37.0/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go/blob/v1.38.0/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/otel/metric
 
-License: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.37.0/metric/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.38.0/metric/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/otel/trace
 
-License: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.37.0/trace/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.38.0/trace/LICENSE
 Source: Apache-2.0
 
 ### go.uber.org/goleak
@@ -489,17 +489,17 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.256.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.257.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/f26f9409b101/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/79d6a2a48846/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
 
-License: https://github.com/grpc/grpc-go/blob/v1.76.0/LICENSE
+License: https://github.com/grpc/grpc-go/blob/v1.77.0/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/protobuf
