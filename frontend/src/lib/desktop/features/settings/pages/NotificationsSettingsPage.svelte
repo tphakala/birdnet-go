@@ -61,10 +61,8 @@
     WebhookAuthConfig,
   } from '$lib/stores/settings';
 
-  let csrfToken = $derived(
-    (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
-      ''
-  );
+  // CSRF token - cached once on mount since it doesn't change during session
+  let csrfToken = $state('');
 
   // Template settings state
   let templateConfig = $state<{
@@ -813,8 +811,8 @@
       t('settings.notifications.push.providers.deleteConfirm', { name: provider.name })
     );
 
-    if (confirmDelete && pushSettings.providers) {
-      pushSettings.providers.splice(index, 1);
+    if (confirmDelete) {
+      pushSettings.providers = pushSettings.providers?.filter((_, i) => i !== index) ?? [];
     }
   }
 
@@ -928,6 +926,10 @@
   }
 
   onMount(() => {
+    // Cache CSRF token once - it doesn't change during session
+    csrfToken =
+      (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
+      '';
     loadNotificationSettings();
   });
 
@@ -1484,6 +1486,7 @@
                     />
                     <TextInput
                       id="webhook-basic-pass"
+                      type="password"
                       value={serviceFormData.webhookBasicPass}
                       label={t('settings.notifications.push.services.webhook.basicPass.label')}
                       placeholder={t(

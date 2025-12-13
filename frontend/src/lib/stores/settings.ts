@@ -728,6 +728,18 @@ function createEmptySettings(): SettingsFormData {
         port: '3306',
       },
     },
+    notification: {
+      push: {
+        enabled: false,
+        providers: [],
+      },
+      templates: {
+        newSpecies: {
+          title: '',
+          message: '',
+        },
+      },
+    },
   };
 }
 
