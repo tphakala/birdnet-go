@@ -54,7 +54,7 @@ Responsive Breakpoints:
   import { t } from '$lib/i18n';
   import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
   import SkeletonDailySummary from '$lib/desktop/components/ui/SkeletonDailySummary.svelte';
-  import { getLocalDateString } from '$lib/utils/date';
+  import { getLocalDateString, getLocalTimeString, parseLocalDateString } from '$lib/utils/date';
   import { LRUCache } from '$lib/utils/LRUCache';
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
@@ -564,21 +564,21 @@ Responsive Breakpoints:
 
 {#snippet sunIcon(sunType: 'sunrise' | 'sunset', sunTime: string | undefined, shouldShow: boolean)}
   {#if shouldShow && sunTime}
-    {@const formattedTime = new Date(sunTime).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    })}
-    <div
-      class="sun-icon-wrapper"
-      title={t(`dashboard.dailySummary.daylight.${sunType}`, { time: formattedTime })}
-    >
-      {#if sunType === 'sunrise'}
-        <Sunrise class="size-3.5 text-orange-700" />
-      {:else}
-        <Sunset class="size-3.5 text-rose-700" />
-      {/if}
-      <span class="sun-tooltip sun-tooltip-{sunType}">{formattedTime}</span>
-    </div>
+    {@const parsedDate = parseLocalDateString(sunTime)}
+    {#if parsedDate}
+      {@const formattedTime = getLocalTimeString(parsedDate, false)}
+      <div
+        class="sun-icon-wrapper"
+        title={t(`dashboard.dailySummary.daylight.${sunType}`, { time: formattedTime })}
+      >
+        {#if sunType === 'sunrise'}
+          <Sunrise class="size-3.5 text-orange-700" />
+        {:else}
+          <Sunset class="size-3.5 text-rose-700" />
+        {/if}
+        <span class="sun-tooltip sun-tooltip-{sunType}">{formattedTime}</span>
+      </div>
+    {/if}
   {/if}
 {/snippet}
 
@@ -608,7 +608,7 @@ Responsive Breakpoints:
       <div class="flex items-center justify-between overflow-visible">
         <div class="flex flex-col">
           <h3 class="font-semibold">{t('dashboard.dailySummary.title')}</h3>
-          <p class="text-sm" style:color="#94a3b8">{t('dashboard.dailySummary.subtitle')}</p>
+          <p class="text-sm text-base-content/60">{t('dashboard.dailySummary.subtitle')}</p>
         </div>
         {@render navigationControls()}
       </div>
@@ -629,7 +629,7 @@ Responsive Breakpoints:
       <div class="flex items-center justify-between overflow-visible">
         <div class="flex flex-col">
           <h3 class="font-semibold">{t('dashboard.dailySummary.title')}</h3>
-          <p class="text-sm" style:color="#94a3b8">{t('dashboard.dailySummary.subtitle')}</p>
+          <p class="text-sm text-base-content/60">{t('dashboard.dailySummary.subtitle')}</p>
         </div>
         {@render navigationControls()}
       </div>
@@ -756,7 +756,7 @@ Responsive Breakpoints:
 
           <!-- Species rows -->
           <div class="space-y-0">
-            {#each sortedData as item}
+            {#each sortedData as item (item.scientific_name)}
               <div
                 class="flex items-center species-row"
                 class:new-species={item.isNew && !prefersReducedMotion}
