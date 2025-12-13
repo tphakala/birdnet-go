@@ -459,6 +459,15 @@
         "deleteDetection": "Verwijder de herkenning van {species}",
         "deleteDetectionConfirm": "Weet je zeker dat je de herkenning van {species} wilt verwijderen? Deze aktie kan niet worden terug gedraaid!!!"
       },
+      "actions": {
+        "menuLabel": "Acties voor {species}",
+        "review": "Herkenning beoordelen",
+        "showSpecies": "Soort tonen",
+        "ignoreSpecies": "Soort negeren",
+        "lockDetection": "Herkenning vergrendelen",
+        "unlockDetection": "Herkenning ontgrendelen",
+        "deleteDetection": "Herkenning verwijderen"
+      },
       "noDetections": "Geen recente herkenning"
     },
     "errors": {

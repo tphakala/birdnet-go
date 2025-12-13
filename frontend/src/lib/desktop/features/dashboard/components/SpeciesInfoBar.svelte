@@ -14,6 +14,7 @@
   import { formatRelativeTime } from '$lib/utils/formatters';
   import { Check } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
+  import { t } from '$lib/i18n';
 
   interface Props {
     detection: Detection;
@@ -66,9 +67,9 @@
           <Check class="size-3" />
         </span>
       {:else if isFalsePositive}
-        <span class="false-positive-badge">false</span>
+        <span class="false-positive-badge">{t('dashboard.recentDetections.status.false')}</span>
       {:else}
-        <span class="unverified-badge">unverified</span>
+        <span class="unverified-badge">{t('dashboard.recentDetections.status.unverified')}</span>
       {/if}
     </div>
 

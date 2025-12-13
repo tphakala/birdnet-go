@@ -460,6 +460,15 @@
         "deleteDetection": "Delete Detection of {species}",
         "deleteDetectionConfirm": "Are you sure you want to delete detection of {species}? This action cannot be undone."
       },
+      "actions": {
+        "menuLabel": "Actions for {species}",
+        "review": "Review detection",
+        "showSpecies": "Show species",
+        "ignoreSpecies": "Ignore species",
+        "lockDetection": "Lock detection",
+        "unlockDetection": "Unlock detection",
+        "deleteDetection": "Delete detection"
+      },
       "noDetections": "No recent detections"
     },
     "errors": {

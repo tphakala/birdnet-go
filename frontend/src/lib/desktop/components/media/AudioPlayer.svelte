@@ -569,14 +569,6 @@
 
   // Spectrogram loading handlers
   const handleSpectrogramLoad = () => {
-    // eslint-disable-next-line no-console
-    console.log(`[AudioPlayer:${detectionId}] handleSpectrogramLoad: image loaded successfully`, {
-      loaderState: {
-        loading: spectrogramLoader.loading,
-        showSpinner: spectrogramLoader.showSpinner,
-        error: spectrogramLoader.error,
-      },
-    });
     debugLog('handleSpectrogramLoad: success');
     spectrogramLoader.setLoading(false);
     spectrogramRetryCount = 0; // Reset retry count on successful load
@@ -586,18 +578,6 @@
 
   const handleSpectrogramError = async (event: Event) => {
     const img = event.currentTarget as HTMLImageElement;
-
-    // eslint-disable-next-line no-console
-    console.log(`[AudioPlayer:${detectionId}] handleSpectrogramError: image failed to load`, {
-      src: img.src,
-      retryCount: spectrogramRetryCount,
-      mode: spectrogramMode,
-      loaderState: {
-        loading: spectrogramLoader.loading,
-        showSpinner: spectrogramLoader.showSpinner,
-        error: spectrogramLoader.error,
-      },
-    });
 
     debugLog('handleSpectrogramError: triggered', {
       retryCount: spectrogramRetryCount,
@@ -803,32 +783,21 @@
   let previousSpectrogramUrl = $state<string | null>(null);
 
   // Handle spectrogram URL changes with proper loading state
-  // DEBUG: Simplified loading logic - don't show spinner by default
   $effect(() => {
     // Only reset loading state if URL actually changed
     if (spectrogramUrl && spectrogramUrl !== previousSpectrogramUrl && !spectrogramLoader.error) {
-      // eslint-disable-next-line no-console
-      console.log(`[AudioPlayer:${detectionId}] spectrogramUrl changed:`, {
+      debugLog('spectrogramUrl changed', {
         from: previousSpectrogramUrl,
         to: spectrogramUrl,
-        imageComplete: spectrogramImage?.complete,
-        imageNaturalHeight: spectrogramImage?.naturalHeight,
       });
 
       previousSpectrogramUrl = spectrogramUrl;
-
-      // DEBUG: Skip checkSpectrogramMode for now - it fetches the URL which may cause issues
-      // checkSpectrogramMode();
 
       // Reset retry count and clear any pending retry timer for new spectrogram
       spectrogramRetryCount = 0;
       clearSpectrogramRetryTimer();
       // Abort any in-flight status polling when URL changes
       clearStatusPollTimer();
-
-      // DEBUG: Don't set loading state - let the image load naturally
-      // The onload/onerror handlers will manage the state
-      // spectrogramLoader.setLoading(true);
     }
   });
 
@@ -911,23 +880,14 @@
 
     // Check if spectrogram image is already loaded from cache on mount
     // This handles the race condition where image loads before effects run
-    // eslint-disable-next-line no-console
-    console.log(`[AudioPlayer:${detectionId}] onMount: checking spectrogram state`, {
+    debugLog('onMount: checking spectrogram state', {
       spectrogramUrl,
       spectrogramImageExists: !!spectrogramImage,
       imageComplete: spectrogramImage?.complete,
       imageNaturalHeight: spectrogramImage?.naturalHeight,
-      imageSrc: spectrogramImage?.src,
-      loaderState: {
-        loading: spectrogramLoader.loading,
-        showSpinner: spectrogramLoader.showSpinner,
-        error: spectrogramLoader.error,
-      },
     });
 
     if (spectrogramImage?.complete && spectrogramImage?.naturalHeight !== 0) {
-      // eslint-disable-next-line no-console
-      console.log(`[AudioPlayer:${detectionId}] onMount: spectrogram already loaded from cache`);
       debugLog('onMount: spectrogram already loaded from cache');
       spectrogramLoader.setLoading(false);
     }
@@ -947,12 +907,6 @@
 
   // Debug effect to track spectrogram loader state changes
   $effect(() => {
-    // eslint-disable-next-line no-console
-    console.log(`[AudioPlayer:${detectionId}] loader state changed:`, {
-      loading: spectrogramLoader.loading,
-      showSpinner: spectrogramLoader.showSpinner,
-      error: spectrogramLoader.error,
-    });
     debugLog('loader state changed', {
       loading: spectrogramLoader.loading,
       showSpinner: spectrogramLoader.showSpinner,
@@ -963,12 +917,6 @@
   // Debug effect to track spectrogram status changes
   $effect(() => {
     if (spectrogramStatus) {
-      // eslint-disable-next-line no-console
-      console.log(`[AudioPlayer:${detectionId}] spectrogram status changed:`, {
-        status: spectrogramStatus.status,
-        queuePosition: spectrogramStatus.queuePosition,
-        message: spectrogramStatus.message,
-      });
       debugLog('spectrogram status changed', {
         status: spectrogramStatus.status,
         queuePosition: spectrogramStatus.queuePosition,

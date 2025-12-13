@@ -459,6 +459,15 @@
         "deleteDetection": "Poista {species} havainto",
         "deleteDetectionConfirm": "Haluatko varmasti poistaa {species} havainnon? Tätä toimintoa ei voi peruuttaa."
       },
+      "actions": {
+        "menuLabel": "Toiminnot: {species}",
+        "review": "Tarkista havainto",
+        "showSpecies": "Näytä laji",
+        "ignoreSpecies": "Ohita laji",
+        "lockDetection": "Lukitse havainto",
+        "unlockDetection": "Avaa havainnon lukitus",
+        "deleteDetection": "Poista havainto"
+      },
       "noDetections": "Ei viimeaikaisia havaintoja"
     },
     "errors": {

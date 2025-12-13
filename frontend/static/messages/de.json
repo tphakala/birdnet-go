@@ -459,6 +459,15 @@
         "deleteDetection": "Erkennung von {species} löschen",
         "deleteDetectionConfirm": "Sind Sie sicher, dass Sie die Erkennung von {species} löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden."
       },
+      "actions": {
+        "menuLabel": "Aktionen für {species}",
+        "review": "Erkennung überprüfen",
+        "showSpecies": "Art anzeigen",
+        "ignoreSpecies": "Art ignorieren",
+        "lockDetection": "Erkennung sperren",
+        "unlockDetection": "Erkennung entsperren",
+        "deleteDetection": "Erkennung löschen"
+      },
       "noDetections": "Keine aktuellen Erkennungen"
     },
     "errors": {

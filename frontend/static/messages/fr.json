@@ -459,6 +459,15 @@
         "deleteDetection": "Supprimer la détection de {species}",
         "deleteDetectionConfirm": "Êtes-vous sûr de vouloir supprimer la détection de {species} ? Cette action est irréversible."
       },
+      "actions": {
+        "menuLabel": "Actions pour {species}",
+        "review": "Examiner la détection",
+        "showSpecies": "Afficher l'espèce",
+        "ignoreSpecies": "Ignorer l'espèce",
+        "lockDetection": "Verrouiller la détection",
+        "unlockDetection": "Déverrouiller la détection",
+        "deleteDetection": "Supprimer la détection"
+      },
       "noDetections": "Aucune détection récente"
     },
     "errors": {

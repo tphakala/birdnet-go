@@ -153,7 +153,7 @@
     bind:this={buttonElement}
     onclick={handleOpen}
     class="menu-trigger"
-    aria-label="Actions menu"
+    aria-label={t('dashboard.recentDetections.actions.menuLabel', { species: detection.commonName })}
     aria-haspopup="true"
     aria-expanded={isOpen}
   >
@@ -165,7 +165,7 @@
       <li>
         <button onclick={() => handleAction(onReview)} class="menu-item" role="menuitem">
           <SquarePen class="size-4" />
-          <span>Review detection</span>
+          <span>{t('dashboard.recentDetections.actions.review')}</span>
           {#if detection.review?.verified === 'correct'}
             <span class="badge badge-success badge-sm">✓</span>
           {:else if detection.review?.verified === 'false_positive'}
@@ -178,10 +178,10 @@
         <button onclick={() => handleAction(onToggleSpecies)} class="menu-item" role="menuitem">
           {#if isExcluded}
             <Eye class="size-4" />
-            <span>Show species</span>
+            <span>{t('dashboard.recentDetections.actions.showSpecies')}</span>
           {:else}
             <EyeOff class="size-4" />
-            <span>Ignore species</span>
+            <span>{t('dashboard.recentDetections.actions.ignoreSpecies')}</span>
           {/if}
         </button>
       </li>
@@ -190,10 +190,10 @@
         <button onclick={() => handleAction(onToggleLock)} class="menu-item" role="menuitem">
           {#if detection.locked}
             <Lock class="size-4" />
-            <span>Unlock detection</span>
+            <span>{t('dashboard.recentDetections.actions.unlockDetection')}</span>
           {:else}
             <LockOpen class="size-4" />
-            <span>Lock detection</span>
+            <span>{t('dashboard.recentDetections.actions.lockDetection')}</span>
           {/if}
         </button>
       </li>
@@ -214,7 +214,7 @@
             role="menuitem"
           >
             <Trash2 class="size-4" />
-            <span>Delete detection</span>
+            <span>{t('dashboard.recentDetections.actions.deleteDetection')}</span>
           </button>
         </li>
       {/if}
@@ -284,12 +284,12 @@
     background-color: var(--color-base-200);
   }
 
-  .delete-item {
-    color: rgb(248 113 113);
-  }
-
   .delete-item:hover {
     background-color: rgb(239 68 68 / 0.15);
+  }
+
+  :global([data-theme='light']) .delete-item:hover {
+    background-color: rgb(239 68 68 / 0.1);
   }
 
   .menu-separator {

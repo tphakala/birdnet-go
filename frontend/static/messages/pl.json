@@ -459,6 +459,15 @@
         "deleteDetection": "Usuń Detekcję {species}",
         "deleteDetectionConfirm": "Czy na pewno chcesz usunąć detekcję {species}? Ta akcja nie może być cofnięta."
       },
+      "actions": {
+        "menuLabel": "Akcje dla {species}",
+        "review": "Przegląd detekcji",
+        "showSpecies": "Pokaż gatunek",
+        "ignoreSpecies": "Ignoruj gatunek",
+        "lockDetection": "Zablokuj detekcję",
+        "unlockDetection": "Odblokuj detekcję",
+        "deleteDetection": "Usuń detekcję"
+      },
       "noDetections": "Brak ostatnich detekcji"
     },
     "errors": {

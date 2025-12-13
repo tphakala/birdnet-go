@@ -459,6 +459,15 @@
         "deleteDetection": "Excluir detecção de {species}",
         "deleteDetectionConfirm": "Tem certeza de que deseja excluir a detecção de {species}? Esta ação não pode ser desfeita."
       },
+      "actions": {
+        "menuLabel": "Ações para {species}",
+        "review": "Revisar detecção",
+        "showSpecies": "Mostrar espécie",
+        "ignoreSpecies": "Ignorar espécie",
+        "lockDetection": "Bloquear detecção",
+        "unlockDetection": "Desbloquear detecção",
+        "deleteDetection": "Excluir detecção"
+      },
       "noDetections": "Nenhuma detecção recente"
     },
     "errors": {
