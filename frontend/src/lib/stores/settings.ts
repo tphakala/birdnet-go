@@ -462,6 +462,65 @@ export interface SentrySettings {
   includePrivateInfo?: boolean;
 }
 
+// Push notification provider filter configuration
+export interface PushFilterConfig {
+  types?: string[]; // 'detection', 'error', 'warning', 'info', 'system'
+  priorities?: string[];
+  components?: string[];
+}
+
+// Webhook authentication configuration
+export interface WebhookAuthConfig {
+  type: 'none' | 'bearer' | 'basic' | 'custom';
+  token?: string; // For bearer auth
+  user?: string; // For basic auth
+  pass?: string; // For basic auth
+  header?: string; // For custom auth
+  value?: string; // For custom auth
+}
+
+// Webhook endpoint configuration
+export interface WebhookEndpointConfig {
+  url: string;
+  method?: string; // POST, PUT, PATCH (default: POST)
+  headers?: Record<string, string>;
+  timeout?: number;
+  auth?: WebhookAuthConfig;
+}
+
+// Push provider configuration (shoutrrr type for user-friendly UI)
+export interface PushProviderConfig {
+  type: 'shoutrrr' | 'webhook' | 'script';
+  enabled: boolean;
+  name: string;
+  urls?: string[]; // For shoutrrr providers
+  endpoints?: WebhookEndpointConfig[]; // For webhook providers
+  filter?: PushFilterConfig;
+  timeout?: number;
+}
+
+// Push settings for notification delivery
+export interface PushSettings {
+  enabled: boolean;
+  providers?: PushProviderConfig[];
+}
+
+// Notification templates
+export interface NewSpeciesTemplate {
+  title: string;
+  message: string;
+}
+
+export interface NotificationTemplates {
+  newSpecies?: NewSpeciesTemplate;
+}
+
+// Main notification settings structure
+export interface NotificationSettings {
+  push?: PushSettings;
+  templates?: NotificationTemplates;
+}
+
 // Main settings form data interface - EXACTLY matching backend structure
 export interface SettingsFormData {
   debug?: boolean;
@@ -477,6 +536,7 @@ export interface SettingsFormData {
   sentry?: SentrySettings;
   output?: OutputSettings;
   backup?: BackupSettings;
+  notification?: NotificationSettings;
 }
 
 // Global settings state interface
@@ -735,6 +795,8 @@ export const sentrySettings = derived(settingsStore, $store => $store.formData.s
 export const rtspSettings = derived(settingsStore, $store => $store.formData.realtime?.rtsp);
 
 export const outputSettings = derived(settingsStore, $store => $store.formData.output);
+
+export const notificationSettings = derived(settingsStore, $store => $store.formData.notification);
 
 export const integrationSettings = derived(settingsStore, $store => ({
   birdweather: $store.formData.realtime?.birdweather,
