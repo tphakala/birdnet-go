@@ -21,7 +21,7 @@
   import type { ToastMessage, ToastPosition } from '$lib/stores/toast';
   import { safeGet } from '$lib/utils/security';
 
-  // Group toasts by position using Map to avoid object injection
+  // Group toasts by position using Record with pre-initialized keys
   const toastsByPosition = $derived.by(() => {
     const result: Record<ToastPosition, ToastMessage[]> = {
       'top-left': [],
@@ -34,10 +34,8 @@
 
     for (const toast of $toasts) {
       const position = toast.position || 'top-right';
-      const existingToasts = safeGet(result, position, []);
-      if (existingToasts) {
-        existingToasts.push(toast);
-      }
+      // eslint-disable-next-line security/detect-object-injection -- Safe: position is guaranteed to be a valid ToastPosition key (either from toast.position or defaulting to 'top-right')
+      result[position].push(toast);
     }
 
     return result;

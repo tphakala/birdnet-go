@@ -483,7 +483,7 @@
             <!-- Errors -->
             {#if parsedSearch.errors.length > 0}
               <div class="space-y-1 mb-2">
-                {#each parsedSearch.errors as error (`error-${error}`)}
+                {#each parsedSearch.errors as error, index (`error-${index}`)}
                   <div class="alert alert-error alert-sm">
                     <TriangleAlert class="size-4" />
                     <span class="text-xs">{error}</span>
