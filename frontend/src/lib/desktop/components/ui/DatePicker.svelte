@@ -476,7 +476,7 @@ Accessibility:
   {#if showCalendar}
     <div
       bind:this={calendarRef}
-      class="absolute z-50 mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg p-4 min-w-[280px]"
+      class="absolute right-0 z-50 mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg p-4 min-w-[280px]"
       role="dialog"
       aria-label={t('common.aria.datePickerCalendar')}
     >
