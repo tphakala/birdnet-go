@@ -88,7 +88,7 @@
   const showWindSpeedGroup = $derived(containerWidth === 0 || containerWidth >= 100); // Hide wind speed on narrow
 
   // Get the appropriate unit labels based on the units setting
-  const temperatureUnit = $derived(() => {
+  const temperatureUnit = $derived.by(() => {
     switch (units) {
       case 'imperial':
         return '°F';
@@ -99,9 +99,7 @@
     }
   });
 
-  const windSpeedUnit = $derived(() => {
-    return units === 'imperial' ? 'mph' : 'm/s';
-  });
+  const windSpeedUnit = $derived(units === 'imperial' ? 'mph' : 'm/s');
 
   // Weather icon mapping
   const weatherIconMap: Record<string, { day: string; night: string; description: string }> = {
@@ -117,7 +115,7 @@
   };
 
   // Extract base weather code
-  const weatherCode = $derived(() => {
+  const weatherCode = $derived.by(() => {
     if (!weatherIcon || typeof weatherIcon !== 'string') return '';
     const match = weatherIcon.match(/^(\d{2})[dn]?$/);
     return match ? match[1] : '';
@@ -128,7 +126,7 @@
 
   // Get weather emoji and description
   const weatherInfo = $derived(
-    safeGet(weatherIconMap, weatherCode(), {
+    safeGet(weatherIconMap, weatherCode, {
       day: '❓',
       night: '❓',
       description: weatherDescription || 'Unknown',
@@ -168,7 +166,7 @@
   );
 
   // Get appropriate wind icon opacity based on wind speed
-  const getWindOpacity = $derived(() => {
+  const getWindOpacity = $derived.by(() => {
     if (windSpeed === undefined) return '';
     if (windSpeed < 3) return 'opacity-50'; // Light wind: 0-3 m/s
     if (windSpeed < 8) return 'opacity-75'; // Moderate wind: 3-8 m/s
@@ -237,7 +235,7 @@
         <span
           class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content/70 whitespace-nowrap')}
         >
-          {temperature.toFixed(1)}{temperatureUnit()}
+          {temperature.toFixed(1)}{temperatureUnit}
         </span>
       </div>
     {/if}
@@ -248,7 +246,7 @@
         <!-- Wind Speed Icon -->
         {#if SHOW_WINDSPEED_ICON}
           <Wind
-            class={cn(safeGet(sizeClasses, size, ''), getWindOpacity(), 'shrink-0')}
+            class={cn(safeGet(sizeClasses, size, ''), getWindOpacity, 'shrink-0')}
             aria-label={`Wind speed: ${windSpeed.toFixed(1)} m/s`}
           />
         {/if}
@@ -258,7 +256,7 @@
           {windSpeed.toFixed(0)}{windGust !== undefined && windGust > windSpeed
             ? `(${windGust.toFixed(0)})`
             : ''}
-          {windSpeedUnit()}
+          {windSpeedUnit}
         </span>
       </div>
     {/if}

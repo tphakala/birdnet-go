@@ -94,7 +94,7 @@
         : []
   );
 
-  let filteredOptions = $derived(() => {
+  let filteredOptions = $derived.by(() => {
     if (!searchable || !searchQuery) return options;
 
     const query = searchQuery.toLowerCase();
@@ -106,10 +106,10 @@
     );
   });
 
-  let groupedOptions = $derived(() => {
-    if (!groupBy) return { '': filteredOptions() };
+  let groupedOptions = $derived.by(() => {
+    if (!groupBy) return { '': filteredOptions };
 
-    return filteredOptions().reduce(
+    return filteredOptions.reduce(
       (groups, option) => {
         const group = option.group || '';
         const existingGroup = safeGet(groups, group, []);
@@ -126,7 +126,7 @@
       (value && Array.isArray(value) ? (value as string[]).length : 0) < maxSelections
   );
 
-  let displayText = $derived(() => {
+  let displayText = $derived.by(() => {
     if (selectedOptions.length === 0) return placeholder;
     if (multiple) {
       return `${selectedOptions.length} selected`;
@@ -193,7 +193,7 @@
   }
 
   function handleKeyDown(event: KeyboardEvent) {
-    const allOptions = filteredOptions();
+    const allOptions = filteredOptions;
 
     switch (event.key) {
       case 'Escape':
@@ -315,7 +315,7 @@
         {#if renderSelected && selectedOptions.length > 0}
           {@render renderSelected(selectedOptions)}
         {:else}
-          {displayText()}
+          {displayText}
         {/if}
       </span>
 
@@ -381,19 +381,19 @@
           id="{fieldId}-listbox"
           aria-labelledby={label ? `${fieldId}-label` : undefined}
         >
-          {#if filteredOptions().length === 0}
+          {#if filteredOptions.length === 0}
             <div class="p-4 text-center text-base-content opacity-60">No options found</div>
           {:else}
-            {@const flatOptions = filteredOptions()}
+            {@const flatOptions = filteredOptions}
             {@const optionIndexMap = new Map(flatOptions.map((option, index) => [option, index]))}
-            {#each Object.entries(groupedOptions()) as [group, groupOptions]}
+            {#each Object.entries(groupedOptions) as [group, options] (group)}
               {#if group && groupBy}
                 <div class="px-3 py-2 text-xs font-semibold text-base-content opacity-60 uppercase">
                   {group}
                 </div>
               {/if}
 
-              {#each groupOptions as option}
+              {#each options as option (option.value)}
                 {@const flatIndex = optionIndexMap.get(option) ?? -1}
                 <button
                   type="button"

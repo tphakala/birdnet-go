@@ -190,7 +190,7 @@
 
   // Memoized today value - only recalculates when component mounts or when day changes
   // This prevents unnecessary recalculations on every state change
-  const today = $derived(() => {
+  const today = $derived.by(() => {
     // Force recalculation periodically to handle day changes
     // Using Math.floor to update once per day
     const daysSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
@@ -200,9 +200,9 @@
   });
 
   // Optimized reactive date constraints - only recalculate when relevant dependencies change
-  const startDateConstraints = $derived(() => {
+  const startDateConstraints = $derived.by(() => {
     // Only depends on: dateRange.end and today
-    const todayValue = today();
+    const todayValue = today;
     const endDate = dateRange.end;
 
     const constraints: { maxDate?: string; minDate?: string } = {};
@@ -217,9 +217,9 @@
     return constraints;
   });
 
-  const endDateConstraints = $derived(() => {
+  const endDateConstraints = $derived.by(() => {
     // Only depends on: dateRange.start and today
-    const todayValue = today();
+    const todayValue = today;
     const startDate = dateRange.start;
 
     const constraints: { maxDate?: string; minDate?: string } = {
@@ -328,8 +328,8 @@
                 placeholder={t('search.fields.from')}
                 className="w-full"
                 size="md"
-                maxDate={startDateConstraints().maxDate}
-                minDate={startDateConstraints().minDate}
+                maxDate={startDateConstraints.maxDate}
+                minDate={startDateConstraints.minDate}
               />
               <DatePicker
                 value={dateRange.end}
@@ -337,8 +337,8 @@
                 placeholder={t('search.fields.to')}
                 className="w-full"
                 size="md"
-                maxDate={endDateConstraints().maxDate}
-                minDate={endDateConstraints().minDate}
+                maxDate={endDateConstraints.maxDate}
+                minDate={endDateConstraints.minDate}
               />
             </div>
             {#if showTooltip === 'dateRange'}

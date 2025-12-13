@@ -98,7 +98,7 @@
   let effectiveButtonSize = $derived(buttonSize || size);
 
   // Validation state
-  let isValid = $derived(() => {
+  let isValid = $derived.by(() => {
     if (!inputElement || !touched) return true;
     return inputElement.validity.valid;
   });

@@ -96,7 +96,7 @@
     <!-- Data loaded state -->
     {#if !isLoading && !error && items.length > 0}
       <div class="space-y-4" aria-labelledby={headingId}>
-        {#each items as item}
+        {#each items as item (item.label)}
           <div>
             <!-- Title and usage - optimized for card width -->
             <div class="flex flex-col lg:flex-row lg:justify-between mb-2 gap-1">

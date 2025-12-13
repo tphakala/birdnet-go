@@ -22,7 +22,7 @@
   import { safeGet } from '$lib/utils/security';
 
   // Group toasts by position using Map to avoid object injection
-  const toastsByPosition = $derived(() => {
+  const toastsByPosition = $derived.by(() => {
     const result: Record<ToastPosition, ToastMessage[]> = {
       'top-left': [],
       'top-center': [],
@@ -59,7 +59,7 @@
 </script>
 
 <!-- Render toast containers for each position that has toasts -->
-{#each Object.entries(toastsByPosition()) as [position, positionToasts]}
+{#each Object.entries(toastsByPosition) as [position, positionToasts] (position)}
   <div
     class="fixed z-50 pointer-events-none {safeGet(positionClasses, position as ToastPosition, '')}"
     role="region"

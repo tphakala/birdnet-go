@@ -68,7 +68,7 @@
   let themeUnsubscribe: (() => void) | null = null;
 
   // Computed properties
-  const dimensions = $derived(() => {
+  const dimensions = $derived.by(() => {
     return createResponsiveScales({
       containerWidth,
       containerHeight,
@@ -169,7 +169,7 @@
       return null;
     }
 
-    const dims = dimensions();
+    const dims = dimensions;
     const context = {
       svg,
       chartGroup,

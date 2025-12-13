@@ -94,7 +94,7 @@ Accessibility:
 
   // Validation state
   const isValueValid = $derived(isValidDate(value));
-  const validationError = $derived(() => {
+  const validationError = $derived.by(() => {
     if (!value) return null;
     if (!isValidDateFormat(value)) {
       return t('components.datePicker.feedback.invalidDateFormat');
@@ -126,7 +126,7 @@ Accessibility:
   let ariaMessage = $state<string>('');
 
   // Get the selected date as a Date object (use noon to avoid timezone shifts)
-  const selectedDate = $derived(() => {
+  const selectedDate = $derived.by(() => {
     if (!value || !isValueValid) return null;
     try {
       return new Date(value + 'T12:00:00');
@@ -136,16 +136,14 @@ Accessibility:
   });
 
   // Format the display text
-  const displayText = $derived(() => {
-    if (validationError()) {
+  const displayText = $derived.by(() => {
+    if (validationError) {
       return t('common.validation.invalid');
     }
-    if (!selectedDate()) return placeholder;
+    if (!selectedDate) return placeholder;
 
     try {
-      const date = selectedDate();
-      if (!date) return placeholder;
-      return date.toLocaleDateString(undefined, {
+      return selectedDate.toLocaleDateString(undefined, {
         weekday: 'short',
         year: 'numeric',
         month: 'short',
@@ -165,7 +163,7 @@ Accessibility:
   );
 
   // Get calendar days
-  const calendarDays = $derived(() => {
+  const calendarDays = $derived.by(() => {
     const year = displayMonth.getFullYear();
     const month = displayMonth.getMonth();
     const firstDay = new Date(year, month, 1);
@@ -203,7 +201,7 @@ Accessibility:
   // Check if a date is selected
   function isDateSelected(date: Date): boolean {
     if (!date) return false;
-    const selected = selectedDate();
+    const selected = selectedDate;
     if (!selected) return false;
     return date.toDateString() === selected.toDateString();
   }
@@ -250,7 +248,7 @@ Accessibility:
       ? t('components.datePicker.aria.calendarOpened')
       : t('components.datePicker.aria.calendarClosed');
     if (opening) {
-      focusedDate = selectedDate() || new Date();
+      focusedDate = selectedDate || new Date();
     }
   }
 
@@ -261,7 +259,7 @@ Accessibility:
         event.preventDefault();
         toggleCalendar();
         // Set initial focus to selected date or today
-        const initialFocus = selectedDate() || new Date();
+        const initialFocus = selectedDate || new Date();
         focusedDate = initialFocus;
         ariaMessage = t('components.datePicker.aria.calendarOpened');
       }
@@ -269,7 +267,7 @@ Accessibility:
     }
 
     // Handle keyboard navigation within calendar
-    const currentFocus = focusedDate || selectedDate() || new Date();
+    const currentFocus = focusedDate || selectedDate || new Date();
     let newFocus: Date | null = null;
     let handled = true;
 
@@ -404,7 +402,7 @@ Accessibility:
   );
 
   // Map size prop to padding/text size classes
-  const sizeClass = $derived(() => {
+  const sizeClass = $derived.by(() => {
     switch (size) {
       case 'xs':
         return 'px-2 py-1 text-xs';
@@ -426,7 +424,7 @@ Accessibility:
     bind:this={buttonRef}
     type="button"
     {...restProps}
-    class={cn('datepicker-trigger', sizeClass(), disabled && 'opacity-50 cursor-not-allowed')}
+    class={cn('datepicker-trigger', sizeClass, disabled && 'opacity-50 cursor-not-allowed')}
     onclick={toggleCalendar}
     onkeydown={handleKeyDown}
     {disabled}
@@ -435,13 +433,13 @@ Accessibility:
     aria-haspopup="true"
   >
     <Calendar class="size-4" />
-    <span class="truncate leading-normal">{displayText()}</span>
+    <span class="truncate leading-normal">{displayText}</span>
   </button>
 
   <!-- Validation Error Display -->
-  {#if validationError()}
+  {#if validationError}
     <div class="datepicker-error" role="alert">
-      {validationError()}
+      {validationError}
     </div>
   {/if}
 
@@ -499,7 +497,7 @@ Accessibility:
 
       <!-- Week Days -->
       <div class="grid grid-cols-7 gap-1 mb-2">
-        {#each weekDays as day}
+        {#each weekDays as day (day)}
           <div class="datepicker-weekday">
             {day}
           </div>
@@ -513,7 +511,7 @@ Accessibility:
         aria-labelledby="month-year-heading"
         aria-describedby="calendar-instructions"
       >
-        {#each calendarDays() as date, i (date ? date.getTime() : `empty-${i}`)}
+        {#each calendarDays as date, i (date ? date.getTime() : `empty-${i}`)}
           {#if date}
             <button
               type="button"
@@ -530,7 +528,7 @@ Accessibility:
               tabindex={// Only the focused date (or selected date, or today if no focus) should be tabbable
               (focusedDate && focusedDate.toDateString() === date.toDateString()) ||
               (!focusedDate && isDateSelected(date)) ||
-              (!focusedDate && !selectedDate() && isToday(date))
+              (!focusedDate && !selectedDate && isToday(date))
                 ? 0
                 : -1}
               onclick={() => selectDate(date)}

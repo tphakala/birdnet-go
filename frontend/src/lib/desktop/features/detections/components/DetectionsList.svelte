@@ -61,7 +61,7 @@
   }: Props = $props();
 
   // Generate title based on query type
-  const title = $derived(() => {
+  const title = $derived.by(() => {
     if (!data) return t('detections.title');
 
     switch (data.queryType) {
@@ -118,7 +118,7 @@
     <div class="flex justify-between items-center">
       <!-- Title -->
       <span class="card-title grow text-base sm:text-xl">
-        {title()}
+        {title}
       </span>
 
       <!-- Number of results selector -->
@@ -190,7 +190,7 @@
           </tr>
         </thead>
         <tbody class="divide-y divide-base-200">
-          {#each data.notes as detection}
+          {#each data.notes as detection (detection.id)}
             <tr>
               <DetectionRow {detection} {onDetailsClick} {onRefresh} />
             </tr>

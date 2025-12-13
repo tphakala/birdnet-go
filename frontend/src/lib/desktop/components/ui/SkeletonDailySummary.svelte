@@ -86,13 +86,13 @@ Features:
               <div class="h-4 bg-base-300 rounded-sm w-20 animate-pulse"></div>
             </th>
             <!-- Hourly headers skeleton -->
-            {#each Array(24) as _}
+            {#each Array(24) as _, i (i)}
               <th class="px-0 hour-header hourly-count text-center" role="columnheader">
                 <div class="h-4 bg-base-300 rounded-sm w-6 mx-auto animate-pulse"></div>
               </th>
             {/each}
             <!-- Bi-hourly headers skeleton -->
-            {#each Array(12) as _}
+            {#each Array(12) as _, i (i)}
               <th
                 class="px-0 hour-header bi-hourly-count bi-hourly text-center"
                 role="columnheader"
@@ -101,7 +101,7 @@ Features:
               </th>
             {/each}
             <!-- Six-hourly headers skeleton -->
-            {#each Array(4) as _}
+            {#each Array(4) as _, i (i)}
               <th
                 class="px-0 hour-header six-hourly-count six-hourly text-center"
                 role="columnheader"
@@ -112,7 +112,7 @@ Features:
           </tr>
         </thead>
         <tbody>
-          {#each skeletonSpecies as species}
+          {#each skeletonSpecies as species (species.id)}
             <tr class="hover">
               <!-- Species name skeleton -->
               <td class="py-0 px-2 sm:px-4" role="cell">
@@ -135,7 +135,7 @@ Features:
               </td>
 
               <!-- Hourly counts skeleton -->
-              {#each Array(24) as _}
+              {#each Array(24) as _, i (i)}
                 <td
                   class="hour-data hourly-count text-center py-0 px-0 heatmap-color-0"
                   role="cell"
@@ -145,7 +145,7 @@ Features:
               {/each}
 
               <!-- Bi-hourly counts skeleton -->
-              {#each Array(12) as _}
+              {#each Array(12) as _, i (i)}
                 <td
                   class="hour-data bi-hourly-count bi-hourly text-center py-0 px-0 heatmap-color-0"
                   role="cell"
@@ -155,7 +155,7 @@ Features:
               {/each}
 
               <!-- Six-hourly counts skeleton -->
-              {#each Array(4) as _}
+              {#each Array(4) as _, i (i)}
                 <td
                   class="hour-data six-hourly-count six-hourly text-center py-0 px-0 heatmap-color-0"
                   role="cell"

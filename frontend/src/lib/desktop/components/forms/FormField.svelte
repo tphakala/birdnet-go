@@ -158,7 +158,7 @@
   }
 
   // Reactive error message that translates on locale change
-  let displayError = $derived(() => {
+  let displayError = $derived.by(() => {
     if (!error) return null;
 
     // Check if error is a translation key object with optional parameters
@@ -305,7 +305,7 @@
           onfocus={handleFocus}
           {onkeydown}
         >
-          {#each options as option}
+          {#each options as option (option.value)}
             <option value={option.value} disabled={option.disabled}>
               {option.label}
             </option>
@@ -328,7 +328,7 @@
           {#if !required}
             <option value="">{t('forms.labels.selectOption')}</option>
           {/if}
-          {#each options as option}
+          {#each options as option (option.value)}
             <option value={option.value} disabled={option.disabled}>
               {option.label}
             </option>
@@ -438,7 +438,7 @@
 
   {#if error && (touched || externalError)}
     <div class="label">
-      <span id={errorId} class={cn('text-xs text-error', errorClassName)}>{displayError()}</span>
+      <span id={errorId} class={cn('text-xs text-error', errorClassName)}>{displayError}</span>
     </div>
   {:else if helpText}
     <span id={helpTextId} class="help-text">{helpText}</span>

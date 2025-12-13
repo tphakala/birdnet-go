@@ -45,7 +45,7 @@
   let tooltip: ChartTooltip | null = null;
 
   // Prepare data with colors
-  const chartData = $derived(() => {
+  const chartData = $derived.by(() => {
     if (!data.length) return [];
 
     const currentTheme = getCurrentTheme();
@@ -60,11 +60,11 @@
   });
 
   // Get visible species data
-  const visibleData = $derived(() => chartData().filter(s => s.visible));
+  const visibleData = $derived(chartData.filter(s => s.visible));
 
   // Calculate scales
-  const scales = $derived(() => {
-    const visible = visibleData();
+  const scales = $derived.by(() => {
+    const visible = visibleData;
     if (!visible.length) return null;
 
     const maxCount =
@@ -100,8 +100,8 @@
     // Store context for later use
     chartContext = context;
 
-    const currentScales = scales();
-    if (!currentScales || !visibleData().length) {
+    const currentScales = scales;
+    if (!currentScales || !visibleData.length) {
       // Clear existing content
       if (context.chartGroup) {
         context.chartGroup.selectAll('*').remove();
@@ -191,7 +191,7 @@
 
     const speciesLines = linesGroup
       .selectAll<globalThis.SVGPathElement, SpeciesTimeData>('.species-line')
-      .data<SpeciesTimeData>(visibleData(), d => d.species);
+      .data<SpeciesTimeData>(visibleData, d => d.species);
 
     // Enter new lines
     speciesLines
@@ -220,7 +220,7 @@
     // Add data points for better interaction
     const pointsGroup = chartGroup.append('g').attr('class', 'points');
 
-    visibleData().forEach(species => {
+    visibleData.forEach(species => {
       const speciesPoints = pointsGroup
         .selectAll(`.points-${species.species.replace(/\s+/g, '-')}`)
         .data(species.data);
@@ -278,7 +278,7 @@
           // hoveredHour = hour;
 
           // Show crosshair tooltip with all species data at this hour
-          const hourData = visibleData()
+          const hourData = visibleData
             .map(species => {
               const hourPoint = species.data.find(d => d.hour === hour);
               return hourPoint
@@ -313,7 +313,7 @@
     });
 
     // Create legend
-    const legendItems = visibleData().map(species => ({
+    const legendItems = visibleData.map(species => ({
       id: species.species,
       label: species.commonName,
       color: species.color ?? '#999999',
@@ -326,7 +326,7 @@
         position: { x: innerWidth - 150, y: 20 },
         itemHeight: 20,
         onToggle: (id, visible) => {
-          const species = visibleData().find(s => s.species === id);
+          const species = visibleData.find(s => s.species === id);
           if (species) {
             onSpeciesToggle?.(species.species, visible);
           }
@@ -346,8 +346,8 @@
     // Force evaluation of reactive dependencies by accessing them
     // These assignments are CRITICAL - they make the effect track these values
     const currentData = data; // Track the data prop changes
-    const visible = visibleData(); // Track computed visible data
-    const chartScales = scales(); // Track scale changes
+    const visible = visibleData; // Track computed visible data
+    const chartScales = scales; // Track scale changes
     const ctx = chartContext; // Get the D3 context from snippet
 
     // CRITICAL: Force reactive dependency tracking without logging
