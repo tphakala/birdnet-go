@@ -467,7 +467,7 @@
         "showSpecies": "Näytä laji",
         "ignoreSpecies": "Ohita laji",
         "lockDetection": "Lukitse havainto",
-        "unlockDetection": "Poista lukitus",
+        "unlockDetection": "Avaa lukitus",
         "deleteDetection": "Poista havainto"
       },
       "noDetections": "Ei viimeaikaisia havaintoja"

@@ -184,18 +184,19 @@ Responsive Breakpoints:
         logger.warn(errorMsg);
         return null;
       }
-      const data = await response.json();
+      const responseData = await response.json();
       const sunTimesData: SunTimes = {
-        sunrise: data.sunrise,
-        sunset: data.sunset,
+        sunrise: responseData.sunrise,
+        sunset: responseData.sunset,
       };
 
       // Cache the result
       sunTimesCache.set(date, sunTimesData);
 
       return sunTimesData;
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error fetching sun times';
+    } catch (fetchError) {
+      const errorMsg =
+        fetchError instanceof Error ? fetchError.message : 'Unknown error fetching sun times';
       logger.warn('Error fetching sun times:', errorMsg);
       return null;
     }
@@ -216,18 +217,20 @@ Responsive Breakpoints:
     try {
       const date = new Date(timeStr);
       return date.getHours();
-    } catch (error) {
-      logger.error('Error parsing time', error, { timeStr });
+    } catch (parseError) {
+      logger.error('Error parsing time', parseError, { timeStr });
       return null;
     }
   };
 
+  // Pre-computed sunrise/sunset hours to avoid recalculating in template loops
+  const sunriseHour = $derived(sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null);
+  const sunsetHour = $derived(sunTimes ? getSunHourFromTime(sunTimes.sunset) : null);
+
   // Get daylight class for an hour based on its position relative to sunrise/sunset
   // Returns: 'deep-night', 'night', 'pre-dawn', 'sunrise', 'early-day', 'day', 'mid-day', 'late-day', 'sunset', 'dusk', 'evening'
   const getDaylightClass = (hour: number): string => {
-    if (!sunTimes) return 'night';
-    const sunriseHour = getSunHourFromTime(sunTimes.sunrise);
-    const sunsetHour = getSunHourFromTime(sunTimes.sunset);
+    // Use pre-computed derived values for performance
     if (sunriseHour === null || sunsetHour === null) return 'night';
 
     // Sunrise hour - special gradient
@@ -287,7 +290,8 @@ Responsive Breakpoints:
 
   // Get initials from species common name (first letter of first two words)
   const getSpeciesInitials = (commonName: string): string => {
-    const words = commonName.trim().split(/\s+/);
+    const words = commonName.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return '??';
     if (words.length === 1) {
       return words[0].substring(0, 2).toUpperCase();
     }
@@ -598,7 +602,7 @@ Responsive Breakpoints:
   <SkeletonDailySummary {showThumbnails} showSpinner={showDelayedIndicator} speciesCount={8} />
 {:else if loadingPhase === 'error'}
   <section
-    class="card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100 overflow-visible"
+    class="daily-summary-card card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100 overflow-visible"
   >
     <div class="px-6 py-4 border-b border-base-200 overflow-visible">
       <div class="flex items-center justify-between overflow-visible">
@@ -618,7 +622,7 @@ Responsive Breakpoints:
   </section>
 {:else if loadingPhase === 'loaded'}
   <section
-    class="card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100 overflow-visible"
+    class="daily-summary-card card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100 overflow-visible"
   >
     <!-- Card Header with Date Navigation -->
     <div class="px-6 py-4 border-b border-base-200 overflow-visible">
@@ -644,9 +648,7 @@ Responsive Breakpoints:
             </div>
             <!-- Hourly daylight (desktop) -->
             <div class="hourly-grid flex-1 grid">
-              {#each Array(24) as _, hour}
-                {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
-                {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
+              {#each Array(24) as _, hour (hour)}
                 {@const daylightClass = getDaylightClass(hour)}
                 <div
                   class="h-5 rounded-sm daylight-cell daylight-{daylightClass} relative flex items-center justify-center"
@@ -658,13 +660,16 @@ Responsive Breakpoints:
             </div>
             <!-- Bi-hourly daylight (tablet/mobile) -->
             <div class="bi-hourly-grid flex-1 grid">
-              {#each Array(12) as _, i}
+              {#each Array(12) as _, i (i)}
                 {@const hour = i * 2}
-                {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
-                {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
                 {@const daylightClass = getDaylightClass(hour)}
-                {@const showSunrise = sunriseHour !== null && hour <= sunriseHour && sunriseHour < hour + 2}
-                {@const showSunset = sunsetHour !== null && hour <= sunsetHour && sunsetHour < hour + 2 && !showSunrise}
+                {@const showSunrise =
+                  sunriseHour !== null && hour <= sunriseHour && sunriseHour < hour + 2}
+                {@const showSunset =
+                  sunsetHour !== null &&
+                  hour <= sunsetHour &&
+                  sunsetHour < hour + 2 &&
+                  !showSunrise}
                 <div
                   class="h-5 rounded-sm daylight-cell daylight-{daylightClass} relative flex items-center justify-center"
                 >
@@ -675,13 +680,16 @@ Responsive Breakpoints:
             </div>
             <!-- Six-hourly daylight (small mobile) -->
             <div class="six-hourly-grid flex-1 grid">
-              {#each Array(4) as _, i}
+              {#each Array(4) as _, i (i)}
                 {@const hour = i * 6}
-                {@const sunriseHour = sunTimes ? getSunHourFromTime(sunTimes.sunrise) : null}
-                {@const sunsetHour = sunTimes ? getSunHourFromTime(sunTimes.sunset) : null}
                 {@const daylightClass = getDaylightClass(hour)}
-                {@const showSunrise = sunriseHour !== null && hour <= sunriseHour && sunriseHour < hour + 6}
-                {@const showSunset = sunsetHour !== null && hour <= sunsetHour && sunsetHour < hour + 6 && !showSunrise}
+                {@const showSunrise =
+                  sunriseHour !== null && hour <= sunriseHour && sunriseHour < hour + 6}
+                {@const showSunset =
+                  sunsetHour !== null &&
+                  hour <= sunsetHour &&
+                  sunsetHour < hour + 6 &&
+                  !showSunrise}
                 <div
                   class="h-5 rounded-sm daylight-cell daylight-{daylightClass} relative flex items-center justify-center"
                 >
@@ -697,7 +705,7 @@ Responsive Breakpoints:
             <div class="species-label-col shrink-0"></div>
             <!-- Hourly headers (desktop) -->
             <div class="hourly-grid flex-1 grid text-xs">
-              {#each Array(24) as _, hour}
+              {#each Array(24) as _, hour (hour)}
                 <a
                   href={urlBuilders.hourly(hour, 1)}
                   class="text-center hover:text-primary cursor-pointer"
@@ -712,7 +720,7 @@ Responsive Breakpoints:
             </div>
             <!-- Bi-hourly headers (tablet/mobile) -->
             <div class="bi-hourly-grid flex-1 grid text-xs">
-              {#each Array(12) as _, i}
+              {#each Array(12) as _, i (i)}
                 {@const hour = i * 2}
                 <a
                   href={urlBuilders.hourly(hour, 2)}
@@ -729,7 +737,7 @@ Responsive Breakpoints:
             </div>
             <!-- Six-hourly headers (small mobile) -->
             <div class="six-hourly-grid flex-1 grid text-xs">
-              {#each Array(4) as _, i}
+              {#each Array(4) as _, i (i)}
                 {@const hour = i * 6}
                 <a
                   href={urlBuilders.hourly(hour, 6)}
@@ -808,7 +816,7 @@ Responsive Breakpoints:
 
                 <!-- Hourly heatmap cells (desktop) -->
                 <div class="hourly-grid flex-1 grid">
-                  {#each Array(24) as _, hour}
+                  {#each Array(24) as _, hour (hour)}
                     {@const count = safeArrayAccess(item.hourly_counts, hour, 0) ?? 0}
                     {@const intensity =
                       count > 0 ? Math.min(9, Math.floor((count / globalMaxHourlyCount) * 9)) : 0}
@@ -835,7 +843,7 @@ Responsive Breakpoints:
 
                 <!-- Bi-hourly heatmap cells (tablet/mobile) -->
                 <div class="bi-hourly-grid flex-1 grid">
-                  {#each Array(12) as _, i}
+                  {#each Array(12) as _, i (i)}
                     {@const hour = i * 2}
                     {@const count = renderFunctions['bi-hourly'](item, hour)}
                     {@const intensity =
@@ -862,7 +870,7 @@ Responsive Breakpoints:
 
                 <!-- Six-hourly heatmap cells (small mobile) -->
                 <div class="six-hourly-grid flex-1 grid">
-                  {#each Array(4) as _, i}
+                  {#each Array(4) as _, i (i)}
                     {@const hour = i * 6}
                     {@const count = renderFunctions['six-hourly'](item, hour)}
                     {@const intensity =
@@ -907,7 +915,7 @@ Responsive Breakpoints:
           <div class="flex justify-end items-center gap-1.5 mt-3 text-xs text-base-content/60">
             <span>{t('dashboard.dailySummary.legend.less')}</span>
             <div class="flex gap-0.5">
-              {#each [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as intensity}
+              {#each [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as intensity (intensity)}
                 <div
                   class="w-3 h-3 rounded-sm heatmap-color-{intensity}"
                   title="Intensity {intensity}"
@@ -925,8 +933,9 @@ Responsive Breakpoints:
 <style>
   /* ========================================================================
      CSS Custom Properties for Daily Summary Grid
+     Scoped to component to avoid global conflicts
      ======================================================================== */
-  :root {
+  .daily-summary-card {
     /* Grid layout properties */
     --grid-cell-height: 1.25rem;
     --grid-cell-radius: 4px;

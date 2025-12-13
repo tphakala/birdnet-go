@@ -79,8 +79,8 @@
 
   // Custom dropdown state
   let showLimitDropdown = $state(false);
-  let dropdownRef: HTMLDivElement;
-  let dropdownButtonRef: HTMLButtonElement;
+  let dropdownRef = $state<HTMLDivElement | undefined>(undefined);
+  let dropdownButtonRef = $state<HTMLButtonElement | undefined>(undefined);
   const limitOptions = [6, 12, 24, 48];
 
   // Toggle dropdown
@@ -405,9 +405,12 @@
       selectedDetection = null;
     }}
     onConfirm={async () => {
-      await confirmModalConfig.onConfirm();
-      showConfirmModal = false;
-      selectedDetection = null;
+      try {
+        await confirmModalConfig.onConfirm();
+      } finally {
+        showConfirmModal = false;
+        selectedDetection = null;
+      }
     }}
   />
 {/if}
