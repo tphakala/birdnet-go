@@ -69,6 +69,7 @@ func (c *Controller) initDetectionRoutes() {
 	detectionGroup.POST("/:id/review", c.ReviewDetection)
 	detectionGroup.POST("/:id/lock", c.LockDetection)
 	detectionGroup.POST("/ignore", c.IgnoreSpecies)
+	detectionGroup.GET("/ignored", c.GetExcludedSpecies)
 }
 
 // DetectionResponse represents a detection in the API response
@@ -1197,7 +1198,20 @@ type IgnoreSpeciesRequest struct {
 	CommonName string `json:"common_name"`
 }
 
-// IgnoreSpecies adds a species to the ignored list
+// IgnoreSpeciesResponse represents the response for the ignore species endpoint
+type IgnoreSpeciesResponse struct {
+	CommonName string `json:"common_name"`
+	Action     string `json:"action"` // "added" or "removed"
+	IsExcluded bool   `json:"is_excluded"`
+}
+
+// ExcludedSpeciesResponse represents the response for the get excluded species endpoint
+type ExcludedSpeciesResponse struct {
+	Species []string `json:"species"`
+	Count   int      `json:"count"`
+}
+
+// IgnoreSpecies toggles a species in the ignored list (adds if not present, removes if present)
 func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 	// Parse request body
 	req := &IgnoreSpeciesRequest{}
@@ -1210,13 +1224,43 @@ func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 		return ctx.JSON(http.StatusBadRequest, map[string]string{"error": "Missing species name"})
 	}
 
-	// Add to ignored species list
-	err := c.addSpeciesToIgnoredList(req.CommonName)
+	// Toggle the species in ignored list
+	action, isExcluded, err := c.toggleSpeciesInIgnoredList(req.CommonName)
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	return ctx.NoContent(http.StatusNoContent)
+	// Log the action
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Species exclusion toggled",
+			"species", req.CommonName,
+			"action", action,
+			"is_excluded", isExcluded,
+			"ip", ctx.RealIP(),
+		)
+	}
+
+	return ctx.JSON(http.StatusOK, IgnoreSpeciesResponse{
+		CommonName: req.CommonName,
+		Action:     action,
+		IsExcluded: isExcluded,
+	})
+}
+
+// GetExcludedSpecies returns the list of excluded species
+func (c *Controller) GetExcludedSpecies(ctx echo.Context) error {
+	settings := conf.GetSettings()
+
+	// Create a copy of the slice to avoid race conditions
+	c.speciesExcludeMutex.Lock()
+	species := make([]string, len(settings.Realtime.Species.Exclude))
+	copy(species, settings.Realtime.Species.Exclude)
+	c.speciesExcludeMutex.Unlock()
+
+	return ctx.JSON(http.StatusOK, ExcludedSpeciesResponse{
+		Species: species,
+		Count:   len(species),
+	})
 }
 
 // addToIgnoredSpecies handles the logic for adding species to the ignore list
@@ -1227,15 +1271,55 @@ func (c *Controller) addToIgnoredSpecies(verified, ignoreSpecies string) error {
 	return nil
 }
 
-// addSpeciesToIgnoredList adds a species to the ignore list with proper concurrency control.
-// It uses a mutex to ensure thread-safety when multiple requests try to modify the
-// excluded species list simultaneously. The function:
-// 1. Locks the controller's mutex to prevent concurrent modifications
-// 2. Gets the latest settings from the settings package
-// 3. Checks if the species is already in the excluded list
-// 4. If not excluded, creates a copy of the exclude list to avoid race conditions
-// 5. Adds the species to the new list and updates the settings
-// 6. Saves the settings using the package's thread-safe function
+// toggleSpeciesInIgnoredList toggles a species in the ignore list with proper concurrency control.
+// If the species is already excluded, it removes it. If not excluded, it adds it.
+// Returns the action taken ("added" or "removed"), the new excluded state, and any error.
+func (c *Controller) toggleSpeciesInIgnoredList(species string) (action string, isExcluded bool, err error) {
+	if species == "" {
+		return "", false, nil
+	}
+
+	// Use the controller's mutex to protect this operation
+	c.speciesExcludeMutex.Lock()
+	defer c.speciesExcludeMutex.Unlock()
+
+	// Access the latest settings using the settings accessor function
+	settings := conf.GetSettings()
+
+	// Check if species is already in the excluded list
+	wasExcluded := slices.Contains(settings.Realtime.Species.Exclude, species)
+
+	if wasExcluded {
+		// Remove from excluded list
+		newExcludeList := make([]string, 0, len(settings.Realtime.Species.Exclude)-1)
+		for _, s := range settings.Realtime.Species.Exclude {
+			if s != species {
+				newExcludeList = append(newExcludeList, s)
+			}
+		}
+		settings.Realtime.Species.Exclude = newExcludeList
+		action = "removed"
+		isExcluded = false
+	} else {
+		// Add to excluded list
+		newExcludeList := make([]string, len(settings.Realtime.Species.Exclude))
+		copy(newExcludeList, settings.Realtime.Species.Exclude)
+		newExcludeList = append(newExcludeList, species)
+		settings.Realtime.Species.Exclude = newExcludeList
+		action = "added"
+		isExcluded = true
+	}
+
+	// Save settings using the package function that handles concurrency
+	if err := conf.SaveSettings(); err != nil {
+		return "", wasExcluded, fmt.Errorf("failed to save settings: %w", err)
+	}
+
+	return action, isExcluded, nil
+}
+
+// addSpeciesToIgnoredList adds a species to the ignore list (used by review endpoint).
+// This is a simplified version that only adds, used when marking as false positive.
 func (c *Controller) addSpeciesToIgnoredList(species string) error {
 	if species == "" {
 		return nil

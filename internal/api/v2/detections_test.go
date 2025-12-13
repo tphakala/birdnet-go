@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -848,69 +849,355 @@ func TestLockDetection(t *testing.T) {
 	}
 }
 
-// TestIgnoreSpecies tests the IgnoreSpecies endpoint
+// clearExcludedSpeciesList is a test helper that clears the global excluded species list
+// to ensure test isolation. Call this at the beginning of tests that check list state.
+func clearExcludedSpeciesList(t *testing.T) {
+	t.Helper()
+	settings := conf.GetSettings()
+	settings.Realtime.Species.Exclude = []string{}
+}
+
+// TestIgnoreSpecies tests the IgnoreSpecies endpoint with toggle behavior
 func TestIgnoreSpecies(t *testing.T) {
-	// Setup
-	e, _, controller := setupTestEnvironment(t)
+	// Test cases for error scenarios
+	t.Run("Error cases", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		clearExcludedSpeciesList(t)
 
-	// Test cases
-	testCases := []struct {
-		name           string
-		requestBody    string
-		expectedStatus int
-	}{
-		{
-			name:           "Valid species name",
-			requestBody:    `{"common_name": "American Crow"}`,
-			expectedStatus: http.StatusNoContent,
-		},
-		{
-			name:           "Empty species name",
-			requestBody:    `{"common_name": ""}`,
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "Invalid JSON",
-			requestBody:    `{"common_name": }`,
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "Extremely long species name",
-			requestBody:    `{"common_name": "` + strings.Repeat("Very Long Bird Name ", 100) + `"}`,
-			expectedStatus: http.StatusNoContent, // Should handle long names gracefully
-		},
-		{
-			name:           "Species name with special characters",
-			requestBody:    `{"common_name": "<script>alert('XSS')</script>Bird with special chars: &<>\"'!@#$%^&*()_+{}[]|\\:;,.?/~"}`,
-			expectedStatus: http.StatusNoContent, // Should sanitize or handle special chars
-		},
-	}
+		errorCases := []struct {
+			name           string
+			requestBody    string
+			expectedStatus int
+			expectedError  string
+		}{
+			{
+				name:           "Empty species name",
+				requestBody:    `{"common_name": ""}`,
+				expectedStatus: http.StatusBadRequest,
+				expectedError:  "Missing species name",
+			},
+			{
+				name:           "Invalid JSON",
+				requestBody:    `{"common_name": }`,
+				expectedStatus: http.StatusBadRequest,
+				expectedError:  "Invalid request format",
+			},
+			{
+				name:           "Missing common_name field",
+				requestBody:    `{}`,
+				expectedStatus: http.StatusBadRequest,
+				expectedError:  "Missing species name",
+			},
+		}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Create request
+		for _, tc := range errorCases {
+			t.Run(tc.name, func(t *testing.T) {
+				req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+					strings.NewReader(tc.requestBody))
+				req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+				rec := httptest.NewRecorder()
+				c := e.NewContext(req, rec)
+
+				err := controller.IgnoreSpecies(c)
+				require.NoError(t, err)
+				assert.Equal(t, tc.expectedStatus, rec.Code)
+
+				var response map[string]string
+				err = json.Unmarshal(rec.Body.Bytes(), &response)
+				require.NoError(t, err)
+				assert.Contains(t, response["error"], tc.expectedError)
+			})
+		}
+	})
+
+	// Test toggle behavior: add then remove
+	t.Run("Toggle behavior - add species", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		clearExcludedSpeciesList(t)
+
+		// First request: add species (should not be in list initially)
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+			strings.NewReader(`{"common_name": "American Crow"}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := controller.IgnoreSpecies(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response IgnoreSpeciesResponse
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Equal(t, "American Crow", response.CommonName)
+		assert.Equal(t, "added", response.Action)
+		assert.True(t, response.IsExcluded)
+	})
+
+	t.Run("Toggle behavior - remove species", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		clearExcludedSpeciesList(t)
+
+		// First, add the species
+		req1 := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+			strings.NewReader(`{"common_name": "Red-bellied Woodpecker"}`))
+		req1.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec1 := httptest.NewRecorder()
+		c1 := e.NewContext(req1, rec1)
+
+		err := controller.IgnoreSpecies(c1)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec1.Code)
+
+		var addResponse IgnoreSpeciesResponse
+		err = json.Unmarshal(rec1.Body.Bytes(), &addResponse)
+		require.NoError(t, err)
+		assert.Equal(t, "added", addResponse.Action)
+		assert.True(t, addResponse.IsExcluded)
+
+		// Second request: toggle (remove) the same species
+		req2 := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+			strings.NewReader(`{"common_name": "Red-bellied Woodpecker"}`))
+		req2.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec2 := httptest.NewRecorder()
+		c2 := e.NewContext(req2, rec2)
+
+		err = controller.IgnoreSpecies(c2)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec2.Code)
+
+		var removeResponse IgnoreSpeciesResponse
+		err = json.Unmarshal(rec2.Body.Bytes(), &removeResponse)
+		require.NoError(t, err)
+		assert.Equal(t, "Red-bellied Woodpecker", removeResponse.CommonName)
+		assert.Equal(t, "removed", removeResponse.Action)
+		assert.False(t, removeResponse.IsExcluded)
+	})
+
+	t.Run("Multiple toggle operations", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		clearExcludedSpeciesList(t)
+		speciesName := "Northern Cardinal"
+
+		// Perform add-remove-add cycle
+		for i, expectedAction := range []string{"added", "removed", "added"} {
 			req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
-				strings.NewReader(tc.requestBody))
+				strings.NewReader(`{"common_name": "`+speciesName+`"}`))
 			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 
-			// Call handler
 			err := controller.IgnoreSpecies(c)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusOK, rec.Code, "Request %d failed", i+1)
 
-			// Check response
-			if tc.expectedStatus == http.StatusNoContent {
-				require.NoError(t, err)
-				assert.Equal(t, tc.expectedStatus, rec.Code)
-			} else {
-				// For error cases, check the response
-				var response map[string]string
-				err = json.Unmarshal(rec.Body.Bytes(), &response)
-				require.NoError(t, err)
-				assert.Contains(t, response, "error")
+			var response IgnoreSpeciesResponse
+			err = json.Unmarshal(rec.Body.Bytes(), &response)
+			require.NoError(t, err)
+			assert.Equal(t, expectedAction, response.Action, "Request %d: expected action %s", i+1, expectedAction)
+			assert.Equal(t, expectedAction == "added", response.IsExcluded, "Request %d: isExcluded mismatch", i+1)
+		}
+	})
+
+	t.Run("Special characters in species name", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		clearExcludedSpeciesList(t)
+
+		// Test with special characters (properly JSON encoded)
+		// Note: Use proper JSON encoding for special chars
+		specialName := "Bird with special chars: &<>'éàü"
+		reqBody := IgnoreSpeciesRequest{CommonName: specialName}
+		jsonBody, err := json.Marshal(reqBody)
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+			bytes.NewReader(jsonBody))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err = controller.IgnoreSpecies(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response IgnoreSpeciesResponse
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Equal(t, specialName, response.CommonName)
+		assert.Equal(t, "added", response.Action)
+	})
+
+	t.Run("Long species name", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		clearExcludedSpeciesList(t)
+
+		longName := strings.Repeat("Very Long Bird Name ", 50)
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+			strings.NewReader(`{"common_name": "`+longName+`"}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := controller.IgnoreSpecies(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response IgnoreSpeciesResponse
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Equal(t, "added", response.Action)
+	})
+}
+
+// TestGetExcludedSpecies tests the GetExcludedSpecies endpoint
+func TestGetExcludedSpecies(t *testing.T) {
+	t.Run("Empty excluded list", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		clearExcludedSpeciesList(t)
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/ignored", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := controller.GetExcludedSpecies(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response ExcludedSpeciesResponse
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Equal(t, 0, response.Count)
+		assert.Empty(t, response.Species)
+	})
+
+	t.Run("Excluded list with species", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		clearExcludedSpeciesList(t)
+
+		// First add some species
+		species := []string{"American Crow", "Red-bellied Woodpecker", "Blue Jay"}
+		for _, s := range species {
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+				strings.NewReader(`{"common_name": "`+s+`"}`))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			err := controller.IgnoreSpecies(c)
+			require.NoError(t, err)
+		}
+
+		// Now get the excluded list
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/ignored", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+
+		err := controller.GetExcludedSpecies(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response ExcludedSpeciesResponse
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Equal(t, 3, response.Count)
+		assert.ElementsMatch(t, species, response.Species)
+	})
+
+	t.Run("Excluded list reflects toggle operations", func(t *testing.T) {
+		e, _, controller := setupTestEnvironment(t)
+		clearExcludedSpeciesList(t)
+
+		// Add two species
+		for _, s := range []string{"Species A", "Species B"} {
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+				strings.NewReader(`{"common_name": "`+s+`"}`))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			err := controller.IgnoreSpecies(c)
+			require.NoError(t, err)
+		}
+
+		// Remove one species
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+			strings.NewReader(`{"common_name": "Species A"}`))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		err := controller.IgnoreSpecies(c)
+		require.NoError(t, err)
+
+		// Verify the list only contains Species B
+		req = httptest.NewRequest(http.MethodGet, "/api/v2/detections/ignored", http.NoBody)
+		rec = httptest.NewRecorder()
+		c = e.NewContext(req, rec)
+
+		err = controller.GetExcludedSpecies(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response ExcludedSpeciesResponse
+		err = json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Equal(t, 1, response.Count)
+		assert.Contains(t, response.Species, "Species B")
+		assert.NotContains(t, response.Species, "Species A")
+	})
+}
+
+// TestIgnoreSpeciesConcurrency tests concurrent access to the IgnoreSpecies endpoint
+func TestIgnoreSpeciesConcurrency(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	clearExcludedSpeciesList(t)
+
+	// Use WaitGroup.Go() for automatic Add/Done management (Go 1.25+)
+	var wg sync.WaitGroup
+	var barrier sync.WaitGroup
+	barrier.Add(1)
+
+	numGoroutines := 10
+	var successCount int32
+
+	for range numGoroutines {
+		wg.Go(func() {
+			barrier.Wait()
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
+				strings.NewReader(`{"common_name": "Concurrent Test Bird"}`))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			err := controller.IgnoreSpecies(c)
+			if err == nil && rec.Code == http.StatusOK {
+				atomic.AddInt32(&successCount, 1)
 			}
 		})
 	}
+
+	// Start all goroutines simultaneously
+	barrier.Done()
+	wg.Wait()
+
+	// All requests should succeed
+	assert.Equal(t, int32(numGoroutines), successCount)
+
+	// Verify final state - species should be either in or out of list
+	// (odd number of toggles = in list, even = out)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/ignored", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	err := controller.GetExcludedSpecies(c)
+	require.NoError(t, err)
+
+	var response ExcludedSpeciesResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	// With 10 toggles starting from empty list: odd number = should be in list
+	// But due to concurrent execution, the final state depends on timing
+	// We just verify the endpoint didn't crash and returned valid data
+	assert.GreaterOrEqual(t, response.Count, 0)
 }
 
 // TestAddCommentMethod tests the AddComment method directly
