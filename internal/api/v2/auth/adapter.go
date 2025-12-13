@@ -146,7 +146,15 @@ func (a *SecurityAdapter) ValidateToken(token string) error {
 // NOTE: This application does not support multiple user accounts or authorization levels.
 // Basic authentication relies on a single, fixed username/password combination
 // configured in settings (Security.BasicAuth.ClientID and Security.BasicAuth.Password).
-// The provided username MUST match the configured ClientID.
+//
+// Username validation behavior:
+// - If ClientID is configured (non-empty): username MUST match ClientID
+// - If ClientID is empty: username check is skipped (backwards compatible with V1)
+//
+// This ensures backwards compatibility with configurations that don't have ClientID set
+// while still allowing stricter authentication when ClientID is explicitly configured.
+// See Issue #1234 for details.
+//
 // Returns auth code on success, error on failure.
 func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password string) (string, error) {
 	// For basic auth, check against configured ClientID and Password
@@ -155,12 +163,13 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 
 	// Log basic auth attempt
 	security.LogInfo("Basic authentication login attempt", "username", username)
-	
-	// Temporary debug logging to diagnose auth issues
+
+	// Debug logging to diagnose auth issues
 	if a.logger != nil {
-		a.logger.Debug("BasicAuth configuration check", 
+		a.logger.Debug("BasicAuth configuration check",
 			"provided_username", username,
 			"configured_clientid", storedClientID,
+			"clientid_empty", storedClientID == "",
 			"clientid_match", username == storedClientID)
 	}
 
@@ -173,15 +182,30 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 		return "", ErrBasicAuthDisabled // Return the specific error for disabled basic auth
 	}
 
-	// Hash inputs and stored values before comparison to ensure fixed length for ConstantTimeCompare.
-	usernameHash := sha256.Sum256([]byte(username))
+	// Hash password for comparison (always required)
 	passwordHash := sha256.Sum256([]byte(password))
-	storedClientIDHash := sha256.Sum256([]byte(storedClientID))
 	storedPasswordHash := sha256.Sum256([]byte(storedPassword))
 
-	// Constant-time comparison on the hashes.
-	userMatch := subtle.ConstantTimeCompare(usernameHash[:], storedClientIDHash[:]) == 1
+	// Constant-time comparison on password hash
 	passMatch := subtle.ConstantTimeCompare(passwordHash[:], storedPasswordHash[:]) == 1
+
+	// Username validation: only check if ClientID is configured (non-empty)
+	// This maintains backwards compatibility with V1 behavior where only password was checked
+	// See Issue #1234: empty ClientID caused new UI login to fail
+	var userMatch bool
+	if storedClientID == "" {
+		// ClientID not configured - skip username check (V1 backwards compatible behavior)
+		userMatch = true
+		if a.logger != nil {
+			a.logger.Debug("ClientID is empty, skipping username validation (V1 compatible mode)")
+		}
+	} else {
+		// ClientID configured - require username to match
+		usernameHash := sha256.Sum256([]byte(username))
+		storedClientIDHash := sha256.Sum256([]byte(storedClientID))
+		userMatch = subtle.ConstantTimeCompare(usernameHash[:], storedClientIDHash[:]) == 1
+	}
+
 	credentialsValid := userMatch && passMatch
 
 	if credentialsValid {
