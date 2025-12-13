@@ -425,9 +425,11 @@
     },
     "recentDetections": {
       "title": "Recent herkend",
+      "subtitle": "Laatst geïdentificeerde soorten",
       "controls": {
         "show": "Toon",
-        "refresh": "Ververs herkeningen"
+        "refresh": "Ververs herkeningen",
+        "refreshPaused": "Ververs gepauzeerd tijdens interactie"
       },
       "headers": {
         "dateTime": "Datum/Tijd",
@@ -1821,6 +1823,7 @@
       "currentTime": "{current} / {total}",
       "loading": "Opname inlezen ...",
       "error": "Inlezen opname is mislukt",
+      "playError": "Afspelen opname is mislukt",
       "volumeGain": "Volume versterking: {value} dB",
       "filterControl": "Filter bediening",
       "highPassFilter": "Hoog-doorlaat filter: {freq} Hz",

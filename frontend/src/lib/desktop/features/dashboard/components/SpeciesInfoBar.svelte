@@ -25,7 +25,8 @@
 
   // Get detection datetime for relative time
   function getDetectionDateTime(date: string, time: string): Date {
-    return new Date(`${date}T${time}`);
+    const parsed = new Date(`${date}T${time}`);
+    return isNaN(parsed.getTime()) ? new Date() : parsed;
   }
 
   const detectionDateTime = $derived(getDetectionDateTime(detection.date, detection.time));
@@ -63,13 +64,25 @@
     <div class="species-name-row">
       <span class="species-name">{detection.commonName}</span>
       {#if isVerified}
-        <span class="verified-badge" title="Verified correct">
+        <span
+          class="verified-badge"
+          title={t('dashboard.recentDetections.status.verified')}
+          aria-label={t('dashboard.recentDetections.status.verified')}
+        >
           <Check class="size-3" />
         </span>
       {:else if isFalsePositive}
-        <span class="false-positive-badge">{t('dashboard.recentDetections.status.false')}</span>
+        <span
+          class="false-positive-badge"
+          role="status"
+          aria-label={t('dashboard.recentDetections.status.false')}
+        >{t('dashboard.recentDetections.status.false')}</span>
       {:else}
-        <span class="unverified-badge">{t('dashboard.recentDetections.status.unverified')}</span>
+        <span
+          class="unverified-badge"
+          role="status"
+          aria-label={t('dashboard.recentDetections.status.unverified')}
+        >{t('dashboard.recentDetections.status.unverified')}</span>
       {/if}
     </div>
 

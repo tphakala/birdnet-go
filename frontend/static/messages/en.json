@@ -428,7 +428,8 @@
       "subtitle": "Latest identified species",
       "controls": {
         "show": "Show:",
-        "refresh": "Refresh detections"
+        "refresh": "Refresh detections",
+        "refreshPaused": "Refresh paused while interaction is active"
       },
       "headers": {
         "dateTime": "Date & Time",
@@ -1978,6 +1979,7 @@
       "currentTime": "{current} / {total}",
       "loading": "Loading audio...",
       "error": "Failed to load audio",
+      "playError": "Failed to play audio",
       "volumeGain": "Volume gain control: {value} dB",
       "filterControl": "Filter control",
       "highPassFilter": "High-pass filter control: {freq} Hz",

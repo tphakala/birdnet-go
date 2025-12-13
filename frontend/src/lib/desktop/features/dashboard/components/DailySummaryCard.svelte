@@ -223,7 +223,7 @@ Responsive Breakpoints:
   };
 
   // Get daylight class for an hour based on its position relative to sunrise/sunset
-  // Returns: 'deep-night', 'night', 'pre-dawn', 'sunrise', 'early-day', 'mid-day', 'late-day', 'sunset', 'dusk', 'evening'
+  // Returns: 'deep-night', 'night', 'pre-dawn', 'sunrise', 'early-day', 'day', 'mid-day', 'late-day', 'sunset', 'dusk', 'evening'
   const getDaylightClass = (hour: number): string => {
     if (!sunTimes) return 'night';
     const sunriseHour = getSunHourFromTime(sunTimes.sunrise);

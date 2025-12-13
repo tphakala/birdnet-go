@@ -68,6 +68,15 @@
   // Uses untrack() to explicitly capture initial value only (local state is independent after init)
   let selectedLimit = $state(untrack(() => limit));
 
+  // Track excluded species by common name (session-local tracking)
+  // Note: In production, this could be fetched from the API on mount for persistence
+  let excludedSpecies = $state(new Set<string>());
+
+  // Helper to check if a species is excluded
+  function isSpeciesExcluded(commonName: string): boolean {
+    return excludedSpecies.has(commonName);
+  }
+
   // Custom dropdown state
   let showLimitDropdown = $state(false);
   let dropdownRef = $state<HTMLDivElement>();
@@ -170,7 +179,7 @@
   }
 
   function handleToggleSpecies(detection: Detection) {
-    const isExcluded = false;
+    const isExcluded = isSpeciesExcluded(detection.commonName);
     confirmModalConfig = {
       title: isExcluded
         ? t('dashboard.recentDetections.modals.showSpecies', { species: detection.commonName })
@@ -190,6 +199,14 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ common_name: detection.commonName }),
           });
+          // Toggle local exclusion state
+          if (isExcluded) {
+            excludedSpecies.delete(detection.commonName);
+          } else {
+            excludedSpecies.add(detection.commonName);
+          }
+          // Trigger reactivity by reassigning
+          excludedSpecies = new Set(excludedSpecies);
           onRefresh();
         } catch (err) {
           logger.error('Error toggling species exclusion:', err);
@@ -321,7 +338,7 @@
           class:opacity-50={updatesAreFrozen}
           disabled={loading || updatesAreFrozen}
           title={updatesAreFrozen
-            ? 'Refresh paused while interaction is active'
+            ? t('dashboard.recentDetections.controls.refreshPaused')
             : t('dashboard.recentDetections.controls.refresh')}
           aria-label={t('dashboard.recentDetections.controls.refresh')}
         >
@@ -355,6 +372,7 @@
             <DetectionCard
               {detection}
               isNew={newDetectionIds.has(detection.id)}
+              isExcluded={isSpeciesExcluded(detection.commonName)}
               {onFreezeStart}
               {onFreezeEnd}
               onReview={() => handleReview(detection)}

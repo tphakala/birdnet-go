@@ -425,9 +425,11 @@
     },
     "recentDetections": {
       "title": "Detecções recentes",
+      "subtitle": "Últimas espécies identificadas",
       "controls": {
         "show": "Mostrar:",
-        "refresh": "Atualizar detecções"
+        "refresh": "Atualizar detecções",
+        "refreshPaused": "Atualização pausada durante a interação"
       },
       "headers": {
         "dateTime": "Data e hora",
@@ -1821,6 +1823,7 @@
       "currentTime": "{current} / {total}",
       "loading": "Carregando áudio...",
       "error": "Falha ao carregar áudio",
+      "playError": "Falha ao reproduzir áudio",
       "volumeGain": "Controle de ganho de volume: {value} dB",
       "filterControl": "Controle de filtro",
       "highPassFilter": "Controle de filtro passa-alta: {freq} Hz",

@@ -31,6 +31,7 @@
   interface Props {
     detection: Detection;
     isNew?: boolean;
+    isExcluded?: boolean;
     onFreezeStart?: () => void;
     onFreezeEnd?: () => void;
     onReview?: () => void;
@@ -42,6 +43,7 @@
   let {
     detection,
     isNew = false,
+    isExcluded = false,
     onFreezeStart,
     onFreezeEnd,
     onReview,
@@ -72,6 +74,24 @@
 
   // Spectrogram URL
   const spectrogramUrl = $derived(`/api/v2/spectrogram/${detection.id}?size=md&raw=true`);
+
+  // Track previous detection ID for cleanup
+  let previousDetectionId: number | undefined;
+
+  // Reset retry state when detection changes
+  $effect(() => {
+    const currentId = detection.id;
+    if (previousDetectionId !== undefined && previousDetectionId !== currentId) {
+      // Detection changed - cleanup any pending retry
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = undefined;
+      }
+      retryCount = 0;
+      spectrogramLoader.reset();
+    }
+    previousDetectionId = currentId;
+  });
 
   function handleSpectrogramLoad() {
     spectrogramLoader.setLoading(false);
@@ -211,6 +231,7 @@
   <div class="absolute top-2 right-2 z-50">
     <CardActionMenu
       {detection}
+      {isExcluded}
       {onReview}
       {onToggleSpecies}
       {onToggleLock}

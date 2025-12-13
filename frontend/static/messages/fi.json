@@ -425,9 +425,11 @@
     },
     "recentDetections": {
       "title": "Viimeisimmät havainnot",
+      "subtitle": "Viimeksi tunnistetut lajit",
       "controls": {
         "show": "Näytä:",
-        "refresh": "Päivitä havainnot"
+        "refresh": "Päivitä havainnot",
+        "refreshPaused": "Päivitys keskeytetty vuorovaikutuksen ajaksi"
       },
       "headers": {
         "dateTime": "Päivä ja aika",
@@ -1821,6 +1823,7 @@
       "currentTime": "{current} / {total}",
       "loading": "Ladataan ääntä...",
       "error": "Äänen lataus epäonnistui",
+      "playError": "Äänen toisto epäonnistui",
       "volumeGain": "Äänenvoimakkuuden vahvistus: {value} dB",
       "filterControl": "Suodattimen hallinta",
       "highPassFilter": "Ylipäästösuodattimen hallinta: {freq} Hz",

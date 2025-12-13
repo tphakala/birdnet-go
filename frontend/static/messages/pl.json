@@ -425,9 +425,11 @@
     },
     "recentDetections": {
       "title": "Ostatnie Detekcje",
+      "subtitle": "Ostatnio zidentyfikowane gatunki",
       "controls": {
         "show": "Pokaż:",
-        "refresh": "Odśwież detekcje"
+        "refresh": "Odśwież detekcje",
+        "refreshPaused": "Odświeżanie wstrzymane podczas interakcji"
       },
       "headers": {
         "dateTime": "Data i Czas",
@@ -1821,6 +1823,7 @@
       "currentTime": "{current} / {total}",
       "loading": "Ładowanie audio...",
       "error": "Nie udało się załadować audio",
+      "playError": "Nie udało się odtworzyć audio",
       "volumeGain": "Kontrola wzmocnienia głośności: {value} dB",
       "filterControl": "Kontrola filtra",
       "highPassFilter": "Kontrola filtra górnoprzepustowego: {freq} Hz",

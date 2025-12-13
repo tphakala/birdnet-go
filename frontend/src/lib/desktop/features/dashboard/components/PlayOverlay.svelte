@@ -52,7 +52,7 @@
       }
     } catch (err) {
       logger.error('Error playing audio:', err);
-      error = 'Failed to play audio';
+      error = t('media.audio.playError');
       isLoading = false;
     }
   }
@@ -104,7 +104,7 @@
   }
 
   function handleError() {
-    error = 'Failed to load audio';
+    error = t('media.audio.error');
     isLoading = false;
   }
 

@@ -173,11 +173,11 @@
     aria-describedby={showPopup ? 'bird-popup' : undefined}
   >
     <!-- Thumbnail placeholder -->
-    <div class="thumbnail-placeholder w-8 h-6 rounded-sm bg-base-200"></div>
+    <div class="thumbnail-placeholder w-8 h-7 rounded-sm bg-base-200"></div>
     <img
       src={thumbnailUrl}
       alt={commonName}
-      class="thumbnail-image w-8 h-7.5 rounded-sm object-cover cursor-pointer hover:opacity-80 transition-opacity"
+      class="thumbnail-image w-8 h-7 rounded-sm object-cover cursor-pointer hover:opacity-80 transition-opacity"
       onerror={handleImageError}
       loading="lazy"
     />

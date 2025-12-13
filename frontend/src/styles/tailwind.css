@@ -2399,8 +2399,4 @@
   .border-border-100 {
     border-color: var(--border-100);
   }
-
-  .border-border-200 {
-    border-color: var(--border-200);
-  }
 }
