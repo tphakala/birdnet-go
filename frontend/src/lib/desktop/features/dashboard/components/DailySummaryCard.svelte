@@ -578,10 +578,10 @@ Responsive Breakpoints:
   <SkeletonDailySummary {showThumbnails} showSpinner={showDelayedIndicator} speciesCount={8} />
 {:else if loadingPhase === 'error'}
   <section
-    class="card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100 overflow-hidden"
+    class="card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100 overflow-visible"
   >
-    <div class="px-6 py-4 border-b border-base-200">
-      <div class="flex items-center justify-between">
+    <div class="px-6 py-4 border-b border-base-200 overflow-visible">
+      <div class="flex items-center justify-between overflow-visible">
         <div class="flex flex-col">
           <h3 class="font-semibold">{t('dashboard.dailySummary.title')}</h3>
           <p class="text-sm" style:color="#94a3b8">{t('dashboard.dailySummary.subtitle')}</p>
@@ -597,10 +597,12 @@ Responsive Breakpoints:
     </div>
   </section>
 {:else if loadingPhase === 'loaded'}
-  <section class="card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100">
+  <section
+    class="card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100 overflow-visible"
+  >
     <!-- Card Header with Date Navigation -->
-    <div class="px-6 py-4 border-b border-base-200">
-      <div class="flex items-center justify-between">
+    <div class="px-6 py-4 border-b border-base-200 overflow-visible">
+      <div class="flex items-center justify-between overflow-visible">
         <div class="flex flex-col">
           <h3 class="font-semibold">{t('dashboard.dailySummary.title')}</h3>
           <p class="text-sm" style:color="#94a3b8">{t('dashboard.dailySummary.subtitle')}</p>

@@ -41,7 +41,7 @@ Performance Optimizations:
   import { onMount, untrack } from 'svelte';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import DailySummaryCard from '$lib/desktop/features/dashboard/components/DailySummaryCard.svelte';
-  import RecentDetectionsCard from '$lib/desktop/features/dashboard/components/RecentDetectionsCard.svelte';
+  import DetectionCardGrid from '$lib/desktop/features/dashboard/components/DetectionCardGrid.svelte';
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary, Detection } from '$lib/types/detection.types';
   import {
@@ -114,21 +114,43 @@ Performance Optimizations:
   // SSE throttling timer
   let sseFetchTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Valid detection limit options for card grid layout
+  const VALID_DETECTION_LIMITS = [6, 12, 24, 48];
+  const DEFAULT_DETECTION_LIMIT = 6;
+
+  // Migration map from old values to new card grid values
+  const LIMIT_MIGRATION_MAP: Record<number, number> = {
+    5: 6,
+    10: 12,
+    25: 24,
+    50: 48,
+  };
+
   // Function to get initial detection limit from localStorage
   function getInitialDetectionLimit(): number {
     if (typeof window !== 'undefined') {
       const savedLimit = localStorage.getItem('recentDetectionLimit');
       if (savedLimit) {
         const parsed = parseInt(savedLimit, 10);
-        if (!isNaN(parsed) && [5, 10, 25, 50].includes(parsed)) {
-          return parsed;
+        if (!isNaN(parsed)) {
+          // Check if it's a valid new value
+          if (VALID_DETECTION_LIMITS.includes(parsed)) {
+            return parsed;
+          }
+          // Migrate old values to new ones
+          const migrated = LIMIT_MIGRATION_MAP[parsed];
+          if (migrated) {
+            // Update localStorage with migrated value
+            localStorage.setItem('recentDetectionLimit', migrated.toString());
+            return migrated;
+          }
         }
       }
     }
-    return 5; // Default value
+    return DEFAULT_DETECTION_LIMIT;
   }
 
-  // Detection limit state to sync with RecentDetectionsCard
+  // Detection limit state to sync with DetectionCardGrid
   let detectionLimit = $state(getInitialDetectionLimit());
 
   // Animation state for new detections
@@ -1095,8 +1117,9 @@ Performance Optimizations:
     queueDailySummaryUpdate(detection);
   }
 
-  // Handle detection click
-  function handleDetectionClick(detection: Detection) {
+  // Handle detection click - reserved for future card navigation implementation
+  // eslint-disable-next-line no-unused-vars
+  function _handleDetectionClick(detection: Detection) {
     // Navigate to detection detail view
     window.location.href = `/ui/detections/${detection.id}`;
   }
@@ -1117,16 +1140,14 @@ Performance Optimizations:
   />
 
   <!-- Recent Detections Section -->
-  <RecentDetectionsCard
+  <DetectionCardGrid
     data={recentDetections}
     loading={isLoadingDetections}
     error={detectionsError}
     limit={detectionLimit}
     onLimitChange={handleDetectionLimitChange}
-    onRowClick={handleDetectionClick}
     onRefresh={handleManualRefresh}
     {newDetectionIds}
-    {detectionArrivalTimes}
     onFreezeStart={handleFreezeStart}
     onFreezeEnd={handleFreezeEnd}
     updatesAreFrozen={freezeCount > 0}
