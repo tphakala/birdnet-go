@@ -1,0 +1,20 @@
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <!-- OpenWeatherMap orange sun with cloud -->
+  <defs>
+    <linearGradient id="owSun" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#EB6E4B"/>
+      <stop offset="100%" style="stop-color:#E74C3C"/>
+    </linearGradient>
+  </defs>
+  <!-- Sun background -->
+  <circle cx="16" cy="8" r="5" fill="url(#owSun)"/>
+  <!-- Sun rays -->
+  <g stroke="#EB6E4B" stroke-width="1.5" stroke-linecap="round">
+    <line x1="16" y1="1" x2="16" y2="2.5"/>
+    <line x1="21.66" y1="5.34" x2="20.6" y2="6.4"/>
+    <line x1="23" y1="8" x2="21.5" y2="8"/>
+    <line x1="21.66" y1="10.66" x2="20.6" y2="9.6"/>
+  </g>
+  <!-- Cloud -->
+  <path d="M5.5 19a3.5 3.5 0 0 1-.23-7A4.5 4.5 0 0 1 14 11h.5a4 4 0 0 1 .2 8H5.5z" fill="#5D9CEC"/>
+</svg>

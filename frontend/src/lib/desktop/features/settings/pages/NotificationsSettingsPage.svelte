@@ -26,6 +26,8 @@
   import { onMount } from 'svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
+  import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -40,7 +42,6 @@
     Pencil,
     Trash2,
     ExternalLink,
-    ChevronDown,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import ServiceIcon from '$lib/desktop/components/ui/ServiceIcon.svelte';
@@ -159,21 +160,22 @@
   });
   let testingProvider = $state(false);
 
-  // Available services for the dropdown
-  const availableServices: { id: ServiceType; name: string }[] = [
-    { id: 'discord', name: 'Discord' },
-    { id: 'telegram', name: 'Telegram' },
-    { id: 'slack', name: 'Slack' },
-    { id: 'ntfy', name: 'ntfy' },
-    { id: 'gotify', name: 'Gotify' },
-    { id: 'pushover', name: 'Pushover' },
-    { id: 'ifttt', name: 'IFTTT' },
-    { id: 'webhook', name: 'Webhook' },
-    { id: 'custom', name: 'Custom URL' },
-  ];
+  // Available services for the dropdown - extends SelectOption with serviceId for icon rendering
+  interface ServiceOption extends SelectOption {
+    serviceId: ServiceType;
+  }
 
-  // Custom dropdown state
-  let serviceDropdownOpen = $state(false);
+  const availableServices: ServiceOption[] = [
+    { value: 'discord', label: 'Discord', serviceId: 'discord' },
+    { value: 'telegram', label: 'Telegram', serviceId: 'telegram' },
+    { value: 'slack', label: 'Slack', serviceId: 'slack' },
+    { value: 'ntfy', label: 'ntfy', serviceId: 'ntfy' },
+    { value: 'gotify', label: 'Gotify', serviceId: 'gotify' },
+    { value: 'pushover', label: 'Pushover', serviceId: 'pushover' },
+    { value: 'ifttt', label: 'IFTTT', serviceId: 'ifttt' },
+    { value: 'webhook', label: 'Webhook', serviceId: 'webhook' },
+    { value: 'custom', label: 'Custom URL', serviceId: 'custom' },
+  ];
 
   // Generate shoutrrr URL from service-specific inputs
   function generateShoutrrrUrl(): string {
@@ -701,8 +703,8 @@
     // Auto-generate name if empty
     let name = providerFormData.name.trim();
     if (!name) {
-      const service = availableServices.find(s => s.id === selectedService);
-      name = service?.name || 'Provider';
+      const service = availableServices.find(s => s.value === selectedService);
+      name = service?.label || 'Provider';
     }
 
     let provider: PushProviderConfig;
@@ -1151,55 +1153,30 @@
 
               <div class="space-y-4">
                 <!-- Service Selector with Icons -->
-                <div class="form-control">
-                  <label class="label" for="service-selector">
-                    <span class="label-text font-semibold"
-                      >{t('settings.notifications.push.services.selectLabel')}</span
-                    >
-                  </label>
-                  <div class="dropdown w-full">
-                    <button
-                      id="service-selector"
-                      type="button"
-                      class="select select-bordered w-full flex items-center justify-between text-left"
-                      onclick={() => (serviceDropdownOpen = !serviceDropdownOpen)}
-                    >
-                      <span class="flex items-center gap-2">
-                        <ServiceIcon service={selectedService} />
-                        <span
-                          >{availableServices.find(s => s.id === selectedService)?.name ||
-                            'Select service'}</span
-                        >
-                      </span>
-                      <ChevronDown class="size-4 opacity-70" />
-                    </button>
-                    {#if serviceDropdownOpen}
-                      <ul
-                        class="dropdown-content menu bg-base-100 rounded-box z-50 w-full p-2 shadow-xl border border-base-content/20 mt-1"
-                      >
-                        {#each availableServices as service (service.id)}
-                          <li>
-                            <button
-                              type="button"
-                              class="flex items-center gap-2"
-                              class:active={selectedService === service.id}
-                              onclick={() => {
-                                selectedService = service.id;
-                                serviceDropdownOpen = false;
-                              }}
-                            >
-                              <ServiceIcon service={service.id} />
-                              <span>{service.name}</span>
-                            </button>
-                          </li>
-                        {/each}
-                      </ul>
-                    {/if}
-                  </div>
-                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
-                    {t('settings.notifications.push.services.selectHelpText')}
-                  </p>
-                </div>
+                <SelectDropdown
+                  options={availableServices}
+                  bind:value={selectedService}
+                  label={t('settings.notifications.push.services.selectLabel')}
+                  helpText={t('settings.notifications.push.services.selectHelpText')}
+                  variant="select"
+                  groupBy={false}
+                  onChange={value => (selectedService = value as ServiceType)}
+                >
+                  {#snippet renderOption(option)}
+                    {@const serviceOption = option as ServiceOption}
+                    <div class="flex items-center gap-2">
+                      <ServiceIcon service={serviceOption.serviceId} className="size-4" />
+                      <span>{serviceOption.label}</span>
+                    </div>
+                  {/snippet}
+                  {#snippet renderSelected(options)}
+                    {@const serviceOption = options[0] as ServiceOption}
+                    <span class="flex items-center gap-2">
+                      <ServiceIcon service={serviceOption.serviceId} className="size-4" />
+                      <span>{serviceOption.label}</span>
+                    </span>
+                  {/snippet}
+                </SelectDropdown>
 
                 <!-- Service-Specific Inputs -->
                 {#if selectedService === 'discord'}

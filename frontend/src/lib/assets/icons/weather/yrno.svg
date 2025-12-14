@@ -1,0 +1,9 @@
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <!-- Official YR.no logo - lowercase "yr" in NRK brand blue, scaled for icon use -->
+  <g fill="#0062BA">
+    <!-- y letter - scaled up for visibility -->
+    <path d="M1 4h3.5l3.2 7.5L11 4h3.5l-5.5 12L7.5 20H4l2-4z"/>
+    <!-- r letter - scaled up for visibility -->
+    <path d="M15 8h3v2c.7-1.4 1.8-2.2 3.5-2.2.4 0 .7 0 1 .1v3c-.4-.1-.8-.2-1.2-.2-2 0-3.3 1.2-3.3 3.5V20h-3z"/>
+  </g>
+</svg>

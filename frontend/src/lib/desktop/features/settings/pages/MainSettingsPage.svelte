@@ -25,7 +25,11 @@
 <script lang="ts">
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
-  import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
+  import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
+  import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
+  import WeatherIcon, { type WeatherProvider } from '$lib/desktop/components/ui/WeatherIcon.svelte';
+  import DatabaseIcon, { type DatabaseType } from '$lib/desktop/components/ui/DatabaseIcon.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import { cn } from '$lib/utils/cn.js';
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
@@ -84,11 +88,38 @@
       ''
   );
 
+  // Extended option type for locale with typed locale code
+  interface LocaleOption extends SelectOption {
+    localeCode: FlagLocale;
+  }
+
   // PERFORMANCE OPTIMIZATION: Static UI locales computed once
-  const uiLocales = Object.entries(LOCALES).map(([code, info]) => ({
+  const uiLocales: LocaleOption[] = Object.entries(LOCALES).map(([code, info]) => ({
     value: code,
-    label: `${info.flag} ${info.name}`,
+    label: info.name,
+    localeCode: code as FlagLocale,
   }));
+
+  // Extended option type for weather provider
+  interface WeatherOption extends SelectOption {
+    providerCode: WeatherProvider;
+  }
+
+  // Extended option type for BirdNET locale
+  interface BirdnetLocaleOption extends SelectOption {
+    localeCode: FlagLocale;
+  }
+
+  // Extended option type for database
+  interface DatabaseOption extends SelectOption {
+    databaseType: DatabaseType;
+  }
+
+  // Database options with icons
+  const databaseOptions: DatabaseOption[] = [
+    { value: 'sqlite', label: 'SQLite', databaseType: 'sqlite' },
+    { value: 'mysql', label: 'MySQL', databaseType: 'mysql' },
+  ];
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived({
@@ -264,6 +295,15 @@
     data: [],
   });
   let multipleProvidersAvailable = $derived(providerOptions.data.length > 1);
+
+  // Transform birdnetLocales to include flag locale code
+  let birdnetLocaleOptions = $derived<BirdnetLocaleOption[]>(
+    birdnetLocales.data.map(locale => ({
+      value: locale.value,
+      label: locale.label,
+      localeCode: locale.value as FlagLocale,
+    }))
+  );
 
   // Weather test state
   let weatherTestState = $state<{
@@ -1454,15 +1494,31 @@
           </span>
           <div class="transition-opacity duration-200" class:opacity-50={!settings.dashboard.newUI}>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-              <SelectField
-                id="ui-locale"
+              <SelectDropdown
+                options={uiLocales}
                 value={settings.dashboard.locale}
                 label={t('settings.main.sections.userInterface.interface.locale.label')}
-                options={uiLocales}
                 helpText={t('settings.main.sections.userInterface.interface.locale.helpText')}
                 disabled={!settings.dashboard.newUI || store.isLoading || store.isSaving}
-                onchange={updateUILocale}
-              />
+                variant="select"
+                groupBy={false}
+                onChange={value => updateUILocale(value as string)}
+              >
+                {#snippet renderOption(option)}
+                  {@const localeOption = option as LocaleOption}
+                  <div class="flex items-center gap-2">
+                    <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                    <span>{localeOption.label}</span>
+                  </div>
+                {/snippet}
+                {#snippet renderSelected(options)}
+                  {@const localeOption = options[0] as LocaleOption}
+                  <span class="flex items-center gap-2">
+                    <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                    <span>{localeOption.label}</span>
+                  </span>
+                {/snippet}
+              </SelectDropdown>
             </div>
 
             {#if !settings.dashboard.newUI}
@@ -1532,13 +1588,12 @@
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
             <div class:opacity-50={!multipleProvidersAvailable}>
-              <SelectField
-                id="image-provider"
+              <SelectDropdown
+                options={providerOptions.data}
                 value={settings.dashboard.thumbnails.imageProvider}
                 label={t(
                   'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.label'
                 )}
-                options={providerOptions.data}
                 helpText={t(
                   'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.helpText'
                 )}
@@ -1546,17 +1601,15 @@
                   store.isSaving ||
                   !multipleProvidersAvailable ||
                   providerOptions.loading}
-                onchange={value => updateThumbnailSetting('imageProvider', value)}
+                variant="select"
+                groupBy={false}
+                menuSize="sm"
+                onChange={value => updateThumbnailSetting('imageProvider', value as string)}
               />
             </div>
 
             {#if multipleProvidersAvailable}
-              <SelectField
-                id="fallback-policy"
-                value={settings.dashboard.thumbnails.fallbackPolicy}
-                label={t(
-                  'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.label'
-                )}
+              <SelectDropdown
                 options={[
                   {
                     value: 'all',
@@ -1571,11 +1624,18 @@
                     ),
                   },
                 ]}
+                value={settings.dashboard.thumbnails.fallbackPolicy}
+                label={t(
+                  'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.label'
+                )}
                 helpText={t(
                   'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.helpText'
                 )}
                 disabled={store.isLoading || store.isSaving}
-                onchange={value => updateThumbnailSetting('fallbackPolicy', value)}
+                variant="select"
+                groupBy={false}
+                menuSize="sm"
+                onChange={value => updateThumbnailSetting('fallbackPolicy', value as string)}
               />
             {/if}
           </div>
@@ -1591,10 +1651,7 @@
           </h4>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-            <SelectField
-              id="spectrogram-mode"
-              value={settings.dashboard.spectrogram?.mode ?? 'auto'}
-              label={t('settings.main.sections.userInterface.dashboard.spectrogram.mode.label')}
+            <SelectDropdown
               options={[
                 {
                   value: 'auto',
@@ -1615,8 +1672,13 @@
                   ),
                 },
               ]}
+              value={settings.dashboard.spectrogram?.mode ?? 'auto'}
+              label={t('settings.main.sections.userInterface.dashboard.spectrogram.mode.label')}
               disabled={store.isLoading || store.isSaving}
-              onchange={value => updateSpectrogramSetting('mode', value)}
+              variant="select"
+              groupBy={false}
+              menuSize="sm"
+              onChange={value => updateSpectrogramSetting('mode', value as string)}
             />
           </div>
 
@@ -1737,15 +1799,32 @@
           disabled={store.isLoading || store.isSaving}
         />
 
-        <SelectField
-          id="locale"
+        <SelectDropdown
+          options={birdnetLocaleOptions}
           value={settings.birdnet.locale}
           label={t('settings.main.fields.locale.label')}
-          options={birdnetLocales.data}
           helpText={t('settings.main.fields.locale.helpText')}
           disabled={store.isLoading || store.isSaving || birdnetLocales.loading}
-          onchange={value => updateBirdnetSetting('locale', value)}
-        />
+          variant="select"
+          groupBy={false}
+          searchable={true}
+          onChange={value => updateBirdnetSetting('locale', value as string)}
+        >
+          {#snippet renderOption(option)}
+            {@const localeOption = option as BirdnetLocaleOption}
+            <div class="flex items-center gap-2">
+              <FlagIcon locale={localeOption.localeCode} className="size-4" />
+              <span>{localeOption.label}</span>
+            </div>
+          {/snippet}
+          {#snippet renderSelected(options)}
+            {@const localeOption = options[0] as BirdnetLocaleOption}
+            <span class="flex items-center gap-2">
+              <FlagIcon locale={localeOption.localeCode} className="size-4" />
+              <span>{localeOption.label}</span>
+            </span>
+          {/snippet}
+        </SelectDropdown>
 
         <NumberField
           label={t('settings.main.fields.tensorflowThreads.label')}
@@ -2092,25 +2171,51 @@
       currentData={store.formData.realtime?.weather}
     >
       <div class="space-y-4">
-        <SelectField
-          id="weather-provider"
-          value={settings.weather.provider}
-          label={t('settings.integration.weather.provider.label')}
+        <SelectDropdown
           options={[
-            { value: 'none', label: t('settings.integration.weather.provider.options.none') },
-            { value: 'yrno', label: t('settings.integration.weather.provider.options.yrno') },
+            {
+              value: 'none',
+              label: t('settings.integration.weather.provider.options.none'),
+              providerCode: 'none',
+            },
+            {
+              value: 'yrno',
+              label: t('settings.integration.weather.provider.options.yrno'),
+              providerCode: 'yrno',
+            },
             {
               value: 'openweather',
               label: t('settings.integration.weather.provider.options.openweather'),
+              providerCode: 'openweather',
             },
             {
               value: 'wunderground',
               label: t('settings.integration.weather.provider.options.wunderground'),
+              providerCode: 'wunderground',
             },
-          ]}
+          ] as WeatherOption[]}
+          value={settings.weather.provider}
+          label={t('settings.integration.weather.provider.label')}
           disabled={store.isLoading || store.isSaving}
-          onchange={updateWeatherProvider}
-        />
+          variant="select"
+          groupBy={false}
+          onChange={value => updateWeatherProvider(value as string)}
+        >
+          {#snippet renderOption(option)}
+            {@const weatherOption = option as WeatherOption}
+            <div class="flex items-center gap-2">
+              <WeatherIcon provider={weatherOption.providerCode} className="size-4" />
+              <span>{weatherOption.label}</span>
+            </div>
+          {/snippet}
+          {#snippet renderSelected(options)}
+            {@const weatherOption = options[0] as WeatherOption}
+            <span class="flex items-center gap-2">
+              <WeatherIcon provider={weatherOption.providerCode} className="size-4" />
+              <span>{weatherOption.label}</span>
+            </span>
+          {/snippet}
+        </SelectDropdown>
 
         <!-- Provider-specific notes -->
         {#if settings.weather.provider === 'none'}
@@ -2142,10 +2247,7 @@
               allowReveal={true}
             />
 
-            <SelectField
-              id="weather-units"
-              value={settings.weather.openWeather?.units || 'metric'}
-              label={t('settings.integration.weather.units.label')}
+            <SelectDropdown
               options={[
                 {
                   value: 'standard',
@@ -2157,8 +2259,13 @@
                   label: t('settings.integration.weather.units.options.imperial'),
                 },
               ]}
+              value={settings.weather.openWeather?.units || 'metric'}
+              label={t('settings.integration.weather.units.label')}
               disabled={store.isLoading || store.isSaving}
-              onchange={updateWeatherUnits}
+              variant="select"
+              groupBy={false}
+              menuSize="sm"
+              onChange={value => updateWeatherUnits(value as string)}
             />
           </div>
         {:else if settings.weather.provider === 'wunderground'}
@@ -2195,17 +2302,19 @@
               disabled={store.isLoading || store.isSaving}
             />
 
-            <SelectField
-              id="wunderground-units"
-              value={settings.weather.wunderground?.units ?? 'm'}
-              label={t('settings.integration.weather.wunderground.units.label')}
+            <SelectDropdown
               options={[
                 { value: 'e', label: t('settings.integration.weather.units.options.imperial') },
                 { value: 'm', label: t('settings.integration.weather.units.options.metric') },
                 { value: 'h', label: t('settings.integration.weather.units.options.ukhybrid') },
               ]}
+              value={settings.weather.wunderground?.units ?? 'm'}
+              label={t('settings.integration.weather.wunderground.units.label')}
               disabled={store.isLoading || store.isSaving}
-              onchange={units => updateWundergroundSetting('units', units)}
+              variant="select"
+              groupBy={false}
+              menuSize="sm"
+              onChange={value => updateWundergroundSetting('units', value as string)}
             />
           </div>
         {/if}
@@ -2268,18 +2377,34 @@
       <div class="space-y-6">
         <!-- Database Type Selector -->
         <div class="max-w-md">
-          <SelectField
-            id="database-type"
-            bind:value={selectedDatabaseType}
+          <SelectDropdown
+            options={databaseOptions}
+            value={selectedDatabaseType}
             label={t('settings.main.sections.database.type.label')}
-            options={[
-              { value: 'sqlite', label: 'SQLite' },
-              { value: 'mysql', label: 'MySQL' },
-            ]}
             helpText={t('settings.main.sections.database.type.helpText')}
             disabled={store.isLoading || store.isSaving}
-            onchange={value => updateDatabaseType(value as 'sqlite' | 'mysql')}
-          />
+            variant="select"
+            groupBy={false}
+            onChange={value => {
+              selectedDatabaseType = value as string;
+              updateDatabaseType(value as 'sqlite' | 'mysql');
+            }}
+          >
+            {#snippet renderOption(option)}
+              {@const dbOption = option as DatabaseOption}
+              <div class="flex items-center gap-2">
+                <DatabaseIcon database={dbOption.databaseType} className="size-4" />
+                <span>{dbOption.label}</span>
+              </div>
+            {/snippet}
+            {#snippet renderSelected(options)}
+              {@const dbOption = options[0] as DatabaseOption}
+              <span class="flex items-center gap-2">
+                <DatabaseIcon database={dbOption.databaseType} className="size-4" />
+                <span>{dbOption.label}</span>
+              </span>
+            {/snippet}
+          </SelectDropdown>
         </div>
 
         <!-- SQLite Settings -->

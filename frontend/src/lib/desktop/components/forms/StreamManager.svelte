@@ -26,6 +26,7 @@
   import StreamCard, { type StreamStatus } from './StreamCard.svelte';
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
+  import SelectDropdown from './SelectDropdown.svelte';
 
   const logger = loggers.audio;
 
@@ -78,6 +79,15 @@
   // For now, we use the global transport but store per-stream for future
   // Using SvelteMap for automatic reactivity
   let streamTransports = $state(new SvelteMap<string, string>());
+
+  // Stream type options (RTSP only for now)
+  const streamTypeOptions = [{ value: 'rtsp', label: 'RTSP' }];
+
+  // Transport protocol options
+  const transportOptions = [
+    { value: 'tcp', label: 'TCP' },
+    { value: 'udp', label: 'UDP' },
+  ];
 
   // Summary stats
   let healthySummary = $derived.by(() => {
@@ -471,40 +481,28 @@
 
           <!-- Type and Transport Row -->
           <div class="grid grid-cols-2 gap-4">
-            <div class="form-control">
-              <label class="label py-1" for="new-stream-type">
-                <span class="label-text text-sm font-medium">
-                  {t('settings.audio.streams.typeLabel')}
-                </span>
-              </label>
-              <select
-                id="new-stream-type"
-                bind:value={newStreamType}
-                class="select select-sm w-full"
-                disabled
-              >
-                <option value="rtsp">RTSP</option>
-              </select>
-              <span class="text-xs text-base-content opacity-50 mt-1">
-                {t('settings.audio.streams.typeLockedNote')}
-              </span>
+            <div>
+              <SelectDropdown
+                value={newStreamType}
+                label={t('settings.audio.streams.typeLabel')}
+                helpText={t('settings.audio.streams.typeLockedNote')}
+                options={streamTypeOptions}
+                disabled={true}
+                groupBy={false}
+                menuSize="sm"
+              />
             </div>
 
-            <div class="form-control">
-              <label class="label py-1" for="new-stream-transport">
-                <span class="label-text text-sm font-medium">
-                  {t('settings.audio.streams.transportLabel')}
-                </span>
-              </label>
-              <select
-                id="new-stream-transport"
-                bind:value={newTransport}
-                class="select select-sm w-full"
+            <div>
+              <SelectDropdown
+                value={newTransport}
+                label={t('settings.audio.streams.transportLabel')}
+                options={transportOptions}
                 {disabled}
-              >
-                <option value="tcp">TCP</option>
-                <option value="udp">UDP</option>
-              </select>
+                onChange={value => (newTransport = value as string)}
+                groupBy={false}
+                menuSize="sm"
+              />
             </div>
           </div>
 

@@ -21,6 +21,9 @@
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
+  import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
+  import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -67,10 +70,16 @@
     data: T;
   }
 
+  // Extended option type for locale with typed locale code
+  interface LocaleOption extends SelectOption {
+    localeCode: FlagLocale;
+  }
+
   // PERFORMANCE OPTIMIZATION: Static UI locales computed once
-  const uiLocales = Object.entries(LOCALES).map(([code, info]) => ({
+  const uiLocales: LocaleOption[] = Object.entries(LOCALES).map(([code, info]) => ({
     value: code,
-    label: `${info.flag} ${info.name}`,
+    label: info.name,
+    localeCode: code as FlagLocale,
   }));
 
   // Image provider options
@@ -260,15 +269,31 @@
           class:opacity-50={!settings.dashboard.newUI}
         >
           <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-            <SelectField
-              id="ui-locale"
+            <SelectDropdown
+              options={uiLocales}
               value={settings.dashboard.locale}
               label={t('settings.main.sections.userInterface.interface.locale.label')}
-              options={uiLocales}
               helpText={t('settings.main.sections.userInterface.interface.locale.helpText')}
               disabled={!settings.dashboard.newUI || store.isLoading || store.isSaving}
-              onchange={updateUILocale}
-            />
+              variant="select"
+              groupBy={false}
+              onChange={value => updateUILocale(value as string)}
+            >
+              {#snippet renderOption(option)}
+                {@const localeOption = option as LocaleOption}
+                <div class="flex items-center gap-2">
+                  <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                  <span>{localeOption.label}</span>
+                </div>
+              {/snippet}
+              {#snippet renderSelected(options)}
+                {@const localeOption = options[0] as LocaleOption}
+                <span class="flex items-center gap-2">
+                  <FlagIcon locale={localeOption.localeCode} className="size-4" />
+                  <span>{localeOption.label}</span>
+                </span>
+              {/snippet}
+            </SelectDropdown>
           </div>
 
           {#if !settings.dashboard.newUI}

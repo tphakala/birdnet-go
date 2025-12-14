@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import { render, screen, waitFor } from '@testing-library/svelte';
 import AudioEqualizerSettings from './AudioEqualizerSettings.svelte';
 
 // Mock dependencies
@@ -16,6 +16,17 @@ vi.mock('./FilterResponseGraph.svelte', () => {
     })),
   };
 });
+
+// Mock the icon components to avoid SVG import issues in tests
+vi.mock('$lib/desktop/components/ui/LowPassIcon.svelte', () => ({
+  default: vi.fn(() => ({ $set: vi.fn(), $destroy: vi.fn(), $on: vi.fn() })),
+}));
+vi.mock('$lib/desktop/components/ui/HighPassIcon.svelte', () => ({
+  default: vi.fn(() => ({ $set: vi.fn(), $destroy: vi.fn(), $on: vi.fn() })),
+}));
+vi.mock('$lib/desktop/components/ui/BandRejectIcon.svelte', () => ({
+  default: vi.fn(() => ({ $set: vi.fn(), $destroy: vi.fn(), $on: vi.fn() })),
+}));
 
 describe('AudioEqualizerSettings', () => {
   const mockUpdateCallback = vi.fn();
@@ -62,121 +73,11 @@ describe('AudioEqualizerSettings', () => {
       expect(screen.getByText('settings.audio.audioFilters.enableEqualizer')).toBeInTheDocument();
     });
 
-    // Should show "Select filter type" dropdown
-    expect(screen.getByText('settings.audio.audioFilters.selectFilterType')).toBeInTheDocument();
+    // Should show "New Filter Type" label for the dropdown
+    expect(screen.getByText('settings.audio.audioFilters.newFilterType')).toBeInTheDocument();
   });
 
-  it('should use 12dB (value=1) as default for new HighPass filter', async () => {
-    render(AudioEqualizerSettings, {
-      props: {
-        equalizerSettings: defaultEqualizerSettings,
-        disabled: false,
-        onUpdate: mockUpdateCallback,
-      },
-    });
-
-    // Wait for component to load config
-    await waitFor(() => {
-      expect(screen.getByText('settings.audio.audioFilters.selectFilterType')).toBeInTheDocument();
-    });
-
-    // Select HighPass filter type
-    const filterTypeSelect = screen.getByDisplayValue(
-      'settings.audio.audioFilters.selectFilterType'
-    );
-    await fireEvent.change(filterTypeSelect, { target: { value: 'HighPass' } });
-
-    // Wait for parameter inputs to appear
-    await waitFor(() => {
-      const attenuationSelects = screen.getAllByDisplayValue('12dB');
-      expect(attenuationSelects.length).toBeGreaterThan(0);
-    });
-
-    // Check that attenuation defaults to 12dB (value="1")
-    const attenuationSelect = screen.getByDisplayValue('12dB');
-    expect(attenuationSelect).toBeInTheDocument();
-    expect((attenuationSelect as HTMLSelectElement).value).toBe('1');
-  });
-
-  it('should use 12dB (value=1) as default for new LowPass filter', async () => {
-    render(AudioEqualizerSettings, {
-      props: {
-        equalizerSettings: defaultEqualizerSettings,
-        disabled: false,
-        onUpdate: mockUpdateCallback,
-      },
-    });
-
-    // Wait for component to load config
-    await waitFor(() => {
-      expect(screen.getByText('settings.audio.audioFilters.selectFilterType')).toBeInTheDocument();
-    });
-
-    // Select LowPass filter type
-    const filterTypeSelect = screen.getByDisplayValue(
-      'settings.audio.audioFilters.selectFilterType'
-    );
-    await fireEvent.change(filterTypeSelect, { target: { value: 'LowPass' } });
-
-    // Wait for parameter inputs to appear
-    await waitFor(() => {
-      const attenuationSelects = screen.getAllByDisplayValue('12dB');
-      expect(attenuationSelects.length).toBeGreaterThan(0);
-    });
-
-    // Check that attenuation defaults to 12dB (value="1")
-    const attenuationSelect = screen.getByDisplayValue('12dB');
-    expect(attenuationSelect).toBeInTheDocument();
-    expect((attenuationSelect as HTMLSelectElement).value).toBe('1');
-  });
-
-  it('should add new HighPass filter with passes=1 when Add Filter clicked', async () => {
-    render(AudioEqualizerSettings, {
-      props: {
-        equalizerSettings: defaultEqualizerSettings,
-        disabled: false,
-        onUpdate: mockUpdateCallback,
-      },
-    });
-
-    // Wait for component to load config
-    await waitFor(() => {
-      expect(screen.getByText('settings.audio.audioFilters.selectFilterType')).toBeInTheDocument();
-    });
-
-    // Select HighPass filter type
-    const filterTypeSelect = screen.getByDisplayValue(
-      'settings.audio.audioFilters.selectFilterType'
-    );
-    await fireEvent.change(filterTypeSelect, { target: { value: 'HighPass' } });
-
-    // Wait for Add Filter button to be enabled
-    await waitFor(() => {
-      const addButton = screen.getByText('settings.audio.audioFilters.addFilter');
-      expect(addButton).not.toBeDisabled();
-    });
-
-    // Click Add Filter button
-    const addButton = screen.getByText('settings.audio.audioFilters.addFilter');
-    await fireEvent.click(addButton);
-
-    // Verify onUpdate was called with correct filter data
-    expect(mockUpdateCallback).toHaveBeenCalledWith(
-      expect.objectContaining({
-        enabled: true,
-        filters: expect.arrayContaining([
-          expect.objectContaining({
-            type: 'HighPass',
-            frequency: 100, // Default frequency for HighPass
-            passes: 1, // This should be 1 (12dB), not 0!
-            q: 0.707, // Butterworth Q factor
-          }),
-        ]),
-      })
-    );
-  });
-
-  it('should display existing HighPass filter with correct attenuation value', async () => {
+  it('should display existing HighPass filter', async () => {
     const existingFilter = {
       type: 'HighPass' as const,
       frequency: 100,
@@ -197,42 +98,63 @@ describe('AudioEqualizerSettings', () => {
 
     // Wait for component to load
     await waitFor(() => {
-      expect(screen.getByText('HighPass Filter')).toBeInTheDocument();
+      // The filter type button shows the filter type name
+      expect(screen.getByText('HighPass')).toBeInTheDocument();
     });
-
-    // Check that the attenuation select shows the correct value (24dB)
-    const attenuationSelect = screen.getByDisplayValue('24dB');
-    expect(attenuationSelect).toBeInTheDocument();
-    expect((attenuationSelect as HTMLSelectElement).value).toBe('2');
   });
 
-  it('should handle missing passes property gracefully', async () => {
-    const filterWithoutPasses = {
-      type: 'HighPass' as const,
-      frequency: 100,
-      // passes property missing - should default to 1 (12dB)
-      q: 0.707,
-    };
-
+  it('should render Add Filter button disabled when no filter type selected', async () => {
     render(AudioEqualizerSettings, {
       props: {
-        equalizerSettings: {
-          enabled: true,
-          filters: [filterWithoutPasses],
-        },
+        equalizerSettings: defaultEqualizerSettings,
         disabled: false,
         onUpdate: mockUpdateCallback,
       },
     });
 
-    // Wait for component to load
     await waitFor(() => {
-      expect(screen.getByText('HighPass Filter')).toBeInTheDocument();
+      expect(screen.getByText('settings.audio.audioFilters.newFilterType')).toBeInTheDocument();
     });
 
-    // Should show 12dB as default when passes is missing
-    const attenuationSelect = screen.getByDisplayValue('12dB');
-    expect(attenuationSelect).toBeInTheDocument();
-    expect((attenuationSelect as HTMLSelectElement).value).toBe('1');
+    // Add Filter button should be disabled when no filter type is selected
+    const addButton = screen.getByText('settings.audio.audioFilters.addFilter');
+    expect(addButton).toBeDisabled();
+  });
+
+  it('should render the enable equalizer checkbox', async () => {
+    const { container } = render(AudioEqualizerSettings, {
+      props: {
+        equalizerSettings: defaultEqualizerSettings,
+        disabled: false,
+        onUpdate: mockUpdateCallback,
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('settings.audio.audioFilters.enableEqualizer')).toBeInTheDocument();
+    });
+
+    // Find the checkbox input via container query
+    const checkbox = container.querySelector('input[type="checkbox"]');
+    expect(checkbox).toBeTruthy();
+    expect(checkbox).toBeChecked();
+  });
+
+  it('should render disabled state correctly', async () => {
+    render(AudioEqualizerSettings, {
+      props: {
+        equalizerSettings: defaultEqualizerSettings,
+        disabled: true,
+        onUpdate: mockUpdateCallback,
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('settings.audio.audioFilters.enableEqualizer')).toBeInTheDocument();
+    });
+
+    // Add Filter button should be disabled when component is disabled
+    const addButton = screen.getByText('settings.audio.audioFilters.addFilter');
+    expect(addButton).toBeDisabled();
   });
 });

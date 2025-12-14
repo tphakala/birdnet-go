@@ -4,14 +4,14 @@
  */
 
 export const LOCALES = {
-  en: { name: 'English', flag: '🇺🇸' },
-  de: { name: 'Deutsch', flag: '🇩🇪' },
-  fr: { name: 'Français', flag: '🇫🇷' },
-  es: { name: 'Español', flag: '🇪🇸' },
-  fi: { name: 'Suomi', flag: '🇫🇮' },
-  nl: { name: 'Nederlands', flag: '🇳🇱' },
-  pl: { name: 'Polski', flag: '🇵🇱' },
-  pt: { name: 'Português', flag: '🇵🇹' },
+  en: { name: 'English' },
+  de: { name: 'Deutsch' },
+  fr: { name: 'Francais' },
+  es: { name: 'Espanol' },
+  fi: { name: 'Suomi' },
+  nl: { name: 'Nederlands' },
+  pl: { name: 'Polski' },
+  pt: { name: 'Portugues' },
 } as const;
 
 export type Locale = keyof typeof LOCALES;

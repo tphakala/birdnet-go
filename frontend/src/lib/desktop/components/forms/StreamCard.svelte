@@ -22,6 +22,7 @@
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
+  import SelectDropdown from './SelectDropdown.svelte';
 
   // Stream health status type
   export type StreamStatus = 'connected' | 'connecting' | 'error' | 'idle' | 'unknown';
@@ -242,42 +243,27 @@
 
         <!-- Type and Transport Row -->
         <div class="grid grid-cols-2 gap-4">
-          <div class="form-control">
-            <label class="label py-1" for="stream-type-{index}">
-              <span class="label-text text-xs font-medium">
-                {t('settings.audio.streams.typeLabel')}
-              </span>
-            </label>
-            <select
-              id="stream-type-{index}"
-              bind:value={editStreamType}
-              class="select select-sm w-full"
-              disabled
-            >
-              {#each streamTypeOptions as opt (opt.value)}
-                <option value={opt.value}>{opt.label}</option>
-              {/each}
-            </select>
-            <span class="text-xs text-base-content opacity-50 mt-1">
-              {t('settings.audio.streams.typeLockedNote')}
-            </span>
+          <div>
+            <SelectDropdown
+              value={editStreamType}
+              label={t('settings.audio.streams.typeLabel')}
+              helpText={t('settings.audio.streams.typeLockedNote')}
+              options={streamTypeOptions}
+              disabled={true}
+              groupBy={false}
+              menuSize="sm"
+            />
           </div>
 
-          <div class="form-control">
-            <label class="label py-1" for="stream-transport-{index}">
-              <span class="label-text text-xs font-medium">
-                {t('settings.audio.streams.transportLabel')}
-              </span>
-            </label>
-            <select
-              id="stream-transport-{index}"
-              bind:value={editTransport}
-              class="select select-sm w-full"
-            >
-              {#each transportOptions as opt (opt.value)}
-                <option value={opt.value}>{opt.label}</option>
-              {/each}
-            </select>
+          <div>
+            <SelectDropdown
+              value={editTransport}
+              label={t('settings.audio.streams.transportLabel')}
+              options={transportOptions}
+              onChange={value => (editTransport = value as string)}
+              groupBy={false}
+              menuSize="sm"
+            />
           </div>
         </div>
 
