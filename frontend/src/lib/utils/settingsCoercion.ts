@@ -15,6 +15,12 @@ import type {
   MQTTSettings,
   OAuthSettings,
   EqualizerFilter,
+  NotificationSettings,
+  PushSettings,
+  PushProviderConfig,
+  WebhookEndpointConfig,
+  WebhookAuthConfig,
+  PushFilterConfig,
 } from '$lib/stores/settings';
 
 // Type for partial/unknown settings data
@@ -24,6 +30,7 @@ type PartialAudioSettings = Partial<AudioSettings> & UnknownSettings;
 type PartialSecuritySettings = Partial<SecuritySettings> & UnknownSettings;
 type PartialSpeciesSettings = Partial<SpeciesSettings> & UnknownSettings;
 type PartialMQTTSettings = Partial<MQTTSettings> & UnknownSettings;
+type PartialNotificationSettings = Partial<NotificationSettings> & UnknownSettings;
 
 /**
  * Coerce a value to a number within specified bounds
@@ -506,6 +513,160 @@ export function coerceMQTTSettings(settings: PartialMQTTSettings): PartialMQTTSe
 }
 
 /**
+ * Validate and coerce webhook endpoint configuration
+ */
+function coerceWebhookEndpoint(endpoint: unknown): WebhookEndpointConfig | null {
+  if (!endpoint || typeof endpoint !== 'object' || Array.isArray(endpoint)) {
+    return null;
+  }
+
+  const e = endpoint as UnknownSettings;
+  const url = coerceString(e.url, '');
+
+  // Skip endpoints with no URL
+  if (!url) {
+    return null;
+  }
+
+  const coercedEndpoint: WebhookEndpointConfig = {
+    url,
+    method: coerceString(e.method, 'POST'),
+    timeout: e.timeout !== undefined ? coerceNumber(e.timeout, 1, 300, 30) : undefined,
+  };
+
+  // Coerce headers if present
+  if (e.headers && typeof e.headers === 'object' && !Array.isArray(e.headers)) {
+    coercedEndpoint.headers = e.headers as Record<string, string>;
+  }
+
+  // Coerce auth if present
+  if (e.auth && typeof e.auth === 'object' && !Array.isArray(e.auth)) {
+    const auth = e.auth as UnknownSettings;
+    const authType = coerceString(auth.type, 'none');
+    const validAuthTypes = ['none', 'bearer', 'basic', 'custom'];
+    const normalizedType = validAuthTypes.includes(authType) ? authType : 'none';
+
+    coercedEndpoint.auth = {
+      type: normalizedType as WebhookAuthConfig['type'],
+      token: coerceString(auth.token, ''),
+      user: coerceString(auth.user, ''),
+      pass: coerceString(auth.pass, ''),
+      header: coerceString(auth.header, ''),
+      value: coerceString(auth.value, ''),
+    };
+  }
+
+  return coercedEndpoint;
+}
+
+/**
+ * Validate and coerce push provider configuration
+ */
+function coercePushProvider(provider: unknown): PushProviderConfig | null {
+  if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
+    return null;
+  }
+
+  const p = provider as UnknownSettings;
+  const providerType = coerceString(p.type, 'shoutrrr');
+  const validTypes = ['shoutrrr', 'webhook', 'script'];
+  const normalizedType = validTypes.includes(providerType) ? providerType : 'shoutrrr';
+
+  const coercedProvider: PushProviderConfig = {
+    type: normalizedType as PushProviderConfig['type'],
+    enabled: coerceBoolean(p.enabled, false),
+    name: coerceString(p.name, ''),
+    timeout: p.timeout !== undefined ? coerceNumber(p.timeout, 1, 300, 30) : undefined,
+  };
+
+  // Coerce URLs for shoutrrr providers
+  if (p.urls !== undefined) {
+    coercedProvider.urls = coerceArray<string>(p.urls, []).filter(url => typeof url === 'string' && url.trim() !== '');
+  }
+
+  // Coerce endpoints for webhook providers
+  if (p.endpoints !== undefined) {
+    const endpoints = coerceArray(p.endpoints, []);
+    coercedProvider.endpoints = endpoints
+      .map(coerceWebhookEndpoint)
+      .filter((e): e is WebhookEndpointConfig => e !== null);
+  }
+
+  // Coerce filter if present
+  if (p.filter && typeof p.filter === 'object' && !Array.isArray(p.filter)) {
+    const f = p.filter as UnknownSettings;
+    const coercedFilter: PushFilterConfig = {};
+
+    if (f.types !== undefined) {
+      coercedFilter.types = coerceArray<string>(f.types, []);
+    }
+    if (f.priorities !== undefined) {
+      coercedFilter.priorities = coerceArray<string>(f.priorities, []);
+    }
+    if (f.components !== undefined) {
+      coercedFilter.components = coerceArray<string>(f.components, []);
+    }
+
+    coercedProvider.filter = coercedFilter;
+  }
+
+  return coercedProvider;
+}
+
+/**
+ * Validate and coerce push settings
+ */
+function coercePushSettings(settings: unknown): PushSettings {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+    return {
+      enabled: false,
+      providers: [],
+    };
+  }
+
+  const s = settings as UnknownSettings;
+
+  return {
+    enabled: coerceBoolean(s.enabled, false),
+    providers: coerceArray(s.providers, [])
+      .map(coercePushProvider)
+      .filter((p): p is PushProviderConfig => p !== null),
+  };
+}
+
+/**
+ * Validate and coerce notification settings
+ */
+export function coerceNotificationSettings(
+  settings: PartialNotificationSettings | null | undefined
+): PartialNotificationSettings {
+  const safeSettings = settings && typeof settings === 'object' ? settings : {};
+
+  const coerced: PartialNotificationSettings = {};
+
+  // Coerce push settings
+  if ('push' in safeSettings) {
+    coerced.push = coercePushSettings(safeSettings.push);
+  }
+
+  // Coerce templates if present
+  if (safeSettings.templates && typeof safeSettings.templates === 'object') {
+    const templates = safeSettings.templates as UnknownSettings;
+    coerced.templates = {};
+
+    if (templates.newSpecies && typeof templates.newSpecies === 'object') {
+      const ns = templates.newSpecies as UnknownSettings;
+      coerced.templates.newSpecies = {
+        title: coerceString(ns.title, ''),
+        message: coerceString(ns.message, ''),
+      };
+    }
+  }
+
+  return coerced;
+}
+
+/**
  * Main coercion function for all settings
  */
 export function coerceSettings(section: string, data: UnknownSettings): UnknownSettings {
@@ -538,6 +699,8 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
       return coerceSpeciesSettings(data as PartialSpeciesSettings);
     case 'mqtt':
       return coerceMQTTSettings(data as PartialMQTTSettings);
+    case 'notification':
+      return coerceNotificationSettings(data as PartialNotificationSettings);
     default:
       return data;
   }

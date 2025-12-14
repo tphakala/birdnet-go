@@ -40,19 +40,11 @@
     Pencil,
     Trash2,
     ExternalLink,
+    ChevronDown,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
-
-  // Service icons
-  import DiscordIcon from '$lib/assets/icons/services/discord.svg?raw';
-  import TelegramIcon from '$lib/assets/icons/services/telegram.svg?raw';
-  import SlackIcon from '$lib/assets/icons/services/slack.svg?raw';
-  import NtfyIcon from '$lib/assets/icons/services/ntfy.svg?raw';
-  import GotifyIcon from '$lib/assets/icons/services/gotify.svg?raw';
-  import PushoverIcon from '$lib/assets/icons/services/pushover.svg?raw';
-  import IftttIcon from '$lib/assets/icons/services/ifttt.svg?raw';
-  import WebhookIcon from '$lib/assets/icons/services/webhook.svg?raw';
-  import CustomIcon from '$lib/assets/icons/services/custom.svg?raw';
+  import ServiceIcon from '$lib/desktop/components/ui/ServiceIcon.svelte';
+  import type { ServiceType } from '$lib/desktop/components/ui/ServiceIcon.svelte';
   import type {
     PushProviderConfig,
     PushSettings,
@@ -96,18 +88,6 @@
   let savingPush = $state(false);
   let pushStatusMessage = $state('');
   let pushStatusType = $state<'info' | 'success' | 'error'>('info');
-
-  // Service template types
-  type ServiceType =
-    | 'discord'
-    | 'telegram'
-    | 'ntfy'
-    | 'gotify'
-    | 'pushover'
-    | 'slack'
-    | 'ifttt'
-    | 'webhook'
-    | 'custom';
 
   // Service-specific form data
   interface ServiceFormData {
@@ -178,19 +158,6 @@
     customUrl: '',
   });
   let testingProvider = $state(false);
-
-  // Service icon map for rendering
-  const serviceIcons: Record<ServiceType, string> = {
-    discord: DiscordIcon,
-    telegram: TelegramIcon,
-    slack: SlackIcon,
-    ntfy: NtfyIcon,
-    gotify: GotifyIcon,
-    pushover: PushoverIcon,
-    ifttt: IftttIcon,
-    webhook: WebhookIcon,
-    custom: CustomIcon,
-  };
 
   // Available services for the dropdown
   const availableServices: { id: ServiceType; name: string }[] = [
@@ -927,9 +894,8 @@
 
   onMount(() => {
     // Cache CSRF token once - it doesn't change during session
-    csrfToken =
-      (document.querySelector('meta[name="csrf-token"]') as HTMLElement)?.getAttribute('content') ||
-      '';
+    const meta = document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement | null;
+    csrfToken = meta?.content ?? '';
     loadNotificationSettings();
   });
 
@@ -1199,27 +1165,13 @@
                       onclick={() => (serviceDropdownOpen = !serviceDropdownOpen)}
                     >
                       <span class="flex items-center gap-2">
-                        <span class="size-5 shrink-0 [&>svg]:size-full">
-                          {@html serviceIcons[selectedService]}
-                        </span>
+                        <ServiceIcon service={selectedService} />
                         <span
                           >{availableServices.find(s => s.id === selectedService)?.name ||
                             'Select service'}</span
                         >
                       </span>
-                      <svg
-                        class="size-4 opacity-70"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M19 9l-7 7-7-7"
-                        />
-                      </svg>
+                      <ChevronDown class="size-4 opacity-70" />
                     </button>
                     {#if serviceDropdownOpen}
                       <ul
@@ -1236,9 +1188,7 @@
                                 serviceDropdownOpen = false;
                               }}
                             >
-                              <span class="size-5 shrink-0 [&>svg]:size-full">
-                                {@html serviceIcons[service.id]}
-                              </span>
+                              <ServiceIcon service={service.id} />
                               <span>{service.name}</span>
                             </button>
                           </li>
@@ -1653,7 +1603,7 @@
 
           {#if pushSettings.providers && pushSettings.providers.length > 0}
             <div class="space-y-2">
-              {#each pushSettings.providers as provider, index (index)}
+              {#each pushSettings.providers as provider, index (`${provider.type}:${provider.name}:${index}`)}
                 <div
                   class="card bg-base-200"
                   class:opacity-50={!provider.enabled || !pushSettings.enabled}
