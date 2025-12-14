@@ -1772,6 +1772,36 @@
       }
     },
     "species": {
+      "activeSpecies": {
+        "title": "Espécies Ativas",
+        "description": "Espécies que serão detectadas com base na sua localização atual e configurações de filtro",
+        "stats": {
+          "species": "Espécies",
+          "location": "Localização",
+          "threshold": "Limiar",
+          "updated": "Atualizado",
+          "justNow": "Agora mesmo",
+          "minutesAgo": "há {count}m",
+          "hoursAgo": "há {count}h"
+        },
+        "search": {
+          "placeholder": "Pesquisar espécies..."
+        },
+        "badges": {
+          "included": "Incluída",
+          "configured": "Configurada"
+        },
+        "empty": {
+          "title": "Nenhuma espécie encontrada",
+          "description": "Configure sua localização nas Configurações Principais para ver as espécies disponíveis"
+        },
+        "noResults": "Nenhuma espécie corresponde à sua pesquisa",
+        "infoNote": "Esta lista é baseada na sua localização e no limiar do filtro de alcance. Espécies adicionadas manualmente são sempre incluídas.",
+        "retry": "Tentar novamente",
+        "errors": {
+          "loadFailed": "Falha ao carregar a lista de espécies ativas"
+        }
+      },
       "alwaysInclude": {
         "title": "Sempre incluir espécies",
         "description": "Espécies nesta lista serão sempre incluídas no alcance de espécies detectadas",

@@ -25,22 +25,25 @@
   @component
 -->
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, untrack } from 'svelte';
   import SpeciesInput from '$lib/desktop/components/forms/SpeciesInput.svelte';
   import {
     settingsStore,
     settingsActions,
     speciesSettings,
     realtimeSettings,
+    birdnetSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { SpeciesConfig, SpeciesSettings } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
+  import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
+  import { api } from '$lib/utils/api';
   import {
     ChevronRight,
     Plus,
@@ -49,6 +52,15 @@
     CirclePlus,
     CircleMinus,
     Settings2,
+    ListCheck,
+    Download,
+    MapPin,
+    SlidersHorizontal,
+    Clock,
+    Bird,
+    Search,
+    Maximize2,
+    Minimize2,
   } from '@lucide/svelte';
   import { toastActions } from '$lib/stores/toast';
 
@@ -103,6 +115,91 @@
     loading: true,
     error: null,
     data: [],
+  });
+
+  // Active species types
+  interface ActiveSpecies {
+    commonName: string;
+    scientificName: string;
+    score: number;
+    isManuallyIncluded: boolean;
+    hasCustomConfig: boolean;
+  }
+
+  interface ActiveSpeciesData {
+    species: ActiveSpecies[];
+    count: number;
+    threshold: number;
+    location: { latitude: number; longitude: number };
+    lastUpdated: Date;
+  }
+
+  // Active species state - start with loading: true to prevent flash of "location not configured"
+  let activeSpeciesState = $state<{
+    loading: boolean;
+    error: string | null;
+    data: ActiveSpeciesData | null;
+    locationNotConfigured: boolean;
+    initialized: boolean; // Track if we've ever attempted to load
+  }>({
+    loading: true,
+    error: null,
+    data: null,
+    locationNotConfigured: false,
+    initialized: false,
+  });
+
+  // Search query for active species filtering
+  // Use separate input value and debounced query to prevent rapid reactive updates
+  // that can corrupt Svelte's internal state
+  let searchInputValue = $state('');
+  let activeSearchQuery = $state('');
+  let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Debounced search update to prevent Svelte reactive corruption during rapid typing
+  function handleSearchInput(event: Event) {
+    const value = (event.target as HTMLInputElement).value;
+    searchInputValue = value;
+
+    // Clear existing timer
+    if (searchDebounceTimer) {
+      clearTimeout(searchDebounceTimer);
+    }
+
+    // Debounce the actual search query update
+    searchDebounceTimer = setTimeout(() => {
+      searchDebounceTimer = null;
+      activeSearchQuery = value;
+    }, 150);
+  }
+
+  // List view state: expanded or compact with scroll
+  let isListExpanded = $state(false);
+
+  // Filtered active species list - use pure $derived.by() to avoid any state modifications
+  // during Svelte's reactive update cycle which can corrupt internal linked list state
+  // This is a read-only computation, not a state change, so it's safe
+  let filteredActiveSpecies = $derived.by(() => {
+    const data = activeSpeciesState.data;
+    const searchQuery = activeSearchQuery;
+
+    if (!data?.species) {
+      return [] as ActiveSpecies[];
+    }
+
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      // Return the original array reference when no search query
+      // This is safe because we're not mutating it
+      return data.species;
+    }
+
+    // Filter creates a new array, which is what we want for search results
+    return data.species.filter(
+      s =>
+        s.commonName.toLowerCase().includes(query) ||
+        s.scientificName.toLowerCase().includes(query)
+    );
   });
 
   // PERFORMANCE OPTIMIZATION: Derived species lists
@@ -227,6 +324,187 @@
     }
   }
 
+  // Re-entrancy guard for loadActiveSpecies to prevent concurrent API calls
+  // and state corruption during Svelte's update cycle
+  let isLoadingActiveSpecies = false;
+
+  // Load active species list from API
+  // Takes birdnet settings as parameter to ensure we have the correct values
+  async function loadActiveSpecies(birdnetData: {
+    latitude: number;
+    longitude: number;
+    rangeFilter?: { threshold: number };
+  }) {
+    // Prevent re-entrant calls that can corrupt Svelte's internal state
+    if (isLoadingActiveSpecies) {
+      return;
+    }
+    isLoadingActiveSpecies = true;
+
+    // Check if location is configured (not 0,0)
+    const locationConfigured = birdnetData.latitude !== 0 || birdnetData.longitude !== 0;
+
+    // IMPORTANT: Capture all reactive values BEFORE any await
+    // Reading derived values after await corrupts Svelte's reactivity system
+    const currentInclude = settings.include;
+    const currentConfig = settings.config;
+
+    activeSpeciesState.loading = true;
+    activeSpeciesState.error = null;
+    activeSpeciesState.locationNotConfigured = !locationConfigured;
+    activeSpeciesState.initialized = true;
+
+    // If location is not configured, don't call the API - show warning instead
+    if (!locationConfigured) {
+      activeSpeciesState.loading = false;
+      activeSpeciesState.data = null;
+      isLoadingActiveSpecies = false;
+      return;
+    }
+
+    try {
+      const response = await api.post<{
+        species: Array<{
+          label: string;
+          scientificName: string;
+          commonName: string;
+          score: number;
+        }>;
+        count: number;
+        threshold: number;
+        location: { latitude: number; longitude: number };
+      }>('/api/v2/range/species/test', {
+        latitude: birdnetData.latitude,
+        longitude: birdnetData.longitude,
+        threshold: birdnetData.rangeFilter?.threshold ?? 0.01,
+      });
+
+      // Cross-reference with include/exclude and config lists (using captured values)
+      const includeSet = new Set(currentInclude.map(s => s.toLowerCase()));
+      const configKeys = new Set(Object.keys(currentConfig).map(s => s.toLowerCase()));
+      const threshold = response.threshold;
+
+      // Filter species that pass the threshold OR are manually included
+      const mappedSpecies: ActiveSpecies[] = response.species
+        .filter(s => s.score >= threshold || includeSet.has(s.commonName.toLowerCase()))
+        .map(s => ({
+          commonName: s.commonName,
+          scientificName: s.scientificName,
+          score: s.score,
+          isManuallyIncluded: includeSet.has(s.commonName.toLowerCase()),
+          hasCustomConfig: configKeys.has(s.commonName.toLowerCase()),
+        }));
+
+      // Sort by score descending
+      mappedSpecies.sort((a, b) => b.score - a.score);
+
+      activeSpeciesState.data = {
+        species: mappedSpecies,
+        count: mappedSpecies.length, // Use filtered count, not total
+        threshold: response.threshold,
+        location: response.location,
+        lastUpdated: new Date(),
+      };
+    } catch (error) {
+      logger.error('Failed to load active species:', error);
+      activeSpeciesState.error = t('settings.species.activeSpecies.errors.loadFailed');
+    } finally {
+      activeSpeciesState.loading = false;
+      isLoadingActiveSpecies = false;
+    }
+  }
+
+  // Auto-load active species when tab becomes active and settings are loaded
+  $effect(() => {
+    // Track these as dependencies - re-run when they change
+    // IMPORTANT: Use store.formData.birdnet directly instead of derived $birdnetSettings
+    // to avoid timing issues where the derived store hasn't recalculated yet
+    const currentTab = activeTab;
+    const settingsLoading = store.isLoading;
+    const birdnetData = store.formData?.birdnet;
+    const hasOriginalData = store.originalData?.birdnet !== undefined;
+
+    // Wait for main settings to actually be loaded (originalData is set when settings are fetched)
+    // This prevents flash of "location not configured" with default empty values
+    if (settingsLoading || !hasOriginalData) {
+      return;
+    }
+
+    // Don't track state reads to avoid infinite loops - read values INSIDE untrack
+    const loading = untrack(() => activeSpeciesState.loading);
+    const data = untrack(() => activeSpeciesState.data);
+    const locationNotConfigured = untrack(() => activeSpeciesState.locationNotConfigured);
+    const initialized = untrack(() => activeSpeciesState.initialized);
+
+    const hasLocationData =
+      birdnetData && birdnetData.latitude !== undefined && birdnetData.longitude !== undefined;
+    const hasRealCoordinates =
+      hasLocationData && (birdnetData.latitude !== 0 || birdnetData.longitude !== 0);
+    const isActiveTab = currentTab === 'active';
+    const canLoad = !loading || !initialized; // Allow first load even if loading=true initially
+    const noDataYet = !data;
+
+    // Also reload if we previously showed "location not configured" but now have real coordinates
+    const needsRetryWithRealCoords = locationNotConfigured && hasRealCoordinates;
+
+    if (
+      hasLocationData &&
+      isActiveTab &&
+      canLoad &&
+      (noDataYet || needsRetryWithRealCoords)
+    ) {
+      // CRITICAL: Use queueMicrotask to defer the call out of the $effect's synchronous context
+      // This prevents state modifications from happening during Svelte's reactive update cycle,
+      // which can corrupt Svelte's internal linked list and cause "Cannot read prev" errors
+      queueMicrotask(() => {
+        loadActiveSpecies(birdnetData);
+      });
+    }
+  });
+
+  // CSV download function for active species
+  function downloadActiveSpeciesCSV() {
+    if (!activeSpeciesState.data?.species.length) return;
+
+    const headers = ['Common Name', 'Scientific Name', 'Score', 'Included', 'Configured'];
+    const rows = activeSpeciesState.data.species.map(s => [
+      s.commonName,
+      s.scientificName,
+      s.score.toFixed(4),
+      s.isManuallyIncluded ? 'Yes' : 'No',
+      s.hasCustomConfig ? 'Yes' : 'No',
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `active-species-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Format relative time for last updated
+  function formatRelativeTime(date: Date): string {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+
+    if (diffMins < 1) return t('settings.species.activeSpecies.stats.justNow') || 'Just now';
+    if (diffMins < 60)
+      return (
+        t('settings.species.activeSpecies.stats.minutesAgo', { count: diffMins }) ||
+        `${diffMins}m ago`
+      );
+
+    const diffHours = Math.floor(diffMins / 60);
+    return (
+      t('settings.species.activeSpecies.stats.hoursAgo', { count: diffHours }) ||
+      `${diffHours}h ago`
+    );
+  }
+
   // PERFORMANCE OPTIMIZATION: Debounced prediction functions with memoization
   let debounceTimeouts = { include: 0, exclude: 0, config: 0 };
 
@@ -235,6 +513,9 @@
     clearTimeout(debounceTimeouts.include);
     clearTimeout(debounceTimeouts.exclude);
     clearTimeout(debounceTimeouts.config);
+    if (searchDebounceTimer) {
+      clearTimeout(searchDebounceTimer);
+    }
   });
 
   function updateIncludePredictions(input: string) {
@@ -470,10 +751,17 @@
   }
 
   // Tab state
-  let activeTab = $state('include');
+  let activeTab = $state('active');
 
   // Tab definitions for the species settings page
   let tabs = $derived<TabDefinition[]>([
+    {
+      id: 'active',
+      label: t('settings.species.activeSpecies.title'),
+      icon: ListCheck,
+      content: activeTabContent,
+      // No hasChanges - this is read-only
+    },
     {
       id: 'include',
       label: t('settings.species.alwaysInclude.title'),
@@ -497,6 +785,264 @@
     },
   ]);
 </script>
+
+<!-- Active Species Tab Content -->
+{#snippet activeTabContent()}
+  <div class="space-y-4">
+    <!-- Stats Bar - Outside the card -->
+    {#if activeSpeciesState.data}
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <!-- Species Count -->
+        <div class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-3">
+            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
+              <Bird class="size-4" />
+              <span class="text-xs font-medium"
+                >{t('settings.species.activeSpecies.stats.species')}</span
+              >
+            </div>
+            <div class="mt-1 text-xl font-semibold">{activeSpeciesState.data.count}</div>
+          </div>
+        </div>
+
+        <!-- Location -->
+        <div class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-3">
+            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
+              <MapPin class="size-4" />
+              <span class="text-xs font-medium"
+                >{t('settings.species.activeSpecies.stats.location')}</span
+              >
+            </div>
+            <div
+              class="mt-1 text-sm font-semibold truncate"
+              title="{activeSpeciesState.data.location.latitude.toFixed(
+                2
+              )}°, {activeSpeciesState.data.location.longitude.toFixed(2)}°"
+            >
+              {activeSpeciesState.data.location.latitude.toFixed(2)}°, {activeSpeciesState.data.location.longitude.toFixed(
+                2
+              )}°
+            </div>
+          </div>
+        </div>
+
+        <!-- Threshold -->
+        <div class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-3">
+            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
+              <SlidersHorizontal class="size-4" />
+              <span class="text-xs font-medium"
+                >{t('settings.species.activeSpecies.stats.threshold')}</span
+              >
+            </div>
+            <div class="mt-1 text-xl font-semibold">{activeSpeciesState.data.threshold}</div>
+          </div>
+        </div>
+
+        <!-- Last Updated -->
+        <div class="card bg-base-100 shadow-sm border border-base-300">
+          <div class="card-body p-3">
+            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
+              <Clock class="size-4" />
+              <span class="text-xs font-medium"
+                >{t('settings.species.activeSpecies.stats.updated')}</span
+              >
+            </div>
+            <div class="mt-1 text-sm font-semibold">
+              {formatRelativeTime(activeSpeciesState.data.lastUpdated)}
+            </div>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    <!-- Main Content Card -->
+    <SettingsSection
+      title={t('settings.species.activeSpecies.title')}
+      description={t('settings.species.activeSpecies.description')}
+      defaultOpen={true}
+    >
+      <div class="space-y-4">
+        <!-- Loading State: Show spinner until both main settings AND active species data are ready -->
+        <!-- Guard against flash: Don't show location warning until main settings have truly loaded from API -->
+        {#if activeSpeciesState.loading || store.isLoading || !store.originalData?.birdnet}
+          <div class="flex items-center justify-center py-12">
+            <div
+              class="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full"
+            ></div>
+          </div>
+        {:else if activeSpeciesState.error}
+          <!-- Error State -->
+          <div class="p-4 rounded-lg bg-error/10 text-error">
+            <p class="text-sm">{activeSpeciesState.error}</p>
+            <button
+              type="button"
+              class="mt-2 px-3 py-1.5 text-sm rounded-lg bg-error/20 hover:bg-error/30 transition-colors"
+              onclick={() => {
+                const birdnetData = $birdnetSettings;
+                if (birdnetData) loadActiveSpecies(birdnetData);
+              }}
+            >
+              {t('settings.species.activeSpecies.retry') || 'Retry'}
+            </button>
+          </div>
+        {:else if activeSpeciesState.locationNotConfigured}
+          <!-- Location Not Configured Warning -->
+          <div class="p-4 rounded-lg bg-warning/10 border border-warning/30">
+            <div class="flex items-start gap-3">
+              <MapPin class="size-5 text-warning shrink-0 mt-0.5" />
+              <div>
+                <p class="font-medium text-warning">
+                  {t('settings.species.activeSpecies.locationNotConfigured.title') ||
+                    'Location Not Configured'}
+                </p>
+                <p class="text-sm text-[color:var(--color-base-content)] opacity-70 mt-1">
+                  {t('settings.species.activeSpecies.locationNotConfigured.description') ||
+                    'Set your location in Main Settings to see species available in your area. The range filter uses your location to determine which species are likely to be found nearby.'}
+                </p>
+                <a href="/ui/settings/main" class="btn btn-warning btn-sm mt-3">
+                  {t('settings.species.activeSpecies.locationNotConfigured.action') ||
+                    'Configure Location'}
+                </a>
+              </div>
+            </div>
+          </div>
+        {:else if activeSpeciesState.data}
+          <!-- Search & Actions Bar -->
+          <div class="flex items-center gap-3">
+            <!-- Search Input -->
+            <div class="relative flex-1">
+              <Search
+                class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[color:var(--color-base-content)] opacity-40"
+              />
+              <input
+                type="text"
+                value={searchInputValue}
+                oninput={handleSearchInput}
+                placeholder={t('settings.species.activeSpecies.search.placeholder')}
+                autocomplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                data-form-type="other"
+                class="w-full pl-10 pr-4 py-2 text-sm rounded-lg border border-base-300 bg-base-100 focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
+            <!-- Expand/Collapse Button -->
+            <button
+              type="button"
+              class="btn btn-outline btn-sm gap-2"
+              onclick={() => (isListExpanded = !isListExpanded)}
+              title={isListExpanded ? 'Collapse list' : 'Expand list'}
+            >
+              {#if isListExpanded}
+                <Minimize2 class="size-4" />
+              {:else}
+                <Maximize2 class="size-4" />
+              {/if}
+            </button>
+
+            <!-- CSV Download Button -->
+            <button
+              type="button"
+              class="btn btn-outline btn-sm gap-2"
+              onclick={downloadActiveSpeciesCSV}
+              disabled={!activeSpeciesState.data.species.length}
+              title="Download CSV"
+            >
+              <Download class="size-4" />
+              <span class="hidden sm:inline">CSV</span>
+            </button>
+          </div>
+
+          <!-- Species List - Use {#key} to force full recreation instead of diffing -->
+          <!-- This prevents Svelte internal state corruption during list transitions -->
+          {#key activeSearchQuery}
+            {#if filteredActiveSpecies.length > 0}
+              <div
+                class="divide-y divide-base-300 rounded-lg border border-base-300 overflow-hidden overflow-y-auto"
+                class:max-h-[32rem]={!isListExpanded}
+              >
+                {#each filteredActiveSpecies as species (species.scientificName)}
+                  <div
+                    class="flex items-center justify-between p-3 hover:bg-base-200/50 transition-colors"
+                  >
+                    <!-- Left: Names -->
+                    <div class="min-w-0 flex-1">
+                      <div class="font-medium text-sm truncate">{species.commonName}</div>
+                      <div
+                        class="text-xs text-[color:var(--color-base-content)] opacity-50 italic truncate"
+                      >
+                        {species.scientificName}
+                      </div>
+                    </div>
+
+                    <!-- Right: Badges + Score bar (badges first for consistent score alignment) -->
+                    <div class="flex items-center gap-3 ml-3 shrink-0">
+                      <!-- Badges - fixed width container for alignment -->
+                      <div class="flex items-center gap-1.5 w-36 justify-end">
+                        {#if species.isManuallyIncluded}
+                          <span class="badge badge-success badge-sm gap-1">
+                            + {t('settings.species.activeSpecies.badges.included')}
+                          </span>
+                        {/if}
+                        {#if species.hasCustomConfig}
+                          <span class="badge badge-secondary badge-sm gap-1">
+                            ★ {t('settings.species.activeSpecies.badges.configured')}
+                          </span>
+                        {/if}
+                      </div>
+
+                      <!-- Score Bar - always in same position -->
+                      <div class="flex items-center gap-2">
+                        <div class="w-20 h-2 bg-base-300 rounded-full overflow-hidden">
+                          <div
+                            class="h-full bg-primary rounded-full transition-all"
+                            style:width="{species.score * 100}%"
+                          ></div>
+                        </div>
+                        <span
+                          class="text-xs font-mono tabular-nums w-10 text-[color:var(--color-base-content)] opacity-60"
+                        >
+                          {species.score.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {:else if searchInputValue}
+              <!-- No Search Results -->
+              <div class="text-center py-8 text-[color:var(--color-base-content)] opacity-50">
+                <p class="text-sm">{t('settings.species.activeSpecies.noResults')}</p>
+              </div>
+            {:else}
+              <!-- Empty State -->
+              <div class="text-center py-8 text-[color:var(--color-base-content)] opacity-50">
+                <Bird class="size-12 mx-auto mb-3 opacity-30" />
+                <p class="text-sm font-medium">{t('settings.species.activeSpecies.empty.title')}</p>
+                <p class="text-xs mt-1">{t('settings.species.activeSpecies.empty.description')}</p>
+              </div>
+            {/if}
+          {/key}
+
+          <!-- Info Note -->
+          <SettingsNote>
+            {t('settings.species.activeSpecies.infoNote')}
+          </SettingsNote>
+        {:else}
+          <!-- Initial Empty State (before load) -->
+          <div class="text-center py-8 text-[color:var(--color-base-content)] opacity-50">
+            <Bird class="size-12 mx-auto mb-3 opacity-30" />
+            <p class="text-sm font-medium">{t('settings.species.activeSpecies.empty.title')}</p>
+            <p class="text-xs mt-1">{t('settings.species.activeSpecies.empty.description')}</p>
+          </div>
+        {/if}
+      </div>
+    </SettingsSection>
+  </div>
+{/snippet}
 
 <!-- Include Species Tab Content -->
 {#snippet includeTabContent()}

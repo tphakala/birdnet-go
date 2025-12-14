@@ -1772,6 +1772,36 @@
       }
     },
     "species": {
+      "activeSpecies": {
+        "title": "Aktive Arten",
+        "description": "Arten, die basierend auf Ihrem aktuellen Standort und Filtereinstellungen erkannt werden",
+        "stats": {
+          "species": "Arten",
+          "location": "Standort",
+          "threshold": "Schwellenwert",
+          "updated": "Aktualisiert",
+          "justNow": "Gerade eben",
+          "minutesAgo": "vor {count}m",
+          "hoursAgo": "vor {count}h"
+        },
+        "search": {
+          "placeholder": "Arten suchen..."
+        },
+        "badges": {
+          "included": "Eingeschlossen",
+          "configured": "Konfiguriert"
+        },
+        "empty": {
+          "title": "Keine Arten gefunden",
+          "description": "Konfigurieren Sie Ihren Standort in den Haupteinstellungen, um verfügbare Arten zu sehen"
+        },
+        "noResults": "Keine Arten entsprechen Ihrer Suche",
+        "infoNote": "Diese Liste basiert auf Ihrem Standort und dem Bereichsfilter-Schwellenwert. Manuell hinzugefügte Arten werden immer eingeschlossen.",
+        "retry": "Erneut versuchen",
+        "errors": {
+          "loadFailed": "Fehler beim Laden der aktiven Artenliste"
+        }
+      },
       "alwaysInclude": {
         "title": "Immer Arten einschließen",
         "description": "Arten in dieser Liste werden immer im Bereich der erkannten Arten enthalten sein",
