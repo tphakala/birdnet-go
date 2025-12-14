@@ -31,8 +31,10 @@ const (
 	audioLevelChannelBuffer = 100 // Buffer size for internal processing
 
 	// Rate limits
-	audioLevelRateLimitRequests = 10              // Rate limit requests per window
-	audioLevelRateLimitWindow   = 1 * time.Minute // Rate limit time window
+	// Rate is requests per second for Echo's rate limiter
+	// 10 requests per minute = 10/60 ≈ 0.167 requests per second
+	audioLevelRateLimitRate   = 10.0 / 60.0       // Rate in requests per second (10 req/min)
+	audioLevelRateLimitWindow = 1 * time.Minute   // Window for rate limit expiration
 
 	// Endpoints
 	audioLevelStreamEndpoint = "/api/v2/streams/audio-level"
@@ -84,7 +86,7 @@ func (c *Controller) initAudioLevelRoutes() {
 	rateLimiterConfig := middleware.RateLimiterConfig{
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
 			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      audioLevelRateLimitRequests,
+				Rate:      audioLevelRateLimitRate,
 				ExpiresIn: audioLevelRateLimitWindow,
 			},
 		),
