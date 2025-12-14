@@ -32,10 +32,10 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-      
+        uses: actions/checkout@v6
+
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -46,7 +46,7 @@ jobs:
         run: npm ci
 
       - name: Cache Vitest
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: frontend/node_modules/.vitest
           key: vitest-${{ runner.os }}-${{ hashFiles('frontend/src/**/*.test.ts', 'frontend/vite.config.js') }}
