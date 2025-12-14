@@ -5,15 +5,21 @@
   @component
 -->
 <script lang="ts">
+  import type { HTMLAttributes } from 'svelte/elements';
+  import { cn } from '$lib/utils/cn.js';
   import BandRejectSvg from '$lib/assets/icons/filters/bandreject.svg?raw';
 
-  interface Props {
+  interface Props extends HTMLAttributes<HTMLElement> {
     class?: string;
   }
 
-  let { class: className = 'size-5' }: Props = $props();
+  let { class: className = '', ...rest }: Props = $props();
 </script>
 
-<span class="{className} shrink-0 [&>svg]:size-full [&>svg]:block">
+<span
+  class={cn('size-5 shrink-0 [&>svg]:size-full [&>svg]:block', className)}
+  aria-hidden="true"
+  {...rest}
+>
   {@html BandRejectSvg}
 </span>

@@ -29,9 +29,12 @@
 
   /**
    * Handle language selection change
+   * Note: groupBy={false} means single selection, so value is always string at runtime
    */
   function handleLanguageChange(value: string | string[]) {
-    const newLocale = value as Locale;
+    // With groupBy={false}, value is always a single string, but the type signature
+    // must match SelectDropdown's onChange for TypeScript compatibility
+    const newLocale = (Array.isArray(value) ? value[0] : value) as Locale;
 
     if (newLocale === currentLocale) return;
 
@@ -62,10 +65,12 @@
     </div>
   {/snippet}
   {#snippet renderSelected(options)}
-    {@const localeOption = options[0] as LocaleOption}
-    <span class="flex items-center gap-2">
-      <FlagIcon locale={localeOption.localeCode} className="size-4" />
-      <span>{localeOption.label}</span>
-    </span>
+    {#if options.length > 0}
+      {@const localeOption = options[0] as LocaleOption}
+      <span class="flex items-center gap-2">
+        <FlagIcon locale={localeOption.localeCode} className="size-4" />
+        <span>{localeOption.label}</span>
+      </span>
+    {/if}
   {/snippet}
 </SelectDropdown>

@@ -2,16 +2,20 @@
   FlagIcon Component
 
   Purpose: Renders country flag icons based on locale code.
-  This component provides a type-safe way to display flag icons
-  without using raw HTML injection.
+  This component provides a type-safe way to display flag icons.
 
   Props:
   - locale: The locale code (en, de, fr, etc.) or BirdNET locale code
   - className: Optional CSS classes for sizing/styling
 
+  Note: Uses {@html} for SVG rendering - safe because icons are static build-time
+  assets, not user-generated content.
+
   @component
 -->
 <script lang="ts">
+  import type { HTMLAttributes } from 'svelte/elements';
+  import { cn } from '$lib/utils/cn.js';
   // Import all flag icons as raw SVG strings
   // UI language flags
   import GbFlag from '$lib/assets/icons/flags/gb.svg?raw';
@@ -106,12 +110,12 @@
     | 'vi-vn'
     | 'zh';
 
-  interface Props {
+  interface Props extends HTMLAttributes<HTMLElement> {
     locale: FlagLocale;
     className?: string;
   }
 
-  let { locale, className = 'size-5' }: Props = $props();
+  let { locale, className = '', ...rest }: Props = $props();
 
   // Map locale codes to their SVG content
   const flagIcons: Record<FlagLocale, string> = {
@@ -163,15 +167,17 @@
     zh: CnFlag, // Chinese -> China
   };
 
-  // Get the icon for the current locale
-  let iconSvg = $derived(flagIcons[locale] || GbFlag);
+  // Runtime type guard to satisfy static analysis (object injection sink warning)
+  const isFlagLocale = (v: unknown): v is FlagLocale => typeof v === 'string' && v in flagIcons;
+
+  // Get the icon for the current locale with runtime validation
+  let iconSvg = $derived(isFlagLocale(locale) ? flagIcons[locale] : GbFlag);
 </script>
 
-<!--
-  Note: We use {@html} here because the SVG icons are static assets
-  imported at build time, not user-generated content. The icons are
-  trusted and sanitized by the build process.
--->
-<span class="{className} shrink-0 [&>svg]:size-full [&>svg]:block">
+<span
+  class={cn('size-5 shrink-0 [&>svg]:size-full [&>svg]:block', className)}
+  aria-hidden="true"
+  {...rest}
+>
   {@html iconSvg}
 </span>
