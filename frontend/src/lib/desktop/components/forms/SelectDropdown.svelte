@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import type { Snippet } from 'svelte';
-  import type { SelectOption } from './SelectDropdown.types';
+  import type { Snippet, Component } from 'svelte';
+  import type { SelectOption, SelectDropdownVariant } from './SelectDropdown.types';
   import { X, ChevronDown } from '@lucide/svelte';
   import {
     safeGet,
@@ -27,11 +27,22 @@
     maxSelections?: number;
     groupBy?: boolean;
     virtualScroll?: boolean;
+    /** Visual style variant: 'select' (default, looks like native select) or 'button' */
+    variant?: SelectDropdownVariant;
+    /** Size of the dropdown trigger */
+    size?: 'xs' | 'sm' | 'md' | 'lg';
+    /** Font size of dropdown menu items */
+    menuSize?: 'xs' | 'sm' | 'md';
     onChange?: (_value: string | string[]) => void;
     onSearch?: (_query: string) => void;
     onClear?: () => void;
     renderOption?: Snippet<[SelectOption]>;
     renderSelected?: Snippet<[SelectOption[]]>;
+  }
+
+  /** Check if icon is a Svelte component (function) or string */
+  function isComponentIcon(icon: string | Component | undefined): icon is Component {
+    return typeof icon === 'function';
   }
 
   let {
@@ -51,6 +62,9 @@
     maxSelections,
     groupBy = true,
     // virtualScroll = false, // Reserved for future implementation
+    variant = 'select',
+    size = 'sm',
+    menuSize = 'md',
     onChange,
     onSearch,
     onClear,
@@ -60,6 +74,45 @@
 
   // Generate unique field ID
   let fieldId = `select-dropdown-${Math.random().toString(36).substring(2, 11)}`;
+
+  // State - must be declared before derived values that use them
+  let isOpen = $state(false);
+  let searchQuery = $state('');
+  let highlightedIndex = $state(-1);
+  let dropdownElement = $state<HTMLDivElement>();
+  let inputElement = $state<HTMLInputElement>();
+  let buttonElement = $state<HTMLButtonElement>();
+
+  // Position state for fixed dropdown
+  let dropdownPosition = $state({ top: 0, left: 0, width: 0 });
+
+  // Size classes for select variant
+  const sizeClasses = {
+    xs: 'select-xs',
+    sm: 'select-sm',
+    md: '',
+    lg: 'select-lg',
+  };
+
+  // Menu item size classes (font size and padding)
+  const menuSizeClasses = {
+    xs: 'text-xs py-1.5 px-2',
+    sm: 'text-sm py-1.5 px-2.5',
+    md: 'py-2 px-3',
+  };
+
+  // Trigger button classes based on variant
+  // Note: bg-none removes the default chevron background-image since we render our own
+  // pr-3 overrides the extra right padding that was for the background-image chevron
+  let triggerClasses = $derived(
+    variant === 'select'
+      ? cn(
+          'select w-full flex items-center justify-between text-left cursor-pointer bg-none pr-3',
+          safeGet(sizeClasses, size, ''),
+          disabled && 'select-disabled opacity-50 cursor-not-allowed'
+        )
+      : cn('btn btn-block justify-between', isOpen && 'btn-active', disabled && 'btn-disabled')
+  );
 
   // Initialize value based on multiple prop and handle type changes
   $effect(() => {
@@ -74,14 +127,6 @@
       }
     }
   });
-
-  // State
-  let isOpen = $state(false);
-  let searchQuery = $state('');
-  let highlightedIndex = $state(-1);
-  let dropdownElement = $state<HTMLDivElement>();
-  let inputElement = $state<HTMLInputElement>();
-  let buttonElement = $state<HTMLButtonElement>();
 
   // Computed values
   let selectedOptions = $derived(
@@ -134,13 +179,29 @@
     return selectedOptions[0].label;
   });
 
+  // Calculate dropdown position based on button element
+  // Uses viewport coordinates for fixed positioning
+  function updateDropdownPosition() {
+    if (!buttonElement) return;
+
+    const rect = buttonElement.getBoundingClientRect();
+    dropdownPosition = {
+      top: rect.bottom,
+      left: rect.left,
+      width: rect.width,
+    };
+  }
+
   // Event handlers
   function toggleDropdown() {
     if (disabled) return;
     isOpen = !isOpen;
 
-    if (isOpen && searchable) {
-      setTimeout(() => inputElement?.focus(), 0);
+    if (isOpen) {
+      updateDropdownPosition();
+      if (searchable) {
+        setTimeout(() => inputElement?.focus(), 0);
+      }
     }
   }
 
@@ -274,14 +335,18 @@
   $effect(() => {
     if (isOpen) {
       document.addEventListener('click', handleClickOutside);
+      window.addEventListener('scroll', updateDropdownPosition, true);
+      window.addEventListener('resize', updateDropdownPosition);
       return () => {
         document.removeEventListener('click', handleClickOutside);
+        window.removeEventListener('scroll', updateDropdownPosition, true);
+        window.removeEventListener('resize', updateDropdownPosition);
       };
     }
   });
 </script>
 
-<div class={cn('select-dropdown', className)}>
+<div class={cn('select-dropdown form-control', className)}>
   {#if label}
     <label class="label" for={fieldId} id="{fieldId}-label">
       <span class="label-text">
@@ -298,11 +363,7 @@
       bind:this={buttonElement}
       id={fieldId}
       type="button"
-      class={cn(
-        'btn btn-block justify-between',
-        isOpen && 'btn-active',
-        disabled && 'btn-disabled'
-      )}
+      class={triggerClasses}
       {disabled}
       onclick={toggleDropdown}
       onkeydown={handleKeyDown}
@@ -311,15 +372,25 @@
       aria-labelledby={label ? `${fieldId}-label` : undefined}
       aria-describedby={helpText ? `${fieldId}-help` : undefined}
     >
-      <span class="truncate">
+      <span class="flex items-center gap-2 truncate min-w-0">
         {#if renderSelected && selectedOptions.length > 0}
           {@render renderSelected(selectedOptions)}
+        {:else if selectedOptions.length > 0 && !multiple}
+          {#if selectedOptions[0].icon}
+            {#if isComponentIcon(selectedOptions[0].icon)}
+              {@const IconComponent = selectedOptions[0].icon}
+              <IconComponent class="size-4 shrink-0" />
+            {:else}
+              <span class="text-base shrink-0">{selectedOptions[0].icon}</span>
+            {/if}
+          {/if}
+          <span class="truncate">{selectedOptions[0].label}</span>
         {:else}
-          {displayText}
+          <span class="truncate">{displayText}</span>
         {/if}
       </span>
 
-      <div class="flex items-center gap-1">
+      <div class="flex items-center gap-1 shrink-0">
         {#if clearable && selectedOptions.length > 0}
           <div
             role="button"
@@ -342,7 +413,7 @@
           </div>
         {/if}
 
-        <div class={cn('transition-transform', isOpen && 'rotate-180')}>
+        <div class={cn('transition-transform opacity-70', isOpen && 'rotate-180')}>
           <ChevronDown class="size-4" />
         </div>
       </div>
@@ -352,9 +423,12 @@
       <div
         bind:this={dropdownElement}
         class={cn(
-          'absolute z-50 w-full mt-1 bg-base-100 rounded-lg shadow-lg border border-base-300 overflow-hidden',
+          'fixed z-50 bg-base-100 rounded-md shadow-xl border border-base-content/20 overflow-hidden',
           dropdownClassName
         )}
+        style:top="{dropdownPosition.top}px"
+        style:left="{dropdownPosition.left}px"
+        style:width="{dropdownPosition.width}px"
         style:max-height="{maxHeight}px"
       >
         {#if searchable}
@@ -374,7 +448,7 @@
         {/if}
 
         <div
-          class="overflow-auto"
+          class="overflow-auto p-1"
           style:max-height="{searchable ? maxHeight - 60 : maxHeight}px"
           role="listbox"
           aria-multiselectable={multiple}
@@ -398,7 +472,8 @@
                 <button
                   type="button"
                   class={cn(
-                    'w-full px-3 py-2 text-left hover:bg-base-200 focus:bg-base-200 focus:outline-hidden flex items-center gap-2',
+                    'w-full text-left hover:bg-base-200 focus:bg-base-200 focus:outline-hidden flex items-center gap-2 rounded',
+                    safeGet(menuSizeClasses, menuSize, ''),
                     isSelected(option) && 'bg-primary/10 text-primary',
                     option.disabled && 'opacity-50 cursor-not-allowed',
                     highlightedIndex === flatIndex && 'bg-base-200'
@@ -419,7 +494,12 @@
                   {/if}
 
                   {#if option.icon}
-                    <span class="text-lg">{option.icon}</span>
+                    {#if isComponentIcon(option.icon)}
+                      {@const IconComponent = option.icon}
+                      <IconComponent class="size-4 shrink-0" />
+                    {:else}
+                      <span class="text-base shrink-0">{option.icon}</span>
+                    {/if}
                   {/if}
 
                   <div class="flex-1">

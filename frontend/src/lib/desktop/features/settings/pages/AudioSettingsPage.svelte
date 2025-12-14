@@ -29,7 +29,7 @@
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import StreamManager from '$lib/desktop/components/forms/StreamManager.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
-  import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import InlineSlider from '$lib/desktop/components/forms/InlineSlider.svelte';
   import {
@@ -94,6 +94,17 @@
     { value: '90%', label: '90%' },
     { value: '95%', label: '95%' },
   ]);
+
+  // Audio source options derived from audio devices
+  let audioSourceOptions = $derived.by(() => {
+    getLocale();
+    const noCapture = { value: '', label: t('settings.audio.audioCapture.noSoundCardCapture') };
+    const deviceOptions = audioDevices.data.map(device => ({
+      value: device.Name,
+      label: device.Name,
+    }));
+    return [noCapture, ...deviceOptions];
+  });
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
@@ -539,21 +550,17 @@
         currentData={{ source: store.formData.realtime?.audio?.source }}
       >
         <div class="space-y-4">
-          <SelectField
-            id="audio-source"
+          <SelectDropdown
             value={settings.audio.source}
             label={t('settings.audio.audioCapture.audioSourceLabel')}
             placeholder={t('settings.audio.audioCapture.noSoundCardCapture')}
             helpText={t('settings.audio.audioCapture.audioSourceHelp')}
             disabled={store.isLoading || store.isSaving}
-            onchange={updateAudioSource}
-            options={[]}
-          >
-            <option value="">{t('settings.audio.audioCapture.noSoundCardCapture')}</option>
-            {#each audioDevices.data as device (device.Index)}
-              <option value={device.Name}>{device.Name}</option>
-            {/each}
-          </SelectField>
+            onChange={value => updateAudioSource(value as string)}
+            options={audioSourceOptions}
+            groupBy={false}
+            menuSize="sm"
+          />
 
           <!-- Status indicator -->
           <div class="flex items-center justify-between">
@@ -1071,15 +1078,16 @@
             />
 
             <!-- Export Type -->
-            <SelectField
-              id="export-type"
+            <SelectDropdown
               value={settings.audio.export.type}
               label={t('settings.audio.fileSettings.typeLabel')}
               helpText={t('settings.audio.fileSettings.typeHelp')}
               options={exportFormatOptions}
               disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
-              onchange={value =>
+              onChange={value =>
                 updateExportFormat(value as 'wav' | 'mp3' | 'flac' | 'aac' | 'opus')}
+              groupBy={false}
+              menuSize="sm"
             />
 
             <!-- Bitrate -->
@@ -1139,14 +1147,15 @@
       <div class="space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <!-- Retention Policy -->
-          <SelectField
-            id="retention-policy"
+          <SelectDropdown
             value={retentionSettings.policy}
             label={t('settings.audio.audioClipRetention.policyLabel')}
             helpText={t('settings.audio.audioClipRetention.policyHelp')}
             options={retentionPolicyOptions}
             disabled={store.isLoading || store.isSaving}
-            onchange={updateRetentionPolicy}
+            onChange={value => updateRetentionPolicy(value as string)}
+            groupBy={false}
+            menuSize="sm"
           />
 
           <!-- Max Age (shown when policy is 'age') -->
@@ -1164,14 +1173,15 @@
 
           <!-- Max Usage (shown when policy is 'usage') -->
           {#if retentionSettings.policy === 'usage'}
-            <SelectField
-              id="retention-max-usage"
+            <SelectDropdown
               value={retentionSettings.maxUsage}
               label={t('settings.audio.audioClipRetention.maxUsageLabel')}
               helpText={t('settings.audio.audioClipRetention.maxUsageHelp')}
               options={maxUsageOptions}
               disabled={store.isLoading || store.isSaving}
-              onchange={updateRetentionMaxUsage}
+              onChange={value => updateRetentionMaxUsage(value as string)}
+              groupBy={false}
+              menuSize="sm"
             />
           {/if}
         </div>

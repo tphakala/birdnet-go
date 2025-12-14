@@ -19,6 +19,10 @@
 -->
 <script lang="ts">
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
+  import LowPassIcon from '$lib/desktop/components/ui/LowPassIcon.svelte';
+  import HighPassIcon from '$lib/desktop/components/ui/HighPassIcon.svelte';
+  import BandRejectIcon from '$lib/desktop/components/ui/BandRejectIcon.svelte';
   import FilterResponseGraph from './FilterResponseGraph.svelte';
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
   import { t } from '$lib/i18n';
@@ -26,6 +30,15 @@
   import type { EqualizerFilterType } from '$lib/stores/settings';
 
   const logger = loggers.settings;
+
+  // Attenuation options for filter passes
+  const attenuationOptions = [
+    { value: '0', label: '0dB' },
+    { value: '1', label: '12dB' },
+    { value: '2', label: '24dB' },
+    { value: '3', label: '36dB' },
+    { value: '4', label: '48dB' },
+  ];
 
   // Fallback configuration used when API fails or returns invalid data
   const FALLBACK_EQ_FILTER_CONFIG = {
@@ -145,6 +158,27 @@
     width: 100,
     gain: 0,
     passes: 1, // Default to 12dB attenuation
+  });
+
+  // Map filter types to their icon components
+  const filterIconMap = {
+    LowPass: LowPassIcon,
+    HighPass: HighPassIcon,
+    BandReject: BandRejectIcon,
+  };
+
+  // Filter type options derived from config - with icons
+  let filterTypeOptions = $derived.by(() => {
+    const placeholder = {
+      value: '',
+      label: t('settings.audio.audioFilters.selectFilterType'),
+    };
+    const typeOptions = Object.keys(eqFilterConfig).map(filterType => ({
+      value: filterType,
+      label: filterType,
+      icon: filterIconMap[filterType as keyof typeof filterIconMap],
+    }));
+    return [placeholder, ...typeOptions];
   });
 
   // Load filter configuration from backend on mount with cleanup
@@ -397,9 +431,16 @@
           <div class="flex items-end">
             <button
               type="button"
-              class="btn btn-sm w-full pointer-events-none bg-base-300 border-base-300"
+              class="btn btn-sm w-full pointer-events-none bg-base-300 border-base-300 gap-2"
             >
-              <span class="font-medium">{filter.type} Filter</span>
+              {#if filter.type === 'LowPass'}
+                <LowPassIcon class="size-4" />
+              {:else if filter.type === 'HighPass'}
+                <HighPassIcon class="size-4" />
+              {:else if filter.type === 'BandReject'}
+                <BandRejectIcon class="size-4" />
+              {/if}
+              <span class="font-medium">{filter.type}</span>
             </button>
           </div>
 
@@ -413,21 +454,17 @@
                     {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
                   </span>
                 </div>
-                {#if param.Label === 'Attenuation'}
+                {#if param.Name.toLowerCase() === 'passes'}
                   <!-- Select for Passes/Attenuation -->
-                  <select
+                  <SelectDropdown
                     value={String(filter.passes ?? param.Default ?? 1)}
-                    onchange={e =>
-                      updateFilterParameter(index, param.Name, parseInt(e.currentTarget.value))}
-                    class="select select-sm w-full"
+                    options={attenuationOptions}
+                    onChange={value =>
+                      updateFilterParameter(index, param.Name, parseInt(value as string))}
                     {disabled}
-                  >
-                    <option value="0">0dB</option>
-                    <option value="1">12dB</option>
-                    <option value="2">24dB</option>
-                    <option value="3">36dB</option>
-                    <option value="4">48dB</option>
-                  </select>
+                    groupBy={false}
+                    menuSize="sm"
+                  />
                 {:else if param.Name.toLowerCase() === 'frequency'}
                   <!-- Frequency input -->
                   <input
@@ -503,21 +540,18 @@
       <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end mt-6">
         <!-- New Filter Type -->
         <div class="flex flex-col">
-          <label class="label" for="new-filter-type">
-            <span class="label-text">{t('settings.audio.audioFilters.newFilterType')}</span>
-          </label>
-          <select
-            id="new-filter-type"
-            bind:value={newFilter.type}
-            onchange={() => getFilterDefaults(newFilter.type)}
-            class="select select-sm w-full"
+          <SelectDropdown
+            value={newFilter.type}
+            label={t('settings.audio.audioFilters.newFilterType')}
+            options={filterTypeOptions}
+            onChange={value => {
+              newFilter.type = value as EqualizerFilterType | '';
+              getFilterDefaults(newFilter.type);
+            }}
             {disabled}
-          >
-            <option value="">{t('settings.audio.audioFilters.selectFilterType')}</option>
-            {#each Object.keys(eqFilterConfig) as filterType (filterType)}
-              <option value={filterType}>{filterType}</option>
-            {/each}
-          </select>
+            groupBy={false}
+            menuSize="sm"
+          />
         </div>
 
         <!-- New Audio Filter Parameters -->
@@ -531,23 +565,18 @@
                     {param.Label}{param.Unit ? ` (${param.Unit})` : ''}
                   </span>
                 </div>
-                {#if param.Label === 'Attenuation'}
+                {#if param.Name.toLowerCase() === 'passes'}
                   <!-- Select for Passes/Attenuation -->
-                  <select
+                  <SelectDropdown
                     value={String(newFilter.passes ?? 1)}
-                    onchange={e => {
-                      const value = parseInt(e.currentTarget.value, 10);
-                      newFilter = { ...newFilter, passes: value };
+                    options={attenuationOptions}
+                    onChange={value => {
+                      newFilter = { ...newFilter, passes: parseInt(value as string, 10) };
                     }}
-                    class="select select-sm w-full"
                     {disabled}
-                  >
-                    <option value="0">0dB</option>
-                    <option value="1">12dB</option>
-                    <option value="2">24dB</option>
-                    <option value="3">36dB</option>
-                    <option value="4">48dB</option>
-                  </select>
+                    groupBy={false}
+                    menuSize="sm"
+                  />
                 {:else if param.Name.toLowerCase() === 'frequency'}
                   <!-- Frequency input -->
                   <input
