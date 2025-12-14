@@ -108,6 +108,32 @@ export default defineConfig({
     // Exclude .svelte files from test discovery - they are test wrapper components, not test files
     // Added per CodeRabbit review to fix "No test suite found" errors for .test.svelte files
     include: ['src/**/*.{test,spec}.{js,ts}'],
+    // Explicitly exclude node_modules and other non-test directories from file search
+    exclude: ['node_modules', 'dist', 'build', '.svelte-kit', 'coverage'],
+    // Performance optimizations
+    pool: 'threads', // Faster than default 'forks' for many small tests
+    poolOptions: {
+      threads: {
+        singleThread: false, // Allow multiple threads
+        minThreads: 2, // Keep minimum threads warm
+        maxThreads: 8, // Limit max threads to avoid overhead
+      },
+    },
+    // Increase concurrent test limit
+    maxConcurrency: 20,
+    // Optimize dependency handling
+    deps: {
+      optimizer: {
+        web: {
+          // Pre-bundle heavy dependencies
+          include: ['@testing-library/svelte', '@testing-library/jest-dom', 'jsdom'],
+        },
+      },
+    },
+    // Cache test results for faster re-runs
+    cache: {
+      dir: 'node_modules/.vitest',
+    },
     coverage: {
       reporter: ['text', 'html', 'lcov'],
       exclude: [
