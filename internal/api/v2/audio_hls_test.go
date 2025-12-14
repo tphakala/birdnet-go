@@ -3,6 +3,7 @@
 package api
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -259,7 +260,7 @@ func TestHLSManagerConcurrency(t *testing.T) {
 		for i := range numGoroutines {
 			go func(id int) {
 				defer wg.Done()
-				streamID := "concurrent_test_" + time.Now().String() + string(rune('0'+id))
+				streamID := fmt.Sprintf("concurrent_test_%s_%d", time.Now().String(), id)
 
 				// Add stream
 				hlsMgr.streamsMu.Lock()
@@ -282,7 +283,7 @@ func TestHLSManagerConcurrency(t *testing.T) {
 		for i := range numGoroutines {
 			go func(id int) {
 				defer wg.Done()
-				streamID := "activity_test_" + time.Now().String() + string(rune('0'+id))
+				streamID := fmt.Sprintf("activity_test_%s_%d", time.Now().String(), id)
 
 				// Update activity
 				hlsMgr.activityMu.Lock()
@@ -307,8 +308,8 @@ func TestHLSManagerConcurrency(t *testing.T) {
 		for i := range numGoroutines {
 			go func(id int) {
 				defer wg.Done()
-				streamID := "client_test_" + time.Now().String() + string(rune('0'+id))
-				clientID := "client_" + string(rune('0'+id))
+				streamID := fmt.Sprintf("client_test_%s_%d", time.Now().String(), id)
+				clientID := fmt.Sprintf("client_%d", id)
 
 				// Add client
 				hlsMgr.clientsMu.Lock()

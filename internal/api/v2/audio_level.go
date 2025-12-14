@@ -47,29 +47,42 @@ type AudioLevelSSEData struct {
 	Levels map[string]myaudio.AudioLevelData `json:"levels"`
 }
 
-// audioLevelManager manages audio level SSE connections
+// audioLevelManager manages audio level SSE connections and broadcasts
 type audioLevelManager struct {
 	// Active connections tracked per client IP to prevent duplicates
 	activeConnections sync.Map
 	// Total connection counter for monitoring
 	totalConnections int64
-	// RTSP anonymization map for non-authenticated users
+	// RTSP anonymization map for non-authenticated users (bounded to maxRTSPSources)
 	rtspAnonymMap map[string]string
 	rtspAnonymMu  sync.RWMutex
+
+	// Fan-out broadcaster for audio level data
+	subscribers   map[chan myaudio.AudioLevelData]struct{}
+	subscribersMu sync.RWMutex
+
+	// Broadcaster lifecycle
+	broadcasterOnce   sync.Once
+	broadcasterCancel context.CancelFunc
 }
+
+// Maximum number of RTSP sources to cache in anonymization map
+const maxRTSPAnonymMapSize = 100
 
 // Global audio level manager instance
 // TODO: Move to Controller struct during httpcontroller refactoring
 var audioLevelMgr = &audioLevelManager{
 	rtspAnonymMap: make(map[string]string),
+	subscribers:   make(map[chan myaudio.AudioLevelData]struct{}),
 }
 
-// SetAudioLevelChan sets the audio level channel for the controller.
+// SetAudioLevelChan sets the audio level channel for the controller and starts
+// the broadcaster goroutine that fans out messages to all SSE subscribers.
 //
 // CONCURRENCY CONTRACT: This method MUST be called exactly once during
 // single-threaded server startup, before any HTTP requests are processed.
-// The channel is read concurrently by SSE handlers but never modified after
-// this initial setup. Calling this method after the server starts accepting
+// The channel is read by a single broadcaster goroutine which fans out to
+// subscriber channels. Calling this method after the server starts accepting
 // requests may result in data races.
 //
 // This connects the audio capture system to the SSE endpoint.
@@ -78,6 +91,89 @@ func (c *Controller) SetAudioLevelChan(ch chan myaudio.AudioLevelData) {
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Audio level channel connected to API v2 controller")
 	}
+
+	// Start the broadcaster goroutine (only once across all controller instances)
+	audioLevelMgr.broadcasterOnce.Do(func() {
+		ctx, cancel := context.WithCancel(c.ctx)
+		audioLevelMgr.broadcasterCancel = cancel
+		go runAudioLevelBroadcaster(ctx, ch)
+	})
+}
+
+// runAudioLevelBroadcaster reads from the source channel and broadcasts to all subscribers.
+// This allows multiple SSE clients to receive the same audio level data.
+func runAudioLevelBroadcaster(ctx context.Context, sourceChan chan myaudio.AudioLevelData) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case data, ok := <-sourceChan:
+			if !ok {
+				// Source channel closed, close all subscriber channels
+				audioLevelMgr.subscribersMu.Lock()
+				for ch := range audioLevelMgr.subscribers {
+					close(ch)
+					delete(audioLevelMgr.subscribers, ch)
+				}
+				audioLevelMgr.subscribersMu.Unlock()
+				return
+			}
+
+			// Fan out to all subscribers (non-blocking send)
+			audioLevelMgr.subscribersMu.RLock()
+			for ch := range audioLevelMgr.subscribers {
+				select {
+				case ch <- data:
+					// Sent successfully
+				default:
+					// Subscriber channel full, skip this update
+					// (slow clients will miss updates rather than blocking others)
+				}
+			}
+			audioLevelMgr.subscribersMu.RUnlock()
+		}
+	}
+}
+
+// subscribeToAudioLevels creates a new subscriber channel and registers it.
+// The returned channel will receive audio level data from the broadcaster.
+// The caller MUST call unsubscribeFromAudioLevels when done.
+func subscribeToAudioLevels() chan myaudio.AudioLevelData {
+	ch := make(chan myaudio.AudioLevelData, audioLevelChannelBuffer)
+	audioLevelMgr.subscribersMu.Lock()
+	audioLevelMgr.subscribers[ch] = struct{}{}
+	audioLevelMgr.subscribersMu.Unlock()
+	return ch
+}
+
+// unsubscribeFromAudioLevels removes a subscriber channel from the broadcaster.
+// This should be called when an SSE client disconnects.
+func unsubscribeFromAudioLevels(ch chan myaudio.AudioLevelData) {
+	audioLevelMgr.subscribersMu.Lock()
+	delete(audioLevelMgr.subscribers, ch)
+	audioLevelMgr.subscribersMu.Unlock()
+	// Note: We don't close the channel here as it may still have buffered data
+	// that the handler is processing. The channel will be garbage collected.
+}
+
+// cacheRTSPAnonymName stores an anonymized name for an RTSP source with bounded map size.
+// If the map exceeds maxRTSPAnonymMapSize, it clears the map to prevent unbounded growth.
+// This is acceptable because the map is only a cache for performance; lookups will
+// regenerate the name if not found.
+func cacheRTSPAnonymName(sourceID, displayName string) {
+	audioLevelMgr.rtspAnonymMu.Lock()
+	defer audioLevelMgr.rtspAnonymMu.Unlock()
+
+	// If map is at capacity and this is a new entry, clear the map
+	// This is a simple strategy; in practice RTSP source count is typically small
+	if len(audioLevelMgr.rtspAnonymMap) >= maxRTSPAnonymMapSize {
+		if _, exists := audioLevelMgr.rtspAnonymMap[sourceID]; !exists {
+			// Clear the map to prevent unbounded growth
+			audioLevelMgr.rtspAnonymMap = make(map[string]string)
+		}
+	}
+
+	audioLevelMgr.rtspAnonymMap[sourceID] = displayName
 }
 
 // initAudioLevelRoutes registers audio level SSE endpoints
@@ -132,8 +228,13 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 		})
 	}
 
+	// Subscribe to the broadcaster to receive audio level data
+	// This allows multiple clients to receive the same data (fan-out pattern)
+	subscriberChan := subscribeToAudioLevels()
+
 	// Cleanup connection on exit
 	defer func() {
+		unsubscribeFromAudioLevels(subscriberChan)
 		audioLevelMgr.activeConnections.Delete(clientIP)
 		atomic.AddInt64(&audioLevelMgr.totalConnections, -1)
 	}()
@@ -201,7 +302,7 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 
 	lastSentTime := time.Now()
 
-	// Main event loop
+	// Main event loop - reads from subscriber channel instead of source channel
 	for {
 		select {
 		case <-timeoutCtx.Done():
@@ -209,9 +310,9 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 				"reason", "timeout_or_cancelled")
 			return nil
 
-		case audioData, ok := <-c.audioLevelChan:
+		case audioData, ok := <-subscriberChan:
 			if !ok {
-				c.logAPIRequest(ctx, slog.LevelWarn, "Audio level channel closed")
+				c.logAPIRequest(ctx, slog.LevelWarn, "Audio level subscriber channel closed")
 				return nil
 			}
 
@@ -296,10 +397,8 @@ func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]myau
 			displayName := source.DisplayName
 			if !isAuthenticated {
 				displayName = fmt.Sprintf("camera-%d", i+1)
-				// Cache anonymized name for O(1) lookup
-				audioLevelMgr.rtspAnonymMu.Lock()
-				audioLevelMgr.rtspAnonymMap[source.ID] = displayName
-				audioLevelMgr.rtspAnonymMu.Unlock()
+				// Cache anonymized name for O(1) lookup with bounded map size
+				cacheRTSPAnonymName(source.ID, displayName)
 			}
 			levels[source.ID] = myaudio.AudioLevelData{
 				Level:  0,

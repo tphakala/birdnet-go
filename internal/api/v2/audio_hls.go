@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -71,7 +72,7 @@ type HLSHeartbeatRequest struct {
 type hlsManager struct {
 	// Active streams indexed by sourceID
 	streams   map[string]*HLSStreamInfo
-	streamsMu sync.Mutex
+	streamsMu sync.RWMutex // RWMutex for read-heavy operations
 
 	// Client tracking per stream
 	clients   map[string]map[string]bool // sourceID -> clientID -> true
@@ -317,20 +318,26 @@ func (c *Controller) HLSHeartbeat(ctx echo.Context) error {
 // GetHLSStatus returns the status of all active HLS streams
 // GET /api/v2/streams/hls/status
 func (c *Controller) GetHLSStatus(ctx echo.Context) error {
-	hlsMgr.streamsMu.Lock()
-	defer hlsMgr.streamsMu.Unlock()
+	hlsMgr.streamsMu.RLock()
+	// Copy stream references under lock to minimize lock duration
+	streamsCopy := make(map[string]*HLSStreamInfo, len(hlsMgr.streams))
+	maps.Copy(streamsCopy, hlsMgr.streams)
+	hlsMgr.streamsMu.RUnlock()
 
-	streams := make([]HLSStreamStatus, 0, len(hlsMgr.streams))
-	for sourceID := range hlsMgr.streams {
+	streams := make([]HLSStreamStatus, 0, len(streamsCopy))
+	for sourceID, stream := range streamsCopy {
 		encodedSourceID := url.PathEscape(sourceID)
 		playlistURL := fmt.Sprintf("/api/v2/streams/hls/%s/playlist.m3u8", encodedSourceID)
+
+		// Check actual playlist readiness instead of hardcoding true
+		playlistReady := c.checkHLSPlaylistReady(stream)
 
 		streams = append(streams, HLSStreamStatus{
 			Status:        "active",
 			Source:        encodedSourceID,
 			PlaylistURL:   playlistURL,
 			ActiveClients: c.getHLSClientCount(sourceID),
-			PlaylistReady: true,
+			PlaylistReady: playlistReady,
 		})
 	}
 
@@ -495,8 +502,9 @@ func (c *Controller) validateAndDecodeSourceID(ctx echo.Context) (string, error)
 }
 
 // generateClientID creates a standardized client identifier
+// Uses RemoteAddr (not RealIP) for consistency with audio_level.go to prevent IP spoofing
 func (c *Controller) generateClientID(ctx echo.Context) string {
-	clientIP := ctx.RealIP()
+	clientIP := c.extractRemoteAddr(ctx)
 	userAgent := ctx.Request().Header.Get("User-Agent")
 
 	clientType := "HLSPlayer"
@@ -1031,15 +1039,15 @@ func (c *Controller) updateHLSActivity(sourceID, clientID, activityType string, 
 
 // getHLSStream returns the stream info if it exists
 func (c *Controller) getHLSStream(sourceID string) *HLSStreamInfo {
-	hlsMgr.streamsMu.Lock()
-	defer hlsMgr.streamsMu.Unlock()
+	hlsMgr.streamsMu.RLock()
+	defer hlsMgr.streamsMu.RUnlock()
 	return hlsMgr.streams[sourceID]
 }
 
 // hlsStreamExists checks if a stream exists
 func (c *Controller) hlsStreamExists(sourceID string) bool {
-	hlsMgr.streamsMu.Lock()
-	defer hlsMgr.streamsMu.Unlock()
+	hlsMgr.streamsMu.RLock()
+	defer hlsMgr.streamsMu.RUnlock()
 	_, exists := hlsMgr.streams[sourceID]
 	return exists
 }
@@ -1273,23 +1281,29 @@ func (c *Controller) waitForHLSPlaylist(ctx echo.Context, sourceID string, strea
 	playlistCtx, cancel := context.WithTimeout(ctx.Request().Context(), hlsPlaylistWaitTimeout)
 	defer cancel()
 
+	// Use ticker instead of time.Sleep for more idiomatic polling
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	// Check immediately first, then on each tick
 	for range 30 {
+		if secFS.ExistsNoErr(stream.PlaylistPath) {
+			data, err := secFS.ReadFile(stream.PlaylistPath)
+			if err == nil && len(data) > 0 && strings.Contains(string(data), "#EXTM3U") {
+				return true
+			}
+		}
+
+		if !c.hlsStreamExists(sourceID) {
+			return false
+		}
+
+		// Wait for next tick or context cancellation
 		select {
 		case <-playlistCtx.Done():
 			return false
-		default:
-			if secFS.ExistsNoErr(stream.PlaylistPath) {
-				data, err := secFS.ReadFile(stream.PlaylistPath)
-				if err == nil && len(data) > 0 && strings.Contains(string(data), "#EXTM3U") {
-					return true
-				}
-			}
-
-			if !c.hlsStreamExists(sourceID) {
-				return false
-			}
-
-			time.Sleep(1 * time.Second)
+		case <-ticker.C:
+			// Continue to next iteration
 		}
 	}
 
@@ -1397,8 +1411,8 @@ func syncHLSActivity() {
 
 // getActiveStreamIDs returns a snapshot of all active stream IDs
 func getActiveStreamIDs() []string {
-	hlsMgr.streamsMu.Lock()
-	defer hlsMgr.streamsMu.Unlock()
+	hlsMgr.streamsMu.RLock()
+	defer hlsMgr.streamsMu.RUnlock()
 
 	activeStreamIDs := make([]string, 0, len(hlsMgr.streams))
 	for sourceID := range hlsMgr.streams {

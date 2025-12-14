@@ -3,6 +3,7 @@
 package api
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -208,7 +209,7 @@ func TestAudioLevelManagerConcurrency(t *testing.T) {
 		for i := range numGoroutines {
 			go func(id int) {
 				// Use unique IP for each goroutine to avoid conflicts
-				clientIP := "test-" + time.Now().String() + "-" + string(rune('0'+id))
+				clientIP := fmt.Sprintf("test-%s-%d", time.Now().String(), id)
 				_, loaded := audioLevelMgr.activeConnections.LoadOrStore(clientIP, time.Now())
 				if !loaded {
 					audioLevelMgr.activeConnections.Delete(clientIP)
