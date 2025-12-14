@@ -809,6 +809,15 @@
             "helpText": "Liczba godzin, przez które korekty progu dynamicznego pozostają ważne. Po tym okresie próg dynamiczny jest resetowany."
           }
         },
+        "falsePositiveFilter": {
+          "title": "Filtr Fałszywych Pozytywów",
+          "description": "Redukuje fałszywe wykrycia, wymagając wielu potwierdzeń z nakładających się segmentów audio",
+          "level": {
+            "label": "Poziom Filtra"
+          },
+          "hardwareNote": "Poziomy Ścisły i Maksymalny wymagają wyższych ustawień nakładania i większych zasobów CPU. Dla tych poziomów wymagany jest RPi 4 lub lepszy sprzęt.",
+          "overlapAdjusted": "Ustawienie nakładania automatycznie dostosowane do {overlap}s, aby spełnić wymagania filtra"
+        },
         "rangeFilter": {
           "title": "Filtr Zasięgu",
           "stationLocation": {

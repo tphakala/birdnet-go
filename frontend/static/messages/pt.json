@@ -809,6 +809,15 @@
             "helpText": "O número de horas durante as quais os ajustes de limiar dinâmico permanecem válidos. Após esse período, o limiar dinâmico é redefinido."
           }
         },
+        "falsePositiveFilter": {
+          "title": "Filtro de Falsos Positivos",
+          "description": "Reduz detecções falsas exigindo múltiplas confirmações em segmentos de áudio sobrepostos",
+          "level": {
+            "label": "Nível do Filtro"
+          },
+          "hardwareNote": "Os níveis Rigoroso e Máximo requerem configurações de sobreposição mais altas e mais recursos de CPU. RPi 4 ou hardware superior é necessário para esses níveis.",
+          "overlapAdjusted": "Configuração de sobreposição ajustada automaticamente para {overlap}s para atender aos requisitos do filtro"
+        },
         "rangeFilter": {
           "title": "Filtro de alcance",
           "stationLocation": {

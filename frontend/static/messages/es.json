@@ -809,6 +809,15 @@
             "helpText": "El número de horas durante las cuales los ajustes del umbral dinámico permanecen válidos. Después de este período, el umbral dinámico se reinicia."
           }
         },
+        "falsePositiveFilter": {
+          "title": "Filtro de Falsos Positivos",
+          "description": "Reduce las detecciones falsas requiriendo múltiples confirmaciones en segmentos de audio superpuestos",
+          "level": {
+            "label": "Nivel del Filtro"
+          },
+          "hardwareNote": "Los niveles Estricto y Máximo requieren configuraciones de superposición más altas y más recursos de CPU. Se requiere RPi 4 o hardware superior para estos niveles.",
+          "overlapAdjusted": "La configuración de superposición se ajustó automáticamente a {overlap}s para cumplir con los requisitos del filtro"
+        },
         "rangeFilter": {
           "title": "Filtro de rango",
           "stationLocation": {

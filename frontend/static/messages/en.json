@@ -823,6 +823,15 @@
             "helpText": "The number of hours during which the dynamic threshold adjustments remain valid. After this period, the dynamic threshold is reset."
           }
         },
+        "falsePositiveFilter": {
+          "title": "False Positive Filter",
+          "description": "Reduce false detections by requiring multiple confirmations across overlapping audio segments",
+          "level": {
+            "label": "Filter Level"
+          },
+          "hardwareNote": "Strict and Maximum levels require higher overlap settings and more CPU resources. RPi 4 or better hardware is required for these levels.",
+          "overlapAdjusted": "Overlap setting automatically adjusted to {overlap}s to meet filter requirements"
+        },
         "rangeFilter": {
           "title": "Range Filter",
           "description": "Limit detection to species probable in your geographic region",
