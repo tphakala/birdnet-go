@@ -209,8 +209,8 @@ routeInitializers := []struct {
 
 - Real-time audio level data for UI audio indicators (0-100 with clipping detection)
 - Automatic source anonymization for unauthenticated clients
-- Duplicate connection prevention (one connection per client IP)
-- Rate limiting: 10 requests/minute per IP
+- Connection limiting: up to 5 concurrent connections per client IP (allows multiple browser tabs)
+- Rate limiting: 30 requests/minute per IP
 - Maximum connection duration: 30 minutes
 - Heartbeat interval: 10 seconds
 

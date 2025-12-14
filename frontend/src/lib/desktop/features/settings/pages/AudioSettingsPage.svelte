@@ -100,8 +100,8 @@
     getLocale();
     const noCapture = { value: '', label: t('settings.audio.audioCapture.noSoundCardCapture') };
     const deviceOptions = audioDevices.data.map(device => ({
-      value: device.Name,
-      label: device.Name,
+      value: device.name,
+      label: device.name,
     }));
     return [noCapture, ...deviceOptions];
   });
@@ -256,7 +256,8 @@
   }
 
   // Audio source options - map to actual device names
-  let audioDevices = $state<ApiState<Array<{ Index: number; Name: string }>>>({
+  // Note: v2 API returns lowercase field names (index, name, id)
+  let audioDevices = $state<ApiState<Array<{ index: number; name: string; id: string }>>>({
     loading: true,
     error: null,
     data: [],
