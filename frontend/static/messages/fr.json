@@ -1837,6 +1837,44 @@
       }
     },
     "species": {
+      "activeSpecies": {
+        "title": "Espèces Actives",
+        "description": "Espèces qui seront détectées en fonction de votre emplacement actuel et des paramètres de filtre",
+        "stats": {
+          "species": "Espèces",
+          "location": "Emplacement",
+          "threshold": "Seuil",
+          "updated": "Mis à jour",
+          "justNow": "À l'instant",
+          "minutesAgo": "il y a {count}m",
+          "hoursAgo": "il y a {count}h"
+        },
+        "search": {
+          "placeholder": "Rechercher des espèces..."
+        },
+        "badges": {
+          "included": "Incluse",
+          "configured": "Configurée"
+        },
+        "empty": {
+          "title": "Aucune espèce trouvée",
+          "description": "Configurez votre emplacement dans les Paramètres Principaux pour voir les espèces disponibles"
+        },
+        "noResults": "Aucune espèce ne correspond à votre recherche",
+        "infoNote": "Cette liste est basée sur votre emplacement et le seuil du filtre de portée. Les espèces ajoutées manuellement sont toujours incluses.",
+        "retry": "Réessayer",
+        "expand": "Développer la liste",
+        "collapse": "Réduire la liste",
+        "downloadCsv": "Télécharger le CSV",
+        "errors": {
+          "loadFailed": "Échec du chargement de la liste des espèces actives"
+        },
+        "locationNotConfigured": {
+          "title": "Emplacement non configuré",
+          "description": "Définissez votre emplacement dans les Paramètres Principaux pour voir les espèces disponibles dans votre région. Le filtre de portée utilise votre emplacement pour déterminer quelles espèces sont susceptibles d'être présentes à proximité.",
+          "action": "Configurer l'emplacement"
+        }
+      },
       "alwaysInclude": {
         "title": "Toujours inclure les espèces",
         "description": "Les espèces de cette liste seront toujours incluses dans la gamme des espèces détectées",

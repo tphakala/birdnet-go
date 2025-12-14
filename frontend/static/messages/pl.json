@@ -1837,6 +1837,44 @@
       }
     },
     "species": {
+      "activeSpecies": {
+        "title": "Aktywne Gatunki",
+        "description": "Gatunki, które będą wykrywane na podstawie Twojej aktualnej lokalizacji i ustawień filtrów",
+        "stats": {
+          "species": "Gatunki",
+          "location": "Lokalizacja",
+          "threshold": "Próg",
+          "updated": "Zaktualizowano",
+          "justNow": "Właśnie teraz",
+          "minutesAgo": "{count}m temu",
+          "hoursAgo": "{count}g temu"
+        },
+        "search": {
+          "placeholder": "Szukaj gatunków..."
+        },
+        "badges": {
+          "included": "Uwzględniony",
+          "configured": "Skonfigurowany"
+        },
+        "empty": {
+          "title": "Nie znaleziono gatunków",
+          "description": "Skonfiguruj swoją lokalizację w Ustawieniach Głównych, aby zobaczyć dostępne gatunki"
+        },
+        "noResults": "Żaden gatunek nie pasuje do Twojego wyszukiwania",
+        "infoNote": "Ta lista jest oparta na Twojej lokalizacji i progu filtra zasięgu. Ręcznie dodane gatunki są zawsze uwzględniane.",
+        "retry": "Spróbuj ponownie",
+        "expand": "Rozwiń listę",
+        "collapse": "Zwiń listę",
+        "downloadCsv": "Pobierz CSV",
+        "errors": {
+          "loadFailed": "Nie udało się załadować listy aktywnych gatunków"
+        },
+        "locationNotConfigured": {
+          "title": "Lokalizacja nie skonfigurowana",
+          "description": "Ustaw swoją lokalizację w Ustawieniach Głównych, aby zobaczyć gatunki dostępne w Twojej okolicy. Filtr zasięgu wykorzystuje Twoją lokalizację do określenia, które gatunki prawdopodobnie występują w pobliżu.",
+          "action": "Skonfiguruj lokalizację"
+        }
+      },
       "alwaysInclude": {
         "title": "Zawsze Uwzględniaj Gatunki",
         "description": "Gatunki z tej listy będą zawsze uwzględniane w zakresie wykrytych gatunków",

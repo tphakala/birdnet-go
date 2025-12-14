@@ -1965,6 +1965,44 @@
       }
     },
     "species": {
+      "activeSpecies": {
+        "title": "Active Species",
+        "description": "Species that will be detected based on your current location and filter settings",
+        "stats": {
+          "species": "Species",
+          "location": "Location",
+          "threshold": "Threshold",
+          "updated": "Updated",
+          "justNow": "Just now",
+          "minutesAgo": "{count}m ago",
+          "hoursAgo": "{count}h ago"
+        },
+        "search": {
+          "placeholder": "Search species..."
+        },
+        "badges": {
+          "included": "Included",
+          "configured": "Configured"
+        },
+        "empty": {
+          "title": "No species found",
+          "description": "Configure your location in Main Settings to see available species"
+        },
+        "noResults": "No species match your search",
+        "infoNote": "This list is based on your location and range filter threshold. Manually included species are always added.",
+        "retry": "Retry",
+        "expand": "Expand list",
+        "collapse": "Collapse list",
+        "downloadCsv": "Download CSV",
+        "errors": {
+          "loadFailed": "Failed to load active species list"
+        },
+        "locationNotConfigured": {
+          "title": "Location Not Configured",
+          "description": "Set your location in Main Settings to see species available in your area. The range filter uses your location to determine which species are likely to be found nearby.",
+          "action": "Configure Location"
+        }
+      },
       "alwaysInclude": {
         "title": "Always Include Species",
         "description": "Species in this list will always be included in range of detected species",

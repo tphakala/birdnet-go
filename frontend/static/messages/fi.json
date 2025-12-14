@@ -1772,6 +1772,44 @@
       }
     },
     "species": {
+      "activeSpecies": {
+        "title": "Aktiiviset lajit",
+        "description": "Lajit, jotka tunnistetaan nykyisen sijainnin ja suodatusasetusten perusteella",
+        "stats": {
+          "species": "Lajit",
+          "location": "Sijainti",
+          "threshold": "Kynnysarvo",
+          "updated": "Päivitetty",
+          "justNow": "Juuri nyt",
+          "minutesAgo": "{count}m sitten",
+          "hoursAgo": "{count}t sitten"
+        },
+        "search": {
+          "placeholder": "Etsi lajeja..."
+        },
+        "badges": {
+          "included": "Sisällytetty",
+          "configured": "Määritetty"
+        },
+        "empty": {
+          "title": "Lajeja ei löytynyt",
+          "description": "Määritä sijaintisi pääasetuksissa nähdäksesi saatavilla olevat lajit"
+        },
+        "noResults": "Mikään laji ei vastaa hakuasi",
+        "infoNote": "Tämä luettelo perustuu sijaintiisi ja aluesuodattimen kynnysarvoon. Manuaalisesti lisätyt lajit sisällytetään aina.",
+        "retry": "Yritä uudelleen",
+        "expand": "Laajenna luettelo",
+        "collapse": "Supista luettelo",
+        "downloadCsv": "Lataa CSV",
+        "errors": {
+          "loadFailed": "Aktiivisten lajien luettelon lataus epäonnistui"
+        },
+        "locationNotConfigured": {
+          "title": "Sijaintia ei ole määritetty",
+          "description": "Määritä sijaintisi pääasetuksissa nähdäksesi alueellasi esiintyvät lajit. Aluesuodatin käyttää sijaintiasi määrittääkseen, mitkä lajit todennäköisesti esiintyvät lähistölläsi.",
+          "action": "Määritä sijainti"
+        }
+      },
       "alwaysInclude": {
         "title": "Sisällytä lajit aina",
         "description": "Tämän listan lajit sisällytetään aina havaittujen lajien alueelle",

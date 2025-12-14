@@ -1837,6 +1837,44 @@
       }
     },
     "species": {
+      "activeSpecies": {
+        "title": "Actieve Soorten",
+        "description": "Soorten die worden gedetecteerd op basis van uw huidige locatie en filterinstellingen",
+        "stats": {
+          "species": "Soorten",
+          "location": "Locatie",
+          "threshold": "Drempelwaarde",
+          "updated": "Bijgewerkt",
+          "justNow": "Zojuist",
+          "minutesAgo": "{count}m geleden",
+          "hoursAgo": "{count}u geleden"
+        },
+        "search": {
+          "placeholder": "Zoek soorten..."
+        },
+        "badges": {
+          "included": "Opgenomen",
+          "configured": "Geconfigureerd"
+        },
+        "empty": {
+          "title": "Geen soorten gevonden",
+          "description": "Configureer uw locatie in Hoofdinstellingen om beschikbare soorten te zien"
+        },
+        "noResults": "Geen soorten komen overeen met uw zoekopdracht",
+        "infoNote": "Deze lijst is gebaseerd op uw locatie en de drempelwaarde van het bereikfilter. Handmatig toegevoegde soorten worden altijd opgenomen.",
+        "retry": "Opnieuw proberen",
+        "expand": "Lijst uitvouwen",
+        "collapse": "Lijst invouwen",
+        "downloadCsv": "CSV downloaden",
+        "errors": {
+          "loadFailed": "Kan de lijst met actieve soorten niet laden"
+        },
+        "locationNotConfigured": {
+          "title": "Locatie niet geconfigureerd",
+          "description": "Stel uw locatie in bij Hoofdinstellingen om soorten in uw omgeving te zien. Het bereikfilter gebruikt uw locatie om te bepalen welke soorten waarschijnlijk in de buurt voorkomen.",
+          "action": "Locatie configureren"
+        }
+      },
       "alwaysInclude": {
         "title": "Altijd Opnemen Soorten",
         "description": "Soorten in deze lijst worden altijd opgenomen in het bereik van gedetecteerde soorten",

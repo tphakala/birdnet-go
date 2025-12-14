@@ -1772,6 +1772,44 @@
       }
     },
     "species": {
+      "activeSpecies": {
+        "title": "Especies Activas",
+        "description": "Especies que serán detectadas según tu ubicación actual y configuración de filtros",
+        "stats": {
+          "species": "Especies",
+          "location": "Ubicación",
+          "threshold": "Umbral",
+          "updated": "Actualizado",
+          "justNow": "Ahora mismo",
+          "minutesAgo": "hace {count}m",
+          "hoursAgo": "hace {count}h"
+        },
+        "search": {
+          "placeholder": "Buscar especies..."
+        },
+        "badges": {
+          "included": "Incluida",
+          "configured": "Configurada"
+        },
+        "empty": {
+          "title": "No se encontraron especies",
+          "description": "Configura tu ubicación en Ajustes Principales para ver las especies disponibles"
+        },
+        "noResults": "Ninguna especie coincide con tu búsqueda",
+        "infoNote": "Esta lista se basa en tu ubicación y el umbral del filtro de rango. Las especies añadidas manualmente siempre se incluyen.",
+        "retry": "Reintentar",
+        "expand": "Expandir lista",
+        "collapse": "Contraer lista",
+        "downloadCsv": "Descargar CSV",
+        "errors": {
+          "loadFailed": "Error al cargar la lista de especies activas"
+        },
+        "locationNotConfigured": {
+          "title": "Ubicación no configurada",
+          "description": "Configura tu ubicación en Ajustes Principales para ver las especies disponibles en tu área. El filtro de rango utiliza tu ubicación para determinar qué especies es probable encontrar cerca.",
+          "action": "Configurar ubicación"
+        }
+      },
       "alwaysInclude": {
         "title": "Incluir especies siempre",
         "description": "Las especies en esta lista siempre serán incluidas en el rango de especies detectadas",
