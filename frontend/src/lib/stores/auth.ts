@@ -96,15 +96,17 @@ function createAuthStore() {
      */
     logout: async (): Promise<void> => {
       try {
-        // Use the V1 logout endpoint which works with the OAuth session
-        const response = await fetch('/logout', {
-          method: 'GET',
+        // Use the v2 logout endpoint
+        const response = await fetch('/api/v2/auth/logout', {
+          method: 'POST',
           credentials: 'include',
-          redirect: 'manual', // Don't follow redirects automatically
+          headers: {
+            'Content-Type': 'application/json',
+          },
         });
 
-        // The V1 logout endpoint returns a redirect (302) to / on success
-        if (response.type === 'opaqueredirect' || response.status === 302 || response.ok) {
+        // The v2 logout endpoint returns 200 OK on success
+        if (response.ok) {
           // Clear auth state
           set({
             isLoggedIn: false,

@@ -30,15 +30,13 @@ A Svelte 5 TypeScript component that displays real-time audio levels from connec
 
 ## API Integration
 
-Currently uses v1 API endpoints:
+Uses v2 API endpoints:
 
-- `/api/v1/audio-level` - SSE endpoint for real-time audio levels
-- `/api/v1/audio-stream-hls/{sourceId}/start` - Start audio streaming
-- `/api/v1/audio-stream-hls/{sourceId}/stop` - Stop audio streaming
-- `/api/v1/audio-stream-hls/{sourceId}/playlist.m3u8` - HLS playlist
-- `/api/v1/audio-stream-hls/heartbeat` - Keep-alive heartbeat
-
-**Note**: Update to v2 API endpoints when available.
+- `/api/v2/streams/audio-level` - SSE endpoint for real-time audio levels
+- `/api/v2/streams/hls/{sourceId}/start` - Start audio streaming
+- `/api/v2/streams/hls/{sourceId}/stop` - Stop audio streaming
+- `/api/v2/streams/hls/{sourceId}/playlist.m3u8` - HLS playlist
+- `/api/v2/streams/hls/heartbeat` - Keep-alive heartbeat
 
 ## Dependencies
 
@@ -69,7 +67,6 @@ Currently uses v1 API endpoints:
 
 ## Future Enhancements
 
-- Migration to v2 API endpoints
 - WebRTC support for lower latency
 - Recording capabilities
 - Audio visualization enhancements

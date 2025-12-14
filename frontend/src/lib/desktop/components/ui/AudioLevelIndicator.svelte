@@ -134,9 +134,8 @@
     cleanupEventSource();
 
     try {
-      // TODO: Update to v2 API when available
       // ReconnectingEventSource with configuration
-      eventSource = new ReconnectingEventSource('/api/v1/audio-level', {
+      eventSource = new ReconnectingEventSource('/api/v2/streams/audio-level', {
         max_retry_time: 30000, // Max 30 seconds between reconnection attempts
         withCredentials: false, // Set to true if you need CORS credentials
       });
@@ -265,8 +264,7 @@
       if (!isPlaying || !playingSource) return;
 
       try {
-        // TODO: Update to v2 API when available
-        const response = await fetch('/api/v1/audio-stream-hls/heartbeat', {
+        const response = await fetch('/api/v2/streams/hls/heartbeat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ source_id: playingSource }),
@@ -293,8 +291,7 @@
 
     // Send disconnect notification
     if (playingSource) {
-      // TODO: Update to v2 API when available
-      fetch('/api/v1/audio-stream-hls/heartbeat?disconnect=true', {
+      fetch('/api/v2/streams/hls/heartbeat?disconnect=true', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ source_id: playingSource }),
@@ -428,8 +425,7 @@
     const encodedSourceId = encodeURIComponent(sourceId);
 
     try {
-      // TODO: Update to v2 API when available
-      const response = await fetch(`/api/v1/audio-stream-hls/${encodedSourceId}/start`, {
+      const response = await fetch(`/api/v2/streams/hls/${encodedSourceId}/start`, {
         method: 'POST',
       });
 
@@ -437,7 +433,7 @@
         throw new Error(`Failed to start stream: ${response.status} ${response.statusText}`);
       }
 
-      const hlsUrl = `/api/v1/audio-stream-hls/${encodedSourceId}/playlist.m3u8`;
+      const hlsUrl = `/api/v2/streams/hls/${encodedSourceId}/playlist.m3u8`;
       await setupHLSStream(hlsUrl, sourceId);
 
       startHeartbeat();
@@ -476,8 +472,7 @@
     // Notify server
     if (previousSource) {
       const encodedSourceId = encodeURIComponent(previousSource);
-      // TODO: Update to v2 API when available
-      fetch(`/api/v1/audio-stream-hls/${encodedSourceId}/stop`, {
+      fetch(`/api/v2/streams/hls/${encodedSourceId}/stop`, {
         method: 'POST',
       }).catch(_err => {
         // Failed to notify server of playback stop

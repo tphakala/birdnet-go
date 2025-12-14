@@ -278,8 +278,9 @@
     audioDevices.error = null;
 
     try {
-      const response = await fetch('/api/v1/settings/audio/get', {
+      const response = await fetch('/api/v2/system/audio/devices', {
         headers: { 'X-CSRF-Token': csrfToken },
+        credentials: 'include',
       });
       if (!response.ok) {
         throw new Error(`Failed to load audio devices: ${response.status}`);
