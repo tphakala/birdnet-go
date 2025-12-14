@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
@@ -30,11 +29,8 @@ const (
 	// Buffer sizes
 	audioLevelChannelBuffer = 100 // Buffer size for internal processing
 
-	// Rate limits
-	// Rate is requests per second for Echo's rate limiter
-	// 10 requests per minute = 10/60 ≈ 0.167 requests per second
-	audioLevelRateLimitRate   = 10.0 / 60.0       // Rate in requests per second (10 req/min)
-	audioLevelRateLimitWindow = 1 * time.Minute   // Window for rate limit expiration
+	// Maximum connections per IP (allows multiple browser tabs)
+	audioLevelMaxConnectionsPerIP = 5
 
 	// Endpoints
 	audioLevelStreamEndpoint = "/api/v2/streams/audio-level"
@@ -49,8 +45,10 @@ type AudioLevelSSEData struct {
 
 // audioLevelManager manages audio level SSE connections and broadcasts
 type audioLevelManager struct {
-	// Active connections tracked per client IP to prevent duplicates
+	// Active connections tracked per client IP (stores connection count as *int32)
 	activeConnections sync.Map
+	// Mutex for connection count operations
+	connectionMu sync.Mutex
 	// Total connection counter for monitoring
 	totalConnections int64
 	// RTSP anonymization map for non-authenticated users (bounded to maxRTSPSources)
@@ -178,30 +176,10 @@ func cacheRTSPAnonymName(sourceID, displayName string) {
 
 // initAudioLevelRoutes registers audio level SSE endpoints
 func (c *Controller) initAudioLevelRoutes() {
-	// Create rate limiter for audio level SSE connections
-	rateLimiterConfig := middleware.RateLimiterConfig{
-		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
-			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      audioLevelRateLimitRate,
-				ExpiresIn: audioLevelRateLimitWindow,
-			},
-		),
-		IdentifierExtractor: middleware.DefaultRateLimiterConfig.IdentifierExtractor,
-		ErrorHandler: func(context echo.Context, err error) error {
-			return context.JSON(http.StatusTooManyRequests, map[string]string{
-				"error": "Rate limit exceeded for audio level stream",
-			})
-		},
-		DenyHandler: func(context echo.Context, identifier string, err error) error {
-			return context.JSON(http.StatusTooManyRequests, map[string]string{
-				"error": "Too many audio level stream connection attempts, please wait before trying again",
-			})
-		},
-	}
-
-	// Audio level SSE endpoint - public with rate limiting (matches v1 behavior)
+	// Audio level SSE endpoint - public, no rate limiting
+	// The per-IP connection limit (audioLevelMaxConnectionsPerIP) still applies
 	// Authentication is checked within the handler to control data anonymization
-	c.Group.GET("/streams/audio-level", c.StreamAudioLevel, middleware.RateLimiterWithConfig(rateLimiterConfig))
+	c.Group.GET("/streams/audio-level", c.StreamAudioLevel)
 }
 
 // StreamAudioLevel handles SSE connections for real-time audio level streaming
@@ -215,18 +193,35 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 		})
 	}
 
-	// Use RemoteAddr for duplicate connection check to prevent IP spoofing
+	// Use RemoteAddr for connection tracking to prevent IP spoofing
 	// via proxy headers for rate limiting purposes
 	clientIP := c.extractRemoteAddr(ctx)
 
-	// Check for duplicate connection from same IP
-	if _, exists := audioLevelMgr.activeConnections.LoadOrStore(clientIP, time.Now()); exists {
-		c.logAPIRequest(ctx, slog.LevelWarn, "Rejected duplicate audio level SSE connection",
-			"reason", "already_connected")
+	// Check connection count per IP (allow multiple browser tabs up to limit)
+	audioLevelMgr.connectionMu.Lock()
+	countPtr, loaded := audioLevelMgr.activeConnections.Load(clientIP)
+	var count int32
+	if loaded {
+		count = atomic.LoadInt32(countPtr.(*int32))
+	}
+	if count >= audioLevelMaxConnectionsPerIP {
+		audioLevelMgr.connectionMu.Unlock()
+		c.logAPIRequest(ctx, slog.LevelWarn, "Rejected audio level SSE connection - max per IP reached",
+			"reason", "max_connections_per_ip",
+			"current_count", count,
+			"max_allowed", audioLevelMaxConnectionsPerIP)
 		return ctx.JSON(http.StatusTooManyRequests, map[string]string{
-			"error": "Only one audio level stream connection per client is allowed",
+			"error": fmt.Sprintf("Maximum %d audio level stream connections per client reached", audioLevelMaxConnectionsPerIP),
 		})
 	}
+	// Increment connection count
+	if !loaded {
+		var newCount int32 = 1
+		audioLevelMgr.activeConnections.Store(clientIP, &newCount)
+	} else {
+		atomic.AddInt32(countPtr.(*int32), 1)
+	}
+	audioLevelMgr.connectionMu.Unlock()
 
 	// Subscribe to the broadcaster to receive audio level data
 	// This allows multiple clients to receive the same data (fan-out pattern)
@@ -235,7 +230,15 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 	// Cleanup connection on exit
 	defer func() {
 		unsubscribeFromAudioLevels(subscriberChan)
-		audioLevelMgr.activeConnections.Delete(clientIP)
+		// Decrement connection count for this IP
+		audioLevelMgr.connectionMu.Lock()
+		if countPtr, ok := audioLevelMgr.activeConnections.Load(clientIP); ok {
+			newCount := atomic.AddInt32(countPtr.(*int32), -1)
+			if newCount <= 0 {
+				audioLevelMgr.activeConnections.Delete(clientIP)
+			}
+		}
+		audioLevelMgr.connectionMu.Unlock()
 		atomic.AddInt64(&audioLevelMgr.totalConnections, -1)
 	}()
 

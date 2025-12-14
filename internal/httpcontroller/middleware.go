@@ -75,7 +75,9 @@ func (s *Server) CSRFMiddleware() echo.MiddlewareFunc {
 				strings.HasPrefix(path, "/api/v1/media/") ||
 				strings.HasPrefix(path, "/api/v1/sse") ||
 				strings.HasPrefix(path, "/api/v1/audio-level") ||
-				strings.HasPrefix(path, "/api/v1/audio-stream-hls") || // Skip CSRF for HLS streaming
+				strings.HasPrefix(path, "/api/v1/audio-stream-hls") || // Skip CSRF for v1 HLS streaming
+				strings.HasPrefix(path, "/api/v2/streams/hls") || // Skip CSRF for v2 HLS streaming
+				strings.HasPrefix(path, "/api/v2/streams/audio-level") || // Skip CSRF for v2 audio level SSE
 				strings.HasPrefix(path, "/api/v1/auth/") ||
 				strings.HasPrefix(path, "/api/v1/oauth2/token") ||
 				path == "/api/v1/oauth2/callback" ||
