@@ -1806,7 +1806,7 @@
         },
         "locationNotConfigured": {
           "title": "Ubicación no configurada",
-          "description": "Configure su ubicación en Ajustes Principales para ver las especies disponibles en su área. El filtro de rango utiliza su ubicación para determinar qué especies es probable encontrar cerca.",
+          "description": "Configura tu ubicación en Ajustes Principales para ver las especies disponibles en tu área. El filtro de rango utiliza tu ubicación para determinar qué especies es probable encontrar cerca.",
           "action": "Configurar ubicación"
         }
       },

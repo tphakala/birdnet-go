@@ -1865,7 +1865,7 @@
         "retry": "Réessayer",
         "expand": "Développer la liste",
         "collapse": "Réduire la liste",
-        "downloadCsv": "Télécharger CSV",
+        "downloadCsv": "Télécharger le CSV",
         "errors": {
           "loadFailed": "Échec du chargement de la liste des espèces actives"
         },
