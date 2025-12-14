@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import ReconnectingEventSource from 'reconnecting-eventsource';
-  import { Mic, CirclePlay, CircleStop } from '@lucide/svelte';
+  import { Mic, CirclePlay, CircleStop, Check } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
   import { fetchWithCSRF } from '$lib/utils/api';
   import Hls from 'hls.js';
@@ -640,7 +640,7 @@
               <div
                 class={cn(
                   'border-b border-base-300 p-4 hover:bg-base-200 transition-colors',
-                  selectedSource === source && 'bg-base-200/50'
+                  selectedSource === source && 'bg-primary/10 border-l-2 border-l-primary'
                 )}
                 role="menuitem"
               >
@@ -669,15 +669,19 @@
                     role="menuitemradio"
                     aria-checked={selectedSource === source}
                   >
-                    <div class="flex items-start justify-between gap-2">
+                    <div class="flex items-center gap-2">
                       <span
                         class={cn(
                           'font-medium text-sm truncate',
-                          isInactive(source) ? 'text-base-content/60' : 'text-base-content'
+                          isInactive(source) ? 'text-base-content/60' : 'text-base-content',
+                          selectedSource === source && 'text-primary'
                         )}
                       >
                         {getSourceDisplayName(source)}
                       </span>
+                      {#if selectedSource === source}
+                        <Check class="size-4 text-primary shrink-0" />
+                      {/if}
                     </div>
                     {#if isInactive(source)}
                       <span class="text-xs text-base-content/60">(silent)</span>
