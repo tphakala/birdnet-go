@@ -30,6 +30,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/security"
@@ -83,6 +84,10 @@ type Controller struct {
 
 	// Goroutine lifecycle management
 	wg sync.WaitGroup // tracks background goroutines for clean shutdown
+
+	// Audio level channel for SSE streaming
+	// TODO: Consider moving to a dedicated audio manager during httpcontroller refactoring
+	audioLevelChan chan myaudio.AudioLevelData
 
 	// Test synchronization fields (only populated when initializeRoutes is true)
 	// goroutinesStarted signals when all background goroutines have successfully started.
@@ -469,6 +474,8 @@ func (c *Controller) initRoutes() {
 		{"filesystem routes", c.initFileSystemRoutes},
 		{"stream routes", c.initStreamRoutes},
 		{"stream health routes", c.initStreamHealthRoutes},
+		{"audio level routes", c.initAudioLevelRoutes},
+		{"hls streaming routes", c.initHLSRoutes},
 		{"integration routes", c.initIntegrationsRoutes},
 		{"control routes", c.initControlRoutes},
 		{"auth routes", c.initAuthRoutes},

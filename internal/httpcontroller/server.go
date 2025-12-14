@@ -232,6 +232,13 @@ func (s *Server) initializeServer() {
 		s.Processor.SetSSEBroadcaster(s.APIV2.BroadcastDetection)
 		s.Debug("SSE broadcaster connected to processor")
 	}
+
+	// Connect audio level channel to v2 API for audio level SSE streaming
+	s.Debug("Setting up audio level channel connection to API v2")
+	if s.APIV2 != nil && s.AudioLevelChan != nil {
+		s.APIV2.SetAudioLevelChan(s.AudioLevelChan)
+		s.Debug("Audio level channel connected to API v2")
+	}
 }
 
 // initHLSCleanupTask initializes a background task to clean up idle HLS streams
