@@ -1863,8 +1863,16 @@
         "noResults": "Geen soorten komen overeen met uw zoekopdracht",
         "infoNote": "Deze lijst is gebaseerd op uw locatie en de drempelwaarde van het bereikfilter. Handmatig toegevoegde soorten worden altijd opgenomen.",
         "retry": "Opnieuw proberen",
+        "expand": "Lijst uitvouwen",
+        "collapse": "Lijst invouwen",
+        "downloadCsv": "CSV downloaden",
         "errors": {
           "loadFailed": "Kan de lijst met actieve soorten niet laden"
+        },
+        "locationNotConfigured": {
+          "title": "Locatie niet geconfigureerd",
+          "description": "Stel uw locatie in bij Hoofdinstellingen om soorten in uw omgeving te zien. Het bereikfilter gebruikt uw locatie om te bepalen welke soorten waarschijnlijk in de buurt voorkomen.",
+          "action": "Locatie configureren"
         }
       },
       "alwaysInclude": {

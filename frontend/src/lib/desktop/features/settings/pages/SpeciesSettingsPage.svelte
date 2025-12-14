@@ -32,7 +32,6 @@
     settingsActions,
     speciesSettings,
     realtimeSettings,
-    birdnetSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { SpeciesConfig, SpeciesSettings } from '$lib/stores/settings';
@@ -44,6 +43,7 @@
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
   import { api } from '$lib/utils/api';
+  import { getLocalDateString } from '$lib/utils/date';
   import {
     ChevronRight,
     Plus,
@@ -197,8 +197,7 @@
     // Filter creates a new array, which is what we want for search results
     return data.species.filter(
       s =>
-        s.commonName.toLowerCase().includes(query) ||
-        s.scientificName.toLowerCase().includes(query)
+        s.commonName.toLowerCase().includes(query) || s.scientificName.toLowerCase().includes(query)
     );
   });
 
@@ -447,12 +446,7 @@
     // Also reload if we previously showed "location not configured" but now have real coordinates
     const needsRetryWithRealCoords = locationNotConfigured && hasRealCoordinates;
 
-    if (
-      hasLocationData &&
-      isActiveTab &&
-      canLoad &&
-      (noDataYet || needsRetryWithRealCoords)
-    ) {
+    if (hasLocationData && isActiveTab && canLoad && (noDataYet || needsRetryWithRealCoords)) {
       // CRITICAL: Use queueMicrotask to defer the call out of the $effect's synchronous context
       // This prevents state modifications from happening during Svelte's reactive update cycle,
       // which can corrupt Svelte's internal linked list and cause "Cannot read prev" errors
@@ -463,24 +457,32 @@
   });
 
   // CSV download function for active species
+  // Escape CSV field: wrap in quotes, escape internal quotes by doubling
+  function escapeCsvField(field: string): string {
+    // Always wrap in quotes and escape internal quotes
+    return `"${field.replace(/"/g, '""')}"`;
+  }
+
   function downloadActiveSpeciesCSV() {
     if (!activeSpeciesState.data?.species.length) return;
 
     const headers = ['Common Name', 'Scientific Name', 'Score', 'Included', 'Configured'];
     const rows = activeSpeciesState.data.species.map(s => [
-      s.commonName,
-      s.scientificName,
-      s.score.toFixed(4),
-      s.isManuallyIncluded ? 'Yes' : 'No',
-      s.hasCustomConfig ? 'Yes' : 'No',
+      escapeCsvField(s.commonName),
+      escapeCsvField(s.scientificName),
+      escapeCsvField(s.score.toFixed(4)),
+      escapeCsvField(s.isManuallyIncluded ? 'Yes' : 'No'),
+      escapeCsvField(s.hasCustomConfig ? 'Yes' : 'No'),
     ]);
 
-    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const csvContent = [headers.map(escapeCsvField).join(','), ...rows.map(r => r.join(','))].join(
+      '\n'
+    );
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `active-species-${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `active-species-${getLocalDateString()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -880,8 +882,10 @@
               type="button"
               class="mt-2 px-3 py-1.5 text-sm rounded-lg bg-error/20 hover:bg-error/30 transition-colors"
               onclick={() => {
-                const birdnetData = $birdnetSettings;
-                if (birdnetData) loadActiveSpecies(birdnetData);
+                const birdnetData = store.formData?.birdnet;
+                if (birdnetData?.latitude !== undefined && birdnetData?.longitude !== undefined) {
+                  loadActiveSpecies(birdnetData);
+                }
               }}
             >
               {t('settings.species.activeSpecies.retry') || 'Retry'}
@@ -915,12 +919,15 @@
             <div class="relative flex-1">
               <Search
                 class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[color:var(--color-base-content)] opacity-40"
+                aria-hidden="true"
               />
               <input
+                id="active-species-search"
                 type="text"
                 value={searchInputValue}
                 oninput={handleSearchInput}
                 placeholder={t('settings.species.activeSpecies.search.placeholder')}
+                aria-label={t('settings.species.activeSpecies.search.placeholder')}
                 autocomplete="off"
                 data-1p-ignore
                 data-lpignore="true"
@@ -934,12 +941,18 @@
               type="button"
               class="btn btn-outline btn-sm gap-2"
               onclick={() => (isListExpanded = !isListExpanded)}
-              title={isListExpanded ? 'Collapse list' : 'Expand list'}
+              title={isListExpanded
+                ? t('settings.species.activeSpecies.collapse') || 'Collapse list'
+                : t('settings.species.activeSpecies.expand') || 'Expand list'}
+              aria-label={isListExpanded
+                ? t('settings.species.activeSpecies.collapse') || 'Collapse list'
+                : t('settings.species.activeSpecies.expand') || 'Expand list'}
+              aria-expanded={isListExpanded}
             >
               {#if isListExpanded}
-                <Minimize2 class="size-4" />
+                <Minimize2 class="size-4" aria-hidden="true" />
               {:else}
-                <Maximize2 class="size-4" />
+                <Maximize2 class="size-4" aria-hidden="true" />
               {/if}
             </button>
 
@@ -949,9 +962,10 @@
               class="btn btn-outline btn-sm gap-2"
               onclick={downloadActiveSpeciesCSV}
               disabled={!activeSpeciesState.data.species.length}
-              title="Download CSV"
+              title={t('settings.species.activeSpecies.downloadCsv') || 'Download CSV'}
+              aria-label={t('settings.species.activeSpecies.downloadCsv') || 'Download CSV'}
             >
-              <Download class="size-4" />
+              <Download class="size-4" aria-hidden="true" />
               <span class="hidden sm:inline">CSV</span>
             </button>
           </div>

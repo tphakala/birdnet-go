@@ -1798,8 +1798,16 @@
         "noResults": "Mikään laji ei vastaa hakuasi",
         "infoNote": "Tämä luettelo perustuu sijaintiisi ja aluesuodattimen kynnysarvoon. Manuaalisesti lisätyt lajit sisällytetään aina.",
         "retry": "Yritä uudelleen",
+        "expand": "Laajenna luettelo",
+        "collapse": "Supista luettelo",
+        "downloadCsv": "Lataa CSV",
         "errors": {
           "loadFailed": "Aktiivisten lajien luettelon lataus epäonnistui"
+        },
+        "locationNotConfigured": {
+          "title": "Sijaintia ei ole määritetty",
+          "description": "Määritä sijaintisi pääasetuksissa nähdäksesi alueellasi esiintyvät lajit. Aluesuodatin käyttää sijaintiasi määrittääkseen, mitkä lajit todennäköisesti esiintyvät lähistölläsi.",
+          "action": "Määritä sijainti"
         }
       },
       "alwaysInclude": {

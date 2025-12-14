@@ -1798,8 +1798,16 @@
         "noResults": "Ninguna especie coincide con tu búsqueda",
         "infoNote": "Esta lista se basa en tu ubicación y el umbral del filtro de rango. Las especies añadidas manualmente siempre se incluyen.",
         "retry": "Reintentar",
+        "expand": "Expandir lista",
+        "collapse": "Contraer lista",
+        "downloadCsv": "Descargar CSV",
         "errors": {
           "loadFailed": "Error al cargar la lista de especies activas"
+        },
+        "locationNotConfigured": {
+          "title": "Ubicación no configurada",
+          "description": "Configure su ubicación en Ajustes Principales para ver las especies disponibles en su área. El filtro de rango utiliza su ubicación para determinar qué especies es probable encontrar cerca.",
+          "action": "Configurar ubicación"
         }
       },
       "alwaysInclude": {

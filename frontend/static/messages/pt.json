@@ -1798,8 +1798,16 @@
         "noResults": "Nenhuma espécie corresponde à sua pesquisa",
         "infoNote": "Esta lista é baseada na sua localização e no limiar do filtro de alcance. Espécies adicionadas manualmente são sempre incluídas.",
         "retry": "Tentar novamente",
+        "expand": "Expandir lista",
+        "collapse": "Recolher lista",
+        "downloadCsv": "Baixar CSV",
         "errors": {
           "loadFailed": "Falha ao carregar a lista de espécies ativas"
+        },
+        "locationNotConfigured": {
+          "title": "Localização não configurada",
+          "description": "Defina sua localização nas Configurações Principais para ver as espécies disponíveis na sua área. O filtro de alcance usa sua localização para determinar quais espécies provavelmente serão encontradas nas proximidades.",
+          "action": "Configurar localização"
         }
       },
       "alwaysInclude": {

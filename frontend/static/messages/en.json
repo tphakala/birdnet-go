@@ -1991,6 +1991,9 @@
         "noResults": "No species match your search",
         "infoNote": "This list is based on your location and range filter threshold. Manually included species are always added.",
         "retry": "Retry",
+        "expand": "Expand list",
+        "collapse": "Collapse list",
+        "downloadCsv": "Download CSV",
         "errors": {
           "loadFailed": "Failed to load active species list"
         },

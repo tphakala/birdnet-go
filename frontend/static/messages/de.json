@@ -1798,8 +1798,16 @@
         "noResults": "Keine Arten entsprechen Ihrer Suche",
         "infoNote": "Diese Liste basiert auf Ihrem Standort und dem Bereichsfilter-Schwellenwert. Manuell hinzugefügte Arten werden immer eingeschlossen.",
         "retry": "Erneut versuchen",
+        "expand": "Liste erweitern",
+        "collapse": "Liste reduzieren",
+        "downloadCsv": "CSV herunterladen",
         "errors": {
           "loadFailed": "Fehler beim Laden der aktiven Artenliste"
+        },
+        "locationNotConfigured": {
+          "title": "Standort nicht konfiguriert",
+          "description": "Legen Sie Ihren Standort in den Haupteinstellungen fest, um Arten in Ihrer Umgebung zu sehen. Der Bereichsfilter verwendet Ihren Standort, um zu bestimmen, welche Arten in der Nähe wahrscheinlich vorkommen.",
+          "action": "Standort konfigurieren"
         }
       },
       "alwaysInclude": {
