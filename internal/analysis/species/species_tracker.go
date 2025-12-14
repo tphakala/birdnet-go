@@ -472,7 +472,27 @@ func (t *SpeciesTracker) isSameSeasonPeriod(time1, time2 time.Time) bool {
 		return true
 	}
 
-	// If times are within seasonBufferDays of each other, they're very likely in the same season
+	// Check if any season boundary falls between the two times
+	// If so, they might be in different seasons even if close together
+	day1 := time1.YearDay()
+	day2 := time2.YearDay()
+	minDay, maxDay := day1, day2
+	if day2 < day1 {
+		minDay, maxDay = day2, day1
+	}
+
+	for _, season := range t.seasons {
+		boundaryDate := time.Date(time1.Year(), time.Month(season.month), season.day, 0, 0, 0, 0, time1.Location())
+		boundaryDay := boundaryDate.YearDay()
+
+		// If a season boundary falls between the two times (inclusive of boundary day),
+		// they could be in different seasons
+		if boundaryDay >= minDay && boundaryDay <= maxDay {
+			return false
+		}
+	}
+
+	// If no boundaries between times and within buffer, consider same period
 	// (seasons typically last ~90 days, so seasonBufferDays is a safe buffer)
 	timeDiff := time1.Sub(time2)
 	if timeDiff < 0 {
