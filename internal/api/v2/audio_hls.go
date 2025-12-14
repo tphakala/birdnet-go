@@ -35,9 +35,10 @@ const (
 	hlsNewStreamGracePeriod    = 30 * time.Second // Grace period for new streams before cleanup
 
 	// Logging
-	hlsLogCooldown    = 60 * time.Second      // Only log client connections once per this duration
-	hlsVerboseEnvVar  = "HLS_VERBOSE_LOGGING" // Environment variable to enable verbose logging
-	hlsVerboseTimeout = 5 * time.Minute       // Verbose logging window at startup
+	hlsLogCooldown         = 60 * time.Second      // Only log client connections once per this duration
+	hlsVerboseEnvVar       = "HLS_VERBOSE_LOGGING" // Environment variable to enable verbose logging
+	hlsVerboseTimeout      = 5 * time.Minute       // Verbose logging window at startup
+	hlsClientLogRetention  = 24 * time.Hour        // Retention period for client log timestamps
 )
 
 // HLSStreamInfo contains information about an active HLS streaming session
@@ -193,7 +194,7 @@ func (c *Controller) StartHLSStream(ctx echo.Context) error {
 // buildHLSStreamResponse constructs the HLS stream status response
 func (c *Controller) buildHLSStreamResponse(ctx echo.Context, sourceID string, stream *HLSStreamInfo, playlistReady ...bool) error {
 	// Get client count
-	clientCount := c.getHLSClientCount(sourceID)
+	clientCount := getStreamClientCount(sourceID)
 
 	// Build the API URL for the playlist (not the filesystem path)
 	encodedSourceID := url.PathEscape(sourceID)
@@ -336,7 +337,7 @@ func (c *Controller) GetHLSStatus(ctx echo.Context) error {
 			Status:        "active",
 			Source:        encodedSourceID,
 			PlaylistURL:   playlistURL,
-			ActiveClients: c.getHLSClientCount(sourceID),
+			ActiveClients: getStreamClientCount(sourceID),
 			PlaylistReady: playlistReady,
 		})
 	}
@@ -1052,16 +1053,6 @@ func (c *Controller) hlsStreamExists(sourceID string) bool {
 	return exists
 }
 
-// getHLSClientCount returns the number of active clients for a stream
-func (c *Controller) getHLSClientCount(sourceID string) int {
-	hlsMgr.clientsMu.Lock()
-	defer hlsMgr.clientsMu.Unlock()
-	if clients, exists := hlsMgr.clients[sourceID]; exists {
-		return len(clients)
-	}
-	return 0
-}
-
 // removeHLSClient removes a client from tracking, returns true if last client
 func (c *Controller) removeHLSClient(sourceID, clientID string) bool {
 	hlsMgr.clientsMu.Lock()
@@ -1281,12 +1272,12 @@ func (c *Controller) waitForHLSPlaylist(ctx echo.Context, sourceID string, strea
 	playlistCtx, cancel := context.WithTimeout(ctx.Request().Context(), hlsPlaylistWaitTimeout)
 	defer cancel()
 
-	// Use ticker instead of time.Sleep for more idiomatic polling
+	// Use ticker for polling, let context timeout control the overall duration
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	// Check immediately first, then on each tick
-	for range 30 {
+	// Poll until playlist is ready, stream is removed, or context times out
+	for {
 		if secFS.ExistsNoErr(stream.PlaylistPath) {
 			data, err := secFS.ReadFile(stream.PlaylistPath)
 			if err == nil && len(data) > 0 && strings.Contains(string(data), "#EXTM3U") {
@@ -1303,11 +1294,9 @@ func (c *Controller) waitForHLSPlaylist(ctx echo.Context, sourceID string, strea
 		case <-playlistCtx.Done():
 			return false
 		case <-ticker.C:
-			// Continue to next iteration
+			// Continue polling
 		}
 	}
-
-	return false
 }
 
 // logHLSClientConnection logs client connections with rate limiting
@@ -1407,6 +1396,20 @@ func syncHLSActivity() {
 	activeStreamIDs := getActiveStreamIDs()
 	streamsToCleanup := findInactiveStreams(activeStreamIDs)
 	cleanupInactiveStreams(streamsToCleanup)
+	cleanupClientLogTime()
+}
+
+// cleanupClientLogTime removes stale entries from clientLogTime map
+func cleanupClientLogTime() {
+	now := time.Now()
+	hlsMgr.clientLogTimeMu.Lock()
+	defer hlsMgr.clientLogTimeMu.Unlock()
+
+	for key, lastTime := range hlsMgr.clientLogTime {
+		if now.Sub(lastTime) > hlsClientLogRetention {
+			delete(hlsMgr.clientLogTime, key)
+		}
+	}
 }
 
 // getActiveStreamIDs returns a snapshot of all active stream IDs
