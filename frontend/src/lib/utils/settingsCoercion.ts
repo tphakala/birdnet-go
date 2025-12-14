@@ -15,6 +15,12 @@ import type {
   MQTTSettings,
   OAuthSettings,
   EqualizerFilter,
+  NotificationSettings,
+  PushSettings,
+  PushProviderConfig,
+  WebhookEndpointConfig,
+  WebhookAuthConfig,
+  PushFilterConfig,
 } from '$lib/stores/settings';
 
 // Type for partial/unknown settings data
@@ -24,6 +30,7 @@ type PartialAudioSettings = Partial<AudioSettings> & UnknownSettings;
 type PartialSecuritySettings = Partial<SecuritySettings> & UnknownSettings;
 type PartialSpeciesSettings = Partial<SpeciesSettings> & UnknownSettings;
 type PartialMQTTSettings = Partial<MQTTSettings> & UnknownSettings;
+type PartialNotificationSettings = Partial<NotificationSettings> & UnknownSettings;
 
 /**
  * Coerce a value to a number within specified bounds
@@ -506,6 +513,215 @@ export function coerceMQTTSettings(settings: PartialMQTTSettings): PartialMQTTSe
 }
 
 /**
+ * Validate and coerce webhook endpoint configuration
+ */
+function coerceWebhookEndpoint(endpoint: unknown): WebhookEndpointConfig | null {
+  if (!endpoint || typeof endpoint !== 'object' || Array.isArray(endpoint)) {
+    return null;
+  }
+
+  const e = endpoint as UnknownSettings;
+  const url = coerceString(e.url, '');
+
+  // Skip endpoints with no URL
+  if (!url) {
+    return null;
+  }
+
+  // Validate URL scheme - only allow http(s) for webhooks
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+  } catch {
+    // Invalid URL format
+    return null;
+  }
+
+  // Normalize HTTP method to uppercase
+  const rawMethod = coerceString(e.method, 'POST').toUpperCase();
+  const validMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+  const method = validMethods.includes(rawMethod) ? rawMethod : 'POST';
+
+  const coercedEndpoint: WebhookEndpointConfig = {
+    url,
+    method,
+    timeout: e.timeout !== undefined ? coerceNumber(e.timeout, 1, 300, 30) : undefined,
+  };
+
+  // Coerce headers if present - validate each value is a string
+  if (e.headers && typeof e.headers === 'object' && !Array.isArray(e.headers)) {
+    const rawHeaders = e.headers as Record<string, unknown>;
+    const validatedHeaders: Record<string, string> = {};
+
+    for (const [key, value] of Object.entries(rawHeaders)) {
+      if (typeof value === 'string') {
+        // eslint-disable-next-line security/detect-object-injection -- key from Object.entries
+        validatedHeaders[key] = value;
+      } else if (value !== null && value !== undefined) {
+        // Convert primitives to strings, skip objects/arrays
+        if (typeof value === 'number' || typeof value === 'boolean') {
+          // eslint-disable-next-line security/detect-object-injection -- key from Object.entries
+          validatedHeaders[key] = String(value);
+        }
+        // Skip non-primitive values (objects, arrays, functions)
+      }
+    }
+
+    // Only set headers if we have valid entries
+    if (Object.keys(validatedHeaders).length > 0) {
+      coercedEndpoint.headers = validatedHeaders;
+    }
+  }
+
+  // Coerce auth if present
+  if (e.auth && typeof e.auth === 'object' && !Array.isArray(e.auth)) {
+    const auth = e.auth as UnknownSettings;
+    // Normalize auth type to lowercase for case-insensitive matching
+    const authType = coerceString(auth.type, 'none').toLowerCase();
+    const validAuthTypes = ['none', 'bearer', 'basic', 'custom'];
+    const normalizedType = validAuthTypes.includes(authType) ? authType : 'none';
+
+    coercedEndpoint.auth = {
+      type: normalizedType as WebhookAuthConfig['type'],
+      token: coerceString(auth.token, ''),
+      user: coerceString(auth.user, ''),
+      pass: coerceString(auth.pass, ''),
+      header: coerceString(auth.header, ''),
+      value: coerceString(auth.value, ''),
+    };
+  }
+
+  return coercedEndpoint;
+}
+
+/**
+ * Validate and coerce push provider configuration
+ */
+function coercePushProvider(provider: unknown): PushProviderConfig | null {
+  if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
+    return null;
+  }
+
+  const p = provider as UnknownSettings;
+  const providerType = coerceString(p.type, 'shoutrrr');
+  const validTypes = ['shoutrrr', 'webhook', 'script'];
+  const normalizedType = validTypes.includes(providerType) ? providerType : 'shoutrrr';
+
+  const coercedProvider: PushProviderConfig = {
+    type: normalizedType as PushProviderConfig['type'],
+    enabled: coerceBoolean(p.enabled, false),
+    name: coerceString(p.name, ''),
+    timeout: p.timeout !== undefined ? coerceNumber(p.timeout, 1, 300, 30) : undefined,
+  };
+
+  // Coerce URLs only for shoutrrr providers
+  if (normalizedType === 'shoutrrr' && p.urls !== undefined) {
+    coercedProvider.urls = coerceArray<string>(p.urls, []).filter(
+      url => typeof url === 'string' && url.trim() !== ''
+    );
+  }
+
+  // Coerce endpoints only for webhook providers
+  if (normalizedType === 'webhook' && p.endpoints !== undefined) {
+    const endpoints = coerceArray(p.endpoints, []);
+    coercedProvider.endpoints = endpoints
+      .map(coerceWebhookEndpoint)
+      .filter((e): e is WebhookEndpointConfig => e !== null);
+  }
+
+  // Coerce filter if present
+  if (p.filter && typeof p.filter === 'object' && !Array.isArray(p.filter)) {
+    const f = p.filter as UnknownSettings;
+    const coercedFilter: PushFilterConfig = {};
+
+    // Helper to coerce filter arrays - enforce string types and trim
+    const coerceStringArray = (value: unknown): string[] =>
+      coerceArray<unknown>(value, [])
+        .filter((v): v is string => typeof v === 'string')
+        .map(s => s.trim())
+        .filter(s => s !== '');
+
+    if (f.types !== undefined) {
+      coercedFilter.types = coerceStringArray(f.types);
+    }
+    if (f.priorities !== undefined) {
+      coercedFilter.priorities = coerceStringArray(f.priorities);
+    }
+    if (f.components !== undefined) {
+      coercedFilter.components = coerceStringArray(f.components);
+    }
+
+    coercedProvider.filter = coercedFilter;
+  }
+
+  return coercedProvider;
+}
+
+/**
+ * Validate and coerce push settings
+ */
+function coercePushSettings(settings: unknown): PushSettings {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+    return {
+      enabled: false,
+      providers: [],
+    };
+  }
+
+  const s = settings as UnknownSettings;
+
+  return {
+    enabled: coerceBoolean(s.enabled, false),
+    providers: coerceArray(s.providers, [])
+      .map(coercePushProvider)
+      .filter((p): p is PushProviderConfig => p !== null),
+  };
+}
+
+/**
+ * Validate and coerce notification settings
+ */
+export function coerceNotificationSettings(
+  settings: PartialNotificationSettings | null | undefined
+): PartialNotificationSettings {
+  const safeSettings = settings && typeof settings === 'object' ? settings : {};
+
+  const coerced: PartialNotificationSettings = {};
+
+  // Coerce push settings
+  if ('push' in safeSettings) {
+    coerced.push = coercePushSettings(safeSettings.push);
+  }
+
+  // Coerce templates if present - ensure it's a plain object, not an array
+  if (
+    safeSettings.templates &&
+    typeof safeSettings.templates === 'object' &&
+    !Array.isArray(safeSettings.templates)
+  ) {
+    const templates = safeSettings.templates as UnknownSettings;
+    coerced.templates = {};
+
+    // Ensure newSpecies is also a plain object, not an array
+    if (
+      templates.newSpecies &&
+      typeof templates.newSpecies === 'object' &&
+      !Array.isArray(templates.newSpecies)
+    ) {
+      const ns = templates.newSpecies as UnknownSettings;
+      coerced.templates.newSpecies = {
+        title: coerceString(ns.title, ''),
+        message: coerceString(ns.message, ''),
+      };
+    }
+  }
+
+  return coerced;
+}
+
+/**
  * Main coercion function for all settings
  */
 export function coerceSettings(section: string, data: UnknownSettings): UnknownSettings {
@@ -538,6 +754,8 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
       return coerceSpeciesSettings(data as PartialSpeciesSettings);
     case 'mqtt':
       return coerceMQTTSettings(data as PartialMQTTSettings);
+    case 'notification':
+      return coerceNotificationSettings(data as PartialNotificationSettings);
     default:
       return data;
   }
