@@ -534,9 +534,29 @@ function coerceWebhookEndpoint(endpoint: unknown): WebhookEndpointConfig | null 
     timeout: e.timeout !== undefined ? coerceNumber(e.timeout, 1, 300, 30) : undefined,
   };
 
-  // Coerce headers if present
+  // Coerce headers if present - validate each value is a string
   if (e.headers && typeof e.headers === 'object' && !Array.isArray(e.headers)) {
-    coercedEndpoint.headers = e.headers as Record<string, string>;
+    const rawHeaders = e.headers as Record<string, unknown>;
+    const validatedHeaders: Record<string, string> = {};
+
+    for (const [key, value] of Object.entries(rawHeaders)) {
+      if (typeof value === 'string') {
+        // eslint-disable-next-line security/detect-object-injection -- key from Object.entries
+        validatedHeaders[key] = value;
+      } else if (value !== null && value !== undefined) {
+        // Convert primitives to strings, skip objects/arrays
+        if (typeof value === 'number' || typeof value === 'boolean') {
+          // eslint-disable-next-line security/detect-object-injection -- key from Object.entries
+          validatedHeaders[key] = String(value);
+        }
+        // Skip non-primitive values (objects, arrays, functions)
+      }
+    }
+
+    // Only set headers if we have valid entries
+    if (Object.keys(validatedHeaders).length > 0) {
+      coercedEndpoint.headers = validatedHeaders;
+    }
   }
 
   // Coerce auth if present
@@ -581,7 +601,9 @@ function coercePushProvider(provider: unknown): PushProviderConfig | null {
 
   // Coerce URLs for shoutrrr providers
   if (p.urls !== undefined) {
-    coercedProvider.urls = coerceArray<string>(p.urls, []).filter(url => typeof url === 'string' && url.trim() !== '');
+    coercedProvider.urls = coerceArray<string>(p.urls, []).filter(
+      url => typeof url === 'string' && url.trim() !== ''
+    );
   }
 
   // Coerce endpoints for webhook providers
