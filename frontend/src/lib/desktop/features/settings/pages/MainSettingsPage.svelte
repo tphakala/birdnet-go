@@ -114,7 +114,7 @@
       min: 0.3,
       validHours: 24,
     },
-    falsePositiveFilter: $realtimeSettings?.falsePositiveFilter || {
+    falsePositiveFilter: $realtimeSettings?.falsePositiveFilter ?? {
       level: 0,
     },
     output: $outputSettings || {
