@@ -33,13 +33,13 @@ func TestHLSStreamStatusStruct(t *testing.T) {
 		status := HLSStreamStatus{
 			Status:        "starting",
 			Source:        "test_source",
-			PlaylistPath:  "/api/v2/streams/hls/abc123/playlist.m3u8",
+			PlaylistURL:   "/api/v2/streams/hls/abc123/playlist.m3u8",
 			ActiveClients: 0,
 			PlaylistReady: false,
 		}
 
 		assert.Equal(t, "test_source", status.Source)
-		assert.Contains(t, status.PlaylistPath, "playlist.m3u8")
+		assert.Contains(t, status.PlaylistURL, "playlist.m3u8")
 		assert.Equal(t, "starting", status.Status)
 		assert.False(t, status.PlaylistReady)
 	})
@@ -47,8 +47,8 @@ func TestHLSStreamStatusStruct(t *testing.T) {
 	t.Run("ready status with clients", func(t *testing.T) {
 		status := HLSStreamStatus{
 			Status:        "ready",
-			Source:        "rtsp://camera.local/stream",
-			PlaylistPath:  "/api/v2/streams/hls/def456/playlist.m3u8",
+			Source:        "rtsp%3A%2F%2Fcamera.local%2Fstream", // URL-encoded source
+			PlaylistURL:   "/api/v2/streams/hls/def456/playlist.m3u8",
 			ActiveClients: 2,
 			PlaylistReady: true,
 		}

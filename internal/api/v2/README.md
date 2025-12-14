@@ -232,30 +232,29 @@ routeInitializers := []struct {
 
 ### HLS Streaming (`audio_hls.go`)
 
-| Method | Route                               | Handler           | Auth | Description                     |
-| ------ | ----------------------------------- | ----------------- | ---- | ------------------------------- |
-| POST   | `/streams/hls/start`                | `StartHLSStream`  | ✅   | Start HLS stream for source     |
-| POST   | `/streams/hls/stop`                 | `StopHLSStream`   | ✅   | Stop HLS stream                 |
-| POST   | `/streams/hls/heartbeat`            | `HLSHeartbeat`    | ❌   | Keep HLS stream alive           |
-| GET    | `/streams/hls/:sourceId/playlist.m3u8` | `ServeHLSPlaylist` | ❌  | Get HLS playlist                |
-| GET    | `/streams/hls/:sourceId/*`          | `ServeHLSContent` | ❌   | Serve HLS segments and init     |
-| GET    | `/streams/hls/status`               | `GetHLSStatus`    | ❌   | Get status of all HLS streams   |
+| Method | Route                                  | Handler            | Auth | Description                   |
+| ------ | -------------------------------------- | ------------------ | ---- | ----------------------------- |
+| POST   | `/streams/hls/:sourceID/start`         | `StartHLSStream`   | ✅   | Start HLS stream for source   |
+| POST   | `/streams/hls/:sourceID/stop`          | `StopHLSStream`    | ✅   | Stop HLS stream               |
+| POST   | `/streams/hls/heartbeat`               | `HLSHeartbeat`     | ❌   | Keep HLS stream alive         |
+| GET    | `/streams/hls/status`                  | `GetHLSStatus`     | ❌   | Get status of all HLS streams |
+| GET    | `/streams/hls/:sourceID/playlist.m3u8` | `ServeHLSPlaylist` | ❌   | Get HLS playlist              |
+| GET    | `/streams/hls/:sourceID/*`             | `ServeHLSContent`  | ❌   | Serve HLS segments and init   |
 
-**Start HLS Stream Request:**
+**Start HLS Stream:**
 
-```json
-{
-  "source_id": "rtsp://camera.local:554/stream"
-}
-```
+- `POST /api/v2/streams/hls/{URL-encoded-sourceID}/start`
+- Optional query param: `?force=true` to restart an existing stream
 
 **Start HLS Stream Response:**
 
 ```json
 {
-  "source_id": "rtsp://camera.local:554/stream",
-  "playlist_url": "/api/v2/streams/hls/abc123/playlist.m3u8",
-  "status": "starting"
+  "status": "ready",
+  "source": "rtsp%3A%2F%2Fcamera.local%3A554%2Fstream",
+  "playlist_url": "/api/v2/streams/hls/rtsp%3A%2F%2Fcamera.local%3A554%2Fstream/playlist.m3u8",
+  "active_clients": 1,
+  "playlist_ready": true
 }
 ```
 
@@ -268,10 +267,28 @@ routeInitializers := []struct {
 }
 ```
 
+**Status Response:**
+
+```json
+{
+  "streams": [
+    {
+      "status": "active",
+      "source": "rtsp%3A%2F%2Fcamera.local%3A554%2Fstream",
+      "playlist_url": "/api/v2/streams/hls/...",
+      "active_clients": 2,
+      "playlist_ready": true
+    }
+  ],
+  "count": 1
+}
+```
+
 **Features:**
 
 - FFmpeg-based HLS streaming with AAC audio encoding
-- Automatic stream cleanup after 60 seconds of inactivity
+- Automatic stream cleanup after 5 minutes of inactivity
+- Stream reuse: existing healthy streams are reused for new clients
 - Client tracking with heartbeat-based keep-alive
 - Secure file serving with path validation
 - Cross-platform support (FIFO on Unix, stdin pipe on Windows)

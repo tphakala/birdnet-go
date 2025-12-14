@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -61,9 +62,15 @@ var audioLevelMgr = &audioLevelManager{
 	rtspAnonymMap: make(map[string]string),
 }
 
-// SetAudioLevelChan sets the audio level channel for the controller
-// This should be called after controller initialization to connect
-// the audio capture system to the SSE endpoint
+// SetAudioLevelChan sets the audio level channel for the controller.
+//
+// CONCURRENCY CONTRACT: This method MUST be called exactly once during
+// single-threaded server startup, before any HTTP requests are processed.
+// The channel is read concurrently by SSE handlers but never modified after
+// this initial setup. Calling this method after the server starts accepting
+// requests may result in data races.
+//
+// This connects the audio capture system to the SSE endpoint.
 func (c *Controller) SetAudioLevelChan(ch chan myaudio.AudioLevelData) {
 	c.audioLevelChan = ch
 	if c.apiLogger != nil {
@@ -102,7 +109,17 @@ func (c *Controller) initAudioLevelRoutes() {
 // StreamAudioLevel handles SSE connections for real-time audio level streaming
 // This provides simple audio level data (0-100 with clipping detection) for UI indicators
 func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
-	clientIP := ctx.RealIP()
+	// Early nil check for audio level channel
+	if c.audioLevelChan == nil {
+		c.logAPIRequest(ctx, slog.LevelWarn, "Audio level stream unavailable - channel not configured")
+		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
+			"error": "Audio level stream is not available",
+		})
+	}
+
+	// Use RemoteAddr for duplicate connection check to prevent IP spoofing
+	// via proxy headers for rate limiting purposes
+	clientIP := c.extractRemoteAddr(ctx)
 
 	// Check for duplicate connection from same IP
 	if _, exists := audioLevelMgr.activeConnections.LoadOrStore(clientIP, time.Now()); exists {
@@ -145,11 +162,10 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 	// Override request context with timeout
 	ctx.SetRequest(ctx.Request().WithContext(timeoutCtx))
 
-	// Set SSE headers
+	// Set SSE headers (CORS is handled by middleware at the v2 group level)
 	ctx.Response().Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	ctx.Response().Header().Set("Cache-Control", "no-cache")
 	ctx.Response().Header().Set("Connection", "keep-alive")
-	ctx.Response().Header().Set("Access-Control-Allow-Origin", "*")
 	ctx.Response().WriteHeader(http.StatusOK)
 
 	// Check authentication status for data anonymization
@@ -418,6 +434,19 @@ func (c *Controller) checkSourceActivity(
 	}
 
 	return updated
+}
+
+// extractRemoteAddr extracts the IP address from RemoteAddr, stripping port if present.
+// This is used for rate limiting and duplicate connection detection where we want
+// the actual connection address rather than proxy-provided headers which can be spoofed.
+func (c *Controller) extractRemoteAddr(ctx echo.Context) string {
+	remoteAddr := ctx.Request().RemoteAddr
+	// RemoteAddr is typically "IP:port", extract just the IP
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		return host
+	}
+	// If no port (unlikely but possible), return as-is
+	return remoteAddr
 }
 
 // sendAudioLevelUpdate sends the current levels to the client
