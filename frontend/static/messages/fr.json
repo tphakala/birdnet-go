@@ -809,6 +809,15 @@
             "helpText": "Le nombre d'heures pendant lesquelles les ajustements du seuil dynamique restent valides. Après cette période, le seuil dynamique est réinitialisé."
           }
         },
+        "falsePositiveFilter": {
+          "title": "Filtre de Faux Positifs",
+          "description": "Réduit les fausses détections en exigeant plusieurs confirmations sur des segments audio qui se chevauchent",
+          "level": {
+            "label": "Niveau du Filtre"
+          },
+          "hardwareNote": "Les niveaux Strict et Maximum nécessitent des paramètres de chevauchement plus élevés et plus de ressources CPU. Un RPi 4 ou un matériel supérieur est requis pour ces niveaux.",
+          "overlapAdjusted": "Le paramètre de chevauchement a été automatiquement ajusté à {overlap}s pour répondre aux exigences du filtre"
+        },
         "rangeFilter": {
           "title": "Filtre de portée",
           "stationLocation": {

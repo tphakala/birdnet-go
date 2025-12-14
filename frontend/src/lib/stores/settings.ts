@@ -80,6 +80,10 @@ export interface DynamicThresholdSettings {
   validHours: number;
 }
 
+export interface FalsePositiveFilterSettings {
+  level: number; // 0=Off, 1=Lenient, 2=Moderate, 3=Balanced, 4=Strict, 5=Maximum
+}
+
 export interface RangeFilterSettings {
   threshold: number;
   speciesCount: number | null;
@@ -344,6 +348,7 @@ export interface RealtimeSettings {
   audio?: AudioSettings;
   dashboard?: Dashboard;
   dynamicThreshold?: DynamicThresholdSettings;
+  falsePositiveFilter?: FalsePositiveFilterSettings;
   log?: {
     enabled: boolean;
     path: string;
@@ -594,6 +599,9 @@ function createEmptySettings(): SettingsFormData {
         trigger: 0.8,
         min: 0.3,
         validHours: 24,
+      },
+      falsePositiveFilter: {
+        level: 0,
       },
       audio: {
         source: '',

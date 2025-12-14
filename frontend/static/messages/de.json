@@ -809,6 +809,15 @@
             "helpText": "Die Anzahl der Stunden, in denen die dynamischen Schwellenwertanpassungen gültig bleiben. Nach diesem Zeitraum wird der dynamische Schwellenwert zurückgesetzt."
           }
         },
+        "falsePositiveFilter": {
+          "title": "Falsch-Positiv-Filter",
+          "description": "Reduziert Fehlerkennungen, indem mehrere Bestätigungen über überlappende Audiosegmente hinweg verlangt werden",
+          "level": {
+            "label": "Filterstufe"
+          },
+          "hardwareNote": "Die Stufen \"Streng\" und \"Maximum\" erfordern höhere Überlappungseinstellungen und mehr CPU-Ressourcen. RPi 4 oder bessere Hardware ist für diese Stufen erforderlich.",
+          "overlapAdjusted": "Überlappungseinstellung automatisch auf {overlap}s angepasst, um die Filteranforderungen zu erfüllen"
+        },
         "rangeFilter": {
           "title": "Reichweitenfilter",
           "stationLocation": {

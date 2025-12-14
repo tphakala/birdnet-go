@@ -27,6 +27,7 @@
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
+  import { cn } from '$lib/utils/cn.js';
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
   import MultiStageOperation from '$lib/desktop/components/ui/MultiStageOperation.svelte';
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
@@ -113,6 +114,9 @@
       min: 0.3,
       validHours: 24,
     },
+    falsePositiveFilter: $realtimeSettings?.falsePositiveFilter ?? {
+      level: 0,
+    },
     output: $outputSettings || {
       sqlite: {
         enabled: false,
@@ -188,7 +192,7 @@
       hasSettingsChanged(store.originalData.sentry, store.formData.sentry)
   );
 
-  // Detection tab includes BirdNET params and Range Filter
+  // Detection tab includes BirdNET params, False Positive Filter, and Range Filter
   let detectionTabHasChanges = $derived(
     hasSettingsChanged(
       {
@@ -215,6 +219,10 @@
       hasSettingsChanged(
         store.originalData.realtime?.dynamicThreshold,
         store.formData.realtime?.dynamicThreshold
+      ) ||
+      hasSettingsChanged(
+        store.originalData.realtime?.falsePositiveFilter,
+        store.formData.realtime?.falsePositiveFilter
       )
   );
 
@@ -1021,6 +1029,99 @@
     });
   }
 
+  // False Positive Filter helpers and update handler
+  // Minimum overlap values must match backend: internal/analysis/processor/false_positive_filter.go
+  const falsePositiveFilterLevels = [
+    {
+      value: 0,
+      name: 'Off',
+      description: 'No filtering - accepts first detection immediately',
+      minOverlap: 0.0,
+    },
+    {
+      value: 1,
+      name: 'Lenient',
+      description: '~2 confirmations required. For low-quality audio (RTSP cameras, webcam mics)',
+      minOverlap: 2.0,
+    },
+    {
+      value: 2,
+      name: 'Moderate',
+      description: '~3 confirmations required. Balanced for typical hobby setups',
+      minOverlap: 2.2,
+    },
+    {
+      value: 3,
+      name: 'Balanced',
+      description: '~5 confirmations required. Original pre-Sept 2025 behavior',
+      minOverlap: 2.4,
+    },
+    {
+      value: 4,
+      name: 'Strict',
+      description: '~12 confirmations required. RPi 4+ needed. For high-quality microphones',
+      minOverlap: 2.7,
+    },
+    {
+      value: 5,
+      name: 'Maximum',
+      description: '~21 confirmations required. RPi 4+ needed. For professional-grade microphones',
+      minOverlap: 2.8,
+    },
+  ];
+
+  function getFalsePositiveFilterLevelName(level: number): string {
+    return falsePositiveFilterLevels[level]?.name ?? 'Unknown';
+  }
+
+  function getFalsePositiveFilterDescription(level: number): string {
+    return falsePositiveFilterLevels[level]?.description ?? '';
+  }
+
+  function getMinimumOverlapForLevel(level: number): number {
+    return falsePositiveFilterLevels[level]?.minOverlap ?? 0.0;
+  }
+
+  function getFalsePositiveFilterBadgeClass(level: number): string {
+    switch (level) {
+      case 0:
+        return 'badge-ghost'; // Off - muted/neutral
+      case 1:
+        return 'badge-success'; // Lenient - green (easy on resources)
+      case 2:
+        return 'badge-info'; // Moderate - blue
+      case 3:
+        return 'badge-warning'; // Balanced - yellow/amber
+      case 4:
+        return 'badge-error'; // Strict - red (requires RPi 4+)
+      case 5:
+        return 'badge-error'; // Maximum - red (requires RPi 4+)
+      default:
+        return 'badge-ghost';
+    }
+  }
+
+  function updateFalsePositiveFilterLevel(level: number) {
+    // Get minimum overlap required for this level
+    const minOverlap = getMinimumOverlapForLevel(level);
+    const currentOverlap = settings.birdnet.overlap;
+
+    // Update the filter level
+    settingsActions.updateSection('realtime', {
+      falsePositiveFilter: { level },
+    });
+
+    // Auto-adjust overlap if current value is below minimum required
+    if (currentOverlap < minOverlap) {
+      settingsActions.updateSection('birdnet', { overlap: minOverlap });
+      toastActions.info(
+        t('settings.main.sections.falsePositiveFilter.overlapAdjusted', {
+          overlap: minOverlap.toFixed(1),
+        })
+      );
+    }
+  }
+
   // Weather update handlers
   function updateWeatherProvider(provider: string) {
     settingsActions.updateSection('realtime', {
@@ -1656,6 +1757,56 @@
           helpText={t('settings.main.fields.tensorflowThreads.helpText')}
           disabled={store.isLoading || store.isSaving}
         />
+      </div>
+    </SettingsSection>
+
+    <!-- False Positive Filter Card -->
+    <SettingsSection
+      title={t('settings.main.sections.falsePositiveFilter.title')}
+      description={t('settings.main.sections.falsePositiveFilter.description')}
+      originalData={store.originalData.realtime?.falsePositiveFilter}
+      currentData={store.formData.realtime?.falsePositiveFilter}
+    >
+      <div class="space-y-4">
+        <!-- Custom implementation with colored badge -->
+        <div class="form-control min-w-0">
+          <label for="false-positive-filter-level" class="label">
+            <span class="label-text font-medium">
+              {t('settings.main.sections.falsePositiveFilter.level.label')}
+            </span>
+            <span
+              class={cn(
+                'badge badge-sm font-medium',
+                getFalsePositiveFilterBadgeClass(settings.falsePositiveFilter.level)
+              )}
+            >
+              {getFalsePositiveFilterLevelName(settings.falsePositiveFilter.level)}
+            </span>
+          </label>
+          <input
+            id="false-positive-filter-level"
+            type="range"
+            class="range range-primary"
+            min={0}
+            max={5}
+            step={1}
+            value={settings.falsePositiveFilter.level}
+            oninput={e => updateFalsePositiveFilterLevel(parseInt(e.currentTarget.value))}
+            disabled={store.isLoading || store.isSaving}
+          />
+          <div class="label">
+            <span class="label-text-alt">
+              {getFalsePositiveFilterDescription(settings.falsePositiveFilter.level)}
+            </span>
+          </div>
+        </div>
+
+        <!-- Hardware note for strict/maximum levels -->
+        {#if settings.falsePositiveFilter.level >= 4}
+          <SettingsNote>
+            <span>{t('settings.main.sections.falsePositiveFilter.hardwareNote')}</span>
+          </SettingsNote>
+        {/if}
       </div>
     </SettingsSection>
 

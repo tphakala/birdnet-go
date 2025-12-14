@@ -809,6 +809,15 @@
             "helpText": "Het aantal uren gedurende welke de dynamische drempelwaarde aanpassingen geldig blijven. Na deze periode wordt de dynamische drempelwaarde gereset."
           }
         },
+        "falsePositiveFilter": {
+          "title": "Vals Positief Filter",
+          "description": "Vermindert valse detecties door meerdere bevestigingen te vereisen over overlappende audiosegmenten",
+          "level": {
+            "label": "Filterniveau"
+          },
+          "hardwareNote": "De niveaus \"Strikt\" en \"Maximum\" vereisen hogere overlap-instellingen en meer CPU-bronnen. RPi 4 of betere hardware is vereist voor deze niveaus.",
+          "overlapAdjusted": "Overlap-instelling automatisch aangepast naar {overlap}s om aan de filtervereisten te voldoen"
+        },
         "rangeFilter": {
           "title": "Bereik Filter",
           "stationLocation": {

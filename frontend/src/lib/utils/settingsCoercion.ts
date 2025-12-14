@@ -21,6 +21,7 @@ import type {
   WebhookEndpointConfig,
   WebhookAuthConfig,
   PushFilterConfig,
+  FalsePositiveFilterSettings,
 } from '$lib/stores/settings';
 
 // Type for partial/unknown settings data
@@ -31,6 +32,7 @@ type PartialSecuritySettings = Partial<SecuritySettings> & UnknownSettings;
 type PartialSpeciesSettings = Partial<SpeciesSettings> & UnknownSettings;
 type PartialMQTTSettings = Partial<MQTTSettings> & UnknownSettings;
 type PartialNotificationSettings = Partial<NotificationSettings> & UnknownSettings;
+type PartialFalsePositiveFilterSettings = Partial<FalsePositiveFilterSettings> & UnknownSettings;
 
 /**
  * Coerce a value to a number within specified bounds
@@ -513,6 +515,19 @@ export function coerceMQTTSettings(settings: PartialMQTTSettings): PartialMQTTSe
 }
 
 /**
+ * Validate and coerce false positive filter settings
+ */
+export function coerceFalsePositiveFilterSettings(
+  settings: PartialFalsePositiveFilterSettings | null | undefined
+): PartialFalsePositiveFilterSettings {
+  const safeSettings = settings && typeof settings === 'object' ? settings : {};
+
+  return {
+    level: coerceNumber(safeSettings.level, 0, 5, 0),
+  };
+}
+
+/**
  * Validate and coerce webhook endpoint configuration
  */
 function coerceWebhookEndpoint(endpoint: unknown): WebhookEndpointConfig | null {
@@ -744,6 +759,12 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
 
       if (Object.prototype.hasOwnProperty.call(data, 'species')) {
         coercedRealtime.species = coerceSpeciesSettings(data.species as PartialSpeciesSettings);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(data, 'falsePositiveFilter')) {
+        coercedRealtime.falsePositiveFilter = coerceFalsePositiveFilterSettings(
+          data.falsePositiveFilter as PartialFalsePositiveFilterSettings
+        );
       }
 
       return coercedRealtime;
