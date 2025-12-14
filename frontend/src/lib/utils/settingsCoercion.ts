@@ -528,9 +528,25 @@ function coerceWebhookEndpoint(endpoint: unknown): WebhookEndpointConfig | null 
     return null;
   }
 
+  // Validate URL scheme - only allow http(s) for webhooks
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+  } catch {
+    // Invalid URL format
+    return null;
+  }
+
+  // Normalize HTTP method to uppercase
+  const rawMethod = coerceString(e.method, 'POST').toUpperCase();
+  const validMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+  const method = validMethods.includes(rawMethod) ? rawMethod : 'POST';
+
   const coercedEndpoint: WebhookEndpointConfig = {
     url,
-    method: coerceString(e.method, 'POST'),
+    method,
     timeout: e.timeout !== undefined ? coerceNumber(e.timeout, 1, 300, 30) : undefined,
   };
 
@@ -562,7 +578,8 @@ function coerceWebhookEndpoint(endpoint: unknown): WebhookEndpointConfig | null 
   // Coerce auth if present
   if (e.auth && typeof e.auth === 'object' && !Array.isArray(e.auth)) {
     const auth = e.auth as UnknownSettings;
-    const authType = coerceString(auth.type, 'none');
+    // Normalize auth type to lowercase for case-insensitive matching
+    const authType = coerceString(auth.type, 'none').toLowerCase();
     const validAuthTypes = ['none', 'bearer', 'basic', 'custom'];
     const normalizedType = validAuthTypes.includes(authType) ? authType : 'none';
 
@@ -599,15 +616,15 @@ function coercePushProvider(provider: unknown): PushProviderConfig | null {
     timeout: p.timeout !== undefined ? coerceNumber(p.timeout, 1, 300, 30) : undefined,
   };
 
-  // Coerce URLs for shoutrrr providers
-  if (p.urls !== undefined) {
+  // Coerce URLs only for shoutrrr providers
+  if (normalizedType === 'shoutrrr' && p.urls !== undefined) {
     coercedProvider.urls = coerceArray<string>(p.urls, []).filter(
       url => typeof url === 'string' && url.trim() !== ''
     );
   }
 
-  // Coerce endpoints for webhook providers
-  if (p.endpoints !== undefined) {
+  // Coerce endpoints only for webhook providers
+  if (normalizedType === 'webhook' && p.endpoints !== undefined) {
     const endpoints = coerceArray(p.endpoints, []);
     coercedProvider.endpoints = endpoints
       .map(coerceWebhookEndpoint)
@@ -619,14 +636,21 @@ function coercePushProvider(provider: unknown): PushProviderConfig | null {
     const f = p.filter as UnknownSettings;
     const coercedFilter: PushFilterConfig = {};
 
+    // Helper to coerce filter arrays - enforce string types and trim
+    const coerceStringArray = (value: unknown): string[] =>
+      coerceArray<unknown>(value, [])
+        .filter((v): v is string => typeof v === 'string')
+        .map(s => s.trim())
+        .filter(s => s !== '');
+
     if (f.types !== undefined) {
-      coercedFilter.types = coerceArray<string>(f.types, []);
+      coercedFilter.types = coerceStringArray(f.types);
     }
     if (f.priorities !== undefined) {
-      coercedFilter.priorities = coerceArray<string>(f.priorities, []);
+      coercedFilter.priorities = coerceStringArray(f.priorities);
     }
     if (f.components !== undefined) {
-      coercedFilter.components = coerceArray<string>(f.components, []);
+      coercedFilter.components = coerceStringArray(f.components);
     }
 
     coercedProvider.filter = coercedFilter;
@@ -671,12 +695,21 @@ export function coerceNotificationSettings(
     coerced.push = coercePushSettings(safeSettings.push);
   }
 
-  // Coerce templates if present
-  if (safeSettings.templates && typeof safeSettings.templates === 'object') {
+  // Coerce templates if present - ensure it's a plain object, not an array
+  if (
+    safeSettings.templates &&
+    typeof safeSettings.templates === 'object' &&
+    !Array.isArray(safeSettings.templates)
+  ) {
     const templates = safeSettings.templates as UnknownSettings;
     coerced.templates = {};
 
-    if (templates.newSpecies && typeof templates.newSpecies === 'object') {
+    // Ensure newSpecies is also a plain object, not an array
+    if (
+      templates.newSpecies &&
+      typeof templates.newSpecies === 'object' &&
+      !Array.isArray(templates.newSpecies)
+    ) {
       const ns = templates.newSpecies as UnknownSettings;
       coerced.templates.newSpecies = {
         title: coerceString(ns.title, ''),
