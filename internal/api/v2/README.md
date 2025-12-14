@@ -199,6 +199,108 @@ routeInitializers := []struct {
 | GET    | `/streams/audio-level`   | `HandleAudioLevelStream`    | ✅   | Audio level stream  |
 | GET    | `/streams/notifications` | `HandleNotificationsStream` | ✅   | Notification stream |
 
+### Audio Level SSE (`audio_level.go`)
+
+| Method | Route                  | Handler            | Auth | Description                              |
+| ------ | ---------------------- | ------------------ | ---- | ---------------------------------------- |
+| GET    | `/streams/audio-level` | `StreamAudioLevel` | ❌⚡ | Real-time audio level SSE (rate limited) |
+
+**Features:**
+
+- Real-time audio level data for UI audio indicators (0-100 with clipping detection)
+- Automatic source anonymization for unauthenticated clients
+- Duplicate connection prevention (one connection per client IP)
+- Rate limiting: 10 requests/minute per IP
+- Maximum connection duration: 30 minutes
+- Heartbeat interval: 10 seconds
+
+**Event Format:**
+
+```json
+{
+  "type": "audio-level",
+  "levels": {
+    "source_id_1": {
+      "level": 45,
+      "name": "Audio Source Name",
+      "source": "source_id_1",
+      "clipping": false
+    }
+  }
+}
+```
+
+### HLS Streaming (`audio_hls.go`)
+
+| Method | Route                                  | Handler            | Auth | Description                   |
+| ------ | -------------------------------------- | ------------------ | ---- | ----------------------------- |
+| POST   | `/streams/hls/:sourceID/start`         | `StartHLSStream`   | ✅   | Start HLS stream for source   |
+| POST   | `/streams/hls/:sourceID/stop`          | `StopHLSStream`    | ✅   | Stop HLS stream               |
+| POST   | `/streams/hls/heartbeat`               | `HLSHeartbeat`     | ❌   | Keep HLS stream alive         |
+| GET    | `/streams/hls/status`                  | `GetHLSStatus`     | ❌   | Get status of all HLS streams |
+| GET    | `/streams/hls/:sourceID/playlist.m3u8` | `ServeHLSPlaylist` | ❌   | Get HLS playlist              |
+| GET    | `/streams/hls/:sourceID/*`             | `ServeHLSContent`  | ❌   | Serve HLS segments and init   |
+
+**Start HLS Stream:**
+
+- `POST /api/v2/streams/hls/{URL-encoded-sourceID}/start`
+- Optional query param: `?force=true` to restart an existing stream
+
+**Start HLS Stream Response:**
+
+```json
+{
+  "status": "ready",
+  "source": "rtsp%3A%2F%2Fcamera.local%3A554%2Fstream",
+  "playlist_url": "/api/v2/streams/hls/rtsp%3A%2F%2Fcamera.local%3A554%2Fstream/playlist.m3u8",
+  "active_clients": 1,
+  "playlist_ready": true
+}
+```
+
+**Heartbeat Request:**
+
+```json
+{
+  "source_id": "rtsp://camera.local:554/stream",
+  "client_id": "optional-client-id"
+}
+```
+
+**Status Response:**
+
+```json
+{
+  "streams": [
+    {
+      "status": "active",
+      "source": "rtsp%3A%2F%2Fcamera.local%3A554%2Fstream",
+      "playlist_url": "/api/v2/streams/hls/...",
+      "active_clients": 2,
+      "playlist_ready": true
+    }
+  ],
+  "count": 1
+}
+```
+
+**Features:**
+
+- FFmpeg-based HLS streaming with AAC audio encoding
+- Automatic stream cleanup after 5 minutes of inactivity
+- Stream reuse: existing healthy streams are reused for new clients
+- Client tracking with heartbeat-based keep-alive
+- Secure file serving with path validation
+- Cross-platform support (FIFO on Unix, stdin pipe on Windows)
+- Configurable bitrate (16-320 kbps), sample rate, and segment length
+
+**Configuration (via settings):**
+
+- `BitRate`: Audio bitrate in kbps (default: 128, range: 16-320)
+- `SampleRate`: Audio sample rate in Hz (default: 48000)
+- `SegmentLength`: HLS segment duration in seconds (default: 2, range: 1-30)
+- `FfmpegLogLevel`: FFmpeg log level (default: "warning")
+
 ### Stream Health Monitoring (`streams_health.go`)
 
 | Method | Route                    | Handler                   | Auth | Description                                               |
