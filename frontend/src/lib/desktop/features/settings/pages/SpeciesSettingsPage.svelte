@@ -985,9 +985,7 @@
                     <!-- Left: Names -->
                     <div class="min-w-0 flex-1">
                       <div class="font-medium text-sm truncate">{species.commonName}</div>
-                      <div
-                        class="text-xs text-(--color-base-content) opacity-50 italic truncate"
-                      >
+                      <div class="text-xs text-(--color-base-content) opacity-50 italic truncate">
                         {species.scientificName}
                       </div>
                     </div>
@@ -1087,9 +1085,7 @@
         {/each}
 
         {#if settings.include.length === 0}
-          <div
-            class="text-sm text-(--color-base-content) opacity-60 italic p-2 text-center"
-          >
+          <div class="text-sm text-(--color-base-content) opacity-60 italic p-2 text-center">
             {t('settings.species.alwaysInclude.noSpeciesMessage')}
           </div>
         {/if}
@@ -1139,9 +1135,7 @@
         {/each}
 
         {#if settings.exclude.length === 0}
-          <div
-            class="text-sm text-(--color-base-content) opacity-60 italic p-2 text-center"
-          >
+          <div class="text-sm text-(--color-base-content) opacity-60 italic p-2 text-center">
             {t('settings.species.alwaysExclude.noSpeciesMessage')}
           </div>
         {/if}
