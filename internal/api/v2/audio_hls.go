@@ -566,7 +566,7 @@ func (c *Controller) setHLSContentType(ctx echo.Context, path string) {
 // Stream management methods
 
 // getOrCreateHLSStream gets existing stream or creates a new one
-func (c *Controller) getOrCreateHLSStream(ctx context.Context, sourceID string) (*HLSStreamInfo, error) {
+func (c *Controller) getOrCreateHLSStream(_ context.Context, sourceID string) (*HLSStreamInfo, error) {
 	// Check for existing stream
 	if stream := c.getHLSStream(sourceID); stream != nil {
 		return stream, nil
@@ -577,8 +577,10 @@ func (c *Controller) getOrCreateHLSStream(ctx context.Context, sourceID string) 
 	// Generate filesystem-safe name
 	filesystemSafeID := generateFilesystemSafeName(sourceID)
 
-	// Create stream context
-	streamCtx, streamCancel := context.WithCancel(ctx)
+	// Create stream context from controller's lifecycle context, NOT from HTTP request context.
+	// Using request context would cause the stream to be cleaned up when the /start request completes.
+	// The stream must persist beyond the initial request lifetime.
+	streamCtx, streamCancel := context.WithCancel(c.ctx)
 
 	// Get HLS directory
 	hlsBaseDir, err := conf.GetHLSDirectory()
