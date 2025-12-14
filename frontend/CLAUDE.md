@@ -4,7 +4,7 @@
 
 - **Svelte 5** with Runes (`$state`, `$derived`, `$effect`)
 - **TypeScript** - NO `any` types without justification
-- **Tailwind v4** + **daisyUI 5** components
+- **Tailwind v4.1** (native CSS only, no component libraries)
 - **Vite** build, **Vitest** testing
 - **i18n** - Custom implementation in `@i18n`
 
@@ -353,9 +353,14 @@ node tools/test-all-pages.js
 
 ```svelte
 {#if loading}
-  <div class="loading loading-spinner" />
+  <div class="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full" />
 {:else if error}
-  <div role="alert" class="alert alert-error">{error.message}</div>
+  <div
+    role="alert"
+    class="p-4 rounded-lg bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+  >
+    {error.message}
+  </div>
 {:else}
   <Content />
 {/if}
