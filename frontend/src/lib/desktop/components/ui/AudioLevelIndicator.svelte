@@ -3,6 +3,7 @@
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { Mic, CirclePlay, CircleStop } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
+  import { fetchWithCSRF } from '$lib/utils/api';
   import Hls from 'hls.js';
   import type { ErrorData } from 'hls.js';
   import { HLS_AUDIO_CONFIG, BUFFERING_STRATEGY, ERROR_HANDLING } from './hls-config';
@@ -425,21 +426,22 @@
     const encodedSourceId = encodeURIComponent(sourceId);
 
     try {
-      const response = await fetch(`/api/v2/streams/hls/${encodedSourceId}/start`, {
+      // Use fetchWithCSRF for authenticated HLS endpoint
+      await fetchWithCSRF(`/api/v2/streams/hls/${encodedSourceId}/start`, {
         method: 'POST',
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to start stream: ${response.status} ${response.statusText}`);
-      }
 
       const hlsUrl = `/api/v2/streams/hls/${encodedSourceId}/playlist.m3u8`;
       await setupHLSStream(hlsUrl, sourceId);
 
       startHeartbeat();
-    } catch {
+    } catch (error) {
       // Handle audio stream access error
-      showStatusMessage('Error starting stream');
+      const message =
+        error instanceof Error && error.message.includes('permission')
+          ? 'Login required to stream audio'
+          : 'Error starting stream';
+      showStatusMessage(message);
       globalThis.setTimeout(() => hideStatusMessage(), 3000);
     }
   }
@@ -469,10 +471,10 @@
       navigator.mediaSession.playbackState = 'paused';
     }
 
-    // Notify server
+    // Notify server (use fetchWithCSRF for authenticated endpoint)
     if (previousSource) {
       const encodedSourceId = encodeURIComponent(previousSource);
-      fetch(`/api/v2/streams/hls/${encodedSourceId}/stop`, {
+      fetchWithCSRF(`/api/v2/streams/hls/${encodedSourceId}/stop`, {
         method: 'POST',
       }).catch(_err => {
         // Failed to notify server of playback stop
