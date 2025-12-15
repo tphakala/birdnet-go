@@ -24,7 +24,7 @@ Source: Apache-2.0
 
 ### filippo.io/edwards25519
 
-License: Unknown
+License: https://github.com/FiloSottile/edwards25519/blob/v1.1.0/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/antonholmquist/jason
@@ -394,7 +394,7 @@ Source: Unlicense
 
 ### github.com/tphakala/simd
 
-License: https://github.com/tphakala/simd/blob/v1.0.18/LICENSE
+License: https://github.com/tphakala/simd/blob/v1.0.22/LICENSE
 Source: MIT
 
 ### github.com/valyala/bytebufferpool
@@ -449,12 +449,12 @@ Source: MIT
 
 ### golang.org/x/crypto
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.45.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.46.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.47.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.48.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -464,22 +464,22 @@ Source: BSD-3-Clause
 
 ### golang.org/x/sync
 
-License: https://cs.opensource.google/go/x/sync/+/v0.18.0:LICENSE
+License: https://cs.opensource.google/go/x/sync/+/v0.19.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/sys
 
-License: https://cs.opensource.google/go/x/sys/+/v0.38.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.39.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term
 
-License: https://cs.opensource.google/go/x/term/+/v0.37.0:LICENSE
+License: https://cs.opensource.google/go/x/term/+/v0.38.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.31.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.32.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
