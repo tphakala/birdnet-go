@@ -32,7 +32,7 @@ require (
 	github.com/tphakala/simd v1.0.22
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.46.0
-	golang.org/x/net v0.47.0
+	golang.org/x/net v0.48.0
 	golang.org/x/term v0.38.0
 	golang.org/x/text v0.32.0
 	google.golang.org/api v0.257.0
