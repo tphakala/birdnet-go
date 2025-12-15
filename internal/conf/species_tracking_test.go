@@ -132,20 +132,20 @@ func validateSeasonConfiguration(t *testing.T, latitude float64, expectedSeasons
 func TestGetDefaultSeasons(t *testing.T) {
 	t.Run("northern hemisphere", func(t *testing.T) {
 		t.Parallel()
-		
+
 		expectedSeasons := map[string]Season{
 			"spring": {StartMonth: 3, StartDay: 20},   // March 20
 			"summer": {StartMonth: 6, StartDay: 21},   // June 21
 			"fall":   {StartMonth: 9, StartDay: 22},   // September 22
 			"winter": {StartMonth: 12, StartDay: 21},  // December 21
 		}
-		
+
 		validateSeasonConfiguration(t, 45.0, expectedSeasons, "northern hemisphere")
 	})
 
 	t.Run("southern hemisphere", func(t *testing.T) {
 		t.Parallel()
-		
+
 		// Seasons shifted by 6 months for southern hemisphere
 		expectedSeasons := map[string]Season{
 			"spring": {StartMonth: 9, StartDay: 22},   // September 22
@@ -153,13 +153,13 @@ func TestGetDefaultSeasons(t *testing.T) {
 			"fall":   {StartMonth: 3, StartDay: 20},   // March 20
 			"winter": {StartMonth: 6, StartDay: 21},   // June 21
 		}
-		
+
 		validateSeasonConfiguration(t, -45.0, expectedSeasons, "southern hemisphere")
 	})
 
 	t.Run("equatorial region", func(t *testing.T) {
 		t.Parallel()
-		
+
 		// Wet/dry season cycle for equatorial regions
 		expectedSeasons := map[string]Season{
 			"wet1": {StartMonth: 3, StartDay: 1},   // March-May wet season
@@ -167,7 +167,227 @@ func TestGetDefaultSeasons(t *testing.T) {
 			"wet2": {StartMonth: 9, StartDay: 1},   // September-November wet season
 			"dry2": {StartMonth: 12, StartDay: 1},  // December-February dry season
 		}
-		
+
 		validateSeasonConfiguration(t, 0.0, expectedSeasons, "equatorial region")
+	})
+}
+
+// TestIsDefaultSeasonConfiguration tests the isDefaultSeasonConfiguration helper function
+func TestIsDefaultSeasonConfiguration(t *testing.T) {
+	tests := []struct {
+		name     string
+		seasons  map[string]Season
+		expected bool
+	}{
+		{
+			name: "traditional seasons",
+			seasons: map[string]Season{
+				"spring": {StartMonth: 3, StartDay: 20},
+				"summer": {StartMonth: 6, StartDay: 21},
+				"fall":   {StartMonth: 9, StartDay: 22},
+				"winter": {StartMonth: 12, StartDay: 21},
+			},
+			expected: true,
+		},
+		{
+			name: "equatorial seasons",
+			seasons: map[string]Season{
+				"wet1": {StartMonth: 3, StartDay: 1},
+				"dry1": {StartMonth: 6, StartDay: 1},
+				"wet2": {StartMonth: 9, StartDay: 1},
+				"dry2": {StartMonth: 12, StartDay: 1},
+			},
+			expected: true,
+		},
+		{
+			name: "custom seasons - different names",
+			seasons: map[string]Season{
+				"rainy":  {StartMonth: 6, StartDay: 1},
+				"cool":   {StartMonth: 10, StartDay: 1},
+				"hot":    {StartMonth: 2, StartDay: 1},
+				"windy":  {StartMonth: 12, StartDay: 1},
+			},
+			expected: false,
+		},
+		{
+			name: "partial traditional seasons",
+			seasons: map[string]Season{
+				"spring": {StartMonth: 3, StartDay: 20},
+				"summer": {StartMonth: 6, StartDay: 21},
+				"autumn": {StartMonth: 9, StartDay: 22}, // "autumn" instead of "fall"
+				"winter": {StartMonth: 12, StartDay: 21},
+			},
+			expected: false,
+		},
+		{
+			name:     "empty seasons",
+			seasons:  map[string]Season{},
+			expected: false,
+		},
+		{
+			name:     "nil seasons",
+			seasons:  nil,
+			expected: false,
+		},
+		{
+			name: "only 3 seasons",
+			seasons: map[string]Season{
+				"spring": {StartMonth: 3, StartDay: 20},
+				"summer": {StartMonth: 6, StartDay: 21},
+				"fall":   {StartMonth: 9, StartDay: 22},
+			},
+			expected: false,
+		},
+		{
+			name: "5 seasons",
+			seasons: map[string]Season{
+				"spring": {StartMonth: 3, StartDay: 20},
+				"summer": {StartMonth: 6, StartDay: 21},
+				"fall":   {StartMonth: 9, StartDay: 22},
+				"winter": {StartMonth: 12, StartDay: 21},
+				"extra":  {StartMonth: 1, StartDay: 1},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := isDefaultSeasonConfiguration(tt.seasons)
+			assert.Equal(t, tt.expected, got, "isDefaultSeasonConfiguration() returned unexpected result")
+		})
+	}
+}
+
+// TestGetSeasonalTrackingWithHemisphere_Issue1524 tests the fix for issue #1524
+// where users with pre-existing Northern hemisphere seasons would not get updated
+// to Southern hemisphere seasons when their latitude indicated Southern hemisphere.
+func TestGetSeasonalTrackingWithHemisphere_Issue1524(t *testing.T) {
+	t.Run("empty seasons get populated", func(t *testing.T) {
+		t.Parallel()
+
+		settings := SeasonalTrackingSettings{
+			Enabled:    true,
+			WindowDays: 21,
+			Seasons:    nil,
+		}
+
+		result := GetSeasonalTrackingWithHemisphere(settings, -33.8688) // Sydney
+		assert.Len(t, result.Seasons, 4, "Should have 4 seasons")
+		assert.Equal(t, 9, result.Seasons["spring"].StartMonth, "Southern spring should start in September")
+	})
+
+	t.Run("northern seasons updated to southern", func(t *testing.T) {
+		t.Parallel()
+
+		// Pre-existing Northern hemisphere seasons (the bug scenario)
+		settings := SeasonalTrackingSettings{
+			Enabled:    true,
+			WindowDays: 21,
+			Seasons: map[string]Season{
+				"spring": {StartMonth: 3, StartDay: 20},
+				"summer": {StartMonth: 6, StartDay: 21},
+				"fall":   {StartMonth: 9, StartDay: 22},
+				"winter": {StartMonth: 12, StartDay: 21},
+			},
+		}
+
+		// Apply to Southern hemisphere user
+		result := GetSeasonalTrackingWithHemisphere(settings, -33.8688) // Sydney
+
+		// Verify seasons were updated to Southern hemisphere
+		assert.Equal(t, 9, result.Seasons["spring"].StartMonth, "Southern spring should start in September")
+		assert.Equal(t, 12, result.Seasons["summer"].StartMonth, "Southern summer should start in December")
+		assert.Equal(t, 3, result.Seasons["fall"].StartMonth, "Southern fall should start in March")
+		assert.Equal(t, 6, result.Seasons["winter"].StartMonth, "Southern winter should start in June")
+	})
+
+	t.Run("southern seasons kept for southern hemisphere", func(t *testing.T) {
+		t.Parallel()
+
+		// Southern hemisphere seasons already set
+		settings := SeasonalTrackingSettings{
+			Enabled:    true,
+			WindowDays: 21,
+			Seasons: map[string]Season{
+				"spring": {StartMonth: 9, StartDay: 22},
+				"summer": {StartMonth: 12, StartDay: 21},
+				"fall":   {StartMonth: 3, StartDay: 20},
+				"winter": {StartMonth: 6, StartDay: 21},
+			},
+		}
+
+		result := GetSeasonalTrackingWithHemisphere(settings, -33.8688) // Sydney
+
+		// Should stay Southern
+		assert.Equal(t, 9, result.Seasons["spring"].StartMonth, "Southern spring should stay in September")
+	})
+
+	t.Run("northern seasons kept for northern hemisphere", func(t *testing.T) {
+		t.Parallel()
+
+		settings := SeasonalTrackingSettings{
+			Enabled:    true,
+			WindowDays: 21,
+			Seasons: map[string]Season{
+				"spring": {StartMonth: 3, StartDay: 20},
+				"summer": {StartMonth: 6, StartDay: 21},
+				"fall":   {StartMonth: 9, StartDay: 22},
+				"winter": {StartMonth: 12, StartDay: 21},
+			},
+		}
+
+		result := GetSeasonalTrackingWithHemisphere(settings, 60.1699) // Helsinki
+
+		// Should stay Northern
+		assert.Equal(t, 3, result.Seasons["spring"].StartMonth, "Northern spring should stay in March")
+	})
+
+	t.Run("custom seasons preserved", func(t *testing.T) {
+		t.Parallel()
+
+		// User has custom season names
+		settings := SeasonalTrackingSettings{
+			Enabled:    true,
+			WindowDays: 21,
+			Seasons: map[string]Season{
+				"rainy": {StartMonth: 6, StartDay: 1},
+				"cool":  {StartMonth: 10, StartDay: 1},
+				"hot":   {StartMonth: 2, StartDay: 1},
+				"windy": {StartMonth: 12, StartDay: 1},
+			},
+		}
+
+		result := GetSeasonalTrackingWithHemisphere(settings, -33.8688) // Sydney
+
+		// Custom seasons should be preserved
+		assert.Equal(t, 6, result.Seasons["rainy"].StartMonth, "Custom rainy season should be preserved")
+		_, exists := result.Seasons["spring"]
+		assert.False(t, exists, "Should not add default seasons when custom seasons exist")
+	})
+
+	t.Run("equatorial to traditional - update based on latitude", func(t *testing.T) {
+		t.Parallel()
+
+		// User has equatorial seasons but is at Northern latitude
+		settings := SeasonalTrackingSettings{
+			Enabled:    true,
+			WindowDays: 21,
+			Seasons: map[string]Season{
+				"wet1": {StartMonth: 3, StartDay: 1},
+				"dry1": {StartMonth: 6, StartDay: 1},
+				"wet2": {StartMonth: 9, StartDay: 1},
+				"dry2": {StartMonth: 12, StartDay: 1},
+			},
+		}
+
+		// Apply to Northern hemisphere user (outside equatorial zone)
+		result := GetSeasonalTrackingWithHemisphere(settings, 60.1699) // Helsinki
+
+		// Should be updated to Northern hemisphere traditional seasons
+		_, hasSpring := result.Seasons["spring"]
+		assert.True(t, hasSpring, "Should have traditional spring for Northern hemisphere")
+		assert.Equal(t, 3, result.Seasons["spring"].StartMonth, "Northern spring should start in March")
 	})
 }

@@ -579,12 +579,68 @@ func DetectHemisphere(latitude float64) string {
 
 // GetSeasonalTrackingWithHemisphere returns seasonal tracking configuration adjusted for hemisphere
 // For southern hemisphere, seasons are shifted by 6 months
+//
+// This function handles three scenarios:
+// 1. No seasons defined (len == 0): Uses defaults for detected hemisphere
+// 2. Default seasons from wrong hemisphere: Updates to correct hemisphere
+// 3. Custom seasons (non-default names): Preserves user customizations
+//
+// Issue #1524 fix: Previously only updated when len(Seasons) == 0, which caused
+// users with pre-existing Northern hemisphere defaults to keep wrong seasons
+// even when their latitude indicated Southern hemisphere.
 func GetSeasonalTrackingWithHemisphere(settings SeasonalTrackingSettings, latitude float64) SeasonalTrackingSettings {
-	// If no custom seasons are defined, use defaults based on hemisphere
+	// If no seasons defined, use defaults based on hemisphere
 	if len(settings.Seasons) == 0 {
 		settings.Seasons = GetDefaultSeasons(latitude)
+		return settings
 	}
+
+	// Check if current seasons are default seasons (not custom)
+	// If they are default seasons, update them to match the user's hemisphere
+	if isDefaultSeasonConfiguration(settings.Seasons) {
+		settings.Seasons = GetDefaultSeasons(latitude)
+	}
+
 	return settings
+}
+
+// isDefaultSeasonConfiguration checks if the given seasons map contains
+// default season names (spring/summer/fall/winter or wet1/dry1/wet2/dry2).
+// This helps distinguish between:
+// - Default seasons that should be updated based on hemisphere
+// - Custom seasons that should be preserved
+//
+// Returns true if the seasons appear to be a default configuration,
+// false if they appear to be custom user-defined seasons.
+func isDefaultSeasonConfiguration(seasons map[string]Season) bool {
+	if len(seasons) != 4 {
+		return false
+	}
+
+	// Check for traditional season names (Northern/Southern hemisphere)
+	traditionalSeasons := []string{"spring", "summer", "fall", "winter"}
+	hasTraditional := true
+	for _, name := range traditionalSeasons {
+		if _, exists := seasons[name]; !exists {
+			hasTraditional = false
+			break
+		}
+	}
+	if hasTraditional {
+		return true
+	}
+
+	// Check for equatorial season names
+	equatorialSeasons := []string{"wet1", "dry1", "wet2", "dry2"}
+	hasEquatorial := true
+	for _, name := range equatorialSeasons {
+		if _, exists := seasons[name]; !exists {
+			hasEquatorial = false
+			break
+		}
+	}
+
+	return hasEquatorial
 }
 
 // GetDefaultSeasons returns default seasons based on hemisphere
