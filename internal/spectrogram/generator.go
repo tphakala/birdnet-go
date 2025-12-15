@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,11 +27,20 @@ const (
 	// defaultGenerationTimeout is the default timeout for spectrogram generation
 	defaultGenerationTimeout = 60 * time.Second
 
+	// ffmpegFallbackTimeout is the timeout for FFmpeg fallback when Sox fails.
+	// This is independent of the Sox timeout to ensure FFmpeg has adequate time
+	// even when Sox consumed most of the original timeout before failing (fixes #1503).
+	ffmpegFallbackTimeout = 60 * time.Second
+
 	// dynamicRange for sox spectrogram generation (-z parameter)
 	dynamicRange = "100"
 
 	// durationCacheTTL is how long duration cache entries remain valid
 	durationCacheTTL = 10 * time.Minute
+
+	// maxCacheEntries is the maximum number of entries in the audio duration cache
+	// This prevents unbounded memory growth over long operation periods (fixes #1503)
+	maxCacheEntries = 1000
 
 	// ffmpegGain controls the gain parameter for FFmpeg showspectrumpic filter
 	ffmpegGain = "3"
@@ -137,18 +147,25 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 		return err
 	}
 
-	// Create context with timeout (see function documentation for timeout layering behavior)
-	ctx, cancel := context.WithTimeout(ctx, defaultGenerationTimeout)
-	defer cancel()
+	// Create context with timeout for Sox (see function documentation for timeout layering behavior)
+	soxCtx, soxCancel := context.WithTimeout(ctx, defaultGenerationTimeout)
+	defer soxCancel()
 
 	// Try Sox first (faster, direct processing)
-	if err := g.generateWithSoxFile(ctx, audioPath, outputPath, width, raw); err != nil {
+	if err := g.generateWithSoxFile(soxCtx, audioPath, outputPath, width, raw); err != nil {
 		g.logger.Debug("Sox generation failed, trying FFmpeg fallback",
 			"audio_path", audioPath,
 			"sox_error", err.Error())
 
-		// Fallback to FFmpeg pipeline
-		if ffmpegErr := g.generateWithFFmpeg(ctx, audioPath, outputPath, width, raw); ffmpegErr != nil {
+		// Create FRESH context for FFmpeg fallback with full timeout.
+		// This ensures FFmpeg has adequate time even if Sox consumed most of the
+		// original timeout before failing (e.g., killed by OOM after 55 seconds).
+		// Fixes issue #1503 where FFmpeg failed with "context canceled".
+		ffmpegCtx, ffmpegCancel := CreateFreshFFmpegContext(ctx)
+		defer ffmpegCancel()
+
+		// Fallback to FFmpeg pipeline with fresh context
+		if ffmpegErr := g.generateWithFFmpeg(ffmpegCtx, audioPath, outputPath, width, raw); ffmpegErr != nil {
 			g.logger.Error("Both Sox and FFmpeg generation failed",
 				"audio_path", audioPath,
 				"sox_error", err.Error(),
@@ -763,8 +780,9 @@ func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
 		return 0 // Caller will use configured fallback
 	}
 
-	// Store in cache with write lock
+	// Store in cache with write lock, evicting old entries if needed
 	audioDurationCache.Lock()
+	evictOldCacheEntriesLocked()
 	audioDurationCache.entries[cacheKey] = &durationCacheEntry{
 		duration:  duration,
 		timestamp: time.Now(),
@@ -774,6 +792,39 @@ func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
 	audioDurationCache.Unlock()
 
 	return duration
+}
+
+// evictOldCacheEntriesLocked removes oldest entries when cache exceeds maxCacheEntries.
+// Must be called while holding audioDurationCache.Lock().
+// This prevents unbounded memory growth during long operation periods (fixes #1503).
+func evictOldCacheEntriesLocked() {
+	if len(audioDurationCache.entries) < maxCacheEntries {
+		return
+	}
+
+	// Find and remove oldest entries (by timestamp) until we're under the limit
+	// Remove 10% of entries to avoid frequent eviction
+	entriesToRemove := len(audioDurationCache.entries) - maxCacheEntries + maxCacheEntries/10
+
+	// Find the oldest entries
+	type keyTime struct {
+		key       string
+		timestamp time.Time
+	}
+	entries := make([]keyTime, 0, len(audioDurationCache.entries))
+	for k, v := range audioDurationCache.entries {
+		entries = append(entries, keyTime{k, v.timestamp})
+	}
+
+	// Sort by timestamp (oldest first) using O(n log n) algorithm
+	slices.SortFunc(entries, func(a, b keyTime) int {
+		return a.timestamp.Compare(b.timestamp)
+	})
+
+	// Remove oldest entries
+	for i := 0; i < entriesToRemove && i < len(entries); i++ {
+		delete(audioDurationCache.entries, entries[i].key)
+	}
 }
 
 // getAudioDurationViaFFprobe calls ffprobe to get audio duration.
@@ -807,4 +858,23 @@ func getAudioDurationViaFFprobe(ctx context.Context, audioPath string) (float64,
 // FFmpeg version optimization logic.
 func (g *Generator) GetSoxSpectrogramArgsForTest(ctx context.Context, audioPath, outputPath string, width int, raw bool) []string {
 	return g.getSoxSpectrogramArgs(ctx, audioPath, outputPath, width, raw)
+}
+
+// CreateFreshFFmpegContext creates a new context for FFmpeg fallback with full timeout.
+// This ensures FFmpeg has adequate time even when the parent context (used by Sox)
+// is nearly exhausted or cancelled.
+//
+// IMPORTANT TRADEOFF: This function intentionally uses context.Background() as the
+// parent, which means FFmpeg will NOT respect parent context cancellation (e.g., HTTP
+// request cancellation or server shutdown signals). This is an intentional design
+// decision to solve issue #1503 where FFmpeg failed with "context canceled" after
+// Sox was killed by OOM - in that scenario, giving FFmpeg a fair chance to succeed
+// is more valuable than immediate cancellation responsiveness.
+//
+// The ffmpegFallbackTimeout (60s) provides an upper bound on how long FFmpeg can run.
+func CreateFreshFFmpegContext(_ context.Context) (context.Context, context.CancelFunc) {
+	// Use Background() to avoid inheriting cancellation from parent.
+	// This is intentional: when Sox fails (possibly due to OOM/kill),
+	// we want FFmpeg to have a fair chance with its own timeout.
+	return context.WithTimeout(context.Background(), ffmpegFallbackTimeout)
 }

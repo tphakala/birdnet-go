@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/securefs"
@@ -273,5 +275,127 @@ func TestGenerator_GenerateFromFile_MissingBinaries(t *testing.T) {
 	err = gen.GenerateFromFile(context.Background(), audioPath, outputPath, 400, false)
 	if err == nil {
 		t.Error("GenerateFromFile() should error when binaries not configured")
+	}
+}
+
+// TestAudioDurationCache_Cleanup tests that the cache evicts old entries when exceeding max size
+// This addresses issue #1503 where memory accumulates over hours of operation
+func TestAudioDurationCache_Cleanup(t *testing.T) {
+	// Clear the cache before test
+	ClearAudioDurationCache()
+	defer ClearAudioDurationCache() // Clean up after test
+
+	// Create test files to get unique cache keys
+	tempDir := t.TempDir()
+
+	// Add entries up to the max cache size + some extra
+	maxEntries := GetMaxCacheEntries()
+	extraEntries := 10
+
+	for i := range maxEntries + extraEntries {
+		// Create a real file so cache entry is valid (use index for unique names)
+		testFile := filepath.Join(tempDir, "test_"+strconv.Itoa(i)+".wav")
+		if err := os.WriteFile(testFile, []byte("test"), 0o644); err != nil {
+			t.Fatalf("Failed to create test file: %v", err)
+		}
+
+		// Manually add cache entry (simulating what getCachedAudioDuration does)
+		AddToCacheForTest(testFile, float64(i), 4)
+	}
+
+	// Verify cache size is bounded
+	cacheSize := GetAudioDurationCacheSize()
+	if cacheSize > maxEntries {
+		t.Errorf("Cache size %d exceeds max %d - cache cleanup not working", cacheSize, maxEntries)
+	}
+}
+
+// TestAudioDurationCache_EvictsOldestEntries tests that oldest entries are evicted first
+func TestAudioDurationCache_EvictsOldestEntries(t *testing.T) {
+	// Clear the cache before test
+	ClearAudioDurationCache()
+	defer ClearAudioDurationCache()
+
+	tempDir := t.TempDir()
+	maxEntries := GetMaxCacheEntries()
+
+	// Create "old" entry first with timestamp 1 hour ago
+	oldFile := filepath.Join(tempDir, "old.wav")
+	if err := os.WriteFile(oldFile, []byte("old"), 0o644); err != nil {
+		t.Fatalf("Failed to create old test file: %v", err)
+	}
+	AddToCacheForTestWithTimestamp(oldFile, 1.0, 3, time.Now().Add(-1*time.Hour))
+
+	// Fill cache with newer entries (unique filenames using index)
+	for i := range maxEntries {
+		testFile := filepath.Join(tempDir, "new_"+strconv.Itoa(i)+".wav")
+		if err := os.WriteFile(testFile, []byte("new"), 0o644); err != nil {
+			t.Fatalf("Failed to create test file: %v", err)
+		}
+		AddToCacheForTest(testFile, float64(i+10), 3)
+	}
+
+	// Old entry should have been evicted (it was the oldest)
+	if HasCacheEntry(oldFile) {
+		t.Error("Old cache entry should have been evicted but was still present")
+	}
+}
+
+// TestFFmpegFallback_GetsFreshContext tests that FFmpeg fallback gets adequate time
+// even when Sox fails after consuming time from the shared context.
+// This addresses issue #1503 where FFmpeg fails with "context canceled".
+func TestFFmpegFallback_GetsFreshContext(t *testing.T) {
+	// This test verifies that the FFmpeg fallback timeout is independent.
+	// We verify this by checking that GetFFmpegFallbackTimeout returns a value
+	// greater than zero, ensuring FFmpeg always has dedicated time.
+	timeout := GetFFmpegFallbackTimeout()
+	if timeout <= 0 {
+		t.Errorf("FFmpeg fallback timeout should be positive, got %v", timeout)
+	}
+
+	// Verify it's at least 30 seconds (reasonable minimum for FFmpeg processing)
+	minTimeout := 30 * time.Second
+	if timeout < minTimeout {
+		t.Errorf("FFmpeg fallback timeout %v is less than minimum %v", timeout, minTimeout)
+	}
+}
+
+// TestFFmpegFallback_NotAffectedByParentContext tests that FFmpeg fallback
+// succeeds even when the parent context has minimal time remaining.
+// This documents the fix for issue #1503.
+func TestFFmpegFallback_NotAffectedByParentContext(t *testing.T) {
+	// Create a context with very short deadline (simulating exhausted Sox timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	// Sleep to consume most of the context time
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify parent context has minimal time left
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("Context should have deadline")
+	}
+	remaining := time.Until(deadline)
+	if remaining > 100*time.Millisecond {
+		t.Fatalf("Context should have minimal time remaining, got %v", remaining)
+	}
+
+	// CreateFreshFFmpegContext should return a context with full timeout
+	// regardless of parent context state
+	ffmpegCtx, ffmpegCancel := CreateFreshFFmpegContext(ctx)
+	defer ffmpegCancel()
+
+	// Verify FFmpeg context has adequate time
+	ffmpegDeadline, ok := ffmpegCtx.Deadline()
+	if !ok {
+		t.Fatal("FFmpeg context should have deadline")
+	}
+	ffmpegRemaining := time.Until(ffmpegDeadline)
+
+	// FFmpeg should have at least 30 seconds
+	minRequired := 30 * time.Second
+	if ffmpegRemaining < minRequired {
+		t.Errorf("FFmpeg context has %v remaining, need at least %v", ffmpegRemaining, minRequired)
 	}
 }
