@@ -207,8 +207,8 @@ github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e h1:/qmTC7Fy2iFd
 github.com/tphakala/go-tflite v0.0.0-20241022031318-2dad4328ec9e/go.mod h1:fDE48JMvNlDtdjhzShuhkEnikhmTvkom1jxuxP28atQ=
 github.com/tphakala/malgo v0.11.22 h1:3rSnGbCkDFrV04ERDqAlnX/XPGc9IHcN6e71xNA0TyE=
 github.com/tphakala/malgo v0.11.22/go.mod h1:PeoBfxQgha3ifttIUWxd0/FZeD4vot3G5njVldpZyqc=
-github.com/tphakala/simd v1.0.18 h1:Qu0XhqkDCMVEos215Tj9/NevTd6s91MxZSel54VE/IY=
-github.com/tphakala/simd v1.0.18/go.mod h1:8xsPUbOTnNI4WUdPlXVlWXt85Y8RCm3xqGAo8PLxYyA=
+github.com/tphakala/simd v1.0.22 h1:3wHL91t4yvhCB0ycyTznvucTHax+QGpYkvOhqfraTYw=
+github.com/tphakala/simd v1.0.22/go.mod h1:8xsPUbOTnNI4WUdPlXVlWXt85Y8RCm3xqGAo8PLxYyA=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
 github.com/valyala/fasttemplate v1.2.2 h1:lxLXG0uE3Qnshl9QyaK6XJxMXlQZELvChBOCmQD0Loo=
