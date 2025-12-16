@@ -72,7 +72,7 @@ func NewOAuth2ServerForTesting(settings *conf.Settings) *OAuth2Server {
 		authCodes:         make(map[string]AuthCode),
 		accessTokens:      make(map[string]AccessToken),
 		throttledMessages: make(map[string]time.Time),
-		debug:             settings.WebServer.Debug,
+		debug:             settings.Security.Debug, // Use same source as production constructor
 	}
 }
 

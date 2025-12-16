@@ -249,7 +249,8 @@ func (c *Controller) Login(ctx echo.Context) error {
 	}
 	
 	// Construct the V2 OAuth callback URL with the validated redirect
-	redirectURL := fmt.Sprintf("/api/v2/auth/callback?code=%s&redirect=%s", authCode, finalRedirect)
+	// URL-encode both code and redirect to prevent parameter injection and handle special characters
+	redirectURL := fmt.Sprintf("/api/v2/auth/callback?code=%s&redirect=%s", url.QueryEscape(authCode), url.QueryEscape(finalRedirect))
 
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Returning successful login response with redirect",
