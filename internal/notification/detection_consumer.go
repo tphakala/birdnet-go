@@ -105,14 +105,16 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 
 // isWithinCooldown checks if the species is still within the cooldown period.
 // Also performs lazy cleanup of expired cooldowns.
+// Uses a single write lock to ensure atomicity and prevent race conditions
+// between concurrent goroutines checking the same species.
 func (c *DetectionNotificationConsumer) isWithinCooldown(species string, cooldownMinutes int) bool {
 	cooldownDuration := time.Duration(cooldownMinutes) * time.Minute
 	now := time.Now()
 
-	c.cooldownMu.RLock()
-	lastNotification, exists := c.speciesCooldowns[species]
-	c.cooldownMu.RUnlock()
+	c.cooldownMu.Lock()
+	defer c.cooldownMu.Unlock()
 
+	lastNotification, exists := c.speciesCooldowns[species]
 	if !exists {
 		return false
 	}
@@ -123,9 +125,7 @@ func (c *DetectionNotificationConsumer) isWithinCooldown(species string, cooldow
 	}
 
 	// Cooldown expired, clean up entry
-	c.cooldownMu.Lock()
 	delete(c.speciesCooldowns, species)
-	c.cooldownMu.Unlock()
 
 	return false
 }
