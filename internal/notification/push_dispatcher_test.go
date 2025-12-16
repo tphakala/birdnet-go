@@ -368,12 +368,12 @@ func TestPushDispatcher_ExponentialBackoff(t *testing.T) {
 					exponential = tt.maxDelay
 				}
 
-				// Add jitter
+				// Add jitter (mirrors production code for testing)
 				jitterRange := exponential * jitterPercent / 100
 				jitterMax := int64(jitterRange * 2)
 				var jitter time.Duration
 				if jitterMax > 0 {
-					jitter = time.Duration(rand.Int64N(jitterMax)) - jitterRange
+					jitter = time.Duration(rand.Int64N(jitterMax)) - jitterRange //nolint:gosec // Testing non-cryptographic jitter
 				}
 
 				delay := min(max(exponential+jitter, tt.baseDelay), tt.maxDelay)

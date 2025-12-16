@@ -53,6 +53,12 @@ const (
 
 	// maxErrorBodySize limits error response body reading to prevent memory issues
 	maxErrorBodySize = 1024
+
+	// Webhook authentication type constants
+	authTypeNone   = "none"
+	authTypeBearer = "bearer"
+	authTypeBasic  = "basic"
+	authTypeCustom = "custom"
 )
 
 // WebhookProvider sends notifications to HTTP/HTTPS webhooks with customizable templates,
@@ -97,20 +103,20 @@ func resolveWebhookAuth(cfg *conf.WebhookAuthConfig) (*WebhookAuth, error) {
 	}
 
 	// Empty or "none" type needs no resolution
-	if auth.Type == "" || auth.Type == "none" {
+	if auth.Type == "" || auth.Type == authTypeNone {
 		return auth, nil
 	}
 
 	var err error
 
 	switch auth.Type {
-	case "bearer":
+	case authTypeBearer:
 		auth.Token, err = secrets.MustResolve("bearer token", cfg.TokenFile, cfg.Token)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve bearer token: %w", err)
 		}
 
-	case "basic":
+	case authTypeBasic:
 		auth.User, err = secrets.MustResolve("basic auth user", cfg.UserFile, cfg.User)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve basic auth user: %w", err)
@@ -120,7 +126,7 @@ func resolveWebhookAuth(cfg *conf.WebhookAuthConfig) (*WebhookAuth, error) {
 			return nil, fmt.Errorf("failed to resolve basic auth pass: %w", err)
 		}
 
-	case "custom":
+	case authTypeCustom:
 		auth.Header = cfg.Header // Header name is not a secret
 		auth.Value, err = secrets.MustResolve("custom header value", cfg.ValueFile, cfg.Value)
 		if err != nil {
@@ -331,22 +337,22 @@ func validateEndpointURL(index int, urlStr string) error {
 func validateResolvedWebhookAuth(auth *WebhookAuth) error {
 	authType := strings.ToLower(auth.Type)
 	if authType == "" {
-		authType = "none"
+		authType = authTypeNone
 		auth.Type = authType
 	}
 
 	switch authType {
-	case "none":
+	case authTypeNone:
 		return nil
-	case "bearer":
+	case authTypeBearer:
 		if auth.Token == "" {
 			return fmt.Errorf("bearer auth requires token (secret resolution may have failed)")
 		}
-	case "basic":
+	case authTypeBasic:
 		if auth.User == "" || auth.Pass == "" {
 			return fmt.Errorf("basic auth requires user and pass (secret resolution may have failed)")
 		}
-	case "custom":
+	case authTypeCustom:
 		if auth.Header == "" {
 			return fmt.Errorf("custom auth requires header name")
 		}
@@ -549,13 +555,13 @@ func applyWebhookAuth(req *http.Request, auth *WebhookAuth) error {
 	authType := strings.ToLower(auth.Type)
 
 	switch authType {
-	case "none", "":
+	case authTypeNone, "":
 		return nil
-	case "bearer":
+	case authTypeBearer:
 		req.Header.Set("Authorization", "Bearer "+auth.Token)
-	case "basic":
+	case authTypeBasic:
 		req.SetBasicAuth(auth.User, auth.Pass)
-	case "custom":
+	case authTypeCustom:
 		req.Header.Set(auth.Header, auth.Value)
 	default:
 		return fmt.Errorf("unsupported auth type: %s", authType)
