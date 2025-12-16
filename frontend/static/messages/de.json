@@ -1208,8 +1208,8 @@
           "title": "Erkennungsfilter",
           "description": "Steuern Sie, welche Vogelerkennungen Push-Benachrichtigungen auslösen",
           "minConfidence": {
-            "label": "Mindestvertrauen",
-            "helpText": "Nur Benachrichtigungen für Erkennungen über diesem Vertrauensniveau senden. Auf 0 setzen zum Deaktivieren."
+            "label": "Mindestkonfidenz",
+            "helpText": "Nur Benachrichtigungen für Erkennungen über diesem Konfidenzniveau senden. Auf 0 setzen zum Deaktivieren."
           },
           "speciesCooldown": {
             "label": "Arten-Abklingzeit",
