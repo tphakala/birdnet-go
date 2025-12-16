@@ -1169,8 +1169,21 @@
         "description": "Send notifications to external services like Discord, Telegram, Slack, and more",
         "enable": "Enable Push Notifications",
         "disabled": "Push notifications are disabled",
-        "enabledDescription": "Push notifications will be sent to all enabled providers below",
-        "noProviders": "No providers configured",
+        "enabledDescription": "Push-ilmoitukset lähetetään kaikille alla oleville käytössä oleville palveluntarjoajille",
+        "filters": {
+          "title": "Tunnistussuodattimet",
+          "description": "Hallitse mitkä lintuhavainnot laukaisevat push-ilmoituksia",
+          "minConfidence": {
+            "label": "Vähimmäisluottamus",
+            "helpText": "Lähetä ilmoituksia vain havainnoista, joiden luottamustaso ylittää tämän. Aseta 0 poistaaksesi käytöstä."
+          },
+          "speciesCooldown": {
+            "label": "Lajikohtainen odotusaika",
+            "unit": "min",
+            "helpText": "Estää toistuvat ilmoitukset samasta lajista tämän aikavälin sisällä. Aseta 0 poistaaksesi käytöstä."
+          }
+        },
+        "noProviders": "Ei määritettyjä palveluntarjoajia",
         "noProvidersDescription": "Add a provider to start receiving push notifications",
         "providers": {
           "title": "Notification Providers",

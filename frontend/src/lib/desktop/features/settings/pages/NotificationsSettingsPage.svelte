@@ -83,6 +83,8 @@
   let pushSettings = $state<PushSettings>({
     enabled: false,
     providers: [],
+    minConfidenceThreshold: 0,
+    speciesCooldownMinutes: 0,
   });
   let originalPushSettings = $state<PushSettings | null>(null);
   let loadingPush = $state(false);
@@ -401,6 +403,8 @@
           pushSettings = {
             enabled: data.push.enabled ?? false,
             providers: data.push.providers ?? [],
+            minConfidenceThreshold: data.push.minConfidenceThreshold ?? 0,
+            speciesCooldownMinutes: data.push.speciesCooldownMinutes ?? 0,
           };
           originalPushSettings = JSON.parse(JSON.stringify(pushSettings));
         }
@@ -1139,6 +1143,86 @@
           <p class="text-sm text-[color:var(--color-base-content)] opacity-50">
             {t('settings.notifications.push.disabled')}
           </p>
+        {/if}
+
+        <!-- Detection Filters Section -->
+        {#if pushSettings.enabled}
+          <div class="card bg-base-200">
+            <div class="card-body">
+              <h3 class="card-title text-base">
+                {t('settings.notifications.push.filters.title')}
+              </h3>
+              <p class="text-sm text-[color:var(--color-base-content)] opacity-70 mb-2">
+                {t('settings.notifications.push.filters.description')}
+              </p>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Minimum Confidence Threshold -->
+                <div class="form-control">
+                  <label for="min-confidence" class="label">
+                    <span class="label-text font-semibold">
+                      {t('settings.notifications.push.filters.minConfidence.label')}
+                    </span>
+                  </label>
+                  <div class="join">
+                    <input
+                      id="min-confidence"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={Math.round((pushSettings.minConfidenceThreshold ?? 0) * 100)}
+                      onchange={e => {
+                        const target = e.target as HTMLInputElement;
+                        pushSettings.minConfidenceThreshold =
+                          Math.max(0, Math.min(100, parseInt(target.value) || 0)) / 100;
+                      }}
+                      class="input input-bordered join-item w-full"
+                      disabled={savingPush}
+                    />
+                    <span class="btn btn-disabled join-item">%</span>
+                  </div>
+                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                    {t('settings.notifications.push.filters.minConfidence.helpText')}
+                  </p>
+                </div>
+
+                <!-- Species Cooldown -->
+                <div class="form-control">
+                  <label for="species-cooldown" class="label">
+                    <span class="label-text font-semibold">
+                      {t('settings.notifications.push.filters.speciesCooldown.label')}
+                    </span>
+                  </label>
+                  <div class="join">
+                    <input
+                      id="species-cooldown"
+                      type="number"
+                      min="0"
+                      max="1440"
+                      step="5"
+                      value={pushSettings.speciesCooldownMinutes ?? 0}
+                      onchange={e => {
+                        const target = e.target as HTMLInputElement;
+                        pushSettings.speciesCooldownMinutes = Math.max(
+                          0,
+                          Math.min(1440, parseInt(target.value) || 0)
+                        );
+                      }}
+                      class="input input-bordered join-item w-full"
+                      disabled={savingPush}
+                    />
+                    <span class="btn btn-disabled join-item"
+                      >{t('settings.notifications.push.filters.speciesCooldown.unit')}</span
+                    >
+                  </div>
+                  <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                    {t('settings.notifications.push.filters.speciesCooldown.helpText')}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         {/if}
 
         <!-- Provider Form Modal -->

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log/slog"
+	"sync"
 	"text/template"
 	"time"
 
@@ -14,12 +15,16 @@ import (
 type DetectionNotificationConsumer struct {
 	service *Service
 	logger  *slog.Logger
+	// speciesCooldowns tracks the last notification time for each species
+	speciesCooldowns map[string]time.Time
+	cooldownMu       sync.RWMutex
 }
 
 func NewDetectionNotificationConsumer(service *Service) *DetectionNotificationConsumer {
 	return &DetectionNotificationConsumer{
-		service: service,
-		logger:  service.logger,
+		service:          service,
+		logger:           service.logger,
+		speciesCooldowns: make(map[string]time.Time),
 	}
 }
 
@@ -44,6 +49,32 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 		return nil
 	}
 
+	// Get settings for filtering
+	settings := conf.GetSettings()
+
+	// Check confidence threshold (if configured)
+	if settings != nil && settings.Notification.Push.MinConfidenceThreshold > 0 {
+		if event.GetConfidence() < settings.Notification.Push.MinConfidenceThreshold {
+			c.logger.Debug("detection below confidence threshold, skipping notification",
+				"species", event.GetSpeciesName(),
+				"confidence", event.GetConfidence(),
+				"threshold", settings.Notification.Push.MinConfidenceThreshold,
+			)
+			return nil
+		}
+	}
+
+	// Check species cooldown (if configured)
+	if settings != nil && settings.Notification.Push.SpeciesCooldownMinutes > 0 {
+		if c.isWithinCooldown(event.GetSpeciesName(), settings.Notification.Push.SpeciesCooldownMinutes) {
+			c.logger.Debug("species within cooldown period, skipping notification",
+				"species", event.GetSpeciesName(),
+				"cooldownMinutes", settings.Notification.Push.SpeciesCooldownMinutes,
+			)
+			return nil
+		}
+	}
+
 	templateData := c.createTemplateData(event)
 	title, message := c.renderTitleAndMessage(event, templateData)
 	notification := c.buildDetectionNotification(event, title, message, templateData)
@@ -58,6 +89,11 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 
 	c.service.broadcast(notification)
 
+	// Record cooldown after successful notification
+	if settings != nil && settings.Notification.Push.SpeciesCooldownMinutes > 0 {
+		c.recordCooldown(event.GetSpeciesName())
+	}
+
 	c.logger.Info("created new species notification",
 		"species", event.GetSpeciesName(),
 		"confidence", event.GetConfidence(),
@@ -65,6 +101,40 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 	)
 
 	return nil
+}
+
+// isWithinCooldown checks if the species is still within the cooldown period.
+// Also performs lazy cleanup of expired cooldowns.
+func (c *DetectionNotificationConsumer) isWithinCooldown(species string, cooldownMinutes int) bool {
+	cooldownDuration := time.Duration(cooldownMinutes) * time.Minute
+	now := time.Now()
+
+	c.cooldownMu.RLock()
+	lastNotification, exists := c.speciesCooldowns[species]
+	c.cooldownMu.RUnlock()
+
+	if !exists {
+		return false
+	}
+
+	// Check if still within cooldown
+	if now.Sub(lastNotification) < cooldownDuration {
+		return true
+	}
+
+	// Cooldown expired, clean up entry
+	c.cooldownMu.Lock()
+	delete(c.speciesCooldowns, species)
+	c.cooldownMu.Unlock()
+
+	return false
+}
+
+// recordCooldown records the current time as the last notification time for a species.
+func (c *DetectionNotificationConsumer) recordCooldown(species string) {
+	c.cooldownMu.Lock()
+	c.speciesCooldowns[species] = time.Now()
+	c.cooldownMu.Unlock()
 }
 
 // createTemplateData creates template data from event and settings.

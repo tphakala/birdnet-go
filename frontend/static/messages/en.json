@@ -1223,6 +1223,19 @@
         "enable": "Enable Push Notifications",
         "disabled": "Push notifications are disabled",
         "enabledDescription": "Push notifications will be sent to all enabled providers below",
+        "filters": {
+          "title": "Detection Filters",
+          "description": "Control which bird detections trigger push notifications",
+          "minConfidence": {
+            "label": "Minimum Confidence",
+            "helpText": "Only send notifications for detections above this confidence level. Set to 0 to disable."
+          },
+          "speciesCooldown": {
+            "label": "Species Cooldown",
+            "unit": "min",
+            "helpText": "Prevent repeated notifications for the same species within this time window. Set to 0 to disable."
+          }
+        },
         "noProviders": "No providers configured",
         "noProvidersDescription": "Add a provider to start receiving push notifications",
         "providers": {

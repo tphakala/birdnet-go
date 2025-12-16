@@ -1169,8 +1169,21 @@
         "description": "Send notifications to external services like Discord, Telegram, Slack, and more",
         "enable": "Enable Push Notifications",
         "disabled": "Push notifications are disabled",
-        "enabledDescription": "Push notifications will be sent to all enabled providers below",
-        "noProviders": "No providers configured",
+        "enabledDescription": "Notificações push serão enviadas a todos os provedores habilitados abaixo",
+        "filters": {
+          "title": "Filtros de Detecção",
+          "description": "Controle quais detecções de pássaros acionam notificações push",
+          "minConfidence": {
+            "label": "Confiança Mínima",
+            "helpText": "Enviar notificações apenas para detecções acima deste nível de confiança. Defina como 0 para desativar."
+          },
+          "speciesCooldown": {
+            "label": "Tempo de Espera por Espécie",
+            "unit": "min",
+            "helpText": "Evita notificações repetidas para a mesma espécie dentro desta janela de tempo. Defina como 0 para desativar."
+          }
+        },
+        "noProviders": "Nenhum provedor configurado",
         "noProvidersDescription": "Add a provider to start receiving push notifications",
         "providers": {
           "title": "Notification Providers",

@@ -1169,8 +1169,21 @@
         "description": "Send notifications to external services like Discord, Telegram, Slack, and more",
         "enable": "Enable Push Notifications",
         "disabled": "Push notifications are disabled",
-        "enabledDescription": "Push notifications will be sent to all enabled providers below",
-        "noProviders": "No providers configured",
+        "enabledDescription": "Powiadomienia push będą wysyłane do wszystkich włączonych dostawców poniżej",
+        "filters": {
+          "title": "Filtry wykryć",
+          "description": "Kontroluj, które wykrycia ptaków wyzwalają powiadomienia push",
+          "minConfidence": {
+            "label": "Minimalna pewność",
+            "helpText": "Wysyłaj powiadomienia tylko dla wykryć powyżej tego poziomu pewności. Ustaw na 0, aby wyłączyć."
+          },
+          "speciesCooldown": {
+            "label": "Czas oczekiwania gatunku",
+            "unit": "min",
+            "helpText": "Zapobiegaj powtórnym powiadomieniom dla tego samego gatunku w tym oknie czasowym. Ustaw na 0, aby wyłączyć."
+          }
+        },
+        "noProviders": "Brak skonfigurowanych dostawców",
         "noProvidersDescription": "Add a provider to start receiving push notifications",
         "providers": {
           "title": "Notification Providers",

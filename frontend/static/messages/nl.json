@@ -1169,8 +1169,21 @@
         "description": "Send notifications to external services like Discord, Telegram, Slack, and more",
         "enable": "Enable Push Notifications",
         "disabled": "Push notifications are disabled",
-        "enabledDescription": "Push notifications will be sent to all enabled providers below",
-        "noProviders": "No providers configured",
+        "enabledDescription": "Push-notificaties worden naar alle ingeschakelde providers hieronder verzonden",
+        "filters": {
+          "title": "Detectiefilters",
+          "description": "Bepaal welke vogeldetecties push-notificaties activeren",
+          "minConfidence": {
+            "label": "Minimale betrouwbaarheid",
+            "helpText": "Alleen notificaties verzenden voor detecties boven dit betrouwbaarheidsniveau. Stel in op 0 om uit te schakelen."
+          },
+          "speciesCooldown": {
+            "label": "Soort-afkoeltijd",
+            "unit": "min",
+            "helpText": "Voorkom herhaalde notificaties voor dezelfde soort binnen dit tijdvenster. Stel in op 0 om uit te schakelen."
+          }
+        },
+        "noProviders": "Geen providers geconfigureerd",
         "noProvidersDescription": "Add a provider to start receiving push notifications",
         "providers": {
           "title": "Notification Providers",

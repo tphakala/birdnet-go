@@ -270,6 +270,9 @@ type PushSettings struct {
 	HealthCheck    HealthCheckConfig    `json:"health_check" mapstructure:"health_check"`
 	RateLimiting   RateLimitingConfig   `json:"rate_limiting" mapstructure:"rate_limiting"`
 	Providers      []PushProviderConfig `json:"providers"`
+	// Detection filtering settings
+	MinConfidenceThreshold float64 `json:"minConfidenceThreshold" mapstructure:"min_confidence_threshold"` // 0.0-1.0, 0 = disabled
+	SpeciesCooldownMinutes int     `json:"speciesCooldownMinutes" mapstructure:"species_cooldown_minutes"` // 0 = disabled
 }
 
 // CircuitBreakerConfig holds circuit breaker configuration.
