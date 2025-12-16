@@ -26,15 +26,18 @@ const (
 
 	// Test timeouts
 	tlsTestTimeout = 30 * time.Second
+
+	// Environment variable values
+	envTrue = "true"
 )
 
 // skipIfNoTLSBroker skips the test if TLS brokers are not available
 func skipIfNoTLSBroker(t *testing.T) {
 	t.Helper()
-	if os.Getenv("SKIP_TLS_TESTS") == "true" {
+	if os.Getenv("SKIP_TLS_TESTS") == envTrue {
 		t.Skip("Skipping TLS tests (SKIP_TLS_TESTS=true)")
 	}
-	if os.Getenv("CI") == "true" && os.Getenv("RUN_TLS_TESTS") != "true" {
+	if os.Getenv("CI") == envTrue && os.Getenv("RUN_TLS_TESTS") != envTrue {
 		t.Skip("Skipping TLS tests in CI (set RUN_TLS_TESTS=true to enable)")
 	}
 }
@@ -268,6 +271,70 @@ func testTLSAutoDetection(t *testing.T) {
 	}
 }
 
+// tlsConnectionTestStages are the expected stages for TLS connection tests
+var tlsConnectionTestStages = []string{
+	"DNS Resolution",
+	"TCP Connection",
+	"MQTT Connection",
+	"Message Publishing",
+}
+
+// collectTLSTestResults collects test results from the result channel
+func collectTLSTestResults(t *testing.T, resultChan <-chan TestResult, testDone <-chan struct{}) map[string]bool {
+	t.Helper()
+	stageResults := make(map[string]bool)
+	timeout := time.After(20 * time.Second)
+
+	for {
+		select {
+		case result, ok := <-resultChan:
+			if !ok {
+				return stageResults
+			}
+			logTLSTestResult(t, &result)
+			trackTLSStageResult(&result, stageResults)
+
+		case <-timeout:
+			t.Fatal("Test timed out waiting for results")
+			return stageResults
+
+		case <-testDone:
+			return stageResults
+		}
+	}
+}
+
+// logTLSTestResult logs a single test result
+func logTLSTestResult(t *testing.T, result *TestResult) {
+	t.Helper()
+	t.Logf("Test stage: %s - Success: %v, Message: %s", result.Stage, result.Success, result.Message)
+	if result.Error != "" {
+		t.Logf("  Error: %s", result.Error)
+	}
+}
+
+// trackTLSStageResult tracks a completed stage result
+func trackTLSStageResult(result *TestResult, stageResults map[string]bool) {
+	for _, stage := range tlsConnectionTestStages {
+		if result.Stage == stage && !result.IsProgress {
+			stageResults[stage] = result.Success
+		}
+	}
+}
+
+// verifyTLSStageResults verifies all expected stages were tested
+func verifyTLSStageResults(t *testing.T, stageResults map[string]bool) {
+	t.Helper()
+	for _, stage := range tlsConnectionTestStages {
+		if _, ok := stageResults[stage]; !ok {
+			t.Errorf("Stage %s was not tested", stage)
+		}
+	}
+	if success, ok := stageResults["TCP Connection"]; ok && !success {
+		t.Error("TCP/TLS connection stage failed")
+	}
+}
+
 // testTLSConnectionTest verifies the multi-stage connection test works with TLS
 func testTLSConnectionTest(t *testing.T) {
 	settings := &conf.Settings{
@@ -278,7 +345,7 @@ func testTLSConnectionTest(t *testing.T) {
 				Topic:   "birdnet-go/test/tls",
 				TLS: conf.MQTTTLSSettings{
 					Enabled:            true,
-					InsecureSkipVerify: true, // Skip verification for test broker
+					InsecureSkipVerify: true,
 				},
 			},
 		},
@@ -298,168 +365,111 @@ func testTLSConnectionTest(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), tlsTestTimeout)
 	defer cancel()
 
-	// Run the connection test
 	resultChan := make(chan TestResult, 10)
-
-	// Run test in goroutine with proper cleanup
 	testDone := make(chan struct{})
+
 	go func() {
 		defer close(testDone)
 		client.TestConnection(ctx, resultChan)
+		close(resultChan)
 	}()
 
-	stages := []string{
-		"DNS Resolution",
-		"TCP Connection", // This should also test TLS handshake
-		"MQTT Connection",
-		"Message Publishing",
-	}
-
-	stageResults := make(map[string]bool)
-
-	// Read results with timeout
-	timeout := time.After(20 * time.Second)
-
-loop:
-	for {
-		select {
-		case result, ok := <-resultChan:
-			if !ok {
-				break loop
-			}
-
-			t.Logf("Test stage: %s - Success: %v, Message: %s",
-				result.Stage, result.Success, result.Message)
-
-			if result.Error != "" {
-				t.Logf("  Error: %s", result.Error)
-			}
-
-			// Track completed stages
-			for _, stage := range stages {
-				if result.Stage == stage && !result.IsProgress {
-					stageResults[stage] = result.Success
-				}
-			}
-
-		case <-timeout:
-			t.Fatal("Test timed out waiting for results")
-
-		case <-testDone:
-			// Close the channel when test is done
-			close(resultChan)
-			break loop
-		}
-	}
-
-	// Verify all expected stages were tested
-	for _, stage := range stages {
-		if _, ok := stageResults[stage]; !ok {
-			t.Errorf("Stage %s was not tested", stage)
-		}
-	}
-
-	// TCP Connection stage should have tested TLS
-	if success, ok := stageResults["TCP Connection"]; ok && !success {
-		t.Error("TCP/TLS connection stage failed")
-	}
-
+	stageResults := collectTLSTestResults(t, resultChan, testDone)
+	verifyTLSStageResults(t, stageResults)
 	t.Log("TLS connection test completed successfully")
+}
+
+// runTLSConfigValidationTest executes a TLS config validation test case
+func runTLSConfigValidationTest(t *testing.T, tlsSettings conf.MQTTTLSSettings, expectedError string) {
+	t.Helper()
+
+	settings := &conf.Settings{
+		Realtime: conf.RealtimeSettings{
+			MQTT: conf.MQTTSettings{
+				Enabled: true,
+				Broker:  mosquittoTLSBroker,
+				TLS:     tlsSettings,
+			},
+		},
+	}
+
+	metrics, err := observability.NewMetrics()
+	if err != nil {
+		t.Fatalf("Failed to create metrics: %v", err)
+	}
+
+	client, err := NewClient(settings, metrics)
+	if err != nil {
+		t.Fatalf("Failed to create MQTT client: %v", err)
+	}
+	defer client.Disconnect()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = client.Connect(ctx)
+	if err == nil {
+		t.Fatalf("Expected connection to fail with error containing: %s", expectedError)
+	}
+
+	if !strings.Contains(err.Error(), expectedError) {
+		t.Errorf("Expected error containing %q, got: %v", expectedError, err)
+	}
 }
 
 // TestTLSConfigValidation tests validation of TLS configuration options
 func TestTLSConfigValidation(t *testing.T) {
 	t.Parallel()
+
 	t.Run("Invalid CA Certificate Path", func(t *testing.T) {
 		t.Parallel()
-		settings := &conf.Settings{
-			Realtime: conf.RealtimeSettings{
-				MQTT: conf.MQTTSettings{
-					Enabled: true,
-					Broker:  mosquittoTLSBroker,
-					TLS: conf.MQTTTLSSettings{
-						Enabled: true,
-						CACert:  "/nonexistent/ca.crt",
-					},
-				},
-			},
-		}
-
-		metrics, err := observability.NewMetrics()
-		if err != nil {
-			t.Fatalf("Failed to create metrics: %v", err)
-		}
-
-		client, err := NewClient(settings, metrics)
-		if err != nil {
-			t.Fatalf("Failed to create MQTT client: %v", err)
-		}
-		defer client.Disconnect()
-
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		err = client.Connect(ctx)
-		if err == nil {
-			t.Fatal("Expected connection to fail with invalid CA certificate path")
-		}
-
-		// We now check for file existence first, so expect the more specific error
-		if !strings.Contains(err.Error(), "CA certificate file does not exist") {
-			t.Errorf("Expected CA certificate file does not exist error, got: %v", err)
-		}
+		runTLSConfigValidationTest(t, conf.MQTTTLSSettings{
+			Enabled: true,
+			CACert:  "/nonexistent/ca.crt",
+		}, "CA certificate file does not exist")
 	})
 
 	t.Run("Invalid Client Certificate Path", func(t *testing.T) {
 		t.Parallel()
-		settings := &conf.Settings{
-			Realtime: conf.RealtimeSettings{
-				MQTT: conf.MQTTSettings{
-					Enabled: true,
-					Broker:  mosquittoTLSBroker,
-					TLS: conf.MQTTTLSSettings{
-						Enabled:    true,
-						ClientCert: "/nonexistent/client.crt",
-						ClientKey:  "/nonexistent/client.key",
-					},
-				},
-			},
-		}
-
-		metrics, err := observability.NewMetrics()
-		if err != nil {
-			t.Fatalf("Failed to create metrics: %v", err)
-		}
-
-		client, err := NewClient(settings, metrics)
-		if err != nil {
-			t.Fatalf("Failed to create MQTT client: %v", err)
-		}
-		defer client.Disconnect()
-
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		err = client.Connect(ctx)
-		if err == nil {
-			t.Fatal("Expected connection to fail with invalid client certificate path")
-		}
-
-		// We now check for file existence first, so expect the more specific error
-		if !strings.Contains(err.Error(), "client certificate file does not exist") {
-			t.Errorf("Expected client certificate file does not exist error, got: %v", err)
-		}
+		runTLSConfigValidationTest(t, conf.MQTTTLSSettings{
+			Enabled:    true,
+			ClientCert: "/nonexistent/client.crt",
+			ClientKey:  "/nonexistent/client.key",
+		}, "client certificate file does not exist")
 	})
 }
 
 // skipIfNoTLSBrokerBench skips benchmarks if TLS brokers are not available
 func skipIfNoTLSBrokerBench(b *testing.B) {
 	b.Helper()
-	if os.Getenv("SKIP_TLS_TESTS") == "true" {
+	if os.Getenv("SKIP_TLS_TESTS") == envTrue {
 		b.Skip("Skipping TLS tests (SKIP_TLS_TESTS=true)")
 	}
-	if os.Getenv("CI") == "true" && os.Getenv("RUN_TLS_TESTS") != "true" {
+	if os.Getenv("CI") == envTrue && os.Getenv("RUN_TLS_TESTS") != envTrue {
 		b.Skip("Skipping TLS tests in CI (set RUN_TLS_TESTS=true to enable)")
+	}
+}
+
+// benchmarkMQTTConnection runs a connection benchmark with the given settings
+func benchmarkMQTTConnection(b *testing.B, settings *conf.Settings, metrics *observability.Metrics) {
+	b.Helper()
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		client, err := NewClient(settings, metrics)
+		if err != nil {
+			b.Fatalf("Failed to create client: %v", err)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err = client.Connect(ctx)
+		if err != nil {
+			b.Fatalf("Failed to connect: %v", err)
+		}
+
+		client.Disconnect()
+		cancel()
 	}
 }
 
@@ -467,8 +477,7 @@ func skipIfNoTLSBrokerBench(b *testing.B) {
 func BenchmarkTLSConnection(b *testing.B) {
 	skipIfNoTLSBrokerBench(b)
 
-	// Skip in CI unless explicitly requested
-	if os.Getenv("CI") == "true" && os.Getenv("RUN_BENCHMARKS") != "true" {
+	if os.Getenv("CI") == envTrue && os.Getenv("RUN_BENCHMARKS") != envTrue {
 		b.Skip("Skipping benchmarks in CI")
 	}
 
@@ -483,39 +492,17 @@ func BenchmarkTLSConnection(b *testing.B) {
 				MQTT: conf.MQTTSettings{
 					Enabled: true,
 					Broker:  mosquittoTLSBroker,
-					TLS: conf.MQTTTLSSettings{
-						Enabled: true,
-					},
+					TLS:     conf.MQTTTLSSettings{Enabled: true},
 				},
 			},
 		}
-
-		b.ResetTimer()
-		b.ReportAllocs()
-
-		for b.Loop() {
-			client, err := NewClient(settings, metrics)
-			if err != nil {
-				b.Fatalf("Failed to create client: %v", err)
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			err = client.Connect(ctx)
-			if err != nil {
-				b.Fatalf("Failed to connect: %v", err)
-			}
-
-			client.Disconnect()
-			cancel()
-		}
+		benchmarkMQTTConnection(b, settings, metrics)
 	})
 
 	b.Run("Non_TLS_Connection", func(b *testing.B) {
-		// Skip if no local broker
 		if !isLocalBrokerAvailable() {
 			b.Skip("Local broker not available for non-TLS benchmark")
 		}
-
 		settings := &conf.Settings{
 			Realtime: conf.RealtimeSettings{
 				MQTT: conf.MQTTSettings{
@@ -524,24 +511,6 @@ func BenchmarkTLSConnection(b *testing.B) {
 				},
 			},
 		}
-
-		b.ResetTimer()
-		b.ReportAllocs()
-
-		for b.Loop() {
-			client, err := NewClient(settings, metrics)
-			if err != nil {
-				b.Fatalf("Failed to create client: %v", err)
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			err = client.Connect(ctx)
-			if err != nil {
-				b.Fatalf("Failed to connect: %v", err)
-			}
-
-			client.Disconnect()
-			cancel()
-		}
+		benchmarkMQTTConnection(b, settings, metrics)
 	})
 }

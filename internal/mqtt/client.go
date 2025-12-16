@@ -158,79 +158,25 @@ func (c *client) connectWithOptions(ctx context.Context, isAutoReconnect bool) e
 	}
 
 	logger := mqttLogger.With("broker", c.config.Broker, "client_id", c.config.ClientID)
-	if isAutoReconnect {
-		logger.Info("Attempting automatic reconnect to MQTT broker")
-	} else {
-		logger.Info("Attempting to connect to MQTT broker")
-	}
+	c.logConnectionAttempt(logger, isAutoReconnect)
 
-	// --- Lock acquisition START ---
-	c.mu.Lock()
-	// Only check cooldown for manual connection attempts, not automatic reconnects
-	if !isAutoReconnect {
-		if err := c.checkConnectionCooldownLocked(logger); err != nil {
-			c.mu.Unlock() // Unlock before returning
-			return err
-		}
-	}
-
-	// Disconnect existing client if needed - requires lock
-	var oldClientToDisconnect mqtt.Client
-	if c.internalClient != nil && c.internalClient.IsConnected() {
-		logger.Info("Marking existing client for disconnection before reconnecting")
-		oldClientToDisconnect = c.internalClient // Copy pointer under lock
-	}
-	c.mu.Unlock() // Release lock BEFORE potentially blocking disconnect call
-
-	// Perform disconnection outside the lock
-	if oldClientToDisconnect != nil {
-		logger.Debug("Disconnecting old client instance", "timeout_ms", uint(GracefulDisconnectTimeout.Milliseconds()))
-		oldClientToDisconnect.Disconnect(uint(GracefulDisconnectTimeout.Milliseconds())) // Use longer timeout for graceful disconnect
-	}
-
-	// --- Re-acquire lock to modify shared state ---
-	c.mu.Lock() // Re-acquire lock for client options and creation
-
-	// Reinitialize reconnectStop if it was closed by a previous Disconnect()
-	// Use non-blocking select to check if channel is closed
-	select {
-	case <-c.reconnectStop:
-		// Channel is closed, create a new one for this connection session
-		c.reconnectStop = make(chan struct{})
-		logger.Debug("Reinitialized reconnectStop channel for new connection session")
-	default:
-		// Channel is still open, leave it intact
-	}
-
-	// Create and configure client options
-	opts, err := c.configureClientOptions(logger)
-	if err != nil {
-		c.mu.Unlock()
+	// Phase 1: Prepare for connection (handles cooldown and old client)
+	if err := c.prepareForConnection(logger, isAutoReconnect); err != nil {
 		return err
 	}
 
-	// Create and store the new client instance under lock
-	c.internalClient = mqtt.NewClient(opts)
-	clientToConnect := c.internalClient // Local variable to use after unlock
+	// Phase 2: Create new client under lock
+	clientToConnect, err := c.createNewClient(logger)
+	if err != nil {
+		return err
+	}
 
-	logger.Debug("MQTT client options configured and new client created",
-		"keepalive", 30*time.Second,
-		"ping_timeout", 10*time.Second,
-		"write_timeout", 10*time.Second,
-		"connect_timeout", c.config.ConnectTimeout,
-		"clean_session", true,
-	)
-	c.mu.Unlock()
-	// --- Lock acquisition END ---
-
-	// --- Operations outside the lock ---
-
-	// Perform DNS resolution if needed
+	// Phase 3: Perform DNS resolution if needed
 	if err := c.performDNSResolution(ctx, logger); err != nil {
 		return err
 	}
 
-	// Attempt connection with timeout handling
+	// Phase 4: Attempt connection with timeout handling
 	connectErr := c.performConnectionAttempt(ctx, clientToConnect, logger)
 
 	c.mu.Lock()
@@ -238,37 +184,112 @@ func (c *client) connectWithOptions(ctx context.Context, isAutoReconnect bool) e
 	c.mu.Unlock()
 
 	if connectErr != nil {
-		logger.Error("MQTT connection failed", "error", connectErr)
-		// Ensure metrics reflect failure if onConnect wasn't called.
-		c.mu.Lock()
-		// Check if c.internalClient is still the one we attempted to connect.
-		// It might have been changed by a concurrent Disconnect/Connect sequence, though unlikely with current locking.
-		if c.internalClient == clientToConnect && !c.internalClient.IsConnected() {
-			c.metrics.UpdateConnectionStatus(false)
-		}
-		c.mu.Unlock()
-
-		// If connectErr is not already an enhanced error, enhance it
-		var enhancedErr *errors.EnhancedError
-		if !errors.As(connectErr, &enhancedErr) {
-			connectErr = errors.New(connectErr).
-				Component("mqtt").
-				Category(errors.CategoryMQTTConnection).
-				Context("broker", c.config.Broker).
-				Context("client_id", c.config.ClientID).
-				Context("operation", "mqtt_connect").
-				Context("connect_timeout", c.config.ConnectTimeout).
-				Build()
-		}
-		return connectErr
+		return c.handleConnectionFailure(connectErr, clientToConnect, logger)
 	}
 
-	// If we reach here, connectErr was nil from the select block
 	logger.Info("Successfully connected to MQTT broker")
-	// onConnect handler should be called by Paho, which updates metrics.
-	// If onConnect was somehow not called despite a successful connection,
-	// metrics might be out of sync. This state is unlikely with Paho.
 	return nil
+}
+
+// logConnectionAttempt logs the appropriate message based on connection type
+func (c *client) logConnectionAttempt(logger *slog.Logger, isAutoReconnect bool) {
+	if isAutoReconnect {
+		logger.Info("Attempting automatic reconnect to MQTT broker")
+	} else {
+		logger.Info("Attempting to connect to MQTT broker")
+	}
+}
+
+// prepareForConnection handles cooldown check and disconnects old client if needed
+func (c *client) prepareForConnection(logger *slog.Logger, isAutoReconnect bool) error {
+	c.mu.Lock()
+	// Only check cooldown for manual connection attempts, not automatic reconnects
+	if !isAutoReconnect {
+		if err := c.checkConnectionCooldownLocked(logger); err != nil {
+			c.mu.Unlock()
+			return err
+		}
+	}
+
+	// Disconnect existing client if needed
+	var oldClientToDisconnect mqtt.Client
+	if c.internalClient != nil && c.internalClient.IsConnected() {
+		logger.Info("Marking existing client for disconnection before reconnecting")
+		oldClientToDisconnect = c.internalClient
+	}
+	c.mu.Unlock()
+
+	// Perform disconnection outside the lock
+	if oldClientToDisconnect != nil {
+		disconnectTimeoutMs := durationToMillisUint(GracefulDisconnectTimeout)
+		logger.Debug("Disconnecting old client instance", "timeout_ms", disconnectTimeoutMs)
+		oldClientToDisconnect.Disconnect(disconnectTimeoutMs)
+	}
+	return nil
+}
+
+// createNewClient creates and configures a new MQTT client instance
+func (c *client) createNewClient(logger *slog.Logger) (mqtt.Client, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Reinitialize reconnectStop if it was closed by a previous Disconnect()
+	c.reinitializeReconnectStopLocked(logger)
+
+	// Create and configure client options
+	opts, err := c.configureClientOptions(logger)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create and store the new client instance
+	c.internalClient = mqtt.NewClient(opts)
+	logger.Debug("MQTT client options configured and new client created",
+		"keepalive", KeepAliveInterval,
+		"ping_timeout", PingTimeout,
+		"write_timeout", WriteTimeout,
+		"connect_timeout", c.config.ConnectTimeout,
+		"clean_session", true,
+	)
+	return c.internalClient, nil
+}
+
+// reinitializeReconnectStopLocked resets the reconnect stop channel if closed
+// CALLER MUST HOLD c.mu LOCK
+func (c *client) reinitializeReconnectStopLocked(logger *slog.Logger) {
+	select {
+	case <-c.reconnectStop:
+		c.reconnectStop = make(chan struct{})
+		logger.Debug("Reinitialized reconnectStop channel for new connection session")
+	default:
+		// Channel is still open, leave it intact
+	}
+}
+
+// handleConnectionFailure processes connection errors and updates metrics
+func (c *client) handleConnectionFailure(connectErr error, clientToConnect mqtt.Client, logger *slog.Logger) error {
+	logger.Error("MQTT connection failed", "error", connectErr)
+
+	// Ensure metrics reflect failure
+	c.mu.Lock()
+	if c.internalClient == clientToConnect && !c.internalClient.IsConnected() {
+		c.metrics.UpdateConnectionStatus(false)
+	}
+	c.mu.Unlock()
+
+	// Enhance error if needed
+	var enhancedErr *errors.EnhancedError
+	if !errors.As(connectErr, &enhancedErr) {
+		connectErr = errors.New(connectErr).
+			Component("mqtt").
+			Category(errors.CategoryMQTTConnection).
+			Context("broker", c.config.Broker).
+			Context("client_id", c.config.ClientID).
+			Context("operation", "mqtt_connect").
+			Context("connect_timeout", c.config.ConnectTimeout).
+			Build()
+	}
+	return connectErr
 }
 
 // Publish sends a message to the specified topic on the MQTT broker.
@@ -371,18 +392,30 @@ func (c *client) IsConnected() bool {
 // calculateCancelTimeout computes a safe timeout for canceling connection attempts
 func (c *client) calculateCancelTimeout() uint {
 	ms := c.config.DisconnectTimeout.Milliseconds()
-	var cancelTimeout uint
+	defaultTimeout := durationToMillisUint(CancelDisconnectTimeout)
 	if ms <= 0 {
-		cancelTimeout = uint(CancelDisconnectTimeout.Milliseconds())
-	} else {
-		candidate := max(1, uint(ms)/5)
-		cancelTimeout = min(uint(CancelDisconnectTimeout.Milliseconds()), candidate)
-		// Final guard against zero
-		if cancelTimeout == 0 {
-			cancelTimeout = uint(CancelDisconnectTimeout.Milliseconds())
-		}
+		return defaultTimeout
+	}
+	candidate := max(1, durationToMillisUint(c.config.DisconnectTimeout)/5)
+	cancelTimeout := min(defaultTimeout, candidate)
+	// Final guard against zero
+	if cancelTimeout == 0 {
+		return defaultTimeout
 	}
 	return cancelTimeout
+}
+
+// cancelConnectionAttempt disconnects the client to prevent goroutine leaks
+func (c *client) cancelConnectionAttempt(clientToConnect mqtt.Client, logger *slog.Logger) {
+	if clientToConnect == nil {
+		return
+	}
+	cancelTimeout := c.calculateCancelTimeout()
+	logger.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak",
+		"timeout_ms", cancelTimeout,
+		"base_timeout", durationToMillisUint(CancelDisconnectTimeout),
+		"config_timeout_ms", c.config.DisconnectTimeout.Milliseconds())
+	clientToConnect.Disconnect(cancelTimeout)
 }
 
 // checkConnectionCooldownLocked validates if enough time has passed since the last connection attempt
@@ -427,9 +460,9 @@ func (c *client) configureClientOptions(logger *slog.Logger) (*mqtt.ClientOption
 	opts.SetOnConnectHandler(c.onConnect)
 	opts.SetConnectionLostHandler(c.onConnectionLost)
 	opts.SetConnectRetry(false) // We'll handle retries ourselves
-	opts.SetKeepAlive(30 * time.Second)
-	opts.SetPingTimeout(10 * time.Second)
-	opts.SetWriteTimeout(10 * time.Second)
+	opts.SetKeepAlive(KeepAliveInterval)
+	opts.SetPingTimeout(PingTimeout)
+	opts.SetWriteTimeout(WriteTimeout)
 	opts.SetConnectTimeout(c.config.ConnectTimeout) // Use config timeout for initial connection attempt
 
 	// Configure TLS if enabled
@@ -472,7 +505,7 @@ func (c *client) performDNSResolution(ctx context.Context, logger *slog.Logger) 
 	}
 
 	// Perform DNS resolution (potentially blocking network I/O)
-	dnsCtx, dnsCancel := context.WithTimeout(ctx, 5*time.Second)
+	dnsCtx, dnsCancel := context.WithTimeout(ctx, DNSLookupTimeout)
 	defer dnsCancel()
 	host := u.Hostname()
 	if net.ParseIP(host) == nil {
@@ -525,114 +558,94 @@ func (c *client) performDNSResolution(ctx context.Context, logger *slog.Logger) 
 
 // performConnectionAttempt handles the actual MQTT connection with timeout management
 func (c *client) performConnectionAttempt(ctx context.Context, clientToConnect mqtt.Client, logger *slog.Logger) error {
-	// --- Actual connection attempt (blocking) ---
 	logger.Debug("Starting blocking connection attempt")
 	token := clientToConnect.Connect()
 
-	var connectErr error
 	opDone := make(chan struct{})
-
 	go func() {
-		// token.Wait() can block indefinitely if ConnectTimeout in Paho is not effective for all cases.
-		// We are primarily relying on the select below for timeout.
-		// However, WaitTimeout is still useful if Paho's timeout *is* shorter for some reason.
-		// Using WaitTimeout here also allows Paho to set its internal error state correctly on its timeout.
 		if !token.WaitTimeout(c.config.ConnectTimeout) {
-			// This branch is taken if Paho's ConnectTimeout expires.
-			// The select below will likely also hit its own timeout case almost simultaneously or shortly after.
-			// Error from token.Error() should reflect the Paho timeout.
-			mqttLogger.Debug("paho.token.WaitTimeout returned false, indicating its internal timeout likely expired; actual error/timeout is handled by the main select block")
+			mqttLogger.Debug("paho.token.WaitTimeout returned false, indicating its internal timeout likely expired")
 		}
 		close(opDone)
 	}()
 
-	// Create timer with grace period to avoid timer leaks
 	timeoutDuration := c.config.ConnectTimeout + ConnectTimeoutGrace
 	timer := time.NewTimer(timeoutDuration)
-	defer timer.Stop() // Ensure timer cleanup
+	defer timer.Stop()
 
 	select {
 	case <-opDone:
-		// Stop the timer since operation completed
-		if !timer.Stop() {
-			// If Stop returns false, drain the channel to prevent goroutine leak
-			select {
-			case <-timer.C:
-			default:
-			}
-		}
-
-		connectErr = token.Error()
-		if connectErr == nil && !clientToConnect.IsConnected() {
-			// If token.Error() is nil but not connected, it implies Paho's WaitTimeout might have returned true
-			// because the "wait" finished, but the connection itself failed without an error on the token.
-			// This can happen if the timeout was very short.
-			// For very short timeouts (< 500ms), this is likely a timeout scenario
-			if c.config.ConnectTimeout < 500*time.Millisecond {
-				connectErr = errors.Newf("mqtt connection timeout - connection failed with short timeout (%v)", c.config.ConnectTimeout).
-					Component("mqtt").
-					Category(errors.CategoryMQTTConnection).
-					Context("broker", c.config.Broker).
-					Context("client_id", c.config.ClientID).
-					Context("operation", "connect_timeout_short").
-					Context("connect_timeout", c.config.ConnectTimeout).
-					Build()
-				logger.Warn("Connection failed with very short timeout, treating as timeout scenario", "timeout", c.config.ConnectTimeout)
-			} else {
-				connectErr = errors.Newf("mqtt connection failed post-wait, client not connected").
-					Component("mqtt").
-					Category(errors.CategoryMQTTConnection).
-					Context("broker", c.config.Broker).
-					Context("client_id", c.config.ClientID).
-					Context("operation", "connect_post_wait").
-					Context("connect_timeout", c.config.ConnectTimeout).
-					Build()
-				logger.Warn("Paho token wait completed but client not connected, no explicit token error.")
-			}
-		}
+		drainTimer(timer)
+		return c.handleConnectionResult(token, clientToConnect, logger)
 	case <-timer.C:
-		connectErr = errors.Newf("mqtt connection attempt actively timed out by client wrapper after %v", timeoutDuration).
+		logger.Error("MQTT connection attempt timed out by client.go select", "timeout", timeoutDuration)
+		c.cancelConnectionAttempt(clientToConnect, logger)
+		return c.buildTimeoutError(timeoutDuration)
+	case <-ctx.Done():
+		drainTimer(timer)
+		logger.Error("Context cancelled during MQTT connection wait", "error", ctx.Err())
+		c.cancelConnectionAttempt(clientToConnect, logger)
+		return ctx.Err()
+	}
+}
+
+// drainTimer stops timer and drains channel to prevent goroutine leaks
+func drainTimer(timer *time.Timer) {
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+}
+
+// handleConnectionResult processes the result of a completed connection attempt
+func (c *client) handleConnectionResult(token mqtt.Token, clientToConnect mqtt.Client, logger *slog.Logger) error {
+	connectErr := token.Error()
+	if connectErr != nil {
+		return connectErr
+	}
+	if clientToConnect.IsConnected() {
+		return nil
+	}
+	// Token succeeded but client not connected - determine appropriate error
+	return c.buildNotConnectedError(logger)
+}
+
+// buildNotConnectedError creates an error for when token succeeds but client isn't connected
+func (c *client) buildNotConnectedError(logger *slog.Logger) error {
+	if c.config.ConnectTimeout < MinConnectTimeout {
+		logger.Warn("Connection failed with very short timeout, treating as timeout scenario", "timeout", c.config.ConnectTimeout)
+		return errors.Newf("mqtt connection timeout - connection failed with short timeout (%v)", c.config.ConnectTimeout).
 			Component("mqtt").
 			Category(errors.CategoryMQTTConnection).
 			Context("broker", c.config.Broker).
 			Context("client_id", c.config.ClientID).
-			Context("operation", "connect_timeout").
-			Context("timeout_duration", timeoutDuration).
+			Context("operation", "connect_timeout_short").
+			Context("connect_timeout", c.config.ConnectTimeout).
 			Build()
-		logger.Error("MQTT connection attempt timed out by client.go select", "timeout", timeoutDuration)
-		// Cancel the connection attempt to prevent the goroutine from leaking
-		if clientToConnect != nil {
-			cancelTimeout := c.calculateCancelTimeout()
-			logger.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak",
-				"timeout_ms", cancelTimeout,
-				"base_timeout", uint(CancelDisconnectTimeout.Milliseconds()),
-				"config_timeout_ms", c.config.DisconnectTimeout.Milliseconds())
-			clientToConnect.Disconnect(cancelTimeout) // Use dynamic timeout for graceful disconnection
-		}
-	case <-ctx.Done():
-		// Stop the timer since context was cancelled
-		if !timer.Stop() {
-			// If Stop returns false, drain the channel to prevent goroutine leak
-			select {
-			case <-timer.C:
-			default:
-			}
-		}
-
-		connectErr = ctx.Err()
-		logger.Error("Context cancelled during MQTT connection wait", "error", connectErr)
-		// Cancel the connection attempt to prevent the goroutine from leaking
-		if clientToConnect != nil {
-			cancelTimeout := c.calculateCancelTimeout()
-			logger.Debug("Calling Disconnect with dynamic timeout to cancel connection attempt and prevent goroutine leak",
-				"timeout_ms", cancelTimeout,
-				"base_timeout", uint(CancelDisconnectTimeout.Milliseconds()),
-				"config_timeout_ms", c.config.DisconnectTimeout.Milliseconds())
-			clientToConnect.Disconnect(cancelTimeout) // Use dynamic timeout for graceful disconnection
-		}
 	}
+	logger.Warn("Paho token wait completed but client not connected, no explicit token error.")
+	return errors.Newf("mqtt connection failed post-wait, client not connected").
+		Component("mqtt").
+		Category(errors.CategoryMQTTConnection).
+		Context("broker", c.config.Broker).
+		Context("client_id", c.config.ClientID).
+		Context("operation", "connect_post_wait").
+		Context("connect_timeout", c.config.ConnectTimeout).
+		Build()
+}
 
-	return connectErr
+// buildTimeoutError creates an error for connection timeout
+func (c *client) buildTimeoutError(timeoutDuration time.Duration) error {
+	return errors.Newf("mqtt connection attempt actively timed out by client wrapper after %v", timeoutDuration).
+		Component("mqtt").
+		Category(errors.CategoryMQTTConnection).
+		Context("broker", c.config.Broker).
+		Context("client_id", c.config.ClientID).
+		Context("operation", "connect_timeout").
+		Context("timeout_duration", timeoutDuration).
+		Build()
 }
 
 // Disconnect closes the connection to the MQTT broker.
@@ -762,7 +775,7 @@ func (c *client) startReconnectTimer() {
 func (c *client) reconnectWithBackoff() {
 	// Use a context with a timeout longer than the connect timeout itself,
 	// to allow for DNS lookup etc. Add a buffer.
-	ctx, cancel := context.WithTimeout(context.Background(), c.config.ConnectTimeout+10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), c.config.ConnectTimeout+ReconnectContextGrace)
 	defer cancel()
 
 	logger := mqttLogger.With("broker", c.config.Broker, "client_id", c.config.ClientID)
@@ -807,17 +820,10 @@ func (c *client) reconnectWithBackoff() {
 
 // createTLSConfig creates a TLS configuration based on the client settings
 func (c *client) createTLSConfig() (*tls.Config, error) {
-	// Extract hostname from broker URL for ServerName
-	u, err := url.Parse(c.config.Broker)
+	hostname, err := c.extractBrokerHostname()
 	if err != nil {
-		return nil, errors.Newf("failed to parse broker URL for TLS config: %v", err).
-			Component("mqtt").
-			Category(errors.CategoryConfiguration).
-			Context("broker", c.config.Broker).
-			Build()
+		return nil, err
 	}
-
-	hostname := u.Hostname()
 
 	tlsConfig := &tls.Config{
 		ServerName: hostname,
@@ -830,79 +836,97 @@ func (c *client) createTLSConfig() (*tls.Config, error) {
 
 	// Load CA certificate if provided
 	if c.config.TLS.CACert != "" {
-		// Check if file exists for better error message
-		if _, err := os.Stat(c.config.TLS.CACert); os.IsNotExist(err) {
-			return nil, errors.Newf("CA certificate file does not exist: %s", c.config.TLS.CACert).
-				Component("mqtt").
-				Category(errors.CategoryConfiguration).
-				Context("ca_cert_path", c.config.TLS.CACert).
-				Build()
+		if err := c.loadCACertificate(tlsConfig); err != nil {
+			return nil, err
 		}
-
-		caCert, err := os.ReadFile(c.config.TLS.CACert)
-		if err != nil {
-			return nil, errors.Newf("failed to read CA certificate file: %v", err).
-				Component("mqtt").
-				Category(errors.CategoryConfiguration).
-				Context("ca_cert_path", c.config.TLS.CACert).
-				Build()
-		}
-
-		caCertPool := x509.NewCertPool()
-		if !caCertPool.AppendCertsFromPEM(caCert) {
-			return nil, errors.Newf("failed to parse CA certificate").
-				Component("mqtt").
-				Category(errors.CategoryConfiguration).
-				Context("ca_cert_path", c.config.TLS.CACert).
-				Build()
-		}
-		tlsConfig.RootCAs = caCertPool
-		mqttLogger.Debug("CA certificate loaded", "path", c.config.TLS.CACert)
 	}
 
 	// Load client certificate and key if provided
 	if c.config.TLS.ClientCert != "" && c.config.TLS.ClientKey != "" {
-		// Check if client certificate exists
-		if _, err := os.Stat(c.config.TLS.ClientCert); os.IsNotExist(err) {
-			return nil, errors.Newf("client certificate file does not exist: %s", c.config.TLS.ClientCert).
-				Component("mqtt").
-				Category(errors.CategoryConfiguration).
-				Context("client_cert_path", c.config.TLS.ClientCert).
-				Build()
+		if err := c.loadClientCertificate(tlsConfig); err != nil {
+			return nil, err
 		}
-
-		// Check if client key exists
-		if _, err := os.Stat(c.config.TLS.ClientKey); os.IsNotExist(err) {
-			return nil, errors.Newf("client key file does not exist: %s", c.config.TLS.ClientKey).
-				Component("mqtt").
-				Category(errors.CategoryConfiguration).
-				Context("client_key_path", c.config.TLS.ClientKey).
-				Build()
-		}
-
-		cert, err := tls.LoadX509KeyPair(c.config.TLS.ClientCert, c.config.TLS.ClientKey)
-		if err != nil {
-			return nil, errors.Newf("failed to load client certificate and key: %v", err).
-				Component("mqtt").
-				Category(errors.CategoryConfiguration).
-				Context("client_cert_path", c.config.TLS.ClientCert).
-				Context("client_key_path", c.config.TLS.ClientKey).
-				Build()
-		}
-		tlsConfig.Certificates = []tls.Certificate{cert}
-		mqttLogger.Debug("Client certificate loaded",
-			"cert_path", c.config.TLS.ClientCert,
-			"key_path", c.config.TLS.ClientKey,
-		)
 	}
 
 	return tlsConfig, nil
 }
 
-// Helper function to get the current internal client safely
-// (Not strictly needed with current refactor but could be useful)
-// func (c *client) getInternalClient() mqtt.Client {
-// 	c.mu.RLock()
-// 	defer c.mu.RUnlock()
-// 	return c.internalClient
-// }
+// extractBrokerHostname extracts the hostname from the broker URL
+func (c *client) extractBrokerHostname() (string, error) {
+	u, err := url.Parse(c.config.Broker)
+	if err != nil {
+		return "", errors.Newf("failed to parse broker URL for TLS config: %v", err).
+			Component("mqtt").
+			Category(errors.CategoryConfiguration).
+			Context("broker", c.config.Broker).
+			Build()
+	}
+	return u.Hostname(), nil
+}
+
+// loadCACertificate loads the CA certificate into the TLS config
+func (c *client) loadCACertificate(tlsConfig *tls.Config) error {
+	if _, err := os.Stat(c.config.TLS.CACert); os.IsNotExist(err) {
+		return errors.Newf("CA certificate file does not exist: %s", c.config.TLS.CACert).
+			Component("mqtt").
+			Category(errors.CategoryConfiguration).
+			Context("ca_cert_path", c.config.TLS.CACert).
+			Build()
+	}
+
+	caCert, err := os.ReadFile(c.config.TLS.CACert)
+	if err != nil {
+		return errors.Newf("failed to read CA certificate file: %v", err).
+			Component("mqtt").
+			Category(errors.CategoryConfiguration).
+			Context("ca_cert_path", c.config.TLS.CACert).
+			Build()
+	}
+
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		return errors.Newf("failed to parse CA certificate").
+			Component("mqtt").
+			Category(errors.CategoryConfiguration).
+			Context("ca_cert_path", c.config.TLS.CACert).
+			Build()
+	}
+	tlsConfig.RootCAs = caCertPool
+	mqttLogger.Debug("CA certificate loaded", "path", c.config.TLS.CACert)
+	return nil
+}
+
+// loadClientCertificate loads the client certificate and key into the TLS config
+func (c *client) loadClientCertificate(tlsConfig *tls.Config) error {
+	if _, err := os.Stat(c.config.TLS.ClientCert); os.IsNotExist(err) {
+		return errors.Newf("client certificate file does not exist: %s", c.config.TLS.ClientCert).
+			Component("mqtt").
+			Category(errors.CategoryConfiguration).
+			Context("client_cert_path", c.config.TLS.ClientCert).
+			Build()
+	}
+
+	if _, err := os.Stat(c.config.TLS.ClientKey); os.IsNotExist(err) {
+		return errors.Newf("client key file does not exist: %s", c.config.TLS.ClientKey).
+			Component("mqtt").
+			Category(errors.CategoryConfiguration).
+			Context("client_key_path", c.config.TLS.ClientKey).
+			Build()
+	}
+
+	cert, err := tls.LoadX509KeyPair(c.config.TLS.ClientCert, c.config.TLS.ClientKey)
+	if err != nil {
+		return errors.Newf("failed to load client certificate and key: %v", err).
+			Component("mqtt").
+			Category(errors.CategoryConfiguration).
+			Context("client_cert_path", c.config.TLS.ClientCert).
+			Context("client_key_path", c.config.TLS.ClientKey).
+			Build()
+	}
+	tlsConfig.Certificates = []tls.Certificate{cert}
+	mqttLogger.Debug("Client certificate loaded",
+		"cert_path", c.config.TLS.ClientCert,
+		"key_path", c.config.TLS.ClientKey,
+	)
+	return nil
+}

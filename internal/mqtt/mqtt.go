@@ -23,7 +23,30 @@ const (
 	ShutdownDisconnectTimeout = 2 * time.Second
 	// ConnectTimeoutGrace is the additional time to wait beyond ConnectTimeout for cleanup
 	ConnectTimeoutGrace = 500 * time.Millisecond
+	// KeepAliveInterval is the MQTT keep-alive interval
+	KeepAliveInterval = 30 * time.Second
+	// PingTimeout is the timeout for MQTT ping responses
+	PingTimeout = 10 * time.Second
+	// WriteTimeout is the timeout for MQTT write operations
+	WriteTimeout = 10 * time.Second
+	// DNSLookupTimeout is the timeout for DNS resolution during connection
+	DNSLookupTimeout = 5 * time.Second
+	// MinConnectTimeout is the minimum allowed connect timeout
+	MinConnectTimeout = 500 * time.Millisecond
+	// ReconnectContextGrace is the additional time beyond ConnectTimeout for reconnect context
+	ReconnectContextGrace = 10 * time.Second
 )
+
+// durationToMillisUint safely converts a time.Duration to uint milliseconds.
+// Returns 0 for negative durations. This prevents integer overflow when
+// converting int64 milliseconds to uint (gosec G115).
+func durationToMillisUint(d time.Duration) uint {
+	ms := d.Milliseconds()
+	if ms < 0 {
+		return 0
+	}
+	return uint(ms) // #nosec G115 -- checked for negative values
+}
 
 // Client defines the interface for MQTT client operations.
 type Client interface {
@@ -62,10 +85,9 @@ type Config struct {
 	ReconnectCooldown time.Duration
 	ReconnectDelay    time.Duration
 	// Connection timeouts
-	ConnectTimeout    time.Duration
-	ReconnectTimeout  time.Duration
-	PublishTimeout       time.Duration
-	DisconnectTimeout    time.Duration
+	ConnectTimeout            time.Duration
+	PublishTimeout            time.Duration
+	DisconnectTimeout         time.Duration
 	ShutdownDisconnectTimeout time.Duration // Timeout for disconnect during shutdown (shorter than normal)
 	// TLS configuration
 	TLS TLSConfig
@@ -82,12 +104,10 @@ type TLSConfig struct {
 
 // Package-level logger for MQTT related events
 var (
-	mqttLogger *slog.Logger
-	// mqttLogWriter   io.Writer     // No longer needed directly
+	mqttLogger      *slog.Logger
 	mqttLogCloser   func() error         // Stores the closer function
 	mqttLogFilePath string               // Stores the log file path
 	mqttLevelVar    = new(slog.LevelVar) // Dynamic level control
-	// mqttLogMutex    sync.RWMutex // No longer needed for level changes
 )
 
 func init() {
@@ -103,7 +123,6 @@ func init() {
 		log.Printf("ERROR: Failed to initialize MQTT file logger at %s: %v. Service logging disabled.", mqttLogFilePath, err)
 		// Fallback to a disabled logger to prevent nil panics
 		mqttLogger = slog.New(slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: mqttLevelVar}))
-		// mqttLogWriter = io.Discard // No longer needed
 		mqttLogCloser = func() error { return nil } // No-op closer for fallback
 	} else {
 		// Use standard log for initial confirmation message
@@ -134,12 +153,11 @@ func CloseLogger() error {
 // DefaultConfig returns a Config with reasonable default values
 func DefaultConfig() Config {
 	return Config{
-		ReconnectCooldown: 5 * time.Second,
-		ReconnectDelay:    1 * time.Second,
-		ConnectTimeout:    30 * time.Second,
-		ReconnectTimeout:         5 * time.Second,
-		PublishTimeout:           10 * time.Second,
-		DisconnectTimeout:        GracefulDisconnectTimeout, // Use constant for consistency
+		ReconnectCooldown:         5 * time.Second,
+		ReconnectDelay:            1 * time.Second,
+		ConnectTimeout:            30 * time.Second,
+		PublishTimeout:            10 * time.Second,
+		DisconnectTimeout:         GracefulDisconnectTimeout, // Use constant for consistency
 		ShutdownDisconnectTimeout: ShutdownDisconnectTimeout, // Shorter timeout for shutdown
 	}
 }
