@@ -682,6 +682,8 @@ function coercePushSettings(settings: unknown): PushSettings {
     return {
       enabled: false,
       providers: [],
+      minConfidenceThreshold: 0,
+      speciesCooldownMinutes: 0,
     };
   }
 
@@ -692,6 +694,9 @@ function coercePushSettings(settings: unknown): PushSettings {
     providers: coerceArray(s.providers, [])
       .map(coercePushProvider)
       .filter((p): p is PushProviderConfig => p !== null),
+    // Detection filtering settings (0 = disabled)
+    minConfidenceThreshold: coerceNumber(s.minConfidenceThreshold, 0, 1, 0),
+    speciesCooldownMinutes: coerceNumber(s.speciesCooldownMinutes, 0, 1440, 0), // Max 24 hours
   };
 }
 

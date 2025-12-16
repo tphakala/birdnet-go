@@ -508,6 +508,9 @@ export interface PushProviderConfig {
 export interface PushSettings {
   enabled: boolean;
   providers?: PushProviderConfig[];
+  // Detection filtering settings
+  minConfidenceThreshold?: number; // 0.0-1.0, 0 = disabled
+  speciesCooldownMinutes?: number; // 0 = disabled
 }
 
 // Notification templates

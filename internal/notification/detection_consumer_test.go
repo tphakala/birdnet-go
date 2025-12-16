@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"go.uber.org/goleak"
 )
@@ -21,6 +22,25 @@ func TestMain(m *testing.M) {
 		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/notification.(*ResourceEventWorker).cleanupLoop"),
 	)
 	os.Exit(m.Run())
+}
+
+// setupTestServiceAndConsumer creates a notification service and consumer for testing.
+// Returns the service, consumer, and a cleanup function that should be called with defer.
+func setupTestServiceAndConsumer(t *testing.T) (*Service, *DetectionNotificationConsumer, func()) {
+	t.Helper()
+	config := &ServiceConfig{
+		MaxNotifications:   100,
+		CleanupInterval:    5 * time.Minute,
+		RateLimitWindow:    1 * time.Minute,
+		RateLimitMaxEvents: 100,
+	}
+	service := NewService(config)
+	require.NotNil(t, service)
+	consumer := NewDetectionNotificationConsumer(service)
+	cleanup := func() {
+		service.Stop()
+	}
+	return service, consumer, cleanup
 }
 
 func TestDetectionNotificationConsumer(t *testing.T) {
@@ -344,4 +364,254 @@ func TestDetectionNotificationConsumer_MetadataFieldsWithoutGPS(t *testing.T) {
 	assert.NotEmpty(t, notif.Metadata["bg_detection_url"])
 	assert.NotEmpty(t, notif.Metadata["bg_image_url"])
 	assert.Equal(t, "88", notif.Metadata["bg_confidence_percent"])
+}
+
+// TestDetectionNotificationConsumer_ConfidenceThreshold verifies that detections
+// below the configured confidence threshold are filtered out.
+//
+//nolint:dupl // Test structure intentionally similar to cooldown test for readability
+func TestDetectionNotificationConsumer_ConfidenceThreshold(t *testing.T) {
+	// Note: Cannot use t.Parallel() because tests share global settingsInstance
+
+	// Set up test settings with confidence threshold
+	settings := conf.GetTestSettings()
+	settings.Notification.Push.MinConfidenceThreshold = 0.80 // 80% threshold
+	conf.SetTestSettings(settings)
+	defer conf.SetTestSettings(nil) // Clean up
+
+	service, consumer, cleanup := setupTestServiceAndConsumer(t)
+	defer cleanup()
+
+	// Test: Detection ABOVE threshold should create notification
+	highConfEvent, err := events.NewDetectionEvent(
+		"American Robin",
+		"Turdus migratorius",
+		0.92, // Above 80% threshold
+		"backyard-camera",
+		true,
+		0,
+	)
+	require.NoError(t, err)
+
+	err = consumer.ProcessDetectionEvent(highConfEvent)
+	require.NoError(t, err)
+
+	notifications, err := service.List(&FilterOptions{Types: []Type{TypeDetection}, Limit: 10})
+	require.NoError(t, err)
+	assert.Len(t, notifications, 1, "High confidence detection should create notification")
+
+	// Test: Detection BELOW threshold should NOT create notification
+	lowConfEvent, err := events.NewDetectionEvent(
+		"Blue Jay",
+		"Cyanocitta cristata",
+		0.65, // Below 80% threshold
+		"backyard-camera",
+		true,
+		0,
+	)
+	require.NoError(t, err)
+
+	err = consumer.ProcessDetectionEvent(lowConfEvent)
+	require.NoError(t, err)
+
+	notifications, err = service.List(&FilterOptions{Types: []Type{TypeDetection}, Limit: 10})
+	require.NoError(t, err)
+	assert.Len(t, notifications, 1, "Low confidence detection should NOT create notification")
+
+	// Test: Detection AT threshold should create notification
+	atThresholdEvent, err := events.NewDetectionEvent(
+		"Northern Cardinal",
+		"Cardinalis cardinalis", //nolint:misspell // Scientific name, not a misspelling
+		0.80, // Exactly at threshold
+		"backyard-camera",
+		true,
+		0,
+	)
+	require.NoError(t, err)
+
+	err = consumer.ProcessDetectionEvent(atThresholdEvent)
+	require.NoError(t, err)
+
+	notifications, err = service.List(&FilterOptions{Types: []Type{TypeDetection}, Limit: 10})
+	require.NoError(t, err)
+	assert.Len(t, notifications, 2, "Detection at threshold should create notification")
+}
+
+// TestDetectionNotificationConsumer_SpeciesCooldown verifies that the same species
+// doesn't trigger multiple notifications within the cooldown period.
+//
+//nolint:dupl // Test structure intentionally similar to confidence test for readability
+func TestDetectionNotificationConsumer_SpeciesCooldown(t *testing.T) {
+	// Note: Cannot use t.Parallel() because tests share global settingsInstance
+
+	// Set up test settings with cooldown
+	settings := conf.GetTestSettings()
+	settings.Notification.Push.SpeciesCooldownMinutes = 60 // 60 minute cooldown
+	conf.SetTestSettings(settings)
+	defer conf.SetTestSettings(nil) // Clean up
+
+	service, consumer, cleanup := setupTestServiceAndConsumer(t)
+	defer cleanup()
+
+	// First detection should create notification
+	event1, err := events.NewDetectionEvent(
+		"American Robin",
+		"Turdus migratorius",
+		0.92,
+		"backyard-camera",
+		true,
+		0,
+	)
+	require.NoError(t, err)
+
+	err = consumer.ProcessDetectionEvent(event1)
+	require.NoError(t, err)
+
+	notifications, err := service.List(&FilterOptions{Types: []Type{TypeDetection}, Limit: 10})
+	require.NoError(t, err)
+	assert.Len(t, notifications, 1, "First detection should create notification")
+
+	// Second detection of SAME species should be blocked by cooldown
+	event2, err := events.NewDetectionEvent(
+		"American Robin", // Same species
+		"Turdus migratorius",
+		0.95,
+		"backyard-camera",
+		true,
+		0,
+	)
+	require.NoError(t, err)
+
+	err = consumer.ProcessDetectionEvent(event2)
+	require.NoError(t, err)
+
+	notifications, err = service.List(&FilterOptions{Types: []Type{TypeDetection}, Limit: 10})
+	require.NoError(t, err)
+	assert.Len(t, notifications, 1, "Second detection of same species should be blocked by cooldown")
+
+	// Detection of DIFFERENT species should create notification
+	event3, err := events.NewDetectionEvent(
+		"Blue Jay", // Different species
+		"Cyanocitta cristata",
+		0.88,
+		"backyard-camera",
+		true,
+		0,
+	)
+	require.NoError(t, err)
+
+	err = consumer.ProcessDetectionEvent(event3)
+	require.NoError(t, err)
+
+	notifications, err = service.List(&FilterOptions{Types: []Type{TypeDetection}, Limit: 10})
+	require.NoError(t, err)
+	assert.Len(t, notifications, 2, "Different species should create notification")
+}
+
+// TestDetectionNotificationConsumer_CooldownExpiration verifies that cooldown expires correctly.
+func TestDetectionNotificationConsumer_CooldownExpiration(t *testing.T) {
+	// Note: Cannot use t.Parallel() because tests share global settingsInstance
+
+	// Set up test settings with very short cooldown for testing
+	settings := conf.GetTestSettings()
+	settings.Notification.Push.SpeciesCooldownMinutes = 1 // 1 minute cooldown
+	conf.SetTestSettings(settings)
+	defer conf.SetTestSettings(nil) // Clean up
+
+	service, consumer, cleanup := setupTestServiceAndConsumer(t)
+	defer cleanup()
+
+	// First detection
+	event1, err := events.NewDetectionEvent(
+		"American Robin",
+		"Turdus migratorius",
+		0.92,
+		"backyard-camera",
+		true,
+		0,
+	)
+	require.NoError(t, err)
+
+	err = consumer.ProcessDetectionEvent(event1)
+	require.NoError(t, err)
+
+	notifications, err := service.List(&FilterOptions{Types: []Type{TypeDetection}, Limit: 10})
+	require.NoError(t, err)
+	assert.Len(t, notifications, 1)
+
+	// Manually expire the cooldown by manipulating the internal map
+	// This simulates time passing without actually waiting
+	consumer.cooldownMu.Lock()
+	consumer.speciesCooldowns["American Robin"] = time.Now().Add(-2 * time.Minute) // Set to 2 minutes ago
+	consumer.cooldownMu.Unlock()
+
+	// Second detection should now succeed since cooldown expired
+	event2, err := events.NewDetectionEvent(
+		"American Robin",
+		"Turdus migratorius",
+		0.95,
+		"backyard-camera",
+		true,
+		0,
+	)
+	require.NoError(t, err)
+
+	err = consumer.ProcessDetectionEvent(event2)
+	require.NoError(t, err)
+
+	notifications, err = service.List(&FilterOptions{Types: []Type{TypeDetection}, Limit: 10})
+	require.NoError(t, err)
+	assert.Len(t, notifications, 2, "Detection after cooldown expired should create notification")
+}
+
+// TestDetectionNotificationConsumer_DisabledFiltering verifies that filtering
+// is disabled when threshold/cooldown are set to 0.
+func TestDetectionNotificationConsumer_DisabledFiltering(t *testing.T) {
+	// Note: Cannot use t.Parallel() because tests share global settingsInstance
+
+	// Set up test settings with filtering disabled (0 values)
+	settings := conf.GetTestSettings()
+	settings.Notification.Push.MinConfidenceThreshold = 0 // Disabled
+	settings.Notification.Push.SpeciesCooldownMinutes = 0 // Disabled
+	conf.SetTestSettings(settings)
+	defer conf.SetTestSettings(nil) // Clean up
+
+	service, consumer, cleanup := setupTestServiceAndConsumer(t)
+	defer cleanup()
+
+	// Low confidence detection should create notification when threshold is 0
+	lowConfEvent, err := events.NewDetectionEvent(
+		"American Robin",
+		"Turdus migratorius",
+		0.15, // Very low confidence
+		"backyard-camera",
+		true,
+		0,
+	)
+	require.NoError(t, err)
+
+	err = consumer.ProcessDetectionEvent(lowConfEvent)
+	require.NoError(t, err)
+
+	notifications, err := service.List(&FilterOptions{Types: []Type{TypeDetection}, Limit: 10})
+	require.NoError(t, err)
+	assert.Len(t, notifications, 1, "Low confidence should pass when threshold is 0")
+
+	// Same species should create another notification when cooldown is 0
+	secondEvent, err := events.NewDetectionEvent(
+		"American Robin", // Same species
+		"Turdus migratorius",
+		0.20,
+		"backyard-camera",
+		true,
+		0,
+	)
+	require.NoError(t, err)
+
+	err = consumer.ProcessDetectionEvent(secondEvent)
+	require.NoError(t, err)
+
+	notifications, err = service.List(&FilterOptions{Types: []Type{TypeDetection}, Limit: 10})
+	require.NoError(t, err)
+	assert.Len(t, notifications, 2, "Same species should pass when cooldown is 0")
 }
