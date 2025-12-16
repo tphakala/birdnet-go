@@ -31,10 +31,11 @@ import (
 // - Prevents access to reserved Windows device names
 // - Handles platform-specific path validation (Windows, Unix, WASI, etc.)
 type SecureFS struct {
-	baseDir  string     // The base directory that all operations are restricted to
-	root     *os.Root   // The sandboxed filesystem root
-	pipeName string     // Platform-specific pipe name for named pipes
-	cache    *PathCache // Smart memoization cache for expensive operations
+	baseDir         string     // The base directory that all operations are restricted to
+	root            *os.Root   // The sandboxed filesystem root
+	pipeName        string     // Platform-specific pipe name for named pipes
+	cache           *PathCache // Smart memoization cache for expensive operations
+	maxReadFileSize int64      // Maximum file size for ReadFile (0 = unlimited)
 }
 
 // New creates a new secure filesystem with the specified base directory
@@ -72,33 +73,63 @@ func IsPathWithinBase(basePath, targetPath string) (bool, error) {
 	return IsPathWithinBaseWithCache(nil, basePath, targetPath)
 }
 
-// IsPathWithinBaseWithCache checks if targetPath is within or equal to basePath with optional caching
-func IsPathWithinBaseWithCache(cache *PathCache, basePath, targetPath string) (bool, error) {
-	var absBase, absTarget string
+// resolveAbsPath resolves a path to absolute, using cache if available
+func resolveAbsPath(cache *PathCache, path string) (string, error) {
+	if cache != nil {
+		return cache.GetAbsPath(path, filepath.Abs)
+	}
+	return filepath.Abs(path)
+}
+
+// resolveSymlinks resolves symlinks for a path, using cache if available
+func resolveSymlinks(cache *PathCache, path string) string {
+	var resolved string
 	var err error
 
-	// Use cache for expensive filepath.Abs() calls if available
 	if cache != nil {
-		absBase, err = cache.GetAbsPath(basePath, filepath.Abs)
-		if err != nil {
-			return false, fmt.Errorf("failed to resolve base path: %w", err)
-		}
-
-		absTarget, err = cache.GetAbsPath(targetPath, filepath.Abs)
-		if err != nil {
-			return false, fmt.Errorf("failed to resolve target path: %w", err)
-		}
+		resolved, err = cache.GetSymlinkResolution(path, filepath.EvalSymlinks)
 	} else {
-		// Fallback to direct calls when no cache available
-		absBase, err = filepath.Abs(basePath)
-		if err != nil {
-			return false, fmt.Errorf("failed to resolve base path: %w", err)
-		}
+		resolved, err = filepath.EvalSymlinks(path)
+	}
 
-		absTarget, err = filepath.Abs(targetPath)
-		if err != nil {
-			return false, fmt.Errorf("failed to resolve target path: %w", err)
+	if err == nil {
+		return resolved
+	}
+	return path
+}
+
+// resolveParentSymlinks attempts to resolve symlinks in parent directories
+// when the full path cannot be resolved (e.g., file doesn't exist yet)
+func resolveParentSymlinks(cache *PathCache, absTarget string) string {
+	dir := filepath.Dir(absTarget)
+
+	for dir != "/" && dir != "." && dir != "" {
+		resolvedDir := resolveSymlinks(cache, dir)
+		if resolvedDir != dir {
+			// Found a parent directory that's a symlink
+			// Reconstruct the target with the resolved parent
+			return filepath.Join(resolvedDir, filepath.Base(absTarget))
 		}
+		dir = filepath.Dir(dir)
+	}
+	return absTarget
+}
+
+// isPathPrefix checks if target is within or equal to base
+func isPathPrefix(absBase, absTarget string) bool {
+	return strings.HasPrefix(absTarget, absBase+string(filepath.Separator)) || absTarget == absBase
+}
+
+// IsPathWithinBaseWithCache checks if targetPath is within or equal to basePath with optional caching
+func IsPathWithinBaseWithCache(cache *PathCache, basePath, targetPath string) (bool, error) {
+	absBase, err := resolveAbsPath(cache, basePath)
+	if err != nil {
+		return false, fmt.Errorf("failed to resolve base path: %w", err)
+	}
+
+	absTarget, err := resolveAbsPath(cache, targetPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to resolve target path: %w", err)
 	}
 
 	// Clean paths to remove any . or .. components
@@ -111,75 +142,26 @@ func IsPathWithinBaseWithCache(cache *PathCache, basePath, targetPath string) (b
 	}
 
 	// For paths that don't exist yet, we can only do string prefix comparison
-	// which is good enough for testing and validation
 	if _, err := os.Stat(absTarget); os.IsNotExist(err) {
-		// Check if target path starts with base path
-		return strings.HasPrefix(absTarget, absBase+string(filepath.Separator)) || absTarget == absBase, nil
+		return isPathPrefix(absBase, absTarget), nil
 	}
 
-	// For paths that exist, try to resolve symlinks with caching
-	if cache != nil {
-		// Use cached symlink resolution
-		resolvedBase, err := cache.GetSymlinkResolution(absBase, filepath.EvalSymlinks)
-		if err == nil {
-			absBase = resolvedBase
-		}
+	// Resolve symlinks for existing paths
+	absBase = resolveSymlinks(cache, absBase)
+	resolved := resolveSymlinks(cache, absTarget)
 
-		resolvedTarget, err := cache.GetSymlinkResolution(absTarget, filepath.EvalSymlinks)
-		if err == nil {
-			absTarget = resolvedTarget
-		} else {
-			// Handle the case where intermediate components might be symlinks
-			// This is a fallback for paths that don't fully exist yet
-			dir := filepath.Dir(absTarget)
-			// Try to resolve parent directories if possible
-			for dir != "/" && dir != "." && dir != "" {
-				resolvedDir, err := cache.GetSymlinkResolution(dir, filepath.EvalSymlinks)
-				if err == nil && resolvedDir != dir {
-					// Found a parent directory that's a symlink
-					// Reconstruct the target with the resolved parent
-					base := filepath.Base(absTarget)
-					absTarget = filepath.Join(resolvedDir, base)
-					break
-				}
-				dir = filepath.Dir(dir)
-			}
-		}
+	// If target symlink resolution failed, try resolving parent directories
+	if resolved == absTarget {
+		absTarget = resolveParentSymlinks(cache, absTarget)
 	} else {
-		// Fallback to direct calls when no cache available
-		resolvedBase, err := filepath.EvalSymlinks(absBase)
-		if err == nil {
-			absBase = resolvedBase
-		}
-
-		resolvedTarget, err := filepath.EvalSymlinks(absTarget)
-		if err == nil {
-			absTarget = resolvedTarget
-		} else {
-			// Handle the case where intermediate components might be symlinks
-			// This is a fallback for paths that don't fully exist yet
-			dir := filepath.Dir(absTarget)
-			// Try to resolve parent directories if possible
-			for dir != "/" && dir != "." && dir != "" {
-				resolvedDir, err := filepath.EvalSymlinks(dir)
-				if err == nil && resolvedDir != dir {
-					// Found a parent directory that's a symlink
-					// Reconstruct the target with the resolved parent
-					base := filepath.Base(absTarget)
-					absTarget = filepath.Join(resolvedDir, base)
-					break
-				}
-				dir = filepath.Dir(dir)
-			}
-		}
+		absTarget = resolved
 	}
 
 	// Clean paths again after symlink resolution
 	absBase = filepath.Clean(absBase)
 	absTarget = filepath.Clean(absTarget)
 
-	// Check if target path starts with base path or is exactly the base path
-	return strings.HasPrefix(absTarget, absBase+string(filepath.Separator)) || absTarget == absBase, nil
+	return isPathPrefix(absBase, absTarget), nil
 }
 
 // IsPathValidWithinBase is a helper that checks if a path is within a base directory
@@ -223,7 +205,7 @@ func (sfs *SecureFS) RelativePath(path string) (string, error) {
 	// Verify the path is within the base directory for safety
 	// Additional check using filepath.IsLocal for defense in depth
 	if !filepath.IsLocal(filepath.Base(absPath)) {
-		return "", fmt.Errorf("security error: path contains invalid components")
+		return "", fmt.Errorf("%w: path contains invalid components", ErrInvalidPath)
 	}
 
 	// Using the cached version of IsPathWithinBase for better performance
@@ -236,7 +218,7 @@ func (sfs *SecureFS) RelativePath(path string) (string, error) {
 	}
 
 	if !isWithin {
-		return "", fmt.Errorf("security error: path %s is outside allowed directory %s", path, sfs.baseDir)
+		return "", fmt.Errorf("%w: path %s is outside allowed directory %s", ErrPathTraversal, path, sfs.baseDir)
 	}
 
 	// Make the path relative to the base directory for os.Root operations
@@ -280,64 +262,45 @@ func (sfs *SecureFS) ValidateRelativePath(relPath string) (string, error) {
 	})
 }
 
+// createDirComponent attempts to create a single directory component, ignoring "already exists" errors
+func (sfs *SecureFS) createDirComponent(path string, perm os.FileMode) error {
+	err := sfs.root.Mkdir(path, perm)
+	if err != nil && !os.IsExist(err) {
+		return fmt.Errorf("failed to create directory component %s: %w", path, err)
+	}
+	return nil
+}
+
 // MkdirAll creates a directory and all necessary parent directories with path validation
 func (sfs *SecureFS) MkdirAll(path string, perm os.FileMode) error {
-	// Get relative path for os.Root operations
 	relPath, err := sfs.RelativePath(path)
 	if err != nil {
 		return err
 	}
 
-	// If the path is the root, it's already created
 	if relPath == "" || relPath == "." {
 		return nil
 	}
 
-	// Create directories recursively
 	components := strings.Split(relPath, string(filepath.Separator))
 	currentPath := ""
 
-	// Create each directory component
-	for i, component := range components {
-		// Skip empty components that might result from path normalization
+	for _, component := range components {
 		if component == "" {
 			continue
 		}
 
-		// Build the current path
-		if currentPath == "" {
-			currentPath = component
-		} else {
-			currentPath = filepath.Join(currentPath, component)
-		}
-
-		// Try to create the directory using os.Root.Mkdir
-		// Ignore "already exists" errors
-		err := sfs.root.Mkdir(currentPath, perm)
-		if err != nil && !os.IsExist(err) {
-			return fmt.Errorf("failed to create directory component %s: %w", currentPath, err)
-		}
-
-		// If this is the last component, we're done
-		if i == len(components)-1 {
-			return nil
+		currentPath = filepath.Join(currentPath, component)
+		if err := sfs.createDirComponent(currentPath, perm); err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
-// RemoveAll removes a directory and all its contents with path validation
-// This implementation provides a more secure alternative to os.RemoveAll by using
-// os.Root operations for each individual file/directory where possible
-func (sfs *SecureFS) RemoveAll(path string) error {
-	// Get relative path for os.Root operations
-	relPath, err := sfs.RelativePath(path)
-	if err != nil {
-		return err
-	}
-
-	// If the path doesn't exist, there's nothing to remove
+// removeAllRelative removes a path using already-validated relative path
+func (sfs *SecureFS) removeAllRelative(relPath string) error {
 	info, err := sfs.root.Stat(relPath)
 	if os.IsNotExist(err) {
 		return nil
@@ -346,48 +309,47 @@ func (sfs *SecureFS) RemoveAll(path string) error {
 		return err
 	}
 
-	// For non-directories, just use os.Root.Remove
 	if !info.IsDir() {
 		return sfs.root.Remove(relPath)
 	}
 
-	// For directories, we need a recursive solution since os.Root doesn't have RemoveAll
-	// Open the directory securely using os.Root
+	return sfs.removeDirContents(relPath)
+}
+
+// removeDirContents removes all contents of a directory and then the directory itself
+func (sfs *SecureFS) removeDirContents(relPath string) error {
 	dir, err := sfs.root.Open(relPath)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err := dir.Close(); err != nil {
-			log.Printf("SecureFS: warning: failed to close directory %s: %v", relPath, err)
-		}
-	}()
 
-	// Read directory entries
-	entries, err := dir.ReadDir(0) // 0 means read all entries
+	entries, err := dir.ReadDir(0)
+	if closeErr := dir.Close(); closeErr != nil {
+		log.Printf("SecureFS: warning: failed to close directory %s: %v", relPath, closeErr)
+	}
 	if err != nil {
 		return err
 	}
 
-	// Remove each entry in the directory
 	for _, entry := range entries {
-		childRelPath := filepath.Join(relPath, entry.Name())
-
-		if entry.IsDir() {
-			// Recursive call for subdirectories
-			if err := sfs.RemoveAll(filepath.Join(sfs.baseDir, childRelPath)); err != nil {
-				return err
-			}
-		} else {
-			// Remove files directly
-			if err := sfs.root.Remove(childRelPath); err != nil {
-				return err
-			}
+		childPath := filepath.Join(relPath, entry.Name())
+		if err := sfs.removeAllRelative(childPath); err != nil {
+			return err
 		}
 	}
 
-	// Now remove the empty directory
 	return sfs.root.Remove(relPath)
+}
+
+// RemoveAll removes a directory and all its contents with path validation
+// This implementation provides a more secure alternative to os.RemoveAll by using
+// os.Root operations for each individual file/directory where possible
+func (sfs *SecureFS) RemoveAll(path string) error {
+	relPath, err := sfs.RelativePath(path)
+	if err != nil {
+		return err
+	}
+	return sfs.removeAllRelative(relPath)
 }
 
 // Remove removes a file with path validation
@@ -510,7 +472,23 @@ func (sfs *SecureFS) ExistsNoErr(path string) bool {
 	return exists
 }
 
-// ReadFile reads a file with path validation and returns its contents
+// SetMaxReadFileSize sets the maximum file size that ReadFile will read.
+// A value of 0 means unlimited (no size check).
+// This helps prevent memory exhaustion from reading very large files.
+func (sfs *SecureFS) SetMaxReadFileSize(maxSize int64) {
+	sfs.maxReadFileSize = maxSize
+}
+
+// GetMaxReadFileSize returns the current maximum file size for ReadFile.
+func (sfs *SecureFS) GetMaxReadFileSize() int64 {
+	return sfs.maxReadFileSize
+}
+
+// ErrFileTooLarge is returned when a file exceeds the configured size limit
+var ErrFileTooLarge = errors.New("file size exceeds maximum allowed size")
+
+// ReadFile reads a file with path validation and returns its contents.
+// If maxReadFileSize is set (> 0), files exceeding that size will return ErrFileTooLarge.
 func (sfs *SecureFS) ReadFile(path string) ([]byte, error) {
 	// Open the file using secure methods
 	file, err := sfs.OpenFile(path, os.O_RDONLY, 0)
@@ -522,6 +500,18 @@ func (sfs *SecureFS) ReadFile(path string) ([]byte, error) {
 			log.Printf("SecureFS: warning: failed to close file: %v", err)
 		}
 	}()
+
+	// Check file size if limit is configured
+	if sfs.maxReadFileSize > 0 {
+		stat, err := file.Stat()
+		if err != nil {
+			return nil, fmt.Errorf("failed to stat file: %w", err)
+		}
+		if stat.Size() > sfs.maxReadFileSize {
+			return nil, fmt.Errorf("%w: file is %d bytes, limit is %d bytes",
+				ErrFileTooLarge, stat.Size(), sfs.maxReadFileSize)
+		}
+	}
 
 	// Read the entire file
 	return io.ReadAll(file)
@@ -545,41 +535,40 @@ func (sfs *SecureFS) WriteFile(path string, data []byte, perm os.FileMode) error
 	return err
 }
 
+// mapOpenErrorToHTTP converts file open errors to appropriate HTTP errors
+func mapOpenErrorToHTTP(err error, effectivePath string) *echo.HTTPError {
+	switch {
+	case errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist):
+		return echo.NewHTTPError(http.StatusNotFound, fmt.Sprintf("File not found: %s", effectivePath))
+	case errors.Is(err, fs.ErrPermission) || errors.Is(err, os.ErrPermission) || errors.Is(err, ErrAccessDenied):
+		return echo.NewHTTPError(http.StatusForbidden, "Access denied")
+	case errors.Is(err, ErrPathTraversal) || errors.Is(err, ErrInvalidPath):
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid file path").SetInternal(err)
+	case errors.Is(err, ErrNotRegularFile):
+		return echo.NewHTTPError(http.StatusForbidden, "Not a regular file")
+	default:
+		log.Printf("SecureFS: Unhandled error serving file for path %s: %v", effectivePath, err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Error serving file").SetInternal(err)
+	}
+}
+
+// getContentType determines the content type for a file, using extension-based detection
+func getContentType(path string) string {
+	contentType := mime.TypeByExtension(filepath.Ext(path))
+	if contentType == "" {
+		return "application/octet-stream"
+	}
+	return contentType
+}
+
 // serveInternal handles the core logic for serving a file using an opener function.
 // The opener function is responsible for securely opening the file and returning
 // the file handle, the effective path used (for logging/headers), and any error.
 func (sfs *SecureFS) serveInternal(c echo.Context, opener func() (*os.File, string, error)) error {
 	f, effectivePath, err := opener()
 	if err != nil {
-		// Log the specific error for debugging
-		// Added path for context in logs
 		log.Printf("SecureFS: Error opening file via opener for path %s: %v", effectivePath, err)
-
-		// Check for specific path-related errors
-		// Use errors.Is for robust checking, including fs.ErrNotExist and os.ErrNotExist
-		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, os.ErrNotExist) {
-			return echo.NewHTTPError(http.StatusNotFound, fmt.Sprintf("File not found: %s", effectivePath))
-		}
-		// Use errors.Is for robust checking, including fs.ErrPermission and os.ErrPermission
-		if errors.Is(err, fs.ErrPermission) || errors.Is(err, os.ErrPermission) || errors.Is(err, ErrAccessDenied) {
-			return echo.NewHTTPError(http.StatusForbidden, "Access denied")
-		}
-		// Check for security validation errors (like path traversal)
-		if errors.Is(err, ErrPathTraversal) || errors.Is(err, ErrInvalidPath) {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid file path").SetInternal(err)
-		}
-		if errors.Is(err, ErrNotRegularFile) {
-			return echo.NewHTTPError(http.StatusForbidden, "Not a regular file")
-		}
-
-		// For backward compatibility, also check strings (can be removed in future)
-		if strings.HasPrefix(err.Error(), "security error:") {
-			return echo.NewHTTPError(http.StatusBadRequest, "Invalid file path").SetInternal(err)
-		}
-
-		// Handle other potential errors, log them, and return a generic 500 error
-		log.Printf("SecureFS: Unhandled error serving file for path %s: %v", effectivePath, err)
-		return echo.NewHTTPError(http.StatusInternalServerError, "Error serving file").SetInternal(err)
+		return mapOpenErrorToHTTP(err, effectivePath)
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
@@ -587,31 +576,21 @@ func (sfs *SecureFS) serveInternal(c echo.Context, opener func() (*os.File, stri
 		}
 	}()
 
-	// Get file info for size and modification time
 	stat, err := f.Stat()
 	if err != nil {
 		log.Printf("Serve Internal: Stat Error: %v for relPath %s", err, effectivePath)
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info").SetInternal(err)
 	}
 
-	// Only serve regular files
 	if !stat.Mode().IsRegular() {
 		return echo.NewHTTPError(http.StatusForbidden, "Not a regular file")
 	}
 
 	// Only set content type if not already set by the caller
-	// This allows handlers to set specific Content-Type for audio files
-	if existingContentType := c.Response().Header().Get(echo.HeaderContentType); existingContentType == "" {
-		// Set content type based on file extension using the validated relative path
-		contentType := mime.TypeByExtension(filepath.Ext(effectivePath))
-		if contentType == "" {
-			contentType = "application/octet-stream" // Default content type
-		}
-		c.Response().Header().Set(echo.HeaderContentType, contentType)
+	if c.Response().Header().Get(echo.HeaderContentType) == "" {
+		c.Response().Header().Set(echo.HeaderContentType, getContentType(effectivePath))
 	}
 
-	// Use http.ServeContent which properly handles Range requests, caching, etc.
-	// It uses the validated relative path's base name for the download filename suggestion.
 	http.ServeContent(c.Response(), c.Request(), filepath.Base(effectivePath), stat.ModTime(), f)
 	return nil
 }
@@ -785,18 +764,50 @@ func (sfs *SecureFS) ParentPath(path string) (string, error) {
 	return parentAbsPath, nil
 }
 
-// Readlink reads the target of a symbolic link, ensuring the operation
-// stays within the SecureFS sandbox.
+// Readlink reads the target of a symbolic link, ensuring the symlink file
+// itself is within the SecureFS sandbox.
+//
+// Note: This method returns the symlink target as a string without validating
+// whether the target is safe to follow. Security validation occurs when you
+// actually try to FOLLOW the symlink (via Open, Stat, etc.).
+//
+// This is the expected behavior - Readlink is an informational operation
+// that tells you what a symlink points to without accessing the target.
 func (sfs *SecureFS) Readlink(path string) (string, error) {
-	// Get relative path for os.Root operations
-	relPath, err := sfs.RelativePath(path)
+	// Clean and get absolute path
+	path = filepath.Clean(path)
+	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
-	// Construct the full path within the base directory
-	// Since we've already validated the path is within our boundaries,
-	// this is safe to read from
-	fullPath := filepath.Join(sfs.baseDir, relPath)
-	return os.Readlink(fullPath)
+	// Use Lstat to check if the symlink file itself exists (don't follow the link)
+	info, err := os.Lstat(absPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to stat symlink: %w", err)
+	}
+
+	// Verify it's actually a symlink
+	if info.Mode()&os.ModeSymlink == 0 {
+		return "", fmt.Errorf("not a symbolic link: %s", path)
+	}
+
+	// Make the path relative to the base directory
+	relPath, err := filepath.Rel(sfs.baseDir, absPath)
+if err != nil {
+	// This error implies the path is outside the base directory.
+	return "", fmt.Errorf("%w: failed to make path relative: %w", ErrPathTraversal, err)
+}
+
+	// Validate the symlink file path itself is within bounds
+	// Check for path traversal attempts
+	if strings.HasPrefix(relPath, ".."+string(filepath.Separator)) || relPath == ".." {
+		return "", fmt.Errorf("%w: symlink path escapes sandbox", ErrPathTraversal)
+	}
+
+	// Ensure no leading separator
+	relPath = strings.TrimPrefix(relPath, string(filepath.Separator))
+
+	// Use os.Root.Readlink to securely read the symlink target
+	return sfs.root.Readlink(relPath)
 }

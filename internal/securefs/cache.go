@@ -66,16 +66,21 @@ func (pc *PathCache) GetAbsPath(path string, compute func(string) (string, error
 		pc.absPathCache.Delete(path)
 	}
 
-	// Compute and cache result
+	// Compute result
 	result, err := compute(path)
-	cacheEntry := CacheEntry{
-		value: absPathResult{
-			path: result,
-			err:  err,
-		},
-		expiry: time.Now().Add(pc.absPathTTL),
+
+	// Only cache successful results - errors should not be cached
+	// to allow transient failures to be retried immediately
+	if err == nil {
+		cacheEntry := CacheEntry{
+			value: absPathResult{
+				path: result,
+				err:  nil,
+			},
+			expiry: time.Now().Add(pc.absPathTTL),
+		}
+		pc.absPathCache.Store(path, cacheEntry)
 	}
-	pc.absPathCache.Store(path, cacheEntry)
 
 	return result, err
 }
@@ -93,16 +98,21 @@ func (pc *PathCache) GetValidatePath(path string, compute func(string) (string, 
 		pc.validatePathCache.Delete(path)
 	}
 
-	// Compute and cache result
+	// Compute result
 	result, err := compute(path)
-	cacheEntry := CacheEntry{
-		value: validatePathResult{
-			path: result,
-			err:  err,
-		},
-		expiry: time.Now().Add(pc.validateTTL),
+
+	// Only cache successful results - errors should not be cached
+	// to allow transient failures to be retried immediately
+	if err == nil {
+		cacheEntry := CacheEntry{
+			value: validatePathResult{
+				path: result,
+				err:  nil,
+			},
+			expiry: time.Now().Add(pc.validateTTL),
+		}
+		pc.validatePathCache.Store(path, cacheEntry)
 	}
-	pc.validatePathCache.Store(path, cacheEntry)
 
 	return result, err
 }
@@ -120,16 +130,21 @@ func (pc *PathCache) GetWithinBase(key string, compute func() (bool, error)) (bo
 		pc.withinBaseCache.Delete(key)
 	}
 
-	// Compute and cache result
+	// Compute result
 	within, err := compute()
-	cacheEntry := CacheEntry{
-		value: withinBaseResult{
-			within: within,
-			err:    err,
-		},
-		expiry: time.Now().Add(pc.withinBaseTTL),
+
+	// Only cache successful results - errors should not be cached
+	// to allow transient failures to be retried immediately
+	if err == nil {
+		cacheEntry := CacheEntry{
+			value: withinBaseResult{
+				within: within,
+				err:    nil,
+			},
+			expiry: time.Now().Add(pc.withinBaseTTL),
+		}
+		pc.withinBaseCache.Store(key, cacheEntry)
 	}
-	pc.withinBaseCache.Store(key, cacheEntry)
 
 	return within, err
 }
@@ -147,16 +162,21 @@ func (pc *PathCache) GetSymlinkResolution(path string, compute func(string) (str
 		pc.symlinkCache.Delete(path)
 	}
 
-	// Compute and cache result
+	// Compute result
 	resolved, err := compute(path)
-	cacheEntry := CacheEntry{
-		value: symlinkResult{
-			resolved: resolved,
-			err:      err,
-		},
-		expiry: time.Now().Add(pc.symlinkTTL),
+
+	// Only cache successful results - errors should not be cached
+	// to allow transient failures to be retried immediately
+	if err == nil {
+		cacheEntry := CacheEntry{
+			value: symlinkResult{
+				resolved: resolved,
+				err:      nil,
+			},
+			expiry: time.Now().Add(pc.symlinkTTL),
+		}
+		pc.symlinkCache.Store(path, cacheEntry)
 	}
-	pc.symlinkCache.Store(path, cacheEntry)
 
 	return resolved, err
 }
@@ -174,16 +194,21 @@ func (pc *PathCache) GetStat(path string, compute func(string) (fs.FileInfo, err
 		pc.statCache.Delete(path)
 	}
 
-	// Compute and cache result
+	// Compute result
 	info, err := compute(path)
-	cacheEntry := CacheEntry{
-		value: statResult{
-			info: info,
-			err:  err,
-		},
-		expiry: time.Now().Add(pc.statTTL),
+
+	// Only cache successful results - errors should not be cached
+	// to allow transient failures to be retried immediately
+	if err == nil {
+		cacheEntry := CacheEntry{
+			value: statResult{
+				info: info,
+				err:  nil,
+			},
+			expiry: time.Now().Add(pc.statTTL),
+		}
+		pc.statCache.Store(path, cacheEntry)
 	}
-	pc.statCache.Store(path, cacheEntry)
 
 	return info, err
 }
