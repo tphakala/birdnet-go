@@ -100,6 +100,10 @@ func (c *Controller) initAuthRoutes() {
 	// Routes that don't require authentication (but are rate limited)
 	authGroup.POST("/login", c.Login, loginRateLimiter)
 
+	// OAuth callback endpoint - public, completes the OAuth flow
+	// This is the V2 replacement for /api/v1/oauth2/callback
+	authGroup.GET("/callback", c.OAuthCallback)
+
 	// Routes that require authentication
 	protectedGroup := authGroup.Group("", c.AuthMiddleware)
 	protectedGroup.POST("/logout", c.Logout)
@@ -244,8 +248,8 @@ func (c *Controller) Login(ctx echo.Context) error {
 		}
 	}
 	
-	// Construct the OAuth callback URL with the validated redirect
-	redirectURL := fmt.Sprintf("/api/v1/oauth2/callback?code=%s&redirect=%s", authCode, finalRedirect)
+	// Construct the V2 OAuth callback URL with the validated redirect
+	redirectURL := fmt.Sprintf("/api/v2/auth/callback?code=%s&redirect=%s", authCode, finalRedirect)
 
 	if c.apiLogger != nil {
 		c.apiLogger.Info("Returning successful login response with redirect",
@@ -518,6 +522,131 @@ func ensurePathWithinBase(redirectPath, basePath string) string {
 
 	// Otherwise, just use the base path
 	return basePath
+}
+
+// OAuthCallback handles GET /api/v2/auth/callback
+// Completes the OAuth flow by exchanging auth code for access token and establishing session.
+// This endpoint is the V2 equivalent of /api/v1/oauth2/callback.
+func (c *Controller) OAuthCallback(ctx echo.Context) error {
+	code := ctx.QueryParam("code")
+	redirect := ctx.QueryParam("redirect")
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Handling V2 OAuth callback",
+			"redirect", redirect,
+			"ip", ctx.RealIP(),
+			"path", ctx.Request().URL.Path,
+		)
+	}
+
+	// 1. Validate code parameter
+	if code == "" {
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Missing authorization code in callback",
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
+		return ctx.String(http.StatusBadRequest, "Missing authorization code")
+	}
+
+	// 2. Exchange auth code for access token (with 15s timeout)
+	exchangeCtx, cancel := context.WithTimeout(ctx.Request().Context(), 15*time.Second)
+	defer cancel()
+
+	accessToken, err := c.AuthService.ExchangeAuthCode(exchangeCtx, code)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			if c.apiLogger != nil {
+				c.apiLogger.Warn("Timeout exchanging authorization code",
+					"error", err.Error(),
+					"ip", ctx.RealIP(),
+				)
+			}
+			return ctx.String(http.StatusGatewayTimeout, "Login timed out. Please try again.")
+		}
+		if c.apiLogger != nil {
+			c.apiLogger.Warn("Failed to exchange authorization code",
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+			)
+		}
+		return ctx.String(http.StatusUnauthorized, "Unable to complete login at this time. Please try again.")
+	}
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Successfully exchanged authorization code for access token",
+			"ip", ctx.RealIP(),
+		)
+	}
+
+	// 3. Establish session (handles session fixation mitigation)
+	if err := c.AuthService.EstablishSession(ctx, accessToken); err != nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("Failed to establish session",
+				"error", err.Error(),
+				"ip", ctx.RealIP(),
+			)
+		}
+		return ctx.String(http.StatusInternalServerError, "Session error during login. Please try again.")
+	}
+
+	// 4. Validate redirect path (prevent open redirects)
+	safeRedirect := validateAndSanitizeRedirect(redirect)
+
+	if c.apiLogger != nil {
+		c.apiLogger.Info("Redirecting user to final destination",
+			"destination", safeRedirect,
+			"ip", ctx.RealIP(),
+		)
+	}
+
+	// 5. Redirect to final destination
+	return ctx.Redirect(http.StatusFound, safeRedirect)
+}
+
+// validateAndSanitizeRedirect validates and sanitizes a redirect path to prevent open redirects.
+// Returns "/" if the path is invalid, otherwise returns the sanitized path.
+func validateAndSanitizeRedirect(redirect string) string {
+	safeRedirect := "/" // Default redirect
+
+	if redirect == "" {
+		return safeRedirect
+	}
+
+	// Replace ALL backslashes with forward slashes for robust normalization
+	cleanedRedirect := strings.ReplaceAll(redirect, "\\", "/")
+	parsedURL, err := url.Parse(cleanedRedirect)
+
+	// Security validation for redirect paths to prevent open redirect vulnerabilities
+	// We ONLY accept relative paths that:
+	// 1. Parse without error
+	// 2. Have no scheme (not http://, https://, etc.)
+	// 3. Have no host (not //evil.com)
+	// 4. Start with a single '/' (valid relative path)
+	// 5. Do NOT start with '//' or '/\' (which browsers interpret as protocol-relative URLs)
+	if err == nil && parsedURL.Scheme == "" && parsedURL.Host == "" &&
+		strings.HasPrefix(parsedURL.Path, "/") &&
+		(len(parsedURL.Path) <= 1 || (parsedURL.Path[1] != '/' && parsedURL.Path[1] != '\\')) {
+
+		// Additional check for CR/LF injection characters in path and query
+		pathContainsCRLF := strings.ContainsAny(parsedURL.Path, "\r\n") ||
+			strings.Contains(strings.ToLower(parsedURL.Path), "%0d") ||
+			strings.Contains(strings.ToLower(parsedURL.Path), "%0a")
+		queryContainsCRLF := strings.ContainsAny(parsedURL.RawQuery, "\r\n") ||
+			strings.Contains(strings.ToLower(parsedURL.RawQuery), "%0d") ||
+			strings.Contains(strings.ToLower(parsedURL.RawQuery), "%0a")
+
+		if !pathContainsCRLF && !queryContainsCRLF {
+			// Passed all checks, construct safe redirect preserving path and query
+			safeRedirect = parsedURL.Path
+			if parsedURL.RawQuery != "" {
+				safeRedirect += "?" + parsedURL.RawQuery
+			}
+		}
+	}
+
+	return safeRedirect
 }
 
 // randomDelay introduces a random sleep duration within the specified range [minMs, maxMs).

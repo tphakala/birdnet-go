@@ -641,7 +641,7 @@ describe('LoginModal', () => {
       postSpy.mockResolvedValue({
         success: true,
         message: 'Login successful',
-        redirectUrl: '/api/v1/oauth2/callback?code=123&redirect=/ui/',
+        redirectUrl: '/api/v2/auth/callback?code=123&redirect=/ui/',
       });
 
       mockWindowLocation();
@@ -752,7 +752,7 @@ describe('LoginModal', () => {
       postSpy.mockResolvedValue({
         success: true,
         message: 'Login successful',
-        redirectUrl: '/api/v1/oauth2/callback?code=123&state=settings%2Fmain', // OAuth callback
+        redirectUrl: '/api/v2/auth/callback?code=123&state=settings%2Fmain', // OAuth callback
       });
 
       loginModalTest.render({
@@ -781,7 +781,7 @@ describe('LoginModal', () => {
       });
 
       // Verify OAuth redirect happens immediately
-      expect(mockLocation.href).toBe('/api/v1/oauth2/callback?code=123&state=settings%2Fmain');
+      expect(mockLocation.href).toBe('/api/v2/auth/callback?code=123&state=settings%2Fmain');
     });
 
     it('should handle edge case of user on root path', async () => {

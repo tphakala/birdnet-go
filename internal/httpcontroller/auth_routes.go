@@ -19,6 +19,9 @@ func (s *Server) initAuthRoutes() {
 	g.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(10)))
 
 	// OAuth2 routes (basic auth flow)
+	// DEPRECATED: These V1 OAuth2 routes are deprecated. Use /api/v2/auth/* instead.
+	// The V2 login endpoint POST /api/v2/auth/login now redirects to /api/v2/auth/callback.
+	// These routes are kept for backward compatibility with older clients.
 	g.GET("/api/v1/oauth2/authorize", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthorize))
 	g.POST("/api/v1/oauth2/token", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthToken))
 	g.GET("/api/v1/oauth2/callback", s.Handlers.WithErrorHandling(s.OAuth2Server.HandleBasicAuthCallback))
