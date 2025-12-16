@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/rand"
 	"net"
 	"strings"
@@ -151,6 +150,14 @@ const (
 	pubTimeout  = 12 * time.Second
 )
 
+// State constants for test results
+const (
+	stateRunning   = "running"
+	stateCompleted = "completed"
+	stateFailed    = "failed"
+	stateTimeout   = "timeout"
+)
+
 // networkTest represents a generic network test function
 type networkTest func(context.Context) error
 
@@ -187,43 +194,45 @@ func runNetworkTest(ctx context.Context, stage TestStage, test networkTest) Test
 			Message: fmt.Sprintf("%s operation timed out", stage),
 		}
 	case err := <-resultChan:
-		if err != nil {
-			// Extract error details for better categorization
-			errorMessage := err.Error()
-			errorCategory := "generic"
-
-			// Check if it's already an enhanced error
-			var enhancedErr *errors.EnhancedError
-			if errors.As(err, &enhancedErr) {
-				errorCategory = enhancedErr.GetCategory()
-			} else {
-				// Categorize based on error content
-				errorLower := strings.ToLower(errorMessage)
-				switch {
-				case strings.Contains(errorLower, "dns"):
-					errorCategory = "network"
-				case strings.Contains(errorLower, "connection refused"), strings.Contains(errorLower, "tcp"):
-					errorCategory = "network"
-				case strings.Contains(errorLower, "mqtt"), strings.Contains(errorLower, "auth"), strings.Contains(errorLower, "unauthorized"):
-					errorCategory = "mqtt-connection"
-				case strings.Contains(errorLower, "publish"), strings.Contains(errorLower, "timeout"):
-					errorCategory = "mqtt-publish"
-				}
-			}
-
+		if err == nil {
 			return TestResult{
-				Success: false,
+				Success: true,
 				Stage:   stage.String(),
-				Error:   errorMessage,
-				Message: fmt.Sprintf("Failed to perform %s (%s)", stage, errorCategory),
+				Message: fmt.Sprintf("Successfully completed %s", stage),
 			}
 		}
+		// Extract error details for better categorization
+		errorCategory := categorizeError(err)
+		return TestResult{
+			Success: false,
+			Stage:   stage.String(),
+			Error:   err.Error(),
+			Message: fmt.Sprintf("Failed to perform %s (%s)", stage, errorCategory),
+		}
+	}
+}
+
+// categorizeError determines the error category based on error type and content
+func categorizeError(err error) string {
+	// Check if it's already an enhanced error
+	var enhancedErr *errors.EnhancedError
+	if errors.As(err, &enhancedErr) {
+		return enhancedErr.GetCategory()
 	}
 
-	return TestResult{
-		Success: true,
-		Stage:   stage.String(),
-		Message: fmt.Sprintf("Successfully completed %s", stage),
+	// Categorize based on error content
+	errorLower := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(errorLower, "dns"):
+		return "network"
+	case strings.Contains(errorLower, "connection refused"), strings.Contains(errorLower, "tcp"):
+		return "network"
+	case strings.Contains(errorLower, "mqtt"), strings.Contains(errorLower, "auth"), strings.Contains(errorLower, "unauthorized"):
+		return "mqtt-connection"
+	case strings.Contains(errorLower, "publish"), strings.Contains(errorLower, "timeout"):
+		return "mqtt-publish"
+	default:
+		return "generic"
 	}
 }
 
@@ -255,74 +264,72 @@ func (c *client) testTCPStage(ctx context.Context) TestResult {
 	defer tcpCancel()
 
 	return runNetworkTest(tcpCtx, TCPConnection, func(ctx context.Context) error {
-		var d net.Dialer
 		hostPort := extractHostPort(c.config.Broker)
-		
-		// For TLS connections, we should test the TLS handshake as well
 		if c.config.TLS.Enabled {
-			tlsConfig, err := c.createTLSConfig()
-			if err != nil {
-				return errors.New(err).
-					Component("mqtt").
-					Category(errors.CategoryConfiguration).
-					Context("broker", c.config.Broker).
-					Context("operation", "tls_config_test").
-					Build()
-			}
-			
-			// Dial TCP first
-			conn, err := d.DialContext(ctx, "tcp", hostPort)
-			if err != nil {
-				enhancedErr := errors.New(err).
-					Component("mqtt").
-					Category(errors.CategoryNetwork).
-					Context("broker", c.config.Broker).
-					Context("host_port", hostPort).
-					Context("operation", "tcp_connection_test").
-					Build()
-				return enhancedErr
-			}
-			
-			// Perform TLS handshake
-			tlsConn := tls.Client(conn, tlsConfig)
-			if err := tlsConn.HandshakeContext(ctx); err != nil {
-				_ = conn.Close()
-				enhancedErr := errors.New(err).
-					Component("mqtt").
-					Category(errors.CategoryNetwork).
-					Context("broker", c.config.Broker).
-					Context("host_port", hostPort).
-					Context("operation", "tls_handshake_test").
-					Build()
-				return enhancedErr
-			}
-			
-			defer func() {
-				if err := tlsConn.Close(); err != nil {
-					log.Printf("Failed to close TLS connection: %v", err)
-				}
-			}()
-		} else {
-			// Regular TCP connection
-			conn, err := d.DialContext(ctx, "tcp", hostPort)
-			if err != nil {
-				enhancedErr := errors.New(err).
-					Component("mqtt").
-					Category(errors.CategoryNetwork).
-					Context("broker", c.config.Broker).
-					Context("host_port", hostPort).
-					Context("operation", "tcp_connection_test").
-					Build()
-				return enhancedErr
-			}
-			defer func() {
-				if err := conn.Close(); err != nil {
-					log.Printf("Failed to close connection: %v", err)
-				}
-			}()
+			return c.testTLSConnection(ctx, hostPort)
 		}
-		return nil
+		return c.testPlainTCPConnection(ctx, hostPort)
 	})
+}
+
+// testTLSConnection tests TCP connection with TLS handshake
+func (c *client) testTLSConnection(ctx context.Context, hostPort string) error {
+	tlsConfig, err := c.createTLSConfig()
+	if err != nil {
+		return errors.New(err).
+			Component("mqtt").
+			Category(errors.CategoryConfiguration).
+			Context("broker", c.config.Broker).
+			Context("operation", "tls_config_test").
+			Build()
+	}
+
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "tcp", hostPort)
+	if err != nil {
+		return c.buildTCPConnectionError(err, hostPort)
+	}
+
+	tlsConn := tls.Client(conn, tlsConfig)
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		_ = conn.Close()
+		return errors.New(err).
+			Component("mqtt").
+			Category(errors.CategoryNetwork).
+			Context("broker", c.config.Broker).
+			Context("host_port", hostPort).
+			Context("operation", "tls_handshake_test").
+			Build()
+	}
+
+	if err := tlsConn.Close(); err != nil {
+		mqttLogger.Warn("Failed to close TLS connection", "error", err)
+	}
+	return nil
+}
+
+// testPlainTCPConnection tests plain TCP connection without TLS
+func (c *client) testPlainTCPConnection(ctx context.Context, hostPort string) error {
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "tcp", hostPort)
+	if err != nil {
+		return c.buildTCPConnectionError(err, hostPort)
+	}
+	if err := conn.Close(); err != nil {
+		mqttLogger.Warn("Failed to close connection", "error", err)
+	}
+	return nil
+}
+
+// buildTCPConnectionError creates a standardized TCP connection error
+func (c *client) buildTCPConnectionError(err error, hostPort string) error {
+	return errors.New(err).
+		Component("mqtt").
+		Category(errors.CategoryNetwork).
+		Context("broker", c.config.Broker).
+		Context("host_port", hostPort).
+		Context("operation", "tcp_connection_test").
+		Build()
 }
 
 // testMQTTStage performs MQTT connection testing
@@ -355,7 +362,7 @@ func (c *client) testPublishStage(ctx context.Context) TestResult {
 			CommonName:     "Whooper Swan",
 			ScientificName: "Cygnus cygnus",
 			Confidence:     0.95,
-			Source:         datastore.AudioSource{
+			Source: datastore.AudioSource{
 				ID:          "mqtt_test",
 				SafeString:  "MQTT Test",
 				DisplayName: "MQTT Test",
@@ -406,179 +413,127 @@ func (c *client) testPublishStage(ctx context.Context) TestResult {
 
 // TestConnection performs a multi-stage test of the MQTT connection and functionality
 func (c *client) TestConnection(ctx context.Context, resultChan chan<- TestResult) {
-	// Force debug logging during the test, restoring original value afterwards
 	originalDebug := c.IsDebug()
 	c.SetDebug(true)
-	defer func() {
-		c.SetDebug(originalDebug)
-	}()
+	defer c.SetDebug(originalDebug)
 
-	// Helper function to send a result
-	sendResult := func(result TestResult) {
-		// Mark progress messages
-		result.IsProgress = strings.Contains(strings.ToLower(result.Message), "running") ||
-			strings.Contains(strings.ToLower(result.Message), "testing") ||
-			strings.Contains(strings.ToLower(result.Message), "establishing") ||
-			strings.Contains(strings.ToLower(result.Message), "initializing")
+	sendResult := createResultSender(ctx, resultChan)
 
-		// Set state based on result
-		switch {
-		case result.State != "":
-			// Keep existing state if explicitly set
-		case result.Error != "":
-			result.State = "failed"
-			result.Success = false
-			result.IsProgress = false
-		case result.IsProgress:
-			result.State = "running"
-		case result.Success:
-			result.State = "completed"
-		case strings.Contains(strings.ToLower(result.Error), "timeout") ||
-			strings.Contains(strings.ToLower(result.Error), "deadline exceeded"):
-			result.State = "timeout"
-		default:
-			result.State = "failed"
-		}
-
-		// Add timestamp
-		result.Timestamp = time.Now().Format(time.RFC3339)
-
-		// Log the result with emoji
-		emoji := "❌"
-		if result.Success {
-			emoji = "✅"
-		}
-
-		// Format the log message
-		logMsg := result.Message
-		if !result.Success && result.Error != "" {
-			logMsg = fmt.Sprintf("%s: %s", result.Message, result.Error)
-		}
-		log.Printf("%s %s: %s", emoji, result.Stage, logMsg)
-
-		// Send result to channel
-		select {
-		case <-ctx.Done():
-			return
-		case resultChan <- result:
-		}
-	}
-
-	// Check context before starting
 	if err := ctx.Err(); err != nil {
 		sendResult(TestResult{
-			Success: false,
-			Stage:   "Test Setup",
-			Message: "Test cancelled",
-			Error:   err.Error(),
-			State:   "timeout",
+			Success: false, Stage: "Test Setup", Message: "Test cancelled",
+			Error: err.Error(), State: stateTimeout,
 		})
 		return
 	}
 
-	// Extract broker host for testing
 	brokerHost := extractHost(c.config.Broker)
-	isIP := isIPAddress(brokerHost)
+	c.runTestStages(ctx, brokerHost, sendResult)
+}
 
-	// Helper function to run a test stage
+// createResultSender creates a function that sends test results with proper state management
+func createResultSender(ctx context.Context, resultChan chan<- TestResult) func(TestResult) {
+	return func(result TestResult) {
+		resultPtr := &result
+		enrichTestResult(resultPtr)
+		logTestResult(resultPtr)
+		select {
+		case <-ctx.Done():
+		case resultChan <- result:
+		}
+	}
+}
+
+// enrichTestResult adds progress/state/timestamp to a test result
+func enrichTestResult(result *TestResult) {
+	msg := strings.ToLower(result.Message)
+	result.IsProgress = strings.Contains(msg, "running") ||
+		strings.Contains(msg, "testing") ||
+		strings.Contains(msg, "establishing") ||
+		strings.Contains(msg, "initializing")
+
+	// If there's an error, ensure Success and IsProgress are correctly set
+	if result.Error != "" {
+		result.Success = false
+		result.IsProgress = false
+	}
+
+	if result.State == "" {
+		result.State = determineResultState(result)
+	}
+	result.Timestamp = time.Now().Format(time.RFC3339)
+}
+
+// determineResultState determines the state based on result properties (pure function)
+func determineResultState(result *TestResult) string {
+	// Check for timeout errors first (most specific)
+	if result.Error != "" {
+		errorLower := strings.ToLower(result.Error)
+		if strings.Contains(errorLower, "timeout") || strings.Contains(errorLower, "deadline exceeded") {
+			return stateTimeout
+		}
+		return stateFailed
+	}
+
+	// Check state based on flags
+	switch {
+	case result.IsProgress:
+		return stateRunning
+	case result.Success:
+		return stateCompleted
+	default:
+		return stateFailed
+	}
+}
+
+// logTestResult logs the test result using structured logging
+func logTestResult(result *TestResult) {
+	if result.Success {
+		mqttLogger.Info("Test stage completed",
+			"stage", result.Stage,
+			"message", result.Message,
+		)
+	} else {
+		mqttLogger.Warn("Test stage failed",
+			"stage", result.Stage,
+			"message", result.Message,
+			"error", result.Error,
+		)
+	}
+}
+
+// runTestStages executes the test stages in sequence
+func (c *client) runTestStages(ctx context.Context, brokerHost string, sendResult func(TestResult)) {
 	runStage := func(stage TestStage, test func() TestResult) bool {
-		// Send progress message
 		sendResult(TestResult{
 			Success: true,
 			Stage:   stage.String(),
 			Message: fmt.Sprintf("Running %s test...", stage.String()),
 		})
-
-		// Execute the test
 		result := test()
 		sendResult(result)
 		return result.Success
 	}
 
 	// Stage 1: DNS Resolution (skip if IP address)
-	if !isIP {
-		if !runStage(DNSResolution, func() TestResult {
-			return c.testDNSStage(ctx, brokerHost)
-		}) {
+	if !isIPAddress(brokerHost) {
+		if !runStage(DNSResolution, func() TestResult { return c.testDNSStage(ctx, brokerHost) }) {
 			return
 		}
 	}
 
 	// Stage 2: TCP Connection
-	if !runStage(TCPConnection, func() TestResult {
-		return c.testTCPStage(ctx)
-	}) {
+	if !runStage(TCPConnection, func() TestResult { return c.testTCPStage(ctx) }) {
 		return
 	}
 
 	// Stage 3: MQTT Connection
-	if !runStage(MQTTConnection, func() TestResult {
-		return c.testMQTTStage(ctx)
-	}) {
+	if !runStage(MQTTConnection, func() TestResult { return c.testMQTTStage(ctx) }) {
 		return
 	}
 
 	// Stage 4: Message Publishing
-	runStage(MessagePublish, func() TestResult {
-		return c.testPublishStage(ctx)
-	})
-}
-
-// publishTestMessage publishes a test message using a mock Whooper Swan detection
-func (c *client) publishTestMessage(ctx context.Context) TestResult {
-	simulateDelay()
-
-	if simulateFailure() {
-		return TestResult{
-			Success: false,
-			Stage:   MessagePublish.String(),
-			Error:   "simulated message publishing failure",
-			Message: "Failed to publish test message",
-		}
-	}
-
-	// Create a mock detection for Whooper Swan
-	mockNote := datastore.Note{
-		Time:           time.Now().Format(time.RFC3339),
-		CommonName:     "Whooper Swan",
-		ScientificName: "Cygnus cygnus",
-		Confidence:     0.95,
-		Source:         datastore.AudioSource{
-			ID:          "mqtt_test",
-			SafeString:  "MQTT Test",
-			DisplayName: "MQTT Test",
-		},
-	}
-
-	// Convert to JSON
-	noteJson, err := json.Marshal(mockNote)
-	if err != nil {
-		return TestResult{
-			Success: false,
-			Stage:   MessagePublish.String(),
-			Error:   err.Error(),
-			Message: "Failed to create test message",
-		}
-	}
-
-	// Construct test topic with proper handling of base topic
-	testTopic := constructTestTopic(c.config.Topic)
-
-	err = c.Publish(ctx, testTopic, string(noteJson))
-	if err != nil {
-		return TestResult{
-			Success: false,
-			Stage:   MessagePublish.String(),
-			Error:   err.Error(),
-			Message: "Failed to publish test message",
-		}
-	}
-
-	return TestResult{
-		Success: true,
-		Stage:   MessagePublish.String(),
-		Message: "Successfully published test message",
-	}
+	runStage(MessagePublish, func() TestResult { return c.testPublishStage(ctx) })
 }
 
 // constructTestTopic creates a proper test topic path handling edge cases
@@ -592,111 +547,6 @@ func constructTestTopic(baseTopic string) string {
 	}
 
 	return baseTopic + "/test"
-}
-
-// testDNSResolution tests DNS resolution for the broker hostname
-func testDNSResolution(ctx context.Context, host string) TestResult {
-	simulateDelay()
-
-	if simulateFailure() {
-		return TestResult{
-			Success: false,
-			Stage:   DNSResolution.String(),
-			Error:   "simulated DNS resolution failure",
-			Message: fmt.Sprintf("Failed to resolve hostname: %s", host),
-		}
-	}
-
-	// Create a channel for the DNS lookup result
-	resultChan := make(chan error, 1)
-
-	go func() {
-		_, err := net.LookupHost(host)
-		resultChan <- err
-	}()
-
-	// Wait for either the context to be done or the lookup to complete
-	select {
-	case <-ctx.Done():
-		return TestResult{
-			Success: false,
-			Stage:   DNSResolution.String(),
-			Error:   "DNS resolution timeout",
-			Message: fmt.Sprintf("DNS resolution for %s timed out", host),
-		}
-	case err := <-resultChan:
-		if err != nil {
-			return TestResult{
-				Success: false,
-				Stage:   DNSResolution.String(),
-				Error:   err.Error(),
-				Message: fmt.Sprintf("Failed to resolve hostname: %s", host),
-			}
-		}
-	}
-
-	return TestResult{
-		Success: true,
-		Stage:   DNSResolution.String(),
-		Message: fmt.Sprintf("Successfully resolved hostname: %s", host),
-	}
-}
-
-// testTCPConnection tests TCP connection to the broker
-func testTCPConnection(ctx context.Context, broker string) TestResult {
-	simulateDelay()
-
-	if simulateFailure() {
-		return TestResult{
-			Success: false,
-			Stage:   TCPConnection.String(),
-			Error:   "simulated TCP connection failure",
-			Message: fmt.Sprintf("Failed to establish TCP connection to %s", broker),
-		}
-	}
-
-	// Extract host and port from broker URL
-	hostPort := extractHostPort(broker)
-
-	// Create a channel for the connection result
-	resultChan := make(chan error, 1)
-
-	go func() {
-		var d net.Dialer
-		conn, err := d.DialContext(ctx, "tcp", hostPort)
-		if err == nil {
-			if closeErr := conn.Close(); closeErr != nil {
-				log.Printf("Failed to close connection: %v", closeErr)
-			}
-		}
-		resultChan <- err
-	}()
-
-	// Wait for either the context to be done or the connection to complete
-	select {
-	case <-ctx.Done():
-		return TestResult{
-			Success: false,
-			Stage:   TCPConnection.String(),
-			Error:   "TCP connection timeout",
-			Message: fmt.Sprintf("TCP connection to %s timed out", hostPort),
-		}
-	case err := <-resultChan:
-		if err != nil {
-			return TestResult{
-				Success: false,
-				Stage:   TCPConnection.String(),
-				Error:   err.Error(),
-				Message: fmt.Sprintf("Failed to establish TCP connection to %s", hostPort),
-			}
-		}
-	}
-
-	return TestResult{
-		Success: true,
-		Stage:   TCPConnection.String(),
-		Message: fmt.Sprintf("Successfully established TCP connection to %s", hostPort),
-	}
 }
 
 // extractHost extracts the hostname from broker URL
