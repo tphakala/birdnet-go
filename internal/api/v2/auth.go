@@ -551,7 +551,18 @@ func (c *Controller) OAuthCallback(ctx echo.Context) error {
 		return ctx.String(http.StatusBadRequest, "Missing authorization code")
 	}
 
-	// 2. Exchange auth code for access token (with 15s timeout)
+	// 2. Defensive check: ensure AuthService is available
+	if c.AuthService == nil {
+		if c.apiLogger != nil {
+			c.apiLogger.Error("AuthService is nil in OAuthCallback - server misconfiguration",
+				"ip", ctx.RealIP(),
+				"path", ctx.Request().URL.Path,
+			)
+		}
+		return ctx.String(http.StatusServiceUnavailable, "Authentication service unavailable. Please try again later.")
+	}
+
+	// 3. Exchange auth code for access token (with 15s timeout)
 	exchangeCtx, cancel := context.WithTimeout(ctx.Request().Context(), 15*time.Second)
 	defer cancel()
 
@@ -581,7 +592,7 @@ func (c *Controller) OAuthCallback(ctx echo.Context) error {
 		)
 	}
 
-	// 3. Establish session (handles session fixation mitigation)
+	// 4. Establish session (handles session fixation mitigation)
 	if err := c.AuthService.EstablishSession(ctx, accessToken); err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to establish session",
@@ -592,7 +603,7 @@ func (c *Controller) OAuthCallback(ctx echo.Context) error {
 		return ctx.String(http.StatusInternalServerError, "Session error during login. Please try again.")
 	}
 
-	// 4. Validate redirect path (prevent open redirects)
+	// 5. Validate redirect path (prevent open redirects)
 	safeRedirect := validateAndSanitizeRedirect(redirect)
 
 	if c.apiLogger != nil {
@@ -602,7 +613,7 @@ func (c *Controller) OAuthCallback(ctx echo.Context) error {
 		)
 	}
 
-	// 5. Redirect to final destination
+	// 6. Redirect to final destination
 	return ctx.Redirect(http.StatusFound, safeRedirect)
 }
 
