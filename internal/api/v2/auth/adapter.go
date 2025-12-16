@@ -2,6 +2,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"log/slog"
@@ -252,4 +253,40 @@ func (a *SecurityAdapter) Logout(c echo.Context) error {
 
 	// Log out from gothic session
 	return gothic.Logout(c.Response().Writer, c.Request())
+}
+
+// ExchangeAuthCode exchanges an authorization code for an access token.
+// This delegates to the underlying OAuth2Server.
+func (a *SecurityAdapter) ExchangeAuthCode(ctx context.Context, code string) (string, error) {
+	return a.OAuth2Server.ExchangeAuthCode(ctx, code)
+}
+
+// EstablishSession creates a new session with the given access token.
+// Handles session fixation mitigation by clearing old session first.
+func (a *SecurityAdapter) EstablishSession(c echo.Context, accessToken string) error {
+	// Session fixation mitigation: clear old session first
+	// This regenerates the session ID to prevent session fixation attacks
+	if err := gothic.Logout(c.Response().Writer, c.Request()); err != nil {
+		if a.logger != nil {
+			a.logger.Warn("Error during session regeneration (session fixation mitigation)", "error", err)
+		}
+		// Continue anyway - StoreInSession might still create a new session
+	} else {
+		if a.logger != nil {
+			a.logger.Info("Successfully cleared old session before storing new token (session fixation mitigation)")
+		}
+	}
+
+	// Store access token in new session
+	if err := gothic.StoreInSession("access_token", accessToken, c.Request(), c.Response()); err != nil {
+		if a.logger != nil {
+			a.logger.Error("Failed to store access token in new session after logout/regeneration", "error", err)
+		}
+		return err
+	}
+
+	if a.logger != nil {
+		a.logger.Info("Successfully stored access token in new session")
+	}
+	return nil
 }

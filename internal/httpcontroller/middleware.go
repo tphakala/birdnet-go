@@ -29,6 +29,7 @@ var publicV2ApiPrefixes = map[string]struct{}{
 	"/api/v2/audio":               {},
 	"/api/v2/health":              {}, // Health check should always be public
 	"/api/v2/weather":             {}, // Weather endpoints should be public
+	"/api/v2/auth/callback":       {}, // OAuth callback must be public to complete authentication
 }
 
 // configureMiddleware sets up middleware for the server.
@@ -81,7 +82,8 @@ func (s *Server) CSRFMiddleware() echo.MiddlewareFunc {
 				strings.HasPrefix(path, "/api/v1/auth/") ||
 				strings.HasPrefix(path, "/api/v1/oauth2/token") ||
 				path == "/api/v1/oauth2/callback" ||
-				path == "/api/v2/auth/login" // Skip CSRF for V2 login endpoint
+				path == "/api/v2/auth/login" || // Skip CSRF for V2 login endpoint
+				path == "/api/v2/auth/logout" // Skip CSRF for V2 logout endpoint (low risk - only invalidates session)
 		},
 		ErrorHandler: func(err error, c echo.Context) error {
 			// Keep the original debug logging for backward compatibility

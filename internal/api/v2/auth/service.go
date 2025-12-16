@@ -2,6 +2,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 
 	"github.com/labstack/echo/v4"
@@ -60,4 +61,12 @@ type Service interface {
 	// Logout invalidates the current session/token.
 	// Returns nil on success, or ErrLogoutFailed on failure.
 	Logout(c echo.Context) error
+
+	// ExchangeAuthCode exchanges an authorization code for an access token.
+	// Returns the access token on success, or error on failure.
+	ExchangeAuthCode(ctx context.Context, code string) (string, error)
+
+	// EstablishSession creates a new session with the given access token.
+	// Handles session fixation mitigation by clearing old session first.
+	EstablishSession(c echo.Context, accessToken string) error
 }

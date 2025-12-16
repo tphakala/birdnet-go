@@ -64,6 +64,18 @@ type OAuth2Server struct {
 // For testing purposes
 var testConfigPath string
 
+// NewOAuth2ServerForTesting creates an OAuth2Server with the provided settings for testing.
+// This bypasses conf.GetSettings() and allows custom settings to be injected.
+func NewOAuth2ServerForTesting(settings *conf.Settings) *OAuth2Server {
+	return &OAuth2Server{
+		Settings:          settings,
+		authCodes:         make(map[string]AuthCode),
+		accessTokens:      make(map[string]AccessToken),
+		throttledMessages: make(map[string]time.Time),
+		debug:             settings.Security.Debug, // Use same source as production constructor
+	}
+}
+
 // Pre-defined errors for token validation
 var (
 	ErrTokenNotFound = errors.New("token not found")
