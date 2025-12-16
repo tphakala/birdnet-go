@@ -367,6 +367,13 @@ func (s *Service) CreateErrorNotification(err error) (*Notification, error) {
 	return s.CreateWithComponent(TypeError, priority, title, message, component)
 }
 
+// broadcastStats tracks broadcast results.
+type broadcastStats struct {
+	success   int
+	failed    int
+	cancelled int
+}
+
 // broadcast sends a notification to all subscribers.
 // Each subscriber receives a clone of the notification to prevent race conditions
 // if the original notification is modified after broadcast (e.g., adding metadata).
@@ -374,58 +381,78 @@ func (s *Service) broadcast(notification *Notification) {
 	s.subscribersMu.Lock()
 	defer s.subscribersMu.Unlock()
 
+	s.logBroadcastStart(notification)
+	activeSubscribers, stats := s.processSubscribers(notification)
+	s.subscribers = activeSubscribers
+	s.logBroadcastCompletion(notification, stats, len(activeSubscribers))
+}
+
+// logBroadcastStart logs the start of a broadcast operation.
+func (s *Service) logBroadcastStart(notification *Notification) {
 	if s.config.Debug && len(s.subscribers) > 0 {
 		s.logger.Debug("broadcasting notification",
 			"notification_id", notification.ID,
 			"type", notification.Type,
 			"subscriber_count", len(s.subscribers))
 	}
+}
 
-	// Track which subscribers are still active
+// processSubscribers sends notification to all subscribers and returns active ones.
+func (s *Service) processSubscribers(notification *Notification) ([]*Subscriber, broadcastStats) {
 	activeSubscribers := make([]*Subscriber, 0, len(s.subscribers))
-	var successCount, failedCount, cancelledCount int
+	var stats broadcastStats
 
 	for _, sub := range s.subscribers {
-		select {
-		case <-sub.ctx.Done():
-			// Subscriber cancelled, don't add to active list
-			cancelledCount++
+		if s.isSubscriberCancelled(sub) {
+			stats.cancelled++
 			continue
-		default:
-			// Subscriber is still active
-			activeSubscribers = append(activeSubscribers, sub)
+		}
 
-			// Clone the notification for each subscriber to prevent race conditions.
-			// This ensures that if the caller modifies the notification after broadcast
-			// (e.g., adding metadata in NotificationWorker.ProcessEvent), the subscribers
-			// have their own isolated copy of the Metadata map.
-			clone := notification.Clone()
-
-			// Try to send notification clone
-			select {
-			case sub.ch <- clone:
-				// Successfully sent
-				successCount++
-			default:
-				// Channel is full, skip this subscriber
-				failedCount++
-				if s.logger != nil {
-					s.logger.Debug("notification channel full, skipping subscriber")
-				}
-			}
+		activeSubscribers = append(activeSubscribers, sub)
+		if s.sendToSubscriber(sub, notification) {
+			stats.success++
+		} else {
+			stats.failed++
 		}
 	}
 
-	// Update the subscribers list to only include active ones
-	s.subscribers = activeSubscribers
+	return activeSubscribers, stats
+}
 
-	if s.config.Debug && (successCount > 0 || failedCount > 0 || cancelledCount > 0) {
+// isSubscriberCancelled checks if a subscriber's context is cancelled.
+func (s *Service) isSubscriberCancelled(sub *Subscriber) bool {
+	select {
+	case <-sub.ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+// sendToSubscriber sends a cloned notification to a subscriber.
+// Returns true if sent successfully, false if channel was full.
+func (s *Service) sendToSubscriber(sub *Subscriber, notification *Notification) bool {
+	clone := notification.Clone()
+	select {
+	case sub.ch <- clone:
+		return true
+	default:
+		if s.logger != nil {
+			s.logger.Debug("notification channel full, skipping subscriber")
+		}
+		return false
+	}
+}
+
+// logBroadcastCompletion logs the completion of a broadcast operation.
+func (s *Service) logBroadcastCompletion(notification *Notification, stats broadcastStats, activeCount int) {
+	if s.config.Debug && (stats.success > 0 || stats.failed > 0 || stats.cancelled > 0) {
 		s.logger.Debug("broadcast completed",
 			"notification_id", notification.ID,
-			"success_count", successCount,
-			"failed_count", failedCount,
-			"cancelled_count", cancelledCount,
-			"active_subscribers", len(activeSubscribers))
+			"success_count", stats.success,
+			"failed_count", stats.failed,
+			"cancelled_count", stats.cancelled,
+			"active_subscribers", activeCount)
 	}
 }
 
@@ -436,31 +463,7 @@ func (s *Service) cleanupLoop() {
 	for {
 		select {
 		case <-s.cleanupTicker.C:
-			if s.config.Debug {
-				// Count expired notifications before cleanup
-				filter := &FilterOptions{}
-				notifications, _ := s.store.List(filter)
-				var expiredCount int
-				for _, n := range notifications {
-					if n.IsExpired() {
-						expiredCount++
-					}
-				}
-				if expiredCount > 0 {
-					s.logger.Debug("starting notification cleanup",
-						"expired_count", expiredCount,
-						"total_count", len(notifications))
-				}
-			}
-			
-			if err := s.store.DeleteExpired(); err != nil {
-				// Log error but don't stop the cleanup loop
-				if s.logger != nil {
-					s.logger.Error("error cleaning up expired notifications", "error", err)
-				}
-			} else if s.config.Debug {
-				s.logger.Debug("notification cleanup completed")
-			}
+			s.performCleanup()
 		case <-s.ctx.Done():
 			if s.config.Debug {
 				s.logger.Debug("notification cleanup loop shutting down")
@@ -468,6 +471,46 @@ func (s *Service) cleanupLoop() {
 			return
 		}
 	}
+}
+
+// performCleanup executes a single cleanup cycle with optional debug logging.
+func (s *Service) performCleanup() {
+	s.logCleanupStart()
+
+	if err := s.store.DeleteExpired(); err != nil {
+		if s.logger != nil {
+			s.logger.Error("error cleaning up expired notifications", "error", err)
+		}
+	} else if s.config.Debug {
+		s.logger.Debug("notification cleanup completed")
+	}
+}
+
+// logCleanupStart logs debug info about expired notifications before cleanup.
+func (s *Service) logCleanupStart() {
+	if !s.config.Debug {
+		return
+	}
+
+	notifications, _ := s.store.List(&FilterOptions{})
+	expiredCount := s.countExpired(notifications)
+
+	if expiredCount > 0 {
+		s.logger.Debug("starting notification cleanup",
+			"expired_count", expiredCount,
+			"total_count", len(notifications))
+	}
+}
+
+// countExpired counts expired notifications in a slice.
+func (s *Service) countExpired(notifications []*Notification) int {
+	count := 0
+	for _, n := range notifications {
+		if n.IsExpired() {
+			count++
+		}
+	}
+	return count
 }
 
 // Stop gracefully shuts down the notification service

@@ -44,100 +44,9 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 		return nil
 	}
 
-	var title, message string
-	var titleSet, messageSet bool
-	var templateData *TemplateData
-
-	settings := conf.GetSettings()
-	if settings != nil {
-		// Build base URL for links
-		baseURL := BuildBaseURL(settings.Security.Host, settings.WebServer.Port, settings.Security.AutoTLS)
-
-		// Create template data from event
-		templateData = NewTemplateData(event, baseURL, settings.Main.TimeAs24h)
-
-		// Render title template
-		titleTemplate := settings.Notification.Templates.NewSpecies.Title
-		if titleTemplate != "" {
-			var err error
-			title, err = renderTemplate("title", titleTemplate, templateData)
-			if err != nil {
-				c.logger.Error("failed to render title template, using default",
-					"error", err,
-					"template", titleTemplate,
-				)
-			} else {
-				titleSet = true
-			}
-		} else {
-			// Empty template means user wants no title
-			titleSet = true
-		}
-
-		// Render message template
-		messageTemplate := settings.Notification.Templates.NewSpecies.Message
-		if messageTemplate != "" {
-			var err error
-			message, err = renderTemplate("message", messageTemplate, templateData)
-			if err != nil {
-				c.logger.Error("failed to render message template, using default",
-					"error", err,
-					"template", messageTemplate,
-				)
-			} else {
-				messageSet = true
-			}
-		} else {
-			// Empty template means user wants no message (unlikely but allowed)
-			messageSet = true
-		}
-	} else {
-		// Fallback: create template data with placeholder base URL when settings not available.
-		// This should only occur during:
-		// - Early startup before settings are fully initialized
-		// - Unit tests that don't initialize settings
-		// URLs will use "http://localhost" as fallback, indicating incomplete configuration.
-		// Detection notifications will still be created but with generic localhost URLs.
-		c.logger.Warn("Settings unavailable during detection notification, using localhost for URL fields",
-			"species", event.GetSpeciesName(),
-			"confidence", event.GetConfidence())
-		// Use localhost fallback and default 24h time format
-		templateData = NewTemplateData(event, "http://localhost", true)
-	}
-
-	// Use defaults only if settings not available or template rendering failed
-	if !titleSet {
-		title = fmt.Sprintf("New Species Detected: %s", event.GetSpeciesName())
-	}
-	if !messageSet {
-		message = fmt.Sprintf(
-			"First detection of %s (%s) at %s",
-			event.GetSpeciesName(),
-			event.GetScientificName(),
-			event.GetLocation(),
-		)
-	}
-
-	notification := NewNotification(TypeDetection, PriorityHigh, title, message).
-		WithComponent("detection").
-		WithMetadata("species", event.GetSpeciesName()).
-		WithMetadata("scientific_name", event.GetScientificName()).
-		WithMetadata("confidence", event.GetConfidence()).
-		WithMetadata("location", event.GetLocation()).
-		WithMetadata("is_new_species", true).
-		WithMetadata("days_since_first_seen", event.GetDaysSinceFirstSeen()).
-		WithExpiry(24 * time.Hour)
-
-	// Expose all TemplateData fields with bg_ prefix for use in provider templates
-	// See: https://github.com/tphakala/birdnet-go/issues/1457
-	notification = EnrichWithTemplateData(notification, templateData)
-
-	// Add note_id from event metadata if available for navigation to detection detail
-	if eventMetadata := event.GetMetadata(); eventMetadata != nil {
-		if noteID, ok := eventMetadata["note_id"]; ok {
-			notification = notification.WithMetadata("note_id", noteID)
-		}
-	}
+	templateData := c.createTemplateData(event)
+	title, message := c.renderTitleAndMessage(event, templateData)
+	notification := c.buildDetectionNotification(event, title, message, templateData)
 
 	if err := c.service.store.Save(notification); err != nil {
 		c.logger.Error("failed to save new species notification",
@@ -156,6 +65,98 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 	)
 
 	return nil
+}
+
+// createTemplateData creates template data from event and settings.
+func (c *DetectionNotificationConsumer) createTemplateData(event events.DetectionEvent) *TemplateData {
+	settings := conf.GetSettings()
+	if settings == nil {
+		c.logger.Warn("Settings unavailable during detection notification, using localhost for URL fields",
+			"species", event.GetSpeciesName(),
+			"confidence", event.GetConfidence())
+		return NewTemplateData(event, "http://localhost", true)
+	}
+
+	baseURL := BuildBaseURL(settings.Security.Host, settings.WebServer.Port, settings.Security.AutoTLS)
+	return NewTemplateData(event, baseURL, settings.Main.TimeAs24h)
+}
+
+// renderTitleAndMessage renders title and message from templates, with fallbacks.
+func (c *DetectionNotificationConsumer) renderTitleAndMessage(event events.DetectionEvent, templateData *TemplateData) (title, message string) {
+	title = c.renderTemplateField("title", event, templateData)
+	message = c.renderTemplateField("message", event, templateData)
+	return title, message
+}
+
+// renderTemplateField renders a single template field (title or message) with fallback.
+func (c *DetectionNotificationConsumer) renderTemplateField(field string, event events.DetectionEvent, templateData *TemplateData) string {
+	settings := conf.GetSettings()
+	if settings == nil {
+		return c.getDefaultValue(field, event)
+	}
+
+	var templateStr string
+	switch field {
+	case "title":
+		templateStr = settings.Notification.Templates.NewSpecies.Title
+	case "message":
+		templateStr = settings.Notification.Templates.NewSpecies.Message
+	}
+
+	// Empty template means user explicitly wants empty value
+	if templateStr == "" {
+		return ""
+	}
+
+	rendered, err := renderTemplate(field, templateStr, templateData)
+	if err != nil {
+		c.logger.Error("failed to render "+field+" template, using default",
+			"error", err,
+			"template", templateStr,
+		)
+		return c.getDefaultValue(field, event)
+	}
+	return rendered
+}
+
+// getDefaultValue returns the default title or message for a detection event.
+func (c *DetectionNotificationConsumer) getDefaultValue(field string, event events.DetectionEvent) string {
+	switch field {
+	case "title":
+		return fmt.Sprintf("New Species Detected: %s", event.GetSpeciesName())
+	case "message":
+		return fmt.Sprintf("First detection of %s (%s) at %s",
+			event.GetSpeciesName(),
+			event.GetScientificName(),
+			event.GetLocation())
+	default:
+		return ""
+	}
+}
+
+// buildDetectionNotification creates a notification with all metadata.
+func (c *DetectionNotificationConsumer) buildDetectionNotification(event events.DetectionEvent, title, message string, templateData *TemplateData) *Notification {
+	notification := NewNotification(TypeDetection, PriorityHigh, title, message).
+		WithComponent("detection").
+		WithMetadata("species", event.GetSpeciesName()).
+		WithMetadata("scientific_name", event.GetScientificName()).
+		WithMetadata("confidence", event.GetConfidence()).
+		WithMetadata("location", event.GetLocation()).
+		WithMetadata("is_new_species", true).
+		WithMetadata("days_since_first_seen", event.GetDaysSinceFirstSeen()).
+		WithExpiry(24 * time.Hour)
+
+	// Expose all TemplateData fields with bg_ prefix for use in provider templates
+	notification = EnrichWithTemplateData(notification, templateData)
+
+	// Add note_id from event metadata if available
+	if eventMetadata := event.GetMetadata(); eventMetadata != nil {
+		if noteID, ok := eventMetadata["note_id"]; ok {
+			notification = notification.WithMetadata("note_id", noteID)
+		}
+	}
+
+	return notification
 }
 
 // RenderTemplate renders a Go template string with the provided data.

@@ -401,34 +401,34 @@ func (s *InMemoryStore) matchesFilter(notif *Notification, filter *FilterOptions
 		return true
 	}
 
-	// Check type filter
+	return s.matchesAttributeFilters(notif, filter) && s.matchesTimeFilters(notif, filter)
+}
+
+// matchesAttributeFilters checks type, priority, status, and component filters.
+func (s *InMemoryStore) matchesAttributeFilters(notif *Notification, filter *FilterOptions) bool {
 	if len(filter.Types) > 0 && !slices.Contains(filter.Types, notif.Type) {
 		return false
 	}
-
-	// Check priority filter
 	if len(filter.Priorities) > 0 && !slices.Contains(filter.Priorities, notif.Priority) {
 		return false
 	}
-
-	// Check status filter
 	if len(filter.Status) > 0 && !slices.Contains(filter.Status, notif.Status) {
 		return false
 	}
-
-	// Check component filter
 	if filter.Component != "" && notif.Component != filter.Component {
 		return false
 	}
+	return true
+}
 
-	// Check time filters
+// matchesTimeFilters checks Since and Until time filters.
+func (s *InMemoryStore) matchesTimeFilters(notif *Notification, filter *FilterOptions) bool {
 	if filter.Since != nil && notif.Timestamp.Before(*filter.Since) {
 		return false
 	}
 	if filter.Until != nil && notif.Timestamp.After(*filter.Until) {
 		return false
 	}
-
 	return true
 }
 

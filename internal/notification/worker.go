@@ -158,6 +158,28 @@ func (w *NotificationWorker) Name() string {
 
 // ProcessEvent processes a single error event
 func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
+	w.logEventProcessingStart(event)
+
+	if !w.circuitBreaker.Allow() {
+		return w.handleCircuitBreakerOpen(event)
+	}
+
+	priority := w.determineEventPriority(event)
+	if w.shouldSkipLowPriority(event, priority) {
+		return nil
+	}
+
+	notification, err := w.createEventNotification(event, priority)
+	if err != nil {
+		return w.handleNotificationCreationError(event, err)
+	}
+
+	w.recordNotificationSuccess(notification, event, priority)
+	return nil
+}
+
+// logEventProcessingStart logs debug info when processing starts.
+func (w *NotificationWorker) logEventProcessingStart(event events.ErrorEvent) {
 	if w.config.Debug {
 		w.logger.Debug("processing error event",
 			"component", event.GetComponent(),
@@ -165,82 +187,100 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 			"error_message_length", len(event.GetMessage()),
 			"context", scrubContextMap(event.GetContext()))
 	}
+}
 
-	// Check circuit breaker
-	if !w.circuitBreaker.Allow() {
-		w.eventsDropped.Add(1)
-		w.logger.Debug("circuit breaker open, dropping event",
-			"component", event.GetComponent(),
-			"category", event.GetCategory(),
-		)
-		return nil // Don't propagate error when circuit is open
-	}
+// handleCircuitBreakerOpen handles the case when circuit breaker is open.
+func (w *NotificationWorker) handleCircuitBreakerOpen(event events.ErrorEvent) error {
+	w.eventsDropped.Add(1)
+	w.logger.Debug("circuit breaker open, dropping event",
+		"component", event.GetComponent(),
+		"category", event.GetCategory(),
+	)
+	return nil
+}
 
-	// Determine priority based on category and explicit priority if available
+// determineEventPriority determines priority from category and explicit priority if available.
+func (w *NotificationWorker) determineEventPriority(event events.ErrorEvent) Priority {
 	explicitPriority := ""
 	if enhancedErr, ok := event.(*errors.EnhancedError); ok {
 		explicitPriority = enhancedErr.GetPriority()
 	}
-	priority := getNotificationPriority(event.GetCategory(), explicitPriority)
+	return getNotificationPriority(event.GetCategory(), explicitPriority)
+}
 
-	// Filter out low priority notifications
-	if priority == PriorityLow {
-		w.logger.Debug("skipping low priority error notification",
-			"category", event.GetCategory(),
-			"priority", priority,
-			"component", event.GetComponent(),
-		)
-		return nil
+// shouldSkipLowPriority returns true if low priority events should be skipped.
+func (w *NotificationWorker) shouldSkipLowPriority(event events.ErrorEvent, priority Priority) bool {
+	if priority != PriorityLow {
+		return false
 	}
+	w.logger.Debug("skipping low priority error notification",
+		"category", event.GetCategory(),
+		"priority", priority,
+		"component", event.GetComponent(),
+	)
+	return true
+}
 
-	// Create notification
+// createEventNotification creates a notification for the event.
+func (w *NotificationWorker) createEventNotification(event events.ErrorEvent, priority Priority) (*Notification, error) {
 	title := w.generateTitle(event, priority)
 	message := w.generateMessage(event, priority)
 
-	notification, err := w.service.CreateWithComponent(
+	return w.service.CreateWithComponent(
 		TypeError,
 		priority,
 		title,
 		message,
 		event.GetComponent(),
 	)
+}
 
-	if err != nil {
-		w.eventsFailed.Add(1)
-		w.circuitBreaker.RecordFailure()
+// handleNotificationCreationError handles errors during notification creation.
+func (w *NotificationWorker) handleNotificationCreationError(event events.ErrorEvent, err error) error {
+	w.eventsFailed.Add(1)
+	w.circuitBreaker.RecordFailure()
 
-		// Check if it's a rate limit error
-		var enhErr *errors.EnhancedError
-		if errors.As(err, &enhErr) && enhErr.GetMessage() == "rate limit exceeded" {
-			// Don't log rate limit errors as they're expected
-			w.eventsDropped.Add(1)
-			return nil
-		}
-
-		w.logger.Error("failed to create notification",
-			"error", privacy.ScrubMessage(err.Error()),
-			"component", event.GetComponent(),
-			"category", event.GetCategory(),
-		)
-		return err
+	// Rate limit errors are expected - just track and return
+	var enhErr *errors.EnhancedError
+	if errors.As(err, &enhErr) && enhErr.GetMessage() == "rate limit exceeded" {
+		w.eventsDropped.Add(1)
+		return nil
 	}
 
-	// Success
+	w.logger.Error("failed to create notification",
+		"error", privacy.ScrubMessage(err.Error()),
+		"component", event.GetComponent(),
+		"category", event.GetCategory(),
+	)
+	return err
+}
+
+// recordNotificationSuccess records success and enriches notification metadata.
+func (w *NotificationWorker) recordNotificationSuccess(notification *Notification, event events.ErrorEvent, priority Priority) {
 	w.eventsProcessed.Add(1)
 	w.circuitBreaker.RecordSuccess()
 
-	// Add context metadata
-	if notification != nil && event.GetContext() != nil {
-		for k, v := range event.GetContext() {
-			notification.WithMetadata(k, v)
-		}
+	w.enrichNotificationWithContext(notification, event, priority)
+	w.logNotificationCreated(notification, event, priority)
+}
 
-		// Set expiry for non-critical notifications
-		if priority != PriorityCritical {
-			notification.WithExpiry(24 * time.Hour)
-		}
+// enrichNotificationWithContext adds event context to notification metadata.
+func (w *NotificationWorker) enrichNotificationWithContext(notification *Notification, event events.ErrorEvent, priority Priority) {
+	if notification == nil || event.GetContext() == nil {
+		return
 	}
 
+	for k, v := range event.GetContext() {
+		notification.WithMetadata(k, v)
+	}
+
+	if priority != PriorityCritical {
+		notification.WithExpiry(24 * time.Hour)
+	}
+}
+
+// logNotificationCreated logs debug info after successful notification creation.
+func (w *NotificationWorker) logNotificationCreated(notification *Notification, event events.ErrorEvent, priority Priority) {
 	if w.config.Debug {
 		w.logger.Debug("created error notification",
 			"notification_id", notification.ID,
@@ -250,8 +290,13 @@ func (w *NotificationWorker) ProcessEvent(event events.ErrorEvent) error {
 			"metadata_count", len(event.GetContext()),
 			"scrubbed_context", scrubContextMap(event.GetContext()))
 	}
+}
 
-	return nil
+// eventKey groups events by component, category, and priority.
+type eventKey struct {
+	component string
+	category  string
+	priority  Priority
 }
 
 // ProcessBatch processes multiple events at once with aggregation
@@ -261,29 +306,36 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 	}
 
 	if w.config.Debug {
-		w.logger.Debug("processing event batch",
-			"batch_size", len(errorEvents))
+		w.logger.Debug("processing event batch", "batch_size", len(errorEvents))
 	}
 
-	// Group events by component and category for aggregation
-	type eventKey struct {
-		component string
-		category  string
-		priority  Priority
-	}
+	eventGroups := w.groupEventsByKey(errorEvents)
+	aggregatedErrors, successCount := w.processEventGroups(eventGroups)
 
+	w.logger.Debug("processed event batch with aggregation",
+		"total", len(errorEvents),
+		"groups", len(eventGroups),
+		"success", successCount,
+		"failed", len(errorEvents)-successCount,
+	)
+
+	if len(aggregatedErrors) > 0 {
+		return errors.Join(aggregatedErrors...)
+	}
+	return nil
+}
+
+// groupEventsByKey groups events by component, category, and priority, skipping low priority.
+func (w *NotificationWorker) groupEventsByKey(errorEvents []events.ErrorEvent) map[eventKey][]events.ErrorEvent {
 	eventGroups := make(map[eventKey][]events.ErrorEvent)
 
-	// Group events by key
 	for _, event := range errorEvents {
-		// Determine priority based on category and explicit priority if available
 		explicitPriority := ""
 		if enhancedErr, ok := event.(*errors.EnhancedError); ok {
 			explicitPriority = enhancedErr.GetPriority()
 		}
 		priority := getNotificationPriority(event.GetCategory(), explicitPriority)
 
-		// Skip low priority events
 		if priority == PriorityLow {
 			continue
 		}
@@ -296,93 +348,95 @@ func (w *NotificationWorker) ProcessBatch(errorEvents []events.ErrorEvent) error
 		eventGroups[key] = append(eventGroups[key], event)
 	}
 
-	// Process each group
-	var aggregatedErrors []error
-	successCount := 0
+	return eventGroups
+}
 
-	for key, events := range eventGroups {
-		// Check circuit breaker once per group
-		if !w.circuitBreaker.Allow() {
-			w.eventsDropped.Add(uint64(len(events)))
-			w.logger.Debug("circuit breaker open, dropping event group",
-				"component", key.component,
-				"category", key.category,
-				"count", len(events),
-			)
-			continue
-		}
-
-		// Create aggregated notification
-		title := fmt.Sprintf("%s (%d occurrences)",
-			w.generateTitle(events[0], key.priority), len(events))
-
-		// Aggregate messages
-		var messageBuilder strings.Builder
-		messageBuilder.WriteString(fmt.Sprintf("Multiple %s errors in %s:\n",
-			key.category, key.component))
-
-		// Include up to 5 unique messages
-		uniqueMessages := make(map[string]bool)
-		for _, event := range events {
-			msg := event.GetMessage()
-			if len(uniqueMessages) >= 5 {
-				messageBuilder.WriteString(fmt.Sprintf("\n... and %d more errors",
-					len(events)-len(uniqueMessages)))
-				break
-			}
-			if !uniqueMessages[msg] {
-				uniqueMessages[msg] = true
-				messageBuilder.WriteString("\n• ")
-				messageBuilder.WriteString(w.truncateMessage(msg, 100))
-			}
-		}
-
-		// Create single notification for the group
-		notification, err := w.service.CreateWithComponent(
-			TypeError,
-			key.priority,
-			title,
-			messageBuilder.String(),
-			key.component,
-		)
-
+// processEventGroups processes each event group and returns aggregated errors and success count.
+func (w *NotificationWorker) processEventGroups(eventGroups map[eventKey][]events.ErrorEvent) (aggregatedErrors []error, successCount int) {
+	for key, groupEvents := range eventGroups {
+		err := w.processEventGroup(key, groupEvents)
 		if err != nil {
-			w.eventsFailed.Add(uint64(len(events)))
-			w.circuitBreaker.RecordFailure()
 			aggregatedErrors = append(aggregatedErrors, err)
-
-			// Check for rate limit
-			var enhErr *errors.EnhancedError
-			if errors.As(err, &enhErr) && enhErr.GetMessage() == "rate limit exceeded" {
-				w.eventsDropped.Add(uint64(len(events)))
-			}
 		} else {
-			w.eventsProcessed.Add(uint64(len(events)))
-			w.circuitBreaker.RecordSuccess()
-			successCount += len(events)
-
-			// Add aggregated context
-			if notification != nil {
-				notification.WithMetadata("error_count", len(events))
-				notification.WithMetadata("first_occurrence", events[0].GetTimestamp())
-				notification.WithMetadata("last_occurrence", events[len(events)-1].GetTimestamp())
-			}
+			successCount += len(groupEvents)
 		}
 	}
 
-	w.logger.Debug("processed event batch with aggregation",
-		"total", len(errorEvents),
-		"groups", len(eventGroups),
-		"success", successCount,
-		"failed", len(errorEvents)-successCount,
+	return aggregatedErrors, successCount
+}
+
+// processEventGroup processes a single group of events with the same key.
+func (w *NotificationWorker) processEventGroup(key eventKey, groupEvents []events.ErrorEvent) error {
+	eventCount := len(groupEvents)
+
+	if !w.circuitBreaker.Allow() {
+		w.eventsDropped.Add(uint64(eventCount))
+		w.logger.Debug("circuit breaker open, dropping event group",
+			"component", key.component,
+			"category", key.category,
+			"count", eventCount,
+		)
+		return nil
+	}
+
+	title := fmt.Sprintf("%s (%d occurrences)", w.generateTitle(groupEvents[0], key.priority), eventCount)
+	message := w.buildAggregatedMessage(key, groupEvents)
+
+	notification, err := w.service.CreateWithComponent(
+		TypeError,
+		key.priority,
+		title,
+		message,
+		key.component,
 	)
 
-	// Return aggregated errors if any
-	if len(aggregatedErrors) > 0 {
-		return errors.Join(aggregatedErrors...)
+	if err != nil {
+		w.eventsFailed.Add(uint64(eventCount))
+		w.circuitBreaker.RecordFailure()
+
+		var enhErr *errors.EnhancedError
+		if errors.As(err, &enhErr) && enhErr.GetMessage() == "rate limit exceeded" {
+			w.eventsDropped.Add(uint64(eventCount))
+		}
+		return err
 	}
 
+	w.eventsProcessed.Add(uint64(eventCount))
+	w.circuitBreaker.RecordSuccess()
+	w.addAggregatedMetadata(notification, groupEvents)
 	return nil
+}
+
+// buildAggregatedMessage builds an aggregated message from multiple events.
+func (w *NotificationWorker) buildAggregatedMessage(key eventKey, groupEvents []events.ErrorEvent) string {
+	var messageBuilder strings.Builder
+	messageBuilder.WriteString(fmt.Sprintf("Multiple %s errors in %s:\n", key.category, key.component))
+
+	uniqueMessages := make(map[string]bool)
+	for _, event := range groupEvents {
+		msg := event.GetMessage()
+		if len(uniqueMessages) >= 5 {
+			messageBuilder.WriteString(fmt.Sprintf("\n... and %d more errors", len(groupEvents)-len(uniqueMessages)))
+			break
+		}
+		if !uniqueMessages[msg] {
+			uniqueMessages[msg] = true
+			messageBuilder.WriteString("\n• ")
+			messageBuilder.WriteString(w.truncateMessage(msg, 100))
+		}
+	}
+
+	return messageBuilder.String()
+}
+
+// addAggregatedMetadata adds aggregation metadata to a notification.
+func (w *NotificationWorker) addAggregatedMetadata(notification *Notification, groupEvents []events.ErrorEvent) {
+	if notification == nil {
+		return
+	}
+	notification.WithMetadata("error_count", len(groupEvents))
+	notification.WithMetadata("first_occurrence", groupEvents[0].GetTimestamp())
+	notification.WithMetadata("last_occurrence", groupEvents[len(groupEvents)-1].GetTimestamp())
 }
 
 // truncateMessage truncates a message to the specified length

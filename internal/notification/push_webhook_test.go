@@ -1,3 +1,4 @@
+//nolint:gocognit // Table-driven tests have expected complexity
 package notification
 
 import (
@@ -9,6 +10,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewWebhookProvider(t *testing.T) {
@@ -570,4 +574,177 @@ func TestWebhookProvider_Close(t *testing.T) {
 
 	// Multiple closes should be safe
 	provider.Close()
+}
+
+// TestWebhookProvider_validateAndNormalizeMethod tests HTTP method validation and normalization
+func TestWebhookProvider_validateAndNormalizeMethod(t *testing.T) {
+	t.Parallel()
+
+	// Create a minimal provider for testing
+	provider := &WebhookProvider{name: "test"}
+
+	tests := []struct {
+		name           string
+		inputMethod    string
+		expectedMethod string
+		wantErr        bool
+	}{
+		// Valid methods - lowercase to uppercase
+		{
+			name:           "lowercase_post",
+			inputMethod:    "post",
+			expectedMethod: "POST",
+			wantErr:        false,
+		},
+		{
+			name:           "lowercase_put",
+			inputMethod:    "put",
+			expectedMethod: "PUT",
+			wantErr:        false,
+		},
+		{
+			name:           "lowercase_patch",
+			inputMethod:    "patch",
+			expectedMethod: "PATCH",
+			wantErr:        false,
+		},
+		// Valid methods - mixed case
+		{
+			name:           "mixed_case_post",
+			inputMethod:    "PoSt",
+			expectedMethod: "POST",
+			wantErr:        false,
+		},
+		{
+			name:           "mixed_case_put",
+			inputMethod:    "PuT",
+			expectedMethod: "PUT",
+			wantErr:        false,
+		},
+		{
+			name:           "mixed_case_patch",
+			inputMethod:    "PaTcH",
+			expectedMethod: "PATCH",
+			wantErr:        false,
+		},
+		// Valid methods - already uppercase
+		{
+			name:           "uppercase_post",
+			inputMethod:    "POST",
+			expectedMethod: "POST",
+			wantErr:        false,
+		},
+		{
+			name:           "uppercase_put",
+			inputMethod:    "PUT",
+			expectedMethod: "PUT",
+			wantErr:        false,
+		},
+		{
+			name:           "uppercase_patch",
+			inputMethod:    "PATCH",
+			expectedMethod: "PATCH",
+			wantErr:        false,
+		},
+		// Whitespace trimming
+		{
+			name:           "whitespace_before_post",
+			inputMethod:    "  POST",
+			expectedMethod: "POST",
+			wantErr:        false,
+		},
+		{
+			name:           "whitespace_after_post",
+			inputMethod:    "POST  ",
+			expectedMethod: "POST",
+			wantErr:        false,
+		},
+		{
+			name:           "whitespace_around_post",
+			inputMethod:    "  POST  ",
+			expectedMethod: "POST",
+			wantErr:        false,
+		},
+		{
+			name:           "whitespace_around_lowercase",
+			inputMethod:    "  put  ",
+			expectedMethod: "PUT",
+			wantErr:        false,
+		},
+		// Empty string defaults to POST
+		{
+			name:           "empty_defaults_to_post",
+			inputMethod:    "",
+			expectedMethod: "POST",
+			wantErr:        false,
+		},
+		{
+			name:           "whitespace_only_defaults_to_post",
+			inputMethod:    "   ",
+			expectedMethod: "POST",
+			wantErr:        false,
+		},
+		// Invalid methods
+		{
+			name:           "invalid_get_lowercase",
+			inputMethod:    "get",
+			expectedMethod: "GET", // Gets normalized before rejection
+			wantErr:        true,
+		},
+		{
+			name:           "invalid_get_uppercase",
+			inputMethod:    "GET",
+			expectedMethod: "GET",
+			wantErr:        true,
+		},
+		{
+			name:           "invalid_delete",
+			inputMethod:    "DELETE",
+			expectedMethod: "DELETE",
+			wantErr:        true,
+		},
+		{
+			name:           "invalid_head",
+			inputMethod:    "HEAD",
+			expectedMethod: "HEAD",
+			wantErr:        true,
+		},
+		{
+			name:           "invalid_options",
+			inputMethod:    "OPTIONS",
+			expectedMethod: "OPTIONS",
+			wantErr:        true,
+		},
+		{
+			name:           "invalid_custom_method",
+			inputMethod:    "CUSTOM",
+			expectedMethod: "CUSTOM",
+			wantErr:        true,
+		},
+		{
+			name:           "invalid_whitespace_get",
+			inputMethod:    "  GET  ",
+			expectedMethod: "GET",
+			wantErr:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			endpoint := &WebhookEndpoint{Method: tt.inputMethod}
+			err := provider.validateAndNormalizeMethod(0, endpoint)
+
+			// Check method was normalized in-place
+			assert.Equal(t, tt.expectedMethod, endpoint.Method, "method should be normalized")
+
+			if tt.wantErr {
+				require.Error(t, err, "expected error for invalid method")
+				assert.Contains(t, err.Error(), "must be POST, PUT, or PATCH")
+			} else {
+				require.NoError(t, err, "expected no error for valid method")
+			}
+		})
+	}
 }
