@@ -73,7 +73,7 @@ func DefaultWorkerConfig() *WorkerConfig {
 // CircuitBreaker implements the circuit breaker pattern
 type CircuitBreaker struct {
 	mu              sync.Mutex
-	state           string // "closed", "open", "half-open"
+	state           string // Uses circuitState* constants from constants.go
 	failures        int
 	lastFailureTime time.Time
 	successCount    int
@@ -97,7 +97,7 @@ func NewNotificationWorker(service *Service, config *WorkerConfig) (*Notificatio
 		templates: make(map[string]*template.Template),
 		config:    config,
 		circuitBreaker: &CircuitBreaker{
-			state:  "closed",
+			state:  circuitStateClosed,
 			config: config,
 			logger: logger,
 		},
@@ -569,11 +569,11 @@ func (cb *CircuitBreaker) Allow() bool {
 	defer cb.mu.Unlock()
 
 	switch cb.state {
-	case "open":
+	case circuitStateOpen:
 		// Check if we should transition to half-open
 		if time.Since(cb.lastFailureTime) > cb.config.RecoveryTimeout {
 			oldState := cb.state
-			cb.state = "half-open"
+			cb.state = circuitStateHalfOpen
 			cb.successCount = 0
 			if cb.config.Debug && cb.logger != nil {
 				cb.logger.Debug("circuit breaker state transition",
@@ -585,7 +585,7 @@ func (cb *CircuitBreaker) Allow() bool {
 		}
 		return false
 
-	case "half-open":
+	case circuitStateHalfOpen:
 		// Allow limited events in half-open state
 		return cb.successCount < cb.config.HalfOpenMaxEvents
 
@@ -601,11 +601,11 @@ func (cb *CircuitBreaker) RecordSuccess() {
 
 	cb.failures = 0
 
-	if cb.state == "half-open" {
+	if cb.state == circuitStateHalfOpen {
 		cb.successCount++
 		if cb.successCount >= cb.config.HalfOpenMaxEvents {
 			oldState := cb.state
-			cb.state = "closed"
+			cb.state = circuitStateClosed
 			if cb.config.Debug && cb.logger != nil {
 				cb.logger.Debug("circuit breaker state transition",
 					"from", oldState,
@@ -626,8 +626,8 @@ func (cb *CircuitBreaker) RecordFailure() {
 
 	if cb.failures >= cb.config.FailureThreshold {
 		oldState := cb.state
-		cb.state = "open"
-		if cb.config.Debug && cb.logger != nil && oldState != "open" {
+		cb.state = circuitStateOpen
+		if cb.config.Debug && cb.logger != nil && oldState != circuitStateOpen {
 			cb.logger.Debug("circuit breaker state transition",
 				"from", oldState,
 				"to", cb.state,
@@ -636,9 +636,9 @@ func (cb *CircuitBreaker) RecordFailure() {
 		}
 	}
 
-	if cb.state == "half-open" {
+	if cb.state == circuitStateHalfOpen {
 		oldState := cb.state
-		cb.state = "open"
+		cb.state = circuitStateOpen
 		if cb.config.Debug && cb.logger != nil {
 			cb.logger.Debug("circuit breaker state transition",
 				"from", oldState,
@@ -660,7 +660,7 @@ func (cb *CircuitBreaker) Reset() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
-	cb.state = "closed"
+	cb.state = circuitStateClosed
 	cb.failures = 0
 	cb.successCount = 0
 }

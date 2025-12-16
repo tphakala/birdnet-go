@@ -6,6 +6,12 @@ import (
 	"time"
 )
 
+// Test data constants
+const (
+	testValue1               = "value1"
+	expectedRateLimitErrMsg = "rate limit exceeded"
+)
+
 func TestService_CreateWithMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -52,7 +58,7 @@ func testCreateWithMetadata(t *testing.T, service *Service) {
 	// Create a notification with metadata
 	notif := NewNotification(TypeInfo, PriorityLow, "Test Title", "Test Message").
 		WithComponent("test-component").
-		WithMetadata("key1", "value1").
+		WithMetadata("key1", testValue1).
 		WithMetadata("key2", 42).
 		WithMetadata("isToast", true)
 
@@ -105,8 +111,8 @@ func verifyStoredNotificationMetadata(t *testing.T, stored *Notification) {
 		t.Fatal("stored notification should have metadata")
 	}
 
-	if value, ok := stored.Metadata["key1"].(string); !ok || value != "value1" {
-		t.Errorf("metadata key1 = %v, want %v", value, "value1")
+	if value, ok := stored.Metadata["key1"].(string); !ok || value != testValue1 {
+		t.Errorf("metadata key1 = %v, want %v", value, testValue1)
 	}
 
 	if value, ok := stored.Metadata["key2"].(int); !ok || value != 42 {
@@ -193,7 +199,7 @@ func testRateLimitingWithMetadata(t *testing.T) {
 	}
 
 	// Error should indicate rate limit exceeded
-	if err2.Error() != "rate limit exceeded" {
+	if err2.Error() != expectedRateLimitErrMsg {
 		t.Errorf("Expected rate limit error, got: %v", err2)
 	}
 }

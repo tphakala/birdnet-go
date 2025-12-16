@@ -31,16 +31,17 @@ const (
 )
 
 // String returns the string representation of CircuitState.
+// Uses constants from constants.go for consistent state names.
 func (s CircuitState) String() string {
 	switch s {
 	case StateClosed:
-		return "closed"
+		return circuitStateClosed
 	case StateHalfOpen:
-		return "half-open"
+		return circuitStateHalfOpen
 	case StateOpen:
-		return "open"
+		return circuitStateOpen
 	default:
-		return "unknown"
+		return circuitStateUnknown
 	}
 }
 

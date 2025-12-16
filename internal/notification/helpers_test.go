@@ -5,6 +5,9 @@ import (
 	"testing"
 )
 
+// Expected value for redacted credentials in scrubContextMap output
+const expectedRedactedValue = "[REDACTED]"
+
 func TestScrubContextMap(t *testing.T) {
 	t.Parallel()
 
@@ -77,9 +80,9 @@ func TestScrubContextMap(t *testing.T) {
 				"secret":   "confidential",
 			},
 			expected: func(result map[string]any) bool {
-				// All credentials should be "[REDACTED]"
+				// All credentials should be redacted
 				for k := range result {
-					if result[k] != "[REDACTED]" {
+					if result[k] != expectedRedactedValue {
 						return false
 					}
 				}
@@ -97,7 +100,7 @@ func TestScrubContextMap(t *testing.T) {
 			},
 			expected: func(result map[string]any) bool {
 				// URL should be anonymized, token redacted, others unchanged
-				return result["token"] == "[REDACTED]" &&
+				return result["token"] == expectedRedactedValue &&
 					result["count"] == 42 &&
 					result["enabled"] == true &&
 					result["metadata"] == "some data"

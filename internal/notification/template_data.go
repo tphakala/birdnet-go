@@ -120,9 +120,15 @@ func NewTemplateData(event events.DetectionEvent, baseURL string, timeAs24h bool
 // scheme or port (e.g., "birdnet.home.arpa" or "192.168.1.100"). The scheme and port
 // are determined by the autoTLS and port parameters.
 func BuildBaseURL(host, port string, autoTLS bool) string {
-	scheme := "http"
+	// URL scheme constants
+	const (
+		schemeHTTP  = "http"
+		schemeHTTPS = "https"
+	)
+
+	scheme := schemeHTTP
 	if autoTLS {
-		scheme = "https"
+		scheme = schemeHTTPS
 	}
 
 	// Priority 1: Use provided host from config (security.host)
@@ -141,7 +147,7 @@ func BuildBaseURL(host, port string, autoTLS bool) string {
 	}
 
 	// Omit default ports for cleaner URLs
-	if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
+	if (scheme == schemeHTTPS && port == "443") || (scheme == schemeHTTP && port == "80") {
 		return fmt.Sprintf("%s://%s", scheme, host)
 	}
 

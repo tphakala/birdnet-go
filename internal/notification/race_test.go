@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+// Test data constants
+const testMetadataValue1 = "value1"
+
 // TestBroadcastMetadataRace tests for the race condition where metadata is modified
 // after a notification has been broadcast to subscribers.
 //
@@ -267,7 +270,7 @@ func TestCloneProvidesSafeAccess(t *testing.T) {
 func TestCloneCreatesDeepCopy(t *testing.T) {
 	original := NewNotification(TypeInfo, PriorityMedium, "Original Title", "Original Message")
 	original.WithComponent("original-component")
-	original.WithMetadata("key1", "value1")
+	original.WithMetadata("key1", testMetadataValue1)
 	original.WithMetadata("key2", 42)
 	original.WithExpiry(time.Hour)
 
@@ -293,8 +296,8 @@ func TestCloneCreatesDeepCopy(t *testing.T) {
 	}
 
 	// Verify metadata is copied
-	if clone.Metadata["key1"] != "value1" {
-		t.Errorf("Metadata key1 mismatch: got %v, want value1", clone.Metadata["key1"])
+	if clone.Metadata["key1"] != testMetadataValue1 {
+		t.Errorf("Metadata key1 mismatch: got %v, want %s", clone.Metadata["key1"], testMetadataValue1)
 	}
 	if clone.Metadata["key2"] != 42 {
 		t.Errorf("Metadata key2 mismatch: got %v, want 42", clone.Metadata["key2"])
@@ -308,7 +311,7 @@ func TestCloneCreatesDeepCopy(t *testing.T) {
 	if original.Title != "Original Title" {
 		t.Error("Modifying clone should not affect original Title")
 	}
-	if original.Metadata["key1"] != "value1" {
+	if original.Metadata["key1"] != testMetadataValue1 {
 		t.Error("Modifying clone metadata should not affect original")
 	}
 	if _, exists := original.Metadata["newKey"]; exists {

@@ -521,11 +521,12 @@ func (d *pushDispatcher) waitForRetry(ctx context.Context, providerName string, 
 
 	// Add jitter: ±25% of the delay to prevent thundering herd
 	// Use math/rand/v2 for thread-safe random generation (Go 1.22+)
+	// G404: Cryptographic randomness not needed for retry jitter - this is for load distribution only
 	jitterRange := exponential * jitterPercent / 100
 	jitterMax := int64(jitterRange * 2)
 	var jitter time.Duration
 	if jitterMax > 0 {
-		jitter = time.Duration(rand.Int64N(jitterMax)) - jitterRange
+		jitter = time.Duration(rand.Int64N(jitterMax)) - jitterRange //nolint:gosec // Non-cryptographic use for load distribution
 	}
 
 	// Apply jitter and ensure final delay stays within bounds
