@@ -97,34 +97,37 @@ func getPlatformOpenFlags() int {
 	return os.O_WRONLY | syscall.O_NONBLOCK
 }
 
+// waitWithContext waits for the specified duration or until context is canceled
+func waitWithContext(ctx context.Context, d time.Duration) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(d):
+		return nil
+	}
+}
+
 // openFIFOWithRetries attempts to open the FIFO with multiple retries
 func openFIFOWithRetries(ctx context.Context, fifoPath, pipePath string, openFlags int, sfs *SecureFS) (*os.File, error) {
-	maxRetries := 30
-	retryInterval := 200 * time.Millisecond
+	const maxRetries = 30
+	const retryInterval = 200 * time.Millisecond
 
 	for i := range maxRetries {
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			return nil, fmt.Errorf("context canceled while opening FIFO")
-		default:
-			// Attempt to open the FIFO with platform-specific approach
-			fifo, openErr := openPlatformSpecificFIFO(pipePath, fifoPath, openFlags, sfs)
-			if openErr == nil {
-				return fifo, nil
-			}
+		}
 
-			if i == 0 || (i+1)%5 == 0 {
-				// Use structured logging with proper context instead of fmt.Printf
-				log.Printf("FIFO %s: writer waiting (attempt %d): %v", fifoPath, i+1, openErr)
-			}
+		fifo, openErr := openPlatformSpecificFIFO(pipePath, fifoPath, openFlags, sfs)
+		if openErr == nil {
+			return fifo, nil
+		}
 
-			// Sleep before retrying
-			select {
-			case <-ctx.Done():
-				return nil, fmt.Errorf("context canceled during retry delay")
-			case <-time.After(retryInterval):
-				// Continue to next attempt
-			}
+		if i == 0 || (i+1)%5 == 0 {
+			log.Printf("FIFO %s: writer waiting (attempt %d): %v", fifoPath, i+1, openErr)
+		}
+
+		if err := waitWithContext(ctx, retryInterval); err != nil {
+			return nil, fmt.Errorf("context canceled during retry delay")
 		}
 	}
 

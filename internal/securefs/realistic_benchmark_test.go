@@ -192,21 +192,21 @@ func BenchmarkCacheOverhead(b *testing.B) {
 	}
 }
 
-// BenchmarkRealWorldSpectrogramScenario simulates the actual spectrogram generation scenario
-func BenchmarkRealWorldSpectrogramScenario(b *testing.B) {
-	// Create a temporary directory structure similar to real usage using Go 1.24 b.TempDir()
-	tempDir := b.TempDir()
-
-	// Create actual audio files
-	audioFiles := []string{
+// spectrogramTestFiles returns the list of test audio file paths
+func spectrogramTestFiles() []string {
+	return []string{
 		"clips/2025/08/muscicapa_striata_33p_20250801T085157Z.mp3",
 		"clips/2025/08/muscicapa_striata_38p_20250801T085349Z.mp3",
 		"clips/2025/08/muscicapa_striata_8p_20250801T084745Z.mp3",
 		"clips/2025/08/muscicapa_striata_60p_20250801T085252Z.mp3",
 		"clips/2025/08/muscicapa_striata_42p_20250801T085230Z.mp3",
 	}
+}
 
-	for _, file := range audioFiles {
+// setupSpectrogramTestFiles creates test audio files in tempDir
+func setupSpectrogramTestFiles(b *testing.B, tempDir string, files []string) {
+	b.Helper()
+	for _, file := range files {
 		fullPath := filepath.Join(tempDir, file)
 		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 			b.Fatal(err)
@@ -215,68 +215,66 @@ func BenchmarkRealWorldSpectrogramScenario(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+// benchSpectrogramWithoutCache runs spectrogram benchmark without caching
+func benchSpectrogramWithoutCache(b *testing.B, tempDir string, audioFiles []string) { //nolint:thelper // not a helper
+	for b.Loop() {
+		for _, audioFile := range audioFiles {
+			audioPath := filepath.Join(tempDir, audioFile)
+			_, _ = filepath.Abs(audioPath)
+			cleanPath := filepath.Clean(audioFile)
+			_ = filepath.IsAbs(cleanPath)
+			_, _ = filepath.Abs(tempDir)
+			_, _ = filepath.EvalSymlinks(audioPath)
+			_, _ = filepath.EvalSymlinks(tempDir)
+			_, _ = os.Stat(audioPath)
+			spectrogramPath := audioPath[:len(audioPath)-4] + "_400px.png"
+			_, _ = os.Stat(spectrogramPath)
+		}
+	}
+}
+
+// benchSpectrogramWithCache runs spectrogram benchmark with caching
+func benchSpectrogramWithCache(b *testing.B, tempDir string, audioFiles []string) { //nolint:thelper // not a helper
+	cache := NewPathCache()
+	validatePath := func(path string) (string, error) {
+		cleanPath := filepath.Clean(path)
+		if filepath.IsAbs(cleanPath) {
+			return "", nil
+		}
+		return cleanPath, nil
+	}
+
+	for b.Loop() {
+		for _, audioFile := range audioFiles {
+			audioPath := filepath.Join(tempDir, audioFile)
+			_, _ = cache.GetAbsPath(audioPath, filepath.Abs)
+			_, _ = cache.GetValidatePath(audioFile, validatePath)
+			_, _ = cache.GetAbsPath(tempDir, filepath.Abs)
+			_, _ = cache.GetSymlinkResolution(audioPath, filepath.EvalSymlinks)
+			_, _ = cache.GetSymlinkResolution(tempDir, filepath.EvalSymlinks)
+			_, _ = cache.GetStat(audioPath, os.Stat)
+			spectrogramPath := audioPath[:len(audioPath)-4] + "_400px.png"
+			_, _ = cache.GetStat(spectrogramPath, os.Stat)
+		}
+	}
+}
+
+// BenchmarkRealWorldSpectrogramScenario simulates the actual spectrogram generation scenario
+func BenchmarkRealWorldSpectrogramScenario(b *testing.B) {
+	tempDir := b.TempDir()
+	audioFiles := spectrogramTestFiles()
+	setupSpectrogramTestFiles(b, tempDir, audioFiles)
 
 	b.Run("WithoutCache", func(b *testing.B) {
 		b.ReportAllocs()
-		// Use Go 1.24 b.Loop() instead of manual for loop
-		for b.Loop() {
-			for _, audioFile := range audioFiles {
-				// Simulate what happens in the v2 API for each spectrogram request
-				audioPath := filepath.Join(tempDir, audioFile)
-
-				// 1. Path validation operations (ValidateRelativePath equivalent)
-				_, _ = filepath.Abs(audioPath)
-				cleanPath := filepath.Clean(audioFile)
-				_ = filepath.IsAbs(cleanPath)
-
-				// 2. Path within base check (IsPathWithinBase equivalent)
-				_, _ = filepath.Abs(tempDir)
-				_, _ = filepath.EvalSymlinks(audioPath)
-				_, _ = filepath.EvalSymlinks(tempDir)
-
-				// 3. Stat operations (StatRel equivalent)
-				_, _ = os.Stat(audioPath)
-
-				// 4. Generate spectrogram path and check existence
-				spectrogramPath := audioPath[:len(audioPath)-4] + "_400px.png"
-				_, _ = os.Stat(spectrogramPath) // This will fail but simulates the check
-			}
-		}
+		benchSpectrogramWithoutCache(b, tempDir, audioFiles)
 	})
 
 	b.Run("WithCache", func(b *testing.B) {
 		b.ReportAllocs()
-		cache := NewPathCache()
-
-		// Use Go 1.24 b.Loop() instead of manual for loop
-		for b.Loop() {
-			for _, audioFile := range audioFiles {
-				// Simulate the same operations but with caching
-				audioPath := filepath.Join(tempDir, audioFile)
-
-				// 1. Cached path validation
-				_, _ = cache.GetAbsPath(audioPath, filepath.Abs)
-				_, _ = cache.GetValidatePath(audioFile, func(path string) (string, error) {
-					cleanPath := filepath.Clean(path)
-					if filepath.IsAbs(cleanPath) {
-						return "", nil
-					}
-					return cleanPath, nil
-				})
-
-				// 2. Cached path within base check
-				_, _ = cache.GetAbsPath(tempDir, filepath.Abs)
-				_, _ = cache.GetSymlinkResolution(audioPath, filepath.EvalSymlinks)
-				_, _ = cache.GetSymlinkResolution(tempDir, filepath.EvalSymlinks)
-
-				// 3. Cached stat operations
-				_, _ = cache.GetStat(audioPath, os.Stat)
-
-				// 4. Cached spectrogram existence check
-				spectrogramPath := audioPath[:len(audioPath)-4] + "_400px.png"
-				_, _ = cache.GetStat(spectrogramPath, os.Stat)
-			}
-		}
+		benchSpectrogramWithCache(b, tempDir, audioFiles)
 	})
 }
 
