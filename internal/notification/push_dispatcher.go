@@ -84,90 +84,109 @@ func InitializePushFromConfig(settings *conf.Settings) error {
 func InitializePushFromConfigWithMetrics(settings *conf.Settings, notificationMetrics *metrics.NotificationMetrics) error {
 	var initErr error
 	dispatcherOnce.Do(func() {
-		if settings == nil || !settings.Notification.Push.Enabled {
-			return
-		}
-
-		// Calculate max concurrent jobs based on number of providers
-		maxConcurrentJobs := int64(defaultMaxConcurrentJobs)
-		if providerCount := len(settings.Notification.Push.Providers); providerCount > 0 {
-			perProviderLimit := int64(providerCount * jobsPerProvider)
-			if perProviderLimit > maxConcurrentJobs {
-				maxConcurrentJobs = perProviderLimit
-			}
-		}
-
-		pd := &pushDispatcher{
-			log:               getFileLogger(settings.Debug),
-			enabled:           settings.Notification.Push.Enabled,
-			maxRetries:        settings.Notification.Push.MaxRetries,
-			retryDelay:        settings.Notification.Push.RetryDelay,
-			defaultTimeout:    settings.Notification.Push.DefaultTimeout,
-			metrics:           notificationMetrics,
-			concurrencySem:    semaphore.NewWeighted(maxConcurrentJobs),
-			maxConcurrentJobs: maxConcurrentJobs,
-		}
-
-		// Initialize health checker if enabled
-		if settings.Notification.Push.HealthCheck.Enabled {
-			hcConfig := HealthCheckConfig{
-				Enabled:  settings.Notification.Push.HealthCheck.Enabled,
-				Interval: settings.Notification.Push.HealthCheck.Interval,
-				Timeout:  settings.Notification.Push.HealthCheck.Timeout,
-			}
-			pd.healthChecker = NewHealthChecker(hcConfig, pd.log, notificationMetrics)
-		}
-
-		// Rate limiting is now per-provider (initialized in initializeEnhancedProviders)
-
-		// Build enhanced providers with circuit breakers and rate limiters
-		pd.providers = pd.initializeEnhancedProviders(settings, notificationMetrics)
-
-		// Register providers with health checker
-		if pd.healthChecker != nil {
-			for i := range pd.providers {
-				ep := &pd.providers[i]
-				pd.healthChecker.RegisterProvider(ep.prov, ep.circuitBreaker)
-			}
-		}
-
-		globalPushDispatcher = pd
-
-		// Warn if localhost URLs are used with external webhooks
-		// See: https://github.com/tphakala/birdnet-go/issues/1457
-		baseURL := BuildBaseURL(settings.Security.Host, settings.WebServer.Port, settings.Security.AutoTLS)
-		if containsLocalhost(baseURL) && hasExternalWebhooks(pd.providers) {
-			pd.log.Info("detection URLs use localhost with external webhooks",
-				"base_url", baseURL,
-				"note", "External services may not access these URLs",
-				"fix", "Set security.host in config or BIRDNET_HOST environment variable")
-		}
-
-		// Move start() inside Once to prevent race conditions
-		if pd.enabled && len(pd.providers) > 0 {
-			if err := pd.start(); err != nil {
-				pd.log.Error("failed to start push dispatcher", "error", err)
-				initErr = err
-			}
-		}
+		initErr = initializePushDispatcher(settings, notificationMetrics)
 	})
-
 	return initErr
+}
+
+// initializePushDispatcher performs the actual dispatcher initialization.
+func initializePushDispatcher(settings *conf.Settings, notificationMetrics *metrics.NotificationMetrics) error {
+	if settings == nil || !settings.Notification.Push.Enabled {
+		return nil
+	}
+
+	pd := createPushDispatcher(settings, notificationMetrics)
+	pd.healthChecker = createHealthCheckerIfEnabled(settings, pd.log, notificationMetrics)
+	pd.providers = pd.initializeEnhancedProviders(settings, notificationMetrics)
+
+	registerProvidersWithHealthChecker(pd)
+	globalPushDispatcher = pd
+
+	warnIfLocalhostWithExternalWebhooks(pd, settings)
+	return startDispatcherIfNeeded(pd)
+}
+
+// createPushDispatcher creates a new push dispatcher with the given settings.
+func createPushDispatcher(settings *conf.Settings, notificationMetrics *metrics.NotificationMetrics) *pushDispatcher {
+	maxConcurrentJobs := calculateMaxConcurrentJobs(settings)
+	return &pushDispatcher{
+		log:               getFileLogger(settings.Debug),
+		enabled:           settings.Notification.Push.Enabled,
+		maxRetries:        settings.Notification.Push.MaxRetries,
+		retryDelay:        settings.Notification.Push.RetryDelay,
+		defaultTimeout:    settings.Notification.Push.DefaultTimeout,
+		metrics:           notificationMetrics,
+		concurrencySem:    semaphore.NewWeighted(maxConcurrentJobs),
+		maxConcurrentJobs: maxConcurrentJobs,
+	}
+}
+
+// calculateMaxConcurrentJobs calculates the max concurrent jobs based on provider count.
+func calculateMaxConcurrentJobs(settings *conf.Settings) int64 {
+	maxJobs := int64(defaultMaxConcurrentJobs)
+	if providerCount := len(settings.Notification.Push.Providers); providerCount > 0 {
+		perProviderLimit := int64(providerCount * jobsPerProvider)
+		if perProviderLimit > maxJobs {
+			maxJobs = perProviderLimit
+		}
+	}
+	return maxJobs
+}
+
+// createHealthCheckerIfEnabled creates a health checker if enabled in settings.
+func createHealthCheckerIfEnabled(settings *conf.Settings, log *slog.Logger, notificationMetrics *metrics.NotificationMetrics) *HealthChecker {
+	if !settings.Notification.Push.HealthCheck.Enabled {
+		return nil
+	}
+	hcConfig := HealthCheckConfig{
+		Enabled:  settings.Notification.Push.HealthCheck.Enabled,
+		Interval: settings.Notification.Push.HealthCheck.Interval,
+		Timeout:  settings.Notification.Push.HealthCheck.Timeout,
+	}
+	return NewHealthChecker(hcConfig, log, notificationMetrics)
+}
+
+// registerProvidersWithHealthChecker registers all providers with the health checker.
+func registerProvidersWithHealthChecker(pd *pushDispatcher) {
+	if pd.healthChecker == nil {
+		return
+	}
+	for i := range pd.providers {
+		ep := &pd.providers[i]
+		pd.healthChecker.RegisterProvider(ep.prov, ep.circuitBreaker)
+	}
+}
+
+// warnIfLocalhostWithExternalWebhooks logs a warning if localhost URLs are used with external webhooks.
+// See: https://github.com/tphakala/birdnet-go/issues/1457
+func warnIfLocalhostWithExternalWebhooks(pd *pushDispatcher, settings *conf.Settings) {
+	baseURL := BuildBaseURL(settings.Security.Host, settings.WebServer.Port, settings.Security.AutoTLS)
+	if containsLocalhost(baseURL) && hasExternalWebhooks(pd.providers) {
+		pd.log.Info("detection URLs use localhost with external webhooks",
+			"base_url", baseURL,
+			"note", "External services may not access these URLs",
+			"fix", "Set security.host in config or BIRDNET_HOST environment variable")
+	}
+}
+
+// startDispatcherIfNeeded starts the dispatcher if it's enabled and has providers.
+func startDispatcherIfNeeded(pd *pushDispatcher) error {
+	if !pd.enabled || len(pd.providers) == 0 {
+		return nil
+	}
+	if err := pd.start(); err != nil {
+		pd.log.Error("failed to start push dispatcher", "error", err)
+		return err
+	}
+	return nil
 }
 
 // GetPushDispatcher returns the dispatcher if initialized
 func GetPushDispatcher() *pushDispatcher { return globalPushDispatcher }
 
 func (d *pushDispatcher) start() error {
-	if !d.enabled {
-		return nil
-	}
-	if d.cancel != nil {
-		return nil // already started
-	}
-	if len(d.providers) == 0 {
-		d.log.Info("push notifications enabled but no providers configured")
-		return nil
+	if err := d.validateStartPreconditions(); err != nil {
+		return err
 	}
 
 	service := GetService()
@@ -179,33 +198,8 @@ func (d *pushDispatcher) start() error {
 	ctx, cancel := context.WithCancel(ctx)
 	d.cancel = cancel
 
-	go func() {
-		defer service.Unsubscribe(ch)
-		for {
-			select {
-			case notif, ok := <-ch:
-				if !ok || notif == nil {
-					return
-				}
-				// Skip ephemeral toast notifications
-				if isToastNotification(notif) {
-					continue
-				}
-				// Dispatch in background
-				go d.dispatch(ctx, notif)
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	// Start health checker if enabled
-	if d.healthChecker != nil {
-		if err := d.healthChecker.Start(ctx); err != nil {
-			d.log.Error("failed to start health checker", "error", err)
-			// Non-fatal, continue with dispatcher
-		}
-	}
+	go d.runDispatchLoop(ctx, ch, service)
+	d.startHealthChecker(ctx)
 
 	d.log.Info("push dispatcher started",
 		"providers", len(d.providers),
@@ -214,57 +208,119 @@ func (d *pushDispatcher) start() error {
 	return nil
 }
 
+// validateStartPreconditions checks if the dispatcher can be started.
+func (d *pushDispatcher) validateStartPreconditions() error {
+	if !d.enabled {
+		return nil
+	}
+	if d.cancel != nil {
+		return nil // already started
+	}
+	if len(d.providers) == 0 {
+		d.log.Info("push notifications enabled but no providers configured")
+		return nil
+	}
+	return nil
+}
+
+// runDispatchLoop runs the main notification dispatch loop.
+func (d *pushDispatcher) runDispatchLoop(ctx context.Context, ch <-chan *Notification, service *Service) {
+	defer service.Unsubscribe(ch)
+	for {
+		select {
+		case notif, ok := <-ch:
+			if !ok || notif == nil {
+				return
+			}
+			if isToastNotification(notif) {
+				continue
+			}
+			go d.dispatch(ctx, notif)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// startHealthChecker starts the health checker if enabled.
+func (d *pushDispatcher) startHealthChecker(ctx context.Context) {
+	if d.healthChecker == nil {
+		return
+	}
+	if err := d.healthChecker.Start(ctx); err != nil {
+		d.log.Error("failed to start health checker", "error", err)
+	}
+}
+
 func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 	for i := range d.providers {
 		ep := &d.providers[i]
-		if !ep.prov.IsEnabled() || !ep.prov.SupportsType(notif.Type) {
-			continue
-		}
-		// Apply filter with metrics tracking
-		if !d.matchesFilter(ep, notif) {
+		if !d.shouldDispatchToProvider(ep, notif) {
 			continue
 		}
 
-		// Acquire semaphore slot before spawning goroutine (prevents unbounded goroutine explosion)
-		// Use TryAcquire with timeout to prevent blocking the dispatch loop
-		// Skip semaphore if not initialized (e.g., in tests)
-		if d.concurrencySem != nil {
-			acquireCtx, cancel := context.WithTimeout(ctx, semaphoreAcquireTimeout)
-			err := d.concurrencySem.Acquire(acquireCtx, 1)
-			cancel()
-			if err != nil {
-				// Failed to acquire within timeout - queue is full
-				if d.log != nil {
-					d.log.Warn("dispatch queue full, dropping notification",
-						"provider", ep.name,
-						"notification_id", notif.ID,
-						"error", err)
-				}
-				if d.metrics != nil {
-					d.metrics.RecordFilterRejection(ep.name, "queue_full")
-				}
-				continue
-			}
+		if !d.acquireSemaphoreSlot(ctx, ep, notif) {
+			continue
 		}
 
-		// Run each provider in its own goroutine to avoid head-of-line blocking
-		go func(provider *enhancedProvider) {
-			// Always release semaphore and handle panics
-			defer func() {
-				if d.concurrencySem != nil {
-					d.concurrencySem.Release(1)
-				}
-				if r := recover(); r != nil {
-					if d.log != nil {
-						d.log.Error("panic in dispatch goroutine",
-							"provider", provider.name,
-							"notification_id", notif.ID,
-							"panic", r)
-					}
-				}
-			}()
-			d.dispatchEnhanced(ctx, notif, provider)
-		}(ep)
+		d.spawnDispatchGoroutine(ctx, ep, notif)
+	}
+}
+
+// shouldDispatchToProvider checks if notification should be dispatched to provider.
+func (d *pushDispatcher) shouldDispatchToProvider(ep *enhancedProvider, notif *Notification) bool {
+	if !ep.prov.IsEnabled() || !ep.prov.SupportsType(notif.Type) {
+		return false
+	}
+	return d.matchesFilter(ep, notif)
+}
+
+// acquireSemaphoreSlot attempts to acquire a semaphore slot for dispatch.
+// Returns true if slot acquired or semaphore not configured, false if queue is full.
+func (d *pushDispatcher) acquireSemaphoreSlot(ctx context.Context, ep *enhancedProvider, notif *Notification) bool {
+	if d.concurrencySem == nil {
+		return true
+	}
+
+	acquireCtx, cancel := context.WithTimeout(ctx, semaphoreAcquireTimeout)
+	err := d.concurrencySem.Acquire(acquireCtx, 1)
+	cancel()
+
+	if err != nil {
+		if d.log != nil {
+			d.log.Warn("dispatch queue full, dropping notification",
+				"provider", ep.name,
+				"notification_id", notif.ID,
+				"error", err)
+		}
+		if d.metrics != nil {
+			d.metrics.RecordFilterRejection(ep.name, "queue_full")
+		}
+		return false
+	}
+	return true
+}
+
+// spawnDispatchGoroutine spawns a goroutine to dispatch notification to provider.
+func (d *pushDispatcher) spawnDispatchGoroutine(ctx context.Context, ep *enhancedProvider, notif *Notification) {
+	go func(provider *enhancedProvider) {
+		defer d.recoverFromDispatchPanic(provider, notif)
+		d.dispatchEnhanced(ctx, notif, provider)
+	}(ep)
+}
+
+// recoverFromDispatchPanic handles cleanup and panic recovery for dispatch goroutines.
+func (d *pushDispatcher) recoverFromDispatchPanic(provider *enhancedProvider, notif *Notification) {
+	if d.concurrencySem != nil {
+		d.concurrencySem.Release(1)
+	}
+	if r := recover(); r != nil {
+		if d.log != nil {
+			d.log.Error("panic in dispatch goroutine",
+				"provider", provider.name,
+				"notification_id", notif.ID,
+				"panic", r)
+		}
 	}
 }
 
@@ -849,111 +905,142 @@ func (e *providerError) Unwrap() error { return e.Err }
 
 // initializeEnhancedProviders creates enhanced providers with circuit breakers and metrics.
 func (d *pushDispatcher) initializeEnhancedProviders(settings *conf.Settings, notificationMetrics *metrics.NotificationMetrics) []enhancedProvider {
+	cbConfig := d.getCircuitBreakerConfig(settings)
 	var enhanced []enhancedProvider
-
-	// Get circuit breaker config from settings or use defaults
-	cbConfig := DefaultCircuitBreakerConfig()
-	if settings.Notification.Push.CircuitBreaker.Enabled {
-		cbConfig.MaxFailures = settings.Notification.Push.CircuitBreaker.MaxFailures
-		cbConfig.Timeout = settings.Notification.Push.CircuitBreaker.Timeout
-		cbConfig.HalfOpenMaxRequests = settings.Notification.Push.CircuitBreaker.HalfOpenMaxRequests
-
-		// Validate circuit breaker configuration
-		if err := cbConfig.Validate(); err != nil {
-			if d.log != nil {
-				d.log.Error("invalid circuit breaker configuration, using defaults",
-					"error", err)
-			}
-			cbConfig = DefaultCircuitBreakerConfig()
-		}
-	}
 
 	for i := range settings.Notification.Push.Providers {
 		pc := &settings.Notification.Push.Providers[i]
-		prov := buildProvider(pc, d.log)
-		if prov == nil {
-			continue
-		}
-
-		if err := prov.ValidateConfig(); err != nil {
-			if d.log != nil {
-				d.log.Error("push provider config invalid", "name", pc.Name, "type", pc.Type, "error", err)
-			}
-			continue
-		}
-
-		if prov.IsEnabled() {
-			name := prov.GetName()
-
-			// Create circuit breaker for this provider
-			var cb *PushCircuitBreaker
-			if settings.Notification.Push.CircuitBreaker.Enabled {
-				cb = NewPushCircuitBreaker(cbConfig, notificationMetrics, name)
-			}
-
-			// Create per-provider rate limiter if enabled
-			var rl *PushRateLimiter
-			if settings.Notification.Push.RateLimiting.Enabled {
-				rl = NewPushRateLimiter(PushRateLimiterConfig{
-					RequestsPerMinute: settings.Notification.Push.RateLimiting.RequestsPerMinute,
-					BurstSize:         settings.Notification.Push.RateLimiting.BurstSize,
-				})
-				if d.log != nil {
-					d.log.Info("rate limiter enabled for provider",
-						"provider", name,
-						"requests_per_minute", settings.Notification.Push.RateLimiting.RequestsPerMinute,
-						"burst_size", settings.Notification.Push.RateLimiting.BurstSize)
-				}
-			}
-
-			// Inject telemetry into circuit breaker and provider
-			service := GetService()
-			if service != nil && service.GetTelemetry() != nil {
-				telemetry := service.GetTelemetry()
-
-				// Set telemetry on circuit breaker
-				if cb != nil {
-					cb.SetTelemetry(telemetry)
-					d.log.Debug("telemetry injected into circuit breaker",
-						"provider", name,
-						"telemetry_enabled", telemetry.IsEnabled())
-				}
-
-				// Set telemetry on webhook providers
-				if webhookProv, ok := prov.(*WebhookProvider); ok {
-					webhookProv.SetTelemetry(telemetry)
-					d.log.Debug("telemetry injected into webhook provider",
-						"provider", name,
-						"telemetry_enabled", telemetry.IsEnabled())
-				}
-			} else {
-				d.log.Debug("telemetry not available for provider injection",
-					"provider", name,
-					"service_exists", service != nil,
-					"telemetry_exists", service != nil && service.GetTelemetry() != nil)
-			}
-
-			ep := enhancedProvider{
-				prov:           prov,
-				circuitBreaker: cb,
-				rateLimiter:    rl,
-				filter:         pc.Filter,
-				name:           name,
-			}
-
-			enhanced = append(enhanced, ep)
-
-			if d.log != nil {
-				d.log.Debug("registered enhanced push provider",
-					"name", name,
-					"circuit_breaker", cb != nil,
-					"types", pc.Filter.Types,
-					"priorities", pc.Filter.Priorities)
-			}
+		ep := d.buildEnhancedProvider(pc, cbConfig, settings, notificationMetrics)
+		if ep != nil {
+			enhanced = append(enhanced, *ep)
 		}
 	}
 
 	return enhanced
+}
+
+// getCircuitBreakerConfig returns circuit breaker config from settings or defaults.
+func (d *pushDispatcher) getCircuitBreakerConfig(settings *conf.Settings) CircuitBreakerConfig {
+	cbConfig := DefaultCircuitBreakerConfig()
+	if !settings.Notification.Push.CircuitBreaker.Enabled {
+		return cbConfig
+	}
+
+	cbConfig.MaxFailures = settings.Notification.Push.CircuitBreaker.MaxFailures
+	cbConfig.Timeout = settings.Notification.Push.CircuitBreaker.Timeout
+	cbConfig.HalfOpenMaxRequests = settings.Notification.Push.CircuitBreaker.HalfOpenMaxRequests
+
+	if err := cbConfig.Validate(); err != nil {
+		if d.log != nil {
+			d.log.Error("invalid circuit breaker configuration, using defaults", "error", err)
+		}
+		return DefaultCircuitBreakerConfig()
+	}
+	return cbConfig
+}
+
+// buildEnhancedProvider creates a single enhanced provider with all supporting components.
+func (d *pushDispatcher) buildEnhancedProvider(pc *conf.PushProviderConfig, cbConfig CircuitBreakerConfig, settings *conf.Settings, notificationMetrics *metrics.NotificationMetrics) *enhancedProvider {
+	prov := buildProvider(pc, d.log)
+	if prov == nil {
+		return nil
+	}
+
+	if err := prov.ValidateConfig(); err != nil {
+		if d.log != nil {
+			d.log.Error("push provider config invalid", "name", pc.Name, "type", pc.Type, "error", err)
+		}
+		return nil
+	}
+
+	if !prov.IsEnabled() {
+		return nil
+	}
+
+	name := prov.GetName()
+	cb := d.createProviderCircuitBreaker(settings, cbConfig, notificationMetrics, name)
+	rl := d.createProviderRateLimiter(settings, name)
+	d.injectTelemetry(prov, cb, name)
+
+	ep := &enhancedProvider{
+		prov:           prov,
+		circuitBreaker: cb,
+		rateLimiter:    rl,
+		filter:         pc.Filter,
+		name:           name,
+	}
+
+	if d.log != nil {
+		d.log.Debug("registered enhanced push provider",
+			"name", name,
+			"circuit_breaker", cb != nil,
+			"types", pc.Filter.Types,
+			"priorities", pc.Filter.Priorities)
+	}
+
+	return ep
+}
+
+// createProviderCircuitBreaker creates a circuit breaker for a provider if enabled.
+func (d *pushDispatcher) createProviderCircuitBreaker(settings *conf.Settings, cbConfig CircuitBreakerConfig, notificationMetrics *metrics.NotificationMetrics, name string) *PushCircuitBreaker {
+	if !settings.Notification.Push.CircuitBreaker.Enabled {
+		return nil
+	}
+	return NewPushCircuitBreaker(cbConfig, notificationMetrics, name)
+}
+
+// createProviderRateLimiter creates a rate limiter for a provider if enabled.
+func (d *pushDispatcher) createProviderRateLimiter(settings *conf.Settings, name string) *PushRateLimiter {
+	if !settings.Notification.Push.RateLimiting.Enabled {
+		return nil
+	}
+
+	rl := NewPushRateLimiter(PushRateLimiterConfig{
+		RequestsPerMinute: settings.Notification.Push.RateLimiting.RequestsPerMinute,
+		BurstSize:         settings.Notification.Push.RateLimiting.BurstSize,
+	})
+
+	if d.log != nil {
+		d.log.Info("rate limiter enabled for provider",
+			"provider", name,
+			"requests_per_minute", settings.Notification.Push.RateLimiting.RequestsPerMinute,
+			"burst_size", settings.Notification.Push.RateLimiting.BurstSize)
+	}
+
+	return rl
+}
+
+// injectTelemetry injects telemetry into circuit breaker and provider.
+func (d *pushDispatcher) injectTelemetry(prov Provider, cb *PushCircuitBreaker, name string) {
+	service := GetService()
+	if service == nil || service.GetTelemetry() == nil {
+		if d.log != nil {
+			d.log.Debug("telemetry not available for provider injection",
+				"provider", name,
+				"service_exists", service != nil)
+		}
+		return
+	}
+
+	telemetry := service.GetTelemetry()
+
+	if cb != nil {
+		cb.SetTelemetry(telemetry)
+		if d.log != nil {
+			d.log.Debug("telemetry injected into circuit breaker",
+				"provider", name,
+				"telemetry_enabled", telemetry.IsEnabled())
+		}
+	}
+
+	if webhookProv, ok := prov.(*WebhookProvider); ok {
+		webhookProv.SetTelemetry(telemetry)
+		if d.log != nil {
+			d.log.Debug("telemetry injected into webhook provider",
+				"provider", name,
+				"telemetry_enabled", telemetry.IsEnabled())
+		}
+	}
 }
 
 // ----------------- Error Categorization -----------------
@@ -1089,49 +1176,54 @@ func hasExternalWebhooks(providers []enhancedProvider) bool {
 func isPrivateOrLocalURL(urlStr string) bool {
 	u, err := url.Parse(urlStr)
 	if err != nil {
-		// If we can't parse it, assume it's external to be safe
 		return false
 	}
 
 	hostname := u.Hostname()
 
-	// Check for localhost string match first (covers "localhost" domain)
 	if strings.EqualFold(hostname, "localhost") {
 		return true
 	}
 
-	// Strip zone ID from IPv6 addresses (e.g., "fe80::1%eth0" -> "fe80::1")
-	// net.ParseIP doesn't handle zone IDs, but they indicate link-local addresses
+	if isPrivateIP(hostname) {
+		return true
+	}
+
+	return hasInternalTLD(hostname)
+}
+
+// isPrivateIP checks if the hostname is a private, loopback, or link-local IP.
+func isPrivateIP(hostname string) bool {
+	// Strip zone ID from IPv6 addresses
 	if idx := strings.IndexByte(hostname, '%'); idx >= 0 {
 		hostname = hostname[:idx]
 	}
 
-	// Try to parse as IP address
 	ip := net.ParseIP(hostname)
-	if ip != nil {
-		// Use built-in Go functions for proper private/loopback/link-local detection
-		// Note: IsPrivate() does NOT include link-local or CGNAT, so we check explicitly
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() {
-			return true
-		}
-		// Check for CGNAT range (100.64.0.0/10, RFC 6598)
-		// Go's IsPrivate() doesn't include this, but it's carrier-grade NAT and should be treated as private
-		if ipv4 := ip.To4(); ipv4 != nil {
-			if ipv4[0] == 100 && (ipv4[1]&0xC0) == 64 {
-				return true // 100.64.0.0/10
-			}
-		}
+	if ip == nil {
+		return false
 	}
 
-	// Check for common internal/private TLD patterns
-	// These are commonly used for internal networks and should not trigger external webhook warnings
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() {
+		return true
+	}
+
+	return isCGNATAddress(ip)
+}
+
+// isCGNATAddress checks if IP is in CGNAT range (100.64.0.0/10, RFC 6598).
+func isCGNATAddress(ip net.IP) bool {
+	ipv4 := ip.To4()
+	if ipv4 == nil {
+		return false
+	}
+	return ipv4[0] == 100 && (ipv4[1]&0xC0) == 64
+}
+
+// hasInternalTLD checks if hostname has a common internal/private TLD.
+func hasInternalTLD(hostname string) bool {
 	internalTLDs := []string{
-		".local",    // mDNS/Bonjour (RFC 6762)
-		".internal", // Common internal convention
-		".lan",      // Common home network convention
-		".home",     // Common home network convention
-		".corp",     // Corporate networks
-		".private",  // Private networks
+		".local", ".internal", ".lan", ".home", ".corp", ".private",
 	}
 
 	lowerHostname := strings.ToLower(hostname)
@@ -1140,8 +1232,5 @@ func isPrivateOrLocalURL(urlStr string) bool {
 			return true
 		}
 	}
-
-	// If hostname is not an IP and doesn't match internal TLDs,
-	// assume it's external for safety (triggers privacy warning).
 	return false
 }

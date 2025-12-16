@@ -1,3 +1,4 @@
+//nolint:gocognit // Table-driven tests have expected complexity
 package notification
 
 import (

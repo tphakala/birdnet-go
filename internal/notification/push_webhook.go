@@ -263,46 +263,66 @@ func (w *WebhookProvider) ValidateConfig() error {
 		return fmt.Errorf("at least one webhook endpoint is required")
 	}
 
-	// Validate each endpoint (use index to avoid copying)
 	for i := range w.endpoints {
-		endpoint := &w.endpoints[i] // Use pointer to avoid copying
-		if endpoint.URL == "" {
-			return fmt.Errorf("endpoint %d: URL is required", i)
-		}
-
-		// Validate and normalize HTTP method
-		method := strings.ToUpper(strings.TrimSpace(endpoint.Method))
-		if method == "" {
-			method = http.MethodPost // Default to POST
-		}
-		endpoint.Method = method
-		if method != http.MethodPost && method != http.MethodPut && method != http.MethodPatch {
-			return fmt.Errorf("endpoint %d: method must be POST, PUT, or PATCH, got %s", i, method)
-		}
-
-		// Validate URL and scheme using url.Parse
-		u, err := url.Parse(endpoint.URL)
-		if err != nil {
-			return fmt.Errorf("endpoint %d: invalid URL: %w", i, err)
-		}
-		if u.Scheme != "http" && u.Scheme != "https" {
-			return fmt.Errorf("endpoint %d: URL scheme must be http or https, got %s", i, u.Scheme)
-		}
-		if u.Host == "" {
-			return fmt.Errorf("endpoint %d: URL host is required", i)
-		}
-
-		// Validate timeout
-		if endpoint.Timeout < 0 {
-			return fmt.Errorf("endpoint %d: timeout must be >= 0", i)
-		}
-
-		// Validate auth configuration (secrets are already resolved at this point)
-		if err := validateResolvedWebhookAuth(&endpoint.Auth); err != nil {
-			return fmt.Errorf("endpoint %d: %w", i, err)
+		if err := w.validateEndpoint(i, &w.endpoints[i]); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+// validateEndpoint validates a single webhook endpoint configuration.
+func (w *WebhookProvider) validateEndpoint(index int, endpoint *WebhookEndpoint) error {
+	if endpoint.URL == "" {
+		return fmt.Errorf("endpoint %d: URL is required", index)
+	}
+
+	if err := w.validateAndNormalizeMethod(index, endpoint); err != nil {
+		return err
+	}
+
+	if err := validateEndpointURL(index, endpoint.URL); err != nil {
+		return err
+	}
+
+	if endpoint.Timeout < 0 {
+		return fmt.Errorf("endpoint %d: timeout must be >= 0", index)
+	}
+
+	if err := validateResolvedWebhookAuth(&endpoint.Auth); err != nil {
+		return fmt.Errorf("endpoint %d: %w", index, err)
+	}
+
+	return nil
+}
+
+// validateAndNormalizeMethod validates and normalizes the HTTP method.
+func (w *WebhookProvider) validateAndNormalizeMethod(index int, endpoint *WebhookEndpoint) error {
+	method := strings.ToUpper(strings.TrimSpace(endpoint.Method))
+	if method == "" {
+		method = http.MethodPost
+	}
+	endpoint.Method = method
+
+	if method != http.MethodPost && method != http.MethodPut && method != http.MethodPatch {
+		return fmt.Errorf("endpoint %d: method must be POST, PUT, or PATCH, got %s", index, method)
+	}
+	return nil
+}
+
+// validateEndpointURL validates the URL format and scheme.
+func validateEndpointURL(index int, urlStr string) error {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return fmt.Errorf("endpoint %d: invalid URL: %w", index, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("endpoint %d: URL scheme must be http or https, got %s", index, u.Scheme)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("endpoint %d: URL host is required", index)
+	}
 	return nil
 }
 
