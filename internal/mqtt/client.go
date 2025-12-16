@@ -230,17 +230,19 @@ func (c *client) prepareForConnection(logger *slog.Logger, isAutoReconnect bool)
 
 // createNewClient creates and configures a new MQTT client instance
 func (c *client) createNewClient(logger *slog.Logger) (mqtt.Client, error) {
+	// Create and configure client options outside the lock to avoid holding it during
+	// potential file I/O (TLS certificate loading). configureClientOptions only reads
+	// from c.config which is not modified concurrently.
+	opts, err := c.configureClientOptions(logger)
+	if err != nil {
+		return nil, err
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// Reinitialize reconnectStop if it was closed by a previous Disconnect()
 	c.reinitializeReconnectStopLocked(logger)
-
-	// Create and configure client options
-	opts, err := c.configureClientOptions(logger)
-	if err != nil {
-		return nil, err
-	}
 
 	// Create and store the new client instance
 	c.internalClient = mqtt.NewClient(opts)

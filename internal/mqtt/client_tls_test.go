@@ -25,7 +25,10 @@ const (
 	hivemqTLSBroker = "ssl://broker.hivemq.com:8883"
 
 	// Test timeouts
-	tlsTestTimeout = 30 * time.Second
+	tlsTestTimeout              = 30 * time.Second
+	tlsResultCollectionTimeout  = 20 * time.Second
+	tlsConfigValidationTimeout  = 10 * time.Second
+	benchmarkConnectionTimeout  = 10 * time.Second
 
 	// Environment variable values
 	envTrue = "true"
@@ -283,7 +286,7 @@ var tlsConnectionTestStages = []string{
 func collectTLSTestResults(t *testing.T, resultChan <-chan TestResult, testDone <-chan struct{}) map[string]bool {
 	t.Helper()
 	stageResults := make(map[string]bool)
-	timeout := time.After(20 * time.Second)
+	timeout := time.After(tlsResultCollectionTimeout)
 
 	for {
 		select {
@@ -404,7 +407,7 @@ func runTLSConfigValidationTest(t *testing.T, tlsSettings conf.MQTTTLSSettings, 
 	}
 	defer client.Disconnect()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), tlsConfigValidationTimeout)
 	defer cancel()
 
 	err = client.Connect(ctx)
@@ -462,14 +465,15 @@ func benchmarkMQTTConnection(b *testing.B, settings *conf.Settings, metrics *obs
 			b.Fatalf("Failed to create client: %v", err)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), benchmarkConnectionTimeout)
 		err = client.Connect(ctx)
 		if err != nil {
+			cancel()
 			b.Fatalf("Failed to connect: %v", err)
 		}
 
-		client.Disconnect()
 		cancel()
+		client.Disconnect()
 	}
 }
 

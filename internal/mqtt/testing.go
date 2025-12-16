@@ -150,6 +150,14 @@ const (
 	pubTimeout  = 12 * time.Second
 )
 
+// State constants for test results
+const (
+	stateRunning   = "running"
+	stateCompleted = "completed"
+	stateFailed    = "failed"
+	stateTimeout   = "timeout"
+)
+
 // networkTest represents a generic network test function
 type networkTest func(context.Context) error
 
@@ -414,7 +422,7 @@ func (c *client) TestConnection(ctx context.Context, resultChan chan<- TestResul
 	if err := ctx.Err(); err != nil {
 		sendResult(TestResult{
 			Success: false, Stage: "Test Setup", Message: "Test cancelled",
-			Error: err.Error(), State: "timeout",
+			Error: err.Error(), State: stateTimeout,
 		})
 		return
 	}
@@ -462,19 +470,19 @@ func determineResultState(result *TestResult) string {
 	if result.Error != "" {
 		errorLower := strings.ToLower(result.Error)
 		if strings.Contains(errorLower, "timeout") || strings.Contains(errorLower, "deadline exceeded") {
-			return "timeout"
+			return stateTimeout
 		}
-		return "failed"
+		return stateFailed
 	}
 
 	// Check state based on flags
 	switch {
 	case result.IsProgress:
-		return "running"
+		return stateRunning
 	case result.Success:
-		return "completed"
+		return stateCompleted
 	default:
-		return "failed"
+		return stateFailed
 	}
 }
 
