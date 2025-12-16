@@ -185,10 +185,6 @@ func startDispatcherIfNeeded(pd *pushDispatcher) error {
 func GetPushDispatcher() *pushDispatcher { return globalPushDispatcher }
 
 func (d *pushDispatcher) start() error {
-	if err := d.validateStartPreconditions(); err != nil {
-		return err
-	}
-
 	service := GetService()
 	if service == nil {
 		return fmt.Errorf("notification service not initialized")
@@ -205,21 +201,6 @@ func (d *pushDispatcher) start() error {
 		"providers", len(d.providers),
 		"health_checker", d.healthChecker != nil,
 		"max_concurrent_dispatches", d.maxConcurrentJobs)
-	return nil
-}
-
-// validateStartPreconditions checks if the dispatcher can be started.
-func (d *pushDispatcher) validateStartPreconditions() error {
-	if !d.enabled {
-		return nil
-	}
-	if d.cancel != nil {
-		return nil // already started
-	}
-	if len(d.providers) == 0 {
-		d.log.Info("push notifications enabled but no providers configured")
-		return nil
-	}
 	return nil
 }
 

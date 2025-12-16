@@ -3,6 +3,7 @@ package notification
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -343,8 +344,8 @@ func TestHealthChecker_StartStop(t *testing.T) {
 	err := hc.Start(ctx)
 	require.NoError(t, err)
 
-	// Wait for at least one check
-	time.Sleep(150 * time.Millisecond)
+	// Wait for at least one check - use longer timeout for CI reliability
+	time.Sleep(250 * time.Millisecond)
 
 	// Verify provider was checked
 	assert.Positive(t, provider.getValidateCalled())
@@ -354,7 +355,7 @@ func TestHealthChecker_StartStop(t *testing.T) {
 
 	// Verify no more checks happen
 	callsBefore := provider.getValidateCalled()
-	time.Sleep(150 * time.Millisecond)
+	time.Sleep(250 * time.Millisecond)
 	callsAfter := provider.getValidateCalled()
 	assert.Equal(t, callsBefore, callsAfter)
 }
@@ -571,7 +572,7 @@ func TestHealthChecker_ConcurrentAccess(t *testing.T) {
 
 	// Register multiple providers
 	for i := range 5 {
-		provider := &mockHealthProvider{name: "provider-" + string(rune('0'+i)), enabled: true}
+		provider := &mockHealthProvider{name: fmt.Sprintf("provider-%d", i), enabled: true}
 		hc.RegisterProvider(provider, nil)
 	}
 

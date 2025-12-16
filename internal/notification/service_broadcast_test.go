@@ -2,6 +2,7 @@ package notification
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -506,25 +507,29 @@ func TestService_ConcurrentBroadcast(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			notification := NewNotification(TypeInfo, PriorityLow, "Concurrent", "Test")
-			notification.ID += string(rune('0' + idx)) // Make unique
+			notification.ID += fmt.Sprintf("-%d", idx) // Make unique
 			service.broadcast(notification)
 		}(i)
 	}
 
 	wg.Wait()
 
-	// Drain channels to verify no deadlock
+	// Drain channels to verify no deadlock with timeout protection
 	for _, ch := range channels {
 		drainCount := 0
+		timeout := time.After(2 * time.Second)
+	drainLoop:
 		for {
 			select {
 			case <-ch:
 				drainCount++
+			case <-timeout:
+				t.Errorf("timeout draining channel after receiving %d notifications", drainCount)
+				break drainLoop
 			default:
-				goto done
+				break drainLoop
 			}
 		}
-	done:
 		// Should have received some notifications
 		assert.GreaterOrEqual(t, drainCount, 0)
 	}

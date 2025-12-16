@@ -115,28 +115,12 @@ func TestBuildBaseURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Note: Can't use t.Parallel() here because we're modifying environment variables
-
-			// Set environment variable if specified
+			// t.Setenv automatically restores original value and prevents t.Parallel()
 			if tt.envVar != "" {
-				oldEnv := os.Getenv("BIRDNET_HOST")
-				setEnv(t, "BIRDNET_HOST", tt.envVar)
-				defer func() {
-					if oldEnv != "" {
-						setEnv(t, "BIRDNET_HOST", oldEnv)
-					} else {
-						unsetEnv(t, "BIRDNET_HOST")
-					}
-				}()
+				t.Setenv("BIRDNET_HOST", tt.envVar)
 			} else {
-				// Ensure env var is not set
-				oldEnv := os.Getenv("BIRDNET_HOST")
-				unsetEnv(t, "BIRDNET_HOST")
-				defer func() {
-					if oldEnv != "" {
-						setEnv(t, "BIRDNET_HOST", oldEnv)
-					}
-				}()
+				// Ensure env var is not set by setting to empty
+				t.Setenv("BIRDNET_HOST", "")
 			}
 
 			result := BuildBaseURL(tt.host, tt.port, tt.autoTLS)

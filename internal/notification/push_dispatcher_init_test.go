@@ -3,7 +3,6 @@ package notification
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"testing"
 	"time"
 
@@ -533,68 +532,13 @@ func TestPushDispatcher_checkRateLimit(t *testing.T) {
 	})
 }
 
-// TestPushDispatcher_validateStartPreconditions tests start validation
-func TestPushDispatcher_validateStartPreconditions(t *testing.T) {
+// TestStartDispatcherIfNeeded tests conditional dispatcher start
+func TestStartDispatcherIfNeeded(t *testing.T) {
 	t.Parallel()
 
 	t.Run("disabled_returns_nil", func(t *testing.T) {
 		t.Parallel()
 
-		d := &pushDispatcher{
-			enabled: false,
-		}
-
-		err := d.validateStartPreconditions()
-		assert.NoError(t, err)
-	})
-
-	t.Run("already_started_returns_nil", func(t *testing.T) {
-		t.Parallel()
-
-		cancel := func() {}
-		d := &pushDispatcher{
-			enabled: true,
-			cancel:  cancel,
-		}
-
-		err := d.validateStartPreconditions()
-		assert.NoError(t, err)
-	})
-
-	t.Run("no_providers_returns_nil", func(t *testing.T) {
-		t.Parallel()
-
-		d := &pushDispatcher{
-			enabled:   true,
-			cancel:    nil,
-			providers: []enhancedProvider{},
-			log:       slog.Default(),
-		}
-
-		err := d.validateStartPreconditions()
-		assert.NoError(t, err)
-	})
-
-	t.Run("ready_to_start_returns_nil", func(t *testing.T) {
-		t.Parallel()
-
-		d := &pushDispatcher{
-			enabled: true,
-			cancel:  nil,
-			log:     slog.Default(),
-			providers: []enhancedProvider{
-				{name: "test"},
-			},
-		}
-
-		err := d.validateStartPreconditions()
-		assert.NoError(t, err)
-	})
-}
-
-// TestStartDispatcherIfNeeded tests conditional dispatcher start
-func TestStartDispatcherIfNeeded(t *testing.T) {
-	t.Run("disabled_returns_nil", func(t *testing.T) {
 		pd := &pushDispatcher{
 			enabled: false,
 		}
@@ -604,6 +548,8 @@ func TestStartDispatcherIfNeeded(t *testing.T) {
 	})
 
 	t.Run("no_providers_returns_nil", func(t *testing.T) {
+		t.Parallel()
+
 		pd := &pushDispatcher{
 			enabled:   true,
 			providers: []enhancedProvider{},
