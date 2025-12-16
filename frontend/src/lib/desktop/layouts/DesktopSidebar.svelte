@@ -416,7 +416,7 @@ Performance Optimizations:
         {:else}
           <button
             onclick={handleLogin}
-            class="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium bg-primary text-primary-content hover:bg-primary/90 transition-colors duration-150"
+            class="flex items-center justify-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-base-content/90 hover:text-base-content hover:bg-base-content/5 transition-colors duration-150"
             aria-label={t('auth.openLoginModal')}
           >
             <LogIn class="size-4" />
