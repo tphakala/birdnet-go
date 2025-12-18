@@ -192,14 +192,18 @@ const (
 	negativeEntryMarker = "__NOT_FOUND__"     // Special URL marker for negative cache entries
 
 	// Configuration constants
-	fallbackPolicyAll = "all"  // Fallback policy to allow all providers
-	percentMultiplier = 100    // Multiplier for percentage calculations
+	fallbackPolicyAll = "all" // Fallback policy to allow all providers
+	percentMultiplier = 100   // Multiplier for percentage calculations
 
 	// Performance threshold constants
 	dbCacheLookupSlowThreshold   = 50 * time.Millisecond  // Threshold for slow DB cache lookups
 	providerFetchSlowThreshold   = 100 * time.Millisecond // Threshold for slow provider fetch operations
 	totalFetchSlowThreshold      = 200 * time.Millisecond // Threshold for slow total fetch operations
 )
+
+// fallbackProviders defines the ordered list of providers to try when the primary provider fails.
+// The order matters: avicommons is tried first as it's faster (local data), then wikimedia (remote API).
+var fallbackProviders = []string{"avicommons", "wikimedia"}
 
 // --- Shared Helper Functions ---
 
@@ -644,7 +648,6 @@ func (c *BirdImageCache) tryBatchFallbackProviders(scientificNames []string, deb
 		logger.Debug("No images found with primary provider, trying fallback providers (policy: all)")
 	}
 
-	fallbackProviders := []string{"avicommons", "wikimedia"}
 	for _, fallbackProvider := range fallbackProviders {
 		if fallbackProvider == c.providerName {
 			continue
@@ -1142,7 +1145,12 @@ func (c *BirdImageCache) storeSuccessfulFetch(scientificName string, fetchedImag
 // logSlowOperation logs if an operation exceeds the threshold.
 func (c *BirdImageCache) logSlowOperation(operation, scientificName string, duration, threshold time.Duration) {
 	if c.debug && duration > threshold {
-		log.Printf("fetchAndStore: %s for %s took %v", operation, scientificName, duration)
+		imageProviderLogger.Warn("Slow operation detected",
+			"operation", operation,
+			"scientific_name", scientificName,
+			"duration", duration,
+			"threshold", threshold,
+			"provider", c.providerName)
 	}
 }
 

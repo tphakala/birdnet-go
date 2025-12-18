@@ -38,15 +38,21 @@ func createDatabaseErrorTestFunc(t *testing.T) func() error {
 			},
 			failGetCache: true,
 		}
-		metrics, _ := observability.NewMetrics()
-		cache, _ := imageprovider.CreateDefaultCache(metrics, failingStore)
+		metrics, err := observability.NewMetrics()
+		if err != nil {
+			return fmt.Errorf("failed to create metrics: %w", err)
+		}
+		cache, err := imageprovider.CreateDefaultCache(metrics, failingStore)
+		if err != nil {
+			return fmt.Errorf("failed to create cache: %w", err)
+		}
 		defer func() {
 			if closeErr := cache.Close(); closeErr != nil {
 				t.Logf("Failed to close cache: %v", closeErr)
 			}
 		}()
 		cache.SetImageProvider(&mockImageProvider{})
-		_, err := cache.Get("Test species")
+		_, err = cache.Get("Test species")
 		return err
 	}
 }

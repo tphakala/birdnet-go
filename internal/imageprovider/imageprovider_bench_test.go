@@ -76,7 +76,8 @@ func benchmarkConcurrentGet(b *testing.B, cache *imageprovider.BirdImageCache, s
 		i := 0
 		for pb.Next() {
 			if _, err := cache.Get(species[i%len(species)]); err != nil {
-				b.Fatalf("Unexpected error: %v", err)
+				b.Error("Unexpected error:", err)
+				return
 			}
 			i++
 		}
@@ -224,7 +225,8 @@ func BenchmarkConcurrentCacheAccess(b *testing.B) {
 			s := species[i%len(species)]
 			_, err := cache.Get(s)
 			if err != nil {
-				b.Fatalf("Unexpected error: %v", err)
+				b.Error("Unexpected error:", err)
+				return
 			}
 			i++
 		}
@@ -436,7 +438,8 @@ func benchmarkMixedReadWrite(b *testing.B, cache *imageprovider.BirdImageCache, 
 				cache.SetImageProvider(provider)
 			} else {
 				if _, err := cache.Get(species[i%len(species)]); err != nil {
-					b.Fatalf("Unexpected error: %v", err)
+					b.Error("Unexpected error:", err)
+					return
 				}
 			}
 			i++

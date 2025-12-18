@@ -32,7 +32,7 @@ func setupNegativeCacheTest(t *testing.T, notFoundSpecies map[string]bool) (*moc
 // assertImageNotFoundError verifies the error is ErrImageNotFound.
 func assertImageNotFoundError(t *testing.T, err error, context string) {
 	t.Helper()
-	assert.True(t, errors.Is(err, imageprovider.ErrImageNotFound), "%s: Expected ErrImageNotFound, got %v", context, err)
+	require.ErrorIs(t, err, imageprovider.ErrImageNotFound, "%s: Expected ErrImageNotFound", context)
 }
 
 // TestNegativeCachingBehavior validates that negative caching works correctly

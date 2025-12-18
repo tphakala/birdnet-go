@@ -374,9 +374,10 @@ func (m *mockFailingStore) GetSpeciesFirstDetectionInPeriod(ctx context.Context,
 }
 
 // verifyCacheEntry validates that an image was cached correctly in the store.
+// Note: CreateDefaultCache uses "wikimedia" as the provider name.
 func verifyCacheEntry(t *testing.T, store *mockStore, scientificName, expectedURL string) {
 	t.Helper()
-	cached, err := store.GetImageCache(datastore.ImageCacheQuery{ScientificName: scientificName, ProviderName: "mock"})
+	cached, err := store.GetImageCache(datastore.ImageCacheQuery{ScientificName: scientificName, ProviderName: "wikimedia"})
 	if errors.Is(err, datastore.ErrImageCacheNotFound) {
 		return // Not cached yet is acceptable
 	}
