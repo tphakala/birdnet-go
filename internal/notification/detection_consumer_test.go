@@ -94,12 +94,12 @@ func TestDetectionNotificationConsumer(t *testing.T) {
 	notif := notifications[0]
 	assert.Equal(t, TypeDetection, notif.Type)
 	assert.Equal(t, PriorityHigh, notif.Priority)
-	// Default template: "New Species: {{.CommonName}}"
-	assert.Contains(t, notif.Title, "New Species: American Robin")
+	// Default fallback title format when settings are nil: "New Species Detected: %s"
+	assert.Contains(t, notif.Title, "New Species Detected: American Robin")
+	// Default fallback message format when settings are nil: "First detection of %s (%s) at %s"
 	assert.Contains(t, notif.Message, "First detection of American Robin")
 	assert.Contains(t, notif.Message, "Turdus migratorius")
-	// Default template includes confidence percentage and detection time
-	assert.Contains(t, notif.Message, "92% confidence")
+	assert.Contains(t, notif.Message, "backyard-camera")
 	assert.Equal(t, "detection", notif.Component)
 
 	// Verify metadata
@@ -219,10 +219,10 @@ func TestDetectionNotificationConsumer_PreSanitizedLocations(t *testing.T) {
 
 			notif := notifications[0]
 
-			// Default template includes confidence and detection time, not location in message
-			assert.Contains(t, notif.Message, "95% confidence")
+			// Default fallback message format when settings are nil: "First detection of %s (%s) at %s"
 			assert.Contains(t, notif.Message, "First detection of Blue Jay")
 			assert.Contains(t, notif.Message, "Cyanocitta cristata")
+			assert.Contains(t, notif.Message, tc.expectedLocation)
 
 			// Verify the location in metadata passes through unchanged
 			assert.Equal(t, tc.expectedLocation, notif.Metadata["location"])
