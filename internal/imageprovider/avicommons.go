@@ -18,6 +18,7 @@ const (
 	aviCommonsProviderName = "avicommons"
 	aviCommonsBaseURL      = "https://static.avicommons.org"
 	aviCommonsDefaultSize  = "320" // Default image size (e.g., 240, 320, 480, 900)
+	bytesPerKB             = 1024  // Bytes per kilobyte for size calculations
 )
 
 // aviCommonsEntry represents a single entry in the Avicommons full JSON data.
@@ -94,7 +95,7 @@ func NewAviCommonsProvider(dataFs fs.FS, debug bool) (*AviCommonsProvider, error
 	}
 	logger.Info("Successfully read Avicommons data file",
 		"size_bytes", len(jsonData),
-		"size_kb", len(jsonData)/1024)
+		"size_kb", len(jsonData)/bytesPerKB)
 
 	logger.Debug("Unmarshalling Avicommons JSON data")
 	var data []aviCommonsEntry

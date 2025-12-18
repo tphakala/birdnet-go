@@ -20,25 +20,74 @@ import (
 // 5. Rate limiting impact - measuring how rate limiting affects throughput
 // 6. Batch operations - measuring GetBatch performance
 
-// BenchmarkCacheHit measures the performance of cache hits (best case scenario)
-func BenchmarkCacheHit(b *testing.B) {
-	mockProvider := &mockImageProvider{}
-	mockStore := newMockStore()
+// benchmarkCacheSetup creates a cache for benchmarking with proper cleanup.
+func benchmarkCacheSetup(b *testing.B, provider imageprovider.ImageProvider, store datastore.Interface) *imageprovider.BirdImageCache {
+	b.Helper()
 	metrics, err := observability.NewMetrics()
 	if err != nil {
 		b.Fatalf("Failed to create metrics: %v", err)
 	}
 
-	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
+	cache, err := imageprovider.CreateDefaultCache(metrics, store)
 	if err != nil {
 		b.Fatalf("Failed to create cache: %v", err)
 	}
-	defer func() {
+	cache.SetImageProvider(provider)
+
+	b.Cleanup(func() {
 		if err := cache.Close(); err != nil {
 			b.Errorf("Failed to close cache: %v", err)
 		}
-	}()
-	cache.SetImageProvider(mockProvider)
+	})
+
+	return cache
+}
+
+// benchmarkPrePopulateCache pre-populates the cache with species for benchmarking.
+func benchmarkPrePopulateCache(b *testing.B, cache *imageprovider.BirdImageCache, species []string) {
+	b.Helper()
+	for _, s := range species {
+		if _, err := cache.Get(s); err != nil {
+			b.Fatalf("Failed to pre-populate cache entry: %v", err)
+		}
+	}
+}
+
+// benchmarkSequentialGet runs sequential Get operations.
+func benchmarkSequentialGet(b *testing.B, cache *imageprovider.BirdImageCache, species []string) {
+	b.Helper()
+	b.ReportAllocs()
+	b.ResetTimer()
+	i := 0
+	for b.Loop() {
+		if _, err := cache.Get(species[i%len(species)]); err != nil {
+			b.Fatalf("Unexpected error: %v", err)
+		}
+		i++
+	}
+}
+
+// benchmarkConcurrentGet runs concurrent Get operations.
+func benchmarkConcurrentGet(b *testing.B, cache *imageprovider.BirdImageCache, species []string) {
+	b.Helper()
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		i := 0
+		for pb.Next() {
+			if _, err := cache.Get(species[i%len(species)]); err != nil {
+				b.Fatalf("Unexpected error: %v", err)
+			}
+			i++
+		}
+	})
+}
+
+// BenchmarkCacheHit measures the performance of cache hits (best case scenario)
+func BenchmarkCacheHit(b *testing.B) {
+	mockProvider := &mockImageProvider{}
+	mockStore := newMockStore()
+	cache := benchmarkCacheSetup(b, mockProvider, mockStore)
 
 	// Pre-populate cache
 	if _, err := cache.Get("Turdus merula"); err != nil {
@@ -230,38 +279,13 @@ func BenchmarkRateLimitedFetch(b *testing.B) {
 func BenchmarkGetBatch(b *testing.B) {
 	mockProvider := &mockImageProvider{}
 	mockStore := newMockStore()
-	metrics, err := observability.NewMetrics()
-	if err != nil {
-		b.Fatalf("Failed to create metrics: %v", err)
-	}
+	cache := benchmarkCacheSetup(b, mockProvider, mockStore)
 
-	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		b.Fatalf("Failed to create cache: %v", err)
-	}
-	defer func() {
-		if err := cache.Close(); err != nil {
-			b.Errorf("Failed to close cache: %v", err)
-		}
-	}()
-	cache.SetImageProvider(mockProvider)
-
-	// Create batch of species names
 	batchSizes := []int{10, 50, 100}
-
 	for _, size := range batchSizes {
 		b.Run(fmt.Sprintf("BatchSize_%d", size), func(b *testing.B) {
-			species := make([]string, size)
-			for i := range size {
-				species[i] = fmt.Sprintf("Species_%d", i)
-			}
-
-			// Pre-populate half of the entries
-			for i := 0; i < size/2; i++ {
-				if _, err := cache.Get(species[i]); err != nil {
-					b.Fatalf("Failed to pre-populate cache entry: %v", err)
-				}
-			}
+			species := generateSpeciesNames(size, "Species")
+			benchmarkPrePopulateCache(b, cache, species[:size/2])
 
 			b.ReportAllocs()
 			b.ResetTimer()
@@ -274,6 +298,15 @@ func BenchmarkGetBatch(b *testing.B) {
 			}
 		})
 	}
+}
+
+// generateSpeciesNames creates a slice of species names with the given prefix.
+func generateSpeciesNames(count int, prefix string) []string {
+	species := make([]string, count)
+	for i := range count {
+		species[i] = fmt.Sprintf("%s_%d", prefix, i)
+	}
+	return species
 }
 
 // BenchmarkMemoryUsage measures the memory overhead of the cache
@@ -373,81 +406,41 @@ func BenchmarkCacheRefreshCycle(b *testing.B) {
 func BenchmarkProviderAccess(b *testing.B) {
 	mockProvider := &mockImageProvider{}
 	mockStore := newMockStore()
-	metrics, err := observability.NewMetrics()
-	if err != nil {
-		b.Fatalf("Failed to create metrics: %v", err)
-	}
+	cache := benchmarkCacheSetup(b, mockProvider, mockStore)
 
-	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		b.Fatalf("Failed to create cache: %v", err)
-	}
-	defer func() {
-		if err := cache.Close(); err != nil {
-			b.Errorf("Failed to close cache: %v", err)
-		}
-	}()
-	cache.SetImageProvider(mockProvider)
-
-	// Pre-populate cache to focus on provider access
 	species := []string{"Turdus merula", "Parus major", "Carduelis carduelis"}
-	for _, s := range species {
-		if _, err := cache.Get(s); err != nil {
-			b.Fatalf("Failed to pre-populate: %v", err)
-		}
-	}
+	benchmarkPrePopulateCache(b, cache, species)
 
 	b.Run("Sequential", func(b *testing.B) {
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		i := 0
-		for b.Loop() {
-			// This will hit cache but still needs provider access check
-			_, err := cache.Get(species[i%len(species)])
-			if err != nil {
-				b.Fatalf("Unexpected error: %v", err)
-			}
-			i++
-		}
+		benchmarkSequentialGet(b, cache, species)
 	})
 
 	b.Run("Concurrent", func(b *testing.B) {
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		b.RunParallel(func(pb *testing.PB) {
-			i := 0
-			for pb.Next() {
-				_, err := cache.Get(species[i%len(species)])
-				if err != nil {
-					b.Fatalf("Unexpected error: %v", err)
-				}
-				i++
-			}
-		})
+		benchmarkConcurrentGet(b, cache, species)
 	})
 
 	b.Run("MixedReadWrite", func(b *testing.B) {
-		b.ReportAllocs()
-		b.ResetTimer()
+		benchmarkMixedReadWrite(b, cache, mockProvider, species)
+	})
+}
 
-		b.RunParallel(func(pb *testing.PB) {
-			i := 0
-			for pb.Next() {
-				if i%100 == 0 {
-					// Occasionally change provider (write operation)
-					cache.SetImageProvider(mockProvider)
-				} else {
-					// Mostly read operations
-					_, err := cache.Get(species[i%len(species)])
-					if err != nil {
-						b.Fatalf("Unexpected error: %v", err)
-					}
+// benchmarkMixedReadWrite runs mixed read/write operations.
+func benchmarkMixedReadWrite(b *testing.B, cache *imageprovider.BirdImageCache, provider imageprovider.ImageProvider, species []string) {
+	b.Helper()
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		i := 0
+		for pb.Next() {
+			if i%100 == 0 {
+				cache.SetImageProvider(provider)
+			} else {
+				if _, err := cache.Get(species[i%len(species)]); err != nil {
+					b.Fatalf("Unexpected error: %v", err)
 				}
-				i++
 			}
-		})
+			i++
+		}
 	})
 }
 

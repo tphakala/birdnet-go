@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -25,14 +27,10 @@ func setupTestCache(t *testing.T) (*mockProviderWithAPICounter, *imageprovider.B
 
 	mockStore := newMockStore()
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		t.Fatalf("Failed to create cache: %v", err)
-	}
+	require.NoError(t, err, "Failed to create cache")
 	cache.SetImageProvider(mockProvider)
 
 	return mockProvider, cache
@@ -50,114 +48,78 @@ func setupTestCacheWithSharedStore(t *testing.T) (*mockProviderWithAPICounter, *
 
 	mockStore := newMockStore()
 	metrics, err := observability.NewMetrics()
-	if err != nil {
-		t.Fatalf("Failed to create metrics: %v", err)
-	}
+	require.NoError(t, err, "Failed to create metrics")
 
 	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	if err != nil {
-		t.Fatalf("Failed to create cache: %v", err)
-	}
+	require.NoError(t, err, "Failed to create cache")
 	cache.SetImageProvider(mockProvider)
 
 	return mockProvider, cache, mockStore, metrics
+}
+
+// runConcurrentGets runs concurrent Get requests and returns any errors.
+func runConcurrentGets(cache *imageprovider.BirdImageCache, species string, count int) []error {
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errs []error
+
+	for range count {
+		wg.Go(func() {
+			if _, err := cache.Get(species); err != nil {
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
+			}
+		})
+	}
+	wg.Wait()
+	return errs
 }
 
 // TestCacheEffectiveness validates that caching effectively reduces external API calls
 func TestCacheEffectiveness(t *testing.T) {
 	t.Parallel()
 
-	// Test 1: Multiple requests for same species should only trigger one API call
 	t.Run("DeduplicationTest", func(t *testing.T) {
 		t.Parallel()
 		mockProvider, cache := setupTestCache(t)
-
-		species := "Parus major"
-
-		// Make 10 concurrent requests
-		var wg sync.WaitGroup
-		for range 10 {
-			wg.Go(func() {
-				_, err := cache.Get(species)
-				if err != nil {
-					t.Errorf("Failed to get image: %v", err)
-				}
-			})
-		}
-		wg.Wait()
-
-		// Should only have made 1 API call
-		if mockProvider.getAPICallCount() != 1 {
-			t.Errorf("Expected 1 API call, got %d", mockProvider.getAPICallCount())
-		}
+		errs := runConcurrentGets(cache, "Parus major", 10)
+		assert.Empty(t, errs, "Expected no errors from concurrent requests")
+		assert.Equal(t, int64(1), mockProvider.getAPICallCount(), "Expected 1 API call for concurrent requests")
 	})
 
-	// Test 2: Subsequent requests should use cache
 	t.Run("CacheHitTest", func(t *testing.T) {
 		t.Parallel()
 		mockProvider, cache := setupTestCache(t)
-
 		species := "Carduelis carduelis"
 
-		// First request - should hit API
 		_, err := cache.Get(species)
-		if err != nil {
-			t.Fatalf("Failed to get image: %v", err)
-		}
+		require.NoError(t, err, "Failed to get image")
+		assert.Equal(t, int64(1), mockProvider.getAPICallCount(), "Expected 1 initial API call")
 
-		initialCalls := mockProvider.getAPICallCount()
-		if initialCalls != 1 {
-			t.Errorf("Expected 1 initial API call, got %d", initialCalls)
-		}
-
-		// Make 100 more requests - should all be cache hits
-		for i := range 100 {
+		for range 100 {
 			_, err := cache.Get(species)
-			if err != nil {
-				t.Errorf("Failed to get image on request %d: %v", i, err)
-			}
+			require.NoError(t, err)
 		}
-
-		// API calls should not increase
-		if mockProvider.getAPICallCount() != initialCalls {
-			t.Errorf("Expected no additional API calls, got %d total calls", mockProvider.getAPICallCount())
-		}
+		assert.Equal(t, int64(1), mockProvider.getAPICallCount(), "Expected no additional API calls")
 	})
 
-	// Test 3: DB cache persistence
 	t.Run("DBCachePersistenceTest", func(t *testing.T) {
 		t.Parallel()
 		mockProvider, cache, mockStore, metrics := setupTestCacheWithSharedStore(t)
-
 		species := "Sturnus vulgaris"
 
-		// First request
 		_, err := cache.Get(species)
-		if err != nil {
-			t.Fatalf("Failed to get image: %v", err)
-		}
+		require.NoError(t, err, "Failed to get image")
+		assert.Equal(t, int64(1), mockProvider.getAPICallCount(), "Expected 1 API call for initial fetch")
 
-		if mockProvider.getAPICallCount() != 1 {
-			t.Errorf("Expected 1 API call for initial fetch, got %d", mockProvider.getAPICallCount())
-		}
-
-		// Create new cache instance (simulating restart)
 		cache2, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-		if err != nil {
-			t.Fatalf("Failed to create second cache: %v", err)
-		}
+		require.NoError(t, err, "Failed to create second cache")
 		cache2.SetImageProvider(mockProvider)
 
-		// Request same species - should load from DB, not API
 		_, err = cache2.Get(species)
-		if err != nil {
-			t.Fatalf("Failed to get image from new cache: %v", err)
-		}
-
-		// Should still be 1 API call (no new call)
-		if mockProvider.getAPICallCount() != 1 {
-			t.Errorf("Expected no new API calls after restart, got %d total calls", mockProvider.getAPICallCount())
-		}
+		require.NoError(t, err, "Failed to get image from new cache")
+		assert.Equal(t, int64(1), mockProvider.getAPICallCount(), "Expected no new API calls after restart")
 	})
 }
 

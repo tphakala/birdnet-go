@@ -61,6 +61,12 @@ const (
 	responseBodyPreviewLimit = 200 // Bytes to show in error messages
 	responseBodyDebugLimit   = 500 // Bytes to show in debug logs
 
+	// Request ID configuration
+	requestIDLength = 8 // Length of UUID prefix used for request tracking
+
+	// Metadata fallback values
+	unknownMetadataValue = "Unknown" // Default value when author/license metadata is unavailable
+
 	// Error detection strings (lowercase for case-insensitive comparison)
 	errorStringUserAgent   = "user-agent"
 	errorStringRobotPolicy = "robot policy"
@@ -145,36 +151,73 @@ func (l *wikiMediaProvider) resetCircuit() {
 // This replaces the mwclient library to ensure proper User-Agent header handling.
 // The context is used for rate limiting, cancellation, and deadlines.
 func (l *wikiMediaProvider) makeAPIRequest(ctx context.Context, params map[string]string) (*jason.Object, error) {
-	// Apply global rate limiting - ALL requests must respect the 1 req/sec limit
-	if l.globalLimiter != nil {
-		if err := l.globalLimiter.Wait(ctx); err != nil {
-			return nil, errors.New(err).
-				Component("imageprovider").
-				Category(errors.CategoryNetwork).
-				Context("provider", wikiProviderName).
-				Context("operation", "global_rate_limit_wait").
-				Build()
-		}
-		imageProviderLogger.Debug("Global rate limiter wait completed",
-			"provider", wikiProviderName)
+	if err := l.waitForGlobalRateLimit(ctx); err != nil {
+		return nil, err
 	}
 
-	// Verify User-Agent is set
+	if err := l.validateUserAgent(); err != nil {
+		return nil, err
+	}
+
+	fullURL, err := l.buildRequestURL(params)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := l.createHTTPRequest(fullURL)
+	if err != nil {
+		return nil, err
+	}
+
+	body, statusCode, err := l.executeHTTPRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if statusCode != http.StatusOK {
+		return nil, l.handleHTTPStatusError(statusCode, string(body))
+	}
+
+	return l.parseJSONResponse(body)
+}
+
+// waitForGlobalRateLimit waits for the global rate limiter if configured.
+func (l *wikiMediaProvider) waitForGlobalRateLimit(ctx context.Context) error {
+	if l.globalLimiter == nil {
+		return nil
+	}
+	if err := l.globalLimiter.Wait(ctx); err != nil {
+		return errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("operation", "global_rate_limit_wait").
+			Build()
+	}
+	imageProviderLogger.Debug("Global rate limiter wait completed", "provider", wikiProviderName)
+	return nil
+}
+
+// validateUserAgent ensures the User-Agent is set.
+func (l *wikiMediaProvider) validateUserAgent() error {
 	if l.userAgent == "" {
 		imageProviderLogger.Error("User-Agent is empty! This will cause Wikipedia to reject the request",
 			"provider", wikiProviderName)
-		return nil, errors.Newf("User-Agent not set for Wikipedia provider").
+		return errors.Newf("User-Agent not set for Wikipedia provider").
 			Component("imageprovider").
 			Category(errors.CategoryConfiguration).
 			Context("provider", wikiProviderName).
 			Context("operation", "missing_user_agent").
 			Build()
 	}
+	return nil
+}
 
-	// Build URL with query parameters
+// buildRequestURL constructs the full API URL with query parameters.
+func (l *wikiMediaProvider) buildRequestURL(params map[string]string) (string, error) {
 	u, err := url.Parse(wikipediaAPIURL)
 	if err != nil {
-		return nil, errors.New(err).
+		return "", errors.New(err).
 			Component("imageprovider").
 			Category(errors.CategoryNetwork).
 			Context("provider", wikiProviderName).
@@ -182,15 +225,16 @@ func (l *wikiMediaProvider) makeAPIRequest(ctx context.Context, params map[strin
 			Build()
 	}
 
-	// Add query parameters
 	q := u.Query()
 	for k, v := range params {
 		q.Set(k, v)
 	}
 	u.RawQuery = q.Encode()
-	fullURL := u.String()
+	return u.String(), nil
+}
 
-	// Create HTTP request with proper headers
+// createHTTPRequest creates an HTTP request with proper headers.
+func (l *wikiMediaProvider) createHTTPRequest(fullURL string) (*http.Request, error) {
 	req, err := http.NewRequest("GET", fullURL, http.NoBody)
 	if err != nil {
 		return nil, errors.New(err).
@@ -202,37 +246,34 @@ func (l *wikiMediaProvider) makeAPIRequest(ctx context.Context, params map[strin
 			Build()
 	}
 
-	// Set User-Agent header - CRITICAL for Wikipedia API
 	req.Header.Set("User-Agent", l.userAgent)
-
-	// Add other standard headers
 	req.Header.Set("Accept", "application/json")
-	// DO NOT set Accept-Encoding manually - let Go's HTTP client handle compression automatically
-	// When we set it manually, we have to decompress manually too!
 
-	// ALWAYS log the User-Agent to debug this issue
 	imageProviderLogger.Info("Setting User-Agent for Wikipedia API request",
 		"provider", wikiProviderName,
 		"user_agent", l.userAgent,
 		"user_agent_length", len(l.userAgent),
 		"url", fullURL)
 
-	// Log full request details in debug mode
 	if l.debug {
 		imageProviderLogger.Debug("Full request headers",
 			"provider", wikiProviderName,
 			"headers", req.Header)
 	}
 
-	// Execute the request
+	return req, nil
+}
+
+// executeHTTPRequest executes the HTTP request and returns the body and status code.
+func (l *wikiMediaProvider) executeHTTPRequest(req *http.Request) (body []byte, statusCode int, err error) {
 	resp, err := l.httpClient.Do(req)
 	if err != nil {
-		return nil, errors.New(err).
+		return nil, 0, errors.New(err).
 			Component("imageprovider").
 			Category(errors.CategoryNetwork).
 			Context("provider", wikiProviderName).
 			Context("operation", "http_request").
-			Context("url", fullURL).
+			Context("url", req.URL.String()).
 			Build()
 	}
 	defer func() {
@@ -241,10 +282,9 @@ func (l *wikiMediaProvider) makeAPIRequest(ctx context.Context, params map[strin
 		}
 	}()
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
+	body, err = io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.New(err).
+		return nil, resp.StatusCode, errors.New(err).
 			Component("imageprovider").
 			Category(errors.CategoryNetwork).
 			Context("provider", wikiProviderName).
@@ -253,76 +293,65 @@ func (l *wikiMediaProvider) makeAPIRequest(ctx context.Context, params map[strin
 			Build()
 	}
 
-	// Check HTTP status code and handle different error types
-	if resp.StatusCode != http.StatusOK {
-		bodyStr := string(body)
+	return body, resp.StatusCode, nil
+}
 
-		// Log the error response
-		imageProviderLogger.Warn("Wikipedia API error response",
-			"provider", wikiProviderName,
-			"status_code", resp.StatusCode,
-			"body", bodyStr)
+// handleHTTPStatusError processes non-200 HTTP status codes.
+func (l *wikiMediaProvider) handleHTTPStatusError(statusCode int, bodyStr string) error {
+	imageProviderLogger.Warn("Wikipedia API error response",
+		"provider", wikiProviderName,
+		"status_code", statusCode,
+		"body", bodyStr)
 
-		// Check for specific error types and open circuit breaker
-		switch resp.StatusCode {
-		case http.StatusForbidden:
-			// User-Agent policy violation or rate limiting - open circuit breaker
-			// Convert to lowercase once for efficient comparison
-			bodyLower := strings.ToLower(bodyStr)
-			switch {
-			case strings.Contains(bodyLower, errorStringUserAgent) || strings.Contains(bodyLower, errorStringRobotPolicy):
-				// User-agent policy violation
-				l.openCircuit(circuitBreakerUserAgentDuration, fmt.Sprintf("User-Agent policy violation (HTTP 403): %s", truncateResponseBody(bodyStr, responseBodyPreviewLimit)))
-			case strings.Contains(bodyLower, errorStringRate) || strings.Contains(bodyLower, errorStringLimit):
-				// Rate limiting
-				l.openCircuit(circuitBreakerRateLimitDuration, fmt.Sprintf("Rate limited (HTTP 403): %s", truncateResponseBody(bodyStr, responseBodyPreviewLimit)))
-			default:
-				// Generic 403
-				l.openCircuit(circuitBreakerBlockedDuration, fmt.Sprintf("Access blocked (HTTP 403): %s", truncateResponseBody(bodyStr, responseBodyPreviewLimit)))
-			}
-		case http.StatusTooManyRequests:
-			// Explicit rate limiting
-			l.openCircuit(circuitBreakerRateLimitDuration, fmt.Sprintf("Rate limited (HTTP 429): %s", truncateResponseBody(bodyStr, responseBodyPreviewLimit)))
-		case http.StatusServiceUnavailable:
-			// Service unavailable
-			l.openCircuit(circuitBreakerServiceUnavailDuration, fmt.Sprintf("Service unavailable (HTTP 503): %s", truncateResponseBody(bodyStr, responseBodyPreviewLimit)))
-		}
+	l.handleCircuitBreaker(statusCode, bodyStr)
 
-		truncatedBody := truncateResponseBody(bodyStr, responseBodyPreviewLimit)
-		return nil, errors.Newf("Wikipedia API returned status %d: %s", resp.StatusCode, truncatedBody).
-			Component("imageprovider").
-			Category(errors.CategoryNetwork).
-			Context("provider", wikiProviderName).
-			Context("operation", "api_error").
-			Context("status_code", resp.StatusCode).
-			Context("response_body", truncatedBody).
-			Build()
+	truncatedBody := truncateResponseBody(bodyStr, responseBodyPreviewLimit)
+	return errors.Newf("Wikipedia API returned status %d: %s", statusCode, truncatedBody).
+		Component("imageprovider").
+		Category(errors.CategoryNetwork).
+		Context("provider", wikiProviderName).
+		Context("operation", "api_error").
+		Context("status_code", statusCode).
+		Context("response_body", truncatedBody).
+		Build()
+}
+
+// handleCircuitBreaker opens the circuit breaker based on the error type.
+func (l *wikiMediaProvider) handleCircuitBreaker(statusCode int, bodyStr string) {
+	switch statusCode {
+	case http.StatusForbidden:
+		l.handleForbiddenError(bodyStr)
+	case http.StatusTooManyRequests:
+		l.openCircuit(circuitBreakerRateLimitDuration,
+			fmt.Sprintf("Rate limited (HTTP 429): %s", truncateResponseBody(bodyStr, responseBodyPreviewLimit)))
+	case http.StatusServiceUnavailable:
+		l.openCircuit(circuitBreakerServiceUnavailDuration,
+			fmt.Sprintf("Service unavailable (HTTP 503): %s", truncateResponseBody(bodyStr, responseBodyPreviewLimit)))
 	}
+}
 
-	// Parse JSON response into jason.Object for compatibility
+// handleForbiddenError classifies and handles HTTP 403 errors.
+func (l *wikiMediaProvider) handleForbiddenError(bodyStr string) {
+	bodyLower := strings.ToLower(bodyStr)
+	truncated := truncateResponseBody(bodyStr, responseBodyPreviewLimit)
+
+	switch {
+	case strings.Contains(bodyLower, errorStringUserAgent) || strings.Contains(bodyLower, errorStringRobotPolicy):
+		l.openCircuit(circuitBreakerUserAgentDuration, fmt.Sprintf("User-Agent policy violation (HTTP 403): %s", truncated))
+	case strings.Contains(bodyLower, errorStringRate) || strings.Contains(bodyLower, errorStringLimit):
+		l.openCircuit(circuitBreakerRateLimitDuration, fmt.Sprintf("Rate limited (HTTP 403): %s", truncated))
+	default:
+		l.openCircuit(circuitBreakerBlockedDuration, fmt.Sprintf("Access blocked (HTTP 403): %s", truncated))
+	}
+}
+
+// parseJSONResponse parses the response body as JSON.
+func (l *wikiMediaProvider) parseJSONResponse(body []byte) (*jason.Object, error) {
 	var jsonData any
 	if err := json.Unmarshal(body, &jsonData); err != nil {
-		// Check if this might be an HTML error page
-		if bytes.Contains(body, []byte(errorStringHTMLDoctype)) || bytes.Contains(body, []byte(errorStringHTMLTag)) {
-			return nil, errors.Newf("Wikipedia returned HTML instead of JSON (likely an error page)").
-				Component("imageprovider").
-				Category(errors.CategoryNetwork).
-				Context("provider", wikiProviderName).
-				Context("operation", "json_parse_html_detected").
-				Context("response_preview", truncateResponseBody(string(body), responseBodyPreviewLimit)).
-				Build()
-		}
-
-		return nil, errors.New(err).
-			Component("imageprovider").
-			Category(errors.CategoryNetwork).
-			Context("provider", wikiProviderName).
-			Context("operation", "json_parse").
-			Context("response_preview", string(body[:min(len(body), 200)])).
-			Build()
+		return nil, l.handleJSONParseError(body, err)
 	}
 
-	// Convert to jason.Object
 	jasonObj, err := jason.NewObjectFromBytes(body)
 	if err != nil {
 		return nil, errors.New(err).
@@ -334,6 +363,27 @@ func (l *wikiMediaProvider) makeAPIRequest(ctx context.Context, params map[strin
 	}
 
 	return jasonObj, nil
+}
+
+// handleJSONParseError handles JSON parsing errors with context.
+func (l *wikiMediaProvider) handleJSONParseError(body []byte, parseErr error) error {
+	if bytes.Contains(body, []byte(errorStringHTMLDoctype)) || bytes.Contains(body, []byte(errorStringHTMLTag)) {
+		return errors.Newf("Wikipedia returned HTML instead of JSON (likely an error page)").
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("operation", "json_parse_html_detected").
+			Context("response_preview", truncateResponseBody(string(body), responseBodyPreviewLimit)).
+			Build()
+	}
+
+	return errors.New(parseErr).
+		Component("imageprovider").
+		Category(errors.CategoryNetwork).
+		Context("provider", wikiProviderName).
+		Context("operation", "json_parse").
+		Context("response_preview", truncateResponseBody(string(body), responseBodyPreviewLimit)).
+		Build()
 }
 
 // LazyWikiMediaProvider wraps the actual Wikipedia provider with lazy initialization.
@@ -424,13 +474,13 @@ func (l *LazyWikiMediaProvider) ShouldRefreshCache() bool {
 	}
 
 	// Check if WikiMedia is configured as primary provider
-	if settings.Realtime.Dashboard.Thumbnails.ImageProvider == "wikimedia" {
+	if settings.Realtime.Dashboard.Thumbnails.ImageProvider == wikiProviderName {
 		return true
 	}
 
 	// Check if WikiMedia is configured as fallback provider
 	fallback := strings.ToLower(strings.TrimSpace(settings.Realtime.Dashboard.Thumbnails.FallbackPolicy))
-	return fallback == "wikimedia" || fallback == "all"
+	return fallback == wikiProviderName || fallback == fallbackPolicyAll
 }
 
 // truncateResponseBody truncates a response body string to a specified length for logging.
@@ -850,17 +900,13 @@ func NewWikiMediaProvider() (*wikiMediaProvider, error) {
 	}, nil
 }
 
-// queryWithRetryAndLimiter performs a query with retry logic using the specified rate limiter.
-// The context is used for cancellation, deadlines, and rate limiting.
-func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID string, params map[string]string, limiter *rate.Limiter) (*jason.Object, error) {
-	logger := imageProviderLogger.With("provider", wikiProviderName, "request_id", reqID, "api_action", params["action"])
-
-	// Check if circuit breaker is open
+// checkCircuitBreaker checks if the circuit breaker is open and returns an error if so.
+func (l *wikiMediaProvider) checkCircuitBreaker(logger *slog.Logger, reqID string, params map[string]string) error {
 	if open, reason := l.isCircuitOpen(); open {
 		logger.Warn("Wikipedia circuit breaker is open, rejecting request",
 			"species", params["titles"],
 			"reason", reason)
-		return nil, errors.Newf("Wikipedia API circuit breaker open: %s", reason).
+		return errors.Newf("Wikipedia API circuit breaker open: %s", reason).
 			Component("imageprovider").
 			Category(errors.CategoryNetwork).
 			Context("provider", wikiProviderName).
@@ -869,64 +915,109 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID 
 			Context("reason", reason).
 			Build()
 	}
+	return nil
+}
+
+// waitForRateLimiterRetry waits for the rate limiter and returns an error if the wait fails.
+func (l *wikiMediaProvider) waitForRateLimiterRetry(ctx context.Context, limiter *rate.Limiter, logger *slog.Logger, reqID string) error {
+	if limiter == nil {
+		logger.Debug("No rate limiting applied (user request)")
+		return nil
+	}
+
+	logger.Debug("Waiting for rate limiter")
+	if err := limiter.Wait(ctx); err != nil {
+		enhancedErr := errors.New(err).
+			Component("imageprovider").
+			Category(errors.CategoryNetwork).
+			Context("provider", wikiProviderName).
+			Context("request_id", reqID).
+			Context("operation", "rate_limiter_wait").
+			Build()
+		logger.Error("Rate limiter error", "error", enhancedErr)
+		return enhancedErr
+	}
+	return nil
+}
+
+// logSuccessfulAPIResponse logs the successful API response details.
+func logSuccessfulAPIResponse(resp *jason.Object, logger *slog.Logger) {
+	if respObj, errJson := resp.Object(); errJson == nil {
+		responseStr := respObj.String()
+		logger.Debug("API request successful - raw response received",
+			"response_preview", truncateResponseBody(responseStr, responseBodyDebugLimit),
+			"response_size", len(responseStr))
+	} else {
+		logger.Debug("API request successful")
+	}
+}
+
+// handleJSONParsingErrorIfNeeded checks for JSON parsing errors and handles them appropriately.
+func (l *wikiMediaProvider) handleJSONParsingErrorIfNeeded(err error, reqID, fullURL string, logger *slog.Logger, attempt int) error {
+	if !strings.Contains(err.Error(), "invalid character") || !strings.Contains(err.Error(), "looking for beginning of value") {
+		return nil
+	}
+
+	settings := conf.Setting()
+	if policyErr := l.handleJSONParsingError(reqID, fullURL, err, settings, logger, attempt); policyErr != nil {
+		return policyErr
+	}
+	return nil
+}
+
+// calculateRetryDelay calculates the delay before the next retry using exponential backoff.
+func calculateRetryDelay(attempt int) time.Duration {
+	exponentialDelay := time.Second * time.Duration(1<<attempt)
+	return max(retryMinDelay, exponentialDelay)
+}
+
+// buildRetryExhaustedError builds the enhanced error when all retries are exhausted.
+func buildRetryExhaustedError(lastErr error, reqID string, params map[string]string, maxRetries int) error {
+	return errors.New(lastErr).
+		Component("imageprovider").
+		Category(errors.CategoryNetwork).
+		Context("provider", wikiProviderName).
+		Context("request_id", reqID).
+		Context("max_retries", maxRetries).
+		Context("operation", "query_with_retry").
+		Context("api_action", params["action"]).
+		Context("species_query", params["titles"]).
+		Context("error_category", errorCategoryNetworkFailure.Type).
+		Context("error_severity", errorCategoryNetworkFailure.Severity).
+		Context("actionable", errorCategoryNetworkFailure.Actionable).
+		Context("final_error", lastErr.Error()).
+		Build()
+}
+
+// queryWithRetryAndLimiter performs a query with retry logic using the specified rate limiter.
+// The context is used for cancellation, deadlines, and rate limiting.
+func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID string, params map[string]string, limiter *rate.Limiter) (*jason.Object, error) {
+	logger := imageProviderLogger.With("provider", wikiProviderName, "request_id", reqID, "api_action", params["action"])
+
+	if err := l.checkCircuitBreaker(logger, reqID, params); err != nil {
+		return nil, err
+	}
 
 	var lastErr error
-	for attempt := 0; attempt < l.maxRetries; attempt++ {
+	for attempt := range l.maxRetries {
 		attemptLogger := logger.With("attempt", attempt+1, "max_attempts", l.maxRetries)
-		attemptLogger.Debug("Attempting Wikipedia API request",
-			"species", params["titles"])
-		// Wait for rate limiter if one is provided (only for background operations)
-		if limiter != nil {
-			attemptLogger.Debug("Waiting for rate limiter")
-			err := limiter.Wait(ctx) // Use provided context for cancellation and deadlines
-			if err != nil {
-				enhancedErr := errors.New(err).
-					Component("imageprovider").
-					Category(errors.CategoryNetwork).
-					Context("provider", wikiProviderName).
-					Context("request_id", reqID).
-					Context("operation", "rate_limiter_wait").
-					Build()
-				attemptLogger.Error("Rate limiter error", "error", enhancedErr)
-				// Don't retry on limiter error, return immediately
-				return nil, enhancedErr
-			}
-		} else {
-			attemptLogger.Debug("No rate limiting applied (user request)")
+		attemptLogger.Debug("Attempting Wikipedia API request", "species", params["titles"])
+
+		if err := l.waitForRateLimiterRetry(ctx, limiter, attemptLogger, reqID); err != nil {
+			return nil, err
 		}
 
-		// Make the API request using our new method
 		attemptLogger.Debug("Sending GET request to Wikipedia API", "params", params)
 		resp, err := l.makeAPIRequest(ctx, params)
 		if err == nil {
-			// Log successful response with debug details
-			if respObj, errJson := resp.Object(); errJson == nil {
-				responseStr := respObj.String()
-				attemptLogger.Debug("API request successful - raw response received",
-					"response_preview", truncateResponseBody(responseStr, responseBodyDebugLimit),
-					"response_size", len(responseStr))
-			} else {
-				attemptLogger.Debug("API request successful")
-			}
-			// Reset circuit breaker on successful request
+			logSuccessfulAPIResponse(resp, attemptLogger)
 			l.resetCircuit()
-			return resp, nil // Success
+			return resp, nil
 		}
 
-		// Build URL for error logging
-		queryParams := make([]string, 0, len(params))
-		for k, v := range params {
-			queryParams = append(queryParams, k+"="+url.QueryEscape(v))
-		}
-		fullURL := wikipediaAPIURL + "?" + strings.Join(queryParams, "&")
-
-		// Check if this is a JSON parsing error (Wikipedia returned HTML instead of JSON)
-		if strings.Contains(err.Error(), "invalid character") && strings.Contains(err.Error(), "looking for beginning of value") {
-			// Get settings to build proper user agent
-			settings := conf.Setting()
-			if policyErr := l.handleJSONParsingError(reqID, fullURL, err, settings, attemptLogger, attempt); policyErr != nil {
-				return nil, policyErr // Return immediately for permanent failures
-			}
+		fullURL := buildDebugURL(params)
+		if policyErr := l.handleJSONParsingErrorIfNeeded(err, reqID, fullURL, attemptLogger, attempt); policyErr != nil {
+			return nil, policyErr
 		}
 
 		lastErr = err
@@ -936,189 +1027,181 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID 
 			"attempt", attempt+1,
 			"will_retry", attempt < l.maxRetries-1)
 
-		// Wait before retry with minimum delay + exponential backoff
-		// Minimum 2 seconds between retries to be conservative with Wikipedia API
-		minDelay := retryMinDelay
-		exponentialDelay := time.Second * time.Duration(1<<attempt)
-		waitDuration := max(minDelay, exponentialDelay)
-		attemptLogger.Debug("Waiting before retry",
-			"duration", waitDuration,
-			"min_delay", minDelay,
-			"exponential_delay", exponentialDelay)
+		waitDuration := calculateRetryDelay(attempt)
+		attemptLogger.Debug("Waiting before retry", "duration", waitDuration)
 		time.Sleep(waitDuration)
 	}
 
-	// Use categorized error logging for final failure
 	logAPIError(logger, errorCategoryNetworkFailure, reqID, params["titles"], params, lastErr)
+	return nil, buildRetryExhaustedError(lastErr, reqID, params, l.maxRetries)
+}
 
-	enhancedErr := errors.New(lastErr).
-		Component("imageprovider").
-		Category(errors.CategoryNetwork).
-		Context("provider", wikiProviderName).
-		Context("request_id", reqID).
-		Context("max_retries", l.maxRetries).
-		Context("operation", "query_with_retry").
-		Context("api_action", params["action"]).
-		Context("species_query", params["titles"]).
-		Context("error_category", errorCategoryNetworkFailure.Type).
-		Context("error_severity", errorCategoryNetworkFailure.Severity).
-		Context("actionable", errorCategoryNetworkFailure.Actionable).
-		Context("final_error", lastErr.Error()).
-		Build()
-	return nil, enhancedErr
+// buildDebugURL constructs a URL string for debug logging purposes.
+func buildDebugURL(params map[string]string) string {
+	queryParams := make([]string, 0, len(params))
+	for k, v := range params {
+		queryParams = append(queryParams, k+"="+url.QueryEscape(v))
+	}
+	return wikipediaAPIURL + "?" + strings.Join(queryParams, "&")
+}
+
+// logRawResponse logs the raw API response at debug level for troubleshooting.
+func logRawResponse(ctx context.Context, logger *slog.Logger, resp *jason.Object, fullURL string) {
+	if !logger.Enabled(ctx, slog.LevelDebug) {
+		return
+	}
+	if respObj, errJson := resp.Object(); errJson == nil {
+		responseStr := respObj.String()
+		logger.Debug("Raw Wikipedia API response received",
+			"response_full", responseStr,
+			"response_length", len(responseStr),
+			"request_url", fullURL)
+	} else {
+		logger.Debug("Failed to format raw response for logging", "error", errJson, "request_url", fullURL)
+	}
+}
+
+// logQueryMissingError logs diagnostics when the 'query' field is missing from the response.
+func logQueryMissingError(logger *slog.Logger, resp *jason.Object, params map[string]string, fullURL string, queryErr error) {
+	// Log the complete raw response when query field is missing
+	if respObj, errJson := resp.Object(); errJson == nil {
+		logger.Debug("Wikipedia response missing 'query' field - full response dump",
+			"raw_response", respObj.String(),
+			"request_url", fullURL)
+	}
+
+	logger.Info("Wikipedia response missing 'query' field - analyzing response structure",
+		"error", queryErr.Error(),
+		"request_params", params,
+		"request_url", fullURL,
+		"response_analysis", "checking_for_api_errors")
+
+	// Check if there's an error field in the response
+	if errorObj, errCheck := resp.GetObject("error"); errCheck == nil {
+		if errorCode, errCode := errorObj.GetString("code"); errCode == nil {
+			if errorInfo, errInfo := errorObj.GetString("info"); errInfo == nil {
+				logger.Debug("Wikipedia API returned structured error response - normal for missing pages",
+					"error_code", errorCode,
+					"error_info", errorInfo,
+					"error_type", "api_structured_error_expected",
+					"species_query", params["titles"],
+					"diagnostic_hint", "wikipedia_api_rejected_request_for_nonexistent_page")
+			}
+		}
+	} else {
+		// No structured error, likely malformed response
+		logger.Debug("Wikipedia response has no 'query' field and no structured 'error' field",
+			"response_structure_error", queryErr.Error(),
+			"error_type", "malformed_api_response_expected",
+			"species_query", params["titles"],
+			"diagnostic_hint", "wikipedia_api_returned_unexpected_format_for_missing_page")
+	}
+}
+
+// logPagesMissingError logs diagnostics when the 'pages' field is missing from the query.
+func logPagesMissingError(logger *slog.Logger, query *jason.Object, params map[string]string, fullURL string, pagesErr error) {
+	// Log the query object structure
+	if queryObj, errJson := query.Object(); errJson == nil {
+		logger.Debug("Wikipedia 'query' object structure when 'pages' field missing",
+			"query_object", queryObj.String(),
+			"request_url", fullURL)
+	}
+
+	logger.Info("No 'pages' field in Wikipedia query response - analyzing alternative response structures",
+		"pages_error", pagesErr.Error(),
+		"species_query", params["titles"],
+		"request_url", fullURL,
+		"response_analysis", "checking_redirects_and_normalized_titles")
+
+	// Check for redirects
+	if redirects, redirectErr := query.GetObjectArray("redirects"); redirectErr == nil && len(redirects) > 0 {
+		logger.Info("Wikipedia response contains redirects but no pages",
+			"redirect_count", len(redirects),
+			"error_type", "redirect_without_pages",
+			"diagnostic_hint", "wikipedia_redirected_query_but_target_page_missing")
+	}
+
+	// Check for normalized titles
+	if normalized, normalErr := query.GetObjectArray("normalized"); normalErr == nil && len(normalized) > 0 {
+		logger.Info("Wikipedia response contains normalized titles but no pages",
+			"normalized_count", len(normalized),
+			"error_type", "normalized_title_without_pages",
+			"diagnostic_hint", "wikipedia_normalized_species_name_but_no_page_found")
+	}
+
+	logger.Info("Wikipedia page structure analysis complete - no pages found",
+		"error_type", "no_pages_in_response",
+		"species_query", params["titles"],
+		"diagnostic_hint", "species_likely_has_no_wikipedia_page")
+}
+
+// logEmptyPagesArray logs diagnostics when the pages array is empty.
+func logEmptyPagesArray(logger *slog.Logger, resp *jason.Object, params map[string]string, fullURL string) {
+	logger.Debug("Wikipedia returned empty pages array - normal for species without pages",
+		"error_type", "empty_pages_array_expected",
+		"species_query", params["titles"],
+		"request_url", fullURL,
+		"response_has_query_field", true,
+		"pages_array_length", 0,
+		"diagnostic_hint", "wikipedia_query_succeeded_but_species_has_no_page")
+
+	if respObj, errJson := resp.Object(); errJson == nil {
+		logger.Debug("Full Wikipedia response structure analysis (empty pages)",
+			"response_json", respObj.String(),
+			"request_url", fullURL,
+			"analysis", "complete_api_response_for_debugging")
+	} else {
+		logger.Debug("Could not serialize response for debugging", "serialization_error", errJson, "request_url", fullURL)
+	}
+}
+
+// logFirstPageContent logs the first page content at debug level for troubleshooting.
+func logFirstPageContent(ctx context.Context, logger *slog.Logger, pages []*jason.Object, fullURL string) {
+	if !logger.Enabled(ctx, slog.LevelDebug) {
+		return
+	}
+	if firstPageObj, errJson := pages[0].Object(); errJson == nil {
+		logger.Debug("First page content from API response",
+			"page_content", firstPageObj.String(),
+			"request_url", fullURL)
+	} else {
+		logger.Debug("Could not format first page for logging", "error", errJson, "request_url", fullURL)
+	}
 }
 
 // queryAndGetFirstPageWithLimiter queries Wikipedia with given parameters using the specified rate limiter.
 func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(ctx context.Context, reqID string, params map[string]string, limiter *rate.Limiter) (*jason.Object, error) {
 	logger := imageProviderLogger.With("provider", wikiProviderName, "request_id", reqID, "api_action", params["action"], "titles", params["titles"])
-	// Construct URL for debug logging with proper URL encoding
-	queryParams := make([]string, 0, len(params))
-	for k, v := range params {
-		queryParams = append(queryParams, k+"="+url.QueryEscape(v))
-	}
-	fullURL := wikipediaAPIURL + "?" + strings.Join(queryParams, "&")
+	fullURL := buildDebugURL(params)
 	logger.Info("Querying Wikipedia API", "debug_full_url", fullURL)
 
 	resp, err := l.queryWithRetryAndLimiter(ctx, reqID, params, limiter)
 	if err != nil {
-		// Error already logged and enhanced in queryWithRetry
 		return nil, err
 	}
 
-	// Log raw response at Debug level for troubleshooting
-	if logger.Enabled(ctx, slog.LevelDebug) {
-		if respObj, errJson := resp.Object(); errJson == nil {
-			responseStr := respObj.String()
-			logger.Debug("Raw Wikipedia API response received",
-				"response_full", responseStr,
-				"response_length", len(responseStr),
-				"request_url", fullURL)
-		} else {
-			logger.Debug("Failed to format raw response for logging", "error", errJson, "request_url", fullURL)
-		}
-	}
-
+	logRawResponse(ctx, logger, resp, fullURL)
 	logger.Debug("Parsing pages from API response")
 
-	// First check if the response has a query field at all
 	query, err := resp.GetObject("query")
 	if err != nil {
-		// Log the complete raw response when query field is missing
-		if respObj, errJson := resp.Object(); errJson == nil {
-			logger.Debug("Wikipedia response missing 'query' field - full response dump",
-				"raw_response", respObj.String(),
-				"request_url", fullURL)
-		}
-		// Enhanced logging for missing query field
-		logger.Info("Wikipedia response missing 'query' field - analyzing response structure",
-			"error", err.Error(),
-			"request_params", params,
-			"request_url", fullURL,
-			"response_analysis", "checking_for_api_errors")
-
-		// Check if there's an error field in the response
-		if errorObj, errCheck := resp.GetObject("error"); errCheck == nil {
-			if errorCode, errCode := errorObj.GetString("code"); errCode == nil {
-				if errorInfo, errInfo := errorObj.GetString("info"); errInfo == nil {
-					logger.Debug("Wikipedia API returned structured error response - normal for missing pages",
-						"error_code", errorCode,
-						"error_info", errorInfo,
-						"error_type", "api_structured_error_expected",
-						"species_query", params["titles"],
-						"diagnostic_hint", "wikipedia_api_rejected_request_for_nonexistent_page")
-				}
-			}
-		} else {
-			// No structured error, likely malformed response - this might be more serious
-			logger.Debug("Wikipedia response has no 'query' field and no structured 'error' field",
-				"response_structure_error", err.Error(),
-				"error_type", "malformed_api_response_expected",
-				"species_query", params["titles"],
-				"diagnostic_hint", "wikipedia_api_returned_unexpected_format_for_missing_page")
-		}
-
-		// This is likely a "not found" scenario, not an error worth reporting to telemetry
+		logQueryMissingError(logger, resp, params, fullURL, err)
 		return nil, ErrImageNotFound
 	}
 
-	// Try to get pages array from the query object
 	pages, err := query.GetObjectArray("pages")
 	if err != nil {
-		// Log the query object structure when pages field is missing
-		if queryObj, errJson := query.Object(); errJson == nil {
-			logger.Debug("Wikipedia 'query' object structure when 'pages' field missing",
-				"query_object", queryObj.String(),
-				"request_url", fullURL)
-		}
-		// Enhanced logging for missing pages array
-		logger.Info("No 'pages' field in Wikipedia query response - analyzing alternative response structures",
-			"pages_error", err.Error(),
-			"species_query", params["titles"],
-			"request_url", fullURL,
-			"response_analysis", "checking_redirects_and_normalized_titles")
-
-		// Check for alternative structures that might indicate page issues
-		// Check for redirects
-		if redirects, redirectErr := query.GetObjectArray("redirects"); redirectErr == nil && len(redirects) > 0 {
-			logger.Info("Wikipedia response contains redirects but no pages",
-				"redirect_count", len(redirects),
-				"error_type", "redirect_without_pages",
-				"diagnostic_hint", "wikipedia_redirected_query_but_target_page_missing")
-		}
-
-		// Check for normalized titles
-		if normalized, normalErr := query.GetObjectArray("normalized"); normalErr == nil && len(normalized) > 0 {
-			logger.Info("Wikipedia response contains normalized titles but no pages",
-				"normalized_count", len(normalized),
-				"error_type", "normalized_title_without_pages",
-				"diagnostic_hint", "wikipedia_normalized_species_name_but_no_page_found")
-		}
-
-		// This is a common scenario for species without Wikipedia pages
-		// Enhanced diagnostic logging
-		logger.Info("Wikipedia page structure analysis complete - no pages found",
-			"error_type", "no_pages_in_response",
-			"species_query", params["titles"],
-			"diagnostic_hint", "species_likely_has_no_wikipedia_page")
+		logPagesMissingError(logger, query, params, fullURL, err)
 		return nil, ErrImageNotFound
 	}
 
 	if len(pages) == 0 {
-		// Enhanced logging for empty pages array - this is normal for missing species
-		logger.Debug("Wikipedia returned empty pages array - normal for species without pages",
-			"error_type", "empty_pages_array_expected",
-			"species_query", params["titles"],
-			"request_url", fullURL,
-			"response_has_query_field", true,
-			"pages_array_length", 0,
-			"diagnostic_hint", "wikipedia_query_succeeded_but_species_has_no_page")
-
-		// Always log full response structure for debugging
-		if respObj, errJson := resp.Object(); errJson == nil {
-			logger.Debug("Full Wikipedia response structure analysis (empty pages)",
-				"response_json", respObj.String(),
-				"request_url", fullURL,
-				"analysis", "complete_api_response_for_debugging")
-		} else {
-			logger.Debug("Could not serialize response for debugging", "serialization_error", errJson, "request_url", fullURL)
-		}
-
-		// Return specific error indicating page not found
+		logEmptyPagesArray(logger, resp, params, fullURL)
 		return nil, ErrImageNotFound
 	}
 
-	// Log first page content at Debug level for troubleshooting
-	if logger.Enabled(ctx, slog.LevelDebug) {
-		if firstPageObj, errJson := pages[0].Object(); errJson == nil {
-			logger.Debug("First page content from API response",
-				"page_content", firstPageObj.String(),
-				"request_url", fullURL)
-		} else {
-			logger.Debug("Could not format first page for logging", "error", errJson, "request_url", fullURL)
-		}
-	}
+	logFirstPageContent(ctx, logger, pages, fullURL)
 
-	// Use success logging function
 	responseMetadata := map[string]any{
 		"pages_found":              len(pages),
 		"response_has_query_field": true,
@@ -1142,7 +1225,7 @@ func (l *wikiMediaProvider) isAllowedToFetch() (allowed bool, reason string) {
 	thumbnails := settings.Realtime.Dashboard.Thumbnails
 
 	// Case 1: WikiMedia is explicitly configured as the provider
-	if thumbnails.ImageProvider == "wikimedia" {
+	if thumbnails.ImageProvider == wikiProviderName {
 		return true, ""
 	}
 
@@ -1152,7 +1235,7 @@ func (l *wikiMediaProvider) isAllowedToFetch() (allowed bool, reason string) {
 	}
 
 	// Case 3: WikiMedia can be used as a fallback
-	if thumbnails.FallbackPolicy == "all" {
+	if thumbnails.FallbackPolicy == fallbackPolicyAll {
 		return true, ""
 	}
 
@@ -1215,7 +1298,7 @@ func (l *wikiMediaProvider) Fetch(scientificName string) (BirdImage, error) {
 
 // fetchWithLimiter retrieves the bird image using the specified rate limiter.
 func (l *wikiMediaProvider) fetchWithLimiter(ctx context.Context, scientificName string, limiter *rate.Limiter) (BirdImage, error) {
-	reqID := uuid.New().String()[:8] // Using first 8 chars for brevity
+	reqID := uuid.New().String()[:requestIDLength]
 	logger := imageProviderLogger.With("provider", wikiProviderName, "scientific_name", scientificName, "request_id", reqID)
 
 	// Enhanced start logging with operation context
@@ -1250,9 +1333,9 @@ func (l *wikiMediaProvider) fetchWithLimiter(ctx context.Context, scientificName
 			logger.Debug("Author info not available, using defaults")
 			// Use default author info rather than failing
 			authorInfo = &wikiMediaAuthor{
-				name:        "Unknown",
+				name:        unknownMetadataValue,
 				URL:         "",
-				licenseName: "Unknown",
+				licenseName: unknownMetadataValue,
 				licenseURL:  "",
 			}
 		} else {
@@ -1426,34 +1509,30 @@ func (l *wikiMediaProvider) queryAuthorInfo(ctx context.Context, reqID, thumbnai
 	}
 
 	// Extract specific fields (Artist, LicenseShortName, LicenseUrl)
-	artistHTML, _ := extMetadata.GetString("Artist", "value")
-	licenseName, _ := extMetadata.GetString("LicenseShortName", "value")
-	licenseURL, _ := extMetadata.GetString("LicenseUrl", "value")
+	// These fields are optional - missing fields are expected and logged at debug level
+	artistHTML, err := extMetadata.GetString("Artist", "value")
+	if err != nil {
+		logger.Debug("Artist field not found in extmetadata", "error", err)
+	}
+	licenseName, err := extMetadata.GetString("LicenseShortName", "value")
+	if err != nil {
+		logger.Debug("LicenseShortName field not found in extmetadata", "error", err)
+	}
+	licenseURL, err := extMetadata.GetString("LicenseUrl", "value")
+	if err != nil {
+		logger.Debug("LicenseUrl field not found in extmetadata", "error", err)
+	}
 
 	logger.Debug("Extracted raw metadata fields", "artist_html_len", len(artistHTML), "license_name", licenseName, "license_url", licenseURL)
 
-	// Parse artist HTML to get name and URL
-	authorName, authorURL := "", ""
-	if artistHTML != "" {
-		authorURL, authorName, err = extractArtistInfo(artistHTML)
-		if err != nil {
-			// Log error but continue, attribution might just be text
-			logger.Warn("Failed to parse artist HTML, using plain text if available", "html", artistHTML, "error", err)
-			// Fallback to plain text version if parsing failed
-			authorName = html2text.HTML2Text(artistHTML)
-		} else {
-			logger.Debug("Parsed artist info from HTML", "name", authorName, "url", authorURL)
-		}
-	}
+	// Parse artist HTML to get name and URL using the helper function
+	authorName, authorURL := parseAuthorFromHTML(artistHTML)
+	logger.Debug("Parsed author info", "name", authorName, "url", authorURL)
 
-	// Handle cases where author might still be empty
-	if authorName == "" {
-		logger.Warn("Author name could not be extracted")
-		authorName = "Unknown"
-	}
+	// Handle license name fallback
 	if licenseName == "" {
 		logger.Warn("License name could not be extracted")
-		licenseName = "Unknown"
+		licenseName = unknownMetadataValue
 	}
 
 	logger.Debug("Final extracted author and license info", "author_name", authorName, "author_url", authorURL, "license_name", licenseName, "license_url", licenseURL)
@@ -1463,6 +1542,27 @@ func (l *wikiMediaProvider) queryAuthorInfo(ctx context.Context, reqID, thumbnai
 		licenseName: licenseName,
 		licenseURL:  licenseURL,
 	}, nil
+}
+
+// parseAuthorFromHTML extracts author name and URL from HTML, with fallbacks.
+// Returns unknownMetadataValue for empty input or when extraction fails.
+func parseAuthorFromHTML(artistHTML string) (authorName, authorURL string) {
+	if artistHTML == "" {
+		return unknownMetadataValue, ""
+	}
+
+	authorURL, authorName, err := extractArtistInfo(artistHTML)
+	if err != nil {
+		// Fallback to plain text version if parsing failed
+		authorName = html2text.HTML2Text(artistHTML)
+	}
+
+	// If author name is still empty after all attempts, use unknownMetadataValue
+	if authorName == "" {
+		authorName = unknownMetadataValue
+	}
+
+	return authorName, authorURL
 }
 
 // extractArtistInfo extracts the artist's name and URL from the HTML string.
