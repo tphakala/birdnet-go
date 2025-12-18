@@ -3,7 +3,6 @@ package birdweather
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,7 +15,6 @@ import (
 	"net/http"
 	neturl "net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -25,7 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logging" // Import the new logging package
+	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
@@ -62,6 +60,63 @@ func init() {
 // EBU R128 standard target is -23 LUFS.
 const targetIntegratedLoudnessLUFS = -23.0
 
+// HTTP and timeout constants
+const (
+	// httpClientTimeout is the default timeout for HTTP requests
+	httpClientTimeout = 45 * time.Second
+
+	// encodingTimeout is the timeout for audio encoding operations
+	encodingTimeout = 30 * time.Second
+
+	// detectionDurationSeconds is the duration added to timestamp for end time
+	detectionDurationSeconds = 3
+)
+
+// BirdNET algorithm constants
+const (
+	// birdnetAlgorithmVersion is the BirdNET model version identifier for API submissions
+	birdnetAlgorithmVersion = "2p4"
+)
+
+// Geographic constants
+const (
+	// metersPerDegree is the approximate number of meters in one degree of latitude
+	metersPerDegree = 111000.0
+
+	// coordinatePrecisionFactor is used to truncate coordinates to 4 decimal places
+	coordinatePrecisionFactor = 10000.0
+
+	// randomOffsetMultiplier is used in coordinate randomization
+	randomOffsetMultiplier = 2.0
+
+	// randomCenterOffset is used to center random values around zero (-0.5 to +0.5)
+	randomCenterOffset = 0.5
+)
+
+// HTML/Response preview constants
+const (
+	// errorSnippetBefore is the number of characters to show before an error pattern
+	errorSnippetBefore = 50
+
+	// errorSnippetAfter is the number of characters to show after an error pattern
+	errorSnippetAfter = 100
+
+	// maxHTMLPreview is the maximum length of HTML preview in error messages
+	maxHTMLPreview = 200
+
+	// maxResponsePreview is the maximum length of response preview in logs
+	maxResponsePreview = 500
+)
+
+// File permission constants
+const (
+	// dirPermission is the permission mode for created directories
+	dirPermission = 0o750
+
+	// filePermission is the permission mode for created files
+	filePermission = 0o600
+)
+
 // SoundscapeResponse represents the JSON structure of the response from the Birdweather API when uploading a soundscape.
 type SoundscapeResponse struct {
 	Success    bool `json:"success"`
@@ -94,6 +149,17 @@ func (b *BwClient) maskURL(urlStr string) string {
 	return strings.ReplaceAll(urlStr, b.BirdweatherID, "***")
 }
 
+// closeResponseBody safely closes an HTTP response body and logs any errors
+// This helper reduces code duplication across HTTP request handlers
+func closeResponseBody(resp *http.Response) {
+	if resp == nil || resp.Body == nil {
+		return
+	}
+	if err := resp.Body.Close(); err != nil {
+		serviceLogger.Debug("Failed to close response body", "error", err)
+	}
+}
+
 // BirdweatherClientInterface defines what methods a BirdweatherClient must have
 type Interface interface {
 	Publish(note *datastore.Note, pcmData []byte) error
@@ -104,7 +170,7 @@ type Interface interface {
 }
 
 // New creates and initializes a new BwClient with the given settings.
-// The HTTP client is configured with a 45-second timeout to prevent hanging requests.
+// The HTTP client is configured with httpClientTimeout to prevent hanging requests.
 func New(settings *conf.Settings) (*BwClient, error) {
 	serviceLogger.Info("Creating new BirdWeather client")
 	// We expect that Birdweather ID is validated before this function is called
@@ -114,7 +180,7 @@ func New(settings *conf.Settings) (*BwClient, error) {
 		Accuracy:      settings.Realtime.Birdweather.LocationAccuracy,
 		Latitude:      settings.BirdNET.Latitude,
 		Longitude:     settings.BirdNET.Longitude,
-		HTTPClient:    &http.Client{Timeout: 45 * time.Second},
+		HTTPClient:    &http.Client{Timeout: httpClientTimeout},
 	}
 	return client, nil
 }
@@ -126,16 +192,16 @@ func (b *BwClient) RandomizeLocation(radiusMeters float64) (latitude, longitude 
 	// Create a new local random generator seeded with current Unix time
 	rnd := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(time.Now().UnixNano()))) //nolint:gosec // G404: weak randomness acceptable for upload retry jitter, not security-critical
 
-	// Calculate the degree offset using an approximation that 111,000 meters equals 1 degree
-	degreeOffset := radiusMeters / 111000
+	// Calculate the degree offset using metersPerDegree approximation
+	degreeOffset := radiusMeters / metersPerDegree
 
 	// Generate random offsets within +/- degreeOffset
-	latOffset := (rnd.Float64() - 0.5) * 2 * degreeOffset
-	lonOffset := (rnd.Float64() - 0.5) * 2 * degreeOffset
+	latOffset := (rnd.Float64() - randomCenterOffset) * randomOffsetMultiplier * degreeOffset
+	lonOffset := (rnd.Float64() - randomCenterOffset) * randomOffsetMultiplier * degreeOffset
 
 	// Apply the offsets to the original coordinates and truncate to 4 decimal places
-	latitude = math.Floor((b.Latitude+latOffset)*10000) / 10000
-	longitude = math.Floor((b.Longitude+lonOffset)*10000) / 10000
+	latitude = math.Floor((b.Latitude+latOffset)*coordinatePrecisionFactor) / coordinatePrecisionFactor
+	longitude = math.Floor((b.Longitude+lonOffset)*coordinatePrecisionFactor) / coordinatePrecisionFactor
 
 	serviceLogger.Debug("Randomized location",
 		"original_lat", b.Latitude, "original_lon", b.Longitude,
@@ -233,8 +299,8 @@ func extractHTMLError(htmlContent string) string {
 		}
 		// Try to extract a reasonable snippet around the error
 		index := strings.Index(lowerHTML, pattern)
-		start := max(index-50, 0)
-		end := min(index+100, len(htmlContent))
+		start := max(index-errorSnippetBefore, 0)
+		end := min(index+errorSnippetAfter, len(htmlContent))
 		snippet := htmlContent[start:end]
 		// Remove HTML tags for cleaner output
 		snippet = strings.ReplaceAll(snippet, "<", " <")
@@ -246,7 +312,7 @@ func extractHTMLError(htmlContent string) string {
 	}
 
 	// If no specific error found, return generic message with beginning of content
-	maxLen := min(len(htmlContent), 200)
+	maxLen := min(len(htmlContent), maxHTMLPreview)
 	preview := strings.TrimSpace(htmlContent[:maxLen])
 	return fmt.Sprintf("Unexpected HTML response (first %d chars): %s", maxLen, preview)
 }
@@ -274,7 +340,7 @@ func handleHTTPResponse(resp *http.Response, expectedStatus int, operation, mask
 				"url", maskedURL,
 				"status_code", resp.StatusCode,
 				"html_error", htmlError,
-				"response_preview", string(responseBody[:min(len(responseBody), 500)]))
+				"response_preview", string(responseBody[:min(len(responseBody), maxResponsePreview)]))
 
 			// Determine category based on status code
 			category := errors.CategoryNetwork
@@ -434,166 +500,52 @@ func parseDouble(s string, defaultValue float64) float64 {
 // It handles the PCM to WAV conversion, compresses the data, and manages HTTP request creation and response handling safely.
 func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscapeID string, err error) {
 	// Track performance timing for telemetry
+	// Note: Wrapped in closure so soundscapeID is captured at execution time, not registration time
 	startTime := time.Now()
 	defer func() {
-		duration := time.Since(startTime)
-		if err != nil {
-			// Report failed submissions at warning level with timing context
-			var enhancedErr *errors.EnhancedError
-			if errors.As(err, &enhancedErr) {
-				// Add timing context to existing enhanced error
-				enhancedErr.Context["operation_duration_ms"] = duration.Milliseconds()
-				enhancedErr.Context["operation"] = "soundscape_upload"
-			} else {
-				// Create new enhanced error with timing
-				err = errors.New(err).
-					Component("birdweather").
-					Category(errors.CategoryNetwork).
-					Timing("soundscape_upload", duration).
-					Context("timestamp", timestamp).
-					Build()
-			}
-			serviceLogger.Warn("Soundscape upload failed", "timestamp", timestamp, "duration_ms", duration.Milliseconds(), "error", err)
-		} else {
-			serviceLogger.Info("Soundscape upload completed", "timestamp", timestamp, "duration_ms", duration.Milliseconds(), "soundscape_id", soundscapeID)
-		}
+		trackOperationTiming(&err, "soundscape_upload", startTime, "timestamp", timestamp, "soundscape_id", soundscapeID)()
 	}()
 
 	serviceLogger.Info("Starting soundscape upload", "timestamp", timestamp)
-	// Add check for empty pcmData
+
+	// Validate input
 	if len(pcmData) == 0 {
-		enhancedErr := errors.New(fmt.Errorf("pcmData is empty")).
+		return "", errors.New(fmt.Errorf("pcmData is empty")).
 			Component("birdweather").
 			Category(errors.CategoryValidation).
 			Context("timestamp", timestamp).
 			Build()
-		serviceLogger.Error("Soundscape upload failed: PCM data is empty", "timestamp", timestamp)
-		return "", enhancedErr
 	}
 
-	// Create a variable to hold the audio data buffer and extension
-	var audioBuffer *bytes.Buffer
-	var audioExt string
-
-	// Create a context with timeout for potentially long operations like encoding
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Use the validated FFmpeg path from settings.
-	// This path is determined during config validation (ValidateAudioSettings)
-	// and is either an explicit valid path, a path found in PATH, or empty if unavailable.
-	ffmpegPathForExec, _ := exec.LookPath(conf.GetFfmpegBinaryName())
-	ffmpegAvailable := ffmpegPathForExec != ""
-	serviceLogger.Debug("Checking FFmpeg availability", "path", ffmpegPathForExec, "available", ffmpegAvailable)
-
-	// Use FLAC if FFmpeg is available, otherwise fall back to WAV
-	if ffmpegAvailable {
-		// Encode PCM data to FLAC format with normalization, passing the context and validated path
-		audioBuffer, err = encodeFlacUsingFFmpeg(ctx, pcmData, ffmpegPathForExec, b.Settings)
-		if err != nil {
-			serviceLogger.Warn("FLAC encoding failed, falling back to WAV", "timestamp", timestamp, "error", err)
-			// Log the FLAC encoding error
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				log.Printf("⚠️ FLAC encoding timed out or was cancelled, falling back to WAV: %v\n", err)
-			} else {
-				log.Printf("❌ Failed to encode/normalize PCM to FLAC, falling back to WAV: %v\n", err)
-			}
-
-			// Fall back to WAV if FLAC encoding fails, using a *new* context
-			wavCtx, cancelWav := context.WithTimeout(context.Background(), 30*time.Second) // Fresh timeout for WAV
-			defer cancelWav()
-			serviceLogger.Debug("Encoding to WAV (fallback)", "timestamp", timestamp)
-			audioBuffer, err = myaudio.EncodePCMtoWAVWithContext(wavCtx, pcmData)
-			if err != nil {
-				enhancedErr := errors.New(err).
-					Component("birdweather").
-					Category(errors.CategoryAudio).
-					Context("timestamp", timestamp).
-					Context("fallback_encoding", "wav").
-					Build()
-				serviceLogger.Error("Failed to encode PCM to WAV after FLAC failure", "timestamp", timestamp, "error", err)
-				return "", enhancedErr
-			}
-			audioExt = "wav"
-			serviceLogger.Info("Using WAV format for upload (fallback)", "timestamp", timestamp)
-		} else {
-			audioExt = "flac"
-			serviceLogger.Info("Using FLAC format for upload", "timestamp", timestamp)
-		}
-	} else {
-		log.Println("🔊 FFmpeg not available (checked configured path and system PATH), encoding to WAV format")
-		serviceLogger.Info("FFmpeg not available, encoding to WAV format", "timestamp", timestamp)
-		// Encode PCM data to WAV format using a dedicated context
-		wavCtx, cancelWav := context.WithTimeout(context.Background(), 30*time.Second) // Fresh timeout for WAV
-		defer cancelWav()
-		audioBuffer, err = myaudio.EncodePCMtoWAVWithContext(wavCtx, pcmData)
-		if err != nil {
-			enhancedErr := errors.New(err).
-				Component("birdweather").
-				Category(errors.CategoryAudio).
-				Context("timestamp", timestamp).
-				Context("encoding_format", "wav").
-				Build()
-			serviceLogger.Error("Failed to encode PCM to WAV", "timestamp", timestamp, "error", err)
-			return "", enhancedErr
-		}
-		audioExt = "wav"
-		serviceLogger.Info("Using WAV format for upload", "timestamp", timestamp)
+	// Encode PCM data to audio format (FLAC with FFmpeg, or WAV fallback)
+	encodingResult, err := encodeAudioForUpload(b.Settings, pcmData, timestamp)
+	if err != nil {
+		return "", errors.New(err).
+			Component("birdweather").
+			Category(errors.CategoryAudio).
+			Context("timestamp", timestamp).
+			Build()
 	}
+	audioBuffer := encodingResult.buffer
+	audioExt := encodingResult.ext
 
-	// If debug is enabled, save the audio file locally with timestamp information
+	// If debug is enabled, save the audio file locally
 	if b.Settings.Realtime.Birdweather.Debug {
-		// Parse the timestamp
-		parsedTime, parseErr := time.Parse("2006-01-02T15:04:05.000-0700", timestamp)
-		if parseErr != nil {
-			serviceLogger.Warn("Could not parse timestamp for debug file saving", "timestamp", timestamp, "format", audioExt, "error", parseErr)
-		} else {
-			// Create a debug directory for audio files
-			debugDir := filepath.Join("debug", "birdweather", audioExt)
-
-			// Generate a unique filename based on the timestamp
-			debugFilename := filepath.Join(debugDir, fmt.Sprintf("bw_debug_%s.%s",
-				parsedTime.Format("20060102_150405"), audioExt))
-
-			// Calculate the end time (3 seconds after start)
-			endTime := parsedTime.Add(3 * time.Second)
-
-			// Save the audio buffer with timestamp information
-			audioCopy := bytes.NewBuffer(audioBuffer.Bytes())
-			if saveErr := saveBufferToFile(audioCopy, debugFilename, parsedTime, endTime); saveErr != nil {
-				serviceLogger.Warn("Could not save debug file", "filename", debugFilename, "error", saveErr)
-			} else {
-				serviceLogger.Debug("Saved debug file", "filename", debugFilename)
-			}
-		}
+		saveDebugAudioFile(audioBuffer, audioExt, timestamp)
 	}
-
-	// Compress the audio data
-	var gzipAudioData bytes.Buffer
-	gzipWriter := gzip.NewWriter(&gzipAudioData)
-	serviceLogger.Debug("Compressing audio data", "format", audioExt, "timestamp", timestamp)
-	if _, err := io.Copy(gzipWriter, audioBuffer); err != nil {
-		serviceLogger.Error("Failed to compress audio data", "format", audioExt, "timestamp", timestamp, "error", err)
-		return "", fmt.Errorf("failed to compress %s data: %w", audioExt, err)
-	}
-	if err := gzipWriter.Close(); err != nil {
-		serviceLogger.Error("Failed to finalize audio compression", "format", audioExt, "timestamp", timestamp, "error", err)
-		return "", fmt.Errorf("failed to finalize compression: %w", err)
-	}
-	serviceLogger.Debug("Audio data compressed", "format", audioExt, "original_size", audioBuffer.Len(), "compressed_size", gzipAudioData.Len())
 
 	// Create and execute the POST request
+	// Note: FLAC is already compressed, so we don't gzip it
 	soundscapeURL := fmt.Sprintf("https://app.birdweather.com/api/v1/stations/%s/soundscapes?timestamp=%s&type=%s",
 		b.BirdweatherID, neturl.QueryEscape(timestamp), audioExt)
-	maskedURL := strings.ReplaceAll(soundscapeURL, b.BirdweatherID, "***")
-	serviceLogger.Debug("Creating soundscape upload request", "url", maskedURL)
-	req, err := http.NewRequest("POST", soundscapeURL, &gzipAudioData)
+	maskedURL := b.maskURL(soundscapeURL)
+	serviceLogger.Debug("Creating soundscape upload request", "url", maskedURL, "audio_size", audioBuffer.Len())
+	req, err := http.NewRequest("POST", soundscapeURL, audioBuffer)
 	if err != nil {
 		serviceLogger.Error("Failed to create soundscape POST request", "url", maskedURL, "error", err)
 		return "", fmt.Errorf("failed to create POST request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
-	req.Header.Set("Content-Encoding", "gzip")
 	req.Header.Set("User-Agent", "BirdNET-Go")
 
 	// Execute the request
@@ -601,17 +553,13 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	resp, err := b.HTTPClient.Do(req)
 	if err != nil {
 		serviceLogger.Error("Soundscape upload request failed", "url", maskedURL, "error", err)
-		return "", handleNetworkError(err, maskedURL, 45*time.Second, "soundscape upload")
+		return "", handleNetworkError(err, maskedURL, httpClientTimeout, "soundscape upload")
 	}
 	if resp == nil {
 		serviceLogger.Error("Soundscape upload received nil response", "url", maskedURL)
 		return "", fmt.Errorf("received nil response")
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			serviceLogger.Debug("Failed to close response body", "error", err)
-		}
-	}()
+	defer closeResponseBody(resp)
 	serviceLogger.Debug("Received soundscape upload response", "url", maskedURL, "status_code", resp.StatusCode)
 
 	// Process the response using the new handler
@@ -624,33 +572,12 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 		serviceLogger.Debug("Soundscape response body", "body", string(responseBody))
 	}
 
-	var sdata SoundscapeResponse
-	if err := json.Unmarshal(responseBody, &sdata); err != nil {
-		// Check if this might be HTML even though we got 200 OK
-		if strings.Contains(string(responseBody), "<") && strings.Contains(string(responseBody), ">") {
-			htmlError := extractHTMLError(string(responseBody))
-			serviceLogger.Error("Received HTML response with 200 OK status",
-				"operation", "soundscape upload",
-				"url", maskedURL,
-				"html_error", htmlError,
-				"response_preview", string(responseBody[:min(len(responseBody), 500)]))
-			return "", errors.New(fmt.Errorf("soundscape upload failed: %s", htmlError)).
-				Component("birdweather").
-				Category(errors.CategoryNetwork).
-				Context("response_type", "html_with_200").
-				Context("operation", "soundscape upload").
-				Build()
-		}
-		serviceLogger.Error("Failed to decode soundscape JSON response", "url", maskedURL, "status_code", resp.StatusCode, "body", string(responseBody), "error", err)
-		return "", fmt.Errorf("failed to decode JSON response: %w", err)
+	// Parse and validate response
+	soundscapeID, err = parseSoundscapeResponse(responseBody, maskedURL, resp.StatusCode)
+	if err != nil {
+		return "", err
 	}
 
-	if !sdata.Success {
-		serviceLogger.Error("Soundscape upload was not successful according to API response", "url", maskedURL, "status_code", resp.StatusCode, "response", sdata)
-		return "", fmt.Errorf("upload failed, response reported failure")
-	}
-
-	soundscapeID = fmt.Sprintf("%d", sdata.Soundscape.ID)
 	serviceLogger.Info("Soundscape uploaded successfully", "timestamp", timestamp, "soundscape_id", soundscapeID, "url", maskedURL)
 	return soundscapeID, nil
 }
@@ -658,33 +585,10 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 // PostDetection posts a detection to the Birdweather API matching the specified soundscape ID.
 func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientificName string, confidence float64) (err error) {
 	// Track performance timing for telemetry
-	startTime := time.Now()
-	defer func() {
-		duration := time.Since(startTime)
-		if err != nil {
-			// Report failed submissions at warning level with timing context
-			var enhancedErr *errors.EnhancedError
-			if errors.As(err, &enhancedErr) {
-				// Add timing context to existing enhanced error
-				enhancedErr.Context["operation_duration_ms"] = duration.Milliseconds()
-				enhancedErr.Context["operation"] = "detection_post"
-			} else {
-				// Create new enhanced error with timing
-				err = errors.New(err).
-					Component("birdweather").
-					Category(errors.CategoryNetwork).
-					Timing("detection_post", duration).
-					Context("soundscape_id", soundscapeID).
-					Context("timestamp", timestamp).
-					Build()
-			}
-			serviceLogger.Warn("Detection post failed", "soundscape_id", soundscapeID, "duration_ms", duration.Milliseconds(), "error", err)
-		} else {
-			serviceLogger.Info("Detection post completed", "soundscape_id", soundscapeID, "duration_ms", duration.Milliseconds())
-		}
-	}()
+	defer trackOperationTiming(&err, "detection_post", time.Now(), "soundscape_id", soundscapeID)()
 
 	serviceLogger.Info("Starting detection post", "soundscape_id", soundscapeID, "timestamp", timestamp, "common_name", commonName, "scientific_name", scientificName, "confidence", confidence)
+
 	// Simple input validation
 	if soundscapeID == "" || timestamp == "" || commonName == "" || scientificName == "" {
 		enhancedErr := errors.New(fmt.Errorf("invalid input: all string parameters must be non-empty")).
@@ -701,7 +605,7 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 	}
 
 	detectionURL := fmt.Sprintf("https://app.birdweather.com/api/v1/stations/%s/detections", b.BirdweatherID)
-	maskedDetectionURL := strings.ReplaceAll(detectionURL, b.BirdweatherID, "***")
+	maskedDetectionURL := b.maskURL(detectionURL)
 
 	// Fuzz location coordinates with user defined accuracy
 	fuzzedLatitude, fuzzedLongitude := b.RandomizeLocation(b.Accuracy)
@@ -712,7 +616,7 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 		serviceLogger.Error("Failed to parse timestamp for detection post", "timestamp", timestamp, "error", err)
 		return fmt.Errorf("failed to parse timestamp: %w", err)
 	}
-	endTime := parsedTime.Add(3 * time.Second).Format("2006-01-02T15:04:05.000-0700") // Add 3 seconds to timestamp for endTime
+	endTime := parsedTime.Add(detectionDurationSeconds * time.Second).Format("2006-01-02T15:04:05.000-0700") // Add detection duration to timestamp for endTime
 	serviceLogger.Debug("Calculated detection time range", "start_time", timestamp, "end_time", endTime)
 
 	// Prepare JSON payload for POST request
@@ -736,7 +640,7 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 		SoundscapeEndTime:   endTime,   // Soundscape is 3s, so end time matches
 		CommonName:          commonName,
 		ScientificName:      scientificName,
-		Algorithm:           "2p4", // TODO: Make configurable?
+		Algorithm:           birdnetAlgorithmVersion,
 		Confidence:          fmt.Sprintf("%.2f", confidence),
 	}
 
@@ -756,17 +660,13 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 	resp, err := b.HTTPClient.Post(detectionURL, "application/json", bytes.NewBuffer(postDataBytes))
 	if err != nil {
 		serviceLogger.Error("Detection post request failed", "url", maskedDetectionURL, "soundscape_id", soundscapeID, "error", err)
-		return handleNetworkError(err, maskedDetectionURL, 45*time.Second, "detection post")
+		return handleNetworkError(err, maskedDetectionURL, httpClientTimeout, "detection post")
 	}
 	if resp == nil {
 		serviceLogger.Error("Detection post received nil response", "url", maskedDetectionURL, "soundscape_id", soundscapeID)
 		return fmt.Errorf("received nil response")
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			serviceLogger.Debug("Failed to close response body", "error", err)
-		}
-	}()
+	defer closeResponseBody(resp)
 	serviceLogger.Debug("Received detection post response", "url", maskedDetectionURL, "soundscape_id", soundscapeID, "status_code", resp.StatusCode)
 
 	// Handle response using the new handler
@@ -789,43 +689,18 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 // It first parses the timestamp from the note, then uploads the soundscape, and finally posts the detection.
 func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) (err error) {
 	// Track performance timing for telemetry
-	startTime := time.Now()
-	defer func() {
-		duration := time.Since(startTime)
-		if err != nil {
-			// Report failed submissions at warning level with timing context
-			var enhancedErr *errors.EnhancedError
-			if errors.As(err, &enhancedErr) {
-				// Add timing context to existing enhanced error
-				enhancedErr.Context["operation_duration_ms"] = duration.Milliseconds()
-				enhancedErr.Context["operation"] = "publish"
-			} else {
-				// Create new enhanced error with timing
-				err = errors.New(err).
-					Component("birdweather").
-					Category(errors.CategoryNetwork).
-					Timing("publish", duration).
-					Context("common_name", note.CommonName).
-					Context("scientific_name", note.ScientificName).
-					Build()
-			}
-			serviceLogger.Warn("Publish failed", "common_name", note.CommonName, "scientific_name", note.ScientificName, "duration_ms", duration.Milliseconds(), "error", err)
-		} else {
-			serviceLogger.Info("Publish completed", "common_name", note.CommonName, "scientific_name", note.ScientificName, "duration_ms", duration.Milliseconds())
-		}
-	}()
+	defer trackOperationTiming(&err, "publish", time.Now(), "common_name", note.CommonName, "scientific_name", note.ScientificName)()
 
 	serviceLogger.Info("Starting publish process", "date", note.Date, "time", note.Time, "common_name", note.CommonName, "scientific_name", note.ScientificName, "confidence", note.Confidence)
-	// Add check for empty pcmData
+
+	// Validate input
 	if len(pcmData) == 0 {
-		enhancedErr := errors.New(fmt.Errorf("pcmData is empty")).
+		return errors.New(fmt.Errorf("pcmData is empty")).
 			Component("birdweather").
 			Category(errors.CategoryValidation).
 			Context("common_name", note.CommonName).
 			Context("scientific_name", note.ScientificName).
 			Build()
-		serviceLogger.Error("Publish failed: PCM data is empty", "note", note, "error", enhancedErr)
-		return enhancedErr
 	}
 
 	// Use system's local timezone for timestamp parsing
@@ -856,7 +731,7 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) (err error) {
 			serviceLogger.Warn("Could not create debug PCM directory", "directory", debugDir, "error", err)
 		} else {
 			// Save raw PCM data
-			if err := os.WriteFile(debugFilename, pcmData, 0o600); err != nil {
+			if err := os.WriteFile(debugFilename, pcmData, filePermission); err != nil {
 				serviceLogger.Warn("Could not save debug PCM file", "filename", debugFilename, "error", err)
 			} else {
 				serviceLogger.Debug("Saved debug PCM file", "filename", debugFilename)
@@ -921,8 +796,141 @@ func (b *BwClient) Close() {
 
 // createDebugDirectory creates a directory for debug files and returns any error encountered
 func createDebugDirectory(path string) error {
-	if err := os.MkdirAll(path, 0o750); err != nil {
+	if err := os.MkdirAll(path, dirPermission); err != nil {
 		return fmt.Errorf("couldn't create debug directory: %w", err)
 	}
 	return nil
+}
+
+// audioEncodingResult holds the result of audio encoding
+type audioEncodingResult struct {
+	buffer *bytes.Buffer
+	ext    string
+}
+
+// encodeAudioForUpload handles the PCM to FLAC encoding using FFmpeg
+// FFmpeg is required as BirdWeather only accepts FLAC format
+func encodeAudioForUpload(settings *conf.Settings, pcmData []byte, timestamp string) (*audioEncodingResult, error) {
+	// Use the validated FFmpeg path from settings (validated at startup)
+	// This avoids redundant exec.LookPath calls on every upload
+	ffmpegPathForExec := settings.Realtime.Audio.FfmpegPath
+	ffmpegAvailable := ffmpegPathForExec != ""
+	serviceLogger.Debug("Checking FFmpeg availability", "path", ffmpegPathForExec, "available", ffmpegAvailable)
+
+	if !ffmpegAvailable {
+		log.Println("❌ FFmpeg not available - BirdWeather requires FLAC format which needs FFmpeg for encoding")
+		serviceLogger.Error("FFmpeg not available, cannot encode to FLAC for BirdWeather", "timestamp", timestamp)
+		return nil, fmt.Errorf("FFmpeg is required for BirdWeather uploads (FLAC encoding)")
+	}
+
+	return encodeWithFFmpeg(settings, pcmData, ffmpegPathForExec, timestamp)
+}
+
+// encodeWithFFmpeg encodes PCM to FLAC format using FFmpeg
+func encodeWithFFmpeg(settings *conf.Settings, pcmData []byte, ffmpegPath, timestamp string) (*audioEncodingResult, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), encodingTimeout)
+	defer cancel()
+
+	audioBuffer, err := encodeFlacUsingFFmpeg(ctx, pcmData, ffmpegPath, settings)
+	if err != nil {
+		serviceLogger.Error("FLAC encoding failed", "timestamp", timestamp, "error", err)
+		logFLACEncodingError(err)
+		return nil, fmt.Errorf("FLAC encoding failed: %w", err)
+	}
+	serviceLogger.Info("Encoded audio to FLAC format", "timestamp", timestamp)
+	return &audioEncodingResult{buffer: audioBuffer, ext: "flac"}, nil
+}
+
+// logFLACEncodingError logs the appropriate message for FLAC encoding failures
+func logFLACEncodingError(err error) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		log.Printf("⚠️ FLAC encoding timed out or was cancelled: %v\n", err)
+	} else {
+		log.Printf("❌ Failed to encode/normalize PCM to FLAC: %v\n", err)
+	}
+}
+
+// saveDebugAudioFile saves audio buffer to a debug file if debug mode is enabled
+func saveDebugAudioFile(audioBuffer *bytes.Buffer, audioExt, timestamp string) {
+	parsedTime, parseErr := time.Parse("2006-01-02T15:04:05.000-0700", timestamp)
+	if parseErr != nil {
+		serviceLogger.Warn("Could not parse timestamp for debug file saving", "timestamp", timestamp, "format", audioExt, "error", parseErr)
+		return
+	}
+
+	debugDir := filepath.Join("debug", "birdweather", audioExt)
+	debugFilename := filepath.Join(debugDir, fmt.Sprintf("bw_debug_%s.%s", parsedTime.Format("20060102_150405"), audioExt))
+	endTime := parsedTime.Add(detectionDurationSeconds * time.Second)
+
+	audioCopy := bytes.NewBuffer(audioBuffer.Bytes())
+	if saveErr := saveBufferToFile(audioCopy, debugFilename, parsedTime, endTime); saveErr != nil {
+		serviceLogger.Warn("Could not save debug file", "filename", debugFilename, "error", saveErr)
+	} else {
+		serviceLogger.Debug("Saved debug file", "filename", debugFilename)
+	}
+}
+
+
+// parseSoundscapeResponse parses the JSON response from soundscape upload
+func parseSoundscapeResponse(responseBody []byte, maskedURL string, statusCode int) (string, error) {
+	var sdata SoundscapeResponse
+	if err := json.Unmarshal(responseBody, &sdata); err != nil {
+		// Check if this might be HTML even though we got 200 OK
+		if strings.Contains(string(responseBody), "<") && strings.Contains(string(responseBody), ">") {
+			htmlError := extractHTMLError(string(responseBody))
+			serviceLogger.Error("Received HTML response with 200 OK status",
+				"operation", "soundscape upload",
+				"url", maskedURL,
+				"html_error", htmlError,
+				"response_preview", string(responseBody[:min(len(responseBody), maxResponsePreview)]))
+			return "", errors.New(fmt.Errorf("soundscape upload failed: %s", htmlError)).
+				Component("birdweather").
+				Category(errors.CategoryNetwork).
+				Context("response_type", "html_with_200").
+				Context("operation", "soundscape upload").
+				Build()
+		}
+		serviceLogger.Error("Failed to decode soundscape JSON response", "url", maskedURL, "status_code", statusCode, "body", string(responseBody), "error", err)
+		return "", fmt.Errorf("failed to decode JSON response: %w", err)
+	}
+
+	if !sdata.Success {
+		serviceLogger.Error("Soundscape upload was not successful according to API response", "url", maskedURL, "status_code", statusCode, "response", sdata)
+		return "", fmt.Errorf("upload failed, response reported failure")
+	}
+
+	return fmt.Sprintf("%d", sdata.Soundscape.ID), nil
+}
+
+// trackOperationTiming creates a deferred timing tracker for operations
+// Usage: defer trackOperationTiming(&err, "operation_name", time.Now(), contextFields...)()
+//
+//nolint:gocritic // errPtr must be a pointer to modify the error in the calling function's scope
+func trackOperationTiming(errPtr *error, operation string, startTime time.Time, contextFields ...any) func() {
+	return func() {
+		duration := time.Since(startTime)
+		if *errPtr != nil {
+			// Add timing context to error
+			var enhancedErr *errors.EnhancedError
+			if errors.As(*errPtr, &enhancedErr) {
+				// Initialize Context map if nil to prevent panic
+				if enhancedErr.Context == nil {
+					enhancedErr.Context = make(map[string]any)
+				}
+				enhancedErr.Context["operation_duration_ms"] = duration.Milliseconds()
+				enhancedErr.Context["operation"] = operation
+			} else {
+				*errPtr = errors.New(*errPtr).
+					Component("birdweather").
+					Category(errors.CategoryNetwork).
+					Timing(operation, duration).
+					Build()
+			}
+			logArgs := append([]any{"operation", operation, "duration_ms", duration.Milliseconds(), "error", *errPtr}, contextFields...)
+			serviceLogger.Warn(fmt.Sprintf("%s failed", operation), logArgs...)
+		} else {
+			logArgs := append([]any{"operation", operation, "duration_ms", duration.Milliseconds()}, contextFields...)
+			serviceLogger.Info(fmt.Sprintf("%s completed", operation), logArgs...)
+		}
+	}
 }

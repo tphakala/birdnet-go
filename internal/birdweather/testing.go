@@ -23,6 +23,66 @@ const (
 	minTestInterval = 1 * time.Minute
 )
 
+// Test configuration defaults
+const (
+	// defaultFailureProbability is the default probability for simulated failures
+	defaultFailureProbability = 0.5
+
+	// defaultMinDelayMs is the default minimum delay in milliseconds for simulated delays
+	defaultMinDelayMs = 500
+
+	// defaultMaxDelayMs is the default maximum delay in milliseconds for simulated delays
+	defaultMaxDelayMs = 3000
+)
+
+// Audio constants for test data generation
+const (
+	// testAudioSampleRate is the sample rate for test audio data (48kHz)
+	testAudioSampleRate = 48000
+
+	// testAudioBytesPerSample is the number of bytes per audio sample (16-bit = 2 bytes)
+	testAudioBytesPerSample = 2
+
+	// testAudioDurationFraction is the fraction of a second for test audio (0.5 seconds)
+	testAudioDurationFraction = 2 // sampleRate / 2 = 0.5 seconds
+)
+
+// generateTestPCMData creates a small test PCM data buffer (500ms of silence)
+// This is used in multiple test functions to avoid code duplication
+func generateTestPCMData() []byte {
+	numSamples := testAudioSampleRate / testAudioDurationFraction // 0.5 seconds
+	return make([]byte, numSamples*testAudioBytesPerSample)
+}
+
+// newSecureHTTPClient creates an HTTP client with secure TLS configuration
+// This helper reduces code duplication for creating HTTP clients with TLS settings
+func newSecureHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				MinVersion:         tls.VersionTLS12,
+				InsecureSkipVerify: false,
+			},
+		},
+	}
+}
+
+// HTTP status code constants for testing
+const (
+	// httpStatusClientError is the threshold for client error status codes
+	httpStatusClientError = 400
+
+	// httpStatusUnauthorized is the 401 status code
+	httpStatusUnauthorized = 401
+
+	// httpStatusForbidden is the 403 status code
+	httpStatusForbidden = 403
+
+	// httpStatusNotFound is the 404 status code
+	httpStatusNotFound = 404
+)
+
 // DNS Fallback resolvers
 var fallbackDNSResolvers = []string{
 	"1.1.1.1:53", // Cloudflare
@@ -78,6 +138,8 @@ func checkRateLimit() error {
 // resolveDNSWithFallback attempts to resolve a hostname using fallback DNS servers if the OS resolver fails
 // It uses shorter timeouts per DNS server to avoid long waits when multiple servers are unreachable
 // The provided context allows callers to control overall timeout and cancellation
+//
+//nolint:gocognit // Complexity justified: DNS fallback requires multiple resolver attempts with per-attempt timeout management
 func resolveDNSWithFallback(ctx context.Context, hostname string) ([]net.IP, error) {
 	// First try the standard resolver with context-based timeout
 	// Create a child context with systemDNSTimeout, but respect parent cancellation
@@ -184,9 +246,9 @@ type TestConfig struct {
 var testConfig = &TestConfig{
 	Enabled:            false,
 	RandomFailureMode:  false,
-	FailureProbability: 0.5,
-	MinDelay:           500,
-	MaxDelay:           3000,
+	FailureProbability: defaultFailureProbability,
+	MinDelay:           defaultMinDelayMs,
+	MaxDelay:           defaultMaxDelayMs,
 	rng:                rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(time.Now().UnixNano()))), //nolint:gosec // G404: weak randomness acceptable for test utilities, not security-critical
 }
 
@@ -348,6 +410,8 @@ func runTest(ctx context.Context, stage TestStage, test birdweatherTest) TestRes
 }
 
 // testAPIConnectivity tests basic connectivity to the BirdWeather API
+//
+//nolint:gocognit // Complexity justified: connectivity testing requires multiple fallback attempts and error handling paths
 func (b *BwClient) testAPIConnectivity(ctx context.Context) TestResult {
 	apiCtx, apiCancel := context.WithTimeout(ctx, apiTimeout)
 	defer apiCancel()
@@ -492,16 +556,7 @@ func tryAPIConnection(ctx context.Context, apiEndpoint string, hostHeader ...str
 	}
 
 	// Create a temporary HTTP client with a shorter timeout for this test
-	client := &http.Client{
-		Timeout: apiTimeout,
-		// Add special transport to handle potential certificate issues with direct IP
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				MinVersion:         tls.VersionTLS12, // Require TLS 1.2 minimum
-				InsecureSkipVerify: false,            // Keep secure by default
-			},
-		},
-	}
+	client := newSecureHTTPClient(apiTimeout)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -515,15 +570,11 @@ func tryAPIConnection(ctx context.Context, apiEndpoint string, hostHeader ...str
 		}
 		return fmt.Errorf("failed to connect to BirdWeather API: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("Failed to close response body: %v", err)
-		}
-	}()
+	defer closeResponseBody(resp)
 
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= httpStatusClientError {
 		// Special handling for 404 Not Found errors
-		if resp.StatusCode == 404 {
+		if resp.StatusCode == httpStatusNotFound {
 			log.Printf("BirdWeather API endpoint not found: returned 404")
 			return fmt.Errorf("API endpoint not found (404)")
 		}
@@ -537,6 +588,8 @@ func tryAPIConnection(ctx context.Context, apiEndpoint string, hostHeader ...str
 }
 
 // testAuthentication tests authentication with the BirdWeather API
+//
+//nolint:gocognit // Complexity justified: authentication testing requires DNS fallback and multiple verification paths
 func (b *BwClient) testAuthentication(ctx context.Context) TestResult {
 	authCtx, authCancel := context.WithTimeout(ctx, authTimeout)
 	defer authCancel()
@@ -589,6 +642,24 @@ func (b *BwClient) testAuthentication(ctx context.Context) TestResult {
 	})
 }
 
+// checkAuthenticationStatus evaluates the HTTP status code and returns an appropriate error
+func checkAuthenticationStatus(statusCode int) error {
+	switch statusCode {
+	case httpStatusUnauthorized, httpStatusForbidden:
+		log.Printf("❌ BirdWeather authentication failed: invalid station ID")
+		return fmt.Errorf("authentication failed: invalid station ID")
+	case httpStatusNotFound:
+		log.Printf("❌ BirdWeather station not found: returned 404")
+		return fmt.Errorf("station not found (404)")
+	default:
+		if statusCode >= httpStatusClientError {
+			log.Printf("❌ BirdWeather authentication failed: server returned status code %d", statusCode)
+			return fmt.Errorf("authentication failed: server returned status code %d", statusCode)
+		}
+	}
+	return nil
+}
+
 // tryAuthentication attempts to authenticate with the station URL
 func tryAuthentication(ctx context.Context, b *BwClient, stationURL string) error {
 	maskedURL := maskURLForLogging(stationURL, b.BirdweatherID)
@@ -602,24 +673,10 @@ func tryAuthentication(ctx context.Context, b *BwClient, stationURL string) erro
 	if err != nil {
 		return fmt.Errorf("failed to authenticate with BirdWeather at %s: %w", maskedURL, err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("Failed to close response body: %v", err)
-		}
-	}()
+	defer closeResponseBody(resp)
 
-	switch resp.StatusCode {
-	case 401, 403:
-		log.Printf("❌ BirdWeather authentication failed: invalid station ID")
-		return fmt.Errorf("authentication failed: invalid station ID")
-	case 404:
-		log.Printf("❌ BirdWeather station not found: returned 404")
-		return fmt.Errorf("station not found (404)")
-	default:
-		if resp.StatusCode >= 400 {
-			log.Printf("❌ BirdWeather authentication failed: server returned status code %d", resp.StatusCode)
-			return fmt.Errorf("authentication failed: server returned status code %d", resp.StatusCode)
-		}
+	if err := checkAuthenticationStatus(resp.StatusCode); err != nil {
+		return err
 	}
 
 	// Successfully authenticated - don't log the actual token
@@ -641,39 +698,17 @@ func tryAuthenticationWithHostOverride(ctx context.Context, b *BwClient, station
 	}
 
 	// Create a client with custom transport to handle direct IP connection
-	client := &http.Client{
-		Timeout: authTimeout,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				MinVersion:         tls.VersionTLS12, // Require TLS 1.2 minimum
-				InsecureSkipVerify: false,            // Keep secure
-			},
-		},
-	}
+	client := newSecureHTTPClient(authTimeout)
 
 	maskedURL := maskURLForLogging(stationURL, b.BirdweatherID)
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to authenticate with BirdWeather at %s (host: %s): %w", maskedURL, hostOverride, err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("Failed to close response body: %v", err)
-		}
-	}()
+	defer closeResponseBody(resp)
 
-	switch resp.StatusCode {
-	case 401, 403:
-		log.Printf("❌ BirdWeather authentication failed: invalid station ID")
-		return fmt.Errorf("authentication failed: invalid station ID")
-	case 404:
-		log.Printf("❌ BirdWeather station not found: returned 404")
-		return fmt.Errorf("station not found (404)")
-	default:
-		if resp.StatusCode >= 400 {
-			log.Printf("❌ BirdWeather authentication failed: server returned status code %d", resp.StatusCode)
-			return fmt.Errorf("authentication failed: server returned status code %d", resp.StatusCode)
-		}
+	if err := checkAuthenticationStatus(resp.StatusCode); err != nil {
+		return err
 	}
 
 	// Successfully authenticated
@@ -703,9 +738,7 @@ func (b *BwClient) testSoundscapeUpload(ctx context.Context) TestResult {
 
 	return runTest(uploadCtx, SoundscapeUpload, func(ctx context.Context) error {
 		// Generate a small test PCM data (500ms of silence)
-		sampleRate := 48000
-		numSamples := sampleRate / 2              // 0.5 seconds
-		testPCMData := make([]byte, numSamples*2) // 16-bit samples = 2 bytes per sample
+		testPCMData := generateTestPCMData()
 
 		// Generate current timestamp in the required format
 		timestamp := time.Now().Format("2006-01-02T15:04:05.000-0700")
@@ -759,6 +792,8 @@ func (b *BwClient) testDetectionPost(ctx context.Context, soundscapeID string) T
 }
 
 // TestConnection performs a multi-stage test of the BirdWeather connection and functionality
+//
+//nolint:gocognit // Complexity justified: orchestrates multiple test stages with state management and result coordination
 func (b *BwClient) TestConnection(ctx context.Context, resultChan chan<- TestResult) {
 	// Helper function to send a result
 	sendResult := func(result TestResult) {
@@ -922,9 +957,7 @@ func (b *BwClient) UploadTestSoundscape(ctx context.Context) TestResult {
 	}
 
 	// Generate a small test PCM data (500ms of silence)
-	sampleRate := 48000
-	numSamples := sampleRate / 2              // 0.5 seconds
-	testPCMData := make([]byte, numSamples*2) // 16-bit samples = 2 bytes per sample
+	testPCMData := generateTestPCMData()
 
 	// Generate current timestamp in the required format
 	timestamp := time.Now().Format("2006-01-02T15:04:05.000-0700")
