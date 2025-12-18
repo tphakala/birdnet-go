@@ -990,8 +990,13 @@ func (c *BirdImageCache) handleDBCacheHit(scientificName string, dbImage *BirdIm
 
 	// Regular positive entry - check staleness
 	if isCacheEntryStale(dbImage.CachedAt, false) {
-		logger.Info("DB cache entry is stale, returning stale data and triggering background refresh", "cached_at", dbImage.CachedAt)
-		go c.refreshEntry(scientificName)
+		// Check if shutdown was signaled before spawning new goroutine
+		if c.shouldQuit() {
+			logger.Debug("Skipping background refresh - shutdown in progress")
+		} else {
+			logger.Info("DB cache entry is stale, returning stale data and triggering background refresh", "cached_at", dbImage.CachedAt)
+			go c.refreshEntry(scientificName)
+		}
 	} else {
 		logger.Info("Image loaded from DB cache")
 	}
