@@ -18,6 +18,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
+// Test constants
+const (
+	// testTimestamp is the standard timestamp used in tests
+	testTimestamp = "2023-01-01T12:00:00.000-0500"
+)
+
 // MockSettings creates mock settings for testing
 func MockSettings() *conf.Settings {
 	return &conf.Settings{
@@ -156,6 +162,7 @@ func TestNew(t *testing.T) {
 	}
 }
 
+//nolint:gocognit // Test function with multiple sub-tests and validation checks
 func TestRandomizeLocation(t *testing.T) {
 	settings := MockSettings()
 	client, _ := New(settings)
@@ -275,8 +282,9 @@ func TestUploadSoundscape(t *testing.T) {
 				r.Header.Get("Content-Type"))
 		}
 
-		if r.Header.Get("Content-Encoding") != "gzip" {
-			t.Errorf("Expected Content-Encoding: gzip, got: %s",
+		// FLAC is already compressed, so no Content-Encoding header expected
+		if r.Header.Get("Content-Encoding") != "" {
+			t.Errorf("Expected no Content-Encoding header for FLAC, got: %s",
 				r.Header.Get("Content-Encoding"))
 		}
 
@@ -316,7 +324,7 @@ func TestUploadSoundscape(t *testing.T) {
 
 	// Create test PCM data (create FLAC data using PCM)
 	pcmData := make([]byte, 48000*2) // 1 second of 48kHz mono audio (2 bytes per sample)
-	timestamp := "2023-01-01T12:00:00.000-0500"
+	timestamp := testTimestamp
 
 	// Call the method under test
 	soundscapeID, err := client.UploadSoundscape(timestamp, pcmData)
@@ -360,7 +368,7 @@ func TestUploadSoundscape_EmptyData(t *testing.T) {
 	client, _ := New(MockSettings())
 
 	// Test with empty PCM data
-	_, err := client.UploadSoundscape("2023-01-01T12:00:00.000-0500", []byte{})
+	_, err := client.UploadSoundscape(testTimestamp, []byte{})
 
 	if err == nil {
 		t.Error("Expected error with empty pcmData, got nil")
@@ -392,7 +400,7 @@ func TestUploadSoundscape_ServerError(t *testing.T) {
 
 	// Create test PCM data
 	pcmData := make([]byte, 48000*2) // 2 bytes per sample for 16-bit
-	timestamp := "2023-01-01T12:00:00.000-0500"
+	timestamp := testTimestamp
 
 	// Call the method under test
 	_, err := client.UploadSoundscape(timestamp, pcmData)
@@ -456,7 +464,7 @@ func TestPostDetection(t *testing.T) {
 
 	// Test parameters
 	soundscapeID := "12345"
-	timestamp := "2023-01-01T12:00:00.000-0500"
+	timestamp := testTimestamp
 	commonName := "American Robin"
 	scientificName := "Turdus migratorius"
 	confidence := 0.95
@@ -485,7 +493,7 @@ func TestPostDetection_InvalidInput(t *testing.T) {
 		{
 			name:           "Empty soundscapeID",
 			soundscapeID:   "",
-			timestamp:      "2023-01-01T12:00:00.000-0500",
+			timestamp:      testTimestamp,
 			commonName:     "American Robin",
 			scientificName: "Turdus migratorius",
 			confidence:     0.95,
@@ -501,7 +509,7 @@ func TestPostDetection_InvalidInput(t *testing.T) {
 		{
 			name:           "Empty commonName",
 			soundscapeID:   "12345",
-			timestamp:      "2023-01-01T12:00:00.000-0500",
+			timestamp:      testTimestamp,
 			commonName:     "",
 			scientificName: "Turdus migratorius",
 			confidence:     0.95,
@@ -509,7 +517,7 @@ func TestPostDetection_InvalidInput(t *testing.T) {
 		{
 			name:           "Empty scientificName",
 			soundscapeID:   "12345",
-			timestamp:      "2023-01-01T12:00:00.000-0500",
+			timestamp:      testTimestamp,
 			commonName:     "American Robin",
 			scientificName: "",
 			confidence:     0.95,
@@ -648,7 +656,7 @@ func TestClose(t *testing.T) {
 	// as implemented, not enforcing a specific implementation.
 
 	// Attempt operations after Close to ensure they fail gracefully
-	_, err := client.UploadSoundscape("2023-01-01T12:00:00.000-0500", []byte{1, 2, 3, 4})
+	_, err := client.UploadSoundscape(testTimestamp, []byte{1, 2, 3, 4})
 	if err == nil {
 		t.Error("Expected error when using client after Close, got nil")
 	}

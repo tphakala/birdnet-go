@@ -11,6 +11,8 @@ import (
 )
 
 // TestResolveDNSWithFallback tests the DNS fallback resolution mechanism
+//
+//nolint:gocognit // Test function with multiple sub-tests and thorough DNS fallback validation
 func TestResolveDNSWithFallback(t *testing.T) {
 	t.Parallel() // Safe to parallelize - no shared state
 
