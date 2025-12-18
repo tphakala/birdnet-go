@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
+//nolint:gocognit // test requires multiple scenarios for comprehensive coverage
 func TestMockTransport(t *testing.T) {
 	t.Parallel()
 	t.Run("SendEvent stores events", func(t *testing.T) {

@@ -32,6 +32,19 @@ func IsTelemetryEnabled() bool {
 	return telemetryEnabled.Load()
 }
 
+// EnableTestMode enables test mode and updates the telemetry enabled state
+// This is useful for tests that need to enable telemetry without real settings
+func EnableTestMode() {
+	atomic.StoreInt32(&testMode, 1)
+	UpdateTelemetryEnabled()
+}
+
+// DisableTestMode disables test mode and updates the telemetry enabled state
+func DisableTestMode() {
+	atomic.StoreInt32(&testMode, 0)
+	UpdateTelemetryEnabled()
+}
+
 // init sets up the initial telemetry state
 func init() {
 	// Set initial state

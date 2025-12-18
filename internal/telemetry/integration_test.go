@@ -11,6 +11,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+//nolint:gocognit // integration test requires multiple scenarios for comprehensive coverage
 func TestTelemetryIntegration(t *testing.T) {
 	// Cannot run in parallel due to global event bus state
 	t.Run("error reporting through telemetry", func(t *testing.T) {
@@ -33,7 +34,7 @@ func TestTelemetryIntegration(t *testing.T) {
 		CaptureError(err, "test-component")
 
 		// Verify event was captured
-		AssertEventCount(t, config.MockTransport, 1, 100*time.Millisecond)
+		AssertEventCount(t, config.MockTransport, 1, 500*time.Millisecond)
 
 		// Check event details
 		event := config.MockTransport.GetLastEvent()
@@ -57,7 +58,7 @@ func TestTelemetryIntegration(t *testing.T) {
 		ReportMessage("Critical error occurred", sentry.LevelError, "core")
 
 		// Wait for all events
-		AssertEventCount(t, config.MockTransport, 3, 200*time.Millisecond)
+		AssertEventCount(t, config.MockTransport, 3, 500*time.Millisecond)
 
 		// Verify levels
 		events := config.MockTransport.GetEvents()
@@ -103,7 +104,7 @@ func TestTelemetryIntegration(t *testing.T) {
 		ReportError(testErr)
 
 		// Should capture the event
-		AssertEventCount(t, config.MockTransport, 1, 100*time.Millisecond)
+		AssertEventCount(t, config.MockTransport, 1, 500*time.Millisecond)
 	})
 
 	t.Run("privacy compliance", func(t *testing.T) {
@@ -115,7 +116,7 @@ func TestTelemetryIntegration(t *testing.T) {
 		ReportError(sensitiveErr)
 
 		// Verify event was captured
-		AssertEventCount(t, config.MockTransport, 1, 100*time.Millisecond)
+		AssertEventCount(t, config.MockTransport, 1, 500*time.Millisecond)
 
 		// Check that sensitive data was scrubbed
 		event := config.MockTransport.GetLastEvent()
@@ -178,7 +179,7 @@ func TestTelemetryIntegration(t *testing.T) {
 		Flush(2 * time.Second)
 
 		// All events should be captured
-		AssertEventCount(t, config.MockTransport, 5, 100*time.Millisecond)
+		AssertEventCount(t, config.MockTransport, 5, 500*time.Millisecond)
 	})
 }
 

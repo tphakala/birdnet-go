@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"fmt"
 	"maps"
 	"sync"
 	"sync/atomic"
@@ -43,6 +44,26 @@ type TelemetryWorker struct {
 	logger *slog.Logger
 }
 
+// Default worker configuration values
+const (
+	// DefaultFailureThreshold is the number of failures before circuit opens
+	DefaultFailureThreshold = 10
+	// DefaultRecoveryTimeout is the time to wait before transitioning to half-open
+	DefaultRecoveryTimeout = 60 * time.Second
+	// DefaultHalfOpenMaxEvents is the max events allowed in half-open state
+	DefaultHalfOpenMaxEvents = 5
+	// DefaultBatchSize is the default batch size for event processing
+	DefaultBatchSize = 10
+	// DefaultBatchTimeout is the default timeout for batch processing
+	DefaultBatchTimeout = 100 * time.Millisecond
+	// samplingHashMod is the modulo value for sampling hash calculation
+	samplingHashMod = 100
+	// hashMultiplier is the multiplier for string hash calculation (prime number)
+	hashMultiplier = 31
+)
+
+// Note: DefaultRateLimitMaxEvents is defined in system_init_manager.go
+
 // WorkerConfig holds configuration for the telemetry worker
 type WorkerConfig struct {
 	// CircuitBreaker settings
@@ -66,22 +87,29 @@ type WorkerConfig struct {
 // DefaultWorkerConfig returns default configuration
 func DefaultWorkerConfig() *WorkerConfig {
 	return &WorkerConfig{
-		FailureThreshold:   10,
-		RecoveryTimeout:    60 * time.Second,
-		HalfOpenMaxEvents:  5,
+		FailureThreshold:   DefaultFailureThreshold,
+		RecoveryTimeout:    DefaultRecoveryTimeout,
+		HalfOpenMaxEvents:  DefaultHalfOpenMaxEvents,
 		RateLimitWindow:    1 * time.Minute,
-		RateLimitMaxEvents: 100,
+		RateLimitMaxEvents: DefaultRateLimitMaxEvents,
 		SamplingRate:       1.0, // 100% by default
 		BatchingEnabled:    true,
-		BatchSize:          10,
-		BatchTimeout:       100 * time.Millisecond,
+		BatchSize:          DefaultBatchSize,
+		BatchTimeout:       DefaultBatchTimeout,
 	}
 }
+
+// Circuit breaker states
+const (
+	circuitStateClosed   = "closed"
+	circuitStateOpen     = "open"
+	circuitStateHalfOpen = "half-open"
+)
 
 // CircuitBreaker implements the circuit breaker pattern for Sentry failures
 type CircuitBreaker struct {
 	mu              sync.Mutex
-	state           string // "closed", "open", "half-open"
+	state           string // circuitStateClosed, circuitStateOpen, circuitStateHalfOpen
 	failures        int
 	lastFailureTime time.Time
 	successCount    int
@@ -117,7 +145,7 @@ func NewTelemetryWorker(enabled bool, config *WorkerConfig) (*TelemetryWorker, e
 		enabled: enabled,
 		config:  config,
 		circuitBreaker: &CircuitBreaker{
-			state:  "closed",
+			state:  circuitStateClosed,
 			config: config,
 		},
 		rateLimiter: &RateLimiter{
@@ -243,8 +271,11 @@ func (w *TelemetryWorker) reportToSentry(event events.ErrorEvent) error {
 			Category(errors.ErrorCategory(event.GetCategory())).
 			Build()
 
-		// Add context if available
+		// Add context if available - ensure destination map is initialized
 		if ctx := event.GetContext(); ctx != nil {
+			if ee.Context == nil {
+				ee.Context = make(map[string]any)
+			}
 			maps.Copy(ee.Context, ctx)
 		}
 	}
@@ -268,7 +299,7 @@ func (w *TelemetryWorker) shouldSample(event events.ErrorEvent) bool {
 	// Simple sampling based on hash of component + category
 	// This ensures consistent sampling for similar errors
 	hash := hashString(event.GetComponent() + event.GetCategory())
-	sample := float64(hash%100) / 100.0
+	sample := float64(hash%samplingHashMod) / float64(samplingHashMod)
 
 	return sample < samplingRate
 }
@@ -277,7 +308,7 @@ func (w *TelemetryWorker) shouldSample(event events.ErrorEvent) bool {
 func hashString(s string) uint32 {
 	var h uint32
 	for _, c := range s {
-		h = h*31 + uint32(c)
+		h = h*hashMultiplier + uint32(c)
 	}
 	return h
 }
@@ -290,6 +321,18 @@ func (w *TelemetryWorker) GetStats() WorkerStats {
 		EventsFailed:    w.eventsFailed.Load(),
 		CircuitState:    w.circuitBreaker.State(),
 	}
+}
+
+// SetSamplingRate updates the sampling rate for event processing.
+// Rate must be between 0.0 and 1.0, where 1.0 means 100% sampling.
+func (w *TelemetryWorker) SetSamplingRate(rate float64) error {
+	if rate < 0.0 || rate > 1.0 {
+		return fmt.Errorf("sampling rate must be between 0.0 and 1.0")
+	}
+	w.configMu.Lock()
+	w.config.SamplingRate = rate
+	w.configMu.Unlock()
+	return nil
 }
 
 // WorkerStats contains runtime statistics
@@ -308,16 +351,16 @@ func (cb *CircuitBreaker) Allow() bool {
 	defer cb.mu.Unlock()
 
 	switch cb.state {
-	case "open":
+	case circuitStateOpen:
 		// Check if we should transition to half-open
 		if time.Since(cb.lastFailureTime) > cb.config.RecoveryTimeout {
-			cb.state = "half-open"
+			cb.state = circuitStateHalfOpen
 			cb.successCount = 0
 			return true
 		}
 		return false
 
-	case "half-open":
+	case circuitStateHalfOpen:
 		// Allow limited events in half-open state
 		return cb.successCount < cb.config.HalfOpenMaxEvents
 
@@ -333,10 +376,10 @@ func (cb *CircuitBreaker) RecordSuccess() {
 
 	cb.failures = 0
 
-	if cb.state == "half-open" {
+	if cb.state == circuitStateHalfOpen {
 		cb.successCount++
 		if cb.successCount >= cb.config.HalfOpenMaxEvents {
-			cb.state = "closed"
+			cb.state = circuitStateClosed
 		}
 	}
 }
@@ -350,11 +393,11 @@ func (cb *CircuitBreaker) RecordFailure() {
 	cb.lastFailureTime = time.Now()
 
 	if cb.failures >= cb.config.FailureThreshold {
-		cb.state = "open"
+		cb.state = circuitStateOpen
 	}
 
-	if cb.state == "half-open" {
-		cb.state = "open"
+	if cb.state == circuitStateHalfOpen {
+		cb.state = circuitStateOpen
 	}
 }
 

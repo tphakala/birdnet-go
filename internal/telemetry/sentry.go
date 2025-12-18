@@ -17,6 +17,18 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
+// Error title truncation limits
+const (
+	// panicMessageMaxLen is the maximum length for panic messages in error titles
+	panicMessageMaxLen = 50
+	// errorMessageMaxLen is the maximum length for general error messages in titles
+	errorMessageMaxLen = 60
+)
+
+// sentryDSN is the Sentry DSN for the BirdNET-Go project
+// Defined at package level to avoid duplication across initialization functions
+const sentryDSN = "https://b9269b6c0f8fae154df65be5a97e0435@o4509553065525248.ingest.de.sentry.io/4509553112186960"
+
 // DeferredMessage represents a message that was captured before Sentry initialization
 type DeferredMessage struct {
 	Message   string
@@ -33,6 +45,18 @@ var (
 	attachmentUploader *AttachmentUploader
 	testMode           int32 // testMode allows tests to bypass settings checks (0=false, 1=true)
 )
+
+// shouldSkipTelemetry returns true if telemetry should be skipped.
+// It checks test mode and whether Sentry is enabled in settings.
+// This helper reduces code duplication across telemetry functions.
+func shouldSkipTelemetry() bool {
+	// In test mode, never skip (telemetry is always "enabled" for testing)
+	if atomic.LoadInt32(&testMode) == 1 {
+		return false
+	}
+	settings := conf.GetSettings()
+	return settings == nil || !settings.Sentry.Enabled
+}
 
 // PlatformInfo holds privacy-safe platform information for telemetry
 type PlatformInfo struct {
@@ -110,9 +134,6 @@ func enableDebugLogging() {
 
 // initializeSentrySDK initializes the Sentry SDK with privacy-compliant options
 func initializeSentrySDK(settings *conf.Settings) error {
-	// Use hardcoded DSN for BirdNET-Go project
-	const sentryDSN = "https://b9269b6c0f8fae154df65be5a97e0435@o4509553065525248.ingest.de.sentry.io/4509553112186960"
-
 	// Initialize Sentry with privacy-compliant options
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn:        sentryDSN,
@@ -381,68 +402,96 @@ func generateErrorTitle(scrubbedErrorMsg, component string) string {
 	return errorType
 }
 
+// errorTypePattern represents a pattern-to-result mapping for error type parsing
+type errorTypePattern struct {
+	pattern string
+	result  string
+}
+
+// errorTypePatterns maps error message patterns to human-readable error types
+// Order matters: more specific patterns should come before more general ones
+var errorTypePatterns = []errorTypePattern{
+	{"nil pointer dereference", "Nil Pointer Dereference"},
+	{"invalid memory address", "Invalid Memory Access"},
+	{"index out of range", "Index Out of Range"},
+	{"slice bounds out of range", "Slice Bounds Out of Range"},
+	{"integer divide by zero", "Integer Divide by Zero"},
+	{"send on closed channel", "Send on Closed Channel"},
+	{"close of closed channel", "Close of Closed Channel"},
+}
+
+// parseConcurrentMapError returns the appropriate error type for concurrent map errors
+func parseConcurrentMapError(lower string) string {
+	if strings.Contains(lower, "read") {
+		return "Concurrent Map Access"
+	}
+	if strings.Contains(lower, "write") {
+		return "Concurrent Map Write"
+	}
+	return "Concurrent Map Access"
+}
+
+// parseInterfaceConversionError returns the appropriate error type for interface conversion errors
+func parseInterfaceConversionError(lower string) string {
+	if strings.Contains(lower, "is nil") {
+		return "Interface Conversion: Nil Value"
+	}
+	return "Interface Conversion Failed"
+}
+
+// parsePanicMessage extracts and formats the panic message from an error string
+func parsePanicMessage(errMsg string) string {
+	const panicPrefix = "panic:"
+	panicMsg := errMsg[len(panicPrefix):]
+	// Trim leading whitespace (handles both "panic: " and "panic:")
+	panicMsg = strings.TrimLeft(panicMsg, " \t")
+	// Trim at first newline to exclude stack traces
+	if idx := strings.IndexByte(panicMsg, '\n'); idx >= 0 {
+		panicMsg = panicMsg[:idx]
+	}
+	// Truncate if still too long
+	if len(panicMsg) > panicMessageMaxLen {
+		panicMsg = panicMsg[:panicMessageMaxLen] + "..."
+	}
+	return fmt.Sprintf("Panic: %s", panicMsg)
+}
+
+// truncateErrorMessage trims and truncates an error message for display
+func truncateErrorMessage(errMsg string) string {
+	// Trim at first newline
+	if idx := strings.IndexByte(errMsg, '\n'); idx >= 0 {
+		errMsg = errMsg[:idx]
+	}
+	// Truncate very long messages
+	if len(errMsg) > errorMessageMaxLen {
+		return errMsg[:errorMessageMaxLen] + "..."
+	}
+	return errMsg
+}
+
 // parseErrorType extracts a human-readable error type from the error message
 // Uses case-insensitive matching for robustness and trims multi-line content
 func parseErrorType(errMsg string) string {
 	// Normalize for case-insensitive matching
 	lower := strings.ToLower(errMsg)
 
-	// Check for common runtime panic patterns
+	// Check simple pattern mappings first (order matters for overlapping patterns)
+	for _, p := range errorTypePatterns {
+		if strings.Contains(lower, p.pattern) {
+			return p.result
+		}
+	}
+
+	// Handle patterns with conditional logic
 	switch {
-	case strings.Contains(lower, "nil pointer dereference"):
-		return "Nil Pointer Dereference"
-	case strings.Contains(lower, "index out of range"):
-		return "Index Out of Range"
-	case strings.Contains(lower, "slice bounds out of range"):
-		return "Slice Bounds Out of Range"
-	case strings.Contains(lower, "integer divide by zero"):
-		return "Integer Divide by Zero"
-	case strings.Contains(lower, "invalid memory address"):
-		return "Invalid Memory Access"
-	case strings.Contains(lower, "send on closed channel"):
-		return "Send on Closed Channel"
-	case strings.Contains(lower, "close of closed channel"):
-		return "Close of Closed Channel"
 	case strings.Contains(lower, "concurrent map"):
-		// Check for "read" first to handle "concurrent map read and map write"
-		if strings.Contains(lower, "read") {
-			return "Concurrent Map Access"
-		}
-		if strings.Contains(lower, "write") {
-			return "Concurrent Map Write"
-		}
-		return "Concurrent Map Access"
+		return parseConcurrentMapError(lower)
 	case strings.Contains(lower, "interface conversion"):
-		if strings.Contains(lower, "is nil") {
-			return "Interface Conversion: Nil Value"
-		}
-		return "Interface Conversion Failed"
+		return parseInterfaceConversionError(lower)
 	case strings.HasPrefix(lower, "panic:"):
-		// Extract panic message after "panic:" and handle optional space
-		const panicPrefix = "panic:"
-		panicMsg := errMsg[len(panicPrefix):]
-		// Trim leading whitespace (handles both "panic: " and "panic:")
-		panicMsg = strings.TrimLeft(panicMsg, " \t")
-		// Trim at first newline to exclude stack traces
-		if idx := strings.IndexByte(panicMsg, '\n'); idx >= 0 {
-			panicMsg = panicMsg[:idx]
-		}
-		// Truncate if still too long
-		if len(panicMsg) > 50 {
-			panicMsg = panicMsg[:50] + "..."
-		}
-		return fmt.Sprintf("Panic: %s", panicMsg)
+		return parsePanicMessage(errMsg)
 	default:
-		// For unknown errors, use a generic title
-		// Trim at first newline
-		if idx := strings.IndexByte(errMsg, '\n'); idx >= 0 {
-			errMsg = errMsg[:idx]
-		}
-		// Truncate very long messages
-		if len(errMsg) > 60 {
-			return errMsg[:60] + "..."
-		}
-		return errMsg
+		return truncateErrorMessage(errMsg)
 	}
 }
 
@@ -501,12 +550,8 @@ func titleCaseComponent(component string) string {
 
 // CaptureError captures an error with privacy-compliant context
 func CaptureError(err error, component string) {
-	// Skip settings check in test mode
-	if atomic.LoadInt32(&testMode) == 0 {
-		settings := conf.GetSettings()
-		if settings == nil || !settings.Sentry.Enabled {
-			return
-		}
+	if shouldSkipTelemetry() {
+		return
 	}
 
 	// Create a scrubbed error for privacy - this prevents PII leakage
@@ -563,12 +608,8 @@ func CaptureError(err error, component string) {
 
 // CaptureMessage captures a message with privacy-compliant context
 func CaptureMessage(message string, level sentry.Level, component string) {
-	// Skip settings check in test mode
-	if atomic.LoadInt32(&testMode) == 0 {
-		settings := conf.GetSettings()
-		if settings == nil || !settings.Sentry.Enabled {
-			return
-		}
+	if shouldSkipTelemetry() {
+		return
 	}
 
 	// Scrub sensitive information from the message
@@ -598,12 +639,8 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 // CaptureMessageDeferred captures a message for later processing if Sentry is not yet initialized
 // If Sentry is already initialized, it immediately sends the message
 func CaptureMessageDeferred(message string, level sentry.Level, component string) {
-	// Skip settings check in test mode
-	if atomic.LoadInt32(&testMode) == 0 {
-		settings := conf.GetSettings()
-		if settings == nil || !settings.Sentry.Enabled {
-			return
-		}
+	if shouldSkipTelemetry() {
+		return
 	}
 
 	deferredMutex.Lock()
@@ -638,12 +675,8 @@ func CaptureMessageDeferred(message string, level sentry.Level, component string
 
 // Flush ensures all buffered events are sent to Sentry
 func Flush(timeout time.Duration) {
-	// Skip settings check in test mode
-	if atomic.LoadInt32(&testMode) == 0 {
-		settings := conf.GetSettings()
-		if settings == nil || !settings.Sentry.Enabled {
-			return
-		}
+	if shouldSkipTelemetry() {
+		return
 	}
 
 	sentry.Flush(timeout)
@@ -673,10 +706,7 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 		return nil
 	}
 
-	// Use the same DSN as full initialization
-	const sentryDSN = "https://b9269b6c0f8fae154df65be5a97e0435@o4509553065525248.ingest.de.sentry.io/4509553112186960"
-
-	// Initialize with minimal configuration
+	// Initialize with minimal configuration (uses package-level sentryDSN)
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn:              sentryDSN,
 		SampleRate:       0, // Don't capture any errors automatically

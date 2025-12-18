@@ -3,12 +3,16 @@ package telemetry
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
+
+// componentInitTimeout is the timeout for waiting for a single component to initialize
+const componentInitTimeout = 5 * time.Second
 
 // InitCoordinator provides a safe, ordered initialization of telemetry components
 type InitCoordinator struct {
@@ -77,9 +81,9 @@ func (c *InitCoordinator) WaitForInitialization(timeout time.Duration) error {
 		required     bool
 		waitForState InitState
 	}{
-		{"error_integration", true, InitStateCompleted},
-		{"sentry", false, InitStateCompleted}, // Not required
-		{"event_bus", false, InitStateCompleted}, // May be deferred
+		{ComponentErrorIntegration, true, InitStateCompleted},
+		{ComponentSentry, false, InitStateCompleted}, // Not required
+		{ComponentEventBus, false, InitStateCompleted}, // May be deferred
 	}
 
 	for _, comp := range components {
@@ -95,7 +99,7 @@ func (c *InitCoordinator) WaitForInitialization(timeout time.Duration) error {
 			}
 
 			// Wait for completion or failure
-			if err := c.manager.WaitForComponent(comp.name, comp.waitForState, 5*time.Second); err != nil {
+			if err := c.manager.WaitForComponent(comp.name, comp.waitForState, componentInitTimeout); err != nil {
 				if comp.required {
 					return fmt.Errorf("required component %s failed: %w", comp.name, err)
 				}
@@ -125,20 +129,33 @@ func (c *InitCoordinator) Shutdown(timeout time.Duration) error {
 }
 
 // GlobalInitCoordinator provides a global initialization coordinator
-var globalInitCoordinator *InitCoordinator
+var (
+	globalInitCoordinator     *InitCoordinator
+	globalInitCoordinatorOnce sync.Once
+)
 
-// GetGlobalInitCoordinator returns the global init coordinator instance
-// This is used by debug endpoints to access telemetry health status
+// GetGlobalInitCoordinator returns the global init coordinator instance.
+// Returns nil if InitializeCoordinatorOnce has not been called yet.
+// Callers must handle the nil case or use InitializeCoordinatorOnce instead
+// if initialization is required.
+// This is used by debug endpoints to access telemetry health status.
 func GetGlobalInitCoordinator() *InitCoordinator {
+	return globalInitCoordinator
+}
+
+// InitializeCoordinatorOnce returns the global init coordinator, creating it if necessary
+// This is thread-safe and ensures only one coordinator is ever created
+func InitializeCoordinatorOnce() *InitCoordinator {
+	globalInitCoordinatorOnce.Do(func() {
+		globalInitCoordinator = NewInitCoordinator()
+	})
 	return globalInitCoordinator
 }
 
 // Initialize creates the global init coordinator and performs basic initialization
 func Initialize(settings *conf.Settings) error {
-	if globalInitCoordinator == nil {
-		globalInitCoordinator = NewInitCoordinator()
-	}
-	return globalInitCoordinator.InitializeAll(settings)
+	coord := InitializeCoordinatorOnce()
+	return coord.InitializeAll(settings)
 }
 
 // InitializeEventBus initializes event bus integration (call after core services are ready)

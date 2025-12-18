@@ -2,10 +2,7 @@
 package telemetry
 
 import (
-	"sync/atomic"
-
 	"github.com/getsentry/sentry-go"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
@@ -65,16 +62,8 @@ func (r *SentryNotificationReporter) CaptureError(err error, component string) {
 
 // CaptureEvent reports a custom event with tags and contexts to Sentry
 func (r *SentryNotificationReporter) CaptureEvent(message, level string, tags map[string]string, contexts map[string]any) {
-	if !r.enabled {
+	if !r.enabled || shouldSkipTelemetry() {
 		return
-	}
-
-	// Skip settings check in test mode
-	if atomic.LoadInt32(&testMode) == 0 {
-		settings := conf.GetSettings()
-		if settings == nil || !settings.Sentry.Enabled {
-			return
-		}
 	}
 
 	// Scrub message for privacy
@@ -119,17 +108,7 @@ func (r *SentryNotificationReporter) CaptureEvent(message, level string, tags ma
 
 // IsEnabled returns whether telemetry reporting is enabled
 func (r *SentryNotificationReporter) IsEnabled() bool {
-	if !r.enabled {
-		return false
-	}
-
-	// Skip settings check in test mode
-	if atomic.LoadInt32(&testMode) == 0 {
-		settings := conf.GetSettings()
-		return settings != nil && settings.Sentry.Enabled
-	}
-
-	return true
+	return r.enabled && !shouldSkipTelemetry()
 }
 
 // convertToSentryLevel converts string level to sentry.Level

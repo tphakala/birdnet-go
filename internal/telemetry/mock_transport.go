@@ -9,6 +9,9 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
+// pollInterval is the interval for polling in WaitForEventCount
+const pollInterval = 10 * time.Millisecond
+
 // MockTransport implements sentry.Transport for testing
 type MockTransport struct {
 	mu       sync.RWMutex
@@ -201,7 +204,7 @@ func (t *MockTransport) WaitForEventCount(count int, timeout time.Duration) bool
 		if t.GetEventCount() >= count {
 			return true
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(pollInterval)
 	}
 	return false
 }

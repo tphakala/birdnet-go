@@ -19,7 +19,43 @@ import (
 const (
 	// maxBreadcrumbs defines the maximum number of breadcrumbs to keep in Sentry events
 	maxBreadcrumbs = 10
+	// sentryFlushTimeout is the timeout for flushing events to Sentry
+	sentryFlushTimeout = 5 * time.Second
 )
+
+// flushWithContext flushes Sentry events with context cancellation awareness.
+// Returns nil on successful flush, or an error if context is cancelled during flush.
+//
+// Design notes:
+//   - This function does not check shouldSkipTelemetry() because it is only called
+//     after event capture, which has already performed that check. Rechecking here
+//     would be redundant and could cause events to be captured but never flushed.
+//   - If context is cancelled, the flush goroutine continues running until Sentry's
+//     internal timeout (sentryFlushTimeout) completes. This is intentional to allow
+//     in-flight events to be sent even when the caller has given up waiting.
+func flushWithContext(ctx context.Context, operation string) error {
+	logTelemetryDebug(nil, "telemetry: flushing event to Sentry", "operation", operation)
+
+	flushDone := make(chan struct{})
+	go func() {
+		sentry.Flush(sentryFlushTimeout)
+		close(flushDone)
+	}()
+
+	select {
+	case <-ctx.Done():
+		logTelemetryWarn(nil, "telemetry: "+operation+" cancelled during flush", "error", ctx.Err())
+		return errors.New(ctx.Err()).
+			Component("telemetry").
+			Category(errors.CategoryNetwork).
+			Context("operation", operation).
+			Context("reason", "context_cancelled_during_flush").
+			Build()
+	case <-flushDone:
+		logTelemetryDebug(nil, "telemetry: flush completed successfully", "operation", operation)
+		return nil
+	}
+}
 
 // Package-level logger specific to telemetry service
 var (
@@ -27,6 +63,15 @@ var (
 	serviceLevelVar = new(slog.LevelVar) // Dynamic level control
 	closeLogger     func() error
 )
+
+// CloseServiceLogger closes the telemetry service logger file handle.
+// This should be called during application shutdown to ensure log files are properly flushed.
+func CloseServiceLogger() error {
+	if closeLogger != nil {
+		return closeLogger()
+	}
+	return nil
+}
 
 func init() {
 	var err error
@@ -188,30 +233,15 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	logTelemetryDebug(nil, "telemetry: event captured", "event_id", eventID)
 
 	// Flush to ensure the event is sent with context awareness
-	logTelemetryDebug(nil, "telemetry: flushing event to Sentry")
-	flushDone := make(chan struct{})
-	go func() {
-		sentry.Flush(5 * time.Second)
-		close(flushDone)
-	}()
-
-	// Wait for flush or context cancellation
-	select {
-	case <-ctx.Done():
-		logTelemetryWarn(nil, "telemetry: upload cancelled during flush", "error", ctx.Err())
-		return errors.New(ctx.Err()).
-			Component("telemetry").
-			Category(errors.CategoryNetwork).
-			Context("operation", "upload_support_dump").
-			Context("reason", "context_cancelled_during_flush").
-			Build()
-	case <-flushDone:
-		logTelemetryInfo(nil, "telemetry: support dump uploaded successfully",
-			"system_id", systemID,
-			"event_id", eventID,
-			"dump_size", len(dumpData))
-		return nil
+	if err := flushWithContext(ctx, "upload_support_dump"); err != nil {
+		return err
 	}
+
+	logTelemetryInfo(nil, "telemetry: support dump uploaded successfully",
+		"system_id", systemID,
+		"event_id", eventID,
+		"dump_size", len(dumpData))
+	return nil
 }
 
 // CreateSupportEvent creates a support request event without an attachment
@@ -307,53 +337,91 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 	logTelemetryDebug(nil, "telemetry: support event captured", "event_id", eventID)
 
 	// Flush with context awareness
-	logTelemetryDebug(nil, "telemetry: flushing support event to Sentry")
-	flushDone := make(chan struct{})
-	go func() {
-		sentry.Flush(5 * time.Second)
-		close(flushDone)
-	}()
-
-	// Wait for flush or context cancellation
-	select {
-	case <-ctx.Done():
-		logTelemetryWarn(nil, "telemetry: support event cancelled during flush", "error", ctx.Err())
-		return errors.New(ctx.Err()).
-			Component("telemetry").
-			Category(errors.CategoryNetwork).
-			Context("operation", "create_support_event").
-			Context("reason", "context_cancelled_during_flush").
-			Build()
-	case <-flushDone:
-		logTelemetryInfo(nil, "telemetry: support event created successfully",
-			"system_id", systemID,
-			"event_id", eventID)
-		return nil
+	if err := flushWithContext(ctx, "create_support_event"); err != nil {
+		return err
 	}
+
+	logTelemetryInfo(nil, "telemetry: support event created successfully",
+		"system_id", systemID,
+		"event_id", eventID)
+	return nil
 }
 
-// extractTraceID attempts to extract a trace ID from the context
-// It looks for common trace ID keys used by various tracing systems
-func extractTraceID(ctx context.Context) string {
-	// Check for OpenTelemetry trace ID
-	if traceID := ctx.Value("trace-id"); traceID != nil {
-		if id, ok := traceID.(string); ok {
-			return id
+// contextKey is a typed key for context values to avoid collisions with other packages
+type contextKey string
+
+// Unexported context keys for trace ID extraction
+const (
+	traceIDKey   contextKey = "trace-id"
+	xTraceIDKey  contextKey = "x-trace-id"
+	requestIDKey contextKey = "request-id"
+)
+
+// NewTraceIDContext returns a new context with the given trace ID.
+func NewTraceIDContext(ctx context.Context, traceID string) context.Context {
+	return context.WithValue(ctx, traceIDKey, traceID)
+}
+
+// TraceIDFromContext extracts the trace ID from the context.
+// Returns the trace ID and true if present, or empty string and false if not.
+func TraceIDFromContext(ctx context.Context) (string, bool) {
+	if v := ctx.Value(traceIDKey); v != nil {
+		if id, ok := v.(string); ok {
+			return id, true
 		}
+	}
+	return "", false
+}
+
+// NewXTraceIDContext returns a new context with the given X-Trace-ID.
+func NewXTraceIDContext(ctx context.Context, xTraceID string) context.Context {
+	return context.WithValue(ctx, xTraceIDKey, xTraceID)
+}
+
+// XTraceIDFromContext extracts the X-Trace-ID from the context.
+// Returns the X-Trace-ID and true if present, or empty string and false if not.
+func XTraceIDFromContext(ctx context.Context) (string, bool) {
+	if v := ctx.Value(xTraceIDKey); v != nil {
+		if id, ok := v.(string); ok {
+			return id, true
+		}
+	}
+	return "", false
+}
+
+// NewRequestIDContext returns a new context with the given request ID.
+func NewRequestIDContext(ctx context.Context, requestID string) context.Context {
+	return context.WithValue(ctx, requestIDKey, requestID)
+}
+
+// RequestIDFromContext extracts the request ID from the context.
+// Returns the request ID and true if present, or empty string and false if not.
+func RequestIDFromContext(ctx context.Context) (string, bool) {
+	if v := ctx.Value(requestIDKey); v != nil {
+		if id, ok := v.(string); ok {
+			return id, true
+		}
+	}
+	return "", false
+}
+
+// extractTraceID attempts to extract a trace ID from the context.
+// It looks for common trace ID keys used by various tracing systems.
+// Priority: trace-id > x-trace-id > request-id
+func extractTraceID(ctx context.Context) string {
+	// Check for OpenTelemetry trace ID (highest priority)
+	if id, ok := TraceIDFromContext(ctx); ok {
+		return id
 	}
 
 	// Check for X-Trace-ID (common HTTP header)
-	if traceID := ctx.Value("x-trace-id"); traceID != nil {
-		if id, ok := traceID.(string); ok {
-			return id
-		}
+	if id, ok := XTraceIDFromContext(ctx); ok {
+		return id
 	}
 
 	// Check for request ID
-	if reqID := ctx.Value("request-id"); reqID != nil {
-		if id, ok := reqID.(string); ok {
-			return id
-		}
+	if id, ok := RequestIDFromContext(ctx); ok {
+		return id
 	}
 
 	return ""
