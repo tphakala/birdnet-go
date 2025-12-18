@@ -6,10 +6,34 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
+
+// setupNegativeCacheTest creates a cache with a not-found provider for testing.
+func setupNegativeCacheTest(t *testing.T, notFoundSpecies map[string]bool) (*mockProviderWithNotFound, *imageprovider.BirdImageCache) {
+	t.Helper()
+
+	mockProvider := &mockProviderWithNotFound{notFoundSpecies: notFoundSpecies}
+	mockStore := newMockStore()
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err, "Failed to create metrics")
+
+	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
+	require.NoError(t, err, "Failed to create cache")
+	cache.SetImageProvider(mockProvider)
+
+	return mockProvider, cache
+}
+
+// assertImageNotFoundError verifies the error is ErrImageNotFound.
+func assertImageNotFoundError(t *testing.T, err error, context string) {
+	t.Helper()
+	require.ErrorIs(t, err, imageprovider.ErrImageNotFound, "%s: Expected ErrImageNotFound", context)
+}
 
 // TestNegativeCachingBehavior validates that negative caching works correctly
 func TestNegativeCachingBehavior(t *testing.T) {
@@ -17,115 +41,49 @@ func TestNegativeCachingBehavior(t *testing.T) {
 
 	t.Run("NegativeCacheReducesAPICalls", func(t *testing.T) {
 		t.Parallel()
-		// Create a provider that tracks API calls and returns not found for specific species
-		mockProvider := &mockProviderWithNotFound{
-			notFoundSpecies: map[string]bool{
-				"Notfoundicus imaginary": true,
-			},
-		}
-
-		mockStore := newMockStore()
-		metrics, err := observability.NewMetrics()
-		if err != nil {
-			t.Fatalf("Failed to create metrics: %v", err)
-		}
-
-		cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-		if err != nil {
-			t.Fatalf("Failed to create cache: %v", err)
-		}
-		cache.SetImageProvider(mockProvider)
-
-		// Ensure the provider is set by attempting a dummy fetch
-		// This synchronizes with any background operations
+		mockProvider, cache := setupNegativeCacheTest(t, map[string]bool{"Notfoundicus imaginary": true})
 		species := "Notfoundicus imaginary"
 
 		// First request - should hit API
-		_, err = cache.Get(species)
-		if !errors.Is(err, imageprovider.ErrImageNotFound) {
-			t.Errorf("Expected ErrImageNotFound, got %v", err)
-		}
-
-		if mockProvider.getAPICallCount() != 1 {
-			t.Errorf("Expected 1 API call for initial request, got %d", mockProvider.getAPICallCount())
-		}
+		_, err := cache.Get(species)
+		assertImageNotFoundError(t, err, "initial request")
+		assert.Equal(t, int64(1), mockProvider.getAPICallCount(), "Expected 1 API call for initial request")
 
 		// Make 5 more requests - should use negative cache
 		for i := range 5 {
 			_, err := cache.Get(species)
-			if !errors.Is(err, imageprovider.ErrImageNotFound) {
-				t.Errorf("Request %d: Expected ErrImageNotFound, got %v", i+2, err)
-			}
+			assertImageNotFoundError(t, err, "request "+string(rune('2'+i)))
 		}
 
 		// Should still be 1 API call (negative caching working)
-		if mockProvider.getAPICallCount() != 1 {
-			t.Errorf("Expected 1 total API call with negative caching, got %d", mockProvider.getAPICallCount())
-		}
+		assert.Equal(t, int64(1), mockProvider.getAPICallCount(), "Expected 1 total API call with negative caching")
 	})
 
 	t.Run("NegativeCacheExpiry", func(t *testing.T) {
 		t.Parallel()
-		// Create a separate provider and cache for this test
-		mockProvider := &mockProviderWithNotFound{
-			notFoundSpecies: map[string]bool{
-				"Missingbird species": true,
-			},
-		}
-
-		mockStore := newMockStore()
-		metrics, err := observability.NewMetrics()
-		if err != nil {
-			t.Fatalf("Failed to create metrics: %v", err)
-		}
-
-		cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-		if err != nil {
-			t.Fatalf("Failed to create cache: %v", err)
-		}
-		cache.SetImageProvider(mockProvider)
-
-		// This test would need to wait 15 minutes in real scenario
-		// For testing, we'll just verify the logic is in place
+		mockProvider, cache := setupNegativeCacheTest(t, map[string]bool{"Missingbird species": true})
 		species := "Missingbird species"
 
 		// First request
-		_, err = cache.Get(species)
-		if !errors.Is(err, imageprovider.ErrImageNotFound) {
-			t.Errorf("Expected ErrImageNotFound, got %v", err)
-		}
+		_, err := cache.Get(species)
+		assertImageNotFoundError(t, err, "first request")
 
 		// Immediate second request should use cache
 		_, err = cache.Get(species)
-		if !errors.Is(err, imageprovider.ErrImageNotFound) {
-			t.Errorf("Expected ErrImageNotFound on cached request, got %v", err)
-		}
+		assertImageNotFoundError(t, err, "cached request")
 
-		// Should still be 1 API call
-		if mockProvider.getAPICallCount() != 1 {
-			t.Logf("Negative cache working: only %d API call for 2 requests", mockProvider.getAPICallCount())
-		} else {
-			t.Logf("Negative cache confirmed: 1 API call for multiple requests")
-		}
+		t.Logf("Negative cache confirmed: %d API call(s) for multiple requests", mockProvider.getAPICallCount())
 	})
 
 	t.Run("TransientErrorsNotCached", func(t *testing.T) {
 		t.Parallel()
-		// Create provider that returns transient errors
-		errorProvider := &mockProviderWithTransientError{
-			errorMessage: "temporary network error",
-		}
-
+		errorProvider := &mockProviderWithTransientError{errorMessage: "temporary network error"}
 		mockStore := newMockStore()
 		metrics, err := observability.NewMetrics()
-		if err != nil {
-			t.Fatalf("Failed to create metrics: %v", err)
-		}
+		require.NoError(t, err, "Failed to create metrics")
 
 		cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-		if err != nil {
-			t.Fatalf("Failed to create cache: %v", err)
-		}
+		require.NoError(t, err, "Failed to create cache")
 		cache.SetImageProvider(errorProvider)
 
 		species := "Any species"
@@ -133,18 +91,12 @@ func TestNegativeCachingBehavior(t *testing.T) {
 		// Make 3 requests - each should hit API (no caching of transient errors)
 		for i := range 3 {
 			_, err := cache.Get(species)
-			if err == nil {
-				t.Errorf("Request %d: Expected transient error, got nil", i+1)
-			} else if errors.Is(err, imageprovider.ErrImageNotFound) {
-				t.Errorf("Request %d: Expected transient error, got ErrImageNotFound", i+1)
-			}
-			// The error should be a transient error (not nil and not ErrImageNotFound)
+			require.Error(t, err, "Request %d: Expected transient error", i+1)
+			assert.False(t, errors.Is(err, imageprovider.ErrImageNotFound), "Request %d: Expected transient error, not ErrImageNotFound", i+1)
 		}
 
 		// Should have made 3 API calls (no caching of transient errors)
-		if errorProvider.getAPICallCount() != 3 {
-			t.Errorf("Expected 3 API calls for transient errors, got %d", errorProvider.getAPICallCount())
-		}
+		assert.Equal(t, int64(3), errorProvider.getAPICallCount(), "Expected 3 API calls for transient errors")
 	})
 }
 
