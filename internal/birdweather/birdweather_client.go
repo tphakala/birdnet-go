@@ -15,7 +15,6 @@ import (
 	"net/http"
 	neturl "net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -501,7 +500,11 @@ func parseDouble(s string, defaultValue float64) float64 {
 // It handles the PCM to WAV conversion, compresses the data, and manages HTTP request creation and response handling safely.
 func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscapeID string, err error) {
 	// Track performance timing for telemetry
-	defer trackOperationTiming(&err, "soundscape_upload", time.Now(), "timestamp", timestamp, "soundscape_id", soundscapeID)()
+	// Note: Wrapped in closure so soundscapeID is captured at execution time, not registration time
+	startTime := time.Now()
+	defer func() {
+		trackOperationTiming(&err, "soundscape_upload", startTime, "timestamp", timestamp, "soundscape_id", soundscapeID)()
+	}()
 
 	serviceLogger.Info("Starting soundscape upload", "timestamp", timestamp)
 
@@ -808,7 +811,9 @@ type audioEncodingResult struct {
 // encodeAudioForUpload handles the PCM to FLAC encoding using FFmpeg
 // FFmpeg is required as BirdWeather only accepts FLAC format
 func encodeAudioForUpload(settings *conf.Settings, pcmData []byte, timestamp string) (*audioEncodingResult, error) {
-	ffmpegPathForExec, _ := exec.LookPath(conf.GetFfmpegBinaryName())
+	// Use the validated FFmpeg path from settings (validated at startup)
+	// This avoids redundant exec.LookPath calls on every upload
+	ffmpegPathForExec := settings.Realtime.Audio.FfmpegPath
 	ffmpegAvailable := ffmpegPathForExec != ""
 	serviceLogger.Debug("Checking FFmpeg availability", "path", ffmpegPathForExec, "available", ffmpegAvailable)
 
