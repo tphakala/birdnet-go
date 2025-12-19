@@ -2271,7 +2271,7 @@
         "enableLabel": "Ativar autenticação por senha",
         "passwordLabel": "Senha",
         "passwordHelpText": "Limitar acesso às configurações com uma senha.",
-        "disabled": "Password authentication is disabled"
+        "disabled": "Autenticação por senha está desativada"
       },
       "oauth": {
         "title": "OAuth2 - Autenticação social",
@@ -2302,7 +2302,7 @@
       "bypassAuthentication": {
         "title": "Bypass de autenticação",
         "description": "Permitir acesso sem autenticação de redes confiáveis",
-        "disabled": "Subnet bypass is disabled"
+        "disabled": "Bypass de sub-rede está desativado"
       },
       "hostLabel": "Endereço do host",
       "allowSubnetBypassLabel": "Permitir acesso da sub-rede para contornar autenticação",

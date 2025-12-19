@@ -606,12 +606,36 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     allowUntranslated: args.includes('--allow-untranslated'),
     failOnWarnings: args.includes('--fail-on-warnings'),
     verbose: args.includes('--verbose') || args.includes('-v'),
-    minCoverage: args.includes('--min-coverage')
-      ? parseFloat(args[args.indexOf('--min-coverage') + 1])
-      : undefined,
-    showSamples: args.includes('--samples')
-      ? parseInt(args[args.indexOf('--samples') + 1], 10)
-      : undefined,
+    minCoverage: (() => {
+      if (!args.includes('--min-coverage')) return undefined;
+      const idx = args.indexOf('--min-coverage');
+      const value = args[idx + 1];
+      if (value === undefined || value.startsWith('-')) {
+        console.error('Error: --min-coverage requires a numeric value');
+        process.exit(1);
+      }
+      const parsed = parseFloat(value);
+      if (isNaN(parsed) || parsed < 0 || parsed > 100) {
+        console.error('Error: --min-coverage must be a number between 0 and 100');
+        process.exit(1);
+      }
+      return parsed;
+    })(),
+    showSamples: (() => {
+      if (!args.includes('--samples')) return undefined;
+      const idx = args.indexOf('--samples');
+      const value = args[idx + 1];
+      if (value === undefined || value.startsWith('-')) {
+        console.error('Error: --samples requires a numeric value');
+        process.exit(1);
+      }
+      const parsed = parseInt(value, 10);
+      if (isNaN(parsed) || parsed < 1) {
+        console.error('Error: --samples must be a positive integer');
+        process.exit(1);
+      }
+      return parsed;
+    })(),
   };
 
   // Show help

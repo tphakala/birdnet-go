@@ -1600,7 +1600,7 @@
       "errors": {
         "speciesLoadFailed": "Nie udało się załadować listy gatunków. Spróbuj ponownie."
       },
-      "title": "Filters"
+      "title": "Filtry"
     },
     "integration": {
       "birdweather": {
