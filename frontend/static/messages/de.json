@@ -1789,6 +1789,7 @@
     "species": {
       "activeSpecies": {
         "title": "Aktive Arten",
+        "tabLabel": "Aktiv",
         "description": "Arten, die basierend auf Ihrem aktuellen Standort und Filtereinstellungen erkannt werden",
         "stats": {
           "species": "Arten",
@@ -1827,16 +1828,19 @@
       },
       "alwaysInclude": {
         "title": "Immer Arten einschließen",
+        "tabLabel": "Einschl.",
         "description": "Arten in dieser Liste werden immer im Bereich der erkannten Arten enthalten sein",
         "noSpeciesMessage": "Keine Arten zur Einschlussliste hinzugefügt"
       },
       "alwaysExclude": {
         "title": "Immer Arten ausschließen",
+        "tabLabel": "Ausschl.",
         "description": "Arten in dieser Liste werden immer von der Erkennung ausgeschlossen",
         "noSpeciesMessage": "Keine Arten zur Ausschlussliste hinzugefügt"
       },
       "customConfiguration": {
         "title": "Benutzerdefinierte Artenkonfiguration",
+        "tabLabel": "Benutzer.",
         "description": "Artenspezifische Schwellenwerte, Erkennungsintervalle und Aktionen",
         "helpText": {
           "intro": "Konfigurieren Sie artenspezifische Einstellungen:",
@@ -1910,6 +1914,93 @@
       "parametersPlaceholder": "Parameter werden hier angezeigt",
       "errors": {
         "speciesLoadFailed": "Fehler beim Laden der Artenliste. Bitte versuchen Sie es erneut."
+      },
+      "tracking": {
+        "title": "Verfolgung",
+        "tabLabel": "Verfolgung",
+        "description": "Konfigurieren Sie die Verfolgung neuer Artenerkennungen basierend auf Zeiträumen",
+        "enabled": {
+          "label": "Artenverfolgung aktivieren",
+          "helpText": "Bei Aktivierung verfolgt das System neue Artenerkennungen und kann Benachrichtigungen senden"
+        },
+        "newSpeciesWindowDays": {
+          "label": "Neue Art Fenster (Tage)",
+          "helpText": "Anzahl der Tage, die eine Art nach der Erstentdeckung als 'neu' gilt (1-365)"
+        },
+        "syncIntervalMinutes": {
+          "label": "Synchronisierungsintervall (Minuten)",
+          "helpText": "Wie oft Verfolgungsdaten mit der Datenbank synchronisiert werden (1-1440)"
+        },
+        "notificationSuppressionHours": {
+          "label": "Benachrichtigungsunterdrückung (Stunden)",
+          "helpText": "Stunden zur Unterdrückung doppelter Benachrichtigungen für dieselbe Art (0-8760)"
+        },
+        "yearly": {
+          "title": "Jährliche Verfolgung",
+          "description": "Verfolgen Sie die ersten Ankünfte von Arten jedes Jahr",
+          "enabled": {
+            "label": "Jährliche Verfolgung aktivieren",
+            "helpText": "Verfolgen und benachrichtigen Sie, wenn eine Art zum ersten Mal im Jahr erkannt wird"
+          },
+          "resetMonth": {
+            "label": "Rücksetzungsmonat",
+            "helpText": "Monat, in dem die jährliche Verfolgung zurückgesetzt wird (1-12)"
+          },
+          "resetDay": {
+            "label": "Rücksetzungstag",
+            "helpText": "Tag des Monats, an dem die jährliche Verfolgung zurückgesetzt wird"
+          },
+          "windowDays": {
+            "label": "Fenster (Tage)",
+            "helpText": "Tage zur Anzeige des 'Neu in diesem Jahr' Indikators (1-365)"
+          }
+        },
+        "seasonal": {
+          "title": "Saisonale Verfolgung",
+          "description": "Verfolgen Sie die ersten Ankünfte von Arten jede Saison",
+          "enabled": {
+            "label": "Saisonale Verfolgung aktivieren",
+            "helpText": "Verfolgen und benachrichtigen Sie, wenn eine Art zum ersten Mal in der Saison erkannt wird"
+          },
+          "windowDays": {
+            "label": "Fenster (Tage)",
+            "helpText": "Tage zur Anzeige des 'Neu in dieser Saison' Indikators (1-365)"
+          },
+          "seasons": {
+            "title": "Saisondefinitionen",
+            "description": "Definieren Sie, wann jede Saison beginnt. Die Saisons werden automatisch basierend auf dem Breitengrad Ihres Standorts angepasst.",
+            "spring": "Frühling",
+            "summer": "Sommer",
+            "fall": "Herbst",
+            "winter": "Winter",
+            "wet1": "Regenzeit 1",
+            "dry1": "Trockenzeit 1",
+            "wet2": "Regenzeit 2",
+            "dry2": "Trockenzeit 2",
+            "startMonth": "Startmonat",
+            "startDay": "Starttag",
+            "hemisphereNote": "Die Saisondaten werden automatisch basierend auf Ihrem Breitengrad konfiguriert. Die nördliche Hemisphäre verwendet Standardsaisons, die südliche Hemisphäre hat verschobene Daten und Äquatorialregionen verwenden Regen-/Trockenzeiten."
+          }
+        },
+        "months": {
+          "january": "Januar",
+          "february": "Februar",
+          "march": "März",
+          "april": "April",
+          "may": "Mai",
+          "june": "Juni",
+          "july": "Juli",
+          "august": "August",
+          "september": "September",
+          "october": "Oktober",
+          "november": "November",
+          "december": "Dezember"
+        },
+        "units": {
+          "days": "Tage",
+          "min": "Min",
+          "hours": "Std"
+        }
       }
     },
     "security": {

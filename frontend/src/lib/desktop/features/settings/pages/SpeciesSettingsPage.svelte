@@ -27,11 +27,15 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from 'svelte';
   import SpeciesInput from '$lib/desktop/components/forms/SpeciesInput.svelte';
+  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
+  import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import {
     settingsStore,
     settingsActions,
     speciesSettings,
     realtimeSettings,
+    speciesTrackingSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { SpeciesConfig, SpeciesSettings } from '$lib/stores/settings';
@@ -61,10 +65,70 @@
     Search,
     Maximize2,
     Minimize2,
+    CalendarClock,
   } from '@lucide/svelte';
   import { toastActions } from '$lib/stores/toast';
 
   const logger = loggers.settings;
+
+  // ============================================================================
+  // TRACKING SETTINGS CONSTANTS
+  // Centralized defaults to avoid magic numbers and duplication
+  // ============================================================================
+
+  /** Month names for dropdown options */
+  const MONTH_NAMES = [
+    'january',
+    'february',
+    'march',
+    'april',
+    'may',
+    'june',
+    'july',
+    'august',
+    'september',
+    'october',
+    'november',
+    'december',
+  ] as const;
+
+  /** Default season start dates (Northern Hemisphere astronomical seasons) */
+  const SEASON_DEFAULTS = {
+    spring: { startMonth: 3, startDay: 20 },
+    summer: { startMonth: 6, startDay: 21 },
+    fall: { startMonth: 9, startDay: 22 },
+    winter: { startMonth: 12, startDay: 21 },
+  } as const;
+
+  /** Input validation limits */
+  const TRACKING_LIMITS = {
+    days: { min: 1, max: 365 },
+    syncMinutes: { min: 1, max: 1440 },
+    suppressionHours: { min: 0, max: 8760 },
+    dayOfMonth: { min: 1, max: 31 },
+  } as const;
+
+  /** Default values for tracking settings */
+  const TRACKING_DEFAULTS = {
+    newSpeciesWindowDays: 7,
+    syncIntervalMinutes: 60,
+    notificationSuppressionHours: 24,
+    yearlyTracking: {
+      enabled: false,
+      resetMonth: 1,
+      resetDay: 1,
+      windowDays: 7,
+    },
+    seasonalTracking: {
+      enabled: false,
+      windowDays: 7,
+      seasons: SEASON_DEFAULTS,
+    },
+  } as const;
+
+  // ============================================================================
+  // END TRACKING SETTINGS CONSTANTS
+  // ============================================================================
 
   // Helper function to check if a value is a plain object
   function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -269,6 +333,176 @@
       store.formData.realtime?.species?.config
     )
   );
+
+  let trackingHasChanges = $derived(
+    hasSettingsChanged(
+      store.originalData.realtime?.speciesTracking,
+      store.formData.realtime?.speciesTracking
+    )
+  );
+
+  // Tracking settings state
+  let trackingSettings = $derived($speciesTrackingSettings);
+
+  // Month options for dropdown menus (derived once, used multiple times)
+  let monthOptions = $derived(
+    MONTH_NAMES.map((name, i) => ({
+      value: String(i + 1),
+      label: t(`settings.species.tracking.months.${name}`),
+    })) as SelectOption[]
+  );
+
+  /**
+   * Helper function to update tracking settings with proper defaults.
+   * Reduces code duplication by centralizing the object construction.
+   */
+  function updateTrackingSettings(
+    updates: Partial<{
+      enabled: boolean;
+      newSpeciesWindowDays: number;
+      syncIntervalMinutes: number;
+      notificationSuppressionHours: number;
+      yearlyTracking: {
+        enabled?: boolean;
+        resetMonth?: number;
+        resetDay?: number;
+        windowDays?: number;
+      };
+      seasonalTracking: {
+        enabled?: boolean;
+        windowDays?: number;
+        seasons?: Record<string, { startMonth: number; startDay: number }>;
+      };
+    }>
+  ) {
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      speciesTracking: {
+        enabled: updates.enabled ?? trackingSettings?.enabled ?? true,
+        newSpeciesWindowDays:
+          updates.newSpeciesWindowDays ??
+          trackingSettings?.newSpeciesWindowDays ??
+          TRACKING_DEFAULTS.newSpeciesWindowDays,
+        syncIntervalMinutes:
+          updates.syncIntervalMinutes ??
+          trackingSettings?.syncIntervalMinutes ??
+          TRACKING_DEFAULTS.syncIntervalMinutes,
+        notificationSuppressionHours:
+          updates.notificationSuppressionHours ??
+          trackingSettings?.notificationSuppressionHours ??
+          TRACKING_DEFAULTS.notificationSuppressionHours,
+        yearlyTracking: updates.yearlyTracking
+          ? {
+              enabled:
+                updates.yearlyTracking.enabled ??
+                trackingSettings?.yearlyTracking?.enabled ??
+                TRACKING_DEFAULTS.yearlyTracking.enabled,
+              resetMonth:
+                updates.yearlyTracking.resetMonth ??
+                trackingSettings?.yearlyTracking?.resetMonth ??
+                TRACKING_DEFAULTS.yearlyTracking.resetMonth,
+              resetDay:
+                updates.yearlyTracking.resetDay ??
+                trackingSettings?.yearlyTracking?.resetDay ??
+                TRACKING_DEFAULTS.yearlyTracking.resetDay,
+              windowDays:
+                updates.yearlyTracking.windowDays ??
+                trackingSettings?.yearlyTracking?.windowDays ??
+                TRACKING_DEFAULTS.yearlyTracking.windowDays,
+            }
+          : (trackingSettings?.yearlyTracking ?? { ...TRACKING_DEFAULTS.yearlyTracking }),
+        seasonalTracking: updates.seasonalTracking
+          ? {
+              enabled:
+                updates.seasonalTracking.enabled ??
+                trackingSettings?.seasonalTracking?.enabled ??
+                TRACKING_DEFAULTS.seasonalTracking.enabled,
+              windowDays:
+                updates.seasonalTracking.windowDays ??
+                trackingSettings?.seasonalTracking?.windowDays ??
+                TRACKING_DEFAULTS.seasonalTracking.windowDays,
+              seasons:
+                updates.seasonalTracking.seasons ??
+                trackingSettings?.seasonalTracking?.seasons ??
+                SEASON_DEFAULTS,
+            }
+          : (trackingSettings?.seasonalTracking ?? { ...TRACKING_DEFAULTS.seasonalTracking }),
+      },
+    });
+  }
+
+  /**
+   * Clamp a value between min and max with fallback default.
+   */
+  function clampValue(value: string, min: number, max: number, fallback: number): number {
+    const parsed = parseInt(value);
+    return isNaN(parsed) ? fallback : Math.max(min, Math.min(max, parsed));
+  }
+
+  /**
+   * Creates an onchange handler for number inputs that updates tracking settings.
+   * Reduces duplication of the clamp + update pattern.
+   */
+  function createNumberInputHandler(
+    limits: { min: number; max: number },
+    fallback: number,
+    updateFn: (_value: number) => void
+  ) {
+    return (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      const value = clampValue(target.value, limits.min, limits.max, fallback);
+      updateFn(value);
+    };
+  }
+
+  /**
+   * Get season defaults safely.
+   * Safe: season is typed literal from SEASON_DEFAULTS constant.
+   */
+  function getSeasonDefaults(season: keyof typeof SEASON_DEFAULTS) {
+    // eslint-disable-next-line security/detect-object-injection
+    return SEASON_DEFAULTS[season];
+  }
+
+  /**
+   * Get current season data safely.
+   * Safe: season is typed literal from SEASON_DEFAULTS constant.
+   */
+  function getCurrentSeasonData(season: keyof typeof SEASON_DEFAULTS) {
+    const seasons = trackingSettings?.seasonalTracking?.seasons ?? {};
+    // eslint-disable-next-line security/detect-object-injection
+    return seasons[season];
+  }
+
+  /**
+   * Helper function to update a specific season's start month or day.
+   * Handles merging with existing seasons and uses SEASON_DEFAULTS for missing values.
+   */
+  function updateSeasonDate(
+    season: keyof typeof SEASON_DEFAULTS,
+    field: 'startMonth' | 'startDay',
+    value: number
+  ) {
+    const currentSeasons = trackingSettings?.seasonalTracking?.seasons ?? {};
+    const seasonDefaults = getSeasonDefaults(season);
+    const currentSeason = getCurrentSeasonData(season);
+
+    updateTrackingSettings({
+      seasonalTracking: {
+        seasons: {
+          ...currentSeasons,
+          [season]: {
+            startMonth:
+              field === 'startMonth'
+                ? value
+                : (currentSeason?.startMonth ?? seasonDefaults.startMonth),
+            startDay:
+              field === 'startDay' ? value : (currentSeason?.startDay ?? seasonDefaults.startDay),
+          },
+        },
+      },
+    });
+  }
 
   // Species data will be loaded in onMount after CSRF token is available
 
@@ -759,31 +993,38 @@
   let tabs = $derived<TabDefinition[]>([
     {
       id: 'active',
-      label: t('settings.species.activeSpecies.title'),
+      label: t('settings.species.activeSpecies.tabLabel'),
       icon: ListCheck,
       content: activeTabContent,
       // No hasChanges - this is read-only
     },
     {
       id: 'include',
-      label: t('settings.species.alwaysInclude.title'),
+      label: t('settings.species.alwaysInclude.tabLabel'),
       icon: CirclePlus,
       content: includeTabContent,
       hasChanges: includeHasChanges,
     },
     {
       id: 'exclude',
-      label: t('settings.species.alwaysExclude.title'),
+      label: t('settings.species.alwaysExclude.tabLabel'),
       icon: CircleMinus,
       content: excludeTabContent,
       hasChanges: excludeHasChanges,
     },
     {
       id: 'config',
-      label: t('settings.species.customConfiguration.title'),
+      label: t('settings.species.customConfiguration.tabLabel'),
       icon: Settings2,
       content: configTabContent,
       hasChanges: configHasChanges,
+    },
+    {
+      id: 'tracking',
+      label: t('settings.species.tracking.tabLabel'),
+      icon: CalendarClock,
+      content: trackingTabContent,
+      hasChanges: trackingHasChanges,
     },
   ]);
 </script>
@@ -797,7 +1038,7 @@
         <!-- Species Count -->
         <div class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-3">
-            <div class="flex items-center gap-2 text-(--color-base-content) opacity-60">
+            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
               <Bird class="size-4" />
               <span class="text-xs font-medium"
                 >{t('settings.species.activeSpecies.stats.species')}</span
@@ -810,7 +1051,7 @@
         <!-- Location -->
         <div class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-3">
-            <div class="flex items-center gap-2 text-(--color-base-content) opacity-60">
+            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
               <MapPin class="size-4" />
               <span class="text-xs font-medium"
                 >{t('settings.species.activeSpecies.stats.location')}</span
@@ -832,7 +1073,7 @@
         <!-- Threshold -->
         <div class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-3">
-            <div class="flex items-center gap-2 text-(--color-base-content) opacity-60">
+            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
               <SlidersHorizontal class="size-4" />
               <span class="text-xs font-medium"
                 >{t('settings.species.activeSpecies.stats.threshold')}</span
@@ -845,7 +1086,7 @@
         <!-- Last Updated -->
         <div class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-3">
-            <div class="flex items-center gap-2 text-(--color-base-content) opacity-60">
+            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
               <Clock class="size-4" />
               <span class="text-xs font-medium"
                 >{t('settings.species.activeSpecies.stats.updated')}</span
@@ -901,7 +1142,7 @@
                   {t('settings.species.activeSpecies.locationNotConfigured.title') ||
                     'Location Not Configured'}
                 </p>
-                <p class="text-sm text-(--color-base-content) opacity-70 mt-1">
+                <p class="text-sm text-[color:var(--color-base-content)] opacity-70 mt-1">
                   {t('settings.species.activeSpecies.locationNotConfigured.description') ||
                     'Set your location in Main Settings to see species available in your area. The range filter uses your location to determine which species are likely to be found nearby.'}
                 </p>
@@ -918,7 +1159,7 @@
             <!-- Search Input -->
             <div class="relative flex-1">
               <Search
-                class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-(--color-base-content) opacity-40"
+                class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[color:var(--color-base-content)] opacity-40"
                 aria-hidden="true"
               />
               <input
@@ -985,7 +1226,7 @@
                     <!-- Left: Names -->
                     <div class="min-w-0 flex-1">
                       <div class="font-medium text-sm truncate">{species.commonName}</div>
-                      <div class="text-xs text-(--color-base-content) opacity-50 italic truncate">
+                      <div class="text-xs text-[color:var(--color-base-content)] opacity-50 italic truncate">
                         {species.scientificName}
                       </div>
                     </div>
@@ -1015,7 +1256,7 @@
                           ></div>
                         </div>
                         <span
-                          class="text-xs font-mono tabular-nums w-10 text-(--color-base-content) opacity-60"
+                          class="text-xs font-mono tabular-nums w-10 text-[color:var(--color-base-content)] opacity-60"
                         >
                           {species.score.toFixed(2)}
                         </span>
@@ -1026,12 +1267,12 @@
               </div>
             {:else if searchInputValue}
               <!-- No Search Results -->
-              <div class="text-center py-8 text-(--color-base-content) opacity-50">
+              <div class="text-center py-8 text-[color:var(--color-base-content)] opacity-50">
                 <p class="text-sm">{t('settings.species.activeSpecies.noResults')}</p>
               </div>
             {:else}
               <!-- Empty State -->
-              <div class="text-center py-8 text-(--color-base-content) opacity-50">
+              <div class="text-center py-8 text-[color:var(--color-base-content)] opacity-50">
                 <Bird class="size-12 mx-auto mb-3 opacity-30" />
                 <p class="text-sm font-medium">{t('settings.species.activeSpecies.empty.title')}</p>
                 <p class="text-xs mt-1">{t('settings.species.activeSpecies.empty.description')}</p>
@@ -1045,7 +1286,7 @@
           </SettingsNote>
         {:else}
           <!-- Initial Empty State (before load) -->
-          <div class="text-center py-8 text-(--color-base-content) opacity-50">
+          <div class="text-center py-8 text-[color:var(--color-base-content)] opacity-50">
             <Bird class="size-12 mx-auto mb-3 opacity-30" />
             <p class="text-sm font-medium">{t('settings.species.activeSpecies.empty.title')}</p>
             <p class="text-xs mt-1">{t('settings.species.activeSpecies.empty.description')}</p>
@@ -1085,7 +1326,7 @@
         {/each}
 
         {#if settings.include.length === 0}
-          <div class="text-sm text-(--color-base-content) opacity-60 italic p-2 text-center">
+          <div class="text-sm text-[color:var(--color-base-content)] opacity-60 italic p-2 text-center">
             {t('settings.species.alwaysInclude.noSpeciesMessage')}
           </div>
         {/if}
@@ -1135,7 +1376,7 @@
         {/each}
 
         {#if settings.exclude.length === 0}
-          <div class="text-sm text-(--color-base-content) opacity-60 italic p-2 text-center">
+          <div class="text-sm text-[color:var(--color-base-content)] opacity-60 italic p-2 text-center">
             {t('settings.species.alwaysExclude.noSpeciesMessage')}
           </div>
         {/if}
@@ -1188,7 +1429,7 @@
         {/if}
 
         {#if Object.keys(settings.config).length > 0}
-          <span class="text-xs text-(--color-base-content) opacity-60">
+          <span class="text-xs text-[color:var(--color-base-content)] opacity-60">
             {t('settings.species.customConfiguration.configuredCount', {
               count: Object.keys(settings.config).length,
             })}
@@ -1499,6 +1740,339 @@
       {/if}
     </div>
   </SettingsSection>
+{/snippet}
+
+<!-- Tracking Tab Content -->
+{#snippet trackingTabContent()}
+  <div class="space-y-6">
+    <!-- Main Tracking Settings -->
+    <SettingsSection
+      title={t('settings.species.tracking.title')}
+      description={t('settings.species.tracking.description')}
+      defaultOpen={true}
+      originalData={store.originalData.realtime?.speciesTracking}
+      currentData={store.formData.realtime?.speciesTracking}
+    >
+      <div class="space-y-4">
+        <!-- Enable Species Tracking -->
+        <Checkbox
+          checked={trackingSettings?.enabled ?? false}
+          label={t('settings.species.tracking.enabled.label')}
+          helpText={t('settings.species.tracking.enabled.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => updateTrackingSettings({ enabled: value })}
+        />
+
+        {#if trackingSettings?.enabled}
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- New Species Window Days -->
+            <div class="form-control">
+              <label for="new-species-window" class="label">
+                <span class="label-text font-semibold">
+                  {t('settings.species.tracking.newSpeciesWindowDays.label')}
+                </span>
+              </label>
+              <div class="join">
+                <input
+                  id="new-species-window"
+                  type="number"
+                  min={TRACKING_LIMITS.days.min}
+                  max={TRACKING_LIMITS.days.max}
+                  value={trackingSettings?.newSpeciesWindowDays ??
+                    TRACKING_DEFAULTS.newSpeciesWindowDays}
+                  onchange={createNumberInputHandler(
+                    TRACKING_LIMITS.days,
+                    TRACKING_DEFAULTS.newSpeciesWindowDays,
+                    v => updateTrackingSettings({ newSpeciesWindowDays: v })
+                  )}
+                  class="input input-bordered join-item w-full"
+                  disabled={store.isLoading || store.isSaving}
+                />
+                <span class="btn btn-disabled join-item"
+                  >{t('settings.species.tracking.units.days')}</span
+                >
+              </div>
+              <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                {t('settings.species.tracking.newSpeciesWindowDays.helpText')}
+              </p>
+            </div>
+
+            <!-- Sync Interval Minutes -->
+            <div class="form-control">
+              <label for="sync-interval" class="label">
+                <span class="label-text font-semibold">
+                  {t('settings.species.tracking.syncIntervalMinutes.label')}
+                </span>
+              </label>
+              <div class="join">
+                <input
+                  id="sync-interval"
+                  type="number"
+                  min={TRACKING_LIMITS.syncMinutes.min}
+                  max={TRACKING_LIMITS.syncMinutes.max}
+                  value={trackingSettings?.syncIntervalMinutes ??
+                    TRACKING_DEFAULTS.syncIntervalMinutes}
+                  onchange={createNumberInputHandler(
+                    TRACKING_LIMITS.syncMinutes,
+                    TRACKING_DEFAULTS.syncIntervalMinutes,
+                    v => updateTrackingSettings({ syncIntervalMinutes: v })
+                  )}
+                  class="input input-bordered join-item w-full"
+                  disabled={store.isLoading || store.isSaving}
+                />
+                <span class="btn btn-disabled join-item"
+                  >{t('settings.species.tracking.units.min')}</span
+                >
+              </div>
+              <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                {t('settings.species.tracking.syncIntervalMinutes.helpText')}
+              </p>
+            </div>
+
+            <!-- Notification Suppression Hours -->
+            <div class="form-control">
+              <label for="notification-suppression" class="label">
+                <span class="label-text font-semibold">
+                  {t('settings.species.tracking.notificationSuppressionHours.label')}
+                </span>
+              </label>
+              <div class="join">
+                <input
+                  id="notification-suppression"
+                  type="number"
+                  min={TRACKING_LIMITS.suppressionHours.min}
+                  max={TRACKING_LIMITS.suppressionHours.max}
+                  value={trackingSettings?.notificationSuppressionHours ??
+                    TRACKING_DEFAULTS.notificationSuppressionHours}
+                  onchange={createNumberInputHandler(
+                    TRACKING_LIMITS.suppressionHours,
+                    TRACKING_DEFAULTS.notificationSuppressionHours,
+                    v => updateTrackingSettings({ notificationSuppressionHours: v })
+                  )}
+                  class="input input-bordered join-item w-full"
+                  disabled={store.isLoading || store.isSaving}
+                />
+                <span class="btn btn-disabled join-item"
+                  >{t('settings.species.tracking.units.hours')}</span
+                >
+              </div>
+              <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                {t('settings.species.tracking.notificationSuppressionHours.helpText')}
+              </p>
+            </div>
+          </div>
+        {/if}
+      </div>
+    </SettingsSection>
+
+    {#if trackingSettings?.enabled}
+      <!-- Yearly Tracking Settings -->
+      <SettingsSection
+        title={t('settings.species.tracking.yearly.title')}
+        description={t('settings.species.tracking.yearly.description')}
+        defaultOpen={false}
+      >
+        <div class="space-y-4">
+          <!-- Enable Yearly Tracking -->
+          <Checkbox
+            checked={trackingSettings?.yearlyTracking?.enabled ?? false}
+            label={t('settings.species.tracking.yearly.enabled.label')}
+            helpText={t('settings.species.tracking.yearly.enabled.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={value => updateTrackingSettings({ yearlyTracking: { enabled: value } })}
+          />
+
+          {#if trackingSettings?.yearlyTracking?.enabled}
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <!-- Reset Month -->
+              <SelectDropdown
+                label={t('settings.species.tracking.yearly.resetMonth.label')}
+                helpText={t('settings.species.tracking.yearly.resetMonth.helpText')}
+                value={String(
+                  trackingSettings?.yearlyTracking?.resetMonth ??
+                    TRACKING_DEFAULTS.yearlyTracking.resetMonth
+                )}
+                options={monthOptions}
+                disabled={store.isLoading || store.isSaving}
+                menuSize="sm"
+                onChange={value =>
+                  updateTrackingSettings({ yearlyTracking: { resetMonth: Number(value) } })}
+              />
+
+              <!-- Reset Day -->
+              <div class="form-control">
+                <label for="yearly-reset-day" class="label">
+                  <span class="label-text font-semibold">
+                    {t('settings.species.tracking.yearly.resetDay.label')}
+                  </span>
+                </label>
+                <input
+                  id="yearly-reset-day"
+                  type="number"
+                  min={TRACKING_LIMITS.dayOfMonth.min}
+                  max={TRACKING_LIMITS.dayOfMonth.max}
+                  value={trackingSettings?.yearlyTracking?.resetDay ??
+                    TRACKING_DEFAULTS.yearlyTracking.resetDay}
+                  onchange={createNumberInputHandler(
+                    TRACKING_LIMITS.dayOfMonth,
+                    TRACKING_DEFAULTS.yearlyTracking.resetDay,
+                    v => updateTrackingSettings({ yearlyTracking: { resetDay: v } })
+                  )}
+                  class="input input-bordered w-full"
+                  disabled={store.isLoading || store.isSaving}
+                />
+                <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                  {t('settings.species.tracking.yearly.resetDay.helpText')}
+                </p>
+              </div>
+
+              <!-- Window Days -->
+              <div class="form-control">
+                <label for="yearly-window-days" class="label">
+                  <span class="label-text font-semibold">
+                    {t('settings.species.tracking.yearly.windowDays.label')}
+                  </span>
+                </label>
+                <div class="join">
+                  <input
+                    id="yearly-window-days"
+                    type="number"
+                    min={TRACKING_LIMITS.days.min}
+                    max={TRACKING_LIMITS.days.max}
+                    value={trackingSettings?.yearlyTracking?.windowDays ??
+                      TRACKING_DEFAULTS.yearlyTracking.windowDays}
+                    onchange={createNumberInputHandler(
+                      TRACKING_LIMITS.days,
+                      TRACKING_DEFAULTS.yearlyTracking.windowDays,
+                      v => updateTrackingSettings({ yearlyTracking: { windowDays: v } })
+                    )}
+                    class="input input-bordered join-item w-full"
+                    disabled={store.isLoading || store.isSaving}
+                  />
+                  <span class="btn btn-disabled join-item"
+                    >{t('settings.species.tracking.units.days')}</span
+                  >
+                </div>
+                <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                  {t('settings.species.tracking.yearly.windowDays.helpText')}
+                </p>
+              </div>
+            </div>
+          {/if}
+        </div>
+      </SettingsSection>
+
+      <!-- Seasonal Tracking Settings -->
+      <SettingsSection
+        title={t('settings.species.tracking.seasonal.title')}
+        description={t('settings.species.tracking.seasonal.description')}
+        defaultOpen={false}
+      >
+        <div class="space-y-4">
+          <!-- Enable Seasonal Tracking -->
+          <Checkbox
+            checked={trackingSettings?.seasonalTracking?.enabled ?? false}
+            label={t('settings.species.tracking.seasonal.enabled.label')}
+            helpText={t('settings.species.tracking.seasonal.enabled.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={value => updateTrackingSettings({ seasonalTracking: { enabled: value } })}
+          />
+
+          {#if trackingSettings?.seasonalTracking?.enabled}
+            <!-- Window Days -->
+            <div class="form-control max-w-xs">
+              <label for="seasonal-window-days" class="label">
+                <span class="label-text font-semibold">
+                  {t('settings.species.tracking.seasonal.windowDays.label')}
+                </span>
+              </label>
+              <div class="join">
+                <input
+                  id="seasonal-window-days"
+                  type="number"
+                  min={TRACKING_LIMITS.days.min}
+                  max={TRACKING_LIMITS.days.max}
+                  value={trackingSettings?.seasonalTracking?.windowDays ??
+                    TRACKING_DEFAULTS.seasonalTracking.windowDays}
+                  onchange={createNumberInputHandler(
+                    TRACKING_LIMITS.days,
+                    TRACKING_DEFAULTS.seasonalTracking.windowDays,
+                    v => updateTrackingSettings({ seasonalTracking: { windowDays: v } })
+                  )}
+                  class="input input-bordered join-item w-full"
+                  disabled={store.isLoading || store.isSaving}
+                />
+                <span class="btn btn-disabled join-item"
+                  >{t('settings.species.tracking.units.days')}</span
+                >
+              </div>
+              <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                {t('settings.species.tracking.seasonal.windowDays.helpText')}
+              </p>
+            </div>
+
+            <!-- Season Definitions -->
+            <div class="mt-6">
+              <h4 class="font-medium text-sm mb-2">
+                {t('settings.species.tracking.seasonal.seasons.title')}
+              </h4>
+              <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mb-4">
+                {t('settings.species.tracking.seasonal.seasons.description')}
+              </p>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {#each ['spring', 'summer', 'fall', 'winter'] as season (season)}
+                  {@const seasonKey = season as keyof typeof SEASON_DEFAULTS}
+                  {@const seasonDefaults = getSeasonDefaults(seasonKey)}
+                  {@const currentSeasonData = getCurrentSeasonData(seasonKey)}
+                  <div class="card bg-base-100 border border-base-300 p-4">
+                    <h5 class="font-medium text-sm mb-3">
+                      {t(`settings.species.tracking.seasonal.seasons.${season}`)}
+                    </h5>
+                    <div class="grid grid-cols-2 gap-3">
+                      <SelectDropdown
+                        label={t('settings.species.tracking.seasonal.seasons.startMonth')}
+                        value={String(currentSeasonData?.startMonth ?? seasonDefaults.startMonth)}
+                        options={monthOptions}
+                        disabled={store.isLoading || store.isSaving}
+                        menuSize="sm"
+                        onChange={value => updateSeasonDate(seasonKey, 'startMonth', Number(value))}
+                      />
+                      <div class="form-control">
+                        <label for={`${season}-start-day`} class="label">
+                          <span class="label-text font-semibold">
+                            {t('settings.species.tracking.seasonal.seasons.startDay')}
+                          </span>
+                        </label>
+                        <input
+                          id={`${season}-start-day`}
+                          type="number"
+                          min={TRACKING_LIMITS.dayOfMonth.min}
+                          max={TRACKING_LIMITS.dayOfMonth.max}
+                          value={currentSeasonData?.startDay ?? seasonDefaults.startDay}
+                          onchange={createNumberInputHandler(
+                            TRACKING_LIMITS.dayOfMonth,
+                            seasonDefaults.startDay,
+                            v => updateSeasonDate(seasonKey, 'startDay', v)
+                          )}
+                          class="input input-bordered w-full"
+                          disabled={store.isLoading || store.isSaving}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+
+              <SettingsNote>
+                {t('settings.species.tracking.seasonal.seasons.hemisphereNote')}
+              </SettingsNote>
+            </div>
+          {/if}
+        </div>
+      </SettingsSection>
+    {/if}
+  </div>
 {/snippet}
 
 <main class="settings-page-content" aria-label="Species settings configuration">

@@ -1789,6 +1789,7 @@
     "species": {
       "activeSpecies": {
         "title": "Especies Activas",
+        "tabLabel": "Activas",
         "description": "Especies que serán detectadas según tu ubicación actual y configuración de filtros",
         "stats": {
           "species": "Especies",
@@ -1827,16 +1828,19 @@
       },
       "alwaysInclude": {
         "title": "Incluir especies siempre",
+        "tabLabel": "Incluir",
         "description": "Las especies en esta lista siempre serán incluidas en el rango de especies detectadas",
         "noSpeciesMessage": "No se han añadido especies a la lista de inclusión"
       },
       "alwaysExclude": {
         "title": "Excluir especies siempre",
+        "tabLabel": "Excluir",
         "description": "Las especies en esta lista siempre serán excluidas de la detección",
         "noSpeciesMessage": "No se han añadido especies a la lista de exclusión"
       },
       "customConfiguration": {
         "title": "Configuración personalizada de especies",
+        "tabLabel": "Personal.",
         "description": "Valores de umbral específicos por especie, intervalos de detección y acciones",
         "helpText": {
           "intro": "Configure ajustes específicos por especie:",
@@ -1910,6 +1914,93 @@
       "parametersPlaceholder": "Los parámetros aparecerán aquí",
       "errors": {
         "speciesLoadFailed": "Error al cargar la lista de especies. Por favor, inténtalo de nuevo."
+      },
+      "tracking": {
+        "title": "Seguimiento",
+        "tabLabel": "Seguim.",
+        "description": "Configurar el seguimiento de nuevas detecciones de especies basado en períodos de tiempo",
+        "enabled": {
+          "label": "Habilitar seguimiento de especies",
+          "helpText": "Cuando está habilitado, el sistema rastrea nuevas detecciones de especies y puede enviar notificaciones"
+        },
+        "newSpeciesWindowDays": {
+          "label": "Ventana de nueva especie (días)",
+          "helpText": "Número de días que una especie se considera 'nueva' después de la primera detección (1-365)"
+        },
+        "syncIntervalMinutes": {
+          "label": "Intervalo de sincronización (minutos)",
+          "helpText": "Con qué frecuencia sincronizar los datos de seguimiento con la base de datos (1-1440)"
+        },
+        "notificationSuppressionHours": {
+          "label": "Supresión de notificaciones (horas)",
+          "helpText": "Horas para suprimir notificaciones duplicadas para la misma especie (0-8760)"
+        },
+        "yearly": {
+          "title": "Seguimiento anual",
+          "description": "Seguir las primeras llegadas de especies cada año",
+          "enabled": {
+            "label": "Habilitar seguimiento anual",
+            "helpText": "Seguir y notificar cuando una especie se detecta por primera vez cada año"
+          },
+          "resetMonth": {
+            "label": "Mes de reinicio",
+            "helpText": "Mes en que se reinicia el seguimiento anual (1-12)"
+          },
+          "resetDay": {
+            "label": "Día de reinicio",
+            "helpText": "Día del mes en que se reinicia el seguimiento anual"
+          },
+          "windowDays": {
+            "label": "Ventana (días)",
+            "helpText": "Días para mostrar el indicador 'nuevo este año' (1-365)"
+          }
+        },
+        "seasonal": {
+          "title": "Seguimiento estacional",
+          "description": "Seguir las primeras llegadas de especies cada temporada",
+          "enabled": {
+            "label": "Habilitar seguimiento estacional",
+            "helpText": "Seguir y notificar cuando una especie se detecta por primera vez cada temporada"
+          },
+          "windowDays": {
+            "label": "Ventana (días)",
+            "helpText": "Días para mostrar el indicador 'nuevo esta temporada' (1-365)"
+          },
+          "seasons": {
+            "title": "Definiciones de temporadas",
+            "description": "Definir cuándo comienza cada temporada. Las temporadas se ajustan automáticamente según la latitud de su ubicación.",
+            "spring": "Primavera",
+            "summer": "Verano",
+            "fall": "Otoño",
+            "winter": "Invierno",
+            "wet1": "Temporada húmeda 1",
+            "dry1": "Temporada seca 1",
+            "wet2": "Temporada húmeda 2",
+            "dry2": "Temporada seca 2",
+            "startMonth": "Mes de inicio",
+            "startDay": "Día de inicio",
+            "hemisphereNote": "Las fechas de las temporadas se configuran automáticamente según su latitud. El hemisferio norte usa estaciones estándar, el hemisferio sur tiene fechas desplazadas, y las regiones ecuatoriales usan estaciones húmedas/secas."
+          }
+        },
+        "months": {
+          "january": "Enero",
+          "february": "Febrero",
+          "march": "Marzo",
+          "april": "Abril",
+          "may": "Mayo",
+          "june": "Junio",
+          "july": "Julio",
+          "august": "Agosto",
+          "september": "Septiembre",
+          "october": "Octubre",
+          "november": "Noviembre",
+          "december": "Diciembre"
+        },
+        "units": {
+          "days": "días",
+          "min": "min",
+          "hours": "hrs"
+        }
       }
     },
     "security": {

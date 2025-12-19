@@ -1854,6 +1854,7 @@
     "species": {
       "activeSpecies": {
         "title": "Actieve Soorten",
+        "tabLabel": "Actief",
         "description": "Soorten die worden gedetecteerd op basis van uw huidige locatie en filterinstellingen",
         "stats": {
           "species": "Soorten",
@@ -1892,16 +1893,19 @@
       },
       "alwaysInclude": {
         "title": "Altijd Opnemen Soorten",
+        "tabLabel": "Opnemen",
         "description": "Soorten in deze lijst worden altijd opgenomen in het bereik van gedetecteerde soorten",
         "noSpeciesMessage": "Geen soorten toegevoegd aan de opname lijst"
       },
       "alwaysExclude": {
         "title": "Altijd Uitsluiten Soorten",
+        "tabLabel": "Uitsluiten",
         "description": "Soorten in deze lijst worden altijd uitgesloten van detectie",
         "noSpeciesMessage": "Geen soorten toegevoegd aan de uitsluit lijst"
       },
       "customConfiguration": {
         "title": "Aangepaste Soorten Configuratie",
+        "tabLabel": "Aangepast",
         "description": "Soorten specifieke drempelwaardes, detectie intervallen, en acties",
         "helpText": {
           "intro": "Configureer soorten-specifieke instellingen:",
@@ -1975,6 +1979,93 @@
       "parametersPlaceholder": "Parameters verschijnen hier",
       "errors": {
         "speciesLoadFailed": "Laden van soorten lijst mislukt. Probeer opnieuw."
+      },
+      "tracking": {
+        "title": "Volgen",
+        "tabLabel": "Volgen",
+        "description": "Configureer het volgen van nieuwe soorten detecties op basis van tijdsperioden",
+        "enabled": {
+          "label": "Soortenvolging inschakelen",
+          "helpText": "Wanneer ingeschakeld, volgt het systeem nieuwe soorten detecties en kan meldingen verzenden"
+        },
+        "newSpeciesWindowDays": {
+          "label": "Nieuwe soort venster (dagen)",
+          "helpText": "Aantal dagen dat een soort als 'nieuw' wordt beschouwd na eerste detectie (1-365)"
+        },
+        "syncIntervalMinutes": {
+          "label": "Synchronisatie-interval (minuten)",
+          "helpText": "Hoe vaak volggegevens worden gesynchroniseerd met de database (1-1440)"
+        },
+        "notificationSuppressionHours": {
+          "label": "Meldingsonderdrukking (uren)",
+          "helpText": "Uren om dubbele meldingen voor dezelfde soort te onderdrukken (0-8760)"
+        },
+        "yearly": {
+          "title": "Jaarlijks volgen",
+          "description": "Volg de eerste aankomsten van soorten elk jaar",
+          "enabled": {
+            "label": "Jaarlijks volgen inschakelen",
+            "helpText": "Volg en meld wanneer een soort voor het eerst elk jaar wordt gedetecteerd"
+          },
+          "resetMonth": {
+            "label": "Reset maand",
+            "helpText": "Maand waarin jaarlijks volgen wordt gereset (1-12)"
+          },
+          "resetDay": {
+            "label": "Reset dag",
+            "helpText": "Dag van de maand waarop jaarlijks volgen wordt gereset"
+          },
+          "windowDays": {
+            "label": "Venster (dagen)",
+            "helpText": "Dagen om 'nieuw dit jaar' indicator te tonen (1-365)"
+          }
+        },
+        "seasonal": {
+          "title": "Seizoensvolging",
+          "description": "Volg de eerste aankomsten van soorten elk seizoen",
+          "enabled": {
+            "label": "Seizoensvolging inschakelen",
+            "helpText": "Volg en meld wanneer een soort voor het eerst elk seizoen wordt gedetecteerd"
+          },
+          "windowDays": {
+            "label": "Venster (dagen)",
+            "helpText": "Dagen om 'nieuw dit seizoen' indicator te tonen (1-365)"
+          },
+          "seasons": {
+            "title": "Seizoensdefinities",
+            "description": "Definieer wanneer elk seizoen begint. Seizoenen worden automatisch aangepast op basis van de breedtegraad van uw locatie.",
+            "spring": "Lente",
+            "summer": "Zomer",
+            "fall": "Herfst",
+            "winter": "Winter",
+            "wet1": "Natte seizoen 1",
+            "dry1": "Droge seizoen 1",
+            "wet2": "Natte seizoen 2",
+            "dry2": "Droge seizoen 2",
+            "startMonth": "Startmaand",
+            "startDay": "Startdag",
+            "hemisphereNote": "Seizoensdatums worden automatisch geconfigureerd op basis van uw breedtegraad. Het noordelijk halfrond gebruikt standaard seizoenen, het zuidelijk halfrond heeft verschoven datums, en equatoriale regio's gebruiken natte/droge seizoenen."
+          }
+        },
+        "months": {
+          "january": "Januari",
+          "february": "Februari",
+          "march": "Maart",
+          "april": "April",
+          "may": "Mei",
+          "june": "Juni",
+          "july": "Juli",
+          "august": "Augustus",
+          "september": "September",
+          "october": "Oktober",
+          "november": "November",
+          "december": "December"
+        },
+        "units": {
+          "days": "dagen",
+          "min": "min",
+          "hours": "uur"
+        }
       }
     },
     "database": {
