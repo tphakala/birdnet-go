@@ -2,7 +2,10 @@
 // These functions are only available in test builds.
 package spectrogram
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // ClearAudioDurationCache clears all entries from the audio duration cache.
 // This is exported for testing purposes to ensure test isolation.
@@ -59,4 +62,37 @@ func HasCacheEntry(path string) bool {
 // This is exported for testing purposes.
 func GetFFmpegFallbackTimeout() time.Duration {
 	return ffmpegFallbackTimeout
+}
+
+// ComputeRemainingTimeoutForTest exposes computeRemainingTimeout for testing.
+func ComputeRemainingTimeoutForTest(ctx context.Context, fallback time.Duration) time.Duration {
+	return computeRemainingTimeout(ctx, fallback)
+}
+
+// GetDefaultGenerationTimeout returns the default generation timeout for testing.
+func GetDefaultGenerationTimeout() time.Duration {
+	return defaultGenerationTimeout
+}
+
+// GetDurationCacheTTL returns the duration cache TTL for testing.
+func GetDurationCacheTTL() time.Duration {
+	return durationCacheTTL
+}
+
+// GetCacheEntry returns a copy of a cache entry for testing.
+// Returns nil if the entry doesn't exist.
+func GetCacheEntry(path string) *durationCacheEntry {
+	audioDurationCache.RLock()
+	defer audioDurationCache.RUnlock()
+	entry, exists := audioDurationCache.entries[path]
+	if !exists {
+		return nil
+	}
+	// Return a copy to avoid race conditions
+	return &durationCacheEntry{
+		duration:  entry.duration,
+		timestamp: entry.timestamp,
+		fileSize:  entry.fileSize,
+		modTime:   entry.modTime,
+	}
 }

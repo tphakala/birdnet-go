@@ -26,7 +26,7 @@ func TestPreRenderer_Submit_FileAlreadyExists(t *testing.T) {
 	spectrogramPath := filepath.Join(tempDir, "test.png")
 
 	// Create the spectrogram file (simulating it already exists)
-	if err := os.WriteFile(spectrogramPath, []byte("fake png"), 0o644); err != nil {
+	if err := os.WriteFile(spectrogramPath, []byte("fake png"), 0o600); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
