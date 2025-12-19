@@ -83,7 +83,11 @@ type Stats struct {
 
 // NewPreRenderer creates a new pre-renderer instance.
 // The parentCtx is used for lifecycle management and cancellation.
+// If logger is nil, slog.Default() is used to prevent nil pointer panics.
 func NewPreRenderer(parentCtx context.Context, settings *conf.Settings, sfs *securefs.SecureFS, logger *slog.Logger) *PreRenderer {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	ctx, cancel := context.WithCancel(parentCtx)
 
 	return &PreRenderer{

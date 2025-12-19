@@ -11,6 +11,21 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// Spectrogram size constants define pixel widths for different display contexts
+const (
+	// sizeSmallPx is the width for compact display in lists and dashboards (default)
+	sizeSmallPx = 400
+
+	// sizeMediumPx is the width for standard detail view and review modals
+	sizeMediumPx = 800
+
+	// sizeLargePx is the width for large display for detailed analysis
+	sizeLargePx = 1000
+
+	// sizeExtraLargePx is the width for maximum quality for expert review
+	sizeExtraLargePx = 1200
+)
+
 // validSizes maps size strings to pixel widths (single source of truth).
 // These sizes are optimized for different UI contexts:
 // - sm (400px): Compact display in lists and dashboards (default)
@@ -18,10 +33,10 @@ import (
 // - lg (1000px): Large display for detailed analysis
 // - xl (1200px): Maximum quality for expert review
 var validSizes = map[string]int{
-	"sm": 400,  // Small - 400px
-	"md": 800,  // Medium - 800px
-	"lg": 1000, // Large - 1000px
-	"xl": 1200, // Extra Large - 1200px
+	"sm": sizeSmallPx,      // Small - 400px
+	"md": sizeMediumPx,     // Medium - 800px
+	"lg": sizeLargePx,      // Large - 1000px
+	"xl": sizeExtraLargePx, // Extra Large - 1200px
 }
 
 // SizeToPixels converts a size string to pixel width.

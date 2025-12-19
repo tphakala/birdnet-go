@@ -32,6 +32,9 @@ const (
 	// even when Sox consumed most of the original timeout before failing (fixes #1503).
 	ffmpegFallbackTimeout = 60 * time.Second
 
+	// soxWaitFallbackTimeout is the fallback timeout for waiting on Sox process completion
+	soxWaitFallbackTimeout = 30 * time.Second
+
 	// dynamicRange for sox spectrogram generation (-z parameter)
 	dynamicRange = "100"
 
@@ -42,11 +45,29 @@ const (
 	// This prevents unbounded memory growth over long operation periods (fixes #1503)
 	maxCacheEntries = 1000
 
+	// cacheEvictionPercent is the percentage of entries to remove when cache exceeds max
+	cacheEvictionPercent = 10
+
 	// ffmpegGain controls the gain parameter for FFmpeg showspectrumpic filter
 	ffmpegGain = "3"
 
 	// ffmpegDrange controls the dynamic range parameter for FFmpeg showspectrumpic filter
 	ffmpegDrange = "100"
+
+	// heightRatio is the divisor for calculating spectrogram height from width (height = width / heightRatio)
+	heightRatio = 2
+
+	// durationRoundingOffset is added to duration before truncating to int for rounding
+	durationRoundingOffset = 0.5
+
+	// outputDirPermissions is the permission mode for creating output directories
+	outputDirPermissions = 0o755
+
+	// osWindows is the GOOS value for Windows operating system
+	osWindows = "windows"
+
+	// soxResampleRate is the target sample rate for Sox spectrogram generation
+	soxResampleRate = "24k"
 )
 
 // durationCacheEntry stores cached audio duration with file validation info
@@ -84,10 +105,12 @@ type Generator struct {
 }
 
 // NewGenerator creates a new generator instance.
+// If logger is nil, slog.Default() is used to prevent nil pointer panics.
 func NewGenerator(settings *conf.Settings, sfs *securefs.SecureFS, logger *slog.Logger) *Generator {
-	if logger != nil {
-		logger = logger.With("component", "spectrogram")
+	if logger == nil {
+		logger = slog.Default()
 	}
+	logger = logger.With("component", "spectrogram")
 	return &Generator{
 		settings: settings,
 		sfs:      sfs,
@@ -305,19 +328,13 @@ func (g *Generator) generateWithSoxDirect(ctx context.Context, audioPath, output
 		"audio_path", audioPath,
 		"output_path", outputPath)
 
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
-		cmd = exec.CommandContext(ctx, soxBinary, soxArgs...)
-	} else {
-		// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
-		cmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
-	}
+	cmd := createCommandWithNice(ctx, soxBinary, soxArgs)
 
 	var output bytes.Buffer
 	cmd.Stderr = &output
 	cmd.Stdout = &output
 
+	// Yield to other goroutines before/after blocking on external process
 	runtime.Gosched()
 	if err := cmd.Run(); err != nil {
 		return errors.New(err).
@@ -334,6 +351,27 @@ func (g *Generator) generateWithSoxDirect(ctx context.Context, audioPath, output
 	runtime.Gosched()
 
 	return nil
+}
+
+// createCommandWithNice creates an exec.Cmd with nice wrapper on non-Windows systems.
+// This reduces cognitive complexity by extracting the OS-specific command creation logic.
+func createCommandWithNice(ctx context.Context, binary string, args []string) *exec.Cmd {
+	if runtime.GOOS == osWindows {
+		return exec.CommandContext(ctx, binary, args...) // #nosec G204 - binaries validated by exec.LookPath
+	}
+	return exec.CommandContext(ctx, "nice", append([]string{"-n", "19", binary}, args...)...) // #nosec G204 - binaries validated by exec.LookPath
+}
+
+// killSoxProcess kills the Sox process and logs any failure.
+func (g *Generator) killSoxProcess(soxCmd *exec.Cmd, soxPid int) {
+	if soxCmd.Process == nil {
+		return
+	}
+	if killErr := soxCmd.Process.Kill(); killErr != nil {
+		g.logger.Debug("Failed to kill Sox process after FFmpeg failure",
+			"error", killErr.Error(),
+			"sox_pid", soxPid)
+	}
 }
 
 // generateWithFFmpegSoxPipeline generates a spectrogram using FFmpeg piped to Sox.
@@ -361,16 +399,8 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 	ffmpegArgs := []string{"-hide_banner", "-i", audioPath, "-f", "sox", "-"}
 	soxArgs := append([]string{"-t", "sox", "-"}, g.getSoxSpectrogramArgs(ctx, audioPath, outputPath, width, raw)...)
 
-	var ffmpegCmd, soxCmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		// #nosec G204 - binaries are validated by exec.LookPath during config initialization
-		ffmpegCmd = exec.CommandContext(ctx, ffmpegBinary, ffmpegArgs...)
-		soxCmd = exec.CommandContext(ctx, soxBinary, soxArgs...)
-	} else {
-		// #nosec G204 - binaries are validated by exec.LookPath during config initialization
-		ffmpegCmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
-		soxCmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", soxBinary}, soxArgs...)...)
-	}
+	ffmpegCmd := createCommandWithNice(ctx, ffmpegBinary, ffmpegArgs)
+	soxCmd := createCommandWithNice(ctx, soxBinary, soxArgs)
 
 	// Connect FFmpeg stdout to Sox stdin
 	var err error
@@ -390,6 +420,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 	ffmpegCmd.Stderr = &ffmpegOutput
 	soxCmd.Stderr = &soxOutput
 
+	// Yield to other goroutines before starting pipeline
 	runtime.Gosched()
 
 	// Start Sox first (consumer)
@@ -415,22 +446,14 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 	defer func() {
 		// Ensure Sox process is cleaned up to prevent zombies
 		if !soxWaitDone && soxCmd.Process != nil {
-			// Use remaining context time or 30s fallback instead of hard 5s
-			timeout := computeRemainingTimeout(ctx, 30*time.Second)
+			timeout := computeRemainingTimeout(ctx, soxWaitFallbackTimeout)
 			g.waitWithTimeout(soxCmd, timeout)
 		}
 	}()
 
 	// Run FFmpeg (producer)
 	if err := ffmpegCmd.Run(); err != nil {
-		// FFmpeg failed - kill Sox since it won't receive valid input
-		if soxCmd.Process != nil {
-			if killErr := soxCmd.Process.Kill(); killErr != nil {
-				g.logger.Debug("Failed to kill Sox process after FFmpeg failure",
-					"error", killErr.Error(),
-					"sox_pid", soxPid)
-			}
-		}
+		g.killSoxProcess(soxCmd, soxPid)
 		return errors.New(err).
 			Component("spectrogram").
 			Category(errors.CategorySystem).
@@ -443,11 +466,11 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 			Build()
 	}
 
+	// Yield after FFmpeg completes before waiting on Sox
 	runtime.Gosched()
 
 	// FFmpeg succeeded - wait for Sox to finish processing
-	// Use remaining context time or 30s fallback instead of hard 5s
-	timeout := computeRemainingTimeout(ctx, 30*time.Second)
+	timeout := computeRemainingTimeout(ctx, soxWaitFallbackTimeout)
 	soxWaitErr := g.waitWithTimeoutErr(soxCmd, timeout)
 	soxWaitDone = true
 
@@ -463,6 +486,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 			Context("sox_output", soxOutput.String()).
 			Build()
 	}
+	// Yield after pipeline completes to allow other work to proceed
 	runtime.Gosched()
 
 	return nil
@@ -482,18 +506,19 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outp
 	}
 
 	// Build Sox arguments for PCM stdin
+	// PCM format parameters use constants from conf package for consistency
 	args := []string{
-		"-t", "raw",              // Input type: raw/headerless PCM
-		"-r", "48000",            // Sample rate: 48kHz (conf.SampleRate)
-		"-e", "signed",           // Encoding: signed integer
-		"-b", "16",               // Bit depth: 16-bit (conf.BitDepth)
-		"-c", "1",                // Channels: mono
+		"-t", "raw",                            // Input type: raw/headerless PCM
+		"-r", strconv.Itoa(conf.SampleRate),    // Sample rate: 48kHz
+		"-e", "signed",                         // Encoding: signed integer
+		"-b", strconv.Itoa(conf.BitDepth),      // Bit depth: 16-bit
+		"-c", strconv.Itoa(conf.NumChannels),   // Channels: mono
 		"-",                      // Read from stdin
 		"-n",                     // No audio output (null output)
-		"rate", "24k",            // Resample to 24kHz for spectrogram
+		"rate", soxResampleRate,  // Resample to 24kHz for spectrogram
 		"spectrogram",            // Effect: spectrogram
 		"-x", strconv.Itoa(width), // Width in pixels
-		"-y", strconv.Itoa(width / 2), // Height in pixels (half of width)
+		"-y", strconv.Itoa(width / heightRatio), // Height in pixels (half of width)
 		"-o", outputPath,         // Output PNG file
 	}
 
@@ -503,14 +528,7 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outp
 	}
 
 	// Build command with low priority
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
-		cmd = exec.CommandContext(ctx, soxBinary, args...)
-	} else {
-		// #nosec G204 - soxBinary is validated by exec.LookPath during config initialization
-		cmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", soxBinary}, args...)...)
-	}
+	cmd := createCommandWithNice(ctx, soxBinary, args)
 
 	// Feed PCM data to stdin
 	cmd.Stdin = bytes.NewReader(pcmData)
@@ -548,7 +566,7 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPat
 			Build()
 	}
 
-	height := width / 2
+	height := width / heightRatio
 	var filterStr string
 	if raw {
 		// Raw spectrogram without frequency/time axes and legends
@@ -567,14 +585,7 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPat
 		outputPath,
 	}
 
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		// #nosec G204 - ffmpegBinary is validated by exec.LookPath during config initialization
-		cmd = exec.CommandContext(ctx, ffmpegBinary, ffmpegArgs...)
-	} else {
-		// #nosec G204 - ffmpegBinary is validated by exec.LookPath during config initialization
-		cmd = exec.CommandContext(ctx, "nice", append([]string{"-n", "19", ffmpegBinary}, ffmpegArgs...)...)
-	}
+	cmd := createCommandWithNice(ctx, ffmpegBinary, ffmpegArgs)
 
 	var output bytes.Buffer
 	cmd.Stderr = &output
@@ -614,11 +625,11 @@ func (g *Generator) getSoxArgs(ctx context.Context, audioPath, outputPath string
 // Sox interprets the -x (width in pixels) as seconds of audio time, causing spectrograms
 // to show truncated audio durations (see issue #1484).
 func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, outputPath string, width int, raw bool) []string {
-	heightStr := strconv.Itoa(width / 2)
+	heightStr := strconv.Itoa(width / heightRatio)
 	widthStr := strconv.Itoa(width)
 
 	// Build base args without duration parameter
-	args := []string{"-n", "rate", "24k", "spectrogram", "-x", widthStr, "-y", heightStr}
+	args := []string{"-n", "rate", soxResampleRate, "spectrogram", "-x", widthStr, "-y", heightStr}
 
 	// Always provide explicit duration via -d parameter to ensure spectrogram
 	// shows the full audio duration regardless of image width (fixes #1484)
@@ -633,7 +644,7 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, output
 	}
 
 	// Convert duration to string, rounding to nearest integer
-	captureLengthStr := strconv.Itoa(int(duration + 0.5))
+	captureLengthStr := strconv.Itoa(int(duration + durationRoundingOffset))
 
 	// Add duration and remaining common parameters
 	args = append(args, "-d", captureLengthStr, "-z", dynamicRange, "-o", outputPath)
@@ -650,7 +661,7 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, output
 // Uses SecureFS for path validation.
 func (g *Generator) ensureOutputDirectory(outputPath string) error {
 	outputDir := filepath.Dir(outputPath)
-	if err := g.sfs.MkdirAll(outputDir, 0o755); err != nil {
+	if err := g.sfs.MkdirAll(outputDir, outputDirPermissions); err != nil {
 		return errors.New(err).
 			Component("spectrogram").
 			Category(errors.CategoryFileIO).
@@ -772,9 +783,7 @@ func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
 		}
 	}
 
-	// Cache miss or invalid - need to call ffprobe
-	// Use the existing myaudio package for duration lookup
-	// Import note: myaudio is already available in the generator context
+	// Cache miss or invalid - fetch duration via ffprobe
 	duration, err := getAudioDurationViaFFprobe(ctx, audioPath)
 	if err != nil {
 		return 0 // Caller will use configured fallback
@@ -803,8 +812,8 @@ func evictOldCacheEntriesLocked() {
 	}
 
 	// Find and remove oldest entries (by timestamp) until we're under the limit
-	// Remove 10% of entries to avoid frequent eviction
-	entriesToRemove := len(audioDurationCache.entries) - maxCacheEntries + maxCacheEntries/10
+	// Remove cacheEvictionPercent% of entries to avoid frequent eviction
+	entriesToRemove := len(audioDurationCache.entries) - maxCacheEntries + maxCacheEntries/cacheEvictionPercent
 
 	// Find the oldest entries
 	type keyTime struct {
@@ -828,11 +837,9 @@ func evictOldCacheEntriesLocked() {
 }
 
 // getAudioDurationViaFFprobe calls ffprobe to get audio duration.
-// This is a simple wrapper to avoid circular dependency with myaudio package.
+// Uses ffprobe directly to avoid circular dependency with myaudio package.
 func getAudioDurationViaFFprobe(ctx context.Context, audioPath string) (float64, error) {
-	// For now, we'll use ffprobe directly
-	// TODO: Consider using myaudio.GetAudioDuration if we can import it without circular deps
-	ffprobePath := "ffprobe" // Could be made configurable
+	ffprobePath := "ffprobe"
 
 	cmd := exec.CommandContext(ctx, ffprobePath,
 		"-v", "error",
