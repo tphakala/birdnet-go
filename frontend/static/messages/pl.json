@@ -63,7 +63,16 @@
       "selectAll": "Zaznacz wszystko",
       "selectNone": "Odznacz wszystko",
       "required": "Wymagane",
-      "optional": "Opcjonalne"
+      "optional": "Opcjonalne",
+      "noAudioSources": "Brak dostępnych źródeł dźwięku",
+      "noNotifications": "Brak powiadomień",
+      "silent": "(cichy)",
+      "loadingSettings": "Ładowanie ustawień...",
+      "settingsNotFound": "Nie znaleziono ustawień",
+      "sectionNotFound": "Żądana sekcja ustawień \"{section}\" nie została znaleziona.",
+      "loadingMap": "Ładowanie mapy...",
+      "imageNotAvailable": "Obraz niedostępny",
+      "search": "Szukaj..."
     },
     "status": {
       "success": "Sukces",
@@ -116,7 +125,8 @@
       "learnEbirdTaxonomyLink": "Otwórz Taksonomię eBird w nowej karcie"
     },
     "labels": {
-      "confidence": "Pewność"
+      "confidence": "Pewność",
+      "github": "GitHub"
     },
     "values": {
       "yes": "Tak",
@@ -166,6 +176,12 @@
       }
     }
   },
+  "pageTitle": {
+    "settings": "Ustawienia - BirdNET-Go",
+    "pageNotFound": "404 - Nie znaleziono strony",
+    "serverError": "500 - Wewnętrzny błąd serwera",
+    "componentError": "Błąd ładowania komponentu"
+  },
   "navigation": {
     "dashboard": "Panel",
     "detections": "Detekcje",
@@ -192,6 +208,7 @@
     "developedBy": "Opracowany przez",
     "developersText": "K. Lisa Yang Center for Conservation Bioacoustics w Cornell Lab of Ornithology we współpracy z Chemnitz University of Technology:",
     "visitBirdnetAnalyzer": "Odwiedź Projekt BirdNET-Analyzer",
+    "visitBirdnetAnalyzerAriaLabel": "Visit BirdNET-Analyzer GitHub repository",
     "contributors": "Współtwórcy",
     "contributorsText": "BirdNET-Go rozwijał się i poprawiał dzięki wspólnym wysiłkom wielu osób. Ich wkład, od ulepszeń kodu po sugestie funkcji, był nieoceniony w uczynieniu tego projektu lepszym.",
     "mainDeveloper": "Główny Deweloper",
@@ -231,7 +248,11 @@
     "ebirdOrg": "eBird.org",
     "learnEbirdTaxonomy": "Dowiedz się o Taksonomii eBird",
     "avicommonsTitle": "Miniaturki ptaków",
-    "avicommonsDescription": "BirdNET-Go wykorzystuje wyselekcjonowane zdjęcia ptaków z Avicommons, biblioteki starannie dobranych, przyciętych i zorientowanych fotografii ptaków na licencjach Creative Commons."
+    "avicommonsDescription": "BirdNET-Go wykorzystuje wyselekcjonowane zdjęcia ptaków z Avicommons, biblioteki starannie dobranych, przyciętych i zorientowanych fotografii ptaków na licencjach Creative Commons.",
+    "githubStarPrompt": "Jeśli uważasz BirdNET-Go za przydatne, rozważ dodanie gwiazdki projektowi na GitHub. Gwiazdki pomagają innym odkryć ten projekt i wspierają jego rozwój.",
+    "viewOnGithub": "Zobacz projekt na GitHub",
+    "visitGithubAriaLabel": "Odwiedź repozytorium BirdNET-Go na GitHub",
+    "visitAvicommonsGithub": "Odwiedź repozytorium Avicommons na GitHub"
   },
   "notifications": {
     "title": "Powiadomienia",
@@ -384,7 +405,9 @@
       "stackTrace": "Ślad Stosu",
       "goToDashboard": "Przejdź do Panelu",
       "reportIssue": "Zgłoś Problem",
-      "loginToViewDetails": "Zaloguj się, aby Zobaczyć Szczegóły"
+      "loginToViewDetails": "Login to View Details",
+      "componentLoadError": "Component Load Error",
+      "failedToLoadComponent": "Failed to load the requested component"
     }
   },
   "dashboard": {
@@ -568,6 +591,11 @@
     "notes": {
       "title": "Notatki i Komentarze",
       "noComments": "Brak komentarzy lub notatek dla tej detekcji."
+    },
+    "aria": {
+      "loading": "Ładowanie szczegółów detekcji...",
+      "loaded": "Szczegóły detekcji załadowane dla {species}",
+      "error": "Błąd ładowania detekcji: {error}"
     }
   },
   "species": {
@@ -577,7 +605,16 @@
     "taxonomy": {
       "hierarchy": "Klasyfikacja Taksonomiczna",
       "subspecies": "Podgatunek",
-      "noData": "Brak dostępnych danych taksonomicznych."
+      "noData": "Brak dostępnych danych taksonomicznych.",
+      "labels": {
+        "kingdom": "Królestwo",
+        "phylum": "Typ",
+        "class": "Klasa",
+        "order": "Rząd",
+        "family": "Rodzina",
+        "genus": "Rodzaj",
+        "species": "Gatunek"
+      }
     }
   },
   "system": {
@@ -609,6 +646,8 @@
     },
     "processInfo": {
       "title": "Informacje o Procesach",
+      "loading": "Ładowanie informacji o procesach...",
+      "noProcesses": "Brak dostępnych informacji o procesach",
       "headers": {
         "pid": "PID",
         "name": "Nazwa",
@@ -618,7 +657,15 @@
         "uptime": "Czas Pracy"
       },
       "showAll": "Pokaż Wszystkie Procesy",
-      "showBirdnetOnly": "Pokaż Tylko BirdNET"
+      "showBirdnetOnly": "Pokaż Tylko BirdNET",
+      "table": {
+        "process": "Proces",
+        "status": "Status",
+        "cpu": "CPU",
+        "memory": "Pamięć",
+        "uptime": "Czas działania",
+        "showAllProcesses": "Pokaż wszystkie procesy"
+      }
     },
     "errors": {
       "systemInfo": "Nie udało się załadować informacji systemowych: {error}",
@@ -627,6 +674,13 @@
       "temperature": "Nie udało się załadować temperatury: {error}",
       "processes": "Nie udało się załadować informacji o procesach: {error}"
     }
+  },
+  "labels": {
+    "free": "Wolne",
+    "available": "Dostępne",
+    "buffCache": "Bufor/Cache",
+    "overallProgress": "Ogólny postęp",
+    "progress": "Postęp"
   },
   "analytics": {
     "title": "Przegląd",
@@ -730,6 +784,61 @@
         "detections": "Detekcje:",
         "confidence": "Pewność:",
         "first": "Pierwsze:"
+      }
+    },
+    "advanced": {
+      "title": "Zaawansowana analityka",
+      "chartControls": "Kontrolki wykresu",
+      "dateRange": "Zakres dat",
+      "chartOptions": "Opcje wykresu",
+      "speciesSelection": "Wybór gatunków",
+      "speciesSelectionCount": "Wybór gatunków ({count}/{max})",
+      "searchHint": "Wyszukaj lub kliknij etykiety",
+      "speciesSelectionHint": "Szukaj lub kliknij etykiety poniżej",
+      "speciesPlaceholder": "Szukaj i wybierz gatunki do analizy...",
+      "noSpeciesFound": "Nie znaleziono gatunków dla wybranego zakresu dat",
+      "detections": "{count} detekcji",
+      "dateRangeOptions": {
+        "week": "Ostatni Tydzień",
+        "month": "Ostatni Miesiąc",
+        "quarter": "Ostatni Kwartał",
+        "year": "Ostatni Rok",
+        "custom": "Niestandardowy Zakres",
+        "lastWeek": "Ostatni tydzień",
+        "lastMonth": "Ostatni miesiąc",
+        "lastQuarter": "Ostatni kwartał",
+        "lastYear": "Ostatni rok",
+        "customRange": "Niestandardowy zakres"
+      },
+      "options": {
+        "relativeTrends": "Względne trendy",
+        "zoomPan": "Powiększ i przesuń",
+        "brushSelection": "Wybór pędzlem"
+      },
+      "charts": {
+        "detectionPatternsByTime": "Wzorce wykryć według pory dnia",
+        "speciesDetectionTrends": "Trendy wykryć gatunków",
+        "noTimeData": "Brak danych czasowych",
+        "noTrendData": "Brak danych o trendach",
+        "selectToView": "Wybierz gatunki i zakres dat",
+        "timeOfDay": {
+          "title": "Wzorce Wykryć według Pory Dnia",
+          "description": "Pokazuje średnią liczbę wykryć w ciągu dnia dla wybranych gatunków",
+          "noData": "Brak danych o porze dnia",
+          "noDataHint": "Wybierz gatunki i zakres dat, aby wyświetlić wzorce"
+        },
+        "dailyTrend": {
+          "title": "Trendy Wykryć Gatunków",
+          "description": "Pokazuje trendy wykryć w czasie dla wybranych gatunków",
+          "noData": "Brak dostępnych danych o trendach",
+          "noDataHint": "Wybierz gatunki i zakres dat, aby wyświetlić trendy"
+        }
+      },
+      "aria": {
+        "startDate": "Data początkowa",
+        "endDate": "Data końcowa",
+        "loadingAnalytics": "Ładowanie danych analitycznych",
+        "loadingTrends": "Ładowanie danych trendów"
       }
     }
   },
@@ -2203,7 +2312,21 @@
         "dragToReorder": "Przeciągnij, aby zmienić kolejność {species}",
         "edit": "Edytuj gatunek",
         "remove": "Usuń gatunek"
-      }
+      },
+      "loadingSpecies": "Ładowanie gatunków...",
+      "typePlaceholder": "Wpisz nazwę gatunku..."
+    },
+    "rtsp": {
+      "addNewStream": "Dodaj nowy strumień RTSP",
+      "maxStreamsReached": "Osiągnięto maksymalną liczbę strumieni RTSP ({max}).",
+      "cameraPlaceholder": "Kamera 1",
+      "urlPlaceholder": "rtsp://użytkownik:hasło@192.168.1.100:554/stream"
+    },
+    "subnet": {
+      "maxSubnetsReached": "Osiągnięto maksymalną liczbę podsieci ({max})."
+    },
+    "select": {
+      "searchPlaceholder": "Szukaj..."
     }
   },
   "media": {
@@ -2236,10 +2359,23 @@
     }
   },
   "components": {
+    "audio": {
+      "spectrogramUnavailable": "Spektrogram niedostępny",
+      "generating": "Generowanie...",
+      "queuePosition": "Kolejka: {position}"
+    },
     "forms": {
       "numberField": {
         "adjustedToMinimum": "Wartość została dostosowana do minimum ({value})",
         "adjustedToMaximum": "Wartość została dostosowana do maksimum ({value})"
+      },
+      "species": {
+        "suggestionsAvailable": "{count} sugestie gatunków dostępne. Używaj klawiszy strzałek do nawigacji.",
+        "noSuggestions": "Brak dostępnych sugestii gatunków."
+      },
+      "select": {
+        "searchOptions": "Opcje wyszukiwania",
+        "noOptions": "Nie znaleziono opcji"
       }
     },
     "datePicker": {

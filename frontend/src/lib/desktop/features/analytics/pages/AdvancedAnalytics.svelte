@@ -1,6 +1,7 @@
 <!-- Advanced Analytics Page with D3.js Charts -->
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { t } from '$lib/i18n';
 
   import TimeOfDaySpeciesChart from '../components/charts/d3/TimeOfDaySpeciesChart.svelte';
   import DailySpeciesTrendChart from '../components/charts/d3/DailySpeciesTrendChart.svelte';
@@ -453,21 +454,21 @@
   <!-- Controls Section -->
   <div class="card bg-base-100 shadow-xs">
     <div class="card-body overflow-visible">
-      <h2 class="card-title text-lg mb-4">Chart Controls</h2>
+      <h2 class="card-title text-lg mb-4">{t('analytics.advanced.chartControls')}</h2>
 
       <!-- Top Row: Date Range and Chart Options -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
         <!-- Date Range Selection -->
         <div class="space-y-2">
           <label class="label" for="date-range-select">
-            <span class="label-text font-medium">Date Range</span>
+            <span class="label-text font-medium">{t('analytics.advanced.dateRange')}</span>
           </label>
           <select bind:value={dateRange} class="select w-full" id="date-range-select">
-            <option value="week">Last Week</option>
-            <option value="month">Last Month</option>
-            <option value="quarter">Last Quarter</option>
-            <option value="year">Last Year</option>
-            <option value="custom">Custom Range</option>
+            <option value="week">{t('analytics.advanced.dateRangeOptions.week')}</option>
+            <option value="month">{t('analytics.advanced.dateRangeOptions.month')}</option>
+            <option value="quarter">{t('analytics.advanced.dateRangeOptions.quarter')}</option>
+            <option value="year">{t('analytics.advanced.dateRangeOptions.year')}</option>
+            <option value="custom">{t('analytics.advanced.dateRangeOptions.custom')}</option>
           </select>
 
           {#if dateRange === 'custom'}
@@ -497,7 +498,7 @@
         <!-- Chart Options -->
         <div class="space-y-2">
           <div class="label">
-            <span class="label-text font-medium">Chart Options</span>
+            <span class="label-text font-medium">{t('analytics.advanced.chartOptions')}</span>
           </div>
 
           <div class="flex flex-wrap gap-x-6 gap-y-2">
@@ -507,17 +508,21 @@
                 bind:checked={showRelativeTrends}
                 class="checkbox checkbox-sm"
               />
-              <span class="label-text text-sm">Relative trends</span>
+              <span class="label-text text-sm"
+                >{t('analytics.advanced.options.relativeTrends')}</span
+              >
             </label>
 
             <label class="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" bind:checked={enableZoom} class="checkbox checkbox-sm" />
-              <span class="label-text text-sm">Zoom & pan</span>
+              <span class="label-text text-sm">{t('analytics.advanced.options.zoomPan')}</span>
             </label>
 
             <label class="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" bind:checked={enableBrush} class="checkbox checkbox-sm" />
-              <span class="label-text text-sm">Brush selection</span>
+              <span class="label-text text-sm"
+                >{t('analytics.advanced.options.brushSelection')}</span
+              >
             </label>
           </div>
         </div>
@@ -527,10 +532,13 @@
       <div class="space-y-2">
         <div class="flex items-baseline justify-between">
           <span class="label-text font-medium"
-            >Species Selection ({selectedSpecies.length}/{maxSpecies})</span
+            >{t('analytics.advanced.speciesSelection', {
+              count: selectedSpecies.length,
+              max: maxSpecies,
+            })}</span
           >
           <span class="label-text-alt text-xs text-base-content opacity-60">
-            Search or click chips below
+            {t('analytics.advanced.speciesSelectionHint')}
           </span>
         </div>
 
@@ -542,12 +550,12 @@
               variant="chip"
               size="md"
               maxSelections={maxSpecies}
-              placeholder="Search and select species for analysis..."
+              placeholder={t('analytics.advanced.speciesPlaceholder')}
               searchable={true}
               showFrequency={true}
               categorized={false}
               loading={isLoading}
-              emptyText="No species found for the selected date range"
+              emptyText={t('analytics.advanced.noSpeciesFound')}
               className="w-full"
               on:change={e => {
                 selectedSpecies = e.detail.selected.map(createSpeciesId);
@@ -572,7 +580,7 @@
                   </div>
                   {#if species.count !== undefined}
                     <div class="badge badge-ghost badge-sm">
-                      {species.count ?? 0} detections
+                      {t('analytics.advanced.detections', { count: species.count ?? 0 })}
                     </div>
                   {/if}
                 </div>
@@ -589,9 +597,9 @@
     <!-- Time of Day Chart -->
     <div class="card bg-base-100 shadow-xs">
       <div class="card-body">
-        <h2 class="card-title">Detection Patterns by Time of Day</h2>
+        <h2 class="card-title">{t('analytics.advanced.charts.timeOfDay.title')}</h2>
         <p class="text-sm text-base-content opacity-70 mb-4">
-          Shows average detection counts throughout the day for selected species
+          {t('analytics.advanced.charts.timeOfDay.description')}
         </p>
 
         <div class="h-96 relative">
@@ -602,20 +610,20 @@
               class="absolute inset-0 bg-base-100/80 backdrop-blur-xs flex items-center justify-center rounded-lg"
               role="status"
               aria-busy="true"
-              aria-label="Loading analytics data"
+              aria-label={t('analytics.advanced.aria.loadingAnalytics')}
             >
               <span class="loading loading-spinner loading-lg text-primary"></span>
-              <span class="sr-only">Loading analytics data</span>
+              <span class="sr-only">{t('analytics.advanced.aria.loadingAnalytics')}</span>
             </div>
           {:else if timeOfDayData.length === 0}
             <div
               class="absolute inset-0 flex items-center justify-center text-base-content opacity-60 rounded-lg"
               role="status"
-              aria-label="No time-of-day data available"
+              aria-label={t('analytics.advanced.charts.timeOfDay.noData')}
             >
               <div class="text-center">
-                <p class="text-lg mb-2">No time-of-day data available</p>
-                <p class="text-sm">Select species and a date range to view patterns</p>
+                <p class="text-lg mb-2">{t('analytics.advanced.charts.timeOfDay.noData')}</p>
+                <p class="text-sm">{t('analytics.advanced.charts.timeOfDay.noDataHint')}</p>
               </div>
             </div>
           {/if}
@@ -626,9 +634,9 @@
     <!-- Daily Trend Chart -->
     <div class="card bg-base-100 shadow-xs">
       <div class="card-body">
-        <h2 class="card-title">Species Detection Trends</h2>
+        <h2 class="card-title">{t('analytics.advanced.charts.dailyTrend.title')}</h2>
         <p class="text-sm text-base-content opacity-70 mb-4">
-          Shows detection trends over time for selected species
+          {t('analytics.advanced.charts.dailyTrend.description')}
         </p>
 
         <div class="h-96 relative">
@@ -649,20 +657,20 @@
               class="absolute inset-0 bg-base-100/80 backdrop-blur-xs flex items-center justify-center rounded-lg"
               role="status"
               aria-busy="true"
-              aria-label="Loading trend data"
+              aria-label={t('analytics.advanced.aria.loadingTrends')}
             >
               <span class="loading loading-spinner loading-lg text-primary"></span>
-              <span class="sr-only">Loading trend data</span>
+              <span class="sr-only">{t('analytics.advanced.aria.loadingTrends')}</span>
             </div>
           {:else if dailyTrendData.length === 0}
             <div
               class="absolute inset-0 flex items-center justify-center text-base-content opacity-60 rounded-lg"
               role="status"
-              aria-label="No trend data available"
+              aria-label={t('analytics.advanced.charts.dailyTrend.noData')}
             >
               <div class="text-center">
-                <p class="text-lg mb-2">No trend data available</p>
-                <p class="text-sm">Select species and a date range to view trends</p>
+                <p class="text-lg mb-2">{t('analytics.advanced.charts.dailyTrend.noData')}</p>
+                <p class="text-sm">{t('analytics.advanced.charts.dailyTrend.noDataHint')}</p>
               </div>
             </div>
           {/if}

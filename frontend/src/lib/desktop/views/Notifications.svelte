@@ -346,7 +346,9 @@
         <!-- Actions -->
         <div class="flex gap-2">
           {#if hasUnread}
-            <button onclick={markAllAsRead} class="btn btn-sm btn-ghost"> Mark All Read </button>
+            <button onclick={markAllAsRead} class="btn btn-sm btn-ghost">
+              {t('notifications.actions.markAllRead')}
+            </button>
           {/if}
           <button
             onclick={loadNotifications}
@@ -354,7 +356,7 @@
             aria-label={t('notifications.actions.refresh')}
           >
             <RefreshCw class="size-5" />
-            Refresh
+            {t('common.refresh')}
           </button>
         </div>
       </div>
@@ -515,17 +517,21 @@
   <!-- Delete Confirmation Modal -->
   <dialog bind:this={deleteModal} class="modal">
     <div class="modal-box">
-      <h3 class="font-bold text-lg">Confirm Delete</h3>
-      <p class="py-4">Are you sure you want to delete this notification?</p>
+      <h3 class="font-bold text-lg">{t('notifications.actions.confirmDelete')}</h3>
+      <p class="py-4">{t('notifications.actions.deleteConfirmation')}</p>
       <div class="modal-action">
         <form method="dialog" class="flex gap-2">
-          <button onclick={() => (pendingDeleteId = null)} class="btn btn-ghost">Cancel</button>
-          <button type="button" onclick={confirmDelete} class="btn btn-error">Delete</button>
+          <button onclick={() => (pendingDeleteId = null)} class="btn btn-ghost"
+            >{t('common.cancel')}</button
+          >
+          <button type="button" onclick={confirmDelete} class="btn btn-error"
+            >{t('common.delete')}</button
+          >
         </form>
       </div>
     </div>
     <form method="dialog" class="modal-backdrop">
-      <button>close</button>
+      <button>{t('common.close')}</button>
     </form>
   </dialog>
 </div>

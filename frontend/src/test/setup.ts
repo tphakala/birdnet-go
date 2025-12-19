@@ -67,6 +67,13 @@ vi.mock('$lib/stores/toast', () => ({
 
 // Mock internationalization - map common keys to actual text for tests
 const translations: Record<string, string> = {
+  // SelectDropdown and SpeciesInput form components
+  'common.ui.search': 'Search...',
+  'components.forms.select.searchOptions': 'Search options',
+  'components.forms.select.noOptions': 'No options found',
+  'components.forms.species.suggestionsAvailable': '{count} species suggestions available',
+  'components.forms.species.noSuggestions': 'No species suggestions available',
+  // Data display
   'dataDisplay.table.noData': 'No data available',
   'dataDisplay.table.sortBy': 'Sort by',
   'settings.species.customConfiguration.title': 'Custom Configuration',

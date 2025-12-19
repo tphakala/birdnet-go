@@ -1,5 +1,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
+  import { t } from '$lib/i18n';
 
   interface SecuritySettings {
     enabled: boolean;
@@ -40,13 +41,17 @@
     <!-- Error details -->
     <div class="mt-8 text-left">
       {#if message}
-        <h3 class="text-2xl font-semibold text-base-content mb-2">Error Details</h3>
+        <h3 class="text-2xl font-semibold text-base-content mb-2">
+          {t('error.generic.errorDetails')}
+        </h3>
         <pre
           class="bg-base-200 p-4 rounded-sm overflow-x-auto text-sm text-base-content font-mono">{message}</pre>
       {/if}
 
       {#if hasStackTrace && showDetails}
-        <h3 class="text-2xl font-semibold text-base-content mt-4 mb-2">Stack Trace</h3>
+        <h3 class="text-2xl font-semibold text-base-content mt-4 mb-2">
+          {t('error.generic.stackTrace')}
+        </h3>
         <pre
           class="bg-base-200 p-4 rounded-sm overflow-x-auto text-sm text-base-content font-mono">{stackTrace}</pre>
       {/if}
@@ -58,21 +63,21 @@
         href="/"
         class="btn btn-primary normal-case text-base font-semibold transition duration-300"
       >
-        Go to Dashboard
+        {t('common.goToDashboard')}
       </a>
       {#if showDetails}
         <a
           href="https://github.com/tphakala/birdnet-go/issues"
           class="btn btn-accent normal-case text-base font-semibold transition duration-300"
         >
-          Report Issue
+          {t('common.reportIssue')}
         </a>
       {:else}
         <a
           href="/login"
           class="btn btn-secondary normal-case text-base font-semibold transition duration-300"
         >
-          Login to View Details
+          {t('common.loginToViewDetails')}
         </a>
       {/if}
     </div>

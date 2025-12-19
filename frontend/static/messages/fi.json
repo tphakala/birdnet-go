@@ -63,7 +63,16 @@
       "selectAll": "Valitse kaikki",
       "selectNone": "Poista valinnat",
       "required": "Pakollinen",
-      "optional": "Vapaaehtoinen"
+      "optional": "Vapaaehtoinen",
+      "noAudioSources": "Ei äänilähteitä saatavilla",
+      "noNotifications": "Ei ilmoituksia",
+      "silent": "(hiljainen)",
+      "loadingSettings": "Ladataan asetuksia...",
+      "settingsNotFound": "Asetuksia ei löydy",
+      "sectionNotFound": "Pyydettyä asetusosaa \"{section}\" ei löytynyt.",
+      "loadingMap": "Ladataan karttaa...",
+      "imageNotAvailable": "Kuva ei saatavilla",
+      "search": "Etsi..."
     },
     "status": {
       "success": "Onnistui",
@@ -116,7 +125,8 @@
       "learnEbirdTaxonomyLink": "Avaa eBird-taksonomia uuteen välilehteen"
     },
     "labels": {
-      "confidence": "Luottamus"
+      "confidence": "Luottamus",
+      "github": "GitHub"
     },
     "values": {
       "yes": "Kyllä",
@@ -181,6 +191,12 @@
     "analyticsSubmenu": "Analytiikan alavalikko",
     "settingsSubmenu": "Asetusten alavalikko"
   },
+  "pageTitle": {
+    "settings": "Asetukset - BirdNET-Go",
+    "pageNotFound": "404 - Sivua ei löydy",
+    "serverError": "500 - Sisäinen palvelinvirhe",
+    "componentError": "Komponentin latausvirhe"
+  },
   "about": {
     "title": "BirdNET-Go",
     "subtitle": "Moderni käyttöliittymä reaaliaikaiseen lintuäänten tunnistukseen ja luokitteluun",
@@ -192,6 +208,7 @@
     "developedBy": "Kehittäjät",
     "developersText": "K. Lisa Yang Center for Conservation Bioacoustics Cornell Lab of Ornithologyssa yhteistyössä Chemnitzin teknillisen yliopiston kanssa:",
     "visitBirdnetAnalyzer": "Käy BirdNET-Analyzer projektissa",
+    "visitBirdnetAnalyzerAriaLabel": "Visit BirdNET-Analyzer GitHub repository",
     "contributors": "Avustajat",
     "contributorsText": "BirdNET-Go on kasvanut ja parantunut monien ihmisten yhteistyön ansiosta. Heidän panoksensa koodin parannuksista ominaisuusehdotuksiin on ollut korvaamatonta tämän projektin parantamisessa.",
     "mainDeveloper": "Pääkehittäjä",
@@ -231,7 +248,11 @@
     "ebirdOrg": "eBird.org",
     "learnEbirdTaxonomy": "Lue lisää eBird-taksonomiasta",
     "avicommonsTitle": "Lintukuvat",
-    "avicommonsDescription": "BirdNET-Go käyttää Avicommons-palvelun kuratoituja lintukuvia. Avicommons on kirjasto käsin valittuja, rajattuja ja suunnattuja lintuvalokuvia Creative Commons -lisenssillä."
+    "avicommonsDescription": "BirdNET-Go käyttää Avicommons-palvelun kuratoituja lintukuvia. Avicommons on kirjasto käsin valittuja, rajattuja ja suunnattuja lintuvalokuvia Creative Commons -lisenssillä.",
+    "githubStarPrompt": "Jos pidät BirdNET-Go:ta hyödyllisenä, harkitse projektin tähdittämistä GitHubissa. Tähdet auttavat muita löytämään projektin ja tukevat sen kehitystä.",
+    "viewOnGithub": "Näytä projekti GitHubissa",
+    "visitGithubAriaLabel": "Vieraile BirdNET-Go GitHub-arkistossa",
+    "visitAvicommonsGithub": "Vieraile Avicommons GitHub-arkistossa"
   },
   "notifications": {
     "title": "Ilmoitukset",
@@ -384,7 +405,9 @@
       "stackTrace": "Pinojälki",
       "goToDashboard": "Siirry kojelauttaan",
       "reportIssue": "Ilmoita ongelmasta",
-      "loginToViewDetails": "Kirjaudu nähdäksesi lisätiedot"
+      "loginToViewDetails": "Login to View Details",
+      "componentLoadError": "Component Load Error",
+      "failedToLoadComponent": "Failed to load the requested component"
     }
   },
   "dashboard": {
@@ -568,6 +591,11 @@
     "notes": {
       "title": "Huomiot ja kommentit",
       "noComments": "Ei kommentteja tai huomioita tälle havainnolle."
+    },
+    "aria": {
+      "loading": "Ladataan havainnon tietoja...",
+      "loaded": "Havainnon tiedot ladattu: {species}",
+      "error": "Virhe havainnon latauksessa: {error}"
     }
   },
   "species": {
@@ -577,7 +605,16 @@
     "taxonomy": {
       "hierarchy": "Taksonomiluokitus",
       "subspecies": "Alalajit",
-      "noData": "Taksonomiatietoja ei ole saatavilla."
+      "noData": "Taksonomiatietoja ei ole saatavilla.",
+      "labels": {
+        "kingdom": "Kunta",
+        "phylum": "Pääjakso",
+        "class": "Luokka",
+        "order": "Lahko",
+        "family": "Heimo",
+        "genus": "Suku",
+        "species": "Laji"
+      }
     }
   },
   "system": {
@@ -609,6 +646,8 @@
     },
     "processInfo": {
       "title": "Prosessitiedot",
+      "loading": "Ladataan prosessitietoja...",
+      "noProcesses": "Prosessitietoja ei saatavilla",
       "headers": {
         "pid": "PID",
         "name": "Nimi",
@@ -618,7 +657,15 @@
         "uptime": "Käynnissäoloaika"
       },
       "showAll": "Näytä kaikki prosessit",
-      "showBirdnetOnly": "Näytä vain BirdNET"
+      "showBirdnetOnly": "Näytä vain BirdNET",
+      "table": {
+        "process": "Prosessi",
+        "status": "Tila",
+        "cpu": "CPU",
+        "memory": "Muisti",
+        "uptime": "Käyntiaika",
+        "showAllProcesses": "Näytä kaikki prosessit"
+      }
     },
     "errors": {
       "systemInfo": "Järjestelmätietojen lataus epäonnistui: {error}",
@@ -730,6 +777,38 @@
         "detections": "Havainnot:",
         "confidence": "Luottamus:",
         "first": "Ensimmäinen:"
+      }
+    },
+    "advanced": {
+      "title": "Edistynyt analytiikka",
+      "chartControls": "Kaavion hallinta",
+      "dateRange": "Päivämääräväli",
+      "chartOptions": "Kaavion asetukset",
+      "speciesSelection": "Lajien valinta",
+      "speciesSelectionCount": "Lajien valinta ({count}/{max})",
+      "searchHint": "Etsi tai napsauta tunnisteita",
+      "dateRangeOptions": {
+        "lastWeek": "Viime viikko",
+        "lastMonth": "Viime kuukausi",
+        "lastQuarter": "Viime neljännes",
+        "lastYear": "Viime vuosi",
+        "customRange": "Mukautettu väli"
+      },
+      "options": {
+        "relativeTrends": "Suhteelliset trendit",
+        "zoomPan": "Zoomaa ja panoroi",
+        "brushSelection": "Sivellysvalinta"
+      },
+      "charts": {
+        "detectionPatternsByTime": "Havaintokuviot vuorokaudenajan mukaan",
+        "speciesDetectionTrends": "Lajien havaintotrendit",
+        "noTimeData": "Ei vuorokaudenaika-dataa saatavilla",
+        "noTrendData": "Ei trendidataa saatavilla",
+        "selectToView": "Valitse lajit ja päivämääräväli"
+      },
+      "aria": {
+        "startDate": "Alkupäivämäärä",
+        "endDate": "Loppupäivämäärä"
       }
     }
   },
@@ -2203,7 +2282,21 @@
         "dragToReorder": "Vedä järjestääksesi {species}",
         "edit": "Muokkaa lajia",
         "remove": "Poista laji"
-      }
+      },
+      "loadingSpecies": "Ladataan lajeja...",
+      "typePlaceholder": "Kirjoita lajin nimi..."
+    },
+    "rtsp": {
+      "addNewStream": "Lisää uusi RTSP-virta",
+      "maxStreamsReached": "RTSP-virtojen enimmäismäärä ({max}) saavutettu.",
+      "cameraPlaceholder": "Kamera 1",
+      "urlPlaceholder": "rtsp://käyttäjä:salasana@192.168.1.100:554/stream"
+    },
+    "subnet": {
+      "maxSubnetsReached": "Aliverkkojen enimmäismäärä ({max}) saavutettu."
+    },
+    "select": {
+      "searchPlaceholder": "Etsi..."
     }
   },
   "media": {
@@ -2236,10 +2329,23 @@
     }
   },
   "components": {
+    "audio": {
+      "spectrogramUnavailable": "Spektrogrammi ei saatavilla",
+      "generating": "Luodaan...",
+      "queuePosition": "Jono: {position}"
+    },
     "forms": {
       "numberField": {
         "adjustedToMinimum": "Arvo säädetty minimiin ({value})",
         "adjustedToMaximum": "Arvo säädetty maksimiin ({value})"
+      },
+      "species": {
+        "suggestionsAvailable": "{count} lajiehdotusta saatavilla. Käytä nuolinäppäimiä navigoimiseen.",
+        "noSuggestions": "Ei saatavilla olevia lajiehdotuksia."
+      },
+      "select": {
+        "searchOptions": "Etsi vaihtoehdot",
+        "noOptions": "Vaihtoehtoja ei löydy"
       }
     },
     "datePicker": {
@@ -2272,5 +2378,12 @@
       "review": "Tarkista",
       "download": "Lataa"
     }
+  },
+  "labels": {
+    "free": "Vapaa",
+    "available": "Saatavilla",
+    "buffCache": "Puskuri/Välimuisti",
+    "overallProgress": "Kokonaisedistyminen",
+    "progress": "Edistyminen"
   }
 }

@@ -63,7 +63,16 @@
       "selectAll": "Alles selecteren",
       "selectNone": "Niets selecteren",
       "required": "Verplicht",
-      "optional": "Optioneel"
+      "optional": "Optioneel",
+      "noAudioSources": "Geen audiobronnen beschikbaar",
+      "noNotifications": "Geen meldingen",
+      "silent": "(stil)",
+      "loadingSettings": "Instellingen laden...",
+      "settingsNotFound": "Instellingen niet gevonden",
+      "sectionNotFound": "De gevraagde instellingensectie \"{section}\" werd niet gevonden.",
+      "loadingMap": "Kaart laden...",
+      "imageNotAvailable": "Afbeelding niet beschikbaar",
+      "search": "Zoeken"
     },
     "status": {
       "success": "Succes",
@@ -116,7 +125,13 @@
       "learnEbirdTaxonomyLink": "Open eBird Taxonomy in een nieuwe tab"
     },
     "labels": {
-      "confidence": "Betrouwbaarheid"
+      "confidence": "Betrouwbaarheid",
+      "free": "Vrij",
+      "available": "Beschikbaar",
+      "buffCache": "Buffer/Cache",
+      "overallProgress": "Algehele voortgang",
+      "progress": "Voortgang",
+      "github": "GitHub"
     },
     "values": {
       "yes": "Ja",
@@ -166,6 +181,12 @@
       }
     }
   },
+  "pageTitle": {
+    "settings": "Instellingen - BirdNET-Go",
+    "pageNotFound": "404 - Pagina niet gevonden",
+    "serverError": "500 - Interne serverfout",
+    "componentError": "Component laadfout"
+  },
   "navigation": {
     "dashboard": "Overzicht",
     "detections": "Herkend",
@@ -192,6 +213,7 @@
     "developedBy": "Ontwikkeld door",
     "developersText": "Het K. Lisa Yang Center for Conservation Bioacoustics van het Cornell Lab of Ornithology in samenwerking met de Technische Universiteit Chemnitz:",
     "visitBirdnetAnalyzer": "Bezoek BirdNET-Analyzer Project",
+    "visitBirdnetAnalyzerAriaLabel": "Visit BirdNET-Analyzer GitHub repository",
     "contributors": "Bijdragers",
     "contributorsText": "BirdNET-Go is gegroeid en verbeterd dankzij de gezamenlijke inspanningen van veel individuen. Hun bijdragen, variërend van code verbeteringen tot functie suggesties, zijn van onschatbare waarde geweest om dit project beter te maken.",
     "mainDeveloper": "Hoofd Ontwikkelaar",
@@ -231,7 +253,11 @@
     "ebirdOrg": "eBird.org",
     "learnEbirdTaxonomy": "Meer informatie over eBird Taxonomie",
     "avicommonsTitle": "Vogelafbeeldingen",
-    "avicommonsDescription": "BirdNET-Go gebruikt gecureerde vogelafbeeldingen van Avicommons, een bibliotheek van zorgvuldig geselecteerde, bijgesneden en georiënteerde vogelfoto's onder Creative Commons-licenties."
+    "avicommonsDescription": "BirdNET-Go gebruikt gecureerde vogelafbeeldingen van Avicommons, een bibliotheek van zorgvuldig geselecteerde, bijgesneden en georiënteerde vogelfoto's onder Creative Commons-licenties.",
+    "githubStarPrompt": "Als u BirdNET-Go waardevol vindt, overweeg dan om het project een ster te geven op GitHub. Sterren helpen anderen dit project te ontdekken en ondersteunen de verdere ontwikkeling.",
+    "viewOnGithub": "Bekijk project op GitHub",
+    "visitGithubAriaLabel": "Bezoek BirdNET-Go GitHub repository",
+    "visitAvicommonsGithub": "Bezoek Avicommons GitHub repository"
   },
   "notifications": {
     "title": "Meldingen",
@@ -384,7 +410,9 @@
       "stackTrace": "Opdracht stapel tracering",
       "goToDashboard": "Ga naar het Overzicht",
       "reportIssue": "Meld een probleem",
-      "loginToViewDetails": "Aanmelden voor Detail weergave"
+      "loginToViewDetails": "Login to View Details",
+      "componentLoadError": "Component Load Error",
+      "failedToLoadComponent": "Failed to load the requested component"
     }
   },
   "dashboard": {
@@ -568,6 +596,11 @@
     "notes": {
       "title": "Notities & Aantekeningen",
       "noComments": "Geen notities of aantekeningen voor deze herkenning."
+    },
+    "aria": {
+      "loading": "Herkenningsdetails laden...",
+      "loaded": "Herkenningsdetails geladen voor {species}",
+      "error": "Fout bij het laden van herkenning: {error}"
     }
   },
   "species": {
@@ -577,7 +610,16 @@
     "taxonomy": {
       "hierarchy": "Taxonomische klassificatie",
       "subspecies": "Ondersoort",
-      "noData": "Geen taxonomische informatie beschikbaar."
+      "noData": "Geen taxonomische informatie beschikbaar.",
+      "labels": {
+        "kingdom": "Rijk",
+        "phylum": "Stam",
+        "class": "Klasse",
+        "order": "Orde",
+        "family": "Familie",
+        "genus": "Geslacht",
+        "species": "Soort"
+      }
     }
   },
   "system": {
@@ -609,6 +651,8 @@
     },
     "processInfo": {
       "title": "Proces informatie",
+      "loading": "Proces informatie laden...",
+      "noProcesses": "Geen proces informatie beschikbaar",
       "headers": {
         "pid": "PID",
         "name": "Naam",
@@ -618,7 +662,15 @@
         "uptime": "Werktijd"
       },
       "showAll": "Toon alle processen",
-      "showBirdnetOnly": "Toon alleen BirdNET"
+      "showBirdnetOnly": "Toon alleen BirdNET",
+      "table": {
+        "process": "Proces",
+        "status": "Status",
+        "cpu": "CPU",
+        "memory": "Geheugen",
+        "uptime": "Uptime",
+        "showAllProcesses": "Toon alle processen"
+      }
     },
     "errors": {
       "systemInfo": "Systeem informatie inlezen mislukt: {error}",
@@ -730,6 +782,49 @@
         "detections": "Aantal herkend:",
         "confidence": "Betrouwbaarheid:",
         "first": "Eerst:"
+      }
+    },
+    "advanced": {
+      "title": "Geavanceerde analyse",
+      "chartControls": "Grafiekbediening",
+      "dateRange": "Datumbereik",
+      "chartOptions": "Grafiekopties",
+      "speciesSelection": "Soortselectie ({count}/{max})",
+      "speciesSelectionHint": "Zoeken of klik op chips hieronder",
+      "speciesPlaceholder": "Zoeken en selecteer soorten voor analyse...",
+      "noSpeciesFound": "Geen soorten gevonden voor het geselecteerde datumbereik",
+      "detections": "{count} herkenningen",
+      "dateRangeOptions": {
+        "week": "Afgelopen week",
+        "month": "Afgelopen maand",
+        "quarter": "Afgelopen kwartaal",
+        "year": "Afgelopen jaar",
+        "custom": "Aangepast bereik"
+      },
+      "options": {
+        "relativeTrends": "Relatieve trends",
+        "zoomPan": "Zoomen en pannen",
+        "brushSelection": "Penseel selectie"
+      },
+      "charts": {
+        "timeOfDay": {
+          "title": "Detectiepatronen per dagdeel",
+          "description": "Toont gemiddelde detectieaantallen gedurende de dag voor geselecteerde soorten",
+          "noData": "Geen dagdeelgegevens beschikbaar",
+          "noDataHint": "Selecteer soorten en een datumbereik om patronen weer te geven"
+        },
+        "dailyTrend": {
+          "title": "Soortdetectietrends",
+          "description": "Toont detectietendensen in de tijd voor geselecteerde soorten",
+          "noData": "Geen trendgegevens beschikbaar",
+          "noDataHint": "Selecteer soorten en een datumbereik om tendensen weer te geven"
+        }
+      },
+      "aria": {
+        "startDate": "Startdatum",
+        "endDate": "Einddatum",
+        "loadingAnalytics": "Analysegegevens laden",
+        "loadingTrends": "Trendgegevens laden"
       }
     }
   },
@@ -2199,11 +2294,25 @@
       "placeholder": "Vul een soort naam in ...",
       "empty": "Geen soort toegevoegd",
       "maxReached": "Maximale aantal van {maxItems} soorten bereikt",
+      "loadingSpecies": "Soorten laden...",
+      "typePlaceholder": "Typ soortnaam...",
       "aria": {
         "dragToReorder": "Sleep om de sortering te wijzigen {species}",
         "edit": "Bewerk soort",
         "remove": "Verwijder soort"
       }
+    },
+    "rtsp": {
+      "addNewStream": "Nieuwe RTSP-stream toevoegen",
+      "maxStreamsReached": "Maximum aantal RTSP-streams ({max}) bereikt.",
+      "cameraPlaceholder": "Camera 1",
+      "urlPlaceholder": "rtsp://gebruiker:wachtwoord@192.168.1.100:554/stream"
+    },
+    "subnet": {
+      "maxSubnetsReached": "Maximum aantal subnetten ({max}) bereikt."
+    },
+    "select": {
+      "searchPlaceholder": "Zoeken..."
     }
   },
   "media": {
@@ -2236,10 +2345,23 @@
     }
   },
   "components": {
+    "audio": {
+      "spectrogramUnavailable": "Spectrogram niet beschikbaar",
+      "generating": "Genereren...",
+      "queuePosition": "Wachtrij: {position}"
+    },
     "forms": {
       "numberField": {
         "adjustedToMinimum": "Waarde is gewijzigd in de minimale waarde ({value})",
         "adjustedToMaximum": "Waarde is gewijzigd in de maximale waarde ({value})"
+      },
+      "species": {
+        "suggestionsAvailable": "{count} soortsuggessies beschikbaar. Gebruik pijltoetsen om te navigeren.",
+        "noSuggestions": "Geen soortsuggessies beschikbaar."
+      },
+      "select": {
+        "searchOptions": "Zoeken opties",
+        "noOptions": "Geen opties gevonden"
       }
     },
     "datePicker": {

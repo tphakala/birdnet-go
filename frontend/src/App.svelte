@@ -7,6 +7,7 @@
   import { getLogger } from './lib/utils/logger';
   import { createSafeMap } from './lib/utils/security';
   import { sseNotifications } from './lib/stores/sseNotifications'; // Initialize SSE toast handler
+  import { t } from './lib/i18n';
 
   const logger = getLogger('app');
 
@@ -27,8 +28,11 @@
 
   let currentRoute = $state<string>('');
   let currentPage = $state<string>('');
-  let pageTitle = $state<string>('Dashboard');
+  let pageTitleKey = $state<string>('navigation.dashboard');
   let loadingComponent = $state<boolean>(false);
+
+  // Derived translated title - automatically updates when language changes
+  let pageTitle = $derived(t(pageTitleKey));
   let dynamicErrorCode = $state<string | null>(null);
   let detectionId = $state<string | null>(null);
 
@@ -42,54 +46,65 @@
   interface RouteConfig {
     route: string;
     page: string;
-    title: string;
+    titleKey: string;
     component: string;
   }
 
   const routeConfigs: RouteConfig[] = [
-    { route: 'dashboard', page: 'dashboard', title: 'Dashboard', component: '' },
+    { route: 'dashboard', page: 'dashboard', titleKey: 'navigation.dashboard', component: '' },
     {
       route: 'notifications',
       page: 'notifications',
-      title: 'Notifications',
+      titleKey: 'navigation.notifications',
       component: 'notifications',
     },
     {
       route: 'species',
       page: 'analytics/species',
-      title: 'Species Analytics',
+      titleKey: 'pageTitle.speciesAnalytics',
       component: 'species',
     },
-    { route: 'analytics', page: 'analytics', title: 'Analytics', component: 'analytics' },
+    {
+      route: 'analytics',
+      page: 'analytics',
+      titleKey: 'navigation.analytics',
+      component: 'analytics',
+    },
     {
       route: 'advanced-analytics',
       page: 'analytics/advanced',
-      title: 'Advanced Analytics',
+      titleKey: 'pageTitle.advancedAnalytics',
       component: 'advanced-analytics',
     },
-    { route: 'search', page: 'search', title: 'Search', component: 'search' },
-    { route: 'detections', page: 'detections', title: 'Detections', component: 'detections' },
+    { route: 'search', page: 'search', titleKey: 'navigation.search', component: 'search' },
+    {
+      route: 'detections',
+      page: 'detections',
+      titleKey: 'navigation.detections',
+      component: 'detections',
+    },
     {
       route: 'detection-detail',
       page: 'detection-detail',
-      title: 'Detection Details',
+      titleKey: 'pageTitle.detectionDetails',
       component: 'detection-detail',
     },
-    { route: 'about', page: 'about', title: 'About', component: 'about' },
-    { route: 'system', page: 'system', title: 'System', component: 'system' },
-    { route: 'settings', page: 'settings', title: 'Settings', component: 'settings' },
+    { route: 'about', page: 'about', titleKey: 'navigation.about', component: 'about' },
+    { route: 'system', page: 'system', titleKey: 'navigation.system', component: 'system' },
+    { route: 'settings', page: 'settings', titleKey: 'navigation.settings', component: 'settings' },
   ];
 
-  const settingsSubpages = {
-    '/main': 'Main Settings',
-    '/userinterface': 'User Interface',
-    '/audio': 'Audio Settings',
-    '/detectionfilters': 'Detection Filters',
-    '/integrations': 'Integrations',
-    '/security': 'Security Settings',
-    '/species': 'Species Settings',
-    '/notifications': 'Notifications Settings',
-    '/support': 'Support',
+  // Settings subpage title keys
+  const settingsSubpages: Record<string, string> = {
+    '/main': 'settings.sections.node',
+    '/userinterface': 'settings.sections.userinterface',
+    '/audio': 'settings.sections.audio',
+    '/detectionfilters': 'settings.sections.filters',
+    '/integrations': 'settings.sections.integration',
+    '/security': 'settings.sections.security',
+    '/species': 'settings.sections.species',
+    '/notifications': 'settings.sections.notifications',
+    '/support': 'settings.sections.support',
   };
 
   // Dynamic import helper
@@ -188,7 +203,7 @@
       // Fall back to generic error page on component load failure
       currentRoute = 'error-generic';
       currentPage = 'error-generic';
-      pageTitle = 'Component Load Error';
+      pageTitleKey = 'pageTitle.componentError';
       dynamicErrorCode = '500';
       // Try to load the generic error component if it hasn't been loaded yet
       if (!GenericErrorPage) {
@@ -237,7 +252,7 @@
         detectionId = id;
         currentRoute = 'detection-detail';
         currentPage = 'detection-detail';
-        pageTitle = 'Detection Details';
+        pageTitleKey = 'pageTitle.detectionDetails';
         loadComponent('detection-detail');
         return;
       }
@@ -249,12 +264,12 @@
       if (settingsConfig) {
         currentRoute = settingsConfig.route;
         currentPage = settingsConfig.page;
-        pageTitle = settingsConfig.title;
+        pageTitleKey = settingsConfig.titleKey;
 
         // Update title based on specific settings page
-        for (const [subpath, title] of Object.entries(settingsSubpages)) {
+        for (const [subpath, titleKey] of Object.entries(settingsSubpages)) {
           if (path.includes(subpath)) {
-            pageTitle = title;
+            pageTitleKey = titleKey;
             break;
           }
         }
@@ -266,7 +281,7 @@
         // Settings config not found, redirect to error page
         currentRoute = 'error-404';
         currentPage = 'error-404';
-        pageTitle = 'Settings Not Available';
+        pageTitleKey = 'pageTitle.settingsNotAvailable';
         loadComponent('error-404');
       }
       return;
@@ -277,7 +292,7 @@
     if (routeConfig) {
       currentRoute = routeConfig.route;
       currentPage = routeConfig.page;
-      pageTitle = routeConfig.title;
+      pageTitleKey = routeConfig.titleKey;
 
       if (routeConfig.component) {
         loadComponent(routeConfig.component);
@@ -288,29 +303,29 @@
     // Handle error pages or unknown routes
     const urlParams = new URLSearchParams(window.location.search);
     const errorCode = urlParams.get('error');
-    const errorTitle = urlParams.get('title');
 
     if (errorCode === '404') {
       currentRoute = 'error-404';
       currentPage = 'error-404';
-      pageTitle = 'Page Not Found';
+      pageTitleKey = 'pageTitle.pageNotFound';
       loadComponent('error-404');
     } else if (errorCode === '500') {
       currentRoute = 'error-500';
       currentPage = 'error-500';
-      pageTitle = 'Internal Server Error';
+      pageTitleKey = 'pageTitle.serverError';
       loadComponent('error-500');
     } else if (errorCode) {
       currentRoute = 'error-generic';
       currentPage = 'error-generic';
-      pageTitle = errorTitle || 'Error';
+      // For dynamic error titles from URL, we use a generic error key
+      pageTitleKey = 'common.error';
       dynamicErrorCode = errorCode || '500';
       loadComponent('error-generic');
     } else {
       // Unknown route, default to 404
       currentRoute = 'error-404';
       currentPage = 'error-404';
-      pageTitle = 'Page Not Found';
+      pageTitleKey = 'pageTitle.pageNotFound';
       loadComponent('error-404');
     }
   }
@@ -376,8 +391,8 @@
       {@const ErrorComponent = GenericErrorPage}
       <ErrorComponent
         code={dynamicErrorCode || '500'}
-        title="Component Load Error"
-        message="Failed to load the requested component"
+        title={t('error.generic.componentLoadError')}
+        message={t('error.generic.failedToLoadComponent')}
       />
     {/if}
   {/if}

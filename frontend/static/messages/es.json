@@ -1,4 +1,10 @@
 {
+  "pageTitle": {
+    "settings": "Configuración - BirdNET-Go",
+    "pageNotFound": "404 - Página no encontrada",
+    "serverError": "500 - Error interno del servidor",
+    "componentError": "Error de carga del componente"
+  },
   "common": {
     "loading": "Cargando...",
     "error": "Error",
@@ -63,7 +69,16 @@
       "selectAll": "Seleccionar todo",
       "selectNone": "Deseleccionar todo",
       "required": "Requerido",
-      "optional": "Opcional"
+      "optional": "Opcional",
+      "noAudioSources": "No hay fuentes de audio disponibles",
+      "noNotifications": "Sin notificaciones",
+      "silent": "(silencioso)",
+      "loadingSettings": "Cargando configuración...",
+      "settingsNotFound": "Configuración no encontrada",
+      "sectionNotFound": "La sección de configuración solicitada \"{section}\" no se encontró.",
+      "loadingMap": "Cargando mapa...",
+      "imageNotAvailable": "Imagen no disponible",
+      "search": "Buscar..."
     },
     "status": {
       "success": "Éxito",
@@ -116,7 +131,13 @@
       "learnEbirdTaxonomyLink": "Abrir Taxonomía de eBird en una nueva pestaña"
     },
     "labels": {
-      "confidence": "Confianza"
+      "confidence": "Confianza",
+      "github": "GitHub",
+      "free": "Libre",
+      "available": "Disponible",
+      "buffCache": "Búfer/Caché",
+      "overallProgress": "Progreso general",
+      "progress": "Progreso"
     },
     "values": {
       "yes": "Sí",
@@ -192,6 +213,7 @@
     "developedBy": "Desarrollado por",
     "developersText": "El K. Lisa Yang Center for Conservation Bioacoustics en el Cornell Lab of Ornithology en colaboración con la Universidad Tecnológica de Chemnitz:",
     "visitBirdnetAnalyzer": "Visitar el proyecto BirdNET-Analyzer",
+    "visitBirdnetAnalyzerAriaLabel": "Visit BirdNET-Analyzer GitHub repository",
     "contributors": "Colaboradores",
     "contributorsText": "BirdNET-Go ha crecido y mejorado gracias a los esfuerzos colaborativos de muchas personas. Sus contribuciones, desde mejoras en el código hasta sugerencias de funciones, han sido invaluables para mejorar este proyecto.",
     "mainDeveloper": "Desarrollador principal",
@@ -231,7 +253,11 @@
     "ebirdOrg": "eBird.org",
     "learnEbirdTaxonomy": "Más información sobre la taxonomía de eBird",
     "avicommonsTitle": "Miniaturas de aves",
-    "avicommonsDescription": "BirdNET-Go utiliza imágenes de aves seleccionadas de Avicommons, una biblioteca de fotos de aves seleccionadas a mano, recortadas y orientadas bajo licencias Creative Commons."
+    "avicommonsDescription": "BirdNET-Go utiliza imágenes de aves seleccionadas de Avicommons, una biblioteca de fotos de aves seleccionadas a mano, recortadas y orientadas bajo licencias Creative Commons.",
+    "githubStarPrompt": "Si encuentra útil BirdNET-Go, considere darle una estrella al proyecto en GitHub. Las estrellas ayudan a otros a descubrir este proyecto y apoyan su desarrollo.",
+    "viewOnGithub": "Ver proyecto en GitHub",
+    "visitGithubAriaLabel": "Visita el repositorio de GitHub",
+    "visitAvicommonsGithub": "Visita el repositorio de Avicommons en GitHub"
   },
   "notifications": {
     "title": "Notificaciones",
@@ -384,7 +410,9 @@
       "stackTrace": "Seguimiento de pila",
       "goToDashboard": "Ir al panel de control",
       "reportIssue": "Reportar problema",
-      "loginToViewDetails": "Inicia sesión para ver detalles"
+      "loginToViewDetails": "Login to View Details",
+      "componentLoadError": "Component Load Error",
+      "failedToLoadComponent": "Failed to load the requested component"
     }
   },
   "dashboard": {
@@ -568,6 +596,11 @@
     "notes": {
       "title": "Notas y comentarios",
       "noComments": "No hay comentarios ni notas para esta detección."
+    },
+    "aria": {
+      "loading": "Cargando detalles de detección...",
+      "loaded": "Detalles de detección cargados para {species}",
+      "error": "Error al cargar la detección: {error}"
     }
   },
   "species": {
@@ -577,7 +610,16 @@
     "taxonomy": {
       "hierarchy": "Clasificación taxonómica",
       "subspecies": "Subespecies",
-      "noData": "No hay datos de taxonomía disponibles."
+      "noData": "No hay datos de taxonomía disponibles.",
+      "labels": {
+        "kingdom": "Reino",
+        "phylum": "Filo",
+        "class": "Clase",
+        "order": "Orden",
+        "family": "Familia",
+        "genus": "Género",
+        "species": "Especie"
+      }
     }
   },
   "system": {
@@ -609,6 +651,8 @@
     },
     "processInfo": {
       "title": "Información de procesos",
+      "loading": "Cargando información del proceso...",
+      "noProcesses": "No hay información de proceso disponible",
       "headers": {
         "pid": "PID",
         "name": "Nombre",
@@ -618,7 +662,15 @@
         "uptime": "Tiempo activo"
       },
       "showAll": "Mostrar todos los procesos",
-      "showBirdnetOnly": "Mostrar solo BirdNET"
+      "showBirdnetOnly": "Mostrar solo BirdNET",
+      "table": {
+        "process": "Proceso",
+        "status": "Estado",
+        "cpu": "CPU",
+        "memory": "Memoria",
+        "uptime": "Tiempo activo",
+        "showAllProcesses": "Mostrar todos los procesos"
+      }
     },
     "errors": {
       "systemInfo": "Error al cargar la información del sistema: {error}",
@@ -730,6 +782,49 @@
         "detections": "Detecciones:",
         "confidence": "Confianza:",
         "first": "Primera:"
+      }
+    },
+    "advanced": {
+      "title": "Análisis avanzado",
+      "chartControls": "Controles del gráfico",
+      "dateRange": "Rango de fechas",
+      "chartOptions": "Opciones del gráfico",
+      "speciesSelection": "Selección de especies ({count}/{max})",
+      "speciesSelectionHint": "Buscar o hacer clic en los chips abajo",
+      "speciesPlaceholder": "Buscar y seleccionar especies para el análisis...",
+      "noSpeciesFound": "No se encontraron especies para el rango de fechas seleccionado",
+      "detections": "{count} detecciones",
+      "dateRangeOptions": {
+        "week": "Última semana",
+        "month": "Último mes",
+        "quarter": "Último trimestre",
+        "year": "Último año",
+        "custom": "Rango personalizado"
+      },
+      "options": {
+        "relativeTrends": "Tendencias relativas",
+        "zoomPan": "Zoom y panorámica",
+        "brushSelection": "Selección con pincel"
+      },
+      "charts": {
+        "timeOfDay": {
+          "title": "Patrones de detección por hora del día",
+          "description": "Muestra los recuentos de detección promedio durante el día para especies seleccionadas",
+          "noData": "No hay datos disponibles por hora del día",
+          "noDataHint": "Selecciona especies y un rango de fechas para ver patrones"
+        },
+        "dailyTrend": {
+          "title": "Tendencias de detección de especies",
+          "description": "Muestra las tendencias de detección a lo largo del tiempo para especies seleccionadas",
+          "noData": "No hay datos de tendencias disponibles",
+          "noDataHint": "Selecciona especies y un rango de fechas para ver tendencias"
+        }
+      },
+      "aria": {
+        "startDate": "Fecha de inicio",
+        "endDate": "Fecha de fin",
+        "loadingAnalytics": "Cargando datos de análisis",
+        "loadingTrends": "Cargando datos de tendencias"
       }
     }
   },
@@ -2203,7 +2298,21 @@
         "dragToReorder": "Arrastra para reordenar {species}",
         "edit": "Editar especie",
         "remove": "Eliminar especie"
-      }
+      },
+      "loadingSpecies": "Cargando especies...",
+      "typePlaceholder": "Escribir nombre de especie..."
+    },
+    "rtsp": {
+      "addNewStream": "Agregar nuevo flujo RTSP",
+      "maxStreamsReached": "Número máximo de flujos RTSP ({max}) alcanzado.",
+      "cameraPlaceholder": "Cámara 1",
+      "urlPlaceholder": "rtsp://usuario:contraseña@192.168.1.100:554/stream"
+    },
+    "subnet": {
+      "maxSubnetsReached": "Número máximo de subredes ({max}) alcanzado."
+    },
+    "select": {
+      "searchPlaceholder": "Buscar..."
     }
   },
   "media": {
@@ -2236,10 +2345,23 @@
     }
   },
   "components": {
+    "audio": {
+      "spectrogramUnavailable": "Espectrograma no disponible",
+      "generating": "Generando...",
+      "queuePosition": "Cola: {position}"
+    },
     "forms": {
       "numberField": {
         "adjustedToMinimum": "Valor ajustado al mínimo ({value})",
         "adjustedToMaximum": "Valor ajustado al máximo ({value})"
+      },
+      "species": {
+        "suggestionsAvailable": "{count} sugerencias de especies disponibles. Usa las teclas de flecha para navegar.",
+        "noSuggestions": "No hay sugerencias de especies disponibles."
+      },
+      "select": {
+        "searchOptions": "Buscar opciones",
+        "noOptions": "No se encontraron opciones"
       }
     },
     "datePicker": {
