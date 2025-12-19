@@ -1521,7 +1521,7 @@
             "credentialsRequired": "Username and password are required when using Basic authentication"
           },
           "custom": {
-            "name": "Custom URL",
+            "name": "Mukautettu URL",
             "url": {
               "label": "Shoutrrr URL",
               "placeholder": "service://credentials@host",
@@ -1750,12 +1750,12 @@
           "age": "Ikä",
           "usage": "Käyttö"
         },
-        "noRetentionTitle": "All Clips Retained",
-        "noRetentionDescription": "Audio clips will be kept indefinitely. Monitor disk usage to prevent storage issues.",
-        "ageRetentionTitle": "Age-Based Cleanup",
-        "ageRetentionDescription": "Clips older than the specified age will be automatically deleted, while preserving the minimum number per species.",
-        "usageRetentionTitle": "Usage-Based Cleanup",
-        "usageRetentionDescription": "When disk usage exceeds the threshold, oldest clips will be deleted until usage is within limits."
+        "noRetentionTitle": "Kaikki leikkeet säilytetään",
+        "noRetentionDescription": "Äänileikkeitä säilytetään toistaiseksi. Seuraa levytilan käyttöä estääksesi tallennusongelmia.",
+        "ageRetentionTitle": "Ikään perustuva siivous",
+        "ageRetentionDescription": "Määritettyä ikää vanhemmat leikkeet poistetaan automaattisesti, säilyttäen kuitenkin vähimmäismäärän lajia kohden.",
+        "usageRetentionTitle": "Käyttöön perustuva siivous",
+        "usageRetentionDescription": "Kun levytilan käyttö ylittää kynnysarvon, vanhimmat leikkeet poistetaan, kunnes käyttö on rajojen sisällä."
       },
       "formats": {
         "wav": "WAV",
