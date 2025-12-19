@@ -107,7 +107,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "myaudio_buffer_allocation_duration_seconds",
 			Help:    "Time taken for buffer allocations",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to ~1s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount10), // 1ms to ~1s
 		},
 		[]string{"buffer_type", "source"},
 	)
@@ -132,7 +132,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "myaudio_buffer_allocation_size_bytes",
 			Help:    "Size of buffer allocations in bytes",
-			Buckets: prometheus.ExponentialBuckets(1024, 2, 20), // 1KB to ~1GB
+			Buckets: prometheus.ExponentialBuckets(BucketStart1KB, BucketFactor2, BucketCount20), // 1KB to ~1GB
 		},
 		[]string{"buffer_type", "source"},
 	)
@@ -175,7 +175,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "myaudio_buffer_write_duration_seconds",
 			Help:    "Time taken for buffer write operations",
-			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 12), // 0.1ms to ~400ms
+			Buckets: prometheus.ExponentialBuckets(BucketStart100us, BucketFactor2, BucketCount12), // 0.1ms to ~400ms
 		},
 		[]string{"buffer_type", "source"},
 	)
@@ -217,7 +217,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "myaudio_buffer_read_duration_seconds",
 			Help:    "Time taken for buffer read operations",
-			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 12), // 0.1ms to ~400ms
+			Buckets: prometheus.ExponentialBuckets(BucketStart100us, BucketFactor2, BucketCount12), // 0.1ms to ~400ms
 		},
 		[]string{"buffer_type", "source"},
 	)
@@ -268,7 +268,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "myaudio_analysis_buffer_processing_duration_seconds",
 			Help:    "Time taken for analysis buffer processing",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 15), // 1ms to ~32s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount15), // 1ms to ~32s
 		},
 		[]string{"source"},
 	)
@@ -302,7 +302,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "myaudio_capture_buffer_segment_read_duration_seconds",
 			Help:    "Time taken for capture buffer segment reads",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 12), // 1ms to ~4s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount12), // 1ms to ~4s
 		},
 		[]string{"source"},
 	)
@@ -353,7 +353,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "myaudio_file_operation_duration_seconds",
 			Help:    "Time taken for file operations",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 12), // 1ms to ~4s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount12), // 1ms to ~4s
 		},
 		[]string{"operation", "format"},
 	)
@@ -395,7 +395,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "myaudio_audio_processing_duration_seconds",
 			Help:    "Time taken for audio processing operations",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 15), // 1ms to ~32s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount15), // 1ms to ~32s
 		},
 		[]string{"operation", "source"},
 	)
@@ -420,7 +420,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "myaudio_audio_conversion_duration_seconds",
 			Help:    "Time taken for audio format conversions",
-			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 12), // 0.1ms to ~400ms
+			Buckets: prometheus.ExponentialBuckets(BucketStart100us, BucketFactor2, BucketCount12), // 0.1ms to ~400ms
 		},
 		[]string{"source", "conversion_type"},
 	)
@@ -437,7 +437,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "myaudio_audio_inference_duration_seconds",
 			Help:    "Time taken for BirdNET inference operations",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 15), // 1ms to ~32s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount15), // 1ms to ~32s
 		},
 		[]string{"source"},
 	)

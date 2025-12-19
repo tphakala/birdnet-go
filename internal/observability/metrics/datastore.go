@@ -105,7 +105,7 @@ func (m *DatastoreMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "datastore_db_operation_duration_seconds",
 			Help:    "Time taken for database operations",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 15), // 1ms to ~32s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount15), // 1ms to ~32s
 		},
 		[]string{"operation", "table"},
 	)
@@ -131,7 +131,7 @@ func (m *DatastoreMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "datastore_db_transaction_duration_seconds",
 			Help:    "Time taken for database transactions",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 15), // 1ms to ~32s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount15), // 1ms to ~32s
 		},
 		[]string{"operation"},
 	)
@@ -190,7 +190,7 @@ func (m *DatastoreMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "datastore_note_operation_duration_seconds",
 			Help:    "Time taken for note operations",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 12), // 1ms to ~4s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount12), // 1ms to ~4s
 		},
 		[]string{"operation"},
 	)
@@ -207,7 +207,7 @@ func (m *DatastoreMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "datastore_note_lock_duration_seconds",
 			Help:    "Time taken for note lock operations",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to ~1s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount10), // 1ms to ~1s
 		},
 		[]string{"operation"},
 	)
@@ -225,7 +225,7 @@ func (m *DatastoreMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "datastore_search_operation_duration_seconds",
 			Help:    "Time taken for search operations",
-			Buckets: prometheus.ExponentialBuckets(0.01, 2, 12), // 10ms to ~40s
+			Buckets: prometheus.ExponentialBuckets(BucketStart10ms, BucketFactor2, BucketCount12), // 10ms to ~40s
 		},
 		[]string{"search_type"},
 	)
@@ -261,7 +261,7 @@ func (m *DatastoreMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "datastore_analytics_operation_duration_seconds",
 			Help:    "Time taken for analytics operations",
-			Buckets: prometheus.ExponentialBuckets(0.01, 2, 15), // 10ms to ~5min
+			Buckets: prometheus.ExponentialBuckets(BucketStart10ms, BucketFactor2, BucketCount15), // 10ms to ~5min
 		},
 		[]string{"analytics_type"},
 	)
@@ -307,7 +307,7 @@ func (m *DatastoreMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "datastore_weather_data_duration_seconds",
 			Help:    "Time taken for weather data operations",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to ~1s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount10), // 1ms to ~1s
 		},
 		[]string{"operation"},
 	)
@@ -325,7 +325,7 @@ func (m *DatastoreMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "datastore_image_cache_duration_seconds",
 			Help:    "Time taken for image cache operations",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to ~1s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount10), // 1ms to ~1s
 		},
 		[]string{"operation"},
 	)
@@ -364,7 +364,7 @@ func (m *DatastoreMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "datastore_lock_wait_time_seconds",
 			Help:    "Time spent waiting for locks",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 12), // 1ms to ~4s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount12), // 1ms to ~4s
 		},
 		[]string{"lock_type"},
 	)
@@ -387,7 +387,7 @@ func (m *DatastoreMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "datastore_backup_duration_seconds",
 			Help:    "Time taken for backup operations",
-			Buckets: prometheus.ExponentialBuckets(0.1, 2, 15), // 100ms to ~54min
+			Buckets: prometheus.ExponentialBuckets(BucketStart100ms, BucketFactor2, BucketCount15), // 100ms to ~54min
 		},
 		[]string{"operation"},
 	)
@@ -670,13 +670,13 @@ func (m *DatastoreMetrics) RecordMaintenanceOperation(operation, status string) 
 // parseTableFromOperation extracts table name from operations like "db_query:notes"
 // Returns the operation and table separately, or "unknown" if no table specified
 func parseTableFromOperation(operation string) (op, table string) {
-	parts := strings.SplitN(operation, ":", 2)
-	if len(parts) == 2 {
+	parts := strings.SplitN(operation, ":", SplitPartsCount)
+	if len(parts) == SplitPartsCount {
 		return parts[0], parts[1]
 	}
 	// Default table names for specific operations
 	switch operation {
-	case "note_create", "note_update", "note_delete", "note_get":
+	case OpNoteCreate, OpNoteUpdate, OpNoteDelete, OpNoteGet:
 		return operation, "notes"
 	default:
 		return operation, "unknown"
@@ -696,26 +696,26 @@ func (m *DatastoreMetrics) RecordOperation(operation, status string) {
 	
 	// Map generic operations to specific datastore operations
 	switch op {
-	case "db_query", "db_insert", "db_update", "db_delete":
+	case OpDbQuery, OpDbInsert, OpDbUpdate, OpDbDelete:
 		m.dbOperationsTotal.WithLabelValues(op, table, status).Inc()
-	case "transaction":
+	case OpTransaction:
 		m.dbTransactionsTotal.WithLabelValues(status).Inc()
-	case "note_create", "note_update", "note_delete", "note_get":
+	case OpNoteCreate, OpNoteUpdate, OpNoteDelete, OpNoteGet:
 		m.noteOperationsTotal.WithLabelValues(op, status).Inc()
-	case "search":
-		m.searchOperationsTotal.WithLabelValues("search", status).Inc()
-	case "analytics":
-		m.analyticsOperationsTotal.WithLabelValues("query", status).Inc()
-	case "cache_get", "cache_set", "cache_delete":
-		m.cacheOperationsTotal.WithLabelValues("suntimes", op, status).Inc()
-	case "weather_data":
-		m.weatherDataOperationsTotal.WithLabelValues("fetch", status).Inc()
-	case "image_cache":
-		m.imageCacheOperationsTotal.WithLabelValues("get", status).Inc()
-	case "backup":
-		m.backupOperationsTotal.WithLabelValues("create", status).Inc()
-	case "maintenance":
-		m.maintenanceOperationsTotal.WithLabelValues("vacuum", status).Inc()
+	case OpSearch:
+		m.searchOperationsTotal.WithLabelValues(OpSearch, status).Inc()
+	case OpAnalytics:
+		m.analyticsOperationsTotal.WithLabelValues(LabelQuery, status).Inc()
+	case OpCacheGet, OpCacheSet, OpCacheDelete:
+		m.cacheOperationsTotal.WithLabelValues(LabelSuntimes, op, status).Inc()
+	case OpWeatherData:
+		m.weatherDataOperationsTotal.WithLabelValues(LabelFetch, status).Inc()
+	case OpImageCache:
+		m.imageCacheOperationsTotal.WithLabelValues(LabelGet, status).Inc()
+	case OpBackup:
+		m.backupOperationsTotal.WithLabelValues(LabelCreate, status).Inc()
+	case OpMaintenance:
+		m.maintenanceOperationsTotal.WithLabelValues(LabelVacuum, status).Inc()
 	}
 }
 
@@ -727,26 +727,26 @@ func (m *DatastoreMetrics) RecordDuration(operation string, seconds float64) {
 	op, table := parseTableFromOperation(operation)
 	
 	switch op {
-	case "db_query", "db_insert", "db_update", "db_delete":
+	case OpDbQuery, OpDbInsert, OpDbUpdate, OpDbDelete:
 		m.dbOperationDuration.WithLabelValues(op, table).Observe(seconds)
-	case "transaction":
-		m.dbTransactionDuration.WithLabelValues("commit").Observe(seconds)
-	case "note_lock":
-		m.noteLockDuration.WithLabelValues("exclusive").Observe(seconds)
-	case "note_operation":
-		m.noteOperationDuration.WithLabelValues("update").Observe(seconds)
-	case "search":
-		m.searchOperationDuration.WithLabelValues("query").Observe(seconds)
-	case "analytics":
-		m.analyticsOperationDuration.WithLabelValues("query").Observe(seconds)
-	case "weather_data":
-		m.weatherDataDuration.WithLabelValues("fetch").Observe(seconds)
-	case "image_cache":
-		m.imageCacheDuration.WithLabelValues("get").Observe(seconds)
-	case "backup":
-		m.backupDuration.WithLabelValues("create").Observe(seconds)
-	case "lock_wait":
-		m.lockWaitTimeHistogram.WithLabelValues("note").Observe(seconds)
+	case OpTransaction:
+		m.dbTransactionDuration.WithLabelValues(LabelCommit).Observe(seconds)
+	case OpNoteLock:
+		m.noteLockDuration.WithLabelValues(LabelExclusive).Observe(seconds)
+	case OpNoteOperation:
+		m.noteOperationDuration.WithLabelValues(LabelUpdate).Observe(seconds)
+	case OpSearch:
+		m.searchOperationDuration.WithLabelValues(LabelQuery).Observe(seconds)
+	case OpAnalytics:
+		m.analyticsOperationDuration.WithLabelValues(LabelQuery).Observe(seconds)
+	case OpWeatherData:
+		m.weatherDataDuration.WithLabelValues(LabelFetch).Observe(seconds)
+	case OpImageCache:
+		m.imageCacheDuration.WithLabelValues(LabelGet).Observe(seconds)
+	case OpBackup:
+		m.backupDuration.WithLabelValues(LabelCreate).Observe(seconds)
+	case OpLockWait:
+		m.lockWaitTimeHistogram.WithLabelValues(LabelNote).Observe(seconds)
 	}
 }
 
@@ -758,40 +758,40 @@ func (m *DatastoreMetrics) RecordError(operation, errorType string) {
 	op, table := parseTableFromOperation(operation)
 	
 	switch op {
-	case "db_query", "db_insert", "db_update", "db_delete":
+	case OpDbQuery, OpDbInsert, OpDbUpdate, OpDbDelete:
 		m.dbOperationErrorsTotal.WithLabelValues(op, table, errorType).Inc()
 		// Also increment operation counter with error status
 		m.dbOperationsTotal.WithLabelValues(op, table, "error").Inc()
-	case "transaction":
-		m.dbTransactionErrorsTotal.WithLabelValues("commit", errorType).Inc()
+	case OpTransaction:
+		m.dbTransactionErrorsTotal.WithLabelValues(LabelCommit, errorType).Inc()
 		// Also increment transaction counter with error status
 		m.dbTransactionsTotal.WithLabelValues("error").Inc()
-	case "note_lock":
+	case OpNoteLock:
 		// Record as error in note operations
-		m.noteLockOperationsTotal.WithLabelValues("exclusive", "error").Inc()
-	case "note_create", "note_update", "note_delete", "note_get":
+		m.noteLockOperationsTotal.WithLabelValues(LabelExclusive, "error").Inc()
+	case OpNoteCreate, OpNoteUpdate, OpNoteDelete, OpNoteGet:
 		// Record as error in note operations
 		m.noteOperationsTotal.WithLabelValues(op, "error").Inc()
-	case "search":
+	case OpSearch:
 		// Record as error in search operations
-		m.searchOperationsTotal.WithLabelValues("search", "error").Inc()
-	case "analytics":
+		m.searchOperationsTotal.WithLabelValues(OpSearch, "error").Inc()
+	case OpAnalytics:
 		// Record as error in analytics operations
-		m.analyticsOperationsTotal.WithLabelValues("query", "error").Inc()
-	case "cache", "cache_get", "cache_set", "cache_delete":
+		m.analyticsOperationsTotal.WithLabelValues(LabelQuery, "error").Inc()
+	case "cache", OpCacheGet, OpCacheSet, OpCacheDelete:
 		// Record as error in cache operations
-		m.cacheOperationsTotal.WithLabelValues("suntimes", op, "error").Inc()
-	case "weather_data":
+		m.cacheOperationsTotal.WithLabelValues(LabelSuntimes, op, "error").Inc()
+	case OpWeatherData:
 		// Record as error in weather data operations
-		m.weatherDataOperationsTotal.WithLabelValues("fetch", "error").Inc()
-	case "image_cache":
+		m.weatherDataOperationsTotal.WithLabelValues(LabelFetch, "error").Inc()
+	case OpImageCache:
 		// Record as error in image cache operations
-		m.imageCacheOperationsTotal.WithLabelValues("get", "error").Inc()
-	case "backup":
+		m.imageCacheOperationsTotal.WithLabelValues(LabelGet, "error").Inc()
+	case OpBackup:
 		// Record as error in backup operations
-		m.backupOperationsTotal.WithLabelValues("create", "error").Inc()
-	case "maintenance":
+		m.backupOperationsTotal.WithLabelValues(LabelCreate, "error").Inc()
+	case OpMaintenance:
 		// Record as error in maintenance operations
-		m.maintenanceOperationsTotal.WithLabelValues("vacuum", "error").Inc()
+		m.maintenanceOperationsTotal.WithLabelValues(LabelVacuum, "error").Inc()
 	}
 }

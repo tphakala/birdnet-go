@@ -8,9 +8,9 @@ import (
 	"log"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	metricspkg "github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 // Endpoint handles all operations related to Prometheus-compatible telemetry.
@@ -78,7 +78,7 @@ func (e *Endpoint) Start(wg *sync.WaitGroup, quitChan <-chan struct{}) {
 func (e *Endpoint) gracefulShutdown(quitChan <-chan struct{}) {
 	<-quitChan
 	log.Println("Stopping telemetry server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), metricspkg.ShutdownTimeout)
 	defer cancel()
 	if err := e.server.Shutdown(ctx); err != nil {
 		log.Printf("Telemetry server shutdown error: %v", err)

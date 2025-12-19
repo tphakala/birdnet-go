@@ -71,7 +71,7 @@ func (m *SunCalcMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "suncalc_duration_seconds",
 			Help:    "Time taken for sun calculation operations",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to ~1s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount10), // 1ms to ~1s
 		},
 		[]string{"operation"},
 	)

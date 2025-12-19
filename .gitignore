@@ -35,3 +35,4 @@ frontend/blob-report/
 frontend/tests/.auth/
 frontend/coverage/
 frontend/playwright-report*.zip
+REFACTOR_CHANGELOG.md
