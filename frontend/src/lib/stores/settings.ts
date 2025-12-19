@@ -332,6 +332,37 @@ export interface Action {
   executeDefaults: boolean;
 }
 
+// Season definition for seasonal tracking
+export interface Season {
+  startMonth: number; // 1-12
+  startDay: number; // 1-31
+}
+
+// Yearly tracking settings
+export interface YearlyTrackingSettings {
+  enabled: boolean;
+  resetMonth: number; // Month to reset yearly tracking (1=January)
+  resetDay: number; // Day to reset yearly tracking
+  windowDays: number; // Days to show "new this year" indicator
+}
+
+// Seasonal tracking settings
+export interface SeasonalTrackingSettings {
+  enabled: boolean;
+  windowDays: number; // Days to show "new this season" indicator
+  seasons: Record<string, Season>; // Season definitions (e.g., spring, summer, fall, winter)
+}
+
+// Species tracking settings
+export interface SpeciesTrackingSettings {
+  enabled: boolean;
+  newSpeciesWindowDays: number; // Days to consider a species "new"
+  syncIntervalMinutes: number; // Interval to sync with database
+  notificationSuppressionHours: number; // Hours to suppress duplicate notifications
+  yearlyTracking: YearlyTrackingSettings;
+  seasonalTracking: SeasonalTrackingSettings;
+}
+
 export interface SupportSettings {
   sentry: {
     enabled: boolean;
@@ -362,6 +393,7 @@ export interface RealtimeSettings {
   monitoring?: MonitoringSettings;
   species?: SpeciesSettings;
   weather?: WeatherSettings;
+  speciesTracking?: SpeciesTrackingSettings;
 }
 
 // WebServer settings
@@ -844,6 +876,12 @@ export const supportSettings = derived(settingsStore, $store => ({
 export const dynamicThresholdSettings = derived(
   settingsStore,
   $store => $store.formData.realtime?.dynamicThreshold
+);
+
+// Species tracking settings derived store
+export const speciesTrackingSettings = derived(
+  settingsStore,
+  $store => $store.formData.realtime?.speciesTracking
 );
 
 // Settings actions

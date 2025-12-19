@@ -27,11 +27,15 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from 'svelte';
   import SpeciesInput from '$lib/desktop/components/forms/SpeciesInput.svelte';
+  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
+  import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import {
     settingsStore,
     settingsActions,
     speciesSettings,
     realtimeSettings,
+    speciesTrackingSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { SpeciesConfig, SpeciesSettings } from '$lib/stores/settings';
@@ -61,6 +65,7 @@
     Search,
     Maximize2,
     Minimize2,
+    CalendarClock,
   } from '@lucide/svelte';
   import { toastActions } from '$lib/stores/toast';
 
@@ -269,6 +274,16 @@
       store.formData.realtime?.species?.config
     )
   );
+
+  let trackingHasChanges = $derived(
+    hasSettingsChanged(
+      store.originalData.realtime?.speciesTracking,
+      store.formData.realtime?.speciesTracking
+    )
+  );
+
+  // Tracking settings state
+  let trackingSettings = $derived($speciesTrackingSettings);
 
   // Species data will be loaded in onMount after CSRF token is available
 
@@ -759,31 +774,38 @@
   let tabs = $derived<TabDefinition[]>([
     {
       id: 'active',
-      label: t('settings.species.activeSpecies.title'),
+      label: t('settings.species.activeSpecies.tabLabel'),
       icon: ListCheck,
       content: activeTabContent,
       // No hasChanges - this is read-only
     },
     {
       id: 'include',
-      label: t('settings.species.alwaysInclude.title'),
+      label: t('settings.species.alwaysInclude.tabLabel'),
       icon: CirclePlus,
       content: includeTabContent,
       hasChanges: includeHasChanges,
     },
     {
       id: 'exclude',
-      label: t('settings.species.alwaysExclude.title'),
+      label: t('settings.species.alwaysExclude.tabLabel'),
       icon: CircleMinus,
       content: excludeTabContent,
       hasChanges: excludeHasChanges,
     },
     {
       id: 'config',
-      label: t('settings.species.customConfiguration.title'),
+      label: t('settings.species.customConfiguration.tabLabel'),
       icon: Settings2,
       content: configTabContent,
       hasChanges: configHasChanges,
+    },
+    {
+      id: 'tracking',
+      label: t('settings.species.tracking.tabLabel'),
+      icon: CalendarClock,
+      content: trackingTabContent,
+      hasChanges: trackingHasChanges,
     },
   ]);
 </script>
@@ -1499,6 +1521,627 @@
       {/if}
     </div>
   </SettingsSection>
+{/snippet}
+
+<!-- Tracking Tab Content -->
+{#snippet trackingTabContent()}
+  <div class="space-y-6">
+    <!-- Main Tracking Settings -->
+    <SettingsSection
+      title={t('settings.species.tracking.title')}
+      description={t('settings.species.tracking.description')}
+      defaultOpen={true}
+      originalData={store.originalData.realtime?.speciesTracking}
+      currentData={store.formData.realtime?.speciesTracking}
+    >
+      <div class="space-y-4">
+        <!-- Enable Species Tracking -->
+        <Checkbox
+          checked={trackingSettings?.enabled ?? false}
+          label={t('settings.species.tracking.enabled.label')}
+          helpText={t('settings.species.tracking.enabled.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={value => {
+            const defaults = {
+              enabled: true,
+              newSpeciesWindowDays: 7,
+              syncIntervalMinutes: 60,
+              notificationSuppressionHours: 24,
+              yearlyTracking: {
+                enabled: false,
+                resetMonth: 1,
+                resetDay: 1,
+                windowDays: 7,
+              },
+              seasonalTracking: {
+                enabled: false,
+                windowDays: 7,
+                seasons: {
+                  spring: { startMonth: 3, startDay: 20 },
+                  summer: { startMonth: 6, startDay: 21 },
+                  fall: { startMonth: 9, startDay: 22 },
+                  winter: { startMonth: 12, startDay: 21 },
+                },
+              },
+            };
+            settingsActions.updateSection('realtime', {
+              ...$realtimeSettings,
+              speciesTracking: {
+                ...defaults,
+                ...trackingSettings,
+                enabled: value,
+              },
+            });
+          }}
+        />
+
+        {#if trackingSettings?.enabled}
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- New Species Window Days -->
+            <div class="form-control">
+              <label for="new-species-window" class="label">
+                <span class="label-text font-semibold">
+                  {t('settings.species.tracking.newSpeciesWindowDays.label')}
+                </span>
+              </label>
+              <div class="join">
+                <input
+                  id="new-species-window"
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={trackingSettings?.newSpeciesWindowDays ?? 7}
+                  onchange={e => {
+                    const target = e.target as HTMLInputElement;
+                    const value = Math.max(1, Math.min(365, parseInt(target.value) || 7));
+                    settingsActions.updateSection('realtime', {
+                      ...$realtimeSettings,
+                      speciesTracking: {
+                        enabled: true,
+                        newSpeciesWindowDays: value,
+                        syncIntervalMinutes: trackingSettings?.syncIntervalMinutes ?? 60,
+                        notificationSuppressionHours:
+                          trackingSettings?.notificationSuppressionHours ?? 24,
+                        yearlyTracking: trackingSettings?.yearlyTracking ?? {
+                          enabled: false,
+                          resetMonth: 1,
+                          resetDay: 1,
+                          windowDays: 7,
+                        },
+                        seasonalTracking: trackingSettings?.seasonalTracking ?? {
+                          enabled: false,
+                          windowDays: 7,
+                          seasons: {},
+                        },
+                      },
+                    });
+                  }}
+                  class="input input-bordered join-item w-full"
+                  disabled={store.isLoading || store.isSaving}
+                />
+                <span class="btn btn-disabled join-item"
+                  >{t('settings.species.tracking.units.days')}</span
+                >
+              </div>
+              <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                {t('settings.species.tracking.newSpeciesWindowDays.helpText')}
+              </p>
+            </div>
+
+            <!-- Sync Interval Minutes -->
+            <div class="form-control">
+              <label for="sync-interval" class="label">
+                <span class="label-text font-semibold">
+                  {t('settings.species.tracking.syncIntervalMinutes.label')}
+                </span>
+              </label>
+              <div class="join">
+                <input
+                  id="sync-interval"
+                  type="number"
+                  min="1"
+                  max="1440"
+                  value={trackingSettings?.syncIntervalMinutes ?? 60}
+                  onchange={e => {
+                    const target = e.target as HTMLInputElement;
+                    const value = Math.max(1, Math.min(1440, parseInt(target.value) || 60));
+                    settingsActions.updateSection('realtime', {
+                      ...$realtimeSettings,
+                      speciesTracking: {
+                        enabled: true,
+                        newSpeciesWindowDays: trackingSettings?.newSpeciesWindowDays ?? 7,
+                        syncIntervalMinutes: value,
+                        notificationSuppressionHours:
+                          trackingSettings?.notificationSuppressionHours ?? 24,
+                        yearlyTracking: trackingSettings?.yearlyTracking ?? {
+                          enabled: false,
+                          resetMonth: 1,
+                          resetDay: 1,
+                          windowDays: 7,
+                        },
+                        seasonalTracking: trackingSettings?.seasonalTracking ?? {
+                          enabled: false,
+                          windowDays: 7,
+                          seasons: {},
+                        },
+                      },
+                    });
+                  }}
+                  class="input input-bordered join-item w-full"
+                  disabled={store.isLoading || store.isSaving}
+                />
+                <span class="btn btn-disabled join-item"
+                  >{t('settings.species.tracking.units.min')}</span
+                >
+              </div>
+              <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                {t('settings.species.tracking.syncIntervalMinutes.helpText')}
+              </p>
+            </div>
+
+            <!-- Notification Suppression Hours -->
+            <div class="form-control">
+              <label for="notification-suppression" class="label">
+                <span class="label-text font-semibold">
+                  {t('settings.species.tracking.notificationSuppressionHours.label')}
+                </span>
+              </label>
+              <div class="join">
+                <input
+                  id="notification-suppression"
+                  type="number"
+                  min="0"
+                  max="8760"
+                  value={trackingSettings?.notificationSuppressionHours ?? 24}
+                  onchange={e => {
+                    const target = e.target as HTMLInputElement;
+                    const value = Math.max(0, Math.min(8760, parseInt(target.value) || 24));
+                    settingsActions.updateSection('realtime', {
+                      ...$realtimeSettings,
+                      speciesTracking: {
+                        enabled: true,
+                        newSpeciesWindowDays: trackingSettings?.newSpeciesWindowDays ?? 7,
+                        syncIntervalMinutes: trackingSettings?.syncIntervalMinutes ?? 60,
+                        notificationSuppressionHours: value,
+                        yearlyTracking: trackingSettings?.yearlyTracking ?? {
+                          enabled: false,
+                          resetMonth: 1,
+                          resetDay: 1,
+                          windowDays: 7,
+                        },
+                        seasonalTracking: trackingSettings?.seasonalTracking ?? {
+                          enabled: false,
+                          windowDays: 7,
+                          seasons: {},
+                        },
+                      },
+                    });
+                  }}
+                  class="input input-bordered join-item w-full"
+                  disabled={store.isLoading || store.isSaving}
+                />
+                <span class="btn btn-disabled join-item"
+                  >{t('settings.species.tracking.units.hours')}</span
+                >
+              </div>
+              <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                {t('settings.species.tracking.notificationSuppressionHours.helpText')}
+              </p>
+            </div>
+          </div>
+        {/if}
+      </div>
+    </SettingsSection>
+
+    {#if trackingSettings?.enabled}
+      <!-- Yearly Tracking Settings -->
+      <SettingsSection
+        title={t('settings.species.tracking.yearly.title')}
+        description={t('settings.species.tracking.yearly.description')}
+        defaultOpen={false}
+      >
+        <div class="space-y-4">
+          <!-- Enable Yearly Tracking -->
+          <Checkbox
+            checked={trackingSettings?.yearlyTracking?.enabled ?? false}
+            label={t('settings.species.tracking.yearly.enabled.label')}
+            helpText={t('settings.species.tracking.yearly.enabled.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={value => {
+              const yearlyDefaults = { enabled: false, resetMonth: 1, resetDay: 1, windowDays: 7 };
+              settingsActions.updateSection('realtime', {
+                ...$realtimeSettings,
+                speciesTracking: {
+                  enabled: true,
+                  newSpeciesWindowDays: trackingSettings?.newSpeciesWindowDays ?? 7,
+                  syncIntervalMinutes: trackingSettings?.syncIntervalMinutes ?? 60,
+                  notificationSuppressionHours:
+                    trackingSettings?.notificationSuppressionHours ?? 24,
+                  yearlyTracking: {
+                    ...yearlyDefaults,
+                    ...trackingSettings?.yearlyTracking,
+                    enabled: value,
+                  },
+                  seasonalTracking: trackingSettings?.seasonalTracking ?? {
+                    enabled: false,
+                    windowDays: 7,
+                    seasons: {},
+                  },
+                },
+              });
+            }}
+          />
+
+          {#if trackingSettings?.yearlyTracking?.enabled}
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <!-- Reset Month -->
+              <SelectDropdown
+                label={t('settings.species.tracking.yearly.resetMonth.label')}
+                helpText={t('settings.species.tracking.yearly.resetMonth.helpText')}
+                value={String(trackingSettings?.yearlyTracking?.resetMonth ?? 1)}
+                options={Array.from({ length: 12 }, (_, i) => ({
+                  value: String(i + 1),
+                  label: t(
+                    `settings.species.tracking.months.${['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'][i]}`
+                  ),
+                })) as SelectOption[]}
+                disabled={store.isLoading || store.isSaving}
+                menuSize="sm"
+                onChange={value => {
+                  settingsActions.updateSection('realtime', {
+                    ...$realtimeSettings,
+                    speciesTracking: {
+                      enabled: true,
+                      newSpeciesWindowDays: trackingSettings?.newSpeciesWindowDays ?? 7,
+                      syncIntervalMinutes: trackingSettings?.syncIntervalMinutes ?? 60,
+                      notificationSuppressionHours:
+                        trackingSettings?.notificationSuppressionHours ?? 24,
+                      yearlyTracking: {
+                        enabled: true,
+                        resetMonth: Number(value),
+                        resetDay: trackingSettings?.yearlyTracking?.resetDay ?? 1,
+                        windowDays: trackingSettings?.yearlyTracking?.windowDays ?? 7,
+                      },
+                      seasonalTracking: trackingSettings?.seasonalTracking ?? {
+                        enabled: false,
+                        windowDays: 7,
+                        seasons: {},
+                      },
+                    },
+                  });
+                }}
+              />
+
+              <!-- Reset Day -->
+              <div class="form-control">
+                <label for="yearly-reset-day" class="label">
+                  <span class="label-text font-semibold">
+                    {t('settings.species.tracking.yearly.resetDay.label')}
+                  </span>
+                </label>
+                <input
+                  id="yearly-reset-day"
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={trackingSettings?.yearlyTracking?.resetDay ?? 1}
+                  onchange={e => {
+                    const target = e.target as HTMLInputElement;
+                    const value = Math.max(1, Math.min(31, parseInt(target.value) || 1));
+                    settingsActions.updateSection('realtime', {
+                      ...$realtimeSettings,
+                      speciesTracking: {
+                        enabled: true,
+                        newSpeciesWindowDays: trackingSettings?.newSpeciesWindowDays ?? 7,
+                        syncIntervalMinutes: trackingSettings?.syncIntervalMinutes ?? 60,
+                        notificationSuppressionHours:
+                          trackingSettings?.notificationSuppressionHours ?? 24,
+                        yearlyTracking: {
+                          enabled: true,
+                          resetMonth: trackingSettings?.yearlyTracking?.resetMonth ?? 1,
+                          resetDay: value,
+                          windowDays: trackingSettings?.yearlyTracking?.windowDays ?? 7,
+                        },
+                        seasonalTracking: trackingSettings?.seasonalTracking ?? {
+                          enabled: false,
+                          windowDays: 7,
+                          seasons: {},
+                        },
+                      },
+                    });
+                  }}
+                  class="input input-bordered w-full"
+                  disabled={store.isLoading || store.isSaving}
+                />
+                <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                  {t('settings.species.tracking.yearly.resetDay.helpText')}
+                </p>
+              </div>
+
+              <!-- Window Days -->
+              <div class="form-control">
+                <label for="yearly-window-days" class="label">
+                  <span class="label-text font-semibold">
+                    {t('settings.species.tracking.yearly.windowDays.label')}
+                  </span>
+                </label>
+                <div class="join">
+                  <input
+                    id="yearly-window-days"
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={trackingSettings?.yearlyTracking?.windowDays ?? 7}
+                    onchange={e => {
+                      const target = e.target as HTMLInputElement;
+                      const value = Math.max(1, Math.min(365, parseInt(target.value) || 7));
+                      settingsActions.updateSection('realtime', {
+                        ...$realtimeSettings,
+                        speciesTracking: {
+                          enabled: true,
+                          newSpeciesWindowDays: trackingSettings?.newSpeciesWindowDays ?? 7,
+                          syncIntervalMinutes: trackingSettings?.syncIntervalMinutes ?? 60,
+                          notificationSuppressionHours:
+                            trackingSettings?.notificationSuppressionHours ?? 24,
+                          yearlyTracking: {
+                            enabled: true,
+                            resetMonth: trackingSettings?.yearlyTracking?.resetMonth ?? 1,
+                            resetDay: trackingSettings?.yearlyTracking?.resetDay ?? 1,
+                            windowDays: value,
+                          },
+                          seasonalTracking: trackingSettings?.seasonalTracking ?? {
+                            enabled: false,
+                            windowDays: 7,
+                            seasons: {},
+                          },
+                        },
+                      });
+                    }}
+                    class="input input-bordered join-item w-full"
+                    disabled={store.isLoading || store.isSaving}
+                  />
+                  <span class="btn btn-disabled join-item"
+                    >{t('settings.species.tracking.units.days')}</span
+                  >
+                </div>
+                <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                  {t('settings.species.tracking.yearly.windowDays.helpText')}
+                </p>
+              </div>
+            </div>
+          {/if}
+        </div>
+      </SettingsSection>
+
+      <!-- Seasonal Tracking Settings -->
+      <SettingsSection
+        title={t('settings.species.tracking.seasonal.title')}
+        description={t('settings.species.tracking.seasonal.description')}
+        defaultOpen={false}
+      >
+        <div class="space-y-4">
+          <!-- Enable Seasonal Tracking -->
+          <Checkbox
+            checked={trackingSettings?.seasonalTracking?.enabled ?? false}
+            label={t('settings.species.tracking.seasonal.enabled.label')}
+            helpText={t('settings.species.tracking.seasonal.enabled.helpText')}
+            disabled={store.isLoading || store.isSaving}
+            onchange={value => {
+              const seasonalDefaults = {
+                enabled: false,
+                windowDays: 7,
+                seasons: {
+                  spring: { startMonth: 3, startDay: 20 },
+                  summer: { startMonth: 6, startDay: 21 },
+                  fall: { startMonth: 9, startDay: 22 },
+                  winter: { startMonth: 12, startDay: 21 },
+                },
+              };
+              settingsActions.updateSection('realtime', {
+                ...$realtimeSettings,
+                speciesTracking: {
+                  enabled: true,
+                  newSpeciesWindowDays: trackingSettings?.newSpeciesWindowDays ?? 7,
+                  syncIntervalMinutes: trackingSettings?.syncIntervalMinutes ?? 60,
+                  notificationSuppressionHours:
+                    trackingSettings?.notificationSuppressionHours ?? 24,
+                  yearlyTracking: trackingSettings?.yearlyTracking ?? {
+                    enabled: false,
+                    resetMonth: 1,
+                    resetDay: 1,
+                    windowDays: 7,
+                  },
+                  seasonalTracking: {
+                    ...seasonalDefaults,
+                    ...trackingSettings?.seasonalTracking,
+                    enabled: value,
+                  },
+                },
+              });
+            }}
+          />
+
+          {#if trackingSettings?.seasonalTracking?.enabled}
+            <!-- Window Days -->
+            <div class="form-control max-w-xs">
+              <label for="seasonal-window-days" class="label">
+                <span class="label-text font-semibold">
+                  {t('settings.species.tracking.seasonal.windowDays.label')}
+                </span>
+              </label>
+              <div class="join">
+                <input
+                  id="seasonal-window-days"
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={trackingSettings?.seasonalTracking?.windowDays ?? 7}
+                  onchange={e => {
+                    const target = e.target as HTMLInputElement;
+                    const value = Math.max(1, Math.min(365, parseInt(target.value) || 7));
+                    settingsActions.updateSection('realtime', {
+                      ...$realtimeSettings,
+                      speciesTracking: {
+                        enabled: true,
+                        newSpeciesWindowDays: trackingSettings?.newSpeciesWindowDays ?? 7,
+                        syncIntervalMinutes: trackingSettings?.syncIntervalMinutes ?? 60,
+                        notificationSuppressionHours:
+                          trackingSettings?.notificationSuppressionHours ?? 24,
+                        yearlyTracking: trackingSettings?.yearlyTracking ?? {
+                          enabled: false,
+                          resetMonth: 1,
+                          resetDay: 1,
+                          windowDays: 7,
+                        },
+                        seasonalTracking: {
+                          enabled: true,
+                          windowDays: value,
+                          seasons: trackingSettings?.seasonalTracking?.seasons ?? {},
+                        },
+                      },
+                    });
+                  }}
+                  class="input input-bordered join-item w-full"
+                  disabled={store.isLoading || store.isSaving}
+                />
+                <span class="btn btn-disabled join-item"
+                  >{t('settings.species.tracking.units.days')}</span
+                >
+              </div>
+              <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mt-1">
+                {t('settings.species.tracking.seasonal.windowDays.helpText')}
+              </p>
+            </div>
+
+            <!-- Season Definitions -->
+            <div class="mt-6">
+              <h4 class="font-medium text-sm mb-2">
+                {t('settings.species.tracking.seasonal.seasons.title')}
+              </h4>
+              <p class="text-xs text-(--color-base-content) opacity-60 mb-4">
+                {t('settings.species.tracking.seasonal.seasons.description')}
+              </p>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {#each ['spring', 'summer', 'fall', 'winter'] as season}
+                  <div class="card bg-base-100 border border-base-300 p-4">
+                    <h5 class="font-medium text-sm mb-3">
+                      {t(`settings.species.tracking.seasonal.seasons.${season}`)}
+                    </h5>
+                    <div class="grid grid-cols-2 gap-3">
+                      <SelectDropdown
+                        label={t('settings.species.tracking.seasonal.seasons.startMonth')}
+                        value={String(
+                          trackingSettings?.seasonalTracking?.seasons?.[season]?.startMonth ?? 1
+                        )}
+                        options={Array.from({ length: 12 }, (_, i) => ({
+                          value: String(i + 1),
+                          label: t(
+                            `settings.species.tracking.months.${['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'][i]}`
+                          ),
+                        })) as SelectOption[]}
+                        disabled={store.isLoading || store.isSaving}
+                        menuSize="sm"
+                        onChange={value => {
+                          const currentSeasons = trackingSettings?.seasonalTracking?.seasons ?? {};
+                          const defaultSeasonDay =
+                            { spring: 20, summer: 21, fall: 22, winter: 21 }[season] ?? 1;
+                          settingsActions.updateSection('realtime', {
+                            ...$realtimeSettings,
+                            speciesTracking: {
+                              enabled: true,
+                              newSpeciesWindowDays: trackingSettings?.newSpeciesWindowDays ?? 7,
+                              syncIntervalMinutes: trackingSettings?.syncIntervalMinutes ?? 60,
+                              notificationSuppressionHours:
+                                trackingSettings?.notificationSuppressionHours ?? 24,
+                              yearlyTracking: trackingSettings?.yearlyTracking ?? {
+                                enabled: false,
+                                resetMonth: 1,
+                                resetDay: 1,
+                                windowDays: 7,
+                              },
+                              seasonalTracking: {
+                                enabled: true,
+                                windowDays: trackingSettings?.seasonalTracking?.windowDays ?? 7,
+                                seasons: {
+                                  ...currentSeasons,
+                                  [season]: {
+                                    startMonth: Number(value),
+                                    startDay: currentSeasons[season]?.startDay ?? defaultSeasonDay,
+                                  },
+                                },
+                              },
+                            },
+                          });
+                        }}
+                      />
+                      <div class="form-control">
+                        <label for={`${season}-start-day`} class="label">
+                          <span class="label-text font-semibold">
+                            {t('settings.species.tracking.seasonal.seasons.startDay')}
+                          </span>
+                        </label>
+                        <input
+                          id={`${season}-start-day`}
+                          type="number"
+                          min="1"
+                          max="31"
+                          value={trackingSettings?.seasonalTracking?.seasons?.[season]?.startDay ??
+                            1}
+                          onchange={e => {
+                            const target = e.target as HTMLInputElement;
+                            const value = Math.max(1, Math.min(31, parseInt(target.value) || 1));
+                            const currentSeasons =
+                              trackingSettings?.seasonalTracking?.seasons ?? {};
+                            const defaultSeasonMonth =
+                              { spring: 3, summer: 6, fall: 9, winter: 12 }[season] ?? 1;
+                            settingsActions.updateSection('realtime', {
+                              ...$realtimeSettings,
+                              speciesTracking: {
+                                enabled: true,
+                                newSpeciesWindowDays: trackingSettings?.newSpeciesWindowDays ?? 7,
+                                syncIntervalMinutes: trackingSettings?.syncIntervalMinutes ?? 60,
+                                notificationSuppressionHours:
+                                  trackingSettings?.notificationSuppressionHours ?? 24,
+                                yearlyTracking: trackingSettings?.yearlyTracking ?? {
+                                  enabled: false,
+                                  resetMonth: 1,
+                                  resetDay: 1,
+                                  windowDays: 7,
+                                },
+                                seasonalTracking: {
+                                  enabled: true,
+                                  windowDays: trackingSettings?.seasonalTracking?.windowDays ?? 7,
+                                  seasons: {
+                                    ...currentSeasons,
+                                    [season]: {
+                                      startMonth:
+                                        currentSeasons[season]?.startMonth ?? defaultSeasonMonth,
+                                      startDay: value,
+                                    },
+                                  },
+                                },
+                              },
+                            });
+                          }}
+                          class="input input-bordered w-full"
+                          disabled={store.isLoading || store.isSaving}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+
+              <SettingsNote>
+                {t('settings.species.tracking.seasonal.seasons.hemisphereNote')}
+              </SettingsNote>
+            </div>
+          {/if}
+        </div>
+      </SettingsSection>
+    {/if}
+  </div>
 {/snippet}
 
 <main class="settings-page-content" aria-label="Species settings configuration">

@@ -1789,6 +1789,7 @@
     "species": {
       "activeSpecies": {
         "title": "Aktiiviset lajit",
+        "tabLabel": "Aktiivis.",
         "description": "Lajit, jotka tunnistetaan nykyisen sijainnin ja suodatusasetusten perusteella",
         "stats": {
           "species": "Lajit",
@@ -1827,16 +1828,19 @@
       },
       "alwaysInclude": {
         "title": "Sisällytä lajit aina",
+        "tabLabel": "Sisällytä",
         "description": "Tämän listan lajit sisällytetään aina havaittujen lajien alueelle",
         "noSpeciesMessage": "Sisällytyslistaan ei ole lisätty lajeja"
       },
       "alwaysExclude": {
         "title": "Jätä lajit aina pois",
+        "tabLabel": "Jätä pois",
         "description": "Tämän listan lajit jätetään aina pois tunnistuksesta",
         "noSpeciesMessage": "Poissulkulistaan ei ole lisätty lajeja"
       },
       "customConfiguration": {
         "title": "Mukautettu lajikokoonpano",
+        "tabLabel": "Mukautet.",
         "description": "Lajikohtaiset kynnysarvot, havaintovälit ja toiminnot",
         "helpText": {
           "intro": "Määritä lajikohtaisia asetuksia:",
@@ -1910,6 +1914,88 @@
       "parametersPlaceholder": "Parametrit ilmestyvät tähän",
       "errors": {
         "speciesLoadFailed": "Lajiluettelon lataus epäonnistui. Yritä uudelleen."
+      },
+      "tracking": {
+        "title": "Seuranta",
+        "tabLabel": "Seuranta",
+        "description": "Määritä uusien lajihavaintojen seuranta aikajaksojen perusteella",
+        "enabled": {
+          "label": "Ota lajiseuranta käyttöön",
+          "helpText": "Kun käytössä, järjestelmä seuraa uusia lajihavaintoja ja voi lähettää ilmoituksia"
+        },
+        "newSpeciesWindowDays": {
+          "label": "Uuden lajin ikkuna (päivää)",
+          "helpText": "Kuinka monta päivää lajia pidetään 'uutena' ensimmäisen havainnon jälkeen (1-365)"
+        },
+        "syncIntervalMinutes": {
+          "label": "Synkronointiväli (minuuttia)",
+          "helpText": "Kuinka usein seurantatiedot synkronoidaan tietokannan kanssa (1-1440)"
+        },
+        "notificationSuppressionHours": {
+          "label": "Ilmoitusten esto (tuntia)",
+          "helpText": "Tuntia, joiden ajan estetään saman lajin toistuvat ilmoitukset (0-8760)"
+        },
+        "yearly": {
+          "title": "Vuosiseuranta",
+          "description": "Seuraa lajien ensimmäisiä saapumisia joka vuosi",
+          "enabled": {
+            "label": "Ota vuosiseuranta käyttöön",
+            "helpText": "Seuraa ja ilmoita, kun laji havaitaan ensimmäisen kerran vuodessa"
+          },
+          "resetMonth": {
+            "label": "Nollauskuukausi",
+            "helpText": "Kuukausi, jolloin vuosiseuranta nollataan (1-12)"
+          },
+          "resetDay": {
+            "label": "Nollauspäivä",
+            "helpText": "Kuukauden päivä, jolloin vuosiseuranta nollataan"
+          },
+          "windowDays": {
+            "label": "Ikkuna (päivää)",
+            "helpText": "Päivät 'uusi tänä vuonna' -ilmaisimen näyttämiseksi (1-365)"
+          }
+        },
+        "seasonal": {
+          "title": "Kausiseuranta",
+          "description": "Seuraa lajien ensimmäisiä saapumisia joka kausi",
+          "enabled": {
+            "label": "Ota kausiseuranta käyttöön",
+            "helpText": "Seuraa ja ilmoita, kun laji havaitaan ensimmäisen kerran kaudessa"
+          },
+          "windowDays": {
+            "label": "Ikkuna (päivää)",
+            "helpText": "Päivät 'uusi tällä kaudella' -ilmaisimen näyttämiseksi (1-365)"
+          },
+          "seasons": {
+            "title": "Kausimääritykset",
+            "description": "Määritä, milloin kukin kausi alkaa",
+            "spring": "Kevät",
+            "summer": "Kesä",
+            "fall": "Syksy",
+            "winter": "Talvi",
+            "startMonth": "Alkukuukausi",
+            "startDay": "Alkupäivä"
+          }
+        },
+        "months": {
+          "january": "Tammikuu",
+          "february": "Helmikuu",
+          "march": "Maaliskuu",
+          "april": "Huhtikuu",
+          "may": "Toukokuu",
+          "june": "Kesäkuu",
+          "july": "Heinäkuu",
+          "august": "Elokuu",
+          "september": "Syyskuu",
+          "october": "Lokakuu",
+          "november": "Marraskuu",
+          "december": "Joulukuu"
+        },
+        "units": {
+          "days": "päivää",
+          "min": "min",
+          "hours": "t"
+        }
       }
     },
     "security": {

@@ -1789,6 +1789,7 @@
     "species": {
       "activeSpecies": {
         "title": "Espécies Ativas",
+        "tabLabel": "Ativas",
         "description": "Espécies que serão detectadas com base na sua localização atual e configurações de filtro",
         "stats": {
           "species": "Espécies",
@@ -1827,16 +1828,19 @@
       },
       "alwaysInclude": {
         "title": "Sempre incluir espécies",
+        "tabLabel": "Incluir",
         "description": "Espécies nesta lista serão sempre incluídas no alcance de espécies detectadas",
         "noSpeciesMessage": "Nenhuma espécie adicionada à lista de inclusão"
       },
       "alwaysExclude": {
         "title": "Sempre excluir espécies",
+        "tabLabel": "Excluir",
         "description": "Espécies nesta lista serão sempre excluídas da detecção",
         "noSpeciesMessage": "Nenhuma espécie adicionada à lista de exclusão"
       },
       "customConfiguration": {
         "title": "Configuração personalizada de espécies",
+        "tabLabel": "Personal.",
         "description": "Valores de limiar específicos de espécies, intervalos de detecção e ações",
         "helpText": {
           "intro": "Configure configurações específicas da espécie:",
@@ -1910,6 +1914,88 @@
       "parametersPlaceholder": "Os parâmetros aparecerão aqui",
       "errors": {
         "speciesLoadFailed": "Falha ao carregar lista de espécies. Por favor, tente novamente."
+      },
+      "tracking": {
+        "title": "Rastreamento",
+        "tabLabel": "Rastrear",
+        "description": "Configurar o rastreamento de novas detecções de espécies com base em períodos de tempo",
+        "enabled": {
+          "label": "Ativar rastreamento de espécies",
+          "helpText": "Quando ativado, o sistema rastreia novas detecções de espécies e pode enviar notificações"
+        },
+        "newSpeciesWindowDays": {
+          "label": "Janela de nova espécie (dias)",
+          "helpText": "Número de dias que uma espécie é considerada 'nova' após a primeira detecção (1-365)"
+        },
+        "syncIntervalMinutes": {
+          "label": "Intervalo de sincronização (minutos)",
+          "helpText": "Com que frequência sincronizar dados de rastreamento com o banco de dados (1-1440)"
+        },
+        "notificationSuppressionHours": {
+          "label": "Supressão de notificações (horas)",
+          "helpText": "Horas para suprimir notificações duplicadas para a mesma espécie (0-8760)"
+        },
+        "yearly": {
+          "title": "Rastreamento anual",
+          "description": "Rastrear as primeiras chegadas de espécies a cada ano",
+          "enabled": {
+            "label": "Ativar rastreamento anual",
+            "helpText": "Rastrear e notificar quando uma espécie é detectada pela primeira vez a cada ano"
+          },
+          "resetMonth": {
+            "label": "Mês de reinicialização",
+            "helpText": "Mês em que o rastreamento anual é reiniciado (1-12)"
+          },
+          "resetDay": {
+            "label": "Dia de reinicialização",
+            "helpText": "Dia do mês em que o rastreamento anual é reiniciado"
+          },
+          "windowDays": {
+            "label": "Janela (dias)",
+            "helpText": "Dias para mostrar o indicador 'novo este ano' (1-365)"
+          }
+        },
+        "seasonal": {
+          "title": "Rastreamento sazonal",
+          "description": "Rastrear as primeiras chegadas de espécies a cada estação",
+          "enabled": {
+            "label": "Ativar rastreamento sazonal",
+            "helpText": "Rastrear e notificar quando uma espécie é detectada pela primeira vez a cada estação"
+          },
+          "windowDays": {
+            "label": "Janela (dias)",
+            "helpText": "Dias para mostrar o indicador 'novo esta estação' (1-365)"
+          },
+          "seasons": {
+            "title": "Definições de estações",
+            "description": "Defina quando cada estação começa",
+            "spring": "Primavera",
+            "summer": "Verão",
+            "fall": "Outono",
+            "winter": "Inverno",
+            "startMonth": "Mês de início",
+            "startDay": "Dia de início"
+          }
+        },
+        "months": {
+          "january": "Janeiro",
+          "february": "Fevereiro",
+          "march": "Março",
+          "april": "Abril",
+          "may": "Maio",
+          "june": "Junho",
+          "july": "Julho",
+          "august": "Agosto",
+          "september": "Setembro",
+          "october": "Outubro",
+          "november": "Novembro",
+          "december": "Dezembro"
+        },
+        "units": {
+          "days": "dias",
+          "min": "min",
+          "hours": "hrs"
+        }
       }
     },
     "security": {

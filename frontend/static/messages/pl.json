@@ -1854,6 +1854,7 @@
     "species": {
       "activeSpecies": {
         "title": "Aktywne Gatunki",
+        "tabLabel": "Aktywne",
         "description": "Gatunki, które będą wykrywane na podstawie Twojej aktualnej lokalizacji i ustawień filtrów",
         "stats": {
           "species": "Gatunki",
@@ -1892,16 +1893,19 @@
       },
       "alwaysInclude": {
         "title": "Zawsze Uwzględniaj Gatunki",
+        "tabLabel": "Uwzględ.",
         "description": "Gatunki z tej listy będą zawsze uwzględniane w zakresie wykrytych gatunków",
         "noSpeciesMessage": "Nie dodano gatunków do listy uwzględnianych"
       },
       "alwaysExclude": {
         "title": "Zawsze Wykluczaj Gatunki",
+        "tabLabel": "Wyklucz",
         "description": "Gatunki z tej listy będą zawsze wykluczone z detekcji",
         "noSpeciesMessage": "Nie dodano gatunków do listy wykluczanych"
       },
       "customConfiguration": {
         "title": "Niestandardowa Konfiguracja Gatunków",
+        "tabLabel": "Niest.",
         "description": "Wartości progowe specyficzne dla gatunków, interwały detekcji i akcje",
         "helpText": {
           "intro": "Konfiguruj ustawienia specyficzne dla gatunków:",
@@ -1975,6 +1979,88 @@
       "parametersPlaceholder": "Parametry pojawią się tutaj",
       "errors": {
         "speciesLoadFailed": "Nie udało się załadować listy gatunków. Spróbuj ponownie."
+      },
+      "tracking": {
+        "title": "Śledzenie",
+        "tabLabel": "Śledź",
+        "description": "Konfiguruj śledzenie nowych wykryć gatunków na podstawie okresów czasowych",
+        "enabled": {
+          "label": "Włącz śledzenie gatunków",
+          "helpText": "Po włączeniu system śledzi nowe wykrycia gatunków i może wysyłać powiadomienia"
+        },
+        "newSpeciesWindowDays": {
+          "label": "Okno nowego gatunku (dni)",
+          "helpText": "Liczba dni, przez które gatunek jest uważany za 'nowy' po pierwszym wykryciu (1-365)"
+        },
+        "syncIntervalMinutes": {
+          "label": "Interwał synchronizacji (minuty)",
+          "helpText": "Jak często synchronizować dane śledzenia z bazą danych (1-1440)"
+        },
+        "notificationSuppressionHours": {
+          "label": "Wstrzymanie powiadomień (godziny)",
+          "helpText": "Godziny na wstrzymanie zduplikowanych powiadomień dla tego samego gatunku (0-8760)"
+        },
+        "yearly": {
+          "title": "Śledzenie roczne",
+          "description": "Śledź pierwsze pojawienia gatunków każdego roku",
+          "enabled": {
+            "label": "Włącz śledzenie roczne",
+            "helpText": "Śledź i powiadamiaj, gdy gatunek zostanie wykryty po raz pierwszy w roku"
+          },
+          "resetMonth": {
+            "label": "Miesiąc resetu",
+            "helpText": "Miesiąc, w którym resetowane jest śledzenie roczne (1-12)"
+          },
+          "resetDay": {
+            "label": "Dzień resetu",
+            "helpText": "Dzień miesiąca, w którym resetowane jest śledzenie roczne"
+          },
+          "windowDays": {
+            "label": "Okno (dni)",
+            "helpText": "Dni do wyświetlania wskaźnika 'nowy w tym roku' (1-365)"
+          }
+        },
+        "seasonal": {
+          "title": "Śledzenie sezonowe",
+          "description": "Śledź pierwsze pojawienia gatunków każdego sezonu",
+          "enabled": {
+            "label": "Włącz śledzenie sezonowe",
+            "helpText": "Śledź i powiadamiaj, gdy gatunek zostanie wykryty po raz pierwszy w sezonie"
+          },
+          "windowDays": {
+            "label": "Okno (dni)",
+            "helpText": "Dni do wyświetlania wskaźnika 'nowy w tym sezonie' (1-365)"
+          },
+          "seasons": {
+            "title": "Definicje sezonów",
+            "description": "Określ, kiedy zaczyna się każdy sezon",
+            "spring": "Wiosna",
+            "summer": "Lato",
+            "fall": "Jesień",
+            "winter": "Zima",
+            "startMonth": "Miesiąc rozpoczęcia",
+            "startDay": "Dzień rozpoczęcia"
+          }
+        },
+        "months": {
+          "january": "Styczeń",
+          "february": "Luty",
+          "march": "Marzec",
+          "april": "Kwiecień",
+          "may": "Maj",
+          "june": "Czerwiec",
+          "july": "Lipiec",
+          "august": "Sierpień",
+          "september": "Wrzesień",
+          "october": "Październik",
+          "november": "Listopad",
+          "december": "Grudzień"
+        },
+        "units": {
+          "days": "dni",
+          "min": "min",
+          "hours": "godz"
+        }
       }
     },
     "database": {

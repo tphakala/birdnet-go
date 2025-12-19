@@ -1982,6 +1982,7 @@
     "species": {
       "activeSpecies": {
         "title": "Active Species",
+        "tabLabel": "Active",
         "description": "Species that will be detected based on your current location and filter settings",
         "stats": {
           "species": "Species",
@@ -2020,16 +2021,19 @@
       },
       "alwaysInclude": {
         "title": "Always Include Species",
+        "tabLabel": "Include",
         "description": "Species in this list will always be included in range of detected species",
         "noSpeciesMessage": "No species added to include list"
       },
       "alwaysExclude": {
         "title": "Always Exclude Species",
+        "tabLabel": "Exclude",
         "description": "Species in this list will always be excluded from detection",
         "noSpeciesMessage": "No species added to exclude list"
       },
       "customConfiguration": {
         "title": "Custom Species Configuration",
+        "tabLabel": "Custom",
         "description": "Species specific threshold values, detection intervals, and actions",
         "helpText": {
           "intro": "Configure species-specific settings:",
@@ -2125,6 +2129,93 @@
       "parametersPlaceholder": "Parameters will appear here",
       "errors": {
         "speciesLoadFailed": "Failed to load species list. Please try again."
+      },
+      "tracking": {
+        "title": "Species Tracking",
+        "tabLabel": "Tracking",
+        "description": "Configure tracking for new species detections based on time periods",
+        "enabled": {
+          "label": "Enable Species Tracking",
+          "helpText": "When enabled, the system tracks new species detections and can send notifications"
+        },
+        "newSpeciesWindowDays": {
+          "label": "New Species Window (days)",
+          "helpText": "Number of days a species is considered 'new' after first detection (1-365)"
+        },
+        "syncIntervalMinutes": {
+          "label": "Sync Interval (minutes)",
+          "helpText": "How often to synchronize tracking data with the database (1-1440)"
+        },
+        "notificationSuppressionHours": {
+          "label": "Notification Suppression (hours)",
+          "helpText": "Hours to suppress duplicate notifications for the same species (0-8760)"
+        },
+        "yearly": {
+          "title": "Yearly Tracking",
+          "description": "Track first arrivals of species each year",
+          "enabled": {
+            "label": "Enable Yearly Tracking",
+            "helpText": "Track and notify when a species is detected for the first time each year"
+          },
+          "resetMonth": {
+            "label": "Reset Month",
+            "helpText": "Month when yearly tracking resets (1-12)"
+          },
+          "resetDay": {
+            "label": "Reset Day",
+            "helpText": "Day of month when yearly tracking resets"
+          },
+          "windowDays": {
+            "label": "Window (days)",
+            "helpText": "Days to show 'new this year' indicator (1-365)"
+          }
+        },
+        "seasonal": {
+          "title": "Seasonal Tracking",
+          "description": "Track first arrivals of species each season",
+          "enabled": {
+            "label": "Enable Seasonal Tracking",
+            "helpText": "Track and notify when a species is detected for the first time each season"
+          },
+          "windowDays": {
+            "label": "Window (days)",
+            "helpText": "Days to show 'new this season' indicator (1-365)"
+          },
+          "seasons": {
+            "title": "Season Definitions",
+            "description": "Define when each season starts. Seasons are automatically adjusted based on your location's hemisphere.",
+            "spring": "Spring",
+            "summer": "Summer",
+            "fall": "Fall",
+            "winter": "Winter",
+            "wet1": "Wet Season 1",
+            "dry1": "Dry Season 1",
+            "wet2": "Wet Season 2",
+            "dry2": "Dry Season 2",
+            "startMonth": "Start Month",
+            "startDay": "Start Day",
+            "hemisphereNote": "Season dates are automatically configured based on your latitude. Northern hemisphere uses standard seasons, southern hemisphere has shifted dates, and equatorial regions use wet/dry seasons."
+          }
+        },
+        "months": {
+          "january": "January",
+          "february": "February",
+          "march": "March",
+          "april": "April",
+          "may": "May",
+          "june": "June",
+          "july": "July",
+          "august": "August",
+          "september": "September",
+          "october": "October",
+          "november": "November",
+          "december": "December"
+        },
+        "units": {
+          "days": "days",
+          "min": "min",
+          "hours": "hrs"
+        }
       }
     },
     "database": {
