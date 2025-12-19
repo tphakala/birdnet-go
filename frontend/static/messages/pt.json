@@ -229,7 +229,9 @@
     "taxonomyCoverage": "2.374 gêneros, 254 famílias, 11.145 espécies",
     "visitEbird": "Visite eBird.org",
     "ebirdOrg": "eBird.org",
-    "learnEbirdTaxonomy": "Saiba mais sobre a taxonomia do eBird"
+    "learnEbirdTaxonomy": "Saiba mais sobre a taxonomia do eBird",
+    "avicommonsTitle": "Miniaturas de aves",
+    "avicommonsDescription": "BirdNET-Go utiliza imagens de aves selecionadas do Avicommons, uma biblioteca de fotos de aves escolhidas a dedo, recortadas e orientadas sob licenças Creative Commons."
   },
   "notifications": {
     "title": "Notificações",

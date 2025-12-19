@@ -18,16 +18,74 @@
 
 ## Structure
 
-```
+```text
 frontend/
 ├── src/lib/
 │   ├── components/{charts,data,forms,media,ui}/
 │   ├── features/{analytics,detections,settings}/
+│   ├── i18n/              # i18n configuration and utilities
 │   ├── pages/
 │   ├── stores/
 │   └── utils/
+├── static/messages/       # Translation files (JSON)
+│   ├── en.json           # English (primary)
+│   ├── de.json           # German
+│   ├── es.json           # Spanish
+│   ├── fi.json           # Finnish
+│   ├── fr.json           # French
+│   ├── nl.json           # Dutch
+│   ├── pl.json           # Polish
+│   └── pt.json           # Portuguese
 └── dist/
 ```
+
+## Internationalization (i18n)
+
+### Translation Files Location
+
+All translation files are in `frontend/static/messages/`:
+
+```bash
+frontend/static/messages/
+├── en.json  # English (primary - update this first)
+├── de.json  # German
+├── es.json  # Spanish
+├── fi.json  # Finnish
+├── fr.json  # French
+├── nl.json  # Dutch
+├── pl.json  # Polish
+└── pt.json  # Portuguese
+```
+
+### Adding New Translation Keys
+
+**CRITICAL: When adding new translation keys, you MUST update ALL language files.**
+
+1. Add the key to `en.json` first (English is the source of truth)
+2. Add translations to ALL other language files (de, es, fi, fr, nl, pl, pt)
+3. Use the same key structure across all files
+
+```bash
+# Quick check for missing keys
+grep -l "newKeyName" frontend/static/messages/*.json
+```
+
+### Usage in Components
+
+```svelte
+<script lang="ts">
+  import { t } from '$lib/i18n';
+</script>
+
+<p>{t('about.avicommonsTitle')}</p>
+<p>{t('about.avicommonsDescription')}</p>
+```
+
+### Key Naming Convention
+
+- Use dot notation for nested keys: `section.subsection.key`
+- Use camelCase for key names: `avicommonsDescription`
+- Group related keys under common prefixes: `about.`, `settings.`, `notifications.`
 
 ## Commands
 

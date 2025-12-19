@@ -229,7 +229,9 @@
     "taxonomyCoverage": "2.374 geslachten, 254 families, 11.145 soorten",
     "visitEbird": "Bezoek eBird.org",
     "ebirdOrg": "eBird.org",
-    "learnEbirdTaxonomy": "Meer informatie over eBird Taxonomie"
+    "learnEbirdTaxonomy": "Meer informatie over eBird Taxonomie",
+    "avicommonsTitle": "Vogelafbeeldingen",
+    "avicommonsDescription": "BirdNET-Go gebruikt gecureerde vogelafbeeldingen van Avicommons, een bibliotheek van zorgvuldig geselecteerde, bijgesneden en georiënteerde vogelfoto's onder Creative Commons-licenties."
   },
   "notifications": {
     "title": "Meldingen",

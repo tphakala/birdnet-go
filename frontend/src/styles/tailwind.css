@@ -293,12 +293,38 @@
 
   .btn-outline {
     background-color: transparent;
-    border-color: currentcolor;
+    border-color: var(--border-200);
+    color: var(--color-base-content);
   }
 
   .btn-outline:hover:not(:disabled) {
-    background-color: var(--color-base-content);
-    color: var(--color-base-100);
+    background-color: var(--hover-overlay);
+    border-color: var(--color-base-content);
+  }
+
+  /* Outline variants with semantic colors */
+  .btn-outline-primary {
+    background-color: transparent;
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+
+  .btn-outline-primary:hover:not(:disabled) {
+    background-color: var(--color-primary);
+    color: var(--color-primary-content);
+    border-color: var(--color-primary);
+  }
+
+  .btn-outline-secondary {
+    background-color: transparent;
+    border-color: var(--color-secondary);
+    color: var(--color-secondary);
+  }
+
+  .btn-outline-secondary:hover:not(:disabled) {
+    background-color: var(--color-secondary);
+    color: var(--color-secondary-content);
+    border-color: var(--color-secondary);
   }
 
   .btn-link {

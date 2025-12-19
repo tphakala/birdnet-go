@@ -229,7 +229,9 @@
     "taxonomyCoverage": "2 374 genres, 254 familles, 11 145 espèces",
     "visitEbird": "Visiter eBird.org",
     "ebirdOrg": "eBird.org",
-    "learnEbirdTaxonomy": "En savoir plus sur la taxonomie eBird"
+    "learnEbirdTaxonomy": "En savoir plus sur la taxonomie eBird",
+    "avicommonsTitle": "Vignettes d'oiseaux",
+    "avicommonsDescription": "BirdNET-Go utilise des images d'oiseaux sélectionnées provenant d'Avicommons, une bibliothèque de photos d'oiseaux triées sur le volet, recadrées et orientées sous licences Creative Commons."
   },
   "notifications": {
     "title": "Notifications",

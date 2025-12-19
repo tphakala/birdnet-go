@@ -229,7 +229,9 @@
     "taxonomyCoverage": "2.374 Gattungen, 254 Familien, 11.145 Arten",
     "visitEbird": "eBird.org besuchen",
     "ebirdOrg": "eBird.org",
-    "learnEbirdTaxonomy": "Mehr über eBird-Taxonomie erfahren"
+    "learnEbirdTaxonomy": "Mehr über eBird-Taxonomie erfahren",
+    "avicommonsTitle": "Vogelbilder",
+    "avicommonsDescription": "BirdNET-Go verwendet kuratierte Vogelbilder von Avicommons, einer Bibliothek handverlesener, zugeschnittener und ausgerichteter Vogelfotos unter Creative-Commons-Lizenzen."
   },
   "notifications": {
     "title": "Benachrichtigungen",

@@ -44,16 +44,15 @@
 
 <div class="col-span-12 space-y-4">
   <!-- Header with Logo -->
-  <div class="card bg-base-100 shadow-xs">
-    <div class="card-body items-center text-center">
+  <div class="card bg-base-100 shadow-sm">
+    <div class="card-body flex flex-col items-center text-center">
       <div
-        class="w-36 h-36 rounded-full bg-linear-to-b from-base-200 to-base-100 flex items-center justify-center p-1 ring-1 ring-base-content/10"
+        class="w-36 h-36 rounded-full bg-gradient-to-b from-[var(--surface-200)] to-[var(--color-base-100)] flex items-center justify-center p-1 border border-[var(--border-100)]"
       >
         <img
           src="/assets/images/BirdNET-Go-logo.webp"
           alt={t('about.logoAlt')}
           class="w-full h-full object-contain rounded-full"
-          style:transform="scale(1)"
         />
       </div>
       <div class="mt-4">
@@ -66,7 +65,7 @@
   </div>
 
   <!-- About BirdNET-Go Section -->
-  <Card title={t('about.overview')} className="bg-base-100 shadow-xs">
+  <Card title={t('about.overview')} className="bg-base-100 shadow-sm">
     <p>
       {t('about.overviewText')}
     </p>
@@ -86,7 +85,7 @@
     <div class="mt-4 flex justify-center">
       <a
         href="https://github.com/tphakala/birdnet-go"
-        class="btn btn-primary btn-outline gap-2"
+        class="btn btn-outline-primary gap-2"
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Visit BirdNET-Go GitHub repository"
@@ -98,7 +97,7 @@
   </Card>
 
   <!-- BirdNET Project Section -->
-  <Card title={t('about.birdnetProject')} className="bg-base-100 shadow-xs">
+  <Card title={t('about.birdnetProject')} className="bg-base-100 shadow-sm">
     <p>
       {t('about.birdnetDescription')}
     </p>
@@ -129,7 +128,7 @@
     <div class="mt-6 flex justify-center">
       <a
         href="https://github.com/birdnet-team/BirdNET-Analyzer"
-        class="btn btn-primary btn-outline gap-2"
+        class="btn btn-outline-primary gap-2"
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Visit BirdNET-Analyzer GitHub repository"
@@ -141,7 +140,7 @@
   </Card>
 
   <!-- Contributors Section -->
-  <Card title={t('about.contributors')} className="bg-base-100 shadow-xs">
+  <Card title={t('about.contributors')} className="bg-base-100 shadow-sm">
     <p>
       {t('about.contributorsText')}
     </p>
@@ -243,7 +242,7 @@
   </Card>
 
   <!-- Additional Credits Section -->
-  <Card title={t('about.additionalCredits')} className="bg-base-100 shadow-xs">
+  <Card title={t('about.additionalCredits')} className="bg-base-100 shadow-sm">
     <p class="text-xl font-medium">{t('about.birdnetPiProject')}</p>
     <p class="mt-2">
       {t('about.birdnetPiDescription')}
@@ -251,7 +250,7 @@
     <div class="flex gap-2 mt-4">
       <a
         href="https://github.com/mcguirepr89/BirdNET-Pi"
-        class="btn btn-sm btn-outline gap-2"
+        class="btn btn-sm btn-outline-primary gap-2"
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Visit BirdNET-Pi GitHub repository"
@@ -266,7 +265,7 @@
     <div class="flex gap-2 mt-4">
       <a
         href="https://github.com/patlevin"
-        class="btn btn-sm btn-outline gap-2"
+        class="btn btn-sm btn-outline-primary gap-2"
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Visit Patrick Levin's GitHub profile"
@@ -296,7 +295,7 @@
     <div class="flex gap-2 mt-4">
       <a
         href="https://ebird.org"
-        class="btn btn-sm btn-outline gap-2"
+        class="btn btn-sm btn-outline-primary gap-2"
         target="_blank"
         rel="noopener noreferrer"
         aria-label={t('about.visitEbird')}
@@ -306,7 +305,7 @@
       </a>
       <a
         href="https://ebird.org/science/use-ebird-data/the-ebird-taxonomy"
-        class="btn btn-sm btn-outline gap-2"
+        class="btn btn-sm btn-outline-primary gap-2"
         target="_blank"
         rel="noopener noreferrer"
         aria-label={t('about.learnEbirdTaxonomy')}
@@ -315,10 +314,41 @@
         {t('common.buttons.learnMore')}
       </a>
     </div>
+
+    <p class="text-xl font-medium mt-6">{t('about.avicommonsTitle')}</p>
+    <p class="mt-2">
+      {t('about.avicommonsDescription')}
+    </p>
+    <p class="mt-2 flex items-center gap-2">
+      <User class="size-5" />
+      Adam Jackson
+    </p>
+    <div class="flex gap-2 mt-4">
+      <a
+        href="https://avicommons.org"
+        class="btn btn-sm btn-outline-primary gap-2"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Visit Avicommons website"
+      >
+        <Globe class="size-5" />
+        avicommons.org
+      </a>
+      <a
+        href="https://github.com/rawcomposition/avicommons"
+        class="btn btn-sm btn-outline-primary gap-2"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Visit Avicommons GitHub repository"
+      >
+        <Github class="size-5" />
+        GitHub
+      </a>
+    </div>
   </Card>
 
   <!-- Version Information -->
-  <div class="card bg-base-100 shadow-xs">
+  <div class="card bg-base-100 shadow-sm">
     <div class="card-body">
       <h2 class="card-title">{t('about.versionInformation')}</h2>
       <div class="space-y-4">
@@ -337,7 +367,7 @@
   </div>
 
   <!-- License Information -->
-  <div class="card bg-base-100 shadow-xs">
+  <div class="card bg-base-100 shadow-sm">
     <div class="card-body">
       <h2 class="card-title">{t('about.licenseInformation')}</h2>
       <div class="space-y-4">

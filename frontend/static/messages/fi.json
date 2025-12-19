@@ -229,7 +229,9 @@
     "taxonomyCoverage": "2 374 sukua, 254 perhettä, 11 145 lajia",
     "visitEbird": "Vieraile eBird.org-sivustolla",
     "ebirdOrg": "eBird.org",
-    "learnEbirdTaxonomy": "Lue lisää eBird-taksonomiasta"
+    "learnEbirdTaxonomy": "Lue lisää eBird-taksonomiasta",
+    "avicommonsTitle": "Lintukuvat",
+    "avicommonsDescription": "BirdNET-Go käyttää Avicommons-palvelun kuratoituja lintukuvia. Avicommons on kirjasto käsin valittuja, rajattuja ja suunnattuja lintuvalokuvia Creative Commons -lisenssillä."
   },
   "notifications": {
     "title": "Ilmoitukset",

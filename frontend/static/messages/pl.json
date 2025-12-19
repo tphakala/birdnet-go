@@ -229,7 +229,9 @@
     "taxonomyCoverage": "2374 rodzaje, 254 rodziny, 11145 gatunków",
     "visitEbird": "Odwiedź eBird.org",
     "ebirdOrg": "eBird.org",
-    "learnEbirdTaxonomy": "Dowiedz się o Taksonomii eBird"
+    "learnEbirdTaxonomy": "Dowiedz się o Taksonomii eBird",
+    "avicommonsTitle": "Miniaturki ptaków",
+    "avicommonsDescription": "BirdNET-Go wykorzystuje wyselekcjonowane zdjęcia ptaków z Avicommons, biblioteki starannie dobranych, przyciętych i zorientowanych fotografii ptaków na licencjach Creative Commons."
   },
   "notifications": {
     "title": "Powiadomienia",

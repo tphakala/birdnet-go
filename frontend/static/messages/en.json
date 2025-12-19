@@ -229,7 +229,9 @@
     "taxonomyCoverage": "2,374 genera, 254 families, 11,145 species",
     "visitEbird": "Visit eBird.org",
     "ebirdOrg": "eBird.org",
-    "learnEbirdTaxonomy": "Learn about eBird Taxonomy"
+    "learnEbirdTaxonomy": "Learn about eBird Taxonomy",
+    "avicommonsTitle": "Bird Thumbnails",
+    "avicommonsDescription": "BirdNET-Go uses curated bird images from Avicommons, a library of hand-picked, cropped, and oriented bird photos licensed under Creative Commons licenses."
   },
   "notifications": {
     "title": "Notifications",
