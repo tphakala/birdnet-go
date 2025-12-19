@@ -73,6 +73,8 @@ func BenchmarkInlinedCheck(b *testing.B) {
 }
 
 // BenchmarkMemoryPressure tests behavior under memory pressure
+//
+//nolint:gocognit // benchmark requires multiple test scenarios for comprehensive coverage
 func BenchmarkMemoryPressure(b *testing.B) {
 	telemetryEnabled.Store(false)
 	

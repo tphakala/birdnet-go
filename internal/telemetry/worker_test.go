@@ -74,6 +74,7 @@ func (m *mockErrorEvent) MarkReported() {
 	m.reported = true
 }
 
+//nolint:gocognit // test requires multiple scenarios for comprehensive coverage
 func TestTelemetryWorker_ProcessEvent(t *testing.T) {
 	t.Parallel()
 
@@ -235,6 +236,7 @@ func TestTelemetryWorker_RateLimiting(t *testing.T) {
 	}
 }
 
+//nolint:gocognit // test requires multiple scenarios for comprehensive coverage
 func TestTelemetryWorker_CircuitBreaker(t *testing.T) {
 	t.Parallel()
 
@@ -399,5 +401,70 @@ func TestTelemetryWorker_BatchProcessing(t *testing.T) {
 	stats := worker.GetStats()
 	if stats.EventsProcessed != 5 {
 		t.Errorf("Expected 5 events processed in batch, got %d", stats.EventsProcessed)
+	}
+}
+
+func TestTelemetryWorker_ReportToSentry_WithContext(t *testing.T) {
+	t.Parallel()
+
+	// Initialize logging
+	logging.Init()
+
+	// Create worker
+	worker, err := NewTelemetryWorker(true, nil)
+	if err != nil {
+		t.Fatalf("Failed to create worker: %v", err)
+	}
+
+	// Replace with mock reporter to avoid actual Sentry calls
+	worker.sentryReporter = &mockSentryReporter{enabled: true}
+
+	// Create event with context - this should not panic even if ee.Context is nil
+	event := &mockErrorEvent{
+		component: "test",
+		category:  string(errors.CategorySystem),
+		message:   "Test error with context",
+		context: map[string]any{
+			"key1": "value1",
+			"key2": 42,
+		},
+		timestamp: time.Now(),
+	}
+
+	// This should not panic - the bug is that maps.Copy panics on nil destination
+	err = worker.reportToSentry(event)
+	if err != nil {
+		t.Errorf("reportToSentry failed: %v", err)
+	}
+}
+
+func TestTelemetryWorker_ReportToSentry_NilContextSafe(t *testing.T) {
+	t.Parallel()
+
+	// Initialize logging
+	logging.Init()
+
+	// Create worker
+	worker, err := NewTelemetryWorker(true, nil)
+	if err != nil {
+		t.Fatalf("Failed to create worker: %v", err)
+	}
+
+	// Replace with mock reporter
+	worker.sentryReporter = &mockSentryReporter{enabled: true}
+
+	// Create event without context (nil)
+	event := &mockErrorEvent{
+		component: "test",
+		category:  string(errors.CategorySystem),
+		message:   "Test error without context",
+		context:   nil, // Explicitly nil
+		timestamp: time.Now(),
+	}
+
+	// This should not panic
+	err = worker.reportToSentry(event)
+	if err != nil {
+		t.Errorf("reportToSentry failed with nil context: %v", err)
 	}
 }

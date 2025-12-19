@@ -3,8 +3,21 @@ package telemetry
 import (
 	"encoding/json"
 	"fmt"
+	"math/bits"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
+)
+
+// Health check constants
+const (
+	// minEventsForFailureCheck is the minimum events before checking failure rate
+	minEventsForFailureCheck = 100
+	// maxFailureRateThreshold is the maximum acceptable failure rate (10%)
+	maxFailureRateThreshold = 0.1
+	// failureRatePercentMultiplier converts rate to percentage
+	failureRatePercentMultiplier = 100
 )
 
 // HealthCheckHandler provides HTTP health check endpoint for telemetry
@@ -56,10 +69,11 @@ func (h *HealthCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Convert to JSON-friendly format
+	components := make(map[string]any)
 	response := map[string]any{
-		"status":    getOverallStatus(status),
-		"timestamp": status.Timestamp.Format(time.RFC3339),
-		"components": map[string]any{},
+		"status":     getOverallStatus(status),
+		"timestamp":  status.Timestamp.Format(time.RFC3339),
+		"components": components,
 	}
 
 	// Add component details
@@ -71,7 +85,7 @@ func (h *HealthCheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if health.Error != "" {
 			componentInfo["error"] = health.Error
 		}
-		response["components"].(map[string]any)[name] = componentInfo
+		components[name] = componentInfo
 	}
 
 	// Add worker statistics if available
@@ -104,7 +118,7 @@ func getOverallStatus(status HealthStatus) string {
 	
 	// Check if any critical components failed
 	for name, health := range status.Components {
-		if name == "error_integration" && health.State == InitStateFailed {
+		if name == ComponentErrorIntegration && health.State == InitStateFailed {
 			return "critical"
 		}
 		if health.State == InitStateFailed {
@@ -150,13 +164,15 @@ func formatUnhealthyComponents(status HealthStatus) string {
 	var unhealthy []string
 	for name, health := range status.Components {
 		if !health.Healthy && health.State != InitStateNotStarted {
-			unhealthy = append(unhealthy, fmt.Sprintf("%s:%s", name, health.State))
+			unhealthy = append(unhealthy, fmt.Sprintf("[%s:%s]", name, health.State))
 		}
 	}
 	if len(unhealthy) == 0 {
 		return "none"
 	}
-	return fmt.Sprintf("%v", unhealthy)
+	// Sort for deterministic output (map iteration order is random)
+	sort.Strings(unhealthy)
+	return strings.Join(unhealthy, " ")
 }
 
 // WorkerHealthCheck checks the health of the telemetry worker specifically
@@ -167,18 +183,23 @@ func WorkerHealthCheck() error {
 	}
 
 	stats := worker.GetStats()
-	
+
 	// Check circuit breaker state
-	if stats.CircuitState == "open" {
+	if stats.CircuitState == circuitStateOpen {
 		return fmt.Errorf("circuit breaker open, telemetry reporting suspended")
 	}
 
-	// Check failure rate
-	total := stats.EventsProcessed + stats.EventsFailed
-	if total > 100 { // Only check after sufficient events
+	// Check failure rate only after sufficient events
+	// Use checked addition to detect overflow (unlikely but possible with uint64)
+	total, carry := bits.Add64(stats.EventsProcessed, stats.EventsFailed, 0)
+	if carry != 0 {
+		// Overflow occurred - treat as unhealthy since we can't calculate rate
+		return fmt.Errorf("event counter overflow detected")
+	}
+	if total > minEventsForFailureCheck {
 		failureRate := float64(stats.EventsFailed) / float64(total)
-		if failureRate > 0.1 { // 10% failure rate threshold
-			return fmt.Errorf("high failure rate: %.2f%%", failureRate*100)
+		if failureRate > maxFailureRateThreshold {
+			return fmt.Errorf("high failure rate: %.2f%%", failureRate*failureRatePercentMultiplier)
 		}
 	}
 

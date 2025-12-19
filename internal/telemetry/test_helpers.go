@@ -11,6 +11,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/events"
 )
 
+// testFlushTimeout is the timeout for flushing events during test cleanup
+const testFlushTimeout = 2 * time.Second
+
 // TestConfig holds configuration for telemetry testing
 type TestConfig struct {
 	MockTransport *MockTransport
@@ -113,7 +116,7 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 		events.ResetForTesting()
 
 		// Flush any pending events
-		sentry.Flush(2 * time.Second)
+		sentry.Flush(testFlushTimeout)
 
 		// Reset initialization state
 		sentryInitialized = false

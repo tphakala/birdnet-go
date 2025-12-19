@@ -16,6 +16,8 @@ type ErrorEvent struct {
 }
 
 // BenchmarkChannelOperations tests performance of channel-based event bus
+//
+//nolint:gocognit // benchmark requires multiple test scenarios for comprehensive coverage
 func BenchmarkChannelOperations(b *testing.B) {
 	b.Run("UnbufferedChannel", func(b *testing.B) {
 		ch := make(chan ErrorEvent)

@@ -295,6 +295,11 @@ func TestParseErrorTypeWithCaseInsensitivity(t *testing.T) {
 			errMsg:   "Concurrent Map Writes",
 			expected: "Concurrent Map Write",
 		},
+		{
+			name:     "concurrent map without read or write keyword",
+			errMsg:   "concurrent map access detected",
+			expected: "Concurrent Map Access",
+		},
 	}
 
 	for _, tt := range tests {
