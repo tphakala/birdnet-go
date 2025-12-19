@@ -207,7 +207,7 @@ func BenchmarkAnonymizePath(b *testing.B) {
 
 	for b.Loop() {
 		for _, path := range paths {
-			_ = anonymizePath(path)
+			_ = anonymizeURLPath(path)
 		}
 	}
 }

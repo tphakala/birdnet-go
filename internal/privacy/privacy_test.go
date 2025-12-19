@@ -3,6 +3,9 @@ package privacy
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // runBooleanTests runs table-driven tests for functions that take string input and return boolean
@@ -1161,20 +1164,26 @@ func TestBearerTokenScrubbing(t *testing.T) {
 	}
 }
 
-func TestRedactUserAgent(t *testing.T) {
+func TestRedactUserAgent_EmptyInput(t *testing.T) {
+	t.Parallel()
+	assert.Empty(t, RedactUserAgent(""), "Empty input should return empty string")
+}
+
+func TestRedactUserAgent_UnknownUserAgent(t *testing.T) {
+	t.Parallel()
+	result := RedactUserAgent("SomeRandomUserAgent/1.0")
+	assert.True(t, strings.HasPrefix(result, "ua-"),
+		"Unknown user agent should return hash prefixed with 'ua-', got %q", result)
+}
+
+func TestRedactUserAgent_BrowserDetection(t *testing.T) {
 	t.Parallel()
 
-	testCases := []struct {
+	tests := []struct {
 		name     string
 		input    string
-		expected string
-		contains []string // Elements that should be in the output
+		contains []string
 	}{
-		{
-			name:     "Empty user agent",
-			input:    "",
-			expected: "",
-		},
 		{
 			name:     "Chrome on Windows",
 			input:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
@@ -1201,16 +1210,6 @@ func TestRedactUserAgent(t *testing.T) {
 			contains: []string{"Chrome", "Android"},
 		},
 		{
-			name:     "Bot user agent",
-			input:    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-			contains: []string{"Bot"},
-		},
-		{
-			name:     "Unknown user agent",
-			input:    "SomeRandomUserAgent/1.0",
-			expected: "ua-", // Should start with ua- followed by hash
-		},
-		{
 			name:     "Opera browser",
 			input:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 OPR/77.0.4054.203",
 			contains: []string{"Opera", "Windows"},
@@ -1220,53 +1219,60 @@ func TestRedactUserAgent(t *testing.T) {
 			input:    "Mozilla/5.0 (X11; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0",
 			contains: []string{"Firefox", "Linux"},
 		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := RedactUserAgent(tt.input)
+
+			for _, expected := range tt.contains {
+				assert.Contains(t, result, expected,
+					"Result should contain %q for browser/OS detection", expected)
+			}
+		})
+	}
+}
+
+func TestRedactUserAgent_BotDetection(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+	}{
 		{
-			name:     "Crawler",
-			input:    "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
-			contains: []string{"Bot"},
+			name:  "Googlebot",
+			input: "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+		},
+		{
+			name:  "Bingbot",
+			input: "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
 		},
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := RedactUserAgent(tc.input)
-
-			// Check exact match if expected is specified
-			if tc.expected != "" {
-				if tc.expected == "ua-" {
-					// For unknown user agents, just check the prefix
-					if !strings.HasPrefix(result, tc.expected) {
-						t.Errorf("Expected result to start with %q, got %q", tc.expected, result)
-					}
-				} else if result != tc.expected {
-					t.Errorf("Expected %q, got %q", tc.expected, result)
-				}
-			}
-
-			// Check that expected components are present
-			for _, component := range tc.contains {
-				if !strings.Contains(result, component) {
-					t.Errorf("Expected result to contain %q, got %q", component, result)
-				}
-			}
-
-			// Ensure no version numbers are present
-			if tc.input != "" && tc.expected != "" {
-				// Check that common version patterns are removed
-				versionPatterns := []string{
-					"10.0", "91.0", "14.6", "11", "89.0", "77.0",
-					"Windows NT", "Mac OS X", "Android",
-					"AppleWebKit", "Gecko", "KHTML",
-				}
-				for _, pattern := range versionPatterns {
-					if strings.Contains(tc.input, pattern) && strings.Contains(result, pattern) {
-						t.Errorf("Result should not contain version info %q, got %q", pattern, result)
-					}
-				}
-			}
+			result := RedactUserAgent(tt.input)
+			assert.Contains(t, result, "Bot", "Bot user agents should be identified as Bot")
 		})
+	}
+}
+
+func TestRedactUserAgent_RemovesVersionInfo(t *testing.T) {
+	t.Parallel()
+
+	// Test that version information is stripped from the output
+	input := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/91.0.4472.124"
+	result := RedactUserAgent(input)
+
+	versionPatterns := []string{"10.0", "91.0", "537.36", "4472.124"}
+	for _, pattern := range versionPatterns {
+		assert.NotContains(t, result, pattern,
+			"Result should not contain version info %q", pattern)
 	}
 }
 
@@ -1321,4 +1327,468 @@ func TestSanitizeFFmpegError(t *testing.T) {
 	}
 
 	runScrubTests(t, SanitizeFFmpegError, tests)
+}
+
+func TestAnonymizePath_EmptyInput(t *testing.T) {
+	t.Parallel()
+	assert.Empty(t, AnonymizePath(""), "Empty input should return empty string")
+}
+
+func TestAnonymizePath_RootPath(t *testing.T) {
+	t.Parallel()
+	result := AnonymizePath("/")
+	assert.Equal(t, "empty-path", result, "Root path should return 'empty-path'")
+}
+
+func TestAnonymizePath_Consistency(t *testing.T) {
+	t.Parallel()
+
+	paths := []string{
+		"/home/user/file.txt",
+		"documents/file.txt",
+		"C:\\Users\\file.txt",
+	}
+
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			result1 := AnonymizePath(path)
+			result2 := AnonymizePath(path)
+			assert.Equal(t, result1, result2, "AnonymizePath should produce consistent results")
+		})
+	}
+}
+
+func TestAnonymizePath_PathTypes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		input        string
+		expectPrefix string
+		expectContains []string
+	}{
+		{
+			name:         "Unix absolute path",
+			input:        "/home/user/documents/file.txt",
+			expectPrefix: "/",
+			expectContains: []string{"path-", ".txt"},
+		},
+		{
+			name:         "Unix relative path",
+			input:        "documents/file.txt",
+			expectContains: []string{"path-", ".txt"},
+		},
+		{
+			name:         "Windows absolute path",
+			input:        "C:\\Users\\John\\Documents\\file.txt",
+			expectContains: []string{"path-", ".txt", "\\"},
+		},
+		{
+			name:         "Path with multiple extensions",
+			input:        "/var/log/app.log.gz",
+			expectPrefix: "/",
+			expectContains: []string{"path-", ".gz"},
+		},
+		{
+			name:         "Path without extension",
+			input:        "/usr/bin/executable",
+			expectPrefix: "/",
+			expectContains: []string{"path-"},
+		},
+		{
+			name:         "Single segment path",
+			input:        "filename.txt",
+			expectContains: []string{"path-", ".txt"},
+		},
+		{
+			name:         "Deep nested path",
+			input:        "/alpha/beta/gamma/delta/file.go",
+			expectPrefix: "/",
+			expectContains: []string{"path-", ".go"},
+		},
+		{
+			name:         "Path with spaces in name",
+			input:        "/home/user/my documents/my file.pdf",
+			expectPrefix: "/",
+			expectContains: []string{"path-", ".pdf"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := AnonymizePath(tt.input)
+			require.NotEmpty(t, result, "Result should not be empty")
+
+			if tt.expectPrefix != "" {
+				assert.True(t, strings.HasPrefix(result, tt.expectPrefix),
+					"Expected result to start with %q, got %q", tt.expectPrefix, result)
+			}
+
+			for _, expected := range tt.expectContains {
+				assert.Contains(t, result, expected,
+					"Expected result to contain %q", expected)
+			}
+		})
+	}
+}
+
+func TestAnonymizePath_AnonymizesSegments(t *testing.T) {
+	t.Parallel()
+
+	input := "/home/username/documents/secret_file.txt"
+	result := AnonymizePath(input)
+
+	// Original segment names should not appear in output
+	assert.NotContains(t, result, "home")
+	assert.NotContains(t, result, "username")
+	assert.NotContains(t, result, "documents")
+	assert.NotContains(t, result, "secret_file")
+	// Extension should be preserved
+	assert.Contains(t, result, ".txt")
+}
+
+func TestAnonymizePath_PreservesFileExtensions(t *testing.T) {
+	t.Parallel()
+
+	extensions := []string{".txt", ".go", ".py", ".jpg", ".mp3", ".wav", ".json", ".yaml"}
+
+	for _, ext := range extensions {
+		t.Run("extension"+ext, func(t *testing.T) {
+			t.Parallel()
+
+			input := "/some/path/file" + ext
+			result := AnonymizePath(input)
+
+			assert.Contains(t, result, ext,
+				"Extension %q should be preserved in result %q", ext, result)
+		})
+	}
+}
+
+func TestAnonymizePath_PreservesPathSeparators(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Unix separator", func(t *testing.T) {
+		t.Parallel()
+
+		input := "/home/user/file.txt"
+		result := AnonymizePath(input)
+
+		assert.Contains(t, result, "/", "Unix separator should be preserved")
+		assert.NotContains(t, result, "\\", "Windows separator should not appear in Unix path")
+	})
+
+	t.Run("Windows separator", func(t *testing.T) {
+		t.Parallel()
+
+		input := "C:\\Users\\file.txt"
+		result := AnonymizePath(input)
+
+		assert.Contains(t, result, "\\", "Windows separator should be preserved")
+	})
+}
+
+// Tests for helper functions
+
+func TestIsAbsolutePath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{
+			name:     "Unix absolute path",
+			input:    "/home/user/file.txt",
+			expected: true,
+		},
+		{
+			name:     "Unix root",
+			input:    "/",
+			expected: true,
+		},
+		{
+			name:     "Windows absolute path with drive letter",
+			input:    "C:\\Users\\file.txt",
+			expected: true,
+		},
+		{
+			name:     "Windows drive letter lowercase",
+			input:    "d:\\data",
+			expected: true,
+		},
+		{
+			name:     "Relative path",
+			input:    "documents/file.txt",
+			expected: false,
+		},
+		{
+			name:     "Single filename",
+			input:    "file.txt",
+			expected: false,
+		},
+		{
+			name:     "Empty path",
+			input:    "",
+			expected: false,
+		},
+		{
+			name:     "Dot relative path",
+			input:    "./file.txt",
+			expected: false,
+		},
+		{
+			name:     "Parent relative path",
+			input:    "../file.txt",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := isAbsolutePath(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGetPathSeparator(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Unix path",
+			input:    "/home/user/file.txt",
+			expected: "/",
+		},
+		{
+			name:     "Windows path",
+			input:    "C:\\Users\\file.txt",
+			expected: "\\",
+		},
+		{
+			name:     "Mixed separators prefers backslash",
+			input:    "C:\\Users/mixed/path",
+			expected: "\\",
+		},
+		{
+			name:     "No separator defaults to forward slash",
+			input:    "filename.txt",
+			expected: "/",
+		},
+		{
+			name:     "Empty path defaults to forward slash",
+			input:    "",
+			expected: "/",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := getPathSeparator(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestAnonymizePathSegment(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Empty segment returns empty", func(t *testing.T) {
+		t.Parallel()
+		result := anonymizePathSegment("", false)
+		assert.Empty(t, result)
+	})
+
+	t.Run("Non-last segment without extension", func(t *testing.T) {
+		t.Parallel()
+		result := anonymizePathSegment("documents", false)
+		assert.True(t, strings.HasPrefix(result, "path-"),
+			"Should start with 'path-', got %q", result)
+		assert.NotContains(t, result, "documents")
+	})
+
+	t.Run("Last segment preserves extension", func(t *testing.T) {
+		t.Parallel()
+		result := anonymizePathSegment("file.txt", true)
+		assert.True(t, strings.HasPrefix(result, "path-"),
+			"Should start with 'path-', got %q", result)
+		assert.Contains(t, result, ".txt")
+		assert.NotContains(t, result, "file")
+	})
+
+	t.Run("Non-last segment ignores extension", func(t *testing.T) {
+		t.Parallel()
+		result := anonymizePathSegment("folder.backup", false)
+		// When not last segment, extension is part of the hash
+		assert.True(t, strings.HasPrefix(result, "path-"))
+		assert.NotContains(t, result, ".backup")
+	})
+
+	t.Run("Consistent hashing", func(t *testing.T) {
+		t.Parallel()
+		result1 := anonymizePathSegment("secret", false)
+		result2 := anonymizePathSegment("secret", false)
+		assert.Equal(t, result1, result2, "Same input should produce same hash")
+	})
+
+	t.Run("Different inputs produce different hashes", func(t *testing.T) {
+		t.Parallel()
+		result1 := anonymizePathSegment("folder1", false)
+		result2 := anonymizePathSegment("folder2", false)
+		assert.NotEqual(t, result1, result2, "Different inputs should produce different hashes")
+	})
+}
+
+func TestIsBot(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{
+			name:     "Googlebot",
+			input:    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+			expected: true,
+		},
+		{
+			name:     "Bingbot",
+			input:    "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+			expected: true,
+		},
+		{
+			name:     "Crawler",
+			input:    "Mozilla/5.0 (compatible; crawler/1.0)",
+			expected: true,
+		},
+		{
+			name:     "Spider",
+			input:    "SomeSpider/1.0",
+			expected: true,
+		},
+		{
+			name:     "Normal Chrome browser",
+			input:    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124",
+			expected: false,
+		},
+		{
+			name:     "Normal Firefox browser",
+			input:    "Mozilla/5.0 (X11; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0",
+			expected: false,
+		},
+		{
+			name:     "Empty user agent",
+			input:    "",
+			expected: false,
+		},
+		{
+			name:     "Case insensitive BOT",
+			input:    "SomeBOT/1.0",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := isBot(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExtractUserAgentComponents(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Chrome on Windows without bot", func(t *testing.T) {
+		t.Parallel()
+		ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0.4472.124"
+		result := extractUserAgentComponents(ua, false)
+
+		require.Len(t, result, 2, "Should find browser and OS")
+		assert.Contains(t, result, "Chrome")
+		assert.Contains(t, result, "Windows")
+	})
+
+	t.Run("Firefox on Linux without bot", func(t *testing.T) {
+		t.Parallel()
+		ua := "Mozilla/5.0 (X11; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0"
+		result := extractUserAgentComponents(ua, false)
+
+		require.Len(t, result, 2, "Should find browser and OS")
+		assert.Contains(t, result, "Firefox")
+		assert.Contains(t, result, "Linux")
+	})
+
+	t.Run("With bot prefix", func(t *testing.T) {
+		t.Parallel()
+		ua := "Mozilla/5.0 (Windows NT 10.0) Chrome/91.0"
+		result := extractUserAgentComponents(ua, true)
+
+		require.GreaterOrEqual(t, len(result), 1, "Should have at least Bot")
+		assert.Equal(t, "Bot", result[0], "First element should be Bot")
+		// Browser should not be added since foundBrowser starts as true
+		assert.NotContains(t, result, "Chrome")
+	})
+
+	t.Run("Edge prioritized over Chrome", func(t *testing.T) {
+		t.Parallel()
+		// Edge user agents contain both Chrome and Edge identifiers
+		ua := "Mozilla/5.0 (Windows NT 10.0) Chrome/91.0.4472.124 Edg/91.0.864.59"
+		result := extractUserAgentComponents(ua, false)
+
+		require.GreaterOrEqual(t, len(result), 1)
+		assert.Contains(t, result, "Edge", "Edge should be detected over Chrome")
+		assert.NotContains(t, result, "Chrome", "Chrome should not be detected when Edge is present")
+	})
+
+	t.Run("Unknown user agent returns empty", func(t *testing.T) {
+		t.Parallel()
+		ua := "SomeRandomUserAgent/1.0"
+		result := extractUserAgentComponents(ua, false)
+
+		assert.Empty(t, result, "Unknown user agent should return empty components")
+	})
+
+	t.Run("Safari on iOS", func(t *testing.T) {
+		t.Parallel()
+		ua := "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) Safari/604.1"
+		result := extractUserAgentComponents(ua, false)
+
+		require.Len(t, result, 2)
+		assert.Contains(t, result, "Safari")
+		assert.Contains(t, result, "iOS")
+	})
+
+	t.Run("Opera on Windows", func(t *testing.T) {
+		t.Parallel()
+		ua := "Mozilla/5.0 (Windows NT 10.0) OPR/77.0.4054.203"
+		result := extractUserAgentComponents(ua, false)
+
+		require.Len(t, result, 2)
+		assert.Contains(t, result, "Opera")
+		assert.Contains(t, result, "Windows")
+	})
+
+	t.Run("Android Chrome", func(t *testing.T) {
+		t.Parallel()
+		ua := "Mozilla/5.0 (Linux; Android 11; SM-G991B) Chrome/91.0.4472.120"
+		result := extractUserAgentComponents(ua, false)
+
+		require.Len(t, result, 2)
+		assert.Contains(t, result, "Chrome")
+		assert.Contains(t, result, "Android")
+	})
 }
