@@ -32,7 +32,6 @@ func TestTokenPersistence(t *testing.T) {
 		authCodes:     make(map[string]AuthCode),
 		tokensFile:    filepath.Join(tempDir, "tokens.json"),
 		persistTokens: true,
-		debug:         true,
 	}
 
 	// Add some test tokens
@@ -60,7 +59,6 @@ func TestTokenPersistence(t *testing.T) {
 		accessTokens:  make(map[string]AccessToken),
 		tokensFile:    filepath.Join(tempDir, "tokens.json"),
 		persistTokens: true,
-		debug:         true,
 	}
 
 	// Load tokens
@@ -73,7 +71,7 @@ func TestTokenPersistence(t *testing.T) {
 	require.ErrorIs(t, newServer.ValidateAccessToken("expired_token"), ErrTokenNotFound, "Expired token should not be loaded, thus not found")
 
 	// Check token file contents directly
-	data, err := os.ReadFile(filepath.Join(tempDir, "tokens.json"))
+	data, err := os.ReadFile(filepath.Join(tempDir, "tokens.json")) //nolint:gosec // test file path from t.TempDir()
 	if err != nil {
 		t.Fatalf("Failed to read tokens file: %v", err)
 	}
@@ -131,7 +129,7 @@ func TestFilesystemStore(t *testing.T) {
 		t.Fatalf("Failed to stat sessions directory: %v", err)
 	}
 	assert.True(t, info.IsDir(), "Sessions path should be a directory")
-	assert.Equal(t, os.FileMode(0o755), info.Mode().Perm(), "Sessions directory should have 0755 permissions")
+	assert.Equal(t, os.FileMode(DirPermissions), info.Mode().Perm(), "Sessions directory should have secure permissions")
 }
 
 // TestLocalNetworkCookieStore tests configuring cookie store for local network access
@@ -143,7 +141,6 @@ func TestLocalNetworkCookieStore(t *testing.T) {
 				SessionSecret: "test-secret",
 			},
 		},
-		debug: true,
 	}
 
 	// Test with CookieStore
@@ -179,7 +176,6 @@ func TestConfigureLocalNetworkWithUnknownStore(t *testing.T) {
 				SessionSecret: "test-secret",
 			},
 		},
-		debug: true,
 	}
 
 	// Capture slog output
@@ -210,16 +206,17 @@ func TestConfigureLocalNetworkWithUnknownStore(t *testing.T) {
 	assert.Contains(t, logOutput, "mockStore") // The string representation of the type might be "*security.mockStore" or similar
 }
 
-// TestConfigureLocalNetworkWithMissingSessionSecret tests handling of missing session secret
+// TestConfigureLocalNetworkWithMissingSessionSecret verifies that the function handles
+// unknown store types gracefully regardless of session secret configuration.
+// Note: Session secret is only relevant for supported store types (CookieStore, FilesystemStore).
 func TestConfigureLocalNetworkWithMissingSessionSecret(t *testing.T) {
 	// Create test server with empty session secret
 	server := &OAuth2Server{
 		Settings: &conf.Settings{
 			Security: conf.Security{
-				SessionSecret: "", // Empty session secret
+				SessionSecret: "", // Empty session secret - should not cause issues with unknown store
 			},
 		},
-		debug: true,
 	}
 
 	// Create a mock store that doesn't match our expected types
@@ -233,7 +230,7 @@ func TestConfigureLocalNetworkWithMissingSessionSecret(t *testing.T) {
 
 	testHandler := slog.NewTextHandler(&logBuffer, &slog.HandlerOptions{Level: slog.LevelDebug})
 	testLogger := slog.New(testHandler)
-	
+
 	// Use the thread-safe setter to replace the logger
 	restore := setTestLogger(testLogger)
 	securityLevelVar.Set(slog.LevelDebug)
@@ -246,15 +243,12 @@ func TestConfigureLocalNetworkWithMissingSessionSecret(t *testing.T) {
 	// Set the mock store
 	gothic.Store = &mockStore{}
 
-	// This should not panic and should log appropriate warnings
+	// This should not panic and should log a warning about the unknown store type
 	server.configureLocalNetworkCookieStore()
 
 	// Verify that appropriate warning was logged
 	logOutput := logBuffer.String()
-	// securityLogger.Warn("Unknown session store type, using default cookie store options", "store_type", fmt.Sprintf("%T", store))
-	// securityLogger.Warn("No session secret configured, using temporary value")
 	assert.Contains(t, logOutput, "Unknown session store type")
-	assert.Contains(t, logOutput, "No session secret configured")
 }
 
 // TestLoadCorruptedTokensFile tests handling of corrupted tokens file
@@ -277,7 +271,6 @@ func TestLoadCorruptedTokensFile(t *testing.T) {
 		},
 		tokensFile:    tokensFile,
 		persistTokens: true,
-		debug:         true,
 	}
 
 	// Should handle error gracefully
@@ -298,18 +291,18 @@ func TestUnwritableTokensDirectory(t *testing.T) {
 
 	// Create a token file path in a subdirectory that we'll make unwritable
 	unwritableDir := filepath.Join(tempDir, "unwritable")
-	if err := os.Mkdir(unwritableDir, 0o755); err != nil {
+	if err := os.Mkdir(unwritableDir, DirPermissions); err != nil {
 		t.Fatalf("Failed to create unwritable directory: %v", err)
 	}
 
 	tokensFile := filepath.Join(unwritableDir, "tokens.json")
 
 	// Make the directory read-only
-	if err := os.Chmod(unwritableDir, 0o500); err != nil { // r-x --- ---
+	if err := os.Chmod(unwritableDir, 0o500); err != nil { //nolint:gosec // intentionally restrictive for test
 		t.Fatalf("Failed to make directory unwritable: %v", err)
 	}
 	defer func() {
-		_ = os.Chmod(unwritableDir, 0o755) // Best effort to restore permissions for cleanup
+		_ = os.Chmod(unwritableDir, DirPermissions) //nolint:gosec // restore permissions for cleanup
 	}()
 
 	server := &OAuth2Server{
@@ -322,7 +315,6 @@ func TestUnwritableTokensDirectory(t *testing.T) {
 		},
 		tokensFile:    tokensFile,
 		persistTokens: true,
-		debug:         true,
 	}
 
 	// Should handle error gracefully
@@ -351,7 +343,6 @@ func TestAtomicTokenSaving(t *testing.T) {
 		},
 		tokensFile:    tokensFile,
 		persistTokens: true,
-		debug:         true,
 	}
 
 	// Save tokens
@@ -374,7 +365,7 @@ func TestAtomicTokenSaving(t *testing.T) {
 	}
 	var storedData StoredTokenData
 
-	data, err := os.ReadFile(tokensFile)
+	data, err := os.ReadFile(tokensFile) //nolint:gosec // test file path from t.TempDir()
 	require.NoError(t, err, "Should be able to read token file")
 
 	err = json.Unmarshal(data, &storedData)

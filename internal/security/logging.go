@@ -10,6 +10,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
+// SecurityLogger defines the logging interface used by security helper functions.
+// This allows passing contextual loggers (e.g., with request-specific fields) to helper functions.
+type SecurityLogger interface {
+	Debug(msg string, args ...any)
+	Info(msg string, args ...any)
+	Warn(msg string, args ...any)
+	Error(msg string, args ...any)
+}
+
 // Package-level logger for security related events
 var (
 	securityLogger    *slog.Logger

@@ -115,3 +115,74 @@ func IsValidRedirect(redirectPath string) bool {
 	}
 	return isSafe
 }
+
+// ValidateAuthCallbackRedirect validates and sanitizes a redirect path for auth callbacks.
+// It returns a safe redirect path, defaulting to "/" if validation fails.
+// This function handles:
+// - Empty redirects (returns default)
+// - Protocol-relative URLs (//evil.com)
+// - Absolute URLs (https://evil.com)
+// - Backslash-relative URLs (/\evil.com)
+// - CRLF injection attempts
+// - Preserving query parameters for valid relative paths
+func ValidateAuthCallbackRedirect(redirect string) string {
+	const defaultRedirect = "/"
+
+	if redirect == "" {
+		return defaultRedirect
+	}
+
+	// Replace ALL backslashes with forward slashes for robust normalization
+	cleanedRedirect := strings.ReplaceAll(redirect, "\\", "/")
+	parsedURL, err := url.Parse(cleanedRedirect)
+
+	// Validate the parsed URL
+	if err != nil || !isValidRelativePath(parsedURL) {
+		return defaultRedirect
+	}
+
+	// Check for CRLF injection
+	if containsCRLF(parsedURL.Path) || containsCRLF(parsedURL.RawQuery) {
+		return defaultRedirect
+	}
+
+	// Construct safe redirect preserving path and query
+	safeRedirect := parsedURL.Path
+	if parsedURL.RawQuery != "" {
+		safeRedirect += "?" + parsedURL.RawQuery
+	}
+
+	return safeRedirect
+}
+
+// isValidRelativePath checks if a URL is a valid relative path for redirects.
+// Valid paths must:
+// - Have no scheme (not http://, https://, etc.)
+// - Have no host (not //evil.com)
+// - Start with a single '/' (valid relative path)
+// - NOT start with '//' or '/\' (protocol-relative URLs)
+func isValidRelativePath(parsedURL *url.URL) bool {
+	if parsedURL.Scheme != "" || parsedURL.Host != "" {
+		return false
+	}
+
+	if !strings.HasPrefix(parsedURL.Path, "/") {
+		return false
+	}
+
+	// Reject "//" and "/\" patterns at the start
+	if len(parsedURL.Path) > 1 && (parsedURL.Path[1] == '/' || parsedURL.Path[1] == '\\') {
+		return false
+	}
+
+	return true
+}
+
+// containsCRLF checks if a string contains CR/LF characters or their percent-encoded forms.
+func containsCRLF(s string) bool {
+	if strings.ContainsAny(s, "\r\n") {
+		return true
+	}
+	lower := strings.ToLower(s)
+	return strings.Contains(lower, "%0d") || strings.Contains(lower, "%0a")
+}

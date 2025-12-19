@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/url"
-	"strings"
-	"time"
 
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo/v4"
@@ -78,7 +75,20 @@ func getIPv4Subnet(ip net.IP) net.IP {
 	}
 
 	// Get the /24 subnet
-	return ipv4.Mask(net.CIDRMask(24, 32))
+	return ipv4.Mask(net.CIDRMask(IPv4SubnetMaskBits, IPv4TotalAddressBits))
+}
+
+// buildSessionOptions creates session options with standard security settings.
+// The secure parameter controls whether cookies require HTTPS.
+// The maxAge parameter sets the session duration in seconds.
+func buildSessionOptions(secure bool, maxAge int) *sessions.Options {
+	return &sessions.Options{
+		Path:     "/",
+		MaxAge:   maxAge,
+		Secure:   secure,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	}
 }
 
 // configureLocalNetworkCookieStore configures the cookie store for local network access
@@ -87,48 +97,19 @@ func (s *OAuth2Server) configureLocalNetworkCookieStore() {
 	// Configure session options based on store type
 	switch store := gothic.Store.(type) {
 	case *sessions.CookieStore:
-		store.Options = &sessions.Options{
-			Path: "/",
-			// Allow cookies to be sent over HTTP, this is for development purposes only
-			// and is allowed only for local LAN access
-			Secure:   false,
-			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
-		}
+		// For CookieStore, use default session duration (session cookie if 0)
+		store.Options = buildSessionOptions(false, 0)
 	case *sessions.FilesystemStore:
 		// Calculate MaxAge in seconds from the configured session duration
 		// If not configured, default to 7 days
-		// Note: MaxAge in the cookie store options requires an integer in seconds
-		maxAge := 86400 * 7 // 7 days in seconds
+		maxAge := DefaultSessionMaxAgeSeconds
 		if s.Settings.Security.SessionDuration > 0 {
 			maxAge = int(s.Settings.Security.SessionDuration.Seconds())
 		}
-
-		store.Options = &sessions.Options{
-			Path:     "/",
-			MaxAge:   maxAge,
-			Secure:   false, // Allow cookies to be sent over HTTP for local LAN access
-			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
-		}
+		store.Options = buildSessionOptions(false, maxAge)
 	default:
-		// Log the warning using structured logger
-		logger().Warn("Unknown session store type, using default cookie store options", "store_type", fmt.Sprintf("%T", store))
-		// Create a default cookie store as fallback - only for reference, not actually used
-		// Use the configured session secret instead of a hardcoded value
-		sessionSecret := s.Settings.Security.SessionSecret
-		if sessionSecret == "" {
-			// If no session secret is configured, use a pseudo-random value
-			// This is still not ideal but better than a hardcoded string
-			sessionSecret = fmt.Sprintf("birdnet-go-%d", time.Now().UnixNano())
-			// Log the warning using structured logger
-			logger().Warn("No session secret configured, using temporary value")
-		}
-
-		// Note: This store is not actually used, it's only created as a reference
-		// for what options would be applied to a proper store. The warning above
-		// alerts operators about the unknown store type.
-		_ = sessions.NewCookieStore([]byte(sessionSecret))
+		// Log a warning for unknown store types - operators should configure a supported store
+		logger().Warn("Unknown session store type, session options not configured", "store_type", fmt.Sprintf("%T", store))
 	}
 }
 
@@ -218,7 +199,7 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	// Do not log the code being exchanged
 	logger.Info("Attempting to exchange authorization code for access token")
 	// Pass the request context to ExchangeAuthCode
-	tokenCtx, tokenCancel := context.WithTimeout(c.Request().Context(), 15*time.Second) // Apply timeout
+	tokenCtx, tokenCancel := context.WithTimeout(c.Request().Context(), TokenExchangeTimeout)
 	defer tokenCancel()
 	accessToken, err := s.ExchangeAuthCode(tokenCtx, code)
 	if err != nil {
@@ -267,102 +248,60 @@ func (s *OAuth2Server) HandleBasicAuthCallback(c echo.Context) error {
 		return c.String(http.StatusBadRequest, "Missing authorization code")
 	}
 
-	// Create a context with timeout for the token exchange
-	ctx, cancel := context.WithTimeout(c.Request().Context(), 15*time.Second) // Increased timeout slightly
-	defer cancel()
-
-	// Exchange the authorization code for an access token directly on the server
-	// Do not log the code being exchanged
-	logger.Info("Attempting to exchange authorization code for access token server-side")
-	accessToken, err := s.ExchangeAuthCode(ctx, code) // Pass context
+	// Exchange the authorization code for an access token
+	accessToken, err := s.exchangeCodeWithTimeout(c.Request().Context(), code)
 	if err != nil {
-		// Check if the error is context deadline exceeded
-		if errors.Is(err, context.DeadlineExceeded) {
-			logger.Warn("Timeout exchanging authorization code server-side", "error", err)
-			return c.String(http.StatusGatewayTimeout, "Login timed out. Please try again.")
-		}
-		logger.Warn("Failed to exchange authorization code server-side", "error", err)
-		// Provide a user-friendly error message
-		return c.String(http.StatusInternalServerError, "Unable to complete login at this time. Please try again.")
+		return s.handleTokenExchangeError(c, err, logger)
 	}
-	// DO NOT log the accessToken
 	logger.Info("Successfully exchanged authorization code for access token")
 
+	// Regenerate session and store token
+	if err := s.regenerateAndStoreToken(c, accessToken, logger); err != nil {
+		return err
+	}
+
+	// Validate and sanitize the redirect path
+	safeRedirect := ValidateAuthCallbackRedirect(redirect)
+	if safeRedirect != redirect && redirect != "" {
+		logger.Debug("Redirect path sanitized", "original", redirect, "sanitized", safeRedirect)
+	}
+
+	// Redirect the user to the final destination
+	logger.Info("Redirecting user to final destination", "destination", safeRedirect)
+	return c.Redirect(http.StatusFound, safeRedirect)
+}
+
+// exchangeCodeWithTimeout exchanges an auth code for an access token with a timeout
+func (s *OAuth2Server) exchangeCodeWithTimeout(parentCtx context.Context, code string) (string, error) {
+	ctx, cancel := context.WithTimeout(parentCtx, TokenExchangeTimeout)
+	defer cancel()
+	return s.ExchangeAuthCode(ctx, code)
+}
+
+// handleTokenExchangeError handles errors from token exchange and returns appropriate HTTP response
+func (s *OAuth2Server) handleTokenExchangeError(c echo.Context, err error, logger SecurityLogger) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		logger.Warn("Timeout exchanging authorization code server-side", "error", err)
+		return c.String(http.StatusGatewayTimeout, "Login timed out. Please try again.")
+	}
+	logger.Warn("Failed to exchange authorization code server-side", "error", err)
+	return c.String(http.StatusInternalServerError, "Unable to complete login at this time. Please try again.")
+}
+
+// regenerateAndStoreToken regenerates the session and stores the access token
+func (s *OAuth2Server) regenerateAndStoreToken(c echo.Context, accessToken string, logger SecurityLogger) error {
 	// Regenerate session to prevent session fixation
-	// This clears existing auth state and forces a new session ID on save
-	// Pass the underlying http.ResponseWriter and *http.Request to gothic.Logout
 	if err := gothic.Logout(c.Response().Writer, c.Request()); err != nil {
-		// Log the error but proceed cautiously. Depending on the store,
-		// Logout might fail if cookies are invalid, but StoreInSession might still create a new one.
 		logger.Warn("Error during gothic.Logout (session regeneration step)", "error", err)
 	} else {
 		logger.Info("Successfully logged out old session before storing new token (session fixation mitigation)")
 	}
 
 	// Store the access token in the new Gothic session
-	// Do not log the token here either
 	if err := gothic.StoreInSession("access_token", accessToken, c.Request(), c.Response()); err != nil {
-		// This error is more critical now, as it means we couldn't establish the new session
 		logger.Error("Failed to store access token in new session after logout/regeneration", "error", err)
 		return c.String(http.StatusInternalServerError, "Session error during login. Please try again.")
-	} else {
-		logger.Info("Successfully stored access token in new session")
 	}
-
-	// Validate the redirect path
-	safeRedirect := "/" // Default redirect
-	if redirect != "" {
-		// Replace ALL backslashes with forward slashes for robust normalization
-		cleanedRedirect := strings.ReplaceAll(redirect, "\\", "/")
-		parsedURL, err := url.Parse(cleanedRedirect)
-
-		// Security validation for redirect paths to prevent open redirect vulnerabilities
-		// We ONLY accept relative paths that:
-		// 1. Parse without error
-		// 2. Have no scheme (not http://, https://, etc.)
-		// 3. Have no host (not //evil.com)
-		// 4. Start with a single '/' (valid relative path)
-		// 5. Do NOT start with '//' or '/\' (which browsers interpret as protocol-relative URLs)
-		//
-		// Examples:
-		// - ACCEPTED: "/", "/dashboard", "/path?query=value"
-		// - REJECTED: "//evil.com", "/\evil.com", "http://evil.com", "https://evil.com"
-		//
-		// The condition below checks that either:
-		// - Path length is 1 (just "/"), OR
-		// - Path[1] is neither '/' nor '\' (preventing "//" and "/\" patterns)
-		if err == nil && parsedURL.Scheme == "" && parsedURL.Host == "" &&
-			strings.HasPrefix(parsedURL.Path, "/") &&
-			(len(parsedURL.Path) <= 1 || (parsedURL.Path[1] != '/' && parsedURL.Path[1] != '\\')) {
-
-			// Additional check for CR/LF injection characters in path and query
-			pathContainsCRLF := strings.ContainsAny(parsedURL.Path, "\r\n") || strings.Contains(strings.ToLower(parsedURL.Path), "%0d") || strings.Contains(strings.ToLower(parsedURL.Path), "%0a")
-			queryContainsCRLF := strings.ContainsAny(parsedURL.RawQuery, "\r\n") || strings.Contains(strings.ToLower(parsedURL.RawQuery), "%0d") || strings.Contains(strings.ToLower(parsedURL.RawQuery), "%0a")
-
-			if pathContainsCRLF || queryContainsCRLF {
-				logger.Warn("Invalid redirect path provided (contains CR/LF characters), using default", "provided_redirect", redirect, "path", parsedURL.Path, "query", parsedURL.RawQuery, "default_redirect", safeRedirect)
-				// Keep safeRedirect = "/"
-			} else {
-				// Passed all checks, construct safe redirect preserving path and query
-				safeRedirect = parsedURL.Path
-				if parsedURL.RawQuery != "" {
-					safeRedirect += "?" + parsedURL.RawQuery
-				}
-				logger.Debug("Validated redirect path and query", "safe_redirect", safeRedirect)
-			}
-		} else {
-			// Log the reason for rejection if parsing failed or initial validation checks failed
-			if err != nil {
-				logger.Warn("Invalid redirect path provided (parse error), using default", "provided_redirect", redirect, "error", err, "default_redirect", safeRedirect)
-			} else {
-				logger.Warn("Invalid or unsafe redirect path provided (validation failed), using default", "provided_redirect", redirect, "parsed_scheme", parsedURL.Scheme, "parsed_host", parsedURL.Host, "parsed_path", parsedURL.Path, "default_redirect", safeRedirect)
-			}
-		}
-	} else {
-		logger.Debug("No redirect path provided, using default", "default_redirect", safeRedirect)
-	}
-
-	// Redirect the user to the final destination
-	logger.Info("Redirecting user to final destination", "destination", safeRedirect)
-	return c.Redirect(http.StatusFound, safeRedirect)
+	logger.Info("Successfully stored access token in new session")
+	return nil
 }
