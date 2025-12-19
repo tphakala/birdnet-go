@@ -3,7 +3,6 @@ package metrics
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -65,13 +64,13 @@ func (m *MQTTMetrics) initMetrics() error {
 	m.MessageSize = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "mqtt_message_size_bytes",
 		Help:    "Size of MQTT messages in bytes",
-		Buckets: prometheus.ExponentialBuckets(64, 2, 10),
+		Buckets: prometheus.ExponentialBuckets(BucketStart64B, BucketFactor2, BucketCount10),
 	})
 
 	m.PublishLatency = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "mqtt_publish_latency_seconds",
 		Help:    "Latency of MQTT publish operations in seconds",
-		Buckets: prometheus.ExponentialBuckets(0.001, 2, 10),
+		Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount10),
 	})
 
 	return nil
@@ -141,7 +140,6 @@ func (pt *PublishTimer) ObserveDuration() {
 
 // Collect implements the prometheus.Collector interface.
 func (m *MQTTMetrics) Collect(ch chan<- prometheus.Metric) {
-	log.Println("MQTTMetrics Collect method called")
 	m.ConnectionStatus.Collect(ch)
 	m.MessagesDelivered.Collect(ch)
 	m.Errors.Collect(ch)

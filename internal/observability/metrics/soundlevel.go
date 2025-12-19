@@ -105,7 +105,7 @@ func (m *SoundLevelMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "myaudio_sound_level_processing_duration_seconds",
 			Help:    "Time taken to process sound level data",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 12), // 1ms to ~4s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount12), // 1ms to ~4s
 		},
 		[]string{"source", "name", "operation"}, // operation: filter, aggregate, calculate
 	)

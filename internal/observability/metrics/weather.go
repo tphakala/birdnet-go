@@ -73,7 +73,7 @@ func (m *WeatherMetrics) initMetrics() error {
 			// Buckets cover typical weather API response times: 100ms to ~100s
 			// Exponential buckets: 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4, 12.8, 25.6, 51.2s
 			// This range captures fast local responses (100ms) to slow/timeout scenarios (50s+)
-			Buckets: prometheus.ExponentialBuckets(0.1, 2, 10),
+			Buckets: prometheus.ExponentialBuckets(BucketStart100ms, BucketFactor2, BucketCount10),
 		},
 		[]string{"provider"},
 	)
@@ -128,7 +128,7 @@ func (m *WeatherMetrics) initMetrics() error {
 			// Buckets cover typical database operation times: 1ms to ~1s
 			// Exponential buckets: 1ms, 2ms, 4ms, 8ms, 16ms, 32ms, 64ms, 128ms, 256ms, 512ms
 			// This range captures fast queries (1ms) to slow database operations (500ms+)
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10),
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount10),
 		},
 		[]string{"operation"},
 	)

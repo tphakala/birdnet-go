@@ -60,7 +60,7 @@ func (m *DiskManagerMetrics) initMetrics() error {
 	m.diskCheckDurationSeconds = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "diskmanager_disk_check_duration_seconds",
 		Help:    "Time taken to check disk usage",
-		Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to ~1s
+		Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount10), // 1ms to ~1s
 	})
 
 	// Cleanup operation metrics
@@ -100,7 +100,7 @@ func (m *DiskManagerMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "diskmanager_cleanup_duration_seconds",
 			Help:    "Time taken for cleanup operations",
-			Buckets: prometheus.ExponentialBuckets(0.1, 2, 10), // 100ms to ~100s
+			Buckets: prometheus.ExponentialBuckets(BucketStart100ms, BucketFactor2, BucketCount10), // 100ms to ~100s
 		},
 		[]string{"policy"},
 	)
@@ -162,7 +162,7 @@ func (m *DiskManagerMetrics) UpdateDiskUsage(usedBytes, totalBytes uint64) {
 
 	var utilizationPercentage float64
 	if totalBytes > 0 {
-		utilizationPercentage = float64(usedBytes) / float64(totalBytes) * 100
+		utilizationPercentage = float64(usedBytes) / float64(totalBytes) * PercentageFactor
 	}
 	m.diskUtilizationPercentage.Set(utilizationPercentage)
 }

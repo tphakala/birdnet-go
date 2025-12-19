@@ -3,7 +3,6 @@ package metrics
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -63,7 +62,7 @@ func (m *ImageProviderMetrics) initMetrics() error {
 	m.DownloadDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "image_provider_download_duration_seconds",
 		Help:    "Duration of image downloads in seconds.",
-		Buckets: prometheus.ExponentialBuckets(0.1, 2, 10),
+		Buckets: prometheus.ExponentialBuckets(BucketStart100ms, BucketFactor2, BucketCount10),
 	})
 
 	return nil
@@ -107,7 +106,6 @@ func (m *ImageProviderMetrics) ObserveDownloadDuration(durationSeconds float64) 
 
 // Collect implements the prometheus.Collector interface.
 func (m *ImageProviderMetrics) Collect(ch chan<- prometheus.Metric) {
-	log.Println("ImageProviderMetrics Collect method called")
 	m.CacheSize.Collect(ch)
 	m.CacheHits.Collect(ch)
 	m.CacheMisses.Collect(ch)

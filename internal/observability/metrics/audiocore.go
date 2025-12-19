@@ -101,7 +101,7 @@ func (m *AudioCoreMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "audiocore_processing_duration_seconds",
 			Help:    "Time taken to process audio frames",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 12), // 1ms to ~4s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount12), // 1ms to ~4s
 		},
 		[]string{"manager_id", "source_id"},
 	)
@@ -217,7 +217,7 @@ func (m *AudioCoreMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "audiocore_processor_duration_seconds",
 			Help:    "Time taken by audio processors",
-			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 12), // 0.1ms to ~400ms
+			Buckets: prometheus.ExponentialBuckets(BucketStart100us, BucketFactor2, BucketCount12), // 0.1ms to ~400ms
 		},
 		[]string{"processor_id", "processor_type"},
 	)
@@ -317,7 +317,7 @@ func (m *AudioCoreMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "audiocore_gain_levels",
 			Help:    "Distribution of gain levels applied",
-			Buckets: prometheus.LinearBuckets(0, 0.1, 21), // 0.0 to 2.0 in 0.1 steps
+			Buckets: prometheus.LinearBuckets(BucketGainLinearStart, BucketGainLinearWidth, BucketGainLinearCount), // 0.0 to 2.0 in 0.1 steps
 		},
 		[]string{"processor_id"},
 	)

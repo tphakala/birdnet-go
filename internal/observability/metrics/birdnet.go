@@ -69,7 +69,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "birdnet_prediction_duration_seconds",
 			Help:    "Time taken to perform a prediction",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to ~1s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount10), // 1ms to ~1s
 		},
 		[]string{"model"},
 	)
@@ -78,7 +78,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "birdnet_chunk_process_duration_seconds",
 			Help:    "Time taken to process an audio chunk",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10),
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount10),
 		},
 		[]string{"model"},
 	)
@@ -87,7 +87,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "birdnet_model_invoke_duration_seconds",
 			Help:    "Time taken for TensorFlow Lite model invocation",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 8), // 1ms to ~256ms
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount8), // 1ms to ~256ms
 		},
 		[]string{"model"},
 	)
@@ -96,7 +96,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "birdnet_range_filter_duration_seconds",
 			Help:    "Time taken to apply range filter",
-			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 8), // 0.1ms to ~25.6ms
+			Buckets: prometheus.ExponentialBuckets(BucketStart100us, BucketFactor2, BucketCount8), // 0.1ms to ~25.6ms
 		},
 		[]string{"model"},
 	)
@@ -250,7 +250,7 @@ func categorizeError(err error) string {
 // Describe implements the prometheus.Collector interface.
 func (m *BirdNETMetrics) Describe(ch chan<- *prometheus.Desc) {
 	m.DetectionCounter.Describe(ch)
-	ch <- m.ProcessTimeGauge.Desc()
+	m.ProcessTimeGauge.Describe(ch)
 
 	// Performance metrics
 	m.PredictionDuration.Describe(ch)
@@ -265,14 +265,14 @@ func (m *BirdNETMetrics) Describe(ch chan<- *prometheus.Desc) {
 	m.ModelLoadErrors.Describe(ch)
 
 	// State gauges
-	ch <- m.ActiveProcessingGauge.Desc()
-	ch <- m.ModelLoadedGauge.Desc()
+	m.ActiveProcessingGauge.Describe(ch)
+	m.ModelLoadedGauge.Describe(ch)
 }
 
 // Collect implements the prometheus.Collector interface.
 func (m *BirdNETMetrics) Collect(ch chan<- prometheus.Metric) {
 	m.DetectionCounter.Collect(ch)
-	ch <- m.ProcessTimeGauge
+	m.ProcessTimeGauge.Collect(ch)
 
 	// Performance metrics
 	m.PredictionDuration.Collect(ch)
@@ -287,8 +287,8 @@ func (m *BirdNETMetrics) Collect(ch chan<- prometheus.Metric) {
 	m.ModelLoadErrors.Collect(ch)
 
 	// State gauges
-	ch <- m.ActiveProcessingGauge
-	ch <- m.ModelLoadedGauge
+	m.ActiveProcessingGauge.Collect(ch)
+	m.ModelLoadedGauge.Collect(ch)
 }
 
 // RecordOperation implements the Recorder interface.
@@ -297,16 +297,16 @@ func (m *BirdNETMetrics) Collect(ch chan<- prometheus.Metric) {
 // Status values: "success", "error", or species name for "detection"
 func (m *BirdNETMetrics) RecordOperation(operation, status string) {
 	switch operation {
-	case "prediction":
-		m.PredictionTotal.WithLabelValues("birdnet", status).Inc()
-	case "model_load":
-		m.ModelLoadTotal.WithLabelValues("birdnet", status).Inc()
+	case OpPrediction:
+		m.PredictionTotal.WithLabelValues(LabelBirdnet, status).Inc()
+	case OpModelLoad:
+		m.ModelLoadTotal.WithLabelValues(LabelBirdnet, status).Inc()
 		if status == "success" {
 			m.ModelLoadedGauge.Set(1)
 		} else {
 			m.ModelLoadedGauge.Set(0)
 		}
-	case "detection":
+	case OpDetection:
 		// IMPORTANT: For the "detection" operation, the status parameter represents 
 		// the detected species name (e.g., "Turdus migratorius" for American Robin),
 		// not a success/error status. This is a special case where we reuse the 
@@ -320,17 +320,17 @@ func (m *BirdNETMetrics) RecordOperation(operation, status string) {
 // Supported operations: "prediction", "chunk_process", "model_invoke", "range_filter", "process_time_ms"
 func (m *BirdNETMetrics) RecordDuration(operation string, seconds float64) {
 	switch operation {
-	case "prediction":
-		m.PredictionDuration.WithLabelValues("birdnet").Observe(seconds)
-	case "chunk_process":
-		m.ChunkProcessDuration.WithLabelValues("birdnet").Observe(seconds)
-	case "model_invoke":
-		m.ModelInvokeDuration.WithLabelValues("birdnet").Observe(seconds)
-	case "range_filter":
-		m.RangeFilterDuration.WithLabelValues("birdnet").Observe(seconds)
-	case "process_time_ms":
+	case OpPrediction:
+		m.PredictionDuration.WithLabelValues(LabelBirdnet).Observe(seconds)
+	case OpChunkProcess:
+		m.ChunkProcessDuration.WithLabelValues(LabelBirdnet).Observe(seconds)
+	case OpModelInvoke:
+		m.ModelInvokeDuration.WithLabelValues(LabelBirdnet).Observe(seconds)
+	case OpRangeFilter:
+		m.RangeFilterDuration.WithLabelValues(LabelBirdnet).Observe(seconds)
+	case OpProcessTimeMs:
 		// Convert to milliseconds for backward compatibility
-		m.ProcessTimeGauge.Set(seconds * 1000)
+		m.ProcessTimeGauge.Set(seconds * MillisecondsPerSecond)
 	}
 }
 
@@ -340,9 +340,9 @@ func (m *BirdNETMetrics) RecordDuration(operation string, seconds float64) {
 // Error types: "validation", "model_error", "tensor_error", "invoke_error", etc.
 func (m *BirdNETMetrics) RecordError(operation, errorType string) {
 	switch operation {
-	case "prediction":
-		m.PredictionErrors.WithLabelValues("birdnet", errorType).Inc()
-	case "model_load":
-		m.ModelLoadErrors.WithLabelValues("birdnet", errorType).Inc()
+	case OpPrediction:
+		m.PredictionErrors.WithLabelValues(LabelBirdnet, errorType).Inc()
+	case OpModelLoad:
+		m.ModelLoadErrors.WithLabelValues(LabelBirdnet, errorType).Inc()
 	}
 }

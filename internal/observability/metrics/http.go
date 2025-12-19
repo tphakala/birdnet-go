@@ -89,7 +89,7 @@ func (m *HTTPMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "http_response_size_bytes",
 			Help:    "Size of HTTP responses in bytes",
-			Buckets: prometheus.ExponentialBuckets(100, 10, 6), // 100B to ~100MB
+			Buckets: prometheus.ExponentialBuckets(BucketStart100B, BucketFactor10, BucketCount6), // 100B to ~100MB
 		},
 		[]string{"method", "path"},
 	)
@@ -107,7 +107,7 @@ func (m *HTTPMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "http_handler_operation_duration_seconds",
 			Help:    "Time taken for handler operations",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 12), // 1ms to ~4s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount12), // 1ms to ~4s
 		},
 		[]string{"handler", "operation"},
 	)
@@ -133,7 +133,7 @@ func (m *HTTPMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "http_handler_database_operation_duration_seconds",
 			Help:    "Time taken for database operations from handlers",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 15), // 1ms to ~32s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount15), // 1ms to ~32s
 		},
 		[]string{"handler", "db_operation"},
 	)
@@ -168,7 +168,7 @@ func (m *HTTPMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "http_template_render_duration_seconds",
 			Help:    "Time taken for template rendering",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to ~1s
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount10), // 1ms to ~1s
 		},
 		[]string{"template"},
 	)
@@ -201,7 +201,7 @@ func (m *HTTPMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "http_sse_connection_duration_seconds",
 			Help:    "Duration of SSE connections in seconds",
-			Buckets: prometheus.ExponentialBuckets(1, 2, 15), // 1s to ~32768s (9+ hours)
+			Buckets: prometheus.ExponentialBuckets(BucketStart1s, BucketFactor2, BucketCount15), // 1s to ~32768s (9+ hours)
 		},
 		[]string{"endpoint"},
 	)
