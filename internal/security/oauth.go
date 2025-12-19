@@ -40,12 +40,19 @@ type AccessToken struct {
 	ExpiresAt time.Time
 }
 
+// providerAuthConfig holds the configuration for validating a provider's auth session.
+// This allows checkProviderAuth to work generically with any OAuth provider.
+type providerAuthConfig struct {
+	providerName   string // Session key (e.g., ProviderGoogle, ProviderGitHub)
+	enabled        bool   // Whether this provider is enabled
+	allowedUserIds string // Comma-separated list of allowed user IDs
+}
+
 type OAuth2Server struct {
 	Settings     *conf.Settings
 	authCodes    map[string]AuthCode
 	accessTokens map[string]AccessToken
 	mutex        sync.RWMutex
-	debug        bool
 
 	GithubConfig *oauth2.Config
 	GoogleConfig *oauth2.Config
@@ -72,7 +79,6 @@ func NewOAuth2ServerForTesting(settings *conf.Settings) *OAuth2Server {
 		authCodes:         make(map[string]AuthCode),
 		accessTokens:      make(map[string]AccessToken),
 		throttledMessages: make(map[string]time.Time),
-		debug:             settings.Security.Debug, // Use same source as production constructor
 	}
 }
 
@@ -86,192 +92,223 @@ func NewOAuth2Server() *OAuth2Server {
 	// Use the security logger from the start
 	logger().Info("Initializing OAuth2 server")
 	settings := conf.GetSettings()
-	debug := settings.Security.Debug
 
 	server := &OAuth2Server{
 		Settings:     settings,
 		authCodes:    make(map[string]AuthCode),
 		accessTokens: make(map[string]AccessToken),
-		debug:        debug, // Retain debug flag for potential conditional logging
 	}
 
-	// Check Session Secret strength early, regardless of persistence settings
-	if settings.Security.SessionSecret == "" {
-		// This should rarely happen now due to auto-generation in config.go
-		// But we still log it as a critical security issue that needs attention
-		logger().Error("CRITICAL SECURITY WARNING: SessionSecret is empty. A temporary secret will be generated, but this should be fixed in configuration.",
-			"debug_mode", settings.WebServer.Debug,
-			"recommendation", "BirdNET-Go will auto-generate a SessionSecret on next restart")
-
-		// Generate a temporary session secret to allow the application to continue
-		// This ensures backward compatibility while maintaining security
-		tempSecret := conf.GenerateRandomSecret()
-		settings.Security.SessionSecret = tempSecret
-		logger().Info("Generated temporary SessionSecret for this session")
-
-		// Report to telemetry for monitoring
-		// Creating this error will automatically report it to telemetry
-		_ = intErrors.New(
-			errors.New("session secret is empty")).
-			Component("security").
-			Category(intErrors.CategoryConfiguration).
-			Context("debug_mode", settings.WebServer.Debug).
-			Context("action", "auto_generated_temporary_secret").
-			Build()
-	} else if len(settings.Security.SessionSecret) < 32 {
-		// Check length as a proxy for entropy, 32 bytes is common for session keys
-		logger().Warn("Security Recommendation: SessionSecret is potentially weak",
-			"current_length", len(settings.Security.SessionSecret),
-			"recommended_length", 32,
-			"debug_mode", settings.WebServer.Debug,
-			"recommendation", "Consider regenerating with a stronger secret")
-
-		// Report weak session secret to telemetry
-		// Creating this error will automatically report it to telemetry
-		_ = intErrors.New(
-			fmt.Errorf("session secret is potentially weak: %d characters", len(settings.Security.SessionSecret))).
-			Component("security").
-			Category(intErrors.CategoryConfiguration).
-			Context("current_length", len(settings.Security.SessionSecret)).
-			Context("recommended_length", 32).
-			Context("debug_mode", settings.WebServer.Debug).
-			Build()
-	}
+	// Validate and potentially fix session secret
+	validateSessionSecret(settings)
 
 	// Pre-parse the Basic Auth Redirect URI
-	if settings.Security.BasicAuth.RedirectURI != "" {
-		parsedURI, err := url.Parse(settings.Security.BasicAuth.RedirectURI)
-		if err != nil {
-			// Log a critical error if the configured URI is invalid
-			logger().Error("CRITICAL CONFIGURATION ERROR: Failed to parse BasicAuth.RedirectURI. Basic authentication will likely fail.", "uri", settings.Security.BasicAuth.RedirectURI, "error", err)
-			// Set to nil to ensure checks fail later
-			server.ExpectedBasicRedirectURI = nil
-		} else {
-			// Validate that the configured URI doesn't contain query or fragment
-			if parsedURI.RawQuery != "" || parsedURI.Fragment != "" {
-				logger().Error("CRITICAL CONFIGURATION ERROR: BasicAuth.RedirectURI must not contain query parameters or fragments.", "uri", settings.Security.BasicAuth.RedirectURI)
-				server.ExpectedBasicRedirectURI = nil // Fail validation
-			} else {
-				server.ExpectedBasicRedirectURI = parsedURI
-				logger().Info("Pre-parsed and validated Basic Auth Redirect URI", "uri", parsedURI.String())
-			}
-		}
-	} else {
-		logger().Warn("Basic Auth Redirect URI is not configured. Basic authentication might not function correctly.")
-	}
+	server.ExpectedBasicRedirectURI = parseBasicAuthRedirectURI(settings)
 
 	// Initialize Gothic with the provided configuration
 	InitializeGoth(settings)
 
 	// Set up token persistence
-	configPaths, err := conf.GetDefaultConfigPaths()
-	if err != nil {
-		logger().Warn("Failed to get config paths for token persistence, persistence disabled", "error", err)
-	} else {
-		server.tokensFile = filepath.Join(configPaths[0], "tokens.json")
-		server.persistTokens = true
-		logger().Info("Token persistence configured", "file", server.tokensFile)
-
-		// Ensure the directory exists
-		if err := os.MkdirAll(filepath.Dir(server.tokensFile), 0o755); err != nil {
-			logger().Error("Failed to create directory for token persistence, persistence disabled", "path", filepath.Dir(server.tokensFile), "error", err)
-			server.persistTokens = false
-		} else {
-			// Load any existing tokens
-			if err := server.loadTokens(context.Background()); err != nil {
-				// Log as Warn, as failure to load old tokens isn't fatal
-				logger().Warn("Failed to load persisted tokens", "file", server.tokensFile, "error", err)
-			}
-		}
-	}
+	server.setupTokenPersistence()
 
 	// Clean up expired tokens every hour
-	server.StartAuthCleanup(time.Hour)
+	// TODO: Pass application shutdown context for graceful cleanup termination
+	server.StartAuthCleanup(context.Background(), time.Hour)
 
 	logger().Info("OAuth2 server initialization complete")
 	return server
 }
 
+// validateSessionSecret checks the session secret strength and generates a temporary one if needed
+func validateSessionSecret(settings *conf.Settings) {
+	if settings.Security.SessionSecret == "" {
+		handleEmptySessionSecret(settings)
+		return
+	}
+	if len(settings.Security.SessionSecret) < MinSessionSecretLength {
+		handleWeakSessionSecret(settings)
+	}
+}
+
+// handleEmptySessionSecret generates a temporary secret when none is configured
+func handleEmptySessionSecret(settings *conf.Settings) {
+	logger().Error("CRITICAL SECURITY WARNING: SessionSecret is empty. A temporary secret will be generated, but this should be fixed in configuration.",
+		"debug_mode", settings.WebServer.Debug,
+		"recommendation", "BirdNET-Go will auto-generate a SessionSecret on next restart")
+
+	tempSecret := conf.GenerateRandomSecret()
+	settings.Security.SessionSecret = tempSecret
+	logger().Info("Generated temporary SessionSecret for this session")
+
+	_ = intErrors.New(
+		errors.New("session secret is empty")).
+		Component("security").
+		Category(intErrors.CategoryConfiguration).
+		Context("debug_mode", settings.WebServer.Debug).
+		Context("action", "auto_generated_temporary_secret").
+		Build()
+}
+
+// handleWeakSessionSecret logs a warning for weak session secrets
+func handleWeakSessionSecret(settings *conf.Settings) {
+	logger().Warn("Security Recommendation: SessionSecret is potentially weak",
+		"current_length", len(settings.Security.SessionSecret),
+		"recommended_length", MinSessionSecretLength,
+		"debug_mode", settings.WebServer.Debug,
+		"recommendation", "Consider regenerating with a stronger secret")
+
+	_ = intErrors.New(
+		fmt.Errorf("session secret is potentially weak: %d characters", len(settings.Security.SessionSecret))).
+		Component("security").
+		Category(intErrors.CategoryConfiguration).
+		Context("current_length", len(settings.Security.SessionSecret)).
+		Context("recommended_length", MinSessionSecretLength).
+		Context("debug_mode", settings.WebServer.Debug).
+		Build()
+}
+
+// parseBasicAuthRedirectURI parses and validates the Basic Auth redirect URI
+func parseBasicAuthRedirectURI(settings *conf.Settings) *url.URL {
+	if settings.Security.BasicAuth.RedirectURI == "" {
+		logger().Warn("Basic Auth Redirect URI is not configured. Basic authentication might not function correctly.")
+		return nil
+	}
+
+	parsedURI, err := url.Parse(settings.Security.BasicAuth.RedirectURI)
+	if err != nil {
+		logger().Error("CRITICAL CONFIGURATION ERROR: Failed to parse BasicAuth.RedirectURI. Basic authentication will likely fail.",
+			"uri", settings.Security.BasicAuth.RedirectURI, "error", err)
+		return nil
+	}
+
+	if parsedURI.RawQuery != "" || parsedURI.Fragment != "" {
+		logger().Error("CRITICAL CONFIGURATION ERROR: BasicAuth.RedirectURI must not contain query parameters or fragments.",
+			"uri", settings.Security.BasicAuth.RedirectURI)
+		return nil
+	}
+
+	logger().Info("Pre-parsed and validated Basic Auth Redirect URI", "uri", parsedURI.String())
+	return parsedURI
+}
+
+// setupTokenPersistence configures token persistence for the OAuth2 server
+func (s *OAuth2Server) setupTokenPersistence() {
+	configPaths, err := conf.GetDefaultConfigPaths()
+	if err != nil {
+		logger().Warn("Failed to get config paths for token persistence, persistence disabled", "error", err)
+		return
+	}
+
+	s.tokensFile = filepath.Join(configPaths[0], "tokens.json")
+	s.persistTokens = true
+	logger().Info("Token persistence configured", "file", s.tokensFile)
+
+	if err := os.MkdirAll(filepath.Dir(s.tokensFile), DirPermissions); err != nil {
+		logger().Error("Failed to create directory for token persistence, persistence disabled",
+			"path", filepath.Dir(s.tokensFile), "error", err)
+		s.persistTokens = false
+		return
+	}
+
+	if err := s.loadTokens(context.Background()); err != nil {
+		logger().Warn("Failed to load persisted tokens", "file", s.tokensFile, "error", err)
+	}
+}
+
 // InitializeGoth initializes social authentication providers.
 func InitializeGoth(settings *conf.Settings) {
 	logger().Info("Initializing Goth providers")
-	// Get path for storing sessions
-	var sessionPath string
 
-	if testConfigPath != "" {
-		logger().Info("Using test config path for session storage", "path", testConfigPath)
-		// Use test path if set
-		sessionPath = filepath.Join(testConfigPath, "sessions")
-	} else {
-		// Get path for storing sessions
-		configPaths, err := conf.GetDefaultConfigPaths()
-		if err != nil {
-			logger().Warn("Failed to get config paths for session store, using in-memory cookie store", "error", err)
-			// Fallback to in-memory store if config paths can't be retrieved
-			gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
-			goto initProviders // Skip filesystem store setup
-		}
-		sessionPath = filepath.Join(configPaths[0], "sessions")
-		logger().Info("Using filesystem session store", "path", sessionPath)
+	// Setup session store (filesystem or fallback to cookie-based)
+	setupSessionStore(settings)
+
+	// Initialize OAuth providers
+	initializeProviders(settings)
+}
+
+// setupSessionStore configures the Gothic session store.
+// It attempts to use a filesystem store, falling back to an in-memory cookie store on failure.
+func setupSessionStore(settings *conf.Settings) {
+	sessionPath, ok := getSessionPath()
+	if !ok {
+		// Fallback to in-memory store if config paths can't be retrieved
+		gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
+		return
 	}
 
 	// Ensure directory exists
-	if err := os.MkdirAll(sessionPath, 0o755); err != nil {
+	if err := os.MkdirAll(sessionPath, DirPermissions); err != nil {
 		logger().Error("Failed to create session directory, falling back to in-memory cookie store", "path", sessionPath, "error", err)
 		gothic.Store = sessions.NewCookieStore(createSessionKey(settings.Security.SessionSecret))
-	} else {
-		// Create persistent session store with properly sized keys
-		authKey := createSessionKey(settings.Security.SessionSecret)
-		encKey := createSessionKey(settings.Security.SessionSecret + "encryption")
-
-		gothic.Store = sessions.NewFilesystemStore(
-			sessionPath,
-			authKey,
-			encKey,
-		)
-
-		// Configure session store options
-		store := gothic.Store.(*sessions.FilesystemStore)
-		maxAge := 86400 * 7 // 7 days
-		if settings.Security.SessionDuration > 0 {
-			maxAge = int(settings.Security.SessionDuration.Seconds())
-		}
-		secureCookie := settings.Security.RedirectToHTTPS
-		store.Options = &sessions.Options{
-			Path:     "/",
-			MaxAge:   maxAge,
-			HttpOnly: true,
-			Secure:   secureCookie,
-			SameSite: http.SameSiteLaxMode,
-		}
-		logger().Info("Filesystem session store configured", "path", sessionPath, "max_age_seconds", maxAge, "secure", secureCookie)
-
-		// Set reasonable values for session cookie storage
-		maxSize := 1024 * 1024 // 1MB max size
-		store.MaxLength(maxSize)
-		logger().Debug("Set session store max length", "max_bytes", maxSize)
+		return
 	}
 
-initProviders:
+	// Create persistent session store with properly sized keys
+	authKey := createSessionKey(settings.Security.SessionSecret)
+	encKey := createSessionKey(settings.Security.SessionSecret + "encryption")
+
+	gothic.Store = sessions.NewFilesystemStore(
+		sessionPath,
+		authKey,
+		encKey,
+	)
+
+	// Configure session store options
+	store := gothic.Store.(*sessions.FilesystemStore)
+	maxAge := DefaultSessionMaxAgeSeconds
+	if settings.Security.SessionDuration > 0 {
+		maxAge = int(settings.Security.SessionDuration.Seconds())
+	}
+	secureCookie := settings.Security.RedirectToHTTPS
+	store.Options = buildSessionOptions(secureCookie, maxAge)
+	logger().Info("Filesystem session store configured", "path", sessionPath, "max_age_seconds", maxAge, "secure", secureCookie)
+
+	// Set reasonable values for session cookie storage
+	store.MaxLength(MaxSessionSizeBytes)
+	logger().Debug("Set session store max length", "max_bytes", MaxSessionSizeBytes)
+}
+
+// getSessionPath returns the path for session storage and whether it was successfully determined.
+func getSessionPath() (string, bool) {
+	if testConfigPath != "" {
+		logger().Info("Using test config path for session storage", "path", testConfigPath)
+		return filepath.Join(testConfigPath, "sessions"), true
+	}
+
+	configPaths, err := conf.GetDefaultConfigPaths()
+	if err != nil {
+		logger().Warn("Failed to get config paths for session store, using in-memory cookie store", "error", err)
+		return "", false
+	}
+
+	sessionPath := filepath.Join(configPaths[0], "sessions")
+	logger().Info("Using filesystem session store", "path", sessionPath)
+	return sessionPath, true
+}
+
+// initializeProviders sets up the OAuth providers (Google, GitHub).
+func initializeProviders(settings *conf.Settings) {
 	logger().Info("Configuring Goth providers")
-	// Initialize Gothic providers
-	providers := make([]goth.Provider, 0, 2)
+	providers := make([]goth.Provider, 0, InitialProviderCapacity)
+
 	if settings.Security.GoogleAuth.Enabled && settings.Security.GoogleAuth.ClientID != "" && settings.Security.GoogleAuth.ClientSecret != "" {
 		logger().Info("Enabling Google Auth provider")
-		googleProvider :=
-			gothGoogle.New(settings.Security.GoogleAuth.ClientID,
-				settings.Security.GoogleAuth.ClientSecret,
-				settings.Security.GoogleAuth.RedirectURI,
-				"https://www.googleapis.com/auth/userinfo.email", // Scope for email
-			)
+		googleProvider := gothGoogle.New(
+			settings.Security.GoogleAuth.ClientID,
+			settings.Security.GoogleAuth.ClientSecret,
+			settings.Security.GoogleAuth.RedirectURI,
+			"https://www.googleapis.com/auth/userinfo.email", // Scope for email
+		)
 		googleProvider.SetAccessType("offline")
 		providers = append(providers, googleProvider)
 	} else {
 		logger().Info("Google Auth provider disabled or not configured")
 	}
+
 	if settings.Security.GithubAuth.Enabled && settings.Security.GithubAuth.ClientID != "" && settings.Security.GithubAuth.ClientSecret != "" {
 		logger().Info("Enabling GitHub Auth provider")
-		providers = append(providers, github.New(settings.Security.GithubAuth.ClientID,
+		providers = append(providers, github.New(
+			settings.Security.GithubAuth.ClientID,
 			settings.Security.GithubAuth.ClientSecret,
 			settings.Security.GithubAuth.RedirectURI,
 			"user:email", // Scope for email
@@ -312,56 +349,94 @@ func (s *OAuth2Server) UpdateProviders() {
 // IsUserAuthenticated checks if the user is authenticated
 func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 	clientIP := net.ParseIP(c.RealIP())
-	logger := logger().With("client_ip", c.RealIP())
-	logger.Debug("Checking user authentication status")
+	log := logger().With("client_ip", c.RealIP())
+	log.Debug("Checking user authentication status")
 
 	if IsInLocalSubnet(clientIP) {
-		// For clients in the local subnet, consider them authenticated
-		logger.Info("User authenticated: request from local subnet")
+		log.Info("User authenticated: request from local subnet")
 		return true
 	}
 
-	// Check for basic auth token first
-	if token, err := gothic.GetFromSession("access_token", c.Request()); err == nil && token != "" {
-		logger.Debug("Found access_token in session, validating...")
-		if s.ValidateAccessToken(token) == nil {
-			logger.Info("User authenticated: valid access_token found in session")
-			return true
-		}
-		logger.Warn("Invalid or expired access_token found in session")
+	if s.checkBasicAuthToken(c.Request(), log) {
+		return true
 	}
 
-	// Check for social auth sessions
-	userId, err := gothic.GetFromSession("userId", c.Request())
+	if s.checkSocialAuthSessions(c.Request(), log) {
+		return true
+	}
+
+	log.Info("User not authenticated")
+	return false
+}
+
+// checkBasicAuthToken validates the basic auth access token from the session
+func (s *OAuth2Server) checkBasicAuthToken(r *http.Request, log SecurityLogger) bool {
+	token, err := gothic.GetFromSession("access_token", r)
+	if err != nil || token == "" {
+		return false
+	}
+
+	log.Debug("Found access_token in session, validating...")
+	if s.ValidateAccessToken(token) == nil {
+		log.Info("User authenticated: valid access_token found in session")
+		return true
+	}
+	log.Warn("Invalid or expired access_token found in session")
+	return false
+}
+
+// checkSocialAuthSessions checks for valid Google or GitHub authentication sessions
+func (s *OAuth2Server) checkSocialAuthSessions(r *http.Request, log SecurityLogger) bool {
+	userId, err := gothic.GetFromSession("userId", r)
 	if err != nil {
-		logger.Debug("No userId found in session")
+		log.Debug("No userId found in session")
 	} else {
-		logger = logger.With("session_user_id", userId)
-		logger.Debug("Found userId in session, checking provider sessions")
+		log.Debug("Found userId in session, checking provider sessions")
 	}
 
-	if s.Settings.Security.GoogleAuth.Enabled {
-		if googleUser, err := gothic.GetFromSession("google", c.Request()); err == nil && googleUser != "" {
-			logger.Debug("Found 'google' key in session")
-			if isValidUserId(s.Settings.Security.GoogleAuth.UserId, userId) {
-				logger.Info("User authenticated: valid Google session found for allowed user ID")
-				return true
-			}
-			logger.Warn("Google session found, but userId does not match allowed IDs", "allowed_ids", s.Settings.Security.GoogleAuth.UserId)
-		}
-	}
-	if s.Settings.Security.GithubAuth.Enabled {
-		if githubUser, err := gothic.GetFromSession("github", c.Request()); err == nil && githubUser != "" {
-			logger.Debug("Found 'github' key in session")
-			if isValidUserId(s.Settings.Security.GithubAuth.UserId, userId) {
-				logger.Info("User authenticated: valid GitHub session found for allowed user ID")
-				return true
-			}
-			logger.Warn("GitHub session found, but userId does not match allowed IDs", "allowed_ids", s.Settings.Security.GithubAuth.UserId)
-		}
+	if s.checkGoogleAuth(r, userId, log) {
+		return true
 	}
 
-	logger.Info("User not authenticated")
+	return s.checkGithubAuth(r, userId, log)
+}
+
+// checkGoogleAuth validates Google OAuth session
+func (s *OAuth2Server) checkGoogleAuth(r *http.Request, userId string, log SecurityLogger) bool {
+	return s.checkProviderAuth(r, userId, log, providerAuthConfig{
+		providerName:   ProviderGoogle,
+		enabled:        s.Settings.Security.GoogleAuth.Enabled,
+		allowedUserIds: s.Settings.Security.GoogleAuth.UserId,
+	})
+}
+
+// checkGithubAuth validates GitHub OAuth session
+func (s *OAuth2Server) checkGithubAuth(r *http.Request, userId string, log SecurityLogger) bool {
+	return s.checkProviderAuth(r, userId, log, providerAuthConfig{
+		providerName:   ProviderGitHub,
+		enabled:        s.Settings.Security.GithubAuth.Enabled,
+		allowedUserIds: s.Settings.Security.GithubAuth.UserId,
+	})
+}
+
+// checkProviderAuth validates an OAuth provider session generically.
+// This is the shared implementation used by checkGoogleAuth and checkGithubAuth.
+func (s *OAuth2Server) checkProviderAuth(r *http.Request, userId string, log SecurityLogger, cfg providerAuthConfig) bool {
+	if !cfg.enabled {
+		return false
+	}
+
+	sessionUser, err := gothic.GetFromSession(cfg.providerName, r)
+	if err != nil || sessionUser == "" {
+		return false
+	}
+
+	log.Debug("Found provider session key", "provider", cfg.providerName)
+	if isValidUserId(cfg.allowedUserIds, userId) {
+		log.Info("User authenticated: valid session found for allowed user ID", "provider", cfg.providerName)
+		return true
+	}
+	log.Warn("Provider session found, but userId does not match allowed IDs", "provider", cfg.providerName, "allowed_ids", cfg.allowedUserIds)
 	return false
 }
 
@@ -399,7 +474,7 @@ func isValidUserId(configuredIds, providedId string) bool {
 // GenerateAuthCode generates a new authorization code
 func (s *OAuth2Server) GenerateAuthCode() (string, error) {
 	logger().Debug("Generating new authorization code")
-	code := make([]byte, 32)
+	code := make([]byte, AuthCodeByteLength)
 	_, err := rand.Read(code)
 	if err != nil {
 		logger().Error("Failed to read random bytes for auth code", "error", err)
@@ -457,7 +532,7 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 	}
 
 	// Generate access token
-	tokenBytes := make([]byte, 32)
+	tokenBytes := make([]byte, AccessTokenByteLength)
 	_, err := rand.Read(tokenBytes)
 	if err != nil {
 		logger.Error("Failed to read random bytes for access token", "error", err)
@@ -590,11 +665,11 @@ func (s *OAuth2Server) IsRequestFromAllowedSubnet(ipStr string) bool {
 func (s *OAuth2Server) persistTokensIfEnabled() {
 	if s.persistTokens {
 		// Use a short background context for saving, as it runs in a goroutine
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), TokenSaveTimeout)
 		defer cancel()
 		if err := s.saveTokens(ctx); err != nil {
 			// Throttle logging for repeated save errors
-			s.logThrottledError("save_tokens_error", "Failed to save tokens", err, 5*time.Minute)
+			s.logThrottledError("save_tokens_error", "Failed to save tokens", err, ThrottleLogInterval)
 		}
 	}
 }
@@ -718,7 +793,7 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 
 	// Write atomically if possible (write to temp file, then rename)
 	tempFile := s.tokensFile + ".tmp"
-	if err := os.WriteFile(tempFile, data, 0o600); err != nil {
+	if err := os.WriteFile(tempFile, data, FilePermissions); err != nil {
 		logger().Error("Failed to write tokens to temporary file", "file", tempFile, "error", err)
 		return fmt.Errorf("failed to write tokens to temp file %s: %w", tempFile, err)
 	}
@@ -738,14 +813,22 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 	return nil
 }
 
-// StartAuthCleanup starts a background goroutine to clean up expired codes and tokens
-func (s *OAuth2Server) StartAuthCleanup(interval time.Duration) {
+// StartAuthCleanup starts a background goroutine to clean up expired codes and tokens.
+// The cleanup goroutine will stop when the provided context is canceled,
+// enabling graceful shutdown.
+func (s *OAuth2Server) StartAuthCleanup(ctx context.Context, interval time.Duration) {
 	logger().Info("Starting periodic cleanup of expired tokens and codes", "interval", interval)
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		for range ticker.C {
-			s.cleanupExpired()
+		for {
+			select {
+			case <-ctx.Done():
+				logger().Info("Stopping auth cleanup goroutine", "reason", ctx.Err())
+				return
+			case <-ticker.C:
+				s.cleanupExpired()
+			}
 		}
 	}()
 }
@@ -788,15 +871,6 @@ func (s *OAuth2Server) cleanupExpired() {
 		}
 	} else {
 		logger().Debug("No expired entries found during cleanup")
-	}
-}
-
-// Debug logs a debug message if debug mode is enabled
-//
-// Deprecated: Use logger().Debug directly
-func (s *OAuth2Server) Debug(format string, v ...any) {
-	if s.debug {
-		logger().Debug(fmt.Sprintf(format, v...))
 	}
 }
 
