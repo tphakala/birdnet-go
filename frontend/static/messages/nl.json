@@ -63,7 +63,16 @@
       "selectAll": "Alles selecteren",
       "selectNone": "Niets selecteren",
       "required": "Verplicht",
-      "optional": "Optioneel"
+      "optional": "Optioneel",
+      "noAudioSources": "Geen audiobronnen beschikbaar",
+      "noNotifications": "Geen meldingen",
+      "silent": "(stil)",
+      "loadingSettings": "Instellingen laden...",
+      "settingsNotFound": "Instellingen niet gevonden",
+      "sectionNotFound": "Sectie \"{section}\" niet gevonden",
+      "loadingMap": "Kaart laden...",
+      "imageNotAvailable": "Afbeelding niet beschikbaar",
+      "search": "Zoeken..."
     },
     "status": {
       "success": "Succes",
@@ -116,7 +125,8 @@
       "learnEbirdTaxonomyLink": "Open eBird Taxonomy in een nieuwe tab"
     },
     "labels": {
-      "confidence": "Betrouwbaarheid"
+      "confidence": "Betrouwbaarheid",
+      "github": "GitHub"
     },
     "values": {
       "yes": "Ja",
@@ -166,6 +176,16 @@
       }
     }
   },
+  "pageTitle": {
+    "settings": "Instellingen - BirdNET-Go",
+    "pageNotFound": "404 - Pagina niet gevonden",
+    "serverError": "500 - Interne serverfout",
+    "componentError": "Component laadfout",
+    "speciesAnalytics": "Soortanalyses",
+    "advancedAnalytics": "Geavanceerde analyses",
+    "detectionDetails": "Detectiedetails",
+    "settingsNotAvailable": "Instellingen niet beschikbaar"
+  },
   "navigation": {
     "dashboard": "Overzicht",
     "detections": "Herkend",
@@ -192,6 +212,7 @@
     "developedBy": "Ontwikkeld door",
     "developersText": "Het K. Lisa Yang Center for Conservation Bioacoustics van het Cornell Lab of Ornithology in samenwerking met de Technische Universiteit Chemnitz:",
     "visitBirdnetAnalyzer": "Bezoek BirdNET-Analyzer Project",
+    "visitBirdnetAnalyzerAriaLabel": "Bezoek de BirdNET-Analyzer GitHub repository",
     "contributors": "Bijdragers",
     "contributorsText": "BirdNET-Go is gegroeid en verbeterd dankzij de gezamenlijke inspanningen van veel individuen. Hun bijdragen, variërend van code verbeteringen tot functie suggesties, zijn van onschatbare waarde geweest om dit project beter te maken.",
     "mainDeveloper": "Hoofd Ontwikkelaar",
@@ -231,7 +252,11 @@
     "ebirdOrg": "eBird.org",
     "learnEbirdTaxonomy": "Meer informatie over eBird Taxonomie",
     "avicommonsTitle": "Vogelafbeeldingen",
-    "avicommonsDescription": "BirdNET-Go gebruikt gecureerde vogelafbeeldingen van Avicommons, een bibliotheek van zorgvuldig geselecteerde, bijgesneden en georiënteerde vogelfoto's onder Creative Commons-licenties."
+    "avicommonsDescription": "BirdNET-Go gebruikt gecureerde vogelafbeeldingen van Avicommons, een bibliotheek van zorgvuldig geselecteerde, bijgesneden en georiënteerde vogelfoto's onder Creative Commons-licenties.",
+    "githubStarPrompt": "Als u BirdNET-Go waardevol vindt, overweeg dan om het project een ster te geven op GitHub. Sterren helpen anderen dit project te ontdekken en ondersteunen de verdere ontwikkeling.",
+    "viewOnGithub": "Bekijk project op GitHub",
+    "visitGithubAriaLabel": "Bezoek BirdNET-Go GitHub repository",
+    "visitAvicommonsGithub": "Bezoek Avicommons GitHub repository"
   },
   "notifications": {
     "title": "Meldingen",
@@ -384,7 +409,9 @@
       "stackTrace": "Opdracht stapel tracering",
       "goToDashboard": "Ga naar het Overzicht",
       "reportIssue": "Meld een probleem",
-      "loginToViewDetails": "Aanmelden voor Detail weergave"
+      "loginToViewDetails": "Aanmelden om details te bekijken",
+      "componentLoadError": "Fout bij laden van component",
+      "failedToLoadComponent": "Het gevraagde component kon niet worden geladen"
     }
   },
   "dashboard": {
@@ -568,6 +595,11 @@
     "notes": {
       "title": "Notities & Aantekeningen",
       "noComments": "Geen notities of aantekeningen voor deze herkenning."
+    },
+    "aria": {
+      "loading": "Herkenningsdetails laden...",
+      "loaded": "Herkenningsdetails geladen voor {species}",
+      "error": "Fout bij het laden van herkenning: {error}"
     }
   },
   "species": {
@@ -577,7 +609,16 @@
     "taxonomy": {
       "hierarchy": "Taxonomische klassificatie",
       "subspecies": "Ondersoort",
-      "noData": "Geen taxonomische informatie beschikbaar."
+      "noData": "Geen taxonomische informatie beschikbaar.",
+      "labels": {
+        "kingdom": "Rijk",
+        "phylum": "Stam",
+        "class": "Klasse",
+        "order": "Orde",
+        "family": "Familie",
+        "genus": "Geslacht",
+        "species": "Soort"
+      }
     }
   },
   "system": {
@@ -605,10 +646,17 @@
     },
     "memoryUsage": {
       "title": "Geheugen gebruik",
-      "ramUsage": "Werkgeheugen gebruik"
+      "ramUsage": "Werkgeheugen gebruik",
+      "labels": {
+        "free": "Vrij",
+        "available": "Beschikbaar",
+        "buffCache": "Buffer/Cache"
+      }
     },
     "processInfo": {
       "title": "Proces informatie",
+      "loading": "Proces informatie laden...",
+      "noProcesses": "Geen proces informatie beschikbaar",
       "headers": {
         "pid": "PID",
         "name": "Naam",
@@ -618,7 +666,15 @@
         "uptime": "Werktijd"
       },
       "showAll": "Toon alle processen",
-      "showBirdnetOnly": "Toon alleen BirdNET"
+      "showBirdnetOnly": "Toon alleen BirdNET",
+      "table": {
+        "process": "Proces",
+        "status": "Status",
+        "cpu": "CPU",
+        "memory": "Geheugen",
+        "uptime": "Uptime",
+        "showAllProcesses": "Toon alle processen"
+      }
     },
     "errors": {
       "systemInfo": "Systeem informatie inlezen mislukt: {error}",
@@ -626,6 +682,12 @@
       "memoryUsage": "Geheugen gebruik inlezen mislukt: {error}",
       "temperature": "Temperatuur inlezen mislukt: {error}",
       "processes": "Proces informatie inlezen mislukt: {error}"
+    },
+    "progress": {
+      "labels": {
+        "overallProgress": "Totale voortgang",
+        "progress": "Voortgang"
+      }
     }
   },
   "analytics": {
@@ -731,6 +793,49 @@
         "confidence": "Betrouwbaarheid:",
         "first": "Eerst:"
       }
+    },
+    "advanced": {
+      "title": "Geavanceerde analyse",
+      "chartControls": "Grafiekbediening",
+      "dateRange": "Datumbereik",
+      "chartOptions": "Grafiekopties",
+      "speciesSelection": "Soortselectie ({count}/{max})",
+      "speciesSelectionHint": "Zoeken of klik op chips hieronder",
+      "speciesPlaceholder": "Zoeken en selecteer soorten voor analyse...",
+      "noSpeciesFound": "Geen soorten gevonden voor het geselecteerde datumbereik",
+      "detections": "{count} herkenningen",
+      "dateRangeOptions": {
+        "week": "Afgelopen week",
+        "month": "Afgelopen maand",
+        "quarter": "Afgelopen kwartaal",
+        "year": "Afgelopen jaar",
+        "custom": "Aangepast bereik"
+      },
+      "options": {
+        "relativeTrends": "Relatieve trends",
+        "zoomPan": "Zoomen en pannen",
+        "brushSelection": "Penseel selectie"
+      },
+      "charts": {
+        "timeOfDay": {
+          "title": "Detectiepatronen per dagdeel",
+          "description": "Toont gemiddelde detectieaantallen gedurende de dag voor geselecteerde soorten",
+          "noData": "Geen dagdeelgegevens beschikbaar",
+          "noDataHint": "Selecteer soorten en een datumbereik om patronen weer te geven"
+        },
+        "dailyTrend": {
+          "title": "Soortdetectietrends",
+          "description": "Toont detectietendensen in de tijd voor geselecteerde soorten",
+          "noData": "Geen trendgegevens beschikbaar",
+          "noDataHint": "Selecteer soorten en een datumbereik om tendensen weer te geven"
+        }
+      },
+      "aria": {
+        "startDate": "Startdatum",
+        "endDate": "Einddatum",
+        "loadingAnalytics": "Analysegegevens laden",
+        "loadingTrends": "Trendgegevens laden"
+      }
     }
   },
   "settings": {
@@ -781,6 +886,7 @@
         },
         "customClassifier": {
           "title": "Aangepaste BirdNET Classifier",
+          "description": "Configureer aangepaste BirdNET model en label bestanden voor gespecialiseerde herkenning",
           "modelPath": {
             "label": "Model Pad (Vereist herstart om toe te passen)",
             "placeholder": "Pad naar model bestand",
@@ -794,6 +900,7 @@
         },
         "dynamicThreshold": {
           "title": "Dynamische Drempelwaarde",
+          "description": "Pas de detectiegevoeligheid automatisch aan op basis van eerdere waarnemingen",
           "enable": {
             "label": "Schakel Dynamische Drempelwaarde in (BirdNET-Go specifieke functie)",
             "helpText": "Schakelt dynamische betrouwbaarheids drempelwaarde functie in voor meer adaptieve vogelroep herkenning."
@@ -822,6 +929,7 @@
         },
         "rangeFilter": {
           "title": "Bereik Filter",
+          "description": "Beperk detectie tot soorten die waarschijnlijk voorkomen in uw geografische regio",
           "stationLocation": {
             "label": "Station Locatie",
             "helpText": "Station locatie, gebruikt voor weersgegevens en om vogelsoorten te beperken tot diegenen die waarschijnlijk voorkomen in de regio."
@@ -870,6 +978,8 @@
             "helpText": "Selecteer het database type om te gebruiken voor het opslaan van herkenningen."
           },
           "sqlite": {
+            "title": "SQLite-configuratie",
+            "description": "Configureer de locatie van het SQLite database bestand",
             "note": "SQLite is het aanbevolen database type voor de meeste gebruikers.",
             "path": {
               "label": "SQLite Database Pad",
@@ -901,7 +1011,9 @@
               "label": "MySQL Database",
               "placeholder": "Voer MySQL database naam in",
               "helpText": "MySQL database naam"
-            }
+            },
+            "title": "MySQL-configuratie",
+            "description": "Configureer verbindingsinstellingen voor MySQL databaseserver"
           }
         },
         "interface": {
@@ -1043,6 +1155,12 @@
         "rangeFilterTestFailed": "Testen van bereik filter instellingen mislukt",
         "rangeFilterLoadFailed": "Laden van soorten lijst mislukt",
         "rangeFilterCountFailed": "Laden van soorten aantal mislukt"
+      },
+      "tabs": {
+        "general": "Algemeen",
+        "detection": "Detectie",
+        "location": "Locatie",
+        "database": "Database"
       }
     },
     "support": {
@@ -1454,7 +1572,8 @@
         "description": "Privacy filteren voorkomt het opslaan van audio clips wanneer menselijke stemmen worden gedetecteerd",
         "enable": "Schakel Privacy Filteren in",
         "confidenceLabel": "Betrouwbaarheids Drempelwaarde voor Menselijke Detectie",
-        "confidenceHelp": "Stel het betrouwbaarheidsniveau in voor menselijke stem detectie, lagere waarde maakt filter gevoeliger"
+        "confidenceHelp": "Stel het betrouwbaarheidsniveau in voor menselijke stem detectie, lagere waarde maakt filter gevoeliger",
+        "disabled": "Privacy filteren is uitgeschakeld"
       },
       "falsePositivePrevention": {
         "title": "Vals Positief Preventie",
@@ -1466,14 +1585,16 @@
         "expireTimeHelp": "Stel in hoe lang een gedetecteerd hondengeblaf wordt onthouden",
         "addDogBarkSpeciesLabel": "Voeg Hondengeblaf Soorten toe",
         "addDogBarkSpeciesHelp": "Zoek en voeg soorten toe die verward kunnen worden met hondengeblaf",
-        "addSpeciesButton": "Toevoegen"
+        "addSpeciesButton": "Toevoegen",
+        "disabled": "Hondengeblaf filter is uitgeschakeld"
       },
       "speciesNamePlaceholder": "Soorten naam",
       "typeSpeciesName": "Typ soorten naam...",
       "dogBarkSpeciesList": "Hondengeblaf Soorten Lijst",
       "errors": {
         "speciesLoadFailed": "Laden van soorten lijst mislukt. Probeer het opnieuw."
-      }
+      },
+      "title": "Filters"
     },
     "integration": {
       "birdweather": {
@@ -1637,7 +1758,13 @@
         "rtspTransportLabel": "RTSP Transport Protocol",
         "rtspTransportHelp": "TCP is betrouwbaarder maar kan hogere latentie hebben. UDP is sneller maar kan pakketverlies ervaren op slechte netwerken.",
         "rtspUrlsLabel": "RTSP Stream URLs",
-        "rtspUrlsHelp": "Voer één of meer RTSP stream URLs in voor netwerk audio bronnen. Formaat: rtsp://ip:port/stream. Note: Authenticatie gegevens moeten apart worden geconfigureerd in jouw RTSP server instellingen voor beveiliging."
+        "rtspUrlsHelp": "Voer één of meer RTSP stream URLs in voor netwerk audio bronnen. Formaat: rtsp://ip:port/stream. Note: Authenticatie gegevens moeten apart worden geconfigureerd in jouw RTSP server instellingen voor beveiliging.",
+        "noDeviceSelected": "Geen audio apparaat geselecteerd",
+        "refreshDevices": "Vernieuwen",
+        "deviceSelected": "Geluidskaart geselecteerd en klaar voor opname",
+        "availableDevices": "Beschikbare Audio Apparaten",
+        "active": "Actief",
+        "streamsConfigured": "{count} stream(s) geconfigureerd"
       },
       "audioFilters": {
         "title": "Audiofilters",
@@ -1678,7 +1805,8 @@
         "dataOutputDescription": "Wanneer ingeschakeld, worden geluidsniveau metingen gepubliceerd via:",
         "mqttTopic": "MQTT topic:",
         "sseEndpoint": "SSE endpoint:",
-        "prometheusMetrics": "Prometheus metrics:"
+        "prometheusMetrics": "Prometheus metrics:",
+        "disabled": "Sound level monitoring is disabled"
       },
       "clipSettings": {
         "title": "Clip Instellingen",
@@ -1715,7 +1843,9 @@
         "typeHelp": "Audio formaat voor opgeslagen clips. WAV en FLAC zijn lossless (beste kwaliteit, grotere bestanden). MP3, AAC, en Opus zijn lossy (kleinere bestanden, lichte kwaliteitsverlies).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio compressie bitrate voor lossy formaten. Bereik: {min}-{max} kbps. Hogere waarden geven betere kwaliteit maar grotere bestanden.",
-        "losslessNote": "Lossless formaten behouden originele audio kwaliteit zonder compressie artefacten."
+        "losslessNote": "Lossless formaten behouden originele audio kwaliteit zonder compressie artefacten.",
+        "normalizationDisabled": "Audio normalization is disabled",
+        "disabledInfo": "Enable clip recording above to configure clip settings, file format, and storage options."
       },
       "fileSettings": {
         "title": "Bestand Instellingen",
@@ -1761,7 +1891,13 @@
           "none": "Geen - Behoud Alles",
           "age": "Leeftijd-Gebaseerd",
           "usage": "Schijfgebruik-Gebaseerd"
-        }
+        },
+        "noRetentionTitle": "Alle Clips Bewaard",
+        "noRetentionDescription": "Audio clips worden voor onbepaalde tijd bewaard. Monitor schijfgebruik om opslagproblemen te voorkomen.",
+        "ageRetentionTitle": "Leeftijd-Gebaseerde Opruiming",
+        "ageRetentionDescription": "Clips ouder dan de opgegeven leeftijd worden automatisch verwijderd, waarbij het minimum aantal per soort behouden blijft.",
+        "usageRetentionTitle": "Gebruik-Gebaseerde Opruiming",
+        "usageRetentionDescription": "Wanneer schijfgebruik de drempelwaarde overschrijdt, worden oudste clips verwijderd totdat het gebruik binnen de limieten is."
       },
       "formats": {
         "wav": "WAV",
@@ -1784,6 +1920,95 @@
         "devicesLoadFailed": "Laden van audio apparaten mislukt. Controleer systeem permissies.",
         "invalidBitrate": "Ongeldige bitrate waarde",
         "invalidRetentionPolicy": "Ongeldig bewarings beleid"
+      },
+      "emptyStates": {
+        "soundCard": {
+          "title": "Geen Geluidskaarten Gedetecteerd",
+          "description": "Geen lokale audio invoer apparaten gevonden op dit systeem. Dit is normaal voor container of headless server implementaties.",
+          "errorTitle": "Fout bij Laden van Apparaten",
+          "hintsTitle": "U kunt:",
+          "hints": {
+            "container": "Dit is normaal voor container/headless implementaties",
+            "streams": "Configureer in plaats daarvan netwerk streams in het Streams tabblad",
+            "usb": "Sluit een USB microfoon aan en vernieuw de lijst"
+          },
+          "refresh": "Vernieuw Apparaten",
+          "retry": "Opnieuw Proberen"
+        },
+        "streams": {
+          "title": "Geen Streams Geconfigureerd",
+          "description": "Voeg RTSP of netwerk audio streams toe van IP camera's, microfoon servers, of andere streaming bronnen.",
+          "hintsTitle": "Aan de slag:",
+          "hints": {
+            "rtsp": "Voer RTSP URLs in het formaat in: rtsp://ip:poort/stream",
+            "multiple": "U kunt meerdere streams toevoegen voor verschillende locaties",
+            "protocol": "Kies TCP voor betrouwbaarheid of UDP voor lagere latentie"
+          }
+        }
+      },
+      "soundCard": {
+        "title": "Geluidskaart",
+        "description": "Configureer lokaal audio invoer apparaat",
+        "audioSourceLabel": "Audio Bron (vereist applicatie herstart om effect te hebben)",
+        "audioSourceHelp": "Selecteer het audio invoer apparaat voor vogelgeluid detectie. Wijzigingen vereisen applicatie herstart om effect te hebben.",
+        "noSoundCardCapture": "Geen geluidskaart opname",
+        "empty": {
+          "title": "Geen Geluidskaarten Gedetecteerd",
+          "description": "Geen lokale audio invoer apparaten gevonden op dit systeem. Dit is normaal voor container of headless server implementaties.",
+          "hintsTitle": "U kunt:",
+          "hintStream": "Configureer netwerk streams in het Streams tabblad",
+          "hintUsb": "Sluit een USB microfoon aan en vernieuw de lijst",
+          "goToStreams": "Ga naar Streams",
+          "refresh": "Vernieuw Apparaten"
+        }
+      },
+      "noSources": {
+        "warning": "Geen Audio Bronnen Geconfigureerd",
+        "description": "BirdNET-Go heeft een audio invoer nodig om vogels te detecteren. Configureer alstublieft tenminste één bron in het Geluidskaart of Streams tabblad."
+      },
+      "rtspStreams": {
+        "title": "RTSP Stream Configuratie",
+        "description": "Configureer netwerk audio streams voor audio opname op afstand via RTSP protocol.",
+        "noStreamsConfigured": "Geen streams geconfigureerd"
+      },
+      "streams": {
+        "streamLabel": "Stream",
+        "urlLabel": "Stream URL",
+        "urlHelp": "Voer RTSP URL in met optionele credentials (rtsp://gebruiker:wachtwoord@host:poort/pad)",
+        "typeLabel": "Stream Type",
+        "typeLockedNote": "Alleen RTSP wordt momenteel ondersteund",
+        "transportLabel": "Protocol",
+        "summary": "{count} stream(s) geconfigureerd",
+        "healthy": "gezond",
+        "unhealthy": "ongezond",
+        "unknown": "onbekend",
+        "refresh": "Vernieuwen",
+        "addStream": "Stream Toevoegen",
+        "deleteConfirm": "Deze stream verwijderen?",
+        "restartCount": "{count} keer opnieuw gestart",
+        "healthLoadError": "Laden van stream gezondheid status mislukt",
+        "status": {
+          "connected": "Verbonden",
+          "connecting": "Verbinden",
+          "error": "Fout",
+          "idle": "Inactief",
+          "unknown": "Onbekend"
+        },
+        "emptyState": {
+          "title": "Geen Streams Geconfigureerd",
+          "description": "Voeg RTSP streams toe om audio vast te leggen van netwerk camera's of andere RTSP bronnen.",
+          "hintsTitle": "Aan de Slag",
+          "hints": {
+            "rtsp": "Gebruik RTSP URLs van IP camera's (bijv., rtsp://192.168.1.100:554/stream)",
+            "credentials": "Voeg credentials toe in URL indien vereist (rtsp://gebruiker:wachtwoord@host/stream)",
+            "protocol": "TCP is betrouwbaarder, UDP heeft lagere latentie"
+          }
+        },
+        "errors": {
+          "urlRequired": "Stream URL is vereist",
+          "invalidUrl": "Ongeldig RTSP URL formaat",
+          "duplicate": "Deze stream URL bestaat al"
+        }
       }
     },
     "security": {
@@ -1813,7 +2038,8 @@
         "description": "Beveiligde toegang met een eenvoudig wachtwoord",
         "enableLabel": "Schakel Wachtwoord Authenticatie In",
         "passwordLabel": "Wachtwoord",
-        "passwordHelpText": "Beperk toegang tot instellingen met een wachtwoord."
+        "passwordHelpText": "Beperk toegang tot instellingen met een wachtwoord.",
+        "disabled": "Password authentication is disabled"
       },
       "oauth": {
         "title": "OAuth2 Sociale Authenticatie",
@@ -1843,7 +2069,8 @@
       },
       "bypassAuthentication": {
         "title": "Omzeil Authenticatie",
-        "description": "Sta toegang tot instellingen toe zonder authenticatie"
+        "description": "Sta toegang tot instellingen toe zonder authenticatie",
+        "disabled": "Subnet bypass is disabled"
       },
       "placeholders": {
         "host": "Bijvoorbeeld, localhost:8080 of example.domain.com",
@@ -1940,6 +2167,28 @@
           "speciesPlaceholder": "Soorten naam",
           "thresholdPlaceholder": "0.5",
           "intervalPlaceholder": "0"
+        },
+        "addConfiguration": "Configuratie Toevoegen",
+        "newConfiguration": "Nieuwe Configuratie",
+        "editing": "Bewerken: {species}",
+        "configuredCount": "{count} geconfigureerd",
+        "searchPlaceholder": "Typ om te zoeken...",
+        "saving": "Opslaan...",
+        "save": "Opslaan",
+        "cancel": "Annuleren",
+        "configureActions": "Acties Configureren",
+        "actionsConfigured": "Geconfigureerd",
+        "list": {
+          "threshold": "Drempelwaarde:",
+          "interval": "Interval:",
+          "intervalNone": "Geen",
+          "actionBadge": "Actie",
+          "editTitle": "Configuratie bewerken",
+          "removeTitle": "Configuratie verwijderen"
+        },
+        "emptyState": {
+          "title": "Nog geen configuraties.",
+          "description": "Klik op \"Configuratie Toevoegen\" om soorten detectie instellingen aan te passen."
         }
       },
       "actionsModal": {
@@ -2072,6 +2321,12 @@
       "sqlitePlaceholder": "Voer SQLite database pad in",
       "mysqlHostPlaceholder": "Voer MySQL host in",
       "mysqlUsernamePlaceholder": "Voer MySQL gebruikersnaam in"
+    },
+    "tabs": {
+      "navigation": "Navigatietabbladen voor instellingen",
+      "hasChanges": "Dit tabblad heeft niet-opgeslagen wijzigingen",
+      "setAsDefault": "Als standaard instellen",
+      "defaultIndicator": "Standaard invoerbron"
     }
   },
   "auth": {
@@ -2236,10 +2491,35 @@
     }
   },
   "components": {
+    "audio": {
+      "spectrogramUnavailable": "Spectrogram niet beschikbaar",
+      "generating": "Genereren...",
+      "queuePosition": "Wachtrij: {position}"
+    },
     "forms": {
       "numberField": {
         "adjustedToMinimum": "Waarde is gewijzigd in de minimale waarde ({value})",
         "adjustedToMaximum": "Waarde is gewijzigd in de maximale waarde ({value})"
+      },
+      "species": {
+        "suggestionsAvailable": "{count} soortsuggessies beschikbaar. Gebruik pijltoetsen om te navigeren.",
+        "noSuggestions": "Geen soortsuggessies beschikbaar.",
+        "loadingSpecies": "Soorten laden...",
+        "typePlaceholder": "Typ soorten naam..."
+      },
+      "select": {
+        "searchOptions": "Zoeken opties",
+        "noOptions": "Geen opties gevonden",
+        "searchPlaceholder": "Zoeken..."
+      },
+      "rtsp": {
+        "addNewStream": "Nieuwe RTSP Stream Toevoegen",
+        "maxStreamsReached": "Maximum aantal RTSP streams ({max}) bereikt.",
+        "cameraPlaceholder": "Camera 1",
+        "urlPlaceholder": "rtsp://gebruikersnaam:wachtwoord@192.168.1.100:554/stream"
+      },
+      "subnet": {
+        "maxSubnetsReached": "Maximum aantal subnets ({max}) bereikt."
       }
     },
     "datePicker": {

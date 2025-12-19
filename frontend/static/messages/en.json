@@ -63,7 +63,16 @@
       "selectAll": "Select all",
       "selectNone": "Select none",
       "required": "Required",
-      "optional": "Optional"
+      "optional": "Optional",
+      "noAudioSources": "No audio sources available",
+      "noNotifications": "No notifications",
+      "silent": "(silent)",
+      "loadingSettings": "Loading settings...",
+      "settingsNotFound": "Settings Not Found",
+      "sectionNotFound": "The requested settings section \"{section}\" could not be found.",
+      "loadingMap": "Loading map...",
+      "imageNotAvailable": "Image not available",
+      "search": "Search..."
     },
     "status": {
       "success": "Success",
@@ -116,7 +125,8 @@
       "learnEbirdTaxonomyLink": "Open eBird Taxonomy in a new tab"
     },
     "labels": {
-      "confidence": "Confidence"
+      "confidence": "Confidence",
+      "github": "GitHub"
     },
     "values": {
       "yes": "Yes",
@@ -166,6 +176,16 @@
       }
     }
   },
+  "pageTitle": {
+    "settings": "Settings - BirdNET-Go",
+    "pageNotFound": "404 - Page Not Found",
+    "serverError": "500 - Internal Server Error",
+    "componentError": "Component Load Error",
+    "speciesAnalytics": "Species Analytics",
+    "advancedAnalytics": "Advanced Analytics",
+    "detectionDetails": "Detection Details",
+    "settingsNotAvailable": "Settings Not Available"
+  },
   "navigation": {
     "dashboard": "Dashboard",
     "detections": "Detections",
@@ -192,6 +212,7 @@
     "developedBy": "Developed by",
     "developersText": "The K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology:",
     "visitBirdnetAnalyzer": "Visit BirdNET-Analyzer Project",
+    "visitBirdnetAnalyzerAriaLabel": "Visit BirdNET-Analyzer GitHub repository",
     "contributors": "Contributors",
     "contributorsText": "BirdNET-Go has grown and improved thanks to the collaborative efforts of many individuals. Their contributions, ranging from code improvements to feature suggestions, have been invaluable in making this project better.",
     "mainDeveloper": "Main Developer",
@@ -231,7 +252,11 @@
     "ebirdOrg": "eBird.org",
     "learnEbirdTaxonomy": "Learn about eBird Taxonomy",
     "avicommonsTitle": "Bird Thumbnails",
-    "avicommonsDescription": "BirdNET-Go uses curated bird images from Avicommons, a library of hand-picked, cropped, and oriented bird photos licensed under Creative Commons licenses."
+    "avicommonsDescription": "BirdNET-Go uses curated bird images from Avicommons, a library of hand-picked, cropped, and oriented bird photos licensed under Creative Commons licenses.",
+    "githubStarPrompt": "If you find BirdNET-Go valuable, please consider starring the project on GitHub. Stars help others discover this project and support its continued development.",
+    "viewOnGithub": "View Project on GitHub",
+    "visitGithubAriaLabel": "Visit BirdNET-Go GitHub repository",
+    "visitAvicommonsGithub": "Visit Avicommons GitHub repository"
   },
   "notifications": {
     "title": "Notifications",
@@ -384,7 +409,9 @@
       "stackTrace": "Stack Trace",
       "goToDashboard": "Go to Dashboard",
       "reportIssue": "Report Issue",
-      "loginToViewDetails": "Login to View Details"
+      "loginToViewDetails": "Login to View Details",
+      "componentLoadError": "Component Load Error",
+      "failedToLoadComponent": "Failed to load the requested component"
     }
   },
   "dashboard": {
@@ -568,6 +595,11 @@
     "notes": {
       "title": "Notes & Comments",
       "noComments": "No comments or notes for this detection."
+    },
+    "aria": {
+      "loading": "Loading detection details...",
+      "loaded": "Detection details loaded for {species}",
+      "error": "Error loading detection: {error}"
     }
   },
   "species": {
@@ -577,7 +609,16 @@
     "taxonomy": {
       "hierarchy": "Taxonomic Classification",
       "subspecies": "Subspecies",
-      "noData": "No taxonomy data available."
+      "noData": "No taxonomy data available.",
+      "labels": {
+        "kingdom": "Kingdom",
+        "phylum": "Phylum",
+        "class": "Class",
+        "order": "Order",
+        "family": "Family",
+        "genus": "Genus",
+        "species": "Species"
+      }
     }
   },
   "system": {
@@ -605,10 +646,23 @@
     },
     "memoryUsage": {
       "title": "Memory Usage",
-      "ramUsage": "RAM Usage"
+      "ramUsage": "RAM Usage",
+      "labels": {
+        "free": "Free",
+        "available": "Available",
+        "buffCache": "Buff/Cache"
+      }
+    },
+    "progress": {
+      "labels": {
+        "overallProgress": "Overall Progress",
+        "progress": "Progress"
+      }
     },
     "processInfo": {
       "title": "Process Information",
+      "loading": "Loading process information...",
+      "noProcesses": "No process information available",
       "headers": {
         "pid": "PID",
         "name": "Name",
@@ -618,7 +672,15 @@
         "uptime": "Uptime"
       },
       "showAll": "Show All Processes",
-      "showBirdnetOnly": "Show BirdNET Only"
+      "showBirdnetOnly": "Show BirdNET Only",
+      "table": {
+        "process": "Process",
+        "status": "Status",
+        "cpu": "CPU",
+        "memory": "Memory",
+        "uptime": "Uptime",
+        "showAllProcesses": "Show all processes"
+      }
     },
     "errors": {
       "systemInfo": "Failed to load system information: {error}",
@@ -730,6 +792,49 @@
         "detections": "Detections:",
         "confidence": "Confidence:",
         "first": "First:"
+      }
+    },
+    "advanced": {
+      "title": "Advanced Analytics",
+      "chartControls": "Chart Controls",
+      "dateRange": "Date Range",
+      "chartOptions": "Chart Options",
+      "speciesSelection": "Species Selection ({count}/{max})",
+      "speciesSelectionHint": "Search or click chips below",
+      "speciesPlaceholder": "Search and select species for analysis...",
+      "noSpeciesFound": "No species found for the selected date range",
+      "detections": "{count} detections",
+      "dateRangeOptions": {
+        "week": "Last Week",
+        "month": "Last Month",
+        "quarter": "Last Quarter",
+        "year": "Last Year",
+        "custom": "Custom Range"
+      },
+      "options": {
+        "relativeTrends": "Relative trends",
+        "zoomPan": "Zoom & pan",
+        "brushSelection": "Brush selection"
+      },
+      "charts": {
+        "timeOfDay": {
+          "title": "Detection Patterns by Time of Day",
+          "description": "Shows average detection counts throughout the day for selected species",
+          "noData": "No time-of-day data available",
+          "noDataHint": "Select species and a date range to view patterns"
+        },
+        "dailyTrend": {
+          "title": "Species Detection Trends",
+          "description": "Shows detection trends over time for selected species",
+          "noData": "No trend data available",
+          "noDataHint": "Select species and a date range to view trends"
+        }
+      },
+      "aria": {
+        "startDate": "Start date",
+        "endDate": "End date",
+        "loadingAnalytics": "Loading analytics data",
+        "loadingTrends": "Loading trend data"
       }
     }
   },
@@ -2386,10 +2491,35 @@
     }
   },
   "components": {
+    "audio": {
+      "spectrogramUnavailable": "Spectrogram unavailable",
+      "generating": "Generating...",
+      "queuePosition": "Queue: {position}"
+    },
     "forms": {
       "numberField": {
         "adjustedToMinimum": "Value was adjusted to minimum ({value})",
         "adjustedToMaximum": "Value was adjusted to maximum ({value})"
+      },
+      "rtsp": {
+        "addNewStream": "Add New RTSP Stream",
+        "maxStreamsReached": "Maximum number of RTSP streams ({max}) reached.",
+        "cameraPlaceholder": "Camera 1",
+        "urlPlaceholder": "rtsp://username:password@192.168.1.100:554/stream"
+      },
+      "subnet": {
+        "maxSubnetsReached": "Maximum number of subnets ({max}) reached."
+      },
+      "species": {
+        "loadingSpecies": "Loading species...",
+        "typePlaceholder": "Type species name...",
+        "suggestionsAvailable": "{count} species suggestions available. Use arrow keys to navigate.",
+        "noSuggestions": "No species suggestions available."
+      },
+      "select": {
+        "searchPlaceholder": "Search...",
+        "searchOptions": "Search options",
+        "noOptions": "No options found"
       }
     },
     "datePicker": {

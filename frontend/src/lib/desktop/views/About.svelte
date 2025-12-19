@@ -77,8 +77,7 @@
         <span class="text-yellow-500">
           <Star class="size-5" />
         </span>
-        If you find BirdNET-Go valuable, please consider starring the project on GitHub. Stars help others
-        discover this project and support its continued development.
+        {t('about.githubStarPrompt')}
       </p>
     </div>
 
@@ -88,10 +87,10 @@
         class="btn btn-outline-primary gap-2"
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="Visit BirdNET-Go GitHub repository"
+        aria-label={t('about.visitGithubAriaLabel')}
       >
         <Github class="size-5" />
-        View Project on GitHub
+        {t('about.viewOnGithub')}
       </a>
     </div>
   </Card>
@@ -131,7 +130,7 @@
         class="btn btn-outline-primary gap-2"
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="Visit BirdNET-Analyzer GitHub repository"
+        aria-label={t('about.visitBirdnetAnalyzerAriaLabel')}
       >
         <Github class="size-5" />
         {t('about.visitBirdnetAnalyzer')}
@@ -339,10 +338,10 @@
         class="btn btn-sm btn-outline-primary gap-2"
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="Visit Avicommons GitHub repository"
+        aria-label={t('about.visitAvicommonsGithub')}
       >
         <Github class="size-5" />
-        GitHub
+        {t('common.labels.github')}
       </a>
     </div>
   </Card>

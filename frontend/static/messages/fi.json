@@ -26,7 +26,7 @@
     "apply": "Käytä",
     "clear": "Tyhjennä",
     "done": "Valmis",
-    "goToDashboard": "Siirry kojelauttaan",
+    "goToDashboard": "Siirry etusivulle",
     "reportIssue": "Ilmoita ongelmasta",
     "loginToViewDetails": "Kirjaudu nähdäksesi lisätiedot",
     "pageNotFound": "Sivua ei löydy",
@@ -63,13 +63,22 @@
       "selectAll": "Valitse kaikki",
       "selectNone": "Poista valinnat",
       "required": "Pakollinen",
-      "optional": "Vapaaehtoinen"
+      "optional": "Valinnainen",
+      "noAudioSources": "Ei äänilähteitä saatavilla",
+      "noNotifications": "Ei ilmoituksia",
+      "silent": "(hiljainen)",
+      "loadingSettings": "Ladataan asetuksia...",
+      "settingsNotFound": "Asetuksia ei löydy",
+      "sectionNotFound": "Osaa \"{section}\" ei löydy",
+      "loadingMap": "Ladataan karttaa...",
+      "imageNotAvailable": "Kuva ei saatavilla",
+      "search": "Hae..."
     },
     "status": {
       "success": "Onnistui",
       "error": "Virhe",
       "warning": "Varoitus",
-      "info": "Tiedote",
+      "info": "Tiedot",
       "pending": "Odottaa",
       "processing": "Käsitellään",
       "completed": "Valmis",
@@ -116,7 +125,8 @@
       "learnEbirdTaxonomyLink": "Avaa eBird-taksonomia uuteen välilehteen"
     },
     "labels": {
-      "confidence": "Luottamus"
+      "confidence": "Luottamus",
+      "github": "GitHub"
     },
     "values": {
       "yes": "Kyllä",
@@ -167,7 +177,7 @@
     }
   },
   "navigation": {
-    "dashboard": "Kojelautta",
+    "dashboard": "Yleiskatsaus",
     "detections": "Havainnot",
     "search": "Haku",
     "analytics": "Analytiikka",
@@ -181,6 +191,16 @@
     "analyticsSubmenu": "Analytiikan alavalikko",
     "settingsSubmenu": "Asetusten alavalikko"
   },
+  "pageTitle": {
+    "settings": "Asetukset - BirdNET-Go",
+    "pageNotFound": "404 - Sivua ei löydy",
+    "serverError": "500 - Sisäinen palvelinvirhe",
+    "componentError": "Komponentin latausvirhe",
+    "speciesAnalytics": "Lajianalytiikka",
+    "advancedAnalytics": "Edistynyt analytiikka",
+    "detectionDetails": "Tunnistuksen tiedot",
+    "settingsNotAvailable": "Asetukset eivät ole käytettävissä"
+  },
   "about": {
     "title": "BirdNET-Go",
     "subtitle": "Moderni käyttöliittymä reaaliaikaiseen lintuäänten tunnistukseen ja luokitteluun",
@@ -192,6 +212,7 @@
     "developedBy": "Kehittäjät",
     "developersText": "K. Lisa Yang Center for Conservation Bioacoustics Cornell Lab of Ornithologyssa yhteistyössä Chemnitzin teknillisen yliopiston kanssa:",
     "visitBirdnetAnalyzer": "Käy BirdNET-Analyzer projektissa",
+    "visitBirdnetAnalyzerAriaLabel": "Vieraile BirdNET-Analyzer GitHub-repositoriossa",
     "contributors": "Avustajat",
     "contributorsText": "BirdNET-Go on kasvanut ja parantunut monien ihmisten yhteistyön ansiosta. Heidän panoksensa koodin parannuksista ominaisuusehdotuksiin on ollut korvaamatonta tämän projektin parantamisessa.",
     "mainDeveloper": "Pääkehittäjä",
@@ -231,7 +252,11 @@
     "ebirdOrg": "eBird.org",
     "learnEbirdTaxonomy": "Lue lisää eBird-taksonomiasta",
     "avicommonsTitle": "Lintukuvat",
-    "avicommonsDescription": "BirdNET-Go käyttää Avicommons-palvelun kuratoituja lintukuvia. Avicommons on kirjasto käsin valittuja, rajattuja ja suunnattuja lintuvalokuvia Creative Commons -lisenssillä."
+    "avicommonsDescription": "BirdNET-Go käyttää Avicommons-palvelun kuratoituja lintukuvia. Avicommons on kirjasto käsin valittuja, rajattuja ja suunnattuja lintuvalokuvia Creative Commons -lisenssillä.",
+    "githubStarPrompt": "Jos pidät BirdNET-Go:ta hyödyllisenä, harkitse projektin tähdittämistä GitHubissa. Tähdet auttavat muita löytämään projektin ja tukevat sen kehitystä.",
+    "viewOnGithub": "Näytä projekti GitHubissa",
+    "visitGithubAriaLabel": "Vieraile BirdNET-Go GitHub-arkistossa",
+    "visitAvicommonsGithub": "Vieraile Avicommons GitHub-arkistossa"
   },
   "notifications": {
     "title": "Ilmoitukset",
@@ -371,20 +396,22 @@
     "404": {
       "code": "404",
       "title": "Sivua ei löydy",
-      "goToDashboard": "Siirry kojelauttaan"
+      "goToDashboard": "Siirry etusivulle"
     },
     "500": {
       "code": "500",
       "title": "Sisäinen palvelinvirhe",
       "defaultMessage": "Tapahtui sisäinen palvelinvirhe.",
-      "goToDashboard": "Siirry kojelauttaan"
+      "goToDashboard": "Siirry etusivulle"
     },
     "generic": {
       "errorDetails": "Virhetiedot",
       "stackTrace": "Pinojälki",
-      "goToDashboard": "Siirry kojelauttaan",
+      "goToDashboard": "Siirry etusivulle",
       "reportIssue": "Ilmoita ongelmasta",
-      "loginToViewDetails": "Kirjaudu nähdäksesi lisätiedot"
+      "loginToViewDetails": "Kirjaudu sisään nähdäksesi tiedot",
+      "componentLoadError": "Komponentin latausvirhe",
+      "failedToLoadComponent": "Pyydettyä komponenttia ei voitu ladata"
     }
   },
   "dashboard": {
@@ -479,7 +506,7 @@
       "dailySummaryLoad": "Päivän aktiivisuuden lataus epäonnistui",
       "recentDetectionsFetch": "Viimeaikaisten havaintojen haku epäonnistui: {status}",
       "recentDetectionsLoad": "Viimeaikaisten havaintojen lataus epäonnistui",
-      "configFetch": "Kojelaudan asetusten haku epäonnistui: {status}"
+      "configFetch": "Etusivun asetusten haku epäonnistui: {status}"
     }
   },
   "detections": {
@@ -568,6 +595,11 @@
     "notes": {
       "title": "Huomiot ja kommentit",
       "noComments": "Ei kommentteja tai huomioita tälle havainnolle."
+    },
+    "aria": {
+      "loading": "Ladataan havainnon tietoja...",
+      "loaded": "Havainnon tiedot ladattu: {species}",
+      "error": "Virhe havainnon latauksessa: {error}"
     }
   },
   "species": {
@@ -577,15 +609,24 @@
     "taxonomy": {
       "hierarchy": "Taksonomiluokitus",
       "subspecies": "Alalajit",
-      "noData": "Taksonomiatietoja ei ole saatavilla."
+      "noData": "Taksonomiatietoja ei ole saatavilla.",
+      "labels": {
+        "kingdom": "Kunta",
+        "phylum": "Pääjakso",
+        "class": "Luokka",
+        "order": "Lahko",
+        "family": "Heimo",
+        "genus": "Suku",
+        "species": "Laji"
+      }
     }
   },
   "system": {
-    "title": "Järjestelmän kojelautta",
+    "title": "Järjestelmän yleiskatsaus",
     "refreshData": "Päivitä tiedot",
     "aria": {
       "refreshData": "Päivitä järjestelmätiedot",
-      "dashboard": "Järjestelmän kojelauta suorituskykyarvioilla ja tiedoilla"
+      "dashboard": "Järjestelmän yleiskatsaus suorituskykyarvioilla ja tiedoilla"
     },
     "systemInfo": {
       "title": "Järjestelmätiedot",
@@ -605,10 +646,17 @@
     },
     "memoryUsage": {
       "title": "Muistin käyttö",
-      "ramUsage": "RAM-käyttö"
+      "ramUsage": "RAM-käyttö",
+      "labels": {
+        "free": "Vapaa",
+        "available": "Käytettävissä",
+        "buffCache": "Puskuri/välimuisti"
+      }
     },
     "processInfo": {
       "title": "Prosessitiedot",
+      "loading": "Ladataan prosessitietoja...",
+      "noProcesses": "Prosessitietoja ei saatavilla",
       "headers": {
         "pid": "PID",
         "name": "Nimi",
@@ -618,7 +666,15 @@
         "uptime": "Käynnissäoloaika"
       },
       "showAll": "Näytä kaikki prosessit",
-      "showBirdnetOnly": "Näytä vain BirdNET"
+      "showBirdnetOnly": "Näytä vain BirdNET",
+      "table": {
+        "process": "Prosessi",
+        "status": "Tila",
+        "cpu": "CPU",
+        "memory": "Muisti",
+        "uptime": "Käyntiaika",
+        "showAllProcesses": "Näytä kaikki prosessit"
+      }
     },
     "errors": {
       "systemInfo": "Järjestelmätietojen lataus epäonnistui: {error}",
@@ -626,6 +682,12 @@
       "memoryUsage": "Muistin käytön lataus epäonnistui: {error}",
       "temperature": "Lämpötilan lataus epäonnistui: {error}",
       "processes": "Prosessitietojen lataus epäonnistui: {error}"
+    },
+    "progress": {
+      "labels": {
+        "overallProgress": "Kokonaisedistyminen",
+        "progress": "Edistyminen"
+      }
     }
   },
   "analytics": {
@@ -731,6 +793,49 @@
         "confidence": "Luottamus:",
         "first": "Ensimmäinen:"
       }
+    },
+    "advanced": {
+      "title": "Edistynyt analytiikka",
+      "chartControls": "Kaavion hallinta",
+      "dateRange": "Päivämääräväli",
+      "chartOptions": "Kaavion asetukset",
+      "speciesSelection": "Lajien valinta ({count}/{max})",
+      "dateRangeOptions": {
+        "week": "Viime viikko",
+        "month": "Viime kuukausi",
+        "quarter": "Viime neljännes",
+        "year": "Viime vuosi",
+        "custom": "Mukautettu aikaväli"
+      },
+      "options": {
+        "relativeTrends": "Suhteelliset trendit",
+        "zoomPan": "Zoomaa ja panoroi",
+        "brushSelection": "Sivellysvalinta"
+      },
+      "charts": {
+        "timeOfDay": {
+          "title": "Havaintomallityypit vuorokaudenajan mukaan",
+          "description": "Näyttää keskimääräiset havaintomäärät päivän aikana valituille lajeille",
+          "noData": "Ei vuorokaudenajan tietoja saatavilla",
+          "noDataHint": "Valitse lajit ja päivämääräväli nähdäksesi mallit"
+        },
+        "dailyTrend": {
+          "title": "Lajien havaintotrendit",
+          "description": "Näyttää havaintotrendit ajan kuluessa valituille lajeille",
+          "noData": "Ei trenditietoja saatavilla",
+          "noDataHint": "Valitse lajit ja päivämääräväli nähdäksesi trendit"
+        }
+      },
+      "aria": {
+        "startDate": "Alkupäivämäärä",
+        "endDate": "Loppupäivämäärä",
+        "loadingAnalytics": "Ladataan analytiikkatietoja",
+        "loadingTrends": "Ladataan trenditietoja"
+      },
+      "speciesSelectionHint": "Hae tai klikkaa alla olevia merkkejä",
+      "speciesPlaceholder": "Hae ja valitse lajit analysoitavaksi...",
+      "noSpeciesFound": "Lajeja ei löytynyt valitulla aikavälillä",
+      "detections": "{count} havaintoa"
     }
   },
   "settings": {
@@ -781,6 +886,7 @@
         },
         "customClassifier": {
           "title": "Mukautettu BirdNET-luokittelija",
+          "description": "Määritä mukautetut BirdNET-mallin ja nimiketiedostot erikoistuneeseen tunnistukseen",
           "modelPath": {
             "label": "Mallin polku (Vaatii uudelleenkäynnistyksen)",
             "placeholder": "Polku mallitiedostoon",
@@ -794,6 +900,7 @@
         },
         "dynamicThreshold": {
           "title": "Dynaaminen kynnysarvo",
+          "description": "Säädä tunnistusherkkyyttä automaattisesti aikaisempien havaintojen perusteella",
           "enable": {
             "label": "Ota käyttöön dynaaminen kynnysarvo (BirdNET-Go-erityisominaisuus)",
             "helpText": "Ottaa käyttöön dynaamisen luottamuskynnysarvon mukautuvampaa lintuäänten tunnistusta varten."
@@ -822,6 +929,7 @@
         },
         "rangeFilter": {
           "title": "Aluesuodatin",
+          "description": "Rajoita tunnistus lajeihin, jotka ovat todennäköisiä maantieteellisellä alueellasi",
           "stationLocation": {
             "label": "Aseman sijainti",
             "helpText": "Aseman sijainti, jota käytetään säätietoihin ja lintulajien rajoittamiseen alueella todennäköisiin lajeihin."
@@ -870,6 +978,8 @@
             "helpText": "Valitse havaintojen tallentamiseen käytettävä tietokantatyyppi."
           },
           "sqlite": {
+            "title": "SQLite-asetukset",
+            "description": "Määritä SQLite-tietokantatiedoston sijainti",
             "note": "SQLite on suositeltava tietokantatyyppi useimmille käyttäjille.",
             "path": {
               "label": "SQLite-tietokannan polku",
@@ -878,6 +988,8 @@
             }
           },
           "mysql": {
+            "title": "MySQL-määritykset",
+            "description": "Määritä MySQL-tietokantapalvelimen yhteysasetukset",
             "host": {
               "label": "MySQL-isäntä",
               "placeholder": "Syötä MySQL-isäntä",
@@ -906,7 +1018,7 @@
         },
         "interface": {
           "title": "Käyttöliittymä",
-          "description": "Määritä kieli, näyttöasetukset ja kojelaudan rajat"
+          "description": "Määritä kieli, näyttöasetukset ja etusivun rajat"
         },
         "visualContent": {
           "title": "Visuaalinen sisältö",
@@ -920,7 +1032,8 @@
             "description": "Valitse haluamasi kieli ja käyttöliittymäversio",
             "locale": {
               "label": "Näyttökieli",
-              "helpText": "Valitse käyttöliittymän kieli"
+              "helpText": "Valitse käyttöliittymän kieli",
+              "requiresModernUI": "Kielen valinta on saatavilla vain modernia käyttöliittymää käytettäessä."
             },
             "newUI": {
               "label": "Käytä modernia käyttöliittymää",
@@ -936,11 +1049,11 @@
             }
           },
           "dashboard": {
-            "title": "Kojelaudan näyttö",
-            "description": "Määritä, miten havainnot näytetään kojelaudalla",
+            "title": "Etusivun näyttö",
+            "description": "Määritä, miten havainnot näytetään etusivulla",
             "displaySettings": {
               "title": "Näyttöasetukset",
-              "description": "Määritä yleiset kojelaudan näyttöasetukset, kuten lajirajat."
+              "description": "Määritä yleiset etusivun näyttöasetukset, kuten lajirajat."
             },
             "birdImages": {
               "title": "Lintukuvat",
@@ -1029,8 +1142,7 @@
         },
         "locale": {
           "label": "Kieli",
-          "helpText": "Kieli käännetyille lajien nimille.",
-          "requiresModernUI": "Kielivalinta on käytettävissä vain modernin käyttöliittymän kanssa."
+          "helpText": "Kieli käännetyille lajien nimille."
         },
         "tensorflowThreads": {
           "label": "TensorFlow CPU-säikeet",
@@ -1043,6 +1155,12 @@
         "rangeFilterTestFailed": "Aluesuodatinasetusten testaus epäonnistui",
         "rangeFilterLoadFailed": "Lajiluettelon lataus epäonnistui",
         "rangeFilterCountFailed": "Lajimäärän lataus epäonnistui"
+      },
+      "tabs": {
+        "general": "Yleiset",
+        "detection": "Tunnistus",
+        "location": "Sijainti",
+        "database": "Tietokanta"
       }
     },
     "support": {
@@ -1099,11 +1217,11 @@
         },
         "userMessage": {
           "label": "Kuvaile ongelma",
-          "labelOptional": "Kuvaile ongelma (valinnainen)",
+          "labelOptional": "Lisätiedot (valinnainen)",
           "placeholder": "Kuvaile ongelma ja sisällytä GitHub-ongelman linkki jos saatavilla (esim. #123)",
-          "placeholderOptional": "Lisää lisätietoja ongelmasta...",
+          "placeholderOptional": "Anna lisäkontekstia ongelmasta, jota ei ole GitHub-ongelmassasi",
           "githubTip": "💡 Vinkki: Jos sinulla on GitHub-ongelma, sisällytä ongelman numero (esim. #123) ja mainitse järjestelmätunnuksesi {systemId} GitHub-ongelmassa auttaaksesi kehittäjiä yhdistämään tukitietosi.",
-          "systemIdNote": "Mainitse järjestelmätunnuksesi {systemId} GitHub-ongelmassa."
+          "systemIdNote": "💡 Vinkki: Järjestelmätunnuksesi {systemId} sisällytetään automaattisesti lähetykseen"
         },
         "uploadOption": {
           "label": "Lähetä kehittäjille (suositeltu)",
@@ -1167,10 +1285,10 @@
         "loading": "Ladataan..."
       },
       "push": {
-        "title": "Push Notifications",
-        "description": "Send notifications to external services like Discord, Telegram, Slack, and more",
-        "enable": "Enable Push Notifications",
-        "disabled": "Push notifications are disabled",
+        "title": "Push-ilmoitukset",
+        "description": "Lähetä ilmoituksia ulkoisiin palveluihin, kuten Discord, Telegram, Slack ja muihin",
+        "enable": "Ota käyttöön push-ilmoitukset",
+        "disabled": "Push-ilmoitukset ovat pois käytöstä",
         "enabledDescription": "Push-ilmoitukset lähetetään kaikille alla oleville käytössä oleville palveluntarjoajille",
         "filters": {
           "title": "Tunnistussuodattimet",
@@ -1186,48 +1304,48 @@
           }
         },
         "noProviders": "Ei määritettyjä palveluntarjoajia",
-        "noProvidersDescription": "Add a provider to start receiving push notifications",
+        "noProvidersDescription": "Lisää palveluntarjoaja aloittaaksesi push-ilmoitusten vastaanottamisen",
         "providers": {
-          "title": "Notification Providers",
-          "addButton": "Add Provider",
-          "editButton": "Edit",
-          "deleteButton": "Delete",
-          "enableToggle": "Enable provider",
-          "urlsPreview": "{count} URL(s) configured",
-          "deleteConfirm": "Delete provider \"{name}\"? This action cannot be undone.",
+          "title": "Ilmoituspalveluntarjoajat",
+          "addButton": "Lisää palveluntarjoaja",
+          "editButton": "Muokkaa",
+          "deleteButton": "Poista",
+          "enableToggle": "Ota palveluntarjoaja käyttöön",
+          "urlsPreview": "{count} URL-osoitetta määritetty",
+          "deleteConfirm": "Poista palveluntarjoaja \"{name}\"? Tätä toimintoa ei voi peruuttaa.",
           "typeBadge": {
             "shoutrrr": "Shoutrrr",
             "webhook": "Webhook"
           }
         },
         "form": {
-          "addTitle": "Add Notification Provider",
-          "editTitle": "Edit Notification Provider",
+          "addTitle": "Lisää ilmoituspalveluntarjoaja",
+          "editTitle": "Muokkaa ilmoituspalveluntarjoajaa",
           "name": {
-            "label": "Provider Name",
-            "placeholder": "e.g., Discord Alerts",
-            "helpText": "A friendly name to identify this provider"
+            "label": "Palveluntarjoajan nimi",
+            "placeholder": "esim. Discord-hälytykset",
+            "helpText": "Ystävällinen nimi tämän palveluntarjoajan tunnistamiseksi"
           },
           "urls": {
-            "label": "Service URL(s)",
+            "label": "Palvelun URL-osoitteet",
             "placeholder": "discord://token@webhookid",
-            "helpText": "Enter one Shoutrrr URL per line. Multiple URLs send to multiple services.",
+            "helpText": "Syötä yksi Shoutrrr URL-osoite per rivi. Useampi URL-osoite lähettää useampaan palveluun.",
             "validation": {
-              "required": "At least one URL is required",
-              "invalidFormat": "Invalid URL format. URLs should start with a service prefix (e.g., discord://, telegram://)"
+              "required": "Vähintään yksi URL-osoite vaaditaan",
+              "invalidFormat": "Virheellinen URL-muoto. URL-osoitteiden tulisi alkaa palvelun etuliitteellä (esim. discord://, telegram://)"
             }
           },
           "notificationTypes": {
-            "label": "Notification Types",
-            "helpText": "Select which types of notifications to send to this provider",
-            "detection": "Bird detections",
-            "error": "Errors",
-            "warning": "Warnings",
-            "info": "Information",
-            "system": "System events"
+            "label": "Ilmoitustyypit",
+            "helpText": "Valitse mitkä ilmoitustyypit lähetetään tälle palveluntarjoajalle",
+            "detection": "Lintuhavainnot",
+            "error": "Virheet",
+            "warning": "Varoitukset",
+            "info": "Tiedot",
+            "system": "Järjestelmätapahtumat"
           },
           "urlFormats": {
-            "title": "Common URL Formats",
+            "title": "Yleiset URL-muodot",
             "discord": "Discord",
             "discordFormat": "discord://token@webhookid",
             "telegram": "Telegram",
@@ -1240,27 +1358,27 @@
             "gotifyFormat": "gotify://hostname/token",
             "ntfy": "ntfy",
             "ntfyFormat": "ntfy://ntfy.sh/mytopic",
-            "moreServices": "View all supported services",
+            "moreServices": "Näytä kaikki tuetut palvelut",
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
-          "saveButton": "Save Provider",
-          "savingButton": "Saving...",
-          "cancelButton": "Cancel",
-          "testButton": "Test",
-          "testingButton": "Testing..."
+          "saveButton": "Tallenna palveluntarjoaja",
+          "savingButton": "Tallennetaan...",
+          "cancelButton": "Peruuta",
+          "testButton": "Testaa",
+          "testingButton": "Testataan..."
         },
         "test": {
-          "button": "Test Provider",
-          "description": "Send a test notification to verify this provider is working",
-          "success": "Test notification sent successfully!",
-          "error": "Test failed: {message}",
-          "requiresUrl": "Enter a URL to test",
-          "requiresEnabled": "Enable the provider to test"
+          "button": "Testaa palveluntarjoaja",
+          "description": "Lähetä testi-ilmoitus varmistaaksesi, että tämä palveluntarjoaja toimii",
+          "success": "Testi-ilmoitus lähetetty onnistuneesti!",
+          "error": "Testi epäonnistui: {message}",
+          "requiresUrl": "Syötä URL-osoite testataksesi",
+          "requiresEnabled": "Ota palveluntarjoaja käyttöön testataksesi"
         },
         "validation": {
-          "nameRequired": "Provider name is required",
-          "urlRequired": "At least one URL is required",
-          "invalidUrl": "Invalid URL format"
+          "nameRequired": "Palveluntarjoajan nimi vaaditaan",
+          "urlRequired": "Vähintään yksi URL-osoite vaaditaan",
+          "invalidUrl": "Virheellinen URL-muoto"
         },
         "autoName": {
           "discord": "Discord",
@@ -1274,8 +1392,8 @@
           "numbered": "{service} #{number}"
         },
         "services": {
-          "selectLabel": "Service",
-          "selectHelpText": "Choose a notification service to configure",
+          "selectLabel": "Palvelu",
+          "selectHelpText": "Valitse määritettävä ilmoituspalvelu",
           "discord": {
             "name": "Discord",
             "webhookUrl": {
@@ -1403,7 +1521,7 @@
             "credentialsRequired": "Username and password are required when using Basic authentication"
           },
           "custom": {
-            "name": "Custom URL",
+            "name": "Mukautettu URL",
             "url": {
               "label": "Shoutrrr URL",
               "placeholder": "service://credentials@host",
@@ -1454,7 +1572,8 @@
         "description": "Yksityisyyssuodatus estää äänileikkeiden tallentamisen, kun ihmisääniä havaitaan",
         "enable": "Ota yksityisyyssuodatus käyttöön",
         "confidenceLabel": "Luottamuskynnys ihmisen tunnistukseen",
-        "confidenceHelp": "Aseta luottamustaso ihmisäänen tunnistukseen, matalampi arvo tekee suodattimesta herkemmän"
+        "confidenceHelp": "Aseta luottamustaso ihmisäänen tunnistukseen, matalampi arvo tekee suodattimesta herkemmän",
+        "disabled": "Yksityisyyssuodatus on poistettu käytöstä"
       },
       "falsePositivePrevention": {
         "title": "Väärien positiivisten ehkäisy",
@@ -1466,14 +1585,16 @@
         "expireTimeHelp": "Aseta kuinka kauan havaittu koiran haukunta muistetaan",
         "addDogBarkSpeciesLabel": "Lisää koiran haukunnan lajeja",
         "addDogBarkSpeciesHelp": "Etsi ja lisää lajeja, jotka voidaan sekoittaa koiran haukuntaan",
-        "addSpeciesButton": "Lisää"
+        "addSpeciesButton": "Lisää",
+        "disabled": "Koiran haukuntasuodatin on poistettu käytöstä"
       },
       "speciesNamePlaceholder": "Lajin nimi",
       "typeSpeciesName": "Kirjoita lajin nimi...",
       "dogBarkSpeciesList": "Koiran haukunnan lajiluettelo",
       "errors": {
         "speciesLoadFailed": "Lajiluettelon lataus epäonnistui. Yritä uudelleen."
-      }
+      },
+      "title": "Suodattimet"
     },
     "audio": {
       "loading": "Ladataan äänilaitteita...",
@@ -1495,7 +1616,13 @@
         "rtspTransportLabel": "RTSP-siirtoprotokolla",
         "rtspTransportHelp": "TCP on luotettavampi mutta saattaa aiheuttaa suurempaa viivettä. UDP on nopeampi mutta saattaa kokea pakettihäviötä heikoissa verkoissa.",
         "rtspUrlsLabel": "RTSP-virran URL-osoitteet",
-        "rtspUrlsHelp": "Syötä yksi tai useampi RTSP-virran URL-osoite verkkoäänilähteille. Muoto: rtsp://ip:portti/virta. Huom: Todennustiedot tulisi määrittää erikseen RTSP-palvelimen asetuksissa tietoturvan vuoksi."
+        "rtspUrlsHelp": "Syötä yksi tai useampi RTSP-virran URL-osoite verkkoäänilähteille. Muoto: rtsp://ip:portti/virta. Huom: Todennustiedot tulisi määrittää erikseen RTSP-palvelimen asetuksissa tietoturvan vuoksi.",
+        "noDeviceSelected": "Äänilaitetta ei ole valittu",
+        "refreshDevices": "Päivitä",
+        "deviceSelected": "Äänikortti valittu ja valmis tallennukseen",
+        "availableDevices": "Saatavilla olevat äänilaitteet",
+        "active": "Aktiivinen",
+        "streamsConfigured": "{count} virta(a) määritetty"
       },
       "audioFilters": {
         "title": "Äänisuodattimet",
@@ -1536,7 +1663,8 @@
         "dataOutputDescription": "Kun käytössä, äänitasomittaukset julkaistaan kautta:",
         "mqttTopic": "MQTT-aihe:",
         "sseEndpoint": "SSE-päätepiste:",
-        "prometheusMetrics": "Prometheus-mittarit:"
+        "prometheusMetrics": "Prometheus-mittarit:",
+        "disabled": "Äänitason seuranta on poistettu käytöstä"
       },
       "clipSettings": {
         "title": "Leikeasetukset",
@@ -1573,7 +1701,9 @@
         "typeHelp": "Tallennettujen leikkeiden äänimuoto. WAV ja FLAC ovat häviöttömiä (paras laatu, suuremmat tiedostot). MP3, AAC ja Opus ovat häviöllisiä (pienemmät tiedostot, pieni laatutappio).",
         "bitrateLabel": "Bittinopeus",
         "bitrateHelp": "Äänen pakkauksen bittinopeus häviöllisille muodoille. Alue: {min}-{max} kbps. Korkeammat arvot tarjoavat parempaa laatua mutta suurempia tiedostoja.",
-        "losslessNote": "Häviöttömät muodot säilyttävät alkuperäisen äänenlaadun ilman pakkaushäiriöitä."
+        "losslessNote": "Häviöttömät muodot säilyttävät alkuperäisen äänenlaadun ilman pakkaushäiriöitä.",
+        "normalizationDisabled": "Äänen normalisointi on poistettu käytöstä",
+        "disabledInfo": "Ota leikkeiden tallennus käyttöön yllä määrittääksesi leikeasetuksia, tiedostomuotoa ja tallennusvaihtoehtoja."
       },
       "fileSettings": {
         "title": "Tiedostoasetukset",
@@ -1619,7 +1749,13 @@
           "none": "Ei mitään",
           "age": "Ikä",
           "usage": "Käyttö"
-        }
+        },
+        "noRetentionTitle": "Kaikki leikkeet säilytetään",
+        "noRetentionDescription": "Äänileikkeitä säilytetään toistaiseksi. Seuraa levytilan käyttöä estääksesi tallennusongelmia.",
+        "ageRetentionTitle": "Ikään perustuva siivous",
+        "ageRetentionDescription": "Määritettyä ikää vanhemmat leikkeet poistetaan automaattisesti, säilyttäen kuitenkin vähimmäismäärän lajia kohden.",
+        "usageRetentionTitle": "Käyttöön perustuva siivous",
+        "usageRetentionDescription": "Kun levytilan käyttö ylittää kynnysarvon, vanhimmat leikkeet poistetaan, kunnes käyttö on rajojen sisällä."
       },
       "formats": {
         "wav": "WAV",
@@ -1642,6 +1778,95 @@
         "devicesLoadFailed": "Äänilaitteiden lataus epäonnistui. Tarkista järjestelmän käyttöoikeudet.",
         "invalidBitrate": "Virheellinen bittinopeusarvo",
         "invalidRetentionPolicy": "Virheellinen säilytyskäytäntö"
+      },
+      "emptyStates": {
+        "soundCard": {
+          "title": "Äänikortteja ei havaittu",
+          "description": "Tässä järjestelmässä ei löytynyt paikallisia äänitulovälineitä. Tämä on normaalia kontti- tai päättömissä palvelinkäyttöönotoissa.",
+          "errorTitle": "Virhe laitteiden latauksessa",
+          "hintsTitle": "Voit:",
+          "hints": {
+            "container": "Tämä on normaalia kontti-/päättömissä käyttöönotoissa",
+            "streams": "Määritä verkkovirrat sen sijaan Virrat-välilehdellä",
+            "usb": "Liitä USB-mikrofoni ja päivitä luettelo"
+          },
+          "refresh": "Päivitä laitteet",
+          "retry": "Yritä uudelleen"
+        },
+        "streams": {
+          "title": "Virtoja ei ole määritetty",
+          "description": "Lisää RTSP- tai verkkoäänivirtoja IP-kameroista, mikrofonpalvelimista tai muista virtauslähteistä.",
+          "hintsTitle": "Aloittaminen:",
+          "hints": {
+            "rtsp": "Syötä RTSP-URL-osoitteet muodossa: rtsp://ip:portti/virta",
+            "multiple": "Voit lisätä useita virtoja eri sijainteja varten",
+            "protocol": "Valitse TCP luotettavuuden vuoksi tai UDP pienemmän viiveen saamiseksi"
+          }
+        }
+      },
+      "soundCard": {
+        "title": "Äänikortti",
+        "description": "Määritä paikallinen äänitulolaite",
+        "audioSourceLabel": "Äänilähde (vaatii sovelluksen uudelleenkäynnistyksen)",
+        "audioSourceHelp": "Valitse äänitulolaite lintuäänten tunnistukseen. Muutokset vaativat sovelluksen uudelleenkäynnistyksen.",
+        "noSoundCardCapture": "Ei äänikortin tallennusta",
+        "empty": {
+          "title": "Äänikortteja ei havaittu",
+          "description": "Tässä järjestelmässä ei löytynyt paikallisia äänitulovälineitä. Tämä on normaalia kontti- tai päättömissä palvelinkäyttöönotoissa.",
+          "hintsTitle": "Voit:",
+          "hintStream": "Määritä verkkovirrat Virrat-välilehdellä",
+          "hintUsb": "Liitä USB-mikrofoni ja päivitä luettelo",
+          "goToStreams": "Siirry virtoihin",
+          "refresh": "Päivitä laitteet"
+        }
+      },
+      "noSources": {
+        "warning": "Äänilähteita ei ole määritetty",
+        "description": "BirdNET-Go tarvitsee äänen syötteen lintujen havaitsemiseen. Määritä vähintään yksi lähde Äänikortti- tai Virrat-välilehdellä."
+      },
+      "rtspStreams": {
+        "title": "RTSP-virran määritys",
+        "description": "Määritä verkkoäänivirtoja etäänen tallennukseen RTSP-protokollan kautta.",
+        "noStreamsConfigured": "Virtoja ei ole määritetty"
+      },
+      "streams": {
+        "streamLabel": "Virta",
+        "urlLabel": "Virran URL",
+        "urlHelp": "Syötä RTSP-URL valinnaisten tunnistetietojen kanssa (rtsp://käyttäjä:salasana@isäntä:portti/polku)",
+        "typeLabel": "Virran tyyppi",
+        "typeLockedNote": "Vain RTSP on tällä hetkellä tuettu",
+        "transportLabel": "Protokolla",
+        "summary": "{count} virta(a) määritetty",
+        "healthy": "terve",
+        "unhealthy": "epäterve",
+        "unknown": "tuntematon",
+        "refresh": "Päivitä",
+        "addStream": "Lisää virta",
+        "deleteConfirm": "Poista tämä virta?",
+        "restartCount": "Uudelleenkäynnistetty {count} kertaa",
+        "healthLoadError": "Virran terveystilan lataus epäonnistui",
+        "status": {
+          "connected": "Yhdistetty",
+          "connecting": "Yhdistetään",
+          "error": "Virhe",
+          "idle": "Jouten",
+          "unknown": "Tuntematon"
+        },
+        "emptyState": {
+          "title": "Virtoja ei ole määritetty",
+          "description": "Lisää RTSP-virtoja tallentaaksesi ääntä verkkokameroista tai muista RTSP-lähteistä.",
+          "hintsTitle": "Aloittaminen",
+          "hints": {
+            "rtsp": "Käytä RTSP-URL-osoitteita IP-kameroista (esim. rtsp://192.168.1.100:554/virta)",
+            "credentials": "Sisällytä tunnistetiedot URL-osoitteeseen tarvittaessa (rtsp://käyttäjä:salasana@isäntä/virta)",
+            "protocol": "TCP on luotettavampi, UDP:llä on pienempi viive"
+          }
+        },
+        "errors": {
+          "urlRequired": "Virran URL vaaditaan",
+          "invalidUrl": "Virheellinen RTSP-URL-muoto",
+          "duplicate": "Tämä virran URL on jo olemassa"
+        }
       }
     },
     "integration": {
@@ -1875,6 +2100,28 @@
           "speciesPlaceholder": "Lajin nimi",
           "thresholdPlaceholder": "0.5",
           "intervalPlaceholder": "0"
+        },
+        "addConfiguration": "Lisää määritys",
+        "newConfiguration": "Uusi määritys",
+        "editing": "Muokataan: {species}",
+        "configuredCount": "{count} määritetty",
+        "searchPlaceholder": "Kirjoita hakeaksesi...",
+        "saving": "Tallennetaan...",
+        "save": "Tallenna",
+        "cancel": "Peruuta",
+        "configureActions": "Määritä toiminnot",
+        "actionsConfigured": "Määritetty",
+        "list": {
+          "threshold": "Kynnysarvo:",
+          "interval": "Väli:",
+          "intervalNone": "Ei mitään",
+          "actionBadge": "Toiminto",
+          "editTitle": "Muokkaa määritystä",
+          "removeTitle": "Poista määritys"
+        },
+        "emptyState": {
+          "title": "Määrityksiä ei vielä ole.",
+          "description": "Napsauta \"Lisää määritys\" mukauttaaksesi lajintunnistusasetuksia."
         }
       },
       "actionsModal": {
@@ -2030,7 +2277,8 @@
         "description": "Suojattu pääsy yksinkertaisella salasanalla",
         "enableLabel": "Ota käyttöön salasanatunnistautuminen",
         "passwordLabel": "Salasana",
-        "passwordHelpText": "Rajoita pääsy asetuksiin salasanalla."
+        "passwordHelpText": "Rajoita pääsy asetuksiin salasanalla.",
+        "disabled": "Salasana-autentikointi on poistettu käytöstä"
       },
       "oauth": {
         "title": "OAuth2-sosiaalinen tunnistautuminen",
@@ -2060,7 +2308,8 @@
       },
       "bypassAuthentication": {
         "title": "Ohita tunnistautuminen",
-        "description": "Salli pääsy asetuksiin ilman tunnistautumista"
+        "description": "Salli pääsy asetuksiin ilman tunnistautumista",
+        "disabled": "Aliverkon ohitus on poistettu käytöstä"
       },
       "placeholders": {
         "host": "Esimerkiksi localhost:8080 tai example.domain.com",
@@ -2072,6 +2321,12 @@
       "sqlitePlaceholder": "Syötä SQLite-tietokannan polku",
       "mysqlHostPlaceholder": "Syötä MySQL-isäntä",
       "mysqlUsernamePlaceholder": "Syötä MySQL-käyttäjänimi"
+    },
+    "tabs": {
+      "navigation": "Asetusten navigointivälilehdet",
+      "hasChanges": "Tällä välilehdellä on tallentamattomia muutoksia",
+      "setAsDefault": "Aseta oletukseksi",
+      "defaultIndicator": "Oletuslähde"
     }
   },
   "auth": {
@@ -2236,10 +2491,35 @@
     }
   },
   "components": {
+    "audio": {
+      "spectrogramUnavailable": "Spektrogrammi ei saatavilla",
+      "generating": "Luodaan...",
+      "queuePosition": "Jono: {position}"
+    },
     "forms": {
       "numberField": {
         "adjustedToMinimum": "Arvo säädetty minimiin ({value})",
         "adjustedToMaximum": "Arvo säädetty maksimiin ({value})"
+      },
+      "species": {
+        "suggestionsAvailable": "{count} lajiehdotusta saatavilla. Käytä nuolinäppäimiä navigoimiseen.",
+        "noSuggestions": "Ei saatavilla olevia lajiehdotuksia.",
+        "loadingSpecies": "Ladataan lajeja...",
+        "typePlaceholder": "Kirjoita lajin nimi..."
+      },
+      "select": {
+        "searchOptions": "Etsi vaihtoehdot",
+        "noOptions": "Vaihtoehtoja ei löydy",
+        "searchPlaceholder": "Hae..."
+      },
+      "rtsp": {
+        "addNewStream": "Lisää uusi RTSP-virta",
+        "maxStreamsReached": "RTSP-virtojen enimmäismäärä ({max}) saavutettu.",
+        "cameraPlaceholder": "Kamera 1",
+        "urlPlaceholder": "rtsp://käyttäjänimi:salasana@192.168.1.100:554/virta"
+      },
+      "subnet": {
+        "maxSubnetsReached": "Aliverkkojen enimmäismäärä ({max}) saavutettu."
       }
     },
     "datePicker": {

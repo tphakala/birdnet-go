@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { settingsStore, settingsActions } from '$lib/stores/settings';
   import { safeGet } from '$lib/utils/security';
+  import { t } from '$lib/i18n';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -80,7 +81,7 @@
 </script>
 
 <svelte:head>
-  <title>Settings - BirdNET-Go</title>
+  <title>{t('pageTitle.settings')}</title>
 </svelte:head>
 
 <main class="col-span-12 container mx-auto">
@@ -95,7 +96,7 @@
   {#if ENABLE_LOADING_SPINNERS && store.isLoading}
     <div class="flex justify-center items-center py-12">
       <LoadingSpinner size="lg" />
-      <span class="ml-3 text-lg">Loading settings...</span>
+      <span class="ml-3 text-lg">{t('common.ui.loadingSettings')}</span>
     </div>
   {:else}
     <!-- Settings Content -->
@@ -119,8 +120,8 @@
       {:else}
         <div class="card bg-base-100 shadow-xs p-6">
           <div class="text-center py-12 text-base-content opacity-70">
-            <h2 class="text-xl font-semibold mb-2">Settings Not Found</h2>
-            <p>The requested settings section "{currentSection}" could not be found.</p>
+            <h2 class="text-xl font-semibold mb-2">{t('common.ui.settingsNotFound')}</h2>
+            <p>{t('common.ui.sectionNotFound', { section: currentSection })}</p>
           </div>
         </div>
       {/if}

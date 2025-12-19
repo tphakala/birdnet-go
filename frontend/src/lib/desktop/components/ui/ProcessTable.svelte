@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import { Terminal } from '@lucide/svelte';
   import { safeArrayAccess } from '$lib/utils/security';
+  import { t } from '$lib/i18n';
 
   interface ProcessInfo {
     pid: number;
@@ -101,13 +102,13 @@
 
       <!-- Enhanced toggle for showing all processes -->
       <div class="flex items-center gap-2 bg-base-200 px-3 py-1.5 rounded-lg shadow-xs">
-        <span class="text-sm font-medium">Show all processes</span>
+        <span class="text-sm font-medium">{t('system.processInfo.table.showAllProcesses')}</span>
         <input
           type="checkbox"
           class="toggle toggle-sm toggle-primary"
           checked={showAllProcesses}
           onchange={handleToggleChange}
-          aria-label="Toggle to show all system processes"
+          aria-label={t('system.processInfo.table.showAllProcesses')}
         />
       </div>
     </div>
@@ -118,7 +119,7 @@
       <div class="py-4">
         <div class="flex justify-center">
           <span class="loading loading-spinner loading-lg" aria-hidden="true"></span>
-          <span class="sr-only">Loading process information...</span>
+          <span class="sr-only">{t('system.processInfo.loading')}</span>
         </div>
       </div>
     {/if}
@@ -134,11 +135,11 @@
         <table class="table table-zebra w-full">
           <thead>
             <tr class="bg-base-200">
-              <th scope="col">Process</th>
-              <th scope="col">Status</th>
-              <th scope="col">CPU</th>
-              <th scope="col">Memory</th>
-              <th scope="col">Uptime</th>
+              <th scope="col">{t('system.processInfo.table.process')}</th>
+              <th scope="col">{t('system.processInfo.table.status')}</th>
+              <th scope="col">{t('system.processInfo.table.cpu')}</th>
+              <th scope="col">{t('system.processInfo.table.memory')}</th>
+              <th scope="col">{t('system.processInfo.table.uptime')}</th>
             </tr>
           </thead>
           <tbody>
@@ -149,7 +150,7 @@
                   class="text-center py-6 opacity-70"
                   style:color="var(--color-base-content)"
                 >
-                  No process information available
+                  {t('system.processInfo.noProcesses')}
                 </td>
               </tr>
             {:else}

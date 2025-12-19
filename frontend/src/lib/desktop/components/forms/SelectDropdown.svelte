@@ -9,6 +9,7 @@
     safeArraySpread,
     safeElementAccess,
   } from '$lib/utils/security';
+  import { t } from '$lib/i18n';
 
   interface Props {
     options: SelectOption[];
@@ -438,9 +439,9 @@
               type="text"
               bind:value={searchQuery}
               oninput={handleSearch}
-              placeholder="Search..."
+              placeholder={t('common.ui.search')}
               class="input input-sm w-full"
-              aria-label="Search options"
+              aria-label={t('components.forms.select.searchOptions')}
               role="searchbox"
               aria-controls="{fieldId}-listbox"
             />
@@ -456,7 +457,9 @@
           aria-labelledby={label ? `${fieldId}-label` : undefined}
         >
           {#if filteredOptions.length === 0}
-            <div class="p-4 text-center text-base-content opacity-60">No options found</div>
+            <div class="p-4 text-center text-base-content opacity-60">
+              {t('components.forms.select.noOptions')}
+            </div>
           {:else}
             {@const flatOptions = filteredOptions}
             {@const optionIndexMap = new Map(flatOptions.map((option, index) => [option, index]))}

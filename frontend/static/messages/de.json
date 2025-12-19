@@ -63,7 +63,16 @@
       "selectAll": "Alle auswählen",
       "selectNone": "Nichts auswählen",
       "required": "Erforderlich",
-      "optional": "Optional"
+      "optional": "Optional",
+      "noAudioSources": "Keine Audioquellen verfügbar",
+      "noNotifications": "Keine Benachrichtigungen",
+      "silent": "(stumm)",
+      "loadingSettings": "Einstellungen werden geladen...",
+      "settingsNotFound": "Einstellungen nicht gefunden",
+      "sectionNotFound": "Abschnitt \"{section}\" nicht gefunden",
+      "loadingMap": "Karte wird geladen...",
+      "imageNotAvailable": "Bild nicht verfügbar",
+      "search": "Suchen..."
     },
     "status": {
       "success": "Erfolg",
@@ -116,7 +125,8 @@
       "learnEbirdTaxonomyLink": "eBird-Taxonomie in neuem Tab öffnen"
     },
     "labels": {
-      "confidence": "Konfidenz"
+      "confidence": "Konfidenz",
+      "github": "GitHub"
     },
     "values": {
       "yes": "Ja",
@@ -166,6 +176,16 @@
       }
     }
   },
+  "pageTitle": {
+    "settings": "Einstellungen - BirdNET-Go",
+    "pageNotFound": "404 - Seite nicht gefunden",
+    "serverError": "500 - Interner Serverfehler",
+    "componentError": "Komponentenladefehler",
+    "speciesAnalytics": "Arten-Analysen",
+    "advancedAnalytics": "Erweiterte Analysen",
+    "detectionDetails": "Erkennungsdetails",
+    "settingsNotAvailable": "Einstellungen nicht verfügbar"
+  },
   "navigation": {
     "dashboard": "Übersicht",
     "detections": "Erkennungen",
@@ -192,6 +212,7 @@
     "developedBy": "Entwickelt von",
     "developersText": "Das K. Lisa Yang Center for Conservation Bioacoustics am Cornell Lab of Ornithology in Zusammenarbeit mit der Technischen Universität Chemnitz:",
     "visitBirdnetAnalyzer": "BirdNET-Analyzer Projekt besuchen",
+    "visitBirdnetAnalyzerAriaLabel": "Besuchen Sie das BirdNET-Analyzer GitHub-Repository",
     "contributors": "Mitwirkende",
     "contributorsText": "BirdNET-Go ist durch die gemeinsamen Anstrengungen vieler Menschen gewachsen und verbessert worden. Ihre Beiträge, von Code-Verbesserungen bis zu Feature-Vorschlägen, waren von unschätzbarem Wert für die Verbesserung dieses Projekts.",
     "mainDeveloper": "Hauptentwickler",
@@ -231,7 +252,11 @@
     "ebirdOrg": "eBird.org",
     "learnEbirdTaxonomy": "Mehr über eBird-Taxonomie erfahren",
     "avicommonsTitle": "Vogelbilder",
-    "avicommonsDescription": "BirdNET-Go verwendet kuratierte Vogelbilder von Avicommons, einer Bibliothek handverlesener, zugeschnittener und ausgerichteter Vogelfotos unter Creative-Commons-Lizenzen."
+    "avicommonsDescription": "BirdNET-Go verwendet kuratierte Vogelbilder von Avicommons, einer Bibliothek handverlesener, zugeschnittener und ausgerichteter Vogelfotos unter Creative-Commons-Lizenzen.",
+    "githubStarPrompt": "Wenn Sie BirdNET-Go nützlich finden, erwägen Sie bitte, dem Projekt auf GitHub einen Stern zu geben. Sterne helfen anderen, dieses Projekt zu entdecken und unterstützen seine Weiterentwicklung.",
+    "viewOnGithub": "Projekt auf GitHub ansehen",
+    "visitGithubAriaLabel": "BirdNET-Go GitHub-Repository besuchen",
+    "visitAvicommonsGithub": "Avicommons GitHub-Repository besuchen"
   },
   "notifications": {
     "title": "Benachrichtigungen",
@@ -384,7 +409,9 @@
       "stackTrace": "Stack-Trace",
       "goToDashboard": "Zur Übersicht",
       "reportIssue": "Problem melden",
-      "loginToViewDetails": "Anmelden um Details anzuzeigen"
+      "loginToViewDetails": "Anmelden um Details anzuzeigen",
+      "componentLoadError": "Fehler beim Laden der Komponente",
+      "failedToLoadComponent": "Die angeforderte Komponente konnte nicht geladen werden"
     }
   },
   "dashboard": {
@@ -568,6 +595,11 @@
     },
     "row": {
       "viewDetails": "Details für {species} anzeigen"
+    },
+    "aria": {
+      "loading": "Erkennungsdetails werden geladen...",
+      "loaded": "Erkennungsdetails für {species} geladen",
+      "error": "Fehler beim Laden der Erkennung: {error}"
     }
   },
   "species": {
@@ -577,7 +609,16 @@
     "taxonomy": {
       "hierarchy": "Taxonomische Klassifizierung",
       "subspecies": "Unterarten",
-      "noData": "Keine Taxonomiedaten verfügbar."
+      "noData": "Keine Taxonomiedaten verfügbar.",
+      "labels": {
+        "kingdom": "Reich",
+        "phylum": "Stamm",
+        "class": "Klasse",
+        "order": "Ordnung",
+        "family": "Familie",
+        "genus": "Gattung",
+        "species": "Art"
+      }
     }
   },
   "system": {
@@ -592,7 +633,7 @@
       "os": "Betriebssystem",
       "hostname": "Hostname",
       "uptime": "Betriebszeit",
-      "cpus": "CPUs",
+      "cpus": "Prozessoren",
       "model": "Systemmodell",
       "timezone": "Zeitzone",
       "temperature": "CPU-Temperatur",
@@ -605,10 +646,17 @@
     },
     "memoryUsage": {
       "title": "Speichernutzung",
-      "ramUsage": "RAM-Nutzung"
+      "ramUsage": "RAM-Nutzung",
+      "labels": {
+        "free": "Frei",
+        "available": "Verfügbar",
+        "buffCache": "Puffer/Cache"
+      }
     },
     "processInfo": {
       "title": "Prozessinformationen",
+      "loading": "Prozessinformationen werden geladen...",
+      "noProcesses": "Keine Prozessinformationen verfügbar",
       "headers": {
         "pid": "PID",
         "name": "Name",
@@ -618,7 +666,15 @@
         "uptime": "Laufzeit"
       },
       "showAll": "Alle Prozesse anzeigen",
-      "showBirdnetOnly": "Nur BirdNET anzeigen"
+      "showBirdnetOnly": "Nur BirdNET anzeigen",
+      "table": {
+        "process": "Prozess",
+        "status": "Status",
+        "cpu": "CPU",
+        "memory": "Speicher",
+        "uptime": "Laufzeit",
+        "showAllProcesses": "Alle Prozesse anzeigen"
+      }
     },
     "errors": {
       "systemInfo": "Fehler beim Laden der Systeminformationen: {error}",
@@ -626,6 +682,12 @@
       "memoryUsage": "Fehler beim Laden der Speichernutzung: {error}",
       "temperature": "Fehler beim Laden der Temperatur: {error}",
       "processes": "Fehler beim Laden der Prozessinformationen: {error}"
+    },
+    "progress": {
+      "labels": {
+        "overallProgress": "Gesamtfortschritt",
+        "progress": "Fortschritt"
+      }
     }
   },
   "analytics": {
@@ -731,6 +793,49 @@
         "confidence": "Konfidenz:",
         "first": "Erste:"
       }
+    },
+    "advanced": {
+      "title": "Erweiterte Analytik",
+      "chartControls": "Diagrammsteuerung",
+      "dateRange": "Datumsbereich",
+      "chartOptions": "Diagrammoptionen",
+      "speciesSelection": "Artenauswahl ({count}/{max})",
+      "speciesSelectionHint": "Suchen oder Chips unten anklicken",
+      "speciesPlaceholder": "Arten für die Analyse suchen und auswählen...",
+      "noSpeciesFound": "Keine Arten für den ausgewählten Datumsbereich gefunden",
+      "detections": "{count} Erkennungen",
+      "dateRangeOptions": {
+        "week": "Letzte Woche",
+        "month": "Letzter Monat",
+        "quarter": "Letztes Quartal",
+        "year": "Letztes Jahr",
+        "custom": "Benutzerdefinierter Bereich"
+      },
+      "options": {
+        "relativeTrends": "Relative Trends",
+        "zoomPan": "Zoomen & Schwenken",
+        "brushSelection": "Pinselauswahl"
+      },
+      "charts": {
+        "timeOfDay": {
+          "title": "Erkennungsmuster nach Tageszeit",
+          "description": "Zeigt durchschnittliche Erkennungszahlen im Laufe des Tages für ausgewählte Arten",
+          "noData": "Keine Tageszeitdaten verfügbar",
+          "noDataHint": "Wählen Sie Arten und einen Datumsbereich aus, um Muster zu sehen"
+        },
+        "dailyTrend": {
+          "title": "Artenerkennungstrends",
+          "description": "Zeigt Erkennungstrends im Laufe der Zeit für ausgewählte Arten",
+          "noData": "Keine Trenddaten verfügbar",
+          "noDataHint": "Wählen Sie Arten und einen Datumsbereich aus, um Trends zu sehen"
+        }
+      },
+      "aria": {
+        "startDate": "Startdatum",
+        "endDate": "Enddatum",
+        "loadingAnalytics": "Analysen werden geladen",
+        "loadingTrends": "Trenddaten werden geladen"
+      }
     }
   },
   "settings": {
@@ -745,7 +850,7 @@
       "notifications": "Benachrichtigungen",
       "security": "Sicherheit",
       "species": "Arten",
-      "support": "Support"
+      "support": "Unterstützung"
     },
     "notFound": {
       "title": "Einstellungen nicht gefunden",
@@ -790,7 +895,8 @@
             "label": "Label-Pfad (Neustart erforderlich)",
             "placeholder": "Pfad zur Labels-Datei",
             "helpText": "Pfad zur externen Modell-Labels-Datei, .zip- oder .txt-Datei. Geben Sie den absoluten oder relativen Pfad zur birdnet-go-Binärdatei ein. Leer lassen, um die standardmäßig eingebetteten Labels zu verwenden."
-          }
+          },
+          "description": "Konfigurieren Sie benutzerdefinierte BirdNET-Modell- und Label-Dateien für spezialisierte Erkennung"
         },
         "dynamicThreshold": {
           "title": "Dynamischer Schwellenwert",
@@ -809,7 +915,8 @@
           "expireTime": {
             "label": "Ablaufzeit des dynamischen Schwellenwerts (Stunden)",
             "helpText": "Die Anzahl der Stunden, in denen die dynamischen Schwellenwertanpassungen gültig bleiben. Nach diesem Zeitraum wird der dynamische Schwellenwert zurückgesetzt."
-          }
+          },
+          "description": "Erkennungsempfindlichkeit automatisch basierend auf vorherigen Beobachtungen anpassen"
         },
         "falsePositiveFilter": {
           "title": "Falsch-Positiv-Filter",
@@ -860,7 +967,8 @@
             "loadingSpecies": "Arten werden geladen...",
             "noSpeciesFound": "Keine Arten mit aktuellen Einstellungen gefunden",
             "close": "Schließen"
-          }
+          },
+          "description": "Erkennungen auf wahrscheinliche Arten in Ihrer geografischen Region beschränken"
         },
         "database": {
           "title": "Datenbankeinstellungen",
@@ -875,7 +983,9 @@
               "label": "SQLite-Datenbankpfad",
               "placeholder": "SQLite-Datenbankpfad eingeben",
               "helpText": "SQLite-Datenbankdateipfad relativ zum Anwendungsverzeichnis"
-            }
+            },
+            "title": "SQLite-Konfiguration",
+            "description": "Konfigurieren Sie den Speicherort der SQLite-Datenbankdatei"
           },
           "mysql": {
             "host": {
@@ -901,7 +1011,9 @@
               "label": "MySQL-Datenbank",
               "placeholder": "MySQL-Datenbanknamen eingeben",
               "helpText": "MySQL-Datenbankname"
-            }
+            },
+            "title": "MySQL-Konfiguration",
+            "description": "Verbindungseinstellungen für MySQL-Datenbankserver konfigurieren"
           }
         },
         "interface": {
@@ -1043,6 +1155,12 @@
         "rangeFilterTestFailed": "Fehler beim Testen der Reichweitenfilter-Einstellungen",
         "rangeFilterLoadFailed": "Fehler beim Laden der Artenliste",
         "rangeFilterCountFailed": "Fehler beim Laden der Artenanzahl"
+      },
+      "tabs": {
+        "general": "Allgemein",
+        "detection": "Erkennung",
+        "location": "Standort",
+        "database": "Datenbank"
       }
     },
     "support": {
@@ -1201,10 +1319,10 @@
         "recommendation": "Aktivieren Sie externe Webhooks nur, wenn Sie dem empfangenden Dienst vertrauen oder selbst gehostete/lokale Dienste verwenden."
       },
       "push": {
-        "title": "Push Notifications",
-        "description": "Send notifications to external services like Discord, Telegram, Slack, and more",
-        "enable": "Enable Push Notifications",
-        "disabled": "Push notifications are disabled",
+        "title": "Push-Benachrichtigungen",
+        "description": "Benachrichtigungen an externe Dienste wie Discord, Telegram, Slack und mehr senden",
+        "enable": "Push-Benachrichtigungen aktivieren",
+        "disabled": "Push-Benachrichtigungen sind deaktiviert",
         "enabledDescription": "Push-Benachrichtigungen werden an alle aktivierten Anbieter unten gesendet",
         "filters": {
           "title": "Erkennungsfilter",
@@ -1220,48 +1338,48 @@
           }
         },
         "noProviders": "Keine Anbieter konfiguriert",
-        "noProvidersDescription": "Add a provider to start receiving push notifications",
+        "noProvidersDescription": "Fügen Sie einen Anbieter hinzu, um Push-Benachrichtigungen zu erhalten",
         "providers": {
-          "title": "Notification Providers",
-          "addButton": "Add Provider",
-          "editButton": "Edit",
-          "deleteButton": "Delete",
-          "enableToggle": "Enable provider",
-          "urlsPreview": "{count} URL(s) configured",
-          "deleteConfirm": "Delete provider \"{name}\"? This action cannot be undone.",
+          "title": "Benachrichtigungsanbieter",
+          "addButton": "Anbieter hinzufügen",
+          "editButton": "Bearbeiten",
+          "deleteButton": "Löschen",
+          "enableToggle": "Anbieter aktivieren",
+          "urlsPreview": "{count} URL(s) konfiguriert",
+          "deleteConfirm": "Anbieter \"{name}\" löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
           "typeBadge": {
             "shoutrrr": "Shoutrrr",
             "webhook": "Webhook"
           }
         },
         "form": {
-          "addTitle": "Add Notification Provider",
-          "editTitle": "Edit Notification Provider",
+          "addTitle": "Benachrichtigungsanbieter hinzufügen",
+          "editTitle": "Benachrichtigungsanbieter bearbeiten",
           "name": {
-            "label": "Provider Name",
-            "placeholder": "e.g., Discord Alerts",
-            "helpText": "A friendly name to identify this provider"
+            "label": "Anbietername",
+            "placeholder": "z.B. Discord-Benachrichtigungen",
+            "helpText": "Ein freundlicher Name zur Identifizierung dieses Anbieters"
           },
           "urls": {
-            "label": "Service URL(s)",
+            "label": "Dienst-URL(s)",
             "placeholder": "discord://token@webhookid",
-            "helpText": "Enter one Shoutrrr URL per line. Multiple URLs send to multiple services.",
+            "helpText": "Geben Sie eine Shoutrrr-URL pro Zeile ein. Mehrere URLs senden an mehrere Dienste.",
             "validation": {
-              "required": "At least one URL is required",
-              "invalidFormat": "Invalid URL format. URLs should start with a service prefix (e.g., discord://, telegram://)"
+              "required": "Mindestens eine URL ist erforderlich",
+              "invalidFormat": "Ungültiges URL-Format. URLs sollten mit einem Dienstpräfix beginnen (z.B. discord://, telegram://)"
             }
           },
           "notificationTypes": {
-            "label": "Notification Types",
-            "helpText": "Select which types of notifications to send to this provider",
-            "detection": "Bird detections",
-            "error": "Errors",
-            "warning": "Warnings",
-            "info": "Information",
-            "system": "System events"
+            "label": "Benachrichtigungstypen",
+            "helpText": "Wählen Sie, welche Arten von Benachrichtigungen an diesen Anbieter gesendet werden sollen",
+            "detection": "Vogelerkennungen",
+            "error": "Fehler",
+            "warning": "Warnungen",
+            "info": "Informationen",
+            "system": "Systemereignisse"
           },
           "urlFormats": {
-            "title": "Common URL Formats",
+            "title": "Gängige URL-Formate",
             "discord": "Discord",
             "discordFormat": "discord://token@webhookid",
             "telegram": "Telegram",
@@ -1274,27 +1392,27 @@
             "gotifyFormat": "gotify://hostname/token",
             "ntfy": "ntfy",
             "ntfyFormat": "ntfy://ntfy.sh/mytopic",
-            "moreServices": "View all supported services",
+            "moreServices": "Alle unterstützten Dienste anzeigen",
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
-          "saveButton": "Save Provider",
-          "savingButton": "Saving...",
-          "cancelButton": "Cancel",
-          "testButton": "Test",
-          "testingButton": "Testing..."
+          "saveButton": "Anbieter speichern",
+          "savingButton": "Speichern...",
+          "cancelButton": "Abbrechen",
+          "testButton": "Testen",
+          "testingButton": "Teste..."
         },
         "test": {
-          "button": "Test Provider",
-          "description": "Send a test notification to verify this provider is working",
-          "success": "Test notification sent successfully!",
-          "error": "Test failed: {message}",
-          "requiresUrl": "Enter a URL to test",
-          "requiresEnabled": "Enable the provider to test"
+          "button": "Anbieter testen",
+          "description": "Eine Test-Benachrichtigung senden, um zu überprüfen, ob dieser Anbieter funktioniert",
+          "success": "Test-Benachrichtigung erfolgreich gesendet!",
+          "error": "Test fehlgeschlagen: {message}",
+          "requiresUrl": "URL eingeben, um zu testen",
+          "requiresEnabled": "Anbieter aktivieren, um zu testen"
         },
         "validation": {
-          "nameRequired": "Provider name is required",
-          "urlRequired": "At least one URL is required",
-          "invalidUrl": "Invalid URL format"
+          "nameRequired": "Anbietername ist erforderlich",
+          "urlRequired": "Mindestens eine URL ist erforderlich",
+          "invalidUrl": "Ungültiges URL-Format"
         },
         "autoName": {
           "discord": "Discord",
@@ -1308,142 +1426,142 @@
           "numbered": "{service} #{number}"
         },
         "services": {
-          "selectLabel": "Service",
-          "selectHelpText": "Choose a notification service to configure",
+          "selectLabel": "Dienst",
+          "selectHelpText": "Wählen Sie einen Benachrichtigungsdienst zum Konfigurieren",
           "discord": {
             "name": "Discord",
             "webhookUrl": {
-              "label": "Discord Webhook URL",
+              "label": "Discord Webhook-URL",
               "placeholder": "https://discord.com/api/webhooks/...",
-              "helpText": "Paste your full Discord webhook URL"
+              "helpText": "Fügen Sie Ihre vollständige Discord-Webhook-URL ein"
             },
-            "invalidUrl": "Invalid Discord webhook URL. URL should contain discord.com/api/webhooks/"
+            "invalidUrl": "Ungültige Discord-Webhook-URL. URL sollte discord.com/api/webhooks/ enthalten"
           },
           "telegram": {
             "name": "Telegram",
             "botToken": {
-              "label": "Bot Token",
+              "label": "Bot-Token",
               "placeholder": "123456789:ABCdef...",
-              "helpText": "Token from @BotFather"
+              "helpText": "Token von @BotFather"
             },
             "chatId": {
-              "label": "Chat ID",
-              "placeholder": "-1001234567890 or @channel",
-              "helpText": "Chat ID, group ID, or @username"
+              "label": "Chat-ID",
+              "placeholder": "-1001234567890 oder @channel",
+              "helpText": "Chat-ID, Gruppen-ID oder @Benutzername"
             },
-            "incomplete": "Both bot token and chat ID are required"
+            "incomplete": "Sowohl Bot-Token als auch Chat-ID sind erforderlich"
           },
           "ntfy": {
             "name": "ntfy",
             "server": {
               "label": "Server",
               "placeholder": "ntfy.sh",
-              "helpText": "Leave as ntfy.sh for public server or enter your self-hosted server"
+              "helpText": "Als ntfy.sh für öffentlichen Server belassen oder eigenen selbst gehosteten Server eingeben"
             },
             "topic": {
-              "label": "Topic",
-              "placeholder": "my-bird-alerts",
-              "helpText": "Topic name for your notifications"
+              "label": "Thema",
+              "placeholder": "meine-vogel-benachrichtigungen",
+              "helpText": "Themenname für Ihre Benachrichtigungen"
             },
-            "incomplete": "Topic is required"
+            "incomplete": "Thema ist erforderlich"
           },
           "gotify": {
             "name": "Gotify",
             "server": {
-              "label": "Server URL",
+              "label": "Server-URL",
               "placeholder": "gotify.example.com",
-              "helpText": "Your Gotify server hostname (without https://)"
+              "helpText": "Ihr Gotify-Server-Hostname (ohne https://)"
             },
             "token": {
-              "label": "Application Token",
+              "label": "Anwendungstoken",
               "placeholder": "A...",
-              "helpText": "Token from Gotify Apps page"
+              "helpText": "Token von der Gotify Apps-Seite"
             },
-            "incomplete": "Server and token are required"
+            "incomplete": "Server und Token sind erforderlich"
           },
           "pushover": {
             "name": "Pushover",
             "apiToken": {
-              "label": "API Token",
+              "label": "API-Token",
               "placeholder": "az...",
-              "helpText": "Application API token"
+              "helpText": "Anwendungs-API-Token"
             },
             "userKey": {
-              "label": "User Key",
+              "label": "Benutzerschlüssel",
               "placeholder": "u...",
-              "helpText": "Your user or group key"
+              "helpText": "Ihr Benutzer- oder Gruppenschlüssel"
             },
-            "incomplete": "API token and user key are required"
+            "incomplete": "API-Token und Benutzerschlüssel sind erforderlich"
           },
           "slack": {
             "name": "Slack",
             "webhookUrl": {
-              "label": "Slack Webhook URL",
+              "label": "Slack Webhook-URL",
               "placeholder": "https://hooks.slack.com/services/...",
-              "helpText": "Paste your full Slack webhook URL"
+              "helpText": "Fügen Sie Ihre vollständige Slack-Webhook-URL ein"
             },
-            "invalidUrl": "Invalid Slack webhook URL. URL should contain hooks.slack.com/services/"
+            "invalidUrl": "Ungültige Slack-Webhook-URL. URL sollte hooks.slack.com/services/ enthalten"
           },
           "ifttt": {
             "name": "IFTTT",
             "webhookKey": {
-              "label": "Webhook Key",
+              "label": "Webhook-Schlüssel",
               "placeholder": "abc123xyz...",
-              "helpText": "Your IFTTT Webhook key from Maker Webhooks settings"
+              "helpText": "Ihr IFTTT-Webhook-Schlüssel aus den Maker Webhooks-Einstellungen"
             },
             "eventName": {
-              "label": "Event Name",
-              "placeholder": "bird_detected",
-              "helpText": "The event name to trigger in your IFTTT applet"
+              "label": "Ereignisname",
+              "placeholder": "vogel_erkannt",
+              "helpText": "Der Ereignisname, der in Ihrem IFTTT-Applet ausgelöst werden soll"
             },
-            "incomplete": "Webhook key and event name are required"
+            "incomplete": "Webhook-Schlüssel und Ereignisname sind erforderlich"
           },
           "webhook": {
             "name": "Webhook",
             "url": {
-              "label": "Webhook URL",
+              "label": "Webhook-URL",
               "placeholder": "https://api.example.com/webhook",
-              "helpText": "The HTTP(S) endpoint to send notifications to"
+              "helpText": "Der HTTP(S)-Endpunkt, an den Benachrichtigungen gesendet werden"
             },
             "method": {
-              "label": "HTTP Method",
-              "helpText": "HTTP method to use for the request (default: POST)"
+              "label": "HTTP-Methode",
+              "helpText": "HTTP-Methode für die Anfrage (Standard: POST)"
             },
             "auth": {
-              "label": "Authentication",
-              "none": "None",
-              "bearer": "Bearer Token",
+              "label": "Authentifizierung",
+              "none": "Keine",
+              "bearer": "Bearer-Token",
               "basic": "Basic Auth",
-              "helpText": "Optional authentication for the webhook endpoint"
+              "helpText": "Optionale Authentifizierung für den Webhook-Endpunkt"
             },
             "bearerToken": {
-              "label": "Bearer Token",
-              "placeholder": "your-api-token",
-              "helpText": "Token sent in Authorization: Bearer header"
+              "label": "Bearer-Token",
+              "placeholder": "Ihr-API-Token",
+              "helpText": "Token, das im Authorization: Bearer Header gesendet wird"
             },
             "basicUser": {
-              "label": "Username",
-              "placeholder": "username"
+              "label": "Benutzername",
+              "placeholder": "benutzername"
             },
             "basicPass": {
-              "label": "Password",
-              "placeholder": "password"
+              "label": "Passwort",
+              "placeholder": "passwort"
             },
             "basicAuth": {
-              "helpText": "Credentials sent using HTTP Basic Authentication"
+              "helpText": "Anmeldedaten werden über HTTP Basic Authentication gesendet"
             },
-            "invalidUrl": "Invalid URL. Must start with http:// or https://",
-            "tokenRequired": "Bearer token is required when using Bearer authentication",
-            "credentialsRequired": "Username and password are required when using Basic authentication"
+            "invalidUrl": "Ungültige URL. Muss mit http:// oder https:// beginnen",
+            "tokenRequired": "Bearer-Token ist erforderlich bei Verwendung der Bearer-Authentifizierung",
+            "credentialsRequired": "Benutzername und Passwort sind erforderlich bei Verwendung der Basic-Authentifizierung"
           },
           "custom": {
-            "name": "Custom URL",
+            "name": "Benutzerdefinierte URL",
             "url": {
-              "label": "Shoutrrr URL",
-              "placeholder": "service://credentials@host",
-              "helpText": "Enter a raw Shoutrrr URL for any supported service"
+              "label": "Shoutrrr-URL",
+              "placeholder": "dienst://anmeldedaten@host",
+              "helpText": "Geben Sie eine rohe Shoutrrr-URL für jeden unterstützten Dienst ein"
             },
-            "invalidUrl": "Invalid URL format. URL should start with service://"
+            "invalidUrl": "Ungültiges URL-Format. URL sollte mit dienst:// beginnen"
           }
         }
       }
@@ -1454,7 +1572,8 @@
         "description": "Die Datenschutzfilterung verhindert das Speichern von Audioclips, wenn menschliche Stimmen erkannt werden",
         "enable": "Datenschutzfilterung aktivieren",
         "confidenceLabel": "Konfidenzschwelle für Menschenerkennung",
-        "confidenceHelp": "Legen Sie das Konfidenzniveau für die Erkennung menschlicher Stimmen fest, niedrigere Werte machen den Filter empfindlicher"
+        "confidenceHelp": "Legen Sie das Konfidenzniveau für die Erkennung menschlicher Stimmen fest, niedrigere Werte machen den Filter empfindlicher",
+        "disabled": "Datenschutzfilterung ist deaktiviert"
       },
       "falsePositivePrevention": {
         "title": "Falsch-Positiv-Prävention",
@@ -1466,14 +1585,16 @@
         "expireTimeHelp": "Legen Sie fest, wie lange ein erkanntes Hundebellen gespeichert wird",
         "addDogBarkSpeciesLabel": "Hundebellen-Arten hinzufügen",
         "addDogBarkSpeciesHelp": "Suchen und fügen Sie Arten hinzu, die mit Hundebellen verwechselt werden könnten",
-        "addSpeciesButton": "Hinzufügen"
+        "addSpeciesButton": "Hinzufügen",
+        "disabled": "Hundebellenfilter ist deaktiviert"
       },
       "speciesNamePlaceholder": "Artname",
       "typeSpeciesName": "Artname eingeben...",
       "dogBarkSpeciesList": "Hundebell-Artenliste",
       "errors": {
         "speciesLoadFailed": "Fehler beim Laden der Artenliste. Bitte versuchen Sie es erneut."
-      }
+      },
+      "title": "Filter"
     },
     "integration": {
       "birdweather": {
@@ -1637,7 +1758,13 @@
         "rtspTransportLabel": "RTSP-Transportprotokoll",
         "rtspTransportHelp": "TCP ist zuverlässiger, kann aber höhere Latenz haben. UDP ist schneller, kann aber bei schlechten Netzwerken Paketverluste erleiden.",
         "rtspUrlsLabel": "RTSP-Stream-URLs",
-        "rtspUrlsHelp": "Geben Sie eine oder mehrere RTSP-Stream-URLs für Netzwerk-Audioquellen ein. Format: rtsp://ip:port/stream. Hinweis: Authentifizierungsdaten sollten aus Sicherheitsgründen separat in Ihren RTSP-Server-Einstellungen konfiguriert werden."
+        "rtspUrlsHelp": "Geben Sie eine oder mehrere RTSP-Stream-URLs für Netzwerk-Audioquellen ein. Format: rtsp://ip:port/stream. Hinweis: Authentifizierungsdaten sollten aus Sicherheitsgründen separat in Ihren RTSP-Server-Einstellungen konfiguriert werden.",
+        "noDeviceSelected": "Kein Audiogerät ausgewählt",
+        "refreshDevices": "Aktualisieren",
+        "deviceSelected": "Soundkarte ausgewählt und bereit zur Aufnahme",
+        "availableDevices": "Verfügbare Audiogeräte",
+        "active": "Aktiv",
+        "streamsConfigured": "{count} Stream(s) konfiguriert"
       },
       "audioFilters": {
         "title": "Audiofilter",
@@ -1678,7 +1805,8 @@
         "dataOutputDescription": "Wenn aktiviert, werden Schallpegelmessungen veröffentlicht über:",
         "mqttTopic": "MQTT-Topic:",
         "sseEndpoint": "SSE-Endpunkt:",
-        "prometheusMetrics": "Prometheus-Metriken:"
+        "prometheusMetrics": "Prometheus-Metriken:",
+        "disabled": "Schallpegelüberwachung ist deaktiviert"
       },
       "clipSettings": {
         "title": "Clip-Einstellungen",
@@ -1715,7 +1843,9 @@
         "typeHelp": "Audioformat für gespeicherte Clips. WAV und FLAC sind verlustfrei (beste Qualität, größere Dateien). MP3, AAC und Opus sind verlustbehaftet (kleinere Dateien, leichter Qualitätsverlust).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio-Kompressionsbitrate für verlustbehaftete Formate. Bereich: {min}-{max} kbps. Höhere Werte bieten bessere Qualität, aber größere Dateien.",
-        "losslessNote": "Verlustfreie Formate bewahren die ursprüngliche Audioqualität ohne Kompressionsartefakte."
+        "losslessNote": "Verlustfreie Formate bewahren die ursprüngliche Audioqualität ohne Kompressionsartefakte.",
+        "normalizationDisabled": "Audio-Normalisierung ist deaktiviert",
+        "disabledInfo": "Aktivieren Sie die Clip-Aufnahme oben, um Clip-Einstellungen, Dateiformat und Speicheroptionen zu konfigurieren."
       },
       "fileSettings": {
         "title": "Dateieinstellungen",
@@ -1761,7 +1891,13 @@
           "none": "Keine",
           "age": "Alter",
           "usage": "Nutzung"
-        }
+        },
+        "noRetentionTitle": "Alle Clips behalten",
+        "noRetentionDescription": "Audioclips werden unbegrenzt gespeichert. Überwachen Sie die Festplattennutzung, um Speicherprobleme zu vermeiden.",
+        "ageRetentionTitle": "Altersbasierte Bereinigung",
+        "ageRetentionDescription": "Clips, die älter als das angegebene Alter sind, werden automatisch gelöscht, während die Mindestanzahl pro Art erhalten bleibt.",
+        "usageRetentionTitle": "Nutzungsbasierte Bereinigung",
+        "usageRetentionDescription": "Wenn die Festplattennutzung den Schwellenwert überschreitet, werden die ältesten Clips gelöscht, bis die Nutzung innerhalb der Grenzen liegt."
       },
       "formats": {
         "wav": "WAV",
@@ -1784,6 +1920,95 @@
         "devicesLoadFailed": "Fehler beim Laden der Audiogeräte. Bitte überprüfen Sie die Systemberechtigungen.",
         "invalidBitrate": "Ungültiger Bitratenwert",
         "invalidRetentionPolicy": "Ungültige Aufbewahrungsrichtlinie"
+      },
+      "emptyStates": {
+        "soundCard": {
+          "title": "Keine Soundkarten erkannt",
+          "description": "Auf diesem System wurden keine lokalen Audio-Eingabegeräte gefunden. Dies ist normal für Container- oder Headless-Server-Bereitstellungen.",
+          "errorTitle": "Fehler beim Laden der Geräte",
+          "hintsTitle": "Sie können:",
+          "hints": {
+            "container": "Dies ist normal für Container-/Headless-Bereitstellungen",
+            "streams": "Stattdessen Netzwerk-Streams im Streams-Tab konfigurieren",
+            "usb": "Ein USB-Mikrofon anschließen und die Liste aktualisieren"
+          },
+          "refresh": "Geräte aktualisieren",
+          "retry": "Wiederholen"
+        },
+        "streams": {
+          "title": "Keine Streams konfiguriert",
+          "description": "Fügen Sie RTSP- oder Netzwerk-Audio-Streams von IP-Kameras, Mikrofon-Servern oder anderen Streaming-Quellen hinzu.",
+          "hintsTitle": "Erste Schritte:",
+          "hints": {
+            "rtsp": "Geben Sie RTSP-URLs im Format ein: rtsp://ip:port/stream",
+            "multiple": "Sie können mehrere Streams für verschiedene Standorte hinzufügen",
+            "protocol": "Wählen Sie TCP für Zuverlässigkeit oder UDP für geringere Latenz"
+          }
+        }
+      },
+      "soundCard": {
+        "title": "Soundkarte",
+        "description": "Lokales Audio-Eingabegerät konfigurieren",
+        "audioSourceLabel": "Audioquelle (erfordert Anwendungsneustart)",
+        "audioSourceHelp": "Wählen Sie das Audio-Eingabegerät für die Vogelklangerkennung. Änderungen erfordern einen Anwendungsneustart.",
+        "noSoundCardCapture": "Keine Soundkartenaufnahme",
+        "empty": {
+          "title": "Keine Soundkarten erkannt",
+          "description": "Auf diesem System wurden keine lokalen Audio-Eingabegeräte gefunden. Dies ist normal für Container- oder Headless-Server-Bereitstellungen.",
+          "hintsTitle": "Sie können:",
+          "hintStream": "Netzwerk-Streams im Streams-Tab konfigurieren",
+          "hintUsb": "Ein USB-Mikrofon anschließen und die Liste aktualisieren",
+          "goToStreams": "Zu Streams gehen",
+          "refresh": "Geräte aktualisieren"
+        }
+      },
+      "noSources": {
+        "warning": "Keine Audioquellen konfiguriert",
+        "description": "BirdNET-Go benötigt eine Audioeingabe, um Vögel zu erkennen. Bitte konfigurieren Sie mindestens eine Quelle im Soundkarten- oder Streams-Tab."
+      },
+      "rtspStreams": {
+        "title": "RTSP-Stream-Konfiguration",
+        "description": "Netzwerk-Audio-Streams für Remote-Audioaufnahme über RTSP-Protokoll konfigurieren.",
+        "noStreamsConfigured": "Keine Streams konfiguriert"
+      },
+      "streams": {
+        "streamLabel": "Stream",
+        "urlLabel": "Stream-URL",
+        "urlHelp": "RTSP-URL mit optionalen Anmeldedaten eingeben (rtsp://benutzer:passwort@host:port/pfad)",
+        "typeLabel": "Stream-Typ",
+        "typeLockedNote": "Derzeit wird nur RTSP unterstützt",
+        "transportLabel": "Protokoll",
+        "summary": "{count} Stream(s) konfiguriert",
+        "healthy": "gesund",
+        "unhealthy": "ungesund",
+        "unknown": "unbekannt",
+        "refresh": "Aktualisieren",
+        "addStream": "Stream hinzufügen",
+        "deleteConfirm": "Diesen Stream entfernen?",
+        "restartCount": "{count} mal neu gestartet",
+        "healthLoadError": "Fehler beim Laden des Stream-Gesundheitsstatus",
+        "status": {
+          "connected": "Verbunden",
+          "connecting": "Verbinde",
+          "error": "Fehler",
+          "idle": "Inaktiv",
+          "unknown": "Unbekannt"
+        },
+        "emptyState": {
+          "title": "Keine Streams konfiguriert",
+          "description": "Fügen Sie RTSP-Streams hinzu, um Audio von Netzwerkkameras oder anderen RTSP-Quellen aufzunehmen.",
+          "hintsTitle": "Erste Schritte",
+          "hints": {
+            "rtsp": "Verwenden Sie RTSP-URLs von IP-Kameras (z.B. rtsp://192.168.1.100:554/stream)",
+            "credentials": "Fügen Sie Anmeldedaten in die URL ein, falls erforderlich (rtsp://benutzer:passwort@host/stream)",
+            "protocol": "TCP ist zuverlässiger, UDP hat geringere Latenz"
+          }
+        },
+        "errors": {
+          "urlRequired": "Stream-URL ist erforderlich",
+          "invalidUrl": "Ungültiges RTSP-URL-Format",
+          "duplicate": "Diese Stream-URL existiert bereits"
+        }
       }
     },
     "species": {
@@ -1875,6 +2100,28 @@
           "speciesPlaceholder": "Artname",
           "thresholdPlaceholder": "0,5",
           "intervalPlaceholder": "0"
+        },
+        "addConfiguration": "Konfiguration hinzufügen",
+        "newConfiguration": "Neue Konfiguration",
+        "editing": "Bearbeiten: {species}",
+        "configuredCount": "{count} konfiguriert",
+        "searchPlaceholder": "Zum Suchen eingeben...",
+        "saving": "Speichern...",
+        "save": "Speichern",
+        "cancel": "Abbrechen",
+        "configureActions": "Aktionen konfigurieren",
+        "actionsConfigured": "Konfiguriert",
+        "list": {
+          "threshold": "Schwellenwert:",
+          "interval": "Intervall:",
+          "intervalNone": "Keines",
+          "actionBadge": "Aktion",
+          "editTitle": "Konfiguration bearbeiten",
+          "removeTitle": "Konfiguration entfernen"
+        },
+        "emptyState": {
+          "title": "Noch keine Konfigurationen.",
+          "description": "Klicken Sie auf \"Konfiguration hinzufügen\", um die Artenerkennungseinstellungen anzupassen."
         }
       },
       "actionsModal": {
@@ -2030,10 +2277,11 @@
         "description": "Sicherer Zugriff mit einem einfachen Passwort",
         "enableLabel": "Passwort-Authentifizierung aktivieren",
         "passwordLabel": "Passwort",
-        "passwordHelpText": "Zugriff auf Einstellungen mit einem Passwort begrenzen."
+        "passwordHelpText": "Zugriff auf Einstellungen mit einem Passwort begrenzen.",
+        "disabled": "Passwort-Authentifizierung ist deaktiviert"
       },
       "oauth": {
-        "title": "OAuth2 Social Authentication",
+        "title": "OAuth2 Social-Authentifizierung",
         "description": "Single Sign-On zur Anmeldung mit Ihrem bestehenden Konto",
         "google": {
           "title": "Google OAuth",
@@ -2060,7 +2308,8 @@
       },
       "bypassAuthentication": {
         "title": "Authentifizierung umgehen",
-        "description": "Zugriff auf Einstellungen ohne Authentifizierung erlauben"
+        "description": "Zugriff auf Einstellungen ohne Authentifizierung erlauben",
+        "disabled": "Subnet bypass is disabled"
       },
       "placeholders": {
         "host": "Zum Beispiel localhost:8080 oder example.domain.com",
@@ -2072,6 +2321,12 @@
       "sqlitePlaceholder": "SQLite-Datenbankpfad eingeben",
       "mysqlHostPlaceholder": "MySQL-Host eingeben",
       "mysqlUsernamePlaceholder": "MySQL-Benutzernamen eingeben"
+    },
+    "tabs": {
+      "navigation": "Navigationsreiter der Einstellungen",
+      "hasChanges": "Dieser Reiter hat ungespeicherte Änderungen",
+      "setAsDefault": "Als Standard festlegen",
+      "defaultIndicator": "Standard-Eingabequelle"
     }
   },
   "auth": {
@@ -2236,10 +2491,35 @@
     }
   },
   "components": {
+    "audio": {
+      "spectrogramUnavailable": "Spektrogramm nicht verfügbar",
+      "generating": "Wird generiert...",
+      "queuePosition": "Warteschlange: {position}"
+    },
     "forms": {
       "numberField": {
         "adjustedToMinimum": "Wert auf Minimum angepasst ({value})",
         "adjustedToMaximum": "Wert auf Maximum angepasst ({value})"
+      },
+      "rtsp": {
+        "addNewStream": "Neuen RTSP-Stream hinzufügen",
+        "maxStreamsReached": "Maximale Anzahl von RTSP-Streams ({max}) erreicht.",
+        "cameraPlaceholder": "Kamera 1",
+        "urlPlaceholder": "rtsp://benutzername:passwort@192.168.1.100:554/stream"
+      },
+      "subnet": {
+        "maxSubnetsReached": "Maximale Anzahl von Subnetzen ({max}) erreicht."
+      },
+      "species": {
+        "loadingSpecies": "Arten werden geladen...",
+        "typePlaceholder": "Artennamen eingeben...",
+        "suggestionsAvailable": "{count} Artenvorschläge verfügbar. Verwenden Sie die Pfeiltasten zum Navigieren.",
+        "noSuggestions": "Keine Artenvorschläge verfügbar."
+      },
+      "select": {
+        "searchPlaceholder": "Suchen...",
+        "searchOptions": "Optionen suchen",
+        "noOptions": "Keine Optionen gefunden"
       }
     },
     "datePicker": {

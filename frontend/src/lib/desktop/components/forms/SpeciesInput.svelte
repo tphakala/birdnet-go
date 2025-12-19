@@ -26,6 +26,7 @@
   import { Plus } from '@lucide/svelte';
   import { safeGet } from '$lib/utils/security';
   import { Z_INDEX } from '$lib/utils/z-index';
+  import { t } from '$lib/i18n';
 
   interface Props {
     value?: string;
@@ -524,9 +525,9 @@
   <!-- Screen reader announcement for dropdown state changes -->
   <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
     {#if showPredictions && filteredPredictions.length > 0}
-      {filteredPredictions.length} species suggestions available. Use arrow keys to navigate.
+      {t('components.forms.species.suggestionsAvailable', { count: filteredPredictions.length })}
     {:else if showPredictions && filteredPredictions.length === 0}
-      No species suggestions available.
+      {t('components.forms.species.noSuggestions')}
     {/if}
   </div>
 </div>

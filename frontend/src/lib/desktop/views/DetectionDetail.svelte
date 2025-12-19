@@ -621,23 +621,33 @@
           <!-- Visual Family Tree -->
           <div class="space-y-3">
             <div class="flex items-center gap-3">
-              <span class="text-sm text-base-content opacity-60 w-24">Kingdom:</span>
+              <span class="text-sm text-base-content opacity-60 w-24"
+                >{t('species.taxonomy.labels.kingdom')}:</span
+              >
               <span class="font-medium">{taxonomyInfo.taxonomy.kingdom}</span>
             </div>
             <div class="flex items-center gap-3 ml-6">
-              <span class="text-sm text-base-content opacity-60 w-24">Phylum:</span>
+              <span class="text-sm text-base-content opacity-60 w-24"
+                >{t('species.taxonomy.labels.phylum')}:</span
+              >
               <span class="font-medium">{taxonomyInfo.taxonomy.phylum}</span>
             </div>
             <div class="flex items-center gap-3 ml-12">
-              <span class="text-sm text-base-content opacity-60 w-24">Class:</span>
+              <span class="text-sm text-base-content opacity-60 w-24"
+                >{t('species.taxonomy.labels.class')}:</span
+              >
               <span class="font-medium">{taxonomyInfo.taxonomy.class}</span>
             </div>
             <div class="flex items-center gap-3 ml-18">
-              <span class="text-sm text-base-content opacity-60 w-24">Order:</span>
+              <span class="text-sm text-base-content opacity-60 w-24"
+                >{t('species.taxonomy.labels.order')}:</span
+              >
               <span class="font-medium">{taxonomyInfo.taxonomy.order}</span>
             </div>
             <div class="flex items-center gap-3 ml-24">
-              <span class="text-sm text-base-content opacity-60 w-24">Family:</span>
+              <span class="text-sm text-base-content opacity-60 w-24"
+                >{t('species.taxonomy.labels.family')}:</span
+              >
               <span class="font-medium">
                 {taxonomyInfo.taxonomy.family}
                 {#if taxonomyInfo.taxonomy.family_common}
@@ -648,11 +658,15 @@
               </span>
             </div>
             <div class="flex items-center gap-3 ml-30">
-              <span class="text-sm text-base-content opacity-60 w-24">Genus:</span>
+              <span class="text-sm text-base-content opacity-60 w-24"
+                >{t('species.taxonomy.labels.genus')}:</span
+              >
               <span class="font-medium">{taxonomyInfo.taxonomy.genus}</span>
             </div>
             <div class="flex items-center gap-3 ml-36">
-              <span class="text-sm text-base-content opacity-60 w-24">Species:</span>
+              <span class="text-sm text-base-content opacity-60 w-24"
+                >{t('species.taxonomy.labels.species')}:</span
+              >
               <span class="font-medium italic">{taxonomyInfo.taxonomy.species}</span>
             </div>
           </div>
@@ -726,11 +740,11 @@
   <!-- Loading state with live region -->
   <div role="status" aria-live="polite" class="sr-only">
     {#if isLoadingDetection}
-      Loading detection details...
+      {t('detections.aria.loading')}
     {:else if detection}
-      Detection details loaded for {detection.commonName}
+      {t('detections.aria.loaded', { species: detection.commonName })}
     {:else if detectionError}
-      Error loading detection: {detectionError}
+      {t('detections.aria.error', { error: detectionError })}
     {/if}
   </div>
 
