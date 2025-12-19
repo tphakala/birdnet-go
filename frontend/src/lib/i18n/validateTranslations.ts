@@ -352,10 +352,9 @@ class TranslationValidator {
     const groups = new Map<string, string[]>();
     for (const key of keys) {
       const section = key.split('.')[0];
-      if (!groups.has(section)) {
-        groups.set(section, []);
-      }
-      groups.get(section)!.push(key);
+      const existing = groups.get(section) ?? [];
+      existing.push(key);
+      groups.set(section, existing);
     }
     return groups;
   }
@@ -468,7 +467,9 @@ class TranslationValidator {
           if (extra.length > 0) {
             console.log(`        Extra params: {${extra.join('}, {')}}`);
           }
-          console.log(`        EN: "${this.truncateValue(String(this.getValueByPath(this.referenceMessages, key)))}"`);
+          console.log(
+            `        EN: "${this.truncateValue(String(this.getValueByPath(this.referenceMessages, key)))}"`
+          );
         });
       }
 

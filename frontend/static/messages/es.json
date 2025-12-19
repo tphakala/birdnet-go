@@ -2309,7 +2309,7 @@
       "bypassAuthentication": {
         "title": "Omitir autenticación",
         "description": "Permitir acceso a la configuración sin autenticación",
-        "disabled": "Subnet bypass is disabled"
+        "disabled": "El bypass de subred está deshabilitado"
       },
       "placeholders": {
         "host": "Por ejemplo, localhost:8080 o example.domain.com",
@@ -2504,22 +2504,22 @@
       "species": {
         "suggestionsAvailable": "{count} sugerencias de especies disponibles. Usa las teclas de flecha para navegar.",
         "noSuggestions": "No hay sugerencias de especies disponibles.",
-        "loadingSpecies": "Loading species...",
-        "typePlaceholder": "Type species name..."
+        "loadingSpecies": "Cargando especies...",
+        "typePlaceholder": "Escriba el nombre de la especie..."
       },
       "select": {
         "searchOptions": "Buscar opciones",
         "noOptions": "No se encontraron opciones",
-        "searchPlaceholder": "Search..."
+        "searchPlaceholder": "Buscar..."
       },
       "rtsp": {
-        "addNewStream": "Add New RTSP Stream",
-        "maxStreamsReached": "Maximum number of RTSP streams ({max}) reached.",
-        "cameraPlaceholder": "Camera 1",
+        "addNewStream": "Agregar nueva transmisión RTSP",
+        "maxStreamsReached": "Se alcanzó el número máximo de transmisiones RTSP ({max}).",
+        "cameraPlaceholder": "Cámara 1",
         "urlPlaceholder": "rtsp://username:password@192.168.1.100:554/stream"
       },
       "subnet": {
-        "maxSubnetsReached": "Maximum number of subnets ({max}) reached."
+        "maxSubnetsReached": "Se alcanzó el número máximo de subredes ({max})."
       }
     },
     "datePicker": {

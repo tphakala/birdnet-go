@@ -1573,7 +1573,7 @@
         "enable": "Ota yksityisyyssuodatus käyttöön",
         "confidenceLabel": "Luottamuskynnys ihmisen tunnistukseen",
         "confidenceHelp": "Aseta luottamustaso ihmisäänen tunnistukseen, matalampi arvo tekee suodattimesta herkemmän",
-        "disabled": "Privacy filtering is disabled"
+        "disabled": "Yksityisyyssuodatus on poistettu käytöstä"
       },
       "falsePositivePrevention": {
         "title": "Väärien positiivisten ehkäisy",
@@ -1586,7 +1586,7 @@
         "addDogBarkSpeciesLabel": "Lisää koiran haukunnan lajeja",
         "addDogBarkSpeciesHelp": "Etsi ja lisää lajeja, jotka voidaan sekoittaa koiran haukuntaan",
         "addSpeciesButton": "Lisää",
-        "disabled": "Dog bark filter is disabled"
+        "disabled": "Koiran haukuntasuodatin on poistettu käytöstä"
       },
       "speciesNamePlaceholder": "Lajin nimi",
       "typeSpeciesName": "Kirjoita lajin nimi...",
@@ -1594,7 +1594,7 @@
       "errors": {
         "speciesLoadFailed": "Lajiluettelon lataus epäonnistui. Yritä uudelleen."
       },
-      "title": "Filters"
+      "title": "Suodattimet"
     },
     "audio": {
       "loading": "Ladataan äänilaitteita...",
@@ -1617,12 +1617,12 @@
         "rtspTransportHelp": "TCP on luotettavampi mutta saattaa aiheuttaa suurempaa viivettä. UDP on nopeampi mutta saattaa kokea pakettihäviötä heikoissa verkoissa.",
         "rtspUrlsLabel": "RTSP-virran URL-osoitteet",
         "rtspUrlsHelp": "Syötä yksi tai useampi RTSP-virran URL-osoite verkkoäänilähteille. Muoto: rtsp://ip:portti/virta. Huom: Todennustiedot tulisi määrittää erikseen RTSP-palvelimen asetuksissa tietoturvan vuoksi.",
-        "noDeviceSelected": "No audio device selected",
-        "refreshDevices": "Refresh",
-        "deviceSelected": "Sound card selected and ready for capture",
-        "availableDevices": "Available Audio Devices",
-        "active": "Active",
-        "streamsConfigured": "{count} stream(s) configured"
+        "noDeviceSelected": "Äänilaitetta ei ole valittu",
+        "refreshDevices": "Päivitä",
+        "deviceSelected": "Äänikortti valittu ja valmis tallennukseen",
+        "availableDevices": "Saatavilla olevat äänilaitteet",
+        "active": "Aktiivinen",
+        "streamsConfigured": "{count} virta(a) määritetty"
       },
       "audioFilters": {
         "title": "Äänisuodattimet",
@@ -1664,7 +1664,7 @@
         "mqttTopic": "MQTT-aihe:",
         "sseEndpoint": "SSE-päätepiste:",
         "prometheusMetrics": "Prometheus-mittarit:",
-        "disabled": "Sound level monitoring is disabled"
+        "disabled": "Äänitason seuranta on poistettu käytöstä"
       },
       "clipSettings": {
         "title": "Leikeasetukset",
@@ -1702,8 +1702,8 @@
         "bitrateLabel": "Bittinopeus",
         "bitrateHelp": "Äänen pakkauksen bittinopeus häviöllisille muodoille. Alue: {min}-{max} kbps. Korkeammat arvot tarjoavat parempaa laatua mutta suurempia tiedostoja.",
         "losslessNote": "Häviöttömät muodot säilyttävät alkuperäisen äänenlaadun ilman pakkaushäiriöitä.",
-        "normalizationDisabled": "Audio normalization is disabled",
-        "disabledInfo": "Enable clip recording above to configure clip settings, file format, and storage options."
+        "normalizationDisabled": "Äänen normalisointi on poistettu käytöstä",
+        "disabledInfo": "Ota leikkeiden tallennus käyttöön yllä määrittääksesi leikeasetuksia, tiedostomuotoa ja tallennusvaihtoehtoja."
       },
       "fileSettings": {
         "title": "Tiedostoasetukset",
@@ -1781,91 +1781,91 @@
       },
       "emptyStates": {
         "soundCard": {
-          "title": "No Sound Cards Detected",
-          "description": "No local audio input devices were found on this system. This is normal for container or headless server deployments.",
-          "errorTitle": "Error Loading Devices",
-          "hintsTitle": "You can:",
+          "title": "Äänikortteja ei havaittu",
+          "description": "Tässä järjestelmässä ei löytynyt paikallisia äänitulovälineitä. Tämä on normaalia kontti- tai päättömissä palvelinkäyttöönotoissa.",
+          "errorTitle": "Virhe laitteiden latauksessa",
+          "hintsTitle": "Voit:",
           "hints": {
-            "container": "This is normal for container/headless deployments",
-            "streams": "Configure network streams in the Streams tab instead",
-            "usb": "Connect a USB microphone and refresh the list"
+            "container": "Tämä on normaalia kontti-/päättömissä käyttöönotoissa",
+            "streams": "Määritä verkkovirrat sen sijaan Virrat-välilehdellä",
+            "usb": "Liitä USB-mikrofoni ja päivitä luettelo"
           },
-          "refresh": "Refresh Devices",
-          "retry": "Retry"
+          "refresh": "Päivitä laitteet",
+          "retry": "Yritä uudelleen"
         },
         "streams": {
-          "title": "No Streams Configured",
-          "description": "Add RTSP or network audio streams from IP cameras, microphone servers, or other streaming sources.",
-          "hintsTitle": "Getting started:",
+          "title": "Virtoja ei ole määritetty",
+          "description": "Lisää RTSP- tai verkkoäänivirtoja IP-kameroista, mikrofonpalvelimista tai muista virtauslähteistä.",
+          "hintsTitle": "Aloittaminen:",
           "hints": {
-            "rtsp": "Enter RTSP URLs in the format: rtsp://ip:port/stream",
-            "multiple": "You can add multiple streams for different locations",
-            "protocol": "Choose TCP for reliability or UDP for lower latency"
+            "rtsp": "Syötä RTSP-URL-osoitteet muodossa: rtsp://ip:portti/virta",
+            "multiple": "Voit lisätä useita virtoja eri sijainteja varten",
+            "protocol": "Valitse TCP luotettavuuden vuoksi tai UDP pienemmän viiveen saamiseksi"
           }
         }
       },
       "soundCard": {
-        "title": "Sound Card",
-        "description": "Configure local audio input device",
-        "audioSourceLabel": "Audio Source (requires application restart to take effect)",
-        "audioSourceHelp": "Select the audio input device for bird sound detection. Changes require application restart to take effect.",
-        "noSoundCardCapture": "No sound card capture",
+        "title": "Äänikortti",
+        "description": "Määritä paikallinen äänitulolaite",
+        "audioSourceLabel": "Äänilähde (vaatii sovelluksen uudelleenkäynnistyksen)",
+        "audioSourceHelp": "Valitse äänitulolaite lintuäänten tunnistukseen. Muutokset vaativat sovelluksen uudelleenkäynnistyksen.",
+        "noSoundCardCapture": "Ei äänikortin tallennusta",
         "empty": {
-          "title": "No Sound Cards Detected",
-          "description": "No local audio input devices were found on this system. This is normal for container or headless server deployments.",
-          "hintsTitle": "You can:",
-          "hintStream": "Configure network streams in the Streams tab",
-          "hintUsb": "Connect a USB microphone and refresh the list",
-          "goToStreams": "Go to Streams",
-          "refresh": "Refresh Devices"
+          "title": "Äänikortteja ei havaittu",
+          "description": "Tässä järjestelmässä ei löytynyt paikallisia äänitulovälineitä. Tämä on normaalia kontti- tai päättömissä palvelinkäyttöönotoissa.",
+          "hintsTitle": "Voit:",
+          "hintStream": "Määritä verkkovirrat Virrat-välilehdellä",
+          "hintUsb": "Liitä USB-mikrofoni ja päivitä luettelo",
+          "goToStreams": "Siirry virtoihin",
+          "refresh": "Päivitä laitteet"
         }
       },
       "noSources": {
-        "warning": "No Audio Sources Configured",
-        "description": "BirdNET-Go needs an audio input to detect birds. Please configure at least one source in the Sound Card or Streams tab."
+        "warning": "Äänilähteita ei ole määritetty",
+        "description": "BirdNET-Go tarvitsee äänen syötteen lintujen havaitsemiseen. Määritä vähintään yksi lähde Äänikortti- tai Virrat-välilehdellä."
       },
       "rtspStreams": {
-        "title": "RTSP Stream Configuration",
-        "description": "Configure network audio streams for remote audio capture via RTSP protocol.",
-        "noStreamsConfigured": "No streams configured"
+        "title": "RTSP-virran määritys",
+        "description": "Määritä verkkoäänivirtoja etäänen tallennukseen RTSP-protokollan kautta.",
+        "noStreamsConfigured": "Virtoja ei ole määritetty"
       },
       "streams": {
-        "streamLabel": "Stream",
-        "urlLabel": "Stream URL",
-        "urlHelp": "Enter RTSP URL with optional credentials (rtsp://user:password@host:port/path)",
-        "typeLabel": "Stream Type",
-        "typeLockedNote": "Only RTSP is supported currently",
-        "transportLabel": "Protocol",
-        "summary": "{count} stream(s) configured",
-        "healthy": "healthy",
-        "unhealthy": "unhealthy",
-        "unknown": "unknown",
-        "refresh": "Refresh",
-        "addStream": "Add Stream",
-        "deleteConfirm": "Remove this stream?",
-        "restartCount": "Restarted {count} time(s)",
-        "healthLoadError": "Failed to load stream health status",
+        "streamLabel": "Virta",
+        "urlLabel": "Virran URL",
+        "urlHelp": "Syötä RTSP-URL valinnaisten tunnistetietojen kanssa (rtsp://käyttäjä:salasana@isäntä:portti/polku)",
+        "typeLabel": "Virran tyyppi",
+        "typeLockedNote": "Vain RTSP on tällä hetkellä tuettu",
+        "transportLabel": "Protokolla",
+        "summary": "{count} virta(a) määritetty",
+        "healthy": "terve",
+        "unhealthy": "epäterve",
+        "unknown": "tuntematon",
+        "refresh": "Päivitä",
+        "addStream": "Lisää virta",
+        "deleteConfirm": "Poista tämä virta?",
+        "restartCount": "Uudelleenkäynnistetty {count} kertaa",
+        "healthLoadError": "Virran terveystilan lataus epäonnistui",
         "status": {
-          "connected": "Connected",
-          "connecting": "Connecting",
-          "error": "Error",
-          "idle": "Idle",
-          "unknown": "Unknown"
+          "connected": "Yhdistetty",
+          "connecting": "Yhdistetään",
+          "error": "Virhe",
+          "idle": "Jouten",
+          "unknown": "Tuntematon"
         },
         "emptyState": {
-          "title": "No Streams Configured",
-          "description": "Add RTSP streams to capture audio from network cameras or other RTSP sources.",
-          "hintsTitle": "Getting Started",
+          "title": "Virtoja ei ole määritetty",
+          "description": "Lisää RTSP-virtoja tallentaaksesi ääntä verkkokameroista tai muista RTSP-lähteistä.",
+          "hintsTitle": "Aloittaminen",
           "hints": {
-            "rtsp": "Use RTSP URLs from IP cameras (e.g., rtsp://192.168.1.100:554/stream)",
-            "credentials": "Include credentials in URL if required (rtsp://user:pass@host/stream)",
-            "protocol": "TCP is more reliable, UDP has lower latency"
+            "rtsp": "Käytä RTSP-URL-osoitteita IP-kameroista (esim. rtsp://192.168.1.100:554/virta)",
+            "credentials": "Sisällytä tunnistetiedot URL-osoitteeseen tarvittaessa (rtsp://käyttäjä:salasana@isäntä/virta)",
+            "protocol": "TCP on luotettavampi, UDP:llä on pienempi viive"
           }
         },
         "errors": {
-          "urlRequired": "Stream URL is required",
-          "invalidUrl": "Invalid RTSP URL format",
-          "duplicate": "This stream URL already exists"
+          "urlRequired": "Virran URL vaaditaan",
+          "invalidUrl": "Virheellinen RTSP-URL-muoto",
+          "duplicate": "Tämä virran URL on jo olemassa"
         }
       }
     },
@@ -2101,16 +2101,16 @@
           "thresholdPlaceholder": "0.5",
           "intervalPlaceholder": "0"
         },
-        "addConfiguration": "Add Configuration",
-        "newConfiguration": "New Configuration",
-        "editing": "Editing: {species}",
-        "configuredCount": "{count} configured",
-        "searchPlaceholder": "Type to search...",
-        "saving": "Saving...",
-        "save": "Save",
-        "cancel": "Cancel",
-        "configureActions": "Configure Actions",
-        "actionsConfigured": "Configured",
+        "addConfiguration": "Lisää määritys",
+        "newConfiguration": "Uusi määritys",
+        "editing": "Muokataan: {species}",
+        "configuredCount": "{count} määritetty",
+        "searchPlaceholder": "Kirjoita hakeaksesi...",
+        "saving": "Tallennetaan...",
+        "save": "Tallenna",
+        "cancel": "Peruuta",
+        "configureActions": "Määritä toiminnot",
+        "actionsConfigured": "Määritetty",
         "list": {
           "threshold": "Threshold:",
           "interval": "Interval:",
@@ -2120,8 +2120,8 @@
           "removeTitle": "Remove configuration"
         },
         "emptyState": {
-          "title": "No configurations yet.",
-          "description": "Click \"Add Configuration\" to customize species detection settings."
+          "title": "Määrityksiä ei vielä ole.",
+          "description": "Napsauta \"Lisää määritys\" mukauttaaksesi lajintunnistusasetuksia."
         }
       },
       "actionsModal": {
@@ -2278,7 +2278,7 @@
         "enableLabel": "Ota käyttöön salasanatunnistautuminen",
         "passwordLabel": "Salasana",
         "passwordHelpText": "Rajoita pääsy asetuksiin salasanalla.",
-        "disabled": "Password authentication is disabled"
+        "disabled": "Salasana-autentikointi on poistettu käytöstä"
       },
       "oauth": {
         "title": "OAuth2-sosiaalinen tunnistautuminen",
@@ -2309,7 +2309,7 @@
       "bypassAuthentication": {
         "title": "Ohita tunnistautuminen",
         "description": "Salli pääsy asetuksiin ilman tunnistautumista",
-        "disabled": "Subnet bypass is disabled"
+        "disabled": "Aliverkon ohitus on poistettu käytöstä"
       },
       "placeholders": {
         "host": "Esimerkiksi localhost:8080 tai example.domain.com",
@@ -2504,22 +2504,22 @@
       "species": {
         "suggestionsAvailable": "{count} lajiehdotusta saatavilla. Käytä nuolinäppäimiä navigoimiseen.",
         "noSuggestions": "Ei saatavilla olevia lajiehdotuksia.",
-        "loadingSpecies": "Loading species...",
-        "typePlaceholder": "Type species name..."
+        "loadingSpecies": "Ladataan lajeja...",
+        "typePlaceholder": "Kirjoita lajin nimi..."
       },
       "select": {
         "searchOptions": "Etsi vaihtoehdot",
         "noOptions": "Vaihtoehtoja ei löydy",
-        "searchPlaceholder": "Search..."
+        "searchPlaceholder": "Hae..."
       },
       "rtsp": {
-        "addNewStream": "Add New RTSP Stream",
-        "maxStreamsReached": "Maximum number of RTSP streams ({max}) reached.",
-        "cameraPlaceholder": "Camera 1",
-        "urlPlaceholder": "rtsp://username:password@192.168.1.100:554/stream"
+        "addNewStream": "Lisää uusi RTSP-virta",
+        "maxStreamsReached": "RTSP-virtojen enimmäismäärä ({max}) saavutettu.",
+        "cameraPlaceholder": "Kamera 1",
+        "urlPlaceholder": "rtsp://käyttäjänimi:salasana@192.168.1.100:554/virta"
       },
       "subnet": {
-        "maxSubnetsReached": "Maximum number of subnets ({max}) reached."
+        "maxSubnetsReached": "Aliverkkojen enimmäismäärä ({max}) saavutettu."
       }
     },
     "datePicker": {

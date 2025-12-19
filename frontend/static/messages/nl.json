@@ -1012,8 +1012,8 @@
               "placeholder": "Voer MySQL database naam in",
               "helpText": "MySQL database naam"
             },
-            "title": "MySQL Configuration",
-            "description": "Configure connection settings for MySQL database server"
+            "title": "MySQL-configuratie",
+            "description": "Configureer verbindingsinstellingen voor MySQL databaseserver"
           }
         },
         "interface": {
@@ -1157,9 +1157,9 @@
         "rangeFilterCountFailed": "Laden van soorten aantal mislukt"
       },
       "tabs": {
-        "general": "General",
-        "detection": "Detection",
-        "location": "Location",
+        "general": "Algemeen",
+        "detection": "Detectie",
+        "location": "Locatie",
         "database": "Database"
       }
     },
@@ -1573,7 +1573,7 @@
         "enable": "Schakel Privacy Filteren in",
         "confidenceLabel": "Betrouwbaarheids Drempelwaarde voor Menselijke Detectie",
         "confidenceHelp": "Stel het betrouwbaarheidsniveau in voor menselijke stem detectie, lagere waarde maakt filter gevoeliger",
-        "disabled": "Privacy filtering is disabled"
+        "disabled": "Privacy filteren is uitgeschakeld"
       },
       "falsePositivePrevention": {
         "title": "Vals Positief Preventie",
@@ -1586,7 +1586,7 @@
         "addDogBarkSpeciesLabel": "Voeg Hondengeblaf Soorten toe",
         "addDogBarkSpeciesHelp": "Zoek en voeg soorten toe die verward kunnen worden met hondengeblaf",
         "addSpeciesButton": "Toevoegen",
-        "disabled": "Dog bark filter is disabled"
+        "disabled": "Hondengeblaf filter is uitgeschakeld"
       },
       "speciesNamePlaceholder": "Soorten naam",
       "typeSpeciesName": "Typ soorten naam...",
@@ -1759,12 +1759,12 @@
         "rtspTransportHelp": "TCP is betrouwbaarder maar kan hogere latentie hebben. UDP is sneller maar kan pakketverlies ervaren op slechte netwerken.",
         "rtspUrlsLabel": "RTSP Stream URLs",
         "rtspUrlsHelp": "Voer één of meer RTSP stream URLs in voor netwerk audio bronnen. Formaat: rtsp://ip:port/stream. Note: Authenticatie gegevens moeten apart worden geconfigureerd in jouw RTSP server instellingen voor beveiliging.",
-        "noDeviceSelected": "No audio device selected",
-        "refreshDevices": "Refresh",
-        "deviceSelected": "Sound card selected and ready for capture",
-        "availableDevices": "Available Audio Devices",
-        "active": "Active",
-        "streamsConfigured": "{count} stream(s) configured"
+        "noDeviceSelected": "Geen audio apparaat geselecteerd",
+        "refreshDevices": "Vernieuwen",
+        "deviceSelected": "Geluidskaart geselecteerd en klaar voor opname",
+        "availableDevices": "Beschikbare Audio Apparaten",
+        "active": "Actief",
+        "streamsConfigured": "{count} stream(s) geconfigureerd"
       },
       "audioFilters": {
         "title": "Audiofilters",
@@ -1892,12 +1892,12 @@
           "age": "Leeftijd-Gebaseerd",
           "usage": "Schijfgebruik-Gebaseerd"
         },
-        "noRetentionTitle": "All Clips Retained",
-        "noRetentionDescription": "Audio clips will be kept indefinitely. Monitor disk usage to prevent storage issues.",
-        "ageRetentionTitle": "Age-Based Cleanup",
-        "ageRetentionDescription": "Clips older than the specified age will be automatically deleted, while preserving the minimum number per species.",
-        "usageRetentionTitle": "Usage-Based Cleanup",
-        "usageRetentionDescription": "When disk usage exceeds the threshold, oldest clips will be deleted until usage is within limits."
+        "noRetentionTitle": "Alle Clips Bewaard",
+        "noRetentionDescription": "Audio clips worden voor onbepaalde tijd bewaard. Monitor schijfgebruik om opslagproblemen te voorkomen.",
+        "ageRetentionTitle": "Leeftijd-Gebaseerde Opruiming",
+        "ageRetentionDescription": "Clips ouder dan de opgegeven leeftijd worden automatisch verwijderd, waarbij het minimum aantal per soort behouden blijft.",
+        "usageRetentionTitle": "Gebruik-Gebaseerde Opruiming",
+        "usageRetentionDescription": "Wanneer schijfgebruik de drempelwaarde overschrijdt, worden oudste clips verwijderd totdat het gebruik binnen de limieten is."
       },
       "formats": {
         "wav": "WAV",
@@ -1923,91 +1923,91 @@
       },
       "emptyStates": {
         "soundCard": {
-          "title": "No Sound Cards Detected",
-          "description": "No local audio input devices were found on this system. This is normal for container or headless server deployments.",
-          "errorTitle": "Error Loading Devices",
-          "hintsTitle": "You can:",
+          "title": "Geen Geluidskaarten Gedetecteerd",
+          "description": "Geen lokale audio invoer apparaten gevonden op dit systeem. Dit is normaal voor container of headless server implementaties.",
+          "errorTitle": "Fout bij Laden van Apparaten",
+          "hintsTitle": "U kunt:",
           "hints": {
-            "container": "This is normal for container/headless deployments",
-            "streams": "Configure network streams in the Streams tab instead",
-            "usb": "Connect a USB microphone and refresh the list"
+            "container": "Dit is normaal voor container/headless implementaties",
+            "streams": "Configureer in plaats daarvan netwerk streams in het Streams tabblad",
+            "usb": "Sluit een USB microfoon aan en vernieuw de lijst"
           },
-          "refresh": "Refresh Devices",
-          "retry": "Retry"
+          "refresh": "Vernieuw Apparaten",
+          "retry": "Opnieuw Proberen"
         },
         "streams": {
-          "title": "No Streams Configured",
-          "description": "Add RTSP or network audio streams from IP cameras, microphone servers, or other streaming sources.",
-          "hintsTitle": "Getting started:",
+          "title": "Geen Streams Geconfigureerd",
+          "description": "Voeg RTSP of netwerk audio streams toe van IP camera's, microfoon servers, of andere streaming bronnen.",
+          "hintsTitle": "Aan de slag:",
           "hints": {
-            "rtsp": "Enter RTSP URLs in the format: rtsp://ip:port/stream",
-            "multiple": "You can add multiple streams for different locations",
-            "protocol": "Choose TCP for reliability or UDP for lower latency"
+            "rtsp": "Voer RTSP URLs in het formaat in: rtsp://ip:poort/stream",
+            "multiple": "U kunt meerdere streams toevoegen voor verschillende locaties",
+            "protocol": "Kies TCP voor betrouwbaarheid of UDP voor lagere latentie"
           }
         }
       },
       "soundCard": {
-        "title": "Sound Card",
-        "description": "Configure local audio input device",
-        "audioSourceLabel": "Audio Source (requires application restart to take effect)",
-        "audioSourceHelp": "Select the audio input device for bird sound detection. Changes require application restart to take effect.",
-        "noSoundCardCapture": "No sound card capture",
+        "title": "Geluidskaart",
+        "description": "Configureer lokaal audio invoer apparaat",
+        "audioSourceLabel": "Audio Bron (vereist applicatie herstart om effect te hebben)",
+        "audioSourceHelp": "Selecteer het audio invoer apparaat voor vogelgeluid detectie. Wijzigingen vereisen applicatie herstart om effect te hebben.",
+        "noSoundCardCapture": "Geen geluidskaart opname",
         "empty": {
-          "title": "No Sound Cards Detected",
-          "description": "No local audio input devices were found on this system. This is normal for container or headless server deployments.",
-          "hintsTitle": "You can:",
-          "hintStream": "Configure network streams in the Streams tab",
-          "hintUsb": "Connect a USB microphone and refresh the list",
-          "goToStreams": "Go to Streams",
-          "refresh": "Refresh Devices"
+          "title": "Geen Geluidskaarten Gedetecteerd",
+          "description": "Geen lokale audio invoer apparaten gevonden op dit systeem. Dit is normaal voor container of headless server implementaties.",
+          "hintsTitle": "U kunt:",
+          "hintStream": "Configureer netwerk streams in het Streams tabblad",
+          "hintUsb": "Sluit een USB microfoon aan en vernieuw de lijst",
+          "goToStreams": "Ga naar Streams",
+          "refresh": "Vernieuw Apparaten"
         }
       },
       "noSources": {
-        "warning": "No Audio Sources Configured",
-        "description": "BirdNET-Go needs an audio input to detect birds. Please configure at least one source in the Sound Card or Streams tab."
+        "warning": "Geen Audio Bronnen Geconfigureerd",
+        "description": "BirdNET-Go heeft een audio invoer nodig om vogels te detecteren. Configureer alstublieft tenminste één bron in het Geluidskaart of Streams tabblad."
       },
       "rtspStreams": {
-        "title": "RTSP Stream Configuration",
-        "description": "Configure network audio streams for remote audio capture via RTSP protocol.",
-        "noStreamsConfigured": "No streams configured"
+        "title": "RTSP Stream Configuratie",
+        "description": "Configureer netwerk audio streams voor audio opname op afstand via RTSP protocol.",
+        "noStreamsConfigured": "Geen streams geconfigureerd"
       },
       "streams": {
         "streamLabel": "Stream",
         "urlLabel": "Stream URL",
-        "urlHelp": "Enter RTSP URL with optional credentials (rtsp://user:password@host:port/path)",
+        "urlHelp": "Voer RTSP URL in met optionele credentials (rtsp://gebruiker:wachtwoord@host:poort/pad)",
         "typeLabel": "Stream Type",
-        "typeLockedNote": "Only RTSP is supported currently",
+        "typeLockedNote": "Alleen RTSP wordt momenteel ondersteund",
         "transportLabel": "Protocol",
-        "summary": "{count} stream(s) configured",
-        "healthy": "healthy",
-        "unhealthy": "unhealthy",
-        "unknown": "unknown",
-        "refresh": "Refresh",
-        "addStream": "Add Stream",
-        "deleteConfirm": "Remove this stream?",
-        "restartCount": "Restarted {count} time(s)",
-        "healthLoadError": "Failed to load stream health status",
+        "summary": "{count} stream(s) geconfigureerd",
+        "healthy": "gezond",
+        "unhealthy": "ongezond",
+        "unknown": "onbekend",
+        "refresh": "Vernieuwen",
+        "addStream": "Stream Toevoegen",
+        "deleteConfirm": "Deze stream verwijderen?",
+        "restartCount": "{count} keer opnieuw gestart",
+        "healthLoadError": "Laden van stream gezondheid status mislukt",
         "status": {
-          "connected": "Connected",
-          "connecting": "Connecting",
-          "error": "Error",
-          "idle": "Idle",
-          "unknown": "Unknown"
+          "connected": "Verbonden",
+          "connecting": "Verbinden",
+          "error": "Fout",
+          "idle": "Inactief",
+          "unknown": "Onbekend"
         },
         "emptyState": {
-          "title": "No Streams Configured",
-          "description": "Add RTSP streams to capture audio from network cameras or other RTSP sources.",
-          "hintsTitle": "Getting Started",
+          "title": "Geen Streams Geconfigureerd",
+          "description": "Voeg RTSP streams toe om audio vast te leggen van netwerk camera's of andere RTSP bronnen.",
+          "hintsTitle": "Aan de Slag",
           "hints": {
-            "rtsp": "Use RTSP URLs from IP cameras (e.g., rtsp://192.168.1.100:554/stream)",
-            "credentials": "Include credentials in URL if required (rtsp://user:pass@host/stream)",
-            "protocol": "TCP is more reliable, UDP has lower latency"
+            "rtsp": "Gebruik RTSP URLs van IP camera's (bijv., rtsp://192.168.1.100:554/stream)",
+            "credentials": "Voeg credentials toe in URL indien vereist (rtsp://gebruiker:wachtwoord@host/stream)",
+            "protocol": "TCP is betrouwbaarder, UDP heeft lagere latentie"
           }
         },
         "errors": {
-          "urlRequired": "Stream URL is required",
-          "invalidUrl": "Invalid RTSP URL format",
-          "duplicate": "This stream URL already exists"
+          "urlRequired": "Stream URL is vereist",
+          "invalidUrl": "Ongeldig RTSP URL formaat",
+          "duplicate": "Deze stream URL bestaat al"
         }
       }
     },
@@ -2168,27 +2168,27 @@
           "thresholdPlaceholder": "0.5",
           "intervalPlaceholder": "0"
         },
-        "addConfiguration": "Add Configuration",
-        "newConfiguration": "New Configuration",
-        "editing": "Editing: {species}",
-        "configuredCount": "{count} configured",
-        "searchPlaceholder": "Type to search...",
-        "saving": "Saving...",
-        "save": "Save",
-        "cancel": "Cancel",
-        "configureActions": "Configure Actions",
-        "actionsConfigured": "Configured",
+        "addConfiguration": "Configuratie Toevoegen",
+        "newConfiguration": "Nieuwe Configuratie",
+        "editing": "Bewerken: {species}",
+        "configuredCount": "{count} geconfigureerd",
+        "searchPlaceholder": "Typ om te zoeken...",
+        "saving": "Opslaan...",
+        "save": "Opslaan",
+        "cancel": "Annuleren",
+        "configureActions": "Acties Configureren",
+        "actionsConfigured": "Geconfigureerd",
         "list": {
-          "threshold": "Threshold:",
+          "threshold": "Drempelwaarde:",
           "interval": "Interval:",
-          "intervalNone": "None",
-          "actionBadge": "Action",
-          "editTitle": "Edit configuration",
-          "removeTitle": "Remove configuration"
+          "intervalNone": "Geen",
+          "actionBadge": "Actie",
+          "editTitle": "Configuratie bewerken",
+          "removeTitle": "Configuratie verwijderen"
         },
         "emptyState": {
-          "title": "No configurations yet.",
-          "description": "Click \"Add Configuration\" to customize species detection settings."
+          "title": "Nog geen configuraties.",
+          "description": "Klik op \"Configuratie Toevoegen\" om soorten detectie instellingen aan te passen."
         }
       },
       "actionsModal": {
@@ -2504,22 +2504,22 @@
       "species": {
         "suggestionsAvailable": "{count} soortsuggessies beschikbaar. Gebruik pijltoetsen om te navigeren.",
         "noSuggestions": "Geen soortsuggessies beschikbaar.",
-        "loadingSpecies": "Loading species...",
-        "typePlaceholder": "Type species name..."
+        "loadingSpecies": "Soorten laden...",
+        "typePlaceholder": "Typ soorten naam..."
       },
       "select": {
         "searchOptions": "Zoeken opties",
         "noOptions": "Geen opties gevonden",
-        "searchPlaceholder": "Search..."
+        "searchPlaceholder": "Zoeken..."
       },
       "rtsp": {
-        "addNewStream": "Add New RTSP Stream",
-        "maxStreamsReached": "Maximum number of RTSP streams ({max}) reached.",
+        "addNewStream": "Nieuwe RTSP Stream Toevoegen",
+        "maxStreamsReached": "Maximum aantal RTSP streams ({max}) bereikt.",
         "cameraPlaceholder": "Camera 1",
-        "urlPlaceholder": "rtsp://username:password@192.168.1.100:554/stream"
+        "urlPlaceholder": "rtsp://gebruikersnaam:wachtwoord@192.168.1.100:554/stream"
       },
       "subnet": {
-        "maxSubnetsReached": "Maximum number of subnets ({max}) reached."
+        "maxSubnetsReached": "Maximum aantal subnets ({max}) bereikt."
       }
     },
     "datePicker": {

@@ -1579,7 +1579,7 @@
         "enable": "Włącz Filtrowanie Prywatności",
         "confidenceLabel": "Próg Pewności dla Detekcji Człowieka",
         "confidenceHelp": "Ustaw poziom pewności dla detekcji głosu ludzkiego, niższa wartość sprawia, że filtr jest bardziej czuły",
-        "disabled": "Privacy filtering is disabled"
+        "disabled": "Filtrowanie prywatności jest wyłączone"
       },
       "falsePositivePrevention": {
         "title": "Zapobieganie Fałszywym Pozytywnościom",
@@ -1592,7 +1592,7 @@
         "addDogBarkSpeciesLabel": "Dodaj Gatunki Szczekania Psa",
         "addDogBarkSpeciesHelp": "Szukaj i dodaj gatunki, które mogą być mylone ze szczekaniem psa",
         "addSpeciesButton": "Dodaj",
-        "disabled": "Dog bark filter is disabled"
+        "disabled": "Filtr szczekania psa jest wyłączony"
       },
       "speciesNamePlaceholder": "Nazwa gatunku",
       "typeSpeciesName": "Wpisz nazwę gatunku...",
@@ -2174,27 +2174,27 @@
           "thresholdPlaceholder": "0.5",
           "intervalPlaceholder": "0"
         },
-        "addConfiguration": "Add Configuration",
-        "newConfiguration": "New Configuration",
-        "editing": "Editing: {species}",
-        "configuredCount": "{count} configured",
-        "searchPlaceholder": "Type to search...",
-        "saving": "Saving...",
-        "save": "Save",
-        "cancel": "Cancel",
-        "configureActions": "Configure Actions",
-        "actionsConfigured": "Configured",
+        "addConfiguration": "Dodaj Konfigurację",
+        "newConfiguration": "Nowa Konfiguracja",
+        "editing": "Edytowanie: {species}",
+        "configuredCount": "Skonfigurowano {count}",
+        "searchPlaceholder": "Wpisz aby szukać...",
+        "saving": "Zapisywanie...",
+        "save": "Zapisz",
+        "cancel": "Anuluj",
+        "configureActions": "Konfiguruj Akcje",
+        "actionsConfigured": "Skonfigurowane",
         "list": {
-          "threshold": "Threshold:",
-          "interval": "Interval:",
-          "intervalNone": "None",
-          "actionBadge": "Action",
-          "editTitle": "Edit configuration",
-          "removeTitle": "Remove configuration"
+          "threshold": "Próg:",
+          "interval": "Interwał:",
+          "intervalNone": "Brak",
+          "actionBadge": "Akcja",
+          "editTitle": "Edytuj konfigurację",
+          "removeTitle": "Usuń konfigurację"
         },
         "emptyState": {
-          "title": "No configurations yet.",
-          "description": "Click \"Add Configuration\" to customize species detection settings."
+          "title": "Brak konfiguracji.",
+          "description": "Kliknij \"Dodaj Konfigurację\" aby dostosować ustawienia wykrywania gatunków."
         }
       },
       "actionsModal": {
@@ -2510,22 +2510,22 @@
       "species": {
         "suggestionsAvailable": "{count} sugestie gatunków dostępne. Używaj klawiszy strzałek do nawigacji.",
         "noSuggestions": "Brak dostępnych sugestii gatunków.",
-        "loadingSpecies": "Loading species...",
-        "typePlaceholder": "Type species name..."
+        "loadingSpecies": "Ładowanie gatunków...",
+        "typePlaceholder": "Wpisz nazwę gatunku..."
       },
       "select": {
         "searchOptions": "Opcje wyszukiwania",
         "noOptions": "Nie znaleziono opcji",
-        "searchPlaceholder": "Search..."
+        "searchPlaceholder": "Szukaj..."
       },
       "rtsp": {
-        "addNewStream": "Add New RTSP Stream",
-        "maxStreamsReached": "Maximum number of RTSP streams ({max}) reached.",
-        "cameraPlaceholder": "Camera 1",
-        "urlPlaceholder": "rtsp://username:password@192.168.1.100:554/stream"
+        "addNewStream": "Dodaj Nowy Strumień RTSP",
+        "maxStreamsReached": "Osiągnięto maksymalną liczbę strumieni RTSP ({max}).",
+        "cameraPlaceholder": "Kamera 1",
+        "urlPlaceholder": "rtsp://nazwausera:hasło@192.168.1.100:554/stream"
       },
       "subnet": {
-        "maxSubnetsReached": "Maximum number of subnets ({max}) reached."
+        "maxSubnetsReached": "Osiągnięto maksymalną liczbę podsieci ({max})."
       }
     },
     "datePicker": {

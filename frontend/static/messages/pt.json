@@ -2104,27 +2104,27 @@
           "thresholdPlaceholder": "0,5",
           "intervalPlaceholder": "0"
         },
-        "addConfiguration": "Add Configuration",
-        "newConfiguration": "New Configuration",
-        "editing": "Editing: {species}",
-        "configuredCount": "{count} configured",
-        "searchPlaceholder": "Type to search...",
-        "saving": "Saving...",
-        "save": "Save",
-        "cancel": "Cancel",
-        "configureActions": "Configure Actions",
-        "actionsConfigured": "Configured",
+        "addConfiguration": "Adicionar Configuração",
+        "newConfiguration": "Nova Configuração",
+        "editing": "Editando: {species}",
+        "configuredCount": "{count} configurado(s)",
+        "searchPlaceholder": "Digite para pesquisar...",
+        "saving": "Salvando...",
+        "save": "Salvar",
+        "cancel": "Cancelar",
+        "configureActions": "Configurar Ações",
+        "actionsConfigured": "Configurado",
         "list": {
-          "threshold": "Threshold:",
-          "interval": "Interval:",
-          "intervalNone": "None",
-          "actionBadge": "Action",
-          "editTitle": "Edit configuration",
-          "removeTitle": "Remove configuration"
+          "threshold": "Limiar:",
+          "interval": "Intervalo:",
+          "intervalNone": "Nenhum",
+          "actionBadge": "Ação",
+          "editTitle": "Editar configuração",
+          "removeTitle": "Remover configuração"
         },
         "emptyState": {
-          "title": "No configurations yet.",
-          "description": "Click \"Add Configuration\" to customize species detection settings."
+          "title": "Ainda não há configurações.",
+          "description": "Clique em \"Adicionar Configuração\" para personalizar as configurações de detecção de espécies."
         }
       },
       "actionsModal": {
@@ -2505,24 +2505,24 @@
         "adjustedToMaximum": "Valor ajustado para máximo ({value})"
       },
       "rtsp": {
-        "addNewStream": "Add New RTSP Stream",
-        "maxStreamsReached": "Maximum number of RTSP streams ({max}) reached.",
-        "cameraPlaceholder": "Camera 1",
+        "addNewStream": "Adicionar Novo Stream RTSP",
+        "maxStreamsReached": "Número máximo de streams RTSP ({max}) atingido.",
+        "cameraPlaceholder": "Câmera 1",
         "urlPlaceholder": "rtsp://username:password@192.168.1.100:554/stream"
       },
       "subnet": {
-        "maxSubnetsReached": "Maximum number of subnets ({max}) reached."
+        "maxSubnetsReached": "Número máximo de sub-redes ({max}) atingido."
       },
       "species": {
-        "loadingSpecies": "Loading species...",
-        "typePlaceholder": "Type species name...",
-        "suggestionsAvailable": "{count} species suggestions available. Use arrow keys to navigate.",
-        "noSuggestions": "No species suggestions available."
+        "loadingSpecies": "Carregando espécies...",
+        "typePlaceholder": "Digite o nome da espécie...",
+        "suggestionsAvailable": "{count} sugestões de espécies disponíveis. Use as setas do teclado para navegar.",
+        "noSuggestions": "Nenhuma sugestão de espécie disponível."
       },
       "select": {
-        "searchPlaceholder": "Search...",
-        "searchOptions": "Search options",
-        "noOptions": "No options found"
+        "searchPlaceholder": "Pesquisar...",
+        "searchOptions": "Opções de pesquisa",
+        "noOptions": "Nenhuma opção encontrada"
       }
     },
     "datePicker": {
