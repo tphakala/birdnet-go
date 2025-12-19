@@ -2033,13 +2033,18 @@
           },
           "seasons": {
             "title": "Définitions des saisons",
-            "description": "Définir quand chaque saison commence",
+            "description": "Définir quand chaque saison commence. Les saisons sont automatiquement ajustées en fonction de la latitude de votre emplacement.",
             "spring": "Printemps",
             "summer": "Été",
             "fall": "Automne",
             "winter": "Hiver",
+            "wet1": "Saison humide 1",
+            "dry1": "Saison sèche 1",
+            "wet2": "Saison humide 2",
+            "dry2": "Saison sèche 2",
             "startMonth": "Mois de début",
-            "startDay": "Jour de début"
+            "startDay": "Jour de début",
+            "hemisphereNote": "Les dates des saisons sont automatiquement configurées en fonction de votre latitude. L'hémisphère nord utilise les saisons standard, l'hémisphère sud a des dates décalées, et les régions équatoriales utilisent les saisons humides/sèches."
           }
         },
         "months": {

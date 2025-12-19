@@ -1968,13 +1968,18 @@
           },
           "seasons": {
             "title": "Kausimääritykset",
-            "description": "Määritä, milloin kukin kausi alkaa",
+            "description": "Määritä, milloin kukin kausi alkaa. Kaudet mukautuvat automaattisesti sijaintisi leveysasteen perusteella.",
             "spring": "Kevät",
             "summer": "Kesä",
             "fall": "Syksy",
             "winter": "Talvi",
+            "wet1": "Sadekausi 1",
+            "dry1": "Kuivakausi 1",
+            "wet2": "Sadekausi 2",
+            "dry2": "Kuivakausi 2",
             "startMonth": "Alkukuukausi",
-            "startDay": "Alkupäivä"
+            "startDay": "Alkupäivä",
+            "hemisphereNote": "Kausien päivämäärät määritetään automaattisesti leveysasteesi perusteella. Pohjoisella pallonpuoliskolla käytetään tavallisia vuodenaikoja, eteläisellä pallonpuoliskolla siirrettyjä päivämääriä ja päiväntasaajan alueilla sade-/kuivakausia."
           }
         },
         "months": {

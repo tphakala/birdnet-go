@@ -1968,13 +1968,18 @@
           },
           "seasons": {
             "title": "Saisondefinitionen",
-            "description": "Definieren Sie, wann jede Saison beginnt",
+            "description": "Definieren Sie, wann jede Saison beginnt. Die Saisons werden automatisch basierend auf dem Breitengrad Ihres Standorts angepasst.",
             "spring": "Frühling",
             "summer": "Sommer",
             "fall": "Herbst",
             "winter": "Winter",
+            "wet1": "Regenzeit 1",
+            "dry1": "Trockenzeit 1",
+            "wet2": "Regenzeit 2",
+            "dry2": "Trockenzeit 2",
             "startMonth": "Startmonat",
-            "startDay": "Starttag"
+            "startDay": "Starttag",
+            "hemisphereNote": "Die Saisondaten werden automatisch basierend auf Ihrem Breitengrad konfiguriert. Die nördliche Hemisphäre verwendet Standardsaisons, die südliche Hemisphäre hat verschobene Daten und Äquatorialregionen verwenden Regen-/Trockenzeiten."
           }
         },
         "months": {

@@ -2033,13 +2033,18 @@
           },
           "seasons": {
             "title": "Seizoensdefinities",
-            "description": "Definieer wanneer elk seizoen begint",
+            "description": "Definieer wanneer elk seizoen begint. Seizoenen worden automatisch aangepast op basis van de breedtegraad van uw locatie.",
             "spring": "Lente",
             "summer": "Zomer",
             "fall": "Herfst",
             "winter": "Winter",
+            "wet1": "Natte seizoen 1",
+            "dry1": "Droge seizoen 1",
+            "wet2": "Natte seizoen 2",
+            "dry2": "Droge seizoen 2",
             "startMonth": "Startmaand",
-            "startDay": "Startdag"
+            "startDay": "Startdag",
+            "hemisphereNote": "Seizoensdatums worden automatisch geconfigureerd op basis van uw breedtegraad. Het noordelijk halfrond gebruikt standaard seizoenen, het zuidelijk halfrond heeft verschoven datums, en equatoriale regio's gebruiken natte/droge seizoenen."
           }
         },
         "months": {

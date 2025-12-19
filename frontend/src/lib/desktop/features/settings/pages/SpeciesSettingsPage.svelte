@@ -1038,7 +1038,7 @@
         <!-- Species Count -->
         <div class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-3">
-            <div class="flex items-center gap-2 text-(--color-base-content) opacity-60">
+            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
               <Bird class="size-4" />
               <span class="text-xs font-medium"
                 >{t('settings.species.activeSpecies.stats.species')}</span
@@ -1051,7 +1051,7 @@
         <!-- Location -->
         <div class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-3">
-            <div class="flex items-center gap-2 text-(--color-base-content) opacity-60">
+            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
               <MapPin class="size-4" />
               <span class="text-xs font-medium"
                 >{t('settings.species.activeSpecies.stats.location')}</span
@@ -1073,7 +1073,7 @@
         <!-- Threshold -->
         <div class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-3">
-            <div class="flex items-center gap-2 text-(--color-base-content) opacity-60">
+            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
               <SlidersHorizontal class="size-4" />
               <span class="text-xs font-medium"
                 >{t('settings.species.activeSpecies.stats.threshold')}</span
@@ -1086,7 +1086,7 @@
         <!-- Last Updated -->
         <div class="card bg-base-100 shadow-sm border border-base-300">
           <div class="card-body p-3">
-            <div class="flex items-center gap-2 text-(--color-base-content) opacity-60">
+            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
               <Clock class="size-4" />
               <span class="text-xs font-medium"
                 >{t('settings.species.activeSpecies.stats.updated')}</span
@@ -1142,7 +1142,7 @@
                   {t('settings.species.activeSpecies.locationNotConfigured.title') ||
                     'Location Not Configured'}
                 </p>
-                <p class="text-sm text-(--color-base-content) opacity-70 mt-1">
+                <p class="text-sm text-[color:var(--color-base-content)] opacity-70 mt-1">
                   {t('settings.species.activeSpecies.locationNotConfigured.description') ||
                     'Set your location in Main Settings to see species available in your area. The range filter uses your location to determine which species are likely to be found nearby.'}
                 </p>
@@ -1159,7 +1159,7 @@
             <!-- Search Input -->
             <div class="relative flex-1">
               <Search
-                class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-(--color-base-content) opacity-40"
+                class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[color:var(--color-base-content)] opacity-40"
                 aria-hidden="true"
               />
               <input
@@ -1226,7 +1226,7 @@
                     <!-- Left: Names -->
                     <div class="min-w-0 flex-1">
                       <div class="font-medium text-sm truncate">{species.commonName}</div>
-                      <div class="text-xs text-(--color-base-content) opacity-50 italic truncate">
+                      <div class="text-xs text-[color:var(--color-base-content)] opacity-50 italic truncate">
                         {species.scientificName}
                       </div>
                     </div>
@@ -1256,7 +1256,7 @@
                           ></div>
                         </div>
                         <span
-                          class="text-xs font-mono tabular-nums w-10 text-(--color-base-content) opacity-60"
+                          class="text-xs font-mono tabular-nums w-10 text-[color:var(--color-base-content)] opacity-60"
                         >
                           {species.score.toFixed(2)}
                         </span>
@@ -1267,12 +1267,12 @@
               </div>
             {:else if searchInputValue}
               <!-- No Search Results -->
-              <div class="text-center py-8 text-(--color-base-content) opacity-50">
+              <div class="text-center py-8 text-[color:var(--color-base-content)] opacity-50">
                 <p class="text-sm">{t('settings.species.activeSpecies.noResults')}</p>
               </div>
             {:else}
               <!-- Empty State -->
-              <div class="text-center py-8 text-(--color-base-content) opacity-50">
+              <div class="text-center py-8 text-[color:var(--color-base-content)] opacity-50">
                 <Bird class="size-12 mx-auto mb-3 opacity-30" />
                 <p class="text-sm font-medium">{t('settings.species.activeSpecies.empty.title')}</p>
                 <p class="text-xs mt-1">{t('settings.species.activeSpecies.empty.description')}</p>
@@ -1286,7 +1286,7 @@
           </SettingsNote>
         {:else}
           <!-- Initial Empty State (before load) -->
-          <div class="text-center py-8 text-(--color-base-content) opacity-50">
+          <div class="text-center py-8 text-[color:var(--color-base-content)] opacity-50">
             <Bird class="size-12 mx-auto mb-3 opacity-30" />
             <p class="text-sm font-medium">{t('settings.species.activeSpecies.empty.title')}</p>
             <p class="text-xs mt-1">{t('settings.species.activeSpecies.empty.description')}</p>
@@ -1326,7 +1326,7 @@
         {/each}
 
         {#if settings.include.length === 0}
-          <div class="text-sm text-(--color-base-content) opacity-60 italic p-2 text-center">
+          <div class="text-sm text-[color:var(--color-base-content)] opacity-60 italic p-2 text-center">
             {t('settings.species.alwaysInclude.noSpeciesMessage')}
           </div>
         {/if}
@@ -1376,7 +1376,7 @@
         {/each}
 
         {#if settings.exclude.length === 0}
-          <div class="text-sm text-(--color-base-content) opacity-60 italic p-2 text-center">
+          <div class="text-sm text-[color:var(--color-base-content)] opacity-60 italic p-2 text-center">
             {t('settings.species.alwaysExclude.noSpeciesMessage')}
           </div>
         {/if}
@@ -1429,7 +1429,7 @@
         {/if}
 
         {#if Object.keys(settings.config).length > 0}
-          <span class="text-xs text-(--color-base-content) opacity-60">
+          <span class="text-xs text-[color:var(--color-base-content)] opacity-60">
             {t('settings.species.customConfiguration.configuredCount', {
               count: Object.keys(settings.config).length,
             })}
@@ -2016,7 +2016,7 @@
               <h4 class="font-medium text-sm mb-2">
                 {t('settings.species.tracking.seasonal.seasons.title')}
               </h4>
-              <p class="text-xs text-(--color-base-content) opacity-60 mb-4">
+              <p class="text-xs text-[color:var(--color-base-content)] opacity-60 mb-4">
                 {t('settings.species.tracking.seasonal.seasons.description')}
               </p>
 

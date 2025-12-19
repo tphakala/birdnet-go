@@ -2033,13 +2033,18 @@
           },
           "seasons": {
             "title": "Definicje sezonów",
-            "description": "Określ, kiedy zaczyna się każdy sezon",
+            "description": "Określ, kiedy zaczyna się każdy sezon. Sezony są automatycznie dostosowywane na podstawie szerokości geograficznej Twojej lokalizacji.",
             "spring": "Wiosna",
             "summer": "Lato",
             "fall": "Jesień",
             "winter": "Zima",
+            "wet1": "Pora deszczowa 1",
+            "dry1": "Pora sucha 1",
+            "wet2": "Pora deszczowa 2",
+            "dry2": "Pora sucha 2",
             "startMonth": "Miesiąc rozpoczęcia",
-            "startDay": "Dzień rozpoczęcia"
+            "startDay": "Dzień rozpoczęcia",
+            "hemisphereNote": "Daty sezonów są automatycznie konfigurowane na podstawie szerokości geograficznej. Półkula północna używa standardowych pór roku, półkula południowa ma przesunięte daty, a regiony równikowe używają pór deszczowych/suchych."
           }
         },
         "months": {

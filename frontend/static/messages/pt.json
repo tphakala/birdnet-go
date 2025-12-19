@@ -1968,13 +1968,18 @@
           },
           "seasons": {
             "title": "Definições de estações",
-            "description": "Defina quando cada estação começa",
+            "description": "Defina quando cada estação começa. As estações são ajustadas automaticamente com base na latitude da sua localização.",
             "spring": "Primavera",
             "summer": "Verão",
             "fall": "Outono",
             "winter": "Inverno",
+            "wet1": "Estação chuvosa 1",
+            "dry1": "Estação seca 1",
+            "wet2": "Estação chuvosa 2",
+            "dry2": "Estação seca 2",
             "startMonth": "Mês de início",
-            "startDay": "Dia de início"
+            "startDay": "Dia de início",
+            "hemisphereNote": "As datas das estações são configuradas automaticamente com base na sua latitude. O hemisfério norte usa estações padrão, o hemisfério sul tem datas deslocadas, e regiões equatoriais usam estações chuvosas/secas."
           }
         },
         "months": {
