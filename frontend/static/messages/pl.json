@@ -69,7 +69,7 @@
       "silent": "(cichy)",
       "loadingSettings": "Ładowanie ustawień...",
       "settingsNotFound": "Nie znaleziono ustawień",
-      "sectionNotFound": "Żądana sekcja ustawień \"{section}\" nie została znaleziona.",
+      "sectionNotFound": "Nie znaleziono sekcji \"{section}\"",
       "loadingMap": "Ładowanie mapy...",
       "imageNotAvailable": "Obraz niedostępny",
       "search": "Szukaj..."
@@ -180,7 +180,11 @@
     "settings": "Ustawienia - BirdNET-Go",
     "pageNotFound": "404 - Nie znaleziono strony",
     "serverError": "500 - Wewnętrzny błąd serwera",
-    "componentError": "Błąd ładowania komponentu"
+    "componentError": "Błąd ładowania komponentu",
+    "speciesAnalytics": "Analityka gatunków",
+    "advancedAnalytics": "Zaawansowana analityka",
+    "detectionDetails": "Szczegóły wykrycia",
+    "settingsNotAvailable": "Ustawienia niedostępne"
   },
   "navigation": {
     "dashboard": "Panel",
@@ -208,7 +212,7 @@
     "developedBy": "Opracowany przez",
     "developersText": "K. Lisa Yang Center for Conservation Bioacoustics w Cornell Lab of Ornithology we współpracy z Chemnitz University of Technology:",
     "visitBirdnetAnalyzer": "Odwiedź Projekt BirdNET-Analyzer",
-    "visitBirdnetAnalyzerAriaLabel": "Visit BirdNET-Analyzer GitHub repository",
+    "visitBirdnetAnalyzerAriaLabel": "Odwiedź repozytorium GitHub BirdNET-Analyzer",
     "contributors": "Współtwórcy",
     "contributorsText": "BirdNET-Go rozwijał się i poprawiał dzięki wspólnym wysiłkom wielu osób. Ich wkład, od ulepszeń kodu po sugestie funkcji, był nieoceniony w uczynieniu tego projektu lepszym.",
     "mainDeveloper": "Główny Deweloper",
@@ -265,7 +269,7 @@
       "allTypes": "Wszystkie Typy",
       "errors": "Błędy",
       "warnings": "Ostrzeżenia",
-      "info": "Informacje",
+      "info": "Info",
       "system": "System",
       "detections": "Detekcje",
       "allPriorities": "Wszystkie Priorytety",
@@ -405,9 +409,9 @@
       "stackTrace": "Ślad Stosu",
       "goToDashboard": "Przejdź do Panelu",
       "reportIssue": "Zgłoś Problem",
-      "loginToViewDetails": "Login to View Details",
-      "componentLoadError": "Component Load Error",
-      "failedToLoadComponent": "Failed to load the requested component"
+      "loginToViewDetails": "Zaloguj się, aby zobaczyć szczegóły",
+      "componentLoadError": "Błąd ładowania komponentu",
+      "failedToLoadComponent": "Nie można załadować żądanego komponentu"
     }
   },
   "dashboard": {
@@ -642,7 +646,12 @@
     },
     "memoryUsage": {
       "title": "Użycie Pamięci",
-      "ramUsage": "Użycie RAM"
+      "ramUsage": "Użycie RAM",
+      "labels": {
+        "free": "Wolna",
+        "available": "Dostępna",
+        "buffCache": "Bufor/Cache"
+      }
     },
     "processInfo": {
       "title": "Informacje o Procesach",
@@ -673,14 +682,13 @@
       "memoryUsage": "Nie udało się załadować użycia pamięci: {error}",
       "temperature": "Nie udało się załadować temperatury: {error}",
       "processes": "Nie udało się załadować informacji o procesach: {error}"
+    },
+    "progress": {
+      "labels": {
+        "overallProgress": "Ogólny postęp",
+        "progress": "Postęp"
+      }
     }
-  },
-  "labels": {
-    "free": "Wolne",
-    "available": "Dostępne",
-    "buffCache": "Bufor/Cache",
-    "overallProgress": "Ogólny postęp",
-    "progress": "Postęp"
   },
   "analytics": {
     "title": "Przegląd",
@@ -791,9 +799,7 @@
       "chartControls": "Kontrolki wykresu",
       "dateRange": "Zakres dat",
       "chartOptions": "Opcje wykresu",
-      "speciesSelection": "Wybór gatunków",
-      "speciesSelectionCount": "Wybór gatunków ({count}/{max})",
-      "searchHint": "Wyszukaj lub kliknij etykiety",
+      "speciesSelection": "Wybór gatunków ({count}/{max})",
       "speciesSelectionHint": "Szukaj lub kliknij etykiety poniżej",
       "speciesPlaceholder": "Szukaj i wybierz gatunki do analizy...",
       "noSpeciesFound": "Nie znaleziono gatunków dla wybranego zakresu dat",
@@ -803,12 +809,7 @@
         "month": "Ostatni Miesiąc",
         "quarter": "Ostatni Kwartał",
         "year": "Ostatni Rok",
-        "custom": "Niestandardowy Zakres",
-        "lastWeek": "Ostatni tydzień",
-        "lastMonth": "Ostatni miesiąc",
-        "lastQuarter": "Ostatni kwartał",
-        "lastYear": "Ostatni rok",
-        "customRange": "Niestandardowy zakres"
+        "custom": "Niestandardowy Zakres"
       },
       "options": {
         "relativeTrends": "Względne trendy",
@@ -816,11 +817,6 @@
         "brushSelection": "Wybór pędzlem"
       },
       "charts": {
-        "detectionPatternsByTime": "Wzorce wykryć według pory dnia",
-        "speciesDetectionTrends": "Trendy wykryć gatunków",
-        "noTimeData": "Brak danych czasowych",
-        "noTrendData": "Brak danych o trendach",
-        "selectToView": "Wybierz gatunki i zakres dat",
         "timeOfDay": {
           "title": "Wzorce Wykryć według Pory Dnia",
           "description": "Pokazuje średnią liczbę wykryć w ciągu dnia dla wybranych gatunków",
@@ -874,7 +870,19 @@
       "changed": "zmieniono",
       "changedAriaLabel": "Ustawienia zmienione"
     },
+    "tabs": {
+      "navigation": "Karty nawigacji ustawień",
+      "hasChanges": "Ta karta ma niezapisane zmiany",
+      "setAsDefault": "Ustaw jako domyślne",
+      "defaultIndicator": "Domyślne źródło wejściowe"
+    },
     "main": {
+      "tabs": {
+        "general": "Ogólne",
+        "detection": "Detekcja",
+        "location": "Lokalizacja",
+        "database": "Baza Danych"
+      },
       "sections": {
         "main": {
           "title": "Ustawienia Główne",
@@ -890,6 +898,7 @@
         },
         "customClassifier": {
           "title": "Niestandardowy Klasyfikator BirdNET",
+          "description": "Konfiguruj niestandardowe pliki modelu BirdNET i etykiet do specjalistycznej detekcji",
           "modelPath": {
             "label": "Ścieżka Modelu (Wymaga restartu do zastosowania)",
             "placeholder": "Ścieżka do pliku modelu",
@@ -903,6 +912,7 @@
         },
         "dynamicThreshold": {
           "title": "Próg Dynamiczny",
+          "description": "Automatycznie dostosuj czułość detekcji na podstawie wcześniejszych obserwacji",
           "enable": {
             "label": "Włącz Próg Dynamiczny (funkcja specyficzna dla BirdNET-Go)",
             "helpText": "Włącza funkcję dynamicznego progu pewności dla bardziej adaptacyjnej detekcji odgłosów ptaków."
@@ -931,6 +941,7 @@
         },
         "rangeFilter": {
           "title": "Filtr Zasięgu",
+          "description": "Ogranicz detekcję do gatunków prawdopodobnych w Twoim regionie geograficznym",
           "stationLocation": {
             "label": "Lokalizacja Stacji",
             "helpText": "Lokalizacja stacji, używana do danych pogodowych i ograniczenia gatunków ptaków do tych prawdopodobnych w regionie."
@@ -979,6 +990,8 @@
             "helpText": "Wybierz typ bazy danych do przechowywania detekcji."
           },
           "sqlite": {
+            "title": "Konfiguracja SQLite",
+            "description": "Konfiguruj lokalizację pliku bazy danych SQLite",
             "note": "SQLite jest zalecanym typem bazy danych dla większości użytkowników.",
             "path": {
               "label": "Ścieżka Bazy Danych SQLite",
@@ -987,6 +1000,8 @@
             }
           },
           "mysql": {
+            "title": "Konfiguracja MySQL",
+            "description": "Konfiguruj ustawienia połączenia dla serwera bazy danych MySQL",
             "host": {
               "label": "Host MySQL",
               "placeholder": "Wprowadź host MySQL",
@@ -1029,7 +1044,8 @@
             "description": "Wybierz preferowany język i wersję interfejsu",
             "locale": {
               "label": "Język Wyświetlania",
-              "helpText": "Wybierz język dla interfejsu użytkownika"
+              "helpText": "Wybierz język dla interfejsu użytkownika",
+              "requiresModernUI": "Wybór języka jest dostępny tylko przy używaniu Nowoczesnego Interfejsu."
             },
             "newUI": {
               "label": "Użyj Nowoczesnego Interfejsu",
@@ -1138,8 +1154,7 @@
         },
         "locale": {
           "label": "Lokalizacja",
-          "helpText": "Lokalizacja dla przetłumaczonych nazw pospolitych gatunków.",
-          "requiresModernUI": "Wybór języka jest dostępny tylko przy użyciu nowoczesnego interfejsu."
+          "helpText": "Lokalizacja dla przetłumaczonych nazw pospolitych gatunków."
         },
         "tensorflowThreads": {
           "label": "Wątki CPU TensorFlow",
@@ -1329,11 +1344,11 @@
           "notificationTypes": {
             "label": "Notification Types",
             "helpText": "Select which types of notifications to send to this provider",
-            "detection": "Bird detections",
-            "error": "Errors",
-            "warning": "Warnings",
-            "info": "Information",
-            "system": "System events"
+            "detection": "Detekcje ptaków",
+            "error": "Błędy",
+            "warning": "Ostrzeżenia",
+            "info": "Informacje",
+            "system": "Zdarzenia systemowe"
           },
           "urlFormats": {
             "title": "Common URL Formats",
@@ -1563,7 +1578,8 @@
         "description": "Filtrowanie prywatności unika zapisywania klipów audio, gdy wykryte są głosy ludzkie",
         "enable": "Włącz Filtrowanie Prywatności",
         "confidenceLabel": "Próg Pewności dla Detekcji Człowieka",
-        "confidenceHelp": "Ustaw poziom pewności dla detekcji głosu ludzkiego, niższa wartość sprawia, że filtr jest bardziej czuły"
+        "confidenceHelp": "Ustaw poziom pewności dla detekcji głosu ludzkiego, niższa wartość sprawia, że filtr jest bardziej czuły",
+        "disabled": "Privacy filtering is disabled"
       },
       "falsePositivePrevention": {
         "title": "Zapobieganie Fałszywym Pozytywnościom",
@@ -1575,14 +1591,16 @@
         "expireTimeHelp": "Ustaw, jak długo pamiętać wykryte szczekanie psa",
         "addDogBarkSpeciesLabel": "Dodaj Gatunki Szczekania Psa",
         "addDogBarkSpeciesHelp": "Szukaj i dodaj gatunki, które mogą być mylone ze szczekaniem psa",
-        "addSpeciesButton": "Dodaj"
+        "addSpeciesButton": "Dodaj",
+        "disabled": "Dog bark filter is disabled"
       },
       "speciesNamePlaceholder": "Nazwa gatunku",
       "typeSpeciesName": "Wpisz nazwę gatunku...",
       "dogBarkSpeciesList": "Lista Gatunków Szczekania Psa",
       "errors": {
         "speciesLoadFailed": "Nie udało się załadować listy gatunków. Spróbuj ponownie."
-      }
+      },
+      "title": "Filters"
     },
     "integration": {
       "birdweather": {
@@ -1746,7 +1764,13 @@
         "rtspTransportLabel": "Protokół Transportu RTSP",
         "rtspTransportHelp": "TCP jest bardziej niezawodny, ale może mieć większe opóźnienie. UDP jest szybszy, ale może doświadczać utraty pakietów w słabych sieciach.",
         "rtspUrlsLabel": "Adresy URL Strumienia RTSP",
-        "rtspUrlsHelp": "Wprowadź jeden lub więcej adresów URL strumienia RTSP dla sieciowych źródeł audio. Format: rtsp://ip:port/stream. Uwaga: Dane uwierzytelniające powinny być skonfigurowane oddzielnie w ustawieniach serwera RTSP ze względów bezpieczeństwa."
+        "rtspUrlsHelp": "Wprowadź jeden lub więcej adresów URL strumienia RTSP dla sieciowych źródeł audio. Format: rtsp://ip:port/stream. Uwaga: Dane uwierzytelniające powinny być skonfigurowane oddzielnie w ustawieniach serwera RTSP ze względów bezpieczeństwa.",
+        "noDeviceSelected": "Nie wybrano urządzenia audio",
+        "refreshDevices": "Odśwież",
+        "deviceSelected": "Karta dźwiękowa wybrana i gotowa do przechwytywania",
+        "availableDevices": "Dostępne Urządzenia Audio",
+        "active": "Aktywne",
+        "streamsConfigured": "{count, plural, one {Skonfigurowany # strumień} few {Skonfigurowane # strumienie} other {Skonfigurowanych # strumieni}}"
       },
       "audioFilters": {
         "title": "Filtry Audio",
@@ -1787,7 +1811,8 @@
         "dataOutputDescription": "Po włączeniu pomiary poziomu dźwięku są publikowane przez:",
         "mqttTopic": "Temat MQTT:",
         "sseEndpoint": "Punkt końcowy SSE:",
-        "prometheusMetrics": "Metryki Prometheus:"
+        "prometheusMetrics": "Metryki Prometheus:",
+        "disabled": "Monitorowanie poziomu dźwięku jest wyłączone"
       },
       "clipSettings": {
         "title": "Ustawienia Klipów",
@@ -1824,7 +1849,9 @@
         "typeHelp": "Format audio dla zapisanych klipów. WAV i FLAC są bezstratne (najlepsza jakość, większe pliki). MP3, AAC i Opus są stratne (mniejsze pliki, niewielka utrata jakości).",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Bitrate kompresji audio dla formatów stratnych. Zakres: {min}-{max} kbps. Wyższe wartości zapewniają lepszą jakość, ale większe pliki.",
-        "losslessNote": "Formaty bezstratne zachowują oryginalną jakość audio bez artefaktów kompresji."
+        "losslessNote": "Formaty bezstratne zachowują oryginalną jakość audio bez artefaktów kompresji.",
+        "normalizationDisabled": "Normalizacja audio jest wyłączona",
+        "disabledInfo": "Włącz nagrywanie klipów powyżej, aby skonfigurować ustawienia klipów, format pliku i opcje przechowywania."
       },
       "fileSettings": {
         "title": "Ustawienia Pliku",
@@ -1870,7 +1897,13 @@
           "none": "Brak - Zachowaj Wszystko",
           "age": "Na Podstawie Wieku",
           "usage": "Na Podstawie Użycia Dysku"
-        }
+        },
+        "noRetentionTitle": "Wszystkie Klipy Zachowane",
+        "noRetentionDescription": "Klipy audio będą przechowywane bezterminowo. Monitoruj użycie dysku, aby zapobiec problemom z miejscem.",
+        "ageRetentionTitle": "Czyszczenie na Podstawie Wieku",
+        "ageRetentionDescription": "Klipy starsze niż określony wiek zostaną automatycznie usunięte, zachowując minimalną liczbę dla każdego gatunku.",
+        "usageRetentionTitle": "Czyszczenie na Podstawie Użycia",
+        "usageRetentionDescription": "Gdy użycie dysku przekroczy próg, najstarsze klipy zostaną usunięte, aż użycie będzie w granicach limitu."
       },
       "formats": {
         "wav": "WAV",
@@ -1893,6 +1926,95 @@
         "devicesLoadFailed": "Nie udało się załadować urządzeń audio. Proszę sprawdzić uprawnienia systemowe.",
         "invalidBitrate": "Nieprawidłowa wartość bitrate",
         "invalidRetentionPolicy": "Nieprawidłowa polityka retencji"
+      },
+      "emptyStates": {
+        "soundCard": {
+          "title": "Nie Wykryto Kart Dźwiękowych",
+          "description": "Nie znaleziono lokalnych urządzeń wejściowych audio w tym systemie. Jest to normalne dla wdrożeń kontenerowych lub serwerów bez interfejsu graficznego.",
+          "errorTitle": "Błąd Ładowania Urządzeń",
+          "hintsTitle": "Możesz:",
+          "hints": {
+            "container": "Jest to normalne dla wdrożeń kontenerowych/bez interfejsu graficznego",
+            "streams": "Skonfigurować strumienie sieciowe w karcie Strumienie zamiast tego",
+            "usb": "Podłączyć mikrofon USB i odświeżyć listę"
+          },
+          "refresh": "Odśwież Urządzenia",
+          "retry": "Spróbuj Ponownie"
+        },
+        "streams": {
+          "title": "Brak Skonfigurowanych Strumieni",
+          "description": "Dodaj strumienie audio RTSP lub sieciowe z kamer IP, serwerów mikrofonowych lub innych źródeł strumieniowych.",
+          "hintsTitle": "Pierwsze kroki:",
+          "hints": {
+            "rtsp": "Wprowadź adresy URL RTSP w formacie: rtsp://ip:port/strumień",
+            "multiple": "Możesz dodać wiele strumieni dla różnych lokalizacji",
+            "protocol": "Wybierz TCP dla niezawodności lub UDP dla mniejszego opóźnienia"
+          }
+        }
+      },
+      "soundCard": {
+        "title": "Karta Dźwiękowa",
+        "description": "Konfiguruj lokalne urządzenie wejściowe audio",
+        "audioSourceLabel": "Źródło Audio (wymaga restartu aplikacji do zastosowania)",
+        "audioSourceHelp": "Wybierz urządzenie wejściowe audio do detekcji dźwięków ptaków. Zmiany wymagają restartu aplikacji, aby zostały zastosowane.",
+        "noSoundCardCapture": "Brak przechwytywania karty dźwiękowej",
+        "empty": {
+          "title": "Nie Wykryto Kart Dźwiękowych",
+          "description": "Nie znaleziono lokalnych urządzeń wejściowych audio w tym systemie. Jest to normalne dla wdrożeń kontenerowych lub serwerów bez interfejsu graficznego.",
+          "hintsTitle": "Możesz:",
+          "hintStream": "Skonfigurować strumienie sieciowe w karcie Strumienie",
+          "hintUsb": "Podłączyć mikrofon USB i odświeżyć listę",
+          "goToStreams": "Przejdź do Strumieni",
+          "refresh": "Odśwież Urządzenia"
+        }
+      },
+      "noSources": {
+        "warning": "Brak Skonfigurowanych Źródeł Audio",
+        "description": "BirdNET-Go potrzebuje wejścia audio do wykrywania ptaków. Proszę skonfigurować co najmniej jedno źródło w karcie Karta Dźwiękowa lub Strumienie."
+      },
+      "rtspStreams": {
+        "title": "Konfiguracja Strumieni RTSP",
+        "description": "Konfiguruj sieciowe strumienie audio do zdalnego przechwytywania audio przez protokół RTSP.",
+        "noStreamsConfigured": "Brak skonfigurowanych strumieni"
+      },
+      "streams": {
+        "streamLabel": "Strumień",
+        "urlLabel": "Adres URL Strumienia",
+        "urlHelp": "Wprowadź adres URL RTSP z opcjonalnymi danymi uwierzytelniającymi (rtsp://użytkownik:hasło@host:port/ścieżka)",
+        "typeLabel": "Typ Strumienia",
+        "typeLockedNote": "Obecnie obsługiwany jest tylko RTSP",
+        "transportLabel": "Protokół",
+        "summary": "{count, plural, one {Skonfigurowany # strumień} few {Skonfigurowane # strumienie} other {Skonfigurowanych # strumieni}}",
+        "healthy": "sprawny",
+        "unhealthy": "niesprawny",
+        "unknown": "nieznany",
+        "refresh": "Odśwież",
+        "addStream": "Dodaj Strumień",
+        "deleteConfirm": "Usunąć ten strumień?",
+        "restartCount": "{count, plural, one {Zrestartowano # raz} few {Zrestartowano # razy} other {Zrestartowano # razy}}",
+        "healthLoadError": "Nie udało się załadować statusu sprawności strumienia",
+        "status": {
+          "connected": "Połączony",
+          "connecting": "Łączenie",
+          "error": "Błąd",
+          "idle": "Bezczynny",
+          "unknown": "Nieznany"
+        },
+        "emptyState": {
+          "title": "Brak Skonfigurowanych Strumieni",
+          "description": "Dodaj strumienie RTSP, aby przechwytywać dźwięk z kamer sieciowych lub innych źródeł RTSP.",
+          "hintsTitle": "Pierwsze Kroki",
+          "hints": {
+            "rtsp": "Użyj adresów URL RTSP z kamer IP (np. rtsp://192.168.1.100:554/strumień)",
+            "credentials": "Dołącz dane uwierzytelniające w URL, jeśli wymagane (rtsp://użytkownik:hasło@host/strumień)",
+            "protocol": "TCP jest bardziej niezawodny, UDP ma mniejsze opóźnienie"
+          }
+        },
+        "errors": {
+          "urlRequired": "Adres URL strumienia jest wymagany",
+          "invalidUrl": "Nieprawidłowy format adresu URL RTSP",
+          "duplicate": "Ten adres URL strumienia już istnieje"
+        }
       }
     },
     "security": {
@@ -1922,7 +2044,8 @@
         "description": "Bezpieczny dostęp za pomocą prostego hasła",
         "enableLabel": "Włącz Uwierzytelnianie Hasłem",
         "passwordLabel": "Hasło",
-        "passwordHelpText": "Ogranicz dostęp do ustawień za pomocą hasła."
+        "passwordHelpText": "Ogranicz dostęp do ustawień za pomocą hasła.",
+        "disabled": "Uwierzytelnianie hasłem jest wyłączone"
       },
       "oauth": {
         "title": "Uwierzytelnianie Społecznościowe OAuth2",
@@ -1952,7 +2075,8 @@
       },
       "bypassAuthentication": {
         "title": "Omiń Uwierzytelnianie",
-        "description": "Zezwalaj na dostęp do ustawień bez uwierzytelniania"
+        "description": "Zezwalaj na dostęp do ustawień bez uwierzytelniania",
+        "disabled": "Omijanie podsieci jest wyłączone"
       },
       "placeholders": {
         "host": "Na przykład, localhost:8080 lub example.domain.com",
@@ -2049,6 +2173,28 @@
           "speciesPlaceholder": "Nazwa gatunku",
           "thresholdPlaceholder": "0.5",
           "intervalPlaceholder": "0"
+        },
+        "addConfiguration": "Add Configuration",
+        "newConfiguration": "New Configuration",
+        "editing": "Editing: {species}",
+        "configuredCount": "{count} configured",
+        "searchPlaceholder": "Type to search...",
+        "saving": "Saving...",
+        "save": "Save",
+        "cancel": "Cancel",
+        "configureActions": "Configure Actions",
+        "actionsConfigured": "Configured",
+        "list": {
+          "threshold": "Threshold:",
+          "interval": "Interval:",
+          "intervalNone": "None",
+          "actionBadge": "Action",
+          "editTitle": "Edit configuration",
+          "removeTitle": "Remove configuration"
+        },
+        "emptyState": {
+          "title": "No configurations yet.",
+          "description": "Click \"Add Configuration\" to customize species detection settings."
         }
       },
       "actionsModal": {
@@ -2181,6 +2327,12 @@
       "sqlitePlaceholder": "Wprowadź ścieżkę bazy danych SQLite",
       "mysqlHostPlaceholder": "Wprowadź host MySQL",
       "mysqlUsernamePlaceholder": "Wprowadź nazwę użytkownika MySQL"
+    },
+    "tabs": {
+      "navigation": "Karty nawigacji ustawień",
+      "hasChanges": "Ta karta ma niezapisane zmiany",
+      "setAsDefault": "Ustaw jako domyślne",
+      "defaultIndicator": "Domyślne źródło wejściowe"
     }
   },
   "auth": {
@@ -2312,21 +2464,7 @@
         "dragToReorder": "Przeciągnij, aby zmienić kolejność {species}",
         "edit": "Edytuj gatunek",
         "remove": "Usuń gatunek"
-      },
-      "loadingSpecies": "Ładowanie gatunków...",
-      "typePlaceholder": "Wpisz nazwę gatunku..."
-    },
-    "rtsp": {
-      "addNewStream": "Dodaj nowy strumień RTSP",
-      "maxStreamsReached": "Osiągnięto maksymalną liczbę strumieni RTSP ({max}).",
-      "cameraPlaceholder": "Kamera 1",
-      "urlPlaceholder": "rtsp://użytkownik:hasło@192.168.1.100:554/stream"
-    },
-    "subnet": {
-      "maxSubnetsReached": "Osiągnięto maksymalną liczbę podsieci ({max})."
-    },
-    "select": {
-      "searchPlaceholder": "Szukaj..."
+      }
     }
   },
   "media": {
@@ -2371,11 +2509,23 @@
       },
       "species": {
         "suggestionsAvailable": "{count} sugestie gatunków dostępne. Używaj klawiszy strzałek do nawigacji.",
-        "noSuggestions": "Brak dostępnych sugestii gatunków."
+        "noSuggestions": "Brak dostępnych sugestii gatunków.",
+        "loadingSpecies": "Loading species...",
+        "typePlaceholder": "Type species name..."
       },
       "select": {
         "searchOptions": "Opcje wyszukiwania",
-        "noOptions": "Nie znaleziono opcji"
+        "noOptions": "Nie znaleziono opcji",
+        "searchPlaceholder": "Search..."
+      },
+      "rtsp": {
+        "addNewStream": "Add New RTSP Stream",
+        "maxStreamsReached": "Maximum number of RTSP streams ({max}) reached.",
+        "cameraPlaceholder": "Camera 1",
+        "urlPlaceholder": "rtsp://username:password@192.168.1.100:554/stream"
+      },
+      "subnet": {
+        "maxSubnetsReached": "Maximum number of subnets ({max}) reached."
       }
     },
     "datePicker": {

@@ -38,7 +38,79 @@ interface ValidationOptions {
   allowUntranslated?: boolean;
   minCoverage?: number; // Percentage (0-100)
   failOnWarnings?: boolean;
+  verbose?: boolean; // Show all keys with English values
+  showSamples?: number; // Number of sample keys to show per category
 }
+
+// Keywords that legitimately stay the same across languages (technical terms, service names, etc.)
+const SKIP_UNTRANSLATED_KEYWORDS = [
+  // Service/Provider names
+  'discord',
+  'telegram',
+  'slack',
+  'pushover',
+  'gotify',
+  'ntfy',
+  'shoutrrr',
+  'webhook',
+  'mqtt',
+  'birdweather',
+  'ifttt',
+  'google',
+  'oauth',
+  // Database/Technical terms
+  'sqlite',
+  'mysql',
+  'cpu',
+  'pid',
+  'hostname',
+  'api',
+  'url',
+  'csv',
+  'json',
+  'http',
+  'https',
+  'tcp',
+  'udp',
+  'rtsp',
+  'bitrate',
+  'truepeak',
+  'dbtp',
+  'ebu',
+  'r128',
+  // Brand names
+  'birdnet',
+  'ebird',
+  'github',
+  'flickr',
+  'wikipedia',
+  'xeno-canto',
+  // Units and formats
+  '°c',
+  '°f',
+  'db',
+  'm/s',
+  'km/h',
+  'mph',
+  // Common technical abbreviations
+  'ok',
+  'id',
+  // Error codes
+  '404',
+  '500',
+  // Words that are often the same across languages
+  'email',
+  'stream',
+  'standard',
+  'imperial',
+  'logo',
+  'pause',
+  'minimum',
+  'maximum',
+  // Format placeholders (these often stay the same)
+  'format',
+  'placeholder',
+];
 
 class TranslationValidator {
   private readonly messagesPath = join(process.cwd(), 'static/messages');
@@ -161,8 +233,16 @@ class TranslationValidator {
       }
 
       // Check for untranslated (same as English)
+      // Skip keys that contain technical terms, service names, etc. that legitimately stay the same
       if (!options.allowUntranslated && value === referenceValue) {
-        result.untranslated.push(key);
+        const keyLower = key.toLowerCase();
+        const valueLower = typeof value === 'string' ? value.toLowerCase() : '';
+        const shouldSkip = SKIP_UNTRANSLATED_KEYWORDS.some(
+          keyword => keyLower.includes(keyword) || valueLower === keyword
+        );
+        if (!shouldSkip) {
+          result.untranslated.push(key);
+        }
       }
 
       // Validate ICU syntax
@@ -268,7 +348,26 @@ class TranslationValidator {
     }
   }
 
+  private groupKeysBySection(keys: string[]): Map<string, string[]> {
+    const groups = new Map<string, string[]>();
+    for (const key of keys) {
+      const section = key.split('.')[0];
+      if (!groups.has(section)) {
+        groups.set(section, []);
+      }
+      groups.get(section)!.push(key);
+    }
+    return groups;
+  }
+
+  private truncateValue(value: string, maxLength = 60): string {
+    if (value.length <= maxLength) return value;
+    return value.substring(0, maxLength - 3) + '...';
+  }
+
   private printResults(options: ValidationOptions): void {
+    const sampleCount = options.showSamples ?? 5;
+
     console.log('\n╔══════════════════════════════════════════════════════════╗');
     console.log('║         Translation Validation Results                  ║');
     console.log('╚══════════════════════════════════════════════════════════╝\n');
@@ -284,27 +383,71 @@ class TranslationValidator {
         `${status} ${result.locale.toUpperCase()}: ${result.totalKeys} keys (${coverage}% coverage)`
       );
 
+      // Missing keys - grouped by section
       if (result.missingKeys.length > 0) {
         console.log(`  ⚠️  Missing: ${result.missingKeys.length} keys`);
-        if (options.strictMode) {
-          console.log(
-            `      ${result.missingKeys.slice(0, 5).join(', ')}${result.missingKeys.length > 5 ? '...' : ''}`
-          );
+        if (options.strictMode || options.verbose) {
+          const grouped = this.groupKeysBySection(result.missingKeys);
+          for (const [section, keys] of grouped) {
+            console.log(`      [${section}] (${keys.length} keys):`);
+            const displayKeys = options.verbose ? keys : keys.slice(0, sampleCount);
+            for (const key of displayKeys) {
+              const enValue = this.getValueByPath(this.referenceMessages, key);
+              const truncated = this.truncateValue(String(enValue));
+              console.log(`        • ${key}: "${truncated}"`);
+            }
+            if (!options.verbose && keys.length > sampleCount) {
+              console.log(`        ... and ${keys.length - sampleCount} more`);
+            }
+          }
         }
       }
 
+      // Extra keys
       if (result.extraKeys.length > 0) {
         console.log(`  ℹ️  Extra: ${result.extraKeys.length} keys (outdated?)`);
+        if (options.strictMode || options.verbose) {
+          const displayKeys = options.verbose
+            ? result.extraKeys
+            : result.extraKeys.slice(0, sampleCount);
+          for (const key of displayKeys) {
+            console.log(`      • ${key}`);
+          }
+          if (!options.verbose && result.extraKeys.length > sampleCount) {
+            console.log(`      ... and ${result.extraKeys.length - sampleCount} more`);
+          }
+        }
       }
 
+      // Empty values
       if (result.emptyValues.length > 0) {
         console.log(`  ❌ Empty values: ${result.emptyValues.length}`);
+        for (const key of result.emptyValues) {
+          console.log(`      • ${key}`);
+        }
       }
 
+      // Untranslated - grouped by section with English values
       if (result.untranslated.length > 0 && !options.allowUntranslated) {
         console.log(`  ⚠️  Untranslated: ${result.untranslated.length}`);
+        if (options.strictMode || options.verbose) {
+          const grouped = this.groupKeysBySection(result.untranslated);
+          for (const [section, keys] of grouped) {
+            console.log(`      [${section}] (${keys.length} keys):`);
+            const displayKeys = options.verbose ? keys : keys.slice(0, sampleCount);
+            for (const key of displayKeys) {
+              const enValue = this.getValueByPath(this.referenceMessages, key);
+              const truncated = this.truncateValue(String(enValue));
+              console.log(`        • ${key}: "${truncated}"`);
+            }
+            if (!options.verbose && keys.length > sampleCount) {
+              console.log(`        ... and ${keys.length - sampleCount} more`);
+            }
+          }
+        }
       }
 
+      // Invalid ICU
       if (result.invalidICU.length > 0) {
         console.log(`  ❌ Invalid ICU syntax: ${result.invalidICU.length}`);
         result.invalidICU.forEach(({ key, error }) => {
@@ -312,15 +455,21 @@ class TranslationValidator {
         });
       }
 
+      // Parameter mismatches
       if (result.parameterMismatches.length > 0) {
         console.log(`  ❌ Parameter mismatches: ${result.parameterMismatches.length}`);
-        if (options.strictMode) {
-          result.parameterMismatches.forEach(({ key, expected, actual }) => {
-            console.log(
-              `      ${key}: expected [${expected.join(', ')}], got [${actual.join(', ')}]`
-            );
-          });
-        }
+        result.parameterMismatches.forEach(({ key, expected, actual }) => {
+          const missing = expected.filter(p => !actual.includes(p));
+          const extra = actual.filter(p => !expected.includes(p));
+          console.log(`      • ${key}:`);
+          if (missing.length > 0) {
+            console.log(`        Missing params: {${missing.join('}, {')}}`);
+          }
+          if (extra.length > 0) {
+            console.log(`        Extra params: {${extra.join('}, {')}}`);
+          }
+          console.log(`        EN: "${this.truncateValue(String(this.getValueByPath(this.referenceMessages, key)))}"`);
+        });
       }
 
       console.log('');
@@ -455,10 +604,42 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     strictMode: args.includes('--strict'),
     allowUntranslated: args.includes('--allow-untranslated'),
     failOnWarnings: args.includes('--fail-on-warnings'),
+    verbose: args.includes('--verbose') || args.includes('-v'),
     minCoverage: args.includes('--min-coverage')
       ? parseFloat(args[args.indexOf('--min-coverage') + 1])
       : undefined,
+    showSamples: args.includes('--samples')
+      ? parseInt(args[args.indexOf('--samples') + 1], 10)
+      : undefined,
   };
+
+  // Show help
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`
+Translation Validator - Validates translation files for completeness and correctness
+
+Usage: npm run i18n:validate -- [options]
+
+Options:
+  --strict           Show detailed missing/untranslated keys grouped by section
+  --verbose, -v      Show ALL keys (not just samples) with English values
+  --samples N        Show N sample keys per section (default: 5)
+  --allow-untranslated  Don't warn about untranslated keys
+  --min-coverage N   Require at least N% translation coverage
+  --fail-on-warnings Exit with error on warnings (missing keys, untranslated)
+  --json             Output machine-readable JSON
+  --report           Generate report
+  --format=markdown  Use markdown format for report
+  --help, -h         Show this help message
+
+Examples:
+  npm run i18n:validate -- --strict              Show detailed breakdown
+  npm run i18n:validate -- --verbose             Show all keys with values
+  npm run i18n:validate -- --samples 10          Show 10 samples per section
+  npm run i18n:validate -- --strict --samples 3  Show 3 samples per section
+`);
+    process.exit(0);
+  }
 
   // Suppress console output if JSON output requested
   if (jsonOutput) {
