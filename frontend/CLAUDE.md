@@ -77,8 +77,7 @@ grep -l "newKeyName" frontend/static/messages/*.json
   import { t } from '$lib/i18n';
 </script>
 
-<p>{t('about.avicommonsTitle')}</p>
-<p>{t('about.avicommonsDescription')}</p>
+<p>{t('about.avicommonsTitle')}</p><p>{t('about.avicommonsDescription')}</p>
 ```
 
 ### Key Naming Convention
