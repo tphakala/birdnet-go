@@ -2112,12 +2112,12 @@
         "configureActions": "Määritä toiminnot",
         "actionsConfigured": "Määritetty",
         "list": {
-          "threshold": "Threshold:",
-          "interval": "Interval:",
-          "intervalNone": "None",
-          "actionBadge": "Action",
-          "editTitle": "Edit configuration",
-          "removeTitle": "Remove configuration"
+          "threshold": "Kynnysarvo:",
+          "interval": "Väli:",
+          "intervalNone": "Ei mitään",
+          "actionBadge": "Toiminto",
+          "editTitle": "Muokkaa määritystä",
+          "removeTitle": "Poista määritys"
         },
         "emptyState": {
           "title": "Määrityksiä ei vielä ole.",
