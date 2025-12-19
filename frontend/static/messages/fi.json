@@ -26,7 +26,7 @@
     "apply": "Käytä",
     "clear": "Tyhjennä",
     "done": "Valmis",
-    "goToDashboard": "Siirry kojelauttaan",
+    "goToDashboard": "Siirry etusivulle",
     "reportIssue": "Ilmoita ongelmasta",
     "loginToViewDetails": "Kirjaudu nähdäksesi lisätiedot",
     "pageNotFound": "Sivua ei löydy",
@@ -396,18 +396,18 @@
     "404": {
       "code": "404",
       "title": "Sivua ei löydy",
-      "goToDashboard": "Siirry kojelauttaan"
+      "goToDashboard": "Siirry etusivulle"
     },
     "500": {
       "code": "500",
       "title": "Sisäinen palvelinvirhe",
       "defaultMessage": "Tapahtui sisäinen palvelinvirhe.",
-      "goToDashboard": "Siirry kojelauttaan"
+      "goToDashboard": "Siirry etusivulle"
     },
     "generic": {
       "errorDetails": "Virhetiedot",
       "stackTrace": "Pinojälki",
-      "goToDashboard": "Siirry kojelauttaan",
+      "goToDashboard": "Siirry etusivulle",
       "reportIssue": "Ilmoita ongelmasta",
       "loginToViewDetails": "Kirjaudu sisään nähdäksesi tiedot",
       "componentLoadError": "Komponentin latausvirhe",
@@ -506,7 +506,7 @@
       "dailySummaryLoad": "Päivän aktiivisuuden lataus epäonnistui",
       "recentDetectionsFetch": "Viimeaikaisten havaintojen haku epäonnistui: {status}",
       "recentDetectionsLoad": "Viimeaikaisten havaintojen lataus epäonnistui",
-      "configFetch": "Kojelaudan asetusten haku epäonnistui: {status}"
+      "configFetch": "Etusivun asetusten haku epäonnistui: {status}"
     }
   },
   "detections": {
@@ -1018,7 +1018,7 @@
         },
         "interface": {
           "title": "Käyttöliittymä",
-          "description": "Määritä kieli, näyttöasetukset ja kojelaudan rajat"
+          "description": "Määritä kieli, näyttöasetukset ja etusivun rajat"
         },
         "visualContent": {
           "title": "Visuaalinen sisältö",
@@ -1049,11 +1049,11 @@
             }
           },
           "dashboard": {
-            "title": "Kojelaudan näyttö",
-            "description": "Määritä, miten havainnot näytetään kojelaudalla",
+            "title": "Etusivun näyttö",
+            "description": "Määritä, miten havainnot näytetään etusivulla",
             "displaySettings": {
               "title": "Näyttöasetukset",
-              "description": "Määritä yleiset kojelaudan näyttöasetukset, kuten lajirajat."
+              "description": "Määritä yleiset etusivun näyttöasetukset, kuten lajirajat."
             },
             "birdImages": {
               "title": "Lintukuvat",
