@@ -19,6 +19,19 @@ import (
 	"github.com/tphakala/birdnet-go/internal/security"
 )
 
+// Auth constants (file-local)
+const (
+	authDefaultTimeout     = 5   // Default timeout in seconds for auth operations
+	authExtendedTimeout    = 15  // Extended timeout for slower operations
+	authCodeLength         = 50  // Length of generated auth codes
+	maxStateTokenLength    = 128 // Maximum length for OAuth state token
+	authRateLimitRate      = 5   // Login attempts per rate limit window
+	authRateLimitBurst     = 5   // Burst allowance for rate limiting
+	authRateLimitWindow    = 15  // Rate limit window in minutes
+	authDelayMinMs         = 50  // Minimum random delay in ms for timing attack mitigation
+	authDelayMaxMs         = 150 // Maximum random delay in ms for timing attack mitigation
+)
+
 // Compiled regex for path validation (moved outside function for performance)
 var validBasePathRegex = regexp.MustCompile(`^/[a-zA-Z0-9/_-]*/$`)
 
@@ -60,9 +73,9 @@ func (c *Controller) initAuthRoutes() {
 		Skipper: middleware.DefaultSkipper,
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
 			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      5,                // 5 requests
-				Burst:     5,                // Allow burst up to the rate
-				ExpiresIn: 15 * time.Minute, // Per 15 minutes
+				Rate:      authRateLimitRate,                 // 5 requests
+				Burst:     authRateLimitBurst,                // Allow burst up to the rate
+				ExpiresIn: authRateLimitWindow * time.Minute, // Per 15 minutes
 			},
 		),
 		IdentifierExtractor: func(ctx echo.Context) (string, error) {
@@ -160,7 +173,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 	// Check for empty credentials before calling the auth service
 	if req.Username == "" || req.Password == "" {
 		// Add a short, randomized delay to mitigate timing attacks on username enumeration
-		randomDelay(ctx.Request().Context(), 50, 150)
+		randomDelay(ctx.Request().Context(), authDelayMinMs, authDelayMaxMs)
 
 		if c.apiLogger != nil {
 			c.apiLogger.Warn("Login attempt with missing credentials",
@@ -183,7 +196,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 
 	if authErr != nil {
 		// Add a short, randomized delay to mitigate brute force/timing attacks
-		randomDelay(ctx.Request().Context(), 50, 150)
+		randomDelay(ctx.Request().Context(), authDelayMinMs, authDelayMaxMs)
 
 		if c.apiLogger != nil {
 			c.apiLogger.Warn("Failed login attempt",
@@ -461,7 +474,7 @@ func isValidBasePath(basePath string) bool {
 	}
 
 	// Length check
-	if len(basePath) > 128 {
+	if len(basePath) > maxStateTokenLength {
 		return false
 	}
 
@@ -564,7 +577,7 @@ func (c *Controller) OAuthCallback(ctx echo.Context) error {
 	}
 
 	// 3. Exchange auth code for access token (with 15s timeout)
-	exchangeCtx, cancel := context.WithTimeout(ctx.Request().Context(), 15*time.Second)
+	exchangeCtx, cancel := context.WithTimeout(ctx.Request().Context(), authExtendedTimeout*time.Second)
 	defer cancel()
 
 	accessToken, err := c.authService.ExchangeAuthCode(exchangeCtx, code)

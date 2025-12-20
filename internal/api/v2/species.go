@@ -192,7 +192,7 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 // getSpeciesRarityInfo calculates the rarity status for a species
 func (c *Controller) getSpeciesRarityInfo(bn *birdnet.BirdNET, speciesLabel string) (*SpeciesRarityInfo, error) {
 	// Get current date
-	today := time.Now().Truncate(24 * time.Hour)
+	today := time.Now().Truncate(HoursPerDay * time.Hour)
 
 	// Get probable species with scores
 	speciesScores, err := bn.GetProbableSpecies(today, 0.0)

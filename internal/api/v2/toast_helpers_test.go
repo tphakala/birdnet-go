@@ -53,49 +53,49 @@ func getToastTestCases() []toastTestCase {
 		{
 			name:      "success toast",
 			message:   "Operation completed successfully",
-			toastType: "success",
+			toastType: ToastTypeSuccess,
 			duration:  3000,
 			wantError: false,
 		},
 		{
 			name:      "error toast",
 			message:   "Operation failed",
-			toastType: "error",
+			toastType: LogLevelError,
 			duration:  5000,
 			wantError: false,
 		},
 		{
 			name:      "warning toast",
 			message:   "Warning message",
-			toastType: "warning",
+			toastType: LogLevelWarning,
 			duration:  4000,
 			wantError: false,
 		},
 		{
 			name:      "info toast",
 			message:   "Information message",
-			toastType: "info",
+			toastType: LogLevelInfo,
 			duration:  3000,
 			wantError: false,
 		},
 		{
 			name:      "unknown toast type defaults to info",
 			message:   "Unknown type message",
-			toastType: "unknown",
+			toastType: ValueUnknown,
 			duration:  3000,
 			wantError: false,
 		},
 		{
 			name:      "empty message",
 			message:   "",
-			toastType: "info",
+			toastType: LogLevelInfo,
 			duration:  1000,
 			wantError: false,
 		},
 		{
 			name:      "zero duration",
 			message:   "Zero duration message",
-			toastType: "success",
+			toastType: ToastTypeSuccess,
 			duration:  0,
 			wantError: false,
 		},
@@ -113,13 +113,13 @@ func runSendToastTestIsolated(t *testing.T, c *Controller, service *notification
 	// Map string toast type to notification.ToastType (same logic as Controller.SendToast)
 	var notifToastType notification.ToastType
 	switch tc.toastType {
-	case "success":
+	case ToastTypeSuccess:
 		notifToastType = notification.ToastTypeSuccess
-	case "error":
+	case LogLevelError:
 		notifToastType = notification.ToastTypeError
-	case "warning":
+	case LogLevelWarning:
 		notifToastType = notification.ToastTypeWarning
-	case "info":
+	case LogLevelInfo:
 		notifToastType = notification.ToastTypeInfo
 	default:
 		notifToastType = notification.ToastTypeInfo
@@ -183,7 +183,7 @@ func verifyToastMetadata(t *testing.T, notif *notification.Notification, tc toas
 	t.Helper()
 	expectedToastType := tc.toastType
 	if tc.toastType == "unknown" {
-		expectedToastType = "info" // Unknown types default to info
+		expectedToastType = LogLevelInfo // Unknown types default to info
 	}
 
 	toastType, ok := notif.Metadata["toastType"].(string)
@@ -210,13 +210,13 @@ func verifyNotificationTypeMapping(t *testing.T, notif *notification.Notificatio
 	t.Helper()
 	expectedToastType := toastType
 	if toastType == "unknown" {
-		expectedToastType = "info"
+		expectedToastType = LogLevelInfo
 	}
 
 	var expectedNotifType notification.Type
 	var expectedPriority notification.Priority
 	switch expectedToastType {
-	case "success", "info":
+	case "success", LogLevelInfo:
 		expectedNotifType = notification.TypeInfo
 		expectedPriority = notification.PriorityLow
 	case "warning":
@@ -263,7 +263,7 @@ func TestController_SendToast_TypeMapping(t *testing.T) {
 			expectedToastType: notification.ToastTypeWarning,
 		},
 		{
-			toastType:         "info",
+			toastType:         LogLevelInfo,
 			expectedNotifType: notification.TypeInfo,
 			expectedPriority:  notification.PriorityLow,
 			expectedToastType: notification.ToastTypeInfo,
@@ -295,7 +295,7 @@ func TestController_SendToast_TypeMapping(t *testing.T) {
 				actualToastType = notification.ToastTypeError
 			case "warning":
 				actualToastType = notification.ToastTypeWarning
-			case "info":
+			case LogLevelInfo:
 				actualToastType = notification.ToastTypeInfo
 			default:
 				actualToastType = notification.ToastTypeInfo
@@ -338,7 +338,7 @@ func TestController_SendToast_ServiceNotInitialized(t *testing.T) {
 
 	// For now, this test documents the expected behavior:
 	// If notification service is not initialized, SendToast should return an error
-	err := c.SendToast("test message", "info", 1000)
+	err := c.SendToast("test message", LogLevelInfo, 1000)
 
 	// Since service is likely already initialized from other tests, this may pass
 	// In a real uninitialized scenario, this should return an error
@@ -382,7 +382,7 @@ func BenchmarkController_SendToast(b *testing.B) {
 
 	// Use b.Loop() for benchmark iteration (Go 1.25)
 	for b.Loop() {
-		err := c.SendToast("Benchmark toast message", "info", 1000)
+		err := c.SendToast("Benchmark toast message", LogLevelInfo, 1000)
 		if err != nil {
 			b.Fatalf("SendToast() benchmark error = %v", err)
 		}

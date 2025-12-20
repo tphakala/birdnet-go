@@ -34,6 +34,12 @@ const (
 
 	// Endpoints
 	audioLevelStreamEndpoint = "/api/v2/streams/audio-level"
+
+	// Audio source display name for privacy (unauthenticated users)
+	audioSourceDefaultName = "audio-source-1"
+
+	// Anonymization settings
+	anonymizedIDPrefixLen = 8 // Length of ID prefix for anonymized camera names
 )
 
 // AudioLevelSSEData represents the audio level data sent via SSE
@@ -372,7 +378,7 @@ func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]myau
 		if source != nil {
 			displayName := source.DisplayName
 			if !isAuthenticated {
-				displayName = "audio-source-1"
+				displayName = audioSourceDefaultName
 			}
 			levels[source.ID] = myaudio.AudioLevelData{
 				Level:  0,
@@ -446,7 +452,7 @@ func (c *Controller) updateAudioLevel(
 func (c *Controller) getAnonymizedSourceName(source *myaudio.AudioSource) string {
 	switch source.Type {
 	case myaudio.SourceTypeAudioCard:
-		return "audio-source-1"
+		return audioSourceDefaultName
 	case myaudio.SourceTypeRTSP:
 		audioLevelMgr.rtspAnonymMu.RLock()
 		if name, exists := audioLevelMgr.rtspAnonymMap[source.ID]; exists {
@@ -456,8 +462,8 @@ func (c *Controller) getAnonymizedSourceName(source *myaudio.AudioSource) string
 		audioLevelMgr.rtspAnonymMu.RUnlock()
 		// Fallback for unmapped RTSP sources
 		idPrefix := source.ID
-		if len(source.ID) > 8 {
-			idPrefix = source.ID[:8]
+		if len(source.ID) > anonymizedIDPrefixLen {
+			idPrefix = source.ID[:anonymizedIDPrefixLen]
 		}
 		return fmt.Sprintf("camera-%s", idPrefix)
 	case myaudio.SourceTypeFile:
@@ -471,7 +477,7 @@ func (c *Controller) getAnonymizedSourceName(source *myaudio.AudioSource) string
 func (c *Controller) getAnonymizedSourceNameFallback(sourceID string) string {
 	switch {
 	case strings.HasPrefix(sourceID, "audio_card_"):
-		return "audio-source-1"
+		return audioSourceDefaultName
 	case strings.HasPrefix(sourceID, "rtsp_"):
 		audioLevelMgr.rtspAnonymMu.RLock()
 		if name, exists := audioLevelMgr.rtspAnonymMap[sourceID]; exists {
@@ -480,8 +486,8 @@ func (c *Controller) getAnonymizedSourceNameFallback(sourceID string) string {
 		}
 		audioLevelMgr.rtspAnonymMu.RUnlock()
 		idPrefix := sourceID
-		if len(sourceID) > 8 {
-			idPrefix = sourceID[:8]
+		if len(sourceID) > anonymizedIDPrefixLen {
+			idPrefix = sourceID[:anonymizedIDPrefixLen]
 		}
 		return fmt.Sprintf("camera-%s", idPrefix)
 	case strings.HasPrefix(sourceID, "file_"):

@@ -22,6 +22,17 @@ import (
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
+// Settings validation and UI constants (file-local)
+const (
+	maxNodeNameLength     = 100                    // Maximum characters for node name
+	actionDelay           = 100 * time.Millisecond // Delay between reconfiguration actions
+	toastDurationShort    = 3000                   // Short toast duration (3 seconds)
+	toastDurationMedium   = 4000                   // Medium toast duration (4 seconds)
+	toastDurationLong     = 5000                   // Long toast duration (5 seconds)
+	toastDurationExtended = 8000                   // Extended toast duration (8 seconds)
+	minSortableElements   = 2                      // Minimum elements needed after first for sorting
+)
+
 // UpdateRequest represents a request to update settings
 type UpdateRequest struct {
 	Path  string `json:"path"`
@@ -678,17 +689,17 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 
 	// Map section names to their corresponding pointers
 	switch section {
-	case "birdnet":
+	case SettingsSectionBirdnet:
 		return &settings.BirdNET, nil
-	case "webserver":
+	case SettingsSectionWebserver:
 		return &settings.WebServer, nil
 	case "security":
 		return &settings.Security, nil
 	case "main":
 		return &settings.Main, nil
-	case "realtime":
+	case SettingsSectionRealtime:
 		return &settings.Realtime, nil
-	case "audio":
+	case SettingsSectionAudio:
 		return getAudioSectionValue(settings), nil
 	case "dashboard":
 		return &settings.Realtime.Dashboard, nil
@@ -698,7 +709,7 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 		return &settings.Realtime.MQTT, nil
 	case "birdweather":
 		return &settings.Realtime.Birdweather, nil
-	case "species":
+	case SettingsSectionSpecies:
 		return &settings.Realtime.Species, nil
 	case "rtsp":
 		return &settings.Realtime.RTSP, nil
@@ -729,11 +740,11 @@ func handleGenericSection(sectionPtr any, data json.RawMessage, sectionName stri
 	// We need to map our lowercase section names to the expected capitalized format
 	capitalizedSectionName := ""
 	switch sectionName {
-	case "birdnet":
+	case SettingsSectionBirdnet:
 		capitalizedSectionName = "BirdNET"
-	case "realtime":
+	case SettingsSectionRealtime:
 		capitalizedSectionName = "Realtime"
-	case "webserver":
+	case SettingsSectionWebserver:
 		capitalizedSectionName = "WebServer"
 	default:
 		// For other sections, capitalize first letter
@@ -760,15 +771,15 @@ type sectionValidator func(data json.RawMessage) error
 // getSectionValidators returns validators for sections that need special validation
 func getSectionValidators() map[string]sectionValidator {
 	return map[string]sectionValidator{
-		"mqtt":         validateMQTTSection,
-		"rtsp":         validateRTSPSection,
-		"security":     validateSecuritySection,
-		"main":         validateMainSection,
-		"birdnet":      validateBirdNETSection,
-		"webserver":    validateWebServerSection,
-		"species":      validateSpeciesSection,
-		"realtime":     validateRealtimeSection,
-		"notification": validateNotificationSection,
+		"mqtt":                   validateMQTTSection,
+		"rtsp":                   validateRTSPSection,
+		"security":               validateSecuritySection,
+		"main":                   validateMainSection,
+		SettingsSectionBirdnet:   validateBirdNETSection,
+		SettingsSectionWebserver: validateWebServerSection,
+		SettingsSectionSpecies:   validateSpeciesSection,
+		SettingsSectionRealtime:  validateRealtimeSection,
+		"notification":           validateNotificationSection,
 	}
 }
 
@@ -1016,8 +1027,8 @@ func validateMainSectionValues(updateMap map[string]any) error {
 			if str == "" {
 				return fmt.Errorf("node name cannot be empty")
 			}
-			if len(str) > 100 {
-				return fmt.Errorf("node name must not exceed 100 characters")
+			if len(str) > maxNodeNameLength {
+				return fmt.Errorf("node name must not exceed %d characters", maxNodeNameLength)
 			}
 		} else {
 			return fmt.Errorf("node name must be a string")
@@ -1178,17 +1189,17 @@ func getSettingsSection(settings *conf.Settings, section string) (any, error) {
 
 	// Check nested fields
 	switch section {
-	case "birdnet":
+	case SettingsSectionBirdnet:
 		return settings.BirdNET, nil
-	case "webserver":
+	case SettingsSectionWebserver:
 		return settings.WebServer, nil
 	case "security":
 		return settings.Security, nil
 	case "main":
 		return settings.Main, nil
-	case "realtime":
+	case SettingsSectionRealtime:
 		return settings.Realtime, nil
-	case "audio":
+	case SettingsSectionAudio:
 		return getAudioSection(settings), nil
 	case "dashboard":
 		return settings.Realtime.Dashboard, nil
@@ -1198,7 +1209,7 @@ func getSettingsSection(settings *conf.Settings, section string) (any, error) {
 		return settings.Realtime.MQTT, nil
 	case "birdweather":
 		return settings.Realtime.Birdweather, nil
-	case "species":
+	case SettingsSectionSpecies:
 		return settings.Realtime.Species, nil
 	default:
 		return nil, fmt.Errorf("unknown settings section: %s", section)
@@ -1312,7 +1323,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("BirdNET settings changed, triggering reload")
 		reconfigActions = append(reconfigActions, "reload_birdnet")
 		// Send toast notification
-		_ = c.SendToast("Reloading BirdNET model with new settings...", "info", 5000)
+		_ = c.SendToast("Reloading BirdNET model with new settings...", "info", toastDurationLong)
 	}
 
 	// Check range filter settings
@@ -1320,7 +1331,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("Range filter settings changed, triggering rebuild")
 		reconfigActions = append(reconfigActions, "rebuild_range_filter")
 		// Send toast notification
-		_ = c.SendToast("Rebuilding species range filter...", "info", 4000)
+		_ = c.SendToast("Rebuilding species range filter...", "info", toastDurationMedium)
 	}
 
 	// Check species interval settings
@@ -1328,7 +1339,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("Species interval settings changed, triggering update")
 		reconfigActions = append(reconfigActions, "update_detection_intervals")
 		// Send toast notification
-		_ = c.SendToast("Updating detection intervals...", "info", 3000)
+		_ = c.SendToast("Updating detection intervals...", "info", toastDurationShort)
 	}
 
 	// Check MQTT settings
@@ -1336,7 +1347,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("MQTT settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_mqtt")
 		// Send toast notification
-		_ = c.SendToast("Reconfiguring MQTT connection...", "info", 4000)
+		_ = c.SendToast("Reconfiguring MQTT connection...", "info", toastDurationMedium)
 	}
 
 	// Check BirdWeather settings
@@ -1344,7 +1355,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("BirdWeather settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_birdweather")
 		// Send toast notification
-		_ = c.SendToast("Reconfiguring BirdWeather integration...", "info", 4000)
+		_ = c.SendToast("Reconfiguring BirdWeather integration...", "info", toastDurationMedium)
 	}
 
 	// Check RTSP settings
@@ -1352,7 +1363,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("RTSP settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_rtsp_sources")
 		// Send toast notification
-		_ = c.SendToast("Reconfiguring RTSP sources...", "info", 4000)
+		_ = c.SendToast("Reconfiguring RTSP sources...", "info", toastDurationMedium)
 	}
 
 	// Check telemetry settings
@@ -1360,7 +1371,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("Telemetry settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_telemetry")
 		// Send toast notification
-		_ = c.SendToast("Reconfiguring telemetry settings...", "info", 3000)
+		_ = c.SendToast("Reconfiguring telemetry settings...", "info", toastDurationShort)
 	}
 
 	// Check species tracking settings
@@ -1368,14 +1379,14 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.Debug("Species tracking settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_species_tracking")
 		// Send toast notification
-		_ = c.SendToast("Reconfiguring species tracking...", "info", 3000)
+		_ = c.SendToast("Reconfiguring species tracking...", "info", toastDurationShort)
 	}
 
 	// Check web server settings (notify only - requires restart)
 	if webserverSettingsChanged(oldSettings, currentSettings) {
 		c.Debug("Web server settings changed, restart required")
 		// No control action - just notify user that restart is required
-		_ = c.SendToast("Web server settings changed. Restart required to apply.", "warning", 8000)
+		_ = c.SendToast("Web server settings changed. Restart required to apply.", "warning", toastDurationExtended)
 	}
 
 	// Handle audio settings changes
@@ -1392,7 +1403,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 				c.Debug("Asynchronously executing action: %s", action)
 				c.controlChan <- action
 				// Add a small delay between actions to avoid overwhelming the system
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(actionDelay)
 			}
 		}(reconfigActions)
 	}
@@ -1708,7 +1719,7 @@ func (c *Controller) GetImageProviders(ctx echo.Context) error {
 			})
 
 			// Sort the providers alphabetically by display name (excluding the first 'auto' entry)
-			if len(providerOptionList) > 2 { // Need at least 3 elements to sort the part after 'auto'
+			if len(providerOptionList) > minSortableElements { // Need at least 3 elements to sort the part after 'auto'
 				sub := providerOptionList[1:] // Create a sub-slice for sorting
 				sort.Slice(sub, func(i, j int) bool {
 					return sub[i].Display < sub[j].Display // Compare elements within the sub-slice

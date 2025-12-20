@@ -17,6 +17,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observation"
 )
 
+// Range filter constants (file-local)
+const (
+	weeksPerMonth = 4 // Simplified ML model uses 4 weeks per month (48 weeks/year)
+	daysPerWeek   = 7 // Days in a week for week calculation
+)
+
 // rangeFilterMutex protects against concurrent modifications to global settings during testing
 var rangeFilterMutex sync.Mutex
 
@@ -234,8 +240,8 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 		// Use the same calculation as in range_filter.go
 		month := int(testDate.Month())
 		day := testDate.Day()
-		weeksFromMonths := (month - 1) * 4
-		weekInMonth := (day-1)/7 + 1
+		weeksFromMonths := (month - 1) * weeksPerMonth
+		weekInMonth := (day-1)/daysPerWeek + 1
 		week = float32(weeksFromMonths + weekInMonth)
 	}
 
@@ -442,8 +448,8 @@ func (c *Controller) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilt
 	testDate := time.Now()
 	month := int(testDate.Month())
 	day := testDate.Day()
-	weeksFromMonths := (month - 1) * 4
-	weekInMonth := (day-1)/7 + 1
+	weeksFromMonths := (month - 1) * weeksPerMonth
+	weekInMonth := (day-1)/daysPerWeek + 1
 	week := float32(weeksFromMonths + weekInMonth)
 	
 	// Get probable species for the test parameters

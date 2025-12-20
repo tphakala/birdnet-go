@@ -17,6 +17,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
+// Test environment constants
+const (
+	testHelsinkiLatitude  = 60.1699 // Helsinki, Finland latitude for SunCalc tests
+	testHelsinkiLongitude = 24.9384 // Helsinki, Finland longitude for SunCalc tests
+	testControlChannelBuf = 10      // Control channel buffer size for concurrent test scenarios
+)
+
 // safeSlice is a helper for mock methods returning slices.
 // It safely handles nil arguments and performs type assertion.
 func safeSlice[T any](args mock.Arguments, index int) []T {
@@ -162,11 +169,11 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 	birdImageCache.SetImageProvider(mockImageProvider)
 
 	// Create sun calculator with test coordinates (Helsinki, Finland)
-	sunCalc := suncalc.NewSunCalc(60.1699, 24.9384)
+	sunCalc := suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
 
 	// Create control channel with buffer to prevent blocking in tests
 	// Size 10 is sufficient for concurrent test scenarios (e.g., TestConcurrentControlRequests uses 5)
-	controlChan := make(chan string, 10)
+	controlChan := make(chan string, testControlChannelBuf)
 
 	// Create mock metrics for testing
 	mockMetrics, _ := observability.NewMetrics()

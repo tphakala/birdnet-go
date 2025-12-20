@@ -8,11 +8,21 @@ import (
 	"os"
 	"testing"
 	"time"
-	
+
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+)
+
+// Test MQTT topic constant
+const testMQTTTopic = "birdnet/detections"
+
+// Test controller constants
+const (
+	testControlChanBuffer     = 10             // Buffer size for control channel in tests
+	testNewYorkLongitude      = -74.0060       // New York City longitude for test data
+	testResponseHeaderTimeout = 30 * time.Second // HTTP response header timeout for tests
 )
 
 // getTestController creates a test controller with disabled saving
@@ -22,7 +32,7 @@ func getTestController(t *testing.T, e *echo.Echo) *Controller {
 	return &Controller{
 		Echo:                e,
 		Settings:            getTestSettings(t),
-		controlChan:         make(chan string, 10),
+		controlChan:         make(chan string, testControlChanBuffer),
 		DisableSaveSettings: true, // Disable saving to disk during tests
 		logger:              log.New(os.Stderr, "TEST: ", log.LstdFlags), // Add logger for tests
 	}
@@ -48,11 +58,11 @@ func getTestSettings(t *testing.T) *conf.Settings {
 	// MQTT settings
 	settings.Realtime.MQTT.Enabled = false
 	settings.Realtime.MQTT.Broker = "tcp://localhost:1883"
-	settings.Realtime.MQTT.Topic = "birdnet/detections"
+	settings.Realtime.MQTT.Topic = testMQTTTopic
 	
 	// BirdNET settings
 	settings.BirdNET.Latitude = 40.7128
-	settings.BirdNET.Longitude = -74.0060
+	settings.BirdNET.Longitude = testNewYorkLongitude
 	settings.BirdNET.Sensitivity = 1.0
 	settings.BirdNET.Threshold = 0.8
 	settings.BirdNET.RangeFilter.Model = "latest"
@@ -142,6 +152,6 @@ func DisableHTTPKeepAlivesForTesting() {
 		MaxIdleConnsPerHost:   0,
 		DisableCompression:    false,
 		ForceAttemptHTTP2:     false,
-		ResponseHeaderTimeout: 30 * time.Second,
+		ResponseHeaderTimeout: testResponseHeaderTimeout,
 	}
 }

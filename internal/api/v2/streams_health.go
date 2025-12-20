@@ -112,7 +112,7 @@ func (c *Controller) initStreamHealthRoutes() {
 	rateLimiterConfig := middleware.RateLimiterConfig{
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
 			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      rate.Limit(float64(streamHealthRateLimitRequests) / 60.0), // 5 per 60 seconds
+				Rate:      rate.Limit(float64(streamHealthRateLimitRequests) / float64(SecondsPerMinute)), // 5 per 60 seconds
 				Burst:     streamHealthRateLimitRequests,                              // Allow 5 immediate connections
 				ExpiresIn: streamHealthRateLimitWindow,
 			},

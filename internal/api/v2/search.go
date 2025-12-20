@@ -251,9 +251,9 @@ func (c *Controller) validateSearchDates(path, ip string, req *SearchRequest) er
 
 // validateSearchStatusEnums validates VerifiedStatus and LockedStatus.
 func (c *Controller) validateSearchStatusEnums(path, ip string, req *SearchRequest) error {
-	validVerifiedStatus := map[string]bool{"any": true, "verified": true, "unverified": true}
+	validVerifiedStatus := map[string]bool{QueryValueAny: true, "verified": true, "unverified": true}
 	if req.VerifiedStatus == "" {
-		req.VerifiedStatus = "any"
+		req.VerifiedStatus = QueryValueAny
 	} else if !validVerifiedStatus[req.VerifiedStatus] {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Invalid verified status parameter", "verifiedStatus", req.VerifiedStatus, "path", path, "ip", ip)
@@ -261,9 +261,9 @@ func (c *Controller) validateSearchStatusEnums(path, ip string, req *SearchReque
 		return fmt.Errorf("invalid verified status '%s'. Use 'any', 'verified', or 'unverified'", req.VerifiedStatus)
 	}
 
-	validLockedStatus := map[string]bool{"any": true, "locked": true, "unlocked": true}
+	validLockedStatus := map[string]bool{QueryValueAny: true, "locked": true, "unlocked": true}
 	if req.LockedStatus == "" {
-		req.LockedStatus = "any"
+		req.LockedStatus = QueryValueAny
 	} else if !validLockedStatus[req.LockedStatus] {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Invalid locked status parameter", "lockedStatus", req.LockedStatus, "path", path, "ip", ip)
@@ -275,9 +275,9 @@ func (c *Controller) validateSearchStatusEnums(path, ip string, req *SearchReque
 
 // validateSearchTimeOfDay validates the TimeOfDay parameter.
 func (c *Controller) validateSearchTimeOfDay(path, ip string, req *SearchRequest) error {
-	validTimeOfDay := map[string]bool{"any": true, "day": true, "night": true, "sunrise": true, "sunset": true}
+	validTimeOfDay := map[string]bool{QueryValueAny: true, "day": true, "night": true, "sunrise": true, "sunset": true}
 	if req.TimeOfDay == "" {
-		req.TimeOfDay = "any"
+		req.TimeOfDay = QueryValueAny
 	} else if !validTimeOfDay[req.TimeOfDay] {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Invalid time of day parameter", "timeOfDay", req.TimeOfDay, "path", path, "ip", ip)

@@ -21,6 +21,12 @@ import (
 const placeholderImageURL = "/assets/images/bird-placeholder.svg"
 const maxSpeciesBatch = 10
 
+// Analytics constants (file-local)
+const (
+	defaultConfidenceThreshold = 0.8 // Default confidence threshold for analytics
+	defaultAnalyticsDays       = 30  // Default number of days for analytics queries
+)
+
 // SpeciesDailySummary represents a bird in the daily species summary API response
 type SpeciesDailySummary struct {
 	ScientificName     string `json:"scientific_name"`
@@ -277,7 +283,7 @@ func (c *Controller) parseBatchDailySummaryParams(ctx echo.Context) (dates []str
 	minConfidence = 0.0
 	if minConfidenceStr := ctx.QueryParam("min_confidence"); minConfidenceStr != "" {
 		if parsedConfidence, parseErr := strconv.ParseFloat(minConfidenceStr, 64); parseErr == nil {
-			minConfidence = parsedConfidence / 100.0
+			minConfidence = parsedConfidence / PercentageMultiplier
 		} else if c.apiLogger != nil {
 			c.apiLogger.Warn("Invalid min_confidence parameter in batch request, using default 0",
 				"value", minConfidenceStr, "error", parseErr.Error(), "ip", ip, "path", path)
@@ -421,7 +427,7 @@ func (c *Controller) parseDailySpeciesSummaryParams(ctx echo.Context) (selectedD
 	if minConfidenceStr != "" {
 		parsedConfidence, parseErr := strconv.ParseFloat(minConfidenceStr, 64)
 		if parseErr == nil {
-			minConfidence = parsedConfidence / 100.0 // Convert from percentage to decimal
+			minConfidence = parsedConfidence / PercentageMultiplier // Convert from percentage to decimal
 		} else if c.apiLogger != nil {
 			c.apiLogger.Warn("Invalid min_confidence parameter, using default 0", "value", minConfidenceStr, "error", parseErr.Error(), "ip", ip, "path", path)
 		}
@@ -509,7 +515,7 @@ func (c *Controller) aggregateDailySpeciesData(notes []datastore.Note, selectedD
 		// Update aggregated data
 		data.Count = totalCount // Use the count derived from GetHourlyOccurrences
 		data.HourlyCounts = hourlyCounts
-		data.HighConfidence = data.HighConfidence || note.Confidence >= 0.8
+		data.HighConfidence = data.HighConfidence || note.Confidence >= defaultConfidenceThreshold
 
 		// Update first/latest times if the current note is earlier/later
 		if note.Time < data.First {
@@ -573,7 +579,7 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 		data := aggregatedData[scientificName]
 
 		// Convert hourly counts array to slice
-		hourlyCountsSlice := make([]int, 24)
+		hourlyCountsSlice := make([]int, HoursPerDay)
 		copy(hourlyCountsSlice, data.HourlyCounts[:])
 
 		// Get thumbnail URL with fallback
@@ -880,12 +886,12 @@ func (c *Controller) GetHourlyAnalytics(ctx echo.Context) error {
 	}
 
 	// Create a 24-hour array filled with zeros
-	hourlyCountsArray := make([]int, 24)
+	hourlyCountsArray := make([]int, HoursPerDay)
 
 	// Fill in the actual counts
 	for i := range hourlyData {
 		data := hourlyData[i]
-		if data.Hour >= 0 && data.Hour < 24 {
+		if data.Hour >= 0 && data.Hour < HoursPerDay {
 			hourlyCountsArray[data.Hour] = data.Count
 		}
 	}
@@ -991,7 +997,7 @@ func (c *Controller) GetDailyAnalytics(ctx echo.Context) error {
 	// Default end date if not provided
 	if endDate == "" {
 		startTime, _ := time.Parse("2006-01-02", startDate) // Regex ensures this parse succeeds
-		endDate = startTime.AddDate(0, 0, 30).Format("2006-01-02")
+		endDate = startTime.AddDate(0, 0, defaultAnalyticsDays).Format("2006-01-02")
 	}
 
 	if c.apiLogger != nil {
@@ -1140,8 +1146,8 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 
 	// If no data is available yet, return an array with 24 empty hours
 	if len(hourlyData) == 0 {
-		emptyData := make([]HourlyDistribution, 24)
-		for hour := range 24 {
+		emptyData := make([]HourlyDistribution, HoursPerDay)
+		for hour := range HoursPerDay {
 			emptyData[hour] = HourlyDistribution{Hour: hour, Count: 0}
 		}
 
@@ -1159,8 +1165,8 @@ func (c *Controller) GetTimeOfDayDistribution(ctx echo.Context) error {
 	}
 
 	// Ensure we have data for all 24 hours (fill in zeros for missing hours)
-	completeHourlyData := make([]HourlyDistribution, 24)
-	for hour := range 24 {
+	completeHourlyData := make([]HourlyDistribution, HoursPerDay)
+	for hour := range HoursPerDay {
 		completeHourlyData[hour] = HourlyDistribution{Hour: hour, Count: 0}
 	}
 
@@ -1528,7 +1534,7 @@ func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
 	minConfidence := 0.0
 	if minConfidenceStr := ctx.QueryParam("min_confidence"); minConfidenceStr != "" {
 		if parsedConfidence, parseErr := strconv.ParseFloat(minConfidenceStr, 64); parseErr == nil {
-			minConfidence = parsedConfidence / 100.0 // Convert from percentage to decimal
+			minConfidence = parsedConfidence / PercentageMultiplier // Convert from percentage to decimal
 		} else if c.apiLogger != nil {
 			c.apiLogger.Warn("Invalid min_confidence parameter in batch hourly species data, using default 0",
 				"value", minConfidenceStr, "error", parseErr.Error(), "ip", ip, "path", path)
@@ -1576,14 +1582,14 @@ func (c *Controller) GetBatchHourlySpeciesData(ctx echo.Context) error {
 		}
 
 		// Convert to HourlyDistribution format
-		hourlyDistribution := make([]HourlyDistribution, 24)
-		for hour := range 24 {
+		hourlyDistribution := make([]HourlyDistribution, HoursPerDay)
+		for hour := range HoursPerDay {
 			hourlyDistribution[hour] = HourlyDistribution{Hour: hour, Count: 0}
 		}
 
 		// Fill in actual data
 		for _, data := range hourlyData {
-			if data.Hour >= 0 && data.Hour < 24 {
+			if data.Hour >= 0 && data.Hour < HoursPerDay {
 				hourlyDistribution[data.Hour].Count = data.Count
 			}
 		}
@@ -1684,7 +1690,7 @@ func (c *Controller) GetBatchDailySpeciesData(ctx echo.Context) error {
 	// Default end date if not provided (30 days from start)
 	if endDate == "" {
 		startTime, _ := time.Parse("2006-01-02", startDate) // parseAndValidateDateRange ensures this succeeds
-		endDate = startTime.AddDate(0, 0, 30).Format("2006-01-02")
+		endDate = startTime.AddDate(0, 0, defaultAnalyticsDays).Format("2006-01-02")
 	}
 
 	// Deduplicate species list to avoid redundant DB calls and result overwrites

@@ -59,14 +59,14 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 		c.Debug("Sound level monitoring settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, "reconfigure_sound_level")
 		// Send toast notification
-		_ = c.SendToast("Reconfiguring sound level monitoring...", "info", 3000)
+		_ = c.SendToast("Reconfiguring sound level monitoring...", "info", toastDurationShort)
 	}
 
 	// Check audio device settings
 	if audioDeviceSettingChanged(oldSettings, currentSettings) {
 		c.Debug("Audio device changed. A restart will be required.")
 		// Send toast notification about restart requirement
-		_ = c.SendToast("Audio device changed. Restart required to apply changes.", "warning", 8000)
+		_ = c.SendToast("Audio device changed. Restart required to apply changes.", "warning", toastDurationExtended)
 	}
 
 	// Check audio equalizer settings
@@ -75,11 +75,11 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 		// Handle audio equalizer changes synchronously as it returns an error
 		if err := c.handleEqualizerChange(currentSettings); err != nil {
 			// Send error toast
-			_ = c.SendToast("Failed to update audio equalizer settings", "error", 5000)
+			_ = c.SendToast("Failed to update audio equalizer settings", "error", toastDurationLong)
 			return reconfigActions, fmt.Errorf("failed to update audio equalizer: %w", err)
 		}
 		// Send success toast
-		_ = c.SendToast("Audio equalizer settings updated", "success", 3000)
+		_ = c.SendToast("Audio equalizer settings updated", "success", toastDurationShort)
 	}
 
 	return reconfigActions, nil

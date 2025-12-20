@@ -25,6 +25,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
+// Test date constant used across multiple test cases
+const testDate = "2023-01-01"
+
 // TestGetSpeciesSummary tests the species summary endpoint
 func TestGetSpeciesSummary(t *testing.T) {
 	t.Parallel()
@@ -222,7 +225,7 @@ func TestGetHourlyAnalytics(t *testing.T) {
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Create mock data
-	date := "2023-01-01"
+	date := testDate
 	species := "Turdus migratorius"
 
 	mockHourlyData := []datastore.HourlyAnalyticsData{
@@ -290,13 +293,13 @@ func TestGetDailyAnalytics(t *testing.T) {
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Create mock data
-	startDate := "2023-01-01"
+	startDate := testDate
 	endDate := "2023-01-07"
 	species := "Turdus migratorius"
 
 	mockDailyData := []datastore.DailyAnalyticsData{
 		{
-			Date:  "2023-01-01",
+			Date:  testDate,
 			Count: 12,
 		},
 		{
@@ -346,7 +349,7 @@ func TestGetDailyAnalytics(t *testing.T) {
 
 		// Check first data item
 		item1 := data[0].(map[string]any)
-		assert.Equal(t, "2023-01-01", item1["date"])
+		assert.Equal(t, testDate, item1["date"])
 		assert.InDelta(t, 12, item1["count"], 0.01)
 
 		// Check second data item
@@ -367,7 +370,7 @@ func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
 	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
 
 	// Create mock data
-	startDate := "2023-01-01"
+	startDate := testDate
 	endDate := "2023-01-07"
 
 	mockDailyData := []datastore.DailyAnalyticsData{

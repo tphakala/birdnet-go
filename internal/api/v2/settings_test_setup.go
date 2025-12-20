@@ -7,9 +7,14 @@ import (
 	"os"
 	"testing"
 	"time"
-	
+
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"go.uber.org/goleak"
+)
+
+// Test setup constants
+const (
+	testCleanupGracePeriod = 100 * time.Millisecond // Grace period for goroutines to clean up after tests
 )
 
 // TestMain sets up the test environment with test settings
@@ -44,7 +49,7 @@ func TestMain(m *testing.M) {
 		
 		// Give a small grace period for goroutines to clean up after all tests
 		// This is the ONLY place we use time.Sleep, and it's after ALL tests complete
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(testCleanupGracePeriod)
 		
 		// Check for goroutine leaks after ALL tests have completed
 		// This avoids the issue of one test detecting another test's goroutines

@@ -290,11 +290,11 @@ func getTelemetryStatus() map[string]any {
 
 func mapNotificationType(typeStr string) notification.Type {
 	switch typeStr {
-	case "error":
+	case LogLevelError:
 		return notification.TypeError
-	case "warning":
+	case LogLevelWarning:
 		return notification.TypeWarning
-	case "info":
+	case LogLevelInfo:
 		return notification.TypeInfo
 	case "detection":
 		return notification.TypeDetection

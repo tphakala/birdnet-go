@@ -30,6 +30,16 @@ import (
 	"golang.org/x/text/language"
 )
 
+// System info constants (file-local)
+const (
+	cpuCacheUpdateInterval = 2 * time.Second // Interval for CPU cache updates
+	bytesPerKB             = 1024            // Bytes per kilobyte
+	maxPercentage          = 100             // Maximum percentage value
+	defaultAudioSampleRate = 48000           // Standard BirdNET audio sample rate
+	defaultAudioBitDepth   = 16              // Standard audio bit depth
+	minRequiredElements    = 2               // Minimum required elements for various checks
+)
+
 // SystemInfo represents basic system information
 type SystemInfo struct {
 	Hostname      string    `json:"hostname"`
@@ -165,7 +175,7 @@ func UpdateCPUCache(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(2 * time.Second):
+			case <-time.After(cpuCacheUpdateInterval):
 				// Continue to next iteration
 			}
 		}
@@ -343,7 +353,7 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 	// Get hostname
 	hostname, err := os.Hostname()
 	if err != nil {
-		hostname = "unknown"
+		hostname = ValueUnknown
 		if c.apiLogger != nil {
 			c.apiLogger.Warn("Failed to get hostname, using 'unknown'",
 				"error", err.Error(),
@@ -358,7 +368,7 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 
 	// Get System Model on Linux
 	var systemModel string
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS == OSLinux {
 		systemModel = getSystemModelFromProc()
 		if systemModel == "" && c.apiLogger != nil {
 			c.apiLogger.Debug("Could not determine system model from /proc/cpuinfo",
@@ -375,8 +385,8 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 	if timeZoneStr == "Local" || timeZoneStr == "" {
 		// Fallback if Olson name is "Local" or empty
 		name, offset := time.Now().Zone() // Get abbreviation and offset in seconds
-		offsetHours := offset / 3600
-		offsetMinutes := (offset % 3600) / 60
+		offsetHours := offset / SecondsPerHour
+		offsetMinutes := (offset % SecondsPerHour) / SecondsPerMinute
 		if offsetMinutes < 0 { // Ensure minutes are positive for formatting
 			offsetMinutes = -offsetMinutes
 		}
@@ -394,15 +404,15 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 	platformName := tcaser.String(hostInfo.Platform)
 
 	switch runtime.GOOS {
-	case "linux":
+	case OSLinux:
 		if platformName != "" {
 			osDisplay = fmt.Sprintf("%s Linux", platformName)
 		} else {
 			osDisplay = "Linux"
 		}
-	case "windows":
+	case OSWindows:
 		osDisplay = "Microsoft Windows"
-	case "darwin":
+	case OSDarwin:
 		osDisplay = "Apple macOS" // More user-friendly than Darwin
 	default:
 		if platformName != "" {
@@ -458,8 +468,8 @@ func getSystemModelFromProc() string {
 	for line := range lines {
 		// Look specifically for lines starting with "Model" (case-sensitive)
 		if strings.HasPrefix(line, "Model") {
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
+			parts := strings.SplitN(line, ":", minRequiredElements)
+			if len(parts) == minRequiredElements {
 				model := strings.TrimSpace(parts[1])
 				if model != "" {
 					systemModel = model // Keep overwriting, last one wins
@@ -551,7 +561,7 @@ func (c *Controller) GetResourceInfo(ctx echo.Context) error {
 	// Convert process memory to MB for readability
 	var procMemMB float64
 	if procMem != nil {
-		procMemMB = float64(procMem.RSS) / 1024 / 1024
+		procMemMB = float64(procMem.RSS) / bytesPerKB / bytesPerKB
 	}
 
 	// Create response
@@ -644,7 +654,7 @@ func (c *Controller) GetDiskInfo(ctx echo.Context) error {
 		}
 	} else {
 		// Convert uptime to milliseconds for IO busy calculation
-		uptimeMs = hostInfo.Uptime * 1000
+		uptimeMs = hostInfo.Uptime * MillisecondsPerSecond
 	}
 
 	// Process each partition
@@ -710,22 +720,22 @@ func (c *Controller) GetDiskInfo(ctx echo.Context) error {
 			// Calculate I/O busy percentage if uptime is available
 			if uptimeMs > 0 && counter.IoTime > 0 {
 				// IoTime is the time spent doing I/Os (ms)
-				diskInfo.IOBusyPerc = float64(counter.IoTime) / float64(uptimeMs) * 100
+				diskInfo.IOBusyPerc = float64(counter.IoTime) / float64(uptimeMs) * maxPercentage
 
 				// Cap at 100% (in case of measurement anomalies)
-				if diskInfo.IOBusyPerc > 100 {
-					diskInfo.IOBusyPerc = 100
+				if diskInfo.IOBusyPerc > maxPercentage {
+					diskInfo.IOBusyPerc = maxPercentage
 				}
 			} else if counter.ReadTime > 0 || counter.WriteTime > 0 {
 				// Alternative calculation using read/write times if IoTime is not available
 				// This is less accurate but provides a reasonable approximation
 				totalIOTime := counter.ReadTime + counter.WriteTime
 				if uptimeMs > 0 {
-					diskInfo.IOBusyPerc = float64(totalIOTime) / float64(uptimeMs) * 100
+					diskInfo.IOBusyPerc = float64(totalIOTime) / float64(uptimeMs) * maxPercentage
 
 					// Cap at 100%
-					if diskInfo.IOBusyPerc > 100 {
-						diskInfo.IOBusyPerc = 100
+					if diskInfo.IOBusyPerc > maxPercentage {
+						diskInfo.IOBusyPerc = maxPercentage
 					}
 				}
 			}
@@ -878,8 +888,8 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 	// Create response with default values
 	activeDevice := ActiveAudioDevice{
 		Name:       deviceName,
-		SampleRate: 48000, // Standard BirdNET sample rate
-		BitDepth:   16,    // Assuming 16-bit as per the capture.go implementation
+		SampleRate: defaultAudioSampleRate, // Standard BirdNET sample rate
+		BitDepth:   defaultAudioBitDepth,   // Assuming 16-bit as per the capture.go implementation
 		Channels:   1,     // Assuming mono as per the capture.go implementation
 	}
 
@@ -903,11 +913,11 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 
 		// OS-specific additional checks
 		switch runtime.GOOS {
-		case "windows":
+		case OSWindows:
 			diagnostics["note"] = "On Windows, check that audio drivers are properly installed and the device is not disabled in Sound settings"
-		case "darwin":
+		case OSDarwin:
 			diagnostics["note"] = "On macOS, check System Preferences > Sound and ensure the device has proper permissions"
-		case "linux":
+		case OSLinux:
 			diagnostics["note"] = "On Linux, check if PulseAudio/ALSA is running and the user has proper permissions"
 		}
 
@@ -1015,7 +1025,7 @@ func (c *Controller) getSingleProcessInfo(p *process.Process) (ProcessInfo, erro
 	var status string
 	switch {
 	case err != nil:
-		status = "unknown"
+		status = ValueUnknown
 		if c.apiLogger != nil {
 			c.apiLogger.Warn("Failed to get process status", "pid", p.Pid, "name", name, "error", err.Error())
 		}
@@ -1023,7 +1033,7 @@ func (c *Controller) getSingleProcessInfo(p *process.Process) (ProcessInfo, erro
 		// Use the first status code returned
 		status = mapProcessStatus(statusList[0])
 	default:
-		status = "unknown"
+		status = ValueUnknown
 	}
 
 	cpuPercent, err := p.CPUPercent()
@@ -1057,7 +1067,7 @@ func (c *Controller) getSingleProcessInfo(p *process.Process) (ProcessInfo, erro
 		uptimeSeconds = 0
 	} else {
 		// Calculate uptime relative to now
-		uptimeSeconds = max(time.Now().Unix()-(createTimeMillis/1000),
+		uptimeSeconds = max(time.Now().Unix()-(createTimeMillis/MillisecondsPerSecond),
 			// Sanity check for clock skew
 			0)
 	}
@@ -1208,7 +1218,7 @@ func (c *Controller) checkThermalZone(zonePath string, targetTypes map[string]bo
 		return 0, details, false, nil // Error parsing temp.
 	}
 
-	celsius = float64(tempMillCelsius) / 1000.0
+	celsius = float64(tempMillCelsius) / float64(MillisecondsPerSecond)
 
 	// Validate temperature range (0 to 100 °C inclusive)
 	if celsius < 0.0 || celsius > 100.0 {
@@ -1415,7 +1425,7 @@ func skipFilesystem(fstype string) bool {
 
 	// Additional checks for common patterns in filesystem types
 	// that might indicate a virtual or system filesystem
-	if len(fstype) >= 2 {
+	if len(fstype) >= minRequiredElements {
 		// Check for common filesystem type prefixes
 		commonPrefixes := []string{"fuse", "cgroup", "proc", "sys", "dev"}
 		for _, prefix := range commonPrefixes {
