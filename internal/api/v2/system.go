@@ -293,8 +293,8 @@ func (c *Controller) initSystemRoutes() {
 	// Create system API group
 	systemGroup := c.Group.Group("/system")
 
-	// Get the appropriate auth middleware using the helper method
-	authMiddleware := c.getEffectiveAuthMiddleware()
+	// Get the appropriate auth middleware
+	authMiddleware := c.authMiddleware
 
 	// Create auth-protected group using the appropriate middleware
 	protectedGroup := systemGroup.Group("", authMiddleware)

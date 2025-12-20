@@ -44,7 +44,7 @@ func (c *Controller) initControlRoutes() {
 	}
 
 	// Create control API group with auth middleware
-	controlGroup := c.Group.Group("/control", c.AuthMiddleware)
+	controlGroup := c.Group.Group("/control", c.authMiddleware)
 
 	// Control routes
 	controlGroup.POST("/restart", c.RestartAnalysis)

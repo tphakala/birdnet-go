@@ -56,7 +56,7 @@ type Client struct {
 // initStreamRoutes registers all stream-related API endpoints
 func (c *Controller) initStreamRoutes() {
 	// Create streams API group with auth middleware
-	streamsGroup := c.Group.Group("/streams", c.AuthMiddleware)
+	streamsGroup := c.Group.Group("/streams", c.authMiddleware)
 
 	// Routes for real-time data streams
 	streamsGroup.GET("/audio-level", c.HandleAudioLevelStream)

@@ -35,7 +35,7 @@ func (c *Controller) initSettingsRoutes() {
 	}
 
 	// Create settings API group
-	settingsGroup := c.Group.Group("/settings", c.AuthMiddleware)
+	settingsGroup := c.Group.Group("/settings", c.authMiddleware)
 
 	// Routes for settings
 	// GET /api/v2/settings - Retrieves all application settings

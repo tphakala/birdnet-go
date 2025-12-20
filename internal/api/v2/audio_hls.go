@@ -112,7 +112,7 @@ var hlsMgr = &hlsManager{
 // initHLSRoutes registers HLS streaming endpoints
 func (c *Controller) initHLSRoutes() {
 	// Get authentication middleware
-	authMiddleware := c.getEffectiveAuthMiddleware()
+	authMiddleware := c.authMiddleware
 
 	// HLS base group (no auth by default)
 	hlsGroup := c.Group.Group("/streams/hls")

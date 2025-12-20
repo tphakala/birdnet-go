@@ -172,7 +172,7 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 	mockMetrics, _ := observability.NewMetrics()
 
 	// Create API controller without initializing routes to avoid starting background goroutines
-	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, nil, mockMetrics, false)
+	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, mockMetrics, false)
 	if err != nil {
 		t.Fatalf("Failed to create test API controller: %v", err)
 	}

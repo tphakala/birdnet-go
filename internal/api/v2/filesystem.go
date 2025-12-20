@@ -40,7 +40,7 @@ func (c *Controller) initFileSystemRoutes() {
 	}
 
 	// Create filesystem API group with authentication
-	fsGroup := c.Group.Group("/filesystem", c.getEffectiveAuthMiddleware())
+	fsGroup := c.Group.Group("/filesystem", c.authMiddleware)
 
 	// GET /api/v2/filesystem/browse - Browse files and directories
 	fsGroup.GET("/browse", c.BrowseFileSystem)

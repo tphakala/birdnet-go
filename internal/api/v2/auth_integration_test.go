@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/api/v2/auth"
+	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -84,11 +84,16 @@ func setupAuthIntegrationTest(t *testing.T) (*echo.Echo, *Controller, *conf.Sett
 	// Create OAuth2Server with test settings
 	oauth2Server := createTestOAuth2Server(settings)
 
+	// Create auth service and middleware for testing
+	authService := auth.NewSecurityAdapter(oauth2Server, nil)
+	authMw := auth.NewMiddleware(authService, nil)
+
 	// Initialize gothic session store for testing (required for session operations)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
-	// Create API controller with OAuth2Server
-	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, oauth2Server, mockMetrics, true)
+	// Create API controller with OAuth2Server via functional options
+	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, mockMetrics, true,
+		WithAuthMiddleware(authMw.Authenticate), WithAuthService(authService))
 	require.NoError(t, err, "Failed to create test API controller")
 
 	// Register cleanup
@@ -236,7 +241,12 @@ func TestV2AuthFlow_EmptyClientID_V1Compatible(t *testing.T) {
 	mockMetrics, _ := observability.NewMetrics()
 	oauth2Server := createTestOAuth2Server(settings)
 
-	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, oauth2Server, mockMetrics, true)
+	// Create auth service and middleware for testing
+	authService := auth.NewSecurityAdapter(oauth2Server, nil)
+	authMw := auth.NewMiddleware(authService, nil)
+
+	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, logger, mockMetrics, true,
+		WithAuthMiddleware(authMw.Authenticate), WithAuthService(authService))
 	require.NoError(t, err)
 
 	t.Cleanup(func() {

@@ -15,7 +15,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	auth "github.com/tphakala/birdnet-go/internal/api/v2/auth"
+	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/security"
 )
 
@@ -105,7 +105,7 @@ func (c *Controller) initAuthRoutes() {
 	authGroup.GET("/callback", c.OAuthCallback)
 
 	// Routes that require authentication
-	protectedGroup := authGroup.Group("", c.AuthMiddleware)
+	protectedGroup := authGroup.Group("", c.authMiddleware)
 	protectedGroup.POST("/logout", c.Logout)
 	protectedGroup.GET("/status", c.GetAuthStatus)
 }
@@ -126,7 +126,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 	}
 
 	// Use the stored auth service instance
-	authService := c.AuthService
+	authService := c.authService
 	if authService == nil {
 		// Handle case where auth might not be configured but login endpoint is hit
 		if c.apiLogger != nil {
@@ -273,7 +273,7 @@ func (c *Controller) Login(ctx echo.Context) error {
 // Logout handles POST /api/v2/auth/logout
 func (c *Controller) Logout(ctx echo.Context) error {
 	// Use the stored auth service instance
-	authService := c.AuthService
+	authService := c.authService
 	if authService == nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Warn("Logout requested but AuthService is nil (auth not configured?)",
@@ -552,7 +552,7 @@ func (c *Controller) OAuthCallback(ctx echo.Context) error {
 	}
 
 	// 2. Defensive check: ensure AuthService is available
-	if c.AuthService == nil {
+	if c.authService == nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("AuthService is nil in OAuthCallback - server misconfiguration",
 				"ip", ctx.RealIP(),
@@ -566,7 +566,7 @@ func (c *Controller) OAuthCallback(ctx echo.Context) error {
 	exchangeCtx, cancel := context.WithTimeout(ctx.Request().Context(), 15*time.Second)
 	defer cancel()
 
-	accessToken, err := c.AuthService.ExchangeAuthCode(exchangeCtx, code)
+	accessToken, err := c.authService.ExchangeAuthCode(exchangeCtx, code)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			if c.apiLogger != nil {
@@ -593,7 +593,7 @@ func (c *Controller) OAuthCallback(ctx echo.Context) error {
 	}
 
 	// 4. Establish session (handles session fixation mitigation)
-	if err := c.AuthService.EstablishSession(ctx, accessToken); err != nil {
+	if err := c.authService.EstablishSession(ctx, accessToken); err != nil {
 		if c.apiLogger != nil {
 			c.apiLogger.Error("Failed to establish session",
 				"error", err.Error(),

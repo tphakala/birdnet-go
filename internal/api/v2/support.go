@@ -258,9 +258,9 @@ func (c *Controller) GetSupportStatus(ctx echo.Context) error {
 // initSupportRoutes registers support-related routes
 func (c *Controller) initSupportRoutes() {
 	// Support endpoints require authentication
-	c.Group.POST("/support/generate", c.GenerateSupportDump, c.authMiddlewareFn)
-	c.Group.GET("/support/download/:id", c.DownloadSupportDump, c.authMiddlewareFn)
-	c.Group.GET("/support/status", c.GetSupportStatus, c.authMiddlewareFn)
+	c.Group.POST("/support/generate", c.GenerateSupportDump, c.authMiddleware)
+	c.Group.GET("/support/download/:id", c.DownloadSupportDump, c.authMiddleware)
+	c.Group.GET("/support/status", c.GetSupportStatus, c.authMiddleware)
 
 	// Start cleanup goroutine for old support dumps with proper context
 	// Go 1.25: Using WaitGroup.Go() for automatic Add/Done management

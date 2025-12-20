@@ -64,7 +64,7 @@ func (c *Controller) initDetectionRoutes() {
 	c.Group.GET("/detections/:id/time-of-day", c.GetDetectionTimeOfDay)
 
 	// Protected detection management endpoints
-	detectionGroup := c.Group.Group("/detections", c.AuthMiddleware)
+	detectionGroup := c.Group.Group("/detections", c.authMiddleware)
 	detectionGroup.DELETE("/:id", c.DeleteDetection)
 	detectionGroup.POST("/:id/review", c.ReviewDetection)
 	detectionGroup.POST("/:id/lock", c.LockDetection)

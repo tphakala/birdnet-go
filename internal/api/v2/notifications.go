@@ -89,7 +89,7 @@ func (c *Controller) SetupNotificationRoutes() {
 	}
 
 	// SSE endpoint for notification stream (authenticated - includes both notifications and toasts)
-	c.Group.GET("/notifications/stream", c.StreamNotifications, c.getEffectiveAuthMiddleware(), middleware.RateLimiterWithConfig(rateLimiterConfig))
+	c.Group.GET("/notifications/stream", c.StreamNotifications, c.authMiddleware, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
 	// REST endpoints for notification management
 	c.Group.GET("/notifications", c.GetNotifications)
@@ -100,7 +100,7 @@ func (c *Controller) SetupNotificationRoutes() {
 	c.Group.GET("/notifications/unread/count", c.GetUnreadCount)
 
 	// Test endpoints for notification system
-	c.Group.POST("/notifications/test/new-species", c.CreateTestNewSpeciesNotification, c.getEffectiveAuthMiddleware())
+	c.Group.POST("/notifications/test/new-species", c.CreateTestNewSpeciesNotification, c.authMiddleware)
 }
 
 // StreamNotifications handles the SSE connection for real-time notification streaming

@@ -15,7 +15,8 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	echolog "github.com/labstack/gommon/log"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
-	"github.com/tphakala/birdnet-go/internal/api/v2"
+	api "github.com/tphakala/birdnet-go/internal/api/v2"
+	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -211,8 +212,17 @@ func (s *Server) initializeServer() {
 	s.initRoutes()          // Initialize HTML/V1 routes
 	s.initHLSCleanupTask()  // Initialize HLS cleanup task
 
-	// Initialize the JSON API v2 - Pass OAuth2Server directly
+	// Initialize the JSON API v2 with auth middleware and service injected via functional options
 	s.Debug("Initializing JSON API v2")
+
+	// Create auth service and middleware for v2 API
+	var authOpts []api.Option
+	if s.OAuth2Server != nil {
+		authService := auth.NewSecurityAdapter(s.OAuth2Server, nil) // Using nil logger for httpcontroller
+		authMw := auth.NewMiddleware(authService, nil)
+		authOpts = append(authOpts, api.WithAuthMiddleware(authMw.Authenticate), api.WithAuthService(authService))
+	}
+
 	s.APIV2 = api.InitializeAPI(
 		s.Echo,
 		s.DS,
@@ -222,8 +232,8 @@ func (s *Server) initializeServer() {
 		s.controlChan,
 		log.Default(),
 		s.Processor,
-		s.OAuth2Server, // Pass OAuth2Server instance
-		s.metrics,      // Pass observability metrics
+		s.metrics,
+		authOpts...,
 	)
 
 	// Connect the processor's SSE broadcaster to the API controller's SSE manager

@@ -49,7 +49,7 @@ func (c *Controller) initIntegrationsRoutes() {
 	}
 
 	// Create integrations API group with auth middleware
-	integrationsGroup := c.Group.Group("/integrations", c.AuthMiddleware)
+	integrationsGroup := c.Group.Group("/integrations", c.authMiddleware)
 
 	// MQTT routes
 	mqttGroup := integrationsGroup.Group("/mqtt")
