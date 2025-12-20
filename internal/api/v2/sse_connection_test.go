@@ -416,7 +416,7 @@ func setupSSETestServer(t *testing.T) (*httptest.Server, *Controller) {
 	require.NoError(t, err, "Failed to initialize metrics")
 
 	// Create controller WITH route initialization
-	controller, err := NewWithOptions(e, mockDS, settings, nil, nil, controlChan, nil, nil, mockMetrics, true)
+	controller, err := NewWithOptions(e, mockDS, settings, nil, nil, controlChan, nil, mockMetrics, true)
 	require.NoError(t, err)
 
 	// Wait for goroutines to start
@@ -490,7 +490,7 @@ func setupSSETestServerForBench(b *testing.B) (*httptest.Server, *Controller) {
 	controlChan := make(chan string, 10)
 	mockMetrics, _ := observability.NewMetrics()
 
-	controller, err := NewWithOptions(e, mockDS, settings, nil, nil, controlChan, nil, nil, mockMetrics, true)
+	controller, err := NewWithOptions(e, mockDS, settings, nil, nil, controlChan, nil, mockMetrics, true)
 	if err != nil {
 		b.Fatal(err)
 	}

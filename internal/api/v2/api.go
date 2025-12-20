@@ -15,14 +15,13 @@ import (
 
 	"log/slog"
 	"net"
-	"net/url"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/patrickmn/go-cache"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
-	"github.com/tphakala/birdnet-go/internal/api/v2/auth"
+	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -33,7 +32,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/securefs"
-	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -67,13 +65,9 @@ type Controller struct {
 	metrics              *observability.Metrics // Shared metrics instance
 	spectrogramGenerator *spectrogram.Generator // Shared spectrogram generator (initialized after SFS)
 
-	// Auth related fields
-	// AuthService stores the shared authentication service instance.
-	// NOTE: This instance is shared across all requests handled by this controller.
-	// The underlying implementation (auth.SecurityAdapter embedding security.OAuth2Server)
-	// is designed to be concurrency-safe through internal locking (e.g., RWMutex for token maps).
-	AuthService      auth.Service        // Store the auth service instance
-	authMiddlewareFn echo.MiddlewareFunc // Authentication middleware function (set if auth configured)
+	// Auth related fields (injected from server via functional options)
+	authService    auth.Service        // Authentication service (injected from server)
+	authMiddleware echo.MiddlewareFunc // Authentication middleware function (injected from server)
 
 	// SSE related fields
 	sseManager *SSEManager // Manager for Server-Sent Events connections
@@ -96,12 +90,22 @@ type Controller struct {
 	goroutinesStarted chan struct{} // signals when all background goroutines have started (nil if routes not initialized)
 }
 
-// Define specific errors for token handling failures
-var (
-	errMalformedAuthHeader = fmt.Errorf("malformed authorization header")
-	errInvalidAuthToken    = fmt.Errorf("invalid or expired token")
-	errAuthServiceNil      = fmt.Errorf("internal configuration error: auth service is nil")
-)
+// Option is a functional option for configuring the Controller.
+type Option func(*Controller)
+
+// WithAuthMiddleware sets the authentication middleware for the controller.
+func WithAuthMiddleware(mw echo.MiddlewareFunc) Option {
+	return func(c *Controller) {
+		c.authMiddleware = mw
+	}
+}
+
+// WithAuthService sets the authentication service for the controller.
+func WithAuthService(svc auth.Service) Option {
+	return func(c *Controller) {
+		c.authService = svc
+	}
+}
 
 // Custom IP Extractor prioritizing CF-Connecting-IP
 func ipExtractorFromCloudflareHeader(req *http.Request) string {
@@ -179,17 +183,17 @@ func (c *Controller) TunnelDetectionMiddleware() echo.MiddlewareFunc {
 // New creates a new API controller, returning an error if initialization fails.
 func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
-	controlChan chan string, logger *log.Logger, oauth2Server *security.OAuth2Server,
-	metrics *observability.Metrics) (*Controller, error) {
-	return NewWithOptions(e, ds, settings, birdImageCache, sunCalc, controlChan, logger, oauth2Server, metrics, true)
+	controlChan chan string, logger *log.Logger,
+	metrics *observability.Metrics, opts ...Option) (*Controller, error) {
+	return NewWithOptions(e, ds, settings, birdImageCache, sunCalc, controlChan, logger, metrics, true, opts...)
 }
 
 // NewWithOptions creates a new API controller with optional route initialization.
 // Set initializeRoutes to false for testing to avoid starting background goroutines.
 func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
-	controlChan chan string, logger *log.Logger, oauth2Server *security.OAuth2Server,
-	metrics *observability.Metrics, initializeRoutes bool) (*Controller, error) {
+	controlChan chan string, logger *log.Logger,
+	metrics *observability.Metrics, initializeRoutes bool, opts ...Option) (*Controller, error) {
 
 	if logger == nil {
 		logger = log.Default()
@@ -324,22 +328,16 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		}
 	}
 
-	// If OAuth2Server is provided, setup authentication service and middleware function
-	if oauth2Server != nil {
-		// Create and store the auth service instance directly.
-		// This single instance is shared across requests handled by this controller.
-		// Concurrency safety is handled within the auth.Service implementation.
-		c.AuthService = auth.NewSecurityAdapter(oauth2Server, c.apiLogger)
+	// Apply functional options (auth middleware and service injected from server)
+	for _, opt := range opts {
+		opt(c)
+	}
 
-		// Create the middleware provider using the stored service
-		authMiddlewareProvider := auth.NewMiddleware(c.AuthService, c.apiLogger)
-		c.authMiddlewareFn = authMiddlewareProvider.Authenticate
-
-		logger.Println("Initialized API authentication service and middleware function")
+	// Log auth configuration status
+	if c.authMiddleware != nil {
+		logger.Println("Auth middleware configured via functional options")
 	} else {
-		logger.Println("Warning: OAuth2Server not provided, API authentication not configured")
-		// Potentially set a NoOp auth service here if needed for consistency
-		// c.AuthService = auth.NewNoOpService()
+		logger.Println("Warning: Auth middleware not configured")
 	}
 
 	// Create v2 API group
@@ -752,283 +750,26 @@ func (c *Controller) logAPIRequest(ctx echo.Context, level slog.Level, msg strin
 	}
 }
 
-// handleTokenAuth attempts authentication using a Bearer token from the Authorization header.
-// It returns true if authentication succeeds.
-// It returns false and a specific error (errMalformedAuthHeader, errInvalidAuthToken, errAuthServiceNil, or nil for no header)
-// if authentication fails or is not attempted.
-// It no longer writes the HTTP response directly.
-func (c *Controller) handleTokenAuth(ctx echo.Context) (bool, error) {
-	if c.AuthService == nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("handleTokenAuth called but AuthService is nil")
-		}
-		// Return a specific error indicating the internal config issue
-		return false, errAuthServiceNil
-	}
-
-	authHeader := ctx.Request().Header.Get("Authorization")
-	if authHeader == "" {
-		return false, nil // No header, token auth not attempted, no error
-	}
-
-	parts := strings.Fields(authHeader)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Invalid Authorization header format",
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-			)
-		}
-		// Return specific error for malformed header
-		return false, errMalformedAuthHeader
-	}
-
-	token := parts[1]
-	validationErr := c.AuthService.ValidateToken(token) // Capture the error
-	if validationErr == nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Debug("Token authentication successful", "path", ctx.Request().URL.Path, "ip", ctx.RealIP())
-		}
-		return true, nil // Token validation successful
-	}
-
-	// Token validation failed
-	if c.apiLogger != nil {
-		c.apiLogger.Warn("Token validation failed",
-			"error", validationErr.Error(), // Log the specific validation error
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP(),
-		)
-	}
-	// Return specific error for invalid token
-	return false, errInvalidAuthToken
+// GetAuthMiddleware returns the authentication middleware function injected from server.
+// This replaces the previous getEffectiveAuthMiddleware that had fallback logic.
+//
+// Returns nil if no middleware was configured via WithAuthMiddleware option.
+// Callers should be aware that applying nil middleware to Echo routes is a no-op
+// (the routes become unprotected). A warning is logged during initialization
+// if auth middleware is not configured.
+func (c *Controller) GetAuthMiddleware() echo.MiddlewareFunc {
+	return c.authMiddleware
 }
 
-// handleSessionAuth attempts authentication using the existing session.
-// It returns true if authentication succeeds, false otherwise.
-// It now uses the Controller's AuthService instance.
-func (c *Controller) handleSessionAuth(ctx echo.Context) bool {
-	if c.AuthService == nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("handleSessionAuth called but AuthService is nil")
-		}
-		return false // Cannot authenticate without a service
-	}
-
-	err := c.AuthService.CheckAccess(ctx)
-	if err == nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Debug("Session authentication successful", "path", ctx.Request().URL.Path, "ip", ctx.RealIP())
-		}
-		return true
-	}
-
-	if c.apiLogger != nil {
-		c.apiLogger.Debug("Session authentication failed", "path", ctx.Request().URL.Path, "ip", ctx.RealIP(), "error", err.Error())
-	}
-	return false
-}
-
-// handleUnauthorized determines the appropriate response for unauthenticated requests.
-func (c *Controller) handleUnauthorized(ctx echo.Context) error {
-	acceptHeader := ctx.Request().Header.Get("Accept")
-	isHXRequest := ctx.Request().Header.Get("HX-Request") == "true"
-	isBrowserRequest := strings.Contains(acceptHeader, "text/html") || isHXRequest
-
-	if isBrowserRequest {
-		loginPath := "/login" // Assuming default login path is /login
-		// Get the actual origin URL of the request
-		originURL := ctx.Request().URL.String()
-		// Compare against the actual request path, not the route pattern
-		if !strings.HasPrefix(ctx.Request().URL.Path, loginPath) {
-			// Append redirect parameter only if the current path is not the login path
-			loginPath += "?redirect=" + url.QueryEscape(originURL)
-		}
-
-		if isHXRequest {
-			ctx.Response().Header().Set("HX-Redirect", loginPath)
-			return ctx.String(http.StatusUnauthorized, "")
-		}
-		return ctx.Redirect(http.StatusFound, loginPath)
-	}
-
-	// For API clients, return JSON error response
-	// Add WWW-Authenticate header for RFC 6750 compliance, indicating Bearer scheme is expected
-	ctx.Response().Header().Set("WWW-Authenticate", `Bearer realm="api"`)
-	return ctx.JSON(http.StatusUnauthorized, map[string]string{
-		"error": "Authentication required",
-	})
-}
-
-// isAuthRequiredWithoutService checks if authentication would be required based on settings
-// and IP bypass rules, even if the AuthService itself is nil. This is used as a fallback
-// check in AuthMiddleware.
-func (c *Controller) isAuthRequiredWithoutService(ctx echo.Context) bool {
-	// Assume auth is required if any provider is enabled
-	authWouldBeRequired := c.Settings.Security.BasicAuth.Enabled || c.Settings.Security.GoogleAuth.Enabled || c.Settings.Security.GithubAuth.Enabled
-
-	// Check for subnet bypass only if auth would otherwise be required
-	if authWouldBeRequired && c.Settings.Security.AllowSubnetBypass.Enabled {
-		ipStr := ctx.RealIP()
-		ip := net.ParseIP(ipStr)
-		if ip != nil {
-			if ip.IsLoopback() {
-				// Loopback always bypasses
-				authWouldBeRequired = false
-			} else {
-				// Check configured subnets
-				allowedSubnetsStr := c.Settings.Security.AllowSubnetBypass.Subnet
-				if allowedSubnetsStr != "" {
-					allowedSubnets := strings.SplitSeq(allowedSubnetsStr, ",")
-					for cidr := range allowedSubnets {
-						trimmedCIDR := strings.TrimSpace(cidr)
-						if trimmedCIDR == "" {
-							continue
-						}
-						_, subnet, err := net.ParseCIDR(trimmedCIDR)
-						if err == nil {
-							if subnet.Contains(ip) {
-								authWouldBeRequired = false // Bypass cancels requirement
-								break                       // Found a match, exit inner loop
-							}
-						} else {
-							// Log CIDR parsing errors
-							if c.apiLogger != nil {
-								c.apiLogger.Warn("Failed to parse CIDR string from AllowSubnetBypass settings",
-									"cidr_string", trimmedCIDR,
-									"error", err.Error(),
-								)
-							} else {
-								// Fallback to standard logger if apiLogger is nil
-								c.logger.Printf("[WARN] Failed to parse CIDR string \"%s\" from AllowSubnetBypass settings: %v", trimmedCIDR, err)
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return authWouldBeRequired
-}
-
-// AuthMiddleware is a method that returns the auth middleware function
-// This is now considered the *fallback* middleware if authMiddlewareFn is nil.
-// It uses the Controller's stored AuthService instance.
-func (c *Controller) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(ctx echo.Context) error {
-		// Use the stored AuthService instance
-		authService := c.AuthService
-
-		if authService == nil {
-			// If service is nil (should only happen if auth wasn't configured properly),
-			// check if auth *would* have been required based on settings and IP bypass.
-			if c.isAuthRequiredWithoutService(ctx) {
-				if c.apiLogger != nil {
-					c.apiLogger.Error("AuthMiddleware called but AuthService is nil, denying access",
-						"path", ctx.Request().URL.Path,
-						"ip", ctx.RealIP(),
-					)
-				}
-				return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal auth configuration error"})
-			}
-
-			// Otherwise, if auth wouldn't have been required anyway, allow access.
-			if c.apiLogger != nil {
-				c.apiLogger.Warn("AuthMiddleware called but AuthService is nil; auth not required, allowing access",
-					"path", ctx.Request().URL.Path,
-					"ip", ctx.RealIP(),
-				)
-			}
-			ctx.Set("isAuthenticated", false)
-			ctx.Set("authMethod", auth.AuthMethodUnknown) // Use defined enum for 'none'
-			return next(ctx)
-		}
-
-		// Skip auth check if auth is not required for this client IP
-		if !authService.IsAuthRequired(ctx) {
-			if c.apiLogger != nil {
-				c.apiLogger.Debug("Authentication not required for this request", "path", ctx.Request().URL.Path, "ip", ctx.RealIP())
-			}
-			ctx.Set("isAuthenticated", false)
-			ctx.Set("authMethod", auth.AuthMethodUnknown) // Use defined enum for 'none'
-			return next(ctx)
-		}
-
-		// Try token authentication first
-		authenticated, tokenErr := c.handleTokenAuth(ctx)
-		if authenticated {
-			// Token auth successful
-			ctx.Set("isAuthenticated", true)
-			// NOTE: Cannot reliably get username from opaque token via current AuthService.
-			// Username will be empty unless the session also exists and contains it.
-			// ctx.Set("username", authService.GetUsername(ctx)) // Removed this line
-			ctx.Set("authMethod", auth.AuthMethodToken) // Store enum directly
-			return next(ctx)
-		}
-
-		// Handle errors from token authentication attempt
-		if tokenErr != nil {
-			switch { // Use switch without true (shorthand)
-			case errors.Is(tokenErr, errAuthServiceNil):
-				// Logged in handleTokenAuth already
-				return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal auth configuration error"})
-			case errors.Is(tokenErr, errMalformedAuthHeader):
-				// Logged in handleTokenAuth already
-				ctx.Response().Header().Set("WWW-Authenticate", `Bearer realm="api"`)
-				return ctx.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid Authorization header"})
-			case errors.Is(tokenErr, errInvalidAuthToken):
-				// Logged in handleTokenAuth already
-				ctx.Response().Header().Set("WWW-Authenticate", `Bearer realm="api", error="invalid_token", error_description="Invalid or expired token"`)
-				return ctx.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid or expired token"})
-			default:
-				// Handle unexpected errors from handleTokenAuth if any arise
-				if c.apiLogger != nil {
-					c.apiLogger.Error("Unexpected error during token authentication", "error", tokenErr)
-				}
-				return ctx.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error during authentication"})
-			}
-		}
-
-		// Token auth not attempted (no header) or failed, try session auth
-		if c.handleSessionAuth(ctx) {
-			ctx.Set("isAuthenticated", true)
-			ctx.Set("username", authService.GetUsername(ctx))
-			ctx.Set("authMethod", auth.AuthMethodBrowserSession) // Use defined enum for session
-			return next(ctx)
-		}
-
-		// Authentication failed completely, handle unauthorized response
-		return c.handleUnauthorized(ctx)
-	}
-}
-
-// getEffectiveAuthMiddleware returns the appropriate authentication middleware function.
-// It prioritizes the configured authMiddlewareFn and falls back to the
-// controller's AuthMiddleware method if the function is not set.
-func (c *Controller) getEffectiveAuthMiddleware() echo.MiddlewareFunc {
-	if c.authMiddlewareFn != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Info("Using configured authMiddlewareFn for route protection")
-		}
-		return c.authMiddlewareFn
-	} else {
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("authMiddlewareFn not configured, using fallback AuthMiddleware method for route protection")
-		}
-		return c.AuthMiddleware // Return the method itself
-	}
-}
-
-// InitializeAPI creates a new API controller and registers all routes
-// It now accepts the OAuth2Server instance directly.
+// InitializeAPI creates a new API controller and registers all routes.
+// Auth middleware and service should be passed via functional options.
 func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string, logger *log.Logger, proc *processor.Processor,
-	oauth2Server *security.OAuth2Server, metrics *observability.Metrics) *Controller { // Added oauth2Server and metrics parameters
+	metrics *observability.Metrics, opts ...Option) *Controller {
 
-	// Create API controller, passing oauth2Server and metrics directly to New
-	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, logger, oauth2Server, metrics)
+	// Create API controller with metrics and functional options
+	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, logger, metrics, opts...)
 	if err != nil {
 		logger.Fatalf("Failed to initialize API: %v", err)
 	}

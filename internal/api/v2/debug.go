@@ -53,7 +53,7 @@ func (c *Controller) initDebugRoutes() {
 	}
 
 	// Debug endpoints require authentication
-	debugGroup := c.Group.Group("/debug", c.getEffectiveAuthMiddleware())
+	debugGroup := c.Group.Group("/debug", c.authMiddleware)
 	
 	debugGroup.POST("/trigger-error", c.DebugTriggerError)
 	debugGroup.POST("/trigger-notification", c.DebugTriggerNotification)

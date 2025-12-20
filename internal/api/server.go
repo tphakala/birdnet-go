@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	"github.com/tphakala/birdnet-go/internal/api/auth"
 	mw "github.com/tphakala/birdnet-go/internal/api/middleware"
 	v2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -52,6 +53,10 @@ type Server struct {
 	processor      *processor.Processor
 	oauth2Server   *security.OAuth2Server
 	metrics        *observability.Metrics
+
+	// Auth components (owned by server, injected into controllers)
+	authService    auth.Service
+	authMiddleware echo.MiddlewareFunc
 
 	// Channels
 	controlChan    chan string
@@ -195,6 +200,9 @@ func New(settings *conf.Settings, opts ...ServerOption) (*Server, error) {
 	s.echo.Server.WriteTimeout = config.WriteTimeout
 	s.echo.Server.IdleTimeout = config.IdleTimeout
 
+	// Initialize auth service and middleware at server level
+	s.initAuth()
+
 	// Setup middleware
 	s.setupMiddleware()
 
@@ -231,6 +239,24 @@ func (s *Server) initLogger() error {
 	s.logCloser = closer
 	s.logger.Printf("Server logging initialized to %s", DefaultLogPath)
 	return nil
+}
+
+// initAuth initializes authentication service and middleware at server level.
+// This is called before setupRoutes to ensure auth is available for route protection.
+func (s *Server) initAuth() {
+	if s.oauth2Server == nil {
+		s.slogger.Warn("OAuth2Server not provided, authentication not configured")
+		return
+	}
+
+	// Create auth service adapter
+	s.authService = auth.NewSecurityAdapter(s.oauth2Server, s.slogger)
+
+	// Create auth middleware
+	authMw := auth.NewMiddleware(s.authService, s.slogger)
+	s.authMiddleware = authMw.Authenticate
+
+	s.slogger.Info("Auth middleware initialized at server level")
 }
 
 // setupMiddleware configures the Echo middleware stack.
@@ -274,12 +300,16 @@ func (s *Server) setupRoutes() error {
 
 	// Initialize SPA handler (routes registered after API controller)
 	s.spaHandler = NewSPAHandler(s.settings)
+	// Set auth service for SPA handler to determine access status
+	if s.authService != nil {
+		s.spaHandler.SetAuthService(s.authService)
+	}
 
 	s.slogger.Info("Static file server initialized",
 		"mode", s.staticServer.DevModeStatus(),
 	)
 
-	// Initialize API v2 controller
+	// Initialize API v2 controller with auth middleware and service injected
 	apiController, err := v2.New(
 		s.echo,
 		s.dataStore,
@@ -288,8 +318,9 @@ func (s *Server) setupRoutes() error {
 		s.sunCalc,
 		s.controlChan,
 		s.logger,
-		s.oauth2Server,
 		s.metrics,
+		v2.WithAuthMiddleware(s.authMiddleware),
+		v2.WithAuthService(s.authService),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to initialize API v2: %w", err)
@@ -547,10 +578,7 @@ func (s *Server) registerSPARoutes() {
 	)
 }
 
-// getAuthMiddleware returns the authentication middleware from the API controller.
+// getAuthMiddleware returns the authentication middleware owned by the server.
 func (s *Server) getAuthMiddleware() echo.MiddlewareFunc {
-	if s.apiController != nil {
-		return s.apiController.AuthMiddleware
-	}
-	return nil
+	return s.authMiddleware
 }

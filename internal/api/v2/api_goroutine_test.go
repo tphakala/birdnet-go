@@ -55,7 +55,7 @@ func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
 	mockMetrics, _ := observability.NewMetrics()
 
 	// Create controller WITH route initialization to start background goroutines
-	controller, err := NewWithOptions(e, mockDS, settings, nil, nil, controlChan, nil, nil, mockMetrics, true)
+	controller, err := NewWithOptions(e, mockDS, settings, nil, nil, controlChan, nil, mockMetrics, true)
 	require.NoError(t, err)
 
 	// Wait for goroutines to start using the synchronization channel

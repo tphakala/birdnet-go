@@ -99,7 +99,7 @@ type StreamSummaryResponse struct {
 // initStreamHealthRoutes registers all stream health monitoring endpoints
 func (c *Controller) initStreamHealthRoutes() {
 	// All health endpoints require authentication as they may contain sensitive data
-	authMiddleware := c.getEffectiveAuthMiddleware()
+	authMiddleware := c.authMiddleware
 
 	// REST endpoints
 	c.Group.GET("/streams/health", c.GetAllStreamsHealth, authMiddleware)

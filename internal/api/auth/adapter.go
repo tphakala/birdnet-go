@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"log/slog"
 	"reflect"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth/gothic"
@@ -45,7 +46,7 @@ func (a *SecurityAdapter) IsAuthRequired(c echo.Context) bool {
 // It prioritizes the username stored in the context by the authentication middleware.
 func (a *SecurityAdapter) GetUsername(c echo.Context) string {
 	// 1. Check context first (set by middleware after successful auth)
-	if usernameCtx := c.Get("username"); usernameCtx != nil {
+	if usernameCtx := c.Get(CtxKeyUsername); usernameCtx != nil {
 		if username, ok := usernameCtx.(string); ok && username != "" {
 			return username
 		}
@@ -62,9 +63,10 @@ func (a *SecurityAdapter) GetUsername(c echo.Context) string {
 		return userId
 	}
 
-	// No username found in context or session
+	// No username found in context or session - this is expected for LAN bypass
+	// where users are authenticated by IP without going through login flow
 	if a.logger != nil {
-		a.logger.Warn("Could not retrieve username from context or session", "path", c.Request().URL.Path, "ip", c.RealIP())
+		a.logger.Debug("No username in context or session (expected for subnet bypass)", "path", c.Request().URL.Path, "ip", c.RealIP())
 	}
 	return ""
 }
@@ -73,7 +75,7 @@ func (a *SecurityAdapter) GetUsername(c echo.Context) string {
 // It prioritizes context values set by the middleware if available.
 func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 	// 1. Check context first (set by middleware)
-	if authMethodCtx := c.Get("authMethod"); authMethodCtx != nil {
+	if authMethodCtx := c.Get(CtxKeyAuthMethod); authMethodCtx != nil {
 		// Check if it's the expected AuthMethod type
 		if method, ok := authMethodCtx.(AuthMethod); ok {
 			// Return method determined by middleware (e.g., Token, Session)
@@ -91,7 +93,7 @@ func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 
 		// If type assertion or conversion fails, log it but fall through to other checks
 		if a.logger != nil {
-			a.logger.Warn("Context value 'authMethod' has unexpected type or invalid string value", slog.Any("type", reflect.TypeOf(authMethodCtx)), "value", authMethodCtx)
+			a.logger.Warn("Context value for auth method has unexpected type or invalid string value", slog.Any("type", reflect.TypeOf(authMethodCtx)), "value", authMethodCtx)
 		}
 	}
 
@@ -158,89 +160,110 @@ func (a *SecurityAdapter) ValidateToken(token string) error {
 //
 // Returns auth code on success, error on failure.
 func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password string) (string, error) {
-	// For basic auth, check against configured ClientID and Password
-	storedPassword := a.OAuth2Server.Settings.Security.BasicAuth.Password
-	storedClientID := a.OAuth2Server.Settings.Security.BasicAuth.ClientID // Use ClientID as the username
-
-	// Log basic auth attempt
 	security.LogInfo("Basic authentication login attempt", "username", username)
 
-	// Debug logging to diagnose auth issues
-	if a.logger != nil {
-		a.logger.Debug("BasicAuth configuration check",
-			"provided_username", username,
-			"configured_clientid", storedClientID,
-			"clientid_empty", storedClientID == "",
-			"clientid_match", username == storedClientID)
+	if err := a.validateBasicAuthEnabled(username); err != nil {
+		return "", err
 	}
 
-	// Skip if basic auth is not enabled
+	storedPassword := a.OAuth2Server.Settings.Security.BasicAuth.Password
+	storedClientID := a.OAuth2Server.Settings.Security.BasicAuth.ClientID
+
+	a.logDebugAuthConfig(username, storedClientID)
+
+	userMatch := a.validateUsername(username, storedClientID)
+	passMatch := a.validatePassword(password, storedPassword)
+
+	if !userMatch || !passMatch {
+		return "", a.handleAuthFailure(userMatch, username)
+	}
+
+	return a.generateAuthCodeOnSuccess(username)
+}
+
+// validateBasicAuthEnabled checks if basic auth is enabled.
+func (a *SecurityAdapter) validateBasicAuthEnabled(username string) error {
 	if !a.OAuth2Server.Settings.Security.BasicAuth.Enabled {
-		if a.logger != nil {
-			a.logger.Debug("Basic auth is not enabled")
-		}
+		a.logDebug("Basic auth is not enabled")
 		security.LogWarn("Basic authentication failed: Basic auth not enabled", "username", username)
-		return "", ErrBasicAuthDisabled // Return the specific error for disabled basic auth
+		return ErrBasicAuthDisabled
+	}
+	return nil
+}
+
+// logDebugAuthConfig logs debug information about auth configuration.
+func (a *SecurityAdapter) logDebugAuthConfig(username, storedClientID string) {
+	a.logDebug("BasicAuth configuration check",
+		"provided_username", username,
+		"configured_clientid", storedClientID,
+		"clientid_empty", storedClientID == "",
+		"clientid_match", username == storedClientID)
+}
+
+// validateUsername checks if the provided username matches the stored ClientID.
+func (a *SecurityAdapter) validateUsername(username, storedClientID string) bool {
+	if storedClientID == "" {
+		a.logDebug("ClientID is empty, skipping username validation (V1 compatible mode)")
+		return true
 	}
 
-	// Hash password for comparison (always required)
+	usernameHash := sha256.Sum256([]byte(username))
+	storedClientIDHash := sha256.Sum256([]byte(storedClientID))
+	return subtle.ConstantTimeCompare(usernameHash[:], storedClientIDHash[:]) == 1
+}
+
+// validatePassword checks if the provided password matches the stored password.
+func (a *SecurityAdapter) validatePassword(password, storedPassword string) bool {
 	passwordHash := sha256.Sum256([]byte(password))
 	storedPasswordHash := sha256.Sum256([]byte(storedPassword))
+	return subtle.ConstantTimeCompare(passwordHash[:], storedPasswordHash[:]) == 1
+}
 
-	// Constant-time comparison on password hash
-	passMatch := subtle.ConstantTimeCompare(passwordHash[:], storedPasswordHash[:]) == 1
-
-	// Username validation: only check if ClientID is configured (non-empty)
-	// This maintains backwards compatibility with V1 behavior where only password was checked
-	// See Issue #1234: empty ClientID caused new UI login to fail
-	var userMatch bool
-	if storedClientID == "" {
-		// ClientID not configured - skip username check (V1 backwards compatible behavior)
-		userMatch = true
-		if a.logger != nil {
-			a.logger.Debug("ClientID is empty, skipping username validation (V1 compatible mode)")
-		}
-	} else {
-		// ClientID configured - require username to match
-		usernameHash := sha256.Sum256([]byte(username))
-		storedClientIDHash := sha256.Sum256([]byte(storedClientID))
-		userMatch = subtle.ConstantTimeCompare(usernameHash[:], storedClientIDHash[:]) == 1
-	}
-
-	credentialsValid := userMatch && passMatch
-
-	if credentialsValid {
-		if a.logger != nil {
-			a.logger.Info("Credentials validated successfully", "username", username)
-		}
-
-		// Generate auth code for OAuth callback (V1 pattern - no session storage)
-		authCode, err := a.OAuth2Server.GenerateAuthCode()
-		if err != nil {
-			if a.logger != nil {
-				a.logger.Error("Failed to generate auth code during basic auth", "error", err.Error())
-			}
-			security.LogError("Basic authentication failed: Internal error", "username", username, "error", "auth code generation failed")
-			// Treat internal errors during login also as invalid credentials from user's perspective
-			return "", ErrInvalidCredentials
-		}
-
-		if a.logger != nil {
-			a.logger.Info("Auth code generated successfully", "username", username, "auth_code_length", len(authCode))
-		}
-
-		// Log successful authentication
-		security.LogInfo("Basic authentication successful", "username", username)
-		return authCode, nil // Return auth code directly (V1 pattern)
-	}
-
-	// Log failed authentication attempt
+// handleAuthFailure logs the appropriate failure message and returns an error.
+func (a *SecurityAdapter) handleAuthFailure(userMatch bool, username string) error {
 	if !userMatch {
 		security.LogWarn("Basic authentication failed: Invalid username", "username", username)
 	} else {
 		security.LogWarn("Basic authentication failed: Invalid password", "username", username)
 	}
-	return "", ErrInvalidCredentials // Failure
+	return ErrInvalidCredentials
+}
+
+// generateAuthCodeOnSuccess generates an auth code after successful authentication.
+func (a *SecurityAdapter) generateAuthCodeOnSuccess(username string) (string, error) {
+	a.logInfo("Credentials validated successfully", "username", username)
+
+	authCode, err := a.OAuth2Server.GenerateAuthCode()
+	if err != nil {
+		a.logError("Failed to generate auth code during basic auth", "error", err.Error())
+		security.LogError("Basic authentication failed: Internal error", "username", username, "error", "auth code generation failed")
+		return "", ErrAuthCodeGeneration
+	}
+
+	a.logInfo("Auth code generated successfully", "username", username, "auth_code_length", len(authCode))
+	security.LogInfo("Basic authentication successful", "username", username)
+	return authCode, nil
+}
+
+// logDebug logs a debug message if logger is available.
+func (a *SecurityAdapter) logDebug(msg string, args ...any) {
+	if a.logger != nil {
+		a.logger.Debug(msg, args...)
+	}
+}
+
+// logInfo logs an info message if logger is available.
+func (a *SecurityAdapter) logInfo(msg string, args ...any) {
+	if a.logger != nil {
+		a.logger.Info(msg, args...)
+	}
+}
+
+// logError logs an error message if logger is available.
+func (a *SecurityAdapter) logError(msg string, args ...any) {
+	if a.logger != nil {
+		a.logger.Error(msg, args...)
+	}
 }
 
 // Logout invalidates the current session/token
@@ -289,4 +312,27 @@ func (a *SecurityAdapter) EstablishSession(c echo.Context, accessToken string) e
 		a.logger.Info("Successfully stored access token in new session")
 	}
 	return nil
+}
+
+// IsAuthenticated checks if a request is authenticated via any supported method.
+// Returns true if auth is bypassed (not required) or if token/session auth succeeds.
+// This centralizes authentication checking logic to avoid duplication across handlers.
+func (a *SecurityAdapter) IsAuthenticated(c echo.Context) bool {
+	// Check if auth is required for this client (e.g., local subnet bypass)
+	if !a.IsAuthRequired(c) {
+		return true // Bypassed auth is treated as authenticated for data access
+	}
+
+	// Try token auth from Authorization header
+	if authHeader := c.Request().Header.Get("Authorization"); authHeader != "" {
+		parts := strings.Fields(authHeader)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
+			if a.ValidateToken(parts[1]) == nil {
+				return true
+			}
+		}
+	}
+
+	// Try session auth
+	return a.CheckAccess(c) == nil
 }
