@@ -79,9 +79,10 @@ func DefaultConfig() *Config {
 func ConfigFromSettings(settings *conf.Settings) *Config {
 	cfg := DefaultConfig()
 
-	// Server binding
+	// Server binding - use port only, bind to all interfaces
+	// Note: Security.Host is for external URLs (TLS certs, OAuth), not for socket binding
 	cfg.Port = settings.WebServer.Port
-	cfg.Host = settings.Security.Host
+	cfg.Host = "" // Bind to all interfaces (0.0.0.0)
 
 	// TLS settings
 	cfg.AutoTLS = settings.Security.AutoTLS
