@@ -58,6 +58,7 @@ type Server struct {
 
 	// Static file serving
 	staticServer *StaticFileServer
+	spaHandler   *SPAHandler
 
 	// Lifecycle management
 	ctx       context.Context
@@ -260,6 +261,9 @@ func (s *Server) setupRoutes() error {
 	s.staticServer = NewStaticFileServer(s.slogger)
 	s.staticServer.RegisterRoutes(s.echo)
 
+	// Initialize SPA handler (routes registered after API controller)
+	s.spaHandler = NewSPAHandler(s.settings)
+
 	s.slogger.Info("Static file server initialized",
 		"mode", s.staticServer.DevModeStatus(),
 	)
@@ -293,6 +297,9 @@ func (s *Server) setupRoutes() error {
 	if s.audioLevelChan != nil {
 		s.apiController.SetAudioLevelChan(s.audioLevelChan)
 	}
+
+	// Register SPA routes (after API controller for auth middleware access)
+	s.registerSPARoutes()
 
 	s.slogger.Info("Routes initialized",
 		"api_version", "v2",
@@ -435,4 +442,68 @@ func (s *Server) IsDevMode() bool {
 		return s.staticServer.IsDevMode()
 	}
 	return false
+}
+
+// registerSPARoutes registers all frontend SPA routes.
+// These routes serve the HTML shell that loads the Svelte application.
+func (s *Server) registerSPARoutes() {
+	// Public routes (no authentication required)
+	publicRoutes := []string{
+		"/",
+		"/login",
+		"/ui",
+		"/ui/",
+		"/ui/dashboard",
+		"/ui/detections",
+		"/ui/notifications",
+		"/ui/analytics",
+		"/ui/analytics/species",
+		"/ui/analytics/advanced",
+		"/ui/search",
+		"/ui/about",
+	}
+
+	for _, route := range publicRoutes {
+		s.echo.GET(route, s.spaHandler.ServeApp)
+	}
+
+	// Protected routes (authentication required)
+	// These will be protected by the API v2 auth middleware
+	protectedRoutes := []string{
+		"/ui/system",
+		"/ui/settings",
+		"/ui/settings/main",
+		"/ui/settings/audio",
+		"/ui/settings/detectionfilters",
+		"/ui/settings/integrations",
+		"/ui/settings/notifications",
+		"/ui/settings/security",
+		"/ui/settings/species",
+		"/ui/settings/support",
+		"/ui/settings/userinterface",
+	}
+
+	// Get the auth middleware from API controller if available
+	authMiddleware := s.getAuthMiddleware()
+
+	for _, route := range protectedRoutes {
+		if authMiddleware != nil {
+			s.echo.GET(route, s.spaHandler.ServeApp, authMiddleware)
+		} else {
+			s.echo.GET(route, s.spaHandler.ServeApp)
+		}
+	}
+
+	s.slogger.Debug("SPA routes registered",
+		"public_routes", len(publicRoutes),
+		"protected_routes", len(protectedRoutes),
+	)
+}
+
+// getAuthMiddleware returns the authentication middleware from the API controller.
+func (s *Server) getAuthMiddleware() echo.MiddlewareFunc {
+	if s.apiController != nil {
+		return s.apiController.AuthMiddleware
+	}
+	return nil
 }
