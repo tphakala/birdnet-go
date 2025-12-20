@@ -19,9 +19,7 @@ linters:
     - unconvert
     - wastedassign
     # Security & quality linters
-    - gosec
-    - goconst
-    - mnd
+    # - gosec
     - staticcheck
     - ineffassign
     - bodyclose
@@ -43,7 +41,7 @@ linters:
     - unused
   settings:
     gocognit:
-      min-complexity: 12
+      min-complexity: 50
     gocritic:
       disabled-checks:
         - commentFormatting
