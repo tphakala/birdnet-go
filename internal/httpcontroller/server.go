@@ -362,6 +362,12 @@ func (s *Server) Shutdown() error {
 	return s.Echo.Close()
 }
 
+// APIController returns the v2 API controller for SSE broadcasting and other features.
+// This implements the httpserver.Server interface.
+func (s *Server) APIController() *api.Controller {
+	return s.APIV2
+}
+
 // LogError logs an error with structured information
 func (s *Server) LogError(c echo.Context, err error, message string) {
 	// Continue using the old logger (for backward compatibility)

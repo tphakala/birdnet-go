@@ -16,6 +16,7 @@ import (
 
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	"github.com/tphakala/birdnet-go/internal/api"
 	"github.com/tphakala/birdnet-go/internal/audiocore/adapter"
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
@@ -25,6 +26,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
+	"github.com/tphakala/birdnet-go/internal/httpserver"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/monitor"
@@ -236,8 +238,31 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Initialize system monitor if monitoring is enabled
 	systemMonitor := initializeSystemMonitor(settings)
 
-	// Initialize and start the HTTP server
-	httpServer := httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan, proc, metrics)
+	// Initialize and start the HTTP server based on configuration
+	var httpServer httpserver.Server
+	var legacyServer *httpcontroller.Server
+	if settings.WebServer.UseLegacyServer {
+		// Use legacy httpcontroller server
+		log.Println("📡 Using legacy HTTP server (httpcontroller)")
+		legacyServer = httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan, proc, metrics)
+		httpServer = legacyServer
+	} else {
+		// Use new api server
+		log.Println("📡 Using new HTTP server (api)")
+		apiServer, err := api.New(
+			settings,
+			api.WithDataStore(dataStore),
+			api.WithBirdImageCache(birdImageCache),
+			api.WithProcessor(proc),
+			api.WithMetrics(metrics),
+			api.WithControlChannel(controlChan),
+			api.WithAudioLevelChannel(audioLevelChan),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create new HTTP server: %w", err)
+		}
+		httpServer = apiServer
+	}
 	httpServer.Start()
 
 	// Initialize the wait group to wait for all goroutines to finish
@@ -306,7 +331,8 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// startTelemetryEndpoint(&wg, settings, metrics, quitChan) // Moved to control monitor
 
 	// start control monitor for hot reloads
-	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, httpServer, metrics)
+	// Note: legacyServer is nil when using the new api server
+	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, legacyServer, metrics)
 
 	// start shutdown signal monitor
 	monitorShutdownSignals(quitChan)

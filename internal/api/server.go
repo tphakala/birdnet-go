@@ -323,13 +323,32 @@ func (s *Server) healthCheck(c echo.Context) error {
 	})
 }
 
-// Start begins serving HTTP requests.
-// It blocks until the server is shut down.
-func (s *Server) Start() error {
+// Start begins serving HTTP requests in a background goroutine.
+// This implements the httpserver.Server interface and returns immediately.
+// Use Shutdown() to stop the server.
+func (s *Server) Start() {
+	go func() {
+		if err := s.startBlocking(); err != nil {
+			s.slogger.Error("Server error", "error", err)
+		}
+	}()
+
+	addr := s.config.Address()
+	switch {
+	case s.config.AutoTLS:
+		s.logger.Printf("🌐 HTTPS server starting with AutoTLS on %s", addr)
+	case s.config.TLSEnabled:
+		s.logger.Printf("🌐 HTTPS server starting on %s", addr)
+	default:
+		s.logger.Printf("🌐 HTTP server starting on %s", addr)
+	}
+}
+
+// startBlocking begins serving HTTP requests and blocks until the server is shut down.
+func (s *Server) startBlocking() error {
 	addr := s.config.Address()
 
 	s.slogger.Info("Starting HTTP server", "address", addr)
-	s.logger.Printf("🌐 HTTP server starting on %s", addr)
 
 	var err error
 	switch {
@@ -359,11 +378,7 @@ func (s *Server) Start() error {
 // StartWithGracefulShutdown starts the server and handles graceful shutdown on SIGINT/SIGTERM.
 func (s *Server) StartWithGracefulShutdown() error {
 	// Start server in goroutine
-	go func() {
-		if err := s.Start(); err != nil {
-			s.slogger.Error("Server error", "error", err)
-		}
-	}()
+	s.Start()
 
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
@@ -412,15 +427,16 @@ func (s *Server) Shutdown() error {
 	return nil
 }
 
+// APIController returns the v2 API controller for SSE broadcasting and other features.
+// This implements the httpserver.Server interface.
+func (s *Server) APIController() *v2.Controller {
+	return s.apiController
+}
+
 // Echo returns the underlying Echo instance.
 // This is useful for testing or advanced configuration.
 func (s *Server) Echo() *echo.Echo {
 	return s.echo
-}
-
-// APIController returns the API v2 controller.
-func (s *Server) APIController() *v2.Controller {
-	return s.apiController
 }
 
 // SetLogLevel dynamically changes the logging level.
