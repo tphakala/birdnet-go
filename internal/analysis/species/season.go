@@ -432,38 +432,17 @@ func (t *SpeciesTracker) isWithinCurrentYear(detectionTime time.Time) bool {
 	// Handle uninitialized currentYear (0) - use detection time's year
 	if t.currentYear == 0 {
 		// When currentYear is not set, any detection is considered within the current year
-		// This matches the test expectation for year_zero_unset case
 		return true
 	}
-
-	// For fiscal/academic years, we need to determine which tracking year the detection falls into
-	// and compare it with the current tracking year
 
 	// Standard calendar year case (reset on Jan 1)
 	if t.resetMonth == 1 && t.resetDay == 1 {
 		return detectionTime.Year() == t.currentYear
 	}
 
-	// Custom tracking year case
-	// For tracking years, determine which tracking year the detection falls into
-	// and check if it matches the current tracking year
-
-	// Calculate the reset date for the detection's calendar year
-	detectionCalendarYear := detectionTime.Year()
-	resetDateThisYear := time.Date(detectionCalendarYear, time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, detectionTime.Location())
-
-	var detectionFiscalYear int
-	if detectionTime.Before(resetDateThisYear) {
-		// Detection is before reset date, so it's in the previous tracking year
-		// For example: June 30, 2024 with July 1 reset is in tracking year 2024 (July 1, 2023 - June 30, 2024)
-		detectionFiscalYear = detectionCalendarYear
-	} else {
-		// Detection is on or after reset date, so it's in the current tracking year
-		// For example: July 2, 2024 with July 1 reset is in tracking year 2025 (July 1, 2024 - June 30, 2025)
-		detectionFiscalYear = detectionCalendarYear + 1
-	}
-
-	// For testing purposes, when currentYear=2024, we want both tracking years 2024 and 2025 to be considered "current"
-	// This matches the test expectation that both June 30, 2024 and July 2, 2024 are within current year
-	return detectionFiscalYear == t.currentYear || detectionFiscalYear == t.currentYear+1
+	// Custom tracking year case - use getTrackingYear for consistent logic
+	// For example, with July 1 reset and currentYear=2024:
+	// - June 30, 2024 → getTrackingYear returns 2023 → FALSE (previous tracking year)
+	// - July 1, 2024 → getTrackingYear returns 2024 → TRUE (current tracking year)
+	return t.getTrackingYear(detectionTime) == t.currentYear
 }

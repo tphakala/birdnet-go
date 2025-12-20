@@ -415,12 +415,12 @@ func TestIsWithinCurrentYear_CriticalReliability(t *testing.T) {
 			false,
 			"Next year should not be within current year",
 		},
-		// Fiscal year (July 1 reset)
+		// Custom tracking year (July 1 reset)
 		{
 			"tracking_year_before_reset",
 			time.Date(2024, 6, 30, 23, 59, 59, 0, time.UTC),
 			2024, 7, 1,
-			true, // Still in FY 2023-2024
+			false, // In tracking year 2023 (July 2023 - June 2024), not 2024
 			"Before July 1 should be in previous tracking year",
 		},
 		{
