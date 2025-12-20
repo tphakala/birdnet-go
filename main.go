@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/cmd"
 	"github.com/tphakala/birdnet-go/internal/analysis"
+	"github.com/tphakala/birdnet-go/internal/api"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -77,10 +78,11 @@ func mainWithExitCode() int {
 		defer pprof.StopCPUProfile()
 	}
 
-	// publish the embedded assets and views directories to controller package
+	// publish the embedded assets and views directories to controller packages
 	httpcontroller.AssetsFs = assetsFs
 	httpcontroller.ViewsFs = viewsFs
 	httpcontroller.ImageDataFs = imageDataFs
+	api.AssetsFs = assetsFs // Also set for new API server
 
 	// Initialize the image provider registry
 	imageProviderRegistry = imageprovider.NewImageProviderRegistry()
