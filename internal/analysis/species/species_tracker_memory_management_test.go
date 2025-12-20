@@ -5,7 +5,6 @@ package species
 
 import (
 	"fmt"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -19,21 +18,100 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
+// cacheTestCase defines a test case for cache cleanup scenarios
+type cacheTestCase struct {
+	name                 string
+	initialCacheSize     int
+	expiredEntries       int
+	validEntries         int
+	forceCleanup         bool
+	expectedRemainingMin int
+	expectedRemainingMax int
+	description          string
+}
+
+// createMockTrackerForCache creates a mock tracker for cache testing
+func createMockTrackerForCache(t *testing.T) *SpeciesTracker {
+	t.Helper()
+	ds := mocks.NewMockInterface(t)
+	ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return([]datastore.NewSpeciesData{}, nil).Maybe()
+
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: 14,
+		SyncIntervalMinutes:  60,
+	}
+	return NewTrackerFromSettings(ds, settings)
+}
+
+// populateCacheEntries adds expired and valid entries to the tracker's cache
+func populateCacheEntries(tracker *SpeciesTracker, expiredCount, validCount int, currentTime time.Time) {
+	expiredTime := currentTime.Add(-2 * tracker.cacheTTL)
+	validTime := currentTime.Add(-tracker.cacheTTL / 2)
+
+	for i := range expiredCount {
+		speciesName := fmt.Sprintf("Expired_Species_%04d", i)
+		tracker.statusCache[speciesName] = cachedSpeciesStatus{
+			status:    SpeciesStatus{FirstSeenTime: expiredTime, IsNew: false, DaysSinceFirst: 30, LastUpdatedTime: expiredTime},
+			timestamp: expiredTime,
+		}
+	}
+
+	for i := range validCount {
+		speciesName := fmt.Sprintf("Valid_Species_%04d", i)
+		tracker.statusCache[speciesName] = cachedSpeciesStatus{
+			status:    SpeciesStatus{FirstSeenTime: validTime, IsNew: true, DaysSinceFirst: 5, LastUpdatedTime: validTime},
+			timestamp: validTime,
+		}
+	}
+}
+
+// countValidCacheEntries counts entries with "Valid" prefix in cache
+func countValidCacheEntries(cache map[string]cachedSpeciesStatus) int {
+	count := 0
+	for name := range cache {
+		if len(name) >= 5 && name[:5] == "Valid" {
+			count++
+		}
+	}
+	return count
+}
+
+// runCacheCleanup executes cache cleanup and returns size before/after
+func runCacheCleanup(tracker *SpeciesTracker, currentTime time.Time, force bool) (before, after int) {
+	tracker.mu.Lock()
+	before = len(tracker.statusCache)
+	tracker.cleanupExpiredCacheWithForce(currentTime, force)
+	after = len(tracker.statusCache)
+	tracker.mu.Unlock()
+	return
+}
+
+// verifyCacheValidEntries checks that valid entries were preserved when not over limit
+func verifyCacheValidEntries(t *testing.T, tracker *SpeciesTracker, tt *cacheTestCase) {
+	t.Helper()
+	finalSize := len(tracker.statusCache)
+	if !tt.forceCleanup || tt.validEntries == 0 || finalSize == 0 {
+		return
+	}
+	validCount := countValidCacheEntries(tracker.statusCache)
+	if tt.initialCacheSize <= 1000 {
+		assert.Equal(t, tt.validEntries, validCount,
+			"All valid entries should be preserved when not over limit")
+	}
+}
+
 // TestCleanupExpiredCache_CriticalReliability tests cache cleanup for memory management
 // CRITICAL: Prevents OOM crashes by managing cache size
 func TestCleanupExpiredCache_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name                 string
-		initialCacheSize     int
-		expiredEntries       int
-		validEntries         int
-		forceCleanup         bool
-		expectedRemainingMin int
-		expectedRemainingMax int
-		description          string
-	}{
+	tests := []cacheTestCase{
 		{
 			"all_expired_entries",
 			100, 100, 0,
@@ -96,117 +174,31 @@ func TestCleanupExpiredCache_CriticalReliability(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Testing cache cleanup scenario: %s", tt.description)
 
-			// Create tracker
-			ds := mocks.NewMockInterface(t)
-			ds.On("GetNewSpeciesDetections", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]datastore.NewSpeciesData{}, nil).Maybe()
-			// BG-17: InitFromDatabase now loads notification history
-			ds.On("GetActiveNotificationHistory", mock.AnythingOfType("time.Time")).
-				Return([]datastore.NotificationHistory{}, nil).Maybe()
-			ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-				Return([]datastore.NewSpeciesData{}, nil).Maybe()
-
-			settings := &conf.SpeciesTrackingSettings{
-				Enabled:              true,
-				NewSpeciesWindowDays: 14,
-				SyncIntervalMinutes:  60,
-			}
-
-			tracker := NewTrackerFromSettings(ds, settings)
+			tracker := createMockTrackerForCache(t)
 			require.NotNil(t, tracker)
 			require.NoError(t, tracker.InitFromDatabase())
 
-			// Set up cache with test data
 			currentTime := time.Now()
-			expiredTime := currentTime.Add(-2 * tracker.cacheTTL) // Well past TTL
-			validTime := currentTime.Add(-tracker.cacheTTL / 2)   // Still within TTL
+			populateCacheEntries(tracker, tt.expiredEntries, tt.validEntries, currentTime)
 
-			// Add expired entries
-			for i := 0; i < tt.expiredEntries; i++ {
-				speciesName := fmt.Sprintf("Expired_Species_%04d", i)
-				tracker.statusCache[speciesName] = cachedSpeciesStatus{
-					status: SpeciesStatus{
-						FirstSeenTime:   expiredTime,
-						IsNew:           false,
-						DaysSinceFirst:  30,
-						LastUpdatedTime: expiredTime,
-					},
-					timestamp: expiredTime,
-				}
-			}
-
-			// Add valid entries
-			for i := 0; i < tt.validEntries; i++ {
-				speciesName := fmt.Sprintf("Valid_Species_%04d", i)
-				tracker.statusCache[speciesName] = cachedSpeciesStatus{
-					status: SpeciesStatus{
-						FirstSeenTime:   validTime,
-						IsNew:           true,
-						DaysSinceFirst:  5,
-						LastUpdatedTime: validTime,
-					},
-					timestamp: validTime,
-				}
-			}
-
-			// If not forcing, set last cleanup to recent time
 			if !tt.forceCleanup {
 				tracker.lastCacheCleanup = currentTime.Add(-5 * time.Second)
 			}
 
-			// Measure memory before cleanup
-			runtime.GC()
-			var m1 runtime.MemStats
-			runtime.ReadMemStats(&m1)
-			beforeMemory := m1.Alloc
+			initialSize, finalSize := runCacheCleanup(tracker, currentTime, tt.forceCleanup)
 
-			// Test cleanup - need to hold lock since this is an internal function
-			tracker.mu.Lock()
-			initialSize := len(tracker.statusCache)
-			tracker.cleanupExpiredCacheWithForce(currentTime, tt.forceCleanup)
-			finalSize := len(tracker.statusCache)
-			tracker.mu.Unlock()
-
-			// Measure memory after cleanup
-			runtime.GC()
-			var m2 runtime.MemStats
-			runtime.ReadMemStats(&m2)
-			afterMemory := m2.Alloc
-
-			// Verify results
+			// Verify cache size is within expected range
 			assert.GreaterOrEqual(t, finalSize, tt.expectedRemainingMin,
 				"Cache size should be at least %d", tt.expectedRemainingMin)
 			assert.LessOrEqual(t, finalSize, tt.expectedRemainingMax,
 				"Cache size should be at most %d", tt.expectedRemainingMax)
 
-			// Verify no valid entries were incorrectly removed
-			if tt.forceCleanup && tt.validEntries > 0 && finalSize > 0 {
-				// Check that at least some valid entries remain
-				validCount := 0
-				for name := range tracker.statusCache {
-					if name[:5] == "Valid" {
-						validCount++
-					}
-				}
-
-				if tt.initialCacheSize <= 1000 { // If not triggering LRU
-					assert.Equal(t, tt.validEntries, validCount,
-						"All valid entries should be preserved when not over limit")
-				}
-			}
+			// Verify valid entries preserved when not over limit
+			verifyCacheValidEntries(t, tracker, &tt)
 
 			t.Logf("✓ Cache cleanup: %d -> %d entries (removed %d)",
 				initialSize, finalSize, initialSize-finalSize)
 
-			if tt.initialCacheSize > 0 {
-				memoryReduction := int64(0)
-				if beforeMemory > afterMemory {
-					memoryReduction = int64(beforeMemory - afterMemory)
-				}
-				t.Logf("✓ Memory impact: ~%d KB freed", memoryReduction/1024)
-			}
-
-			// Verify cleanup timestamp updated if cleanup occurred
 			if tt.forceCleanup {
 				assert.WithinDuration(t, currentTime, tracker.lastCacheCleanup, time.Second,
 					"Cleanup timestamp should be updated")
@@ -301,6 +293,7 @@ func TestCacheLRUEviction_CriticalReliability(t *testing.T) {
 
 // TestBuildSpeciesStatusWithBuffer_CriticalReliability tests status building with buffer optimization
 // CRITICAL: Core business logic that affects all status calculations
+//nolint:gocognit // Table-driven test for status buffer operations
 func TestBuildSpeciesStatusWithBuffer_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
@@ -485,6 +478,7 @@ func TestBuildSpeciesStatusWithBuffer_CriticalReliability(t *testing.T) {
 
 // TestConcurrentCacheOperations_CriticalReliability tests thread safety of cache operations
 // CRITICAL: Prevents race conditions and data corruption
+//nolint:gocognit // Concurrency test with multiple goroutines requires complex coordination
 func TestConcurrentCacheOperations_CriticalReliability(t *testing.T) {
 	t.Parallel()
 

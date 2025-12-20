@@ -21,6 +21,7 @@ import (
 
 // TestRaceConditionInTimeCalculation demonstrates a race condition in CheckAndUpdateSpecies
 // CRITICAL BUG: Under high concurrency, time calculations return negative values
+//nolint:gocognit // Race condition test requires complex concurrent verification
 func TestRaceConditionInTimeCalculation(t *testing.T) {
 	t.Parallel()
 

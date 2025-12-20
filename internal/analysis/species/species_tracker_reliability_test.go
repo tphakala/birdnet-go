@@ -5,7 +5,7 @@ package species
 
 import (
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -144,13 +144,14 @@ func executeConcurrentOperations(tracker *SpeciesTracker, species []string,
 func runGoroutineOperations(tracker *SpeciesTracker, species []string,
 	operationsPerGR, grID int, totalOps, successCount, errorCount *int64) {
 
-	rnd := rand.New(rand.NewSource(time.Now().UnixNano() + int64(grID)))
+	seed := uint64(time.Now().UnixNano()) + uint64(grID) //nolint:gosec // UnixNano is always positive for current time
+	rnd := rand.New(rand.NewPCG(seed, seed))            //nolint:gosec // Cryptographic randomness not needed for tests
 
 	for range operationsPerGR {
 		atomic.AddInt64(totalOps, 1)
 
-		speciesName := species[rnd.Intn(len(species))]
-		detectionTime := time.Now().Add(-time.Duration(rnd.Intn(30*24)) * time.Hour)
+		speciesName := species[rnd.IntN(len(species))]
+		detectionTime := time.Now().Add(-time.Duration(rnd.IntN(30*24)) * time.Hour)
 
 		performRandomOperation(tracker, species, speciesName, detectionTime, rnd,
 			successCount, errorCount)
@@ -162,7 +163,7 @@ func performRandomOperation(tracker *SpeciesTracker, species []string,
 	speciesName string, detectionTime time.Time, rnd *rand.Rand,
 	successCount, errorCount *int64) {
 
-	switch rnd.Intn(4) {
+	switch rnd.IntN(4) {
 	case 0: // CheckAndUpdateSpecies
 		isNew, days := tracker.CheckAndUpdateSpecies(speciesName, detectionTime)
 		if days >= 0 {
@@ -181,7 +182,7 @@ func performRandomOperation(tracker *SpeciesTracker, species []string,
 		}
 
 	case 2: // GetBatchSpeciesStatus
-		batchSpecies := species[rnd.Intn(minInt(5, len(species))):]
+		batchSpecies := species[rnd.IntN(minInt(5, len(species))):]
 		if len(batchSpecies) > 3 {
 			batchSpecies = batchSpecies[:3]
 		}
@@ -256,6 +257,7 @@ func validateSystemState(t *testing.T, maxSpeciesCount int) {
 
 // TestDatabaseFailureRecovery tests how the tracker handles database failures
 // Critical for data integrity and system stability
+//nolint:gocognit // Table-driven test for database failure recovery scenarios
 func TestDatabaseFailureRecovery(t *testing.T) {
 	t.Parallel()
 

@@ -305,6 +305,7 @@ func TestLoadYearlyDataFromDatabase_CriticalReliability(t *testing.T) {
 
 // TestSyncIfNeeded_CriticalReliability tests database synchronization reliability
 // CRITICAL: Keeps tracker and database consistent - failures cause data loss
+//nolint:gocognit // Table-driven test for database sync scenarios
 func TestSyncIfNeeded_CriticalReliability(t *testing.T) {
 	t.Parallel()
 

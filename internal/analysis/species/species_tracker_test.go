@@ -30,7 +30,7 @@ func TestSpeciesTracker_NewSpecies(t *testing.T) {
 	ds := mocks.NewMockInterface(t)
 	historicalData := []datastore.NewSpeciesData{
 		{
-			ScientificName: "Parus major",
+			ScientificName: testSpeciesParusMajor,
 			CommonName:     "Great Tit",
 			FirstSeenDate:  time.Now().Add(-oldSpeciesDays * 24 * time.Hour).Format("2006-01-02"),
 		},
@@ -73,7 +73,7 @@ func TestSpeciesTracker_NewSpecies(t *testing.T) {
 	})
 
 	t.Run("old species outside window", func(t *testing.T) {
-		status := tracker.GetSpeciesStatus("Parus major", currentTime)
+		status := tracker.GetSpeciesStatus(testSpeciesParusMajor, currentTime)
 		assert.False(t, status.IsNew, "Expected Parus major to not be a new species (%d days old)", oldSpeciesDays)
 		assert.Equal(t, oldSpeciesDays, status.DaysSinceFirst, "Expected DaysSinceFirst to be %d", oldSpeciesDays)
 	})
@@ -166,16 +166,16 @@ func TestSpeciesTracker_UpdateSpecies(t *testing.T) {
 	currentTime := time.Now()
 
 	// Track a new species
-	isNew := tracker.UpdateSpecies("Parus major", currentTime)
+	isNew := tracker.UpdateSpecies(testSpeciesParusMajor, currentTime)
 	assert.True(t, isNew, "Expected UpdateSpecies to return true for new species")
 
 	// Verify it's now tracked
-	status := tracker.GetSpeciesStatus("Parus major", currentTime)
+	status := tracker.GetSpeciesStatus(testSpeciesParusMajor, currentTime)
 	assert.True(t, status.IsNew, "Expected newly tracked species to be marked as new")
 	assert.Equal(t, 0, status.DaysSinceFirst, "Expected DaysSinceFirst to be 0 for just-tracked species")
 
 	// Update same species again
-	isNew = tracker.UpdateSpecies("Parus major", currentTime.Add(time.Hour))
+	isNew = tracker.UpdateSpecies(testSpeciesParusMajor, currentTime.Add(time.Hour))
 	assert.False(t, isNew, "Expected UpdateSpecies to return false for existing species")
 }
 
@@ -189,7 +189,7 @@ func TestSpeciesTracker_EdgeCases(t *testing.T) {
 		ds := mocks.NewMockInterface(t)
 		historicalData := []datastore.NewSpeciesData{
 			{
-				ScientificName: "Parus major",
+				ScientificName: testSpeciesParusMajor,
 				FirstSeenDate:  time.Now().Add(-14 * 24 * time.Hour).Format("2006-01-02"), // Exactly 14 days ago
 			},
 		}
@@ -217,7 +217,7 @@ func TestSpeciesTracker_EdgeCases(t *testing.T) {
 		currentTime := time.Now()
 
 		// Test species exactly at the window boundary
-		status := tracker.GetSpeciesStatus("Parus major", currentTime)
+		status := tracker.GetSpeciesStatus(testSpeciesParusMajor, currentTime)
 		// Should be considered new since it's within the window (14 days is inclusive)
 		assert.True(t, status.IsNew, "Expected species at exact window boundary to be considered new")
 	})
@@ -550,7 +550,7 @@ func TestNewTrackerFromSettings_BasicConfiguration(t *testing.T) {
 
 	// Test that tracker correctly handles species operations with the given configuration
 	testTime := time.Now()
-	testSpecies := "Parus major"
+	testSpecies := testSpeciesParusMajor
 
 	// First detection should be considered new
 	isNew := tracker.UpdateSpecies(testSpecies, testTime)
@@ -610,7 +610,7 @@ func TestMultiPeriodTracking_YearlyTracking(t *testing.T) {
 
 	t.Run("first detection new for all periods", func(t *testing.T) {
 		currentTime := time.Now()
-		speciesName := "Parus major"
+		speciesName := testSpeciesParusMajor
 
 		// First detection - should be new for all periods
 		isNew := tracker.UpdateSpecies(speciesName, currentTime)

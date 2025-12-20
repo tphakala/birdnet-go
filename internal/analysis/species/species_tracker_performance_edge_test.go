@@ -20,6 +20,7 @@ import (
 
 // TestMemoryExhaustionScenarios tests tracker behavior under memory pressure
 // Critical for preventing OOM crashes in production
+//nolint:gocognit // Memory stress test with multiple scenarios requires complex verification
 func TestMemoryExhaustionScenarios(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping memory exhaustion tests in short mode")
@@ -104,7 +105,8 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 			// Calculate init increase safely to avoid underflow
 			var initIncrease int64
 			if afterInitMemory >= initialMemory {
-				initIncrease = int64(afterInitMemory - initialMemory)
+				diff := afterInitMemory - initialMemory
+				initIncrease = int64(min(diff, uint64(1<<62))) //nolint:gosec // Memory values won't exceed int64
 			} else {
 				initIncrease = 0
 			}
@@ -163,7 +165,8 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 			// Calculate memory increase safely to avoid underflow
 			var totalIncrease int64
 			if finalMemory >= initialMemory {
-				totalIncrease = int64(finalMemory - initialMemory)
+				diff := finalMemory - initialMemory
+				totalIncrease = int64(min(diff, uint64(1<<62))) //nolint:gosec // Memory values won't exceed int64
 			} else {
 				totalIncrease = 0
 			}
@@ -176,7 +179,8 @@ func TestMemoryExhaustionScenarios(t *testing.T) {
 			// Use signed arithmetic to avoid underflow when GC reduces memory usage
 			var memoryIncrease int64
 			if finalMemory >= initialMemory {
-				memoryIncrease = int64(finalMemory - initialMemory)
+				diff := finalMemory - initialMemory
+				memoryIncrease = int64(min(diff, uint64(1<<62))) //nolint:gosec // Memory values won't exceed int64
 			} else {
 				// Memory decreased due to GC - treat as no increase
 				memoryIncrease = 0

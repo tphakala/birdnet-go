@@ -52,30 +52,30 @@ func TestGetYearDateRange_CriticalReliability(t *testing.T) {
 			"2024-12-31",
 			"Year end should return current calendar year",
 		},
-		// Custom reset date tests (e.g., July 1 fiscal year)
+		// Custom reset date tests (e.g., July 1 tracking year)
 		{
-			"fiscal_year_before_reset",
+			"tracking_year_before_reset",
 			time.Date(2024, 6, 30, 23, 59, 59, 0, time.UTC),
 			7, 1, 0, // July 1 reset
 			"2023-07-01",
 			"2024-06-30",
-			"Before July 1 reset should be in previous fiscal year",
+			"Before July 1 reset should be in previous tracking year",
 		},
 		{
-			"fiscal_year_on_reset",
+			"tracking_year_on_reset",
 			time.Date(2024, 7, 1, 0, 0, 0, 0, time.UTC),
 			7, 1, 0,
 			"2024-07-01",
 			"2025-06-30",
-			"On July 1 reset should start new fiscal year",
+			"On July 1 reset should start new tracking year",
 		},
 		{
-			"fiscal_year_after_reset",
+			"tracking_year_after_reset",
 			time.Date(2024, 8, 15, 12, 0, 0, 0, time.UTC),
 			7, 1, 0,
 			"2024-07-01",
 			"2025-06-30",
-			"After July 1 reset should be in current fiscal year",
+			"After July 1 reset should be in current tracking year",
 		},
 		// Academic year tests (September 1)
 		{
@@ -224,6 +224,24 @@ func TestGetSeasonDateRange_CriticalReliability(t *testing.T) {
 			"2023-09-22", // Previous year's fall
 			"2023-12-21",
 			"Fall range requested in winter should use previous year",
+		},
+		{
+			"fall_on_last_day_of_fall_dec20",
+			"fall",
+			time.Date(2024, 12, 20, 12, 0, 0, 0, time.UTC), // Dec 20 is still fall (winter starts Dec 21)
+			nil,
+			"2024-09-22", // Current year's fall - BUG FIX: was incorrectly returning 2023
+			"2024-12-21",
+			"Fall range on Dec 20 (still fall) should use current year",
+		},
+		{
+			"fall_on_first_day_of_winter_dec21",
+			"fall",
+			time.Date(2024, 12, 21, 12, 0, 0, 0, time.UTC), // Dec 21 is winter (fall just ended)
+			nil,
+			"2024-09-22", // Current year's fall that just ended
+			"2024-12-21",
+			"Fall range on Dec 21 (winter started) should still use current year's fall",
 		},
 		{
 			"winter_in_january",
@@ -399,39 +417,39 @@ func TestIsWithinCurrentYear_CriticalReliability(t *testing.T) {
 		},
 		// Fiscal year (July 1 reset)
 		{
-			"fiscal_year_before_reset",
+			"tracking_year_before_reset",
 			time.Date(2024, 6, 30, 23, 59, 59, 0, time.UTC),
 			2024, 7, 1,
 			true, // Still in FY 2023-2024
-			"Before July 1 should be in previous fiscal year",
+			"Before July 1 should be in previous tracking year",
 		},
 		{
-			"fiscal_year_on_reset",
+			"tracking_year_on_reset",
 			time.Date(2024, 7, 1, 0, 0, 0, 0, time.UTC),
 			2024, 7, 1,
 			true, // Start of FY 2024-2025
-			"July 1 should start new fiscal year",
+			"July 1 should start new tracking year",
 		},
 		{
-			"fiscal_year_after_reset",
+			"tracking_year_after_reset",
 			time.Date(2024, 8, 15, 12, 0, 0, 0, time.UTC),
 			2024, 7, 1,
 			true,
-			"After July 1 should be in current fiscal year",
+			"After July 1 should be in current tracking year",
 		},
 		{
-			"fiscal_year_next_calendar_year",
+			"tracking_year_next_calendar_year",
 			time.Date(2025, 3, 15, 12, 0, 0, 0, time.UTC),
 			2024, 7, 1,
 			true, // Still in FY 2024-2025
-			"March of next calendar year should still be in fiscal year",
+			"March of next calendar year should still be in tracking year",
 		},
 		{
-			"fiscal_year_past_next_reset",
+			"tracking_year_past_next_reset",
 			time.Date(2025, 7, 1, 0, 0, 0, 0, time.UTC),
 			2024, 7, 1,
 			false, // Now in FY 2025-2026
-			"Next fiscal year should not be within current",
+			"Next tracking year should not be within current",
 		},
 		// Edge cases
 		{
@@ -576,6 +594,7 @@ func TestShouldResetYear_CriticalReliability(t *testing.T) {
 
 // TestCheckAndResetPeriods_DateRange tests period transition logic
 // CRITICAL: Ensures proper state transitions for yearly and seasonal tracking
+//nolint:gocognit // Table-driven test for date range period resets
 func TestCheckAndResetPeriods_DateRange(t *testing.T) {
 	t.Parallel()
 

@@ -20,6 +20,7 @@ import (
 
 // TestUpdateSpecies_CriticalReliability tests the core species update logic
 // CRITICAL: All tracking operations depend on this function - bugs affect entire system
+//nolint:gocognit // Table-driven test covering multiple update scenarios
 func TestUpdateSpecies_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
@@ -252,6 +253,7 @@ func TestUpdateSpecies_CriticalReliability(t *testing.T) {
 
 // TestCheckAndResetPeriods_CriticalReliability tests period reset logic
 // CRITICAL: Period management affects all tracking accuracy
+//nolint:gocognit // Table-driven test for period reset logic
 func TestCheckAndResetPeriods_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
@@ -445,6 +447,7 @@ func TestCheckAndResetPeriods_CriticalReliability(t *testing.T) {
 
 // TestGetBatchSpeciesStatus_CriticalReliability tests batch operations performance and correctness
 // CRITICAL: Batch operations are used for UI updates and must be efficient
+//nolint:gocognit // Table-driven test for batch status operations
 func TestGetBatchSpeciesStatus_CriticalReliability(t *testing.T) {
 	t.Parallel()
 
