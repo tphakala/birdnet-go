@@ -59,8 +59,9 @@ const (
 	notificationTypeNewSpecies           = "new_species"   // Notification type for new species alerts
 
 	// Cache management
-	maxStatusCacheSize = 1000 // Maximum number of species to cache
-	targetCacheSize    = 800  // Target size after cleanup (80% of max)
+	maxStatusCacheSize           = 1000 // Maximum number of species to cache
+	targetCacheSize              = 800  // Target size after cleanup (80% of max)
+	cacheCleanupIntervalMultiple = 10   // Cleanup runs every cacheTTL * this multiplier
 
 	// Retention periods
 	lifetimeRetentionYears = 10 // How long to keep lifetime data
@@ -72,6 +73,9 @@ var (
 	serviceLevelVar = new(slog.LevelVar) // Dynamic level control
 	closeLogger     func() error
 )
+
+// daysInMonth contains the number of days in each month (non-leap year, Jan=index 0)
+var daysInMonth = [12]int{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
 
 func init() {
 	// Initialize species tracking logger
@@ -192,6 +196,10 @@ type SpeciesTracker struct {
 	// Cached season order for performance optimization (built once at initialization)
 	// This avoids rebuilding the season order on every computeCurrentSeason() call
 	cachedSeasonOrder []string
+
+	// Goroutine lifecycle management for graceful shutdown
+	// Tracks in-flight async database operations (notification persistence/cleanup)
+	asyncOpsWg sync.WaitGroup
 }
 
 // seasonDates represents the start date for a season

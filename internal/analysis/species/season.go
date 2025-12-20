@@ -3,6 +3,8 @@
 package species
 
 import (
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -50,10 +52,7 @@ func (t *SpeciesTracker) initializeSeasonOrder() {
 	}
 
 	// Fall back to using all available seasons if non-standard configuration
-	t.cachedSeasonOrder = make([]string, 0, len(t.seasons))
-	for name := range t.seasons {
-		t.cachedSeasonOrder = append(t.cachedSeasonOrder, name)
-	}
+	t.cachedSeasonOrder = slices.Collect(maps.Keys(t.seasons))
 
 	logger.Debug("Initialized season order cache",
 		"order", t.cachedSeasonOrder,
@@ -62,9 +61,6 @@ func (t *SpeciesTracker) initializeSeasonOrder() {
 
 // validateSeasonDate validates that a month/day combination is valid
 func validateSeasonDate(month, day int) error {
-	// Days in each month (non-leap year)
-	daysInMonth := []int{31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
-
 	if month < 1 || month > 12 {
 		return errors.Newf("invalid month: %d (must be 1-12)", month).
 			Component("species-tracking").
@@ -181,10 +177,8 @@ func (t *SpeciesTracker) isSameSeasonPeriod(time1, time2 time.Time) bool {
 	// If so, they might be in different seasons even if close together
 	day1 := time1.YearDay()
 	day2 := time2.YearDay()
-	minDay, maxDay := day1, day2
-	if day2 < day1 {
-		minDay, maxDay = day2, day1
-	}
+	minDay := min(day1, day2)
+	maxDay := max(day1, day2)
 
 	for _, season := range t.seasons {
 		boundaryDate := time.Date(time1.Year(), time.Month(season.month), season.day, 0, 0, 0, 0, time1.Location())
