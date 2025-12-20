@@ -1371,6 +1371,13 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		_ = c.SendToast("Reconfiguring species tracking...", "info", 3000)
 	}
 
+	// Check web server settings (notify only - requires restart)
+	if webserverSettingsChanged(oldSettings, currentSettings) {
+		c.Debug("Web server settings changed, restart required")
+		// No control action - just notify user that restart is required
+		_ = c.SendToast("Web server settings changed. Restart required to apply.", "warning", 8000)
+	}
+
 	// Handle audio settings changes
 	audioActions, err := c.handleAudioSettingsChanges(oldSettings, currentSettings)
 	if err != nil {
@@ -1614,6 +1621,32 @@ func speciesTrackingSettingsChanged(oldSettings, currentSettings *conf.Settings)
 			oldSeason.StartDay != newSeason.StartDay {
 			return true
 		}
+	}
+
+	return false
+}
+
+// webserverSettingsChanged checks if web server settings have changed that require a restart
+func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	oldWS := oldSettings.WebServer
+	newWS := currentSettings.WebServer
+
+	// Check web server core settings
+	if oldWS.Port != newWS.Port ||
+		oldWS.Enabled != newWS.Enabled ||
+		oldWS.Debug != newWS.Debug ||
+		oldWS.UseLegacyServer != newWS.UseLegacyServer {
+		return true
+	}
+
+	// Check security/TLS settings that affect the server
+	oldSec := oldSettings.Security
+	newSec := currentSettings.Security
+
+	if oldSec.Host != newSec.Host ||
+		oldSec.AutoTLS != newSec.AutoTLS ||
+		oldSec.RedirectToHTTPS != newSec.RedirectToHTTPS {
+		return true
 	}
 
 	return false

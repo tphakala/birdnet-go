@@ -1,45 +1,113 @@
 # BirdNet-Go API Package
 
-This package implements the HTTP-based RESTful API for the BirdNET-Go application, providing endpoints for bird detection data management, analytics, system control, and more.
+This package implements the HTTP server and RESTful API for the BirdNET-Go application, providing endpoints for bird detection data management, analytics, system control, and more.
 
 ## Package Structure
 
 ```text
 internal/api/
-└── v2/
+├── config.go              - Server configuration from settings
+├── server.go              - Main HTTP server (Echo framework wrapper)
+├── spa.go                 - Single Page Application handler
+├── static.go              - Static file server for frontend assets
+├── middleware/            - HTTP middleware
+│   ├── compression.go     - Gzip compression middleware
+│   ├── logging.go         - Request logging middleware
+│   └── security.go        - CORS, secure headers, body limit
+├── templates/             - HTML templates
+│   └── spa.html           - SPA shell template with CSRF token
+└── v2/                    - API v2 handlers and routes
+    ├── api.go             - API controller and route initialization
     ├── analytics.go       - Analytics and statistics endpoints
-    ├── analytics_test.go  - Tests for analytics endpoints
-    ├── api.go             - Main API controller and route initialization
-    ├── api_test.go        - Tests for main API functionality
-    ├── auth/              - Authentication package
+    ├── auth.go            - Authentication endpoints and handlers
+    ├── auth/              - Authentication service package
     │   ├── adapter.go     - Adapter for security package
     │   ├── middleware.go  - Authentication middleware
     │   └── service.go     - Authentication service interface
-    ├── auth.go            - Authentication endpoints and handlers
-    ├── auth_test.go       - Tests for authentication endpoints
-    ├── control.go         - System control actions (restart, reload model)
+    ├── control.go         - System control actions (restart, reload)
     ├── detections.go      - Bird detection data endpoints
-    ├── integration.go     - External integration framework
-    ├── integrations.go    - External service integrations
-    ├── media.go           - Media (images, audio) management
+    ├── integrations.go    - External service integrations (MQTT, BirdWeather)
+    ├── media.go           - Media (images, audio, spectrograms)
+    ├── notifications.go   - Push notification management
     ├── range.go           - Range filter management and testing
+    ├── search.go          - Detection search functionality
     ├── settings.go        - Application settings management
-    ├── streams.go         - Real-time data streaming
+    ├── settings_audio.go  - Audio settings hot reload
+    ├── species.go         - Species information endpoints
+    ├── sse.go             - Server-Sent Events broadcaster
+    ├── streams.go         - Real-time audio/detection streaming
+    ├── support.go         - Support bundle generation
     ├── system.go          - System information and monitoring
     └── weather.go         - Weather data related to detections
 ```
 
+## Architecture Overview
+
+The API package is split into two layers:
+
+1. **HTTP Server Layer** (`internal/api/`) - Manages the Echo framework, middleware, static files, and SPA routing
+2. **API Controller Layer** (`internal/api/v2/`) - Handles all REST API endpoints under `/api/v2`
+
+Both layers implement the `httpserver.Server` interface defined in `internal/httpserver/`, allowing runtime selection between this server and the legacy `httpcontroller`.
+
+## HTTP Server
+
+The main `Server` struct in `server.go` wraps the Echo framework and provides:
+
+- Middleware stack (recovery, logging, CORS, gzip, security headers)
+- Static file serving for frontend assets
+- SPA routing for Svelte frontend
+- TLS/AutoTLS support
+- Graceful shutdown
+
+### Server Initialization
+
+The server uses functional options pattern for configuration:
+
+```go
+import (
+    "github.com/tphakala/birdnet-go/internal/api"
+    "github.com/tphakala/birdnet-go/internal/conf"
+)
+
+// Create server with options
+server, err := api.New(
+    settings,
+    api.WithDataStore(dataStore),
+    api.WithBirdImageCache(imageCache),
+    api.WithProcessor(processor),
+    api.WithMetrics(metrics),
+    api.WithControlChannel(controlChan),
+    api.WithAudioLevelChannel(audioLevelChan),
+)
+if err != nil {
+    return err
+}
+
+// Start server (non-blocking)
+server.Start()
+
+// Later: graceful shutdown
+server.Shutdown()
+```
+
+### Available Options
+
+| Option | Purpose |
+|--------|---------|
+| `WithLogger(logger)` | Set standard logger |
+| `WithDataStore(ds)` | Set database interface |
+| `WithBirdImageCache(cache)` | Set species image cache |
+| `WithSunCalc(sc)` | Set sun calculator |
+| `WithProcessor(proc)` | Set analysis processor |
+| `WithOAuth2Server(oauth)` | Set OAuth2 server |
+| `WithMetrics(m)` | Set observability metrics |
+| `WithControlChannel(ch)` | Set control signal channel |
+| `WithAudioLevelChannel(ch)` | Set audio level channel |
+
 ## API Controller
 
-The API is organized around a central `Controller` struct in `v2/api.go` that manages all endpoints and dependencies. It's initialized with:
-
-- Echo web framework instance
-- Datastore interface for database operations
-- Application settings
-- Bird image cache for species images
-- Sun calculator for daylight information
-- Control channel for system commands
-- Logger for API operations
+The v2 API is organized around a central `Controller` struct in `v2/api.go` that manages all REST endpoints. Dependencies are injected from the parent server.
 
 ## API Versions
 
@@ -380,18 +448,18 @@ eventSource.onerror = function (event) {
 
 ### Middleware Implementation
 
-The API uses a combination of standard Echo middleware and custom middleware for specific functionality:
+The `internal/api/middleware/` package provides HTTP middleware used by the server:
 
-1. **Standard Middleware**:
-   - Logger - For request logging
-   - Recover - For panic recovery
-   - CORS - For cross-origin resource sharing
+| Middleware | File | Purpose |
+|------------|------|---------|
+| Recovery | Echo built-in | Panic recovery |
+| RequestLogger | `logging.go` | Structured request logging |
+| CORS | `security.go` | Cross-origin resource sharing |
+| BodyLimit | `security.go` | Request body size limits |
+| Gzip | `compression.go` | Response compression (auto-skips SSE) |
+| SecureHeaders | `security.go` | Security headers (HSTS, X-Frame-Options) |
 
-2. **Custom Middleware**:
-   - AuthMiddleware - Handles both session-based and token-based authentication
-   - Rate limiting for public endpoints
-
-Middleware is defined in the dedicated `middleware.go` file to maintain clean separation of concerns.
+The v2 API adds its own authentication middleware from `v2/auth/middleware.go`.
 
 ### Handler Implementation
 
@@ -472,6 +540,23 @@ The API includes comprehensive endpoints for managing application settings:
    - This prevents long-running operations from blocking API responses
    - A small delay is added between configuration actions to avoid overwhelming the system
 
+5. **Hot Reload Support**:
+   The following settings are automatically applied at runtime without restart:
+
+   | Category | Action | Notification |
+   |----------|--------|--------------|
+   | BirdNET model | `reload_birdnet` | ✅ |
+   | Range filter | `rebuild_range_filter` | ✅ |
+   | Species intervals | `update_detection_intervals` | ✅ |
+   | MQTT | `reconfigure_mqtt` | ✅ |
+   | BirdWeather | `reconfigure_birdweather` | ✅ |
+   | RTSP sources | `reconfigure_rtsp_sources` | ✅ |
+   | Telemetry | `reconfigure_telemetry` | ✅ |
+   | Species tracking | `reconfigure_species_tracking` | ✅ |
+   | Audio/Equalizer | Various | ✅ |
+
+   **Web server settings** (port, TLS, etc.) require a restart - users are notified via toast.
+
 ### Best Practices for API Development
 
 1. **Route Naming**:
@@ -517,41 +602,34 @@ The correlation ID allows tracking specific errors across logs and systems.
 
 The API package requires:
 
-1. Echo web framework
+1. Echo web framework (managed internally)
 2. Access to a datastore implementation
-3. Application configuration
-4. Other internal services like image provider
+3. Application configuration (`conf.Settings`)
+4. Optional services: image cache, processor, metrics
 
 ### Initialization
 
-To initialize the API in your application:
+See [Server Initialization](#server-initialization) above for the recommended approach using functional options.
+
+### Runtime Server Selection
+
+The application supports switching between HTTP server implementations via configuration:
+
+```yaml
+webserver:
+  uselegacyserver: true   # Use legacy httpcontroller (default)
+  # uselegacyserver: false  # Use new api server
+```
+
+Both servers implement the `httpserver.Server` interface:
 
 ```go
-import (
-    "github.com/labstack/echo/v4"
-    "github.com/tphakala/birdnet-go/internal/api"
-    "github.com/tphakala/birdnet-go/internal/conf"
-    "github.com/tphakala/birdnet-go/internal/datastore"
-    "github.com/tphakala/birdnet-go/internal/imageprovider"
-    "github.com/tphakala/birdnet-go/internal/suncalc"
-)
+import "github.com/tphakala/birdnet-go/internal/httpserver"
 
-func setupAPI() {
-    // Initialize echo
-    e := echo.New()
-
-    // Get dependencies
-    ds := datastore.NewSQLiteDatastore("path/to/database")
-    settings := conf.LoadSettings("path/to/config")
-    imageCache := imageprovider.NewBirdImageCache()
-    sunCalc := suncalc.New(settings.Location.Latitude, settings.Location.Longitude)
-    controlChan := make(chan string)
-
-    // Create API controller
-    apiController := api.New(e, ds, settings, imageCache, sunCalc, controlChan, nil)
-
-    // Start the server
-    e.Start(":8080")
+type Server interface {
+    Start()
+    Shutdown() error
+    APIController() *api.Controller
 }
 ```
 
