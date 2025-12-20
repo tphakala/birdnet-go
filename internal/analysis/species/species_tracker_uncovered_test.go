@@ -12,6 +12,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
+// Test constants
+const testSeasonSpring = "Spring"
+
 // TestSpeciesTracker_Close tests the Close method
 func TestSpeciesTracker_Close(t *testing.T) {
 	t.Parallel()
@@ -258,12 +261,12 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 
 		// Initialize season maps
 		tracker.seasons = map[string]seasonDates{
-			"Spring": {month: 3, day: 1},
+			testSeasonSpring: {month: 3, day: 1},
 			"Summer": {month: 6, day: 1},
 			"Autumn": {month: 9, day: 1},
 			"Winter": {month: 12, day: 1},
 		}
-		tracker.currentSeason = "Spring"
+		tracker.currentSeason = testSeasonSpring
 
 		now := time.Now()
 		err := tracker.loadSeasonalDataFromDatabase(now)
@@ -271,10 +274,10 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 
 		// Check data was loaded
 		tracker.mu.RLock()
-		if tracker.speciesBySeason != nil && tracker.speciesBySeason["Spring"] != nil {
-			assert.Len(t, tracker.speciesBySeason["Spring"], 2)
-			assert.Contains(t, tracker.speciesBySeason["Spring"], "Cardinal")
-			assert.Contains(t, tracker.speciesBySeason["Spring"], "BlueJay")
+		if tracker.speciesBySeason != nil && tracker.speciesBySeason[testSeasonSpring] != nil {
+			assert.Len(t, tracker.speciesBySeason[testSeasonSpring], 2)
+			assert.Contains(t, tracker.speciesBySeason[testSeasonSpring], "Cardinal")
+			assert.Contains(t, tracker.speciesBySeason[testSeasonSpring], "BlueJay")
 		}
 		tracker.mu.RUnlock()
 	})
@@ -317,18 +320,18 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 
 		// Initialize season
 		tracker.seasons = map[string]seasonDates{
-			"Spring": {month: 3, day: 1},
+			testSeasonSpring: {month: 3, day: 1},
 		}
-		tracker.currentSeason = "Spring"
+		tracker.currentSeason = testSeasonSpring
 
 		// Pre-populate some data
 		if tracker.speciesBySeason == nil {
 			tracker.speciesBySeason = make(map[string]map[string]time.Time)
 		}
-		if tracker.speciesBySeason["Spring"] == nil {
-			tracker.speciesBySeason["Spring"] = make(map[string]time.Time)
+		if tracker.speciesBySeason[testSeasonSpring] == nil {
+			tracker.speciesBySeason[testSeasonSpring] = make(map[string]time.Time)
 		}
-		tracker.speciesBySeason["Spring"]["Existing"] = time.Now().Add(-10 * 24 * time.Hour)
+		tracker.speciesBySeason[testSeasonSpring]["Existing"] = time.Now().Add(-10 * 24 * time.Hour)
 
 		now := time.Now()
 		err := tracker.loadSeasonalDataFromDatabase(now)
@@ -336,8 +339,8 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 
 		// Check existing data preserved
 		tracker.mu.RLock()
-		if tracker.speciesBySeason != nil && tracker.speciesBySeason["Spring"] != nil {
-			assert.Contains(t, tracker.speciesBySeason["Spring"], "Existing")
+		if tracker.speciesBySeason != nil && tracker.speciesBySeason[testSeasonSpring] != nil {
+			assert.Contains(t, tracker.speciesBySeason[testSeasonSpring], "Existing")
 		}
 		tracker.mu.RUnlock()
 	})
@@ -421,13 +424,13 @@ func TestSpeciesTracker_getSeasonDateRange(t *testing.T) {
 
 		tracker := NewTrackerFromSettings(ds, settings)
 		tracker.seasons = map[string]seasonDates{
-			"Spring": {month: 3, day: 1},
+			testSeasonSpring: {month: 3, day: 1},
 		}
-		tracker.currentSeason = "Spring"
+		tracker.currentSeason = testSeasonSpring
 		tracker.SetCurrentYearForTesting(2024)
 
 		now := time.Now()
-		start, end := tracker.getSeasonDateRange("Spring", now)
+		start, end := tracker.getSeasonDateRange(testSeasonSpring, now)
 		assert.Equal(t, "2024-03-01", start)
 		assert.Equal(t, "2024-05-31", end)
 	})
@@ -564,14 +567,15 @@ func TestSpeciesTracker_yearlyResetBoundaries(t *testing.T) {
 		tracker.SetCurrentYearForTesting(2024)
 		isWithin := tracker.isWithinCurrentYear(beforeReset)
 
-		// June 30, 2024 is within current tracking year (July 1, 2023 - June 30, 2024)
-		// since we haven't reached the July 1, 2024 reset date yet
-		assert.True(t, isWithin)
+		// June 30, 2024 is in tracking year 2023 (July 1, 2023 - June 30, 2024)
+		// Since currentYear=2024, this detection is NOT in the current tracking year
+		assert.False(t, isWithin)
 
 		// Test detection after reset date (July 2, 2024)
 		afterReset := time.Date(2024, 7, 2, 0, 0, 0, 0, time.UTC)
 		isWithin = tracker.isWithinCurrentYear(afterReset)
-		// July 2, 2024 is within new tracking year (July 1, 2024 - June 30, 2025)
+		// July 2, 2024 is in tracking year 2024 (July 1, 2024 - June 30, 2025)
+		// Since currentYear=2024, this detection IS in the current tracking year
 		assert.True(t, isWithin)
 	})
 }

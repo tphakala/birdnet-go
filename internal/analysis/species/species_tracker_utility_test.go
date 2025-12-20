@@ -471,6 +471,7 @@ func TestSetCurrentYearForTesting_CriticalReliability(t *testing.T) {
 
 // TestUtilityFunctions_ConcurrentAccess tests thread safety of utility functions
 // CRITICAL: All public methods must be thread-safe
+//nolint:gocognit // Concurrency test for utility functions
 func TestUtilityFunctions_ConcurrentAccess(t *testing.T) {
 	t.Parallel()
 

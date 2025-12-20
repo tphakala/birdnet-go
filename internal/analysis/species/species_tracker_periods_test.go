@@ -13,6 +13,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
+// Test constants
+const (
+	testSpeciesParusMajor = "Parus major"
+	testNilString         = "nil"
+)
+
 // TestSeasonalPeriodInitialization validates that all seasonal maps are properly initialized
 // to prevent nil map panics
 func TestSeasonalPeriodInitialization(t *testing.T) {
@@ -157,7 +163,7 @@ func TestSeasonalTrackingWithNilMaps(t *testing.T) {
 
 	for i, test := range testDates {
 		// This should not panic even if maps aren't initialized
-		isNew := tracker.UpdateSpecies("Parus major", test.date)
+		isNew := tracker.UpdateSpecies(testSpeciesParusMajor, test.date)
 
 		// Only the first detection should be new - after that, it's a "known" species
 		// The test name suggests this is about nil map handling, not new species detection
@@ -167,7 +173,7 @@ func TestSeasonalTrackingWithNilMaps(t *testing.T) {
 		// Note: subsequent detections may not be "new" from lifetime perspective
 		// since the species is now known, even if in different seasons
 
-		status := tracker.GetSpeciesStatus("Parus major", test.date)
+		status := tracker.GetSpeciesStatus(testSpeciesParusMajor, test.date)
 		assert.Equal(t, test.expectedSeason, status.CurrentSeason)
 
 		// The key test is that this doesn't panic even with nil maps
@@ -188,7 +194,7 @@ func TestYearlyTrackingAcrossYearBoundary(t *testing.T) {
 			FirstSeenDate:  "2022-06-15", // 2+ years ago
 		},
 		{
-			ScientificName: "Parus major",
+			ScientificName: testSpeciesParusMajor,
 			CommonName:     "Great Tit",
 			FirstSeenDate:  "2023-03-20", // Last year
 		},
@@ -246,7 +252,7 @@ func TestYearlyTrackingAcrossYearBoundary(t *testing.T) {
 	yearTime, inYearMap := tracker.speciesThisYear["Turdus merula"]
 	currentYear := tracker.currentYear
 	tracker.mu.RUnlock()
-	yearTimeStr := "nil"
+	yearTimeStr := testNilString
 	if inYearMap {
 		yearTimeStr = yearTime.Format("2006-01-02")
 	}
@@ -398,7 +404,7 @@ func TestBatchSpeciesStatusPerformance(t *testing.T) {
 
 	// Simulate many species for dashboard
 	species := []string{
-		"Parus major", "Turdus merula", "Cyanistes caeruleus",
+		testSpeciesParusMajor, "Turdus merula", "Cyanistes caeruleus",
 		"Erithacus rubecula", "Fringilla coelebs", "Sylvia atricapilla",
 		"Phylloscopus trochilus", "Carduelis carduelis", "Columba palumbus",
 		"Corvus corone", "Pica pica", "Garrulus glandarius",
@@ -460,7 +466,7 @@ func BenchmarkBatchSpeciesStatusPerformance(b *testing.B) {
 
 	// Simulate many species for dashboard
 	species := []string{
-		"Parus major", "Turdus merula", "Cyanistes caeruleus",
+		testSpeciesParusMajor, "Turdus merula", "Cyanistes caeruleus",
 		"Erithacus rubecula", "Fringilla coelebs", "Sylvia atricapilla",
 		"Phylloscopus trochilus", "Carduelis carduelis", "Columba palumbus",
 		"Corvus corone", "Pica pica", "Garrulus glandarius",
@@ -643,7 +649,7 @@ func TestSpeciesStatusCaching(t *testing.T) {
 	tracker := NewTrackerFromSettings(ds, settings)
 	_ = tracker.InitFromDatabase()
 
-	species := "Parus major"
+	species := testSpeciesParusMajor
 	currentTime := time.Now()
 	tracker.UpdateSpecies(species, currentTime)
 
@@ -771,7 +777,7 @@ func TestSeasonMapInitializationOnTransition(t *testing.T) {
 
 	// Start in winter
 	winterTime := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
-	tracker.UpdateSpecies("Parus major", winterTime)
+	tracker.UpdateSpecies(testSpeciesParusMajor, winterTime)
 
 	// Verify winter map is initialized
 	tracker.mu.Lock()
