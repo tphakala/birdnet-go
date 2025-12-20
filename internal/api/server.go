@@ -60,6 +60,9 @@ type Server struct {
 	// API controller
 	apiController *v2.Controller
 
+	// Static file serving
+	staticServer *StaticFileServer
+
 	// Lifecycle management
 	ctx       context.Context
 	cancel    context.CancelFunc
@@ -310,6 +313,14 @@ func (s *Server) setupRoutes() error {
 	// Health check endpoint at root level
 	s.echo.GET("/health", s.healthCheck)
 
+	// Initialize static file server for frontend assets
+	s.staticServer = NewStaticFileServer(s.slogger)
+	s.staticServer.RegisterRoutes(s.echo)
+
+	s.slogger.Info("Static file server initialized",
+		"mode", s.staticServer.DevModeStatus(),
+	)
+
 	// Initialize API v2 controller
 	apiController, err := v2.New(
 		s.echo,
@@ -339,6 +350,7 @@ func (s *Server) setupRoutes() error {
 
 	s.slogger.Info("Routes initialized",
 		"api_version", "v2",
+		"static_mode", s.staticServer.DevModeStatus(),
 	)
 
 	return nil
@@ -464,4 +476,17 @@ func (s *Server) SetLogLevel(level slog.Level) {
 		s.levelVar.Set(level)
 		s.slogger.Info("Log level changed", "level", level.String())
 	}
+}
+
+// StaticServer returns the static file server.
+func (s *Server) StaticServer() *StaticFileServer {
+	return s.staticServer
+}
+
+// IsDevMode returns whether the frontend is running in dev mode.
+func (s *Server) IsDevMode() bool {
+	if s.staticServer != nil {
+		return s.staticServer.IsDevMode()
+	}
+	return false
 }
