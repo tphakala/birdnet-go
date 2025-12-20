@@ -88,11 +88,13 @@ func (m *Middleware) validateAuthService(c echo.Context) error {
 }
 
 // shouldBypassAuth checks if authentication should be bypassed for this request.
+// When bypassed (e.g., LAN subnet), the request is treated as effectively authenticated
+// for data access purposes, matching the behavior of IsAuthenticated().
 func (m *Middleware) shouldBypassAuth(c echo.Context) bool {
 	if !m.AuthService.IsAuthRequired(c) {
 		m.logDebug("Authentication not required for this client",
 			"ip", c.RealIP(), "path", c.Request().URL.Path)
-		c.Set(CtxKeyIsAuthenticated, false)
+		c.Set(CtxKeyIsAuthenticated, true) // Bypassed = effectively authenticated
 		c.Set(CtxKeyAuthMethod, AuthMethodNone)
 		return true
 	}
