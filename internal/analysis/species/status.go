@@ -3,6 +3,8 @@
 package species
 
 import (
+	"context"
+	"log/slog"
 	"slices"
 	"time"
 )
@@ -37,34 +39,37 @@ func (t *SpeciesTracker) GetSpeciesStatus(scientificName string, currentTime tim
 	// Build fresh status using the same logic as buildSpeciesStatusLocked but with buffer reuse
 	status := t.buildSpeciesStatusWithBuffer(scientificName, currentTime, currentSeason)
 
-	firstSeenStr := "never"
-	if !status.FirstSeenTime.IsZero() {
-		firstSeenStr = status.FirstSeenTime.Format("2006-01-02")
-	}
+	// Only perform expensive string formatting if debug logging is enabled
+	if logger.Enabled(context.Background(), slog.LevelDebug) {
+		firstSeenStr := "never"
+		if !status.FirstSeenTime.IsZero() {
+			firstSeenStr = status.FirstSeenTime.Format("2006-01-02")
+		}
 
-	firstThisYearStr := "nil"
-	if status.FirstThisYear != nil {
-		firstThisYearStr = status.FirstThisYear.Format("2006-01-02")
-	}
+		firstThisYearStr := "nil"
+		if status.FirstThisYear != nil {
+			firstThisYearStr = status.FirstThisYear.Format("2006-01-02")
+		}
 
-	firstThisSeasonStr := "nil"
-	if status.FirstThisSeason != nil {
-		firstThisSeasonStr = status.FirstThisSeason.Format("2006-01-02")
-	}
+		firstThisSeasonStr := "nil"
+		if status.FirstThisSeason != nil {
+			firstThisSeasonStr = status.FirstThisSeason.Format("2006-01-02")
+		}
 
-	logger.Debug("Species status computed",
-		"species", scientificName,
-		"current_time", currentTime.Format("2006-01-02 15:04:05"),
-		"current_season", currentSeason,
-		"is_new", status.IsNew,
-		"is_new_this_year", status.IsNewThisYear,
-		"is_new_this_season", status.IsNewThisSeason,
-		"days_since_first", status.DaysSinceFirst,
-		"days_this_year", status.DaysThisYear,
-		"days_this_season", status.DaysThisSeason,
-		"first_seen", firstSeenStr,
-		"first_this_year", firstThisYearStr,
-		"first_this_season", firstThisSeasonStr)
+		logger.Debug("Species status computed",
+			"species", scientificName,
+			"current_time", currentTime.Format("2006-01-02 15:04:05"),
+			"current_season", currentSeason,
+			"is_new", status.IsNew,
+			"is_new_this_year", status.IsNewThisYear,
+			"is_new_this_season", status.IsNewThisSeason,
+			"days_since_first", status.DaysSinceFirst,
+			"days_this_year", status.DaysThisYear,
+			"days_this_season", status.DaysThisSeason,
+			"first_seen", firstSeenStr,
+			"first_this_year", firstThisYearStr,
+			"first_this_season", firstThisSeasonStr)
+	}
 
 	// Cache the computed result for future requests
 	t.statusCache[scientificName] = cachedSpeciesStatus{
@@ -174,7 +179,6 @@ func (t *SpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, cur
 	return *status
 }
 
-// cleanupExpiredCache removes expired entries from the status cache to prevent memory leaks
 // cleanupExpiredCache removes expired entries and enforces size limits with LRU eviction
 func (t *SpeciesTracker) cleanupExpiredCache(currentTime time.Time) {
 	t.cleanupExpiredCacheWithForce(currentTime, false)
@@ -228,7 +232,7 @@ func (t *SpeciesTracker) evictOldestCacheEntries() {
 // cleanupExpiredCacheWithForce allows forcing cleanup even if recently performed (for testing)
 func (t *SpeciesTracker) cleanupExpiredCacheWithForce(currentTime time.Time, force bool) {
 	// Skip if recently performed (unless forced)
-	if !force && currentTime.Sub(t.lastCacheCleanup) <= t.cacheTTL*10 {
+	if !force && currentTime.Sub(t.lastCacheCleanup) <= t.cacheTTL*cacheCleanupIntervalMultiple {
 		return
 	}
 

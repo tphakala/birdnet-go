@@ -251,7 +251,7 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 	// If a goroutine does leak due to database hang, in-memory suppression still works.
 	// TODO(BG-17): Consider adding context.Context parameter to SaveNotificationHistory interface
 	if t.ds != nil {
-		go func() {
+		t.asyncOpsWg.Go(func() {
 			// ExpiresAt = when the suppression ends (sentTime + suppressionWindow)
 			expiresAt := sentTime.Add(t.notificationSuppressionWindow)
 			history := &datastore.NotificationHistory{
@@ -274,7 +274,7 @@ func (t *SpeciesTracker) RecordNotificationSent(scientificName string, sentTime 
 					"species", scientificName,
 					"expires_at", expiresAt.Format("2006-01-02 15:04:05"))
 			}
-		}()
+		})
 	}
 }
 
@@ -307,7 +307,7 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 	// However, SQLite is local and GORM has internal timeouts, so hangs are unlikely.
 	// TODO(BG-17): Consider adding context.Context parameter to DeleteExpiredNotificationHistory interface
 	if t.ds != nil {
-		go func() {
+		t.asyncOpsWg.Go(func() {
 			// Delete records that have expired (ExpiresAt < now)
 			deletedCount, err := t.ds.DeleteExpiredNotificationHistory(currentTime)
 			if err != nil {
@@ -319,7 +319,7 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 					"deleted_count", deletedCount,
 					"current_time", currentTime.Format("2006-01-02 15:04:05"))
 			}
-		}()
+		})
 	}
 
 	return cleaned
@@ -327,7 +327,12 @@ func (t *SpeciesTracker) CleanupOldNotificationRecords(currentTime time.Time) in
 
 // Close releases resources associated with the species tracker, including the logger.
 // This should be called during application shutdown or when the tracker is no longer needed.
+// It waits for any in-flight async database operations to complete before returning.
 func (t *SpeciesTracker) Close() error {
+	// Wait for any in-flight async database operations (notification persistence/cleanup)
+	// This prevents goroutine leaks and ensures data is persisted before shutdown
+	t.asyncOpsWg.Wait()
+
 	// Close the shared logger used by all tracker instances
 	// Note: This is a package-level resource shared across all tracker instances
 	if err := Close(); err != nil {
