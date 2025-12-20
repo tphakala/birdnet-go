@@ -318,13 +318,14 @@ func (c *Controller) Logout(ctx echo.Context) error {
 // GetAuthStatus handles GET /api/v2/auth/status
 func (c *Controller) GetAuthStatus(ctx echo.Context) error {
 	// Read authentication status details set by the AuthMiddleware in the context.
-	isAuthenticated := boolFromCtx(ctx, "isAuthenticated", false)
-	username := stringFromCtx(ctx, "username", "")
+	// Use the auth.CtxKey* constants to ensure consistency with the middleware.
+	isAuthenticated := boolFromCtx(ctx, auth.CtxKeyIsAuthenticated, false)
+	username := stringFromCtx(ctx, auth.CtxKeyUsername, "")
 	// Read the method as a string from context for now.
 	// Downstream consumers comparing this value might need updates if they
 	// relied on specific string literals. The middleware now sets the context
 	// value using the string representation of the new AuthMethod constants.
-	authMethod := stringFromCtx(ctx, "authMethod", auth.AuthMethodUnknown.String())
+	authMethod := stringFromCtx(ctx, auth.CtxKeyAuthMethod, auth.AuthMethodUnknown.String())
 
 	// Construct the response based on context values
 	status := AuthStatus{

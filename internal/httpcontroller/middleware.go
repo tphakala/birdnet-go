@@ -12,6 +12,7 @@ import (
 	sentryecho "github.com/getsentry/sentry-go/echo"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/security"
 )
 
@@ -275,11 +276,12 @@ func (s *Server) AuthMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			if security.IsInLocalSubnet(clientIP) {
 				// Local network clients can access protected API endpoints
 				// Set context values to indicate authenticated state via subnet bypass
+				// Use auth.CtxKey* constants for consistency with v2 middleware
 				c.Set("server", s)
-				c.Set("isAuthenticated", true)
-				c.Set("authMethod", security.AuthMethodLocalSubnet)
-				c.Set("username", security.SubnetUsername) // Subnet bypass username
-				c.Set("userClaims", nil)                   // Explicitly nil as no claims from token
+				c.Set(auth.CtxKeyIsAuthenticated, true)
+				c.Set(auth.CtxKeyAuthMethod, security.AuthMethodLocalSubnet)
+				c.Set(auth.CtxKeyUsername, security.SubnetUsername) // Subnet bypass username
+				c.Set("userClaims", nil)                            // Explicitly nil as no claims from token
 				s.Debug("Client %s is in local subnet, allowing access to %s", clientIP.String(), path)
 				return next(c)
 			}

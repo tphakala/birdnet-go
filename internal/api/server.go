@@ -300,6 +300,10 @@ func (s *Server) setupRoutes() error {
 
 	// Initialize SPA handler (routes registered after API controller)
 	s.spaHandler = NewSPAHandler(s.settings)
+	// Set auth service for SPA handler to determine access status
+	if s.authService != nil {
+		s.spaHandler.SetAuthService(s.authService)
+	}
 
 	s.slogger.Info("Static file server initialized",
 		"mode", s.staticServer.DevModeStatus(),
