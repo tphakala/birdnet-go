@@ -5,6 +5,7 @@ package species
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -75,7 +76,7 @@ func populateCacheEntries(tracker *SpeciesTracker, expiredCount, validCount int,
 func countValidCacheEntries(cache map[string]cachedSpeciesStatus) int {
 	count := 0
 	for name := range cache {
-		if len(name) >= 5 && name[:5] == "Valid" {
+		if strings.HasPrefix(name, "Valid") {
 			count++
 		}
 	}

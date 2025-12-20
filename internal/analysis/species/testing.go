@@ -46,8 +46,10 @@ func (t *SpeciesTracker) SetCurrentYearForTesting(year int) {
 func (t *SpeciesTracker) SetCurrentSeasonForTesting(season string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	now := time.Now()
 	t.cachedSeason = season
-	t.seasonCacheForTime = time.Now() // Set cache time to current time for validity
+	t.seasonCacheTime = now    // When we cached it (for TTL check)
+	t.seasonCacheForTime = now // Input time for which we cached (for period check)
 }
 
 // IsSeasonMapInitialized checks if the season map is properly initialized for the given season.

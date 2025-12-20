@@ -118,9 +118,14 @@ func (t *SpeciesTracker) loadLifetimeDataFromDatabase(now time.Time) error {
 		for _, species := range newSpeciesData {
 			if species.FirstSeenDate != "" {
 				firstSeen, err := time.Parse("2006-01-02", species.FirstSeenDate)
-				if err == nil {
-					t.speciesFirstSeen[species.ScientificName] = firstSeen
+				if err != nil {
+					logger.Debug("Failed to parse first seen date",
+						"species", species.ScientificName,
+						"date", species.FirstSeenDate,
+						"error", err)
+					continue
 				}
+				t.speciesFirstSeen[species.ScientificName] = firstSeen
 			}
 		}
 		logger.Debug("Loaded species data from database",
@@ -166,9 +171,14 @@ func (t *SpeciesTracker) loadYearlyDataFromDatabase(now time.Time) error {
 		for _, species := range yearlyData {
 			if species.FirstSeenDate != "" {
 				firstSeen, err := time.Parse("2006-01-02", species.FirstSeenDate)
-				if err == nil {
-					t.speciesThisYear[species.ScientificName] = firstSeen
+				if err != nil {
+					logger.Debug("Failed to parse yearly first seen date",
+						"species", species.ScientificName,
+						"date", species.FirstSeenDate,
+						"error", err)
+					continue
 				}
+				t.speciesThisYear[species.ScientificName] = firstSeen
 			}
 		}
 		logger.Debug("Loaded yearly species data from database",
@@ -220,9 +230,15 @@ func (t *SpeciesTracker) loadSingleSeasonData(seasonName string, now time.Time) 
 			continue
 		}
 		firstSeen, parseErr := time.Parse("2006-01-02", species.FirstSeenDate)
-		if parseErr == nil {
-			seasonMap[species.ScientificName] = firstSeen
+		if parseErr != nil {
+			logger.Debug("Failed to parse seasonal first seen date",
+				"species", species.ScientificName,
+				"season", seasonName,
+				"date", species.FirstSeenDate,
+				"error", parseErr)
+			continue
 		}
+		seasonMap[species.ScientificName] = firstSeen
 	}
 
 	logger.Debug("Season loading complete",
