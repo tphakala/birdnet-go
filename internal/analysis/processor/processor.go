@@ -1407,6 +1407,20 @@ func (p *Processor) GetEventTracker() *EventTracker {
 	return p.EventTracker
 }
 
+// SetNewSpeciesTracker safely replaces the current SpeciesTracker
+func (p *Processor) SetNewSpeciesTracker(tracker *species.SpeciesTracker) {
+	p.speciesTrackerMu.Lock()
+	defer p.speciesTrackerMu.Unlock()
+	p.NewSpeciesTracker = tracker
+}
+
+// GetNewSpeciesTracker safely returns the current SpeciesTracker
+func (p *Processor) GetNewSpeciesTracker() *species.SpeciesTracker {
+	p.speciesTrackerMu.RLock()
+	defer p.speciesTrackerMu.RUnlock()
+	return p.NewSpeciesTracker
+}
+
 // GetJobQueueStats returns statistics about the job queue
 // This method is thread-safe as it delegates to JobQueue.GetStats() which handles locking internally
 func (p *Processor) GetJobQueueStats() jobqueue.JobStatsSnapshot {

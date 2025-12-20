@@ -1363,6 +1363,14 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		_ = c.SendToast("Reconfiguring telemetry settings...", "info", 3000)
 	}
 
+	// Check species tracking settings
+	if speciesTrackingSettingsChanged(oldSettings, currentSettings) {
+		c.Debug("Species tracking settings changed, triggering reconfiguration")
+		reconfigActions = append(reconfigActions, "reconfigure_species_tracking")
+		// Send toast notification
+		_ = c.SendToast("Reconfiguring species tracking...", "info", 3000)
+	}
+
 	// Handle audio settings changes
 	audioActions, err := c.handleAudioSettingsChanges(oldSettings, currentSettings)
 	if err != nil {
@@ -1553,6 +1561,59 @@ func telemetrySettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	if currentSettings.Realtime.Telemetry.Enabled &&
 		oldSettings.Realtime.Telemetry.Listen != currentSettings.Realtime.Telemetry.Listen {
 		return true
+	}
+
+	return false
+}
+
+// speciesTrackingSettingsChanged checks if species tracking settings have changed
+func speciesTrackingSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	oldTracking := oldSettings.Realtime.SpeciesTracking
+	newTracking := currentSettings.Realtime.SpeciesTracking
+
+	// Check for changes in enabled state
+	if oldTracking.Enabled != newTracking.Enabled {
+		return true
+	}
+
+	// If disabled, no need to check other settings
+	if !newTracking.Enabled {
+		return false
+	}
+
+	// Check core settings
+	if oldTracking.NewSpeciesWindowDays != newTracking.NewSpeciesWindowDays ||
+		oldTracking.SyncIntervalMinutes != newTracking.SyncIntervalMinutes ||
+		oldTracking.NotificationSuppressionHours != newTracking.NotificationSuppressionHours {
+		return true
+	}
+
+	// Check yearly tracking settings
+	if oldTracking.YearlyTracking.Enabled != newTracking.YearlyTracking.Enabled ||
+		oldTracking.YearlyTracking.WindowDays != newTracking.YearlyTracking.WindowDays ||
+		oldTracking.YearlyTracking.ResetMonth != newTracking.YearlyTracking.ResetMonth ||
+		oldTracking.YearlyTracking.ResetDay != newTracking.YearlyTracking.ResetDay {
+		return true
+	}
+
+	// Check seasonal tracking settings
+	if oldTracking.SeasonalTracking.Enabled != newTracking.SeasonalTracking.Enabled ||
+		oldTracking.SeasonalTracking.WindowDays != newTracking.SeasonalTracking.WindowDays {
+		return true
+	}
+
+	// Check for changes in seasons configuration
+	if len(oldTracking.SeasonalTracking.Seasons) != len(newTracking.SeasonalTracking.Seasons) {
+		return true
+	}
+
+	for name, oldSeason := range oldTracking.SeasonalTracking.Seasons {
+		newSeason, exists := newTracking.SeasonalTracking.Seasons[name]
+		if !exists ||
+			oldSeason.StartMonth != newSeason.StartMonth ||
+			oldSeason.StartDay != newSeason.StartDay {
+			return true
+		}
 	}
 
 	return false
