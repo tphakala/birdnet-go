@@ -47,13 +47,15 @@
       document.documentElement.setAttribute('lang', initialLocale);
     })();
   </script>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <link rel="icon" type="image/png" sizes="32x32" href="/assets/images/favicon-32x32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="/assets/images/favicon-16x16.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="/assets/images/apple-touch-icon.png">
-  <link rel="shortcut icon" href="/assets/images/favicon.ico">
-  <link rel="stylesheet" href="/ui/assets/index.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" sizes="32x32" href="/ui/assets/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/ui/assets/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/ui/assets/apple-touch-icon.png">
+  <link rel="shortcut icon" href="/ui/assets/favicon.ico">
   <meta name="csrf-token" content="{{.CSRFToken}}">
+  <script type="module" crossorigin src="/ui/assets/index.js"></script>
+  <link rel="modulepreload" crossorigin href="/ui/assets/vendor.js">
+  <link rel="stylesheet" crossorigin href="/ui/assets/index.css">
 </head>
 <body>
   <div id="app"></div>
@@ -68,6 +70,5 @@
       currentPath: window.location.pathname
     };
   </script>
-  <script type="module" src="/ui/assets/index.js"></script>
 </body>
 </html>
