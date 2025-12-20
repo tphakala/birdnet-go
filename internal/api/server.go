@@ -15,8 +15,9 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	echomw "github.com/labstack/echo/v4/middleware"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	mw "github.com/tphakala/birdnet-go/internal/api/middleware"
 	v2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -28,11 +29,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
-// Middleware configuration constants.
-const (
-	gzipCompressionLevel = 5
-	hstsMaxAgeSeconds    = 31536000 // 1 year in seconds
-)
 
 // Server is the main HTTP server for BirdNET-Go.
 // It manages the Echo framework instance, middleware, and all HTTP routes.
@@ -228,84 +224,31 @@ func (s *Server) initLogger() error {
 // setupMiddleware configures the Echo middleware stack.
 func (s *Server) setupMiddleware() {
 	// Recovery middleware - should be first
-	s.echo.Use(middleware.Recover())
+	s.echo.Use(echomw.Recover())
 
-	// Request logging using the new RequestLoggerWithConfig (Echo 4.14.0+)
-	s.echo.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
-		LogStatus:   true,
-		LogURI:      true,
-		LogMethod:   true,
-		LogLatency:  true,
-		LogRemoteIP: true,
-		LogError:    true,
-		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
-			if s.slogger == nil {
-				return nil
-			}
+	// Request logging using custom middleware package
+	s.echo.Use(mw.NewRequestLogger(s.slogger))
 
-			attrs := []slog.Attr{
-				slog.String("method", v.Method),
-				slog.String("uri", v.URI),
-				slog.Int("status", v.Status),
-				slog.String("ip", v.RemoteIP),
-				slog.Duration("latency", v.Latency),
-			}
-
-			if v.Error != nil {
-				attrs = append(attrs, slog.String("error", v.Error.Error()))
-			}
-
-			s.slogger.LogAttrs(c.Request().Context(), slog.LevelInfo, "request", attrs...)
-			return nil
-		},
-	}))
+	// Security middleware configuration
+	securityConfig := mw.SecurityConfig{
+		AllowedOrigins:        s.config.AllowedOrigins,
+		AllowCredentials:      true,
+		HSTSMaxAge:            mw.HSTSMaxAge,
+		HSTSExcludeSubdomains: false,
+		ContentSecurityPolicy: "",
+	}
 
 	// CORS middleware
-	s.echo.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: s.config.AllowedOrigins,
-		AllowMethods: []string{
-			http.MethodGet,
-			http.MethodHead,
-			http.MethodPut,
-			http.MethodPatch,
-			http.MethodPost,
-			http.MethodDelete,
-			http.MethodOptions,
-		},
-		AllowHeaders: []string{
-			echo.HeaderOrigin,
-			echo.HeaderContentType,
-			echo.HeaderAccept,
-			echo.HeaderAuthorization,
-			"X-Requested-With",
-			"HX-Request",
-			"HX-Target",
-			"HX-Current-URL",
-		},
-		AllowCredentials: true,
-	}))
+	s.echo.Use(mw.NewCORS(securityConfig))
 
 	// Body limit middleware
-	s.echo.Use(middleware.BodyLimit(s.config.BodyLimit))
+	s.echo.Use(mw.NewBodyLimit(s.config.BodyLimit))
 
-	// Gzip compression
-	s.echo.Use(middleware.GzipWithConfig(middleware.GzipConfig{
-		Level: gzipCompressionLevel,
-		Skipper: func(c echo.Context) bool {
-			// Skip compression for SSE endpoints
-			return c.Request().Header.Get("Accept") == "text/event-stream"
-		},
-	}))
+	// Gzip compression (auto-skips SSE endpoints)
+	s.echo.Use(mw.NewGzip())
 
 	// Secure headers
-	s.echo.Use(middleware.SecureWithConfig(middleware.SecureConfig{
-		XSSProtection:         "1; mode=block",
-		ContentTypeNosniff:    "nosniff",
-		XFrameOptions:         "SAMEORIGIN",
-		HSTSMaxAge:            hstsMaxAgeSeconds,
-		HSTSExcludeSubdomains: false,
-		ContentSecurityPolicy: "", // Set appropriately for your needs
-	}))
+	s.echo.Use(mw.NewSecureHeaders(securityConfig))
 }
 
 // setupRoutes configures all HTTP routes.
