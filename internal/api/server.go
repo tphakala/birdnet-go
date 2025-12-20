@@ -2,9 +2,11 @@ package api
 
 import (
 	"context"
+	"embed"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"log/slog"
 	"net/http"
@@ -29,6 +31,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
+// AssetsFs holds the embedded assets filesystem (sounds, images, etc.).
+// This is set by main.go before starting the server.
+var AssetsFs embed.FS
 
 // Server is the main HTTP server for BirdNET-Go.
 // It manages the Echo framework instance, middleware, and all HTTP routes.
@@ -59,6 +64,7 @@ type Server struct {
 	// Static file serving
 	staticServer *StaticFileServer
 	spaHandler   *SPAHandler
+	assetsFS     fs.FS // Embedded assets filesystem (sounds, images, etc.)
 
 	// Lifecycle management
 	ctx       context.Context
@@ -133,6 +139,21 @@ func WithControlChannel(ch chan string) ServerOption {
 func WithAudioLevelChannel(ch chan myaudio.AudioLevelData) ServerOption {
 	return func(s *Server) {
 		s.audioLevelChan = ch
+	}
+}
+
+// WithAssetsFS sets the embedded assets filesystem for serving static assets.
+// This is used to serve files from /assets/* (sounds, images, etc.).
+func WithAssetsFS(assets embed.FS) ServerOption {
+	return func(s *Server) {
+		// Extract the "assets" subdirectory from the embedded FS
+		subFS, err := fs.Sub(assets, "assets")
+		if err != nil {
+			// If extraction fails, use the root FS
+			s.assetsFS = assets
+		} else {
+			s.assetsFS = subFS
+		}
 	}
 }
 
@@ -258,7 +279,7 @@ func (s *Server) setupRoutes() error {
 	s.echo.GET("/health", s.healthCheck)
 
 	// Initialize static file server for frontend assets
-	s.staticServer = NewStaticFileServer(s.slogger)
+	s.staticServer = NewStaticFileServer(s.slogger, s.assetsFS)
 	s.staticServer.RegisterRoutes(s.echo)
 
 	// Initialize SPA handler (routes registered after API controller)
@@ -479,7 +500,16 @@ func (s *Server) registerSPARoutes() {
 		"/ui/about",
 	}
 
+	// Public dynamic routes (with path parameters)
+	publicDynamicRoutes := []string{
+		"/ui/detections/:id", // Detection detail page
+	}
+
 	for _, route := range publicRoutes {
+		s.echo.GET(route, s.spaHandler.ServeApp)
+	}
+
+	for _, route := range publicDynamicRoutes {
 		s.echo.GET(route, s.spaHandler.ServeApp)
 	}
 
@@ -510,8 +540,14 @@ func (s *Server) registerSPARoutes() {
 		}
 	}
 
+	// Catch-all route for any unmatched /ui/* paths
+	// This ensures SPA handles client-side routing for unknown routes
+	// Must be registered last to not override specific routes
+	s.echo.GET("/ui/*", s.spaHandler.ServeApp)
+
 	s.slogger.Debug("SPA routes registered",
 		"public_routes", len(publicRoutes),
+		"public_dynamic_routes", len(publicDynamicRoutes),
 		"protected_routes", len(protectedRoutes),
 	)
 }

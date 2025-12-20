@@ -31,6 +31,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/monitor"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/security"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -249,6 +251,10 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	} else {
 		// Use new api server
 		log.Println("📡 Using new HTTP server (api)")
+		// Create OAuth2Server for authentication (same as legacy httpcontroller)
+		oauth2Server := security.NewOAuth2Server()
+		// Create SunCalc for sun event times (same as legacy httpcontroller)
+		sunCalc := suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
 		apiServer, err := api.New(
 			settings,
 			api.WithDataStore(dataStore),
@@ -257,6 +263,9 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 			api.WithMetrics(metrics),
 			api.WithControlChannel(controlChan),
 			api.WithAudioLevelChannel(audioLevelChan),
+			api.WithOAuth2Server(oauth2Server),
+			api.WithSunCalc(sunCalc),
+			api.WithAssetsFS(api.AssetsFs),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create new HTTP server: %w", err)
