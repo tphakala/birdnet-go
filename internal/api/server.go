@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"embed"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -22,6 +21,7 @@ import (
 	v2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -145,7 +145,9 @@ func WithAssetsFS(assets embed.FS) ServerOption {
 		// Extract the "assets" subdirectory from the embedded FS
 		subFS, err := fs.Sub(assets, "assets")
 		if err != nil {
-			// If extraction fails, use the root FS
+			// If extraction fails, use the root FS and log a warning
+			// This can happen if the assets directory structure changes
+			log.Printf("Warning: could not extract assets subdirectory: %v (using root FS)", err)
 			s.assetsFS = assets
 		} else {
 			s.assetsFS = subFS
@@ -417,15 +419,17 @@ func (s *Server) Shutdown() error {
 		return fmt.Errorf("shutdown error: %w", err)
 	}
 
-	// Close logger
-	if s.logCloser != nil {
-		if err := s.logCloser(); err != nil {
-			s.logger.Printf("Error closing log file: %v", err)
-		}
-	}
-
+	// Log completion before closing logger
 	s.slogger.Info("Server shutdown complete")
 	s.logger.Println("✅ Server shutdown complete")
+
+	// Close logger last to ensure all messages are written
+	if s.logCloser != nil {
+		if err := s.logCloser(); err != nil {
+			// Use fmt since logger may be closed
+			fmt.Printf("Error closing log file: %v\n", err)
+		}
+	}
 
 	return nil
 }

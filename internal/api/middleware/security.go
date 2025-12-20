@@ -9,21 +9,30 @@ import (
 
 // Security configuration constants.
 const (
-	// HStsMaxAge is the max-age value for HSTS header (1 year in seconds).
+	// HSTSMaxAge is the max-age value for HSTS header (1 year in seconds).
 	HSTSMaxAge = 31536000
 )
 
 // SecurityConfig holds configuration for security middleware.
 type SecurityConfig struct {
-	// CORS settings
-	AllowedOrigins   []string
+	// AllowedOrigins specifies which origins are permitted for CORS requests.
+	// Use []string{"*"} to allow all origins (not recommended with credentials).
+	AllowedOrigins []string
+
+	// AllowCredentials indicates whether credentials (cookies, auth headers) are allowed.
+	// Note: Cannot be true when AllowedOrigins contains "*" per CORS specification.
 	AllowCredentials bool
 
-	// HSTS settings
-	HSTSMaxAge            int
+	// HSTSMaxAge is the max-age value in seconds for the Strict-Transport-Security header.
+	// Set to 0 to disable HSTS.
+	HSTSMaxAge int
+
+	// HSTSExcludeSubdomains controls whether HSTS applies to subdomains.
+	// When false (default), HSTS includes subdomains.
 	HSTSExcludeSubdomains bool
 
-	// Content Security Policy
+	// ContentSecurityPolicy specifies the Content-Security-Policy header value.
+	// Leave empty to not set the header.
 	ContentSecurityPolicy string
 }
 
@@ -31,10 +40,14 @@ type SecurityConfig struct {
 // This can be used as a starting point when configuring security middleware.
 // Note: Currently the server constructs SecurityConfig directly, but this
 // function is provided for convenience and testing.
+//
+// Important: AllowCredentials is false by default because wildcard origins ("*")
+// cannot be combined with credentials per the CORS specification. If you need
+// credentials, specify explicit origins instead of using this default.
 func DefaultSecurityConfig() SecurityConfig {
 	return SecurityConfig{
 		AllowedOrigins:        []string{"*"},
-		AllowCredentials:      true,
+		AllowCredentials:      false, // Must be false with wildcard origins per CORS spec
 		HSTSMaxAge:            HSTSMaxAge,
 		HSTSExcludeSubdomains: false,
 		ContentSecurityPolicy: "",
