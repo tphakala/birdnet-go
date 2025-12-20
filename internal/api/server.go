@@ -281,9 +281,12 @@ func (s *Server) setupRoutes() error {
 	}
 	s.apiController = apiController
 
-	// Assign processor to API controller
+	// Assign processor to API controller and connect SSE broadcaster
 	if s.processor != nil {
 		s.apiController.Processor = s.processor
+		// Connect SSE broadcaster for real-time detection streaming
+		s.processor.SetSSEBroadcaster(s.apiController.BroadcastDetection)
+		s.slogger.Debug("SSE broadcaster connected to processor")
 	}
 
 	// Set audio level channel if available
