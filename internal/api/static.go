@@ -117,7 +117,9 @@ func (sfs *StaticFileServer) serveFromDisk(c echo.Context, path string) error {
 	stat, err := file.Stat()
 	if err != nil {
 		sfs.logError("Failed to stat file", path, err)
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info")
+		httpErr := echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info")
+		httpErr.Internal = err
+		return httpErr
 	}
 
 	sfs.setDevModeHeaders(c, path)
@@ -206,11 +208,16 @@ func (sfs *StaticFileServer) serveFromEmbed(c echo.Context, path string) error {
 		return httpErr
 	}
 
-	// Set content type
+	return sfs.serveFileContent(c, file, stat, path)
+}
+
+// serveFileContent serves file content with appropriate headers and efficient delivery.
+// This is a shared helper used by both serveFromEmbed and ServeEmbeddedFS.
+func (sfs *StaticFileServer) serveFileContent(c echo.Context, file fs.File, stat fs.FileInfo, path string) error {
 	contentType := getMIMEType(path)
 	c.Response().Header().Set("Content-Type", contentType)
 
-	// Production mode: enable long-term caching for hashed assets
+	// Enable long-term caching for embedded assets
 	// Vite generates hashed filenames, so we can cache aggressively
 	c.Response().Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 
@@ -237,6 +244,10 @@ func (sfs *StaticFileServer) serveFromEmbed(c echo.Context, path string) error {
 // ServeEmbeddedFS serves files from any embedded filesystem.
 // This is useful for serving other embedded assets like views or static assets.
 func (sfs *StaticFileServer) ServeEmbeddedFS(c echo.Context, fsys fs.FS, path string) error {
+	if fsys == nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Assets filesystem not available")
+	}
+
 	file, err := fsys.Open(path)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "File not found")
@@ -249,25 +260,15 @@ func (sfs *StaticFileServer) ServeEmbeddedFS(c echo.Context, fsys fs.FS, path st
 
 	stat, err := file.Stat()
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info")
+		if sfs.logger != nil {
+			sfs.logger.Error("Failed to stat file from embedded FS", "path", path, "error", err)
+		}
+		httpErr := echo.NewHTTPError(http.StatusInternalServerError, "Failed to get file info")
+		httpErr.Internal = err
+		return httpErr
 	}
 
-	contentType := getMIMEType(path)
-	c.Response().Header().Set("Content-Type", contentType)
-
-	// Try to serve with http.ServeContent
-	if seeker, ok := file.(io.ReadSeeker); ok {
-		http.ServeContent(c.Response(), c.Request(), filepath.Base(path), stat.ModTime(), seeker)
-		return nil
-	}
-
-	if ra, ok := file.(io.ReaderAt); ok {
-		seeker := io.NewSectionReader(ra, 0, stat.Size())
-		http.ServeContent(c.Response(), c.Request(), filepath.Base(path), stat.ModTime(), seeker)
-		return nil
-	}
-
-	return c.Stream(http.StatusOK, contentType, file)
+	return sfs.serveFileContent(c, file, stat, path)
 }
 
 // getMIMEType returns the appropriate MIME type for a file based on its extension.

@@ -28,6 +28,9 @@ type SecurityConfig struct {
 }
 
 // DefaultSecurityConfig returns a SecurityConfig with sensible defaults.
+// This can be used as a starting point when configuring security middleware.
+// Note: Currently the server constructs SecurityConfig directly, but this
+// function is provided for convenience and testing.
 func DefaultSecurityConfig() SecurityConfig {
 	return SecurityConfig{
 		AllowedOrigins:        []string{"*"},

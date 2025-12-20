@@ -11,12 +11,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// Default timeout constants for the HTTP server.
+// Default constants for the HTTP server.
 const (
 	DefaultReadTimeout     = 30 * time.Second
 	DefaultWriteTimeout    = 30 * time.Second
 	DefaultIdleTimeout     = 120 * time.Second
 	DefaultShutdownTimeout = 10 * time.Second
+
+	// DefaultLogPath is the default path for the server log file.
+	DefaultLogPath = "logs/server.log"
 )
 
 // Config holds the HTTP server configuration.

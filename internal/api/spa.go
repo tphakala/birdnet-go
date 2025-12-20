@@ -60,7 +60,9 @@ func (h *SPAHandler) ServeApp(c echo.Context) error {
 	// Render template to buffer
 	var buf bytes.Buffer
 	if err := h.template.Execute(&buf, data); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to render page")
+		httpErr := echo.NewHTTPError(http.StatusInternalServerError, "Failed to render page")
+		httpErr.Internal = err
+		return httpErr
 	}
 
 	return c.HTML(http.StatusOK, buf.String())

@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
@@ -67,9 +66,6 @@ type Server struct {
 	assetsFS     fs.FS // Embedded assets filesystem (sounds, images, etc.)
 
 	// Lifecycle management
-	ctx       context.Context
-	cancel    context.CancelFunc
-	wg        sync.WaitGroup
 	startTime time.Time
 
 	// Cleanup
@@ -165,15 +161,10 @@ func New(settings *conf.Settings, opts ...ServerOption) (*Server, error) {
 		return nil, fmt.Errorf("invalid server configuration: %w", err)
 	}
 
-	// Create context for lifecycle management
-	ctx, cancel := context.WithCancel(context.Background())
-
 	// Create the server instance
 	s := &Server{
 		config:    config,
 		settings:  settings,
-		ctx:       ctx,
-		cancel:    cancel,
 		startTime: time.Now(),
 	}
 
@@ -189,7 +180,6 @@ func New(settings *conf.Settings, opts ...ServerOption) (*Server, error) {
 
 	// Initialize structured logger
 	if err := s.initLogger(); err != nil {
-		cancel()
 		return nil, fmt.Errorf("failed to initialize logger: %w", err)
 	}
 
@@ -208,7 +198,6 @@ func New(settings *conf.Settings, opts ...ServerOption) (*Server, error) {
 
 	// Setup routes
 	if err := s.setupRoutes(); err != nil {
-		cancel()
 		return nil, fmt.Errorf("failed to setup routes: %w", err)
 	}
 
@@ -226,8 +215,7 @@ func (s *Server) initLogger() error {
 	s.levelVar = new(slog.LevelVar)
 	s.levelVar.Set(s.config.LogLevel)
 
-	logPath := "logs/server.log"
-	logger, closer, err := logging.NewFileLogger(logPath, "server", s.levelVar)
+	logger, closer, err := logging.NewFileLogger(DefaultLogPath, "server", s.levelVar)
 	if err != nil {
 		// Fallback to discard logger
 		s.logger.Printf("Warning: Failed to initialize server logger: %v", err)
@@ -239,7 +227,7 @@ func (s *Server) initLogger() error {
 
 	s.slogger = logger
 	s.logCloser = closer
-	s.logger.Printf("Server logging initialized to %s", logPath)
+	s.logger.Printf("Server logging initialized to %s", DefaultLogPath)
 	return nil
 }
 
@@ -414,26 +402,20 @@ func (s *Server) StartWithGracefulShutdown() error {
 
 // Shutdown gracefully stops the server.
 func (s *Server) Shutdown() error {
-	// Cancel context to signal goroutines
-	s.cancel()
-
 	// Create shutdown context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), s.config.ShutdownTimeout)
 	defer cancel()
 
-	// Shutdown API controller first
+	// Shutdown API controller first (waits for its background goroutines)
 	if s.apiController != nil {
 		s.apiController.Shutdown()
 	}
 
-	// Shutdown Echo server
+	// Shutdown Echo server (causes Start() goroutine to exit)
 	if err := s.echo.Shutdown(ctx); err != nil {
 		s.slogger.Error("Error during server shutdown", "error", err)
 		return fmt.Errorf("shutdown error: %w", err)
 	}
-
-	// Wait for goroutines to finish
-	s.wg.Wait()
 
 	// Close logger
 	if s.logCloser != nil {
@@ -540,7 +522,16 @@ func (s *Server) registerSPARoutes() {
 		}
 	}
 
-	// Catch-all route for any unmatched /ui/* paths
+	// Protected catch-all for settings routes
+	// Any /ui/settings/* route not explicitly listed above requires authentication
+	// This ensures new settings pages are protected by default
+	if authMiddleware != nil {
+		s.echo.GET("/ui/settings/*", s.spaHandler.ServeApp, authMiddleware)
+	} else {
+		s.echo.GET("/ui/settings/*", s.spaHandler.ServeApp)
+	}
+
+	// Catch-all route for any unmatched /ui/* paths (public)
 	// This ensures SPA handles client-side routing for unknown routes
 	// Must be registered last to not override specific routes
 	s.echo.GET("/ui/*", s.spaHandler.ServeApp)
