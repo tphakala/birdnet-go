@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -188,6 +189,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureSoundLevel()
 	case "reconfigure_telemetry":
 		cm.handleReconfigureTelemetry()
+	case "reconfigure_species_tracking":
+		cm.handleReconfigureSpeciesTracking()
 	default:
 		log.Printf("Received unknown control signal: %v", signal)
 	}
@@ -584,23 +587,95 @@ func (cm *ControlMonitor) validateListenAddress(address string) error {
 	if address == "" {
 		return fmt.Errorf("listen address cannot be empty")
 	}
-	
+
 	// Check if it contains a colon (for port)
 	if !strings.Contains(address, ":") {
 		return fmt.Errorf("listen address must include port (e.g., '0.0.0.0:8090')")
 	}
-	
+
 	// Split and validate components
 	parts := strings.Split(address, ":")
 	if len(parts) != 2 {
 		return fmt.Errorf("invalid address format, expected 'host:port'")
 	}
-	
+
 	// Validate port is numeric
 	port := parts[1]
 	if _, err := strconv.Atoi(port); err != nil {
 		return fmt.Errorf("invalid port number: %s", port)
 	}
-	
+
 	return nil
+}
+
+// handleReconfigureSpeciesTracking reconfigures the species tracking system
+func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
+	log.Printf("🔄 Reconfiguring species tracking...")
+	settings := conf.Setting()
+
+	if cm.proc == nil {
+		log.Printf("❌ Error: Processor not available")
+		cm.notifyError("Failed to reconfigure species tracking", fmt.Errorf("processor not available"))
+		return
+	}
+
+	// Get the datastore from the processor
+	ds := cm.proc.Ds
+	if ds == nil {
+		log.Printf("❌ Error: Datastore not available")
+		cm.notifyError("Failed to reconfigure species tracking", fmt.Errorf("datastore not available"))
+		return
+	}
+
+	// Close existing tracker to prevent goroutine leaks
+	// This waits for in-flight async database operations to complete
+	if existingTracker := cm.proc.GetNewSpeciesTracker(); existingTracker != nil {
+		if err := existingTracker.Close(); err != nil {
+			log.Printf("⚠️ Warning: Failed to close existing species tracker: %v", err)
+			// Continue anyway - we still want to reconfigure
+		}
+	}
+
+	// If species tracking is disabled, set tracker to nil
+	if !settings.Realtime.SpeciesTracking.Enabled {
+		cm.proc.SetNewSpeciesTracker(nil)
+		log.Printf("✅ Species tracking disabled")
+		cm.notifySuccess("Species tracking disabled")
+		return
+	}
+
+	// Validate species tracking settings
+	if err := settings.Realtime.SpeciesTracking.Validate(); err != nil {
+		log.Printf("❌ Invalid species tracking configuration: %v", err)
+		cm.notifyError("Invalid species tracking configuration", err)
+		return
+	}
+
+	// Adjust seasonal tracking for hemisphere based on BirdNET latitude
+	hemisphereAwareTracking := settings.Realtime.SpeciesTracking
+	if hemisphereAwareTracking.SeasonalTracking.Enabled {
+		hemisphereAwareTracking.SeasonalTracking = conf.GetSeasonalTrackingWithHemisphere(
+			hemisphereAwareTracking.SeasonalTracking,
+			settings.BirdNET.Latitude,
+		)
+	}
+
+	// Create new species tracker with updated settings
+	newTracker := species.NewTrackerFromSettings(ds, &hemisphereAwareTracking)
+
+	// Initialize species tracker from database
+	if err := newTracker.InitFromDatabase(); err != nil {
+		log.Printf("⚠️ Warning: Failed to initialize species tracker from database: %v", err)
+		// Continue anyway - tracker will work for new detections
+	}
+
+	// Replace the existing tracker
+	cm.proc.SetNewSpeciesTracker(newTracker)
+
+	hemisphere := conf.DetectHemisphere(settings.BirdNET.Latitude)
+	log.Printf("✅ Species tracking reconfigured: window=%d days, sync=%d minutes, hemisphere=%s",
+		settings.Realtime.SpeciesTracking.NewSpeciesWindowDays,
+		settings.Realtime.SpeciesTracking.SyncIntervalMinutes,
+		hemisphere)
+	cm.notifySuccess("Species tracking reconfigured successfully")
 }
