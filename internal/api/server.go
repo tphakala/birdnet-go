@@ -1,0 +1,467 @@
+package api
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	v2 "github.com/tphakala/birdnet-go/internal/api/v2"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/logging"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/security"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
+)
+
+// Middleware configuration constants.
+const (
+	gzipCompressionLevel = 5
+	hstsMaxAgeSeconds    = 31536000 // 1 year in seconds
+)
+
+// Server is the main HTTP server for BirdNET-Go.
+// It manages the Echo framework instance, middleware, and all HTTP routes.
+type Server struct {
+	// Core components
+	echo     *echo.Echo
+	config   *Config
+	settings *conf.Settings
+	logger   *log.Logger
+	slogger  *slog.Logger
+	levelVar *slog.LevelVar
+
+	// Dependencies
+	dataStore      datastore.Interface
+	birdImageCache *imageprovider.BirdImageCache
+	sunCalc        *suncalc.SunCalc
+	processor      *processor.Processor
+	oauth2Server   *security.OAuth2Server
+	metrics        *observability.Metrics
+
+	// Channels
+	controlChan    chan string
+	audioLevelChan chan myaudio.AudioLevelData
+
+	// API controller
+	apiController *v2.Controller
+
+	// Lifecycle management
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	startTime time.Time
+
+	// Cleanup
+	logCloser func() error
+}
+
+// ServerOption is a functional option for configuring the Server.
+type ServerOption func(*Server)
+
+// WithLogger sets the standard logger for the server.
+func WithLogger(logger *log.Logger) ServerOption {
+	return func(s *Server) {
+		s.logger = logger
+	}
+}
+
+// WithDataStore sets the datastore for the server.
+func WithDataStore(ds datastore.Interface) ServerOption {
+	return func(s *Server) {
+		s.dataStore = ds
+	}
+}
+
+// WithBirdImageCache sets the bird image cache for the server.
+func WithBirdImageCache(cache *imageprovider.BirdImageCache) ServerOption {
+	return func(s *Server) {
+		s.birdImageCache = cache
+	}
+}
+
+// WithSunCalc sets the sun calculator for the server.
+func WithSunCalc(sc *suncalc.SunCalc) ServerOption {
+	return func(s *Server) {
+		s.sunCalc = sc
+	}
+}
+
+// WithProcessor sets the processor for the server.
+func WithProcessor(proc *processor.Processor) ServerOption {
+	return func(s *Server) {
+		s.processor = proc
+	}
+}
+
+// WithOAuth2Server sets the OAuth2 server for authentication.
+func WithOAuth2Server(oauth *security.OAuth2Server) ServerOption {
+	return func(s *Server) {
+		s.oauth2Server = oauth
+	}
+}
+
+// WithMetrics sets the observability metrics for the server.
+func WithMetrics(m *observability.Metrics) ServerOption {
+	return func(s *Server) {
+		s.metrics = m
+	}
+}
+
+// WithControlChannel sets the control channel for system commands.
+func WithControlChannel(ch chan string) ServerOption {
+	return func(s *Server) {
+		s.controlChan = ch
+	}
+}
+
+// WithAudioLevelChannel sets the audio level channel for SSE streaming.
+func WithAudioLevelChannel(ch chan myaudio.AudioLevelData) ServerOption {
+	return func(s *Server) {
+		s.audioLevelChan = ch
+	}
+}
+
+// New creates a new HTTP server with the given settings and options.
+func New(settings *conf.Settings, opts ...ServerOption) (*Server, error) {
+	// Create configuration from settings
+	config := ConfigFromSettings(settings)
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid server configuration: %w", err)
+	}
+
+	// Create context for lifecycle management
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Create the server instance
+	s := &Server{
+		config:    config,
+		settings:  settings,
+		ctx:       ctx,
+		cancel:    cancel,
+		startTime: time.Now(),
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	// Set default logger if not provided
+	if s.logger == nil {
+		s.logger = log.Default()
+	}
+
+	// Initialize structured logger
+	if err := s.initLogger(); err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to initialize logger: %w", err)
+	}
+
+	// Initialize Echo
+	s.echo = echo.New()
+	s.echo.HideBanner = true
+	s.echo.HidePort = true
+
+	// Configure Echo server timeouts
+	s.echo.Server.ReadTimeout = config.ReadTimeout
+	s.echo.Server.WriteTimeout = config.WriteTimeout
+	s.echo.Server.IdleTimeout = config.IdleTimeout
+
+	// Setup middleware
+	s.setupMiddleware()
+
+	// Setup routes
+	if err := s.setupRoutes(); err != nil {
+		cancel()
+		return nil, fmt.Errorf("failed to setup routes: %w", err)
+	}
+
+	s.slogger.Info("HTTP server initialized",
+		"address", config.Address(),
+		"tls", config.TLSEnabled,
+		"debug", config.Debug,
+	)
+
+	return s, nil
+}
+
+// initLogger initializes the structured logger for the server.
+func (s *Server) initLogger() error {
+	s.levelVar = new(slog.LevelVar)
+	s.levelVar.Set(s.config.LogLevel)
+
+	logPath := "logs/server.log"
+	logger, closer, err := logging.NewFileLogger(logPath, "server", s.levelVar)
+	if err != nil {
+		// Fallback to discard logger
+		s.logger.Printf("Warning: Failed to initialize server logger: %v", err)
+		handler := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: s.levelVar})
+		s.slogger = slog.New(handler).With("service", "server")
+		s.logCloser = func() error { return nil }
+		return nil
+	}
+
+	s.slogger = logger
+	s.logCloser = closer
+	s.logger.Printf("Server logging initialized to %s", logPath)
+	return nil
+}
+
+// setupMiddleware configures the Echo middleware stack.
+func (s *Server) setupMiddleware() {
+	// Recovery middleware - should be first
+	s.echo.Use(middleware.Recover())
+
+	// Request logging using the new RequestLoggerWithConfig (Echo 4.14.0+)
+	s.echo.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
+		LogStatus:   true,
+		LogURI:      true,
+		LogMethod:   true,
+		LogLatency:  true,
+		LogRemoteIP: true,
+		LogError:    true,
+		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
+			if s.slogger == nil {
+				return nil
+			}
+
+			attrs := []slog.Attr{
+				slog.String("method", v.Method),
+				slog.String("uri", v.URI),
+				slog.Int("status", v.Status),
+				slog.String("ip", v.RemoteIP),
+				slog.Duration("latency", v.Latency),
+			}
+
+			if v.Error != nil {
+				attrs = append(attrs, slog.String("error", v.Error.Error()))
+			}
+
+			s.slogger.LogAttrs(c.Request().Context(), slog.LevelInfo, "request", attrs...)
+			return nil
+		},
+	}))
+
+	// CORS middleware
+	s.echo.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: s.config.AllowedOrigins,
+		AllowMethods: []string{
+			http.MethodGet,
+			http.MethodHead,
+			http.MethodPut,
+			http.MethodPatch,
+			http.MethodPost,
+			http.MethodDelete,
+			http.MethodOptions,
+		},
+		AllowHeaders: []string{
+			echo.HeaderOrigin,
+			echo.HeaderContentType,
+			echo.HeaderAccept,
+			echo.HeaderAuthorization,
+			"X-Requested-With",
+			"HX-Request",
+			"HX-Target",
+			"HX-Current-URL",
+		},
+		AllowCredentials: true,
+	}))
+
+	// Body limit middleware
+	s.echo.Use(middleware.BodyLimit(s.config.BodyLimit))
+
+	// Gzip compression
+	s.echo.Use(middleware.GzipWithConfig(middleware.GzipConfig{
+		Level: gzipCompressionLevel,
+		Skipper: func(c echo.Context) bool {
+			// Skip compression for SSE endpoints
+			return c.Request().Header.Get("Accept") == "text/event-stream"
+		},
+	}))
+
+	// Secure headers
+	s.echo.Use(middleware.SecureWithConfig(middleware.SecureConfig{
+		XSSProtection:         "1; mode=block",
+		ContentTypeNosniff:    "nosniff",
+		XFrameOptions:         "SAMEORIGIN",
+		HSTSMaxAge:            hstsMaxAgeSeconds,
+		HSTSExcludeSubdomains: false,
+		ContentSecurityPolicy: "", // Set appropriately for your needs
+	}))
+}
+
+// setupRoutes configures all HTTP routes.
+func (s *Server) setupRoutes() error {
+	// Health check endpoint at root level
+	s.echo.GET("/health", s.healthCheck)
+
+	// Initialize API v2 controller
+	apiController, err := v2.New(
+		s.echo,
+		s.dataStore,
+		s.settings,
+		s.birdImageCache,
+		s.sunCalc,
+		s.controlChan,
+		s.logger,
+		s.oauth2Server,
+		s.metrics,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to initialize API v2: %w", err)
+	}
+	s.apiController = apiController
+
+	// Assign processor to API controller
+	if s.processor != nil {
+		s.apiController.Processor = s.processor
+	}
+
+	// Set audio level channel if available
+	if s.audioLevelChan != nil {
+		s.apiController.SetAudioLevelChan(s.audioLevelChan)
+	}
+
+	s.slogger.Info("Routes initialized",
+		"api_version", "v2",
+	)
+
+	return nil
+}
+
+// healthCheck handles the server health check endpoint.
+func (s *Server) healthCheck(c echo.Context) error {
+	uptime := time.Since(s.startTime)
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"status":         "healthy",
+		"version":        s.settings.Version,
+		"build_date":     s.settings.BuildDate,
+		"uptime":         uptime.String(),
+		"uptime_seconds": uptime.Seconds(),
+		"timestamp":      time.Now().Format(time.RFC3339),
+	})
+}
+
+// Start begins serving HTTP requests.
+// It blocks until the server is shut down.
+func (s *Server) Start() error {
+	addr := s.config.Address()
+
+	s.slogger.Info("Starting HTTP server", "address", addr)
+	s.logger.Printf("🌐 HTTP server starting on %s", addr)
+
+	var err error
+	switch {
+	case s.config.AutoTLS:
+		// AutoTLS with Let's Encrypt
+		s.slogger.Info("Starting with AutoTLS (Let's Encrypt)")
+		err = s.echo.StartAutoTLS(addr)
+	case s.config.TLSEnabled:
+		// Manual TLS
+		s.slogger.Info("Starting with manual TLS",
+			"cert", s.config.TLSCertFile,
+			"key", s.config.TLSKeyFile,
+		)
+		err = s.echo.StartTLS(addr, s.config.TLSCertFile, s.config.TLSKeyFile)
+	default:
+		// Plain HTTP
+		err = s.echo.Start(addr)
+	}
+
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("server error: %w", err)
+	}
+
+	return nil
+}
+
+// StartWithGracefulShutdown starts the server and handles graceful shutdown on SIGINT/SIGTERM.
+func (s *Server) StartWithGracefulShutdown() error {
+	// Start server in goroutine
+	go func() {
+		if err := s.Start(); err != nil {
+			s.slogger.Error("Server error", "error", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	s.slogger.Info("Shutdown signal received, initiating graceful shutdown...")
+	s.logger.Println("🛑 Shutdown signal received")
+
+	return s.Shutdown()
+}
+
+// Shutdown gracefully stops the server.
+func (s *Server) Shutdown() error {
+	// Cancel context to signal goroutines
+	s.cancel()
+
+	// Create shutdown context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), s.config.ShutdownTimeout)
+	defer cancel()
+
+	// Shutdown API controller first
+	if s.apiController != nil {
+		s.apiController.Shutdown()
+	}
+
+	// Shutdown Echo server
+	if err := s.echo.Shutdown(ctx); err != nil {
+		s.slogger.Error("Error during server shutdown", "error", err)
+		return fmt.Errorf("shutdown error: %w", err)
+	}
+
+	// Wait for goroutines to finish
+	s.wg.Wait()
+
+	// Close logger
+	if s.logCloser != nil {
+		if err := s.logCloser(); err != nil {
+			s.logger.Printf("Error closing log file: %v", err)
+		}
+	}
+
+	s.slogger.Info("Server shutdown complete")
+	s.logger.Println("✅ Server shutdown complete")
+
+	return nil
+}
+
+// Echo returns the underlying Echo instance.
+// This is useful for testing or advanced configuration.
+func (s *Server) Echo() *echo.Echo {
+	return s.echo
+}
+
+// APIController returns the API v2 controller.
+func (s *Server) APIController() *v2.Controller {
+	return s.apiController
+}
+
+// SetLogLevel dynamically changes the logging level.
+func (s *Server) SetLogLevel(level slog.Level) {
+	if s.levelVar != nil {
+		s.levelVar.Set(level)
+		s.slogger.Info("Log level changed", "level", level.String())
+	}
+}
