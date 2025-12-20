@@ -14,6 +14,18 @@ import (
 // bearerTokenParts is the expected number of parts when splitting Authorization header.
 const bearerTokenParts = 2
 
+// Context keys for authentication values stored in echo.Context.
+// Using named constants prevents typos and provides centralized documentation.
+// These keys are prefixed with "auth:" to prevent collisions with other packages.
+const (
+	// CtxKeyIsAuthenticated indicates whether the request is authenticated.
+	CtxKeyIsAuthenticated = "auth:isAuthenticated"
+	// CtxKeyAuthMethod indicates the authentication method used.
+	CtxKeyAuthMethod = "auth:authMethod"
+	// CtxKeyUsername contains the authenticated user's username (if available).
+	CtxKeyUsername = "auth:username"
+)
+
 // Middleware provides authentication middleware with the Service
 type Middleware struct {
 	AuthService Service
@@ -80,14 +92,18 @@ func (m *Middleware) shouldBypassAuth(c echo.Context) bool {
 	if !m.AuthService.IsAuthRequired(c) {
 		m.logDebug("Authentication not required for this client",
 			"ip", c.RealIP(), "path", c.Request().URL.Path)
-		c.Set("isAuthenticated", false)
-		c.Set("authMethod", AuthMethodNone)
+		c.Set(CtxKeyIsAuthenticated, false)
+		c.Set(CtxKeyAuthMethod, AuthMethodNone)
 		return true
 	}
 	return false
 }
 
 // tryTokenAuth attempts to authenticate using a Bearer token from the Authorization header.
+// Note: Token-based authentication does not currently provide username information.
+// The AccessToken structure only contains the token and expiry, not user identity.
+// This is a known limitation - downstream handlers should not rely on username
+// being populated for token-authenticated requests.
 func (m *Middleware) tryTokenAuth(c echo.Context) authResult {
 	authHeader := c.Request().Header.Get("Authorization")
 	if authHeader == "" {
@@ -109,9 +125,12 @@ func (m *Middleware) tryTokenAuth(c echo.Context) authResult {
 	}
 
 	m.logDebug("Token authentication successful", "path", path, "ip", ip)
-	c.Set("isAuthenticated", true)
-	c.Set("username", m.AuthService.GetUsername(c))
-	c.Set("authMethod", AuthMethodToken)
+	c.Set(CtxKeyIsAuthenticated, true)
+	// Note: Username is not available for token auth as tokens don't store user identity.
+	// The current AccessToken struct only contains token string and expiry.
+	// TODO: Consider adding username to AccessToken struct to support this use case.
+	c.Set(CtxKeyUsername, "")
+	c.Set(CtxKeyAuthMethod, AuthMethodToken)
 	return authResult{handled: true, err: nil}
 }
 
@@ -151,9 +170,9 @@ func (m *Middleware) trySessionAuth(c echo.Context) bool {
 	}
 
 	m.logDebug("Session authentication successful", "path", path, "ip", ip)
-	c.Set("isAuthenticated", true)
-	c.Set("authMethod", m.AuthService.GetAuthMethod(c))
-	c.Set("username", m.AuthService.GetUsername(c))
+	c.Set(CtxKeyIsAuthenticated, true)
+	c.Set(CtxKeyAuthMethod, m.AuthService.GetAuthMethod(c))
+	c.Set(CtxKeyUsername, m.AuthService.GetUsername(c))
 	return true
 }
 

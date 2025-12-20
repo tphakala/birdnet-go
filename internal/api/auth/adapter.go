@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"log/slog"
 	"reflect"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth/gothic"
@@ -45,7 +46,7 @@ func (a *SecurityAdapter) IsAuthRequired(c echo.Context) bool {
 // It prioritizes the username stored in the context by the authentication middleware.
 func (a *SecurityAdapter) GetUsername(c echo.Context) string {
 	// 1. Check context first (set by middleware after successful auth)
-	if usernameCtx := c.Get("username"); usernameCtx != nil {
+	if usernameCtx := c.Get(CtxKeyUsername); usernameCtx != nil {
 		if username, ok := usernameCtx.(string); ok && username != "" {
 			return username
 		}
@@ -74,7 +75,7 @@ func (a *SecurityAdapter) GetUsername(c echo.Context) string {
 // It prioritizes context values set by the middleware if available.
 func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 	// 1. Check context first (set by middleware)
-	if authMethodCtx := c.Get("authMethod"); authMethodCtx != nil {
+	if authMethodCtx := c.Get(CtxKeyAuthMethod); authMethodCtx != nil {
 		// Check if it's the expected AuthMethod type
 		if method, ok := authMethodCtx.(AuthMethod); ok {
 			// Return method determined by middleware (e.g., Token, Session)
@@ -92,7 +93,7 @@ func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 
 		// If type assertion or conversion fails, log it but fall through to other checks
 		if a.logger != nil {
-			a.logger.Warn("Context value 'authMethod' has unexpected type or invalid string value", slog.Any("type", reflect.TypeOf(authMethodCtx)), "value", authMethodCtx)
+			a.logger.Warn("Context value for auth method has unexpected type or invalid string value", slog.Any("type", reflect.TypeOf(authMethodCtx)), "value", authMethodCtx)
 		}
 	}
 
@@ -236,7 +237,7 @@ func (a *SecurityAdapter) generateAuthCodeOnSuccess(username string) (string, er
 	if err != nil {
 		a.logError("Failed to generate auth code during basic auth", "error", err.Error())
 		security.LogError("Basic authentication failed: Internal error", "username", username, "error", "auth code generation failed")
-		return "", ErrInvalidCredentials
+		return "", ErrAuthCodeGeneration
 	}
 
 	a.logInfo("Auth code generated successfully", "username", username, "auth_code_length", len(authCode))
@@ -311,4 +312,27 @@ func (a *SecurityAdapter) EstablishSession(c echo.Context, accessToken string) e
 		a.logger.Info("Successfully stored access token in new session")
 	}
 	return nil
+}
+
+// IsAuthenticated checks if a request is authenticated via any supported method.
+// Returns true if auth is bypassed (not required) or if token/session auth succeeds.
+// This centralizes authentication checking logic to avoid duplication across handlers.
+func (a *SecurityAdapter) IsAuthenticated(c echo.Context) bool {
+	// Check if auth is required for this client (e.g., local subnet bypass)
+	if !a.IsAuthRequired(c) {
+		return true // Bypassed auth is treated as authenticated for data access
+	}
+
+	// Try token auth from Authorization header
+	if authHeader := c.Request().Header.Get("Authorization"); authHeader != "" {
+		parts := strings.Fields(authHeader)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
+			if a.ValidateToken(parts[1]) == nil {
+				return true
+			}
+		}
+	}
+
+	// Try session auth
+	return a.CheckAccess(c) == nil
 }

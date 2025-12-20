@@ -349,28 +349,12 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 }
 
 // isClientAuthenticated checks if the current request is authenticated
+// by delegating to the auth service's centralized IsAuthenticated method.
 func (c *Controller) isClientAuthenticated(ctx echo.Context) bool {
 	if c.authService == nil {
 		return false
 	}
-
-	// Check if auth is required for this client
-	if !c.authService.IsAuthRequired(ctx) {
-		return true // Bypassed auth is treated as authenticated for data access
-	}
-
-	// Try token auth from Authorization header
-	if authHeader := ctx.Request().Header.Get("Authorization"); authHeader != "" {
-		parts := strings.Fields(authHeader)
-		if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
-			if c.authService.ValidateToken(parts[1]) == nil {
-				return true
-			}
-		}
-	}
-
-	// Try session auth
-	return c.authService.CheckAccess(ctx) == nil
+	return c.authService.IsAuthenticated(ctx)
 }
 
 // initializeAudioLevels creates the initial levels map with configured sources

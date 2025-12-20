@@ -752,6 +752,11 @@ func (c *Controller) logAPIRequest(ctx echo.Context, level slog.Level, msg strin
 
 // GetAuthMiddleware returns the authentication middleware function injected from server.
 // This replaces the previous getEffectiveAuthMiddleware that had fallback logic.
+//
+// Returns nil if no middleware was configured via WithAuthMiddleware option.
+// Callers should be aware that applying nil middleware to Echo routes is a no-op
+// (the routes become unprotected). A warning is logged during initialization
+// if auth middleware is not configured.
 func (c *Controller) GetAuthMiddleware() echo.MiddlewareFunc {
 	return c.authMiddleware
 }

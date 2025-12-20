@@ -10,11 +10,12 @@ import (
 
 // Sentinel errors for authentication failures.
 var (
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrInvalidToken       = errors.New("invalid or expired token")
-	ErrSessionNotFound    = errors.New("session not found or expired")
-	ErrLogoutFailed       = errors.New("logout operation failed")
-	ErrBasicAuthDisabled  = errors.New("basic authentication is disabled")
+	ErrInvalidCredentials  = errors.New("invalid credentials")
+	ErrInvalidToken        = errors.New("invalid or expired token")
+	ErrSessionNotFound     = errors.New("session not found or expired")
+	ErrLogoutFailed        = errors.New("logout operation failed")
+	ErrBasicAuthDisabled   = errors.New("basic authentication is disabled")
+	ErrAuthCodeGeneration  = errors.New("failed to generate authorization code")
 )
 
 //go:generate go run golang.org/x/tools/cmd/stringer -type=AuthMethod
@@ -69,4 +70,8 @@ type Service interface {
 	// EstablishSession creates a new session with the given access token.
 	// Handles session fixation mitigation by clearing old session first.
 	EstablishSession(c echo.Context, accessToken string) error
+
+	// IsAuthenticated checks if a request is authenticated via any supported method.
+	// Returns true if auth is bypassed (not required) or if token/session auth succeeds.
+	IsAuthenticated(c echo.Context) bool
 }
