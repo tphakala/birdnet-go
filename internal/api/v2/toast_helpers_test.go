@@ -245,19 +245,19 @@ func TestController_SendToast_TypeMapping(t *testing.T) {
 		expectedToastType notification.ToastType
 	}{
 		{
-			toastType:         "success",
+			toastType:         ToastTypeSuccess,
 			expectedNotifType: notification.TypeInfo,
 			expectedPriority:  notification.PriorityLow,
 			expectedToastType: notification.ToastTypeSuccess,
 		},
 		{
-			toastType:         "error",
+			toastType:         ToastTypeError,
 			expectedNotifType: notification.TypeError,
 			expectedPriority:  notification.PriorityHigh,
 			expectedToastType: notification.ToastTypeError,
 		},
 		{
-			toastType:         "warning",
+			toastType:         ToastTypeWarning,
 			expectedNotifType: notification.TypeWarning,
 			expectedPriority:  notification.PriorityMedium,
 			expectedToastType: notification.ToastTypeWarning,
@@ -358,7 +358,7 @@ func TestController_SendToast_Integration(t *testing.T) {
 	c := mockController()
 
 	// Send a toast with all features
-	err := c.SendToast("Integration test message", "warning", 4000)
+	err := c.SendToast("Integration test message", ToastTypeWarning, 4000)
 	if err != nil {
 		t.Fatalf("SendToast() integration test error = %v", err)
 	}
