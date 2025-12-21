@@ -11,11 +11,11 @@ func (c *Controller) SendToast(message, toastType string, duration int) error {
 	switch toastType {
 	case ToastTypeSuccess:
 		notifToastType = notification.ToastTypeSuccess
-	case LogLevelError:
+	case ToastTypeError:
 		notifToastType = notification.ToastTypeError
-	case LogLevelWarning:
+	case ToastTypeWarning:
 		notifToastType = notification.ToastTypeWarning
-	case LogLevelInfo:
+	case ToastTypeInfo:
 		notifToastType = notification.ToastTypeInfo
 	default:
 		notifToastType = notification.ToastTypeInfo

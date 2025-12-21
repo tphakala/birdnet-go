@@ -19,12 +19,10 @@ import (
 
 // Integration constants (file-local)
 const (
-	integrationRetryCount       = 3   // Number of retries for integration tests
 	integrationConnectTimeout   = 3   // Connection test timeout in seconds
 	integrationShortTimeout     = 5   // Short timeout in seconds
 	integrationMediumTimeout    = 20  // Medium timeout in seconds
 	integrationLongTimeout      = 30  // Long timeout in seconds
-	integrationHTTPOK           = 200 // HTTP OK status code
 	integrationHTTPUnauthorized = 401 // HTTP Unauthorized status code
 	integrationStageDelay       = 200 // Delay between stages in milliseconds
 )

@@ -182,8 +182,8 @@ func verifyToastNotification(t *testing.T, notif *notification.Notification, tc 
 func verifyToastMetadata(t *testing.T, notif *notification.Notification, tc toastTestCase) {
 	t.Helper()
 	expectedToastType := tc.toastType
-	if tc.toastType == "unknown" {
-		expectedToastType = LogLevelInfo // Unknown types default to info
+	if tc.toastType == ValueUnknown {
+		expectedToastType = ToastTypeInfo // Unknown types default to info
 	}
 
 	toastType, ok := notif.Metadata["toastType"].(string)

@@ -21,15 +21,13 @@ import (
 
 // Auth constants (file-local)
 const (
-	authDefaultTimeout     = 5   // Default timeout in seconds for auth operations
-	authExtendedTimeout    = 15  // Extended timeout for slower operations
-	authCodeLength         = 50  // Length of generated auth codes
-	maxStateTokenLength    = 128 // Maximum length for OAuth state token
-	authRateLimitRate      = 5   // Login attempts per rate limit window
-	authRateLimitBurst     = 5   // Burst allowance for rate limiting
-	authRateLimitWindow    = 15  // Rate limit window in minutes
-	authDelayMinMs         = 50  // Minimum random delay in ms for timing attack mitigation
-	authDelayMaxMs         = 150 // Maximum random delay in ms for timing attack mitigation
+	authExtendedTimeout = 15  // Extended timeout for slower operations
+	maxStateTokenLength = 128 // Maximum length for OAuth state token
+	authRateLimitRate   = 5   // Login attempts per rate limit window
+	authRateLimitBurst  = 5   // Burst allowance for rate limiting
+	authRateLimitWindow = 15  // Rate limit window in minutes
+	authDelayMinMs      = 50  // Minimum random delay in ms for timing attack mitigation
+	authDelayMaxMs      = 150 // Maximum random delay in ms for timing attack mitigation
 )
 
 // Compiled regex for path validation (moved outside function for performance)

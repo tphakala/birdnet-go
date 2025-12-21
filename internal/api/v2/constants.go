@@ -29,11 +29,19 @@ const (
 	SpectrogramCacheSeconds = 2592000 // 30 days
 )
 
-// Log level constants for notification type mapping
+// Log level constants
 const (
 	LogLevelError   = "error"
 	LogLevelWarning = "warning"
 	LogLevelInfo    = "info"
+)
+
+// Notification type constants (for mapping to notification.Type)
+const (
+	NotificationTypeError     = "error"
+	NotificationTypeWarning   = "warning"
+	NotificationTypeInfo      = "info"
+	NotificationTypeDetection = "detection"
 )
 
 // Weather provider constants
@@ -69,6 +77,9 @@ const (
 // Toast notification type constants
 const (
 	ToastTypeSuccess = "success"
+	ToastTypeError   = "error"
+	ToastTypeWarning = "warning"
+	ToastTypeInfo    = "info"
 )
 
 // Query parameter value constants
