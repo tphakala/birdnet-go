@@ -42,6 +42,7 @@
     typeof v === 'string' && v in databaseIcons;
 
   // Get the icon for the current database type with runtime validation
+  // eslint-disable-next-line security/detect-object-injection -- Validated by isDatabaseType type guard
   let iconSvg = $derived(isDatabaseType(database) ? databaseIcons[database] : SqliteIcon);
 </script>
 

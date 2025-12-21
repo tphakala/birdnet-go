@@ -55,8 +55,13 @@
     custom: CustomIcon,
   };
 
-  // Get the icon for the current service
-  let iconSvg = $derived(serviceIcons[service] || CustomIcon);
+  // Runtime type guard to satisfy static analysis (object injection sink warning)
+  const isServiceType = (v: unknown): v is ServiceType =>
+    typeof v === 'string' && v in serviceIcons;
+
+  // Get the icon for the current service with runtime validation
+  // eslint-disable-next-line security/detect-object-injection -- Validated by isServiceType type guard
+  let iconSvg = $derived(isServiceType(service) ? serviceIcons[service] : CustomIcon);
 </script>
 
 <!--

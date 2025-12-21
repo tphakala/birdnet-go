@@ -62,7 +62,12 @@
     ghost: 'btn-ghost',
   };
 
-  let variantClass = $derived(variantClasses[variant]);
+  // Runtime type guard to satisfy static analysis (object injection sink warning)
+  const isButtonVariant = (v: unknown): v is ButtonVariant =>
+    typeof v === 'string' && v in variantClasses;
+
+  // eslint-disable-next-line security/detect-object-injection -- Validated by isButtonVariant type guard
+  let variantClass = $derived(isButtonVariant(variant) ? variantClasses[variant] : 'btn-primary');
 </script>
 
 <button

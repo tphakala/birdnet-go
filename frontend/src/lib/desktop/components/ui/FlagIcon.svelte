@@ -171,6 +171,7 @@
   const isFlagLocale = (v: unknown): v is FlagLocale => typeof v === 'string' && v in flagIcons;
 
   // Get the icon for the current locale with runtime validation
+  // eslint-disable-next-line security/detect-object-injection -- Validated by isFlagLocale type guard
   let iconSvg = $derived(isFlagLocale(locale) ? flagIcons[locale] : GbFlag);
 </script>
 

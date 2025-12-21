@@ -609,8 +609,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     minCoverage: (() => {
       if (!args.includes('--min-coverage')) return undefined;
       const idx = args.indexOf('--min-coverage');
-      const value = args[idx + 1];
-      if (value === undefined || value.startsWith('-')) {
+      // Explicit type annotation: array access may return undefined at runtime
+      const value: string | undefined = args[idx + 1];
+      if (!value || value.startsWith('-')) {
         console.error('Error: --min-coverage requires a numeric value');
         process.exit(1);
       }
@@ -624,8 +625,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     showSamples: (() => {
       if (!args.includes('--samples')) return undefined;
       const idx = args.indexOf('--samples');
-      const value = args[idx + 1];
-      if (value === undefined || value.startsWith('-')) {
+      // Explicit type annotation: array access may return undefined at runtime
+      const value: string | undefined = args[idx + 1];
+      if (!value || value.startsWith('-')) {
         console.error('Error: --samples requires a numeric value');
         process.exit(1);
       }
