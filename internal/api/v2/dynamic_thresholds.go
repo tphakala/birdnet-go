@@ -103,7 +103,7 @@ func applyMemoryOverlay(response *DynamicThresholdResponse, level, highConfCount
 	response.HighConfCount = highConfCount
 	response.ExpiresAt = expiresAt
 	response.IsActive = isActive
-	// Preserve scientific name if response has it and data doesn't
+	// Use scientific name from memory if it's missing in the database response.
 	if response.ScientificName == "" && scientificName != "" {
 		response.ScientificName = scientificName
 	}
