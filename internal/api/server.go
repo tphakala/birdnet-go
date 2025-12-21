@@ -279,6 +279,9 @@ func (s *Server) setupMiddleware() {
 	// CORS middleware
 	s.echo.Use(mw.NewCORS(securityConfig))
 
+	// CSRF protection middleware
+	s.echo.Use(mw.NewCSRFWithLogger(s.slogger))
+
 	// Body limit middleware
 	s.echo.Use(mw.NewBodyLimit(s.config.BodyLimit))
 
