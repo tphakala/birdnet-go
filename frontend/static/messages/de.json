@@ -2293,7 +2293,9 @@
         "resetSuccess": "Schwellenwert für {species} zurückgesetzt",
         "resetError": "Fehler beim Zurücksetzen des Schwellenwerts",
         "resetAllSuccess": "{count} Schwellenwerte zurückgesetzt",
-        "resetAllError": "Fehler beim Zurücksetzen der Schwellenwerte"
+        "resetAllError": "Fehler beim Zurücksetzen der Schwellenwerte",
+        "expand": "Ereignisverlauf anzeigen",
+        "collapse": "Ereignisverlauf ausblenden"
       }
     },
     "security": {

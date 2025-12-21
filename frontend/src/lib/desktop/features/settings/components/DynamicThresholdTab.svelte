@@ -36,6 +36,10 @@
   import StatsCard from './StatsCard.svelte';
 
   const logger = loggers.settings;
+
+  // API pagination limit - matches backend maxThresholdLimit
+  const THRESHOLD_PAGE_LIMIT = 250;
+
   import type {
     DynamicThreshold,
     ThresholdEvent,
@@ -79,7 +83,7 @@
     try {
       const [thresholdResponse, statsResponse] = await Promise.all([
         api.get<{ data: DynamicThreshold[]; total: number }>(
-          '/api/v2/dynamic-thresholds?limit=250'
+          `/api/v2/dynamic-thresholds?limit=${THRESHOLD_PAGE_LIMIT}`
         ),
         api.get<ThresholdStats>('/api/v2/dynamic-thresholds/stats'),
       ]);
@@ -159,12 +163,14 @@
 
   // Map change reason to i18n key
   function getChangeReasonKey(reason: ThresholdChangeReason): string {
-    const keyMap: Record<ThresholdChangeReason, string> = {
-      high_confidence: 'settings.species.dynamicThreshold.changeReason.highConfidence',
-      expiry: 'settings.species.dynamicThreshold.changeReason.expiry',
-      manual_reset: 'settings.species.dynamicThreshold.changeReason.manualReset',
-    };
-    return keyMap[reason];
+    switch (reason) {
+      case 'high_confidence':
+        return 'settings.species.dynamicThreshold.changeReason.highConfidence';
+      case 'expiry':
+        return 'settings.species.dynamicThreshold.changeReason.expiry';
+      case 'manual_reset':
+        return 'settings.species.dynamicThreshold.changeReason.manualReset';
+    }
   }
 </script>
 
@@ -273,6 +279,10 @@
               <button
                 class="btn btn-ghost btn-xs btn-square"
                 onclick={() => toggleExpanded(threshold.speciesName)}
+                aria-label={isExpanded
+                  ? t('settings.species.dynamicThreshold.collapse')
+                  : t('settings.species.dynamicThreshold.expand')}
+                aria-expanded={isExpanded}
               >
                 {#if isExpanded}
                   <ChevronUp class="size-4" />
@@ -331,6 +341,7 @@
                   class="btn btn-ghost btn-xs btn-square"
                   onclick={() => (resetConfirmSpecies = threshold.speciesName)}
                   title={t('settings.species.dynamicThreshold.resetSpecies')}
+                  aria-label={t('settings.species.dynamicThreshold.resetSpecies')}
                 >
                   <Trash2 class="size-4" />
                 </button>

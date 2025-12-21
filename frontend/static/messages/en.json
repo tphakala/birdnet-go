@@ -2366,7 +2366,9 @@
         "resetSuccess": "Threshold reset for {species}",
         "resetError": "Failed to reset threshold",
         "resetAllSuccess": "Reset {count} thresholds",
-        "resetAllError": "Failed to reset thresholds"
+        "resetAllError": "Failed to reset thresholds",
+        "expand": "Show event history",
+        "collapse": "Hide event history"
       }
     },
     "database": {

@@ -2366,7 +2366,9 @@
         "resetSuccess": "Próg zresetowany dla {species}",
         "resetError": "Nie udało się zresetować progu",
         "resetAllSuccess": "Zresetowano {count} progów",
-        "resetAllError": "Nie udało się zresetować progów"
+        "resetAllError": "Nie udało się zresetować progów",
+        "expand": "Pokaż historię zdarzeń",
+        "collapse": "Ukryj historię zdarzeń"
       }
     },
     "database": {

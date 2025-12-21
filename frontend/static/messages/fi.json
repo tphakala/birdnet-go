@@ -2293,7 +2293,9 @@
         "resetSuccess": "Kynnysarvo nollattu lajille {species}",
         "resetError": "Kynnysarvon nollaus epäonnistui",
         "resetAllSuccess": "{count} kynnysarvoa nollattu",
-        "resetAllError": "Kynnysarvojen nollaus epäonnistui"
+        "resetAllError": "Kynnysarvojen nollaus epäonnistui",
+        "expand": "Näytä tapahtumahistoria",
+        "collapse": "Piilota tapahtumahistoria"
       }
     },
     "security": {

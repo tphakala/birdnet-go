@@ -2360,7 +2360,9 @@
         "resetSuccess": "Drempel gereset voor {species}",
         "resetError": "Resetten van drempel mislukt",
         "resetAllSuccess": "{count} drempels gereset",
-        "resetAllError": "Resetten van drempels mislukt"
+        "resetAllError": "Resetten van drempels mislukt",
+        "expand": "Gebeurtenisgeschiedenis tonen",
+        "collapse": "Gebeurtenisgeschiedenis verbergen"
       }
     },
     "database": {
