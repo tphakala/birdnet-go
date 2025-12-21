@@ -117,10 +117,9 @@ func assertCSRFError(t *testing.T, err error, expectedMessage string) {
 	t.Helper()
 	require.Error(t, err)
 	var httpErr *echo.HTTPError
-	if errors.As(err, &httpErr) {
-		assert.Equal(t, http.StatusForbidden, httpErr.Code)
-		assert.Contains(t, httpErr.Message, expectedMessage)
-	}
+	require.True(t, errors.As(err, &httpErr), "expected echo.HTTPError, got %T", err)
+	assert.Equal(t, http.StatusForbidden, httpErr.Code)
+	assert.Contains(t, httpErr.Message, expectedMessage)
 }
 
 // createTestRequest builds an HTTP request with optional body and query params.

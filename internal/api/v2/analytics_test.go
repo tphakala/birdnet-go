@@ -38,9 +38,9 @@ func assertAnalyticsErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, 
 	var errorResp map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &errorResp)
 	require.NoError(t, err)
-	if errVal, ok := errorResp["error"]; ok {
-		assert.Contains(t, fmt.Sprint(errVal), expectedBody)
-	}
+	errVal, ok := errorResp["error"]
+	require.True(t, ok, "error response JSON should contain an 'error' field")
+	assert.Contains(t, fmt.Sprint(errVal), expectedBody)
 }
 
 // TestGetSpeciesSummary tests the species summary endpoint

@@ -604,8 +604,12 @@ func TestGetActiveAudioDevice(t *testing.T) {
 		require.NoError(t, err)
 
 		// Should indicate no device active
-		assert.False(t, response["active"].(bool), "Should not be active when no device configured")
-		assert.Contains(t, response["message"], "No audio device", "Should have appropriate message")
+		active, ok := response["active"].(bool)
+		require.True(t, ok, "response should have 'active' field as bool")
+		assert.False(t, active, "Should not be active when no device configured")
+		msg, ok := response["message"].(string)
+		require.True(t, ok, "response should have 'message' field as string")
+		assert.Contains(t, msg, "No audio device", "Should have appropriate message")
 	})
 }
 

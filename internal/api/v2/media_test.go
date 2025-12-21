@@ -42,7 +42,7 @@ func assertFullContentHeaders(t *testing.T, rec *httptest.ResponseRecorder, expe
 }
 
 // assertAudioErrorResponse checks error response body content.
-func assertAudioErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, status int, isTraversal bool) {
+func assertAudioErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, status int) {
 	t.Helper()
 	switch status {
 	case http.StatusNotFound:
@@ -53,7 +53,7 @@ func assertAudioErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, stat
 }
 
 // assertAudioClipResponse validates the response based on expected status and content type.
-func assertAudioClipResponse(t *testing.T, rec *httptest.ResponseRecorder, expectedStatus int, expectedLength int64, partialContent, isSmallFile, isTraversal bool) {
+func assertAudioClipResponse(t *testing.T, rec *httptest.ResponseRecorder, expectedStatus int, expectedLength int64, partialContent, isSmallFile bool) {
 	t.Helper()
 	assert.Equal(t, expectedStatus, rec.Code)
 
@@ -64,7 +64,7 @@ func assertAudioClipResponse(t *testing.T, rec *httptest.ResponseRecorder, expec
 			assertFullContentHeaders(t, rec, expectedLength, isSmallFile)
 		}
 	} else {
-		assertAudioErrorResponse(t, rec, expectedStatus, isTraversal)
+		assertAudioErrorResponse(t, rec, expectedStatus)
 	}
 }
 
@@ -76,9 +76,8 @@ func assertHandlerError(t *testing.T, handlerErr error, expectedStatus int) {
 		return
 	}
 	if handlerErr == nil {
-		return
+		return // Handler returned nil, response written to recorder
 	}
-	require.Error(t, handlerErr)
 	var httpErr *echo.HTTPError
 	if errors.As(handlerErr, &httpErr) {
 		assert.Equal(t, expectedStatus, httpErr.Code)
@@ -309,8 +308,7 @@ func TestServeAudioClip(t *testing.T) {
 			e.ServeHTTP(rec, req)
 
 			isSmallFile := tc.filename == smallFilename
-			isTraversal := strings.Contains(tc.name, "traversal")
-			assertAudioClipResponse(t, rec, tc.expectedStatus, tc.expectedLength, tc.partialContent, isSmallFile, isTraversal)
+			assertAudioClipResponse(t, rec, tc.expectedStatus, tc.expectedLength, tc.partialContent, isSmallFile)
 		})
 	}
 }

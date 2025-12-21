@@ -89,7 +89,7 @@ func TestBrowseFileSystem_BasicDirectory(t *testing.T) {
 	// Make request to browse the temp directory
 	resp, err := client.Get(server.URL + "/api/v2/filesystem/browse?path=" + tempDir)
 	require.NoError(t, err)
-	defer resp.Body.Close() //nolint:errcheck // Ignore close error in test //nolint:errcheck // Ignore close error in test
+	defer resp.Body.Close() //nolint:errcheck // Ignore close error in test
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
