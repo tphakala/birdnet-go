@@ -116,6 +116,14 @@ type Interface interface {
 	DeleteExpiredDynamicThresholds(before time.Time) (int64, error) // Returns count deleted
 	UpdateDynamicThresholdExpiry(speciesName string, expiresAt time.Time) error
 	BatchSaveDynamicThresholds(thresholds []DynamicThreshold) error
+	DeleteAllDynamicThresholds() (int64, error)                                    // BG-59: Reset all thresholds
+	GetDynamicThresholdStats() (totalCount, activeCount, atMinimumCount int64, levelDistribution map[int]int64, err error)
+	// Threshold Event methods (BG-59: Threshold change history)
+	SaveThresholdEvent(event *ThresholdEvent) error
+	GetThresholdEvents(speciesName string, limit int) ([]ThresholdEvent, error)
+	GetRecentThresholdEvents(limit int) ([]ThresholdEvent, error)
+	DeleteThresholdEvents(speciesName string) error
+	DeleteAllThresholdEvents() (int64, error)
 	// Notification History methods
 	// TODO(BG-17): Add context.Context as first parameter for cancellation/timeout support:
 	//   SaveNotificationHistory(ctx context.Context, history *NotificationHistory) error

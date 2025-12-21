@@ -14,6 +14,7 @@
     "error": "Error",
     "save": "Guardar",
     "cancel": "Cancelar",
+    "confirm": "Confirmar",
     "reset": "Restablecer",
     "refresh": "Actualizar",
     "delete": "Eliminar",
@@ -2248,6 +2249,51 @@
           "min": "min",
           "hours": "hrs"
         }
+      },
+      "dynamicThreshold": {
+        "tabLabel": "Aprendido",
+        "title": "Umbrales aprendidos",
+        "description": "Esta página muestra datos de umbrales dinámicos en tiempo de ejecución. Cuando está habilitado en Ajustes principales → Detección, los umbrales se ajustan automáticamente mediante múltiples detecciones de alta confianza. Las especies mostradas aquí se asumen presentes en esta ubicación.",
+        "stats": {
+          "active": "Activos",
+          "atMinimum": "En mínimo",
+          "minThreshold": "Umbral mín.",
+          "validityPeriod": "Período de validez"
+        },
+        "header": {
+          "species": "Especie",
+          "threshold": "Umbral",
+          "expires": "Expira"
+        },
+        "searchPlaceholder": "Buscar especies...",
+        "threshold": "Umbral",
+        "level": "Nivel",
+        "expires": "Expira",
+        "expired": "Expirado",
+        "confidence": "Confianza",
+        "requiredConfidence": "Confianza requerida",
+        "resetAll": "Restablecer todo",
+        "resetSpecies": "Restablecer umbral para esta especie",
+        "noEvents": "Sin historial de cambios de umbral",
+        "changeReason": {
+          "highConfidence": "Detección de alta confianza",
+          "expiry": "Umbral expirado",
+          "manualReset": "Reinicio manual"
+        },
+        "note": "Las detecciones de alta confianza confirman qué especies existen en esta ubicación. Después de múltiples coincidencias de alta confianza, el umbral de detección se reduce de forma segura para capturar más llamadas sin riesgo significativo de falsos positivos. Los umbrales se restablecen automáticamente después del período de validez configurado.",
+        "empty": {
+          "title": "Sin umbrales aprendidos",
+          "description": "Las detecciones de alta confianza crearán automáticamente umbrales aprendidos para las especies"
+        },
+        "resetAllConfirm": {
+          "title": "Restablecer todos los umbrales",
+          "message": "Esto restablecerá los {count} umbrales aprendidos. Las especies necesitarán ser detectadas con alta confianza nuevamente para reducir sus umbrales."
+        },
+        "loadError": "Error al cargar umbrales dinámicos",
+        "resetSuccess": "Umbral restablecido para {species}",
+        "resetError": "Error al restablecer el umbral",
+        "resetAllSuccess": "{count} umbrales restablecidos",
+        "resetAllError": "Error al restablecer los umbrales"
       }
     },
     "security": {

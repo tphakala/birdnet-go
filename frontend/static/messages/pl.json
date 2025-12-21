@@ -4,6 +4,7 @@
     "error": "Błąd",
     "save": "Zapisz",
     "cancel": "Anuluj",
+    "confirm": "Potwierdź",
     "reset": "Resetuj",
     "refresh": "Odśwież",
     "delete": "Usuń",
@@ -2321,6 +2322,51 @@
           "min": "min",
           "hours": "godz"
         }
+      },
+      "dynamicThreshold": {
+        "tabLabel": "Nauczone",
+        "title": "Nauczone progi",
+        "description": "Ta strona pokazuje dane runtime progów dynamicznych. Gdy włączone w Ustawienia główne → Wykrywanie, progi są automatycznie dostosowywane przez wielokrotne wykrycia o wysokiej pewności. Gatunki pokazane tutaj są uznawane za istniejące w tej lokalizacji.",
+        "stats": {
+          "active": "Aktywne",
+          "atMinimum": "Na minimum",
+          "minThreshold": "Min. próg",
+          "validityPeriod": "Okres ważności"
+        },
+        "header": {
+          "species": "Gatunek",
+          "threshold": "Próg",
+          "expires": "Wygasa"
+        },
+        "searchPlaceholder": "Szukaj gatunków...",
+        "threshold": "Próg",
+        "level": "Poziom",
+        "expires": "Wygasa",
+        "expired": "Wygasły",
+        "confidence": "Pewność",
+        "requiredConfidence": "Wymagana pewność",
+        "resetAll": "Resetuj wszystkie",
+        "resetSpecies": "Resetuj próg dla tego gatunku",
+        "noEvents": "Brak historii zmian progów",
+        "changeReason": {
+          "highConfidence": "Wykrycie o wysokiej pewności",
+          "expiry": "Próg wygasł",
+          "manualReset": "Ręczny reset"
+        },
+        "note": "Wykrycia o wysokiej pewności potwierdzają, które gatunki istnieją w tej lokalizacji. Po wielokrotnych dopasowaniach o wysokiej pewności próg wykrywania jest bezpiecznie obniżany, aby wychwycić więcej wołań bez znaczącego ryzyka fałszywych pozytywów. Progi resetują się automatycznie po skonfigurowanym okresie ważności.",
+        "empty": {
+          "title": "Brak nauczonych progów",
+          "description": "Wykrycia o wysokiej pewności automatycznie utworzą nauczone progi dla gatunków"
+        },
+        "resetAllConfirm": {
+          "title": "Resetuj wszystkie progi",
+          "message": "To zresetuje wszystkie {count} nauczonych progów. Gatunki będą musiały być ponownie wykryte z wysoką pewnością, aby obniżyć ich progi."
+        },
+        "loadError": "Nie udało się załadować dynamicznych progów",
+        "resetSuccess": "Próg zresetowany dla {species}",
+        "resetError": "Nie udało się zresetować progu",
+        "resetAllSuccess": "Zresetowano {count} progów",
+        "resetAllError": "Nie udało się zresetować progów"
       }
     },
     "database": {

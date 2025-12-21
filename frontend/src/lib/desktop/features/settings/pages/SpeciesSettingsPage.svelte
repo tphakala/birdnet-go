@@ -43,6 +43,8 @@
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
+  import DynamicThresholdTab from '$lib/desktop/features/settings/components/DynamicThresholdTab.svelte';
+  import StatsCard from '$lib/desktop/features/settings/components/StatsCard.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
@@ -66,6 +68,7 @@
     Maximize2,
     Minimize2,
     CalendarClock,
+    Activity,
   } from '@lucide/svelte';
   import { toastActions } from '$lib/stores/toast';
 
@@ -1026,6 +1029,13 @@
       content: trackingTabContent,
       hasChanges: trackingHasChanges,
     },
+    {
+      id: 'dynamicThreshold',
+      label: t('settings.species.dynamicThreshold.tabLabel'),
+      icon: Activity,
+      content: dynamicThresholdTabContent,
+      // No hasChanges - this is read-only runtime data with its own save/reset actions
+    },
   ]);
 </script>
 
@@ -1035,68 +1045,31 @@
     <!-- Stats Bar - Outside the card -->
     {#if activeSpeciesState.data}
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <!-- Species Count -->
-        <div class="card bg-base-100 shadow-sm border border-base-300">
-          <div class="card-body p-3">
-            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
-              <Bird class="size-4" />
-              <span class="text-xs font-medium"
-                >{t('settings.species.activeSpecies.stats.species')}</span
-              >
-            </div>
-            <div class="mt-1 text-xl font-semibold">{activeSpeciesState.data.count}</div>
-          </div>
-        </div>
+        <StatsCard
+          icon={Bird}
+          label={t('settings.species.activeSpecies.stats.species')}
+          value={activeSpeciesState.data.count}
+        />
 
-        <!-- Location -->
-        <div class="card bg-base-100 shadow-sm border border-base-300">
-          <div class="card-body p-3">
-            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
-              <MapPin class="size-4" />
-              <span class="text-xs font-medium"
-                >{t('settings.species.activeSpecies.stats.location')}</span
-              >
-            </div>
-            <div
-              class="mt-1 text-sm font-semibold truncate"
-              title="{activeSpeciesState.data.location.latitude.toFixed(
-                2
-              )}°, {activeSpeciesState.data.location.longitude.toFixed(2)}°"
-            >
-              {activeSpeciesState.data.location.latitude.toFixed(2)}°, {activeSpeciesState.data.location.longitude.toFixed(
-                2
-              )}°
-            </div>
-          </div>
-        </div>
+        <StatsCard
+          icon={MapPin}
+          label={t('settings.species.activeSpecies.stats.location')}
+          value="{activeSpeciesState.data.location.latitude.toFixed(
+            2
+          )}°, {activeSpeciesState.data.location.longitude.toFixed(2)}°"
+        />
 
-        <!-- Threshold -->
-        <div class="card bg-base-100 shadow-sm border border-base-300">
-          <div class="card-body p-3">
-            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
-              <SlidersHorizontal class="size-4" />
-              <span class="text-xs font-medium"
-                >{t('settings.species.activeSpecies.stats.threshold')}</span
-              >
-            </div>
-            <div class="mt-1 text-xl font-semibold">{activeSpeciesState.data.threshold}</div>
-          </div>
-        </div>
+        <StatsCard
+          icon={SlidersHorizontal}
+          label={t('settings.species.activeSpecies.stats.threshold')}
+          value={activeSpeciesState.data.threshold}
+        />
 
-        <!-- Last Updated -->
-        <div class="card bg-base-100 shadow-sm border border-base-300">
-          <div class="card-body p-3">
-            <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
-              <Clock class="size-4" />
-              <span class="text-xs font-medium"
-                >{t('settings.species.activeSpecies.stats.updated')}</span
-              >
-            </div>
-            <div class="mt-1 text-sm font-semibold">
-              {formatRelativeTime(activeSpeciesState.data.lastUpdated)}
-            </div>
-          </div>
-        </div>
+        <StatsCard
+          icon={Clock}
+          label={t('settings.species.activeSpecies.stats.updated')}
+          value={formatRelativeTime(activeSpeciesState.data.lastUpdated)}
+        />
       </div>
     {/if}
 
@@ -2079,6 +2052,11 @@
       </SettingsSection>
     {/if}
   </div>
+{/snippet}
+
+<!-- Dynamic Threshold Tab Content -->
+{#snippet dynamicThresholdTabContent()}
+  <DynamicThresholdTab />
 {/snippet}
 
 <main class="settings-page-content" aria-label="Species settings configuration">

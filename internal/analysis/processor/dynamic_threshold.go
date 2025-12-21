@@ -1,19 +1,20 @@
 package processor
 
 import (
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
 // addSpeciesToDynamicThresholds adds a species to the dynamic thresholds map if it doesn't already exist.
-func (p *Processor) addSpeciesToDynamicThresholds(speciesLowercase string, baseThreshold float32) {
+func (p *Processor) addSpeciesToDynamicThresholds(speciesLowercase, scientificName string, baseThreshold float32) {
 	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
 	p.thresholdsMutex.Lock()
 	defer p.thresholdsMutex.Unlock()
 
 	// Check if the species already has a dynamic threshold
-	_, exists := p.DynamicThresholds[speciesLowercase]
+	existing, exists := p.DynamicThresholds[speciesLowercase]
 
 	// If it doesn't exist, initialize it
 	if !exists {
@@ -22,12 +23,16 @@ func (p *Processor) addSpeciesToDynamicThresholds(speciesLowercase string, baseT
 			logger.Debug("Initializing dynamic threshold", "species", speciesLowercase)
 		}
 		p.DynamicThresholds[speciesLowercase] = &DynamicThreshold{
-			Level:         0,
-			CurrentValue:  float64(baseThreshold),
-			Timer:         time.Now(),
-			HighConfCount: 0,
-			ValidHours:    p.Settings.Realtime.DynamicThreshold.ValidHours,
+			Level:          0,
+			CurrentValue:   float64(baseThreshold),
+			Timer:          time.Now(),
+			HighConfCount:  0,
+			ValidHours:     p.Settings.Realtime.DynamicThreshold.ValidHours,
+			ScientificName: scientificName,
 		}
+	} else if existing.ScientificName == "" && scientificName != "" {
+		// Update scientific name if it was missing
+		existing.ScientificName = scientificName
 	}
 }
 
@@ -54,6 +59,10 @@ func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, resu
 		return baseThreshold
 	}
 
+	// Track previous state for event recording
+	previousLevel := dt.Level
+	previousValue := dt.CurrentValue
+
 	// If the detection confidence exceeds the trigger threshold
 	if result.Confidence > float32(p.Settings.Realtime.DynamicThreshold.Trigger) {
 		dt.HighConfCount++
@@ -71,19 +80,60 @@ func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, resu
 			dt.Level = 3
 			dt.CurrentValue = float64(baseThreshold * 0.25)
 		}
+
+		// Apply minimum threshold clamp BEFORE recording event so event shows actual value
+		if dt.CurrentValue < p.Settings.Realtime.DynamicThreshold.Min {
+			dt.CurrentValue = p.Settings.Realtime.DynamicThreshold.Min
+		}
+
+		// Record event if level changed (BG-59)
+		if dt.Level != previousLevel {
+			p.recordThresholdEvent(speciesLowercase, previousLevel, dt.Level, previousValue, dt.CurrentValue, "high_confidence", float64(result.Confidence))
+		}
 	} else if time.Now().After(dt.Timer) {
 		// Reset the dynamic threshold if the timer has expired
 		dt.Level = 0
 		dt.CurrentValue = float64(baseThreshold)
 		dt.HighConfCount = 0
+
+		// Record expiry event if level was not already 0 (BG-59)
+		if previousLevel != 0 {
+			p.recordThresholdEvent(speciesLowercase, previousLevel, 0, previousValue, float64(baseThreshold), "expiry", 0)
+		}
 	}
 
-	// Ensure the dynamic threshold doesn't fall below the minimum threshold
+	// Ensure the dynamic threshold doesn't fall below the minimum threshold (also handles expiry case)
 	if dt.CurrentValue < p.Settings.Realtime.DynamicThreshold.Min {
 		dt.CurrentValue = p.Settings.Realtime.DynamicThreshold.Min
 	}
 
 	return float32(dt.CurrentValue)
+}
+
+// recordThresholdEvent saves a threshold change event to the database (BG-59)
+func (p *Processor) recordThresholdEvent(speciesName string, previousLevel, newLevel int, previousValue, newValue float64, changeReason string, confidence float64) {
+	if p.Ds == nil {
+		return
+	}
+
+	event := &datastore.ThresholdEvent{
+		SpeciesName:   speciesName,
+		PreviousLevel: previousLevel,
+		NewLevel:      newLevel,
+		PreviousValue: previousValue,
+		NewValue:      newValue,
+		ChangeReason:  changeReason,
+		Confidence:    confidence,
+		CreatedAt:     time.Now(),
+	}
+
+	// Save asynchronously to avoid blocking the detection pipeline
+	go func() {
+		if err := p.Ds.SaveThresholdEvent(event); err != nil {
+			logger := GetLogger()
+			logger.Error("Failed to save threshold event", "species", speciesName, "error", err)
+		}
+	}()
 }
 
 // updateDynamicThreshold updates the dynamic threshold for a given species if enabled.
@@ -96,14 +146,14 @@ func (p *Processor) updateDynamicThreshold(commonName string, confidence float64
 		// Check if the species already has a dynamic threshold
 		if dt, exists := p.DynamicThresholds[commonName]; exists && confidence > float64(p.getBaseConfidenceThreshold(commonName)) {
 			// Update the timer to extend the threshold's validity
+			// Note: dt is a pointer, so this directly mutates the struct in the map
 			dt.Timer = time.Now().Add(time.Duration(dt.ValidHours) * time.Hour)
-			// Since we're modifying a struct in the map, we need to reassign it
-			p.DynamicThresholds[commonName] = dt
 		}
 	}
 }
 
 // cleanUpDynamicThresholds removes stale dynamic thresholds for species that haven't been detected for a long time.
+// This cleans up both the in-memory map and the database.
 func (p *Processor) cleanUpDynamicThresholds() {
 	// Calculate the duration after which a dynamic threshold is considered stale
 	staleDuration := time.Duration(p.Settings.Realtime.DynamicThreshold.ValidHours) * time.Hour
@@ -113,7 +163,9 @@ func (p *Processor) cleanUpDynamicThresholds() {
 
 	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
 	p.thresholdsMutex.Lock()
-	defer p.thresholdsMutex.Unlock()
+
+	// Count for logging
+	var removedCount int
 
 	// Iterate through all species in the DynamicThresholds map
 	for species, dt := range p.DynamicThresholds {
@@ -122,10 +174,142 @@ func (p *Processor) cleanUpDynamicThresholds() {
 			// If debug mode is enabled, log the removal of the stale threshold
 			if p.Settings.Realtime.DynamicThreshold.Debug {
 				logger := GetLogger()
-				logger.Debug("Removing stale dynamic threshold", "species", species)
+				logger.Debug("Removing stale dynamic threshold from memory", "species", species)
 			}
 			// Remove the stale threshold from the map
 			delete(p.DynamicThresholds, species)
+			removedCount++
 		}
 	}
+	p.thresholdsMutex.Unlock()
+
+	// Log memory cleanup if any were removed
+	if removedCount > 0 {
+		logger := GetLogger()
+		logger.Debug("Cleaned up stale dynamic thresholds from memory", "count", removedCount)
+	}
+
+	// Also clean up expired thresholds from the database
+	if p.Ds != nil {
+		dbCount, err := p.Ds.DeleteExpiredDynamicThresholds(now)
+		if err != nil {
+			logger := GetLogger()
+			logger.Warn("Failed to clean up expired dynamic thresholds from database", "error", err)
+		} else if dbCount > 0 {
+			logger := GetLogger()
+			logger.Info("Cleaned up expired dynamic thresholds from database", "count", dbCount)
+		}
+	}
+}
+
+// ResetDynamicThreshold resets a single species threshold and clears its history (BG-59)
+// This removes both the in-memory threshold and the database records.
+// The error return is always nil as database errors are logged internally
+// and the operation is best-effort for database cleanup.
+func (p *Processor) ResetDynamicThreshold(speciesName string) error {
+	// Normalize to lowercase to match the casing used by addSpeciesToDynamicThresholds
+	speciesName = strings.ToLower(speciesName)
+
+	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
+	p.thresholdsMutex.Lock()
+
+	// Remove from in-memory map
+	delete(p.DynamicThresholds, speciesName)
+	p.thresholdsMutex.Unlock()
+
+	// Delete from database
+	if p.Ds != nil {
+		// Delete the threshold record
+		if err := p.Ds.DeleteDynamicThreshold(speciesName); err != nil {
+			logger := GetLogger()
+			logger.Warn("Failed to delete dynamic threshold from database", "species", speciesName, "error", err)
+			// Don't return error - the in-memory reset was successful
+		}
+
+		// Delete event history for this species (no need to record reset event since history is cleared)
+		if err := p.Ds.DeleteThresholdEvents(speciesName); err != nil {
+			logger := GetLogger()
+			logger.Warn("Failed to delete threshold events from database", "species", speciesName, "error", err)
+		}
+	}
+
+	logger := GetLogger()
+	logger.Info("Reset dynamic threshold", "species", speciesName)
+	return nil
+}
+
+// ResetAllDynamicThresholds resets all thresholds and clears all history (BG-59)
+// Returns the count of reset thresholds. The error return is always nil as database
+// errors are logged internally and the operation is best-effort for database cleanup;
+// in-memory reset is always successful.
+func (p *Processor) ResetAllDynamicThresholds() (int64, error) {
+	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
+	p.thresholdsMutex.Lock()
+
+	// Count in-memory thresholds
+	count := int64(len(p.DynamicThresholds))
+
+	// Clear all in-memory thresholds (no need to record reset events since history is cleared)
+	p.DynamicThresholds = make(map[string]*DynamicThreshold)
+	p.thresholdsMutex.Unlock()
+
+	// Delete all from database
+	if p.Ds != nil {
+		dbCount, err := p.Ds.DeleteAllDynamicThresholds()
+		if err != nil {
+			logger := GetLogger()
+			logger.Warn("Failed to delete all dynamic thresholds from database", "error", err)
+			// Don't return error - the in-memory reset was successful
+		}
+
+		// Use the higher count (in case database had more records)
+		if dbCount > count {
+			count = dbCount
+		}
+
+		// Delete all event history
+		if _, err := p.Ds.DeleteAllThresholdEvents(); err != nil {
+			logger := GetLogger()
+			logger.Warn("Failed to delete all threshold events from database", "error", err)
+		}
+	}
+
+	logger := GetLogger()
+	logger.Info("Reset all dynamic thresholds", "count", count)
+	return count, nil
+}
+
+// GetDynamicThresholdData returns a copy of the current dynamic thresholds for API access (BG-59)
+// This provides a safe read-only view of the thresholds without exposing the internal map
+func (p *Processor) GetDynamicThresholdData() []DynamicThresholdData {
+	p.thresholdsMutex.RLock()
+	defer p.thresholdsMutex.RUnlock()
+
+	data := make([]DynamicThresholdData, 0, len(p.DynamicThresholds))
+	now := time.Now()
+
+	for speciesName, dt := range p.DynamicThresholds {
+		data = append(data, DynamicThresholdData{
+			SpeciesName:    speciesName,
+			ScientificName: dt.ScientificName,
+			Level:          dt.Level,
+			CurrentValue:   dt.CurrentValue,
+			HighConfCount:  dt.HighConfCount,
+			ExpiresAt:      dt.Timer,
+			IsActive:       dt.Timer.After(now),
+		})
+	}
+
+	return data
+}
+
+// DynamicThresholdData represents threshold data for API responses (BG-59)
+type DynamicThresholdData struct {
+	SpeciesName    string    `json:"speciesName"`
+	ScientificName string    `json:"scientificName"`
+	Level          int       `json:"level"`
+	CurrentValue   float64   `json:"currentValue"`
+	HighConfCount  int       `json:"highConfCount"`
+	ExpiresAt      time.Time `json:"expiresAt"`
+	IsActive       bool      `json:"isActive"`
 }

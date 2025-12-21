@@ -14,6 +14,7 @@
     "error": "Erro",
     "save": "Salvar",
     "cancel": "Cancelar",
+    "confirm": "Confirmar",
     "reset": "Redefinir",
     "refresh": "Atualizar",
     "delete": "Excluir",
@@ -2251,6 +2252,51 @@
           "min": "min",
           "hours": "hrs"
         }
+      },
+      "dynamicThreshold": {
+        "tabLabel": "Aprendido",
+        "title": "Limiares aprendidos",
+        "description": "Esta página mostra dados de execução dos limiares dinâmicos. Quando ativado em Configurações principais → Detecção, os limiares são ajustados automaticamente por múltiplas detecções de alta confiança. As espécies mostradas aqui são consideradas existentes nesta localização.",
+        "stats": {
+          "active": "Ativos",
+          "atMinimum": "No mínimo",
+          "minThreshold": "Limiar mín.",
+          "validityPeriod": "Período de validade"
+        },
+        "header": {
+          "species": "Espécie",
+          "threshold": "Limiar",
+          "expires": "Expira"
+        },
+        "searchPlaceholder": "Pesquisar espécies...",
+        "threshold": "Limiar",
+        "level": "Nível",
+        "expires": "Expira",
+        "expired": "Expirado",
+        "confidence": "Confiança",
+        "requiredConfidence": "Confiança necessária",
+        "resetAll": "Redefinir tudo",
+        "resetSpecies": "Redefinir limiar para esta espécie",
+        "noEvents": "Sem histórico de alterações de limiar",
+        "changeReason": {
+          "highConfidence": "Detecção de alta confiança",
+          "expiry": "Limiar expirado",
+          "manualReset": "Redefinição manual"
+        },
+        "note": "Detecções de alta confiança confirmam quais espécies existem nesta localização. Após múltiplas correspondências de alta confiança, o limiar de detecção é reduzido com segurança para capturar mais chamados sem risco significativo de falsos positivos. Os limiares são redefinidos automaticamente após o período de validade configurado.",
+        "empty": {
+          "title": "Sem limiares aprendidos",
+          "description": "Detecções de alta confiança criarão automaticamente limiares aprendidos para espécies"
+        },
+        "resetAllConfirm": {
+          "title": "Redefinir todos os limiares",
+          "message": "Isso redefinirá todos os {count} limiares aprendidos. As espécies precisarão ser detectadas com alta confiança novamente para reduzir seus limiares."
+        },
+        "loadError": "Falha ao carregar limiares dinâmicos",
+        "resetSuccess": "Limiar redefinido para {species}",
+        "resetError": "Falha ao redefinir limiar",
+        "resetAllSuccess": "{count} limiares redefinidos",
+        "resetAllError": "Falha ao redefinir limiares"
       }
     },
     "security": {
