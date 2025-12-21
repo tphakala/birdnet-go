@@ -162,30 +162,33 @@ func (ds *DataStore) UpdateDynamicThresholdExpiry(speciesName string, expiresAt 
 }
 
 // GetDynamicThresholdStats returns statistics about dynamic thresholds
-// This can be useful for monitoring and debugging
-func (ds *DataStore) GetDynamicThresholdStats() (map[string]any, error) {
-	stats := make(map[string]any)
+// Returns totalCount, activeCount, atMinimumCount (level 3), and level distribution
+func (ds *DataStore) GetDynamicThresholdStats() (totalCount, activeCount, atMinimumCount int64, levelDistribution map[int]int64, err error) {
+	now := time.Now()
 
 	// Total count
-	var totalCount int64
-	if err := ds.DB.Model(&DynamicThreshold{}).Count(&totalCount).Error; err != nil {
-		return nil, dbError(err, "get_dynamic_threshold_stats_count", errors.PriorityLow,
+	if err = ds.DB.Model(&DynamicThreshold{}).Count(&totalCount).Error; err != nil {
+		err = dbError(err, "get_dynamic_threshold_stats_count", errors.PriorityLow,
 			"stat", "total_count",
 			"action", "retrieve_threshold_statistics")
+		return
 	}
-	stats["total_count"] = totalCount
 
-	// Expired count
-	var expiredCount int64
-	if err := ds.DB.Model(&DynamicThreshold{}).Where("expires_at < ?", time.Now()).Count(&expiredCount).Error; err != nil {
-		return nil, dbError(err, "get_dynamic_threshold_stats_expired", errors.PriorityLow,
-			"stat", "expired_count",
+	// Active count (not expired)
+	if err = ds.DB.Model(&DynamicThreshold{}).Where("expires_at >= ?", now).Count(&activeCount).Error; err != nil {
+		err = dbError(err, "get_dynamic_threshold_stats_active", errors.PriorityLow,
+			"stat", "active_count",
 			"action", "retrieve_threshold_statistics")
+		return
 	}
-	stats["expired_count"] = expiredCount
 
-	// Active count
-	stats["active_count"] = totalCount - expiredCount
+	// At minimum count (level 3, which is the minimum threshold)
+	if err = ds.DB.Model(&DynamicThreshold{}).Where("expires_at >= ? AND level = ?", now, 3).Count(&atMinimumCount).Error; err != nil {
+		err = dbError(err, "get_dynamic_threshold_stats_at_minimum", errors.PriorityLow,
+			"stat", "at_minimum_count",
+			"action", "retrieve_threshold_statistics")
+		return
+	}
 
 	// Level distribution
 	type LevelCount struct {
@@ -193,19 +196,145 @@ func (ds *DataStore) GetDynamicThresholdStats() (map[string]any, error) {
 		Count int64
 	}
 	var levelCounts []LevelCount
-	if err := ds.DB.Model(&DynamicThreshold{}).
+	if err = ds.DB.Model(&DynamicThreshold{}).
 		Select("level, COUNT(*) as count").
-		Where("expires_at >= ?", time.Now()).
+		Where("expires_at >= ?", now).
 		Group("level").
 		Order("level ASC").
 		Find(&levelCounts).Error; err != nil {
-		return nil, dbError(err, "get_dynamic_threshold_stats_levels", errors.PriorityLow,
+		err = dbError(err, "get_dynamic_threshold_stats_levels", errors.PriorityLow,
 			"stat", "level_distribution",
 			"action", "retrieve_threshold_statistics")
+		return
 	}
-	stats["level_distribution"] = levelCounts
 
-	return stats, nil
+	levelDistribution = make(map[int]int64)
+	for _, lc := range levelCounts {
+		levelDistribution[lc.Level] = lc.Count
+	}
+
+	return totalCount, activeCount, atMinimumCount, levelDistribution, nil
+}
+
+// DeleteAllDynamicThresholds removes all dynamic thresholds from the database
+// Returns the count of deleted thresholds
+// BG-59: Used for "Reset All" functionality
+func (ds *DataStore) DeleteAllDynamicThresholds() (int64, error) {
+	result := ds.DB.Where("1 = 1").Delete(&DynamicThreshold{})
+	if result.Error != nil {
+		return 0, dbError(result.Error, "delete_all_dynamic_thresholds", errors.PriorityMedium,
+			"action", "reset_all_learned_thresholds")
+	}
+
+	if result.RowsAffected > 0 {
+		getLogger().Info("Reset all dynamic thresholds",
+			"count", result.RowsAffected)
+	}
+
+	return result.RowsAffected, nil
+}
+
+// SaveThresholdEvent saves a threshold change event to the database
+// BG-59: Records threshold changes for history/audit purposes
+func (ds *DataStore) SaveThresholdEvent(event *ThresholdEvent) error {
+	if event == nil {
+		return validationError("event cannot be nil", "event", nil)
+	}
+	if event.SpeciesName == "" {
+		return validationError("species name cannot be empty", "species_name", "")
+	}
+
+	// Set timestamp if not already set
+	if event.CreatedAt.IsZero() {
+		event.CreatedAt = time.Now()
+	}
+
+	if err := ds.DB.Create(event).Error; err != nil {
+		return dbError(err, "save_threshold_event", errors.PriorityMedium,
+			"species", event.SpeciesName,
+			"table", "threshold_events",
+			"action", "record_threshold_change")
+	}
+
+	return nil
+}
+
+// GetThresholdEvents retrieves threshold events for a specific species
+// Returns events ordered by created_at DESC (most recent first)
+// BG-59: Used for displaying threshold change history per species
+func (ds *DataStore) GetThresholdEvents(speciesName string, limit int) ([]ThresholdEvent, error) {
+	if speciesName == "" {
+		return nil, validationError("species name cannot be empty", "species_name", "")
+	}
+
+	var events []ThresholdEvent
+	query := ds.DB.Where("species_name = ?", speciesName).Order("created_at DESC")
+
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+
+	if err := query.Find(&events).Error; err != nil {
+		return nil, dbError(err, "get_threshold_events", errors.PriorityMedium,
+			"species", speciesName,
+			"action", "retrieve_threshold_history")
+	}
+
+	return events, nil
+}
+
+// GetRecentThresholdEvents retrieves recent threshold events across all species
+// Returns events ordered by created_at DESC (most recent first)
+// BG-59: Used for displaying recent activity
+func (ds *DataStore) GetRecentThresholdEvents(limit int) ([]ThresholdEvent, error) {
+	var events []ThresholdEvent
+	query := ds.DB.Order("created_at DESC")
+
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+
+	if err := query.Find(&events).Error; err != nil {
+		return nil, dbError(err, "get_recent_threshold_events", errors.PriorityMedium,
+			"action", "retrieve_recent_threshold_events")
+	}
+
+	return events, nil
+}
+
+// DeleteThresholdEvents removes all threshold events for a specific species
+// BG-59: Used when resetting a single species threshold
+func (ds *DataStore) DeleteThresholdEvents(speciesName string) error {
+	if speciesName == "" {
+		return validationError("species name cannot be empty", "species_name", "")
+	}
+
+	result := ds.DB.Where("species_name = ?", speciesName).Delete(&ThresholdEvent{})
+	if result.Error != nil {
+		return dbError(result.Error, "delete_threshold_events", errors.PriorityMedium,
+			"species", speciesName,
+			"action", "remove_threshold_history")
+	}
+
+	return nil
+}
+
+// DeleteAllThresholdEvents removes all threshold events from the database
+// Returns the count of deleted events
+// BG-59: Used for "Reset All" functionality
+func (ds *DataStore) DeleteAllThresholdEvents() (int64, error) {
+	result := ds.DB.Where("1 = 1").Delete(&ThresholdEvent{})
+	if result.Error != nil {
+		return 0, dbError(result.Error, "delete_all_threshold_events", errors.PriorityMedium,
+			"action", "reset_all_threshold_history")
+	}
+
+	if result.RowsAffected > 0 {
+		getLogger().Info("Deleted all threshold events",
+			"count", result.RowsAffected)
+	}
+
+	return result.RowsAffected, nil
 }
 
 // BatchSaveDynamicThresholds saves multiple dynamic thresholds in a single transaction

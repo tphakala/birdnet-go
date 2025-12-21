@@ -2315,6 +2315,46 @@
           "min": "min",
           "hours": "uur"
         }
+      },
+      "dynamicThreshold": {
+        "tabLabel": "Geleerd",
+        "title": "Geleerde drempels",
+        "description": "Deze pagina toont runtime data van dynamische drempels. Wanneer ingeschakeld in Hoofdinstellingen → Detectie, worden drempels automatisch aangepast door meerdere detecties met hoge betrouwbaarheid. Soorten die hier worden getoond, worden verondersteld op deze locatie te bestaan.",
+        "stats": {
+          "active": "Actief",
+          "atMinimum": "Op minimum",
+          "minThreshold": "Min. drempel",
+          "validityPeriod": "Geldigheidsperiode"
+        },
+        "header": {
+          "species": "Soort",
+          "threshold": "Drempel",
+          "expires": "Verloopt"
+        },
+        "searchPlaceholder": "Zoek soorten...",
+        "threshold": "Drempel",
+        "level": "Niveau",
+        "expires": "Verloopt",
+        "expired": "Verlopen",
+        "confidence": "Betrouwbaarheid",
+        "requiredConfidence": "Vereiste betrouwbaarheid",
+        "resetAll": "Alles resetten",
+        "resetSpecies": "Reset drempel voor deze soort",
+        "noEvents": "Geen drempelwijzigingsgeschiedenis",
+        "note": "Detecties met hoge betrouwbaarheid bevestigen welke soorten op deze locatie bestaan. Na meerdere matches met hoge betrouwbaarheid wordt de detectiedrempel veilig verlaagd om meer geluiden te vangen zonder significant risico op fout-positieven. Drempels worden automatisch gereset na de geconfigureerde geldigheidsperiode.",
+        "empty": {
+          "title": "Geen geleerde drempels",
+          "description": "Detecties met hoge betrouwbaarheid creëren automatisch geleerde drempels voor soorten"
+        },
+        "resetAllConfirm": {
+          "title": "Alle drempels resetten",
+          "message": "Dit zal alle {count} geleerde drempels resetten. Soorten moeten opnieuw met hoge betrouwbaarheid worden gedetecteerd om hun drempels te verlagen."
+        },
+        "loadError": "Laden van dynamische drempels mislukt",
+        "resetSuccess": "Drempel gereset voor {species}",
+        "resetError": "Resetten van drempel mislukt",
+        "resetAllSuccess": "{count} drempels gereset",
+        "resetAllError": "Resetten van drempels mislukt"
       }
     },
     "database": {

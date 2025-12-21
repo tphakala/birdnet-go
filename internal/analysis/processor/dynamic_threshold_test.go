@@ -54,7 +54,7 @@ func TestGlobalThresholdAdjusted(t *testing.T) {
 	}
 
 	// First, add the species to dynamic thresholds
-	p.addSpeciesToDynamicThresholds("house sparrow", 0.80)
+	p.addSpeciesToDynamicThresholds("house sparrow", "Passer domesticus", 0.80)
 
 	// Trigger dynamic threshold with high confidence detection
 	result := datastore.Results{Confidence: 0.95}
@@ -111,7 +111,7 @@ func TestCustomThresholdZeroValue(t *testing.T) {
 	}
 
 	// Initialize and trigger dynamic adjustment to verify it works for zero-threshold species
-	p.addSpeciesToDynamicThresholds("test bird", 0.80)
+	p.addSpeciesToDynamicThresholds("test bird", "Testus birdus", 0.80)
 	highConfResult := datastore.Results{Confidence: 0.95}
 	adjusted := p.getAdjustedConfidenceThreshold("test bird", highConfResult, 0.80, false)
 
@@ -138,7 +138,7 @@ func TestDynamicThresholdLevels(t *testing.T) {
 	}
 
 	baseThreshold := float32(0.80)
-	p.addSpeciesToDynamicThresholds("test species", baseThreshold)
+	p.addSpeciesToDynamicThresholds("test species", "Testus speciesus", baseThreshold)
 
 	// Level 1: First high-confidence detection (75%)
 	result1 := datastore.Results{Confidence: 0.95}
@@ -174,7 +174,7 @@ func TestDynamicThresholdMinimumFloor(t *testing.T) {
 	}
 
 	baseThreshold := float32(0.80)
-	p.addSpeciesToDynamicThresholds("test species", baseThreshold)
+	p.addSpeciesToDynamicThresholds("test species", "Testus speciesus", baseThreshold)
 
 	// Trigger Level 3 (25% of 0.80 = 0.20, which is below min of 0.30)
 	for range 3 {

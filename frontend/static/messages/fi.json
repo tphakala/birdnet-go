@@ -2248,6 +2248,46 @@
           "min": "min",
           "hours": "t"
         }
+      },
+      "dynamicThreshold": {
+        "tabLabel": "Opitut",
+        "title": "Opitut kynnysarvot",
+        "description": "Tämä sivu näyttää dynaamisten kynnysarvojen suoritusaikaiset tiedot. Kun käytössä kohdassa Pääasetukset → Tunnistus, kynnysarvoja säädetään automaattisesti useiden korkean luottamuksen havaintojen perusteella. Täällä näkyvien lajien oletetaan esiintyvän tässä sijainnissa.",
+        "stats": {
+          "active": "Aktiiviset",
+          "atMinimum": "Minimissä",
+          "minThreshold": "Min. kynnys",
+          "validityPeriod": "Voimassaoloaika"
+        },
+        "header": {
+          "species": "Laji",
+          "threshold": "Kynnysarvo",
+          "expires": "Vanhenee"
+        },
+        "searchPlaceholder": "Hae lajeja...",
+        "threshold": "Kynnysarvo",
+        "level": "Taso",
+        "expires": "Vanhenee",
+        "expired": "Vanhentunut",
+        "confidence": "Luottamus",
+        "requiredConfidence": "Vaadittu luottamus",
+        "resetAll": "Nollaa kaikki",
+        "resetSpecies": "Nollaa tämän lajin kynnysarvo",
+        "noEvents": "Ei kynnysarvon muutoshistoriaa",
+        "note": "Korkean luottamuksen havainnot vahvistavat, mitkä lajit esiintyvät tässä sijainnissa. Useiden korkean luottamuksen osumien jälkeen tunnistuskynnystä alennetaan turvallisesti, jotta saadaan enemmän ääniä ilman merkittävää väärien positiivisten riskiä. Kynnysarvot nollautuvat automaattisesti asetetun voimassaoloajan jälkeen.",
+        "empty": {
+          "title": "Ei opittuja kynnysarvoja",
+          "description": "Korkean luottamuksen havainnot luovat automaattisesti opitut kynnysarvot lajeille"
+        },
+        "resetAllConfirm": {
+          "title": "Nollaa kaikki kynnysarvot",
+          "message": "Tämä nollaa kaikki {count} opittua kynnysarvoa. Lajit on havaittava uudelleen korkealla luottamuksella niiden kynnysarvojen alentamiseksi."
+        },
+        "loadError": "Dynaamisten kynnysarvojen lataus epäonnistui",
+        "resetSuccess": "Kynnysarvo nollattu lajille {species}",
+        "resetError": "Kynnysarvon nollaus epäonnistui",
+        "resetAllSuccess": "{count} kynnysarvoa nollattu",
+        "resetAllError": "Kynnysarvojen nollaus epäonnistui"
       }
     },
     "security": {

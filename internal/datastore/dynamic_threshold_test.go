@@ -548,32 +548,35 @@ func TestGetDynamicThresholdStats(t *testing.T) {
 		}
 
 		// Get stats
-		stats, err := ds.GetDynamicThresholdStats()
+		totalCount, activeCount, atMinimumCount, levelDistribution, err := ds.GetDynamicThresholdStats()
 
 		require.NoError(t, err)
-		require.NotNil(t, stats)
 
 		// Verify counts
-		assert.Equal(t, int64(5), stats["total_count"])
-		assert.Equal(t, int64(2), stats["expired_count"])
-		assert.Equal(t, int64(3), stats["active_count"])
+		assert.Equal(t, int64(5), totalCount)
+		assert.Equal(t, int64(3), activeCount)
+		// active3 has level 3, so atMinimumCount should be 1
+		assert.Equal(t, int64(1), atMinimumCount)
 
 		// Verify level distribution
-		levelDist, ok := stats["level_distribution"]
-		assert.True(t, ok)
-		assert.NotNil(t, levelDist)
+		assert.NotNil(t, levelDistribution)
+		// level 1: active1, level 2: active2, level 3: active3
+		assert.Equal(t, int64(1), levelDistribution[1])
+		assert.Equal(t, int64(1), levelDistribution[2])
+		assert.Equal(t, int64(1), levelDistribution[3])
 	})
 
 	t.Run("GetStatsEmptyDatabase", func(t *testing.T) {
 		ds := setupDynamicThresholdTestDB(t)
 
-		stats, err := ds.GetDynamicThresholdStats()
+		totalCount, activeCount, atMinimumCount, levelDistribution, err := ds.GetDynamicThresholdStats()
 
 		require.NoError(t, err)
-		require.NotNil(t, stats)
-		assert.Equal(t, int64(0), stats["total_count"])
-		assert.Equal(t, int64(0), stats["expired_count"])
-		assert.Equal(t, int64(0), stats["active_count"])
+		assert.Equal(t, int64(0), totalCount)
+		assert.Equal(t, int64(0), activeCount)
+		assert.Equal(t, int64(0), atMinimumCount)
+		assert.NotNil(t, levelDistribution)
+		assert.Empty(t, levelDistribution)
 	})
 }
 

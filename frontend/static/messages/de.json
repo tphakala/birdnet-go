@@ -2248,6 +2248,46 @@
           "min": "Min",
           "hours": "Std"
         }
+      },
+      "dynamicThreshold": {
+        "tabLabel": "Gelernt",
+        "title": "Gelernte Schwellenwerte",
+        "description": "Diese Seite zeigt dynamische Schwellenwert-Laufzeitdaten. Wenn in Haupteinstellungen → Erkennung aktiviert, werden Schwellenwerte automatisch durch mehrere hochkonfidente Erkennungen angepasst. Hier gezeigte Arten werden an diesem Standort als vorhanden angenommen.",
+        "stats": {
+          "active": "Aktiv",
+          "atMinimum": "Am Minimum",
+          "minThreshold": "Min. Schwellenwert",
+          "validityPeriod": "Gültigkeitsdauer"
+        },
+        "header": {
+          "species": "Art",
+          "threshold": "Schwellenwert",
+          "expires": "Läuft ab"
+        },
+        "searchPlaceholder": "Arten suchen...",
+        "threshold": "Schwellenwert",
+        "level": "Stufe",
+        "expires": "Läuft ab",
+        "expired": "Abgelaufen",
+        "confidence": "Konfidenz",
+        "requiredConfidence": "Erforderliche Konfidenz",
+        "resetAll": "Alle zurücksetzen",
+        "resetSpecies": "Schwellenwert für diese Art zurücksetzen",
+        "noEvents": "Keine Schwellenwertänderungen",
+        "note": "Hochkonfidente Erkennungen bestätigen, welche Arten an diesem Standort vorkommen. Nach mehreren hochkonfidenten Übereinstimmungen wird der Erkennungsschwellenwert sicher gesenkt, um mehr Rufe ohne signifikantes Falsch-Positiv-Risiko zu erfassen. Schwellenwerte werden nach der konfigurierten Gültigkeitsdauer automatisch zurückgesetzt.",
+        "empty": {
+          "title": "Keine gelernten Schwellenwerte",
+          "description": "Hochkonfidente Erkennungen erstellen automatisch gelernte Schwellenwerte für Arten"
+        },
+        "resetAllConfirm": {
+          "title": "Alle Schwellenwerte zurücksetzen",
+          "message": "Dies setzt alle {count} gelernten Schwellenwerte zurück. Arten müssen erneut mit hoher Konfidenz erkannt werden, um ihre Schwellenwerte zu senken."
+        },
+        "loadError": "Fehler beim Laden der dynamischen Schwellenwerte",
+        "resetSuccess": "Schwellenwert für {species} zurückgesetzt",
+        "resetError": "Fehler beim Zurücksetzen des Schwellenwerts",
+        "resetAllSuccess": "{count} Schwellenwerte zurückgesetzt",
+        "resetAllError": "Fehler beim Zurücksetzen der Schwellenwerte"
       }
     },
     "security": {

@@ -338,6 +338,116 @@ func (_c *MockInterface_Delete_Call) RunAndReturn(run func(string) error) *MockI
 	return _c
 }
 
+// DeleteAllDynamicThresholds provides a mock function with no fields
+func (_m *MockInterface) DeleteAllDynamicThresholds() (int64, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteAllDynamicThresholds")
+	}
+
+	var r0 int64
+	var r1 error
+	if rf, ok := ret.Get(0).(func() (int64, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() int64); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_DeleteAllDynamicThresholds_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteAllDynamicThresholds'
+type MockInterface_DeleteAllDynamicThresholds_Call struct {
+	*mock.Call
+}
+
+// DeleteAllDynamicThresholds is a helper method to define mock.On call
+func (_e *MockInterface_Expecter) DeleteAllDynamicThresholds() *MockInterface_DeleteAllDynamicThresholds_Call {
+	return &MockInterface_DeleteAllDynamicThresholds_Call{Call: _e.mock.On("DeleteAllDynamicThresholds")}
+}
+
+func (_c *MockInterface_DeleteAllDynamicThresholds_Call) Run(run func()) *MockInterface_DeleteAllDynamicThresholds_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockInterface_DeleteAllDynamicThresholds_Call) Return(_a0 int64, _a1 error) *MockInterface_DeleteAllDynamicThresholds_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_DeleteAllDynamicThresholds_Call) RunAndReturn(run func() (int64, error)) *MockInterface_DeleteAllDynamicThresholds_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeleteAllThresholdEvents provides a mock function with no fields
+func (_m *MockInterface) DeleteAllThresholdEvents() (int64, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteAllThresholdEvents")
+	}
+
+	var r0 int64
+	var r1 error
+	if rf, ok := ret.Get(0).(func() (int64, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() int64); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_DeleteAllThresholdEvents_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteAllThresholdEvents'
+type MockInterface_DeleteAllThresholdEvents_Call struct {
+	*mock.Call
+}
+
+// DeleteAllThresholdEvents is a helper method to define mock.On call
+func (_e *MockInterface_Expecter) DeleteAllThresholdEvents() *MockInterface_DeleteAllThresholdEvents_Call {
+	return &MockInterface_DeleteAllThresholdEvents_Call{Call: _e.mock.On("DeleteAllThresholdEvents")}
+}
+
+func (_c *MockInterface_DeleteAllThresholdEvents_Call) Run(run func()) *MockInterface_DeleteAllThresholdEvents_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockInterface_DeleteAllThresholdEvents_Call) Return(_a0 int64, _a1 error) *MockInterface_DeleteAllThresholdEvents_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_DeleteAllThresholdEvents_Call) RunAndReturn(run func() (int64, error)) *MockInterface_DeleteAllThresholdEvents_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // DeleteDynamicThreshold provides a mock function with given fields: speciesName
 func (_m *MockInterface) DeleteDynamicThreshold(speciesName string) error {
 	ret := _m.Called(speciesName)
@@ -584,6 +694,52 @@ func (_c *MockInterface_DeleteNoteComment_Call) Return(_a0 error) *MockInterface
 }
 
 func (_c *MockInterface_DeleteNoteComment_Call) RunAndReturn(run func(string) error) *MockInterface_DeleteNoteComment_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeleteThresholdEvents provides a mock function with given fields: speciesName
+func (_m *MockInterface) DeleteThresholdEvents(speciesName string) error {
+	ret := _m.Called(speciesName)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteThresholdEvents")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string) error); ok {
+		r0 = rf(speciesName)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockInterface_DeleteThresholdEvents_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteThresholdEvents'
+type MockInterface_DeleteThresholdEvents_Call struct {
+	*mock.Call
+}
+
+// DeleteThresholdEvents is a helper method to define mock.On call
+//   - speciesName string
+func (_e *MockInterface_Expecter) DeleteThresholdEvents(speciesName interface{}) *MockInterface_DeleteThresholdEvents_Call {
+	return &MockInterface_DeleteThresholdEvents_Call{Call: _e.mock.On("DeleteThresholdEvents", speciesName)}
+}
+
+func (_c *MockInterface_DeleteThresholdEvents_Call) Run(run func(speciesName string)) *MockInterface_DeleteThresholdEvents_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_DeleteThresholdEvents_Call) Return(_a0 error) *MockInterface_DeleteThresholdEvents_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockInterface_DeleteThresholdEvents_Call) RunAndReturn(run func(string) error) *MockInterface_DeleteThresholdEvents_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1176,6 +1332,84 @@ func (_c *MockInterface_GetDynamicThreshold_Call) Return(_a0 *datastore.DynamicT
 }
 
 func (_c *MockInterface_GetDynamicThreshold_Call) RunAndReturn(run func(string) (*datastore.DynamicThreshold, error)) *MockInterface_GetDynamicThreshold_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetDynamicThresholdStats provides a mock function with no fields
+func (_m *MockInterface) GetDynamicThresholdStats() (int64, int64, int64, map[int]int64, error) {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetDynamicThresholdStats")
+	}
+
+	var r0 int64
+	var r1 int64
+	var r2 int64
+	var r3 map[int]int64
+	var r4 error
+	if rf, ok := ret.Get(0).(func() (int64, int64, int64, map[int]int64, error)); ok {
+		return rf()
+	}
+	if rf, ok := ret.Get(0).(func() int64); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	if rf, ok := ret.Get(1).(func() int64); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Get(1).(int64)
+	}
+
+	if rf, ok := ret.Get(2).(func() int64); ok {
+		r2 = rf()
+	} else {
+		r2 = ret.Get(2).(int64)
+	}
+
+	if rf, ok := ret.Get(3).(func() map[int]int64); ok {
+		r3 = rf()
+	} else {
+		if ret.Get(3) != nil {
+			r3 = ret.Get(3).(map[int]int64)
+		}
+	}
+
+	if rf, ok := ret.Get(4).(func() error); ok {
+		r4 = rf()
+	} else {
+		r4 = ret.Error(4)
+	}
+
+	return r0, r1, r2, r3, r4
+}
+
+// MockInterface_GetDynamicThresholdStats_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetDynamicThresholdStats'
+type MockInterface_GetDynamicThresholdStats_Call struct {
+	*mock.Call
+}
+
+// GetDynamicThresholdStats is a helper method to define mock.On call
+func (_e *MockInterface_Expecter) GetDynamicThresholdStats() *MockInterface_GetDynamicThresholdStats_Call {
+	return &MockInterface_GetDynamicThresholdStats_Call{Call: _e.mock.On("GetDynamicThresholdStats")}
+}
+
+func (_c *MockInterface_GetDynamicThresholdStats_Call) Run(run func()) *MockInterface_GetDynamicThresholdStats_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetDynamicThresholdStats_Call) Return(totalCount int64, activeCount int64, atMinimumCount int64, levelDistribution map[int]int64, err error) *MockInterface_GetDynamicThresholdStats_Call {
+	_c.Call.Return(totalCount, activeCount, atMinimumCount, levelDistribution, err)
+	return _c
+}
+
+func (_c *MockInterface_GetDynamicThresholdStats_Call) RunAndReturn(run func() (int64, int64, int64, map[int]int64, error)) *MockInterface_GetDynamicThresholdStats_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -2064,6 +2298,64 @@ func (_c *MockInterface_GetNotificationHistory_Call) RunAndReturn(run func(strin
 	return _c
 }
 
+// GetRecentThresholdEvents provides a mock function with given fields: limit
+func (_m *MockInterface) GetRecentThresholdEvents(limit int) ([]datastore.ThresholdEvent, error) {
+	ret := _m.Called(limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetRecentThresholdEvents")
+	}
+
+	var r0 []datastore.ThresholdEvent
+	var r1 error
+	if rf, ok := ret.Get(0).(func(int) ([]datastore.ThresholdEvent, error)); ok {
+		return rf(limit)
+	}
+	if rf, ok := ret.Get(0).(func(int) []datastore.ThresholdEvent); ok {
+		r0 = rf(limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.ThresholdEvent)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(int) error); ok {
+		r1 = rf(limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetRecentThresholdEvents_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetRecentThresholdEvents'
+type MockInterface_GetRecentThresholdEvents_Call struct {
+	*mock.Call
+}
+
+// GetRecentThresholdEvents is a helper method to define mock.On call
+//   - limit int
+func (_e *MockInterface_Expecter) GetRecentThresholdEvents(limit interface{}) *MockInterface_GetRecentThresholdEvents_Call {
+	return &MockInterface_GetRecentThresholdEvents_Call{Call: _e.mock.On("GetRecentThresholdEvents", limit)}
+}
+
+func (_c *MockInterface_GetRecentThresholdEvents_Call) Run(run func(limit int)) *MockInterface_GetRecentThresholdEvents_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetRecentThresholdEvents_Call) Return(_a0 []datastore.ThresholdEvent, _a1 error) *MockInterface_GetRecentThresholdEvents_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetRecentThresholdEvents_Call) RunAndReturn(run func(int) ([]datastore.ThresholdEvent, error)) *MockInterface_GetRecentThresholdEvents_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetSpeciesFirstDetectionInPeriod provides a mock function with given fields: ctx, startDate, endDate, limit, offset
 func (_m *MockInterface) GetSpeciesFirstDetectionInPeriod(ctx context.Context, startDate string, endDate string, limit int, offset int) ([]datastore.NewSpeciesData, error) {
 	ret := _m.Called(ctx, startDate, endDate, limit, offset)
@@ -2182,6 +2474,65 @@ func (_c *MockInterface_GetSpeciesSummaryData_Call) Return(_a0 []datastore.Speci
 }
 
 func (_c *MockInterface_GetSpeciesSummaryData_Call) RunAndReturn(run func(context.Context, string, string) ([]datastore.SpeciesSummaryData, error)) *MockInterface_GetSpeciesSummaryData_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetThresholdEvents provides a mock function with given fields: speciesName, limit
+func (_m *MockInterface) GetThresholdEvents(speciesName string, limit int) ([]datastore.ThresholdEvent, error) {
+	ret := _m.Called(speciesName, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetThresholdEvents")
+	}
+
+	var r0 []datastore.ThresholdEvent
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string, int) ([]datastore.ThresholdEvent, error)); ok {
+		return rf(speciesName, limit)
+	}
+	if rf, ok := ret.Get(0).(func(string, int) []datastore.ThresholdEvent); ok {
+		r0 = rf(speciesName, limit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]datastore.ThresholdEvent)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(string, int) error); ok {
+		r1 = rf(speciesName, limit)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockInterface_GetThresholdEvents_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetThresholdEvents'
+type MockInterface_GetThresholdEvents_Call struct {
+	*mock.Call
+}
+
+// GetThresholdEvents is a helper method to define mock.On call
+//   - speciesName string
+//   - limit int
+func (_e *MockInterface_Expecter) GetThresholdEvents(speciesName interface{}, limit interface{}) *MockInterface_GetThresholdEvents_Call {
+	return &MockInterface_GetThresholdEvents_Call{Call: _e.mock.On("GetThresholdEvents", speciesName, limit)}
+}
+
+func (_c *MockInterface_GetThresholdEvents_Call) Run(run func(speciesName string, limit int)) *MockInterface_GetThresholdEvents_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string), args[1].(int))
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetThresholdEvents_Call) Return(_a0 []datastore.ThresholdEvent, _a1 error) *MockInterface_GetThresholdEvents_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockInterface_GetThresholdEvents_Call) RunAndReturn(run func(string, int) ([]datastore.ThresholdEvent, error)) *MockInterface_GetThresholdEvents_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -2860,6 +3211,52 @@ func (_c *MockInterface_SaveNotificationHistory_Call) Return(_a0 error) *MockInt
 }
 
 func (_c *MockInterface_SaveNotificationHistory_Call) RunAndReturn(run func(*datastore.NotificationHistory) error) *MockInterface_SaveNotificationHistory_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SaveThresholdEvent provides a mock function with given fields: event
+func (_m *MockInterface) SaveThresholdEvent(event *datastore.ThresholdEvent) error {
+	ret := _m.Called(event)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SaveThresholdEvent")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(*datastore.ThresholdEvent) error); ok {
+		r0 = rf(event)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockInterface_SaveThresholdEvent_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SaveThresholdEvent'
+type MockInterface_SaveThresholdEvent_Call struct {
+	*mock.Call
+}
+
+// SaveThresholdEvent is a helper method to define mock.On call
+//   - event *datastore.ThresholdEvent
+func (_e *MockInterface_Expecter) SaveThresholdEvent(event interface{}) *MockInterface_SaveThresholdEvent_Call {
+	return &MockInterface_SaveThresholdEvent_Call{Call: _e.mock.On("SaveThresholdEvent", event)}
+}
+
+func (_c *MockInterface_SaveThresholdEvent_Call) Run(run func(event *datastore.ThresholdEvent)) *MockInterface_SaveThresholdEvent_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(*datastore.ThresholdEvent))
+	})
+	return _c
+}
+
+func (_c *MockInterface_SaveThresholdEvent_Call) Return(_a0 error) *MockInterface_SaveThresholdEvent_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockInterface_SaveThresholdEvent_Call) RunAndReturn(run func(*datastore.ThresholdEvent) error) *MockInterface_SaveThresholdEvent_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -487,6 +487,7 @@ func (c *Controller) initRoutes() {
 		{"support routes", c.initSupportRoutes},
 		{"debug routes", c.initDebugRoutes},
 		{"species routes", c.initSpeciesRoutes},
+		{"dynamic threshold routes", c.initDynamicThresholdRoutes},
 	}
 
 	for _, initializer := range routeInitializers {

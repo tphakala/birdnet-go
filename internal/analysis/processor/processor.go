@@ -90,11 +90,12 @@ type Processor struct {
 
 // DynamicThreshold represents the dynamic threshold configuration for a species.
 type DynamicThreshold struct {
-	Level         int
-	CurrentValue  float64
-	Timer         time.Time
-	HighConfCount int
-	ValidHours    int
+	Level          int
+	CurrentValue   float64
+	Timer          time.Time
+	HighConfCount  int
+	ValidHours     int
+	ScientificName string
 }
 
 type Detections struct {
@@ -578,7 +579,7 @@ func (p *Processor) processResults(item birdnet.Results) []Detections {
 
 		// Add species to dynamic thresholds if enabled and passed filters
 		if p.Settings.Realtime.DynamicThreshold.Enabled {
-			p.addSpeciesToDynamicThresholds(speciesLowercase, baseThreshold)
+			p.addSpeciesToDynamicThresholds(speciesLowercase, scientificName, baseThreshold)
 		}
 
 		// Create the detection

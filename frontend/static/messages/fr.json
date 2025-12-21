@@ -2315,6 +2315,46 @@
           "min": "min",
           "hours": "h"
         }
+      },
+      "dynamicThreshold": {
+        "tabLabel": "Appris",
+        "title": "Seuils appris",
+        "description": "Cette page affiche les données d'exécution des seuils dynamiques. Lorsque activés dans Paramètres principaux → Détection, les seuils sont automatiquement ajustés par plusieurs détections à haute confiance. Les espèces affichées ici sont supposées exister à cet emplacement.",
+        "stats": {
+          "active": "Actifs",
+          "atMinimum": "Au minimum",
+          "minThreshold": "Seuil min.",
+          "validityPeriod": "Période de validité"
+        },
+        "header": {
+          "species": "Espèce",
+          "threshold": "Seuil",
+          "expires": "Expire"
+        },
+        "searchPlaceholder": "Rechercher des espèces...",
+        "threshold": "Seuil",
+        "level": "Niveau",
+        "expires": "Expire",
+        "expired": "Expiré",
+        "confidence": "Confiance",
+        "requiredConfidence": "Confiance requise",
+        "resetAll": "Tout réinitialiser",
+        "resetSpecies": "Réinitialiser le seuil pour cette espèce",
+        "noEvents": "Aucun historique de changement de seuil",
+        "note": "Les détections à haute confiance confirment quelles espèces existent à cet emplacement. Après plusieurs correspondances à haute confiance, le seuil de détection est abaissé en toute sécurité pour capturer plus d'appels sans risque significatif de faux positifs. Les seuils se réinitialisent automatiquement après la période de validité configurée.",
+        "empty": {
+          "title": "Aucun seuil appris",
+          "description": "Les détections à haute confiance créeront automatiquement des seuils appris pour les espèces"
+        },
+        "resetAllConfirm": {
+          "title": "Réinitialiser tous les seuils",
+          "message": "Cela réinitialisera les {count} seuils appris. Les espèces devront être détectées à nouveau avec une haute confiance pour abaisser leurs seuils."
+        },
+        "loadError": "Échec du chargement des seuils dynamiques",
+        "resetSuccess": "Seuil réinitialisé pour {species}",
+        "resetError": "Échec de la réinitialisation du seuil",
+        "resetAllSuccess": "{count} seuils réinitialisés",
+        "resetAllError": "Échec de la réinitialisation des seuils"
       }
     },
     "database": {
