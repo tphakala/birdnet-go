@@ -13,6 +13,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// executeLargeDataSettingsPatch creates and executes a PATCH request with large data.
+func executeLargeDataSettingsPatch(t *testing.T, controller *Controller, e *echo.Echo, section string, data any, description string) {
+	t.Helper()
+	body, err := json.Marshal(data)
+	require.NoError(t, err)
+	t.Logf("Test data size: %d bytes", len(body))
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+section, bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("section")
+	ctx.SetParamValues(section)
+
+	err = controller.UpdateSectionSettings(ctx)
+	if err != nil {
+		t.Logf("%s: Failed as expected - %v", description, err)
+	} else {
+		t.Logf("%s: Succeeded in handling large data", description)
+	}
+}
+
 // TestExtremeValues verifies the system handles extreme values appropriately
 func TestExtremeValues(t *testing.T) {
 	t.Parallel()
@@ -308,32 +330,9 @@ func TestMemoryExhaustionAttempts(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-
 			e := echo.New()
 			controller := getTestController(t, e)
-
-			largeData := tt.largeData()
-			body, err := json.Marshal(largeData)
-			require.NoError(t, err)
-
-			// The JSON might be very large
-			t.Logf("Test data size: %d bytes", len(body))
-
-			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section,
-				bytes.NewReader(body))
-			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-			rec := httptest.NewRecorder()
-			ctx := e.NewContext(req, rec)
-			ctx.SetParamNames("section")
-			ctx.SetParamValues(tt.section)
-
-			// Should either succeed or fail gracefully
-			err = controller.UpdateSectionSettings(ctx)
-			if err != nil {
-				t.Logf("%s: Failed as expected - %v", tt.description, err)
-			} else {
-				t.Logf("%s: Succeeded in handling large data", tt.description)
-			}
+			executeLargeDataSettingsPatch(t, controller, e, tt.section, tt.largeData(), tt.description)
 		})
 	}
 }

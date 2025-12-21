@@ -22,6 +22,26 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
+// searchNotesEmptyMock returns a mockSetup function that configures empty search results.
+// Use this to reduce duplication in tests that mock SearchNotes and CountSearchResults.
+func searchNotesEmptyMock() func(*mock.Mock) {
+	return func(m *mock.Mock) {
+		m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
+		m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
+	}
+}
+
+// reviewDetectionMock returns a mockSetup function for review detection endpoints.
+// Configures Get, IsNoteLocked, SaveNoteComment, and SaveNoteReview mocks.
+func reviewDetectionMock(id string) func(*mock.Mock) {
+	return func(m *mock.Mock) {
+		m.On("Get", id).Return(datastore.Note{ID: 1, Locked: false}, nil)
+		m.On("IsNoteLocked", id).Return(false, nil)
+		m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
+		m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
+	}
+}
+
 // setPathParamsFromPath extracts path parameters from a URL path and
 // sets them on the Echo context using a table-driven approach for maintainability.
 func setPathParamsFromPath(c echo.Context, path string) {
@@ -92,6 +112,36 @@ func setPathParamsFromPath(c echo.Context, path string) {
 	// This allows the original path to be used for non-parameterized routes
 }
 
+// assertCSRFError checks that an error is an HTTPError with expected status and message substring.
+func assertCSRFError(t *testing.T, err error, expectedMessage string) {
+	t.Helper()
+	require.Error(t, err)
+	var httpErr *echo.HTTPError
+	require.ErrorAs(t, err, &httpErr, "expected echo.HTTPError, got %T", err)
+	assert.Equal(t, http.StatusForbidden, httpErr.Code)
+	assert.Contains(t, httpErr.Message, expectedMessage)
+}
+
+// createTestRequest builds an HTTP request with optional body and query params.
+func createTestRequest(method, path, body string, queryParams map[string]string) *http.Request {
+	var req *http.Request
+	if method == http.MethodPost || method == http.MethodPut {
+		req = httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	} else {
+		req = httptest.NewRequest(method, path, http.NoBody)
+	}
+
+	if len(queryParams) > 0 {
+		q := req.URL.Query()
+		for k, v := range queryParams {
+			q.Add(k, v)
+		}
+		req.URL.RawQuery = q.Encode()
+	}
+	return req
+}
+
 // assertSuccessfulResponse checks for expected 2xx status and optional body fragment.
 func assertSuccessfulResponse(t *testing.T, tcName string, expectedStatus int, rec *httptest.ResponseRecorder, handlerErr error, expectedBodyFragment string) {
 	t.Helper()
@@ -107,37 +157,47 @@ func assertSuccessfulResponse(t *testing.T, tcName string, expectedStatus int, r
 // or written to the response recorder by Echo's error handler.
 func assertErrorResponse(t *testing.T, tcName string, expectedStatus int, rec *httptest.ResponseRecorder, handlerErr error, expectedError string) {
 	t.Helper()
-	if handlerErr != nil {
-		// Case 1: Handler returned an error value (e.g., echo.HTTPError from validation)
-		var httpErr *echo.HTTPError
-		if errors.As(handlerErr, &httpErr) {
-			assert.Equal(t, expectedStatus, httpErr.Code, "Test Case '%s': Expected status %d, got %d from returned error", tcName, expectedStatus, httpErr.Code)
-			if expectedError != "" {
-				// Check the internal error message wrapped by echo.HTTPError or the Message field
-				internalErr := httpErr.Unwrap()
-				if internalErr != nil {
-					assert.Contains(t, internalErr.Error(), expectedError, "Test Case '%s': Expected internal error message containing '%s', got '%s'", tcName, expectedError, internalErr.Error())
-				} else if msgStr, ok := httpErr.Message.(string); ok {
-					assert.Contains(t, msgStr, expectedError, "Test Case '%s': Expected error message containing '%s', got '%s'", tcName, expectedError, msgStr)
-				} else {
-					assert.Failf(t, "Could not extract error message from echo.HTTPError",
-						"Test Case '%s': HTTPError.Message is not a string and Unwrap returned nil (status=%d)",
-						tcName, expectedStatus)
-				}
-			}
-		} else {
-			// Handler returned a non-HTTPError, which doesn't match expected behavior
-			assert.Failf(t,
-				"Test Case '%s': Unexpected non-HTTP error (%v). Expected an echo.HTTPError with status %d",
-				tcName, handlerErr, expectedStatus)
-		}
-	} else {
-		// Case 2: Handler returned nil, check the response recorder (Echo error handler wrote response)
-		assert.Equal(t, expectedStatus, rec.Code, "Test Case '%s': Handler returned nil, expected status %d, got response code %d", tcName, expectedStatus, rec.Code)
+
+	// Case 1: Handler returned nil, check the response recorder
+	if handlerErr == nil {
+		assert.Equal(t, expectedStatus, rec.Code, "tc=%s: expected status %d, got %d", tcName, expectedStatus, rec.Code)
 		if expectedError != "" {
-			assert.Contains(t, rec.Body.String(), expectedError, "Test Case '%s': Handler returned nil, expected status %d. Body '%s' does not contain expected error '%s'", tcName, expectedStatus, rec.Body.String(), expectedError)
+			assert.Contains(t, rec.Body.String(), expectedError, "tc=%s: body missing expected error", tcName)
 		}
+		return
 	}
+
+	// Case 2: Handler returned an error value
+	var httpErr *echo.HTTPError
+	if !errors.As(handlerErr, &httpErr) {
+		assert.Failf(t, "unexpected error type", "tc=%s: expected echo.HTTPError, got %T", tcName, handlerErr)
+		return
+	}
+
+	assert.Equal(t, expectedStatus, httpErr.Code, "tc=%s: expected status %d, got %d", tcName, expectedStatus, httpErr.Code)
+	if expectedError == "" {
+		return
+	}
+
+	// Try to extract error message from HTTPError
+	assertHTTPErrorContains(t, tcName, httpErr, expectedError)
+}
+
+// assertHTTPErrorContains checks that the HTTPError contains the expected message.
+func assertHTTPErrorContains(t *testing.T, tcName string, httpErr *echo.HTTPError, expected string) {
+	t.Helper()
+
+	if internalErr := httpErr.Unwrap(); internalErr != nil {
+		assert.Contains(t, internalErr.Error(), expected, "tc=%s: internal error missing expected message", tcName)
+		return
+	}
+
+	if msgStr, ok := httpErr.Message.(string); ok {
+		assert.Contains(t, msgStr, expected, "tc=%s: message missing expected content", tcName)
+		return
+	}
+
+	assert.Failf(t, "could not extract error message", "tc=%s: HTTPError.Message is not string and Unwrap returned nil", tcName)
 }
 
 // TestInputValidation tests that API endpoints properly validate and reject invalid inputs
@@ -245,15 +305,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.ReviewDetection(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				// For the review operation on the specific item
-				m.On("Get", "1").Return(datastore.Note{ID: 1, Locked: false}, nil)
-				m.On("IsNoteLocked", "1").Return(false, nil)
-
-				// Comment should be passed through but properly escaped
-				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
-				m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
-			},
+			mockSetup:      reviewDetectionMock("1"),
 			expectedStatus: http.StatusOK,
 		},
 		// New security abuse test cases
@@ -287,11 +339,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.GetDetections(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				// The search should execute but with sanitized input
-				m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
-			},
+			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -305,11 +353,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.GetDetections(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				// If input validation works properly, this might either be rejected or truncated
-				m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
-			},
+			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK, // Should handle it gracefully
 		},
 		{
@@ -357,11 +401,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.GetDetections(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				// The search should execute but with sanitized input
-				m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
-			},
+			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -397,10 +437,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.GetDetections(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
-			},
+			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -414,10 +451,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.GetDetections(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
-			},
+			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -431,10 +465,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.GetDetections(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
-			},
+			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -448,10 +479,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.GetDetections(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
-			},
+			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -465,10 +493,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.GetDetections(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
-			},
+			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -482,10 +507,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.GetDetections(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
-			},
+			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -496,12 +518,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.ReviewDetection(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				m.On("Get", "1").Return(datastore.Note{ID: 1, Locked: false}, nil)
-				m.On("IsNoteLocked", "1").Return(false, nil)
-				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
-				m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
-			},
+			mockSetup:      reviewDetectionMock("1"),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -515,10 +532,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.GetDetections(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
-			},
+			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -532,10 +546,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.GetDetections(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
-			},
+			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -549,10 +560,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.GetDetections(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
-			},
+			mockSetup:      searchNotesEmptyMock(),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -576,49 +584,25 @@ func TestInputValidation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Reset mock expectations
 			mockDS.ExpectedCalls = nil
-			// Apply mock setup if provided
 			if tc.mockSetup != nil {
 				tc.mockSetup(&mockDS.Mock)
 			}
 
-			// Create request
-			var req *http.Request
-			if tc.method == http.MethodPost || tc.method == http.MethodPut {
-				req = httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
-				req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-			} else {
-				req = httptest.NewRequest(tc.method, tc.path, http.NoBody)
-			}
-
-			// Add query parameters
-			if len(tc.queryParams) > 0 {
-				q := req.URL.Query()
-				for k, v := range tc.queryParams {
-					q.Add(k, v)
-				}
-				req.URL.RawQuery = q.Encode()
-			}
-
+			req := createTestRequest(tc.method, tc.path, tc.body, tc.queryParams)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 			c.SetPath(tc.path)
-
-			// Set path parameters using the helper
 			setPathParamsFromPath(c, tc.path)
 
-			// Call handler
 			handlerErr := tc.handler(c)
 
-			// Check response status and error messages using helpers
 			if tc.expectedStatus >= 400 {
 				assertErrorResponse(t, tc.name, tc.expectedStatus, rec, handlerErr, tc.expectedError)
 			} else {
 				assertSuccessfulResponse(t, tc.name, tc.expectedStatus, rec, handlerErr, tc.expectedBodyFragment)
 			}
 
-			// Verify mock expectations
 			mockDS.AssertExpectations(t)
 		})
 	}
@@ -834,17 +818,8 @@ func TestCSRFProtection(t *testing.T) {
 		// Apply the middleware to the handler
 		handler := csrfMiddleware(controller.ReviewDetection)
 
-		// Execute the request
 		err := handler(c)
-
-		// Verify that the request was rejected due to missing CSRF token
-		if assert.Error(t, err) {
-			var httpErr *echo.HTTPError
-			if errors.As(err, &httpErr) {
-				assert.Equal(t, http.StatusForbidden, httpErr.Code)
-				assert.Contains(t, httpErr.Message, "CSRF token missing")
-			}
-		}
+		assertCSRFError(t, err, "CSRF token missing")
 
 		// Now try with invalid token
 		req.Header.Set("X-CSRF-Token", "invalid-token")
@@ -855,14 +830,6 @@ func TestCSRFProtection(t *testing.T) {
 		c.SetParamValues("1")
 
 		err = handler(c)
-
-		// Verify that the request was rejected due to invalid CSRF token
-		if assert.Error(t, err) {
-			var httpErr *echo.HTTPError
-			if errors.As(err, &httpErr) {
-				assert.Equal(t, http.StatusForbidden, httpErr.Code)
-				assert.Contains(t, httpErr.Message, "Invalid CSRF token")
-			}
-		}
+		assertCSRFError(t, err, "Invalid CSRF token")
 	})
 }

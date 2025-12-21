@@ -281,40 +281,43 @@ func TestV2AuthFlow_EmptyClientID_V1Compatible(t *testing.T) {
 	})
 }
 
-// TestV2AuthFlow_CallbackWithInvalidCode tests callback with invalid authorization code.
-func TestV2AuthFlow_CallbackWithInvalidCode(t *testing.T) {
+// TestV2AuthFlow_CallbackErrors tests callback error scenarios.
+func TestV2AuthFlow_CallbackErrors(t *testing.T) {
 	e, controller, _ := setupAuthIntegrationTest(t)
 
-	t.Run("callback fails with invalid code", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/auth/callback?code=invalid-code&redirect=/ui/", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
+	testCases := []struct {
+		name           string
+		url            string
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			name:           "invalid code",
+			url:            "/api/v2/auth/callback?code=invalid-code&redirect=/ui/",
+			expectedStatus: http.StatusUnauthorized,
+			expectedBody:   "Unable to complete login",
+		},
+		{
+			name:           "missing code",
+			url:            "/api/v2/auth/callback?redirect=/ui/",
+			expectedStatus: http.StatusBadRequest,
+			expectedBody:   "Missing authorization code",
+		},
+	}
 
-		err := controller.OAuthCallback(c)
-		require.NoError(t, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.url, http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
 
-		// Should return 401 Unauthorized
-		assert.Equal(t, http.StatusUnauthorized, rec.Code)
-		assert.Contains(t, rec.Body.String(), "Unable to complete login")
-	})
-}
+			err := controller.OAuthCallback(c)
+			require.NoError(t, err)
 
-// TestV2AuthFlow_CallbackWithMissingCode tests callback without code parameter.
-func TestV2AuthFlow_CallbackWithMissingCode(t *testing.T) {
-	e, controller, _ := setupAuthIntegrationTest(t)
-
-	t.Run("callback fails without code parameter", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/auth/callback?redirect=/ui/", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		err := controller.OAuthCallback(c)
-		require.NoError(t, err)
-
-		// Should return 400 Bad Request
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "Missing authorization code")
-	})
+			assert.Equal(t, tc.expectedStatus, rec.Code)
+			assert.Contains(t, rec.Body.String(), tc.expectedBody)
+		})
+	}
 }
 
 // TestV2AuthFlow_OpenRedirectPrevention tests that malicious redirects are blocked.

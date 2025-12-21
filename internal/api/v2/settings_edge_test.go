@@ -15,6 +15,37 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
+// isFieldSkipped checks if a field name appears in the skipped fields list.
+func isFieldSkipped(skippedFields []any, expectedSkip string) bool {
+	for _, skipped := range skippedFields {
+		skippedStr, ok := skipped.(string)
+		if !ok {
+			continue
+		}
+		if skippedStr == expectedSkip ||
+			skippedStr == "BirdNET."+expectedSkip ||
+			skippedStr == "BirdNET.RangeFilter."+expectedSkip {
+			return true
+		}
+	}
+	return false
+}
+
+// verifySkippedFields checks that all expected fields were skipped.
+func verifySkippedFields(t *testing.T, response map[string]any, shouldSkip []string) {
+	t.Helper()
+	skippedFields, ok := response["skippedFields"].([]any)
+	if !ok || len(shouldSkip) == 0 {
+		return
+	}
+	t.Logf("Skipped fields: %v", skippedFields)
+	for _, expectedSkip := range shouldSkip {
+		if !isFieldSkipped(skippedFields, expectedSkip) {
+			t.Logf("Expected field %s to be skipped but it wasn't", expectedSkip)
+		}
+	}
+}
+
 // TestBoundaryValues verifies the system handles boundary values correctly
 func TestBoundaryValues(t *testing.T) {
 	t.Parallel()
@@ -331,37 +362,18 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 
 			err = controller.UpdateSectionSettings(ctx)
 
-			// All sections should succeed but skip runtime fields
 			if err != nil {
 				t.Logf("Update failed: %v", err)
-			} else {
-				assert.Equal(t, http.StatusOK, rec.Code)
-
-				// Check response for skipped fields
-				var response map[string]any
-				err = json.Unmarshal(rec.Body.Bytes(), &response)
-				require.NoError(t, err)
-
-				if skippedFields, ok := response["skippedFields"].([]any); ok && len(tt.shouldSkip) > 0 {
-					t.Logf("Skipped fields: %v", skippedFields)
-					// Verify expected fields were skipped
-					for _, expectedSkip := range tt.shouldSkip {
-						found := false
-						for _, skipped := range skippedFields {
-							if skippedStr, ok := skipped.(string); ok &&
-								(skippedStr == expectedSkip ||
-									skippedStr == "BirdNET."+expectedSkip ||
-									skippedStr == "BirdNET.RangeFilter."+expectedSkip) {
-								found = true
-								break
-							}
-						}
-						if !found {
-							t.Logf("Expected field %s to be skipped but it wasn't", expectedSkip)
-						}
-					}
-				}
+				return
 			}
+
+			assert.Equal(t, http.StatusOK, rec.Code)
+
+			var response map[string]any
+			err = json.Unmarshal(rec.Body.Bytes(), &response)
+			require.NoError(t, err)
+
+			verifySkippedFields(t, response, tt.shouldSkip)
 		})
 	}
 }

@@ -36,6 +36,43 @@ func getSoxSpectrogramArgsBenchHelper(b *testing.B, ctx context.Context, audioPa
 	return gen.GetSoxSpectrogramArgsForTest(ctx, audioPath, outputPath, width, raw)
 }
 
+// checkDurationFlag verifies -d flag presence and value in args.
+func checkDurationFlag(t *testing.T, args []string) bool {
+	t.Helper()
+	for i, arg := range args {
+		if arg == "-d" {
+			if i+1 < len(args) {
+				if args[i+1] == "" {
+					t.Errorf("Duration parameter (-d) present but value is empty")
+				}
+			} else {
+				t.Errorf("Duration parameter (-d) present but no value follows")
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// checkRequiredSoxParams verifies essential SoX parameters are present.
+func checkRequiredSoxParams(t *testing.T, args []string) {
+	t.Helper()
+	requiredParams := []string{"-n", "rate", "24k", "spectrogram", "-x", "-y", "-z", "-o"}
+	for _, param := range requiredParams {
+		if !slices.Contains(args, param) {
+			t.Errorf("Required SoX parameter %q missing from args: %v", param, args)
+		}
+	}
+}
+
+// checkRawFlag verifies -r flag is present when raw=true.
+func checkRawFlag(t *testing.T, args []string, raw bool) {
+	t.Helper()
+	if raw && !slices.Contains(args, "-r") {
+		t.Errorf("Raw flag (-r) should be present for raw=true, args: %v", args)
+	}
+}
+
 // TestGetSoxSpectrogramArgs_DurationParameterRequired verifies that the -d (duration)
 // parameter is always included in Sox spectrogram arguments regardless of FFmpeg version.
 // This ensures correct spectrogram generation where Sox shows the full audio duration
@@ -98,76 +135,35 @@ func TestGetSoxSpectrogramArgs_DurationParameterRequired(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create mock settings with specific FFmpeg version
 			settings := &conf.Settings{
 				Realtime: conf.RealtimeSettings{
 					Audio: conf.AudioSettings{
 						FfmpegVersion: tt.ffmpegVersion,
 						FfmpegMajor:   tt.ffmpegMajor,
 						FfmpegMinor:   tt.ffmpegMinor,
-						Export: conf.ExportSettings{
-							Length: 15, // Default capture length for fallback
-						},
+						Export:        conf.ExportSettings{Length: 15},
 					},
 				},
 			}
 
-			// Get the SoX arguments using helper
-			width := 800
-			args := getSoxSpectrogramArgsHelper(t, ctx, audioPath, absSpectrogramPath, width, raw, settings)
-
-			// Convert args to string for easier inspection
-			argsStr := strings.Join(args, " ")
-
-			// Check if -d flag is present
-			hasDurationFlag := false
-			for i, arg := range args {
-				if arg == "-d" {
-					hasDurationFlag = true
-					// Verify the next argument is a numeric duration
-					if i+1 < len(args) {
-						if args[i+1] == "" {
-							t.Errorf("Duration parameter (-d) present but value is empty")
-						}
-					} else {
-						t.Errorf("Duration parameter (-d) present but no value follows")
-					}
-					break
-				}
-			}
+			args := getSoxSpectrogramArgsHelper(t, ctx, audioPath, absSpectrogramPath, 800, raw, settings)
+			hasDurationFlag := checkDurationFlag(t, args)
 
 			if hasDurationFlag != tt.expectDurationFlag {
 				t.Errorf("Unexpected -d flag presence:\n"+
 					"  FFmpeg version: %s (major: %d, minor: %d)\n"+
-					"  Expected -d flag: %v\n"+
-					"  Got -d flag: %v\n"+
-					"  Args: %s\n"+
-					"  Reason: %s",
+					"  Expected -d flag: %v, Got: %v\n"+
+					"  Args: %s\n  Reason: %s",
 					tt.ffmpegVersion, tt.ffmpegMajor, tt.ffmpegMinor,
 					tt.expectDurationFlag, hasDurationFlag,
-					argsStr,
-					tt.description)
+					strings.Join(args, " "), tt.description)
 			}
 
-			// Verify essential SoX parameters are always present
-			requiredParams := []string{"-n", "rate", "24k", "spectrogram", "-x", "-y", "-z", "-o"}
-			for _, param := range requiredParams {
-				found := slices.Contains(args, param)
-				if !found {
-					t.Errorf("Required SoX parameter %q missing from args: %v", param, args)
-				}
-			}
-
-			// Verify -r flag for raw spectrograms
-			if raw {
-				hasRawFlag := slices.Contains(args, "-r")
-				if !hasRawFlag {
-					t.Errorf("Raw flag (-r) should be present for raw=true, args: %v", args)
-				}
-			}
+			checkRequiredSoxParams(t, args)
+			checkRawFlag(t, args, raw)
 
 			t.Logf("Test passed: %s\n  Version: %s\n  Args: %s",
-				tt.description, tt.ffmpegVersion, argsStr)
+				tt.description, tt.ffmpegVersion, strings.Join(args, " "))
 		})
 	}
 }
@@ -342,15 +338,12 @@ func TestGetSoxSpectrogramArgs_PartialSettings(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			args := getSoxSpectrogramArgsHelper(t, ctx, "/tmp/test.flac", "/tmp/test.png", 800, true, tt.settings)
-
 			hasDurationFlag := slices.Contains(args, "-d")
 
 			if hasDurationFlag != tt.expectDurationFlag {
-				t.Errorf("%s:\n  Expected -d flag: %v\n  Got -d flag: %v\n  Args: %v",
+				t.Errorf("%s:\n  Expected -d flag: %v, Got: %v\n  Args: %v",
 					tt.description, tt.expectDurationFlag, hasDurationFlag, args)
 			}
-
-			t.Logf("Test passed: %s", tt.description)
 		})
 	}
 }

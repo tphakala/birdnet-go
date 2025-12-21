@@ -20,6 +20,128 @@ import (
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
+// assertPartialContentHeaders checks headers for partial content responses.
+func assertPartialContentHeaders(t *testing.T, rec *httptest.ResponseRecorder, expectedLength int64) {
+	t.Helper()
+	assert.Equal(t, fmt.Sprintf("%d", expectedLength), rec.Header().Get("Content-Length"))
+	assert.Equal(t, "bytes", rec.Header().Get("Accept-Ranges"))
+	assert.Contains(t, rec.Header().Get("Content-Range"), "bytes ")
+}
+
+// assertFullContentHeaders checks headers and content for full content responses.
+func assertFullContentHeaders(t *testing.T, rec *httptest.ResponseRecorder, expectedLength int64, checkRIFF bool) {
+	t.Helper()
+	assert.Equal(t, fmt.Sprintf("%d", expectedLength), rec.Header().Get("Content-Length"))
+	if checkRIFF {
+		body := rec.Body.Bytes()
+		assert.GreaterOrEqual(t, len(body), 4, "Response body should have at least 4 bytes")
+		if len(body) >= 4 {
+			assert.Equal(t, []byte("RIFF"), body[:4], "Should return a WAV file starting with RIFF header")
+		}
+	}
+}
+
+// assertAudioErrorResponse checks error response body content.
+func assertAudioErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, status int) {
+	t.Helper()
+	switch status {
+	case http.StatusNotFound:
+		assert.Contains(t, rec.Body.String(), "File not found", "Expected 'File not found' in body for 404")
+	case http.StatusBadRequest:
+		assert.Contains(t, rec.Body.String(), "Invalid file path", "Expected 'Invalid file path' in body for 400")
+	}
+}
+
+// assertAudioClipResponse validates the response based on expected status and content type.
+func assertAudioClipResponse(t *testing.T, rec *httptest.ResponseRecorder, expectedStatus int, expectedLength int64, partialContent, isSmallFile bool) {
+	t.Helper()
+	assert.Equal(t, expectedStatus, rec.Code)
+
+	if expectedStatus >= 200 && expectedStatus < 300 {
+		if partialContent {
+			assertPartialContentHeaders(t, rec, expectedLength)
+		} else if expectedStatus == http.StatusOK {
+			assertFullContentHeaders(t, rec, expectedLength, isSmallFile)
+		}
+	} else {
+		assertAudioErrorResponse(t, rec, expectedStatus)
+	}
+}
+
+// assertHandlerError checks handler error matches expected status for error responses.
+func assertHandlerError(t *testing.T, handlerErr error, expectedStatus int) {
+	t.Helper()
+	if expectedStatus < 400 {
+		require.NoError(t, handlerErr)
+		return
+	}
+	if handlerErr == nil {
+		return // Handler returned nil, response written to recorder
+	}
+	var httpErr *echo.HTTPError
+	if errors.As(handlerErr, &httpErr) {
+		assert.Equal(t, expectedStatus, httpErr.Code)
+	}
+}
+
+// assertAudioHeaders validates audio response headers for iOS Safari compatibility.
+func assertAudioHeaders(t *testing.T, rec *httptest.ResponseRecorder, expectedContentType, expectedDisposition string, shouldHaveAcceptRanges bool) {
+	t.Helper()
+	if expectedContentType != "" {
+		assert.Equal(t, expectedContentType, rec.Header().Get("Content-Type"))
+	}
+	if expectedDisposition != "" {
+		assert.Equal(t, expectedDisposition, rec.Header().Get("Content-Disposition"))
+	}
+	if shouldHaveAcceptRanges {
+		assert.Equal(t, "bytes", rec.Header().Get("Accept-Ranges"))
+	}
+}
+
+// assertMediaResponseBody validates response body content based on type.
+func assertMediaResponseBody(t *testing.T, body []byte, expectedBody string, isAudioFile bool) {
+	t.Helper()
+	if isAudioFile {
+		assert.GreaterOrEqual(t, len(body), 4, "Audio response should have at least 4 bytes")
+		if len(body) >= 4 {
+			assert.Equal(t, []byte("RIFF"), body[:4], "Should return a WAV file starting with RIFF header")
+		}
+	} else {
+		assert.Equal(t, expectedBody, string(body))
+	}
+}
+
+// createLargeWAVFile creates a large WAV file for testing partial content responses.
+func createLargeWAVFile(t *testing.T, path string, dataSize int) {
+	t.Helper()
+	file, err := os.Create(path) //nolint:gosec // G304: path is from controlled test temp dir
+	require.NoError(t, err)
+	defer func() {
+		if err := file.Close(); err != nil {
+			t.Logf("Failed to close large file: %v", err)
+		}
+	}()
+
+	header := []byte{
+		'R', 'I', 'F', 'F',
+		byte(dataSize + 36), byte((dataSize + 36) >> 8), byte((dataSize + 36) >> 16), byte((dataSize + 36) >> 24),
+		'W', 'A', 'V', 'E', 'f', 'm', 't', ' ',
+		16, 0, 0, 0, 1, 0, 1, 0,
+		0x44, 0xAC, 0, 0, 0x88, 0x58, 0x01, 0, 2, 0, 16, 0,
+		'd', 'a', 't', 'a',
+		byte(dataSize), byte(dataSize >> 8), byte(dataSize >> 16), byte(dataSize >> 24),
+	}
+	_, err = file.Write(header)
+	require.NoError(t, err)
+
+	content := make([]byte, dataSize)
+	for i := range content {
+		content[i] = byte(i % 256)
+	}
+	_, err = file.Write(content)
+	require.NoError(t, err)
+}
+
 // TestInitMediaRoutesRegistration tests that media routes are properly registered
 func TestInitMediaRoutesRegistration(t *testing.T) {
 	// Setup
@@ -71,7 +193,7 @@ func createTestAudioFile(t *testing.T, path string) error {
 	numSamples := int(float64(sampleRate) * durationSec)
 	dataSize := numSamples * 2 // 16-bit = 2 bytes per sample
 
-	file, err := os.Create(path)
+	file, err := os.Create(path) //nolint:gosec // G304: path is constructed from controlled test temp dir
 	if err != nil {
 		return err
 	}
@@ -120,45 +242,9 @@ func TestServeAudioClip(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a large test audio file (over 1MB)
-	// For large files, we'll create a simple binary file that's large enough
 	largeFilename := "large.wav"
 	largeFilePath := filepath.Join(tempDir, largeFilename)
-	// Create a large WAV file by writing a proper header and then large data
-	largeFile, err := os.Create(largeFilePath)
-	require.NoError(t, err)
-	defer func() {
-		if err := largeFile.Close(); err != nil {
-			t.Logf("Failed to close large file: %v", err)
-		}
-	}()
-
-	// Write minimal WAV header for a large file
-	dataSize := 1100 * 1024 // 1.1 MB of audio data
-	header := []byte{
-		'R', 'I', 'F', 'F',
-		byte(dataSize + 36), byte((dataSize + 36) >> 8), byte((dataSize + 36) >> 16), byte((dataSize + 36) >> 24),
-		'W', 'A', 'V', 'E',
-		'f', 'm', 't', ' ',
-		16, 0, 0, 0, // Subchunk1Size
-		1, 0, // AudioFormat (PCM)
-		1, 0, // NumChannels (mono)
-		0x44, 0xAC, 0, 0, // SampleRate (44100)
-		0x88, 0x58, 0x01, 0, // ByteRate
-		2, 0, // BlockAlign
-		16, 0, // BitsPerSample
-		'd', 'a', 't', 'a',
-		byte(dataSize), byte(dataSize >> 8), byte(dataSize >> 16), byte(dataSize >> 24),
-	}
-	_, err = largeFile.Write(header)
-	require.NoError(t, err)
-
-	// Write large audio data
-	largeContent := make([]byte, dataSize)
-	for i := range largeContent {
-		largeContent[i] = byte(i % 256)
-	}
-	_, err = largeFile.Write(largeContent)
-	require.NoError(t, err)
+	createLargeWAVFile(t, largeFilePath, 1100*1024)
 
 	// Test cases
 	testCases := []struct {
@@ -213,55 +299,16 @@ func TestServeAudioClip(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create request
-			// Note: We create the target URL based on the filename parameter only
-			// The router set up by setupMediaTestEnvironment will map this URL to the handler
 			targetURL := "/api/v2/media/audio/" + tc.filename
 			req := httptest.NewRequest(http.MethodGet, targetURL, http.NoBody)
 			if tc.rangeHeader != "" {
 				req.Header.Set("Range", tc.rangeHeader)
 			}
 			rec := httptest.NewRecorder()
-
-			// Use e.ServeHTTP to run the full request lifecycle including routing and error handling
 			e.ServeHTTP(rec, req)
 
-			// Assert ONLY on the recorder's status code
-			assert.Equal(t, tc.expectedStatus, rec.Code)
-
-			// For success cases (2xx), check headers and content
-			if tc.expectedStatus >= 200 && tc.expectedStatus < 300 {
-				if tc.partialContent {
-					assert.Equal(t, fmt.Sprintf("%d", tc.expectedLength), rec.Header().Get("Content-Length"))
-					assert.Equal(t, "bytes", rec.Header().Get("Accept-Ranges"))
-					assert.Contains(t, rec.Header().Get("Content-Range"), "bytes ")
-				} else if tc.expectedStatus == http.StatusOK {
-					// http.ServeContent sets Content-Length for full responses too
-					assert.Equal(t, fmt.Sprintf("%d", tc.expectedLength), rec.Header().Get("Content-Length"))
-					// Content verification for small file
-					if tc.filename == smallFilename {
-						// Check that we got a valid WAV file (starts with "RIFF")
-						body := rec.Body.Bytes()
-						assert.GreaterOrEqual(t, len(body), 4, "Response body should have at least 4 bytes")
-						if len(body) >= 4 {
-							assert.Equal(t, []byte("RIFF"), body[:4], "Should return a WAV file starting with RIFF header")
-						}
-					}
-				}
-			} else {
-				// Optional: For error cases (non-2xx), we could assert on the body
-				// For example, Echo's default error handler returns JSON like: {"message":"Not Found"}
-				switch tc.expectedStatus {
-				case http.StatusNotFound:
-					assert.Contains(t, rec.Body.String(), "File not found", "Expected 'File not found' in body for 404")
-				case http.StatusBadRequest:
-					if tc.name == "Invalid filename (traversal attempt)" {
-						assert.Contains(t, rec.Body.String(), "Invalid file path", "Expected 'Invalid file path' in body for traversal attempt")
-					} else {
-						assert.Contains(t, rec.Body.String(), "Invalid file path", "Expected 'Invalid file path' in body for 400")
-					}
-				}
-			}
+			isSmallFile := tc.filename == smallFilename
+			assertAudioClipResponse(t, rec, tc.expectedStatus, tc.expectedLength, tc.partialContent, isSmallFile)
 		})
 	}
 }
@@ -482,17 +529,7 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 			if tc.expectedStatus == http.StatusOK {
 				body, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
-
-				if tc.isAudioFile {
-					// For audio files, check that we got a valid WAV file
-					assert.GreaterOrEqual(t, len(body), 4, "Audio response should have at least 4 bytes")
-					if len(body) >= 4 {
-						assert.Equal(t, []byte("RIFF"), body[:4], "Should return a WAV file starting with RIFF header")
-					}
-				} else {
-					// For other files, check the exact content
-					assert.Equal(t, tc.expectedBody, string(body))
-				}
+				assertMediaResponseBody(t, body, tc.expectedBody, tc.isAudioFile)
 			}
 		})
 	}
@@ -667,7 +704,6 @@ func TestRangeHeaderHandling(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create request
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+filename, http.NoBody)
 			if tc.rangeHeader != "" {
 				req.Header.Set("Range", tc.rangeHeader)
@@ -677,28 +713,10 @@ func TestRangeHeaderHandling(t *testing.T) {
 			c.SetParamNames("filename")
 			c.SetParamValues(filename)
 
-			// Call handler (which uses SecureFS.ServeFile -> http.ServeContent)
 			handlerErr := controller.ServeAudioClip(c)
-
-			// Check status code directly from recorder
 			assert.Equal(t, tc.expectedStatus, rec.Code)
+			assertHandlerError(t, handlerErr, tc.expectedStatus)
 
-			// Handle potential handler errors (less likely now with http.ServeContent)
-			if tc.expectedStatus >= 400 {
-				if handlerErr != nil {
-					require.Error(t, handlerErr)
-					// Use errors.As for robust error checking
-					var httpErr *echo.HTTPError
-					if errors.As(handlerErr, &httpErr) {
-						assert.Equal(t, tc.expectedStatus, httpErr.Code)
-					}
-				}
-			} else {
-				// Expect no error from the handler itself on success
-				require.NoError(t, handlerErr)
-			}
-
-			// Run validation function for successful responses
 			if rec.Code == http.StatusOK || rec.Code == http.StatusPartialContent {
 				tc.validateFunc(t, rec)
 			}
@@ -933,42 +951,23 @@ func TestServeAudioByID(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create request
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/audio/"+tc.audioID, http.NoBody)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 			c.SetParamNames("id")
 			c.SetParamValues(tc.audioID)
 
-			// Call handler
 			handlerErr := controller.ServeAudioByID(c)
 
-			// Check for handler error on successful requests
 			if tc.expectedStatus == http.StatusOK {
 				require.NoError(t, handlerErr)
 			}
 
-			// Check response status
 			assert.Equal(t, tc.expectedStatus, rec.Code)
 
-			// For successful requests, validate headers
 			if tc.expectedStatus == http.StatusOK {
 				assert.Equal(t, testContent, rec.Body.String())
-
-				// Check Content-Type header for iOS Safari compatibility
-				if tc.expectedContentType != "" {
-					assert.Equal(t, tc.expectedContentType, rec.Header().Get("Content-Type"))
-				}
-
-				// Check Content-Disposition for browser playback
-				if tc.expectedDisposition != "" {
-					assert.Equal(t, tc.expectedDisposition, rec.Header().Get("Content-Disposition"))
-				}
-
-				// Check Accept-Ranges for iOS Safari streaming
-				if tc.shouldHaveAcceptRanges {
-					assert.Equal(t, "bytes", rec.Header().Get("Accept-Ranges"))
-				}
+				assertAudioHeaders(t, rec, tc.expectedContentType, tc.expectedDisposition, tc.shouldHaveAcceptRanges)
 			}
 		})
 	}

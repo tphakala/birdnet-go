@@ -11,6 +11,73 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
+// assertEventDataNil checks that a field in eventData is nil.
+func assertEventDataNil(t *testing.T, eventData map[string]any, field, context string) {
+	t.Helper()
+	if eventData[field] != nil {
+		t.Errorf("Event data %s should be nil for %s", field, context)
+	}
+}
+
+// assertEventDataEmpty checks that a string field in eventData is empty.
+func assertEventDataEmpty(t *testing.T, eventData map[string]any, field, context string) {
+	t.Helper()
+	if eventData[field] != "" {
+		t.Errorf("Event data %s should be empty string for %s, got %v", field, context, eventData[field])
+	}
+}
+
+// assertEventDataMissing checks that a field is not present in eventData.
+func assertEventDataMissing(t *testing.T, eventData map[string]any, field string) {
+	t.Helper()
+	if _, exists := eventData[field]; exists {
+		t.Errorf("Event data should not include %s when not set", field)
+	}
+}
+
+// assertEventDataValue checks a specific field value in eventData.
+func assertEventDataValue(t *testing.T, eventData map[string]any, field string, expected any) {
+	t.Helper()
+	if eventData[field] != expected {
+		t.Errorf("Event data %s = %v, want %v", field, eventData[field], expected)
+	}
+}
+
+// mapStringToToastType converts a string toast type to notification.ToastType.
+func mapStringToToastType(toastType string) notification.ToastType {
+	switch toastType {
+	case ToastTypeSuccess:
+		return notification.ToastTypeSuccess
+	case ToastTypeError:
+		return notification.ToastTypeError
+	case ToastTypeWarning:
+		return notification.ToastTypeWarning
+	case ToastTypeInfo:
+		return notification.ToastTypeInfo
+	default:
+		return notification.ToastTypeInfo
+	}
+}
+
+// assertToastTypeMapping verifies toast type string to enum mapping.
+func assertToastTypeMapping(t *testing.T, input string, actual, expected notification.ToastType) {
+	t.Helper()
+	if actual != expected {
+		t.Errorf("Toast type mapping for %q: got %v, want %v", input, actual, expected)
+	}
+}
+
+// assertNotificationMapping verifies notification type and priority mapping.
+func assertNotificationMapping(t *testing.T, toastType string, notif *notification.Notification, expectedType notification.Type, expectedPriority notification.Priority) {
+	t.Helper()
+	if notif.Type != expectedType {
+		t.Errorf("Toast to notification type mapping for %q: got %v, want %v", toastType, notif.Type, expectedType)
+	}
+	if notif.Priority != expectedPriority {
+		t.Errorf("Toast to notification priority mapping for %q: got %v, want %v", toastType, notif.Priority, expectedPriority)
+	}
+}
+
 func TestController_SendToast(t *testing.T) {
 	// Remove t.Parallel() to prevent interference between tests
 	// Each test will use an isolated service instance
@@ -237,88 +304,28 @@ func verifyNotificationTypeMapping(t *testing.T, notif *notification.Notificatio
 }
 
 func TestController_SendToast_TypeMapping(t *testing.T) {
-	// Test the toast type to notification type mapping specifically
 	tests := []struct {
 		toastType         string
 		expectedNotifType notification.Type
 		expectedPriority  notification.Priority
 		expectedToastType notification.ToastType
 	}{
-		{
-			toastType:         ToastTypeSuccess,
-			expectedNotifType: notification.TypeInfo,
-			expectedPriority:  notification.PriorityLow,
-			expectedToastType: notification.ToastTypeSuccess,
-		},
-		{
-			toastType:         ToastTypeError,
-			expectedNotifType: notification.TypeError,
-			expectedPriority:  notification.PriorityHigh,
-			expectedToastType: notification.ToastTypeError,
-		},
-		{
-			toastType:         ToastTypeWarning,
-			expectedNotifType: notification.TypeWarning,
-			expectedPriority:  notification.PriorityMedium,
-			expectedToastType: notification.ToastTypeWarning,
-		},
-		{
-			toastType:         ToastTypeInfo,
-			expectedNotifType: notification.TypeInfo,
-			expectedPriority:  notification.PriorityLow,
-			expectedToastType: notification.ToastTypeInfo,
-		},
-		{
-			toastType:         "invalid",
-			expectedNotifType: notification.TypeInfo,
-			expectedPriority:  notification.PriorityLow,
-			expectedToastType: notification.ToastTypeInfo,
-		},
-		{
-			toastType:         "",
-			expectedNotifType: notification.TypeInfo,
-			expectedPriority:  notification.PriorityLow,
-			expectedToastType: notification.ToastTypeInfo,
-		},
+		{ToastTypeSuccess, notification.TypeInfo, notification.PriorityLow, notification.ToastTypeSuccess},
+		{ToastTypeError, notification.TypeError, notification.PriorityHigh, notification.ToastTypeError},
+		{ToastTypeWarning, notification.TypeWarning, notification.PriorityMedium, notification.ToastTypeWarning},
+		{ToastTypeInfo, notification.TypeInfo, notification.PriorityLow, notification.ToastTypeInfo},
+		{"invalid", notification.TypeInfo, notification.PriorityLow, notification.ToastTypeInfo},
+		{"", notification.TypeInfo, notification.PriorityLow, notification.ToastTypeInfo},
 	}
 
 	for _, tt := range tests {
 		t.Run("type_"+tt.toastType, func(t *testing.T) {
-			// This test focuses on the type mapping logic within SendToast
-			// We're testing the mapping from string to ToastType enum
+			actualToastType := mapStringToToastType(tt.toastType)
+			assertToastTypeMapping(t, tt.toastType, actualToastType, tt.expectedToastType)
 
-			var actualToastType notification.ToastType
-			switch tt.toastType {
-			case ToastTypeSuccess:
-				actualToastType = notification.ToastTypeSuccess
-			case ToastTypeError:
-				actualToastType = notification.ToastTypeError
-			case ToastTypeWarning:
-				actualToastType = notification.ToastTypeWarning
-			case ToastTypeInfo:
-				actualToastType = notification.ToastTypeInfo
-			default:
-				actualToastType = notification.ToastTypeInfo
-			}
-
-			if actualToastType != tt.expectedToastType {
-				t.Errorf("Toast type mapping for %q: got %v, want %v",
-					tt.toastType, actualToastType, tt.expectedToastType)
-			}
-
-			// Also verify that the toast type maps correctly to notification properties
 			toast := notification.NewToast("test", actualToastType)
 			notif := toast.ToNotification()
-
-			if notif.Type != tt.expectedNotifType {
-				t.Errorf("Toast to notification type mapping for %q: got %v, want %v",
-					tt.toastType, notif.Type, tt.expectedNotifType)
-			}
-
-			if notif.Priority != tt.expectedPriority {
-				t.Errorf("Toast to notification priority mapping for %q: got %v, want %v",
-					tt.toastType, notif.Priority, tt.expectedPriority)
-			}
+			assertNotificationMapping(t, tt.toastType, notif, tt.expectedNotifType, tt.expectedPriority)
 		})
 	}
 }

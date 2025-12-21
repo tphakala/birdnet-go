@@ -23,6 +23,38 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
+// executeNoteCommentsHandler simulates the handler behavior for getting comments.
+func executeNoteCommentsHandler(t *testing.T, c echo.Context, mockDS datastore.Interface, detectionID string, expectedStatus int) error {
+	t.Helper()
+	if expectedStatus == http.StatusOK {
+		comments, dbErr := mockDS.GetNoteComments(detectionID)
+		if dbErr != nil {
+			return echo.NewHTTPError(http.StatusNotFound, "Comments not found")
+		}
+		return c.JSON(http.StatusOK, comments)
+	}
+	return echo.NewHTTPError(expectedStatus, "Comments not found")
+}
+
+// assertNoteCommentsResponse validates the response for note comments.
+func assertNoteCommentsResponse(t *testing.T, rec *httptest.ResponseRecorder, err error, expectedStatus, expectedCount int) {
+	t.Helper()
+	if expectedStatus == http.StatusOK {
+		require.NoError(t, err)
+		assert.Equal(t, expectedStatus, rec.Code)
+		var comments []datastore.NoteComment
+		jsonErr := json.Unmarshal(rec.Body.Bytes(), &comments)
+		require.NoError(t, jsonErr)
+		assert.Len(t, comments, expectedCount)
+	} else {
+		require.Error(t, err)
+		var httpErr *echo.HTTPError
+		ok := errors.As(err, &httpErr)
+		assert.True(t, ok)
+		assert.Equal(t, expectedStatus, httpErr.Code)
+	}
+}
+
 // decodePaginated is a helper to unmarshal a response body into a PaginatedResponse
 // and extract the data as a map slice for easier testing.
 func decodePaginated(t *testing.T, body []byte) ([]map[string]any, PaginatedResponse) {
@@ -61,6 +93,32 @@ func testRealtimeSource() datastore.AudioSource {
 		ID:          "realtime",
 		SafeString:  "realtime",
 		DisplayName: "realtime",
+	}
+}
+
+// categorizeHTTPResponse categorizes an HTTP response status into success, conflict, or failure.
+func categorizeHTTPResponse(t *testing.T, statusCode int, successes, conflicts, failures *int32) {
+	t.Helper()
+	switch statusCode {
+	case http.StatusOK:
+		atomic.AddInt32(successes, 1)
+	case http.StatusConflict:
+		atomic.AddInt32(conflicts, 1)
+	default:
+		t.Logf("Unexpected status code: %d", statusCode)
+		atomic.AddInt32(failures, 1)
+	}
+}
+
+// getConcurrencyLevel returns a platform-appropriate concurrency level for tests.
+func getConcurrencyLevel() int {
+	switch runtime.GOOS {
+	case "windows":
+		return 3
+	case "darwin":
+		return 4
+	default:
+		return 5
 	}
 }
 
@@ -1328,42 +1386,8 @@ func TestGetNoteComments(t *testing.T) {
 			c.SetParamNames("id")
 			c.SetParamValues(tc.detectionID)
 
-			// Call handler
-			var err error
-			if tc.expectedStatus == http.StatusOK {
-				// For successful cases, we'll need to implement a handler that uses the datastore
-				// Since we don't have direct access to the handler, we'll simulate it
-				comments, dbErr := mockDS.GetNoteComments(tc.detectionID)
-				if dbErr != nil {
-					err = echo.NewHTTPError(http.StatusNotFound, "Comments not found")
-				} else {
-					err = c.JSON(http.StatusOK, comments)
-				}
-			} else {
-				// For error cases, just create an HTTP error directly
-				err = echo.NewHTTPError(tc.expectedStatus, "Comments not found")
-			}
-
-			// Check response
-			if tc.expectedStatus == http.StatusOK {
-				require.NoError(t, err)
-				assert.Equal(t, tc.expectedStatus, rec.Code)
-
-				// Parse response
-				var comments []datastore.NoteComment
-				err = json.Unmarshal(rec.Body.Bytes(), &comments)
-				require.NoError(t, err)
-				assert.Len(t, comments, tc.expectedCount)
-			} else {
-				// For error cases
-				require.Error(t, err)
-				var httpErr *echo.HTTPError
-				ok := errors.As(err, &httpErr)
-				assert.True(t, ok)
-				assert.Equal(t, tc.expectedStatus, httpErr.Code)
-			}
-
-			// Verify mock expectations
+			err := executeNoteCommentsHandler(t, c, mockDS, tc.detectionID, tc.expectedStatus)
+			assertNoteCommentsResponse(t, rec, err, tc.expectedStatus, tc.expectedCount)
 			mockDS.AssertExpectations(t)
 		})
 	}
@@ -1701,15 +1725,8 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 	jsonData, err := json.Marshal(reviewRequest)
 	require.NoError(t, err)
 
-	// Adjust concurrency level based on platform
-	// Windows might need lower concurrency to avoid resource exhaustion
-	numConcurrent := 5
-	switch runtime.GOOS {
-	case "windows":
-		numConcurrent = 3 // Lower concurrency for Windows
-	case "darwin":
-		numConcurrent = 4 // Moderate concurrency for macOS
-	}
+	// Get platform-appropriate concurrency level
+	numConcurrent := getConcurrencyLevel()
 
 	// Mock note that will be accessed concurrently
 	mockNote := datastore.Note{
@@ -1738,7 +1755,7 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 
 	go func() {
 		// Launch concurrent requests using Go 1.25 WaitGroup.Go() pattern
-		for i := 0; i < numConcurrent; i++ {
+		for i := range numConcurrent {
 			wg.Go(func() {
 				goroutineID := i
 
@@ -1767,19 +1784,8 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 
 				// Track results
 				if err == nil {
-					defer func() {
-						_ = resp.Body.Close() // Safe to ignore in test cleanup
-					}()
-
-					switch resp.StatusCode {
-					case http.StatusOK:
-						atomic.AddInt32(&successes, 1)
-					case http.StatusConflict:
-						atomic.AddInt32(&conflicts, 1)
-					default:
-						t.Logf("Unexpected status code: %d", resp.StatusCode)
-						atomic.AddInt32(&failures, 1)
-					}
+					defer func() { _ = resp.Body.Close() }()
+					categorizeHTTPResponse(t, resp.StatusCode, &successes, &conflicts, &failures)
 				} else {
 					t.Logf("Request error: %v", err)
 					atomic.AddInt32(&failures, 1)

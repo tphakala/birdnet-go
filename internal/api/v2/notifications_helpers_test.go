@@ -12,6 +12,41 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
+// assertMapContainsExpected checks that result map contains all expected key-value pairs.
+func assertMapContainsExpected(t *testing.T, result, expected map[string]any) {
+	t.Helper()
+	for key, expectedValue := range expected {
+		actualValue, exists := result[key]
+		if !exists {
+			t.Errorf("createToastEventData() missing key %q", key)
+			continue
+		}
+		if !reflect.DeepEqual(actualValue, expectedValue) {
+			t.Errorf("createToastEventData() key %q = %v, want %v", key, actualValue, expectedValue)
+		}
+	}
+}
+
+// assertNoZeroDuration checks that zero duration is not included in result.
+func assertNoZeroDuration(t *testing.T, result, metadata map[string]any) {
+	t.Helper()
+	if metadata["duration"] == 0 {
+		if _, exists := result["duration"]; exists {
+			t.Error("createToastEventData() should not include zero duration")
+		}
+	}
+}
+
+// assertNoNilAction checks that nil action is not included in result.
+func assertNoNilAction(t *testing.T, result, metadata map[string]any) {
+	t.Helper()
+	if metadata["action"] == nil {
+		if _, exists := result["action"]; exists {
+			t.Error("createToastEventData() should not include nil action")
+		}
+	}
+}
+
 // mockController creates a controller with minimal setup for testing
 func mockController() *Controller {
 	return &Controller{
@@ -115,33 +150,9 @@ func TestController_createToastEventData(t *testing.T) {
 			t.Parallel()
 
 			result := c.createToastEventData(tt.notif)
-
-			// Check each expected field
-			for key, expectedValue := range tt.expected {
-				actualValue, exists := result[key]
-				if !exists {
-					t.Errorf("createToastEventData() missing key %q", key)
-					continue
-				}
-
-				if !reflect.DeepEqual(actualValue, expectedValue) {
-					t.Errorf("createToastEventData() key %q = %v, want %v", key, actualValue, expectedValue)
-				}
-			}
-
-			// Check that zero duration is not included
-			if tt.notif.Metadata["duration"] == 0 {
-				if _, exists := result["duration"]; exists {
-					t.Error("createToastEventData() should not include zero duration")
-				}
-			}
-
-			// Check that nil action is not included
-			if tt.notif.Metadata["action"] == nil {
-				if _, exists := result["action"]; exists {
-					t.Error("createToastEventData() should not include nil action")
-				}
-			}
+			assertMapContainsExpected(t, result, tt.expected)
+			assertNoZeroDuration(t, result, tt.notif.Metadata)
+			assertNoNilAction(t, result, tt.notif.Metadata)
 		})
 	}
 }
