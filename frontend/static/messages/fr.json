@@ -2360,7 +2360,9 @@
         "resetSuccess": "Seuil réinitialisé pour {species}",
         "resetError": "Échec de la réinitialisation du seuil",
         "resetAllSuccess": "{count} seuils réinitialisés",
-        "resetAllError": "Échec de la réinitialisation des seuils"
+        "resetAllError": "Échec de la réinitialisation des seuils",
+        "expand": "Afficher l'historique des événements",
+        "collapse": "Masquer l'historique des événements"
       }
     },
     "database": {

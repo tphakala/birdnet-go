@@ -2293,7 +2293,9 @@
         "resetSuccess": "Umbral restablecido para {species}",
         "resetError": "Error al restablecer el umbral",
         "resetAllSuccess": "{count} umbrales restablecidos",
-        "resetAllError": "Error al restablecer los umbrales"
+        "resetAllError": "Error al restablecer los umbrales",
+        "expand": "Mostrar historial de eventos",
+        "collapse": "Ocultar historial de eventos"
       }
     },
     "security": {

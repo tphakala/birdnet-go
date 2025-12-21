@@ -64,6 +64,51 @@ type LevelStatItem struct {
 	Count int64 `json:"count"`
 }
 
+// parseSpeciesParam extracts and validates the species parameter from the request.
+// Returns the species name and nil on success, or empty string and error on failure.
+func (c *Controller) parseSpeciesParam(ctx echo.Context) (string, error) {
+	species, err := url.PathUnescape(ctx.Param("species"))
+	if err != nil {
+		return "", c.HandleError(ctx, errors.Newf("invalid species parameter").
+			Category(errors.CategoryValidation).
+			Component("api-dynamic-thresholds").
+			Build(), "Invalid species parameter", http.StatusBadRequest)
+	}
+	if species == "" {
+		return "", c.HandleError(ctx, errors.Newf("species parameter is required").
+			Category(errors.CategoryValidation).
+			Component("api-dynamic-thresholds").
+			Build(), "Missing species parameter", http.StatusBadRequest)
+	}
+	return species, nil
+}
+
+// requireProcessor checks if the processor is available and returns an error if not.
+func (c *Controller) requireProcessor(ctx echo.Context) error {
+	if c.Processor == nil {
+		return c.HandleError(ctx, errors.Newf("processor not available").
+			Category(errors.CategorySystem).
+			Component("api-dynamic-thresholds").
+			Build(), "Processor not available", http.StatusServiceUnavailable)
+	}
+	return nil
+}
+
+// applyMemoryOverlay updates a threshold response with in-memory data.
+// This centralizes the logic for overlaying current processor state onto
+// database records, ensuring API responses reflect the most current state.
+func applyMemoryOverlay(response *DynamicThresholdResponse, level, highConfCount int, currentValue float64, expiresAt time.Time, isActive bool, scientificName string) {
+	response.Level = level
+	response.CurrentValue = currentValue
+	response.HighConfCount = highConfCount
+	response.ExpiresAt = expiresAt
+	response.IsActive = isActive
+	// Use scientific name from memory if it's missing in the database response.
+	if response.ScientificName == "" && scientificName != "" {
+		response.ScientificName = scientificName
+	}
+}
+
 // initDynamicThresholdRoutes registers all dynamic threshold API endpoints
 func (c *Controller) initDynamicThresholdRoutes() {
 	// Public endpoints for reading threshold data
@@ -80,14 +125,6 @@ func (c *Controller) initDynamicThresholdRoutes() {
 // GetDynamicThresholds returns all dynamic thresholds with optional pagination
 // GET /api/v2/dynamic-thresholds?limit=50&offset=0
 func (c *Controller) GetDynamicThresholds(ctx echo.Context) error {
-	// Check if processor is available
-	if c.Processor == nil {
-		return c.HandleError(ctx, errors.Newf("processor not available").
-			Category(errors.CategorySystem).
-			Component("api-dynamic-thresholds").
-			Build(), "Processor not available", http.StatusServiceUnavailable)
-	}
-
 	// Parse pagination parameters
 	limit := c.parsePaginationLimit(ctx.QueryParam("limit"), defaultThresholdLimit, maxThresholdLimit)
 	offset := c.parsePaginationOffset(ctx.QueryParam("offset"))
@@ -171,23 +208,19 @@ func (c *Controller) addDatabaseThresholds(thresholdMap map[string]*DynamicThres
 	}
 }
 
-// addMemoryThresholds adds/updates thresholds from processor memory
+// addMemoryThresholds adds/updates thresholds from processor memory.
+// If processor is unavailable, this function returns early without modification.
 func (c *Controller) addMemoryThresholds(thresholdMap map[string]*DynamicThresholdResponse) {
+	if c.Processor == nil {
+		return
+	}
 	memoryData := c.Processor.GetDynamicThresholdData()
 	baseThreshold := c.Settings.BirdNET.Threshold
 
 	for _, dt := range memoryData {
 		if existing, exists := thresholdMap[dt.SpeciesName]; exists {
-			// Update with in-memory values
-			existing.Level = dt.Level
-			existing.CurrentValue = dt.CurrentValue
-			existing.HighConfCount = dt.HighConfCount
-			existing.ExpiresAt = dt.ExpiresAt
-			existing.IsActive = dt.IsActive
-			// Update scientific name if memory has it and existing doesn't
-			if existing.ScientificName == "" && dt.ScientificName != "" {
-				existing.ScientificName = dt.ScientificName
-			}
+			// Update existing entry with in-memory values
+			applyMemoryOverlay(existing, dt.Level, dt.HighConfCount, dt.CurrentValue, dt.ExpiresAt, dt.IsActive, dt.ScientificName)
 		} else {
 			// Add new entry from memory
 			thresholdMap[dt.SpeciesName] = &DynamicThresholdResponse{
@@ -244,19 +277,9 @@ func (c *Controller) GetDynamicThresholdStats(ctx echo.Context) error {
 // GetDynamicThreshold returns a single dynamic threshold by species name
 // GET /api/v2/dynamic-thresholds/:species
 func (c *Controller) GetDynamicThreshold(ctx echo.Context) error {
-	species, err := url.PathUnescape(ctx.Param("species"))
+	species, err := c.parseSpeciesParam(ctx)
 	if err != nil {
-		return c.HandleError(ctx, errors.Newf("invalid species parameter").
-			Category(errors.CategoryValidation).
-			Component("api-dynamic-thresholds").
-			Build(), "Invalid species parameter", http.StatusBadRequest)
-	}
-
-	if species == "" {
-		return c.HandleError(ctx, errors.Newf("species parameter is required").
-			Category(errors.CategoryValidation).
-			Component("api-dynamic-thresholds").
-			Build(), "Missing species parameter", http.StatusBadRequest)
+		return err
 	}
 
 	// Try to get from database
@@ -286,21 +309,11 @@ func (c *Controller) GetDynamicThreshold(ctx echo.Context) error {
 
 	// Try to get more current data from processor memory
 	if c.Processor != nil {
-		memoryData := c.Processor.GetDynamicThresholdData()
-		for _, md := range memoryData {
-			if md.SpeciesName != species {
-				continue
+		for _, md := range c.Processor.GetDynamicThresholdData() {
+			if md.SpeciesName == species {
+				applyMemoryOverlay(&response, md.Level, md.HighConfCount, md.CurrentValue, md.ExpiresAt, md.IsActive, md.ScientificName)
+				break
 			}
-			response.Level = md.Level
-			response.CurrentValue = md.CurrentValue
-			response.HighConfCount = md.HighConfCount
-			response.ExpiresAt = md.ExpiresAt
-			response.IsActive = md.IsActive
-			// Update scientific name if memory has it and existing doesn't
-			if response.ScientificName == "" && md.ScientificName != "" {
-				response.ScientificName = md.ScientificName
-			}
-			break
 		}
 	}
 
@@ -310,19 +323,9 @@ func (c *Controller) GetDynamicThreshold(ctx echo.Context) error {
 // GetThresholdEvents returns event history for a specific species
 // GET /api/v2/dynamic-thresholds/:species/events?limit=10
 func (c *Controller) GetThresholdEvents(ctx echo.Context) error {
-	species, err := url.PathUnescape(ctx.Param("species"))
+	species, err := c.parseSpeciesParam(ctx)
 	if err != nil {
-		return c.HandleError(ctx, errors.Newf("invalid species parameter").
-			Category(errors.CategoryValidation).
-			Component("api-dynamic-thresholds").
-			Build(), "Invalid species parameter", http.StatusBadRequest)
-	}
-
-	if species == "" {
-		return c.HandleError(ctx, errors.Newf("species parameter is required").
-			Category(errors.CategoryValidation).
-			Component("api-dynamic-thresholds").
-			Build(), "Missing species parameter", http.StatusBadRequest)
+		return err
 	}
 
 	// Parse limit parameter
@@ -359,27 +362,13 @@ func (c *Controller) GetThresholdEvents(ctx echo.Context) error {
 // ResetDynamicThreshold resets a single species threshold
 // DELETE /api/v2/dynamic-thresholds/:species
 func (c *Controller) ResetDynamicThreshold(ctx echo.Context) error {
-	// Check if processor is available
-	if c.Processor == nil {
-		return c.HandleError(ctx, errors.Newf("processor not available").
-			Category(errors.CategorySystem).
-			Component("api-dynamic-thresholds").
-			Build(), "Processor not available", http.StatusServiceUnavailable)
+	if err := c.requireProcessor(ctx); err != nil {
+		return err
 	}
 
-	species, err := url.PathUnescape(ctx.Param("species"))
+	species, err := c.parseSpeciesParam(ctx)
 	if err != nil {
-		return c.HandleError(ctx, errors.Newf("invalid species parameter").
-			Category(errors.CategoryValidation).
-			Component("api-dynamic-thresholds").
-			Build(), "Invalid species parameter", http.StatusBadRequest)
-	}
-
-	if species == "" {
-		return c.HandleError(ctx, errors.Newf("species parameter is required").
-			Category(errors.CategoryValidation).
-			Component("api-dynamic-thresholds").
-			Build(), "Missing species parameter", http.StatusBadRequest)
+		return err
 	}
 
 	// Use processor's reset method which handles both memory and database
@@ -397,12 +386,8 @@ func (c *Controller) ResetDynamicThreshold(ctx echo.Context) error {
 // ResetAllDynamicThresholds resets all dynamic thresholds
 // DELETE /api/v2/dynamic-thresholds?confirm=true
 func (c *Controller) ResetAllDynamicThresholds(ctx echo.Context) error {
-	// Check if processor is available
-	if c.Processor == nil {
-		return c.HandleError(ctx, errors.Newf("processor not available").
-			Category(errors.CategorySystem).
-			Component("api-dynamic-thresholds").
-			Build(), "Processor not available", http.StatusServiceUnavailable)
+	if err := c.requireProcessor(ctx); err != nil {
+		return err
 	}
 
 	// Require confirmation query parameter for safety

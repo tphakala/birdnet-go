@@ -2296,7 +2296,9 @@
         "resetSuccess": "Limiar redefinido para {species}",
         "resetError": "Falha ao redefinir limiar",
         "resetAllSuccess": "{count} limiares redefinidos",
-        "resetAllError": "Falha ao redefinir limiares"
+        "resetAllError": "Falha ao redefinir limiares",
+        "expand": "Mostrar histórico de eventos",
+        "collapse": "Ocultar histórico de eventos"
       }
     },
     "security": {
