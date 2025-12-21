@@ -92,9 +92,7 @@ var audioLevelMgr = &audioLevelManager{
 // This connects the audio capture system to the SSE endpoint.
 func (c *Controller) SetAudioLevelChan(ch chan myaudio.AudioLevelData) {
 	c.audioLevelChan = ch
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Audio level channel connected to API v2 controller")
-	}
+	c.logInfoIfEnabled("Audio level channel connected to API v2 controller")
 
 	// Start the broadcaster goroutine (only once across all controller instances)
 	audioLevelMgr.broadcasterOnce.Do(func() {
@@ -321,7 +319,7 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 
 		case audioData, ok := <-subscriberChan:
 			if !ok {
-				c.logAPIRequest(ctx, slog.LevelWarn, "Audio level subscriber channel closed")
+				c.logWarnIfEnabled("Audio level subscriber channel closed")
 				return nil
 			}
 
@@ -363,50 +361,60 @@ func (c *Controller) isClientAuthenticated(ctx echo.Context) bool {
 	return c.authService.IsAuthenticated(ctx)
 }
 
+// createAudioLevelEntry creates an AudioLevelData entry for a source with appropriate display name.
+func createAudioLevelEntry(source *myaudio.AudioSource, displayName string) myaudio.AudioLevelData {
+	return myaudio.AudioLevelData{
+		Level:  0,
+		Name:   displayName,
+		Source: source.ID,
+	}
+}
+
 // initializeAudioLevels creates the initial levels map with configured sources
 func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]myaudio.AudioLevelData {
 	levels := make(map[string]myaudio.AudioLevelData)
 	registry := myaudio.GetRegistry()
-
 	if registry == nil {
 		return levels
 	}
 
 	// Add configured audio device if set
-	if c.Settings.Realtime.Audio.Source != "" {
-		source := registry.GetOrCreateSource(c.Settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard)
-		if source != nil {
-			displayName := source.DisplayName
-			if !isAuthenticated {
-				displayName = audioSourceDefaultName
-			}
-			levels[source.ID] = myaudio.AudioLevelData{
-				Level:  0,
-				Name:   displayName,
-				Source: source.ID,
-			}
+	if source := c.getAudioCardSource(registry); source != nil {
+		displayName := source.DisplayName
+		if !isAuthenticated {
+			displayName = audioSourceDefaultName
 		}
+		levels[source.ID] = createAudioLevelEntry(source, displayName)
 	}
 
 	// Add configured RTSP sources
-	for i, url := range c.Settings.Realtime.RTSP.URLs {
-		source := registry.GetOrCreateSource(url, myaudio.SourceTypeRTSP)
-		if source != nil {
-			displayName := source.DisplayName
-			if !isAuthenticated {
-				displayName = fmt.Sprintf("camera-%d", i+1)
-				// Cache anonymized name for O(1) lookup with bounded map size
-				cacheRTSPAnonymName(source.ID, displayName)
-			}
-			levels[source.ID] = myaudio.AudioLevelData{
-				Level:  0,
-				Name:   displayName,
-				Source: source.ID,
-			}
-		}
-	}
+	c.addRTSPSourcesToLevels(registry, levels, isAuthenticated)
 
 	return levels
+}
+
+// getAudioCardSource retrieves the audio card source from the registry if configured.
+func (c *Controller) getAudioCardSource(registry *myaudio.AudioSourceRegistry) *myaudio.AudioSource {
+	if c.Settings.Realtime.Audio.Source == "" {
+		return nil
+	}
+	return registry.GetOrCreateSource(c.Settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard)
+}
+
+// addRTSPSourcesToLevels adds all configured RTSP sources to the levels map.
+func (c *Controller) addRTSPSourcesToLevels(registry *myaudio.AudioSourceRegistry, levels map[string]myaudio.AudioLevelData, isAuthenticated bool) {
+	for i, url := range c.Settings.Realtime.RTSP.URLs {
+		source := registry.GetOrCreateSource(url, myaudio.SourceTypeRTSP)
+		if source == nil {
+			continue
+		}
+		displayName := source.DisplayName
+		if !isAuthenticated {
+			displayName = fmt.Sprintf("camera-%d", i+1)
+			cacheRTSPAnonymName(source.ID, displayName)
+		}
+		levels[source.ID] = createAudioLevelEntry(source, displayName)
+	}
 }
 
 // updateAudioLevel processes incoming audio data and updates the levels map

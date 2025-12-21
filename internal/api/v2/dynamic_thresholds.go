@@ -285,12 +285,7 @@ func (c *Controller) GetDynamicThreshold(ctx echo.Context) error {
 	// Try to get from database
 	dt, err := c.DS.GetDynamicThreshold(species)
 	if err != nil {
-		// Check if it's a not-found error
-		var enhancedErr *errors.EnhancedError
-		if errors.As(err, &enhancedErr) && enhancedErr.Category == errors.CategoryNotFound {
-			return c.HandleError(ctx, err, "Threshold not found", http.StatusNotFound)
-		}
-		return c.HandleError(ctx, err, "Failed to get threshold", http.StatusInternalServerError)
+		return c.handleErrorWithNotFound(ctx, err, "Threshold not found", "Failed to get threshold")
 	}
 
 	response := DynamicThresholdResponse{

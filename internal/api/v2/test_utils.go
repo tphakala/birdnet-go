@@ -9,8 +9,10 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
@@ -201,4 +203,68 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 	})
 
 	return e, mockDS, controller
+}
+
+// assertRoutesRegistered verifies that all expected routes are registered in the Echo instance.
+// It creates a map from expected route strings (e.g., "GET /api/v2/control/actions"),
+// checks each registered route against this map, and asserts that all expected routes were found.
+func assertRoutesRegistered(t *testing.T, e *echo.Echo, expectedRoutes []string) {
+	t.Helper()
+
+	// Create a map to track which routes were found
+	routeFound := make(map[string]bool, len(expectedRoutes))
+	for _, route := range expectedRoutes {
+		routeFound[route] = false
+	}
+
+	// Check each registered route
+	for _, r := range e.Routes() {
+		routePath := r.Method + " " + r.Path
+		if _, exists := routeFound[routePath]; exists {
+			routeFound[routePath] = true
+		}
+	}
+
+	// Verify all expected routes were found
+	for route, found := range routeFound {
+		assert.True(t, found, "Route not registered: %s", route)
+	}
+}
+
+// SpeciesDailySummaryExpected contains expected values for species daily summary assertions.
+type SpeciesDailySummaryExpected struct {
+	CommonName          string
+	SpeciesCode         string
+	Count               int
+	HourlyCounts        []int
+	FirstHeard          string
+	LatestHeard         string
+	HighConfidence      bool
+	ThumbnailURLContain string // Substring that ThumbnailURL should contain
+}
+
+// assertSpeciesDailySummary verifies that a SpeciesDailySummary matches expected values.
+// This reduces duplication in tests that verify species summary fields.
+func assertSpeciesDailySummary(t *testing.T, species *SpeciesDailySummary, expected SpeciesDailySummaryExpected) {
+	t.Helper()
+
+	assert.Equal(t, expected.CommonName, species.CommonName, "%s common name mismatch", expected.CommonName)
+	assert.Equal(t, expected.SpeciesCode, species.SpeciesCode, "%s species code mismatch", expected.CommonName)
+	assert.Equal(t, expected.Count, species.Count, "%s count mismatch", expected.CommonName)
+	assert.Equal(t, expected.HourlyCounts, species.HourlyCounts, "%s hourly counts mismatch", expected.CommonName)
+	assert.Equal(t, expected.FirstHeard, species.FirstHeard, "%s first heard time mismatch", expected.CommonName)
+	assert.Equal(t, expected.LatestHeard, species.LatestHeard, "%s latest heard time mismatch", expected.CommonName)
+	assert.Equal(t, expected.HighConfidence, species.HighConfidence, "%s high confidence mismatch", expected.CommonName)
+	assert.Contains(t, species.ThumbnailURL, expected.ThumbnailURLContain, "%s thumbnail URL mismatch", expected.CommonName)
+}
+
+// setupValidReviewMock configures mock expectations for a valid review operation.
+// This is used for detection review tests where the note is not locked and saves succeed.
+func setupValidReviewMock(m *mock.Mock, id string, noteID uint, withComment bool) {
+	m.On("Get", id).Return(datastore.Note{ID: noteID, Locked: false}, nil)
+	m.On("IsNoteLocked", id).Return(false, nil)
+	if withComment {
+		m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
+	}
+	m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
 }

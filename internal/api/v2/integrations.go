@@ -26,6 +26,144 @@ const (
 	integrationStageDelay     = 200 // Delay between stages in milliseconds
 )
 
+// IntegrationTestClient defines the interface for integration test clients.
+// Both MQTT and BirdWeather clients implement this interface.
+type IntegrationTestClient[T any] interface {
+	TestConnection(ctx context.Context, resultChan chan<- T)
+	Cleanup()
+}
+
+// mqttTestAdapter wraps mqtt.Client to implement IntegrationTestClient
+type mqttTestAdapter struct {
+	client interface {
+		TestConnection(ctx context.Context, resultChan chan<- mqtt.TestResult)
+		Disconnect()
+	}
+}
+
+func (a *mqttTestAdapter) TestConnection(ctx context.Context, resultChan chan<- mqtt.TestResult) {
+	a.client.TestConnection(ctx, resultChan)
+}
+
+func (a *mqttTestAdapter) Cleanup() {
+	a.client.Disconnect()
+}
+
+// birdweatherTestAdapter wraps birdweather.BwClient to implement IntegrationTestClient
+type birdweatherTestAdapter struct {
+	client interface {
+		TestConnection(ctx context.Context, resultChan chan<- birdweather.TestResult)
+		Close()
+	}
+}
+
+func (a *birdweatherTestAdapter) TestConnection(ctx context.Context, resultChan chan<- birdweather.TestResult) {
+	a.client.TestConnection(ctx, resultChan)
+}
+
+func (a *birdweatherTestAdapter) Cleanup() {
+	a.client.Close()
+}
+
+// runStreamingIntegrationTest runs an integration test with streaming results.
+// It handles the common pattern of:
+// - Creating context with timeout
+// - Running test in goroutine with cleanup
+// - Streaming results to HTTP client
+// - Handling client disconnection
+func runStreamingIntegrationTest[T any](
+	c *Controller,
+	ctx echo.Context,
+	resultChan chan T,
+	client IntegrationTestClient[T],
+	timeout time.Duration,
+	integrationName string,
+) error {
+	// Create a done channel to signal when the client disconnects
+	doneChan := make(chan struct{})
+
+	// Use sync.Once to ensure doneChan is closed exactly once
+	var closeOnce sync.Once
+	safeDoneClose := func() {
+		closeOnce.Do(func() {
+			close(doneChan)
+		})
+	}
+
+	// Mutex for safe writing to response
+	var writeMu sync.Mutex
+
+	// Create context with timeout that also gets cancelled if HTTP client disconnects
+	httpCtx := ctx.Request().Context()
+	testCtx, cancel := context.WithTimeout(httpCtx, timeout)
+	defer cancel()
+
+	// Run the test in a goroutine
+	go func() {
+		defer close(resultChan)
+		startTime := time.Now()
+
+		// Start the test
+		client.TestConnection(testCtx, resultChan)
+
+		// Calculate elapsed time
+		elapsedTime := time.Since(startTime).Milliseconds()
+
+		// Clean up client resources
+		client.Cleanup()
+
+		// Send final result with elapsed time if the client is still connected
+		select {
+		case <-doneChan:
+			c.Debug("HTTP client disconnected, skipping final result")
+		case <-testCtx.Done():
+			c.Debug("Test context cancelled: %v", testCtx.Err())
+		default:
+			writeMu.Lock()
+			defer writeMu.Unlock()
+
+			finalResult := map[string]any{
+				"elapsed_time_ms": elapsedTime,
+				"state":           "completed",
+			}
+
+			if err := c.writeJSONResponse(ctx, finalResult); err != nil {
+				c.logger.Printf("Error writing final %s test result: %v", integrationName, err)
+			}
+		}
+	}()
+
+	// Feed streaming results to client
+	encoder := json.NewEncoder(ctx.Response())
+
+	// Stream results to client until done
+	for result := range resultChan {
+		writeMu.Lock()
+		if err := encoder.Encode(result); err != nil {
+			c.logger.Printf("Error encoding %s test result: %v", integrationName, err)
+			writeMu.Unlock()
+			safeDoneClose()
+			cancel()
+			return nil
+		}
+		ctx.Response().Flush()
+		writeMu.Unlock()
+
+		// Check if HTTP context is done (client disconnected)
+		select {
+		case <-httpCtx.Done():
+			c.Debug("HTTP client disconnected during %s test", integrationName)
+			safeDoneClose()
+			cancel()
+			return nil
+		default:
+			// Continue processing
+		}
+	}
+
+	return nil
+}
+
 // MQTTStatus represents the current status of the MQTT connection
 type MQTTStatus struct {
 	Connected bool   `json:"connected"`            // Whether the MQTT client is currently connected to the broker
@@ -53,9 +191,7 @@ type BirdWeatherStatus struct {
 
 // initIntegrationsRoutes registers all integration-related API endpoints
 func (c *Controller) initIntegrationsRoutes() {
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Initializing integrations routes")
-	}
+	c.logInfoIfEnabled("Initializing integrations routes")
 
 	// Create integrations API group with auth middleware
 	integrationsGroup := c.Group.Group("/integrations", c.authMiddleware)
@@ -77,18 +213,14 @@ func (c *Controller) initIntegrationsRoutes() {
 	// Other integration routes could be added here:
 	// - External media storage
 
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Integrations routes initialized successfully")
-	}
+	c.logInfoIfEnabled("Integrations routes initialized successfully")
 }
 
 // GetMQTTStatus handles GET /api/v2/integrations/mqtt/status
 func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Getting MQTT status", "path", path, "ip", ip)
-	}
+	c.logInfoIfEnabled("Getting MQTT status", "path", path, "ip", ip)
 
 	// Get MQTT configuration from settings
 	mqttConfig := c.Settings.Realtime.MQTT
@@ -103,31 +235,25 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 
 	// If MQTT is not enabled, return status as-is
 	if !mqttConfig.Enabled {
-		if c.apiLogger != nil {
-			c.apiLogger.Info("MQTT is disabled, returning status", "path", path, "ip", ip)
-		}
+		c.logInfoIfEnabled("MQTT is disabled, returning status", "path", path, "ip", ip)
 		return ctx.JSON(http.StatusOK, status)
 	}
 
 	// Check connection status using a temporary client
-	if c.apiLogger != nil {
-		c.apiLogger.Debug("Checking MQTT connection status", "path", path, "ip", ip)
-	}
+	c.logDebugIfEnabled("Checking MQTT connection status", "path", path, "ip", ip)
 	connected, checkErr := c.checkMQTTConnectionStatus(ctx.Request().Context())
 	status.Connected = connected
 	if checkErr != "" {
 		status.LastError = checkErr
 	}
 
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Retrieved MQTT status successfully",
-			"connected", status.Connected,
-			"broker", status.Broker,
-			"last_error", status.LastError,
-			"path", path,
-			"ip", ip,
-		)
-	}
+	c.logInfoIfEnabled("Retrieved MQTT status successfully",
+		"connected", status.Connected,
+		"broker", status.Broker,
+		"last_error", status.LastError,
+		"path", path,
+		"ip", ip,
+	)
 	return ctx.JSON(http.StatusOK, status)
 }
 
@@ -137,17 +263,13 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context) (connected bool, lastError string) {
 	// Use the injected metrics instance
 	if c.metrics == nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Metrics instance not available for MQTT status check")
-		}
+		c.logErrorIfEnabled("Metrics instance not available for MQTT status check")
 		return false, "error:metrics:not_initialized"
 	}
 
 	tempClient, err := mqtt.NewClient(c.Settings, c.metrics)
 	if err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Failed to create temporary MQTT client for status check", "error", err)
-		}
+		c.logErrorIfEnabled("Failed to create temporary MQTT client for status check", "error", err)
 		return false, fmt.Sprintf("error:client:mqtt_client_creation:%s", err.Error())
 	}
 	defer tempClient.Disconnect() // Ensure temporary client is disconnected
@@ -159,24 +281,18 @@ func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context) (conne
 	// Try to connect
 	err = tempClient.Connect(connectCtx)
 	if err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Temporary MQTT client connection failed during status check", "error", err, "broker", c.Settings.Realtime.MQTT.Broker)
-		}
+		c.logWarnIfEnabled("Temporary MQTT client connection failed during status check", "error", err, "broker", c.Settings.Realtime.MQTT.Broker)
 		return false, fmt.Sprintf("error:connection:mqtt_broker:%s", err.Error())
 	}
 
 	// Check if genuinely connected
 	if !tempClient.IsConnected() {
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Temporary MQTT client connected but IsConnected() returned false", "broker", c.Settings.Realtime.MQTT.Broker)
-		}
+		c.logWarnIfEnabled("Temporary MQTT client connected but IsConnected() returned false", "broker", c.Settings.Realtime.MQTT.Broker)
 		// Consider this a failure for status purposes, though connection might be flapping
 		return false, "error:connection:mqtt_connection_unstable"
 	}
 
-	if c.apiLogger != nil {
-		c.apiLogger.Debug("Temporary MQTT client connected successfully for status check", "broker", c.Settings.Realtime.MQTT.Broker)
-	}
+	c.logDebugIfEnabled("Temporary MQTT client connected successfully for status check", "broker", c.Settings.Realtime.MQTT.Broker)
 	return true, "" // Connected successfully
 }
 
@@ -184,9 +300,7 @@ func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context) (conne
 func (c *Controller) GetBirdWeatherStatus(ctx echo.Context) error {
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Getting BirdWeather status", "path", path, "ip", ip)
-	}
+	c.logInfoIfEnabled("Getting BirdWeather status", "path", path, "ip", ip)
 
 	// Get BirdWeather configuration from settings
 	bwConfig := c.Settings.Realtime.Birdweather
@@ -201,15 +315,13 @@ func (c *Controller) GetBirdWeatherStatus(ctx echo.Context) error {
 
 	// For now, we just return the configuration status
 	// In the future, we could add checks for client status here
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Retrieved BirdWeather status successfully",
-			"enabled", status.Enabled,
-			"station_id", status.StationID,
-			"threshold", status.Threshold,
-			"path", path,
-			"ip", ip,
-		)
-	}
+	c.logInfoIfEnabled("Retrieved BirdWeather status successfully",
+		"enabled", status.Enabled,
+		"station_id", status.StationID,
+		"threshold", status.Threshold,
+		"path", path,
+		"ip", ip,
+	)
 
 	return ctx.JSON(http.StatusOK, status)
 }
@@ -258,100 +370,9 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 	// Channel for test results
 	resultChan := make(chan mqtt.TestResult)
 
-	// Create a done channel to signal when the client disconnects
-	doneChan := make(chan struct{})
-
-	// Use sync.Once to ensure doneChan is closed exactly once
-	var closeOnce sync.Once
-	// Helper function to safely close the doneChan
-	safeDoneClose := func() {
-		closeOnce.Do(func() {
-			close(doneChan)
-		})
-	}
-
-	// Mutex for safe writing to response
-	var writeMu sync.Mutex
-
-	// Create context with timeout that also gets cancelled if HTTP client disconnects
-	httpCtx := ctx.Request().Context()
-	testCtx, cancel := context.WithTimeout(httpCtx, integrationMediumTimeout*time.Second)
-	defer cancel()
-
-	// Run the test in a goroutine
-	go func() {
-		defer close(resultChan)
-		startTime := time.Now()
-
-		// Start the test
-		client.TestConnection(testCtx, resultChan)
-
-		// Calculate elapsed time
-		elapsedTime := time.Since(startTime).Milliseconds()
-
-		// Disconnect client when done
-		client.Disconnect()
-
-		// Send final result with elapsed time if the client is still connected
-		select {
-		case <-doneChan:
-			// HTTP client has disconnected, no need to send final result
-			c.Debug("HTTP client disconnected, skipping final result")
-		case <-testCtx.Done():
-			// Test timed out or was cancelled
-			c.Debug("Test context cancelled: %v", testCtx.Err())
-		default:
-			// Still connected, send final result
-			writeMu.Lock()
-			defer writeMu.Unlock()
-
-			// Format final response
-			finalResult := map[string]any{
-				"elapsed_time_ms": elapsedTime,
-				"state":           "completed",
-			}
-
-			// Write final result to response if possible
-			if err := c.writeJSONResponse(ctx, finalResult); err != nil {
-				c.logger.Printf("Error writing final MQTT test result: %v", err)
-			}
-		}
-	}()
-
-	// Feed streaming results to client
-	encoder := json.NewEncoder(ctx.Response())
-
-	// Stream results to client until done
-	for result := range resultChan {
-		writeMu.Lock()
-		if err := encoder.Encode(result); err != nil {
-			c.logger.Printf("Error encoding MQTT test result: %v", err)
-			writeMu.Unlock()
-
-			// Signal that the HTTP client has disconnected using sync.Once
-			safeDoneClose()
-
-			// Cancel the test context to stop ongoing tests
-			cancel()
-			return nil
-		}
-		ctx.Response().Flush()
-		writeMu.Unlock()
-
-		// Check if HTTP context is done (client disconnected)
-		select {
-		case <-httpCtx.Done():
-			c.Debug("HTTP client disconnected during test")
-			// Use sync.Once to safely close the channel
-			safeDoneClose()
-			cancel() // Cancel the test context
-			return nil
-		default:
-			// Continue processing
-		}
-	}
-
-	return nil
+	// Create adapter and run streaming test
+	adapter := &mqttTestAdapter{client: client}
+	return runStreamingIntegrationTest(c, ctx, resultChan, adapter, integrationMediumTimeout*time.Second, "MQTT")
 }
 
 // TestBirdWeatherConnection handles POST /api/v2/integrations/birdweather/test
@@ -411,100 +432,9 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 	// Channel for test results
 	resultChan := make(chan birdweather.TestResult)
 
-	// Create a done channel to signal when the client disconnects
-	doneChan := make(chan struct{})
-
-	// Use sync.Once to ensure doneChan is closed exactly once
-	var closeOnce sync.Once
-	// Helper function to safely close the doneChan
-	safeDoneClose := func() {
-		closeOnce.Do(func() {
-			close(doneChan)
-		})
-	}
-
-	// Mutex for safe writing to response
-	var writeMu sync.Mutex
-
-	// Create context with timeout that also gets cancelled if HTTP client disconnects
-	httpCtx := ctx.Request().Context()
-	testCtx, cancel := context.WithTimeout(httpCtx, integrationLongTimeout*time.Second)
-	defer cancel()
-
-	// Run the test in a goroutine
-	go func() {
-		defer close(resultChan)
-		startTime := time.Now()
-
-		// Start the test
-		client.TestConnection(testCtx, resultChan)
-
-		// Calculate elapsed time
-		elapsedTime := time.Since(startTime).Milliseconds()
-
-		// Clean up client resources
-		client.Close()
-
-		// Send final result with elapsed time if the client is still connected
-		select {
-		case <-doneChan:
-			// HTTP client has disconnected, no need to send final result
-			c.Debug("HTTP client disconnected, skipping final result")
-		case <-testCtx.Done():
-			// Test timed out or was cancelled
-			c.Debug("Test context cancelled: %v", testCtx.Err())
-		default:
-			// Still connected, send final result
-			writeMu.Lock()
-			defer writeMu.Unlock()
-
-			// Format final response
-			finalResult := map[string]any{
-				"elapsed_time_ms": elapsedTime,
-				"state":           "completed",
-			}
-
-			// Write final result to response if possible
-			if err := c.writeJSONResponse(ctx, finalResult); err != nil {
-				c.logger.Printf("Error writing final BirdWeather test result: %v", err)
-			}
-		}
-	}()
-
-	// Feed streaming results to client
-	encoder := json.NewEncoder(ctx.Response())
-
-	// Stream results to client until done
-	for result := range resultChan {
-		writeMu.Lock()
-		if err := encoder.Encode(result); err != nil {
-			c.logger.Printf("Error encoding BirdWeather test result: %v", err)
-			writeMu.Unlock()
-
-			// Signal that the HTTP client has disconnected using sync.Once
-			safeDoneClose()
-
-			// Cancel the test context to stop ongoing tests
-			cancel()
-			return nil
-		}
-		ctx.Response().Flush()
-		writeMu.Unlock()
-
-		// Check if HTTP context is done (client disconnected)
-		select {
-		case <-httpCtx.Done():
-			c.Debug("HTTP client disconnected during test")
-			// Use sync.Once to safely close the channel
-			safeDoneClose()
-			cancel() // Cancel the test context
-			return nil
-		default:
-			// Continue processing
-		}
-	}
-
-	return nil
+	// Create adapter and run streaming test
+	adapter := &birdweatherTestAdapter{client: client}
+	return runStreamingIntegrationTest(c, ctx, resultChan, adapter, integrationLongTimeout*time.Second, "BirdWeather")
 }
 
 // BirdWeatherTestRequest represents a request to test BirdWeather connectivity

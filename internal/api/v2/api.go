@@ -110,49 +110,56 @@ func WithAuthService(svc auth.Service) Option {
 	}
 }
 
+// parseIPFromHeader attempts to parse a valid IP from a header value.
+// Returns the IP string if valid, empty string otherwise.
+func parseIPFromHeader(headerValue string) string {
+	if headerValue == "" {
+		return ""
+	}
+	ip := net.ParseIP(headerValue)
+	if ip != nil {
+		return ip.String()
+	}
+	return ""
+}
+
+// parseFirstIPFromXFF extracts the first valid IP from X-Forwarded-For header.
+func parseFirstIPFromXFF(xff string) string {
+	if xff == "" {
+		return ""
+	}
+	parts := strings.SplitSeq(xff, ",")
+	for part := range parts {
+		if ip := parseIPFromHeader(strings.TrimSpace(part)); ip != "" {
+			return ip
+		}
+	}
+	return ""
+}
+
 // Custom IP Extractor prioritizing CF-Connecting-IP
 func ipExtractorFromCloudflareHeader(req *http.Request) string {
 	// 1. Check CF-Connecting-IP
-	cfIP := req.Header.Get("CF-Connecting-IP")
-	if cfIP != "" {
-		ip := net.ParseIP(cfIP)
-		if ip != nil {
-			return ip.String() // Return valid IP
-		}
+	if ip := parseIPFromHeader(req.Header.Get("CF-Connecting-IP")); ip != "" {
+		return ip
 	}
 
 	// 2. Check X-Forwarded-For (taking the first valid IP)
-	xff := req.Header.Get(echo.HeaderXForwardedFor)
-	if xff != "" {
-		parts := strings.SplitSeq(xff, ",")
-		for part := range parts {
-			ipStr := strings.TrimSpace(part)
-			ip := net.ParseIP(ipStr)
-			if ip != nil {
-				return ip.String() // Return first valid IP found
-			}
-		}
+	if ip := parseFirstIPFromXFF(req.Header.Get(echo.HeaderXForwardedFor)); ip != "" {
+		return ip
 	}
 
 	// 3. Check X-Real-IP
-	xri := req.Header.Get(echo.HeaderXRealIP)
-	if xri != "" {
-		ip := net.ParseIP(xri)
-		if ip != nil {
-			return ip.String() // Return valid IP
-		}
+	if ip := parseIPFromHeader(req.Header.Get(echo.HeaderXRealIP)); ip != "" {
+		return ip
 	}
 
 	// 4. Fallback to Remote Address (might be proxy)
-	// Use SplitHostPort for robustness, ignoring potential errors
 	remoteAddr, _, _ := net.SplitHostPort(req.RemoteAddr)
-	ip := net.ParseIP(remoteAddr)
-	if ip != nil {
-		return ip.String() // Return valid IP if RemoteAddr is just an IP
+	if ip := parseIPFromHeader(remoteAddr); ip != "" {
+		return ip
 	}
 
-	// If RemoteAddr contained a port or was invalid, return the raw string
-	// (though ideally, it should be a valid IP:port format)
 	return remoteAddr
 }
 
@@ -191,6 +198,51 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	return NewWithOptions(e, ds, settings, birdImageCache, sunCalc, controlChan, logger, metrics, true, opts...)
 }
 
+// resolveAndValidateMediaPath resolves a potentially relative media path and ensures it exists as a directory.
+// Returns the absolute path and any error encountered.
+func resolveAndValidateMediaPath(configPath string, logger *log.Logger) (string, error) {
+	if configPath == "" {
+		return "", fmt.Errorf("settings.realtime.audio.export.path must not be empty")
+	}
+
+	mediaPath := configPath
+
+	// Resolve relative path to absolute based on working directory
+	if !filepath.IsAbs(mediaPath) {
+		workDir, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("failed to get working directory to resolve relative media path: %w", err)
+		}
+		mediaPath = filepath.Join(workDir, mediaPath)
+		logger.Printf("Resolved relative media export path %q to absolute path %q", configPath, mediaPath)
+	}
+
+	// Ensure directory exists, creating if necessary
+	if err := ensureDirectoryExists(mediaPath); err != nil {
+		return "", err
+	}
+
+	return mediaPath, nil
+}
+
+// ensureDirectoryExists checks that a path exists and is a directory, creating it if needed.
+func ensureDirectoryExists(path string) error {
+	fi, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		if err := os.MkdirAll(path, FilePermExecutable); err != nil {
+			return fmt.Errorf("failed to create directory %q: %w", path, err)
+		}
+		fi, err = os.Stat(path)
+	}
+	if err != nil {
+		return fmt.Errorf("error checking path %q: %w", path, err)
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("path is not a directory: %q", path)
+	}
+	return nil
+}
+
 // NewWithOptions creates a new API controller with optional route initialization.
 // Set initializeRoutes to false for testing to avoid starting background goroutines.
 func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
@@ -202,60 +254,17 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		logger = log.Default()
 	}
 
-	// --- Configure IP Extractor ---
-	// IMPORTANT: For this to be secure in production, you would typically
-	// combine this with middleware that verifies the request came *from*
-	// a trusted proxy (like Cloudflare's IP ranges). Echo doesn't have
-	// built-in trusted proxy IP range checking, so this might require
-	// custom middleware or careful infrastructure setup (e.g., firewall rules).
-	// Without trusting the proxy, these headers can be spoofed.
+	// Configure IP extractor for Cloudflare proxy support
 	e.IPExtractor = ipExtractorFromCloudflareHeader
 	logger.Println("Configured custom IP extractor prioritizing CF-Connecting-IP")
-	// --- End IP Extractor Configuration ---
 
-	// Validate and Initialize SecureFS for the media export path
-	mediaPath := settings.Realtime.Audio.Export.Path
-
-	// --- Sanity checks for mediaPath ---
-	if mediaPath == "" {
-		return nil, fmt.Errorf("settings.realtime.audio.export.path must not be empty")
-	}
-
-	// Resolve relative path to absolute based on working directory
-	if !filepath.IsAbs(mediaPath) {
-		// Get the current working directory
-		workDir, err := os.Getwd()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get working directory to resolve relative media path: %w", err)
-		}
-		mediaPath = filepath.Join(workDir, mediaPath)
-		logger.Printf("Resolved relative media export path \"%s\" to absolute path \"%s\"", settings.Realtime.Audio.Export.Path, mediaPath) // Log the resolution
-	}
-
-	// Now perform checks on the potentially resolved absolute path
-	fi, err := os.Stat(mediaPath)
+	// Validate and resolve media export path
+	mediaPath, err := resolveAndValidateMediaPath(settings.Realtime.Audio.Export.Path, logger)
 	if err != nil {
-		if os.IsNotExist(err) {
-			// Attempt to create the directory if it doesn't exist
-			if err := os.MkdirAll(mediaPath, FilePermExecutable); err != nil {
-				return nil, fmt.Errorf("failed to create media export directory %q: %w", mediaPath, err)
-			}
-			// Stat again after creation
-			fi, err = os.Stat(mediaPath)
-			if err != nil {
-				return nil, fmt.Errorf("error checking newly created media export path %q: %w", mediaPath, err)
-			}
-		} else {
-			// Other Stat error
-			return nil, fmt.Errorf("error checking settings.realtime.audio.export.path %q: %w", mediaPath, err)
-		}
+		return nil, err
 	}
-	if !fi.IsDir() {
-		return nil, fmt.Errorf("settings.realtime.audio.export.path is not a directory: %q", mediaPath)
-	}
-	// --- End sanity checks ---
 
-	sfs, err := securefs.New(mediaPath) // Create SecureFS rooted at the export path
+	sfs, err := securefs.New(mediaPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize secure filesystem for media: %w", err)
 	}
@@ -305,10 +314,9 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// Load local taxonomy database for fast species lookups
 	taxonomyDB, err := birdnet.LoadTaxonomyDatabase()
 	if err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Failed to load taxonomy database", "error", err)
-			c.apiLogger.Warn("Species taxonomy lookups will fall back to eBird API")
-		} else {
+		c.logWarnIfEnabled("Failed to load taxonomy database", "error", err)
+		c.logWarnIfEnabled("Species taxonomy lookups will fall back to eBird API")
+		if c.apiLogger == nil {
 			logger.Printf("Warning: Failed to load taxonomy database: %v", err)
 			logger.Printf("Species taxonomy lookups will fall back to eBird API")
 		}
@@ -317,15 +325,14 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	} else {
 		c.TaxonomyDB = taxonomyDB
 		stats := taxonomyDB.Stats()
-		if c.apiLogger != nil {
-			c.apiLogger.Info("Loaded taxonomy database",
-				"genus_count", stats["genus_count"],
-				"family_count", stats["family_count"],
-				"species_count", stats["species_count"],
-				"version", taxonomyDB.Version,
-				"updated_at", taxonomyDB.UpdatedAt,
-			)
-		} else {
+		c.logInfoIfEnabled("Loaded taxonomy database",
+			"genus_count", stats["genus_count"],
+			"family_count", stats["family_count"],
+			"species_count", stats["species_count"],
+			"version", taxonomyDB.Version,
+			"updated_at", taxonomyDB.UpdatedAt,
+		)
+		if c.apiLogger == nil {
 			logger.Printf("Loaded taxonomy database: %v genera, %v families, %v species",
 				stats["genus_count"], stats["family_count"], stats["species_count"])
 		}
@@ -473,7 +480,6 @@ func (c *Controller) initRoutes() {
 		{"system routes", c.initSystemRoutes},
 		{"settings routes", c.initSettingsRoutes},
 		{"filesystem routes", c.initFileSystemRoutes},
-		{"stream routes", c.initStreamRoutes},
 		{"stream health routes", c.initStreamHealthRoutes},
 		{"audio level routes", c.initAudioLevelRoutes},
 		{"hls streaming routes", c.initHLSRoutes},
@@ -670,26 +676,24 @@ func (c *Controller) HandleError(ctx echo.Context, err error, message string, co
 		errorResp.CorrelationID, ip, isTunneled, tunnelProvider, message, err)
 
 	// Also log to structured logger if available
-	if c.apiLogger != nil {
-		var errorStr string
-		if err != nil {
-			errorStr = err.Error()
-		} else {
-			errorStr = message
-		}
-
-		c.apiLogger.Error("API Error",
-			"correlation_id", errorResp.CorrelationID,
-			"message", message,
-			"error", errorStr,
-			"code", code,
-			"path", ctx.Request().URL.Path,
-			"method", ctx.Request().Method,
-			"ip", ip, // Log the extracted IP
-			"tunneled", isTunneled,
-			"tunnel_provider", tunnelProvider,
-		)
+	var errorStr string
+	if err != nil {
+		errorStr = err.Error()
+	} else {
+		errorStr = message
 	}
+
+	c.logErrorIfEnabled("API Error",
+		"correlation_id", errorResp.CorrelationID,
+		"message", message,
+		"error", errorStr,
+		"code", code,
+		"path", ctx.Request().URL.Path,
+		"method", ctx.Request().Method,
+		"ip", ip, // Log the extracted IP
+		"tunneled", isTunneled,
+		"tunnel_provider", tunnelProvider,
+	)
 
 	return ctx.JSON(code, errorResp)
 }
@@ -712,10 +716,8 @@ func (c *Controller) Debug(format string, v ...any) {
 		c.logger.Printf("[DEBUG] %s", msg)
 
 		// Also log to structured logger if available
-		if c.apiLogger != nil {
-			// No IP available here, log simple debug message
-			c.apiLogger.Debug(msg)
-		}
+		// No IP available here, log simple debug message
+		c.logDebugIfEnabled(msg)
 	}
 }
 
@@ -782,12 +784,10 @@ func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings
 	apiController.Processor = proc
 
 	// Log initialization
-	if apiController.apiLogger != nil {
-		apiController.apiLogger.Info("API v2 initialized",
-			"version", settings.Version,
-			"build_date", settings.BuildDate,
-		)
-	}
+	apiController.logInfoIfEnabled("API v2 initialized",
+		"version", settings.Version,
+		"build_date", settings.BuildDate,
+	)
 
 	return apiController
 }

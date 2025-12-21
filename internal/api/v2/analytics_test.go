@@ -731,27 +731,31 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	// Verify the American Crow details
 	assert.NotNil(t, amcro, "American Crow should be in the response")
 	if amcro != nil {
-		assert.Equal(t, "American Crow", amcro.CommonName)
-		assert.Equal(t, "AMCRO", amcro.SpeciesCode)
-		assert.Equal(t, amcroTotal, amcro.Count, "American Crow count mismatch") // Count is sum of hourly
-		assert.Equal(t, expectedAmcroHourlyCounts[:], amcro.HourlyCounts, "American Crow hourly counts mismatch")
-		assert.Equal(t, "08:15:00", amcro.FirstHeard, "American Crow first heard time")
-		assert.Equal(t, "14:45:00", amcro.LatestHeard, "American Crow latest heard time")
-		assert.True(t, amcro.HighConfidence, "American Crow should be high confidence") // Based on 0.95 > 0.8
-		assert.Contains(t, amcro.ThumbnailURL, "Corvus brachyrhynchos", "American Crow thumbnail URL")
+		assertSpeciesDailySummary(t, amcro, SpeciesDailySummaryExpected{
+			CommonName:          "American Crow",
+			SpeciesCode:         "AMCRO",
+			Count:               amcroTotal,
+			HourlyCounts:        expectedAmcroHourlyCounts[:],
+			FirstHeard:          "08:15:00",
+			LatestHeard:         "14:45:00",
+			HighConfidence:      true, // Based on 0.95 > 0.8
+			ThumbnailURLContain: "Corvus brachyrhynchos",
+		})
 	}
 
 	// Verify the Red-bellied Woodpecker details
 	assert.NotNil(t, rbwo, "Red-bellied Woodpecker should be in the response")
 	if rbwo != nil {
-		assert.Equal(t, "Red-bellied Woodpecker", rbwo.CommonName)
-		assert.Equal(t, "RBWO", rbwo.SpeciesCode)
-		assert.Equal(t, rbwoTotal, rbwo.Count, "Red-bellied Woodpecker count mismatch") // Count is sum of hourly
-		assert.Equal(t, expectedRbwoHourlyCounts[:], rbwo.HourlyCounts, "Red-bellied Woodpecker hourly counts mismatch")
-		assert.Equal(t, "10:20:00", rbwo.FirstHeard, "Red-bellied Woodpecker first heard time")
-		assert.Equal(t, "16:05:00", rbwo.LatestHeard, "Red-bellied Woodpecker latest heard time")
-		assert.True(t, rbwo.HighConfidence, "Red-bellied Woodpecker should be high confidence") // Based on 0.8 >= 0.8
-		assert.Contains(t, rbwo.ThumbnailURL, "Melanerpes carolinus", "Red-bellied Woodpecker thumbnail URL")
+		assertSpeciesDailySummary(t, rbwo, SpeciesDailySummaryExpected{
+			CommonName:          "Red-bellied Woodpecker",
+			SpeciesCode:         "RBWO",
+			Count:               rbwoTotal,
+			HourlyCounts:        expectedRbwoHourlyCounts[:],
+			FirstHeard:          "10:20:00",
+			LatestHeard:         "16:05:00",
+			HighConfidence:      true, // Based on 0.8 >= 0.8
+			ThumbnailURLContain: "Melanerpes carolinus",
+		})
 	}
 
 	// Assert that all expectations were met

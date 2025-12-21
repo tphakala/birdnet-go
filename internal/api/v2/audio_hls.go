@@ -781,6 +781,7 @@ func (c *Controller) setupHLSFifo(secFS *securefs.SecureFS, hlsBaseDir, outputDi
 // setupHLSFFmpeg creates the FFmpeg command
 func (c *Controller) setupHLSFFmpeg(ctx context.Context, ffmpegPath, inputSource, outputDir, playlistPath string) (*exec.Cmd, error) {
 	args := c.buildFFmpegArgs(inputSource, outputDir, playlistPath)
+	//nolint:gosec // G204: ffmpegPath is from admin config (Settings.Realtime.Audio.FfmpegPath), not user input
 	return exec.CommandContext(ctx, ffmpegPath, args...), nil
 }
 
@@ -1206,63 +1207,92 @@ func (c *Controller) performHLSCleanup(sourceID string, stream *HLSStreamInfo, r
 		stream.cancel()
 	}
 
-	// Kill FFmpeg process and close log file
-	if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
-		go func(cmd *exec.Cmd, logFile *os.File) {
-			if _, err := cmd.Process.Wait(); err != nil {
-				log.Printf("FFmpeg process wait error: %v", err)
-			}
-			// Close log file after process exits (must be done after Wait())
-			if logFile != nil {
-				if closeErr := logFile.Close(); closeErr != nil {
-					log.Printf("Failed to close log file: %v", closeErr)
-				}
-			}
-			log.Printf("FFmpeg process terminated for source %s", privacy.SanitizeRTSPUrl(sourceID))
-		}(stream.FFmpegCmd, stream.logFile)
-	} else if stream.logFile != nil {
-		// No process to wait for, close log file immediately
-		if closeErr := stream.logFile.Close(); closeErr != nil {
-			log.Printf("Failed to close log file: %v", closeErr)
-		}
-	}
+	// Clean up FFmpeg process and log file
+	c.cleanupFFmpegProcess(sourceID, stream)
 
 	// Clean up output directory
-	if stream.OutputDir != "" {
-		hlsBaseDir, err := conf.GetHLSDirectory()
-		if err == nil {
-			if secFS, err := securefs.New(hlsBaseDir); err == nil {
-				defer func() {
-					if closeErr := secFS.Close(); closeErr != nil {
-						log.Printf("Failed to close secure filesystem: %v", closeErr)
-					}
-				}()
-				if secFS.ExistsNoErr(stream.OutputDir) {
-					log.Printf("Removing stream directory: %s", stream.OutputDir)
-					if removeErr := secFS.RemoveAll(stream.OutputDir); removeErr != nil {
-						log.Printf("Failed to remove stream directory: %v", removeErr)
-					}
-				}
-			}
-		}
+	c.cleanupStreamDirectory(stream.OutputDir)
+
+	// Clean up tracking data
+	c.cleanupStreamTracking(sourceID)
+
+	log.Printf("HLS stream cleanup completed for source %s", privacy.SanitizeRTSPUrl(sourceID))
+}
+
+// cleanupFFmpegProcess terminates the FFmpeg process and closes the log file.
+func (c *Controller) cleanupFFmpegProcess(sourceID string, stream *HLSStreamInfo) {
+	hasProcess := stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil
+	if hasProcess {
+		go c.waitForFFmpegProcess(sourceID, stream.FFmpegCmd, stream.logFile)
+		return
+	}
+	// No process, just close log file if present
+	closeLogFile(stream.logFile)
+}
+
+// waitForFFmpegProcess waits for FFmpeg to exit and cleans up resources.
+func (c *Controller) waitForFFmpegProcess(sourceID string, cmd *exec.Cmd, logFile *os.File) {
+	if _, err := cmd.Process.Wait(); err != nil {
+		log.Printf("FFmpeg process wait error: %v", err)
+	}
+	closeLogFile(logFile)
+	log.Printf("FFmpeg process terminated for source %s", privacy.SanitizeRTSPUrl(sourceID))
+}
+
+// closeLogFile safely closes a log file if it's not nil.
+func closeLogFile(f *os.File) {
+	if f == nil {
+		return
+	}
+	if err := f.Close(); err != nil {
+		log.Printf("Failed to close log file: %v", err)
+	}
+}
+
+// cleanupStreamDirectory removes a single stream's output directory.
+func (c *Controller) cleanupStreamDirectory(outputDir string) {
+	if outputDir == "" {
+		return
 	}
 
+	hlsBaseDir, err := conf.GetHLSDirectory()
+	if err != nil {
+		return
+	}
+
+	secFS, err := securefs.New(hlsBaseDir)
+	if err != nil {
+		return
+	}
+	defer func() {
+		if closeErr := secFS.Close(); closeErr != nil {
+			log.Printf("Failed to close secure filesystem: %v", closeErr)
+		}
+	}()
+
+	if secFS.ExistsNoErr(outputDir) {
+		log.Printf("Removing stream directory: %s", outputDir)
+		if removeErr := secFS.RemoveAll(outputDir); removeErr != nil {
+			log.Printf("Failed to remove stream directory: %v", removeErr)
+		}
+	}
+}
+
+// cleanupStreamTracking removes all tracking data for a stream.
+func (c *Controller) cleanupStreamTracking(sourceID string) {
 	// Clean up client tracking
 	hlsMgr.clientsMu.Lock()
 	delete(hlsMgr.clients, sourceID)
 	hlsMgr.clientsMu.Unlock()
 
-	// Clean up activity tracking
+	// Clean up activity tracking using maps.DeleteFunc (Go 1.21+)
 	hlsMgr.activityMu.Lock()
 	delete(hlsMgr.activity, sourceID)
-	for key := range hlsMgr.clientActivity {
-		if strings.HasPrefix(key, sourceID+":") {
-			delete(hlsMgr.clientActivity, key)
-		}
-	}
+	prefix := sourceID + ":"
+	maps.DeleteFunc(hlsMgr.clientActivity, func(key string, _ time.Time) bool {
+		return strings.HasPrefix(key, prefix)
+	})
 	hlsMgr.activityMu.Unlock()
-
-	log.Printf("HLS stream cleanup completed for source %s", privacy.SanitizeRTSPUrl(sourceID))
 }
 
 // waitForHLSPlaylist waits for the playlist file to be ready
@@ -1338,19 +1368,31 @@ func (c *Controller) logHLSClientConnection(sourceID, clientIP, requestPath stri
 
 // CleanupAllHLSStreams removes all HLS streams (called on shutdown)
 func (c *Controller) CleanupAllHLSStreams() error {
+	// Clone and clear streams atomically using Go 1.21+ maps package
 	hlsMgr.streamsMu.Lock()
-	streamsToClean := make(map[string]*HLSStreamInfo)
-	for sourceID, stream := range hlsMgr.streams {
-		streamsToClean[sourceID] = stream
-		delete(hlsMgr.streams, sourceID)
-	}
+	streamsToClean := maps.Clone(hlsMgr.streams)
+	clear(hlsMgr.streams)
 	hlsMgr.streamsMu.Unlock()
 
+	// Cleanup each stream
 	for sourceID, stream := range streamsToClean {
 		c.performHLSCleanup(sourceID, stream, "server shutdown")
 	}
 
 	// Clean remaining directories
+	if err := c.cleanupHLSDirectories(); err != nil {
+		return err
+	}
+
+	if runtime.GOOS == OSWindows {
+		securefs.CleanupNamedPipes()
+	}
+
+	return nil
+}
+
+// cleanupHLSDirectories removes all stream directories from the HLS base directory.
+func (c *Controller) cleanupHLSDirectories() error {
 	hlsBaseDir, err := conf.GetHLSDirectory()
 	if err != nil {
 		return fmt.Errorf("failed to get HLS directory: %w", err)
@@ -1379,10 +1421,6 @@ func (c *Controller) CleanupAllHLSStreams() error {
 				log.Printf("Failed to remove stream directory: %v", removeErr)
 			}
 		}
-	}
-
-	if runtime.GOOS == OSWindows {
-		securefs.CleanupNamedPipes()
 	}
 
 	return nil

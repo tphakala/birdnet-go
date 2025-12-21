@@ -124,29 +124,13 @@ func TestInitIntegrationsRoutesRegistration(t *testing.T) {
 	// Re-initialize the routes to ensure a clean state
 	controller.initIntegrationsRoutes()
 
-	// Get all routes from the Echo instance
-	routes := e.Routes()
-
-	// Define the integration routes we expect to find
-	expectedRoutes := map[string]bool{
-		"GET /api/v2/integrations/mqtt/status":        false,
-		"POST /api/v2/integrations/mqtt/test":         false,
-		"GET /api/v2/integrations/birdweather/status": false,
-		"POST /api/v2/integrations/birdweather/test":  false,
-	}
-
-	// Check each route
-	for _, r := range routes {
-		routePath := r.Method + " " + r.Path
-		if _, exists := expectedRoutes[routePath]; exists {
-			expectedRoutes[routePath] = true
-		}
-	}
-
-	// Verify that all expected routes were registered
-	for route, found := range expectedRoutes {
-		assert.True(t, found, "Integration route not registered: %s", route)
-	}
+	// Verify expected integration routes are registered
+	assertRoutesRegistered(t, e, []string{
+		"GET /api/v2/integrations/mqtt/status",
+		"POST /api/v2/integrations/mqtt/test",
+		"GET /api/v2/integrations/birdweather/status",
+		"POST /api/v2/integrations/birdweather/test",
+	})
 }
 
 // MockMQTTClient is a mock implementation for MQTT client testing

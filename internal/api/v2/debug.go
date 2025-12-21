@@ -108,12 +108,10 @@ func (c *Controller) DebugTriggerError(ctx echo.Context) error {
 	err := testErr.Build()
 
 	// Log the error which will trigger telemetry if enabled
-	if c.apiLogger != nil {
-		c.apiLogger.Error("Debug error triggered", 
-			"error", err,
-			"component", req.Component,
-			"category", req.Category)
-	}
+	c.logErrorIfEnabled("Debug error triggered",
+		"error", err,
+		"component", req.Component,
+		"category", req.Category)
 
 	response := DebugResponse{
 		Success: true,

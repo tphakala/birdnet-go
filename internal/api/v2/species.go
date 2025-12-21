@@ -54,6 +54,38 @@ type SpeciesRarityInfo struct {
 	ThresholdApplied float64      `json:"threshold_applied"`
 }
 
+// taxonomyLookupResult holds the result of a taxonomy lookup with source info.
+type taxonomyLookupResult struct {
+	tree   *ebird.TaxonomyTree
+	source string
+}
+
+// lookupTaxonomyTree attempts to find taxonomy for a species, trying local DB first then eBird.
+// Returns nil result (not error) if taxonomy is unavailable from both sources.
+func (c *Controller) lookupTaxonomyTree(ctx context.Context, scientificName string) *taxonomyLookupResult {
+	// Try local taxonomy database first (fast, no network)
+	if c.TaxonomyDB != nil {
+		tree, err := c.TaxonomyDB.BuildFamilyTree(scientificName)
+		if err == nil {
+			c.Debug("Retrieved taxonomy for %s from local database", scientificName)
+			return &taxonomyLookupResult{tree: tree, source: "local"}
+		}
+		c.Debug("Local taxonomy lookup failed for %s: %v, falling back to eBird API", scientificName, err)
+	}
+
+	// Fall back to eBird API
+	if c.EBirdClient != nil {
+		tree, err := c.EBirdClient.BuildFamilyTree(ctx, scientificName)
+		if err != nil {
+			c.Debug("Failed to get taxonomy info from eBird for species %s: %v", scientificName, err)
+			return nil
+		}
+		return &taxonomyLookupResult{tree: tree, source: "ebird"}
+	}
+
+	return nil
+}
+
 // initSpeciesRoutes registers all species-related API endpoints
 func (c *Controller) initSpeciesRoutes() {
 	// Public endpoints for species information
@@ -93,11 +125,7 @@ func (c *Controller) GetSpeciesInfo(ctx echo.Context) error {
 	// Get species info
 	speciesInfo, err := c.getSpeciesInfo(ctx.Request().Context(), scientificName)
 	if err != nil {
-		var enhancedErr *errors.EnhancedError
-		if errors.As(err, &enhancedErr) && enhancedErr.Category == errors.CategoryNotFound {
-			return c.HandleError(ctx, err, "Species not found", http.StatusNotFound)
-		}
-		return c.HandleError(ctx, err, "Failed to get species information", http.StatusInternalServerError)
+		return c.handleErrorWithNotFound(ctx, err, "Species not found", "Failed to get species information")
 	}
 
 	return ctx.JSON(http.StatusOK, speciesInfo)
@@ -154,36 +182,10 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 		info.Rarity = rarityInfo
 	}
 
-	// Get taxonomy/family tree information - try local database first, then eBird API
-	if c.TaxonomyDB != nil {
-		// Try local taxonomy database first (fast, no network)
-		taxonomyTree, err := c.TaxonomyDB.BuildFamilyTree(scientificName)
-		if err == nil {
-			info.Taxonomy = taxonomyTree
-			info.Metadata["source"] = "local"
-			c.Debug("Retrieved taxonomy for %s from local database", scientificName)
-		} else {
-			// Fall back to eBird API if local lookup fails
-			c.Debug("Local taxonomy lookup failed for %s: %v, falling back to eBird API", scientificName, err)
-			if c.EBirdClient != nil {
-				taxonomyTree, ebirdErr := c.EBirdClient.BuildFamilyTree(ctx, scientificName)
-				if ebirdErr != nil {
-					c.Debug("Failed to get taxonomy info from eBird for species %s: %v", scientificName, ebirdErr)
-				} else {
-					info.Taxonomy = taxonomyTree
-					info.Metadata["source"] = "ebird"
-				}
-			}
-		}
-	} else if c.EBirdClient != nil {
-		// No local database available, use eBird API directly
-		taxonomyTree, err := c.EBirdClient.BuildFamilyTree(ctx, scientificName)
-		if err != nil {
-			c.Debug("Failed to get taxonomy info from eBird for species %s: %v", scientificName, err)
-		} else {
-			info.Taxonomy = taxonomyTree
-			info.Metadata["source"] = "ebird"
-		}
+	// Get taxonomy/family tree information using fallback pattern
+	if result := c.lookupTaxonomyTree(ctx, scientificName); result != nil {
+		info.Taxonomy = result.tree
+		info.Metadata["source"] = result.source
 	}
 
 	return info, nil
@@ -319,11 +321,7 @@ func (c *Controller) GetSpeciesTaxonomy(ctx echo.Context) error {
 	// Get taxonomy info
 	taxonomyInfo, err := c.getDetailedTaxonomy(ctx.Request().Context(), scientificName, locale, includeSubspecies, includeHierarchy)
 	if err != nil {
-		var enhancedErr *errors.EnhancedError
-		if errors.As(err, &enhancedErr) && enhancedErr.Category == errors.CategoryNotFound {
-			return c.HandleError(ctx, err, "Species not found", http.StatusNotFound)
-		}
-		return c.HandleError(ctx, err, "Failed to get taxonomy information", http.StatusInternalServerError)
+		return c.handleErrorWithNotFound(ctx, err, "Species not found", "Failed to get taxonomy information")
 	}
 
 	return ctx.JSON(http.StatusOK, taxonomyInfo)
@@ -333,58 +331,8 @@ func (c *Controller) GetSpeciesTaxonomy(ctx echo.Context) error {
 // Tries local database first, falls back to eBird API if needed
 func (c *Controller) getDetailedTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies, includeHierarchy bool) (*TaxonomyInfo, error) {
 	// Try local taxonomy database first
-	if c.TaxonomyDB != nil {
-		taxonomyTree, err := c.TaxonomyDB.BuildFamilyTree(scientificName)
-		if err == nil {
-			// Successfully retrieved from local database
-			info := &TaxonomyInfo{
-				ScientificName: scientificName,
-				Metadata: map[string]any{
-					"source":     "local",
-					"updated_at": c.TaxonomyDB.UpdatedAt,
-				},
-			}
-
-			// Add hierarchy if requested
-			if includeHierarchy && taxonomyTree != nil {
-				info.Taxonomy = &TaxonomyHierarchy{
-					Kingdom:       taxonomyTree.Kingdom,
-					Phylum:        taxonomyTree.Phylum,
-					Class:         taxonomyTree.Class,
-					Order:         taxonomyTree.Order,
-					Family:        taxonomyTree.Family,
-					FamilyCommon:  taxonomyTree.FamilyCommon,
-					Genus:         taxonomyTree.Genus,
-					Species:       taxonomyTree.Species,
-					SpeciesCommon: taxonomyTree.SpeciesCommon,
-				}
-			}
-
-			// If subspecies requested or locale specified, try to enhance with eBird data
-			if (includeSubspecies || locale != "") && c.EBirdClient != nil {
-				c.Debug("Enhancing local taxonomy data with eBird API for subspecies/locale")
-				ebirdInfo, ebirdErr := c.getEBirdTaxonomy(ctx, scientificName, locale, includeSubspecies)
-				if ebirdErr == nil {
-					// Merge eBird subspecies data
-					if includeSubspecies && len(ebirdInfo.Subspecies) > 0 {
-						info.Subspecies = ebirdInfo.Subspecies
-					}
-					// Use eBird species code if available
-					if ebirdInfo.SpeciesCode != "" {
-						info.SpeciesCode = ebirdInfo.SpeciesCode
-					}
-					// Update metadata to indicate hybrid source
-					info.Metadata["source"] = "local+ebird"
-					if locale != "" {
-						info.Metadata["locale"] = locale
-					}
-				}
-			}
-
-			return info, nil
-		}
-		// Local lookup failed, will try eBird API below
-		c.Debug("Local taxonomy lookup failed for %s: %v, falling back to eBird API", scientificName, err)
+	if info := c.tryLocalTaxonomy(ctx, scientificName, locale, includeSubspecies, includeHierarchy); info != nil {
+		return info, nil
 	}
 
 	// Fall back to eBird API
@@ -399,6 +347,77 @@ func (c *Controller) getDetailedTaxonomy(ctx context.Context, scientificName, lo
 		Context("scientific_name", scientificName).
 		Component("api-species").
 		Build()
+}
+
+// tryLocalTaxonomy attempts to retrieve taxonomy from the local database.
+// Returns nil if local DB is unavailable or lookup fails.
+func (c *Controller) tryLocalTaxonomy(ctx context.Context, scientificName, locale string, includeSubspecies, includeHierarchy bool) *TaxonomyInfo {
+	if c.TaxonomyDB == nil {
+		return nil
+	}
+
+	taxonomyTree, err := c.TaxonomyDB.BuildFamilyTree(scientificName)
+	if err != nil {
+		c.Debug("Local taxonomy lookup failed for %s: %v, falling back to eBird API", scientificName, err)
+		return nil
+	}
+
+	info := &TaxonomyInfo{
+		ScientificName: scientificName,
+		Metadata: map[string]any{
+			"source":     "local",
+			"updated_at": c.TaxonomyDB.UpdatedAt,
+		},
+	}
+
+	// Add hierarchy if requested
+	if includeHierarchy && taxonomyTree != nil {
+		info.Taxonomy = convertToTaxonomyHierarchy(taxonomyTree)
+	}
+
+	// Enhance with eBird data if needed
+	c.enhanceWithEBirdData(ctx, info, scientificName, locale, includeSubspecies)
+
+	return info
+}
+
+// convertToTaxonomyHierarchy converts an ebird.TaxonomyTree to TaxonomyHierarchy.
+func convertToTaxonomyHierarchy(tree *ebird.TaxonomyTree) *TaxonomyHierarchy {
+	return &TaxonomyHierarchy{
+		Kingdom:       tree.Kingdom,
+		Phylum:        tree.Phylum,
+		Class:         tree.Class,
+		Order:         tree.Order,
+		Family:        tree.Family,
+		FamilyCommon:  tree.FamilyCommon,
+		Genus:         tree.Genus,
+		Species:       tree.Species,
+		SpeciesCommon: tree.SpeciesCommon,
+	}
+}
+
+// enhanceWithEBirdData adds subspecies and locale data from eBird API to local taxonomy info.
+func (c *Controller) enhanceWithEBirdData(ctx context.Context, info *TaxonomyInfo, scientificName, locale string, includeSubspecies bool) {
+	if c.EBirdClient == nil || (!includeSubspecies && locale == "") {
+		return
+	}
+
+	c.Debug("Enhancing local taxonomy data with eBird API for subspecies/locale")
+	ebirdInfo, err := c.getEBirdTaxonomy(ctx, scientificName, locale, includeSubspecies)
+	if err != nil {
+		return
+	}
+
+	if includeSubspecies && len(ebirdInfo.Subspecies) > 0 {
+		info.Subspecies = ebirdInfo.Subspecies
+	}
+	if ebirdInfo.SpeciesCode != "" {
+		info.SpeciesCode = ebirdInfo.SpeciesCode
+	}
+	info.Metadata["source"] = "local+ebird"
+	if locale != "" {
+		info.Metadata["locale"] = locale
+	}
 }
 
 // getEBirdTaxonomy retrieves taxonomy information from eBird API
@@ -508,13 +527,11 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 	}
 
 	// Log the request if API logger is available
-	if c.apiLogger != nil {
-		c.apiLogger.Debug("Retrieving thumbnail for species code",
-			"species_code", speciesCode,
-			"ip", ctx.RealIP(),
-			"path", ctx.Request().URL.Path,
-		)
-	}
+	c.logDebugIfEnabled("Retrieving thumbnail for species code",
+		"species_code", speciesCode,
+		"ip", ctx.RealIP(),
+		"path", ctx.Request().URL.Path,
+	)
 
 	// Check if BirdNET processor is available
 	if c.Processor == nil || c.Processor.Bn == nil {
@@ -577,15 +594,13 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 	}
 
 	// Log successful retrieval
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Successfully retrieved thumbnail",
-			"species_code", speciesCode,
-			"scientific_name", scientificName,
-			"image_url", birdImage.URL,
-			"ip", ctx.RealIP(),
-			"path", ctx.Request().URL.Path,
-		)
-	}
+	c.logInfoIfEnabled("Successfully retrieved thumbnail",
+		"species_code", speciesCode,
+		"scientific_name", scientificName,
+		"image_url", birdImage.URL,
+		"ip", ctx.RealIP(),
+		"path", ctx.Request().URL.Path,
+	)
 
 	// Redirect to the image URL
 	return ctx.Redirect(http.StatusFound, birdImage.URL)
