@@ -1078,7 +1078,7 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 		}()
 
 		// Use controller context (respects shutdown signals) with timeout
-		bgCtx, cancel := context.WithTimeout(c.ctx, 5*time.Minute)
+		bgCtx, cancel := context.WithTimeout(c.ctx, spectrogramGenerationTimeout)
 		defer cancel()
 
 		spectrogramPath, err := c.generateSpectrogram(bgCtx, clipPath, params.width, params.raw)
@@ -1138,6 +1138,17 @@ const semaphoreAcquireTimeout = 30 * time.Second
 // spectrogramRetryAfterSeconds is the suggested retry delay in seconds for 503 responses
 // when audio files are not yet ready for processing
 const spectrogramRetryAfterSeconds = "2"
+
+// Spectrogram generation timing and cache constants
+const (
+	spectrogramGenerationTimeout = 5 * time.Minute  // Max time for async spectrogram generation
+	spectrogramRetryDelay        = 2 * time.Second  // Default retry delay for validation errors
+	ffprobeDurationTimeout       = 3 * time.Second  // Timeout for ffprobe duration queries
+	failedStatusRetentionTime    = 30 * time.Second // How long to retain failed statuses for polling
+	ffprobeCacheMaxEntries       = 100              // Maximum entries in ffprobe cache before cleanup
+	spectrogramVerifyRetries     = 3                // Number of verification retries after generation
+	spectrogramVerifyBaseDelay   = 50               // Base delay in milliseconds for verification retries
+)
 
 var (
 	spectrogramSemaphore = make(chan struct{}, maxConcurrentSpectrograms)
@@ -1387,7 +1398,7 @@ func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath
 			"validation_duration_ms", validationDuration.Milliseconds(),
 			"spectrogram_key", spectrogramKey)
 		return nil, &AudioNotReadyError{
-			RetryAfter: 2 * time.Second, // Default retry for validation errors
+			RetryAfter: spectrogramRetryDelay, // Default retry for validation errors
 			Err:        fmt.Errorf("%w: %w", myaudio.ErrAudioFileNotReady, err),
 		}
 	}
@@ -1446,7 +1457,7 @@ func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath
 	// Cache the successful validation result
 	ffprobeCache.Lock()
 	// Clean old entries if cache is getting large
-	if len(ffprobeCache.validation) > 100 {
+	if len(ffprobeCache.validation) > ffprobeCacheMaxEntries {
 		now := time.Now()
 		for k, v := range ffprobeCache.validation {
 			if now.Sub(v.timestamp) > 5*time.Minute {
@@ -1464,7 +1475,7 @@ func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath
 	// Also cache the duration value for GetAudioDuration calls
 	if validationResult.Duration > 0 {
 		// Clean duration cache if needed
-		if len(ffprobeCache.duration) > 100 {
+		if len(ffprobeCache.duration) > ffprobeCacheMaxEntries {
 			now := time.Now()
 			for k, v := range ffprobeCache.duration {
 				if now.Sub(v.timestamp) > 5*time.Minute {
@@ -1519,7 +1530,7 @@ func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
 		"audio_path", audioPath)
 
 	// Use a timeout context to prevent hanging
-	durationCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	durationCtx, cancel := context.WithTimeout(ctx, ffprobeDurationTimeout)
 	defer cancel()
 
 	duration, err := myaudio.GetAudioDuration(durationCtx, audioPath)
@@ -1533,7 +1544,7 @@ func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
 	// Cache the result
 	ffprobeCache.Lock()
 	// Clean old entries if cache is getting large
-	if len(ffprobeCache.duration) > 100 {
+	if len(ffprobeCache.duration) > ffprobeCacheMaxEntries {
 		now := time.Now()
 		for k, v := range ffprobeCache.duration {
 			if now.Sub(v.timestamp) > 5*time.Minute {
@@ -1725,9 +1736,9 @@ func (c *Controller) cleanupQueueStatus(spectrogramKey string) {
 	if statusValue, ok := spectrogramQueue.Load(spectrogramKey); ok {
 		if status, ok := statusValue.(*SpectrogramQueueStatus); ok {
 			if status.GetStatus() == spectrogramStatusFailed {
-				// Keep failed status for 30 seconds so clients can poll and see the error
+				// Keep failed status for a brief period so clients can poll and see the error
 				// After that, clean it up automatically
-				time.AfterFunc(30*time.Second, func() {
+				time.AfterFunc(failedStatusRetentionTime, func() {
 					spectrogramQueue.Delete(spectrogramKey)
 					getSpectrogramLogger().Debug("Cleaned up failed spectrogram status after TTL",
 						"spectrogram_key", spectrogramKey)
@@ -1849,7 +1860,7 @@ func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectr
 	// We'll use a direct filesystem check because os.Root may have issues with newly created files
 	// Retry a few times to handle filesystem sync delays
 	var statErr error
-	for i := range 3 {
+	for i := range spectrogramVerifyRetries {
 		// Try direct filesystem check first (more reliable for newly created files)
 		if _, err := os.Stat(absSpectrogramPath); err == nil {
 			getSpectrogramLogger().Debug("Spectrogram verified via direct filesystem check",
@@ -1876,9 +1887,9 @@ func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectr
 			break
 		}
 
-		if i < 2 {
+		if i < spectrogramVerifyRetries-1 {
 			// Wait a bit for filesystem to sync (50ms, then 100ms)
-			time.Sleep(time.Duration((i+1)*50) * time.Millisecond)
+			time.Sleep(time.Duration((i+1)*spectrogramVerifyBaseDelay) * time.Millisecond)
 			getSpectrogramLogger().Debug("Retrying spectrogram verification",
 				"abs_path", absSpectrogramPath,
 				"rel_path", relSpectrogramPath,

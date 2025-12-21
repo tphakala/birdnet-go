@@ -19,6 +19,16 @@ import (
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
+// Detection constants (file-local)
+const (
+	detectionCacheExpiry   = 5 * time.Minute  // Default cache expiration
+	detectionCacheCleanup  = 10 * time.Minute // Cache cleanup interval
+	defaultNumResults      = 100              // Default number of results
+	maxNumResults          = 1000             // Maximum number of results
+	sunEventWindowMinutes  = 30               // Minutes before/after sunrise/sunset
+	minHourRangeParts      = 2                // Minimum parts for hour range parsing
+)
+
 // Regex to validate YYYY-MM-DD format and check for unwanted characters
 var validDateRegex = regexp.MustCompile(`^(\d{4})-(\d{2})-(\d{2})$`)
 
@@ -51,7 +61,7 @@ func validateDateParam(dateStr, paramName string) error {
 // initDetectionRoutes registers all detection-related API endpoints
 func (c *Controller) initDetectionRoutes() {
 	// Initialize the cache with a 5-minute default expiration and 10-minute cleanup interval
-	c.detectionCache = cache.New(5*time.Minute, 10*time.Minute)
+	c.detectionCache = cache.New(detectionCacheExpiry, detectionCacheCleanup)
 
 	// Detection endpoints - publicly accessible
 	//
@@ -177,7 +187,7 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 		Location:   ctx.QueryParam("location"),
 		Locked:     ctx.QueryParam("locked"),
 		// Include weather data
-		IncludeWeather: ctx.QueryParam("includeWeather") == "true",
+		IncludeWeather: ctx.QueryParam("includeWeather") == QueryValueTrue,
 	}
 
 	// Parse duration
@@ -261,7 +271,7 @@ func (c *Controller) validateDateParameters(startDateStr, endDateStr string, ctx
 // parseNumResults parses and validates the numResults parameter
 func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
 	if numResultsStr == "" {
-		return 100, nil // Default value
+		return defaultNumResults, nil // Default value
 	}
 
 	log.Printf("[DEBUG] GetDetections: Raw numResults string: '%s'", numResultsStr)
@@ -293,7 +303,7 @@ func (c *Controller) parseNumResults(numResultsStr string) (int, error) {
 		return 0, errors.NewStd("numResults must be greater than zero")
 	}
 
-	if numResults > 1000 {
+	if numResults > maxNumResults {
 		log.Printf("[DEBUG] GetDetections: Too large numResults value: %d", numResults)
 		// Log the enhanced error for telemetry while returning a simpler error for HTTP response
 		// This pattern allows detailed internal tracking without exposing complex error structures to API clients
@@ -564,12 +574,12 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 // mapVerificationStatus maps the database verification status to API response format
 func (c *Controller) mapVerificationStatus(status string) string {
 	switch status {
-	case "correct":
-		return "correct"
-	case "false_positive":
-		return "false_positive"
+	case VerificationStatusCorrect:
+		return VerificationStatusCorrect
+	case VerificationStatusFalsePositive:
+		return VerificationStatusFalsePositive
 	default:
-		return "unverified"
+		return VerificationStatusUnverified
 	}
 }
 
@@ -752,7 +762,7 @@ func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) (
 		if confValue, err := strconv.ParseFloat(value, 64); err == nil {
 			filters.Confidence = &datastore.ConfidenceFilter{
 				Operator: operator,
-				Value:    confValue / 100.0, // Convert percentage to decimal
+				Value:    confValue / PercentageMultiplier, // Convert percentage to decimal
 			}
 		}
 	}
@@ -772,7 +782,7 @@ func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) (
 		if strings.Contains(hourParam, "-") {
 			// Range format: "6-9"
 			parts := strings.Split(hourParam, "-")
-			if len(parts) == 2 {
+			if len(parts) == minHourRangeParts {
 				if start, err := strconv.Atoi(parts[0]); err == nil {
 					if end, err := strconv.Atoi(parts[1]); err == nil {
 						filters.Hour = &datastore.HourFilter{
@@ -821,13 +831,13 @@ func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) (
 
 	// Parse verified filter
 	if params.Verified != "" {
-		verified := params.Verified == "true" || params.Verified == "human"
+		verified := params.Verified == QueryValueTrue || params.Verified == "human"
 		filters.Verified = &verified
 	}
 
 	// Parse locked filter
 	if params.Locked != "" {
-		locked := params.Locked == "true"
+		locked := params.Locked == QueryValueTrue
 		filters.Locked = &locked
 	}
 
@@ -989,7 +999,7 @@ func (c *Controller) GetRecentDetections(ctx echo.Context) error {
 	}
 
 	// Check if weather data should be included
-	includeWeather := ctx.QueryParam("includeWeather") == "true"
+	includeWeather := ctx.QueryParam("includeWeather") == QueryValueTrue
 
 	notes, err := c.DS.GetLastDetections(limit)
 	if err != nil {
@@ -1448,10 +1458,10 @@ func calculateTimeOfDay(detectionTime time.Time, sunEvents *suncalc.SunEventTime
 	sunsetTime := sunEvents.Sunset.Format("15:04:05")
 
 	// Define sunrise/sunset window (30 minutes before and after)
-	sunriseStart := sunEvents.Sunrise.Add(-30 * time.Minute).Format("15:04:05")
-	sunriseEnd := sunEvents.Sunrise.Add(30 * time.Minute).Format("15:04:05")
-	sunsetStart := sunEvents.Sunset.Add(-30 * time.Minute).Format("15:04:05")
-	sunsetEnd := sunEvents.Sunset.Add(30 * time.Minute).Format("15:04:05")
+	sunriseStart := sunEvents.Sunrise.Add(-sunEventWindowMinutes * time.Minute).Format("15:04:05")
+	sunriseEnd := sunEvents.Sunrise.Add(sunEventWindowMinutes * time.Minute).Format("15:04:05")
+	sunsetStart := sunEvents.Sunset.Add(-sunEventWindowMinutes * time.Minute).Format("15:04:05")
+	sunsetEnd := sunEvents.Sunset.Add(sunEventWindowMinutes * time.Minute).Format("15:04:05")
 
 	switch {
 	case detTime >= sunriseStart && detTime <= sunriseEnd:
@@ -1474,10 +1484,10 @@ func (c *Controller) getWeatherUnits() string {
 
 	// Check the weather provider
 	switch c.Settings.Realtime.Weather.Provider {
-	case "openweather":
+	case WeatherProviderOpenWeather:
 		// Return the configured units for OpenWeather
 		return c.Settings.Realtime.Weather.OpenWeather.Units
-	case "wunderground":
+	case WeatherProviderWunderground:
 		// Map Wunderground units to frontend-compatible values
 		// "e" = imperial (Fahrenheit), "m" = metric (Celsius), "h" = hybrid (Celsius temp, mph wind)
 		switch c.Settings.Realtime.Weather.Wunderground.Units {
@@ -1485,16 +1495,16 @@ func (c *Controller) getWeatherUnits() string {
 			return "imperial"
 		case "m", "h":
 			// Both metric and hybrid use Celsius for temperature
-			return "metric"
+			return WeatherUnitMetric
 		default:
 			// Default to imperial if unknown (Wunderground defaults to "e")
 			return "imperial"
 		}
-	case "yrno":
+	case WeatherProviderYrno:
 		// yr.no always provides metric units
-		return "metric"
+		return WeatherUnitMetric
 	default:
 		// Default to metric if provider is unknown
-		return "metric"
+		return WeatherUnitMetric
 	}
 }

@@ -16,6 +16,8 @@ import (
 const (
 	taxonomyCacheControl = "public, max-age=86400"
 	taxonomyVary         = "Accept-Encoding"
+	minGenusNameLength   = 2 // Minimum length for genus names
+	minFamilyNameLength  = 3 // Minimum length for family names
 )
 
 // GenusSpeciesResponse represents the response for genus species lookup
@@ -65,7 +67,7 @@ func (c *Controller) GetGenusSpecies(ctx echo.Context) error {
 
 	// Validate genus name format (basic validation)
 	genus = strings.TrimSpace(genus)
-	if len(genus) < 2 {
+	if len(genus) < minGenusNameLength {
 		return c.HandleError(ctx, errors.Newf("invalid genus name format").
 			Category(errors.CategoryValidation).
 			Context("genus", genus).
@@ -116,7 +118,7 @@ func (c *Controller) GetFamilySpecies(ctx echo.Context) error {
 
 	// Validate family name format (basic validation)
 	family = strings.TrimSpace(family)
-	if len(family) < 3 {
+	if len(family) < minFamilyNameLength {
 		return c.HandleError(ctx, errors.Newf("invalid family name format").
 			Category(errors.CategoryValidation).
 			Context("family", family).

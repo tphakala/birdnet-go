@@ -9,13 +9,13 @@ func (c *Controller) SendToast(message, toastType string, duration int) error {
 	// Map string toast type to notification.ToastType
 	var notifToastType notification.ToastType
 	switch toastType {
-	case "success":
+	case ToastTypeSuccess:
 		notifToastType = notification.ToastTypeSuccess
-	case "error":
+	case ToastTypeError:
 		notifToastType = notification.ToastTypeError
-	case "warning":
+	case ToastTypeWarning:
 		notifToastType = notification.ToastTypeWarning
-	case "info":
+	case ToastTypeInfo:
 		notifToastType = notification.ToastTypeInfo
 	default:
 		notifToastType = notification.ToastTypeInfo

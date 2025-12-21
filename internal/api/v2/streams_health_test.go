@@ -10,6 +10,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
+// Test error type constant for connection timeout scenarios
+const testErrorTypeTimeout = "connection_timeout"
+
 // TestCreateHealthSnapshot tests the createHealthSnapshot function
 func TestCreateHealthSnapshot(t *testing.T) {
 	t.Run("healthy stream with all fields populated", func(t *testing.T) {
@@ -79,7 +82,7 @@ func TestCreateHealthSnapshot(t *testing.T) {
 			IsReceivingData:    false,
 			TotalBytesReceived: 512,
 			LastErrorContext: &myaudio.ErrorContext{
-				ErrorType: "connection_timeout",
+				ErrorType: testErrorTypeTimeout,
 			},
 		}
 
@@ -87,7 +90,7 @@ func TestCreateHealthSnapshot(t *testing.T) {
 
 		assert.Equal(t, "backoff", snapshot.ProcessState)
 		assert.Equal(t, 3, snapshot.RestartCount)
-		assert.Equal(t, "connection_timeout", snapshot.LastErrorType)
+		assert.Equal(t, testErrorTypeTimeout, snapshot.LastErrorType)
 	})
 }
 
@@ -147,7 +150,7 @@ func TestHasHealthChanged(t *testing.T) {
 			TotalBytesReceived: 1024,
 		}
 		current := prev
-		current.LastErrorType = "connection_timeout"
+		current.LastErrorType = testErrorTypeTimeout
 
 		assert.True(t, hasHealthChanged(prev, current))
 	})
@@ -156,7 +159,7 @@ func TestHasHealthChanged(t *testing.T) {
 		prev := streamHealthSnapshot{
 			IsHealthy:          false,
 			ProcessState:       "backoff",
-			LastErrorType:      "connection_timeout",
+			LastErrorType:      testErrorTypeTimeout,
 			RestartCount:       3,
 			IsReceivingData:    false,
 			TotalBytesReceived: 1024,
@@ -246,7 +249,7 @@ func TestDetermineEventType(t *testing.T) {
 		prev := streamHealthSnapshot{
 			IsHealthy:       false,
 			ProcessState:    "running",
-			LastErrorType:   "connection_timeout",
+			LastErrorType:   testErrorTypeTimeout,
 			RestartCount:    2,
 			IsReceivingData: false,
 		}
@@ -269,7 +272,7 @@ func TestDetermineEventType(t *testing.T) {
 		}
 		current := prev
 		current.IsHealthy = false
-		current.LastErrorType = "connection_timeout"
+		current.LastErrorType = testErrorTypeTimeout
 
 		eventType := determineEventType(prev, current)
 		assert.Equal(t, "health_degraded", eventType)
@@ -284,7 +287,7 @@ func TestDetermineEventType(t *testing.T) {
 			IsReceivingData: true,
 		}
 		current := prev
-		current.LastErrorType = "connection_timeout"
+		current.LastErrorType = testErrorTypeTimeout
 
 		eventType := determineEventType(prev, current)
 		assert.Equal(t, "error_detected", eventType)
@@ -294,7 +297,7 @@ func TestDetermineEventType(t *testing.T) {
 		prev := streamHealthSnapshot{
 			IsHealthy:       false,
 			ProcessState:    "running",
-			LastErrorType:   "connection_timeout",
+			LastErrorType:   testErrorTypeTimeout,
 			RestartCount:    1,
 			IsReceivingData: false,
 		}
@@ -309,7 +312,7 @@ func TestDetermineEventType(t *testing.T) {
 		prev := streamHealthSnapshot{
 			IsHealthy:       false,
 			ProcessState:    "running",
-			LastErrorType:   "connection_timeout",
+			LastErrorType:   testErrorTypeTimeout,
 			RestartCount:    2,
 			IsReceivingData: false,
 		}
@@ -568,7 +571,7 @@ func TestConvertErrorContextToResponse(t *testing.T) {
 		now := time.Now()
 		timeout := 10 * time.Second
 		errCtx := &myaudio.ErrorContext{
-			ErrorType:       "connection_timeout",
+			ErrorType:       testErrorTypeTimeout,
 			PrimaryMessage:  "Connection timed out after 10s",
 			UserFacingMsg:   "Connection timeout",
 			TroubleShooting: []string{"Check network", "Verify URL"},
@@ -583,7 +586,7 @@ func TestConvertErrorContextToResponse(t *testing.T) {
 		response := convertErrorContextToResponse(errCtx)
 
 		assert.NotNil(t, response)
-		assert.Equal(t, "connection_timeout", response.ErrorType)
+		assert.Equal(t, testErrorTypeTimeout, response.ErrorType)
 		assert.Equal(t, "Connection timed out after 10s", response.PrimaryMessage)
 		assert.Equal(t, "Connection timeout", response.UserFacingMessage)
 		assert.Len(t, response.TroubleshootingSteps, 2)

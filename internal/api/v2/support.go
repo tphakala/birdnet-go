@@ -15,6 +15,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
+// Support constants (file-local)
+const (
+	supportLogDurationWeeks = 4                 // Weeks of logs to collect
+	supportMaxLogSizeMB     = 50                // Maximum log size in MB
+	supportBytesPerKB       = 1024              // Bytes per kilobyte
+	supportBytesPerMB       = 1024 * 1024       // Bytes per megabyte
+)
+
 // GenerateSupportDumpRequest represents the request for generating a support dump
 type GenerateSupportDumpRequest struct {
 	IncludeLogs       bool   `json:"include_logs"`
@@ -90,8 +98,8 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		IncludeLogs:       req.IncludeLogs,
 		IncludeConfig:     req.IncludeConfig,
 		IncludeSystemInfo: req.IncludeSystemInfo,
-		LogDuration:       4 * 7 * 24 * time.Hour, // 4 weeks
-		MaxLogSize:        50 * 1024 * 1024,       // 50MB to accommodate more logs
+		LogDuration:       supportLogDurationWeeks * daysPerWeek * HoursPerDay * time.Hour, // 4 weeks
+		MaxLogSize:        supportMaxLogSizeMB * supportBytesPerMB,                       // 50MB to accommodate more logs
 		ScrubSensitive:    true,
 	}
 
@@ -177,7 +185,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	if !req.UploadToSentry {
 		// Store temporarily for download
 		tempFile := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-go-support-%s.zip", dump.ID))
-		if err := os.WriteFile(tempFile, archiveData, 0o600); err != nil {
+		if err := os.WriteFile(tempFile, archiveData, FilePermOwnerOnly); err != nil {
 			c.apiLogger.Error("Failed to store temporary file",
 				"error", err,
 				"path", tempFile,

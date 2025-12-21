@@ -34,6 +34,14 @@ const (
 	rateLimitBurst             = 15 // Rate limit burst allowance (increased to handle quick navigation)
 )
 
+// Test notification constants
+const (
+	testNotificationConfidence    = 0.99    // Test confidence value for new species notification
+	testNotificationLatitude      = 42.3601 // Test latitude (Boston, MA) for new species notification
+	testNotificationLongitude     = -71.0589 // Test longitude (Boston, MA) for new species notification
+	newSpeciesNotificationExpiry  = 24      // Hours until new species notification expires
+)
+
 // SSENotificationData represents notification data sent via SSE
 type SSENotificationData struct {
 	*notification.Notification
@@ -681,12 +689,12 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 	testTemplateData := &notification.TemplateData{
 		CommonName:         "Test Bird Species",
 		ScientificName:     "Testus birdicus",
-		Confidence:         0.99,
+		Confidence:         testNotificationConfidence,
 		ConfidencePercent:  "99",
 		DetectionTime:      detectionTime,
 		DetectionDate:      now.Format("2006-01-02"),
-		Latitude:           42.3601,
-		Longitude:          -71.0589,
+		Latitude:           testNotificationLatitude,
+		Longitude:          testNotificationLongitude,
 		Location:           "Test Location (Sample Data)",
 		DetectionID:        "test",
 		DetectionPath:      "/ui/detections/test",
@@ -750,7 +758,7 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 		WithMetadata("is_new_species", true).
 		WithMetadata("days_since_first_seen", testTemplateData.DaysSinceFirstSeen).
 		WithMetadata("note_id", 1).
-		WithExpiry(24 * time.Hour) // New species notifications expire after 24 hours
+		WithExpiry(newSpeciesNotificationExpiry * time.Hour) // New species notifications expire after 24 hours
 
 	// Expose all TemplateData fields with bg_ prefix for use in provider templates
 	// This ensures test notifications have the same metadata as real detections

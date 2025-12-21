@@ -14,6 +14,13 @@ import (
 	"gorm.io/gorm"
 )
 
+// Weather constants (file-local)
+const (
+	timePeriodNight        = "Night"
+	minTimeStringLength    = 2  // Minimum length for parsing hour from time string
+	weatherSunWindowMinute = 30 // Minutes before/after sunrise/sunset for weather
+)
+
 // DailyWeatherResponse represents the API response for daily weather data
 type DailyWeatherResponse struct {
 	Date     string    `json:"date"`
@@ -431,7 +438,7 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 	} else if len(hourlyWeatherList) > 0 {
 		// Fallback if detectionTime parsing failed but we have hourly data: try matching by hour string
 		hourStr := ""
-		if len(note.Time) >= 2 {
+		if len(note.Time) >= minTimeStringLength {
 			hourStr = note.Time[:2]
 		}
 		requestedHour, convErr := strconv.Atoi(hourStr)
@@ -466,7 +473,7 @@ func (c *Controller) GetWeatherForDetection(ctx echo.Context) error {
 // determineTimeOfDayForDetection calculates the time of day string ("Day", "Night", etc.)
 // It returns the parsed detection time, the calculated timeOfDay string, and any error during parsing or calculation.
 func (c *Controller) determineTimeOfDayForDetection(note *datastore.Note, date, detectionID string) (*time.Time, string, error) {
-	timeOfDay := "Night" // Default
+	timeOfDay := timePeriodNight // Default
 
 	detectionTimeStr := date + " " + note.Time
 	loc := time.Local // Assuming detection times are stored relative to local server time
@@ -657,10 +664,10 @@ func (c *Controller) calculateTimeOfDay(detectionTime time.Time, sunEvents *sunc
 	sunsetTime := sunEvents.Sunset.Format("15:04:05")
 
 	// Define sunrise/sunset window (30 minutes before and after)
-	sunriseStart := sunEvents.Sunrise.Add(-30 * time.Minute).Format("15:04:05")
-	sunriseEnd := sunEvents.Sunrise.Add(30 * time.Minute).Format("15:04:05")
-	sunsetStart := sunEvents.Sunset.Add(-30 * time.Minute).Format("15:04:05")
-	sunsetEnd := sunEvents.Sunset.Add(30 * time.Minute).Format("15:04:05")
+	sunriseStart := sunEvents.Sunrise.Add(-weatherSunWindowMinute * time.Minute).Format("15:04:05")
+	sunriseEnd := sunEvents.Sunrise.Add(weatherSunWindowMinute * time.Minute).Format("15:04:05")
+	sunsetStart := sunEvents.Sunset.Add(-weatherSunWindowMinute * time.Minute).Format("15:04:05")
+	sunsetEnd := sunEvents.Sunset.Add(weatherSunWindowMinute * time.Minute).Format("15:04:05")
 
 	switch {
 	case detTime >= sunriseStart && detTime <= sunriseEnd:
@@ -670,7 +677,7 @@ func (c *Controller) calculateTimeOfDay(detectionTime time.Time, sunEvents *sunc
 	case detTime >= sunriseTime && detTime < sunsetTime:
 		return "Day"
 	default:
-		return "Night"
+		return timePeriodNight
 	}
 }
 

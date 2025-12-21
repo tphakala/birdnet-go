@@ -39,6 +39,17 @@ const (
 	hlsVerboseEnvVar       = "HLS_VERBOSE_LOGGING" // Environment variable to enable verbose logging
 	hlsVerboseTimeout      = 5 * time.Minute       // Verbose logging window at startup
 	hlsClientLogRetention  = 24 * time.Hour        // Retention period for client log timestamps
+
+	// Audio encoding
+	hlsMinSegments        = 2     // Minimum HLS segments required
+	hlsDefaultSegmentLen  = 2     // Default HLS segment length in seconds
+	hlsMinSegmentLen      = 1     // Minimum HLS segment length in seconds
+	hlsMaxSegmentLen      = 30    // Maximum HLS segment length in seconds
+	hlsAudioBitDepth      = 16    // Audio bit depth for encoding
+	hlsMinBitrate         = 16    // Minimum audio bitrate in kbps
+	hlsMaxBitrate         = 320   // Maximum audio bitrate in kbps
+	hlsDefaultSampleRate  = 48000 // Default audio sample rate in Hz
+	hlsCleanupDelay       = 5     // Delay in seconds before cleanup
 )
 
 // HLSStreamInfo contains information about an active HLS streaming session
@@ -146,7 +157,7 @@ func (c *Controller) StartHLSStream(ctx echo.Context) error {
 	clientID := c.generateClientID(ctx)
 
 	// Check for force restart query param
-	forceRestart := ctx.QueryParam("force") == "true"
+	forceRestart := ctx.QueryParam("force") == QueryValueTrue
 
 	c.logAPIRequest(ctx, slog.LevelInfo, "HLS stream start requested",
 		"source_id", privacy.SanitizeRTSPUrl(sourceID),
@@ -297,7 +308,7 @@ func (c *Controller) HLSHeartbeat(ctx echo.Context) error {
 	clientID := c.generateClientID(ctx)
 
 	// Handle disconnection announcements
-	if ctx.QueryParam("disconnect") == "true" || ctx.QueryParam("status") == "disconnect" {
+	if ctx.QueryParam("disconnect") == QueryValueTrue || ctx.QueryParam("status") == "disconnect" {
 		return c.handleHLSDisconnect(ctx, heartbeat.SourceID, clientID)
 	}
 
@@ -537,10 +548,10 @@ func (c *Controller) setHLSHeaders(ctx echo.Context) {
 func (c *Controller) getEffectiveSegmentLength() int {
 	segmentLength := c.Settings.WebServer.LiveStream.SegmentLength
 	switch {
-	case segmentLength < 1:
-		return 2 // Default
-	case segmentLength > 30:
-		return 30
+	case segmentLength < hlsMinSegmentLen:
+		return hlsDefaultSegmentLen // Default
+	case segmentLength > hlsMaxSegmentLen:
+		return hlsMaxSegmentLen
 	default:
 		return segmentLength
 	}
@@ -627,7 +638,7 @@ func (c *Controller) getOrCreateHLSStream(_ context.Context, sourceID string) (*
 
 	// Determine reader path based on platform
 	readerPath := fifoPath
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == OSWindows {
 		readerPath = pipeName
 	}
 
@@ -639,7 +650,7 @@ func (c *Controller) getOrCreateHLSStream(_ context.Context, sourceID string) (*
 	}
 
 	// Setup Windows-specific stdin pipe handling
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == OSWindows {
 		if err := c.setupWindowsAudioFeed(streamCtx, sourceID, cmd); err != nil {
 			streamCancel()
 			return nil, err
@@ -701,7 +712,7 @@ func (c *Controller) getOrCreateHLSStream(_ context.Context, sourceID string) (*
 	c.updateHLSActivity(sourceID, "", "stream_creation")
 
 	// Start audio feed (non-Windows platforms)
-	if runtime.GOOS != "windows" {
+	if runtime.GOOS != OSWindows {
 		go c.feedAudioToFFmpeg(sourceID, stream.FifoPipe, stream.ctx)
 	}
 
@@ -735,7 +746,7 @@ func (c *Controller) prepareHLSDirectory(secFS *securefs.SecureFS, hlsBaseDir, f
 	}
 
 	// Create directory
-	if err := secFS.MkdirAll(outputDir, 0o755); err != nil {
+	if err := secFS.MkdirAll(outputDir, FilePermExecutable); err != nil {
 		return "", "", fmt.Errorf("failed to create HLS directory: %w", err)
 	}
 
@@ -781,33 +792,33 @@ func (c *Controller) buildFFmpegArgs(inputSource, outputDir, playlistPath string
 	bitrate := 128
 	if settings.BitRate > 0 {
 		switch {
-		case settings.BitRate < 16:
-			bitrate = 16
-		case settings.BitRate > 320:
-			bitrate = 320
+		case settings.BitRate < hlsMinBitrate:
+			bitrate = hlsMinBitrate
+		case settings.BitRate > hlsMaxBitrate:
+			bitrate = hlsMaxBitrate
 		default:
 			bitrate = settings.BitRate
 		}
 	}
 
-	sampleRate := 48000
+	sampleRate := hlsDefaultSampleRate
 	if settings.SampleRate > 0 {
 		sampleRate = settings.SampleRate
 	}
 
-	segmentLength := 2
+	segmentLength := hlsDefaultSegmentLen
 	if settings.SegmentLength > 0 {
 		switch {
-		case settings.SegmentLength < 1:
-			segmentLength = 1
-		case settings.SegmentLength > 30:
-			segmentLength = 30
+		case settings.SegmentLength < hlsMinSegmentLen:
+			segmentLength = hlsMinSegmentLen
+		case settings.SegmentLength > hlsMaxSegmentLen:
+			segmentLength = hlsMaxSegmentLen
 		default:
 			segmentLength = settings.SegmentLength
 		}
 	}
 
-	logLevel := "warning"
+	logLevel := LogLevelWarning
 	if settings.FfmpegLogLevel != "" {
 		logLevel = settings.FfmpegLogLevel
 	}
@@ -898,7 +909,7 @@ func (c *Controller) setupFFmpegLogging(secFS *securefs.SecureFS, cmd *exec.Cmd,
 		return nil, fmt.Errorf("security error: log file path outside HLS base")
 	}
 
-	logFile, err := secFS.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	logFile, err := secFS.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, FilePermReadWrite)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ffmpeg log file: %w", err)
 	}
@@ -919,7 +930,7 @@ func (c *Controller) setupFFmpegLogging(secFS *securefs.SecureFS, cmd *exec.Cmd,
 
 // setupAudioCallback sets up the audio callback channel
 func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte, cleanup func(), err error) {
-	audioChan = make(chan []byte, 1024)
+	audioChan = make(chan []byte, DefaultReadBufferSize)
 
 	callback := func(callbackSourceID string, data []byte) {
 		if callbackSourceID == sourceID {
@@ -1370,7 +1381,7 @@ func (c *Controller) CleanupAllHLSStreams() error {
 		}
 	}
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == OSWindows {
 		securefs.CleanupNamedPipes()
 	}
 
@@ -1379,7 +1390,7 @@ func (c *Controller) CleanupAllHLSStreams() error {
 
 // runHLSActivitySync runs the HLS activity sync loop until context is cancelled
 func runHLSActivitySync(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(hlsCleanupDelay * time.Second)
 	defer ticker.Stop()
 
 	for {

@@ -36,6 +36,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
+// Tunnel provider constant for unknown providers
+const tunnelProviderUnknown = "unknown"
+
 // Controller manages the API routes and handlers
 type Controller struct {
 	Echo                *echo.Echo
@@ -160,7 +163,7 @@ func (c *Controller) TunnelDetectionMiddleware() echo.MiddlewareFunc {
 		return func(ctx echo.Context) error {
 			req := ctx.Request()
 			tunneled := false
-			provider := "unknown"
+			provider := tunnelProviderUnknown
 
 			// Check Cloudflare header first
 			if req.Header.Get("CF-Connecting-IP") != "" {
@@ -234,7 +237,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Attempt to create the directory if it doesn't exist
-			if err := os.MkdirAll(mediaPath, 0o755); err != nil {
+			if err := os.MkdirAll(mediaPath, FilePermExecutable); err != nil {
 				return nil, fmt.Errorf("failed to create media export directory %q: %w", mediaPath, err)
 			}
 			// Stat again after creation
@@ -268,7 +271,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		SunCalc:              sunCalc,
 		controlChan:          controlChan,
 		logger:               logger,
-		detectionCache:       cache.New(5*time.Minute, 10*time.Minute),
+		detectionCache:       cache.New(detectionCacheExpiry, detectionCacheCleanup),
 		SFS:                  sfs, // Assign SecureFS instance
 		metrics:              metrics,
 		ctx:                  ctx,

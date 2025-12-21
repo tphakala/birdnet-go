@@ -20,8 +20,11 @@ const (
 	// Time allowed to read the next pong message from the client
 	pongWait = 60 * time.Second
 
+	// Ping period ratio (9/10 of pongWait)
+	pingPeriodRatio = 9
+
 	// Send pings to client with this period (must be less than pongWait)
-	pingPeriod = (pongWait * 9) / 10
+	pingPeriod = (pongWait * pingPeriodRatio) / 10
 
 	// Maximum message size allowed from client
 	maxMessageSize = 512
@@ -30,8 +33,8 @@ const (
 var (
 	// Upgrader for converting HTTP connections to WebSocket connections
 	upgrader = websocket.Upgrader{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
+		ReadBufferSize:  DefaultReadBufferSize,
+		WriteBufferSize: DefaultReadBufferSize,
 		// TODO: In production, this should be restricted to only allow specific origins
 		// For example: CheckOrigin: func(r *http.Request) bool {
 		//   origin := r.Header.Get("Origin")
@@ -75,7 +78,7 @@ func (c *Controller) HandleAudioLevelStream(ctx echo.Context) error {
 	// Create client
 	client := &Client{
 		conn:       conn,
-		send:       make(chan []byte, 256),
+		send:       make(chan []byte, DefaultChannelBufferSize),
 		clientID:   ctx.Request().RemoteAddr,
 		streamType: "audio-level",
 		lastSeen:   time.Now(),
@@ -105,7 +108,7 @@ func (c *Controller) HandleNotificationsStream(ctx echo.Context) error {
 	// Create client
 	client := &Client{
 		conn:       conn,
-		send:       make(chan []byte, 256),
+		send:       make(chan []byte, DefaultChannelBufferSize),
 		clientID:   ctx.Request().RemoteAddr,
 		streamType: "notifications",
 		lastSeen:   time.Now(),

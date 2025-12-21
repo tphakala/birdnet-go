@@ -14,6 +14,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
+// Test constant for frontend hardcoded username - must match backend default
+const testFrontendUsername = "birdnet-client"
+
 // TestAuthCompatibility_V1VsV2Differences documents and tests the authentication
 // differences between V1 (/login) and V2 (/api/v2/auth/login) endpoints.
 //
@@ -161,8 +164,8 @@ func TestDefaultClientIDValue(t *testing.T) {
 	// The frontend hardcodes this value in LoginModal.svelte
 	// The backend default is set in internal/conf/defaults.go
 	// These MUST match for authentication to work
-	const frontendHardcodedUsername = "birdnet-client"
-	const backendDefaultClientID = "birdnet-client" // From defaults.go line 306
+	const frontendHardcodedUsername = testFrontendUsername
+	const backendDefaultClientID = testFrontendUsername // From defaults.go line 306
 
 	t.Run("frontend and backend defaults must match", func(t *testing.T) {
 		assert.Equal(t, backendDefaultClientID, frontendHardcodedUsername,
@@ -189,8 +192,8 @@ func TestEmptyClientIDScenario(t *testing.T) {
 		require.NotEmpty(t, settings.Security.BasicAuth.Password)
 		require.Empty(t, settings.Security.BasicAuth.ClientID)
 
-		// Frontend always sends "birdnet-client" as username
-		frontendUsername := "birdnet-client"
+		// Frontend always sends testFrontendUsername as username
+		frontendUsername := testFrontendUsername
 		correctPassword := "mypassword"
 
 		// V1 auth (old UI) - only checks password
@@ -231,9 +234,9 @@ func TestImplementedFix(t *testing.T) {
 
 		// Verify the fix works
 		emptyClientID := ""
-		configuredClientID := "birdnet-client"
+		configuredClientID := testFrontendUsername
 		password := "secret123"
-		frontendUsername := "birdnet-client"
+		frontendUsername := testFrontendUsername
 
 		// Empty ClientID - should succeed (V1 compatible)
 		assert.True(t, simulateV2Auth(emptyClientID, password, frontendUsername, password),

@@ -304,7 +304,7 @@ func (c *Controller) sendConnectionMessage(ctx echo.Context, clientID, message, 
 	if streamType != "" {
 		data["type"] = streamType
 	}
-	return c.sendSSEMessage(ctx, "connected", data)
+	return c.sendSSEMessage(ctx, SSEStatusConnected, data)
 }
 
 // logSSEConnection logs SSE client connection/disconnection events
@@ -313,9 +313,9 @@ func (c *Controller) logSSEConnection(clientID, ip, userAgent, streamType string
 		return
 	}
 
-	action := "connected"
+	action := SSEStatusConnected
 	if !connected {
-		action = "disconnected"
+		action = SSEStatusDisconnected
 	}
 
 	c.apiLogger.Info(fmt.Sprintf("SSE %s client %s", streamType, action),

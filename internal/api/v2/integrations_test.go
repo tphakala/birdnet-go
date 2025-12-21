@@ -18,6 +18,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test constants for integration tests
+const (
+	testBirdNetName = "TestBirdNet"
+	testMQTTBroker  = "tcp://mqtt.example.com:1883"
+)
+
 // runIntegrationConnectionHandlerTest runs table-driven tests for integration connection handlers
 func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Controller, echo.Context) error, endpoint string, testCases []struct {
 	name           string
@@ -221,13 +227,13 @@ func TestGetMQTTStatus(t *testing.T) {
 		{
 			name:           "MQTT Disabled",
 			mqttEnabled:    false,
-			mqttBroker:     "tcp://mqtt.example.com:1883",
+			mqttBroker:     testMQTTBroker,
 			mqttTopic:      "birdnet/detections",
 			expectedStatus: http.StatusOK,
 			validateResult: func(t *testing.T, result map[string]any) {
 				t.Helper()
 				assert.False(t, result["connected"].(bool), "Connected should be false when MQTT is disabled")
-				assert.Equal(t, "tcp://mqtt.example.com:1883", result["broker"], "Broker should match configuration")
+				assert.Equal(t, testMQTTBroker, result["broker"], "Broker should match configuration")
 				assert.Equal(t, "birdnet/detections", result["topic"], "Topic should match configuration")
 				_, hasLastError := result["last_error"]
 				assert.False(t, hasLastError, "There should be no error when MQTT is disabled")
@@ -236,7 +242,7 @@ func TestGetMQTTStatus(t *testing.T) {
 		{
 			name:           "MQTT Enabled but Not Connected",
 			mqttEnabled:    true,
-			mqttBroker:     "tcp://mqtt.example.com:1883",
+			mqttBroker:     testMQTTBroker,
 			mqttTopic:      "birdnet/detections",
 			expectedStatus: http.StatusOK,
 			validateResult: func(t *testing.T, result map[string]any) {
@@ -257,7 +263,7 @@ func TestGetMQTTStatus(t *testing.T) {
 			controller.Settings.Realtime.MQTT.Enabled = tc.mqttEnabled
 			controller.Settings.Realtime.MQTT.Broker = tc.mqttBroker
 			controller.Settings.Realtime.MQTT.Topic = tc.mqttTopic
-			controller.Settings.Main.Name = "TestBirdNet"
+			controller.Settings.Main.Name = testBirdNetName
 
 			// Create request
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/integrations/mqtt/status", http.NoBody)
@@ -373,7 +379,7 @@ func TestTestMQTTConnection(t *testing.T) {
 			name: "MQTT Not Enabled",
 			setupSettings: func(controller *Controller) {
 				controller.Settings.Realtime.MQTT.Enabled = false
-				controller.Settings.Realtime.MQTT.Broker = "tcp://mqtt.example.com:1883"
+				controller.Settings.Realtime.MQTT.Broker = testMQTTBroker
 			},
 			expectedStatus: http.StatusOK,
 			expectedBody:   `{"success":false,"message":"MQTT is not enabled in settings"}`,
@@ -470,7 +476,7 @@ func TestWriteJSONResponse(t *testing.T) {
 func TestMQTTConnectionWithClientDisconnection(t *testing.T) {
 	runIntegrationConnectionWithDisconnectionTest(t, (*Controller).TestMQTTConnection, "/api/v2/integrations/mqtt/test", func(controller *Controller) {
 		controller.Settings.Realtime.MQTT.Enabled = true
-		controller.Settings.Realtime.MQTT.Broker = "tcp://mqtt.example.com:1883"
+		controller.Settings.Realtime.MQTT.Broker = testMQTTBroker
 	})
 }
 
@@ -489,9 +495,9 @@ func TestGetMQTTStatusWithControlChannel(t *testing.T) {
 
 	// Configure settings
 	controller.Settings.Realtime.MQTT.Enabled = true
-	controller.Settings.Realtime.MQTT.Broker = "tcp://mqtt.example.com:1883"
+	controller.Settings.Realtime.MQTT.Broker = testMQTTBroker
 	controller.Settings.Realtime.MQTT.Topic = "birdnet/detections"
-	controller.Settings.Main.Name = "TestBirdNet"
+	controller.Settings.Main.Name = testBirdNetName
 
 	// Create a mock control channel
 	controlChan := make(chan string, 1)
@@ -516,7 +522,7 @@ func TestGetMQTTStatusWithControlChannel(t *testing.T) {
 
 	// Basic validation since we can't mock the MQTT client creation directly
 	assert.Contains(t, result, "connected")
-	assert.Equal(t, "tcp://mqtt.example.com:1883", result["broker"])
+	assert.Equal(t, testMQTTBroker, result["broker"])
 	assert.Equal(t, "birdnet/detections", result["topic"])
 
 	// Close the control channel
@@ -586,7 +592,7 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 
 		// Configure settings to enable MQTT
 		controller.Settings.Realtime.MQTT.Enabled = true
-		controller.Settings.Realtime.MQTT.Broker = "tcp://mqtt.example.com:1883"
+		controller.Settings.Realtime.MQTT.Broker = testMQTTBroker
 
 		// Create a cancellable context
 		ctx, cancel := context.WithCancel(context.Background())
@@ -652,7 +658,7 @@ func TestErrorHandlingForIntegrations(t *testing.T) {
 		controller.Settings.Realtime.MQTT.Enabled = true
 		controller.Settings.Realtime.MQTT.Broker = "tcp://nonexistent.broker:1883"
 		controller.Settings.Realtime.MQTT.Topic = "birdnet/detections"
-		controller.Settings.Main.Name = "TestBirdNet"
+		controller.Settings.Main.Name = testBirdNetName
 
 		// Create request
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/integrations/mqtt/status", http.NoBody)

@@ -17,6 +17,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
 
+// Integration constants (file-local)
+const (
+	integrationConnectTimeout = 3   // Connection test timeout in seconds
+	integrationShortTimeout   = 5   // Short timeout in seconds
+	integrationMediumTimeout  = 20  // Medium timeout in seconds
+	integrationLongTimeout    = 30  // Long timeout in seconds
+	integrationStageDelay     = 200 // Delay between stages in milliseconds
+)
+
 // MQTTStatus represents the current status of the MQTT connection
 type MQTTStatus struct {
 	Connected bool   `json:"connected"`            // Whether the MQTT client is currently connected to the broker
@@ -144,7 +153,7 @@ func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context) (conne
 	defer tempClient.Disconnect() // Ensure temporary client is disconnected
 
 	// Use a short timeout for the connection attempt
-	connectCtx, cancel := context.WithTimeout(parentCtx, 3*time.Second)
+	connectCtx, cancel := context.WithTimeout(parentCtx, integrationConnectTimeout*time.Second)
 	defer cancel()
 
 	// Try to connect
@@ -266,7 +275,7 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 
 	// Create context with timeout that also gets cancelled if HTTP client disconnects
 	httpCtx := ctx.Request().Context()
-	testCtx, cancel := context.WithTimeout(httpCtx, 20*time.Second)
+	testCtx, cancel := context.WithTimeout(httpCtx, integrationMediumTimeout*time.Second)
 	defer cancel()
 
 	// Run the test in a goroutine
@@ -419,7 +428,7 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 
 	// Create context with timeout that also gets cancelled if HTTP client disconnects
 	httpCtx := ctx.Request().Context()
-	testCtx, cancel := context.WithTimeout(httpCtx, 30*time.Second)
+	testCtx, cancel := context.WithTimeout(httpCtx, integrationLongTimeout*time.Second)
 	defer cancel()
 
 	// Run the test in a goroutine
@@ -538,7 +547,7 @@ func (c *Controller) TestWeatherConnection(ctx echo.Context) error {
 	}
 
 	// Validate OpenWeather specific requirements
-	if request.Provider == "openweather" && request.OpenWeather.APIKey == "" {
+	if request.Provider == WeatherProviderOpenWeather && request.OpenWeather.APIKey == "" {
 		return c.HandleError(ctx, nil, "OpenWeather API key is required", http.StatusBadRequest)
 	}
 
@@ -566,7 +575,7 @@ func (c *Controller) TestWeatherConnection(ctx echo.Context) error {
 	}
 
 	// Create test context with timeout
-	testCtx, cancel := context.WithTimeout(ctx.Request().Context(), 30*time.Second)
+	testCtx, cancel := context.WithTimeout(ctx.Request().Context(), integrationLongTimeout*time.Second)
 	defer cancel()
 
 	// Create encoder for streaming results
@@ -639,7 +648,7 @@ func (c *Controller) TestWeatherConnection(ctx echo.Context) error {
 		}
 
 		// Small delay between stages for UX
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(integrationStageDelay * time.Millisecond)
 	}
 
 	return nil
@@ -651,17 +660,17 @@ func (c *Controller) testWeatherAPIConnectivity(ctx context.Context, settings *c
 	provider := settings.Realtime.Weather.Provider
 
 	switch provider {
-	case "yrno":
+	case WeatherProviderYrno:
 		testURL = "https://api.met.no/weatherapi/locationforecast/2.0/status"
-	case "openweather":
+	case WeatherProviderOpenWeather:
 		testURL = "https://api.openweathermap.org"
-	case "wunderground":
+	case WeatherProviderWunderground:
 		testURL = "https://api.weather.com"
 	default:
 		return "", fmt.Errorf("unsupported weather provider: %s", provider)
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
 	req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -686,7 +695,7 @@ func (c *Controller) testWeatherAuthentication(ctx context.Context, settings *co
 	provider := settings.Realtime.Weather.Provider
 
 	switch provider {
-	case "openweather":
+	case WeatherProviderOpenWeather:
 		apiKey := settings.Realtime.Weather.OpenWeather.APIKey
 		endpoint := settings.Realtime.Weather.OpenWeather.Endpoint
 		if endpoint == "" {
@@ -695,7 +704,7 @@ func (c *Controller) testWeatherAuthentication(ctx context.Context, settings *co
 
 		testURL := fmt.Sprintf("%s?lat=0&lon=0&appid=%s", endpoint, apiKey)
 
-		client := &http.Client{Timeout: 5 * time.Second}
+		client := &http.Client{Timeout: integrationShortTimeout * time.Second}
 		req, err := http.NewRequestWithContext(ctx, "GET", testURL, http.NoBody)
 		if err != nil {
 			return "", fmt.Errorf("failed to create authentication request: %w", err)
@@ -712,13 +721,13 @@ func (c *Controller) testWeatherAuthentication(ctx context.Context, settings *co
 			}
 		}()
 
-		if resp.StatusCode == 401 {
+		if resp.StatusCode == http.StatusUnauthorized {
 			return "", fmt.Errorf("invalid API key - please check your OpenWeather API key")
 		}
 
 		return "Successfully authenticated with OpenWeather API", nil
 
-	case "wunderground":
+	case WeatherProviderWunderground:
 		// For Weather Underground, authentication is tested in the data fetch stage
 		// since there's no separate auth endpoint
 		return "Authentication will be verified during data fetch", nil
@@ -732,11 +741,11 @@ func (c *Controller) testWeatherAuthentication(ctx context.Context, settings *co
 func (c *Controller) testWeatherDataFetch(ctx context.Context, settings *conf.Settings) (string, error) {
 	var provider weather.Provider
 	switch settings.Realtime.Weather.Provider {
-	case "yrno":
+	case WeatherProviderYrno:
 		provider = weather.NewYrNoProvider()
-	case "openweather":
+	case WeatherProviderOpenWeather:
 		provider = weather.NewOpenWeatherProvider()
-	case "wunderground":
+	case WeatherProviderWunderground:
 		provider = weather.NewWundergroundProvider(nil)
 	default:
 		return "", fmt.Errorf("unsupported weather provider: %s", settings.Realtime.Weather.Provider)
@@ -764,11 +773,11 @@ func (c *Controller) testWeatherDataFetch(ctx context.Context, settings *conf.Se
 // getProviderDisplayName returns a user-friendly name for the weather provider
 func getProviderDisplayName(provider string) string {
 	switch provider {
-	case "yrno":
+	case WeatherProviderYrno:
 		return "Yr.no"
-	case "openweather":
+	case WeatherProviderOpenWeather:
 		return "OpenWeather"
-	case "wunderground":
+	case WeatherProviderWunderground:
 		return "Weather Underground"
 	default:
 		// Simple capitalization for unknown providers
