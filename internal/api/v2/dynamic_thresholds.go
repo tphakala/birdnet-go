@@ -125,10 +125,6 @@ func (c *Controller) initDynamicThresholdRoutes() {
 // GetDynamicThresholds returns all dynamic thresholds with optional pagination
 // GET /api/v2/dynamic-thresholds?limit=50&offset=0
 func (c *Controller) GetDynamicThresholds(ctx echo.Context) error {
-	if err := c.requireProcessor(ctx); err != nil {
-		return err
-	}
-
 	// Parse pagination parameters
 	limit := c.parsePaginationLimit(ctx.QueryParam("limit"), defaultThresholdLimit, maxThresholdLimit)
 	offset := c.parsePaginationOffset(ctx.QueryParam("offset"))
@@ -212,8 +208,12 @@ func (c *Controller) addDatabaseThresholds(thresholdMap map[string]*DynamicThres
 	}
 }
 
-// addMemoryThresholds adds/updates thresholds from processor memory
+// addMemoryThresholds adds/updates thresholds from processor memory.
+// If processor is unavailable, this function returns early without modification.
 func (c *Controller) addMemoryThresholds(thresholdMap map[string]*DynamicThresholdResponse) {
+	if c.Processor == nil {
+		return
+	}
 	memoryData := c.Processor.GetDynamicThresholdData()
 	baseThreshold := c.Settings.BirdNET.Threshold
 

@@ -170,6 +170,9 @@
         return 'settings.species.dynamicThreshold.changeReason.expiry';
       case 'manual_reset':
         return 'settings.species.dynamicThreshold.changeReason.manualReset';
+      default:
+        // Fallback for any future change reasons
+        return 'settings.species.dynamicThreshold.changeReason.highConfidence';
     }
   }
 </script>
