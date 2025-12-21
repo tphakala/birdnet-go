@@ -458,7 +458,7 @@
   </style>
 </svelte:head>
 
-<div class={cn('min-h-screen bg-base-200 flex items-center justify-center', className)}>
+<div class={cn('col-span-12 min-h-[60vh] flex items-center justify-center', className)}>
   <div class="text-center p-8 rounded-lg bg-base-100 shadow-lg">
     <h1 class="text-6xl font-bold text-base-content mb-4">
       4<span

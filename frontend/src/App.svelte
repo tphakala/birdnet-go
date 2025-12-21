@@ -229,6 +229,7 @@
 
   // Route path to config mapping - using Map for safe lookups
   const pathToRouteMap = createSafeMap<RouteConfig | undefined>({
+    '/': findRouteConfig('dashboard'),
     '/ui/': findRouteConfig('dashboard'),
     '/ui': findRouteConfig('dashboard'),
     '/ui/dashboard': findRouteConfig('dashboard'),

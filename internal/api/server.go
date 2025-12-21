@@ -501,9 +501,13 @@ func (s *Server) IsDevMode() bool {
 // registerSPARoutes registers all frontend SPA routes.
 // These routes serve the HTML shell that loads the Svelte application.
 func (s *Server) registerSPARoutes() {
+	// Redirect root path to dashboard
+	s.echo.GET("/", func(c echo.Context) error {
+		return c.Redirect(http.StatusFound, "/ui/dashboard")
+	})
+
 	// Public routes (no authentication required)
 	publicRoutes := []string{
-		"/",
 		"/login",
 		"/ui",
 		"/ui/",
