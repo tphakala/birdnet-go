@@ -46,6 +46,7 @@
     typeof v === 'string' && v in providerIcons;
 
   // Get the icon for the current provider with runtime validation
+  // eslint-disable-next-line security/detect-object-injection -- Validated by isWeatherProvider type guard
   let iconSvg = $derived(isWeatherProvider(provider) ? providerIcons[provider] : NoneIcon);
 </script>
 

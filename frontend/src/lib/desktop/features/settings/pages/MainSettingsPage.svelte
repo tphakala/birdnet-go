@@ -1111,15 +1111,15 @@
   ];
 
   function getFalsePositiveFilterLevelName(level: number): string {
-    return falsePositiveFilterLevels[level]?.name ?? 'Unknown';
+    return safeArrayAccess(falsePositiveFilterLevels, level)?.name ?? 'Unknown';
   }
 
   function getFalsePositiveFilterDescription(level: number): string {
-    return falsePositiveFilterLevels[level]?.description ?? '';
+    return safeArrayAccess(falsePositiveFilterLevels, level)?.description ?? '';
   }
 
   function getMinimumOverlapForLevel(level: number): number {
-    return falsePositiveFilterLevels[level]?.minOverlap ?? 0.0;
+    return safeArrayAccess(falsePositiveFilterLevels, level)?.minOverlap ?? 0.0;
   }
 
   function getFalsePositiveFilterBadgeClass(level: number): string {

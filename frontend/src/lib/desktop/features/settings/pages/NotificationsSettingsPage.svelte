@@ -53,6 +53,7 @@
     WebhookEndpointConfig,
     WebhookAuthConfig,
   } from '$lib/stores/settings';
+  import { safeArrayAccess, safeRegexTest } from '$lib/utils/security';
 
   // CSRF token - cached once on mount since it doesn't change during session
   let csrfToken = $state('');
@@ -566,8 +567,9 @@
   }
 
   function toggleProviderEnabled(index: number) {
-    if (pushSettings.providers?.[index]) {
-      pushSettings.providers[index].enabled = !pushSettings.providers[index].enabled;
+    const provider = safeArrayAccess(pushSettings.providers ?? [], index);
+    if (provider) {
+      provider.enabled = !provider.enabled;
     }
   }
 
@@ -625,8 +627,12 @@
     switch (service) {
       case 'ntfy': {
         // ntfy://topic or ntfy://server/topic
-        const match = url.match(/^ntfy:\/\/([^/]+)(?:\/(.+))?$/);
-        if (match) {
+        // Use safeRegexTest with length limit to prevent ReDoS
+        // eslint-disable-next-line security/detect-unsafe-regex -- Protected by safeRegexTest length limit
+        const ntfyPattern = /^ntfy:\/\/([^/]+)(?:\/(.+))?$/;
+        if (safeRegexTest(ntfyPattern, url, 500)) {
+          // Non-null assertion safe: safeRegexTest guarantees pattern matches
+          const match = url.match(ntfyPattern)!;
           if (match[2]) {
             serviceFormData.ntfyServer = match[1];
             serviceFormData.ntfyTopic = match[2];
@@ -658,7 +664,7 @@
   }
 
   function openEditProviderForm(index: number) {
-    const provider = pushSettings.providers?.[index];
+    const provider = safeArrayAccess(pushSettings.providers ?? [], index);
     if (!provider) return;
 
     editingProviderIndex = index;
@@ -761,8 +767,9 @@
     }
 
     if (editingProviderIndex !== null) {
-      // Update existing
-      pushSettings.providers[editingProviderIndex] = provider;
+      // Update existing - bounds validated by openEditProviderForm which uses
+      // safeArrayAccess to verify the index exists before setting editingProviderIndex
+      pushSettings.providers.splice(editingProviderIndex, 1, provider);
     } else {
       // Add new
       pushSettings.providers.push(provider);
@@ -777,7 +784,7 @@
   }
 
   function deleteProvider(index: number) {
-    const provider = pushSettings.providers?.[index];
+    const provider = safeArrayAccess(pushSettings.providers ?? [], index);
     if (!provider) return;
 
     const confirmDelete = window.confirm(

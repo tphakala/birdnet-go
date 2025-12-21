@@ -43,6 +43,7 @@
   const isFilterType = (v: unknown): v is FilterType => typeof v === 'string' && v in filterIcons;
 
   // Get the icon for the current filter type with runtime validation
+  // eslint-disable-next-line security/detect-object-injection -- Validated by isFilterType type guard
   let iconSvg = $derived(isFilterType(filter) ? filterIcons[filter] : LowPassIcon);
 </script>
 
