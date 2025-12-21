@@ -19,12 +19,11 @@ import (
 
 // Integration constants (file-local)
 const (
-	integrationConnectTimeout   = 3   // Connection test timeout in seconds
-	integrationShortTimeout     = 5   // Short timeout in seconds
-	integrationMediumTimeout    = 20  // Medium timeout in seconds
-	integrationLongTimeout      = 30  // Long timeout in seconds
-	integrationHTTPUnauthorized = 401 // HTTP Unauthorized status code
-	integrationStageDelay       = 200 // Delay between stages in milliseconds
+	integrationConnectTimeout = 3   // Connection test timeout in seconds
+	integrationShortTimeout   = 5   // Short timeout in seconds
+	integrationMediumTimeout  = 20  // Medium timeout in seconds
+	integrationLongTimeout    = 30  // Long timeout in seconds
+	integrationStageDelay     = 200 // Delay between stages in milliseconds
 )
 
 // MQTTStatus represents the current status of the MQTT connection
@@ -722,7 +721,7 @@ func (c *Controller) testWeatherAuthentication(ctx context.Context, settings *co
 			}
 		}()
 
-		if resp.StatusCode == integrationHTTPUnauthorized {
+		if resp.StatusCode == http.StatusUnauthorized {
 			return "", fmt.Errorf("invalid API key - please check your OpenWeather API key")
 		}
 

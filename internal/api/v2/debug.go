@@ -298,7 +298,7 @@ func mapNotificationType(typeStr string) notification.Type {
 		return notification.TypeInfo
 	case NotificationTypeDetection:
 		return notification.TypeDetection
-	case "system":
+	case NotificationTypeSystem:
 		return notification.TypeSystem
 	default:
 		return notification.TypeInfo

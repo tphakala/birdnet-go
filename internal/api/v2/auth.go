@@ -22,7 +22,7 @@ import (
 // Auth constants (file-local)
 const (
 	authExtendedTimeout = 15  // Extended timeout for slower operations
-	maxStateTokenLength = 128 // Maximum length for OAuth state token
+	maxBasePathLength   = 128 // Maximum length for base path validation
 	authRateLimitRate   = 5   // Login attempts per rate limit window
 	authRateLimitBurst  = 5   // Burst allowance for rate limiting
 	authRateLimitWindow = 15  // Rate limit window in minutes
@@ -472,7 +472,7 @@ func isValidBasePath(basePath string) bool {
 	}
 
 	// Length check
-	if len(basePath) > maxStateTokenLength {
+	if len(basePath) > maxBasePathLength {
 		return false
 	}
 

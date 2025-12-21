@@ -60,21 +60,21 @@ func getToastTestCases() []toastTestCase {
 		{
 			name:      "error toast",
 			message:   "Operation failed",
-			toastType: LogLevelError,
+			toastType: ToastTypeError,
 			duration:  5000,
 			wantError: false,
 		},
 		{
 			name:      "warning toast",
 			message:   "Warning message",
-			toastType: LogLevelWarning,
+			toastType: ToastTypeWarning,
 			duration:  4000,
 			wantError: false,
 		},
 		{
 			name:      "info toast",
 			message:   "Information message",
-			toastType: LogLevelInfo,
+			toastType: ToastTypeInfo,
 			duration:  3000,
 			wantError: false,
 		},
@@ -88,7 +88,7 @@ func getToastTestCases() []toastTestCase {
 		{
 			name:      "empty message",
 			message:   "",
-			toastType: LogLevelInfo,
+			toastType: ToastTypeInfo,
 			duration:  1000,
 			wantError: false,
 		},
@@ -115,11 +115,11 @@ func runSendToastTestIsolated(t *testing.T, c *Controller, service *notification
 	switch tc.toastType {
 	case ToastTypeSuccess:
 		notifToastType = notification.ToastTypeSuccess
-	case LogLevelError:
+	case ToastTypeError:
 		notifToastType = notification.ToastTypeError
-	case LogLevelWarning:
+	case ToastTypeWarning:
 		notifToastType = notification.ToastTypeWarning
-	case LogLevelInfo:
+	case ToastTypeInfo:
 		notifToastType = notification.ToastTypeInfo
 	default:
 		notifToastType = notification.ToastTypeInfo
@@ -209,20 +209,20 @@ func verifyToastMetadata(t *testing.T, notif *notification.Notification, tc toas
 func verifyNotificationTypeMapping(t *testing.T, notif *notification.Notification, toastType string) {
 	t.Helper()
 	expectedToastType := toastType
-	if toastType == "unknown" {
-		expectedToastType = LogLevelInfo
+	if toastType == ValueUnknown {
+		expectedToastType = ToastTypeInfo
 	}
 
 	var expectedNotifType notification.Type
 	var expectedPriority notification.Priority
 	switch expectedToastType {
-	case "success", LogLevelInfo:
+	case ToastTypeSuccess, ToastTypeInfo:
 		expectedNotifType = notification.TypeInfo
 		expectedPriority = notification.PriorityLow
-	case "warning":
+	case ToastTypeWarning:
 		expectedNotifType = notification.TypeWarning
 		expectedPriority = notification.PriorityMedium
-	case "error":
+	case ToastTypeError:
 		expectedNotifType = notification.TypeError
 		expectedPriority = notification.PriorityHigh
 	}
@@ -263,7 +263,7 @@ func TestController_SendToast_TypeMapping(t *testing.T) {
 			expectedToastType: notification.ToastTypeWarning,
 		},
 		{
-			toastType:         LogLevelInfo,
+			toastType:         ToastTypeInfo,
 			expectedNotifType: notification.TypeInfo,
 			expectedPriority:  notification.PriorityLow,
 			expectedToastType: notification.ToastTypeInfo,
@@ -289,13 +289,13 @@ func TestController_SendToast_TypeMapping(t *testing.T) {
 
 			var actualToastType notification.ToastType
 			switch tt.toastType {
-			case "success":
+			case ToastTypeSuccess:
 				actualToastType = notification.ToastTypeSuccess
-			case "error":
+			case ToastTypeError:
 				actualToastType = notification.ToastTypeError
-			case "warning":
+			case ToastTypeWarning:
 				actualToastType = notification.ToastTypeWarning
-			case LogLevelInfo:
+			case ToastTypeInfo:
 				actualToastType = notification.ToastTypeInfo
 			default:
 				actualToastType = notification.ToastTypeInfo
@@ -338,7 +338,7 @@ func TestController_SendToast_ServiceNotInitialized(t *testing.T) {
 
 	// For now, this test documents the expected behavior:
 	// If notification service is not initialized, SendToast should return an error
-	err := c.SendToast("test message", LogLevelInfo, 1000)
+	err := c.SendToast("test message", ToastTypeInfo, 1000)
 
 	// Since service is likely already initialized from other tests, this may pass
 	// In a real uninitialized scenario, this should return an error
@@ -382,7 +382,7 @@ func BenchmarkController_SendToast(b *testing.B) {
 
 	// Use b.Loop() for benchmark iteration (Go 1.25)
 	for b.Loop() {
-		err := c.SendToast("Benchmark toast message", LogLevelInfo, 1000)
+		err := c.SendToast("Benchmark toast message", ToastTypeInfo, 1000)
 		if err != nil {
 			b.Fatalf("SendToast() benchmark error = %v", err)
 		}

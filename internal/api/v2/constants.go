@@ -42,6 +42,7 @@ const (
 	NotificationTypeWarning   = "warning"
 	NotificationTypeInfo      = "info"
 	NotificationTypeDetection = "detection"
+	NotificationTypeSystem    = "system"
 )
 
 // Weather provider constants
