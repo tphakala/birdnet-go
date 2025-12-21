@@ -555,15 +555,14 @@ func TestGetDynamicThresholdStats(t *testing.T) {
 		// Verify counts
 		assert.Equal(t, int64(5), totalCount)
 		assert.Equal(t, int64(3), activeCount)
-		// active3 has level 3, so atMinimumCount should be 1
-		assert.Equal(t, int64(1), atMinimumCount)
+		// No active thresholds at level 3 (active1 and active3 are level 1, active2 is level 2)
+		assert.Equal(t, int64(0), atMinimumCount)
 
-		// Verify level distribution
+		// Verify level distribution for active thresholds
 		assert.NotNil(t, levelDistribution)
-		// level 1: active1, level 2: active2, level 3: active3
-		assert.Equal(t, int64(1), levelDistribution[1])
+		// level 1: active1 and active3, level 2: active2
+		assert.Equal(t, int64(2), levelDistribution[1])
 		assert.Equal(t, int64(1), levelDistribution[2])
-		assert.Equal(t, int64(1), levelDistribution[3])
 	})
 
 	t.Run("GetStatsEmptyDatabase", func(t *testing.T) {

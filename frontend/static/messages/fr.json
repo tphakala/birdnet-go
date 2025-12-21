@@ -2341,6 +2341,11 @@
         "resetAll": "Tout réinitialiser",
         "resetSpecies": "Réinitialiser le seuil pour cette espèce",
         "noEvents": "Aucun historique de changement de seuil",
+        "changeReason": {
+          "highConfidence": "Détection à haute confiance",
+          "expiry": "Seuil expiré",
+          "manualReset": "Réinitialisation manuelle"
+        },
         "note": "Les détections à haute confiance confirment quelles espèces existent à cet emplacement. Après plusieurs correspondances à haute confiance, le seuil de détection est abaissé en toute sécurité pour capturer plus d'appels sans risque significatif de faux positifs. Les seuils se réinitialisent automatiquement après la période de validité configurée.",
         "empty": {
           "title": "Aucun seuil appris",

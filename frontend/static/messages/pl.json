@@ -2347,6 +2347,11 @@
         "resetAll": "Resetuj wszystkie",
         "resetSpecies": "Resetuj próg dla tego gatunku",
         "noEvents": "Brak historii zmian progów",
+        "changeReason": {
+          "highConfidence": "Wykrycie o wysokiej pewności",
+          "expiry": "Próg wygasł",
+          "manualReset": "Ręczny reset"
+        },
         "note": "Wykrycia o wysokiej pewności potwierdzają, które gatunki istnieją w tej lokalizacji. Po wielokrotnych dopasowaniach o wysokiej pewności próg wykrywania jest bezpiecznie obniżany, aby wychwycić więcej wołań bez znaczącego ryzyka fałszywych pozytywów. Progi resetują się automatycznie po skonfigurowanym okresie ważności.",
         "empty": {
           "title": "Brak nauczonych progów",

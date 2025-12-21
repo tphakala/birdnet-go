@@ -42,11 +42,8 @@
     ThresholdStats,
     ThresholdLevel,
   } from '$lib/types/dynamic-threshold';
-  import {
-    getLevelDisplay,
-    getChangeReasonLabel,
-    getTimeRemaining,
-  } from '$lib/types/dynamic-threshold';
+  import { getLevelDisplay, getTimeRemaining } from '$lib/types/dynamic-threshold';
+  import type { ThresholdChangeReason } from '$lib/types/dynamic-threshold';
 
   // State
   let thresholds = $state<DynamicThreshold[]>([]);
@@ -65,7 +62,9 @@
     (searchQuery
       ? thresholds.filter(t => t.speciesName.toLowerCase().includes(searchQuery.toLowerCase()))
       : thresholds
-    ).toSorted((a, b) => a.speciesName.localeCompare(b.speciesName))
+    )
+      .slice()
+      .sort((a, b) => a.speciesName.localeCompare(b.speciesName))
   );
 
   let activeThresholds = $derived(thresholds.filter(t => t.isActive));
@@ -156,6 +155,16 @@
 
   function formatDate(isoDate: string): string {
     return new Date(isoDate).toLocaleString();
+  }
+
+  // Map change reason to i18n key
+  function getChangeReasonKey(reason: ThresholdChangeReason): string {
+    const keyMap: Record<ThresholdChangeReason, string> = {
+      high_confidence: 'settings.species.dynamicThreshold.changeReason.highConfidence',
+      expiry: 'settings.species.dynamicThreshold.changeReason.expiry',
+      manual_reset: 'settings.species.dynamicThreshold.changeReason.manualReset',
+    };
+    return keyMap[reason];
   }
 </script>
 
@@ -359,7 +368,7 @@
                               ).toFixed(0)}%
                             </span>
                             <span class="text-xs text-base-content/60">
-                              ({getChangeReasonLabel(event.changeReason)})
+                              ({t(getChangeReasonKey(event.changeReason))})
                             </span>
                           </div>
                           <div class="text-xs text-base-content/60">

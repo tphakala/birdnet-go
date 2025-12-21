@@ -208,15 +208,6 @@ func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
 	p.thresholdsMutex.Lock()
 
-	// Get previous state for event recording
-	dt, exists := p.DynamicThresholds[speciesName]
-	var previousLevel int
-	var previousValue float64
-	if exists {
-		previousLevel = dt.Level
-		previousValue = dt.CurrentValue
-	}
-
 	// Remove from in-memory map
 	delete(p.DynamicThresholds, speciesName)
 	p.thresholdsMutex.Unlock()
@@ -230,13 +221,7 @@ func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 			// Don't return error - the in-memory reset was successful
 		}
 
-		// Record the manual reset event if threshold existed
-		if exists && previousLevel > 0 {
-			baseThreshold := p.Settings.BirdNET.Threshold
-			p.recordThresholdEvent(speciesName, previousLevel, 0, previousValue, float64(baseThreshold), "manual_reset", 0)
-		}
-
-		// Delete event history for this species
+		// Delete event history for this species (no need to record reset event since history is cleared)
 		if err := p.Ds.DeleteThresholdEvents(speciesName); err != nil {
 			logger := GetLogger()
 			logger.Warn("Failed to delete threshold events from database", "species", speciesName, "error", err)
@@ -257,15 +242,7 @@ func (p *Processor) ResetAllDynamicThresholds() (int64, error) {
 	// Count in-memory thresholds
 	count := int64(len(p.DynamicThresholds))
 
-	// Record events for each threshold being reset
-	baseThreshold := p.Settings.BirdNET.Threshold
-	for speciesName, dt := range p.DynamicThresholds {
-		if dt.Level > 0 {
-			p.recordThresholdEvent(speciesName, dt.Level, 0, dt.CurrentValue, float64(baseThreshold), "manual_reset", 0)
-		}
-	}
-
-	// Clear all in-memory thresholds
+	// Clear all in-memory thresholds (no need to record reset events since history is cleared)
 	p.DynamicThresholds = make(map[string]*DynamicThreshold)
 	p.thresholdsMutex.Unlock()
 

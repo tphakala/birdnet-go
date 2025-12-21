@@ -2341,6 +2341,11 @@
         "resetAll": "Alles resetten",
         "resetSpecies": "Reset drempel voor deze soort",
         "noEvents": "Geen drempelwijzigingsgeschiedenis",
+        "changeReason": {
+          "highConfidence": "Detectie met hoge betrouwbaarheid",
+          "expiry": "Drempel verlopen",
+          "manualReset": "Handmatige reset"
+        },
         "note": "Detecties met hoge betrouwbaarheid bevestigen welke soorten op deze locatie bestaan. Na meerdere matches met hoge betrouwbaarheid wordt de detectiedrempel veilig verlaagd om meer geluiden te vangen zonder significant risico op fout-positieven. Drempels worden automatisch gereset na de geconfigureerde geldigheidsperiode.",
         "empty": {
           "title": "Geen geleerde drempels",

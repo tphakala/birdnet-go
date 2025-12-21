@@ -2274,6 +2274,11 @@
         "resetAll": "Nollaa kaikki",
         "resetSpecies": "Nollaa tämän lajin kynnysarvo",
         "noEvents": "Ei kynnysarvon muutoshistoriaa",
+        "changeReason": {
+          "highConfidence": "Korkean luottamuksen havainto",
+          "expiry": "Kynnysarvo vanhentunut",
+          "manualReset": "Manuaalinen nollaus"
+        },
         "note": "Korkean luottamuksen havainnot vahvistavat, mitkä lajit esiintyvät tässä sijainnissa. Useiden korkean luottamuksen osumien jälkeen tunnistuskynnystä alennetaan turvallisesti, jotta saadaan enemmän ääniä ilman merkittävää väärien positiivisten riskiä. Kynnysarvot nollautuvat automaattisesti asetetun voimassaoloajan jälkeen.",
         "empty": {
           "title": "Ei opittuja kynnysarvoja",

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -428,15 +427,3 @@ func (c *Controller) ResetAllDynamicThresholds(ctx echo.Context) error {
 	})
 }
 
-// convertToThresholdResponse converts processor data to API response
-func convertToThresholdResponse(data processor.DynamicThresholdData, baseThreshold float64) DynamicThresholdResponse {
-	return DynamicThresholdResponse{
-		SpeciesName:   data.SpeciesName,
-		Level:         data.Level,
-		CurrentValue:  data.CurrentValue,
-		BaseThreshold: baseThreshold,
-		HighConfCount: data.HighConfCount,
-		ExpiresAt:     data.ExpiresAt,
-		IsActive:      data.IsActive,
-	}
-}

@@ -2274,6 +2274,11 @@
         "resetAll": "Alle zurücksetzen",
         "resetSpecies": "Schwellenwert für diese Art zurücksetzen",
         "noEvents": "Keine Schwellenwertänderungen",
+        "changeReason": {
+          "highConfidence": "Erkennung mit hoher Konfidenz",
+          "expiry": "Schwellenwert abgelaufen",
+          "manualReset": "Manueller Reset"
+        },
         "note": "Hochkonfidente Erkennungen bestätigen, welche Arten an diesem Standort vorkommen. Nach mehreren hochkonfidenten Übereinstimmungen wird der Erkennungsschwellenwert sicher gesenkt, um mehr Rufe ohne signifikantes Falsch-Positiv-Risiko zu erfassen. Schwellenwerte werden nach der konfigurierten Gültigkeitsdauer automatisch zurückgesetzt.",
         "empty": {
           "title": "Keine gelernten Schwellenwerte",

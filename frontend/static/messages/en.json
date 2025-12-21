@@ -2347,6 +2347,11 @@
         "resetAll": "Reset All",
         "resetSpecies": "Reset threshold for this species",
         "noEvents": "No threshold change history",
+        "changeReason": {
+          "highConfidence": "High confidence detection",
+          "expiry": "Threshold expired",
+          "manualReset": "Manual reset"
+        },
         "note": "High-confidence detections confirm which species exist at this location. After multiple high confidence matches, the detection threshold is safely lowered to capture more calls without significant false positive risk. Thresholds automatically reset after the configured validity period.",
         "empty": {
           "title": "No learned thresholds",

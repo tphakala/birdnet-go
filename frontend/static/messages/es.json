@@ -2274,6 +2274,11 @@
         "resetAll": "Restablecer todo",
         "resetSpecies": "Restablecer umbral para esta especie",
         "noEvents": "Sin historial de cambios de umbral",
+        "changeReason": {
+          "highConfidence": "Detección de alta confianza",
+          "expiry": "Umbral expirado",
+          "manualReset": "Reinicio manual"
+        },
         "note": "Las detecciones de alta confianza confirman qué especies existen en esta ubicación. Después de múltiples coincidencias de alta confianza, el umbral de detección se reduce de forma segura para capturar más llamadas sin riesgo significativo de falsos positivos. Los umbrales se restablecen automáticamente después del período de validez configurado.",
         "empty": {
           "title": "Sin umbrales aprendidos",

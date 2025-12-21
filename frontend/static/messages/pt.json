@@ -2277,6 +2277,11 @@
         "resetAll": "Redefinir tudo",
         "resetSpecies": "Redefinir limiar para esta espécie",
         "noEvents": "Sem histórico de alterações de limiar",
+        "changeReason": {
+          "highConfidence": "Detecção de alta confiança",
+          "expiry": "Limiar expirado",
+          "manualReset": "Redefinição manual"
+        },
         "note": "Detecções de alta confiança confirmam quais espécies existem nesta localização. Após múltiplas correspondências de alta confiança, o limiar de detecção é reduzido com segurança para capturar mais chamados sem risco significativo de falsos positivos. Os limiares são redefinidos automaticamente após o período de validade configurado.",
         "empty": {
           "title": "Sem limiares aprendidos",
