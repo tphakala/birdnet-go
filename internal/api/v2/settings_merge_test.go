@@ -9,6 +9,18 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
+// baseBirdNETConfig returns a standard test config for merge tests.
+func baseBirdNETConfig() conf.BirdNETConfig {
+	return conf.BirdNETConfig{
+		Latitude:  40.7128,
+		Longitude: -74.0060,
+		RangeFilter: conf.RangeFilterSettings{
+			Model:     "latest",
+			Threshold: 0.03,
+		},
+	}
+}
+
 // TestMergeJSONIntoStruct tests the mergeJSONIntoStruct function
 func TestMergeJSONIntoStruct(t *testing.T) {
 	tests := []struct {
@@ -18,15 +30,8 @@ func TestMergeJSONIntoStruct(t *testing.T) {
 		validate func(t *testing.T, result conf.BirdNETConfig)
 	}{
 		{
-			name: "Update coordinates preserves range filter",
-			initial: conf.BirdNETConfig{
-				Latitude:  40.7128,
-				Longitude: -74.0060,
-				RangeFilter: conf.RangeFilterSettings{
-					Model:     "latest",
-					Threshold: 0.03,
-				},
-			},
+			name:    "Update coordinates preserves range filter",
+			initial: baseBirdNETConfig(),
 			update: `{
 				"latitude": 51.5074,
 				"longitude": -0.1278
@@ -40,15 +45,8 @@ func TestMergeJSONIntoStruct(t *testing.T) {
 			},
 		},
 		{
-			name: "Update range filter threshold preserves other fields",
-			initial: conf.BirdNETConfig{
-				Latitude:  40.7128,
-				Longitude: -74.0060,
-				RangeFilter: conf.RangeFilterSettings{
-					Model:     "latest",
-					Threshold: 0.03,
-				},
-			},
+			name:    "Update range filter threshold preserves other fields",
+			initial: baseBirdNETConfig(),
 			update: `{
 				"rangeFilter": {
 					"threshold": 0.05

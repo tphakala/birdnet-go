@@ -28,6 +28,21 @@ import (
 // Test date constant used across multiple test cases
 const testDate = "2023-01-01"
 
+// assertAnalyticsErrorResponse validates analytics error responses.
+func assertAnalyticsErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, expectedStatus int, expectedBody string) {
+	t.Helper()
+	assert.Equal(t, expectedStatus, rec.Code)
+	if expectedStatus == http.StatusOK || expectedBody == "" {
+		return
+	}
+	var errorResp map[string]any
+	err := json.Unmarshal(rec.Body.Bytes(), &errorResp)
+	require.NoError(t, err)
+	if errVal, ok := errorResp["error"]; ok {
+		assert.Contains(t, fmt.Sprint(errVal), expectedBody)
+	}
+}
+
 // TestGetSpeciesSummary tests the species summary endpoint
 func TestGetSpeciesSummary(t *testing.T) {
 	t.Parallel()
@@ -531,27 +546,8 @@ func TestGetInvalidAnalyticsRequests(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, http.NoBody)
 			rec := httptest.NewRecorder()
 
-			// Let Echo's router handle the request routing
 			e.ServeHTTP(rec, req)
-
-			// Check response
-			if tc.expectedStatus == http.StatusOK {
-				assert.Equal(t, tc.expectedStatus, rec.Code)
-			} else {
-				// For error cases, check the error message
-				assert.Equal(t, tc.expectedStatus, rec.Code)
-				if tc.expectedBody != "" {
-					var errorResp map[string]any
-					err := json.Unmarshal(rec.Body.Bytes(), &errorResp)
-					require.NoError(t, err)
-					if errVal, ok := errorResp["error"]; ok {
-						assert.Contains(t, fmt.Sprint(errVal), tc.expectedBody)
-					}
-				}
-			}
-
-			// Only assert expectations if the handler was expected to interact with the mock
-			// mockDS.AssertExpectations(t) // May need selective assertion
+			assertAnalyticsErrorResponse(t, rec, tc.expectedStatus, tc.expectedBody)
 		})
 	}
 }

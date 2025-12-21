@@ -24,6 +24,14 @@ const (
 	testControlChannelBuf = 10      // Control channel buffer size for concurrent test scenarios
 )
 
+// newMinimalController creates a Controller with just a logger for simple validation tests.
+// Use this for tests that only need to call handler methods without database or full infrastructure.
+func newMinimalController() *Controller {
+	return &Controller{
+		logger: log.New(io.Discard, "", 0),
+	}
+}
+
 // safeSlice is a helper for mock methods returning slices.
 // It safely handles nil arguments and performs type assertion.
 func safeSlice[T any](args mock.Arguments, index int) []T {

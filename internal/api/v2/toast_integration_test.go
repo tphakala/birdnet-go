@@ -11,10 +11,67 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
+// awaitNotification waits for a notification with timeout.
+func awaitNotification(t *testing.T, ch <-chan *notification.Notification, timeout time.Duration) *notification.Notification {
+	t.Helper()
+	select {
+	case notif := <-ch:
+		return notif
+	case <-time.After(timeout):
+		t.Fatal("Did not receive notification within timeout")
+		return nil
+	}
+}
+
+// checkToastMarking checks that notification is marked as toast and returns toast ID.
+func checkToastMarking(t *testing.T, notif *notification.Notification) string {
+	t.Helper()
+	isToast, ok := notif.Metadata["isToast"].(bool)
+	if !ok || !isToast {
+		t.Error("Notification should be marked as toast")
+	}
+	toastID, ok := notif.Metadata["toastId"].(string)
+	if !ok || toastID == "" {
+		t.Error("Notification should have toastId in metadata")
+	}
+	return toastID
+}
+
+// checkSSEFields checks that SSE event data contains expected fields.
+func checkSSEFields(t *testing.T, eventData, expected map[string]any) {
+	t.Helper()
+	for field, expectedValue := range expected {
+		actualValue, exists := eventData[field]
+		if !exists {
+			t.Errorf("SSE event data missing field %q", field)
+			continue
+		}
+		if actualValue != expectedValue {
+			t.Errorf("SSE event data field %q = %v, want %v", field, actualValue, expectedValue)
+		}
+	}
+}
+
+// checkSSERequired checks that SSE event data has all required fields and recent timestamp.
+func checkSSERequired(t *testing.T, eventData map[string]any) {
+	t.Helper()
+	for _, field := range []string{"id", "message", "type", "timestamp"} {
+		if _, exists := eventData[field]; !exists {
+			t.Errorf("SSE event data missing required field %q", field)
+		}
+	}
+	if timestamp, ok := eventData["timestamp"].(time.Time); ok {
+		if time.Since(timestamp) > time.Second {
+			t.Error("SSE event timestamp should be recent")
+		}
+	} else {
+		t.Error("SSE event timestamp should be a time.Time")
+	}
+}
+
 // TestToastIntegrationFlow tests the complete flow:
 // SendToast -> notification creation -> SSE event data creation
 func TestToastIntegrationFlow(t *testing.T) {
-	// Initialize notification service
 	config := notification.DefaultServiceConfig()
 	if !notification.IsInitialized() {
 		notification.Initialize(config)
@@ -23,7 +80,6 @@ func TestToastIntegrationFlow(t *testing.T) {
 	service := notification.GetService()
 	c := mockController()
 
-	// Test complete flow for different toast types
 	testCases := []struct {
 		name              string
 		message           string
@@ -37,10 +93,8 @@ func TestToastIntegrationFlow(t *testing.T) {
 			toastType: "success",
 			duration:  3000,
 			expectedSSEFields: map[string]any{
-				"message":   "Operation completed successfully",
-				"type":      "success",
-				"duration":  3000,
-				"component": "api",
+				"message": "Operation completed successfully", "type": "success",
+				"duration": 3000, "component": "api",
 			},
 		},
 		{
@@ -49,83 +103,30 @@ func TestToastIntegrationFlow(t *testing.T) {
 			toastType: "error",
 			duration:  5000,
 			expectedSSEFields: map[string]any{
-				"message":   "Operation failed with error",
-				"type":      "error",
-				"duration":  5000,
-				"component": "api",
+				"message": "Operation failed with error", "type": "error",
+				"duration": 5000, "component": "api",
 			},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Step 1: Subscribe to notifications to capture what's created
 			notifCh, _ := service.Subscribe()
 			defer service.Unsubscribe(notifCh)
 
-			// Step 2: Send toast via API helper
-			err := c.SendToast(tc.message, tc.toastType, tc.duration)
-			if err != nil {
+			if err := c.SendToast(tc.message, tc.toastType, tc.duration); err != nil {
 				t.Fatalf("SendToast() error = %v", err)
 			}
 
-			// Step 3: Capture the notification created
-			var capturedNotif *notification.Notification
-			select {
-			case capturedNotif = <-notifCh:
-				// Got the notification
-			case <-time.After(100 * time.Millisecond):
-				t.Fatal("Did not receive notification within timeout")
-			}
-
-			// Step 4: Verify notification is properly marked as toast
-			isToast, ok := capturedNotif.Metadata["isToast"].(bool)
-			if !ok || !isToast {
-				t.Error("Notification should be marked as toast")
-			}
-
-			// Step 5: Process through SSE event data creation
+			capturedNotif := awaitNotification(t, notifCh, 100*time.Millisecond)
+			toastID := checkToastMarking(t, capturedNotif)
 			sseEventData := c.createToastEventData(capturedNotif)
 
-			// Step 6: Verify SSE event data has correct fields
-			for field, expectedValue := range tc.expectedSSEFields {
-				actualValue, exists := sseEventData[field]
-				if !exists {
-					t.Errorf("SSE event data missing field %q", field)
-					continue
-				}
+			checkSSEFields(t, sseEventData, tc.expectedSSEFields)
+			checkSSERequired(t, sseEventData)
 
-				if actualValue != expectedValue {
-					t.Errorf("SSE event data field %q = %v, want %v", field, actualValue, expectedValue)
-				}
-			}
-
-			// Step 7: Verify SSE event has required fields
-			requiredFields := []string{"id", "message", "type", "timestamp"}
-			for _, field := range requiredFields {
-				if _, exists := sseEventData[field]; !exists {
-					t.Errorf("SSE event data missing required field %q", field)
-				}
-			}
-
-			// Step 8: Verify timestamp is recent
-			if timestamp, ok := sseEventData["timestamp"].(time.Time); ok {
-				if time.Since(timestamp) > time.Second {
-					t.Error("SSE event timestamp should be recent")
-				}
-			} else {
-				t.Error("SSE event timestamp should be a time.Time")
-			}
-
-			// Step 9: Verify toast ID is carried through
-			toastID, ok := capturedNotif.Metadata["toastId"].(string)
-			if !ok || toastID == "" {
-				t.Error("Notification should have toastId in metadata")
-			}
-
-			sseID := sseEventData["id"]
-			if sseID != toastID {
-				t.Errorf("SSE event ID %v should match toast ID %v", sseID, toastID)
+			if sseEventData["id"] != toastID {
+				t.Errorf("SSE event ID %v should match toast ID %v", sseEventData["id"], toastID)
 			}
 		})
 	}
@@ -136,29 +137,19 @@ func TestToastEventDataEdgeCases(t *testing.T) {
 	c := mockController()
 
 	t.Run("notification without toast metadata", func(t *testing.T) {
-		// Create a regular notification without toast metadata
 		notif := notification.NewNotification(
 			notification.TypeInfo,
 			notification.PriorityLow,
 			"Regular notification",
 			"This is not a toast",
 		)
-
-		// Should not panic, but will have empty/nil values
 		eventData := c.createToastEventData(notif)
 
-		// Should have basic structure but with nil/empty values
-		if eventData["id"] != nil {
-			t.Error("Event data ID should be nil for non-toast notification")
-		}
-
-		if eventData["type"] != "" {
-			t.Errorf("Event data type should be empty string, got %v", eventData["type"])
-		}
+		assertEventDataNil(t, eventData, "id", "non-toast notification")
+		assertEventDataEmpty(t, eventData, "type", "non-toast notification")
 	})
 
 	t.Run("notification with partial toast metadata", func(t *testing.T) {
-		// Create notification with some but not all toast metadata
 		notif := notification.NewNotification(
 			notification.TypeInfo,
 			notification.PriorityLow,
@@ -166,47 +157,25 @@ func TestToastEventDataEdgeCases(t *testing.T) {
 			"Missing some metadata",
 		).WithMetadata("isToast", true).
 			WithMetadata("toastType", "info")
-		// Missing toastId, duration, action
 
 		eventData := c.createToastEventData(notif)
 
-		// Should handle missing metadata gracefully
-		if eventData["id"] != nil {
-			t.Error("Event data ID should be nil when toastId missing")
-		}
-
-		if eventData["type"] != "info" {
-			t.Errorf("Event data type should be 'info', got %v", eventData["type"])
-		}
-
-		if _, hasDuration := eventData["duration"]; hasDuration {
-			t.Error("Event data should not include duration when not set")
-		}
-
-		if _, hasAction := eventData["action"]; hasAction {
-			t.Error("Event data should not include action when not set")
-		}
+		assertEventDataNil(t, eventData, "id", "missing toastId")
+		assertEventDataValue(t, eventData, "type", "info")
+		assertEventDataMissing(t, eventData, "duration")
+		assertEventDataMissing(t, eventData, "action")
 	})
 
 	t.Run("notification with nil metadata", func(t *testing.T) {
-		// Create notification with nil metadata
 		notif := &notification.Notification{
 			ID:       "test-id",
 			Message:  "Nil metadata test",
 			Metadata: nil,
 		}
-
-		// Should not panic
 		eventData := c.createToastEventData(notif)
 
-		// All extracted values should be nil or empty
-		if eventData["id"] != nil {
-			t.Error("Event data ID should be nil when metadata is nil")
-		}
-
-		if eventData["type"] != "" {
-			t.Error("Event data type should be empty when metadata is nil")
-		}
+		assertEventDataNil(t, eventData, "id", "nil metadata")
+		assertEventDataEmpty(t, eventData, "type", "nil metadata")
 	})
 }
 

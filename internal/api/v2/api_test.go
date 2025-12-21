@@ -15,6 +15,48 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
+// assertSystemMetrics validates system metrics in health check response.
+func assertSystemMetrics(t *testing.T, metricsMap map[string]any) {
+	t.Helper()
+	if cpu, cpuExists := metricsMap["cpu_usage"]; cpuExists {
+		cpuValue, ok := cpu.(float64)
+		assert.True(t, ok, "CPU usage should be a number")
+		assert.GreaterOrEqual(t, cpuValue, float64(0), "CPU usage should be non-negative")
+		assert.LessOrEqual(t, cpuValue, float64(100), "CPU usage should be <= 100%")
+	}
+	if memory, memExists := metricsMap["memory_usage"]; memExists {
+		memValue, ok := memory.(float64)
+		assert.True(t, ok, "Memory usage should be a number")
+		assert.GreaterOrEqual(t, memValue, float64(0), "Memory usage should be non-negative")
+	}
+}
+
+// assertDiskSpace validates disk space metrics in health check response.
+func assertDiskSpace(t *testing.T, diskSpace any) {
+	t.Helper()
+	diskMap, ok := diskSpace.(map[string]any)
+	assert.True(t, ok, "Disk space should be an object")
+	if total, totalExists := diskMap["total"]; totalExists {
+		assert.GreaterOrEqual(t, total.(float64), float64(0), "Total disk space should be non-negative")
+	}
+	if free, freeExists := diskMap["free"]; freeExists {
+		assert.GreaterOrEqual(t, free.(float64), float64(0), "Free disk space should be non-negative")
+	}
+}
+
+// assertUptime validates uptime field in health check response.
+func assertUptime(t *testing.T, uptime any) {
+	t.Helper()
+	switch v := uptime.(type) {
+	case float64:
+		assert.GreaterOrEqual(t, v, float64(0), "Uptime should be non-negative")
+	case string:
+		assert.NotEmpty(t, v, "Uptime string should not be empty")
+	default:
+		assert.Fail(t, "Uptime should be a number or string")
+	}
+}
+
 // TestHealthCheck tests the health check endpoint
 func TestHealthCheck(t *testing.T) {
 	// Setup
@@ -70,45 +112,15 @@ func TestHealthCheck(t *testing.T) {
 		if metrics, exists := response["system"]; exists {
 			metricsMap, ok := metrics.(map[string]any)
 			assert.True(t, ok, "System metrics should be an object")
-
-			// Check for common system metrics
-			if cpu, cpuExists := metricsMap["cpu_usage"]; cpuExists {
-				cpuValue, ok := cpu.(float64)
-				assert.True(t, ok, "CPU usage should be a number")
-				assert.GreaterOrEqual(t, cpuValue, float64(0), "CPU usage should be non-negative")
-				assert.LessOrEqual(t, cpuValue, float64(100), "CPU usage should be <= 100%")
-			}
-
-			if memory, memExists := metricsMap["memory_usage"]; memExists {
-				memValue, ok := memory.(float64)
-				assert.True(t, ok, "Memory usage should be a number")
-				assert.GreaterOrEqual(t, memValue, float64(0), "Memory usage should be non-negative")
-			}
-
+			assertSystemMetrics(t, metricsMap)
 			if diskSpace, diskExists := metricsMap["disk_space"]; diskExists {
-				diskMap, ok := diskSpace.(map[string]any)
-				assert.True(t, ok, "Disk space should be an object")
-
-				if total, totalExists := diskMap["total"]; totalExists {
-					assert.GreaterOrEqual(t, total.(float64), float64(0), "Total disk space should be non-negative")
-				}
-
-				if free, freeExists := diskMap["free"]; freeExists {
-					assert.GreaterOrEqual(t, free.(float64), float64(0), "Free disk space should be non-negative")
-				}
+				assertDiskSpace(t, diskSpace)
 			}
 		}
 
 		// Check uptime if present
 		if uptime, exists := response["uptime"]; exists {
-			switch v := uptime.(type) {
-			case float64:
-				assert.GreaterOrEqual(t, v, float64(0), "Uptime should be non-negative")
-			case string:
-				assert.NotEmpty(t, v, "Uptime string should not be empty")
-			default:
-				assert.Fail(t, "Uptime should be a number or string")
-			}
+			assertUptime(t, uptime)
 		}
 
 		// Check for additional fields that might be useful

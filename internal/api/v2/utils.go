@@ -63,7 +63,8 @@ func NormalizeClipPathStrict(p, clipsPrefix string) (string, bool) {
 	}
 
 	// Reject paths that would escape the SecureFS root
-	if path.IsAbs(p) || strings.HasPrefix(p, "../") {
+	// Check for absolute paths, parent directory traversal ("../..."), and bare parent reference ("..")
+	if path.IsAbs(p) || strings.HasPrefix(p, "../") || p == ".." {
 		return "", false // Invalid path
 	}
 
