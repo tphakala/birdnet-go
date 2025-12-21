@@ -117,7 +117,7 @@ func assertCSRFError(t *testing.T, err error, expectedMessage string) {
 	t.Helper()
 	require.Error(t, err)
 	var httpErr *echo.HTTPError
-	require.True(t, errors.As(err, &httpErr), "expected echo.HTTPError, got %T", err)
+	require.ErrorAs(t, err, &httpErr, "expected echo.HTTPError, got %T", err)
 	assert.Equal(t, http.StatusForbidden, httpErr.Code)
 	assert.Contains(t, httpErr.Message, expectedMessage)
 }
