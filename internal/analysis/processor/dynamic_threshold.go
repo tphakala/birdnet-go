@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -145,9 +146,8 @@ func (p *Processor) updateDynamicThreshold(commonName string, confidence float64
 		// Check if the species already has a dynamic threshold
 		if dt, exists := p.DynamicThresholds[commonName]; exists && confidence > float64(p.getBaseConfidenceThreshold(commonName)) {
 			// Update the timer to extend the threshold's validity
+			// Note: dt is a pointer, so this directly mutates the struct in the map
 			dt.Timer = time.Now().Add(time.Duration(dt.ValidHours) * time.Hour)
-			// Since we're modifying a struct in the map, we need to reassign it
-			p.DynamicThresholds[commonName] = dt
 		}
 	}
 }
@@ -203,8 +203,13 @@ func (p *Processor) cleanUpDynamicThresholds() {
 }
 
 // ResetDynamicThreshold resets a single species threshold and clears its history (BG-59)
-// This removes both the in-memory threshold and the database records
+// This removes both the in-memory threshold and the database records.
+// The error return is always nil as database errors are logged internally
+// and the operation is best-effort for database cleanup.
 func (p *Processor) ResetDynamicThreshold(speciesName string) error {
+	// Normalize to lowercase to match the casing used by addSpeciesToDynamicThresholds
+	speciesName = strings.ToLower(speciesName)
+
 	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
 	p.thresholdsMutex.Lock()
 
@@ -234,7 +239,9 @@ func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 }
 
 // ResetAllDynamicThresholds resets all thresholds and clears all history (BG-59)
-// Returns the count of reset thresholds
+// Returns the count of reset thresholds. The error return is always nil as database
+// errors are logged internally and the operation is best-effort for database cleanup;
+// in-memory reset is always successful.
 func (p *Processor) ResetAllDynamicThresholds() (int64, error) {
 	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
 	p.thresholdsMutex.Lock()

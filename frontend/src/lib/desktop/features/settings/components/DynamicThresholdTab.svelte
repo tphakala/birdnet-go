@@ -400,6 +400,11 @@
   </SettingsNote>
 </div>
 
+<!-- Global Escape key handler for modal -->
+<svelte:window
+  onkeydown={e => e.key === 'Escape' && resetAllConfirm && (resetAllConfirm = false)}
+/>
+
 <!-- Reset All Confirmation Modal -->
 {#if resetAllConfirm}
   <div class="modal modal-open">
@@ -432,7 +437,6 @@
     <div
       class="modal-backdrop"
       onclick={() => (resetAllConfirm = false)}
-      onkeydown={e => e.key === 'Escape' && (resetAllConfirm = false)}
       role="button"
       tabindex="-1"
       aria-label="Close modal"
