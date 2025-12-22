@@ -1248,7 +1248,7 @@ func (ds *DataStore) LockNote(noteID string) error {
 			if strings.Contains(strings.ToLower(result.Error.Error()), "database is locked") {
 				// Calculate exponential backoff with jitter
 				baseBackoff := baseDelay * time.Duration(attempt+1)
-				jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff))
+				jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff)) //nolint:gosec // G404: math/rand is fine for jitter, not security-critical
 				delay := baseBackoff + jitter
 				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d, jitter %v)", txID, delay, attempt+1, maxRetries, jitter)
 				time.Sleep(delay)
@@ -1310,7 +1310,7 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 			if strings.Contains(strings.ToLower(result.Error.Error()), "database is locked") {
 				// Calculate exponential backoff with jitter
 				baseBackoff := baseDelay * time.Duration(attempt+1)
-				jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff))
+				jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff)) //nolint:gosec // G404: math/rand is fine for jitter, not security-critical
 				delay := baseBackoff + jitter
 				log.Printf("[%s] Database locked, retrying in %v (attempt %d/%d, jitter %v)", txID, delay, attempt+1, maxRetries, jitter)
 				time.Sleep(delay)
@@ -2187,7 +2187,7 @@ func (ds *DataStore) handleDatabaseLockError(attempt, maxRetries int, baseDelay 
 	// Calculate exponential backoff with jitter to avoid thundering herd
 	baseBackoff := baseDelay * time.Duration(attempt+1)
 	// Add 0-25% jitter to the base backoff
-	jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff))
+	jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff)) //nolint:gosec // G404: math/rand is fine for jitter, not security-critical
 	delay := baseBackoff + jitter
 
 	txLogger.Warn("Database locked, scheduling retry",

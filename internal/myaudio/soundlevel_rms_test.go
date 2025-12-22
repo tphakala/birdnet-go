@@ -137,7 +137,7 @@ func TestCalculateRMS_AudioRealistic(t *testing.T) {
 		// Generate random values in [-1, 1]
 		samples := make([]float64, 48000)
 		for i := range samples {
-			samples[i] = rand.Float64()*2 - 1
+			samples[i] = rand.Float64()*2 - 1 //nolint:gosec // G404: math/rand is fine for test data
 		}
 		result := calculateRMS(samples)
 		// White noise RMS should be close to 1/sqrt(3) ≈ 0.577
@@ -227,7 +227,7 @@ func BenchmarkCalculateRMS_DataPatterns(b *testing.B) {
 			create: func() []float64 {
 				samples := make([]float64, size)
 				for i := range samples {
-					samples[i] = rand.Float64()*2 - 1
+					samples[i] = rand.Float64()*2 - 1 //nolint:gosec // G404: math/rand is fine for test data
 				}
 				return samples
 			},
@@ -310,7 +310,7 @@ func BenchmarkCalculateRMS_ThroughputPerSecond(b *testing.B) {
 	for i := range bands {
 		bands[i] = make([]float64, samplesPerBand)
 		for j := range bands[i] {
-			bands[i][j] = rand.Float64()*2 - 1
+			bands[i][j] = rand.Float64()*2 - 1 //nolint:gosec // G404: math/rand is fine for test data
 		}
 	}
 
