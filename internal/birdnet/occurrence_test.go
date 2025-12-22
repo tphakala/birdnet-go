@@ -205,7 +205,7 @@ func TestNoteJSONOmitsOccurrenceWhenZero(t *testing.T) {
 
 	// Build Settings with Main.Name and BirdNET config
 	settings := &conf.Settings{}
-	settings.Main.Name = "TestNode"
+	settings.Main.Name = testNodeName
 	settings.BirdNET = conf.BirdNETConfig{
 		Latitude:    52.5200,
 		Longitude:   13.4050,
@@ -216,10 +216,10 @@ func TestNoteJSONOmitsOccurrenceWhenZero(t *testing.T) {
 	// Create test observation with occurrence 0.0 (should be omitted due to omitzero tag)
 	beginTime := time.Now()
 	endTime := beginTime.Add(3 * time.Second)
-	species := "Turdus merula_blackbird"
+	species := testSpecies
 	confidence := 0.85
-	source := "test_audio"
-	clipName := "test_clip.wav"
+	source := testAudioSource
+	clipName := testClipName
 	elapsedTime := 100 * time.Millisecond
 	occurrence := 0.0
 

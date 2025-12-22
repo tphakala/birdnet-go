@@ -2010,13 +2010,13 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 
 				switch {
 				case detTime >= sunriseStart && detTime <= sunriseEnd:
-					timeOfDay = "sunrise"
+					timeOfDay = TimeOfDaySunrise
 				case detTime >= sunsetStart && detTime <= sunsetEnd:
-					timeOfDay = "sunset"
+					timeOfDay = TimeOfDaySunset
 				case detTime >= sunriseTime && detTime < sunsetTime:
-					timeOfDay = "day"
+					timeOfDay = TimeOfDayDay
 				default:
-					timeOfDay = "night"
+					timeOfDay = TimeOfDayNight
 				}
 			}
 		}

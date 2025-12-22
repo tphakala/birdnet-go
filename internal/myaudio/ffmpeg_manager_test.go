@@ -141,7 +141,7 @@ func TestFFmpegManager_HealthCheck(t *testing.T) {
 
 		audioChan := make(chan UnifiedAudioData, 10)
 		defer close(audioChan)
-		url := "rtsp://test.example.com/stream"
+		url := testRTSPURL
 
 		// Start a stream
 		err := manager.StartStream(url, "tcp", audioChan)
@@ -301,7 +301,7 @@ func TestFFmpegManager_MonitoringIntegration(t *testing.T) {
 		// Background monitoring tickers advance fake time precisely in synctest bubble
 		manager.StartMonitoring(50*time.Millisecond, audioChan)
 
-		url := "rtsp://test.example.com/stream"
+		url := testRTSPURL
 
 		// Start a stream
 		err := manager.StartStream(url, "tcp", audioChan)

@@ -16,6 +16,8 @@ import (
 const (
 	SeverityCritical = "critical"
 	SeverityHigh     = "high"
+	SeverityMedium   = "medium"
+	SeverityLow      = "low"
 )
 
 // DatastoreTelemetry handles telemetry reporting for datastore operations
@@ -195,7 +197,7 @@ func (dt *DatastoreTelemetry) calculateSeverity(err error, context *ErrorContext
 		strings.Contains(errStr, "no such table") ||
 		strings.Contains(errStr, "disk full") ||
 		strings.Contains(errStr, "out of memory") {
-		return "critical"
+		return SeverityCritical
 	}
 
 	// High severity for resource exhaustion or constraint violations
@@ -213,11 +215,11 @@ func (dt *DatastoreTelemetry) calculateSeverity(err error, context *ErrorContext
 	if strings.Contains(errStr, "constraint") ||
 		strings.Contains(errStr, "deadlock") ||
 		strings.Contains(errStr, "timeout") {
-		return "medium"
+		return SeverityMedium
 	}
 
 	// Default to low severity
-	return "low"
+	return SeverityLow
 }
 
 // sendCriticalErrorToTelemetry sends critical errors with full context attachments
@@ -226,7 +228,7 @@ func (dt *DatastoreTelemetry) sendCriticalErrorToTelemetry(err error, context *E
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetLevel(sentry.LevelError)
 		scope.SetTag("component", "datastore")
-		scope.SetTag("severity", "critical")
+		scope.SetTag("severity", SeverityCritical)
 		scope.SetTag("operation", context.Operation)
 
 		// Add resource context as attachment

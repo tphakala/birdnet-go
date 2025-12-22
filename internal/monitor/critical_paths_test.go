@@ -191,11 +191,11 @@ func TestSystemMonitorIntegration(t *testing.T) {
 
 	// Enable audio export
 	config.Realtime.Audio.Export.Enabled = true
-	config.Realtime.Audio.Export.Path = "clips/"
+	config.Realtime.Audio.Export.Path = testClipsPath
 
 	// Enable SQLite
 	config.Output.SQLite.Enabled = true
-	config.Output.SQLite.Path = "birdnet.db"
+	config.Output.SQLite.Path = testDBPath
 
 	// Create monitor (this will auto-append critical paths)
 	monitor := NewSystemMonitor(config)

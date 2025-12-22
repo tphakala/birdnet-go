@@ -229,8 +229,8 @@ func TestLogJobDropped(t *testing.T) {
 	if logEntry["reason"] != "queue_full" {
 		t.Errorf("Expected reason 'queue_full', got %v", logEntry["reason"])
 	}
-	if logEntry["level"] != "WARN" {
-		t.Errorf("Expected level 'WARN' for dropped job, got %v", logEntry["level"])
+	if logEntry["level"] != logLevelWarn {
+		t.Errorf("Expected level '%s' for dropped job, got %v", logLevelWarn, logEntry["level"])
 	}
 	if logEntry["msg"] != "Job dropped" {
 		t.Errorf("Expected message 'Job dropped', got %v", logEntry["msg"])
@@ -327,8 +327,8 @@ func TestLogJobRetryScheduled(t *testing.T) {
 	if logEntry["error"] != "connection timeout" {
 		t.Errorf("Expected error 'connection timeout', got %v", logEntry["error"])
 	}
-	if logEntry["level"] != "WARN" {
-		t.Errorf("Expected level 'WARN' for retry scheduling, got %v", logEntry["level"])
+	if logEntry["level"] != logLevelWarn {
+		t.Errorf("Expected level '%s' for retry scheduling, got %v", logLevelWarn, logEntry["level"])
 	}
 	if logEntry["msg"] != "Job scheduled for retry after failure" {
 		t.Errorf("Expected message 'Job scheduled for retry after failure', got %v", logEntry["msg"])

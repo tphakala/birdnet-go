@@ -35,7 +35,7 @@ func TestFIFOPath(t *testing.T) {
 }
 
 func TestFIFOOperations(t *testing.T) {
-	if runtime.GOOS == "windows" && os.Getenv("CI") == "true" {
+	if runtime.GOOS == osWindows && os.Getenv("CI") == "true" {
 		t.Skip("Skipping FIFO test on Windows in CI environment")
 	}
 
