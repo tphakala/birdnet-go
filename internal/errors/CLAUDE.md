@@ -24,9 +24,9 @@ func init() {
 
 ### Current Components
 
-- birdnet, myaudio, httpcontroller, datastore
-- imageprovider, diskmanager, mqtt, weather
-- conf, telemetry, birdweather, backup, audiocore
+- birdnet, myaudio, datastore, imageprovider
+- diskmanager, mqtt, weather, conf, telemetry
+- birdweather, backup, audiocore
 
 ⚠️ **Unregistered components cause incorrect telemetry tagging**
 

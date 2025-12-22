@@ -83,7 +83,7 @@ type Controller struct {
 	wg sync.WaitGroup // tracks background goroutines for clean shutdown
 
 	// Audio level channel for SSE streaming
-	// TODO: Consider moving to a dedicated audio manager during httpcontroller refactoring
+	// TODO: Consider moving to a dedicated audio manager
 	audioLevelChan chan myaudio.AudioLevelData
 
 	// Test synchronization fields (only populated when initializeRoutes is true)

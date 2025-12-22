@@ -1,11 +1,5 @@
 {
   "devDependencies": {
     "daisyui": "^4.12.24"
-  },
-  "dependencies": {
-    "puppeteer": "^24.12.1"
-  },
-  "scripts": {
-    "prepare": "husky"
   }
 }

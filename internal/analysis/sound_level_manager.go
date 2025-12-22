@@ -7,30 +7,30 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
 // SoundLevelManager manages the lifecycle of sound level monitoring components
 type SoundLevelManager struct {
-	mutex            sync.Mutex
-	isRunning        bool
-	doneChan         chan struct{}
-	wg               sync.WaitGroup
-	soundLevelChan   chan myaudio.SoundLevelData
-	proc             *processor.Processor
-	httpServer       *httpcontroller.Server
-	metrics          *observability.Metrics
+	mutex          sync.Mutex
+	isRunning      bool
+	doneChan       chan struct{}
+	wg             sync.WaitGroup
+	soundLevelChan chan myaudio.SoundLevelData
+	proc           *processor.Processor
+	apiController  *apiv2.Controller
+	metrics        *observability.Metrics
 }
 
 // NewSoundLevelManager creates a new sound level manager
-func NewSoundLevelManager(soundLevelChan chan myaudio.SoundLevelData, proc *processor.Processor, httpServer *httpcontroller.Server, metrics *observability.Metrics) *SoundLevelManager {
+func NewSoundLevelManager(soundLevelChan chan myaudio.SoundLevelData, proc *processor.Processor, apiController *apiv2.Controller, metrics *observability.Metrics) *SoundLevelManager {
 	return &SoundLevelManager{
 		soundLevelChan: soundLevelChan,
 		proc:           proc,
-		httpServer:     httpServer,
+		apiController:  apiController,
 		metrics:        metrics,
 	}
 }
@@ -64,7 +64,7 @@ func (m *SoundLevelManager) Start() error {
 	m.doneChan = make(chan struct{})
 
 	// Start publishers
-	startSoundLevelPublishers(&m.wg, m.doneChan, m.proc, m.soundLevelChan, m.httpServer)
+	startSoundLevelPublishers(&m.wg, m.doneChan, m.proc, m.soundLevelChan, m.apiController)
 
 	m.isRunning = true
 	log.Println("🔊 Sound level monitoring started")

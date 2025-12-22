@@ -14,10 +14,9 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
-	api "github.com/tphakala/birdnet-go/internal/api/v2"
+	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
@@ -509,7 +508,7 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 }
 
 // startSoundLevelPublishers starts all sound level publishers with the given done channel
-func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc *processor.Processor, soundLevelChan chan myaudio.SoundLevelData, httpServer *httpcontroller.Server) {
+func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc *processor.Processor, soundLevelChan chan myaudio.SoundLevelData, apiController *apiv2.Controller) {
 	settings := conf.Setting()
 
 	// Create a merged quit channel that responds to both the done channel and global quit
@@ -525,8 +524,8 @@ func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc 
 	}
 
 	// Start SSE publisher if API is available
-	if httpServer != nil && httpServer.APIV2 != nil {
-		startSoundLevelSSEPublisherWithDone(wg, mergedQuitChan, httpServer.APIV2, soundLevelChan)
+	if apiController != nil {
+		startSoundLevelSSEPublisherWithDone(wg, mergedQuitChan, apiController, soundLevelChan)
 	}
 
 	// Start metrics publisher
@@ -574,7 +573,7 @@ func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan <-chan st
 
 // startSoundLevelSSEPublisherWithDone starts SSE publisher with a custom done channel
 // This is a compatibility wrapper that converts done channel to context for the refactored function
-func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, apiController *api.Controller, soundLevelChan chan myaudio.SoundLevelData) {
+func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, apiController *apiv2.Controller, soundLevelChan chan myaudio.SoundLevelData) {
 	// Create context that gets canceled when done channel is closed
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -592,7 +591,7 @@ func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struc
 }
 
 // broadcastSoundLevelSSE broadcasts sound level data via SSE with error handling and metrics
-func broadcastSoundLevelSSE(apiController *api.Controller, soundData myaudio.SoundLevelData) error {
+func broadcastSoundLevelSSE(apiController *apiv2.Controller, soundData myaudio.SoundLevelData) error {
 	// Validate data before broadcasting
 	if err := validateSoundLevelData(&soundData); err != nil {
 		// Log validation error if debug enabled
@@ -646,7 +645,7 @@ func broadcastSoundLevelSSE(apiController *api.Controller, soundData myaudio.Sou
 }
 
 // getSoundLevelMetricsFromAPI safely retrieves sound level metrics from API controller
-func getSoundLevelMetricsFromAPI(apiController *api.Controller) *metrics.SoundLevelMetrics {
+func getSoundLevelMetricsFromAPI(apiController *apiv2.Controller) *metrics.SoundLevelMetrics {
 	if apiController == nil || apiController.Processor == nil ||
 		apiController.Processor.Metrics == nil || apiController.Processor.Metrics.SoundLevel == nil {
 		return nil

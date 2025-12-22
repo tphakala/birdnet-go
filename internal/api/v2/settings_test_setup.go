@@ -64,8 +64,6 @@ func TestMain(m *testing.M) {
 				goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
 				// Ignore lumberjack logger
 				goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
-				// Ignore audio streaming HLS initialization
-				goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/httpcontroller/handlers.init.0.func1"),
 			}
 			
 			if err := goleak.Find(opts...); err != nil {

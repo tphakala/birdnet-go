@@ -80,7 +80,7 @@ type HLSHeartbeatRequest struct {
 }
 
 // hlsManager manages HLS streaming state
-// TODO: Move to Controller struct during httpcontroller refactoring
+// TODO: Consider moving to Controller struct for better encapsulation
 type hlsManager struct {
 	// Active streams indexed by sourceID
 	streams   map[string]*HLSStreamInfo
@@ -110,7 +110,7 @@ type hlsManager struct {
 }
 
 // Global HLS manager instance
-// TODO: Move to Controller struct during httpcontroller refactoring
+// TODO: Consider moving to Controller struct for better encapsulation
 var hlsMgr = &hlsManager{
 	streams:        make(map[string]*HLSStreamInfo),
 	clients:        make(map[string]map[string]bool),
@@ -1550,7 +1550,7 @@ func removeStreamFromManager(sourceID string) *HLSStreamInfo {
 }
 
 // cleanupStream performs the actual cleanup of a stream
-// TODO: Refactor to use proper dependency injection during httpcontroller refactoring
+// TODO: Consider refactoring to use proper dependency injection
 func cleanupStream(s *HLSStreamInfo, sourceID string) {
 	if s.cancel != nil {
 		s.cancel()

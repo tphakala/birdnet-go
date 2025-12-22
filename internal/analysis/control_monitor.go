@@ -11,11 +11,10 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
+	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/httpcontroller"
-	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
@@ -23,17 +22,16 @@ import (
 
 // ControlMonitor handles control signals for realtime analysis mode
 type ControlMonitor struct {
-	wg               *sync.WaitGroup
-	controlChan      chan string
-	quitChan         chan struct{}
-	restartChan      chan struct{}
-	notificationChan chan handlers.Notification
-	bufferManager    *BufferManager
-	proc             *processor.Processor
-	audioLevelChan   chan myaudio.AudioLevelData
-	soundLevelChan   chan myaudio.SoundLevelData
-	bn               *birdnet.BirdNET
-	httpServer       *httpcontroller.Server
+	wg             *sync.WaitGroup
+	controlChan    chan string
+	quitChan       chan struct{}
+	restartChan    chan struct{}
+	bufferManager  *BufferManager
+	proc           *processor.Processor
+	audioLevelChan chan myaudio.AudioLevelData
+	soundLevelChan chan myaudio.SoundLevelData
+	bn             *birdnet.BirdNET
+	apiController  *apiv2.Controller
 
 	// Track unified audio channel and its done channel to prevent goroutine leaks
 	unifiedAudioChan     chan myaudio.UnifiedAudioData
@@ -43,7 +41,7 @@ type ControlMonitor struct {
 
 	// Sound level manager for lifecycle management
 	soundLevelManager *SoundLevelManager
-	
+
 	// Track telemetry endpoint
 	telemetryEndpoint      *observability.Endpoint
 	telemetryEndpointMutex sync.Mutex
@@ -53,21 +51,21 @@ type ControlMonitor struct {
 }
 
 // NewControlMonitor creates a new ControlMonitor instance
-func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData, metrics *observability.Metrics) *ControlMonitor {
+func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics) *ControlMonitor {
 	cm := &ControlMonitor{
-		wg:                     wg,
-		controlChan:            controlChan,
-		quitChan:               quitChan,
-		restartChan:            restartChan,
-		notificationChan:       notificationChan,
-		bufferManager:          bufferManager,
-		audioLevelChan:         audioLevelChan,
-		soundLevelChan:         soundLevelChan,
-		proc:                   proc,
-		bn:                     proc.Bn,
-		metrics:                metrics,
+		wg:             wg,
+		controlChan:    controlChan,
+		quitChan:       quitChan,
+		restartChan:    restartChan,
+		bufferManager:  bufferManager,
+		audioLevelChan: audioLevelChan,
+		soundLevelChan: soundLevelChan,
+		proc:           proc,
+		bn:             proc.Bn,
+		apiController:  apiController,
+		metrics:        metrics,
 	}
-	
+
 	// Initialize the sound level manager but don't start it yet
 	// It will be started by handleReconfigureSoundLevel based on settings
 	return cm
@@ -108,9 +106,9 @@ func (cm *ControlMonitor) initializeSoundLevelIfEnabled() {
 	if settings.Realtime.Audio.SoundLevel.Enabled {
 		// Initialize the sound level manager
 		if cm.soundLevelManager == nil {
-			cm.soundLevelManager = NewSoundLevelManager(cm.soundLevelChan, cm.proc, cm.httpServer, cm.metrics)
+			cm.soundLevelManager = NewSoundLevelManager(cm.soundLevelChan, cm.proc, cm.apiController, cm.metrics)
 		}
-		
+
 		// Start sound level monitoring
 		if err := cm.soundLevelManager.Start(); err != nil {
 			log.Printf("⚠️ Warning: Failed to start sound level monitoring: %v", err)
@@ -319,22 +317,6 @@ func (cm *ControlMonitor) handleReconfigureRTSP() {
 	// Update the analysis buffer monitors
 	if err := cm.bufferManager.UpdateMonitors(sources); err != nil {
 		log.Printf("\033[33m⚠️  Warning: Buffer monitor update completed with errors: %v\033[0m", err)
-		
-		// Send warning notification to UI to inform users of partial failures
-		if cm.notificationChan != nil {
-			notification := handlers.Notification{
-				Type:    "warning", 
-				Message: fmt.Sprintf("Buffer Monitor Warning: Buffer monitor update completed with errors: %v", err),
-			}
-			
-			// Non-blocking send to avoid blocking reconfiguration
-			select {
-			case cm.notificationChan <- notification:
-			default:
-				log.Printf("Warning: Could not send buffer monitor error notification (channel full)")
-			}
-		}
-		
 		// Note: We continue execution as this is not critical for RTSP reconfiguration
 	}
 
@@ -479,29 +461,23 @@ func (cm *ControlMonitor) handleUpdateDetectionIntervals() {
 	cm.notifySuccess("Detection rate limits updated successfully")
 }
 
-// notifySuccess sends a success notification
+// notifySuccess logs a success message
 func (cm *ControlMonitor) notifySuccess(message string) {
-	cm.notificationChan <- handlers.Notification{
-		Message: message,
-		Type:    "success",
-	}
+	log.Printf("✅ %s", message)
 }
 
-// notifyError sends an error notification
+// notifyError logs an error message
 func (cm *ControlMonitor) notifyError(message string, err error) {
-	cm.notificationChan <- handlers.Notification{
-		Message: fmt.Sprintf("%s: %v", message, err),
-		Type:    "error",
-	}
+	log.Printf("❌ %s: %v", message, err)
 }
 
 // handleReconfigureSoundLevel reconfigures sound level monitoring
 func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 	log.Printf("🔄 Reconfiguring sound level monitoring...")
-	
+
 	// Initialize the sound level manager if not already created
 	if cm.soundLevelManager == nil {
-		cm.soundLevelManager = NewSoundLevelManager(cm.soundLevelChan, cm.proc, cm.httpServer, cm.metrics)
+		cm.soundLevelManager = NewSoundLevelManager(cm.soundLevelChan, cm.proc, cm.apiController, cm.metrics)
 	}
 	
 	// Restart sound level monitoring with new settings

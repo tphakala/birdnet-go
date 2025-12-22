@@ -17,6 +17,7 @@ import (
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api"
+	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/audiocore/adapter"
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
@@ -24,18 +25,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/httpcontroller"
-	"github.com/tphakala/birdnet-go/internal/httpcontroller/handlers"
-	"github.com/tphakala/birdnet-go/internal/httpserver"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/monitor"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
-	"github.com/tphakala/birdnet-go/internal/security"
-	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/security"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
@@ -97,7 +95,7 @@ var audioDemuxManager = NewAudioDemuxManager()
 // RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
 //
 //nolint:gocognit,gocyclo // This is the main orchestration function that coordinates multiple subsystems during startup and shutdown
-func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.Notification) error {
+func RealtimeAnalysis(settings *conf.Settings) error {
 	// Initialize BirdNET interpreter
 	if err := initializeBirdNET(settings); err != nil {
 		// Model initialization failures are not retryable because they indicate:
@@ -240,39 +238,26 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// Initialize system monitor if monitoring is enabled
 	systemMonitor := initializeSystemMonitor(settings)
 
-	// Initialize and start the HTTP server based on configuration
-	var httpServer httpserver.Server
-	var legacyServer *httpcontroller.Server
-	if settings.WebServer.UseLegacyServer {
-		// Use legacy httpcontroller server
-		log.Println("📡 Using legacy HTTP server (httpcontroller)")
-		legacyServer = httpcontroller.New(settings, dataStore, birdImageCache, audioLevelChan, controlChan, proc, metrics)
-		httpServer = legacyServer
-	} else {
-		// Use new api server
-		log.Println("📡 Using new HTTP server (api)")
-		// Create OAuth2Server for authentication (same as legacy httpcontroller)
-		oauth2Server := security.NewOAuth2Server()
-		// Create SunCalc for sun event times (same as legacy httpcontroller)
-		sunCalc := suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
-		apiServer, err := api.New(
-			settings,
-			api.WithDataStore(dataStore),
-			api.WithBirdImageCache(birdImageCache),
-			api.WithProcessor(proc),
-			api.WithMetrics(metrics),
-			api.WithControlChannel(controlChan),
-			api.WithAudioLevelChannel(audioLevelChan),
-			api.WithOAuth2Server(oauth2Server),
-			api.WithSunCalc(sunCalc),
-			api.WithAssetsFS(api.AssetsFs),
-		)
-		if err != nil {
-			return fmt.Errorf("failed to create new HTTP server: %w", err)
-		}
-		httpServer = apiServer
+	// Initialize and start the HTTP server
+	log.Println("📡 Starting HTTP server")
+	oauth2Server := security.NewOAuth2Server()
+	sunCalc := suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
+	apiServer, err := api.New(
+		settings,
+		api.WithDataStore(dataStore),
+		api.WithBirdImageCache(birdImageCache),
+		api.WithProcessor(proc),
+		api.WithMetrics(metrics),
+		api.WithControlChannel(controlChan),
+		api.WithAudioLevelChannel(audioLevelChan),
+		api.WithOAuth2Server(oauth2Server),
+		api.WithSunCalc(sunCalc),
+		api.WithAssetsFS(api.AssetsFs),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create HTTP server: %w", err)
 	}
-	httpServer.Start()
+	apiServer.Start()
 
 	// Initialize the wait group to wait for all goroutines to finish
 	var wg sync.WaitGroup
@@ -340,14 +325,13 @@ func RealtimeAnalysis(settings *conf.Settings, notificationChan chan handlers.No
 	// startTelemetryEndpoint(&wg, settings, metrics, quitChan) // Moved to control monitor
 
 	// start control monitor for hot reloads
-	// Note: legacyServer is nil when using the new api server
-	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, legacyServer, metrics)
+	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, bufferManager, proc, apiServer.APIController(), metrics)
 
 	// start shutdown signal monitor
 	monitorShutdownSignals(quitChan)
 
 	// Track the HTTP server, system monitor and control monitor for clean shutdown
-	httpServerRef := httpServer
+	httpServerRef := apiServer
 	systemMonitorRef := systemMonitor
 	ctrlMonitorRef := ctrlMonitor
 
@@ -896,15 +880,15 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.Metrics) (*imageprovider.ImageProviderRegistry, error) {
 	// Use the global registry if available, otherwise create a new one
 	var registry *imageprovider.ImageProviderRegistry
-	if httpcontroller.ImageProviderRegistry != nil {
-		registry = httpcontroller.ImageProviderRegistry
+	if api.ImageProviderRegistry != nil {
+		registry = api.ImageProviderRegistry
 		// Add structured logging
 		GetLogger().Info("Using existing image provider registry",
 			"operation", "setup_image_registry")
 		log.Println("Using global image provider registry")
 	} else {
 		registry = imageprovider.NewImageProviderRegistry()
-		httpcontroller.ImageProviderRegistry = registry // Assign back to global
+		api.ImageProviderRegistry = registry // Assign back to global
 		// Add structured logging
 		GetLogger().Info("Created new image provider registry",
 			"operation", "setup_image_registry")
@@ -974,7 +958,7 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 			GetLogger().Debug("Listing embedded filesystem contents",
 				"operation", "debug_filesystem")
 			log.Println("Embedded filesystem contents:")
-			if err := fs.WalkDir(httpcontroller.ImageDataFs, ".", func(path string, d fs.DirEntry, err error) error {
+			if err := fs.WalkDir(api.ImageDataFs, ".", func(path string, d fs.DirEntry, err error) error {
 				if err != nil {
 					// Add structured logging
 					GetLogger().Debug("Error walking filesystem path",
@@ -1000,7 +984,7 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 			}
 		}
 
-		if err := imageprovider.RegisterAviCommonsProvider(registry, httpcontroller.ImageDataFs, metrics, ds); err != nil {
+		if err := imageprovider.RegisterAviCommonsProvider(registry, api.ImageDataFs, metrics, ds); err != nil {
 			// Add structured logging
 			GetLogger().Error("Failed to register AviCommons provider",
 				"error", err,
@@ -1014,7 +998,7 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 				Context("provider", "avicommons").
 				Build())
 			// Check if we can read the data file for debugging
-			if _, errRead := fs.ReadFile(httpcontroller.ImageDataFs, "internal/imageprovider/data/latest.json"); errRead != nil {
+			if _, errRead := fs.ReadFile(api.ImageDataFs, "internal/imageprovider/data/latest.json"); errRead != nil {
 				// Add structured logging
 				GetLogger().Error("Error reading AviCommons data file",
 					"error", errRead,
@@ -1321,9 +1305,8 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) 
 }
 
 // startControlMonitor handles various control signals for realtime analysis mode
-func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, notificationChan chan handlers.Notification, bufferManager *BufferManager, proc *processor.Processor, httpServer *httpcontroller.Server, metrics *observability.Metrics) *ControlMonitor {
-	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, notificationChan, bufferManager, proc, audioLevelChan, soundLevelChan, metrics)
-	ctrlMonitor.httpServer = httpServer
+func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, apiController *apiv2.Controller, metrics *observability.Metrics) *ControlMonitor {
+	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, bufferManager, proc, audioLevelChan, soundLevelChan, apiController, metrics)
 	ctrlMonitor.Start()
 	return ctrlMonitor
 }

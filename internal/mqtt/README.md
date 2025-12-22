@@ -328,10 +328,9 @@ BirdNET-Go provides a secure certificate management system:
 
 ### Settings UI
 
-The MQTT integration settings are managed through a web interface located at:
+The MQTT integration settings are managed through the web interface.
 
-- **Template**: `views/pages/settings/integrationSettings.html` (lines 106-287)
-- **Handler**: `internal/httpcontroller/handlers/settings.go`
+- **API Handler**: `internal/api/v2/settings.go`
 
 ### UI Features
 
