@@ -451,6 +451,7 @@
     <div
       class="modal-backdrop"
       onclick={() => (resetAllConfirm = false)}
+      onkeydown={e => e.key === 'Escape' && (resetAllConfirm = false)}
       role="button"
       tabindex="-1"
       aria-label="Close modal"
