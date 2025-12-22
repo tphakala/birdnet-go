@@ -6,12 +6,9 @@ import (
 	"testing"
 )
 
-// Test constant for unknown component.
-const testComponentUnknown = "unknown"
-
 func TestFastPathNoTelemetry(t *testing.T) {
 	t.Parallel()
-	
+
 	// Ensure no telemetry or hooks
 	SetTelemetryReporter(nil)
 	ClearErrorHooks()
@@ -24,8 +21,9 @@ func TestFastPathNoTelemetry(t *testing.T) {
 		t.Errorf("Expected error message 'test error', got '%s'", ee.Err.Error())
 	}
 
-	if ee.GetComponent() != testComponentUnknown {
-		t.Errorf("Expected component '%s' in fast path, got '%s'", testComponentUnknown, ee.GetComponent())
+	// Use production constant directly to ensure test stays in sync
+	if ee.GetComponent() != ComponentUnknown {
+		t.Errorf("Expected component '%s' in fast path, got '%s'", ComponentUnknown, ee.GetComponent())
 	}
 
 	if ee.Category != CategoryGeneric {
