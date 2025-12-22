@@ -25,6 +25,7 @@
   } from '$lib/utils/notifications';
   import NotificationGroup from '$lib/desktop/components/ui/NotificationGroup.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
+  import { toastActions } from '$lib/stores/toast';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -125,22 +126,14 @@
         });
         hasUnread = notifications.some(n => !n.read);
 
-        // Calculate total pages based on deduplicated notifications count
-        // Since deduplication reduces the count, we use the actual notifications length
-        // If we received fewer than pageSize, we're on the last page
-        // If we have pageSize or more, there might be more pages
-        const deduplicatedCount = notifications.length;
-        if (deduplicatedCount < pageSize) {
-          // We have less than a full page, so this is the last page
-          totalPages = currentPage;
-        } else if (data.total !== undefined) {
-          // Estimate remaining pages - use raw total as upper bound
-          // but cap at current + 1 to avoid showing too many empty pages
-          const estimatedPages = Math.ceil(data.total / pageSize);
-          totalPages = Math.min(estimatedPages, currentPage + 1);
+        // Calculate total pages using the raw total from the API for a stable page count.
+        // Client-side deduplication may result in fewer items on some pages, but the
+        // total remains consistent for better UX.
+        if (data.total !== undefined) {
+          totalPages = Math.ceil(data.total / pageSize) || 1;
         } else {
-          // Unknown total, assume there might be one more page
-          totalPages = currentPage + 1;
+          // Fallback when total is not available
+          totalPages = notifications.length < pageSize ? currentPage : currentPage + 1;
         }
       }
     } catch {
@@ -262,7 +255,7 @@
       }
     } catch {
       bulkDeleteModal?.close();
-      alert('Network error occurred. Please try again.');
+      toastActions.error(t('notifications.errors.networkError'));
     }
   }
 
@@ -340,12 +333,11 @@
       } else {
         deleteModal?.close();
         const errorData = await response.json().catch(() => ({}));
-        alert(errorData.error || 'Failed to delete notification. Please try again.');
+        toastActions.error(errorData.error || t('notifications.errors.deleteFailed'));
       }
     } catch {
       deleteModal?.close();
-      // Handle error silently for now
-      alert('Network error occurred. Please try again.');
+      toastActions.error(t('notifications.errors.networkError'));
     }
   }
 

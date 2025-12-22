@@ -7,6 +7,7 @@
     Notification,
   } from '$lib/utils/notifications';
   import { sanitizeNotificationMessage } from '$lib/utils/notifications';
+  import { safeGet } from '$lib/utils/security';
   import {
     ChevronDown,
     XCircle,
@@ -65,18 +66,24 @@
     return `${earliest} - ${latest}`;
   });
 
+  // Time constants for readability
+  const MS_PER_MINUTE = 60 * 1000;
+  const MS_PER_HOUR = MS_PER_MINUTE * 60;
+  const MS_PER_DAY = MS_PER_HOUR * 24;
+  const MS_PER_WEEK = MS_PER_DAY * 7;
+
   function formatTime(timestamp: string): string {
     const date = new Date(timestamp);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
 
-    if (diff < 60000) return t('notifications.timeAgo.justNow');
-    if (diff < 3600000)
-      return t('notifications.timeAgo.minutesAgo', { minutes: Math.floor(diff / 60000) });
-    if (diff < 86400000)
-      return t('notifications.timeAgo.hoursAgo', { hours: Math.floor(diff / 3600000) });
-    if (diff < 604800000)
-      return t('notifications.timeAgo.daysAgo', { days: Math.floor(diff / 86400000) });
+    if (diff < MS_PER_MINUTE) return t('notifications.timeAgo.justNow');
+    if (diff < MS_PER_HOUR)
+      return t('notifications.timeAgo.minutesAgo', { minutes: Math.floor(diff / MS_PER_MINUTE) });
+    if (diff < MS_PER_DAY)
+      return t('notifications.timeAgo.hoursAgo', { hours: Math.floor(diff / MS_PER_HOUR) });
+    if (diff < MS_PER_WEEK)
+      return t('notifications.timeAgo.daysAgo', { days: Math.floor(diff / MS_PER_DAY) });
 
     return date.toLocaleDateString();
   }
@@ -104,7 +111,7 @@
       detection: 'bg-success/20 text-success',
       system: 'bg-primary/20 text-primary',
     };
-    return classes[type] ?? 'bg-base-300';
+    return safeGet(classes, type, 'bg-base-300');
   }
 
   function getPriorityBadgeClass(priority: string): string {
@@ -114,7 +121,7 @@
       medium: 'badge-info',
       low: 'badge-ghost',
     };
-    return classes[priority] ?? 'badge-ghost';
+    return safeGet(classes, priority, 'badge-ghost');
   }
 
   function isClickable(notification: Notification): boolean {
@@ -145,7 +152,7 @@
       aria-expanded={isOpen}
       aria-controls="group-content-{group.key}"
     >
-      <!-- Type Icon -->
+      <!-- Type Icon - use {#if true} to enable @const for dynamic component -->
       {#if true}
         {@const IconComponent = getTypeIcon(group.type)}
         <div
@@ -247,9 +254,15 @@
               </time>
             </div>
 
-            <!-- Individual Actions -->
-            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-            <div class="flex items-center gap-1 shrink-0" onclick={e => e.stopPropagation()}>
+            <!-- Individual Actions - role="toolbar" for action buttons container -->
+            <div
+              class="flex items-center gap-1 shrink-0"
+              role="toolbar"
+              aria-label="Notification actions"
+              tabindex={-1}
+              onclick={e => e.stopPropagation()}
+              onkeydown={e => e.stopPropagation()}
+            >
               {#if !notification.read && onMarkAsRead}
                 <button
                   onclick={() => onMarkAsRead?.(notification.id)}
