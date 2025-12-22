@@ -126,7 +126,7 @@ func createTestWAVFileWithSize(t *testing.T, path string, size int64) {
 	wavHeader[43] = byte(subchunk2Size >> 24)
 
 	// Create the file
-	file, err := os.Create(path)
+	file, err := os.Create(path) //nolint:gosec // G304: test fixture path
 	if err != nil {
 		t.Fatal(err)
 	}

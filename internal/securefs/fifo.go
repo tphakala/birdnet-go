@@ -143,7 +143,7 @@ func openPlatformSpecificFIFO(pipePath, fifoPath string, openFlags int, sfs *Sec
 		}
 		// For Windows, open the named pipe directly
 		// Named pipes on Windows have their own security model independent of file permissions
-		return os.OpenFile(pipePath, openFlags, 0o600)
+		return os.OpenFile(pipePath, openFlags, 0o600) //nolint:gosec // G304: pipePath validated to start with \\.\pipe\
 	}
 
 	// For Unix systems, use SecureFS to maintain security

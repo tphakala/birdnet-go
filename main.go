@@ -56,7 +56,7 @@ func mainWithExitCode() int {
 		now := time.Now()
 		profilePath := fmt.Sprintf("profile_%s.pprof", now.Format("20060102_150405"))
 
-		f, err := os.Create(profilePath)
+		f, err := os.Create(profilePath) //nolint:gosec // G304: profilePath is programmatically constructed with timestamp
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating profile file: %v\n", err)
 			return 1

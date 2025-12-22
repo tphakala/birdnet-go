@@ -80,7 +80,7 @@ func GetAudioInfo(filePath string) (AudioInfo, error) {
 	}
 
 	// Open the file
-	file, err := os.Open(filePath)
+	file, err := os.Open(filePath) //nolint:gosec // G304: filePath is from CLI args or directory walking
 	if err != nil {
 		enhancedErr := errors.New(err).
 			Component("myaudio").

@@ -104,7 +104,7 @@ func createTestWAVFile(path string, durationSec float64) error {
 	numSamples := int(float64(sampleRate) * durationSec)
 	dataSize := numSamples * 2 // 16-bit = 2 bytes per sample
 
-	file, err := os.Create(path)
+	file, err := os.Create(path) //nolint:gosec // G304: test fixture path
 	if err != nil {
 		return err
 	}

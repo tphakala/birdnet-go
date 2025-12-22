@@ -137,7 +137,7 @@ func WriteNotesTable(settings *conf.Settings, notes []datastore.Note, filename s
 			filename += ".txt"
 		}
 		// Create or truncate the file with the specified filename.
-		file, err := os.Create(filename)
+		file, err := os.Create(filename) //nolint:gosec // G304: filename is from settings.Output.File.Path
 		if err != nil {
 			return fmt.Errorf("failed to create file: %w", err)
 		}
@@ -204,7 +204,7 @@ func WriteNotesCsv(settings *conf.Settings, notes []datastore.Note, filename str
 			filename += ".csv"
 		}
 		// Create or truncate the file with the given filename.
-		file, err := os.Create(filename)
+		file, err := os.Create(filename) //nolint:gosec // G304: filename is from settings.Output.File.Path
 		if err != nil {
 			return fmt.Errorf("failed to create file %s: %w", filename, err)
 		}

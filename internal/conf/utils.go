@@ -622,7 +622,7 @@ func moveFile(src, dst string) error {
 		return fmt.Errorf("error resolving destination path: %w", err)
 	}
 
-	srcFile, err := os.Open(srcAbs)
+	srcFile, err := os.Open(srcAbs) //nolint:gosec // G304: srcAbs is filepath.Abs resolved path
 	if err != nil {
 		return fmt.Errorf("error opening source file: %w", err)
 	}
@@ -632,7 +632,7 @@ func moveFile(src, dst string) error {
 		}
 	}() // Ensure the source file is closed when we're done
 
-	dstFile, err := os.Create(dstAbs)
+	dstFile, err := os.Create(dstAbs) //nolint:gosec // G304: dstAbs is filepath.Abs resolved path
 	if err != nil {
 		return fmt.Errorf("error creating destination file: %w", err)
 	}

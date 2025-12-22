@@ -54,7 +54,7 @@ func getDiskSpace(path string) (uint64, error) {
 func checkWritePermission(path string) error {
 	// Create a temporary file to test write permissions
 	tempFile := filepath.Join(filepath.Dir(path), ".tmp_write_test")
-	f, err := os.OpenFile(tempFile, os.O_CREATE|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(tempFile, os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // G304: tempFile derived from database path
 	if err != nil {
 		return errors.New(err).
 			Component("datastore").
@@ -120,7 +120,7 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 	backupPath := fmt.Sprintf("%s.backup_%s", dbPath, timestamp)
 
 	// Open source file
-	source, err := os.Open(dbPath)
+	source, err := os.Open(dbPath) //nolint:gosec // G304: dbPath is from application settings
 	if err != nil {
 		return errors.New(err).
 			Component("datastore").
@@ -136,7 +136,7 @@ func (s *SQLiteStore) createBackup(dbPath string) error {
 	}()
 
 	// Create backup file
-	destination, err := os.Create(backupPath)
+	destination, err := os.Create(backupPath) //nolint:gosec // G304: backupPath derived from dbPath (application settings)
 	if err != nil {
 		return errors.New(err).
 			Component("datastore").

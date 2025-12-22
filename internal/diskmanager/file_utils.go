@@ -43,7 +43,7 @@ type Interface interface {
 
 // LoadPolicy loads the cleanup policies from a CSV file
 func LoadPolicy(policyFile string) (*Policy, error) {
-	file, err := os.Open(policyFile)
+	file, err := os.Open(policyFile) //nolint:gosec // G304: policyFile is from application settings
 	if err != nil {
 		descriptiveErr := errors.New(fmt.Errorf("diskmanager: failed to open policy file: %w", err)).
 			Component("diskmanager").
@@ -400,7 +400,7 @@ func contains(slice []string, item string) bool {
 
 // WriteSortedFilesToFile writes the sorted list of files to a text file for investigation
 func WriteSortedFilesToFile(files []FileInfo, filePath string) error {
-	file, err := os.Create(filePath)
+	file, err := os.Create(filePath) //nolint:gosec // G304: filePath is programmatically constructed
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}

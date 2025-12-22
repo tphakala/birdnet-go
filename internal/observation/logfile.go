@@ -22,7 +22,7 @@ func LogNoteToFile(settings *conf.Settings, note *datastore.Note) error {
 	absoluteFilePath := filepath.Join(basePath, fileName)
 
 	// Open the log file for appending, creating it if it doesn't exist
-	file, err := os.OpenFile(absoluteFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	file, err := os.OpenFile(absoluteFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // G304: absoluteFilePath is from settings.Output.File.Path
 	if err != nil {
 		fmt.Printf("failed to open file '%s': %v\n", absoluteFilePath, err)
 		return fmt.Errorf("failed to open file '%s': %w", absoluteFilePath, err)

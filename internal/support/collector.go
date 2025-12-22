@@ -513,7 +513,7 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 func (c *Collector) collectConfig(scrub bool) (map[string]any, error) {
 	// Load config file
 	configPath := filepath.Join(c.configPath, "config.yaml")
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(configPath) //nolint:gosec // G304: configPath is from c.configPath (application config directory)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("support").
@@ -935,7 +935,7 @@ func (c *Collector) collectLogFiles(duration time.Duration, maxSize int64, anony
 // parseLogFile parses a log file and extracts entries
 func (c *Collector) parseLogFile(path string, cutoffTime time.Time, maxSize int64, anonymizePII bool) (logs []LogEntry, totalSize int64) {
 
-	file, err := os.Open(path)
+	file, err := os.Open(path) //nolint:gosec // G304: path is from known log file locations
 	if err != nil {
 		// Log file might not exist or be inaccessible, which is fine
 		return logs, 0
@@ -1046,7 +1046,7 @@ func sortLogsByTime(logs []LogEntry) {
 // addConfigToArchive adds the config file to the archive in YAML format with scrubbing
 func (c *Collector) addConfigToArchive(w *zip.Writer, scrubSensitive bool) error {
 	configPath := filepath.Join(c.configPath, "config.yaml")
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(configPath) //nolint:gosec // G304: configPath is from c.configPath (application config directory)
 	if err != nil {
 		return errors.New(err).
 			Component("support").
@@ -1426,7 +1426,7 @@ func (lfc *logFileCollector) addNoLogsNote(w *zip.Writer) {
 
 // addFileToArchive adds a single file to the zip archive
 func (c *Collector) addFileToArchive(w *zip.Writer, sourcePath, archivePath string) error {
-	file, err := os.Open(sourcePath)
+	file, err := os.Open(sourcePath) //nolint:gosec // G304: sourcePath is from known log/config file locations
 	if err != nil {
 		return err
 	}
@@ -1465,7 +1465,7 @@ func (c *Collector) addLogFileToArchive(w *zip.Writer, sourcePath, archivePath s
 	}
 
 	// Read the file content for anonymization
-	file, err := os.Open(sourcePath)
+	file, err := os.Open(sourcePath) //nolint:gosec // G304: sourcePath is from known log file locations
 	if err != nil {
 		return err
 	}

@@ -317,7 +317,7 @@ func loadSpeciesFromCSV(fileName string) ([]string, error) {
 	// Try to open the file in one of the default config paths.
 	for _, path := range configPaths {
 		fullPath := filepath.Join(path, fileName)
-		file, err = os.Open(fullPath)
+		file, err = os.Open(fullPath) //nolint:gosec // G304: fullPath built from known config paths
 		if err == nil {
 			break
 		}

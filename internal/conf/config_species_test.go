@@ -195,7 +195,7 @@ func TestSettingsSaveAndLoad(t *testing.T) {
 	require.NoError(t, err, "Failed to save settings")
 
 	// Read the raw YAML file to check field presence
-	yamlContent, err := os.ReadFile(configPath)
+	yamlContent, err := os.ReadFile(configPath) //nolint:gosec // G304: configPath is test fixture path
 	require.NoError(t, err, "Failed to read config file")
 
 	// Parse YAML to check structure
@@ -233,7 +233,7 @@ func TestSettingsSaveAndLoad(t *testing.T) {
 	assert.True(t, hasThreshold, "threshold field should be saved")
 
 	// Load settings back
-	loadedContent, err := os.ReadFile(configPath)
+	loadedContent, err := os.ReadFile(configPath) //nolint:gosec // G304: configPath is test fixture path
 	require.NoError(t, err, "Failed to read config for loading")
 
 	var loadedSettings Settings

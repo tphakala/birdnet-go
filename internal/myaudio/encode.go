@@ -93,7 +93,7 @@ func SavePCMDataToWAV(filePath string, pcmData []byte) error {
 	}
 
 	// Open a new file for writing
-	outFile, err := os.Create(filePath)
+	outFile, err := os.Create(filePath) //nolint:gosec // G304: filePath is programmatically constructed from settings
 	if err != nil {
 		enhancedErr := errors.New(err).
 			Component("myaudio").
