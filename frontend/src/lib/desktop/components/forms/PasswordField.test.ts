@@ -286,34 +286,42 @@ describe('PasswordField', () => {
   });
 
   it('generates unique field IDs', () => {
-    const { unmount } = render(PasswordField, {
+    // Render two components simultaneously to verify unique IDs
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    const div1 = document.createElement('div');
+    const div2 = document.createElement('div');
+    container.appendChild(div1);
+    container.appendChild(div2);
+
+    render(PasswordField, {
+      target: div1,
       props: {
         label: 'Password 1',
-        name: 'password1',
+        value: '',
+        onUpdate: vi.fn(),
+      },
+    });
+
+    render(PasswordField, {
+      target: div2,
+      props: {
+        label: 'Password 2',
         value: '',
         onUpdate: vi.fn(),
       },
     });
 
     const input1 = screen.getByLabelText('Password 1');
-    const id1 = input1.getAttribute('id');
-
-    unmount();
-
-    render(PasswordField, {
-      props: {
-        label: 'Password 2',
-        name: 'password2',
-        value: '',
-        onUpdate: vi.fn(),
-      },
-    });
-
     const input2 = screen.getByLabelText('Password 2');
+    const id1 = input1.getAttribute('id');
     const id2 = input2.getAttribute('id');
 
     expect(id1).not.toBe(id2);
-    expect(id1).toMatch(/^field-/);
-    expect(id2).toMatch(/^field-/);
+    expect(id1).toMatch(/^password-field-/);
+    expect(id2).toMatch(/^password-field-/);
+
+    document.body.removeChild(container);
   });
 });

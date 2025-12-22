@@ -4,8 +4,13 @@
   import { Eye, EyeOff, TriangleAlert } from '@lucide/svelte';
   import { t } from '$lib/i18n';
 
-  // Module-level counter for unique IDs (same pattern as FormField)
-  let fieldCounter = 0;
+  // Generate unique ID using crypto.randomUUID for SSR compatibility
+  const generateUniqueId = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return `password-field-${crypto.randomUUID()}`;
+    }
+    return `password-field-${Math.random().toString(36).substr(2, 9)}-${Date.now()}`;
+  };
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
@@ -40,9 +45,8 @@
     ...rest
   }: Props = $props();
 
-  // Generate unique ID suffix on component creation
-  const fieldIdSuffix = ++fieldCounter;
-  const fieldId = name || `password-field-${fieldIdSuffix}`;
+  // Generate unique ID for this component instance (captured at creation, intentionally non-reactive)
+  const fieldId = (() => name || generateUniqueId())();
 
   let showPassword = $state(false);
 
@@ -135,11 +139,8 @@
       {required}
       {disabled}
       {autocomplete}
-      onchange={(e) => handleChange(e.currentTarget.value)}
-      class={cn(
-        'input input-sm w-full pr-10',
-        error ? 'input-error' : ''
-      )}
+      onchange={e => handleChange(e.currentTarget.value)}
+      class={cn('input input-sm w-full pr-10', error ? 'input-error' : '')}
     />
 
     <!-- Password reveal toggle - vertically centered on input -->
