@@ -41,7 +41,7 @@ func TestTryLoadModelFromStandardPaths_RelativeDirectory(t *testing.T) {
 		// Create test file in relative model directory
 		modelPath := filepath.Join(DefaultModelDirectory, testModelName)
 		require.NoError(t, os.MkdirAll(DefaultModelDirectory, 0o750), "Failed to create model directory")
-		require.NoError(t, os.WriteFile(modelPath, []byte(testContent), 0o644), "Failed to create test file")
+		require.NoError(t, os.WriteFile(modelPath, []byte(testContent), 0o600), "Failed to create test file")
 
 		data, path, err := tryLoadModelFromStandardPaths(testModelName, "test")
 
@@ -63,7 +63,7 @@ func TestTryLoadModelFromStandardPaths_LegacyDataDirectory(t *testing.T) {
 		modelPath := filepath.Join("data", DefaultModelDirectory, testModelName)
 		require.NoError(t, os.MkdirAll(filepath.Join("data", DefaultModelDirectory), 0o750), 
 			"Failed to create model directory")
-		require.NoError(t, os.WriteFile(modelPath, []byte(testContent), 0o644), 
+		require.NoError(t, os.WriteFile(modelPath, []byte(testContent), 0o600), 
 			"Failed to create test file")
 
 		data, path, err := tryLoadModelFromStandardPaths(testModelName, "test")
@@ -87,12 +87,12 @@ func TestTryLoadModelFromStandardPaths_FirstHitWins(t *testing.T) {
 
 		// Create first priority file
 		require.NoError(t, os.MkdirAll(DefaultModelDirectory, 0o750), "Failed to create first directory")
-		require.NoError(t, os.WriteFile(firstPath, []byte("first_priority"), 0o644), "Failed to create first file")
+		require.NoError(t, os.WriteFile(firstPath, []byte("first_priority"), 0o600), "Failed to create first file")
 
 		// Create second priority file
 		require.NoError(t, os.MkdirAll(filepath.Join("data", DefaultModelDirectory), 0o750), 
 			"Failed to create second directory")
-		require.NoError(t, os.WriteFile(secondPath, []byte("second_priority"), 0o644), 
+		require.NoError(t, os.WriteFile(secondPath, []byte("second_priority"), 0o600), 
 			"Failed to create second file")
 
 		data, path, err := tryLoadModelFromStandardPaths(testModelName, "test")
@@ -141,7 +141,7 @@ func TestTryLoadModelFromStandardPaths_RangeFilterModels(t *testing.T) {
 				// Create test file
 				modelPath := filepath.Join(DefaultModelDirectory, tc.modelName)
 				require.NoError(t, os.MkdirAll(DefaultModelDirectory, 0o750), "Failed to create model directory")
-				require.NoError(t, os.WriteFile(modelPath, []byte(testContent), 0o644), "Failed to create test file")
+				require.NoError(t, os.WriteFile(modelPath, []byte(testContent), 0o600), "Failed to create test file")
 
 				data, path, err := tryLoadModelFromStandardPaths(tc.modelName, "test")
 

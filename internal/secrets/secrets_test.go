@@ -162,7 +162,7 @@ func TestReadFile(t *testing.T) {
 			name: "permissive permissions warning",
 			setup: func() string {
 				path := filepath.Join(tmpDir, "permissive_secret")
-				if err := os.WriteFile(path, []byte("secret"), 0o644); err != nil {
+				if err := os.WriteFile(path, []byte("secret"), 0o600); err != nil {
 					t.Fatal(err)
 				}
 				return path

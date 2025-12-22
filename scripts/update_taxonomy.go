@@ -143,7 +143,7 @@ func main() {
 	}
 
 	outputFile := "/tmp/genus_taxonomy.json"
-	if err := os.WriteFile(outputFile, optimizedData2, 0o644); err != nil {
+	if err := os.WriteFile(outputFile, optimizedData2, 0o600); err != nil {
 		log.Fatalf("Failed to write optimized data: %v", err)
 	}
 

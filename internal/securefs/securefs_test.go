@@ -39,7 +39,7 @@ func TestSecureFSWriteFile(t *testing.T) {
 	t.Cleanup(func() { _ = sfs.Close() })
 
 	testFile := filepath.Join(tempDir, "test.txt")
-	if err := sfs.WriteFile(testFile, []byte("test data"), 0o644); err != nil {
+	if err := sfs.WriteFile(testFile, []byte("test data"), 0o600); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 }
@@ -50,7 +50,7 @@ func TestSecureFSExists(t *testing.T) {
 	t.Cleanup(func() { _ = sfs.Close() })
 
 	testFile := filepath.Join(tempDir, "test.txt")
-	_ = sfs.WriteFile(testFile, []byte("test"), 0o644)
+	_ = sfs.WriteFile(testFile, []byte("test"), 0o600)
 
 	exists, err := sfs.Exists(testFile)
 	if err != nil {
@@ -68,7 +68,7 @@ func TestSecureFSReadFile(t *testing.T) {
 
 	testFile := filepath.Join(tempDir, "test.txt")
 	testData := []byte("test data")
-	_ = sfs.WriteFile(testFile, testData, 0o644)
+	_ = sfs.WriteFile(testFile, testData, 0o600)
 
 	data, err := sfs.ReadFile(testFile)
 	if err != nil {
@@ -91,7 +91,7 @@ func TestReadFileWithSizeLimit(t *testing.T) {
 	// Test 1: File within limit should be read successfully
 	smallFile := filepath.Join(tempDir, "small.txt")
 	smallContent := []byte("small content")
-	if err := sfs.WriteFile(smallFile, smallContent, 0o644); err != nil {
+	if err := sfs.WriteFile(smallFile, smallContent, 0o600); err != nil {
 		t.Fatalf("Failed to write small file: %v", err)
 	}
 
@@ -109,7 +109,7 @@ func TestReadFileWithSizeLimit(t *testing.T) {
 	for i := range largeContent {
 		largeContent[i] = 'x'
 	}
-	if err := sfs.WriteFile(largeFile, largeContent, 0o644); err != nil {
+	if err := sfs.WriteFile(largeFile, largeContent, 0o600); err != nil {
 		t.Fatalf("Failed to write large file: %v", err)
 	}
 
@@ -134,7 +134,7 @@ func TestReadFileSizeLimitZeroMeansUnlimited(t *testing.T) {
 	for i := range content {
 		content[i] = byte('a' + i%26)
 	}
-	if err := sfs.WriteFile(testFile, content, 0o644); err != nil {
+	if err := sfs.WriteFile(testFile, content, 0o600); err != nil {
 		t.Fatalf("Failed to write file: %v", err)
 	}
 
@@ -165,7 +165,7 @@ func TestSecureFSStat(t *testing.T) {
 
 	testFile := filepath.Join(tempDir, "test.txt")
 	testData := []byte("test data")
-	_ = sfs.WriteFile(testFile, testData, 0o644)
+	_ = sfs.WriteFile(testFile, testData, 0o600)
 
 	info, err := sfs.Stat(testFile)
 	if err != nil {
@@ -182,7 +182,7 @@ func TestSecureFSOpenFile(t *testing.T) {
 	t.Cleanup(func() { _ = sfs.Close() })
 
 	testFile := filepath.Join(tempDir, "test.txt")
-	_ = sfs.WriteFile(testFile, []byte("test"), 0o644)
+	_ = sfs.WriteFile(testFile, []byte("test"), 0o600)
 
 	file, err := sfs.OpenFile(testFile, os.O_RDONLY, 0)
 	if err != nil {
@@ -197,7 +197,7 @@ func TestSecureFSRemove(t *testing.T) {
 	t.Cleanup(func() { _ = sfs.Close() })
 
 	testFile := filepath.Join(tempDir, "test.txt")
-	_ = sfs.WriteFile(testFile, []byte("test"), 0o644)
+	_ = sfs.WriteFile(testFile, []byte("test"), 0o600)
 
 	if err := sfs.Remove(testFile); err != nil {
 		t.Fatalf("Remove failed: %v", err)
@@ -237,7 +237,7 @@ func TestSecureFSDirectoryOperations(t *testing.T) {
 	// Test file in nested directory
 	nestedFile := filepath.Join(testDir, "nested.txt")
 	nestedData := []byte("nested file data")
-	err = sfs.WriteFile(nestedFile, nestedData, 0o644)
+	err = sfs.WriteFile(nestedFile, nestedData, 0o600)
 	if err != nil {
 		t.Fatalf("WriteFile in nested dir failed: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestSecureFSPathTraversalPrevention(t *testing.T) {
 	}
 
 	// Attempt to write outside the sandbox
-	err = sfs.WriteFile(traversalPath, []byte("should fail"), 0o644)
+	err = sfs.WriteFile(traversalPath, []byte("should fail"), 0o600)
 	if err == nil {
 		t.Fatal("WriteFile should have failed for path outside sandbox")
 	}
@@ -416,7 +416,7 @@ func TestReadlinkWithinSandbox(t *testing.T) {
 
 	// Create a target file within the sandbox
 	targetFile := filepath.Join(tempDir, "target.txt")
-	if err := os.WriteFile(targetFile, []byte("target content"), 0o644); err != nil {
+	if err := os.WriteFile(targetFile, []byte("target content"), 0o600); err != nil {
 		t.Fatalf("Failed to create target file: %v", err)
 	}
 
@@ -482,8 +482,8 @@ func TestReadDir(t *testing.T) {
 	t.Cleanup(func() { _ = sfs.Close() })
 
 	// Create some files and directories
-	_ = sfs.WriteFile(filepath.Join(tempDir, "file1.txt"), []byte("content1"), 0o644)
-	_ = sfs.WriteFile(filepath.Join(tempDir, "file2.txt"), []byte("content2"), 0o644)
+	_ = sfs.WriteFile(filepath.Join(tempDir, "file1.txt"), []byte("content1"), 0o600)
+	_ = sfs.WriteFile(filepath.Join(tempDir, "file2.txt"), []byte("content2"), 0o600)
 	_ = sfs.MkdirAll(filepath.Join(tempDir, "subdir"), 0o750)
 
 	// Read directory
@@ -548,7 +548,7 @@ func TestLstat(t *testing.T) {
 
 	// Create a file
 	testFile := filepath.Join(tempDir, "test.txt")
-	if err := sfs.WriteFile(testFile, []byte("test content"), 0o644); err != nil {
+	if err := sfs.WriteFile(testFile, []byte("test content"), 0o600); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
@@ -574,7 +574,7 @@ func TestStatRel(t *testing.T) {
 	t.Cleanup(func() { _ = sfs.Close() })
 
 	// Create a file
-	if err := sfs.WriteFile(filepath.Join(tempDir, "test.txt"), []byte("content"), 0o644); err != nil {
+	if err := sfs.WriteFile(filepath.Join(tempDir, "test.txt"), []byte("content"), 0o600); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
@@ -603,7 +603,7 @@ func TestCacheUtilities(t *testing.T) {
 
 	// Create a file to trigger some cache entries
 	testFile := filepath.Join(tempDir, "test.txt")
-	_ = sfs.WriteFile(testFile, []byte("content"), 0o644)
+	_ = sfs.WriteFile(testFile, []byte("content"), 0o600)
 	_, _ = sfs.Exists(testFile)
 
 	// Test GetCacheStats
@@ -630,7 +630,7 @@ func TestExistsNoErr(t *testing.T) {
 
 	// Create a file
 	testFile := filepath.Join(tempDir, "test.txt")
-	_ = sfs.WriteFile(testFile, []byte("content"), 0o644)
+	_ = sfs.WriteFile(testFile, []byte("content"), 0o600)
 
 	// Should return true for existing file
 	if !sfs.ExistsNoErr(testFile) {

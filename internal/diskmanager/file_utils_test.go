@@ -57,10 +57,10 @@ func TestGetAudioFilesContinuesOnError(t *testing.T) {
 	invalidFile := tempDir + "/invalid_file.wav"
 
 	// Create the files
-	err := os.WriteFile(validFile, []byte("test content"), 0o644) //nolint:gosec // G306: Test files don't require restrictive permissions
+	err := os.WriteFile(validFile, []byte("test content"), 0o600)
 	require.NoError(t, err, "Should be able to create valid file")
 
-	err = os.WriteFile(invalidFile, []byte("test content"), 0o644) //nolint:gosec // G306: Test files don't require restrictive permissions
+	err = os.WriteFile(invalidFile, []byte("test content"), 0o600)
 	require.NoError(t, err, "Should be able to create invalid file")
 
 	// Create a mock DB
@@ -95,7 +95,7 @@ func TestGetAudioFilesWithMixedFiles(t *testing.T) {
 
 	// Create all the files
 	for _, file := range append(validFiles, invalidFiles...) {
-		err := os.WriteFile(file, []byte("test content"), 0o644) //nolint:gosec // G306: Test files don't require restrictive permissions
+		err := os.WriteFile(file, []byte("test content"), 0o600)
 		require.NoError(t, err, "Should be able to create file: %s", file)
 	}
 
@@ -124,7 +124,7 @@ func TestGetAudioFilesWithMixedFiles(t *testing.T) {
 	for _, file := range invalidFiles {
 		baseName := filepath.Base(file)
 		newPath := filepath.Join(invalidOnlyDir, baseName)
-		err := os.WriteFile(newPath, []byte("test content"), 0o644) //nolint:gosec // G306: Test files don't require restrictive permissions
+		err := os.WriteFile(newPath, []byte("test content"), 0o600)
 		require.NoError(t, err, "Should be able to create file: %s", newPath)
 	}
 
@@ -217,14 +217,14 @@ func TestGetAudioFilesIgnoresTempFiles(t *testing.T) {
 	// Create valid files
 	for _, file := range validFiles {
 		filePath := filepath.Join(tempDir, file)
-		err := os.WriteFile(filePath, []byte("test content"), 0o644)
+		err := os.WriteFile(filePath, []byte("test content"), 0o600)
 		require.NoError(t, err, "Should be able to create valid file: %s", filePath)
 	}
 
 	// Create temp files
 	for _, file := range tempFiles {
 		filePath := filepath.Join(tempDir, file)
-		err := os.WriteFile(filePath, []byte("test content"), 0o644)
+		err := os.WriteFile(filePath, []byte("test content"), 0o600)
 		require.NoError(t, err, "Should be able to create temp file: %s", filePath)
 	}
 
@@ -264,7 +264,7 @@ func TestGetAudioFilesHandlesTempFileRaceCondition(t *testing.T) {
 	// Create a valid audio file
 	validFile := "bubo_bubo_80p_20210102T150405Z.wav"
 	validFilePath := filepath.Join(tempDir, validFile)
-	err := os.WriteFile(validFilePath, []byte("test content"), 0o644)
+	err := os.WriteFile(validFilePath, []byte("test content"), 0o600)
 	require.NoError(t, err, "Should be able to create valid file")
 
 	// Create a mock DB

@@ -185,7 +185,7 @@ func TestQuickValidateAudioFile(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 		testFile := filepath.Join(tmpDir, "tiny.wav")
-		if err := os.WriteFile(testFile, []byte("small"), 0o644); err != nil {
+		if err := os.WriteFile(testFile, []byte("small"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 
@@ -225,7 +225,7 @@ func TestValidateAudioFileWithRetry(t *testing.T) {
 		testFile := filepath.Join(tmpDir, "growing.wav")
 
 		// Start with a small file
-		if err := os.WriteFile(testFile, []byte("small"), 0o644); err != nil {
+		if err := os.WriteFile(testFile, []byte("small"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 
