@@ -340,7 +340,7 @@
     <div class="card-body">
       <!-- Species info container - similar to ReviewModal -->
       <div
-        class="bg-base-200 opacity-50 rounded-lg p-4"
+        class="bg-base-200 rounded-lg p-4"
         role="region"
         aria-label="Species information"
       >
