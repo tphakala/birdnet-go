@@ -553,7 +553,10 @@ func (c *Controller) GetDiskInfo(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get disk partitions", http.StatusInternalServerError)
 	}
 
-	ioCounters, _ := disk.IOCounters() // Continue without IO metrics if error
+	ioCounters, err := disk.IOCounters()
+	if err != nil {
+		c.logAPIRequest(ctx, slog.LevelWarn, "Failed to get IO counters, continuing without IO metrics", "error", err.Error())
+	}
 	uptimeMs := c.getUptimeMs()
 
 	disks := make([]DiskInfo, 0, len(partitions))

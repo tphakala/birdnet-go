@@ -340,7 +340,8 @@ func (c *Controller) aggregateDailySpeciesData(notes []datastore.Note, selectedD
 
 // fetchHourlyCounts retrieves hourly counts with caching
 func (c *Controller) fetchHourlyCounts(cache *hourlyCountsCache, note *datastore.Note, selectedDate string, minConfidence float64) ([24]int, bool) {
-	birdKey := note.ScientificName
+	// Use CommonName as cache key since GetHourlyOccurrences queries by CommonName
+	birdKey := note.CommonName
 
 	if _, fetched := cache.fetched[birdKey]; fetched {
 		return cache.counts[birdKey], true

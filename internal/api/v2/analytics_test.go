@@ -731,7 +731,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	// Verify the American Crow details
 	assert.NotNil(t, amcro, "American Crow should be in the response")
 	if amcro != nil {
-		assertSpeciesDailySummary(t, amcro, SpeciesDailySummaryExpected{
+		assertSpeciesDailySummary(t, amcro, &SpeciesDailySummaryExpected{
 			CommonName:          "American Crow",
 			SpeciesCode:         "AMCRO",
 			Count:               amcroTotal,
@@ -746,7 +746,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 	// Verify the Red-bellied Woodpecker details
 	assert.NotNil(t, rbwo, "Red-bellied Woodpecker should be in the response")
 	if rbwo != nil {
-		assertSpeciesDailySummary(t, rbwo, SpeciesDailySummaryExpected{
+		assertSpeciesDailySummary(t, rbwo, &SpeciesDailySummaryExpected{
 			CommonName:          "Red-bellied Woodpecker",
 			SpeciesCode:         "RBWO",
 			Count:               rbwoTotal,

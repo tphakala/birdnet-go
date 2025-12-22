@@ -67,20 +67,25 @@ func (c *Controller) validateBrowsePath(reqPath string) (browsePathResult, error
 		return browsePathResult{}, fmt.Errorf("invalid or unsafe path: %w", err)
 	}
 
-	// Check for symlinks and validate targets
+	// Check for symlinks and validate targets using Lstat
 	info, err := c.SFS.Lstat(browsePath)
 	if err != nil {
 		return browsePathResult{}, err
 	}
 
-	// If it's a symlink, validate the target
+	// If it's a symlink, validate the target and get target info
 	if info.Mode()&os.ModeSymlink != 0 {
 		if err := c.validateSymlinkTarget(browsePath); err != nil {
 			return browsePathResult{}, fmt.Errorf("symlink target not allowed: %w", err)
 		}
+		// Use Stat to get info about the symlink target (not the symlink itself)
+		info, err = c.SFS.Stat(browsePath)
+		if err != nil {
+			return browsePathResult{}, fmt.Errorf("failed to stat symlink target: %w", err)
+		}
 	}
 
-	// Ensure it's a directory
+	// Ensure it's a directory (now correctly checks target for symlinks)
 	if !info.IsDir() {
 		return browsePathResult{}, fmt.Errorf("path is not a directory")
 	}

@@ -245,7 +245,7 @@ type SpeciesDailySummaryExpected struct {
 
 // assertSpeciesDailySummary verifies that a SpeciesDailySummary matches expected values.
 // This reduces duplication in tests that verify species summary fields.
-func assertSpeciesDailySummary(t *testing.T, species *SpeciesDailySummary, expected SpeciesDailySummaryExpected) {
+func assertSpeciesDailySummary(t *testing.T, species *SpeciesDailySummary, expected *SpeciesDailySummaryExpected) {
 	t.Helper()
 
 	assert.Equal(t, expected.CommonName, species.CommonName, "%s common name mismatch", expected.CommonName)

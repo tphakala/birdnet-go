@@ -80,28 +80,28 @@ func parseVerificationStatus(status string) (verificationStatus, error) {
 }
 
 // checkDetectionNotLocked verifies a detection is not locked, checking both in-memory and database.
-// Returns nil if unlocked, or ErrResponseHandled if locked (error response already sent).
-func (c *Controller) checkDetectionNotLocked(ctx echo.Context, idStr string, inMemoryLocked bool) error {
+// Returns true if locked (error response already sent), false if unlocked.
+func (c *Controller) checkDetectionNotLocked(ctx echo.Context, idStr string, inMemoryLocked bool) bool {
 	// Check in-memory lock state first
 	if inMemoryLocked {
 		_ = c.HandleError(ctx, fmt.Errorf("detection is locked"),
 			"Detection is locked and status cannot be changed", http.StatusConflict)
-		return ErrResponseHandled
+		return true
 	}
 
 	// Check database for race condition (another process may have locked it)
 	isLocked, err := c.DS.IsNoteLocked(idStr)
 	if err != nil {
 		_ = c.HandleError(ctx, err, "Failed to check lock status", http.StatusInternalServerError)
-		return ErrResponseHandled
+		return true
 	}
 	if isLocked {
 		_ = c.HandleError(ctx, fmt.Errorf("detection is locked"),
 			"Detection is locked and status cannot be changed", http.StatusConflict)
-		return ErrResponseHandled
+		return true
 	}
 
-	return nil
+	return false
 }
 
 // initDetectionRoutes registers all detection-related API endpoints
@@ -213,6 +213,16 @@ type detectionQueryParams struct {
 	Locked     string
 	// Include additional data
 	IncludeWeather bool
+}
+
+// advancedSearchCacheKey generates a deterministic cache key for advanced search queries.
+// Includes all filter parameters to avoid cache collisions.
+func (p *detectionQueryParams) advancedSearchCacheKey() string {
+	return fmt.Sprintf("adv_search:%s:%d:%d:%s:%s:%s:%s:%s:%s:%s:%s:%s",
+		p.Search, p.NumResults, p.Offset,
+		p.Confidence, p.TimeOfDay, p.HourRange,
+		p.Verified, p.Location, p.Locked,
+		p.Species, p.Date, p.StartDate+":"+p.EndDate)
 }
 
 // parseDetectionQueryParams extracts and validates query parameters from the request
@@ -768,9 +778,8 @@ func (c *Controller) getSearchDetectionsAdvanced(params *detectionQueryParams) (
 		return nil, 0, err
 	}
 
-	// Cache the results
-	cacheKey := fmt.Sprintf("adv_search:%s:%d:%d", params.Search, params.NumResults, params.Offset)
-	c.detectionCache.Set(cacheKey, struct {
+	// Cache the results with key that includes all filter parameters
+	c.detectionCache.Set(params.advancedSearchCacheKey(), struct {
 		Notes []datastore.Note
 		Total int64
 	}{notes, totalCount}, cache.DefaultExpiration)
@@ -1055,7 +1064,7 @@ func (c *Controller) ReviewDetection(ctx echo.Context) error {
 	}
 
 	// Check lock status (both in-memory and database for race condition)
-	if err := c.checkDetectionNotLocked(ctx, idStr, note.Locked); err != nil {
+	if c.checkDetectionNotLocked(ctx, idStr, note.Locked) {
 		return nil // Response already handled by checkDetectionNotLocked
 	}
 

@@ -491,8 +491,6 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 	dailyEvents, err := c.DS.GetDailyEvents(date)
 	if err != nil {
 		// Log the error but continue with partial response
-		c.logger.Printf("WARN: [Weather API] Failed to get daily weather data for date %s: %v (endpoint=GetLatestWeather)",
-			date, err)
 		c.logWarnIfEnabled("Failed to get daily weather data for latest weather",
 			"date", date,
 			"error", err.Error(),
