@@ -1,9 +1,11 @@
 <script lang="ts">
-  import FormField from './FormField.svelte';
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
   import { Eye, EyeOff, TriangleAlert } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+
+  // Module-level counter for unique IDs (same pattern as FormField)
+  let fieldCounter = 0;
 
   interface Props extends HTMLAttributes<HTMLDivElement> {
     label: string;
@@ -37,6 +39,10 @@
     autocomplete = 'current-password',
     ...rest
   }: Props = $props();
+
+  // Generate unique ID suffix on component creation
+  const fieldIdSuffix = ++fieldCounter;
+  const fieldId = name || `password-field-${fieldIdSuffix}`;
 
   let showPassword = $state(false);
 
@@ -106,29 +112,41 @@
 </script>
 
 <div class={cn('form-control min-w-0', className)} {...rest}>
-  <FormField
-    type={showPassword ? 'text' : 'password'}
-    name={name || 'password-field'}
-    {label}
-    bind:value
-    {placeholder}
-    {helpText}
-    {required}
-    {disabled}
-    {autocomplete}
-    onChange={handleChange}
-    inputClassName={cn(
-      'pr-12', // Make room for toggle button
-      error ? 'input-error' : ''
-    )}
-  />
+  <!-- Label rendered separately for proper button positioning -->
+  {#if label}
+    <label for={fieldId} class="label">
+      <span class="label-text">
+        {label}
+        {#if required}
+          <span class="text-error">*</span>
+        {/if}
+      </span>
+    </label>
+  {/if}
 
-  <!-- Password reveal toggle -->
-  {#if allowReveal}
-    <div class="absolute inset-y-0 right-0 flex items-center pr-3">
+  <!-- Input wrapper for toggle button positioning -->
+  <div class="relative">
+    <input
+      id={fieldId}
+      type={showPassword ? 'text' : 'password'}
+      name={fieldId}
+      bind:value
+      {placeholder}
+      {required}
+      {disabled}
+      {autocomplete}
+      onchange={(e) => handleChange(e.currentTarget.value)}
+      class={cn(
+        'input input-sm w-full pr-10',
+        error ? 'input-error' : ''
+      )}
+    />
+
+    <!-- Password reveal toggle - vertically centered on input -->
+    {#if allowReveal}
       <button
         type="button"
-        class="btn btn-ghost btn-sm btn-square"
+        class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-sm text-base-content/60 hover:text-base-content transition-colors disabled:opacity-50"
         onclick={togglePasswordVisibility}
         {disabled}
         aria-label={showPassword ? t('forms.labels.hidePassword') : t('forms.labels.showPassword')}
@@ -139,7 +157,12 @@
           <Eye class="size-4" />
         {/if}
       </button>
-    </div>
+    {/if}
+  </div>
+
+  <!-- Help text rendered after input wrapper -->
+  {#if helpText}
+    <span class="help-text">{helpText}</span>
   {/if}
 
   <!-- Password strength indicator -->
@@ -195,9 +218,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  .form-control {
-    position: relative;
-  }
-</style>
