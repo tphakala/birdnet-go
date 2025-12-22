@@ -77,11 +77,6 @@ Source: BSD-3-Clause
 License: https://github.com/getsentry/sentry-go/blob/v0.40.0/LICENSE
 Source: MIT
 
-### github.com/getsentry/sentry-go/echo
-
-License: https://github.com/getsentry/sentry-go/blob/echo/v0.40.0/echo/LICENSE
-Source: MIT
-
 ### github.com/go-audio/audio
 
 License: https://github.com/go-audio/audio/blob/v1.0.0/LICENSE
