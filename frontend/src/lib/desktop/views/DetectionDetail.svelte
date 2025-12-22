@@ -339,11 +339,7 @@
   <section class="card bg-base-100 shadow-xs" aria-labelledby="species-heading">
     <div class="card-body">
       <!-- Species info container - similar to ReviewModal -->
-      <div
-        class="bg-base-200 rounded-lg p-4"
-        role="region"
-        aria-label="Species information"
-      >
+      <div class="bg-base-200 rounded-lg p-4" role="region" aria-label="Species information">
         <!-- Single Row Layout: All 4 segments in one row using flex -->
         <div class="flex gap-4 items-start">
           <!-- Section 1: Thumbnail + Species Names (flex-grow for more space) -->
