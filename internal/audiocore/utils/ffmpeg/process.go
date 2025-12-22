@@ -92,7 +92,7 @@ func (p *process) start() error {
 		"command", p.config.FFmpegPath,
 		"arg_count", len(args))
 	
-	p.cmd = exec.CommandContext(p.ctx, p.config.FFmpegPath, args...)
+	p.cmd = exec.CommandContext(p.ctx, p.config.FFmpegPath, args...) //nolint:gosec // G204: FFmpegPath from validated config, args built internally
 
 	// Set up pipes
 	var err error

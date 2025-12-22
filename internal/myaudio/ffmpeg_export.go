@@ -278,7 +278,7 @@ func runFFmpegCommand(ffmpegPath string, pcmData []byte, tempFilePath string, se
 	defer cancel()
 
 	// Create the FFmpeg command with context
-	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...) //nolint:gosec // G204: ffmpegPath from conf.GetFFmpegBinaryName(), args built internally
 
 	// Create a pipe to send PCM data to FFmpeg's stdin
 	stdin, err := cmd.StdinPipe()
@@ -592,7 +592,7 @@ func runCustomFFmpegCommandToBufferWithContext(ctx context.Context, ffmpegPath s
 	args = append(args, "pipe:1")
 
 	// Create the FFmpeg command with context
-	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...) //nolint:gosec // G204: ffmpegPath from conf.GetFFmpegBinaryName(), args built internally
 
 	// Create pipes for stdin and stdout
 	stdin, err := cmd.StdinPipe()
@@ -765,7 +765,7 @@ func AnalyzeAudioLoudnessWithContext(ctx context.Context, pcmData []byte, ffmpeg
 	}
 
 	// Create the FFmpeg command with context
-	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...) //nolint:gosec // G204: ffmpegPath from conf.GetFFmpegBinaryName(), args built internally
 
 	// Create a pipe to write PCM data to FFmpeg's stdin
 	stdin, err := cmd.StdinPipe()

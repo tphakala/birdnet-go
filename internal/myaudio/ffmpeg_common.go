@@ -74,7 +74,7 @@ func GetAudioDuration(ctx context.Context, audioPath string) (float64, error) {
 	// -v error: suppress all output except errors
 	// -show_entries format=duration: only show duration from format section
 	// -of default=noprint_wrappers=1:nokey=1: output just the value, no formatting
-	cmd := exec.CommandContext(ctx, ffprobeBinary,
+	cmd := exec.CommandContext(ctx, ffprobeBinary, //nolint:gosec // G204: ffprobeBinary from conf.GetFfprobeBinaryName(), args are fixed
 		"-v", "error",
 		"-show_entries", "format=duration",
 		"-of", "default=noprint_wrappers=1:nokey=1",

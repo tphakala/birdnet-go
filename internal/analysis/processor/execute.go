@@ -86,7 +86,7 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 	cmdCtx, cancel := context.WithTimeout(ctx, ExecuteCommandTimeout)
 	defer cancel()
 	
-	cmd := exec.CommandContext(cmdCtx, cmdPath, args...)
+	cmd := exec.CommandContext(cmdCtx, cmdPath, args...) //nolint:gosec // G204: cmdPath validated by validateCommandPath(), args by buildSafeArguments()
 
 	// Set a clean environment
 	cmd.Env = getCleanEnvironment()

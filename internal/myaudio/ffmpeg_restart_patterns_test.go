@@ -52,7 +52,7 @@ func TestFFmpegStream_RealWorldRestartPattern(t *testing.T) {
 			// Create a process that exits quickly (< 5 seconds)
 			// This simulates ffmpeg failing to connect or maintain RTSP stream
 			runtimeMs := 1000 + (i%4)*1000 // 1-4 seconds
-			mockCmd := exec.Command("sh", "-c", fmt.Sprintf("sleep %.3f", float64(runtimeMs)/1000.0))
+			mockCmd := exec.Command("sh", "-c", fmt.Sprintf("sleep %.3f", float64(runtimeMs)/1000.0)) //nolint:gosec // G204: test with hardcoded command
 
 			stream.cmdMu.Lock()
 			// Go 1.25: time.Now() returns fake time (starts at 2000-01-01 00:00:00 UTC)

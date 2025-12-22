@@ -273,7 +273,7 @@ func TestFFmpegStream_ConcurrentCleanup(t *testing.T) {
 func createMockFFmpegCommand(tb testing.TB, duration time.Duration) *exec.Cmd {
 	tb.Helper()
 	// Use sleep as a mock ffmpeg process
-	cmd := exec.Command("sleep", fmt.Sprintf("%.3f", duration.Seconds()))
+	cmd := exec.Command("sleep", fmt.Sprintf("%.3f", duration.Seconds())) //nolint:gosec // G204: test helper with hardcoded command
 	return cmd
 }
 
@@ -337,7 +337,7 @@ func assertNoZombieProcess(t *testing.T, pid int) {
 // Helper function to get child processes of a parent PID
 func getChildProcesses(t *testing.T, parentPid int) []int {
 	t.Helper()
-	cmd := exec.Command("pgrep", "-P", fmt.Sprintf("%d", parentPid))
+	cmd := exec.Command("pgrep", "-P", fmt.Sprintf("%d", parentPid)) //nolint:gosec // G204: test helper with hardcoded command
 	output, err := cmd.Output()
 	if err != nil {
 		// No children found
