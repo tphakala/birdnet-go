@@ -12,6 +12,12 @@ import (
 	"time"
 )
 
+// Test constants for log level assertions.
+const (
+	logLevelWarn  = "WARN"
+	logLevelError = "ERROR"
+)
+
 // setupTestLogger sets up a test logger and returns the buffer and cleanup function
 func setupTestLogger(level slog.Level) (buf *bytes.Buffer, cleanup func()) {
 	buf = &bytes.Buffer{}
@@ -149,8 +155,8 @@ func TestLogJobFailed(t *testing.T) {
 		t.Errorf("Expected error containing 'connection timeout', got %v", logEntry["error"])
 	}
 	// Should be Warn for retryable failure
-	if logEntry["level"] != "WARN" {
-		t.Errorf("Expected level 'WARN' for retryable failure, got %v", logEntry["level"])
+	if logEntry["level"] != logLevelWarn {
+		t.Errorf("Expected level '%s' for retryable failure, got %v", logLevelWarn, logEntry["level"])
 	}
 	if logEntry["msg"] != "Job failed, will retry" {
 		t.Errorf("Expected message 'Job failed, will retry', got %v", logEntry["msg"])
@@ -163,8 +169,8 @@ func TestLogJobFailed(t *testing.T) {
 	logEntry2 := parseLogEntry(t, buf)
 	
 	// Should be Error for permanent failure
-	if logEntry2["level"] != "ERROR" {
-		t.Errorf("Expected level 'ERROR' for permanent failure, got %v", logEntry2["level"])
+	if logEntry2["level"] != logLevelError {
+		t.Errorf("Expected level '%s' for permanent failure, got %v", logLevelError, logEntry2["level"])
 	}
 	if logEntry2["msg"] != "Job failed permanently" {
 		t.Errorf("Expected message 'Job failed permanently' for final failure, got %v", logEntry2["msg"])

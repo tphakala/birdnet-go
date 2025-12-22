@@ -17,6 +17,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
+// Test constant for MQTT topic testing.
+const testMQTTTopic = "test/soundlevel"
+
 // TestSoundLevelJSONMarshaling tests JSON marshaling with various edge cases
 func TestSoundLevelJSONMarshaling(t *testing.T) {
 	t.Parallel()
@@ -798,7 +801,7 @@ func TestSoundLevelPublishIntervalBoundaries(t *testing.T) {
 			case soundData := <-testSoundLevelChan:
 				// Simulate immediate MQTT publish
 				ctx := context.Background()
-				topic := "test/soundlevel"
+				topic := testMQTTTopic
 
 				// Convert to compact format
 				compactData := CompactSoundLevelData{
@@ -903,7 +906,7 @@ func TestSoundLevelPublishIntervalChange(t *testing.T) {
 				return
 			case soundData := <-testSoundLevelChan:
 				ctx := context.Background()
-				topic := "test/soundlevel"
+				topic := testMQTTTopic
 				compactData := CompactSoundLevelData{
 					TS:   soundData.Timestamp.Format(time.RFC3339),
 					Src:  soundData.Source,
@@ -1197,7 +1200,7 @@ func startMQTTPublisher(t *testing.T, wg *sync.WaitGroup, stopChan chan struct{}
 func publishSoundLevelData(t *testing.T, soundData myaudio.SoundLevelData, mockProc *processor.Processor) {
 	t.Helper()
 	ctx := context.Background()
-	topic := "test/soundlevel"
+	topic := testMQTTTopic
 
 	compactData := convertToCompactFormat(soundData)
 	jsonData, err := json.Marshal(compactData)
@@ -1293,7 +1296,7 @@ func startMockMQTTPublisher(t *testing.T, wg *sync.WaitGroup, stopChan <-chan st
 				return
 			case soundData := <-testSoundLevelChan:
 				ctx := context.Background()
-				topic := "test/soundlevel"
+				topic := testMQTTTopic
 				compactData := CompactSoundLevelData{
 					TS:    soundData.Timestamp.Format(time.RFC3339),
 					Src:   soundData.Source,
@@ -1419,7 +1422,7 @@ func TestMQTTPublishIntervalWithNoData(t *testing.T) {
 			case soundData := <-testSoundLevelChan:
 				// The publisher publishes immediately when receiving data
 				ctx := context.Background()
-				topic := "test/soundlevel"
+				topic := testMQTTTopic
 				compactData := CompactSoundLevelData{
 					TS:    soundData.Timestamp.Format(time.RFC3339),
 					Src:   soundData.Source,

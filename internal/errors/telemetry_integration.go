@@ -174,7 +174,7 @@ func generateErrorTitle(ee *EnhancedError) string {
 
 	// Add component (capitalize first letter)
 	component := ee.GetComponent()
-	if component != "" && component != "unknown" {
+	if component != "" && component != ComponentUnknown {
 		titleParts = append(titleParts, titleCase(component))
 	}
 

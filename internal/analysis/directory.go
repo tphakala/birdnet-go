@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
 // cleanupProcessingFiles removes all .processing files from the output directory
@@ -200,10 +201,10 @@ func processFile(path string, settings *conf.Settings, processedFiles map[string
 	outputPath := filepath.Join(settings.Output.File.Path, filepath.Base(path))
 	ext := strings.ToLower(filepath.Ext(outputPath))
 	switch ext {
-	case ".wav":
-		outputPath = outputPath[:len(outputPath)-4]
-	case ".flac":
-		outputPath = outputPath[:len(outputPath)-5]
+	case myaudio.ExtWAV:
+		outputPath = outputPath[:len(outputPath)-len(myaudio.ExtWAV)]
+	case myaudio.ExtFLAC:
+		outputPath = outputPath[:len(outputPath)-len(myaudio.ExtFLAC)]
 	}
 	lockFile := outputPath + ".processing"
 
@@ -294,7 +295,7 @@ func scanDirectory(watchDir string, settings *conf.Settings, processedFiles map[
 
 		// Check for both .wav and .flac files (case-insensitive)
 		ext := strings.ToLower(filepath.Ext(d.Name()))
-		if ext == ".wav" || ext == ".flac" {
+		if ext == myaudio.ExtWAV || ext == myaudio.ExtFLAC {
 			wasProcessed, err := processFile(path, settings, processedFiles, ctx)
 			if err != nil {
 				if errors.Is(err, context.Canceled) {

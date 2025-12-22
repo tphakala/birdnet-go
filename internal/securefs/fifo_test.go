@@ -14,7 +14,7 @@ func TestFIFOPath(t *testing.T) {
 	path := "/tmp/test.fifo"
 	fifoPath := GetFIFOPath(path)
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		expectedPrefix := `\\.\pipe\`
 		if len(fifoPath) < len(expectedPrefix) || fifoPath[:len(expectedPrefix)] != expectedPrefix {
 			t.Errorf("Expected Windows named pipe path to start with %s, got %s", expectedPrefix, fifoPath)
@@ -26,7 +26,7 @@ func TestFIFOPath(t *testing.T) {
 	// Test with Windows-style path
 	winPath := `C:\Users\test\pipe.fifo`
 	winFifoPath := GetFIFOPath(winPath)
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		expectedPrefix := `\\.\pipe\`
 		if len(winFifoPath) < len(expectedPrefix) || winFifoPath[:len(expectedPrefix)] != expectedPrefix {
 			t.Errorf("Expected Windows pipe name to start with %s, got %s", expectedPrefix, winFifoPath)
@@ -81,12 +81,12 @@ func testFIFOPipeName(t *testing.T, sfs *SecureFS) {
 func testFIFOCreation(t *testing.T, sfs *SecureFS, fifoPath string) {
 	t.Helper()
 	defer func() {
-		if runtime.GOOS == "windows" {
+		if runtime.GOOS == osWindows {
 			CleanupNamedPipes()
 		}
 	}()
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		err := sfs.CreateFIFO(fifoPath)
 		t.Logf("CreateFIFO on Windows result: %v", err)
 		return

@@ -14,6 +14,14 @@ import (
 // ErrorCode represents specific backup error types
 type ErrorCode int
 
+// Error prefix emoji constants for user-facing messages.
+const (
+	emojiError    = "❌" // General error
+	emojiWarning  = "⚠️" // Warning for config/timeout issues
+	emojiCritical = "🚨" // Critical for media/database failures
+	emojiInfo     = "ℹ️" // Info for cancellations
+)
+
 const (
 	// ErrUnknown represents an unknown error
 	ErrUnknown ErrorCode = iota
@@ -56,35 +64,35 @@ type Error struct {
 func (e *Error) getErrorPrefix() string {
 	switch e.Code {
 	case ErrUnknown:
-		return "❌" // General error
+		return emojiError // General error
 	case ErrConfig:
-		return "⚠️" // Warning for config issues
+		return emojiWarning // Warning for config issues
 	case ErrIO:
-		return "❌" // General error for I/O issues
+		return emojiError // General error for I/O issues
 	case ErrMedia:
-		return "🚨" // Critical for media failures
+		return emojiCritical // Critical for media failures
 	case ErrDatabase:
-		return "🚨" // Critical for database issues
+		return emojiCritical // Critical for database issues
 	case ErrCorruption:
-		return "🚨" // Critical for data corruption
+		return emojiCritical // Critical for data corruption
 	case ErrNotFound:
-		return "⚠️" // Warning for missing resources
+		return emojiWarning // Warning for missing resources
 	case ErrLocked:
-		return "⚠️" // Warning for locked resources
+		return emojiWarning // Warning for locked resources
 	case ErrInsufficientSpace:
-		return "🚨" // Critical for space issues
+		return emojiCritical // Critical for space issues
 	case ErrTimeout:
-		return "⚠️" // Warning for timeouts
+		return emojiWarning // Warning for timeouts
 	case ErrCanceled:
-		return "ℹ️" // Info for cancellations
+		return emojiInfo // Info for cancellations
 	case ErrValidation:
-		return "⚠️" // Warning for validation issues
+		return emojiWarning // Warning for validation issues
 	case ErrEncryption:
-		return "🚨" // Critical for encryption issues
+		return emojiCritical // Critical for encryption issues
 	case ErrSecurity:
-		return "🚨" // Critical for security issues
+		return emojiCritical // Critical for security issues
 	default:
-		return "❌" // Default to general error
+		return emojiError // Default to general error
 	}
 }
 

@@ -13,6 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test constants for type assertion testing.
+const (
+	typeBool    = "bool"
+	typeInt     = "int"
+	typeFloat64 = "float64"
+	typeString  = "string"
+)
+
 func TestValidateEnvBool(t *testing.T) {
 	t.Parallel()
 
@@ -587,16 +595,16 @@ func TestValueCanonicalization(t *testing.T) {
 
 			// Verify type
 			switch tt.expectedType {
-			case "bool":
+			case typeBool:
 				assert.IsType(t, bool(false), actual, "Expected bool type")
 				assert.Equal(t, tt.expectedValue, actual)
-			case "int":
+			case typeInt:
 				assert.IsType(t, int(0), actual, "Expected int type")
 				assert.Equal(t, tt.expectedValue, actual)
-			case "float64":
+			case typeFloat64:
 				assert.IsType(t, float64(0), actual, "Expected float64 type")
 				assert.Equal(t, tt.expectedValue, actual)
-			case "string":
+			case typeString:
 				assert.IsType(t, "", actual, "Expected string type")
 				assert.Equal(t, tt.expectedValue, actual)
 			default:

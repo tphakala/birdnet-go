@@ -12,6 +12,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
+// ComponentSoundLevel is the component identifier for sound level logging.
+const ComponentSoundLevel = "analysis.soundlevel"
+
 // Package-level logger for analysis operations
 var (
 	logger         *slog.Logger
@@ -68,14 +71,14 @@ func LogSoundLevelMQTTPublished(topic, source string, bandCount int) {
 		"topic", topic,
 		"source", source,
 		"octave_bands", bandCount,
-		"component", "analysis.soundlevel",
+		"component", ComponentSoundLevel,
 	)
 }
 
 // LogSoundLevelProcessorRegistered logs successful registration of sound level processor
 func LogSoundLevelProcessorRegistered(source, sourceType, component string) {
 	if component == "" {
-		component = "analysis.soundlevel"
+		component = ComponentSoundLevel
 	}
 	GetLogger().Info("Registered sound level processor",
 		"source", source,
@@ -87,7 +90,7 @@ func LogSoundLevelProcessorRegistered(source, sourceType, component string) {
 // LogSoundLevelProcessorRegistrationFailed logs failed registration of sound level processor
 func LogSoundLevelProcessorRegistrationFailed(source, sourceType, component string, err error) {
 	if component == "" {
-		component = "analysis.soundlevel"
+		component = ComponentSoundLevel
 	}
 	GetLogger().Error("Failed to register sound level processor",
 		"source", source,
@@ -100,7 +103,7 @@ func LogSoundLevelProcessorRegistrationFailed(source, sourceType, component stri
 // LogSoundLevelProcessorUnregistered logs unregistration of sound level processor
 func LogSoundLevelProcessorUnregistered(source, sourceType, component string) {
 	if component == "" {
-		component = "analysis.soundlevel"
+		component = ComponentSoundLevel
 	}
 	GetLogger().Info("Unregistered sound level processor",
 		"source", source,
@@ -117,7 +120,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 			"registered_processors", successCount,
 			"active_streams", activeStreams,
 			"partial_success", false,
-			"component", "analysis.soundlevel",
+			"component", ComponentSoundLevel,
 			"operation", "register_sound_level_processors",
 		)
 	case successCount > 0:
@@ -127,7 +130,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 			"failed_processors", totalCount-successCount,
 			"active_streams", activeStreams,
 			"partial_success", true,
-			"component", "analysis.soundlevel",
+			"component", ComponentSoundLevel,
 			"operation", "register_sound_level_processors",
 		)
 		// Log first few errors for debugging
@@ -135,7 +138,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 			if i >= 3 {
 				GetLogger().Warn("Additional sound level processor registration errors",
 					"remaining_errors", len(errors)-3,
-					"component", "analysis.soundlevel",
+					"component", ComponentSoundLevel,
 					"operation", "register_sound_level_processors",
 				)
 				break
@@ -143,7 +146,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 			GetLogger().Warn("Sound level processor registration error",
 				"error_number", i+1,
 				"error", err,
-				"component", "analysis.soundlevel",
+				"component", ComponentSoundLevel,
 				"operation", "register_sound_level_processors",
 			)
 		}
@@ -151,7 +154,7 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 		GetLogger().Error("Failed to register any sound level processors",
 			"total_failures", len(errors),
 			"partial_success", false,
-			"component", "analysis.soundlevel",
+			"component", ComponentSoundLevel,
 			"operation", "register_sound_level_processors",
 		)
 	}
@@ -161,6 +164,6 @@ func LogSoundLevelRegistrationSummary(successCount, totalCount, activeStreams in
 func LogSoundLevelActiveStreamNotInConfig(url string) {
 	GetLogger().Warn("Found active RTSP stream not in configuration",
 		"rtsp_url", privacy.SanitizeRTSPUrl(url),
-		"component", "analysis.soundlevel",
+		"component", ComponentSoundLevel,
 	)
 }

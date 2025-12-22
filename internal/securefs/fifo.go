@@ -13,6 +13,9 @@ import (
 	"time"
 )
 
+// OS name constant for runtime.GOOS comparisons.
+const osWindows = "windows"
+
 // CreateFIFO creates a FIFO (named pipe) at the specified path with platform-specific implementation
 func (sfs *SecureFS) CreateFIFO(path string) error {
 	// Validate the path is within the base directory
@@ -34,7 +37,7 @@ func (sfs *SecureFS) CreateFIFO(path string) error {
 // GetFIFOPath returns the platform-specific path to use for the FIFO
 // On Windows, this returns a named pipe path, on Unix it returns the original path
 func GetFIFOPath(path string) string {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		// Convert Unix-style path to Windows named pipe path
 		// Format: \\.\pipe\[path]
 		baseName := filepath.Base(path)
@@ -61,7 +64,7 @@ func (sfs *SecureFS) OpenFIFO(ctx context.Context, path string) (*os.File, error
 	var err error
 
 	// Perform platform-specific fifo opening
-	if runtime.GOOS == "windows" && sfs.pipeName != "" {
+	if runtime.GOOS == osWindows && sfs.pipeName != "" {
 		// Use a pipe path from CreateFIFO
 		fifo, err = sfs.OpenNamedPipe(sfs.pipeName)
 	} else {
@@ -90,7 +93,7 @@ func (sfs *SecureFS) OpenNamedPipe(pipePath string) (*os.File, error) {
 
 // getPlatformOpenFlags returns OS-specific open flags for the FIFO
 func getPlatformOpenFlags() int {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		return os.O_WRONLY // Windows uses writeable flag without O_NONBLOCK
 	}
 	// Unix systems use non-blocking flag to prevent indefinite blocking if reader crashes
@@ -136,7 +139,7 @@ func openFIFOWithRetries(ctx context.Context, fifoPath, pipePath string, openFla
 
 // openPlatformSpecificFIFO opens the FIFO using OS-specific approach
 func openPlatformSpecificFIFO(pipePath, fifoPath string, openFlags int, sfs *SecureFS) (*os.File, error) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		// Validate Windows pipe path to ensure it's a valid named pipe path
 		if !strings.HasPrefix(pipePath, `\\.\pipe\`) {
 			return nil, fmt.Errorf("security error: Windows pipe path must start with \\\\.\\pipe\\")

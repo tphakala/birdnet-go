@@ -10,6 +10,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
+// Test constants for path testing.
+const (
+	testDBPath    = "birdnet.db"
+	testClipsPath = "clips/"
+)
+
 func TestGetCriticalPaths(t *testing.T) {
 	t.Parallel()
 
@@ -24,7 +30,7 @@ func TestGetCriticalPaths(t *testing.T) {
 			setupConfig: func() *conf.Settings {
 				s := &conf.Settings{}
 				s.Output.SQLite.Enabled = true
-				s.Output.SQLite.Path = "birdnet.db"
+				s.Output.SQLite.Path = testDBPath
 				return s
 			},
 			wantContains: []string{"/"},
@@ -46,7 +52,7 @@ func TestGetCriticalPaths(t *testing.T) {
 			setupConfig: func() *conf.Settings {
 				s := &conf.Settings{}
 				s.Realtime.Audio.Export.Enabled = true
-				s.Realtime.Audio.Export.Path = "clips/"
+				s.Realtime.Audio.Export.Path = testClipsPath
 				return s
 			},
 			wantContains: []string{"/"},
@@ -213,9 +219,9 @@ func TestGetMonitoringPathsInfo(t *testing.T) {
 	settings := &conf.Settings{}
 	settings.Realtime.Monitoring.Disk.Paths = []string{"/custom", "/data"}
 	settings.Output.SQLite.Enabled = true
-	settings.Output.SQLite.Path = "birdnet.db"
+	settings.Output.SQLite.Path = testDBPath
 	settings.Realtime.Audio.Export.Enabled = true
-	settings.Realtime.Audio.Export.Path = "clips/"
+	settings.Realtime.Audio.Export.Path = testClipsPath
 
 	configured, autoDetected, merged := GetMonitoringPathsInfo(settings)
 

@@ -11,6 +11,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
+// Status constants for metrics recording.
+const (
+	statusSuccess = "success"
+	statusFailure = "failure"
+	statusError   = "error"
+)
+
 // MetricsCollector provides metrics collection for audiocore components
 type MetricsCollector struct {
 	metrics *metrics.AudioCoreMetrics
@@ -125,9 +132,9 @@ func (mc *MetricsCollector) RecordSourceStart(sourceID, sourceType string, succe
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 
-	status := "success"
+	status := statusSuccess
 	if !success {
-		status = "failure"
+		status = statusFailure
 	}
 	mc.metrics.RecordSourceStart(sourceID, sourceType, status)
 
@@ -148,9 +155,9 @@ func (mc *MetricsCollector) RecordSourceStop(sourceID, sourceType string, succes
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 
-	status := "success"
+	status := statusSuccess
 	if !success {
-		status = "failure"
+		status = statusFailure
 	}
 	mc.metrics.RecordSourceStop(sourceID, sourceType, status)
 }
@@ -224,9 +231,9 @@ func (mc *MetricsCollector) RecordProcessorExecution(processorID, processorType 
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
 
-	status := "success"
+	status := statusSuccess
 	if err != nil {
-		status = "error"
+		status = statusError
 		mc.metrics.RecordProcessorError(processorID, processorType, "execution_failed")
 	}
 

@@ -7,6 +7,13 @@ import (
 	"testing"
 )
 
+// Test constants for cross-platform testing.
+const (
+	platformUnix    = "unix"
+	platformWindows = "windows"
+	platformAll     = "all"
+)
+
 func TestSecureFileOp_ValidatePath_CrossPlatform(t *testing.T) {
 	t.Parallel()
 	
@@ -22,40 +29,40 @@ func TestSecureFileOp_ValidatePath_CrossPlatform(t *testing.T) {
 			name:     "valid relative path",
 			path:     "test/file.txt",
 			wantErr:  false,
-			platform: "all",
+			platform: platformAll,
 		},
 		{
 			name:     "valid absolute path unix",
 			path:     "/tmp/test.txt",
 			wantErr:  false,
-			platform: "unix",
+			platform: platformUnix,
 		},
 		{
 			name:     "valid absolute path windows",
 			path:     "C:\\temp\\test.txt",
 			wantErr:  false,
-			platform: "windows",
+			platform: platformWindows,
 		},
 		{
 			name:     "path with dots",
 			path:     "test/../file.txt",
 			wantErr:  false,
-			platform: "all",
+			platform: platformAll,
 		},
 		{
 			name:     "path with double dots",
 			path:     "test/../../file.txt",
 			wantErr:  false,
-			platform: "all",
+			platform: platformAll,
 		},
 	}
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.platform == "unix" && runtime.GOOS == "windows" {
+			if tt.platform == platformUnix && runtime.GOOS == platformWindows {
 				t.Skip("Unix-specific test on Windows")
 			}
-			if tt.platform == "windows" && runtime.GOOS != "windows" {
+			if tt.platform == platformWindows && runtime.GOOS != platformWindows {
 				t.Skip("Windows-specific test on non-Windows")
 			}
 			

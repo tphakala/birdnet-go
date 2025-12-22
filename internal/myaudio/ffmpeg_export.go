@@ -23,6 +23,15 @@ import (
 // completion to ensure atomic file operations.
 const TempExt = ".temp"
 
+// Audio format constants for FFmpeg export operations.
+const (
+	FormatAAC  = "aac"
+	FormatFLAC = "flac"
+	FormatALAC = "alac"
+	FormatOpus = "opus"
+	FormatMP3  = "mp3"
+)
+
 // ExportAudioWithFFmpeg exports PCM data to the specified format using FFmpeg
 // outputPath is full path with audio file name and extension based on format
 // pcmData is the PCM data to export
@@ -411,15 +420,15 @@ func buildAudioFilter(settings *conf.AudioSettings) string {
 // getCodec returns the appropriate codec to use with FFmpeg based on the format
 func getEncoder(format string) string {
 	switch format {
-	case "flac":
-		return "flac"
-	case "alac":
-		return "alac"
-	case "opus":
+	case FormatFLAC:
+		return FormatFLAC
+	case FormatALAC:
+		return FormatALAC
+	case FormatOpus:
 		return "libopus"
-	case "aac":
-		return "aac"
-	case "mp3":
+	case FormatAAC:
+		return FormatAAC
+	case FormatMP3:
 		return "libmp3lame"
 	default:
 		return format
@@ -429,16 +438,16 @@ func getEncoder(format string) string {
 // getOutputFormat returns the appropriate output format for FFmpeg based on the export type
 func getOutputFormat(exportType string) string {
 	switch exportType {
-	case "flac":
-		return "flac"
-	case "alac":
+	case FormatFLAC:
+		return FormatFLAC
+	case FormatALAC:
 		return "ipod" // ALAC uses the iPod container format
-	case "opus":
-		return "opus"
-	case "aac":
+	case FormatOpus:
+		return FormatOpus
+	case FormatAAC:
 		return "mp4" // AAC typically uses the iPod/MP4 container format
-	case "mp3":
-		return "mp3"
+	case FormatMP3:
+		return FormatMP3
 	default:
 		return exportType
 	}
@@ -447,11 +456,11 @@ func getOutputFormat(exportType string) string {
 // getMaxBitrate limits the bitrate to the maximum allowed by the format
 func getMaxBitrate(format, requestedBitrate string) string {
 	switch format {
-	case "opus":
+	case FormatOpus:
 		if requestedBitrate > "256k" {
 			return "256k"
 		}
-	case "mp3":
+	case FormatMP3:
 		if requestedBitrate > "320k" {
 			return "320k"
 		}

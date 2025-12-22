@@ -19,6 +19,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// OS name constants for runtime.GOOS comparisons.
+const (
+	osLinux   = "linux"
+	osWindows = "windows"
+)
+
 // getDefaultConfigPaths returns a list of default configuration paths for the current operating system.
 // It determines paths based on standard conventions for storing application configuration files.
 // If a config.yaml file is found in any of the paths, it returns that path as the default.
@@ -46,7 +52,7 @@ func GetDefaultConfigPaths() ([]string, error) {
 
 	// Define default paths based on the operating system.
 	switch runtime.GOOS {
-	case "windows":
+	case osWindows:
 		// For Windows, use the executable directory and the AppData Roaming directory.
 		configPaths = []string{
 			exeDir,
@@ -166,7 +172,7 @@ func PrintUserInfo() {
 	var audioMember = false
 
 	// Check if the operating system is Linux
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS == osLinux {
 		// Get current user information
 		currentUser, err := user.Current()
 		if err != nil {
@@ -253,7 +259,7 @@ func RunningInContainer() bool {
 
 // isLinuxArm64 checks if the operating system is Linux and the architecture is arm64.
 func IsLinuxArm64() bool {
-	return runtime.GOOS == "linux" && runtime.GOARCH == "arm64"
+	return runtime.GOOS == osLinux && runtime.GOARCH == "arm64"
 }
 
 // getBoardModel reads the SBC board model from the device tree.
@@ -368,7 +374,7 @@ func ConvertUTCToLocal(utcTime time.Time) (time.Time, error) {
 
 // GetFfmpegBinaryName returns the binary name for ffmpeg based on the current OS.
 func GetFfmpegBinaryName() string {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		return "ffmpeg.exe"
 	}
 	return "ffmpeg"
@@ -376,7 +382,7 @@ func GetFfmpegBinaryName() string {
 
 // GetSoxBinaryName returns the binary name for sox based on the current OS.
 func GetSoxBinaryName() string {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		return "sox.exe"
 	}
 	return "sox"
@@ -384,7 +390,7 @@ func GetSoxBinaryName() string {
 
 // GetFfprobeBinaryName returns the binary name for ffprobe based on the current OS.
 func GetFfprobeBinaryName() string {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		return "ffprobe.exe"
 	}
 	return "ffprobe"
