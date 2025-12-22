@@ -298,6 +298,7 @@ func (c *Controller) initSystemRoutes() {
 	protectedGroup.GET("/jobs", c.GetJobQueueStats)
 	protectedGroup.GET("/processes", c.GetProcessInfo)
 	protectedGroup.GET("/temperature/cpu", c.GetSystemCPUTemperature)
+	protectedGroup.GET("/database/stats", c.GetDatabaseStats)
 
 	// Audio device routes (all protected)
 	audioGroup := protectedGroup.Group("/audio")
@@ -1299,4 +1300,43 @@ func (c *Controller) GetEqualizerConfig(ctx echo.Context) error {
 
 	// Return the equalizer filter configuration
 	return ctx.JSON(http.StatusOK, conf.EqFilterConfig)
+}
+
+// GetDatabaseStats handles GET /api/v2/system/database/stats
+func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
+	c.logInfoIfEnabled("Getting database statistics",
+		"path", ctx.Request().URL.Path,
+		"ip", ctx.RealIP(),
+	)
+
+	// Check if datastore is available
+	if c.DS == nil {
+		c.logErrorIfEnabled("Datastore not available",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+		return c.HandleError(ctx, fmt.Errorf("datastore not available"), "Database not configured", http.StatusServiceUnavailable)
+	}
+
+	// Get database stats from the datastore
+	stats, err := c.DS.GetDatabaseStats()
+	if err != nil {
+		c.logErrorIfEnabled("Failed to get database stats",
+			"error", err.Error(),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+		return c.HandleError(ctx, err, "Failed to retrieve database statistics", http.StatusInternalServerError)
+	}
+
+	c.logInfoIfEnabled("Database statistics retrieved successfully",
+		"type", stats.Type,
+		"size_bytes", stats.SizeBytes,
+		"total_detections", stats.TotalDetections,
+		"connected", stats.Connected,
+		"path", ctx.Request().URL.Path,
+		"ip", ctx.RealIP(),
+	)
+
+	return ctx.JSON(http.StatusOK, stats)
 }

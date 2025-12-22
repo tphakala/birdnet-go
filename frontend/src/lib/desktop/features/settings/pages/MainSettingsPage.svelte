@@ -65,11 +65,13 @@
     X,
     Maximize2,
     Download,
+    RefreshCw,
   } from '@lucide/svelte';
   import { t, getLocale } from '$lib/i18n';
   import { LOCALES } from '$lib/i18n/config';
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
+  import { formatBytes } from '$lib/utils/formatters';
   import { wundergroundDefaults, weatherDefaults } from '$lib/utils/weatherDefaults';
   import {
     MAP_CONFIG,
@@ -314,6 +316,25 @@
     stages: [],
     isRunning: false,
     showSuccessNote: false,
+  });
+
+  // Database stats interface and state
+  interface DatabaseStats {
+    type: string;
+    size_bytes: number;
+    total_detections: number;
+    connected: boolean;
+    location: string;
+  }
+
+  let databaseStats = $state<{
+    loading: boolean;
+    error: string | null;
+    data: DatabaseStats | null;
+  }>({
+    loading: false,
+    error: null,
+    data: null,
   });
 
   // Species type for range filter API responses
@@ -595,6 +616,33 @@
       providerOptions.loading = false;
     }
   }
+
+  // Load database statistics from the API
+  async function loadDatabaseStats() {
+    databaseStats.loading = true;
+    databaseStats.error = null;
+
+    try {
+      const stats = await api.get<DatabaseStats>('/api/v2/system/database/stats');
+      databaseStats.data = stats;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        databaseStats.error = error.message;
+      } else {
+        databaseStats.error = 'Failed to load database statistics';
+      }
+      logger.error('Failed to load database stats:', error);
+    } finally {
+      databaseStats.loading = false;
+    }
+  }
+
+  // Load database stats when database tab becomes active
+  $effect(() => {
+    if (activeTab === 'database' && !databaseStats.data && !databaseStats.loading) {
+      loadDatabaseStats();
+    }
+  });
 
   const createMapStyle = createMapStyleFromConfig;
 
@@ -2479,6 +2527,98 @@
               onchange={database => updateMySQLSettings({ database })}
             />
           </div>
+        {/if}
+      </div>
+    </SettingsSection>
+
+    <!-- Database Statistics Section -->
+    <SettingsSection
+      title="Database Statistics"
+      description="Runtime information about your database"
+    >
+      <div class="space-y-4">
+        {#if databaseStats.loading}
+          <div class="flex items-center gap-2 text-base-content/60">
+            <span class="loading loading-spinner loading-sm"></span>
+            <span>Loading database statistics...</span>
+          </div>
+        {:else if databaseStats.error}
+          <div class="alert alert-error">
+            <XCircle class="size-5" />
+            <span>{databaseStats.error}</span>
+            <button type="button" class="btn btn-sm btn-ghost" onclick={() => loadDatabaseStats()}>
+              Retry
+            </button>
+          </div>
+        {:else if databaseStats.data}
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Database Type -->
+            <div class="stat bg-base-200 rounded-box p-4">
+              <div class="stat-title text-xs">Type</div>
+              <div class="stat-value text-lg flex items-center gap-2">
+                <DatabaseIcon
+                  database={databaseStats.data.type as DatabaseType}
+                  className="size-5"
+                />
+                <span class="capitalize">{databaseStats.data.type}</span>
+              </div>
+            </div>
+
+            <!-- Connection Status -->
+            <div class="stat bg-base-200 rounded-box p-4">
+              <div class="stat-title text-xs">Status</div>
+              <div class="stat-value text-lg">
+                {#if databaseStats.data.connected}
+                  <span class="text-success flex items-center gap-2">
+                    <span class="badge badge-success badge-xs"></span>
+                    Connected
+                  </span>
+                {:else}
+                  <span class="text-error flex items-center gap-2">
+                    <span class="badge badge-error badge-xs"></span>
+                    Disconnected
+                  </span>
+                {/if}
+              </div>
+            </div>
+
+            <!-- Database Size -->
+            <div class="stat bg-base-200 rounded-box p-4">
+              <div class="stat-title text-xs">Size</div>
+              <div class="stat-value text-lg">
+                {formatBytes(databaseStats.data.size_bytes)}
+              </div>
+            </div>
+
+            <!-- Total Detections -->
+            <div class="stat bg-base-200 rounded-box p-4">
+              <div class="stat-title text-xs">Total Detections</div>
+              <div class="stat-value text-lg">
+                {databaseStats.data.total_detections.toLocaleString()}
+              </div>
+            </div>
+          </div>
+
+          <!-- Location/Path -->
+          <div class="bg-base-200 rounded-box p-4">
+            <div class="text-xs text-base-content/60 mb-1">Location</div>
+            <div class="font-mono text-sm break-all">{databaseStats.data.location}</div>
+          </div>
+
+          <!-- Refresh Button -->
+          <div class="flex justify-end">
+            <button
+              type="button"
+              class="btn btn-sm btn-ghost gap-2"
+              onclick={() => loadDatabaseStats()}
+              disabled={databaseStats.loading}
+            >
+              <RefreshCw class={cn('size-4', databaseStats.loading && 'animate-spin')} />
+              Refresh
+            </button>
+          </div>
+        {:else}
+          <div class="text-base-content/60">No database statistics available.</div>
         {/if}
       </div>
     </SettingsSection>

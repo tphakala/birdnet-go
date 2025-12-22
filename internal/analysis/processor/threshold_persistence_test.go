@@ -293,6 +293,13 @@ func (m *MockDatastore) DeleteExpiredNotificationHistory(before time.Time) (int6
 	return 0, nil
 }
 
+func (m *MockDatastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
+	return &datastore.DatabaseStats{
+		Type:      "mock",
+		Connected: true,
+	}, nil
+}
+
 // createTestProcessor creates a processor with mock datastore for testing
 func createTestProcessor() *Processor {
 	settings := &conf.Settings{}

@@ -301,6 +301,13 @@ func (m *mockStore) DeleteExpiredNotificationHistory(before time.Time) (int64, e
 	return 0, nil
 }
 
+func (m *mockStore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
+	return &datastore.DatabaseStats{
+		Type:      "mock",
+		Connected: true,
+	}, nil
+}
+
 // mockFailingStore is a mock implementation that simulates database failures
 type mockFailingStore struct {
 	mockStore
