@@ -36,6 +36,13 @@ import (
 // sunriseSetWindowMinutes defines the time window (in minutes) around sunrise and sunset
 const sunriseSetWindowMinutes = 30
 
+// Database dialect constants.
+const (
+	DialectUnknown = "unknown"
+	DialectSQLite  = "sqlite"
+	DialectMySQL   = "mysql"
+)
+
 // Time-of-day filter constants for detection queries.
 const (
 	TimeOfDayAny     = "any"

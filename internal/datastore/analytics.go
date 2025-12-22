@@ -12,13 +12,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Database dialect constants.
-const (
-	DialectUnknown = "unknown"
-	DialectSQLite  = "sqlite"
-	DialectMySQL   = "mysql"
-)
-
 // isDebugLoggingEnabled returns true if debug logging is enabled and logger is available
 func isDebugLoggingEnabled() bool {
 	settings := conf.GetSettings()
