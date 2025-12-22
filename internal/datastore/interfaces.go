@@ -63,6 +63,8 @@ var (
 	ErrImageCacheNotFound = errors.Newf("image cache not found").Component("datastore").Category(errors.CategoryNotFound).Build()
 	// ErrNotificationHistoryNotFound indicates no notification history record exists for the given species and type.
 	ErrNotificationHistoryNotFound = errors.Newf("notification history not found").Component("datastore").Category(errors.CategoryNotFound).Build()
+	// ErrDBNotConnected indicates the database is not connected, but partial stats may be available.
+	ErrDBNotConnected = errors.Newf("database not connected").Component("datastore").Category(errors.CategorySystem).Build()
 )
 
 // StoreInterface abstracts the underlying database implementation and defines the interface for database operations.

@@ -228,7 +228,8 @@ func (m *MySQLStore) UpdateNote(id string, updates map[string]any) error {
 }
 
 // GetDatabaseStats returns basic runtime statistics about the MySQL database.
-// Returns partial stats even if some checks fail - Connected field indicates if DB is reachable.
+// Returns partial stats with ErrDBNotConnected if the database is unreachable.
+// The Connected field in the returned stats indicates if the DB is reachable.
 func (m *MySQLStore) GetDatabaseStats() (*DatabaseStats, error) {
 	location := fmt.Sprintf("%s:%s/%s",
 		m.Settings.Output.MySQL.Host,
@@ -241,18 +242,18 @@ func (m *MySQLStore) GetDatabaseStats() (*DatabaseStats, error) {
 		Location:  location,
 	}
 
-	// Check connection - return partial stats if unavailable
+	// Check connection - return partial stats with error if unavailable
 	if m.DB == nil {
-		return stats, nil //nolint:nilerr // Intentional: return partial stats when DB unavailable
+		return stats, ErrDBNotConnected
 	}
 
 	sqlDB, err := m.DB.DB()
 	if err != nil {
-		return stats, nil //nolint:nilerr // Intentional: return partial stats when DB unavailable
+		return stats, ErrDBNotConnected
 	}
 
 	if err := sqlDB.Ping(); err != nil {
-		return stats, nil //nolint:nilerr // Intentional: return partial stats when DB unreachable
+		return stats, ErrDBNotConnected
 	}
 	stats.Connected = true
 

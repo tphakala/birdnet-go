@@ -4,6 +4,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -25,6 +26,7 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -1321,12 +1323,22 @@ func (c *Controller) GetDatabaseStats(ctx echo.Context) error {
 	// Get database stats from the datastore
 	stats, err := c.DS.GetDatabaseStats()
 	if err != nil {
-		c.logErrorIfEnabled("Failed to get database stats",
-			"error", err.Error(),
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP(),
-		)
-		return c.HandleError(ctx, err, "Failed to retrieve database statistics", http.StatusInternalServerError)
+		// If the database is not connected, log as warning and return partial stats with 200 OK
+		if errors.Is(err, datastore.ErrDBNotConnected) {
+			c.logWarnIfEnabled("Database not connected, returning partial stats",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+			// Continue to return partial stats below
+		} else {
+			c.logErrorIfEnabled("Failed to get database stats",
+				"error", err.Error(),
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP(),
+			)
+			return c.HandleError(ctx, err, "Failed to retrieve database statistics", http.StatusInternalServerError)
+		}
 	}
 
 	c.logInfoIfEnabled("Database statistics retrieved successfully",

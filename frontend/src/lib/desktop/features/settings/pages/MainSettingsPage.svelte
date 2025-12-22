@@ -628,6 +628,8 @@
     } catch (error) {
       if (error instanceof ApiError) {
         databaseStats.error = error.message;
+      } else if (error instanceof Error) {
+        databaseStats.error = error.message;
       } else {
         databaseStats.error = 'Failed to load database statistics';
       }
@@ -637,9 +639,14 @@
     }
   }
 
-  // Load database stats when database tab becomes active
+  // Load database stats when database tab becomes active (only on first load, not after errors)
   $effect(() => {
-    if (activeTab === 'database' && !databaseStats.data && !databaseStats.loading) {
+    if (
+      activeTab === 'database' &&
+      !databaseStats.data &&
+      !databaseStats.loading &&
+      !databaseStats.error
+    ) {
       loadDatabaseStats();
     }
   });
@@ -2538,12 +2545,16 @@
     >
       <div class="space-y-4">
         {#if databaseStats.loading}
-          <div class="flex items-center gap-2 text-base-content/60">
+          <div
+            class="flex items-center gap-2 text-base-content/60"
+            role="status"
+            aria-live="polite"
+          >
             <span class="loading loading-spinner loading-sm"></span>
             <span>Loading database statistics...</span>
           </div>
         {:else if databaseStats.error}
-          <div class="alert alert-error">
+          <div class="alert alert-error" role="alert">
             <XCircle class="size-5" />
             <span>{databaseStats.error}</span>
             <button type="button" class="btn btn-sm btn-ghost" onclick={() => loadDatabaseStats()}>
