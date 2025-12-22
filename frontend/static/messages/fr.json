@@ -263,6 +263,7 @@
     "title": "Notifications",
     "subtitle": "Afficher et gérer toutes les notifications système",
     "filters": {
+      "label": "Filtres",
       "allStatus": "Tous les statuts",
       "unread": "Non lu",
       "read": "Lu",
@@ -307,6 +308,18 @@
       "minutesAgo": "Il y a {minutes}min",
       "hoursAgo": "Il y a {hours}h",
       "daysAgo": "Il y a {days}j"
+    },
+    "viewMode": {
+      "label": "Mode d'affichage",
+      "grouped": "Vue groupée",
+      "flat": "Vue plate"
+    },
+    "groups": {
+      "markAllRead": "Tout marquer comme lu",
+      "dismissAll": "Tout ignorer",
+      "unread": "{count} non lues",
+      "confirmBulkDelete": "Supprimer plusieurs notifications",
+      "bulkDeleteConfirmation": "Êtes-vous sûr de vouloir supprimer {count} notifications?"
     }
   },
   "search": {

@@ -353,7 +353,10 @@
     {showAllProcesses}
     isLoading={processes.loading}
     error={processes.error}
-    onToggleShowAll={loadProcesses}
+    onToggleShowAll={() => {
+      showAllProcesses = !showAllProcesses;
+      loadProcesses();
+    }}
     className="mt-6"
   />
 

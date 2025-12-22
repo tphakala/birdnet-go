@@ -1,6 +1,6 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
-  import { Terminal } from '@lucide/svelte';
+  import { Terminal, ChevronUp, ChevronDown, ChevronsUpDown } from '@lucide/svelte';
   import { safeArrayAccess } from '$lib/utils/security';
   import { t } from '$lib/i18n';
 
@@ -12,6 +12,9 @@
     memory: number;
     uptime: number;
   }
+
+  type SortColumn = 'name' | 'status' | 'cpu' | 'memory' | 'uptime';
+  type SortDirection = 'asc' | 'desc';
 
   interface Props {
     title: string;
@@ -32,6 +35,54 @@
     onToggleShowAll,
     className = '',
   }: Props = $props();
+
+  // Sort state
+  let sortColumn = $state<SortColumn>('name');
+  let sortDirection = $state<SortDirection>('asc');
+
+  // Handle column header click to toggle sort
+  function handleSort(column: SortColumn) {
+    if (sortColumn === column) {
+      // Toggle direction if clicking same column
+      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      // New column: set to ascending by default
+      sortColumn = column;
+      sortDirection = 'asc';
+    }
+  }
+
+  // Sorted processes
+  let sortedProcesses = $derived.by(() => {
+    if (!processes || processes.length === 0) return [];
+
+    return [...processes].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortColumn) {
+        case 'name': {
+          const nameA = a.name === 'main' ? 'BirdNET-Go' : a.name;
+          const nameB = b.name === 'main' ? 'BirdNET-Go' : b.name;
+          comparison = nameA.localeCompare(nameB);
+          break;
+        }
+        case 'status':
+          comparison = a.status.localeCompare(b.status);
+          break;
+        case 'cpu':
+          comparison = a.cpu - b.cpu;
+          break;
+        case 'memory':
+          comparison = a.memory - b.memory;
+          break;
+        case 'uptime':
+          comparison = a.uptime - b.uptime;
+          break;
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  });
 
   // PERFORMANCE OPTIMIZATION: Pure utility functions outside reactive context
   // These functions only depend on their parameters, not component state
@@ -135,15 +186,105 @@
         <table class="table table-zebra w-full">
           <thead>
             <tr class="bg-base-200">
-              <th scope="col">{t('system.processInfo.table.process')}</th>
-              <th scope="col">{t('system.processInfo.table.status')}</th>
-              <th scope="col">{t('system.processInfo.table.cpu')}</th>
-              <th scope="col">{t('system.processInfo.table.memory')}</th>
-              <th scope="col">{t('system.processInfo.table.uptime')}</th>
+              <th scope="col">
+                <button
+                  type="button"
+                  class="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer w-full"
+                  onclick={() => handleSort('name')}
+                  aria-label="Sort by process name"
+                >
+                  {t('system.processInfo.table.process')}
+                  {#if sortColumn === 'name'}
+                    {#if sortDirection === 'asc'}
+                      <ChevronUp class="size-4" />
+                    {:else}
+                      <ChevronDown class="size-4" />
+                    {/if}
+                  {:else}
+                    <ChevronsUpDown class="size-4 opacity-30" />
+                  {/if}
+                </button>
+              </th>
+              <th scope="col">
+                <button
+                  type="button"
+                  class="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer w-full"
+                  onclick={() => handleSort('status')}
+                  aria-label="Sort by status"
+                >
+                  {t('system.processInfo.table.status')}
+                  {#if sortColumn === 'status'}
+                    {#if sortDirection === 'asc'}
+                      <ChevronUp class="size-4" />
+                    {:else}
+                      <ChevronDown class="size-4" />
+                    {/if}
+                  {:else}
+                    <ChevronsUpDown class="size-4 opacity-30" />
+                  {/if}
+                </button>
+              </th>
+              <th scope="col">
+                <button
+                  type="button"
+                  class="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer w-full"
+                  onclick={() => handleSort('cpu')}
+                  aria-label="Sort by CPU usage"
+                >
+                  {t('system.processInfo.table.cpu')}
+                  {#if sortColumn === 'cpu'}
+                    {#if sortDirection === 'asc'}
+                      <ChevronUp class="size-4" />
+                    {:else}
+                      <ChevronDown class="size-4" />
+                    {/if}
+                  {:else}
+                    <ChevronsUpDown class="size-4 opacity-30" />
+                  {/if}
+                </button>
+              </th>
+              <th scope="col">
+                <button
+                  type="button"
+                  class="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer w-full"
+                  onclick={() => handleSort('memory')}
+                  aria-label="Sort by memory usage"
+                >
+                  {t('system.processInfo.table.memory')}
+                  {#if sortColumn === 'memory'}
+                    {#if sortDirection === 'asc'}
+                      <ChevronUp class="size-4" />
+                    {:else}
+                      <ChevronDown class="size-4" />
+                    {/if}
+                  {:else}
+                    <ChevronsUpDown class="size-4 opacity-30" />
+                  {/if}
+                </button>
+              </th>
+              <th scope="col">
+                <button
+                  type="button"
+                  class="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer w-full"
+                  onclick={() => handleSort('uptime')}
+                  aria-label="Sort by uptime"
+                >
+                  {t('system.processInfo.table.uptime')}
+                  {#if sortColumn === 'uptime'}
+                    {#if sortDirection === 'asc'}
+                      <ChevronUp class="size-4" />
+                    {:else}
+                      <ChevronDown class="size-4" />
+                    {/if}
+                  {:else}
+                    <ChevronsUpDown class="size-4 opacity-30" />
+                  {/if}
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
-            {#if processes.length === 0}
+            {#if sortedProcesses.length === 0}
               <tr>
                 <td
                   colspan="5"
@@ -154,7 +295,7 @@
                 </td>
               </tr>
             {:else}
-              {#each processes as process (process.pid)}
+              {#each sortedProcesses as process (process.pid)}
                 <tr class="hover:bg-base-200/50 transition-colors duration-150">
                   <td>
                     <div class="flex items-start gap-2">

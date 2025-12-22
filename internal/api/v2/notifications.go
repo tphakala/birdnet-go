@@ -152,16 +152,18 @@ func (c *Controller) SetupNotificationRoutes() {
 	// SSE endpoint for notification stream (authenticated - includes both notifications and toasts)
 	c.Group.GET("/notifications/stream", c.StreamNotifications, c.authMiddleware, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
-	// REST endpoints for notification management
-	c.Group.GET("/notifications", c.GetNotifications)
-	c.Group.GET("/notifications/:id", c.GetNotification)
-	c.Group.PUT("/notifications/:id/read", c.MarkNotificationRead)
-	c.Group.PUT("/notifications/:id/acknowledge", c.MarkNotificationAcknowledged)
-	c.Group.DELETE("/notifications/:id", c.DeleteNotification)
-	c.Group.GET("/notifications/unread/count", c.GetUnreadCount)
+	// REST endpoints for notification management (authenticated)
+	// All notification endpoints require authentication when security is enabled
+	notificationsGroup := c.Group.Group("/notifications", c.authMiddleware)
+	notificationsGroup.GET("", c.GetNotifications)
+	notificationsGroup.GET("/:id", c.GetNotification)
+	notificationsGroup.PUT("/:id/read", c.MarkNotificationRead)
+	notificationsGroup.PUT("/:id/acknowledge", c.MarkNotificationAcknowledged)
+	notificationsGroup.DELETE("/:id", c.DeleteNotification)
+	notificationsGroup.GET("/unread/count", c.GetUnreadCount)
 
-	// Test endpoints for notification system
-	c.Group.POST("/notifications/test/new-species", c.CreateTestNewSpeciesNotification, c.authMiddleware)
+	// Test endpoints for notification system (authenticated)
+	notificationsGroup.POST("/test/new-species", c.CreateTestNewSpeciesNotification)
 }
 
 // StreamNotifications handles the SSE connection for real-time notification streaming
