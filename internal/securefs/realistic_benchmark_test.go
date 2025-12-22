@@ -25,7 +25,7 @@ func BenchmarkRepeatedStatOperationsWithoutCache(b *testing.B) {
 
 	for _, file := range testFiles {
 		fullPath := filepath.Join(tempDir, file)
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o750); err != nil {
 			b.Fatal(err)
 		}
 		if err := os.WriteFile(fullPath, []byte("test content"), 0o644); err != nil {
@@ -89,7 +89,7 @@ func BenchmarkRepeatedStatOperationsWithCache(b *testing.B) {
 
 	for _, file := range testFiles {
 		fullPath := filepath.Join(tempDir, file)
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o750); err != nil {
 			b.Fatal(err)
 		}
 		if err := os.WriteFile(fullPath, []byte("test content"), 0o644); err != nil {
@@ -208,7 +208,7 @@ func setupSpectrogramTestFiles(b *testing.B, tempDir string, files []string) {
 	b.Helper()
 	for _, file := range files {
 		fullPath := filepath.Join(tempDir, file)
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o750); err != nil {
 			b.Fatal(err)
 		}
 		if err := os.WriteFile(fullPath, []byte("fake audio content"), 0o644); err != nil {

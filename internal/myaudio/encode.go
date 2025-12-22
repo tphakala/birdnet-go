@@ -81,7 +81,7 @@ func SavePCMDataToWAV(filePath string, pcmData []byte) error {
 	}
 
 	// Create the directory structure if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o750); err != nil {
 		enhancedErr := errors.New(err).
 			Component("myaudio").
 			Category(errors.CategoryFileIO).

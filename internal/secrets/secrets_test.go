@@ -202,7 +202,7 @@ func TestReadFile(t *testing.T) {
 			name: "directory instead of file",
 			setup: func() string {
 				path := filepath.Join(tmpDir, "directory_secret")
-				if err := os.Mkdir(path, 0o755); err != nil {
+				if err := os.Mkdir(path, 0o750); err != nil {
 					t.Fatal(err)
 				}
 				return path

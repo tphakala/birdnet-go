@@ -1782,7 +1782,7 @@ func (p *Processor) initPreRenderer() {
 		}
 
 		// Verify export path exists and is writable
-		if err := os.MkdirAll(p.Settings.Realtime.Audio.Export.Path, 0o755); err != nil {
+		if err := os.MkdirAll(p.Settings.Realtime.Audio.Export.Path, 0o750); err != nil {
 			GetLogger().Error("Export path not writable, disabling pre-rendering",
 				"path", p.Settings.Realtime.Audio.Export.Path,
 				"error", err,

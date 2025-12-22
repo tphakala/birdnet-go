@@ -108,7 +108,7 @@ func GetBasePath(path string) string {
 	// Check if the directory exists.
 	if _, err := os.Stat(basePath); os.IsNotExist(err) {
 		// Attempt to create the directory if it doesn't exist.
-		if err := os.MkdirAll(basePath, 0o755); err != nil {
+		if err := os.MkdirAll(basePath, 0o750); err != nil {
 			fmt.Printf("failed to create directory '%s': %v\n", basePath, err)
 			// Note: In a robust application, you might want to handle this error more gracefully.
 		}
@@ -149,7 +149,7 @@ func GetHLSDirectory() (string, error) {
 	}
 
 	// Create directory if it doesn't exist
-	if err := os.MkdirAll(absPath, 0o755); err != nil {
+	if err := os.MkdirAll(absPath, 0o750); err != nil {
 		return "", errors.New(err).
 			Category(errors.CategoryFileIO).
 			Context("operation", "hls-create-directory").

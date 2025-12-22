@@ -86,7 +86,7 @@ func isFileLocked(path string) bool {
 		flag = os.O_RDONLY | syscall.O_NONBLOCK
 	}
 
-	file, err := os.OpenFile(path, flag, 0o666)
+	file, err := os.OpenFile(path, flag, 0o600)
 	if err != nil {
 		// File is probably locked by another process
 		return true
@@ -97,7 +97,7 @@ func isFileLocked(path string) bool {
 
 	// On Windows, also try write access to be sure
 	if runtime.GOOS == "windows" {
-		file, err = os.OpenFile(path, os.O_WRONLY, 0o666)
+		file, err = os.OpenFile(path, os.O_WRONLY, 0o600)
 		if err != nil {
 			return true
 		}
@@ -208,7 +208,7 @@ func processFile(path string, settings *conf.Settings, processedFiles map[string
 	lockFile := outputPath + ".processing"
 
 	// Try to create lock file
-	f, err := os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o666)
+	f, err := os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		// Another instance is processing this file
 		return false, nil
@@ -372,7 +372,7 @@ func DirectoryAnalysis(settings *conf.Settings, ctx context.Context) error {
 	if settings.Output.File.Path == "" {
 		settings.Output.File.Path = "."
 	}
-	if err := os.MkdirAll(settings.Output.File.Path, 0o755); err != nil {
+	if err := os.MkdirAll(settings.Output.File.Path, 0o750); err != nil {
 		log.Printf("Failed to create output directory: %v", err)
 		return err
 	}
