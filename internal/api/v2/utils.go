@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"path"
 	"strconv"
@@ -534,6 +535,11 @@ func parseConfidenceFilter(param string) *ConfidenceFilterResult {
 		return nil
 	}
 
+	// Validate confidence is within 0-100 range and not NaN
+	if math.IsNaN(confValue) || confValue < 0 || confValue > 100 {
+		return nil
+	}
+
 	return &ConfidenceFilterResult{
 		Operator: operator,
 		Value:    confValue / PercentageMultiplier,
@@ -548,7 +554,7 @@ type HourFilterResult struct {
 
 // parseHourFilter parses an hour filter parameter.
 // Supports single hour ("6") or range format ("6-9").
-// Returns nil if the parameter is empty or invalid.
+// Returns nil if the parameter is empty, invalid, out of range (0-23), or has inverted range.
 func parseHourFilter(param string) *HourFilterResult {
 	if param == "" {
 		return nil
@@ -565,12 +571,20 @@ func parseHourFilter(param string) *HourFilterResult {
 		if err1 != nil || err2 != nil {
 			return nil
 		}
+		// Validate hour range (0-23) and ensure start <= end
+		if start < 0 || start > 23 || end < 0 || end > 23 || start > end {
+			return nil
+		}
 		return &HourFilterResult{Start: start, End: end}
 	}
 
 	// Single hour
 	hourVal, err := strconv.Atoi(param)
 	if err != nil {
+		return nil
+	}
+	// Validate hour is within 0-23
+	if hourVal < 0 || hourVal > 23 {
 		return nil
 	}
 	return &HourFilterResult{Start: hourVal, End: hourVal}

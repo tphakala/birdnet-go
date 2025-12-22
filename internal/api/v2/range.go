@@ -27,15 +27,16 @@ const (
 var rangeFilterMutex sync.Mutex
 
 // validateRangeFilterRequest validates the range filter test request parameters.
+// Returns user-facing error messages with capitalized first letter for API responses.
 func validateRangeFilterRequest(req *RangeFilterTestRequest) error {
 	if req.Latitude < -90 || req.Latitude > 90 {
-		return fmt.Errorf("latitude must be between -90 and 90")
+		return fmt.Errorf("Latitude must be between -90 and 90") //nolint:staticcheck // user-facing API message
 	}
 	if req.Longitude < -180 || req.Longitude > 180 {
-		return fmt.Errorf("longitude must be between -180 and 180")
+		return fmt.Errorf("Longitude must be between -180 and 180") //nolint:staticcheck // user-facing API message
 	}
 	if req.Threshold < 0 || req.Threshold > 1 {
-		return fmt.Errorf("threshold must be between 0 and 1")
+		return fmt.Errorf("Threshold must be between 0 and 1") //nolint:staticcheck // user-facing API message
 	}
 	return nil
 }
