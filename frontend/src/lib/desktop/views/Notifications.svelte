@@ -11,14 +11,37 @@
     Info,
     Star,
     Settings,
+    Layers,
+    List,
+    Filter,
   } from '@lucide/svelte';
+  import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
   import { safeGet, safeArrayAccess } from '$lib/utils/security';
-  import { deduplicateNotifications, sanitizeNotificationMessage } from '$lib/utils/notifications';
+  import {
+    deduplicateNotifications,
+    sanitizeNotificationMessage,
+    groupNotifications,
+  } from '$lib/utils/notifications';
+  import NotificationGroup from '$lib/desktop/components/ui/NotificationGroup.svelte';
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
   const ENABLE_LOADING_SPINNERS = false;
+
+  // View mode: 'grouped' or 'flat' with localStorage persistence
+  const STORAGE_KEY = 'notifications-view-mode';
+  let viewMode = $state(
+    (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY)) || 'grouped'
+  );
+
+  // Persist view mode changes to localStorage
+  $effect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, viewMode);
+    }
+  });
 
   let notifications = $state([]);
   let loading = $state(false);
@@ -27,12 +50,45 @@
   let pageSize = 20;
   let hasUnread = $state(false);
   let pendingDeleteId = $state(null);
+  let pendingBulkDeleteIds = $state(null);
   let deleteModal = $state(null);
+  let bulkDeleteModal = $state(null);
 
   let filters = $state({
     status: '',
     type: '',
     priority: '',
+  });
+
+  // Filter options for SelectDropdown components
+  let statusOptions = $derived([
+    { value: '', label: t('notifications.filters.allStatus') },
+    { value: 'unread', label: t('notifications.filters.unread') },
+    { value: 'read', label: t('notifications.filters.read') },
+    { value: 'acknowledged', label: t('notifications.filters.acknowledged') },
+  ]);
+
+  let typeOptions = $derived([
+    { value: '', label: t('notifications.filters.allTypes') },
+    { value: 'error', label: t('notifications.filters.errors'), icon: XCircle },
+    { value: 'warning', label: t('notifications.filters.warnings'), icon: TriangleAlert },
+    { value: 'info', label: t('notifications.filters.info'), icon: Info },
+    { value: 'system', label: t('notifications.filters.system'), icon: Settings },
+    { value: 'detection', label: t('notifications.filters.detections'), icon: Star },
+  ]);
+
+  let priorityOptions = $derived([
+    { value: '', label: t('notifications.filters.allPriorities') },
+    { value: 'critical', label: t('notifications.filters.critical') },
+    { value: 'high', label: t('notifications.filters.high') },
+    { value: 'medium', label: t('notifications.filters.medium') },
+    { value: 'low', label: t('notifications.filters.low') },
+  ]);
+
+  // Grouped notifications derived from notifications array
+  let groupedNotifications = $derived.by(() => {
+    if (viewMode !== 'grouped' || notifications.length === 0) return [];
+    return groupNotifications(notifications);
   });
 
   // Get CSRF token
@@ -45,9 +101,13 @@
   async function loadNotifications() {
     loading = true;
     try {
+      // Use larger limit for grouped view to capture more notification types
+      const effectiveLimit = viewMode === 'grouped' ? 100 : pageSize;
+      const effectiveOffset = viewMode === 'grouped' ? 0 : (currentPage - 1) * pageSize;
+
       const params = new URLSearchParams({
-        limit: pageSize.toString(),
-        offset: ((currentPage - 1) * pageSize).toString(),
+        limit: effectiveLimit.toString(),
+        offset: effectiveOffset.toString(),
       });
 
       // Add filters
@@ -65,11 +125,22 @@
         });
         hasUnread = notifications.some(n => !n.read);
 
-        // Calculate total pages
-        if (data.total !== undefined) {
-          totalPages = Math.ceil(data.total / pageSize) || 1;
+        // Calculate total pages based on deduplicated notifications count
+        // Since deduplication reduces the count, we use the actual notifications length
+        // If we received fewer than pageSize, we're on the last page
+        // If we have pageSize or more, there might be more pages
+        const deduplicatedCount = notifications.length;
+        if (deduplicatedCount < pageSize) {
+          // We have less than a full page, so this is the last page
+          totalPages = currentPage;
+        } else if (data.total !== undefined) {
+          // Estimate remaining pages - use raw total as upper bound
+          // but cap at current + 1 to avoid showing too many empty pages
+          const estimatedPages = Math.ceil(data.total / pageSize);
+          totalPages = Math.min(estimatedPages, currentPage + 1);
         } else {
-          totalPages = notifications.length < pageSize ? currentPage : currentPage + 1;
+          // Unknown total, assume there might be one more page
+          totalPages = currentPage + 1;
         }
       }
     } catch {
@@ -132,6 +203,67 @@
   async function markAllAsRead() {
     const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
     await Promise.all(unreadIds.map(id => markAsRead(id)));
+  }
+
+  // Mark multiple notifications as read (for group actions)
+  async function handleMarkGroupAsRead(ids) {
+    await Promise.all(ids.map(id => markAsRead(id)));
+  }
+
+  // Dismiss/delete multiple notifications (for group actions)
+  function handleDismissGroup(ids) {
+    pendingBulkDeleteIds = ids;
+    bulkDeleteModal?.showModal();
+  }
+
+  // Confirm bulk delete
+  async function confirmBulkDelete() {
+    if (!pendingBulkDeleteIds || pendingBulkDeleteIds.length === 0) return;
+
+    const ids = [...pendingBulkDeleteIds];
+    pendingBulkDeleteIds = null;
+
+    try {
+      // Delete all notifications in parallel
+      const results = await Promise.all(
+        ids.map(async id => {
+          const response = await fetch(`/api/v2/notifications/${id}`, {
+            method: 'DELETE',
+            headers: {
+              'X-CSRF-Token': getCSRFToken(),
+            },
+          });
+          return { id, ok: response.ok };
+        })
+      );
+
+      bulkDeleteModal?.close();
+
+      // Remove successfully deleted notifications from local state
+      const deletedIds = results.filter(r => r.ok).map(r => r.id);
+      const wasUnreadCount = notifications.filter(n => deletedIds.includes(n.id) && !n.read).length;
+
+      notifications = notifications.filter(n => !deletedIds.includes(n.id));
+      hasUnread = notifications.some(n => !n.read);
+
+      // Dispatch event for notification bell update
+      if (deletedIds.length > 0) {
+        window.dispatchEvent(
+          new CustomEvent('notifications-bulk-deleted', {
+            detail: { count: deletedIds.length, wasUnreadCount },
+          })
+        );
+      }
+
+      // If page is empty, go to previous page
+      if (notifications.length === 0 && currentPage > 1) {
+        currentPage--;
+        await loadNotifications();
+      }
+    } catch {
+      bulkDeleteModal?.close();
+      alert('Network error occurred. Please try again.');
+    }
   }
 
   // Acknowledge notification
@@ -232,9 +364,9 @@
     }
   }
 
-  // Get notification icon class
+  // Get notification icon class (compact for flat view)
   function getNotificationIconClass(notification) {
-    const baseClass = 'w-10 h-10 rounded-full flex items-center justify-center';
+    const baseClass = 'w-8 h-8 rounded-full flex items-center justify-center';
     const typeClasses = {
       error: 'bg-error/20 text-error',
       warning: 'bg-warning/20 text-warning',
@@ -248,9 +380,13 @@
   // Get notification card class
   function getNotificationCardClass(notification) {
     let classes =
-      'card bg-base-100 shadow-xs hover:shadow-md transition-shadow focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
+      'card bg-base-100 shadow-2xs hover:shadow-md transition-shadow focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
     if (!notification.read) {
-      classes += ' bg-base-200 opacity-30';
+      // Unread notifications get a subtle highlight, NOT opacity reduction
+      classes += ' border-l-4 border-primary';
+    } else {
+      // Read notifications are slightly muted
+      classes += ' opacity-70';
     }
     if (isClickable(notification)) {
       classes += ' cursor-pointer';
@@ -297,76 +433,104 @@
 </script>
 
 <div class="col-span-12 p-4">
-  <!-- Filters and Actions -->
-  <div class="card bg-base-100 shadow-xs mb-6">
-    <div class="card-body">
-      <div class="flex flex-wrap gap-4 items-center justify-between">
-        <!-- Filters -->
-        <div class="flex flex-wrap gap-2">
-          <select
-            bind:value={filters.status}
-            onchange={applyFilters}
-            class="select select-sm"
-            aria-label={t('notifications.aria.filterByStatus')}
-          >
-            <option value="">{t('notifications.filters.allStatus')}</option>
-            <option value="unread">{t('notifications.filters.unread')}</option>
-            <option value="read">{t('notifications.filters.read')}</option>
-            <option value="acknowledged">{t('notifications.filters.acknowledged')}</option>
-          </select>
+  <!-- Filters and Actions Bar -->
+  <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+    <!-- Filters Group -->
+    <div class="flex flex-wrap items-center gap-3">
+      <span class="text-sm font-medium text-base-content/70 flex items-center gap-1.5">
+        <Filter class="size-4" />
+        {t('notifications.filters.label')}
+      </span>
 
-          <select
-            bind:value={filters.type}
-            onchange={applyFilters}
-            class="select select-sm"
-            aria-label={t('notifications.aria.filterByType')}
-          >
-            <option value="">{t('notifications.filters.allTypes')}</option>
-            <option value="error">{t('notifications.filters.errors')}</option>
-            <option value="warning">{t('notifications.filters.warnings')}</option>
-            <option value="info">{t('notifications.filters.info')}</option>
-            <option value="system">{t('notifications.filters.system')}</option>
-            <option value="detection">{t('notifications.filters.detections')}</option>
-          </select>
-
-          <select
-            bind:value={filters.priority}
-            onchange={applyFilters}
-            class="select select-sm"
-            aria-label={t('notifications.aria.filterByPriority')}
-          >
-            <option value="">{t('notifications.filters.allPriorities')}</option>
-            <option value="critical">{t('notifications.filters.critical')}</option>
-            <option value="high">{t('notifications.filters.high')}</option>
-            <option value="medium">{t('notifications.filters.medium')}</option>
-            <option value="low">{t('notifications.filters.low')}</option>
-          </select>
-        </div>
-
-        <!-- Actions -->
-        <div class="flex gap-2">
-          {#if hasUnread}
-            <button onclick={markAllAsRead} class="btn btn-sm btn-ghost">
-              {t('notifications.actions.markAllRead')}
-            </button>
-          {/if}
-          <button
-            onclick={loadNotifications}
-            class="btn btn-sm btn-ghost"
-            aria-label={t('notifications.actions.refresh')}
-          >
-            <RefreshCw class="size-5" />
-            {t('common.refresh')}
-          </button>
-        </div>
+      <!-- Status Filter -->
+      <div class="w-[140px]">
+        <SelectDropdown
+          options={statusOptions}
+          bind:value={filters.status}
+          placeholder={t('notifications.filters.allStatus')}
+          size="sm"
+          menuSize="sm"
+          onChange={applyFilters}
+        />
       </div>
+
+      <!-- Type Filter -->
+      <div class="w-[160px]">
+        <SelectDropdown
+          options={typeOptions}
+          bind:value={filters.type}
+          placeholder={t('notifications.filters.allTypes')}
+          size="sm"
+          menuSize="sm"
+          onChange={applyFilters}
+        />
+      </div>
+
+      <!-- Priority Filter -->
+      <div class="w-[140px]">
+        <SelectDropdown
+          options={priorityOptions}
+          bind:value={filters.priority}
+          placeholder={t('notifications.filters.allPriorities')}
+          size="sm"
+          menuSize="sm"
+          onChange={applyFilters}
+        />
+      </div>
+    </div>
+
+    <!-- View Toggle and Actions -->
+    <div class="flex items-center gap-2">
+      <!-- View Mode Toggle (DaisyUI tabs style) -->
+      <div
+        class="tabs tabs-boxed tabs-sm"
+        role="tablist"
+        aria-label={t('notifications.viewMode.label')}
+      >
+        <button
+          onclick={() => (viewMode = 'grouped')}
+          class={cn('tab gap-1.5', viewMode === 'grouped' && 'tab-active')}
+          role="tab"
+          aria-selected={viewMode === 'grouped'}
+          aria-label={t('notifications.viewMode.grouped')}
+        >
+          <Layers class="size-4" />
+          <span class="hidden sm:inline">{t('notifications.viewMode.grouped')}</span>
+        </button>
+        <button
+          onclick={() => (viewMode = 'flat')}
+          class={cn('tab gap-1.5', viewMode === 'flat' && 'tab-active')}
+          role="tab"
+          aria-selected={viewMode === 'flat'}
+          aria-label={t('notifications.viewMode.flat')}
+        >
+          <List class="size-4" />
+          <span class="hidden sm:inline">{t('notifications.viewMode.flat')}</span>
+        </button>
+      </div>
+
+      <div class="divider divider-horizontal mx-0"></div>
+
+      {#if hasUnread}
+        <button onclick={markAllAsRead} class="btn btn-ghost btn-sm gap-1.5">
+          <Eye class="size-4" />
+          <span class="hidden sm:inline">{t('notifications.actions.markAllRead')}</span>
+        </button>
+      {/if}
+      <button
+        onclick={loadNotifications}
+        class="btn btn-ghost btn-sm btn-square"
+        aria-label={t('notifications.actions.refresh')}
+      >
+        <RefreshCw class="size-4" />
+      </button>
     </div>
   </div>
 
   <!-- Notifications List -->
-  <div class="space-y-4" role="region" aria-label="Notifications list">
+  <div class="space-y-3" role="region" aria-label="Notifications list">
     {#if ENABLE_LOADING_SPINNERS && loading}
-      <div class="card bg-base-100 shadow-xs">
+      <div class="card bg-base-100 shadow-2xs">
         <div class="card-body">
           <div class="flex justify-center">
             <div class="loading loading-spinner loading-lg"></div>
@@ -374,18 +538,32 @@
         </div>
       </div>
     {:else if notifications.length === 0}
-      <div class="card bg-base-100 shadow-xs">
+      <div class="card bg-base-100 shadow-2xs">
         <div class="card-body text-center py-12">
           <span class="opacity-30 mb-4" aria-hidden="true">
             <BellOff class="size-12" />
           </span>
-          <p class="text-lg text-base-content opacity-60">{t('notifications.empty.title')}</p>
-          <p class="text-sm text-base-content opacity-40">{t('notifications.empty.subtitle')}</p>
+          <p class="text-sm text-base-content opacity-60">{t('notifications.empty.title')}</p>
+          <p class="text-xs text-base-content opacity-40">{t('notifications.empty.subtitle')}</p>
         </div>
       </div>
+    {:else if viewMode === 'grouped'}
+      <!-- Grouped View -->
+      {#each groupedNotifications as group (group.key)}
+        <NotificationGroup
+          {group}
+          defaultOpen={group.notifications.length === 1}
+          onMarkAllRead={handleMarkGroupAsRead}
+          onDismissAll={handleDismissGroup}
+          onMarkAsRead={id => markAsRead(id)}
+          onAcknowledge={id => acknowledge(id)}
+          onDelete={id => deleteNotification(id)}
+          onNotificationClick={handleNotificationClick}
+        />
+      {/each}
     {:else}
+      <!-- Flat View with compact styling -->
       {#each notifications as notification (notification.id)}
-        <!-- Tabindex is conditionally added only when role="link" is set for clickable notifications -->
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
           class={getNotificationCardClass(notification)}
@@ -403,60 +581,57 @@
             }
           }}
         >
-          <div class="card-body">
-            <div class="flex items-start gap-4">
-              <!-- Icon -->
+          <div class="card-body p-3">
+            <div class="flex items-start gap-3">
+              <!-- Icon (smaller) -->
               <div class="shrink-0">
                 <div class={getNotificationIconClass(notification)}>
                   {#if notification.type === 'error'}
-                    <XCircle class="size-5" />
+                    <XCircle class="size-4" />
                   {:else if notification.type === 'warning'}
-                    <TriangleAlert class="size-5" />
+                    <TriangleAlert class="size-4" />
                   {:else if notification.type === 'info'}
-                    <Info class="size-5" />
+                    <Info class="size-4" />
                   {:else if notification.type === 'detection'}
-                    <Star class="size-5" />
+                    <Star class="size-4" />
                   {:else}
-                    <Settings class="size-5" />
+                    <Settings class="size-4" />
                   {/if}
                 </div>
               </div>
 
-              <!-- Content -->
-              <div class="flex-1">
-                <div class="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 class="font-semibold text-lg">{notification.title}</h3>
-                    <p class="text-base-content opacity-80 mt-1">
+              <!-- Content (more compact) -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="min-w-0">
+                    <h3 class="font-medium text-sm truncate">{notification.title}</h3>
+                    <p class="text-xs text-base-content/80 mt-0.5 line-clamp-2">
                       {sanitizeNotificationMessage(notification.message)}
                     </p>
 
-                    <!-- Metadata -->
-                    <div class="flex flex-wrap items-center gap-2 mt-3">
+                    <!-- Metadata (compact) -->
+                    <div class="flex flex-wrap items-center gap-1.5 mt-2">
                       {#if notification.component}
-                        <span class="badge badge-ghost badge-sm">{notification.component}</span>
+                        <span class="badge badge-ghost badge-xs">{notification.component}</span>
                       {/if}
-                      <span class="badge badge-sm {getPriorityBadgeClass(notification.priority)}">
+                      <span class="badge badge-xs {getPriorityBadgeClass(notification.priority)}">
                         {notification.priority}
                       </span>
-                      <time
-                        class="text-xs text-base-content opacity-60"
-                        datetime={notification.timestamp}
-                      >
+                      <time class="text-xs text-base-content/50" datetime={notification.timestamp}>
                         {formatTime(notification.timestamp)}
                       </time>
                     </div>
                   </div>
 
                   <!-- Actions -->
-                  <div class="flex items-center gap-2">
+                  <div class="flex items-center gap-1 shrink-0">
                     {#if !notification.read}
                       <button
                         onclick={e => markAsRead(notification.id, e)}
                         class="btn btn-ghost btn-xs"
                         aria-label={t('notifications.actions.markAsRead')}
                       >
-                        <Eye class="size-4" />
+                        <Eye class="size-3" />
                       </button>
                     {/if}
                     {#if notification.read && notification.status !== 'acknowledged'}
@@ -465,7 +640,7 @@
                         class="btn btn-ghost btn-xs"
                         aria-label={t('notifications.actions.acknowledge')}
                       >
-                        <Check class="size-4" />
+                        <Check class="size-3" />
                       </button>
                     {/if}
                     <button
@@ -473,7 +648,7 @@
                       class="btn btn-ghost btn-xs text-error"
                       aria-label={t('notifications.actions.delete')}
                     >
-                      <Trash2 class="size-4" />
+                      <Trash2 class="size-3" />
                     </button>
                   </div>
                 </div>
@@ -484,8 +659,8 @@
       {/each}
     {/if}
 
-    <!-- Pagination -->
-    {#if !loading && totalPages > 1}
+    <!-- Pagination (only shown in flat view - grouped view shows all loaded notifications) -->
+    {#if !loading && totalPages > 1 && viewMode === 'flat'}
       <div class="flex justify-center mt-6" aria-label="Pagination">
         <div class="join">
           <button
@@ -495,11 +670,12 @@
             aria-label={t('dataDisplay.pagination.goToPreviousPage')}>«</button
           >
           <button
-            class="join-item btn btn-sm btn-active"
+            class="join-item btn btn-sm btn-primary"
             aria-label={t('dataDisplay.pagination.page', {
               current: currentPage,
               total: totalPages,
             })}
+            aria-current="page"
           >
             {t('dataDisplay.pagination.page', { current: currentPage, total: totalPages })}
           </button>
@@ -530,8 +706,33 @@
         </form>
       </div>
     </div>
-    <form method="dialog" class="modal-backdrop">
-      <button>{t('common.close')}</button>
+    <form method="dialog" class="fixed inset-0 bg-black/50 -z-10">
+      <button class="w-full h-full cursor-default">{t('common.close')}</button>
+    </form>
+  </dialog>
+
+  <!-- Bulk Delete Confirmation Modal -->
+  <dialog bind:this={bulkDeleteModal} class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">{t('notifications.groups.confirmBulkDelete')}</h3>
+      <p class="py-4">
+        {t('notifications.groups.bulkDeleteConfirmation', {
+          count: pendingBulkDeleteIds?.length ?? 0,
+        })}
+      </p>
+      <div class="modal-action">
+        <form method="dialog" class="flex gap-2">
+          <button onclick={() => (pendingBulkDeleteIds = null)} class="btn btn-ghost"
+            >{t('common.cancel')}</button
+          >
+          <button type="button" onclick={confirmBulkDelete} class="btn btn-error"
+            >{t('common.delete')}</button
+          >
+        </form>
+      </div>
+    </div>
+    <form method="dialog" class="fixed inset-0 bg-black/50 -z-10">
+      <button class="w-full h-full cursor-default">{t('common.close')}</button>
     </form>
   </dialog>
 </div>

@@ -263,6 +263,7 @@
     "title": "Powiadomienia",
     "subtitle": "Wyświetl i zarządzaj wszystkimi powiadomieniami systemowymi",
     "filters": {
+      "label": "Filtry",
       "allStatus": "Wszystkie Statusy",
       "unread": "Nieprzeczytane",
       "read": "Przeczytane",
@@ -307,6 +308,18 @@
       "minutesAgo": "{minutes}m temu",
       "hoursAgo": "{hours}h temu",
       "daysAgo": "{days}d temu"
+    },
+    "viewMode": {
+      "label": "Tryb widoku",
+      "grouped": "Widok grupowany",
+      "flat": "Widok płaski"
+    },
+    "groups": {
+      "markAllRead": "Oznacz wszystkie jako przeczytane",
+      "dismissAll": "Odrzuć wszystkie",
+      "unread": "{count} nieprzeczytanych",
+      "confirmBulkDelete": "Usuń wiele powiadomień",
+      "bulkDeleteConfirmation": "Czy na pewno chcesz usunąć {count} powiadomień?"
     }
   },
   "search": {

@@ -263,6 +263,7 @@
     "title": "Meldingen",
     "subtitle": "Bekijk en beheer alle systeem meldingen",
     "filters": {
+      "label": "Filters",
       "allStatus": "Elke status",
       "unread": "Ongelezen",
       "read": "Gelezen",
@@ -307,6 +308,18 @@
       "minutesAgo": "{minutes}m geleden",
       "hoursAgo": "{hours}h geleden",
       "daysAgo": "{days}d geleden"
+    },
+    "viewMode": {
+      "label": "Weergavemodus",
+      "grouped": "Gegroepeerde weergave",
+      "flat": "Platte weergave"
+    },
+    "groups": {
+      "markAllRead": "Alles als gelezen markeren",
+      "dismissAll": "Alles verwijderen",
+      "unread": "{count} ongelezen",
+      "confirmBulkDelete": "Meerdere meldingen verwijderen",
+      "bulkDeleteConfirmation": "Weet je zeker dat je {count} meldingen wilt verwijderen?"
     }
   },
   "search": {

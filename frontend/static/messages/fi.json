@@ -263,6 +263,7 @@
     "title": "Ilmoitukset",
     "subtitle": "Näytä ja hallitse kaikkia järjestelmäilmoituksia",
     "filters": {
+      "label": "Suodattimet",
       "allStatus": "Kaikki tilat",
       "unread": "Lukematon",
       "read": "Luettu",
@@ -307,6 +308,18 @@
       "minutesAgo": "{minutes}min sitten",
       "hoursAgo": "{hours}h sitten",
       "daysAgo": "{days}pv sitten"
+    },
+    "viewMode": {
+      "label": "Näkymätila",
+      "grouped": "Ryhmitelty näkymä",
+      "flat": "Tasainen näkymä"
+    },
+    "groups": {
+      "markAllRead": "Merkitse kaikki luetuiksi",
+      "dismissAll": "Hylkää kaikki",
+      "unread": "{count} lukematta",
+      "confirmBulkDelete": "Poista useita ilmoituksia",
+      "bulkDeleteConfirmation": "Haluatko varmasti poistaa {count} ilmoitusta?"
     }
   },
   "search": {

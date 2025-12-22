@@ -263,6 +263,7 @@
     "title": "Benachrichtigungen",
     "subtitle": "Alle Systembenachrichtigungen anzeigen und verwalten",
     "filters": {
+      "label": "Filter",
       "allStatus": "Alle Status",
       "unread": "Ungelesen",
       "read": "Gelesen",
@@ -307,6 +308,18 @@
       "minutesAgo": "Vor {minutes}min",
       "hoursAgo": "Vor {hours}h",
       "daysAgo": "Vor {days}T"
+    },
+    "viewMode": {
+      "label": "Ansichtsmodus",
+      "grouped": "Gruppierte Ansicht",
+      "flat": "Flache Ansicht"
+    },
+    "groups": {
+      "markAllRead": "Alle als gelesen markieren",
+      "dismissAll": "Alle verwerfen",
+      "unread": "{count} ungelesen",
+      "confirmBulkDelete": "Mehrere Benachrichtigungen löschen",
+      "bulkDeleteConfirmation": "Sind Sie sicher, dass Sie {count} Benachrichtigungen löschen möchten?"
     }
   },
   "search": {

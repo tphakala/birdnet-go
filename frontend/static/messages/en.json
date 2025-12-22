@@ -263,6 +263,7 @@
     "title": "Notifications",
     "subtitle": "View and manage all system notifications",
     "filters": {
+      "label": "Filters",
       "allStatus": "All Status",
       "unread": "Unread",
       "read": "Read",
@@ -307,6 +308,18 @@
       "minutesAgo": "{minutes}m ago",
       "hoursAgo": "{hours}h ago",
       "daysAgo": "{days}d ago"
+    },
+    "viewMode": {
+      "label": "View mode",
+      "grouped": "Grouped view",
+      "flat": "Flat view"
+    },
+    "groups": {
+      "markAllRead": "Mark all as read",
+      "dismissAll": "Dismiss all",
+      "unread": "{count} unread",
+      "confirmBulkDelete": "Delete Multiple Notifications",
+      "bulkDeleteConfirmation": "Are you sure you want to delete {count} notifications?"
     }
   },
   "search": {
