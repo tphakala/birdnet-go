@@ -20,6 +20,7 @@ linters:
     - wastedassign
     # Security & quality linters
     - gosec
+    - goconst
     - staticcheck
     - ineffassign
     - bodyclose
@@ -31,7 +32,6 @@ linters:
     - nilerr
     - thelper
     - testifylint
-    #- goconst
     - gocyclo
     - modernize
     # Performance linters
