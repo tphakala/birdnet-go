@@ -113,13 +113,13 @@ func createTestWAVFileWithSize(t *testing.T, path string, size int64) {
 	dataSize := max(size-int64(len(wavHeader)), 0)
 
 	// Update chunk sizes in header
-	chunkSize := uint32(36 + dataSize)
+	chunkSize := uint32(36 + dataSize) //nolint:gosec // G115: test file sizes are small and fit in uint32
 	wavHeader[4] = byte(chunkSize)
 	wavHeader[5] = byte(chunkSize >> 8)
 	wavHeader[6] = byte(chunkSize >> 16)
 	wavHeader[7] = byte(chunkSize >> 24)
 
-	subchunk2Size := uint32(dataSize)
+	subchunk2Size := uint32(dataSize) //nolint:gosec // G115: test file sizes are small and fit in uint32
 	wavHeader[40] = byte(subchunk2Size)
 	wavHeader[41] = byte(subchunk2Size >> 8)
 	wavHeader[42] = byte(subchunk2Size >> 16)

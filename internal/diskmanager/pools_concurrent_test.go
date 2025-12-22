@@ -49,7 +49,7 @@ func TestCurrentPoolSizeConcurrentDecrement(t *testing.T) {
 
 	// Verify final state
 	finalSize := poolMetrics.CurrentPoolSize.Load()
-	totalAttempts := uint64(numGoroutines * opsPerGoroutine)
+	totalAttempts := uint64(numGoroutines * opsPerGoroutine) //nolint:gosec // G115: test constants are small positive values
 
 	// The number of successful decrements should not exceed initial size
 	if successfulDecrements.Load() > initialSize {

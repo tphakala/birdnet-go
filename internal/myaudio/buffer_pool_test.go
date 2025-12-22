@@ -65,7 +65,7 @@ func runPoolConcurrencyWithStats(t *testing.T, bufferSize, numWorkers, opsPerWor
 
 	// Verify stats are consistent
 	stats := getStats()
-	totalOps := uint64(numWorkers * opsPerWorker)
+	totalOps := uint64(numWorkers * opsPerWorker) //nolint:gosec // G115: test constants are small positive values
 
 	hits := stats.GetHits()
 	misses := stats.GetMisses()

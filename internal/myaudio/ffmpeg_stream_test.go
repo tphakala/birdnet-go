@@ -176,7 +176,7 @@ func TestFFmpegStream_BackoffCalculation(t *testing.T) {
 				// maxBackoffExponent constant
 				20)
 
-			backoff := min(stream.backoffDuration*time.Duration(1<<uint(exponent)), stream.maxBackoff)
+			backoff := min(stream.backoffDuration*time.Duration(1<<uint(exponent)), stream.maxBackoff) //nolint:gosec // G115: exponent is capped by min()
 
 			assert.Equal(t, tt.expectedWait, backoff)
 		})
@@ -456,7 +456,7 @@ func TestFFmpegStream_BackoffOverflowProtection(t *testing.T) {
 		// maxBackoffExponent constant
 		20)
 
-	expectedBackoff := min(stream.backoffDuration*time.Duration(1<<uint(exponent)), stream.maxBackoff)
+	expectedBackoff := min(stream.backoffDuration*time.Duration(1<<uint(exponent)), stream.maxBackoff) //nolint:gosec // G115: exponent is capped by min()
 
 	// The expected backoff should be the maximum allowed (2 minutes)
 	assert.Equal(t, 2*time.Minute, expectedBackoff)
@@ -464,7 +464,7 @@ func TestFFmpegStream_BackoffOverflowProtection(t *testing.T) {
 	// Verify the calculation doesn't panic or overflow
 	assert.NotPanics(t, func() {
 		// This should not panic due to overflow protection
-		testBackoff := stream.backoffDuration * time.Duration(1<<uint(exponent))
+		testBackoff := stream.backoffDuration * time.Duration(1<<uint(exponent)) //nolint:gosec // G115: exponent is capped by min()
 		_ = testBackoff
 	})
 }

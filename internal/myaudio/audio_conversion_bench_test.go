@@ -18,7 +18,7 @@ func BenchmarkConvert16BitToFloat32_Original(b *testing.B) {
 	// Fill with realistic audio pattern
 	for i := 0; i < len(testData); i += 2 {
 		// Simulate audio wave
-		value := int16(i % 32768)
+		value := int16(i % 32768) //nolint:gosec // G115: i%32768 is always in int16 range
 		testData[i] = byte(value & 0xFF)
 		testData[i+1] = byte(value >> 8)
 	}
@@ -55,7 +55,7 @@ func BenchmarkConvert16BitToFloat32_WithPool(b *testing.B) {
 	// Fill with realistic audio pattern
 	for i := 0; i < len(testData); i += 2 {
 		// Simulate audio wave
-		value := int16(i % 32768)
+		value := int16(i % 32768) //nolint:gosec // G115: i%32768 is always in int16 range
 		testData[i] = byte(value & 0xFF)
 		testData[i+1] = byte(value >> 8)
 	}
@@ -99,7 +99,7 @@ func BenchmarkConvert16BitToFloat32_Various_Sizes(b *testing.B) {
 			
 			// Fill with test pattern
 			for i := 0; i < len(testData); i += 2 {
-				value := int16(i % 32768)
+				value := int16(i % 32768) //nolint:gosec // G115: i%32768 is always in int16 range
 				testData[i] = byte(value & 0xFF)
 				testData[i+1] = byte(value >> 8)
 			}
@@ -128,7 +128,7 @@ func BenchmarkConvert16BitToFloat32_Concurrent(b *testing.B) {
 	// Create test data
 	testData := make([]byte, conf.BufferSize)
 	for i := 0; i < len(testData); i += 2 {
-		value := int16(i % 32768)
+		value := int16(i % 32768) //nolint:gosec // G115: i%32768 is always in int16 range
 		testData[i] = byte(value & 0xFF)
 		testData[i+1] = byte(value >> 8)
 	}
@@ -169,7 +169,7 @@ func benchmarkOriginalConversion(b *testing.B) {
 	// Fill with realistic audio pattern
 	for i := 0; i < len(testData); i += 2 {
 		// Simulate audio wave
-		value := int16(i % 32768)
+		value := int16(i % 32768) //nolint:gosec // G115: i%32768 is always in int16 range
 		testData[i] = byte(value & 0xFF)
 		testData[i+1] = byte(value >> 8)
 	}
@@ -205,7 +205,7 @@ func benchmarkPooledConversion(b *testing.B) {
 	// Fill with realistic audio pattern
 	for i := 0; i < len(testData); i += 2 {
 		// Simulate audio wave
-		value := int16(i % 32768)
+		value := int16(i % 32768) //nolint:gosec // G115: i%32768 is always in int16 range
 		testData[i] = byte(value & 0xFF)
 		testData[i+1] = byte(value >> 8)
 	}

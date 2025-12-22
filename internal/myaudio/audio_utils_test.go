@@ -297,7 +297,7 @@ func TestFloat64ToBytesPCM16(t *testing.T) {
 		err := Float64ToBytesPCM16([]float64{1.0}, output)
 		require.NoError(t, err)
 		// Should be clamped to 32767
-		val := int16(binary.LittleEndian.Uint16(output))
+		val := int16(binary.LittleEndian.Uint16(output)) //nolint:gosec // G115: intentional uint16→int16 for PCM test verification
 		assert.Equal(t, int16(32767), val)
 	})
 
@@ -305,7 +305,7 @@ func TestFloat64ToBytesPCM16(t *testing.T) {
 		output := make([]byte, 2)
 		err := Float64ToBytesPCM16([]float64{-1.0}, output)
 		require.NoError(t, err)
-		val := int16(binary.LittleEndian.Uint16(output))
+		val := int16(binary.LittleEndian.Uint16(output)) //nolint:gosec // G115: intentional uint16→int16 for PCM test verification
 		assert.Equal(t, int16(-32767), val)
 	})
 
@@ -313,8 +313,8 @@ func TestFloat64ToBytesPCM16(t *testing.T) {
 		output := make([]byte, 2)
 		err := Float64ToBytesPCM16([]float64{1.5}, output)
 		require.NoError(t, err)
-		val := int16(binary.LittleEndian.Uint16(output))
-		assert.Equal(t, int16(32767), val) // Clamped to 1.0
+		val := int16(binary.LittleEndian.Uint16(output)) //nolint:gosec // G115: intentional uint16→int16 for PCM test verification
+		assert.Equal(t, int16(32767), val)               // Clamped to 1.0
 	})
 
 	t.Run("buffer_too_small", func(t *testing.T) {
@@ -444,8 +444,8 @@ func BenchmarkBytesToFloat64PCM16_Sizes(b *testing.B) {
 	for _, size := range sizes {
 		bytes := make([]byte, size*2)
 		for i := range size {
-			val := int16(math.Sin(2*math.Pi*440.0*float64(i)/48000.0) * 32767)
-			binary.LittleEndian.PutUint16(bytes[i*2:], uint16(val))
+			val := int16(math.Sin(2*math.Pi*440.0*float64(i)/48000.0) * 32767) //nolint:gosec // G115: sin*32767 is always in int16 range
+			binary.LittleEndian.PutUint16(bytes[i*2:], uint16(val))            //nolint:gosec // G115: intentional int16→uint16 for PCM test data
 		}
 
 		b.Run(formatSize(size), func(b *testing.B) {

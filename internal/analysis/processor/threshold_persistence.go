@@ -197,7 +197,7 @@ func (p *Processor) persistDynamicThresholds() error {
 		}
 
 		// Exponential backoff: 100ms, 200ms, 400ms
-		backoffDuration := baseDelay * time.Duration(1<<uint(attempt))
+		backoffDuration := baseDelay * time.Duration(1<<uint(attempt)) //nolint:gosec // G115: attempt is bounded by maxRetries (3), no overflow risk
 		GetLogger().Warn("Database locked, retrying after backoff",
 			"attempt", attempt+1,
 			"max_retries", maxRetries,

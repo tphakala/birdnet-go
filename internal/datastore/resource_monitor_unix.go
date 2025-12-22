@@ -171,7 +171,7 @@ func getProcessMemoryUsage() (*ProcessMemoryUsage, error) {
 	}
 
 	return &ProcessMemoryUsage{
-		ResidentMB: int64(vmRSS / 1024),
-		VirtualMB:  int64(vmSize / 1024),
+		ResidentMB: int64(vmRSS / 1024),  //nolint:gosec // G115: memory in MB always fits int64 (max ~8 exabytes)
+		VirtualMB:  int64(vmSize / 1024), //nolint:gosec // G115: memory in MB always fits int64 (max ~8 exabytes)
 	}, nil
 }
