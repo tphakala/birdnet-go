@@ -80,10 +80,10 @@ func TestGainProcessorProcess(t *testing.T) {
 		buffer := make([]byte, 8)
 		var neg1000 int16 = -1000
 		var neg16000 int16 = -16000
-		binary.LittleEndian.PutUint16(buffer[0:2], uint16(int16(1000)))
-		binary.LittleEndian.PutUint16(buffer[2:4], uint16(neg1000))
-		binary.LittleEndian.PutUint16(buffer[4:6], uint16(int16(16000)))
-		binary.LittleEndian.PutUint16(buffer[6:8], uint16(neg16000))
+		binary.LittleEndian.PutUint16(buffer[0:2], uint16(int16(1000)))   //nolint:gosec // G115: intentional int16→uint16 for PCM test data
+		binary.LittleEndian.PutUint16(buffer[2:4], uint16(neg1000))     //nolint:gosec // G115: intentional int16→uint16 for PCM test data
+		binary.LittleEndian.PutUint16(buffer[4:6], uint16(int16(16000))) //nolint:gosec // G115: intentional int16→uint16 for PCM test data
+		binary.LittleEndian.PutUint16(buffer[6:8], uint16(neg16000))    //nolint:gosec // G115: intentional int16→uint16 for PCM test data
 
 		input := &audiocore.AudioData{
 			Buffer: buffer,
@@ -102,10 +102,10 @@ func TestGainProcessorProcess(t *testing.T) {
 		require.NotNil(t, output)
 
 		// Check output values
-		assert.Equal(t, int16(2000), int16(binary.LittleEndian.Uint16(output.Buffer[0:2])))
-		assert.Equal(t, int16(-2000), int16(binary.LittleEndian.Uint16(output.Buffer[2:4])))
-		assert.Equal(t, int16(32000), int16(binary.LittleEndian.Uint16(output.Buffer[4:6])))
-		assert.Equal(t, int16(-32000), int16(binary.LittleEndian.Uint16(output.Buffer[6:8])))
+		assert.Equal(t, int16(2000), int16(binary.LittleEndian.Uint16(output.Buffer[0:2])))   //nolint:gosec // G115: intentional uint16→int16 for PCM test verification
+		assert.Equal(t, int16(-2000), int16(binary.LittleEndian.Uint16(output.Buffer[2:4]))) //nolint:gosec // G115: intentional uint16→int16 for PCM test verification
+		assert.Equal(t, int16(32000), int16(binary.LittleEndian.Uint16(output.Buffer[4:6]))) //nolint:gosec // G115: intentional uint16→int16 for PCM test verification
+		assert.Equal(t, int16(-32000), int16(binary.LittleEndian.Uint16(output.Buffer[6:8]))) //nolint:gosec // G115: intentional uint16→int16 for PCM test verification
 	})
 
 	t.Run("PCM S16LE Clipping", func(t *testing.T) {
@@ -116,8 +116,8 @@ func TestGainProcessorProcess(t *testing.T) {
 		// Create test buffer with values that will clip
 		buffer := make([]byte, 4)
 		var neg20000 int16 = -20000
-		binary.LittleEndian.PutUint16(buffer[0:2], uint16(int16(20000)))
-		binary.LittleEndian.PutUint16(buffer[2:4], uint16(neg20000))
+		binary.LittleEndian.PutUint16(buffer[0:2], uint16(int16(20000))) //nolint:gosec // G115: intentional int16→uint16 for PCM test data
+		binary.LittleEndian.PutUint16(buffer[2:4], uint16(neg20000))  //nolint:gosec // G115: intentional int16→uint16 for PCM test data
 
 		input := &audiocore.AudioData{
 			Buffer: buffer,
@@ -136,8 +136,8 @@ func TestGainProcessorProcess(t *testing.T) {
 		require.NotNil(t, output)
 
 		// Check clipping
-		assert.Equal(t, int16(math.MaxInt16), int16(binary.LittleEndian.Uint16(output.Buffer[0:2])))
-		assert.Equal(t, int16(math.MinInt16), int16(binary.LittleEndian.Uint16(output.Buffer[2:4])))
+		assert.Equal(t, int16(math.MaxInt16), int16(binary.LittleEndian.Uint16(output.Buffer[0:2]))) //nolint:gosec // G115: intentional uint16→int16 for PCM test verification
+		assert.Equal(t, int16(math.MinInt16), int16(binary.LittleEndian.Uint16(output.Buffer[2:4]))) //nolint:gosec // G115: intentional uint16→int16 for PCM test verification
 	})
 
 	t.Run("PCM F32LE Processing", func(t *testing.T) {

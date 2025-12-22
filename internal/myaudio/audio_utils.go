@@ -91,7 +91,7 @@ func BytesToFloat64PCM16(samples []byte) []float64 {
 	floatSamples := make([]float64, sampleCount)
 	// Iterate by sample count to safely ignore any trailing odd byte
 	for i := range sampleCount {
-		floatSamples[i] = float64(int16(binary.LittleEndian.Uint16(samples[i*2:]))) / pcm16ScaleFactor
+		floatSamples[i] = float64(int16(binary.LittleEndian.Uint16(samples[i*2:]))) / pcm16ScaleFactor //nolint:gosec // G115: intentional uint16→int16 bit reinterpretation for PCM audio
 	}
 	return floatSamples
 }
@@ -130,7 +130,7 @@ func Float64ToBytesPCM16(floatSamples []float64, output []byte) error {
 	// Convert to bytes
 	for i, sample := range floatSamples {
 		intSample := int16(sample * pcm16MaxPositive)
-		binary.LittleEndian.PutUint16(output[i*2:], uint16(intSample))
+		binary.LittleEndian.PutUint16(output[i*2:], uint16(intSample)) //nolint:gosec // G115: intentional int16→uint16 bit reinterpretation for PCM audio
 	}
 	return nil
 }

@@ -134,7 +134,7 @@ func TestMemoryLeaks(t *testing.T) {
 
 	// Calculate memory growth
 	allocGrowth := m2.TotalAlloc - m1.TotalAlloc
-	heapGrowth := int64(m2.HeapAlloc) - int64(m1.HeapAlloc)
+	heapGrowth := int64(m2.HeapAlloc) - int64(m1.HeapAlloc) //nolint:gosec // G115: heap alloc in bytes always fits int64 (max ~8 exabytes)
 
 	t.Logf("After %d iterations:", iterations)
 	t.Logf("  Total allocations: %d bytes", allocGrowth)

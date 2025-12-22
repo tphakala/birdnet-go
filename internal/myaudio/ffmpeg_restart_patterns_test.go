@@ -313,7 +313,7 @@ func TestFFmpegStream_ExtendedBackoffPattern(t *testing.T) {
 		exponent := count - 1
 		exponent = min(exponent, maxBackoffExponent)
 
-		expectedBackoff := stream.backoffDuration * time.Duration(1<<uint(exponent))
+		expectedBackoff := stream.backoffDuration * time.Duration(1<<uint(exponent)) //nolint:gosec // G115: exponent is capped by maxBackoffExponent
 		expectedBackoff = min(expectedBackoff, stream.maxBackoff)
 
 		t.Logf("Restart count %d: backoff = %v", count, expectedBackoff)

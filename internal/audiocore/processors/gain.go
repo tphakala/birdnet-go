@@ -159,7 +159,7 @@ func (gp *GainProcessor) applyGainS16LE(buffer []byte, gain float64) {
 	// Process in pairs of bytes (16-bit samples)
 	for i := 0; i < len(buffer)-1; i += 2 {
 		// Convert bytes to int16
-		sample := int16(binary.LittleEndian.Uint16(buffer[i : i+2]))
+		sample := int16(binary.LittleEndian.Uint16(buffer[i : i+2])) //nolint:gosec // G115: intentional uint16→int16 bit reinterpretation for PCM audio
 
 		// Apply gain with clipping
 		amplified := float64(sample) * gain
@@ -170,7 +170,7 @@ func (gp *GainProcessor) applyGainS16LE(buffer []byte, gain float64) {
 		}
 
 		// Convert back to bytes
-		binary.LittleEndian.PutUint16(buffer[i:i+2], uint16(int16(amplified)))
+		binary.LittleEndian.PutUint16(buffer[i:i+2], uint16(int16(amplified))) //nolint:gosec // G115: intentional int16→uint16 bit reinterpretation for PCM audio
 	}
 }
 

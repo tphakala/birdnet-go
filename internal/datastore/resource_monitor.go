@@ -254,8 +254,8 @@ func captureProcessInfo() (ProcessInfo, error) {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
-	info.HeapAllocMB = int64(memStats.HeapAlloc / 1024 / 1024)
-	info.HeapSysMB = int64(memStats.HeapSys / 1024 / 1024)
+	info.HeapAllocMB = int64(memStats.HeapAlloc / 1024 / 1024) //nolint:gosec // G115: memory in MB always fits int64 (max ~8 exabytes)
+	info.HeapSysMB = int64(memStats.HeapSys / 1024 / 1024)     //nolint:gosec // G115: memory in MB always fits int64 (max ~8 exabytes)
 
 	// Platform-specific process memory info will be implemented per OS
 	if procMem, err := getProcessMemoryUsage(); err == nil {

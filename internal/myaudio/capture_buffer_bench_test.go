@@ -283,7 +283,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 
 				// Calculate memory usage
 				memUsed := memStatsAfter.Alloc - memStatsBefore.Alloc
-				expectedSize := uint64(cfg.numSources * cfg.duration * cfg.sampleRate * cfg.bytesPerSample)
+				expectedSize := uint64(cfg.numSources * cfg.duration * cfg.sampleRate * cfg.bytesPerSample) //nolint:gosec // G115: test config values are small positive values
 
 				// Only log on first iteration to avoid spam
 				if i == 0 {

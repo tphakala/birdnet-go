@@ -146,8 +146,8 @@ func TestBytesToFloat64_RoundTrip(t *testing.T) {
 
 	// The round trip may lose 1 LSB due to 32767 vs 32768 scaling
 	for i := 0; i < len(original); i += 2 {
-		origVal := int16(binary.LittleEndian.Uint16(original[i:]))
-		outVal := int16(binary.LittleEndian.Uint16(output[i:]))
+		origVal := int16(binary.LittleEndian.Uint16(original[i:])) //nolint:gosec // G115: intentional uint16→int16 for PCM test verification
+		outVal := int16(binary.LittleEndian.Uint16(output[i:]))    //nolint:gosec // G115: intentional uint16→int16 for PCM test verification
 		assert.InDelta(t, origVal, outVal, 1, "sample %d should round-trip within 1 LSB", i/2)
 	}
 }
@@ -308,8 +308,8 @@ func BenchmarkBytesToFloat64_Sizes(b *testing.B) {
 		bytes := make([]byte, sz.size*2)
 		// Fill with realistic audio pattern
 		for i := 0; i < sz.size; i++ {
-			val := int16(math.Sin(2*math.Pi*440.0*float64(i)/48000.0) * 32767)
-			binary.LittleEndian.PutUint16(bytes[i*2:], uint16(val))
+			val := int16(math.Sin(2*math.Pi*440.0*float64(i)/48000.0) * 32767) //nolint:gosec // G115: sin*32767 is always in int16 range
+			binary.LittleEndian.PutUint16(bytes[i*2:], uint16(val))            //nolint:gosec // G115: intentional int16→uint16 for PCM test data
 		}
 
 		b.Run(sz.name, func(b *testing.B) {
@@ -392,8 +392,8 @@ func BenchmarkApplyFilters_FullPipeline(b *testing.B) {
 	for _, sz := range sizes {
 		samples := make([]byte, sz.size*2)
 		for i := 0; i < sz.size; i++ {
-			val := int16(math.Sin(2*math.Pi*440.0*float64(i)/48000.0) * 32767)
-			binary.LittleEndian.PutUint16(samples[i*2:], uint16(val))
+			val := int16(math.Sin(2*math.Pi*440.0*float64(i)/48000.0) * 32767) //nolint:gosec // G115: sin*32767 is always in int16 range
+			binary.LittleEndian.PutUint16(samples[i*2:], uint16(val))          //nolint:gosec // G115: intentional int16→uint16 for PCM test data
 		}
 
 		b.Run(sz.name, func(b *testing.B) {

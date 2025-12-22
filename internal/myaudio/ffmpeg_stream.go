@@ -1609,7 +1609,7 @@ func (s *FFmpegStream) handleRestartBackoff() {
 	// Cap the exponent to prevent integer overflow
 	exponent := min(s.restartCount-1, maxBackoffExponent)
 
-	backoff := min(s.backoffDuration*time.Duration(1<<uint(exponent)), s.maxBackoff)
+	backoff := min(s.backoffDuration*time.Duration(1<<uint(exponent)), s.maxBackoff) //nolint:gosec // G115: exponent is capped by maxBackoffExponent (line 1610), no overflow risk
 
 	// Add rate limiting for very high restart counts to prevent runaway loops
 	if currentRestartCount > 50 {

@@ -323,7 +323,7 @@ func TestReferenceCountingWithMultipleSources(t *testing.T) {
 
 	// Verify reference counts
 	for i, source := range sources {
-		expectedCount := int32(i + 1)
+		expectedCount := int32(i + 1) //nolint:gosec // G115: i is a small loop index (0-4)
 		if registry.refCounts[source.ID] == nil {
 			t.Errorf("Source %d: expected reference count %d, got nil", i, expectedCount)
 		} else if *registry.refCounts[source.ID] != expectedCount {
