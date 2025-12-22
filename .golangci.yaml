@@ -19,7 +19,7 @@ linters:
     - unconvert
     - wastedassign
     # Security & quality linters
-    # - gosec
+    - gosec
     - staticcheck
     - ineffassign
     - bodyclose
