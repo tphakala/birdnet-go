@@ -268,10 +268,11 @@ func BenchmarkClampFloat64Slice_Sizes(b *testing.B) {
 			samples := make([]float64, sz.size)
 			for i := range samples {
 				// ~20% of samples need clamping (realistic for distorted audio)
+				//nolint:gosec // G404: math/rand is fine for test data generation
 				if rand.Float64() < 0.2 {
-					samples[i] = 1.0 + rand.Float64()
+					samples[i] = 1.0 + rand.Float64() //nolint:gosec // G404: test data
 				} else {
-					samples[i] = rand.Float64()*2 - 1
+					samples[i] = rand.Float64()*2 - 1 //nolint:gosec // G404: test data
 				}
 			}
 

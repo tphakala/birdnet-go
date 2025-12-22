@@ -403,7 +403,7 @@ func BenchmarkMinMaxSumFloat64_Sizes(b *testing.B) {
 	for _, size := range sizes {
 		samples := make([]float64, size)
 		for i := range samples {
-			samples[i] = rand.Float64()*200 - 100 // -100 to +100
+			samples[i] = rand.Float64()*200 - 100 //nolint:gosec // G404: math/rand is fine for test data
 		}
 
 		b.Run(formatSize(size), func(b *testing.B) {
@@ -423,7 +423,7 @@ func BenchmarkScaleFloat64Slice_Sizes(b *testing.B) {
 	for _, size := range sizes {
 		samples := make([]float64, size)
 		for i := range samples {
-			samples[i] = rand.Float64()*2 - 1
+			samples[i] = rand.Float64()*2 - 1 //nolint:gosec // G404: math/rand is fine for test data
 		}
 
 		b.Run(formatSize(size), func(b *testing.B) {

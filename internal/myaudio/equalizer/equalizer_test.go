@@ -219,7 +219,7 @@ func TestFilterChain_ApplyBatch(t *testing.T) {
 	// Generate white noise
 	input := make([]float64, 48000)
 	for i := range input {
-		input[i] = rand.Float64()*2 - 1
+		input[i] = rand.Float64()*2 - 1 //nolint:gosec // G404: math/rand is fine for test data
 	}
 
 	fc.ApplyBatch(input)
