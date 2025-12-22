@@ -500,10 +500,16 @@ func (s *SQLiteStore) CheckpointWAL() error {
 // Returns partial stats with ErrDBNotConnected if the database is unreachable.
 // The Connected field in the returned stats indicates if the DB is reachable.
 func (s *SQLiteStore) GetDatabaseStats() (*DatabaseStats, error) {
+	// Defensive guard for nil Settings (e.g., in custom test setups)
+	location := ""
+	if s.Settings != nil {
+		location = s.Settings.Output.SQLite.Path
+	}
+
 	stats := &DatabaseStats{
 		Type:      DialectSQLite,
 		Connected: false,
-		Location:  s.Settings.Output.SQLite.Path,
+		Location:  location,
 	}
 
 	// Check connection - return partial stats with error if unavailable

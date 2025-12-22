@@ -231,10 +231,14 @@ func (m *MySQLStore) UpdateNote(id string, updates map[string]any) error {
 // Returns partial stats with ErrDBNotConnected if the database is unreachable.
 // The Connected field in the returned stats indicates if the DB is reachable.
 func (m *MySQLStore) GetDatabaseStats() (*DatabaseStats, error) {
-	location := fmt.Sprintf("%s:%s/%s",
-		m.Settings.Output.MySQL.Host,
-		m.Settings.Output.MySQL.Port,
-		m.Settings.Output.MySQL.Database)
+	// Defensive guard for nil Settings (e.g., in custom test setups)
+	location := ""
+	if m.Settings != nil {
+		location = fmt.Sprintf("%s:%s/%s",
+			m.Settings.Output.MySQL.Host,
+			m.Settings.Output.MySQL.Port,
+			m.Settings.Output.MySQL.Database)
+	}
 
 	stats := &DatabaseStats{
 		Type:      DialectMySQL,
