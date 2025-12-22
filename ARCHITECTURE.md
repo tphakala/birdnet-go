@@ -242,16 +242,12 @@ Echo was chosen for its:
 **Server Structure:**
 
 ```
-internal/httpcontroller/
+internal/api/
 ├── server.go           # Echo server initialization
-├── middleware.go       # Authentication, CSRF, cache control, Vary headers
-├── auth_routes.go      # Authentication routes (login, logout, OAuth2)
-├── htmx_routes.go      # HTMX routes (legacy UI)
-├── svelte_handler.go   # Svelte frontend handler
-├── fileserver.go       # Static file serving
-├── template_functions.go # Template helper functions
-├── template_renderers.go # Template rendering logic
-├── handlers/           # HTTP request handlers
+├── middleware/         # Authentication, security, caching middleware
+├── auth/               # Authentication service and OAuth2
+├── static.go           # Static file serving and SPA handler
+├── v2/                 # API v2 controller and endpoints
 │   ├── dashboard.go    # Dashboard endpoints
 │   ├── media.go        # Media endpoints (audio, spectrograms)
 │   ├── weather.go      # Weather integration
@@ -923,7 +919,7 @@ internal/package/
     └── expected/       # Expected results
 ```
 
-**Note:** The `testdata/` directory is used only in packages that require external test data (e.g., `internal/ebird`, `internal/httpcontroller`). Most packages use inline test data or mocks.
+**Note:** The `testdata/` directory is used only in packages that require external test data (e.g., `internal/ebird`). Most packages use inline test data or mocks.
 
 **Mock Framework:**
 
@@ -1571,10 +1567,10 @@ func init() {
 }
 ```
 
-The `DistFS` variable is then used by the HTTP controller to serve static assets:
+The `DistFS` variable is then used by the HTTP server to serve static assets:
 
 ```go
-// internal/httpcontroller/svelte_handler.go
+// internal/api/static.go
 file, err := frontend.DistFS.Open(path)
 ```
 
@@ -1736,14 +1732,6 @@ Air watches both Go and frontend files, rebuilding and restarting the server aut
 ---
 
 ## API Design
-
-### API v1 (Deprecated)
-
-**⚠️ API v1 is frozen - no new endpoints will be added.**
-
-Located in: `internal/httpcontroller/handlers/`
-
-Legacy API used by HTMX frontend. Preserved for backwards compatibility but should not be extended.
 
 ### API v2 (Active Development)
 

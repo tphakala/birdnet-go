@@ -4,8 +4,6 @@ vars:
   BINARY_DIR: bin
   BINARY_NAME: birdnet-go
   TFLITE_VERSION: v2.17.1
-  TAILWIND_INPUT: tailwind.input.css
-  TAILWIND_OUTPUT: assets/tailwind.css
   LABELS_DIR: internal/birdnet/data/labels
   AVICOMMONS_DATA_DIR: internal/imageprovider/data
   AVICOMMONS_JSON_FILE: latest.json
@@ -600,22 +598,6 @@ tasks:
         else
           echo "TensorFlow headers already exist at version {{.TFLITE_VERSION}}"
         fi
-
-  download-assets:
-    cmds:
-      - mkdir -p assets
-      - curl -sL https://unpkg.com/leaflet/dist/leaflet.js -o assets/leaflet.js
-      - curl -sL https://unpkg.com/leaflet/dist/leaflet.css -o assets/leaflet.css
-      - curl -sL https://unpkg.com/htmx.org@2.0 -o assets/htmx.min.js
-      - curl -sL https://unpkg.com/alpinejs -o assets/alpinejs.min.js
-      - curl -sL https://cdn.jsdelivr.net/npm/hls.js@latest -o assets/hls.min.js
-      - curl -sL https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js -o assets/chart.min.js
-      - curl -sL https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js -o assets/chartjs-adapter-date-fns.bundle.min.js
-
-  generate-tailwindcss:
-    cmds:
-      - npm -D install daisyui@4.12.24
-      - npx --yes tailwindcss@3.4.17 -i {{.TAILWIND_INPUT}} -o {{.TAILWIND_OUTPUT}} --minify
 
   dev_server:
     cmds:

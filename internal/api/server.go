@@ -19,7 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	mw "github.com/tphakala/birdnet-go/internal/api/middleware"
-	v2 "github.com/tphakala/birdnet-go/internal/api/v2"
+	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -34,6 +34,14 @@ import (
 // AssetsFs holds the embedded assets filesystem (sounds, images, etc.).
 // This is set by main.go before starting the server.
 var AssetsFs embed.FS
+
+// ImageDataFs holds the embedded image provider data filesystem.
+// This is set by main.go before starting the server.
+var ImageDataFs embed.FS
+
+// ImageProviderRegistry is set by main.go before starting the server.
+// It provides access to bird image providers.
+var ImageProviderRegistry *imageprovider.ImageProviderRegistry
 
 // Server is the main HTTP server for BirdNET-Go.
 // It manages the Echo framework instance, middleware, and all HTTP routes.
@@ -63,7 +71,7 @@ type Server struct {
 	audioLevelChan chan myaudio.AudioLevelData
 
 	// API controller
-	apiController *v2.Controller
+	apiController *apiv2.Controller
 
 	// Static file serving
 	staticServer *StaticFileServer
@@ -313,7 +321,7 @@ func (s *Server) setupRoutes() error {
 	)
 
 	// Initialize API v2 controller with auth middleware and service injected
-	apiController, err := v2.New(
+	apiController, err := apiv2.New(
 		s.echo,
 		s.dataStore,
 		s.settings,
@@ -322,8 +330,8 @@ func (s *Server) setupRoutes() error {
 		s.controlChan,
 		s.logger,
 		s.metrics,
-		v2.WithAuthMiddleware(s.authMiddleware),
-		v2.WithAuthService(s.authService),
+		apiv2.WithAuthMiddleware(s.authMiddleware),
+		apiv2.WithAuthService(s.authService),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to initialize API v2: %w", err)
@@ -369,7 +377,7 @@ func (s *Server) healthCheck(c echo.Context) error {
 }
 
 // Start begins serving HTTP requests in a background goroutine.
-// This implements the httpserver.Server interface and returns immediately.
+// The server starts asynchronously and returns immediately.
 // Use Shutdown() to stop the server.
 func (s *Server) Start() {
 	go func() {
@@ -469,8 +477,7 @@ func (s *Server) Shutdown() error {
 }
 
 // APIController returns the v2 API controller for SSE broadcasting and other features.
-// This implements the httpserver.Server interface.
-func (s *Server) APIController() *v2.Controller {
+func (s *Server) APIController() *apiv2.Controller {
 	return s.apiController
 }
 

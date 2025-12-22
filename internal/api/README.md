@@ -48,8 +48,6 @@ The API package is split into two layers:
 1. **HTTP Server Layer** (`internal/api/`) - Manages the Echo framework, middleware, static files, and SPA routing
 2. **API Controller Layer** (`internal/api/v2/`) - Handles all REST API endpoints under `/api/v2`
 
-Both layers implement the `httpserver.Server` interface defined in `internal/httpserver/`, allowing runtime selection between this server and the legacy `httpcontroller`.
-
 ## HTTP Server
 
 The main `Server` struct in `server.go` wraps the Echo framework and provides:
@@ -613,24 +611,13 @@ See [Server Initialization](#server-initialization) above for the recommended ap
 
 ### Runtime Server Selection
 
-The application supports switching between HTTP server implementations via configuration:
+The HTTP server is configured via:
 
 ```yaml
 webserver:
-  uselegacyserver: true   # Use legacy httpcontroller (default)
-  # uselegacyserver: false  # Use new api server
-```
-
-Both servers implement the `httpserver.Server` interface:
-
-```go
-import "github.com/tphakala/birdnet-go/internal/httpserver"
-
-type Server interface {
-    Start()
-    Shutdown() error
-    APIController() *api.Controller
-}
+  enabled: true
+  port: "8080"
+  debug: false
 ```
 
 ### Extending the API

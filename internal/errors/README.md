@@ -212,7 +212,6 @@ To register a new component, add it to the `init()` function in `/internal/error
 func init() {
     RegisterComponent("birdnet", "birdnet")
     RegisterComponent("myaudio", "myaudio")
-    RegisterComponent("httpcontroller", "http-controller")
     RegisterComponent("datastore", "datastore")
     RegisterComponent("imageprovider", "imageprovider")
     RegisterComponent("diskmanager", "diskmanager")

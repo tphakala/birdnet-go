@@ -74,7 +74,7 @@ type audioLevelManager struct {
 const maxRTSPAnonymMapSize = 100
 
 // Global audio level manager instance
-// TODO: Move to Controller struct during httpcontroller refactoring
+// TODO: Consider moving to Controller struct for better encapsulation
 var audioLevelMgr = &audioLevelManager{
 	rtspAnonymMap: make(map[string]string),
 	subscribers:   make(map[chan myaudio.AudioLevelData]struct{}),

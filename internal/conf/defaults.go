@@ -259,7 +259,6 @@ func setDefaultConfig() {
 	viper.SetDefault("webserver.debug", false)
 	viper.SetDefault("webserver.enabled", true)
 	viper.SetDefault("webserver.port", "8080")
-	viper.SetDefault("webserver.uselegacyserver", true) // use legacy httpcontroller by default, false for new api server
 
 	// Webserver log configuration
 	viper.SetDefault("webserver.log.enabled", false)

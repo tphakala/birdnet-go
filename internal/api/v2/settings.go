@@ -1565,8 +1565,7 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	// Check web server core settings
 	if oldWS.Port != newWS.Port ||
 		oldWS.Enabled != newWS.Enabled ||
-		oldWS.Debug != newWS.Debug ||
-		oldWS.UseLegacyServer != newWS.UseLegacyServer {
+		oldWS.Debug != newWS.Debug {
 		return true
 	}
 

@@ -6,13 +6,13 @@ import (
 	"sync"
 	"time"
 
-	api "github.com/tphakala/birdnet-go/internal/api/v2"
+	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 // getSoundLevelMetrics is a helper function to safely retrieve the SoundLevel metrics object
-func getSoundLevelMetrics(apiController *api.Controller) *metrics.SoundLevelMetrics {
+func getSoundLevelMetrics(apiController *apiv2.Controller) *metrics.SoundLevelMetrics {
 	if apiController == nil || apiController.Processor == nil ||
 		apiController.Processor.Metrics == nil || apiController.Processor.Metrics.SoundLevel == nil {
 		return nil
@@ -21,7 +21,7 @@ func getSoundLevelMetrics(apiController *api.Controller) *metrics.SoundLevelMetr
 }
 
 // startSoundLevelSSEPublisher starts a goroutine to consume sound level data and publish via SSE
-func startSoundLevelSSEPublisher(wg *sync.WaitGroup, ctx context.Context, apiController *api.Controller, soundLevelChan <-chan myaudio.SoundLevelData) {
+func startSoundLevelSSEPublisher(wg *sync.WaitGroup, ctx context.Context, apiController *apiv2.Controller, soundLevelChan <-chan myaudio.SoundLevelData) {
 	if apiController == nil {
 		log.Println("⚠️ SSE API controller not available, sound level SSE publishing disabled")
 		return

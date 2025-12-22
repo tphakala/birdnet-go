@@ -17,7 +17,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis"
 	"github.com/tphakala/birdnet-go/internal/api"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/httpcontroller"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
@@ -30,9 +29,6 @@ var version string
 
 //go:embed assets/*
 var assetsFs embed.FS
-
-//go:embed views/*
-var viewsFs embed.FS
 
 //go:embed internal/imageprovider/data/latest.json
 var imageDataFs embed.FS // Embed image provider data
@@ -78,17 +74,13 @@ func mainWithExitCode() int {
 		defer pprof.StopCPUProfile()
 	}
 
-	// publish the embedded assets and views directories to controller packages
-	httpcontroller.AssetsFs = assetsFs
-	httpcontroller.ViewsFs = viewsFs
-	httpcontroller.ImageDataFs = imageDataFs
-	api.AssetsFs = assetsFs // Also set for new API server
+	// Publish the embedded assets directory to the API server
+	api.AssetsFs = assetsFs
+	api.ImageDataFs = imageDataFs
 
 	// Initialize the image provider registry
 	imageProviderRegistry = imageprovider.NewImageProviderRegistry()
-
-	// Make registry available to the httpcontroller package
-	httpcontroller.ImageProviderRegistry = imageProviderRegistry
+	api.ImageProviderRegistry = imageProviderRegistry
 
 	// Load the configuration
 	settings := conf.Setting()

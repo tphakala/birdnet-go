@@ -496,7 +496,7 @@ func parseErrorType(errMsg string) string {
 }
 
 // titleCaseComponent converts component names to title case for better readability
-// Examples: "httpcontroller" -> "HTTP Controller", "datastore" -> "Datastore"
+// Examples: "datastore" -> "Datastore", "api-server" -> "API Server"
 // Uses prefix-only matching to avoid mid-word replacements (e.g., "capistrano" stays intact)
 func titleCaseComponent(component string) string {
 	// Normalize: trim, lowercase, split on separators

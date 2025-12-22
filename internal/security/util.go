@@ -105,8 +105,6 @@ func IsSafePath(pathStr string) bool {
 
 // IsValidRedirect ensures the redirect path is safe and internal by checking IsSafePath.
 // It logs a warning if the path is deemed unsafe.
-// Note: Consider where the logger should come from if needed outside httpcontroller.
-// For now, it logs using the standard log package if unsafe.
 func IsValidRedirect(redirectPath string) bool {
 	isSafe := IsSafePath(redirectPath) // Use the exported function
 	if !isSafe {
