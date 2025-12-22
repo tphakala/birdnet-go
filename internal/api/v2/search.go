@@ -15,16 +15,12 @@ const defaultPerPage = 20
 
 // initSearchRoutes registers the search-related routes
 func (c *Controller) initSearchRoutes() {
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Initializing search routes")
-	}
+	c.logInfoIfEnabled("Initializing search routes")
 
 	// Search endpoints - publicly accessible
 	c.Group.POST("/search", c.HandleSearch)
 
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Search routes initialized successfully")
-	}
+	c.logInfoIfEnabled("Search routes initialized successfully")
 }
 
 // SearchRequest defines the structure of the search API request
@@ -54,16 +50,12 @@ type SearchResponse struct {
 func (c *Controller) HandleSearch(ctx echo.Context) error {
 	ip := ctx.RealIP()
 	path := ctx.Request().URL.Path
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Handling search request", "path", path, "ip", ip)
-	}
+	c.logInfoIfEnabled("Handling search request", "path", path, "ip", ip)
 
 	// Parse the request
 	var req SearchRequest
 	if err := ctx.Bind(&req); err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Failed to bind search request", "error", err.Error(), "path", path, "ip", ip)
-		}
+		c.logErrorIfEnabled("Failed to bind search request", "error", err.Error(), "path", path, "ip", ip)
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
 	}
 
@@ -81,30 +73,24 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 
 	// Build filters
 	filters := c.buildSearchFilters(&req, ctxTimeout)
-	if c.apiLogger != nil {
-		c.apiLogger.Debug("Executing search with filters", "filters", filters, "path", path, "ip", ip)
-	}
+	c.logDebugIfEnabled("Executing search with filters", "filters", filters, "path", path, "ip", ip)
 
 	// Execute the search
 	results, total, err := c.DS.SearchDetections(&filters)
 	if err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Search query failed", "error", err.Error(), "filters", fmt.Sprintf("%+v", filters), "path", path, "ip", ip)
-		}
+		c.logErrorIfEnabled("Search query failed", "error", err.Error(), "filters", fmt.Sprintf("%+v", filters), "path", path, "ip", ip)
 		return c.HandleError(ctx, err, "Search failed", http.StatusInternalServerError)
 	}
 
 	// Build and return response
 	resp := c.buildSearchResponse(&req, results, total, filters.PerPage)
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Search completed successfully",
-			"total_results", resp.Total,
-			"results_returned", len(resp.Results),
-			"total_pages", resp.Pages,
-			"current_page", resp.CurrentPage,
-			"path", path, "ip", ip,
-		)
-	}
+	c.logInfoIfEnabled("Search completed successfully",
+		"total_results", resp.Total,
+		"results_returned", len(resp.Results),
+		"total_pages", resp.Pages,
+		"current_page", resp.CurrentPage,
+		"path", path, "ip", ip,
+	)
 
 	return ctx.JSON(http.StatusOK, resp)
 }
@@ -114,22 +100,20 @@ func (c *Controller) logValidatedRequest(path, ip string, req *SearchRequest) {
 	c.Debug("Validated Search request: Species='%s', DateStart='%s', DateEnd='%s', ConfidenceMin=%f, ConfidenceMax=%f, VerifiedStatus='%s', LockedStatus='%s', TimeOfDay='%s', Page=%d, SortBy='%s'",
 		req.Species, req.DateStart, req.DateEnd, req.ConfidenceMin, req.ConfidenceMax, req.VerifiedStatus,
 		req.LockedStatus, req.TimeOfDay, req.Page, req.SortBy)
-	if c.apiLogger != nil {
-		c.apiLogger.Debug("Validated search request parameters",
-			"species", req.Species,
-			"dateStart", req.DateStart,
-			"dateEnd", req.DateEnd,
-			"confidenceMin", req.ConfidenceMin,
-			"confidenceMax", req.ConfidenceMax,
-			"verifiedStatus", req.VerifiedStatus,
-			"lockedStatus", req.LockedStatus,
-			"deviceFilter", req.DeviceFilter,
-			"timeOfDay", req.TimeOfDay,
-			"page", req.Page,
-			"sortBy", req.SortBy,
-			"path", path, "ip", ip,
-		)
-	}
+	c.logDebugIfEnabled("Validated search request parameters",
+		"species", req.Species,
+		"dateStart", req.DateStart,
+		"dateEnd", req.DateEnd,
+		"confidenceMin", req.ConfidenceMin,
+		"confidenceMax", req.ConfidenceMax,
+		"verifiedStatus", req.VerifiedStatus,
+		"lockedStatus", req.LockedStatus,
+		"deviceFilter", req.DeviceFilter,
+		"timeOfDay", req.TimeOfDay,
+		"page", req.Page,
+		"sortBy", req.SortBy,
+		"path", path, "ip", ip,
+	)
 }
 
 // buildSearchFilters creates the datastore search filters from the request.
@@ -183,9 +167,7 @@ func (c *Controller) validateAndNormalizeSearchRequest(ctx echo.Context, req *Se
 
 	// Validate Page
 	if req.Page < 1 {
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Invalid page number requested, defaulting to 1", "requested_page", req.Page, "path", path, "ip", ip)
-		}
+		c.logWarnIfEnabled("Invalid page number requested, defaulting to 1", "requested_page", req.Page, "path", path, "ip", ip)
 		req.Page = 1
 	}
 
@@ -220,31 +202,17 @@ func (c *Controller) validateAndNormalizeSearchRequest(ctx echo.Context, req *Se
 
 // validateSearchDates validates the DateStart and DateEnd parameters.
 func (c *Controller) validateSearchDates(path, ip string, req *SearchRequest) error {
-	if req.DateStart != "" {
-		if _, err := time.Parse("2006-01-02", req.DateStart); err != nil {
-			if c.apiLogger != nil {
-				c.apiLogger.Error("Invalid start date format", "dateStart", req.DateStart, "error", err.Error(), "path", path, "ip", ip)
-			}
-			return fmt.Errorf("invalid start date format '%s', use YYYY-MM-DD", req.DateStart)
-		}
+	if err := validateDateFormat(req.DateStart, "start date"); err != nil {
+		c.logErrorIfEnabled("Invalid start date format", "dateStart", req.DateStart, "path", path, "ip", ip)
+		return err
 	}
-	if req.DateEnd != "" {
-		if _, err := time.Parse("2006-01-02", req.DateEnd); err != nil {
-			if c.apiLogger != nil {
-				c.apiLogger.Error("Invalid end date format", "dateEnd", req.DateEnd, "error", err.Error(), "path", path, "ip", ip)
-			}
-			return fmt.Errorf("invalid end date format '%s', use YYYY-MM-DD", req.DateEnd)
-		}
+	if err := validateDateFormat(req.DateEnd, "end date"); err != nil {
+		c.logErrorIfEnabled("Invalid end date format", "dateEnd", req.DateEnd, "path", path, "ip", ip)
+		return err
 	}
-	if req.DateStart != "" && req.DateEnd != "" {
-		start, _ := time.Parse("2006-01-02", req.DateStart)
-		end, _ := time.Parse("2006-01-02", req.DateEnd)
-		if start.After(end) {
-			if c.apiLogger != nil {
-				c.apiLogger.Error("Invalid date range: start date is after end date", "dateStart", req.DateStart, "dateEnd", req.DateEnd, "path", path, "ip", ip)
-			}
-			return fmt.Errorf("'dateStart' (%s) must be earlier than or equal to 'dateEnd' (%s)", req.DateStart, req.DateEnd)
-		}
+	if err := validateDateOrder(req.DateStart, req.DateEnd); err != nil {
+		c.logErrorIfEnabled("Invalid date range", "dateStart", req.DateStart, "dateEnd", req.DateEnd, "path", path, "ip", ip)
+		return fmt.Errorf("'dateStart' (%s) must be earlier than or equal to 'dateEnd' (%s)", req.DateStart, req.DateEnd)
 	}
 	return nil
 }
@@ -255,9 +223,7 @@ func (c *Controller) validateSearchStatusEnums(path, ip string, req *SearchReque
 	if req.VerifiedStatus == "" {
 		req.VerifiedStatus = QueryValueAny
 	} else if !validVerifiedStatus[req.VerifiedStatus] {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Invalid verified status parameter", "verifiedStatus", req.VerifiedStatus, "path", path, "ip", ip)
-		}
+		c.logErrorIfEnabled("Invalid verified status parameter", "verifiedStatus", req.VerifiedStatus, "path", path, "ip", ip)
 		return fmt.Errorf("invalid verified status '%s'. Use 'any', 'verified', or 'unverified'", req.VerifiedStatus)
 	}
 
@@ -265,9 +231,7 @@ func (c *Controller) validateSearchStatusEnums(path, ip string, req *SearchReque
 	if req.LockedStatus == "" {
 		req.LockedStatus = QueryValueAny
 	} else if !validLockedStatus[req.LockedStatus] {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Invalid locked status parameter", "lockedStatus", req.LockedStatus, "path", path, "ip", ip)
-		}
+		c.logErrorIfEnabled("Invalid locked status parameter", "lockedStatus", req.LockedStatus, "path", path, "ip", ip)
 		return fmt.Errorf("invalid locked status '%s'. Use 'any', 'locked', or 'unlocked'", req.LockedStatus)
 	}
 	return nil
@@ -279,9 +243,7 @@ func (c *Controller) validateSearchTimeOfDay(path, ip string, req *SearchRequest
 	if req.TimeOfDay == "" {
 		req.TimeOfDay = QueryValueAny
 	} else if !validTimeOfDay[req.TimeOfDay] {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Invalid time of day parameter", "timeOfDay", req.TimeOfDay, "path", path, "ip", ip)
-		}
+		c.logErrorIfEnabled("Invalid time of day parameter", "timeOfDay", req.TimeOfDay, "path", path, "ip", ip)
 		return fmt.Errorf("invalid time of day '%s'. Use 'any', 'day', 'night', 'sunrise', or 'sunset'", req.TimeOfDay)
 	}
 	return nil
@@ -289,42 +251,49 @@ func (c *Controller) validateSearchTimeOfDay(path, ip string, req *SearchRequest
 
 // validateSearchConfidenceRange validates and normalizes ConfidenceMin and ConfidenceMax.
 func (c *Controller) validateSearchConfidenceRange(path, ip string, req *SearchRequest) error {
+	// Clamp confidenceMin to [0, 1]
 	if req.ConfidenceMin < 0 {
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Invalid confidenceMin, adjusted to 0", "originalConfidenceMin", req.ConfidenceMin, "path", path, "ip", ip)
-		}
+		c.logConfidenceAdjustment("confidenceMin", req.ConfidenceMin, 0, path, ip)
 		req.ConfidenceMin = 0
 	}
-	switch {
-	case req.ConfidenceMax > 1:
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Invalid confidenceMax, adjusted to 1", "originalConfidenceMax", req.ConfidenceMax, "path", path, "ip", ip)
-		}
-		req.ConfidenceMax = 1 // clamp to maximum
-	case req.ConfidenceMax < 0:
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Invalid confidenceMax, adjusted to 0", "originalConfidenceMax", req.ConfidenceMax, "path", path, "ip", ip)
-		}
-		req.ConfidenceMax = 0 // handle negative values
-	case req.ConfidenceMax == 0 && req.ConfidenceMin == 0:
-		// Assume user wants full range [0, 1] if both are zero initially.
-		if c.apiLogger != nil {
-			c.apiLogger.Debug("Confidence range is [0, 0], defaulting ConfidenceMax to 1", "path", path, "ip", ip)
-		}
-		req.ConfidenceMax = 1
-	}
 
-	// Ensure min ≤ max after normalization
+	// Clamp confidenceMax and handle defaults
+	req.ConfidenceMax = c.normalizeConfidenceMax(req.ConfidenceMin, req.ConfidenceMax, path, ip)
+
+	// Ensure min ≤ max
 	if req.ConfidenceMin > req.ConfidenceMax {
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("ConfidenceMin > ConfidenceMax after normalization, swapping values",
-				"normalizedConfidenceMin", req.ConfidenceMin,
-				"normalizedConfidenceMax", req.ConfidenceMax,
-				"path", path, "ip", ip)
-		}
+		c.logConfidenceSwap(req.ConfidenceMin, req.ConfidenceMax, path, ip)
 		req.ConfidenceMin, req.ConfidenceMax = req.ConfidenceMax, req.ConfidenceMin
 	}
 	return nil
+}
+
+// normalizeConfidenceMax clamps and normalizes the confidence max value
+func (c *Controller) normalizeConfidenceMax(minConf, maxConf float64, path, ip string) float64 {
+	switch {
+	case maxConf > 1:
+		c.logConfidenceAdjustment("confidenceMax", maxConf, 1, path, ip)
+		return 1
+	case maxConf < 0:
+		c.logConfidenceAdjustment("confidenceMax", maxConf, 0, path, ip)
+		return 0
+	case maxConf == 0 && minConf == 0:
+		c.logDebugIfEnabled("Confidence range is [0, 0], defaulting ConfidenceMax to 1", "path", path, "ip", ip)
+		return 1
+	default:
+		return maxConf
+	}
+}
+
+// logConfidenceAdjustment logs when a confidence value is adjusted
+func (c *Controller) logConfidenceAdjustment(field string, original, adjusted float64, path, ip string) {
+	c.logWarnIfEnabled("Invalid "+field+", adjusted", "original", original, "adjusted", adjusted, "path", path, "ip", ip)
+}
+
+// logConfidenceSwap logs when min/max values are swapped
+func (c *Controller) logConfidenceSwap(minConf, maxConf float64, path, ip string) {
+	c.logWarnIfEnabled("ConfidenceMin > ConfidenceMax after normalization, swapping values",
+		"normalizedConfidenceMin", minConf, "normalizedConfidenceMax", maxConf, "path", path, "ip", ip)
 }
 
 // validateSearchSortBy validates the SortBy parameter.
@@ -337,9 +306,7 @@ func (c *Controller) validateSearchSortBy(path, ip string, req *SearchRequest) e
 	}
 	if req.SortBy != "" { // Allow empty string for default sorting (handled by datastore)
 		if _, ok := allowedSortBy[req.SortBy]; !ok {
-			if c.apiLogger != nil {
-				c.apiLogger.Error("Invalid sortBy parameter", "sortBy", req.SortBy, "path", path, "ip", ip)
-			}
+			c.logErrorIfEnabled("Invalid sortBy parameter", "sortBy", req.SortBy, "path", path, "ip", ip)
 			// Create a list of allowed sort options for the error message
 			allowedKeys := make([]string, 0, len(allowedSortBy))
 			for k := range allowedSortBy {

@@ -39,9 +39,7 @@ const (
 
 // initControlRoutes registers all control-related API endpoints
 func (c *Controller) initControlRoutes() {
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Initializing control routes")
-	}
+	c.logInfoIfEnabled("Initializing control routes")
 
 	// Create control API group with auth middleware
 	controlGroup := c.Group.Group("/control", c.authMiddleware)
@@ -52,20 +50,16 @@ func (c *Controller) initControlRoutes() {
 	controlGroup.POST("/rebuild-filter", c.RebuildFilter)
 	controlGroup.GET("/actions", c.GetAvailableActions)
 
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Control routes initialized successfully")
-	}
+	c.logInfoIfEnabled("Control routes initialized successfully")
 }
 
 // GetAvailableActions handles GET /api/v2/control/actions
 // Returns a list of available control actions
 func (c *Controller) GetAvailableActions(ctx echo.Context) error {
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Getting available control actions",
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP(),
-		)
-	}
+	c.logInfoIfEnabled("Getting available control actions",
+		"path", ctx.Request().URL.Path,
+		"ip", ctx.RealIP(),
+	)
 
 	actions := []ControlAction{
 		{
@@ -82,13 +76,11 @@ func (c *Controller) GetAvailableActions(ctx echo.Context) error {
 		},
 	}
 
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Retrieved available control actions successfully",
-			"action_count", len(actions),
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP(),
-		)
-	}
+	c.logInfoIfEnabled("Retrieved available control actions successfully",
+		"action_count", len(actions),
+		"path", ctx.Request().URL.Path,
+		"ip", ctx.RealIP(),
+	)
 
 	return ctx.JSON(http.StatusOK, actions)
 }
@@ -102,23 +94,19 @@ func (c *Controller) GetAvailableActions(ctx echo.Context) error {
 //   - successMessage: Message to return in the response when successful
 // Returns an error if the control channel is nil or if the request times out
 func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMessage, successMessage string) error {
-	if c.apiLogger != nil {
-		c.apiLogger.Info(logMessage,
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP(),
-		)
-	}
+	c.logInfoIfEnabled(logMessage,
+		"path", ctx.Request().URL.Path,
+		"ip", ctx.RealIP(),
+	)
 
 	if c.controlChan == nil {
 		err := fmt.Errorf("control channel not initialized")
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Control channel not available",
-				"error", err.Error(),
-				"action", action,
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-			)
-		}
+		c.logErrorIfEnabled("Control channel not available",
+			"error", err.Error(),
+			"action", action,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
 		return c.HandleError(ctx, err,
 			"System control interface not available - server may need to be restarted", http.StatusInternalServerError)
 	}
@@ -131,24 +119,20 @@ func (c *Controller) handleControlSignal(ctx echo.Context, signal, action, logMe
 	// Send signal with context timeout awareness
 	select {
 	case c.controlChan <- signal:
-		if c.apiLogger != nil {
-			c.apiLogger.Info("Control signal sent successfully",
-				"action", action,
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-			)
-		}
+		c.logInfoIfEnabled("Control signal sent successfully",
+			"action", action,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
 		// Signal sent successfully
 	case <-reqCtx.Done():
 		err := reqCtx.Err()
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Request timeout/cancel while sending control signal",
-				"error", err.Error(),
-				"action", action,
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-			)
-		}
+		c.logErrorIfEnabled("Request timeout/cancel while sending control signal",
+			"error", err.Error(),
+			"action", action,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
 		// Request context is done (timeout or cancelled)
 		return c.HandleError(ctx, err,
 			"Request timeout while sending control signal", http.StatusRequestTimeout)

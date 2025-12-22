@@ -192,13 +192,6 @@ routeInitializers := []struct {
 | GET    | `/soundlevels/stream` | `StreamSoundLevels` | ❌⚡ | Real-time audio level stream |
 | GET    | `/sse/status`         | `GetSSEStatus`      | ❌   | SSE connection status        |
 
-### Streams (`streams.go`)
-
-| Method | Route                    | Handler                     | Auth | Description         |
-| ------ | ------------------------ | --------------------------- | ---- | ------------------- |
-| GET    | `/streams/audio-level`   | `HandleAudioLevelStream`    | ✅   | Audio level stream  |
-| GET    | `/streams/notifications` | `HandleNotificationsStream` | ✅   | Notification stream |
-
 ### Audio Level SSE (`audio_level.go`)
 
 | Method | Route                  | Handler            | Auth | Description             |

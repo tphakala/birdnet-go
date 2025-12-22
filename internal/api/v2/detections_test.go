@@ -711,10 +711,7 @@ func TestReviewDetection(t *testing.T) {
 			detectionID: "1",
 			requestBody: `{"verified": "correct", "comment": "Good detection"}`,
 			mockSetup: func(m *mock.Mock) {
-				m.On("Get", "1").Return(datastore.Note{ID: 1, Locked: false}, nil)
-				m.On("IsNoteLocked", "1").Return(false, nil)
-				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
-				m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
+				setupValidReviewMock(m, "1", 1, true)
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -723,9 +720,7 @@ func TestReviewDetection(t *testing.T) {
 			detectionID: "2",
 			requestBody: `{"verified": "false_positive"}`,
 			mockSetup: func(m *mock.Mock) {
-				m.On("Get", "2").Return(datastore.Note{ID: 2, Locked: false}, nil)
-				m.On("IsNoteLocked", "2").Return(false, nil)
-				m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
+				setupValidReviewMock(m, "2", 2, false)
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -753,10 +748,7 @@ func TestReviewDetection(t *testing.T) {
 			detectionID: "5",
 			requestBody: `{"verified": "correct", "comment": "<script>alert('XSS')</script>Special chars: &<>\"'!@#$%^&*()_+{}[]|\\:;,.?/~"}`,
 			mockSetup: func(m *mock.Mock) {
-				m.On("Get", "5").Return(datastore.Note{ID: 5, Locked: false}, nil)
-				m.On("IsNoteLocked", "5").Return(false, nil)
-				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
-				m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
+				setupValidReviewMock(m, "5", 5, true)
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -765,10 +757,7 @@ func TestReviewDetection(t *testing.T) {
 			detectionID: "6",
 			requestBody: `{"verified": "correct", "comment": "` + strings.Repeat("Very long comment. ", 500) + `"}`,
 			mockSetup: func(m *mock.Mock) {
-				m.On("Get", "6").Return(datastore.Note{ID: 6, Locked: false}, nil)
-				m.On("IsNoteLocked", "6").Return(false, nil)
-				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
-				m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
+				setupValidReviewMock(m, "6", 6, true)
 			},
 			expectedStatus: http.StatusOK,
 		},

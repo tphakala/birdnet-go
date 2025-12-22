@@ -347,6 +347,27 @@ func convertErrorContextToResponse(errCtx *myaudio.ErrorContext) *ErrorContextRe
 	return response
 }
 
+// handleStreamHealthHeartbeat sends a heartbeat and returns true if client disconnected.
+func (c *Controller) handleStreamHealthHeartbeat(ctx echo.Context, clientID string) error {
+	if err := c.sendSSEHeartbeat(ctx, clientID, "stream_health"); err != nil {
+		c.logDebugIfEnabled("Stream health SSE heartbeat failed, client likely disconnected",
+			"client_id", clientID,
+			"error", err.Error())
+		return err
+	}
+	return nil
+}
+
+// handleStreamHealthPoll polls for stream health changes and processes updates.
+func (c *Controller) handleStreamHealthPoll(ctx echo.Context, clientID string, previousState map[string]streamHealthSnapshot) error {
+	healthData := myaudio.GetRTSPStreamHealth()
+
+	if err := c.processStreamHealthUpdates(ctx, clientID, healthData, previousState); err != nil {
+		return err
+	}
+	return c.processRemovedStreams(ctx, clientID, healthData, previousState)
+}
+
 // StreamHealthUpdates streams real-time RTSP stream health updates via SSE
 // @Summary Stream real-time RTSP stream health updates
 // @Description Establishes an SSE connection to receive real-time updates when stream health changes
@@ -362,68 +383,37 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 	defer cancel()
 
 	// Override the request context with timeout context
-	originalReq := ctx.Request()
-	ctx.SetRequest(originalReq.WithContext(timeoutCtx))
+	ctx.SetRequest(ctx.Request().WithContext(timeoutCtx))
 
-	// Set SSE headers
 	setSSEHeaders(ctx)
-
-	// Generate client ID for logging
 	clientID := generateCorrelationID()
 
-	// Log the connection
 	c.logSSEConnection(clientID, ctx.RealIP(), ctx.Request().UserAgent(), "stream-health", true)
 	defer c.logSSEConnection(clientID, ctx.RealIP(), "", "stream-health", false)
 
-	// Send initial connection message
 	if err := c.sendConnectionMessage(ctx, clientID, "Connected to stream health updates", "stream_health"); err != nil {
 		return err
 	}
 
-	// Get initial health data to pre-allocate map capacity
-	initialHealthData := myaudio.GetRTSPStreamHealth()
+	// Pre-allocate state tracking based on initial stream count
+	previousState := make(map[string]streamHealthSnapshot, len(myaudio.GetRTSPStreamHealth()))
 
-	// Keep track of previous state to detect changes
-	// Pre-allocate capacity based on initial stream count for better performance
-	previousState := make(map[string]streamHealthSnapshot, len(initialHealthData))
-
-	// Setup ticker for polling health data
 	ticker := time.NewTicker(streamHealthPollInterval)
 	defer ticker.Stop()
-
-	// Setup heartbeat ticker
 	heartbeatTicker := time.NewTicker(sseHeartbeatInterval)
 	defer heartbeatTicker.Stop()
 
 	for {
 		select {
 		case <-heartbeatTicker.C:
-			// Send heartbeat to keep connection alive
-			if err := c.sendSSEHeartbeat(ctx, clientID, "stream_health"); err != nil {
-				if c.apiLogger != nil {
-					c.apiLogger.Debug("Stream health SSE heartbeat failed, client likely disconnected",
-						"client_id", clientID,
-						"error", err.Error())
-				}
+			if err := c.handleStreamHealthHeartbeat(ctx, clientID); err != nil {
 				return err
 			}
-
 		case <-ticker.C:
-			// Poll for stream health changes
-			healthData := myaudio.GetRTSPStreamHealth()
-
-			// Process stream updates
-			if err := c.processStreamHealthUpdates(ctx, clientID, healthData, previousState); err != nil {
+			if err := c.handleStreamHealthPoll(ctx, clientID, previousState); err != nil {
 				return err
 			}
-
-			// Check for removed streams
-			if err := c.processRemovedStreams(ctx, clientID, healthData, previousState); err != nil {
-				return err
-			}
-
 		case <-ctx.Request().Context().Done():
-			// Client disconnected or timeout reached
 			return nil
 		}
 	}
@@ -503,27 +493,23 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 		if !exists {
 			// New stream detected
 			if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, "stream_added"); err != nil {
-				if c.apiLogger != nil {
-					c.apiLogger.Debug("Failed to send stream_added event, client disconnected",
-						"url", privacy.SanitizeRTSPUrl(rawURL),
-						"client_id", clientID,
-						"error", err.Error())
-				}
+				c.logDebugIfEnabled("Failed to send stream_added event, client disconnected",
+					"url", privacy.SanitizeRTSPUrl(rawURL),
+					"client_id", clientID,
+					"error", err.Error())
 				return err
 			}
 		} else if hasHealthChanged(previousSnapshot, currentSnapshot) {
 			// Stream health changed
 			eventType := determineEventType(previousSnapshot, currentSnapshot)
 			if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, eventType); err != nil {
-				if c.apiLogger != nil {
-					c.apiLogger.Debug("Failed to send health update, client disconnected",
-						"url", privacy.SanitizeRTSPUrl(rawURL),
-						"event_type", eventType,
-						"client_id", clientID,
-						"previous_state", previousSnapshot.ProcessState,
-						"current_state", currentSnapshot.ProcessState,
-						"error", err.Error())
-				}
+				c.logDebugIfEnabled("Failed to send health update, client disconnected",
+					"url", privacy.SanitizeRTSPUrl(rawURL),
+					"event_type", eventType,
+					"client_id", clientID,
+					"previous_state", previousSnapshot.ProcessState,
+					"current_state", currentSnapshot.ProcessState,
+					"error", err.Error())
 				return err
 			}
 		}
@@ -557,11 +543,9 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 
 		delete(previousState, prevURL)
 
-		if c.apiLogger != nil {
-			c.apiLogger.Info("Stream removed",
-				"url", sanitizedURL,
-				"client_id", clientID)
-		}
+		c.logInfoIfEnabled("Stream removed",
+			"url", sanitizedURL,
+			"client_id", clientID)
 	}
 
 	return nil
@@ -579,13 +563,11 @@ func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, hea
 		return err
 	}
 
-	if c.apiLogger != nil {
-		c.apiLogger.Debug("Stream health update sent",
-			"url", privacy.SanitizeRTSPUrl(rawURL),
-			"event_type", eventType,
-			"is_healthy", health.IsHealthy,
-			"state", health.ProcessState.String())
-	}
+	c.logDebugIfEnabled("Stream health update sent",
+		"url", privacy.SanitizeRTSPUrl(rawURL),
+		"event_type", eventType,
+		"is_healthy", health.IsHealthy,
+		"state", health.ProcessState.String())
 
 	return nil
 }

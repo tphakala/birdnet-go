@@ -122,9 +122,7 @@ const (
 
 // Initialize media routes
 func (c *Controller) initMediaRoutes() {
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Initializing media routes")
-	}
+	c.logInfoIfEnabled("Initializing media routes")
 
 	// Original filename-based routes (keep for backward compatibility if needed, but ensure they use SFS)
 	c.Group.GET("/media/audio/:filename", c.ServeAudioClip)
@@ -142,9 +140,7 @@ func (c *Controller) initMediaRoutes() {
 	// Bird image endpoint
 	c.Group.GET("/media/species-image", c.GetSpeciesImage)
 
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Media routes initialized successfully")
-	}
+	c.logInfoIfEnabled("Media routes initialized successfully")
 }
 
 // translateSecureFSError handles SecureFS errors consistently across handler methods.
@@ -157,14 +153,12 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 		ctx.Logger().Debugf("SecureFS httpErr=%d internal=%v msg=%v",
 			httpErr.Code, httpErr.Internal, httpErr.Message)
 		// Log this as an error since it represents a failed request from SFS
-		if c.apiLogger != nil {
-			c.apiLogger.Error("SecureFS returned HTTP error",
-				"error", err.Error(),
-				"status_code", httpErr.Code,
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-			)
-		}
+		c.logErrorIfEnabled("SecureFS returned HTTP error",
+			"error", err.Error(),
+			"status_code", httpErr.Code,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
 		return httpErr
 	}
 
@@ -175,95 +169,79 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 	// Check for specific error types and map to appropriate status codes
 	switch {
 	case errors.Is(err, securefs.ErrPathTraversal) || errors.Is(err, ErrPathTraversalAttempt):
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Path traversal attempt detected",
-				"error", err.Error(),
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-				"tunneled", isTunneled,
-				"tunnel_provider", tunnelProvider,
-			)
-		}
-		return c.HandleError(ctx, err, "Invalid file path: attempted path traversal", http.StatusBadRequest)
-	case errors.Is(err, securefs.ErrInvalidPath) || errors.Is(err, ErrInvalidAudioPath):
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Invalid file path provided",
-				"error", err.Error(),
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-				"tunneled", isTunneled,
-				"tunnel_provider", tunnelProvider,
-			)
-		}
-		return c.HandleError(ctx, err, "Invalid file path specification", http.StatusBadRequest)
-	case errors.Is(err, securefs.ErrAccessDenied):
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Access denied to resource",
-				"error", err.Error(),
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-				"tunneled", isTunneled,
-				"tunnel_provider", tunnelProvider,
-			)
-		}
-		return c.HandleError(ctx, err, "Access denied to requested resource", http.StatusForbidden)
-	case errors.Is(err, securefs.ErrNotRegularFile):
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Requested resource is not a regular file",
-				"error", err.Error(),
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-				"tunneled", isTunneled,
-				"tunnel_provider", tunnelProvider,
-			)
-		}
-		return c.HandleError(ctx, err, "Requested resource is not a regular file", http.StatusForbidden)
-	case errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist) || errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, ErrImageNotFound):
-		if c.apiLogger != nil {
-			c.apiLogger.Info("Resource not found", // Info level as 404 is common
-				"error", err.Error(),
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-				"tunneled", isTunneled,
-				"tunnel_provider", tunnelProvider,
-			)
-		}
-		return c.HandleError(ctx, err, "Resource not found", http.StatusNotFound)
-	case errors.Is(err, context.DeadlineExceeded):
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Request timed out",
-				"error", err.Error(),
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-				"tunneled", isTunneled,
-				"tunnel_provider", tunnelProvider,
-			)
-		}
-		return c.HandleError(ctx, err, "Request timed out", http.StatusRequestTimeout)
-	case errors.Is(err, context.Canceled):
-		if c.apiLogger != nil {
-			c.apiLogger.Info("Request canceled by client",
-				"error", err.Error(),
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-				"tunneled", isTunneled,
-				"tunnel_provider", tunnelProvider,
-			)
-		}
-		return c.HandleError(ctx, err, "Request was canceled", StatusClientClosedRequest)
-	}
-
-	// For other errors, log as error and use the provided user message with a 500 status
-	if c.apiLogger != nil {
-		c.apiLogger.Error("Unhandled SecureFS/media error",
+		c.logWarnIfEnabled("Path traversal attempt detected",
 			"error", err.Error(),
-			"user_message", userMsg,
 			"path", ctx.Request().URL.Path,
 			"ip", ctx.RealIP(),
 			"tunneled", isTunneled,
 			"tunnel_provider", tunnelProvider,
 		)
+		return c.HandleError(ctx, err, "Invalid file path: attempted path traversal", http.StatusBadRequest)
+	case errors.Is(err, securefs.ErrInvalidPath) || errors.Is(err, ErrInvalidAudioPath):
+		c.logWarnIfEnabled("Invalid file path provided",
+			"error", err.Error(),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+			"tunneled", isTunneled,
+			"tunnel_provider", tunnelProvider,
+		)
+		return c.HandleError(ctx, err, "Invalid file path specification", http.StatusBadRequest)
+	case errors.Is(err, securefs.ErrAccessDenied):
+		c.logWarnIfEnabled("Access denied to resource",
+			"error", err.Error(),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+			"tunneled", isTunneled,
+			"tunnel_provider", tunnelProvider,
+		)
+		return c.HandleError(ctx, err, "Access denied to requested resource", http.StatusForbidden)
+	case errors.Is(err, securefs.ErrNotRegularFile):
+		c.logWarnIfEnabled("Requested resource is not a regular file",
+			"error", err.Error(),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+			"tunneled", isTunneled,
+			"tunnel_provider", tunnelProvider,
+		)
+		return c.HandleError(ctx, err, "Requested resource is not a regular file", http.StatusForbidden)
+	case errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist) || errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, ErrImageNotFound):
+		c.logInfoIfEnabled("Resource not found", // Info level as 404 is common
+			"error", err.Error(),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+			"tunneled", isTunneled,
+			"tunnel_provider", tunnelProvider,
+		)
+		return c.HandleError(ctx, err, "Resource not found", http.StatusNotFound)
+	case errors.Is(err, context.DeadlineExceeded):
+		c.logWarnIfEnabled("Request timed out",
+			"error", err.Error(),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+			"tunneled", isTunneled,
+			"tunnel_provider", tunnelProvider,
+		)
+		return c.HandleError(ctx, err, "Request timed out", http.StatusRequestTimeout)
+	case errors.Is(err, context.Canceled):
+		c.logInfoIfEnabled("Request canceled by client",
+			"error", err.Error(),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+			"tunneled", isTunneled,
+			"tunnel_provider", tunnelProvider,
+		)
+		return c.HandleError(ctx, err, "Request was canceled", StatusClientClosedRequest)
 	}
+
+	// For other errors, log as error and use the provided user message with a 500 status
+	c.logErrorIfEnabled("Unhandled SecureFS/media error",
+		"error", err.Error(),
+		"user_message", userMsg,
+		"path", ctx.Request().URL.Path,
+		"ip", ctx.RealIP(),
+		"tunneled", isTunneled,
+		"tunnel_provider", tunnelProvider,
+	)
 	return c.HandleError(ctx, err, userMsg, http.StatusInternalServerError)
 }
 
@@ -300,34 +278,28 @@ func parseRawParameter(rawParam string) bool {
 func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 	filename := ctx.Param("filename")
 	if filename == "" {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Missing filename parameter for ServeAudioClip",
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-			)
-		}
-		return c.HandleError(ctx, fmt.Errorf("missing filename"), "Filename parameter is required", http.StatusBadRequest)
-	}
-
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Serving audio clip by filename",
-			"filename", filename,
+		c.logErrorIfEnabled("Missing filename parameter for ServeAudioClip",
 			"path", ctx.Request().URL.Path,
 			"ip", ctx.RealIP(),
 		)
+		return c.HandleError(ctx, fmt.Errorf("missing filename"), "Filename parameter is required", http.StatusBadRequest)
 	}
+
+	c.logInfoIfEnabled("Serving audio clip by filename",
+		"filename", filename,
+		"path", ctx.Request().URL.Path,
+		"ip", ctx.RealIP(),
+	)
 
 	// Normalize and validate the path using the common helper
 	normalizedFilename, err := c.normalizeAndValidatePathWithLogger(filename, c.apiLogger)
 	if err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Invalid file path detected",
-				"original_filename", filename,
-				"error", err.Error(),
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-			)
-		}
+		c.logWarnIfEnabled("Invalid file path detected",
+			"original_filename", filename,
+			"error", err.Error(),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
 		return c.HandleError(ctx, err, "Invalid file path", http.StatusBadRequest)
 	}
 
@@ -340,13 +312,11 @@ func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 		return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
 	}
 
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Successfully served audio clip by filename",
-			"filename", filename,
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP(),
-		)
-	}
+	c.logInfoIfEnabled("Successfully served audio clip by filename",
+		"filename", filename,
+		"path", ctx.Request().URL.Path,
+		"ip", ctx.RealIP(),
+	)
 
 	// If err is nil, ServeRelativeFile handled the response successfully
 	return nil
@@ -504,24 +474,20 @@ func parseSpectrogramParameters(ctx echo.Context) spectrogramParameters {
 func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, clipPath string, err error) {
 	noteID = ctx.Param("id")
 	if noteID == "" {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Missing note ID for spectrogram request",
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP())
-		}
+		c.logErrorIfEnabled("Missing note ID for spectrogram request",
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP())
 		err = c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
 		return
 	}
 
 	clipPath, err = c.DS.GetNoteClipPath(noteID)
 	if err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Failed to get clip path from database",
-				"note_id", noteID,
-				"error", err.Error(),
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP())
-		}
+		c.logErrorIfEnabled("Failed to get clip path from database",
+			"note_id", noteID,
+			"error", err.Error(),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP())
 		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
 			err = c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
 			return
@@ -531,12 +497,10 @@ func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, cli
 	}
 
 	if clipPath == "" {
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Empty clip path for note",
-				"note_id", noteID,
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP())
-		}
+		c.logWarnIfEnabled("Empty clip path for note",
+			"note_id", noteID,
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP())
 		err = c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available for this note", http.StatusNotFound)
 		return
 	}
@@ -559,13 +523,11 @@ func (c *Controller) handleUserRequestedMode(ctx echo.Context, noteID, clipPath 
 		// Check if spectrogram already exists
 		if _, statErr := c.SFS.StatRel(relSpectrogramPath); statErr == nil {
 			// Spectrogram exists, serve it
-			if c.apiLogger != nil {
-				c.apiLogger.Debug("Serving existing spectrogram in user-requested mode",
-					"note_id", noteID,
-					"spectrogram_path", relSpectrogramPath,
-					"path", ctx.Request().URL.Path,
-					"ip", ctx.RealIP())
-			}
+			c.logDebugIfEnabled("Serving existing spectrogram in user-requested mode",
+				"note_id", noteID,
+				"spectrogram_path", relSpectrogramPath,
+				"path", ctx.Request().URL.Path,
+				"ip", ctx.RealIP())
 
 			err = c.SFS.ServeRelativeFile(ctx, relSpectrogramPath)
 			if err != nil {
@@ -576,13 +538,11 @@ func (c *Controller) handleUserRequestedMode(ctx echo.Context, noteID, clipPath 
 	}
 
 	// Spectrogram doesn't exist in user-requested mode - return 404 with helpful message
-	if c.apiLogger != nil {
-		c.apiLogger.Debug("Spectrogram not found in user-requested mode",
-			"note_id", noteID,
-			"mode", conf.SpectrogramModeUserRequested,
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP())
-	}
+	c.logDebugIfEnabled("Spectrogram not found in user-requested mode",
+		"note_id", noteID,
+		"mode", conf.SpectrogramModeUserRequested,
+		"path", ctx.Request().URL.Path,
+		"ip", ctx.RealIP())
 
 	return c.returnSpectrogramNotGeneratedError(ctx)
 }
@@ -601,13 +561,11 @@ func (c *Controller) returnSpectrogramNotGeneratedError(ctx echo.Context) (bool,
 	)
 
 	// Log the error with structured logging
-	if c.apiLogger != nil {
-		c.apiLogger.Error("Spectrogram not generated",
-			"correlation_id", errorResp.CorrelationID,
-			"mode", conf.SpectrogramModeUserRequested,
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP())
-	}
+	c.logErrorIfEnabled("Spectrogram not generated",
+		"correlation_id", errorResp.CorrelationID,
+		"mode", conf.SpectrogramModeUserRequested,
+		"path", ctx.Request().URL.Path,
+		"ip", ctx.RealIP())
 
 	// Return standard error response with mode in data field (API v2 envelope)
 	// Mode is placed in data object to maintain envelope consistency
@@ -630,26 +588,22 @@ func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath 
 	generationDuration := time.Since(generationStart)
 
 	if err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Spectrogram generation failed",
-				"note_id", noteID,
-				"clip_path", clipPath,
-				"error", err.Error(),
-				"duration_ms", generationDuration.Milliseconds(),
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP())
-		}
-		return c.spectrogramHTTPError(ctx, err)
-	}
-
-	if c.apiLogger != nil {
-		c.apiLogger.Debug("Spectrogram path determined",
+		c.logErrorIfEnabled("Spectrogram generation failed",
 			"note_id", noteID,
-			"spectrogram_path", spectrogramPath,
+			"clip_path", clipPath,
+			"error", err.Error(),
 			"duration_ms", generationDuration.Milliseconds(),
 			"path", ctx.Request().URL.Path,
 			"ip", ctx.RealIP())
+		return c.spectrogramHTTPError(ctx, err)
 	}
+
+	c.logDebugIfEnabled("Spectrogram path determined",
+		"note_id", noteID,
+		"spectrogram_path", spectrogramPath,
+		"duration_ms", generationDuration.Milliseconds(),
+		"path", ctx.Request().URL.Path,
+		"ip", ctx.RealIP())
 
 	// Serve the generated spectrogram using SecureFS
 	serveStart := time.Now()
@@ -657,27 +611,23 @@ func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath 
 	serveDuration := time.Since(serveStart)
 
 	if err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Failed to serve spectrogram file",
-				"note_id", noteID,
-				"spectrogram_path", spectrogramPath,
-				"error", err.Error(),
-				"serve_duration_ms", serveDuration.Milliseconds(),
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP())
-		}
+		c.logErrorIfEnabled("Failed to serve spectrogram file",
+			"note_id", noteID,
+			"spectrogram_path", spectrogramPath,
+			"error", err.Error(),
+			"serve_duration_ms", serveDuration.Milliseconds(),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP())
 		return c.translateSecureFSError(ctx, err, "Failed to serve spectrogram image")
 	}
 
-	if c.apiLogger != nil {
-		c.apiLogger.Debug("Spectrogram served successfully",
-			"note_id", noteID,
-			"spectrogram_path", spectrogramPath,
-			"serve_duration_ms", serveDuration.Milliseconds(),
-			"total_duration_ms", time.Since(generationStart).Milliseconds(),
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP())
-	}
+	c.logDebugIfEnabled("Spectrogram served successfully",
+		"note_id", noteID,
+		"spectrogram_path", spectrogramPath,
+		"serve_duration_ms", serveDuration.Milliseconds(),
+		"total_duration_ms", time.Since(generationStart).Milliseconds(),
+		"path", ctx.Request().URL.Path,
+		"ip", ctx.RealIP())
 	return nil
 }
 
@@ -741,16 +691,14 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	params := parseSpectrogramParameters(ctx)
 
 	// Log request details
-	if c.apiLogger != nil {
-		c.apiLogger.Debug("Spectrogram requested by ID",
-			"note_id", noteID,
-			"clip_path", clipPath,
-			"width", params.width,
-			"raw", params.raw,
-			"size_param", params.sizeStr,
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP())
-	}
+	c.logDebugIfEnabled("Spectrogram requested by ID",
+		"note_id", noteID,
+		"clip_path", clipPath,
+		"width", params.width,
+		"raw", params.raw,
+		"size_param", params.sizeStr,
+		"path", ctx.Request().URL.Path,
+		"ip", ctx.RealIP())
 
 	// Check spectrogram generation mode
 	spectrogramMode := c.Settings.Realtime.Dashboard.Spectrogram.GetMode()
@@ -981,16 +929,14 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	params := parseSpectrogramParameters(ctx)
 
 	// Log request details
-	if c.apiLogger != nil {
-		c.apiLogger.Debug("Spectrogram generation requested by user",
-			"note_id", noteID,
-			"clip_path", clipPath,
-			"width", params.width,
-			"raw", params.raw,
-			"size_param", params.sizeStr,
-			"path", ctx.Request().URL.Path,
-			"ip", ctx.RealIP())
-	}
+	c.logDebugIfEnabled("Spectrogram generation requested by user",
+		"note_id", noteID,
+		"clip_path", clipPath,
+		"width", params.width,
+		"raw", params.raw,
+		"size_param", params.sizeStr,
+		"path", ctx.Request().URL.Path,
+		"ip", ctx.RealIP())
 
 	// Check if spectrogram already exists (fast path)
 	// Also compute spectrogramKey for queue management
@@ -999,13 +945,11 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	relAudioPath, err := c.SFS.ValidateRelativePath(normalizedPath)
 	if err != nil {
 		// Path validation failed - return error immediately before spawning goroutine
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Invalid audio path for spectrogram generation",
-				"note_id", noteID,
-				"clip_path", clipPath,
-				"normalized_path", normalizedPath,
-				"error", err.Error())
-		}
+		c.logErrorIfEnabled("Invalid audio path for spectrogram generation",
+			"note_id", noteID,
+			"clip_path", clipPath,
+			"normalized_path", normalizedPath,
+			"error", err.Error())
 		return c.HandleError(ctx, err, "Invalid audio path", http.StatusBadRequest)
 	}
 
@@ -1069,11 +1013,9 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 		// Ensure cleanup even if panic occurs (prevents memory leaks)
 		defer func() {
 			if r := recover(); r != nil {
-				if c.apiLogger != nil {
-					c.apiLogger.Error("Panic in async spectrogram generation",
-						"note_id", noteID,
-						"panic", r)
-				}
+				c.logErrorIfEnabled("Panic in async spectrogram generation",
+					"note_id", noteID,
+					"panic", r)
 			}
 		}()
 
@@ -1090,14 +1032,12 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 				c.updateQueueStatus(spectrogramKey, spectrogramStatusFailed, 0, "Generation failed: "+err.Error())
 			}
 
-			if c.apiLogger != nil {
-				c.apiLogger.Error("Async spectrogram generation failed",
-					"note_id", noteID,
-					"clip_path", clipPath,
-					"error", err.Error())
-			}
-		} else if c.apiLogger != nil {
-			c.apiLogger.Info("Async spectrogram generated successfully",
+			c.logErrorIfEnabled("Async spectrogram generation failed",
+				"note_id", noteID,
+				"clip_path", clipPath,
+				"error", err.Error())
+		} else {
+			c.logInfoIfEnabled("Async spectrogram generated successfully",
 				"note_id", noteID,
 				"spectrogram_path", spectrogramPath)
 		}
@@ -1417,14 +1357,12 @@ func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath
 			"spectrogram_key", spectrogramKey)
 
 		// Track retry metrics
-		if c.apiLogger != nil {
-			c.apiLogger.Info("Spectrogram generation deferred - audio not ready",
-				"audio_path", audioPath,
-				"file_size", validationResult.FileSize,
-				"retry_after_ms", validationResult.RetryAfter.Milliseconds(),
-				"component", "media.spectrogram",
-				"metric_type", "audio_not_ready")
-		}
+		c.logInfoIfEnabled("Spectrogram generation deferred - audio not ready",
+			"audio_path", audioPath,
+			"file_size", validationResult.FileSize,
+			"retry_after_ms", validationResult.RetryAfter.Milliseconds(),
+			"component", "media.spectrogram",
+			"metric_type", "audio_not_ready")
 
 		// Return a specific error that indicates the file is not ready
 		// This will be handled by the HTTP handler to return 503
@@ -1856,65 +1794,56 @@ func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectr
 		"semaphore_slots_in_use", len(spectrogramSemaphore),
 		"max_slots", maxConcurrentSpectrograms)
 
-	// Verify the spectrogram file exists
-	// We'll use a direct filesystem check because os.Root may have issues with newly created files
-	// Retry a few times to handle filesystem sync delays
-	var statErr error
-	for i := range spectrogramVerifyRetries {
-		// Try direct filesystem check first (more reliable for newly created files)
-		if _, err := os.Stat(absSpectrogramPath); err == nil {
-			getSpectrogramLogger().Debug("Spectrogram verified via direct filesystem check",
-				"abs_spectrogram_path", absSpectrogramPath,
-				"attempt", i+1)
-			statErr = nil
-			break
-		} else if !os.IsNotExist(err) {
-			// Unexpected error, don't retry
-			statErr = err
-			break
-		}
-
-		// If direct check failed, try via SecureFS (may work better after delay)
-		if _, statErr = c.SFS.StatRel(relSpectrogramPath); statErr == nil {
-			getSpectrogramLogger().Debug("Spectrogram verified via SecureFS",
-				"rel_spectrogram_path", relSpectrogramPath,
-				"attempt", i+1)
-			break
-		}
-
-		if !os.IsNotExist(statErr) {
-			// Unexpected error, don't retry
-			break
-		}
-
-		if i < spectrogramVerifyRetries-1 {
-			// Wait a bit for filesystem to sync (50ms, then 100ms)
-			time.Sleep(time.Duration((i+1)*spectrogramVerifyBaseDelay) * time.Millisecond)
-			getSpectrogramLogger().Debug("Retrying spectrogram verification",
-				"abs_path", absSpectrogramPath,
-				"rel_path", relSpectrogramPath,
-				"retry_attempt", i+1)
-		}
-	}
-
-	if statErr != nil {
-		// Double-check with direct filesystem access as last resort
-		if _, finalErr := os.Stat(absSpectrogramPath); finalErr == nil {
-			getSpectrogramLogger().Info("Spectrogram found via final direct check after SecureFS failed",
-				"abs_spectrogram_path", absSpectrogramPath)
-			// File exists, continue with success
-		} else {
-			getSpectrogramLogger().Error("Generated spectrogram missing after successful command",
-				"rel_spectrogram_path", relSpectrogramPath,
-				"abs_spectrogram_path", absSpectrogramPath,
-				"securefs_error", statErr,
-				"direct_check_error", finalErr)
-			return nil, fmt.Errorf("%w: spectrogram file missing after generation: %w",
-				ErrSpectrogramGeneration, statErr)
-		}
+	// Verify the spectrogram file exists with retries for filesystem sync delays
+	if err := c.verifySpectrogramFile(absSpectrogramPath, relSpectrogramPath); err != nil {
+		return nil, err
 	}
 
 	return spectrogramStatusGenerated, nil
+}
+
+// verifySpectrogramFile checks that a spectrogram file exists with retries for filesystem sync delays.
+// It tries direct filesystem and SecureFS checks with exponential backoff.
+func (c *Controller) verifySpectrogramFile(absPath, relPath string) error {
+	var statErr error
+	for i := range spectrogramVerifyRetries {
+		// Try direct filesystem check first (more reliable for newly created files)
+		if _, err := os.Stat(absPath); err == nil {
+			getSpectrogramLogger().Debug("Spectrogram verified via direct filesystem check",
+				"abs_spectrogram_path", absPath, "attempt", i+1)
+			return nil
+		} else if !os.IsNotExist(err) {
+			statErr = err
+			break // Unexpected error, don't retry
+		}
+
+		// Try SecureFS check (may work better after delay)
+		if _, statErr = c.SFS.StatRel(relPath); statErr == nil {
+			getSpectrogramLogger().Debug("Spectrogram verified via SecureFS",
+				"rel_spectrogram_path", relPath, "attempt", i+1)
+			return nil
+		}
+		if !os.IsNotExist(statErr) {
+			break // Unexpected error, don't retry
+		}
+
+		if i < spectrogramVerifyRetries-1 {
+			time.Sleep(time.Duration((i+1)*spectrogramVerifyBaseDelay) * time.Millisecond)
+			getSpectrogramLogger().Debug("Retrying spectrogram verification",
+				"abs_path", absPath, "rel_path", relPath, "retry_attempt", i+1)
+		}
+	}
+
+	// Final direct check as last resort
+	if _, finalErr := os.Stat(absPath); finalErr == nil {
+		getSpectrogramLogger().Info("Spectrogram found via final direct check after SecureFS failed",
+			"abs_spectrogram_path", absPath)
+		return nil
+	}
+
+	getSpectrogramLogger().Error("Generated spectrogram missing after successful command",
+		"rel_spectrogram_path", relPath, "abs_spectrogram_path", absPath, "securefs_error", statErr)
+	return fmt.Errorf("%w: spectrogram file missing after generation: %w", ErrSpectrogramGeneration, statErr)
 }
 
 // generateWithFallback attempts to generate a spectrogram with SoX, falling back to FFmpeg on failure

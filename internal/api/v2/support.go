@@ -315,50 +315,43 @@ func (c *Controller) cleanupOldSupportDumps() {
 	files, err := filepath.Glob(pattern)
 	if err != nil {
 		c.apiLogger.Error("Failed to list support dump files for cleanup",
-			"pattern", pattern,
-			"error", err,
-		)
+			"pattern", pattern, "error", err)
 		return
 	}
 
-	// Changed to 1 hour to clean up files more aggressively
 	cutoffTime := time.Now().Add(-1 * time.Hour)
 	removedCount := 0
 
 	for _, file := range files {
-		info, err := os.Stat(file)
-		if err != nil {
-			// File might have been already removed
-			if os.IsNotExist(err) {
-				continue
-			}
-			c.apiLogger.Warn("Failed to stat support dump file",
-				"path", file,
-				"error", err,
-			)
-			continue
-		}
-
-		// Remove files older than 1 hour
-		if info.ModTime().Before(cutoffTime) {
-			if err := os.Remove(file); err != nil {
-				// Check if file was already removed
-				if !os.IsNotExist(err) {
-					c.apiLogger.Warn("Failed to remove old support dump file",
-						"path", file,
-						"age", time.Since(info.ModTime()),
-						"error", err,
-					)
-				}
-			} else {
-				removedCount++
-			}
+		if c.tryRemoveOldFile(file, cutoffTime) {
+			removedCount++
 		}
 	}
 
 	if removedCount > 0 {
-		c.apiLogger.Info("Cleaned up old support dump files",
-			"count", removedCount,
-		)
+		c.apiLogger.Info("Cleaned up old support dump files", "count", removedCount)
 	}
+}
+
+// tryRemoveOldFile attempts to remove a file if it's older than cutoff.
+// Returns true if the file was successfully removed.
+func (c *Controller) tryRemoveOldFile(file string, cutoff time.Time) bool {
+	info, err := os.Stat(file)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			c.apiLogger.Warn("Failed to stat support dump file", "path", file, "error", err)
+		}
+		return false
+	}
+
+	if !info.ModTime().Before(cutoff) {
+		return false // File is not old enough
+	}
+
+	if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
+		c.apiLogger.Warn("Failed to remove old support dump file",
+			"path", file, "age", time.Since(info.ModTime()), "error", err)
+		return false
+	}
+	return true
 }

@@ -309,16 +309,12 @@ func (c *Controller) sendConnectionMessage(ctx echo.Context, clientID, message, 
 
 // logSSEConnection logs SSE client connection/disconnection events
 func (c *Controller) logSSEConnection(clientID, ip, userAgent, streamType string, connected bool) {
-	if c.apiLogger == nil {
-		return
-	}
-
 	action := SSEStatusConnected
 	if !connected {
 		action = SSEStatusDisconnected
 	}
 
-	c.apiLogger.Info(fmt.Sprintf("SSE %s client %s", streamType, action),
+	c.logInfoIfEnabled(fmt.Sprintf("SSE %s client %s", streamType, action),
 		"client_id", clientID,
 		"ip", ip,
 		"user_agent", userAgent,
@@ -336,12 +332,10 @@ func (c *Controller) sendSSEHeartbeat(ctx echo.Context, clientID, streamType str
 	}
 
 	if err := c.sendSSEMessage(ctx, "heartbeat", data); err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Debug("SSE heartbeat failed, client likely disconnected",
-				"client_id", clientID,
-				"error", err.Error(),
-			)
-		}
+		c.logDebugIfEnabled("SSE heartbeat failed, client likely disconnected",
+			"client_id", clientID,
+			"error", err.Error(),
+		)
 		return err
 	}
 	return nil
@@ -480,14 +474,10 @@ func (c *Controller) runSSEEventLoop(ctx echo.Context, client *SSEClient, client
 		case <-ticker.C:
 			// Send heartbeat
 			if err := c.sendSSEHeartbeat(ctx, clientID, heartbeatType); err != nil {
-				if c.metrics != nil && c.metrics.HTTP != nil {
-					c.metrics.HTTP.RecordSSEError(endpoint, "heartbeat_failed")
-				}
+				c.recordSSEError(endpoint, "heartbeat_failed")
 				return err
 			}
-			if c.metrics != nil && c.metrics.HTTP != nil {
-				c.metrics.HTTP.RecordSSEMessageSent(endpoint, "heartbeat")
-			}
+			c.recordSSEMessage(endpoint, "heartbeat")
 
 		case <-ctx.Request().Context().Done():
 			// Client disconnected
@@ -501,22 +491,16 @@ func (c *Controller) runSSEEventLoop(ctx echo.Context, client *SSEClient, client
 			// Check for data on the channel (non-blocking)
 			if data, hasData := dataReceiver(); hasData {
 				if err := c.sendSSEMessage(ctx, eventType, data); err != nil {
-					if c.apiLogger != nil {
-						c.apiLogger.Error("Failed to send SSE message",
-							"client_id", clientID,
-							"endpoint", endpoint,
-							"event_type", eventType,
-							"error", err.Error(),
-						)
-					}
-					if c.metrics != nil && c.metrics.HTTP != nil {
-						c.metrics.HTTP.RecordSSEError(endpoint, "send_failed")
-					}
+					c.logErrorIfEnabled("Failed to send SSE message",
+						"client_id", clientID,
+						"endpoint", endpoint,
+						"event_type", eventType,
+						"error", err.Error(),
+					)
+					c.recordSSEError(endpoint, "send_failed")
 					return err
 				}
-				if c.metrics != nil && c.metrics.HTTP != nil {
-					c.metrics.HTTP.RecordSSEMessageSent(endpoint, eventType)
-				}
+				c.recordSSEMessage(endpoint, eventType)
 			} else {
 				// Small sleep to prevent busy-waiting when no data
 				time.Sleep(sseEventLoopSleep)
@@ -541,9 +525,7 @@ func (c *Controller) sendSSEMessage(ctx echo.Context, event string, data any) er
 		deadline := time.Now().Add(sseWriteDeadline) // Write deadline timeout
 		if err := conn.SetWriteDeadline(deadline); err != nil {
 			// If we can't set deadline, log but continue - not all response writers support this
-			if c.apiLogger != nil {
-				c.apiLogger.Debug("Failed to set write deadline for SSE message", "error", err.Error())
-			}
+			c.logDebugIfEnabled("Failed to set write deadline for SSE message", "error", err.Error())
 		}
 	}
 
@@ -583,15 +565,11 @@ func (c *Controller) BroadcastDetection(note *datastore.Note, birdImage *imagepr
 
 	// Add nil checks to prevent panic
 	if note == nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("SSE broadcast skipped: note is nil")
-		}
+		c.logErrorIfEnabled("SSE broadcast skipped: note is nil")
 		return fmt.Errorf("note is nil")
 	}
 	if birdImage == nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("SSE broadcast skipped: birdImage is nil")
-		}
+		c.logErrorIfEnabled("SSE broadcast skipped: birdImage is nil")
 		return fmt.Errorf("birdImage is nil")
 	}
 
@@ -621,9 +599,7 @@ func (c *Controller) BroadcastSoundLevel(soundLevel *myaudio.SoundLevelData) err
 
 	// Add nil check to prevent panic
 	if soundLevel == nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("SSE broadcast skipped: soundLevel is nil")
-		}
+		c.logErrorIfEnabled("SSE broadcast skipped: soundLevel is nil")
 		return fmt.Errorf("soundLevel is nil")
 	}
 

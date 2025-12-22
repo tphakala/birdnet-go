@@ -240,17 +240,15 @@ func TestController_processNotificationEvent(t *testing.T) {
 	}
 }
 
-func TestController_setNotificationSSEHeaders(t *testing.T) {
+func Test_setSSEHeaders(t *testing.T) {
 	t.Parallel()
-
-	c := mockController()
 
 	e := echo.New()
 	req := httptest.NewRequest("GET", "/test", http.NoBody)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 
-	c.setNotificationSSEHeaders(ctx)
+	setSSEHeaders(ctx)
 
 	expectedHeaders := map[string]string{
 		"Content-Type":                 "text/event-stream",
@@ -263,7 +261,7 @@ func TestController_setNotificationSSEHeaders(t *testing.T) {
 	for key, expectedValue := range expectedHeaders {
 		actualValue := rec.Header().Get(key)
 		if actualValue != expectedValue {
-			t.Errorf("setNotificationSSEHeaders() header %q = %q, want %q", key, actualValue, expectedValue)
+			t.Errorf("setSSEHeaders() header %q = %q, want %q", key, actualValue, expectedValue)
 		}
 	}
 }

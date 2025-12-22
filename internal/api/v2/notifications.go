@@ -36,11 +36,27 @@ const (
 
 // Test notification constants
 const (
-	testNotificationConfidence    = 0.99    // Test confidence value for new species notification
-	testNotificationLatitude      = 42.3601 // Test latitude (Boston, MA) for new species notification
-	testNotificationLongitude     = -71.0589 // Test longitude (Boston, MA) for new species notification
-	newSpeciesNotificationExpiry  = 24      // Hours until new species notification expires
+	testNotificationConfidence   = 0.99     // Test confidence value for new species notification
+	testNotificationLatitude     = 42.3601  // Test latitude (Boston, MA) for new species notification
+	testNotificationLongitude    = -71.0589 // Test longitude (Boston, MA) for new species notification
+	newSpeciesNotificationExpiry = 24       // Hours until new species notification expires
 )
+
+// renderTemplateWithDefault renders a template, returning the default value if template is empty
+// or rendering fails. Logs errors if logError is provided.
+func renderTemplateWithDefault(name, template, defaultVal string, data *notification.TemplateData, logError func(string, ...any)) string {
+	if template == "" {
+		return "" // Empty template = user wants empty value
+	}
+	result, err := notification.RenderTemplate(name, template, data)
+	if err != nil {
+		if logError != nil {
+			logError("failed to render "+name+" template, using default", "error", err)
+		}
+		return defaultVal
+	}
+	return result
+}
 
 // SSENotificationData represents notification data sent via SSE
 type SSENotificationData struct {
@@ -66,6 +82,43 @@ type NotificationClient struct {
 	Done         chan struct{} // Signal-only channel for shutdown notification
 	SubscriberCh <-chan *notification.Notification
 	Context      context.Context
+}
+
+// notificationAction represents a notification service operation
+type notificationAction struct {
+	operation      func(service *notification.Service, id string) error
+	errorLogMsg    string
+	errorRespMsg   string
+	successRespMsg string
+}
+
+// executeNotificationAction handles the common pattern for notification operations:
+// check service initialization, validate ID, execute operation, handle errors.
+func (c *Controller) executeNotificationAction(ctx echo.Context, action notificationAction) error {
+	if !notification.IsInitialized() {
+		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
+			"error": "Notification service not available",
+		})
+	}
+
+	id := ctx.Param("id")
+	if id == "" {
+		return ctx.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Notification ID is required",
+		})
+	}
+
+	service := notification.GetService()
+	if err := action.operation(service, id); err != nil {
+		c.logErrorIfEnabled(action.errorLogMsg, "error", err, "id", id)
+		return ctx.JSON(http.StatusInternalServerError, map[string]string{
+			"error": action.errorRespMsg,
+		})
+	}
+
+	return ctx.JSON(http.StatusOK, map[string]string{
+		"message": action.successRespMsg,
+	})
 }
 
 // initNotificationRoutes registers notification-related routes
@@ -169,7 +222,7 @@ func (c *Controller) StreamNotifications(ctx echo.Context) error {
 // setupNotificationSSEClient initializes the SSE client and establishes connection
 func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*NotificationClient, *notification.Service, error) {
 	// Set SSE headers
-	c.setNotificationSSEHeaders(ctx)
+	setSSEHeaders(ctx)
 
 	// Generate client ID
 	clientID := uuid.New().String()
@@ -206,15 +259,6 @@ func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*Notification
 	c.logNotificationConnection(clientID, ctx.RealIP(), ctx.Request().UserAgent(), true)
 
 	return client, service, nil
-}
-
-// setNotificationSSEHeaders sets the required headers for notification SSE
-func (c *Controller) setNotificationSSEHeaders(ctx echo.Context) {
-	ctx.Response().Header().Set("Content-Type", "text/event-stream")
-	ctx.Response().Header().Set("Cache-Control", "no-cache")
-	ctx.Response().Header().Set("Connection", "keep-alive")
-	ctx.Response().Header().Set("Access-Control-Allow-Origin", "*")
-	ctx.Response().Header().Set("Access-Control-Allow-Headers", "Cache-Control")
 }
 
 // setupNotificationDisconnectHandler sets up client disconnect handling with timeout
@@ -264,14 +308,10 @@ func (c *Controller) runNotificationEventLoop(ctx echo.Context, client *Notifica
 			}
 			// Send heartbeat
 			if err := c.sendNotificationHeartbeat(ctx); err != nil {
-				if c.metrics != nil && c.metrics.HTTP != nil {
-					c.metrics.HTTP.RecordSSEError(sseEndpoint, "heartbeat_failed")
-				}
+				c.recordSSEError(sseEndpoint, "heartbeat_failed")
 				return err
 			}
-			if c.metrics != nil && c.metrics.HTTP != nil {
-				c.metrics.HTTP.RecordSSEMessageSent(sseEndpoint, "heartbeat")
-			}
+			c.recordSSEMessage(sseEndpoint, "heartbeat")
 
 		case <-client.Done:
 			// Client disconnected
@@ -302,15 +342,11 @@ func (c *Controller) sendToastEvent(ctx echo.Context, clientID string, notif *no
 
 	if err := c.sendSSEMessage(ctx, "toast", toastEvent); err != nil {
 		c.logNotificationError("failed to send toast SSE", err, clientID)
-		if c.metrics != nil && c.metrics.HTTP != nil {
-			c.metrics.HTTP.RecordSSEError(sseEndpoint, "send_failed")
-		}
+		c.recordSSEError(sseEndpoint, "send_failed")
 		return err
 	}
 
-	if c.metrics != nil && c.metrics.HTTP != nil {
-		c.metrics.HTTP.RecordSSEMessageSent(sseEndpoint, "toast")
-	}
+	c.recordSSEMessage(sseEndpoint, "toast")
 	c.logToastSent(clientID, notif)
 	return nil
 }
@@ -324,15 +360,11 @@ func (c *Controller) sendNotificationEvent(ctx echo.Context, clientID string, no
 
 	if err := c.sendSSEMessage(ctx, "notification", event); err != nil {
 		c.logNotificationError("failed to send notification SSE", err, clientID)
-		if c.metrics != nil && c.metrics.HTTP != nil {
-			c.metrics.HTTP.RecordSSEError(sseEndpoint, "send_failed")
-		}
+		c.recordSSEError(sseEndpoint, "send_failed")
 		return err
 	}
 
-	if c.metrics != nil && c.metrics.HTTP != nil {
-		c.metrics.HTTP.RecordSSEMessageSent(sseEndpoint, "notification")
-	}
+	c.recordSSEMessage(sseEndpoint, "notification")
 	c.logNotificationSent(clientID, notif)
 	return nil
 }
@@ -370,22 +402,18 @@ func (c *Controller) sendNotificationHeartbeat(ctx echo.Context) error {
 
 // logNotificationConnection logs SSE client connection/disconnection events
 func (c *Controller) logNotificationConnection(clientID, ip, userAgent string, connected bool) {
-	if c.apiLogger == nil {
-		return
-	}
-
 	action := "connected"
 	if !connected {
 		action = "disconnected"
 	}
 
 	if c.Settings != nil && c.Settings.WebServer.Debug && connected {
-		c.apiLogger.Debug("notification SSE client "+action,
+		c.logDebugIfEnabled("notification SSE client "+action,
 			"clientId", clientID,
 			"ip", privacy.AnonymizeIP(ip),
 			"user_agent", privacy.RedactUserAgent(userAgent))
 	} else {
-		c.apiLogger.Info("notification SSE client "+action,
+		c.logInfoIfEnabled("notification SSE client "+action,
 			"clientId", clientID,
 			"ip", privacy.AnonymizeIP(ip))
 	}
@@ -393,16 +421,14 @@ func (c *Controller) logNotificationConnection(clientID, ip, userAgent string, c
 
 // logNotificationError logs SSE errors
 func (c *Controller) logNotificationError(message string, err error, clientID string) {
-	if c.apiLogger != nil {
-		c.apiLogger.Error(message, "error", err, "clientId", clientID)
-	}
+	c.logErrorIfEnabled(message, "error", err, "clientId", clientID)
 }
 
 // logToastSent logs successful toast sending
 func (c *Controller) logToastSent(clientID string, notif *notification.Notification) {
-	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+	if c.Settings != nil && c.Settings.WebServer.Debug {
 		toastType, _ := notif.Metadata["toastType"].(string)
-		c.apiLogger.Debug("toast sent via SSE",
+		c.logDebugIfEnabled("toast sent via SSE",
 			"clientId", clientID,
 			"toast_id", notif.Metadata["toastId"],
 			"type", toastType,
@@ -412,8 +438,8 @@ func (c *Controller) logToastSent(clientID string, notif *notification.Notificat
 
 // logNotificationSent logs successful notification sending
 func (c *Controller) logNotificationSent(clientID string, notif *notification.Notification) {
-	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
-		c.apiLogger.Debug("notification sent via SSE",
+	if c.Settings != nil && c.Settings.WebServer.Debug {
+		c.logDebugIfEnabled("notification sent via SSE",
 			"clientId", clientID,
 			"notification_id", notif.ID,
 			"type", notif.Type,
@@ -465,8 +491,8 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 		}
 	}
 
-	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
-		c.apiLogger.Debug("listing notifications",
+	if c.Settings != nil && c.Settings.WebServer.Debug {
+		c.logDebugIfEnabled("listing notifications",
 			"status", filter.Status,
 			"types", filter.Types,
 			"priorities", filter.Priorities,
@@ -477,21 +503,19 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 	// Get notifications
 	notifications, err := service.List(filter)
 	if err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("failed to list notifications", "error", err)
-		}
+		c.logErrorIfEnabled("failed to list notifications", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to retrieve notifications",
 		})
 	}
 
-	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
+	if c.Settings != nil && c.Settings.WebServer.Debug {
 		unreadCount, err := service.GetUnreadCount()
 		if err != nil {
-			c.apiLogger.Error("failed to get unread count", "error", err)
+			c.logErrorIfEnabled("failed to get unread count", "error", err)
 			unreadCount = -1 // Indicate error in debug log
 		}
-		c.apiLogger.Debug("notifications retrieved",
+		c.logDebugIfEnabled("notifications retrieved",
 			"count", len(notifications),
 			"total_unread", unreadCount)
 	}
@@ -527,9 +551,7 @@ func (c *Controller) GetNotification(ctx echo.Context) error {
 				"error": "Notification not found",
 			})
 		}
-		if c.apiLogger != nil {
-			c.apiLogger.Error("failed to get notification", "error", err, "id", id)
-		}
+		c.logErrorIfEnabled("failed to get notification", "error", err, "id", id)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to retrieve notification",
 		})
@@ -556,16 +578,14 @@ func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
 	service := notification.GetService()
 
 	if err := service.MarkAsRead(id); err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("failed to mark notification as read", "error", err, "id", id)
-		}
+		c.logErrorIfEnabled("failed to mark notification as read", "error", err, "id", id)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to mark notification as read",
 		})
 	}
 
-	if c.apiLogger != nil && c.Settings != nil && c.Settings.WebServer.Debug {
-		c.apiLogger.Debug("notification marked as read", "id", id)
+	if c.Settings != nil && c.Settings.WebServer.Debug {
+		c.logDebugIfEnabled("notification marked as read", "id", id)
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]string{
@@ -575,61 +595,21 @@ func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
 
 // MarkNotificationAcknowledged marks a notification as acknowledged
 func (c *Controller) MarkNotificationAcknowledged(ctx echo.Context) error {
-	if !notification.IsInitialized() {
-		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
-			"error": "Notification service not available",
-		})
-	}
-
-	id := ctx.Param("id")
-	if id == "" {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Notification ID is required",
-		})
-	}
-
-	service := notification.GetService()
-	if err := service.MarkAsAcknowledged(id); err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("failed to mark notification as acknowledged", "error", err, "id", id)
-		}
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Failed to mark notification as acknowledged",
-		})
-	}
-
-	return ctx.JSON(http.StatusOK, map[string]string{
-		"message": "Notification marked as acknowledged",
+	return c.executeNotificationAction(ctx, notificationAction{
+		operation:      func(s *notification.Service, id string) error { return s.MarkAsAcknowledged(id) },
+		errorLogMsg:    "failed to mark notification as acknowledged",
+		errorRespMsg:   "Failed to mark notification as acknowledged",
+		successRespMsg: "Notification marked as acknowledged",
 	})
 }
 
 // DeleteNotification deletes a notification
 func (c *Controller) DeleteNotification(ctx echo.Context) error {
-	if !notification.IsInitialized() {
-		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
-			"error": "Notification service not available",
-		})
-	}
-
-	id := ctx.Param("id")
-	if id == "" {
-		return ctx.JSON(http.StatusBadRequest, map[string]string{
-			"error": "Notification ID is required",
-		})
-	}
-
-	service := notification.GetService()
-	if err := service.Delete(id); err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("failed to delete notification", "error", err, "id", id)
-		}
-		return ctx.JSON(http.StatusInternalServerError, map[string]string{
-			"error": "Failed to delete notification",
-		})
-	}
-
-	return ctx.JSON(http.StatusOK, map[string]string{
-		"message": "Notification deleted",
+	return c.executeNotificationAction(ctx, notificationAction{
+		operation:      func(s *notification.Service, id string) error { return s.Delete(id) },
+		errorLogMsg:    "failed to delete notification",
+		errorRespMsg:   "Failed to delete notification",
+		successRespMsg: "Notification deleted",
 	})
 }
 
@@ -644,9 +624,7 @@ func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 	service := notification.GetService()
 	count, err := service.GetUnreadCount()
 	if err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("failed to get unread count", "error", err)
-		}
+		c.logErrorIfEnabled("failed to get unread count", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to get unread count",
 		})
@@ -703,51 +681,16 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 		DaysSinceFirstSeen: 0,
 	}
 
-	// Get templates from settings
-	titleTemplate := c.Settings.Notification.Templates.NewSpecies.Title
-	messageTemplate := c.Settings.Notification.Templates.NewSpecies.Message
+	// Render notification using templates with defaults
+	title := renderTemplateWithDefault("title",
+		c.Settings.Notification.Templates.NewSpecies.Title,
+		"New Species: Test Bird Species",
+		testTemplateData, c.logErrorIfEnabled)
 
-	// Render notification using templates (same pattern as detection_consumer.go)
-	var title, message string
-	var titleSet, messageSet bool
-
-	if titleTemplate != "" {
-		var err error
-		title, err = notification.RenderTemplate("title", titleTemplate, testTemplateData)
-		if err != nil {
-			if c.apiLogger != nil {
-				c.apiLogger.Error("failed to render title template, using default", "error", err)
-			}
-		} else {
-			titleSet = true
-		}
-	} else {
-		// Empty template means user wants no title
-		titleSet = true
-	}
-
-	if messageTemplate != "" {
-		var err error
-		message, err = notification.RenderTemplate("message", messageTemplate, testTemplateData)
-		if err != nil {
-			if c.apiLogger != nil {
-				c.apiLogger.Error("failed to render message template, using default", "error", err)
-			}
-		} else {
-			messageSet = true
-		}
-	} else {
-		// Empty template means user wants no message
-		messageSet = true
-	}
-
-	// Use defaults only if template rendering failed
-	if !titleSet {
-		title = "New Species: Test Bird Species"
-	}
-	if !messageSet {
-		message = "First detection of Test Bird Species (Testus birdicus) at Fake Test Location"
-	}
+	message := renderTemplateWithDefault("message",
+		c.Settings.Notification.Templates.NewSpecies.Message,
+		"First detection of Test Bird Species (Testus birdicus) at Fake Test Location",
+		testTemplateData, c.logErrorIfEnabled)
 
 	testNotification := notification.NewNotification(notification.TypeDetection, notification.PriorityHigh, title, message).
 		WithComponent("detection").
@@ -767,16 +710,14 @@ func (c *Controller) CreateTestNewSpeciesNotification(ctx echo.Context) error {
 
 	// Use CreateWithMetadata to persist and broadcast
 	if err := service.CreateWithMetadata(testNotification); err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("failed to create test notification", "error", err)
-		}
+		c.logErrorIfEnabled("failed to create test notification", "error", err)
 		return ctx.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to create test notification",
 		})
 	}
 
-	if c.apiLogger != nil && c.Settings.WebServer.Debug {
-		c.apiLogger.Debug("test new species notification created",
+	if c.Settings != nil && c.Settings.WebServer.Debug {
+		c.logDebugIfEnabled("test new species notification created",
 			"notification_id", testNotification.ID,
 			"species", testTemplateData.CommonName,
 			"rendered_title", title,

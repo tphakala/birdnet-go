@@ -26,6 +26,68 @@ const (
 // rangeFilterMutex protects against concurrent modifications to global settings during testing
 var rangeFilterMutex sync.Mutex
 
+// validateRangeFilterRequest validates the range filter test request parameters.
+// Returns user-facing error messages with capitalized first letter for API responses.
+func validateRangeFilterRequest(req *RangeFilterTestRequest) error {
+	if req.Latitude < -90 || req.Latitude > 90 {
+		return fmt.Errorf("Latitude must be between -90 and 90") //nolint:staticcheck // user-facing API message
+	}
+	if req.Longitude < -180 || req.Longitude > 180 {
+		return fmt.Errorf("Longitude must be between -180 and 180") //nolint:staticcheck // user-facing API message
+	}
+	if req.Threshold < 0 || req.Threshold > 1 {
+		return fmt.Errorf("Threshold must be between 0 and 1") //nolint:staticcheck // user-facing API message
+	}
+	return nil
+}
+
+// parseTestDate parses the date from request or returns current time.
+func parseTestDate(dateStr string) (time.Time, error) {
+	if dateStr == "" {
+		return time.Now(), nil
+	}
+	return time.Parse("2006-01-02", dateStr)
+}
+
+// calculateWeek calculates the BirdNET week number from a date.
+// BirdNET uses a custom 48-week year with 4 weeks per month.
+func calculateWeek(date time.Time) float32 {
+	month := int(date.Month())
+	day := date.Day()
+	weeksFromMonths := (month - 1) * weeksPerMonth
+	weekInMonth := (day-1)/daysPerWeek + 1
+	return float32(weeksFromMonths + weekInMonth)
+}
+
+// getBirdNETInstance returns the BirdNET instance or an error if unavailable.
+func (c *Controller) getBirdNETInstance() (*birdnet.BirdNET, error) {
+	if c.Processor == nil {
+		return nil, fmt.Errorf("BirdNET processor not available")
+	}
+	instance := c.Processor.GetBirdNET()
+	if instance == nil {
+		return nil, fmt.Errorf("BirdNET instance not available")
+	}
+	return instance, nil
+}
+
+// swapRangeFilterSettings temporarily sets range filter settings and returns a restore function.
+func (c *Controller) swapRangeFilterSettings(lat, lon float64, threshold float32) func() {
+	originalLat := c.Settings.BirdNET.Latitude
+	originalLon := c.Settings.BirdNET.Longitude
+	originalThreshold := c.Settings.BirdNET.RangeFilter.Threshold
+
+	c.Settings.BirdNET.Latitude = lat
+	c.Settings.BirdNET.Longitude = lon
+	c.Settings.BirdNET.RangeFilter.Threshold = threshold
+
+	return func() {
+		c.Settings.BirdNET.Latitude = originalLat
+		c.Settings.BirdNET.Longitude = originalLon
+		c.Settings.BirdNET.RangeFilter.Threshold = originalThreshold
+	}
+}
+
 // Location represents geographic coordinates
 type Location struct {
 	Latitude  float64 `json:"latitude"`
@@ -177,72 +239,35 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
 	}
 
-	// Basic validation
-	if req.Latitude < -90 || req.Latitude > 90 {
-		return c.HandleError(ctx, nil, "Latitude must be between -90 and 90", http.StatusBadRequest)
-	}
-	if req.Longitude < -180 || req.Longitude > 180 {
-		return c.HandleError(ctx, nil, "Longitude must be between -180 and 180", http.StatusBadRequest)
-	}
-	if req.Threshold < 0 || req.Threshold > 1 {
-		return c.HandleError(ctx, nil, "Threshold must be between 0 and 1", http.StatusBadRequest)
+	// Validate request parameters
+	if err := validateRangeFilterRequest(&req); err != nil {
+		return c.HandleError(ctx, err, err.Error(), http.StatusBadRequest)
 	}
 
-	// Parse date if provided
-	var testDate time.Time
-	var err error
-	if req.Date != "" {
-		testDate, err = time.Parse("2006-01-02", req.Date)
-		if err != nil {
-			return c.HandleError(ctx, err, "Date must be in YYYY-MM-DD format", http.StatusBadRequest)
-		}
-	} else {
-		testDate = time.Now()
+	// Parse date
+	testDate, err := parseTestDate(req.Date)
+	if err != nil {
+		return c.HandleError(ctx, err, "Date must be in YYYY-MM-DD format", http.StatusBadRequest)
 	}
 
 	// Check if processor and BirdNET are available
-	if c.Processor == nil {
-		return c.HandleError(ctx, nil, "BirdNET processor not available", http.StatusInternalServerError)
-	}
-
-	birdnetInstance := c.Processor.GetBirdNET()
-	if birdnetInstance == nil {
-		return c.HandleError(ctx, nil, "BirdNET instance not available", http.StatusInternalServerError)
+	birdnetInstance, err := c.getBirdNETInstance()
+	if err != nil {
+		return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
 	}
 
 	// Use mutex to protect against concurrent modifications to global settings
 	rangeFilterMutex.Lock()
 	defer rangeFilterMutex.Unlock()
 
-	// Store original values from controller settings
-	originalLat := c.Settings.BirdNET.Latitude
-	originalLon := c.Settings.BirdNET.Longitude
-	originalThreshold := c.Settings.BirdNET.RangeFilter.Threshold
-
-	// Temporarily set test values in controller settings
-	c.Settings.BirdNET.Latitude = req.Latitude
-	c.Settings.BirdNET.Longitude = req.Longitude
-	c.Settings.BirdNET.RangeFilter.Threshold = req.Threshold
-
-	// Restore original settings after testing
-	defer func() {
-		c.Settings.BirdNET.Latitude = originalLat
-		c.Settings.BirdNET.Longitude = originalLon
-		c.Settings.BirdNET.RangeFilter.Threshold = originalThreshold
-	}()
+	// Temporarily swap settings for testing
+	restore := c.swapRangeFilterSettings(req.Latitude, req.Longitude, req.Threshold)
+	defer restore()
 
 	// Calculate week if not provided
 	week := req.Week
 	if week == 0 {
-		// BirdNET range filter model expects a custom week numbering system where each month
-		// has exactly 4 weeks, totaling 48 weeks per year instead of the standard 52 weeks.
-		// This is the expected format for the ML model and must be used consistently.
-		// Use the same calculation as in range_filter.go
-		month := int(testDate.Month())
-		day := testDate.Day()
-		weeksFromMonths := (month - 1) * weeksPerMonth
-		weekInMonth := (day-1)/daysPerWeek + 1
-		week = float32(weeksFromMonths + weekInMonth)
+		week = calculateWeek(testDate)
 	}
 
 	// Get probable species for the test parameters
@@ -413,44 +438,23 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 
 // getTestSpeciesList gets species list with test parameters (helper for CSV export)
 func (c *Controller) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilterSpecies, Location, float32, error) {
-	// Check if processor and BirdNET are available
-	if c.Processor == nil {
-		return nil, Location{}, 0, fmt.Errorf("BirdNET processor not available")
+	// Check if BirdNET is available
+	birdnetInstance, err := c.getBirdNETInstance()
+	if err != nil {
+		return nil, Location{}, 0, err
 	}
-	
-	birdnetInstance := c.Processor.GetBirdNET()
-	if birdnetInstance == nil {
-		return nil, Location{}, 0, fmt.Errorf("BirdNET instance not available")
-	}
-	
+
 	// Use mutex to protect against concurrent modifications to global settings
 	rangeFilterMutex.Lock()
 	defer rangeFilterMutex.Unlock()
-	
-	// Store original values from controller settings
-	originalLat := c.Settings.BirdNET.Latitude
-	originalLon := c.Settings.BirdNET.Longitude
-	originalThreshold := c.Settings.BirdNET.RangeFilter.Threshold
-	
-	// Temporarily set test values in controller settings
-	c.Settings.BirdNET.Latitude = req.Latitude
-	c.Settings.BirdNET.Longitude = req.Longitude
-	c.Settings.BirdNET.RangeFilter.Threshold = req.Threshold
-	
-	// Restore original settings after testing
-	defer func() {
-		c.Settings.BirdNET.Latitude = originalLat
-		c.Settings.BirdNET.Longitude = originalLon
-		c.Settings.BirdNET.RangeFilter.Threshold = originalThreshold
-	}()
-	
+
+	// Temporarily set test values and restore after testing
+	restore := c.swapRangeFilterSettings(req.Latitude, req.Longitude, req.Threshold)
+	defer restore()
+
 	// Use current date and calculate week
 	testDate := time.Now()
-	month := int(testDate.Month())
-	day := testDate.Day()
-	weeksFromMonths := (month - 1) * weeksPerMonth
-	weekInMonth := (day-1)/daysPerWeek + 1
-	week := float32(weeksFromMonths + weekInMonth)
+	week := calculateWeek(testDate)
 	
 	// Get probable species for the test parameters
 	speciesScores, err := birdnetInstance.GetProbableSpecies(testDate, week)
@@ -576,18 +580,14 @@ func parseFloat32(s string) (float32, error) {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/rebuild [post]
 func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
-	// Check if processor and BirdNET are available
-	if c.Processor == nil {
-		return c.HandleError(ctx, nil, "BirdNET processor not available", http.StatusInternalServerError)
-	}
-
-	birdnetInstance := c.Processor.GetBirdNET()
-	if birdnetInstance == nil {
-		return c.HandleError(ctx, nil, "BirdNET instance not available", http.StatusInternalServerError)
+	// Check if BirdNET is available
+	birdnetInstance, err := c.getBirdNETInstance()
+	if err != nil {
+		return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
 	}
 
 	// Rebuild the range filter
-	err := birdnet.BuildRangeFilter(birdnetInstance)
+	err = birdnet.BuildRangeFilter(birdnetInstance)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to rebuild range filter", http.StatusInternalServerError)
 	}

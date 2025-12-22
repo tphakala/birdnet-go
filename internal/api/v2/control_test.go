@@ -320,29 +320,13 @@ func TestInitControlRoutesRegistration(t *testing.T) {
 	// Re-initialize the routes to ensure a clean state
 	controller.initControlRoutes()
 
-	// Get all routes from the Echo instance
-	routes := e.Routes()
-
-	// Define the control routes we expect to find
-	expectedRoutes := map[string]bool{
-		"GET /api/v2/control/actions":         false,
-		"POST /api/v2/control/restart":        false,
-		"POST /api/v2/control/reload":         false,
-		"POST /api/v2/control/rebuild-filter": false,
-	}
-
-	// Check each route
-	for _, r := range routes {
-		routePath := r.Method + " " + r.Path
-		if _, exists := expectedRoutes[routePath]; exists {
-			expectedRoutes[routePath] = true
-		}
-	}
-
-	// Verify that all expected routes were registered
-	for route, found := range expectedRoutes {
-		assert.True(t, found, "Control route not registered: %s", route)
-	}
+	// Verify expected control routes are registered
+	assertRoutesRegistered(t, e, []string{
+		"GET /api/v2/control/actions",
+		"POST /api/v2/control/restart",
+		"POST /api/v2/control/reload",
+		"POST /api/v2/control/rebuild-filter",
+	})
 }
 
 // TestControlResultStructure verifies the ControlResult struct works as expected

@@ -35,9 +35,7 @@ type BrowseResponse struct {
 
 // initFileSystemRoutes registers all filesystem-related API endpoints
 func (c *Controller) initFileSystemRoutes() {
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Initializing filesystem routes")
-	}
+	c.logInfoIfEnabled("Initializing filesystem routes")
 
 	// Create filesystem API group with authentication
 	fsGroup := c.Group.Group("/filesystem", c.authMiddleware)
@@ -45,118 +43,122 @@ func (c *Controller) initFileSystemRoutes() {
 	// GET /api/v2/filesystem/browse - Browse files and directories
 	fsGroup.GET("/browse", c.BrowseFileSystem)
 
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Filesystem routes initialized")
-	}
+	c.logInfoIfEnabled("Filesystem routes initialized")
 }
 
-// BrowseFileSystem lists files and directories in the specified path
-func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
-	var req BrowseRequest
-	if err := ctx.Bind(&req); err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Failed to bind browse request",
-				"error", err.Error(),
-				"path", ctx.Request().URL.Path,
-				"ip", ctx.RealIP(),
-			)
-		}
-		return c.HandleError(ctx, err, "Invalid request parameters", http.StatusBadRequest)
-	}
+// browsePathResult holds validated path information for browsing.
+type browsePathResult struct {
+	browsePath string
+	relPath    string
+}
 
+// validateBrowsePath validates and normalizes the browse path, checking security constraints.
+// Returns the validated path info or an error with appropriate HTTP status code.
+func (c *Controller) validateBrowsePath(reqPath string) (browsePathResult, error) {
 	// Default to base directory if no path specified
-	browsePath := req.Path
+	browsePath := reqPath
 	if browsePath == "" {
-		// Use SecureFS base directory as default
 		browsePath = c.SFS.BaseDir()
 	}
 
 	// Convert to relative path and validate using SecureFS
 	relPath, err := c.SFS.RelativePath(browsePath)
 	if err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Warn("Invalid or unsafe path requested",
-				"requested_path", req.Path,
-				"error", err.Error(),
-				"ip", ctx.RealIP(),
-			)
-		}
-		return c.HandleError(ctx, err, "Invalid or unsafe path", http.StatusBadRequest)
+		return browsePathResult{}, fmt.Errorf("invalid or unsafe path: %w", err)
 	}
 
-	// Check for symlinks and validate targets
+	// Check for symlinks and validate targets using Lstat
 	info, err := c.SFS.Lstat(browsePath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return c.HandleError(ctx, err, "Path does not exist", http.StatusNotFound)
-		}
-		return c.HandleError(ctx, err, "Unable to access path", http.StatusForbidden)
+		return browsePathResult{}, err
 	}
 
-	// If it's a symlink, validate the target
+	// If it's a symlink, validate the target and get target info
 	if info.Mode()&os.ModeSymlink != 0 {
 		if err := c.validateSymlinkTarget(browsePath); err != nil {
-			if c.apiLogger != nil {
-				c.apiLogger.Warn("Symlink target validation failed",
-					"symlink_path", browsePath,
-					"error", err.Error(),
-					"ip", ctx.RealIP(),
-				)
-			}
-			return c.HandleError(ctx, err, "Symlink target not allowed", http.StatusForbidden)
+			return browsePathResult{}, fmt.Errorf("symlink target not allowed: %w", err)
+		}
+		// Use Stat to get info about the symlink target (not the symlink itself)
+		info, err = c.SFS.Stat(browsePath)
+		if err != nil {
+			return browsePathResult{}, fmt.Errorf("failed to stat symlink target: %w", err)
 		}
 	}
 
-	// Ensure it's a directory
+	// Ensure it's a directory (now correctly checks target for symlinks)
 	if !info.IsDir() {
-		return c.HandleError(ctx, fmt.Errorf("not a directory"), "Path is not a directory", http.StatusBadRequest)
+		return browsePathResult{}, fmt.Errorf("path is not a directory")
+	}
+
+	return browsePathResult{browsePath: browsePath, relPath: relPath}, nil
+}
+
+// BrowseFileSystem lists files and directories in the specified path
+func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
+	var req BrowseRequest
+	if err := ctx.Bind(&req); err != nil {
+		c.logErrorIfEnabled("Failed to bind browse request",
+			"error", err.Error(),
+			"path", ctx.Request().URL.Path,
+			"ip", ctx.RealIP(),
+		)
+		return c.HandleError(ctx, err, "Invalid request parameters", http.StatusBadRequest)
+	}
+
+	// Validate and normalize the browse path
+	pathResult, err := c.validateBrowsePath(req.Path)
+	if err != nil {
+		status := http.StatusBadRequest
+		if os.IsNotExist(err) {
+			status = http.StatusNotFound
+		} else if os.IsPermission(err) {
+			status = http.StatusForbidden
+		}
+		c.logWarnIfEnabled("Path validation failed",
+			"requested_path", req.Path,
+			"error", err.Error(),
+			"ip", ctx.RealIP(),
+		)
+		return c.HandleError(ctx, err, err.Error(), status)
 	}
 
 	// Read directory contents using SecureFS
-	entries, err := c.SFS.ReadDir(browsePath)
+	entries, err := c.SFS.ReadDir(pathResult.browsePath)
 	if err != nil {
-		if c.apiLogger != nil {
-			c.apiLogger.Error("Failed to read directory",
-				"path", browsePath,
-				"error", err.Error(),
-				"ip", ctx.RealIP(),
-			)
-		}
+		c.logErrorIfEnabled("Failed to read directory",
+			"path", pathResult.browsePath,
+			"error", err.Error(),
+			"ip", ctx.RealIP(),
+		)
 		return c.HandleError(ctx, err, "Unable to read directory", http.StatusForbidden)
 	}
 
 	// Convert to response format
 	items := make([]FileSystemItem, 0, len(entries))
 	for _, entry := range entries {
-		item, err := c.convertDirEntryToItem(browsePath, entry)
+		item, err := c.convertDirEntryToItem(pathResult.browsePath, entry)
 		if err != nil {
-			// Log error but continue with other files
-			if c.apiLogger != nil {
-				c.apiLogger.Debug("Skipping file due to error",
-					"file", entry.Name(),
-					"directory", browsePath,
-					"error", err.Error(),
-				)
-			}
+			c.logDebugIfEnabled("Skipping file due to error",
+				"file", entry.Name(),
+				"directory", pathResult.browsePath,
+				"error", err.Error(),
+			)
 			continue
 		}
 		items = append(items, item)
 	}
 
 	// Determine parent path securely using SecureFS
-	parentPath, err := c.SFS.ParentPath(browsePath)
+	parentPath, err := c.SFS.ParentPath(pathResult.browsePath)
 	if err != nil {
-		// Log error but continue - parent path is optional
-		if c.apiLogger != nil {
-			c.apiLogger.Debug("Failed to get parent path", "path", browsePath, "error", err.Error())
-		}
+		c.logDebugIfEnabled("Failed to get parent path", "path", pathResult.browsePath, "error", err.Error())
 		parentPath = ""
 	}
 
 	// Get the current absolute path for response
-	currentPath := browsePath
+	currentPath := pathResult.browsePath
 	if !filepath.IsAbs(currentPath) {
-		currentPath = filepath.Join(c.SFS.BaseDir(), relPath)
+		currentPath = filepath.Join(c.SFS.BaseDir(), pathResult.relPath)
 	}
 
 	response := BrowseResponse{
@@ -165,13 +167,11 @@ func (c *Controller) BrowseFileSystem(ctx echo.Context) error {
 		ParentPath:  parentPath,
 	}
 
-	if c.apiLogger != nil {
-		c.apiLogger.Info("Successfully browsed directory",
-			"path", currentPath,
-			"item_count", len(items),
-			"ip", ctx.RealIP(),
-		)
-	}
+	c.logInfoIfEnabled("Successfully browsed directory",
+		"path", currentPath,
+		"item_count", len(items),
+		"ip", ctx.RealIP(),
+	)
 
 	return ctx.JSON(http.StatusOK, response)
 }
