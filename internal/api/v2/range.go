@@ -437,44 +437,23 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 
 // getTestSpeciesList gets species list with test parameters (helper for CSV export)
 func (c *Controller) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilterSpecies, Location, float32, error) {
-	// Check if processor and BirdNET are available
-	if c.Processor == nil {
-		return nil, Location{}, 0, fmt.Errorf("BirdNET processor not available")
+	// Check if BirdNET is available
+	birdnetInstance, err := c.getBirdNETInstance()
+	if err != nil {
+		return nil, Location{}, 0, err
 	}
-	
-	birdnetInstance := c.Processor.GetBirdNET()
-	if birdnetInstance == nil {
-		return nil, Location{}, 0, fmt.Errorf("BirdNET instance not available")
-	}
-	
+
 	// Use mutex to protect against concurrent modifications to global settings
 	rangeFilterMutex.Lock()
 	defer rangeFilterMutex.Unlock()
-	
-	// Store original values from controller settings
-	originalLat := c.Settings.BirdNET.Latitude
-	originalLon := c.Settings.BirdNET.Longitude
-	originalThreshold := c.Settings.BirdNET.RangeFilter.Threshold
-	
-	// Temporarily set test values in controller settings
-	c.Settings.BirdNET.Latitude = req.Latitude
-	c.Settings.BirdNET.Longitude = req.Longitude
-	c.Settings.BirdNET.RangeFilter.Threshold = req.Threshold
-	
-	// Restore original settings after testing
-	defer func() {
-		c.Settings.BirdNET.Latitude = originalLat
-		c.Settings.BirdNET.Longitude = originalLon
-		c.Settings.BirdNET.RangeFilter.Threshold = originalThreshold
-	}()
-	
+
+	// Temporarily set test values and restore after testing
+	restore := c.swapRangeFilterSettings(req.Latitude, req.Longitude, req.Threshold)
+	defer restore()
+
 	// Use current date and calculate week
 	testDate := time.Now()
-	month := int(testDate.Month())
-	day := testDate.Day()
-	weeksFromMonths := (month - 1) * weeksPerMonth
-	weekInMonth := (day-1)/daysPerWeek + 1
-	week := float32(weeksFromMonths + weekInMonth)
+	week := calculateWeek(testDate)
 	
 	// Get probable species for the test parameters
 	speciesScores, err := birdnetInstance.GetProbableSpecies(testDate, week)

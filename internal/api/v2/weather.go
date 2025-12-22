@@ -424,10 +424,8 @@ func (c *Controller) findClosestHourlyWeather(detectionTime time.Time, hourlyWea
 	}
 
 	if !found {
-		// This case should ideally not happen if hourlyWeatherList is not empty,
-		// but good practice to handle. Log potentially?
-		c.logger.Printf("WARN: [Weather API] No closest hourly weather found despite having %d records.", len(hourlyWeatherList))
-		c.logWarnIfEnabled("No closest hourly weather record found", "count", len(hourlyWeatherList))
+		// This case should ideally not happen if hourlyWeatherList is not empty
+		c.logWarnIfEnabled("No closest hourly weather record found despite having data", "count", len(hourlyWeatherList))
 	}
 
 	return closestHourlyData

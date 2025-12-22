@@ -200,7 +200,7 @@ func (c *Controller) validateDateFormatStrictWithResponse(ctx echo.Context, date
 }
 
 // parseOptionalPositiveInt parses an optional integer query parameter.
-// Returns the parsed value, defaultVal if empty, or 0 with warning if invalid.
+// Returns the parsed value, defaultVal if empty, or defaultVal with warning if invalid.
 func (c *Controller) parseOptionalPositiveInt(ctx echo.Context, paramName string, defaultVal int) int {
 	str := ctx.QueryParam(paramName)
 	if str == "" {
