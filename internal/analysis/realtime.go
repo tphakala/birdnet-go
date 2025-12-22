@@ -318,11 +318,10 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		startWeatherPolling(&wg, settings, dataStore, metrics, quitChan)
 	}
 
-	// Telemetry endpoint initialization is now handled by control monitor for hot reload support.
+	// Telemetry endpoint initialization is handled by control monitor for hot reload support.
 	// Unlike other services that start directly here, telemetry is managed by the control monitor
 	// to allow users to dynamically enable/disable metrics and change the listen address without
 	// restarting the application. The control monitor will start the endpoint if enabled.
-	// startTelemetryEndpoint(&wg, settings, metrics, quitChan) // Moved to control monitor
 
 	// start control monitor for hot reloads
 	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, bufferManager, proc, apiServer.APIController(), metrics)
@@ -658,25 +657,6 @@ func startWeatherPolling(wg *sync.WaitGroup, settings *conf.Settings, dataStore 
 	wg.Go(func() {
 		weatherService.StartPolling(quitChan)
 	})
-}
-
-func startTelemetryEndpoint(wg *sync.WaitGroup, settings *conf.Settings, metrics *observability.Metrics, quitChan chan struct{}) {
-	// Initialize Prometheus metrics endpoint if enabled
-	if settings.Realtime.Telemetry.Enabled {
-		// Initialize metrics endpoint
-		telemetryEndpoint, err := observability.NewEndpoint(settings, metrics)
-		if err != nil {
-			// Add structured logging
-			GetLogger().Error("Failed to initialize telemetry endpoint",
-				"error", err,
-				"operation", "initialize_telemetry_endpoint")
-			log.Printf("Error initializing telemetry endpoint: %v", err)
-			return
-		}
-
-		// Start metrics server
-		telemetryEndpoint.Start(wg, quitChan)
-	}
 }
 
 // monitorShutdownSignals listens for shutdown signals (SIGINT, SIGTERM) and triggers the application shutdown process.

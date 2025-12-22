@@ -20,7 +20,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
-	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -610,7 +609,7 @@ func broadcastSoundLevelSSE(apiController *apiv2.Controller, soundData myaudio.S
 
 	if err := apiController.BroadcastSoundLevel(&sanitizedData); err != nil {
 		// Record error metric
-		if m := getSoundLevelMetricsFromAPI(apiController); m != nil {
+		if m := getSoundLevelMetrics(apiController); m != nil {
 			m.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "sse", "broadcast_error")
 			m.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "error")
 		}
@@ -627,7 +626,7 @@ func broadcastSoundLevelSSE(apiController *apiv2.Controller, soundData myaudio.S
 	}
 
 	// Record success metric
-	if m := getSoundLevelMetricsFromAPI(apiController); m != nil {
+	if m := getSoundLevelMetrics(apiController); m != nil {
 		m.RecordSoundLevelPublishing(soundData.Source, soundData.Name, "sse", "success")
 	}
 
@@ -642,15 +641,6 @@ func broadcastSoundLevelSSE(apiController *apiv2.Controller, soundData myaudio.S
 	}
 
 	return nil
-}
-
-// getSoundLevelMetricsFromAPI safely retrieves sound level metrics from API controller
-func getSoundLevelMetricsFromAPI(apiController *apiv2.Controller) *metrics.SoundLevelMetrics {
-	if apiController == nil || apiController.Processor == nil ||
-		apiController.Processor.Metrics == nil || apiController.Processor.Metrics.SoundLevel == nil {
-		return nil
-	}
-	return apiController.Processor.Metrics.SoundLevel
 }
 
 // startSoundLevelMetricsPublisherWithDone starts metrics publisher with a custom done channel
