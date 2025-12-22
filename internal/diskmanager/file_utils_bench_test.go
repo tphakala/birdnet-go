@@ -24,7 +24,7 @@ func BenchmarkGetAudioFiles(b *testing.B) {
 
 	for _, file := range testFiles {
 		filePath := filepath.Join(tempDir, file)
-		err := os.WriteFile(filePath, []byte("test"), 0o644)
+		err := os.WriteFile(filePath, []byte("test"), 0o600)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -112,7 +112,7 @@ func BenchmarkMemoryProfile(b *testing.B) {
 			for i := 0; i < scenario.fileCount; i++ {
 				filename := filepath.Join(tempDir,
 					"species_80p_20210102T150405Z.wav")
-				err := os.WriteFile(filename, []byte("test"), 0o644)
+				err := os.WriteFile(filename, []byte("test"), 0o600)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -154,7 +154,7 @@ func BenchmarkPoolEffectiveness(b *testing.B) {
 	for range 100 {
 		filename := filepath.Join(tempDir,
 			"species_80p_20210102T150405Z.wav")
-		err := os.WriteFile(filename, []byte("test"), 0o644)
+		err := os.WriteFile(filename, []byte("test"), 0o600)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -202,7 +202,7 @@ func BenchmarkErrorHandling(b *testing.B) {
 
 	for _, file := range append(validFiles, invalidFiles...) {
 		filePath := filepath.Join(tempDir, file)
-		err := os.WriteFile(filePath, []byte("test"), 0o644)
+		err := os.WriteFile(filePath, []byte("test"), 0o600)
 		if err != nil {
 			b.Fatal(err)
 		}

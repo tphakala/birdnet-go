@@ -28,7 +28,7 @@ func BenchmarkRepeatedStatOperationsWithoutCache(b *testing.B) {
 		if err := os.MkdirAll(filepath.Dir(fullPath), 0o750); err != nil {
 			b.Fatal(err)
 		}
-		if err := os.WriteFile(fullPath, []byte("test content"), 0o644); err != nil {
+		if err := os.WriteFile(fullPath, []byte("test content"), 0o600); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -92,7 +92,7 @@ func BenchmarkRepeatedStatOperationsWithCache(b *testing.B) {
 		if err := os.MkdirAll(filepath.Dir(fullPath), 0o750); err != nil {
 			b.Fatal(err)
 		}
-		if err := os.WriteFile(fullPath, []byte("test content"), 0o644); err != nil {
+		if err := os.WriteFile(fullPath, []byte("test content"), 0o600); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -211,7 +211,7 @@ func setupSpectrogramTestFiles(b *testing.B, tempDir string, files []string) {
 		if err := os.MkdirAll(filepath.Dir(fullPath), 0o750); err != nil {
 			b.Fatal(err)
 		}
-		if err := os.WriteFile(fullPath, []byte("fake audio content"), 0o644); err != nil {
+		if err := os.WriteFile(fullPath, []byte("fake audio content"), 0o600); err != nil {
 			b.Fatal(err)
 		}
 	}
