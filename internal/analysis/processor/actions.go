@@ -789,7 +789,7 @@ func (a *SaveAudioAction) Execute(data any) error {
 	outputPath := filepath.Join(a.Settings.Realtime.Audio.Export.Path, a.ClipName)
 
 	// Ensure the directory exists
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o750); err != nil {
 		// Add structured logging
 		GetLogger().Error("Failed to create directory for audio clip",
 			"component", "analysis.processor.actions",

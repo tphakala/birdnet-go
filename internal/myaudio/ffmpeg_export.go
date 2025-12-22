@@ -169,7 +169,7 @@ func createTempFile(outputPath string) (string, error) {
 	}
 
 	outputDir := filepath.Dir(outputPath)
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := os.MkdirAll(outputDir, 0o750); err != nil {
 		enhancedErr := errors.New(err).
 			Component("myaudio").
 			Category(errors.CategoryFileIO).

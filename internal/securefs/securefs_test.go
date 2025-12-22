@@ -222,7 +222,7 @@ func TestSecureFSDirectoryOperations(t *testing.T) {
 
 	// Test MkdirAll
 	testDir := filepath.Join(tempDir, "subdir", "nested")
-	err := sfs.MkdirAll(testDir, 0o755)
+	err := sfs.MkdirAll(testDir, 0o750)
 	if err != nil {
 		t.Fatalf("MkdirAll failed: %v", err)
 	}
@@ -360,12 +360,12 @@ func setupSymlinkTest(t *testing.T, tempDir string) (outsideDir, symlinkPath str
 	t.Helper()
 
 	insideDir := filepath.Join(tempDir, "inside")
-	if err := os.Mkdir(insideDir, 0o755); err != nil {
+	if err := os.Mkdir(insideDir, 0o750); err != nil {
 		t.Fatalf("Failed to create test directory: %v", err)
 	}
 
 	outsideDir = filepath.Join(os.TempDir(), "securefs_test_outside")
-	if err := os.MkdirAll(outsideDir, 0o755); err != nil {
+	if err := os.MkdirAll(outsideDir, 0o750); err != nil {
 		t.Fatalf("Failed to create outside test directory: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(outsideDir) })
@@ -484,7 +484,7 @@ func TestReadDir(t *testing.T) {
 	// Create some files and directories
 	_ = sfs.WriteFile(filepath.Join(tempDir, "file1.txt"), []byte("content1"), 0o644)
 	_ = sfs.WriteFile(filepath.Join(tempDir, "file2.txt"), []byte("content2"), 0o644)
-	_ = sfs.MkdirAll(filepath.Join(tempDir, "subdir"), 0o755)
+	_ = sfs.MkdirAll(filepath.Join(tempDir, "subdir"), 0o750)
 
 	// Read directory
 	entries, err := sfs.ReadDir(tempDir)
@@ -515,7 +515,7 @@ func TestParentPath(t *testing.T) {
 
 	// Create a nested directory
 	nested := filepath.Join(tempDir, "a", "b", "c")
-	if err := sfs.MkdirAll(nested, 0o755); err != nil {
+	if err := sfs.MkdirAll(nested, 0o750); err != nil {
 		t.Fatalf("MkdirAll failed: %v", err)
 	}
 

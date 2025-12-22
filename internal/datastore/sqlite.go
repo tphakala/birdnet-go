@@ -54,7 +54,7 @@ func getDiskSpace(path string) (uint64, error) {
 func checkWritePermission(path string) error {
 	// Create a temporary file to test write permissions
 	tempFile := filepath.Join(filepath.Dir(path), ".tmp_write_test")
-	f, err := os.OpenFile(tempFile, os.O_CREATE|os.O_WRONLY, 0o666)
+	f, err := os.OpenFile(tempFile, os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return errors.New(err).
 			Component("datastore").
@@ -188,7 +188,7 @@ func (s *SQLiteStore) Open() error {
 		"path", dbPath)
 
 	// Create database directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil {
 		return errors.New(err).
 			Component("datastore").
 			Category(errors.CategorySystem).

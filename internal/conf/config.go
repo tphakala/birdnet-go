@@ -1369,7 +1369,7 @@ func createDefaultConfig() error {
 	}
 
 	// Create directories for config file
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
 		return errors.New(err).
 			Category(errors.CategoryFileIO).
 			Context("operation", "create-config-dirs").

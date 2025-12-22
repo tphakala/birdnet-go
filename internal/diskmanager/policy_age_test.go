@@ -372,7 +372,7 @@ func TestAgeBasedCleanupMinClipsGlobal(t *testing.T) {
 	// --- File Setup --- Helper to create audio files in specific subdirs
 	createTestFile := func(subdir, species string, confidence int, modTime time.Time) string {
 		subdirPath := filepath.Join(testDir, subdir)
-		require.NoError(t, os.MkdirAll(subdirPath, 0o755), "Failed to create subdirectory: %s", subdirPath)
+		require.NoError(t, os.MkdirAll(subdirPath, 0o750), "Failed to create subdirectory: %s", subdirPath)
 		timestampStr := modTime.UTC().Format("20060102T150405Z")
 		baseName := fmt.Sprintf("%s_%dp_%s", species, confidence, timestampStr)
 		audioPath := filepath.Join(testDir, subdir, baseName+".wav")
