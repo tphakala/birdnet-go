@@ -18,6 +18,7 @@
     Activity,
     ChevronDown,
     ChevronUp,
+    ChevronsUpDown,
     Trash2,
     AlertTriangle,
     RefreshCw,
@@ -49,6 +50,10 @@
   import { getLevelDisplay, getTimeRemaining } from '$lib/types/dynamic-threshold';
   import type { ThresholdChangeReason } from '$lib/types/dynamic-threshold';
 
+  // Sort types
+  type SortColumn = 'species' | 'threshold' | 'expires';
+  type SortDirection = 'asc' | 'desc';
+
   // State
   let thresholds = $state<DynamicThreshold[]>([]);
   let stats = $state<ThresholdStats | null>(null);
@@ -61,15 +66,59 @@
   let resetAllConfirm = $state(false);
   let resetting = $state(false);
 
-  // Derived state - filter and sort alphabetically by species name
-  let filteredThresholds = $derived(
-    (searchQuery
+  // Sort state
+  let sortColumn = $state<SortColumn>('species');
+  let sortDirection = $state<SortDirection>('asc');
+
+  // Handle column header click to toggle sort
+  function handleSort(column: SortColumn) {
+    if (sortColumn === column) {
+      // Toggle direction if clicking same column
+      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      // New column: set to ascending by default
+      sortColumn = column;
+      sortDirection = 'asc';
+    }
+  }
+
+  // Derived state - filter and sort by selected column
+  let filteredThresholds = $derived.by(() => {
+    // First filter by search query
+    const filtered = searchQuery
       ? thresholds.filter(t => t.speciesName.toLowerCase().includes(searchQuery.toLowerCase()))
-      : thresholds
-    )
-      .slice()
-      .sort((a, b) => a.speciesName.localeCompare(b.speciesName))
-  );
+      : thresholds;
+
+    // Then sort by selected column
+    return [...filtered].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortColumn) {
+        case 'species':
+          comparison = a.speciesName.localeCompare(b.speciesName);
+          break;
+        case 'threshold':
+          comparison = a.currentValue - b.currentValue;
+          break;
+        case 'expires': {
+          // Sort by active status first, then by expiration date
+          // Active items come before expired ones in ascending order
+          if (a.isActive !== b.isActive) {
+            comparison = a.isActive ? -1 : 1;
+          } else if (a.isActive && b.isActive) {
+            // Both active: compare expiration dates
+            comparison = new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime();
+          } else {
+            // Both expired: compare by expiration date (most recently expired first)
+            comparison = new Date(b.expiresAt).getTime() - new Date(a.expiresAt).getTime();
+          }
+          break;
+        }
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  });
 
   let activeThresholds = $derived(thresholds.filter(t => t.isActive));
 
@@ -260,11 +309,63 @@
       >
         <div class="w-6"></div>
         <div class="w-10"></div>
-        <div>{t('settings.species.dynamicThreshold.header.species')}</div>
-        <div class="text-center w-20">
+        <button
+          type="button"
+          class="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer text-left"
+          onclick={() => handleSort('species')}
+          aria-label={t('dataDisplay.table.sortBy', {
+            column: t('settings.species.dynamicThreshold.header.species'),
+          })}
+        >
+          {t('settings.species.dynamicThreshold.header.species')}
+          {#if sortColumn === 'species'}
+            {#if sortDirection === 'asc'}
+              <ChevronUp class="size-3.5" />
+            {:else}
+              <ChevronDown class="size-3.5" />
+            {/if}
+          {:else}
+            <ChevronsUpDown class="size-3.5 opacity-30" />
+          {/if}
+        </button>
+        <button
+          type="button"
+          class="flex items-center justify-center gap-1 hover:text-primary transition-colors cursor-pointer w-20"
+          onclick={() => handleSort('threshold')}
+          aria-label={t('dataDisplay.table.sortBy', {
+            column: t('settings.species.dynamicThreshold.header.threshold'),
+          })}
+        >
           {t('settings.species.dynamicThreshold.header.threshold')}
-        </div>
-        <div class="text-center w-20">{t('settings.species.dynamicThreshold.header.expires')}</div>
+          {#if sortColumn === 'threshold'}
+            {#if sortDirection === 'asc'}
+              <ChevronUp class="size-3.5" />
+            {:else}
+              <ChevronDown class="size-3.5" />
+            {/if}
+          {:else}
+            <ChevronsUpDown class="size-3.5 opacity-30" />
+          {/if}
+        </button>
+        <button
+          type="button"
+          class="flex items-center justify-center gap-1 hover:text-primary transition-colors cursor-pointer w-20"
+          onclick={() => handleSort('expires')}
+          aria-label={t('dataDisplay.table.sortBy', {
+            column: t('settings.species.dynamicThreshold.header.expires'),
+          })}
+        >
+          {t('settings.species.dynamicThreshold.header.expires')}
+          {#if sortColumn === 'expires'}
+            {#if sortDirection === 'asc'}
+              <ChevronUp class="size-3.5" />
+            {:else}
+              <ChevronDown class="size-3.5" />
+            {/if}
+          {:else}
+            <ChevronsUpDown class="size-3.5 opacity-30" />
+          {/if}
+        </button>
         <div class="w-8"></div>
       </div>
 
