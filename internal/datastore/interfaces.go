@@ -36,6 +36,23 @@ import (
 // sunriseSetWindowMinutes defines the time window (in minutes) around sunrise and sunset
 const sunriseSetWindowMinutes = 30
 
+// Database dialect constants.
+const (
+	DialectUnknown = "unknown"
+	DialectSQLite  = "sqlite"
+	DialectMySQL   = "mysql"
+)
+
+// Time-of-day filter constants for detection queries.
+const (
+	TimeOfDayAny     = "any"
+	TimeOfDayDay     = "day"
+	TimeOfDayNight   = "night"
+	TimeOfDaySunrise = "sunrise"
+	TimeOfDaySunset  = "sunset"
+	TimeOfDayUnknown = "unknown"
+)
+
 // Sentinel errors for not found cases
 var (
 	// ErrNoteReviewNotFound indicates the requested note review was not found.
@@ -473,9 +490,9 @@ func (ds *DataStore) GetHourFormat() string {
 
 	// Handling for supported databases: SQLite and MySQL
 	switch strings.ToLower(dialector.Name()) {
-	case "sqlite":
+	case DialectSQLite:
 		return "strftime('%H', time)"
-	case "mysql":
+	case DialectMySQL:
 		return "TIME_FORMAT(time, '%H')"
 	default:
 		// Log or handle unsupported database types
@@ -500,9 +517,9 @@ func (ds *DataStore) GetDateTimeExpr(dateCol, timeCol string) string {
 
 	// Handling for supported databases: SQLite and MySQL
 	switch strings.ToLower(dialector.Name()) {
-	case "sqlite":
+	case DialectSQLite:
 		return fmt.Sprintf("datetime(%s || ' ' || %s)", dateCol, timeCol)
-	case "mysql":
+	case DialectMySQL:
 		return fmt.Sprintf("STR_TO_DATE(CONCAT(%s, ' ', %s), '%%Y-%%m-%%d %%H:%%i:%%s')", dateCol, timeCol)
 	default:
 		// Log or handle unsupported database types
@@ -539,9 +556,9 @@ func (ds *DataStore) GetDateFormat(columnName string) string {
 
 	// Handling for supported databases: SQLite and MySQL
 	switch strings.ToLower(dialector.Name()) {
-	case "sqlite":
+	case DialectSQLite:
 		return fmt.Sprintf("date(%s)", columnName)
-	case "mysql":
+	case DialectMySQL:
 		return fmt.Sprintf("DATE(%s)", columnName)
 	default:
 		// Log or handle unsupported database types
@@ -772,7 +789,7 @@ func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
 	dateFormat := ds.GetDateFormat("time")
 	if dateFormat == "" {
 		// Safely get database type for error context
-		dialectName := "unknown"
+		dialectName := DialectUnknown
 		if d := ds.Dialector(); d != nil {
 			dialectName = d.Name()
 		}
@@ -1598,7 +1615,7 @@ func (f *SearchFilters) sanitise() error {
 	}
 	// Validate TimeOfDay
 	switch f.TimeOfDay {
-	case "", "any", "day", "night", "sunrise", "sunset": // Add sunrise/sunset
+	case "", TimeOfDayAny, TimeOfDayDay, TimeOfDayNight, TimeOfDaySunrise, TimeOfDaySunset:
 		// Valid values
 	default:
 		return errors.Newf("invalid time_of_day value, must be 'any', 'day', 'night', 'sunrise', or 'sunset'").
@@ -1650,7 +1667,7 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters, ds *DataStore) *
 		filters.TimeOfDay, ds.SunCalc == nil, ds.DB == nil)
 
 	// --- Dynamic TimeOfDay Filter ---
-	if (filters.TimeOfDay == "day" || filters.TimeOfDay == "night" || filters.TimeOfDay == "sunrise" || filters.TimeOfDay == "sunset") && ds.SunCalc != nil && ds.DB != nil { // Include sunrise/sunset
+	if (filters.TimeOfDay == TimeOfDayDay || filters.TimeOfDay == TimeOfDayNight || filters.TimeOfDay == TimeOfDaySunrise || filters.TimeOfDay == TimeOfDaySunset) && ds.SunCalc != nil && ds.DB != nil { // Include sunrise/sunset
 		dateConditions, err := buildTimeOfDayConditions(filters, ds.SunCalc, ds.DB)
 		switch {
 		case err != nil:
@@ -1822,19 +1839,19 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 
 		var condition *gorm.DB
 		switch filters.TimeOfDay {
-		case "day":
+		case TimeOfDayDay:
 			// Exclude the sunrise and sunset windows (30 minutes before and after)
 			sunriseEnd := sunTimes.Sunrise.Add(window).Format("15:04:05")
 			sunsetStart := sunTimes.Sunset.Add(-window).Format("15:04:05")
 			// Time should be after sunrise window but before sunset window
 			condition = db.Where("notes.date = ? AND notes.time > ? AND notes.time < ?", dateStr, sunriseEnd, sunsetStart)
-		case "night":
+		case TimeOfDayNight:
 			condition = db.Where("notes.date = ? AND (notes.time < ? OR notes.time > ?)", dateStr, sunriseStr, sunsetStr)
-		case "sunrise":
+		case TimeOfDaySunrise:
 			sunriseStart := sunTimes.Sunrise.Add(-window).Format("15:04:05")
 			sunriseEnd := sunTimes.Sunrise.Add(window).Format("15:04:05")
 			condition = db.Where("notes.date = ? AND notes.time >= ? AND notes.time <= ?", dateStr, sunriseStart, sunriseEnd)
-		case "sunset":
+		case TimeOfDaySunset:
 			sunsetStart := sunTimes.Sunset.Add(-window).Format("15:04:05")
 			sunsetEnd := sunTimes.Sunset.Add(window).Format("15:04:05")
 			condition = db.Where("notes.date = ? AND notes.time >= ? AND notes.time <= ?", dateStr, sunsetStart, sunsetEnd)
@@ -1971,7 +1988,7 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 		}
 
 		// Calculate time of day
-		timeOfDay := "unknown"
+		timeOfDay := TimeOfDayUnknown
 		if ds.SunCalc != nil {
 			// Get date string for cache key
 			dateStr := scanned.Date
@@ -1993,13 +2010,13 @@ func (ds *DataStore) SearchDetections(filters *SearchFilters) ([]DetectionRecord
 
 				switch {
 				case detTime >= sunriseStart && detTime <= sunriseEnd:
-					timeOfDay = "sunrise"
+					timeOfDay = TimeOfDaySunrise
 				case detTime >= sunsetStart && detTime <= sunsetEnd:
-					timeOfDay = "sunset"
+					timeOfDay = TimeOfDaySunset
 				case detTime >= sunriseTime && detTime < sunsetTime:
-					timeOfDay = "day"
+					timeOfDay = TimeOfDayDay
 				default:
-					timeOfDay = "night"
+					timeOfDay = TimeOfDayNight
 				}
 			}
 		}

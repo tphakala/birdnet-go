@@ -12,6 +12,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
+// Severity level constants for error classification.
+const (
+	SeverityCritical = "critical"
+	SeverityHigh     = "high"
+	SeverityMedium   = "medium"
+	SeverityLow      = "low"
+)
+
 // DatastoreTelemetry handles telemetry reporting for datastore operations
 type DatastoreTelemetry struct {
 	enabled bool
@@ -89,7 +97,7 @@ func (dt *DatastoreTelemetry) CaptureEnhancedError(err error, operation string, 
 	getLogger().Error("Database error with context", logFields...)
 
 	// Send to telemetry based on severity
-	if severity == "critical" || severity == "high" {
+	if severity == SeverityCritical || severity == SeverityHigh {
 		dt.sendCriticalErrorToTelemetry(enhancedErr, context)
 	} else {
 		dt.sendErrorToTelemetry(enhancedErr, context)
@@ -189,17 +197,17 @@ func (dt *DatastoreTelemetry) calculateSeverity(err error, context *ErrorContext
 		strings.Contains(errStr, "no such table") ||
 		strings.Contains(errStr, "disk full") ||
 		strings.Contains(errStr, "out of memory") {
-		return "critical"
+		return SeverityCritical
 	}
 
 	// High severity for resource exhaustion or constraint violations
 	if context != nil && context.ResourceSnapshot != nil {
 		if context.ResourceSnapshot.IsCriticalResourceState() {
-			return "high"
+			return SeverityHigh
 		}
 		// Check for very low disk space
 		if context.ResourceSnapshot.DiskSpace.AvailableBytes < 100*1024*1024 { // Less than 100MB
-			return "high"
+			return SeverityHigh
 		}
 	}
 
@@ -207,11 +215,11 @@ func (dt *DatastoreTelemetry) calculateSeverity(err error, context *ErrorContext
 	if strings.Contains(errStr, "constraint") ||
 		strings.Contains(errStr, "deadlock") ||
 		strings.Contains(errStr, "timeout") {
-		return "medium"
+		return SeverityMedium
 	}
 
 	// Default to low severity
-	return "low"
+	return SeverityLow
 }
 
 // sendCriticalErrorToTelemetry sends critical errors with full context attachments
@@ -220,7 +228,7 @@ func (dt *DatastoreTelemetry) sendCriticalErrorToTelemetry(err error, context *E
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetLevel(sentry.LevelError)
 		scope.SetTag("component", "datastore")
-		scope.SetTag("severity", "critical")
+		scope.SetTag("severity", SeverityCritical)
 		scope.SetTag("operation", context.Operation)
 
 		// Add resource context as attachment
@@ -282,7 +290,7 @@ func (dt *DatastoreTelemetry) sendCriticalErrorToTelemetry(err error, context *E
 // sendErrorToTelemetry sends regular errors to telemetry
 func (dt *DatastoreTelemetry) sendErrorToTelemetry(err error, context *ErrorContext) {
 	level := sentry.LevelWarning
-	if context.Severity == "high" {
+	if context.Severity == SeverityHigh {
 		level = sentry.LevelError
 	}
 

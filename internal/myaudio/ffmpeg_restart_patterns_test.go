@@ -25,7 +25,7 @@ func TestFFmpegStream_RealWorldRestartPattern(t *testing.T) {
 	t.Attr("component", "ffmpeg")
 	t.Attr("test-type", "process-lifecycle")
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("Process testing is Unix-specific")
 	}
 
@@ -141,7 +141,7 @@ func TestFFmpegStream_HealthCheckRestartLoop(t *testing.T) {
 	t.Attr("component", "ffmpeg")
 	t.Attr("test-type", "health-monitoring")
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("Process testing is Unix-specific")
 	}
 
@@ -240,7 +240,7 @@ func TestFFmpegStream_HealthCheckRestartLoop(t *testing.T) {
 // TestFFmpegStream_ConcurrentRestartRequests tests the scenario where multiple restart requests
 // arrive while a process is already being cleaned up (as seen in logs with rapid restart requests)
 func TestFFmpegStream_ConcurrentRestartRequests(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("Process testing is Unix-specific")
 	}
 
@@ -329,7 +329,7 @@ func TestFFmpegStream_ExtendedBackoffPattern(t *testing.T) {
 // TestFFmpegStream_ProcessCleanupUnderLoad tests cleanup behavior when system is under load
 // (simulating the production scenario with many rapid restarts)
 func TestFFmpegStream_ProcessCleanupUnderLoad(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("Process testing is Unix-specific")
 	}
 

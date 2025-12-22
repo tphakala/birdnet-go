@@ -17,6 +17,19 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
+// OS name constants for runtime.GOOS comparisons.
+const (
+	osLinux   = "linux"
+	osDarwin  = "darwin"
+	osWindows = "windows"
+)
+
+// Audio device constants.
+const (
+	deviceDefault            = "default"
+	deviceDefaultDisplayName = "Default Audio Device"
+)
+
 // SourceStats provides structured statistics about registered sources
 type SourceStats struct {
 	Total  int `json:"total_sources"`
@@ -194,7 +207,7 @@ func detectSourceTypeFromString(connectionString string) SourceType {
 		strings.Contains(connectionString, "pulse") ||
 		strings.Contains(connectionString, "dsnoop") ||
 		strings.Contains(connectionString, "sysdefault") ||
-		connectionString == "default" {
+		connectionString == deviceDefault {
 		return SourceTypeAudioCard
 	}
 
@@ -742,11 +755,11 @@ func (r *AudioSourceRegistry) generateDisplayName(source *AudioSource) string {
 // parseAudioDeviceName converts device strings to user-friendly names based on OS
 func (r *AudioSourceRegistry) parseAudioDeviceName(deviceString string) string {
 	switch runtime.GOOS {
-	case "linux":
+	case osLinux:
 		return r.parseLinuxDeviceName(deviceString)
-	case "darwin":
+	case osDarwin:
 		return r.parseDarwinDeviceName(deviceString)
-	case "windows":
+	case osWindows:
 		return r.parseWindowsDeviceName(deviceString)
 	default:
 		// Fallback for unknown OS
@@ -758,8 +771,8 @@ func (r *AudioSourceRegistry) parseAudioDeviceName(deviceString string) string {
 func (r *AudioSourceRegistry) parseLinuxDeviceName(deviceString string) string {
 	// Handle common simple cases first
 	switch deviceString {
-	case "default":
-		return "Default Audio Device"
+	case deviceDefault:
+		return deviceDefaultDisplayName
 	case "malgo":
 		// Legacy malgo usage - use generic name
 		return "Audio Device"
@@ -783,8 +796,8 @@ func (r *AudioSourceRegistry) parseLinuxDeviceName(deviceString string) string {
 func (r *AudioSourceRegistry) parseDarwinDeviceName(deviceString string) string {
 	// Common macOS audio device patterns
 	switch deviceString {
-	case "default":
-		return "Default Audio Device"
+	case deviceDefault:
+		return deviceDefaultDisplayName
 	case "Built-in Microphone":
 		return "Built-in Microphone"
 	case "Built-in Output":
@@ -811,8 +824,8 @@ func (r *AudioSourceRegistry) parseDarwinDeviceName(deviceString string) string 
 // parseWindowsDeviceName converts Windows audio device strings to user-friendly names
 func (r *AudioSourceRegistry) parseWindowsDeviceName(deviceString string) string {
 	// Common Windows audio device patterns
-	if deviceString == "default" {
-		return "Default Audio Device"
+	if deviceString == deviceDefault {
+		return deviceDefaultDisplayName
 	}
 
 	// Windows WASAPI patterns

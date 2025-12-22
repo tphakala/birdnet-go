@@ -21,7 +21,7 @@ func TestFFmpegStream_ZombieCreationOnProcessExit(t *testing.T) {
 	t.Attr("component", "ffmpeg")
 	t.Attr("test-type", "zombie-prevention")
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("Zombie process testing is Unix-specific")
 	}
 
@@ -75,7 +75,7 @@ func TestFFmpegStream_ZombieCreationOnProcessExit(t *testing.T) {
 // TestFFmpegStream_ZombiePreventionWithWaitTimeout tests that we don't create zombies
 // even when the Wait() call times out in cleanupProcess
 func TestFFmpegStream_ZombiePreventionWithWaitTimeout(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("Zombie process testing is Unix-specific")
 	}
 
@@ -150,7 +150,7 @@ func TestFFmpegStream_ZombieAccumulationDuringRestarts(t *testing.T) {
 	t.Attr("component", "ffmpeg")
 	t.Attr("test-type", "zombie-prevention")
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("Zombie process testing is Unix-specific")
 	}
 
@@ -293,7 +293,7 @@ func isProcessZombie(t *testing.T, pid int) bool {
 
 // TestFFmpegStream_ProcessStateTransitions tracks process states during lifecycle
 func TestFFmpegStream_ProcessStateTransitions(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("Process state testing is Unix-specific")
 	}
 

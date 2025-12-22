@@ -253,7 +253,7 @@ func TestCircuitBreaker_PrematureResetBug(t *testing.T) {
 // Previously used real time.Since() measurements that could be affected by system load.
 // With synctest, stability time validation becomes precise and deterministic.
 func TestCircuitBreaker_ProcessStabilityValidation(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("Process testing is Unix-specific")
 	}
 

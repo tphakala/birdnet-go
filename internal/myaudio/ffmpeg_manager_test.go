@@ -16,6 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test constants for RTSP stream testing.
+const testRTSPURL = "rtsp://test.example.com/stream"
+
 func TestFFmpegManager_StartStop(t *testing.T) {
 	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
 
@@ -24,7 +27,7 @@ func TestFFmpegManager_StartStop(t *testing.T) {
 
 	audioChan := make(chan UnifiedAudioData, 10)
 	defer close(audioChan)
-	url := "rtsp://test.example.com/stream"
+	url := testRTSPURL
 	transport := "tcp"
 
 	// Test starting a stream
@@ -101,7 +104,7 @@ func TestFFmpegManager_RestartStream(t *testing.T) {
 
 	audioChan := make(chan UnifiedAudioData, 10)
 	defer close(audioChan)
-	url := "rtsp://test.example.com/stream"
+	url := testRTSPURL
 
 	// Start a stream
 	err := manager.StartStream(url, "tcp", audioChan)
@@ -138,7 +141,7 @@ func TestFFmpegManager_HealthCheck(t *testing.T) {
 
 		audioChan := make(chan UnifiedAudioData, 10)
 		defer close(audioChan)
-		url := "rtsp://test.example.com/stream"
+		url := testRTSPURL
 
 		// Start a stream
 		err := manager.StartStream(url, "tcp", audioChan)
@@ -298,7 +301,7 @@ func TestFFmpegManager_MonitoringIntegration(t *testing.T) {
 		// Background monitoring tickers advance fake time precisely in synctest bubble
 		manager.StartMonitoring(50*time.Millisecond, audioChan)
 
-		url := "rtsp://test.example.com/stream"
+		url := testRTSPURL
 
 		// Start a stream
 		err := manager.StartStream(url, "tcp", audioChan)

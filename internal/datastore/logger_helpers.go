@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+// sqlUnknown is used when SQL operation or table cannot be determined.
+const sqlUnknown = "unknown"
+
 // SQL operation regex patterns
 var (
 	selectPattern = regexp.MustCompile(`(?i)^\s*SELECT\s+.*?\s+FROM\s+['"\x60]?(\w+)['"\x60]?`)
@@ -46,7 +49,7 @@ func parseSQLOperation(sql string) (operation, table string) {
 	}
 
 	// Default for unrecognized patterns
-	return "unknown", "unknown"
+	return sqlUnknown, sqlUnknown
 }
 
 // categorizeError categorizes database errors for metrics

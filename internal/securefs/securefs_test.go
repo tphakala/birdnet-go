@@ -9,6 +9,9 @@ import (
 	"testing"
 )
 
+// Test constant for test file name.
+const testFileName = "test.txt"
+
 // setupSecureFS creates a temporary directory and SecureFS instance for testing
 func setupSecureFS(t *testing.T) (sfs *SecureFS, tempDir string) {
 	t.Helper()
@@ -558,8 +561,8 @@ func TestLstat(t *testing.T) {
 		t.Fatalf("Lstat failed: %v", err)
 	}
 
-	if info.Name() != "test.txt" {
-		t.Errorf("Expected name 'test.txt', got '%s'", info.Name())
+	if info.Name() != testFileName {
+		t.Errorf("Expected name '%s', got '%s'", testFileName, info.Name())
 	}
 
 	if info.Mode()&os.ModeSymlink != 0 {
@@ -584,8 +587,8 @@ func TestStatRel(t *testing.T) {
 		t.Fatalf("StatRel failed: %v", err)
 	}
 
-	if info.Name() != "test.txt" {
-		t.Errorf("Expected name 'test.txt', got '%s'", info.Name())
+	if info.Name() != testFileName {
+		t.Errorf("Expected name '%s', got '%s'", testFileName, info.Name())
 	}
 
 	// StatRel with traversal should fail

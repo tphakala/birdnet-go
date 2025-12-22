@@ -10,6 +10,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logging"
 )
 
+// Pool tier constant for oversized buffers that cannot be returned to pool.
+const poolTierCustomDiscarded = "custom_discarded"
+
 // bufferImpl is the concrete implementation of AudioBuffer
 type bufferImpl struct {
 	data     []byte
@@ -247,7 +250,7 @@ func (p *bufferPoolImpl) Put(buffer AudioBuffer) {
 		poolTier = "large"
 	default:
 		// Don't pool very large buffers
-		poolTier = "custom_discarded"
+		poolTier = poolTierCustomDiscarded
 		p.logger.Debug("discarding custom-sized buffer",
 			"capacity", capacity)
 	}
@@ -255,7 +258,7 @@ func (p *bufferPoolImpl) Put(buffer AudioBuffer) {
 	// Update both global and per-tier stats
 	p.updateStats(func() {
 		p.stats.ActiveBuffers--
-		if poolTier != "custom_discarded" {
+		if poolTier != poolTierCustomDiscarded {
 			if tierStat, ok := p.tierStats[poolTier]; ok {
 				tierStat.ActiveBuffers--
 			}
@@ -265,7 +268,7 @@ func (p *bufferPoolImpl) Put(buffer AudioBuffer) {
 		}
 	})
 
-	if p.logger.Enabled(context.TODO(), slog.LevelDebug) && poolTier != "custom_discarded" {
+	if p.logger.Enabled(context.TODO(), slog.LevelDebug) && poolTier != poolTierCustomDiscarded {
 		p.logger.Debug("buffer returned to pool",
 			"tier", poolTier,
 			"capacity", capacity)

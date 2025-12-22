@@ -82,7 +82,7 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 	dateTimeFormat := ds.GetDateTimeFormat()
 	if dateTimeFormat == "" {
 		// Safely get database type for error context
-		dialectName := "unknown"
+		dialectName := DialectUnknown
 		if d := ds.Dialector(); d != nil {
 			dialectName = d.Name()
 		}
@@ -349,7 +349,7 @@ func (ds *DataStore) GetDetectionTrends(ctx context.Context, period string, limi
 	// Calculate start date based on the period
 	var startDate string
 	switch strings.ToLower(ds.Dialector().Name()) {
-	case "sqlite":
+	case DialectSQLite:
 		startDate = fmt.Sprintf("date('now', '-%s')", interval)
 		query := fmt.Sprintf(`
 			SELECT date, COUNT(*) as count
@@ -369,7 +369,7 @@ func (ds *DataStore) GetDetectionTrends(ctx context.Context, period string, limi
 				Context("limit", fmt.Sprintf("%d", limit)).
 				Build()
 		}
-	case "mysql":
+	case DialectMySQL:
 		startDate = fmt.Sprintf("DATE_SUB(CURRENT_DATE, INTERVAL %s)", interval)
 		query := fmt.Sprintf(`
 			SELECT date, COUNT(*) as count
@@ -391,7 +391,7 @@ func (ds *DataStore) GetDetectionTrends(ctx context.Context, period string, limi
 		}
 	default:
 		// Safely get database type for error context
-		dialectName := "unknown"
+		dialectName := DialectUnknown
 		if d := ds.Dialector(); d != nil {
 			dialectName = d.Name()
 		}

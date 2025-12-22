@@ -12,6 +12,14 @@ import (
 	"go.uber.org/goleak"
 )
 
+// Test constants for observation testing.
+const (
+	testNodeName        = "TestNode"
+	testSpecies         = "Turdus merula_blackbird" // Format: "Scientific Name_Common Name"
+	testAudioSource     = "test_audio"
+	testClipName        = "test_clip.wav"
+)
+
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
@@ -81,7 +89,7 @@ func TestObservationWithOccurrence(t *testing.T) {
 
 	// Create test settings
 	settings := &conf.Settings{}
-	settings.Main.Name = "TestNode"
+	settings.Main.Name = testNodeName
 	settings.BirdNET = conf.BirdNETConfig{
 		Latitude:    52.5200,
 		Longitude:   13.4050,
@@ -92,10 +100,10 @@ func TestObservationWithOccurrence(t *testing.T) {
 	// Create a test observation with occurrence value
 	beginTime := time.Now()
 	endTime := beginTime.Add(3 * time.Second)
-	species := "Turdus merula_blackbird" // Format: "Scientific Name_Common Name"
+	species := testSpecies
 	confidence := 0.85
-	source := "test_audio"
-	clipName := "test_clip.wav"
+	source := testAudioSource
+	clipName := testClipName
 	elapsedTime := 100 * time.Millisecond
 	occurrence := 0.75 // Test occurrence value
 
@@ -103,7 +111,7 @@ func TestObservationWithOccurrence(t *testing.T) {
 	note := observation.New(settings, beginTime, endTime, species, confidence, source, clipName, elapsedTime, occurrence)
 
 	// Verify all fields are set correctly
-	assert.Equal(t, "TestNode", note.SourceNode)
+	assert.Equal(t, testNodeName, note.SourceNode)
 	assert.Equal(t, "Turdus merula", note.ScientificName)
 	assert.Equal(t, "blackbird", note.CommonName)
 	assert.InEpsilon(t, 0.85, note.Confidence, 0.001)
@@ -112,7 +120,7 @@ func TestObservationWithOccurrence(t *testing.T) {
 	assert.InEpsilon(t, 13.4050, note.Longitude, 0.001)
 	assert.InEpsilon(t, 0.5, note.Threshold, 0.001)
 	assert.InEpsilon(t, 1.0, note.Sensitivity, 0.001)
-	assert.Equal(t, "test_clip.wav", note.ClipName)
+	assert.Equal(t, testClipName, note.ClipName)
 	assert.Equal(t, elapsedTime, note.ProcessingTime)
 }
 
@@ -121,7 +129,7 @@ func TestObservationWithOccurrence_Rounding(t *testing.T) {
 
 	// Create test settings
 	settings := &conf.Settings{}
-	settings.Main.Name = "TestNode"
+	settings.Main.Name = testNodeName
 	settings.BirdNET = conf.BirdNETConfig{
 		Latitude:    52.5200,
 		Longitude:   13.4050,
@@ -132,10 +140,10 @@ func TestObservationWithOccurrence_Rounding(t *testing.T) {
 	// Create a test observation with occurrence value that needs rounding
 	beginTime := time.Now()
 	endTime := beginTime.Add(3 * time.Second)
-	species := "Turdus merula_blackbird"
+	species := testSpecies
 	confidence := 0.853 // Value that gets rounded to two decimals
-	source := "test_audio"
-	clipName := "test_clip.wav"
+	source := testAudioSource
+	clipName := testClipName
 	elapsedTime := 100 * time.Millisecond
 	occurrence := 0.853 // Test occurrence value that should be rounded
 
@@ -152,7 +160,7 @@ func TestNoteJSONIncludesOccurrence(t *testing.T) {
 
 	// Build Settings with Main.Name and BirdNET config
 	settings := &conf.Settings{}
-	settings.Main.Name = "TestNode"
+	settings.Main.Name = testNodeName
 	settings.BirdNET = conf.BirdNETConfig{
 		Latitude:    52.5200,
 		Longitude:   13.4050,
@@ -163,10 +171,10 @@ func TestNoteJSONIncludesOccurrence(t *testing.T) {
 	// Create test observation with occurrence 0.23
 	beginTime := time.Now()
 	endTime := beginTime.Add(3 * time.Second)
-	species := "Turdus merula_blackbird"
+	species := testSpecies
 	confidence := 0.85
-	source := "test_audio"
-	clipName := "test_clip.wav"
+	source := testAudioSource
+	clipName := testClipName
 	elapsedTime := 100 * time.Millisecond
 	occurrence := 0.23
 
@@ -197,7 +205,7 @@ func TestNoteJSONOmitsOccurrenceWhenZero(t *testing.T) {
 
 	// Build Settings with Main.Name and BirdNET config
 	settings := &conf.Settings{}
-	settings.Main.Name = "TestNode"
+	settings.Main.Name = testNodeName
 	settings.BirdNET = conf.BirdNETConfig{
 		Latitude:    52.5200,
 		Longitude:   13.4050,
@@ -208,10 +216,10 @@ func TestNoteJSONOmitsOccurrenceWhenZero(t *testing.T) {
 	// Create test observation with occurrence 0.0 (should be omitted due to omitzero tag)
 	beginTime := time.Now()
 	endTime := beginTime.Add(3 * time.Second)
-	species := "Turdus merula_blackbird"
+	species := testSpecies
 	confidence := 0.85
-	source := "test_audio"
-	clipName := "test_clip.wav"
+	source := testAudioSource
+	clipName := testClipName
 	elapsedTime := 100 * time.Millisecond
 	occurrence := 0.0
 

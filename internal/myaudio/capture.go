@@ -322,7 +322,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 // isHardwareDevice checks if the device ID indicates a hardware device
 func isHardwareDevice(decodedID string) bool {
 	// On Linux, hardware devices have IDs in the format ":X,Y"
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS == osLinux {
 		return strings.Contains(decodedID, ":") && strings.Contains(decodedID, ",")
 	}
 	// On Windows and macOS, consider all devices as potential hardware devices
@@ -384,11 +384,11 @@ func ValidateAudioDevice(settings *conf.Settings) error {
 
 	var backend malgo.Backend
 	switch runtime.GOOS {
-	case "linux":
+	case osLinux:
 		backend = malgo.BackendAlsa
-	case "windows":
+	case osWindows:
 		backend = malgo.BackendWasapi
-	case "darwin":
+	case osDarwin:
 		backend = malgo.BackendCoreaudio
 	}
 
@@ -438,11 +438,11 @@ func ValidateAudioDevice(settings *conf.Settings) error {
 func selectCaptureSource(settings *conf.Settings) (captureSource, error) {
 	var backend malgo.Backend
 	switch runtime.GOOS {
-	case "linux":
+	case osLinux:
 		backend = malgo.BackendAlsa
-	case "windows":
+	case osWindows:
 		backend = malgo.BackendWasapi
-	case "darwin":
+	case osDarwin:
 		backend = malgo.BackendCoreaudio
 	}
 
@@ -471,7 +471,7 @@ func selectCaptureSource(settings *conf.Settings) (captureSource, error) {
 		}
 
 		output := fmt.Sprintf("  %d: %s", i, infos[i].Name())
-		if runtime.GOOS == "linux" {
+		if runtime.GOOS == osLinux {
 			output = fmt.Sprintf("%s, %s", output, decodedID)
 		}
 
@@ -496,7 +496,7 @@ func selectCaptureSource(settings *conf.Settings) (captureSource, error) {
 // matchesDeviceSettings checks if the device matches the settings specified by the user.
 func matchesDeviceSettings(decodedID string, info *malgo.DeviceInfo, audioSource string) bool {
 	// Handle "default" and "sysdefault" on Windows and macOS by selecting the system default device
-	if (runtime.GOOS == "windows" || runtime.GOOS == "darwin") &&
+	if (runtime.GOOS == osWindows || runtime.GOOS == osDarwin) &&
 		(audioSource == "sysdefault" || audioSource == "default") {
 		return info.IsDefault == 1
 	}
@@ -704,11 +704,11 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, sourceID s
 
 	var backend malgo.Backend
 	switch runtime.GOOS {
-	case "linux":
+	case osLinux:
 		backend = malgo.BackendAlsa
-	case "windows":
+	case osWindows:
 		backend = malgo.BackendWasapi
-	case "darwin":
+	case osDarwin:
 		backend = malgo.BackendCoreaudio
 	}
 

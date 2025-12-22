@@ -26,7 +26,7 @@ func TestFFmpegStream_ProcessCleanupNoZombies(t *testing.T) {
 	t.Attr("component", "ffmpeg")
 	t.Attr("test-type", "zombie-prevention")
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("Zombie process testing is Unix-specific")
 	}
 
@@ -73,7 +73,7 @@ func TestFFmpegStream_ProcessCleanupNoZombies(t *testing.T) {
 // NOTE: This test doesn't use synctest because cleanupProcess uses real OS process waits
 // that need actual time to complete and cannot be virtualized.
 func TestFFmpegStream_CleanupTimeoutHandling(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("Zombie process testing is Unix-specific")
 	}
 
@@ -123,7 +123,7 @@ func TestFFmpegStream_RapidRestartNoZombies(t *testing.T) {
 	t.Attr("component", "ffmpeg")
 	t.Attr("test-type", "zombie-prevention")
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("Zombie process testing is Unix-specific")
 	}
 
@@ -187,7 +187,7 @@ func TestFFmpegStream_RapidRestartNoZombies(t *testing.T) {
 // Previously used real-time delays for child process spawning and cleanup that could be flaky.
 // With synctest, process group lifecycle testing becomes deterministic and runs instantly.
 func TestFFmpegStream_ProcessGroupCleanup(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("Process group testing is Unix-specific")
 	}
 
@@ -236,7 +236,7 @@ func TestFFmpegStream_ConcurrentCleanup(t *testing.T) {
 	t.Attr("component", "ffmpeg")
 	t.Attr("test-type", "concurrency")
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("Zombie process testing is Unix-specific")
 	}
 
@@ -416,7 +416,7 @@ func TestFFmpegStream_WaitGoroutineLeak(t *testing.T) {
 // Previously used real-time delays for process exit simulation that could be flaky.
 // With synctest, process reaping testing becomes deterministic and runs instantly.
 func TestFFmpegStream_ProcessReapingAfterExit(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("Process reaping testing is Unix-specific")
 	}
 
@@ -474,7 +474,7 @@ func TestFFmpegStream_ProcessReapingAfterExit(t *testing.T) {
 
 // Benchmark process cleanup performance
 func BenchmarkFFmpegStream_ProcessCleanup(b *testing.B) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		b.Skip("Process benchmarking is Unix-specific")
 	}
 

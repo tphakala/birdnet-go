@@ -11,6 +11,24 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
+// FFmpeg error type constants for categorizing error conditions.
+const (
+	ErrTypeConnectionTimeout   = "connection_timeout"
+	ErrTypeNetworkUnreachable  = "network_unreachable"
+	ErrTypeRTSP503             = "rtsp_503"
+	ErrTypeInvalidData         = "invalid_data"
+	ErrTypeEOF                 = "eof"
+	ErrTypeRTSP404             = "rtsp_404"
+	ErrTypeConnectionRefused   = "connection_refused"
+	ErrTypeAuthFailed          = "auth_failed"
+	ErrTypeAuthForbidden       = "auth_forbidden"
+	ErrTypeNoRoute             = "no_route"
+	ErrTypeOperationNotPermit  = "operation_not_permitted"
+	ErrTypeSSLError            = "ssl_error"
+	ErrTypeDNSResolutionFailed = "dns_resolution_failed"
+	ErrTypeProtocolError       = "protocol_error"
+)
+
 // Pre-compiled regular expressions for FFmpeg error parsing
 // Compiling these at package initialization improves performance during error detection
 var (
@@ -148,7 +166,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 
 	// Connection timeout - very common with unreachable hosts
 	if strings.Contains(stderrOutput, "Connection timed out") {
-		ctx.ErrorType = "connection_timeout"
+		ctx.ErrorType = ErrTypeConnectionTimeout
 		ctx.extractConnectionTimeout(stderrOutput)
 		ctx.buildConnectionTimeoutMessage()
 		return ctx
@@ -156,7 +174,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 
 	// RTSP 404 - stream path doesn't exist
 	if strings.Contains(stderrOutput, "404 Not Found") {
-		ctx.ErrorType = "rtsp_404"
+		ctx.ErrorType = ErrTypeRTSP404
 		ctx.extractRTSP404(stderrOutput)
 		ctx.buildRTSP404Message()
 		return ctx
@@ -164,7 +182,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 
 	// Connection refused - server not listening
 	if strings.Contains(stderrOutput, "Connection refused") {
-		ctx.ErrorType = "connection_refused"
+		ctx.ErrorType = ErrTypeConnectionRefused
 		ctx.extractConnectionRefused(stderrOutput)
 		ctx.buildConnectionRefusedMessage()
 		return ctx
@@ -172,7 +190,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 
 	// Authentication failure
 	if strings.Contains(stderrOutput, "401 Unauthorized") {
-		ctx.ErrorType = "auth_failed"
+		ctx.ErrorType = ErrTypeAuthFailed
 		ctx.extractAuthFailure(stderrOutput)
 		ctx.buildAuthFailureMessage()
 		return ctx
@@ -180,7 +198,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 
 	// 403 Forbidden
 	if strings.Contains(stderrOutput, "403 Forbidden") {
-		ctx.ErrorType = "auth_forbidden"
+		ctx.ErrorType = ErrTypeAuthForbidden
 		ctx.extractAuthForbidden(stderrOutput)
 		ctx.buildAuthForbiddenMessage()
 		return ctx
@@ -188,7 +206,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 
 	// No route to host
 	if strings.Contains(stderrOutput, "No route to host") {
-		ctx.ErrorType = "no_route"
+		ctx.ErrorType = ErrTypeNoRoute
 		ctx.extractNoRoute(stderrOutput)
 		ctx.buildNoRouteMessage()
 		return ctx
@@ -196,7 +214,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 
 	// Network unreachable - different from no route
 	if strings.Contains(stderrOutput, "Network unreachable") {
-		ctx.ErrorType = "network_unreachable"
+		ctx.ErrorType = ErrTypeNetworkUnreachable
 		ctx.extractNetworkUnreachable(stderrOutput)
 		ctx.buildNetworkUnreachableMessage()
 		return ctx
@@ -204,7 +222,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 
 	// Operation not permitted - firewall/SELinux
 	if strings.Contains(stderrOutput, "Operation not permitted") {
-		ctx.ErrorType = "operation_not_permitted"
+		ctx.ErrorType = ErrTypeOperationNotPermit
 		ctx.extractOperationNotPermitted(stderrOutput)
 		ctx.buildOperationNotPermittedMessage()
 		return ctx
@@ -212,7 +230,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 
 	// SSL/TLS errors for rtsps://
 	if reSSLError.MatchString(stderrOutput) {
-		ctx.ErrorType = "ssl_error"
+		ctx.ErrorType = ErrTypeSSLError
 		ctx.extractSSLError(stderrOutput)
 		ctx.buildSSLErrorMessage()
 		return ctx
@@ -220,7 +238,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 
 	// RTSP 503 Service Unavailable - server overload
 	if strings.Contains(stderrOutput, "503 Service Unavailable") {
-		ctx.ErrorType = "rtsp_503"
+		ctx.ErrorType = ErrTypeRTSP503
 		ctx.extractRTSP503(stderrOutput)
 		ctx.buildRTSP503Message()
 		return ctx
@@ -231,7 +249,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 		strings.Contains(stderrOutput, "nodename nor servname provided") ||
 		strings.Contains(stderrOutput, "Temporary failure in name resolution") ||
 		strings.Contains(stderrOutput, "Could not resolve hostname") {
-		ctx.ErrorType = "dns_resolution_failed"
+		ctx.ErrorType = ErrTypeDNSResolutionFailed
 		ctx.extractDNSError(stderrOutput)
 		ctx.buildDNSErrorMessage()
 		return ctx
@@ -239,7 +257,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 
 	// Invalid data - stream corruption
 	if strings.Contains(stderrOutput, "Invalid data found") {
-		ctx.ErrorType = "invalid_data"
+		ctx.ErrorType = ErrTypeInvalidData
 		ctx.extractInvalidData(stderrOutput)
 		ctx.buildInvalidDataMessage()
 		return ctx
@@ -247,7 +265,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 
 	// End of file - stream ended unexpectedly
 	if strings.Contains(stderrOutput, "End of file") {
-		ctx.ErrorType = "eof"
+		ctx.ErrorType = ErrTypeEOF
 		ctx.PrimaryMessage = "Stream ended unexpectedly"
 		ctx.buildEOFMessage()
 		return ctx
@@ -255,7 +273,7 @@ func ExtractErrorContext(stderrOutput string) *ErrorContext {
 
 	// Protocol not found
 	if strings.Contains(stderrOutput, "Protocol not found") {
-		ctx.ErrorType = "protocol_error"
+		ctx.ErrorType = ErrTypeProtocolError
 		ctx.PrimaryMessage = "Unsupported protocol"
 		ctx.buildProtocolErrorMessage()
 		return ctx
@@ -720,11 +738,11 @@ func (ctx *ErrorContext) FormatForConsole() string {
 // which will eventually open the circuit if the network remains unreachable.
 func (ctx *ErrorContext) ShouldOpenCircuit() bool {
 	switch ctx.ErrorType {
-	case "rtsp_404", "auth_failed", "auth_forbidden", "connection_refused",
-		"no_route", "protocol_error", "dns_resolution_failed",
-		"operation_not_permitted", "ssl_error":
+	case ErrTypeRTSP404, ErrTypeAuthFailed, ErrTypeAuthForbidden, ErrTypeConnectionRefused,
+		ErrTypeNoRoute, ErrTypeProtocolError, ErrTypeDNSResolutionFailed,
+		ErrTypeOperationNotPermit, ErrTypeSSLError:
 		return true // Permanent failures - require configuration fix
-	case "connection_timeout", "invalid_data", "eof", "network_unreachable", "rtsp_503":
+	case ErrTypeConnectionTimeout, ErrTypeInvalidData, ErrTypeEOF, ErrTypeNetworkUnreachable, ErrTypeRTSP503:
 		return false // Transient failures - allow retry with backoff
 	default:
 		return false
@@ -741,7 +759,7 @@ func (ctx *ErrorContext) ShouldOpenCircuit() bool {
 // - This prevents infinite restarts while allowing recovery from brief network issues
 func (ctx *ErrorContext) ShouldRestart() bool {
 	switch ctx.ErrorType {
-	case "connection_timeout", "invalid_data", "eof", "network_unreachable", "rtsp_503":
+	case ErrTypeConnectionTimeout, ErrTypeInvalidData, ErrTypeEOF, ErrTypeNetworkUnreachable, ErrTypeRTSP503:
 		return true // Transient failures - might recover with bounded retry
 	default:
 		return false

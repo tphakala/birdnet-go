@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+// Test constants for path resolution testing.
+const testResolvedPath = "/resolved/path"
+
 // TestGetSymlinkResolutionDoesNotCacheErrors verifies symlink resolution errors are not cached
 func TestGetSymlinkResolutionDoesNotCacheErrors(t *testing.T) {
 	pc := NewPathCache()
@@ -18,7 +21,7 @@ func TestGetSymlinkResolutionDoesNotCacheErrors(t *testing.T) {
 		if callCount == 1 {
 			return "", transientErr
 		}
-		return "/resolved/path", nil
+		return testResolvedPath, nil
 	}
 
 	// First call - returns error
@@ -32,8 +35,8 @@ func TestGetSymlinkResolutionDoesNotCacheErrors(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected success on second call, got error: %v", err)
 	}
-	if resolved != "/resolved/path" {
-		t.Errorf("expected '/resolved/path', got '%s'", resolved)
+	if resolved != testResolvedPath {
+		t.Errorf("expected '%s', got '%s'", testResolvedPath, resolved)
 	}
 	if callCount != 2 {
 		t.Errorf("expected compute to be called twice, was called %d times", callCount)
@@ -180,7 +183,7 @@ func TestSuccessResultsCached(t *testing.T) {
 
 		compute := func(path string) (string, error) {
 			callCount++
-			return "/resolved/path", nil
+			return testResolvedPath, nil
 		}
 
 		// First call
@@ -214,7 +217,7 @@ func TestCacheEntryExpiration(t *testing.T) {
 		callCount := 0
 		compute := func(path string) (string, error) {
 			callCount++
-			return "/resolved/path", nil
+			return testResolvedPath, nil
 		}
 
 		// First call
