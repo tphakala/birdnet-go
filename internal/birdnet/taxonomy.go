@@ -28,7 +28,7 @@ func LoadTaxonomyData(customPath string) (TaxonomyMap, ScientificNameIndex, erro
 
 	if customPath != "" {
 		// Load from custom file if provided
-		data, err = os.ReadFile(customPath)
+		data, err = os.ReadFile(customPath) //nolint:gosec // G304: customPath is from application settings
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to read custom taxonomy file %s: %w", customPath, err)
 		}

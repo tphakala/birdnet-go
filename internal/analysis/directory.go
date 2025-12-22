@@ -86,7 +86,7 @@ func isFileLocked(path string) bool {
 		flag = os.O_RDONLY | syscall.O_NONBLOCK
 	}
 
-	file, err := os.OpenFile(path, flag, 0o600)
+	file, err := os.OpenFile(path, flag, 0o600) //nolint:gosec // G304: path is from directory walking, not user input
 	if err != nil {
 		// File is probably locked by another process
 		return true
@@ -97,7 +97,7 @@ func isFileLocked(path string) bool {
 
 	// On Windows, also try write access to be sure
 	if runtime.GOOS == "windows" {
-		file, err = os.OpenFile(path, os.O_WRONLY, 0o600)
+		file, err = os.OpenFile(path, os.O_WRONLY, 0o600) //nolint:gosec // G304: path is from directory walking, not user input
 		if err != nil {
 			return true
 		}
@@ -208,7 +208,7 @@ func processFile(path string, settings *conf.Settings, processedFiles map[string
 	lockFile := outputPath + ".processing"
 
 	// Try to create lock file
-	f, err := os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) //nolint:gosec // G304: lockFile derived from settings.Output.File.Path
 	if err != nil {
 		// Another instance is processing this file
 		return false, nil

@@ -266,7 +266,7 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 		}
 
 		// Load model from external file
-		data, err := os.ReadFile(modelPath)
+		data, err := os.ReadFile(modelPath) //nolint:gosec // G304: modelPath is from application settings
 		if err != nil {
 			return nil, errors.New(err).
 				Category(errors.CategoryFileIO).
@@ -743,7 +743,7 @@ func tryLoadModelFromStandardPaths(modelName, modelType string) (data []byte, pa
 
 	// Attempt to read from each candidate path directly (no os.Stat to avoid TOCTOU)
 	for _, candidatePath := range candidatePaths {
-		fileData, readErr := os.ReadFile(candidatePath)
+		fileData, readErr := os.ReadFile(candidatePath) //nolint:gosec // G304: candidatePath built from known safe paths
 		if readErr == nil {
 			// Successfully loaded model
 			return fileData, candidatePath, nil
@@ -783,7 +783,7 @@ func (bn *BirdNET) loadModel() ([]byte, error) {
 			modelPath = filepath.Join(homeDir, modelPath[2:])
 		}
 
-		data, err := os.ReadFile(modelPath)
+		data, err := os.ReadFile(modelPath) //nolint:gosec // G304: modelPath is from application settings
 		if err != nil {
 			return nil, errors.New(err).
 				Category(errors.CategoryFileIO).

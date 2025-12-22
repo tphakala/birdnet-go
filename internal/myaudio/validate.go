@@ -410,7 +410,7 @@ func QuickValidateAudioFile(audioPath string) (bool, error) {
 	}
 
 	// Check if file can be opened (basic accessibility check)
-	file, err := os.Open(audioPath)
+	file, err := os.Open(audioPath) //nolint:gosec // G304: audioPath is from directory walking
 	if err != nil {
 		return false, nil
 	}

@@ -88,7 +88,7 @@ func setupMockServer(tb testing.TB, responses map[string]mockResponse) *httptest
 func loadTestData(tb testing.TB, filename string) string {
 	tb.Helper()
 
-	data, err := os.ReadFile(filepath.Join("testdata", filename))
+	data, err := os.ReadFile(filepath.Join("testdata", filename)) //nolint:gosec // G304: test fixture path
 	require.NoError(tb, err)
 
 	return string(data)

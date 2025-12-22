@@ -124,7 +124,7 @@ func validateAudioFile(filePath string) error {
 	}
 
 	// Open the file to check if it's a valid audio file
-	file, err := os.Open(filePath)
+	file, err := os.Open(filePath) //nolint:gosec // G304: filePath is from CLI args or directory walking
 	if err != nil {
 		return fmt.Errorf("\033[31m❌ Error opening file %s: %w\033[0m", filepath.Base(filePath), err)
 	}

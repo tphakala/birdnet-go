@@ -268,7 +268,7 @@ func TestFFmpegStream_CleanupGoroutineLeak(t *testing.T) {
 func isProcessZombie(t *testing.T, pid int) bool {
 	t.Helper()
 	statPath := fmt.Sprintf("/proc/%d/stat", pid)
-	data, err := os.ReadFile(statPath)
+	data, err := os.ReadFile(statPath) //nolint:gosec // G304: statPath built from test PID, not user input
 	if err != nil {
 		// Process doesn't exist
 		return false
@@ -349,7 +349,7 @@ func TestFFmpegStream_ProcessStateTransitions(t *testing.T) {
 func getProcessState(t *testing.T, pid int) string {
 	t.Helper()
 	statPath := fmt.Sprintf("/proc/%d/stat", pid)
-	data, err := os.ReadFile(statPath)
+	data, err := os.ReadFile(statPath) //nolint:gosec // G304: statPath built from test PID, not user input
 	if err != nil {
 		return ""
 	}

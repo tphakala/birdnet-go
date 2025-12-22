@@ -311,7 +311,7 @@ func assertNoZombieProcess(t *testing.T, pid int) {
 	t.Helper()
 	// Check /proc/[pid]/stat for zombie state
 	statPath := fmt.Sprintf("/proc/%d/stat", pid)
-	data, err := os.ReadFile(statPath)
+	data, err := os.ReadFile(statPath) //nolint:gosec // G304: statPath is /proc path with pid
 	if err != nil {
 		// Process doesn't exist, which is fine (not a zombie)
 		return
