@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -82,9 +83,17 @@ func stripClipsPrefix(p, clipsPrefix string) string {
 	return p
 }
 
-// isUnsafePath checks if a path would escape the SecureFS root
+// isUnsafePath checks if a path would escape the SecureFS root.
+// Uses filepath.IsLocal for robust path validation that handles platform-specific
+// traversal patterns, reserved names, and edge cases.
 func isUnsafePath(p string) bool {
-	return path.IsAbs(p) || strings.HasPrefix(p, "../") || p == ".."
+	// filepath.IsLocal returns false for:
+	// - Absolute paths
+	// - Paths with ".." components
+	// - Empty paths
+	// - Windows reserved names (NUL, COM1, etc.)
+	// - Paths starting with "\"
+	return !filepath.IsLocal(p)
 }
 
 // NormalizeClipPath normalizes audio clip paths for use with SecureFS.

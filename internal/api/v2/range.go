@@ -580,18 +580,14 @@ func parseFloat32(s string) (float32, error) {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v2/range/rebuild [post]
 func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
-	// Check if processor and BirdNET are available
-	if c.Processor == nil {
-		return c.HandleError(ctx, nil, "BirdNET processor not available", http.StatusInternalServerError)
-	}
-
-	birdnetInstance := c.Processor.GetBirdNET()
-	if birdnetInstance == nil {
-		return c.HandleError(ctx, nil, "BirdNET instance not available", http.StatusInternalServerError)
+	// Check if BirdNET is available
+	birdnetInstance, err := c.getBirdNETInstance()
+	if err != nil {
+		return c.HandleError(ctx, err, err.Error(), http.StatusInternalServerError)
 	}
 
 	// Rebuild the range filter
-	err := birdnet.BuildRangeFilter(birdnetInstance)
+	err = birdnet.BuildRangeFilter(birdnetInstance)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to rebuild range filter", http.StatusInternalServerError)
 	}
