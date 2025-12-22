@@ -415,7 +415,7 @@ func GetFfmpegVersion() (version string, major, minor int) {
 	}
 
 	// Execute ffmpeg -version
-	cmd := exec.Command(ffmpegPath, "-version")
+	cmd := exec.Command(ffmpegPath, "-version") //nolint:gosec // G204: ffmpegPath resolved via exec.LookPath()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", 0, 0
@@ -552,7 +552,7 @@ func IsSoxAvailable() (isAvailable bool, formats []string) {
 	}
 
 	// Execute SoX with the help flag to get its output
-	cmd := exec.Command(soxPath, "-h")
+	cmd := exec.Command(soxPath, "-h") //nolint:gosec // G204: soxPath resolved via exec.LookPath()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return false, nil // Failed to execute SoX

@@ -275,7 +275,7 @@ func executeFFprobe(ctx context.Context, audioPath string) (string, error) {
 	}
 
 	// Build ffprobe command to get format and stream information
-	cmd := exec.CommandContext(ctx, ffprobeBinary,
+	cmd := exec.CommandContext(ctx, ffprobeBinary, //nolint:gosec // G204: ffprobeBinary from conf.GetFfprobeBinaryName(), args are fixed
 		"-v", "error",
 		"-show_entries", "format=duration,bit_rate:stream=sample_rate,channels,codec_name",
 		"-of", "csv=p=0",

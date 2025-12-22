@@ -695,7 +695,7 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 		"maxLines", maxJournalLogLines)
 
 	// Run journalctl command with line limit
-	cmd := exec.CommandContext(ctx, "journalctl",
+	cmd := exec.CommandContext(ctx, "journalctl", //nolint:gosec // G204: hardcoded command, args are constants/formatted values
 		journalFlagUnit, systemdServiceName,
 		journalFlagSince, since,
 		journalFlagNoPager,
@@ -1513,7 +1513,7 @@ func (c *Collector) getJournaldLogs(ctx context.Context, duration time.Duration)
 	// Use same line limit as collectJournalLogs
 	const maxJournalLines = 5000
 
-	cmd := exec.CommandContext(ctx, "journalctl",
+	cmd := exec.CommandContext(ctx, "journalctl", //nolint:gosec // G204: hardcoded command, args are constants/formatted values
 		"-u", "birdnet-go.service",
 		"--since", since,
 		"--no-pager",

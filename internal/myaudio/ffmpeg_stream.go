@@ -872,7 +872,7 @@ func (s *FFmpegStream) startProcess() error {
 	)
 
 	// Create FFmpeg command
-	s.cmd = exec.CommandContext(s.ctx, settings.FfmpegPath, args...)
+	s.cmd = exec.CommandContext(s.ctx, settings.FfmpegPath, args...) //nolint:gosec // G204: FfmpegPath from validated settings, args built internally
 
 	// Setup process group
 	setupProcessGroup(s.cmd)
