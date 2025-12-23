@@ -1058,15 +1058,10 @@
           "description": "Personalizar la interfaz de usuario",
           "interface": {
             "title": "Configuración de interfaz",
-            "description": "Elija su idioma e interfaz preferidos",
+            "description": "Elija su idioma preferido",
             "locale": {
               "label": "Idioma de visualización",
-              "helpText": "Seleccione el idioma para la interfaz de usuario",
-              "requiresModernUI": "La selección de idioma solo está disponible al usar la interfaz moderna."
-            },
-            "newUI": {
-              "label": "Usar interfaz moderna",
-              "helpText": "Activa la nueva interfaz basada en Svelte con rendimiento y características mejoradas. Cuando está desactivada, usa la interfaz HTMX clásica."
+              "helpText": "Seleccione el idioma para la interfaz de usuario"
             }
           },
           "language": {
@@ -1098,10 +1093,6 @@
             "summaryLimit": {
               "label": "Número máximo de especies en la tabla de resumen diario",
               "helpText": "Número máximo de especies mostradas en la tabla de resumen diario (valor entre 10 y 1000)"
-            },
-            "newUI": {
-              "label": "Usar nueva interfaz de usuario",
-              "helpText": "Habilitar redirección de la interfaz HTMX antigua a la nueva interfaz Svelte"
             },
             "thumbnails": {
               "title": "Visualización de miniaturas",

@@ -1070,15 +1070,10 @@
           "description": "Dostosuj interfejs użytkownika",
           "interface": {
             "title": "Ustawienia Interfejsu",
-            "description": "Wybierz preferowany język i wersję interfejsu",
+            "description": "Wybierz preferowany język",
             "locale": {
               "label": "Język Wyświetlania",
-              "helpText": "Wybierz język dla interfejsu użytkownika",
-              "requiresModernUI": "Wybór języka jest dostępny tylko przy używaniu Nowoczesnego Interfejsu."
-            },
-            "newUI": {
-              "label": "Użyj Nowoczesnego Interfejsu",
-              "helpText": "Włącz nowy interfejs oparty na Svelte z ulepszoną wydajnością i funkcjami. Po wyłączeniu używa klasycznego interfejsu HTMX."
+              "helpText": "Wybierz język dla interfejsu użytkownika"
             }
           },
           "language": {
@@ -1110,10 +1105,6 @@
             "summaryLimit": {
               "label": "Maksymalna Liczba Gatunków w Tabeli Podsumowania Dziennego",
               "helpText": "Maksymalna liczba gatunków wyświetlanych w tabeli podsumowania dziennego (Wartość między 10 a 1000)"
-            },
-            "newUI": {
-              "label": "Użyj Nowego Interfejsu Użytkownika",
-              "helpText": "Włącz przekierowanie ze starego interfejsu HTMX do nowego interfejsu Svelte"
             },
             "thumbnails": {
               "title": "Wyświetlanie Miniatur",

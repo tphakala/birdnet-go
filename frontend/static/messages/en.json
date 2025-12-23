@@ -1070,15 +1070,10 @@
           "description": "Customize user interface",
           "interface": {
             "title": "Interface Settings",
-            "description": "Choose your preferred language and interface version",
+            "description": "Choose your preferred language",
             "locale": {
               "label": "Display Language",
-              "helpText": "Select the language for the user interface",
-              "requiresModernUI": "Language selection is only available when using the Modern Interface."
-            },
-            "newUI": {
-              "label": "Use Modern Interface",
-              "helpText": "Enable the new Svelte-based interface with improved performance and features. When disabled, uses the classic HTMX interface."
+              "helpText": "Select the language for the user interface"
             }
           },
           "language": {
@@ -1110,10 +1105,6 @@
             "summaryLimit": {
               "label": "Max Number of Species on Daily Summary Table",
               "helpText": "Max number of species shown in the daily summary table (Value between 10 and 1000)"
-            },
-            "newUI": {
-              "label": "Use New User Interface",
-              "helpText": "Enable redirect from old HTMX UI to new Svelte UI"
             },
             "thumbnails": {
               "title": "Thumbnail Display",
